@@ -1,0 +1,46 @@
+{
+  "nav": { "home": "Home", "analysis": "Analysis", "trade": "Trade", "portfolio": "Portfolio" },
+  "home": {
+    "greeting": "Hey {{name}} 👋",
+    "walletPrompt": "Connect your wallet to get started",
+    "connectWallet": "Connect wallet",
+    "connected": "Connected",
+    "marketPulse": "Market pulse",
+    "sentimentLabel": "Market sentiment",
+    "topMovers": "Today's top movers"
+  },
+  "analysis": {
+    "title": "AI market analysis",
+    "sentiment": "Sentiment analysis",
+    "pricePrediction": "Price prediction",
+    "confidence": "Confidence",
+    "disclaimer": "Educational content only, not financial advice. Crypto markets are high risk.",
+    "horizon24h": "Next 24 hours",
+    "bullish": "Bullish",
+    "bearish": "Bearish",
+    "neutral": "Neutral"
+  },
+  "trade": {
+    "title": "Trade",
+    "subtitle": "Trade directly from your own wallet on BSC — we never hold your funds",
+    "from": "From",
+    "to": "To",
+    "amount": "Amount",
+    "reviewSwap": "Review & sign transaction",
+    "connectFirst": "Connect your wallet to trade",
+    "networkFee": "Estimated network fee",
+    "custodyNotice": "⚠️ This bot will never ask you to send funds to another address. Every transaction is signed from your own wallet only."
+  },
+  "portfolio": {
+    "title": "Portfolio",
+    "subtitle": "Read-only view of your wallet's holdings",
+    "totalValue": "Total value",
+    "assets": "Assets",
+    "noWallet": "Connect a wallet to view your portfolio"
+  },
+  "wallet": {
+    "chooseProvider": "Choose a wallet",
+    "disconnect": "Disconnect"
+  },
+  "riskBanner": "This bot never gives financial advice and never custodies your funds."
+}
