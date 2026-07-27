@@ -5,18 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, askFaq } from '../lib/aiClient';
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconDoc,
-  IconExternal,
-  IconMail,
-  IconShield,
-  IconTelegram
-} from '../components/Icons';
-
-const TELEGRAM_URL = 'https://t.me/Shiravi4333';
-const EMAIL = 'Mshiravi433@gmail.com';
+import { IconChevronLeft, IconChevronRight, IconDoc, IconExternal, IconShield } from '../components/Icons';
 
 /** Questions worth surfacing without the user having to think of them. */
 const QUICK = ['fees', 'custody', 'seedLost', 'realMoney', 'network', 'slippage'];
@@ -74,58 +63,23 @@ export default function Help() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('help.title')}</h1>
       </motion.div>
 
-      {/* ---------- direct support ---------- */}
-      <motion.div className="grid-2" variants={stagger} initial="hidden" animate="show">
-        <motion.button
-          className="card lift"
-          variants={riseIn}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => open(TELEGRAM_URL)}
-          style={{ textAlign: 'center', cursor: 'pointer' }}
-        >
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 14,
-              margin: '0 auto 9px',
-              display: 'grid',
-              placeItems: 'center',
-              background: 'linear-gradient(135deg,#2AABEE,#229ED9)',
-              color: '#fff'
-            }}
-          >
-            <IconTelegram width={21} height={21} />
+      <motion.button
+        className="card lift"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        whileTap={{ scale: 0.985 }}
+        onClick={() => navigate('/contact')}
+        style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
+      >
+        <div className="row-between">
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.contactUs')}</div>
+            <div className="faint">{t('help.contactUsSub')}</div>
           </div>
-          <div style={{ fontWeight: 700, fontSize: 13 }}>{t('help.telegram')}</div>
-          <div className="faint" style={{ marginTop: 2 }}>@Shiravi4333</div>
-        </motion.button>
-
-        <motion.button
-          className="card lift"
-          variants={riseIn}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => open(`mailto:${EMAIL}`)}
-          style={{ textAlign: 'center', cursor: 'pointer' }}
-        >
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 14,
-              margin: '0 auto 9px',
-              display: 'grid',
-              placeItems: 'center',
-              background: 'linear-gradient(135deg,var(--rgb-5),var(--rgb-6))',
-              color: '#000'
-            }}
-          >
-            <IconMail width={21} height={21} />
-          </div>
-          <div style={{ fontWeight: 700, fontSize: 13 }}>{t('help.email')}</div>
-          <div className="faint" style={{ marginTop: 2, fontSize: 9.5, wordBreak: 'break-all' }}>{EMAIL}</div>
-        </motion.button>
-      </motion.div>
+          <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)' }} />
+        </div>
+      </motion.button>
 
       {/* ---------- AI FAQ ---------- */}
       <motion.section className="card card-rgb edge-orchid" variants={riseIn} initial="hidden" animate="show">
@@ -137,7 +91,7 @@ export default function Help() {
         <p className="faint" style={{ marginBottom: 11 }}>{t('help.askAiSub')}</p>
 
         {!ai.enabled ? (
-          <p className="notice">{t('help.aiOffline')}</p>
+          <p className="notice notice-danger">{t('help.aiOffline')}</p>
         ) : (
           <>
             {thread.length === 0 && (

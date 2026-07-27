@@ -37,7 +37,7 @@
 
   --glow-cyan: 0 0 24px rgba(0, 229, 255, 0.35);
   --glow-magenta: 0 0 24px rgba(255, 45, 149, 0.35);
-  --nav-h: 74px;
+  --nav-h: 88px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -210,7 +210,8 @@ body {
   background: #000;
 }
 
-.brand-mark span {
+.brand-mark span,
+.brand-mark svg {
   position: relative;
   z-index: 1;
   font-family: var(--font-mono);
@@ -576,35 +577,90 @@ select option { background: #0a0c12; }
    Bottom navigation
    ========================================================================== */
 
+/* ==========================================================================
+   Floating nav bar
+   Detached from the screen edges with a wavy animated top edge.
+   ========================================================================== */
+
 .bottom-nav {
   position: fixed;
-  bottom: 0;
+  bottom: calc(14px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  width: 100%;
-  max-width: 520px;
+  width: calc(100% - 28px);
+  max-width: 440px;
   display: flex;
   align-items: stretch;
   gap: 2px;
-  background: rgba(6, 7, 12, 0.86);
-  backdrop-filter: blur(22px) saturate(1.4);
-  border-top: 1px solid var(--line);
-  padding: 9px 8px calc(9px + env(safe-area-inset-bottom));
+  padding: 9px 7px;
   z-index: 40;
+  border-radius: 26px;
+  background: rgba(10, 11, 18, 0.82);
+  backdrop-filter: blur(26px) saturate(1.6);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 18px 46px -14px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  animation: nav-float 6s ease-in-out infinite;
 }
 
+:root[data-theme='light'] .bottom-nav {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 40px -14px rgba(16, 20, 40, 0.3);
+}
+
+/* gentle vertical drift so the bar reads as floating, not glued */
+@keyframes nav-float {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-3px); }
+}
+
+/* Wavy animated top edge — an SVG mask would be static, so we animate a
+   repeating gradient across a thin strip instead. */
 .bottom-nav::before {
   content: '';
   position: absolute;
   top: -1px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--rgb-1), var(--rgb-3), transparent);
-  opacity: 0.75;
-  animation: nav-line 5s ease-in-out infinite;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--rgb-1) 15%,
+    var(--rgb-2) 35%,
+    var(--rgb-3) 55%,
+    var(--rgb-4) 75%,
+    transparent
+  );
+  background-size: 220% 100%;
+  animation: nav-wave 4.5s linear infinite;
+  opacity: 0.85;
 }
-@keyframes nav-line { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+@keyframes nav-wave {
+  0% { background-position: 200% 0; }
+  100% { background-position: -20% 0; }
+}
+
+/* soft coloured glow under the bar */
+.bottom-nav::after {
+  content: '';
+  position: absolute;
+  inset: 6px 14px -8px;
+  border-radius: 26px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  filter: blur(20px);
+  opacity: 0.22;
+  z-index: -1;
+  animation: nav-glow-shift 8s ease-in-out infinite alternate;
+}
+
+@keyframes nav-glow-shift {
+  0% { opacity: 0.14; filter: blur(20px) hue-rotate(0deg); }
+  100% { opacity: 0.3; filter: blur(26px) hue-rotate(40deg); }
+}
 
 .nav-item {
   flex: 1;
@@ -620,18 +676,23 @@ select option { background: #0a0c12; }
   font-size: 9.5px;
   font-weight: 600;
   cursor: pointer;
-  padding: 5px 2px;
-  transition: color 0.22s;
+  padding: 6px 2px;
+  border-radius: 18px;
+  transition: color 0.24s;
+  min-height: 48px;
+  justify-content: center;
 }
+
 .nav-item.active { color: var(--text-1); }
 .nav-icon { font-size: 17px; line-height: 1; }
 
 .nav-glow {
   position: absolute;
-  inset: -4px 2px;
-  border-radius: 13px;
-  background: linear-gradient(180deg, rgba(0, 229, 255, 0.18), rgba(124, 77, 255, 0.05));
-  border: 1px solid rgba(0, 229, 255, 0.22);
+  inset: -2px 1px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.22), rgba(124, 77, 255, 0.06));
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  box-shadow: 0 0 18px -4px rgba(0, 229, 255, 0.5);
   z-index: -1;
 }
 

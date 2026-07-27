@@ -21,7 +21,20 @@ export default function Header() {
         transition={{ duration: 0.45 }}
       >
         <div className="brand-mark">
-          <span>⇄</span>
+          <motion.svg
+            width="17" height="17" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+            animate={{ rotate: [0, 180, 360] }}
+            transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', times: [0, 0.5, 1] }}
+            style={{ position: 'relative', zIndex: 1 }}
+          >
+            <path d="M17 3.5a9 9 0 0 1 3.9 6.9" />
+            <path d="M7 20.5a9 9 0 0 1-3.9-6.9" />
+            <path d="M14.5 2 18 4.2l-2.4 3" />
+            <path d="M9.5 22 6 19.8l2.4-3" />
+            <path d="M3.2 10.4A9 9 0 0 1 12 3" />
+            <path d="M20.8 13.6A9 9 0 0 1 12 21" />
+          </motion.svg>
         </div>
         <div className="brand-text">
           <span className="brand-name gradient-text">FBT Swap</span>

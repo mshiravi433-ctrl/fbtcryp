@@ -6,7 +6,17 @@
  * not configured, so the Signals screen still works on indicators alone.
  */
 
+/**
+ * In the browser/Mini App a relative '/api' works because the API is served
+ * from the same origin. Inside the Android APK the page is served from
+ * https://localhost, so a relative path resolves to nothing — the build must
+ * supply an absolute origin via VITE_API_BASE.
+ */
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+
+/** True when we have no absolute API to talk to (packaged app, unset base). */
+export const apiUnreachable = () =>
+  API_BASE.startsWith('/') && typeof window !== 'undefined' && window.location.protocol === 'capacitor:';
 
 async function post(path, body, timeout = 60000) {
   const ctrl = new AbortController();

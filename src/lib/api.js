@@ -14,6 +14,12 @@ import { offlineGlobal, offlineMarkets, offlineTrending, offlineChart } from './
 
 // `import.meta.env` is Vite-only; guard it so the module also loads under
 // plain bundlers / SSR / test harnesses.
+//
+// NOTE for the Android build: the APK serves its pages from https://localhost,
+// so a relative '/api' has no host to resolve against. Set VITE_API_BASE to
+// your deployed origin (e.g. https://fbt-swap.vercel.app/api) when building
+// the APK. Market data still falls back to the public CoinGecko endpoints, but
+// the AI routes have no fallback and simply won't work without it.
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 const PUBLIC_CG = 'https://api.coingecko.com/api/v3';
 

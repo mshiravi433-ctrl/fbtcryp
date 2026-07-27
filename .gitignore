@@ -19,3 +19,9 @@ android/app/release/
 *.keystore
 *.jks
 out/
+
+# Signing material — never commit these
+*.keystore
+*.jks
+keystore.properties
+release.keystore

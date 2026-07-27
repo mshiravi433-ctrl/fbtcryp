@@ -773,7 +773,7 @@
     "askAi": "Ask AI",
     "askAiSub": "Answers about this app, grounded in how it actually works.",
     "askPlaceholder": "Ask anything…",
-    "aiOffline": "AI assistant is not configured on this server. Use Telegram or email above.",
+    "aiOffline": "The AI assistant needs a server connection and none is configured in this build. Everything else works normally — for help, use the contact options above.",
     "aiFailed": "Couldn't reach the assistant. Try again, or message us on Telegram.",
     "aiCaveat": "Answers come from an AI model and can be wrong. For anything involving your funds, confirm with us on Telegram.",
     "resources": "Resources",
@@ -791,12 +791,14 @@
       "realMoney": "Which parts use real money?",
       "network": "Which networks are supported?",
       "slippage": "What is slippage?"
-    }
+    },
+    "contactUs": "Contact us",
+    "contactUsSub": "Telegram and email support"
   },
   "docs": {
     "title": "Documentation",
     "intro": "Short guides for each screen. If you're new to crypto, start at the top.",
-    "pitfall": "Common mistake",
+    "pitfall": "⚠️ Watch out",
     "watchVideo": "Watch a tutorial",
     "videoNote": "Video links open YouTube searches from independent educators. We didn't make them and don't control their content.",
     "start": {
@@ -806,7 +808,7 @@
       "step2": "Write your 12-word recovery phrase on paper. Never photograph it or store it in a chat.",
       "step3": "Add BNB Smart Chain in the wallet, then send a small amount of BNB for gas fees.",
       "step4": "Open FBT Swap, tap Connect wallet and approve the connection.",
-      "pitfall": "When withdrawing from an exchange, choose the BEP20 network. Picking the wrong network sends funds somewhere unrecoverable."
+      "pitfall": "When withdrawing from an exchange, always pick the 'BEP20' network. Choose the wrong one and your money goes somewhere nobody can retrieve it — not us, not the exchange."
     },
     "swap": {
       "title": "Swapping tokens",
@@ -816,7 +818,7 @@
       "step3": "Check the rate, minimum received and the 0.5% platform fee.",
       "step4": "Tap Review, then approve the token if this is your first time using it.",
       "step5": "Confirm in your wallet and wait for the transaction to settle.",
-      "pitfall": "Never approve an unlimited allowance you don't understand, and always check the price impact — above 5% means the pool is thin and you'll lose value."
+      "pitfall": "Check the 'price impact' number before you confirm. Above 5% means there aren't enough buyers for this trade and you'll lose value. Try a smaller amount or a different token."
     },
     "farm": {
       "title": "Liquidity & farming",
@@ -825,7 +827,7 @@
       "step2": "Choose a pool — stablecoin pairs are lowest risk.",
       "step3": "Deposit both tokens in equal value and receive LP tokens.",
       "step4": "Stake the LP tokens to earn additional rewards.",
-      "pitfall": "A very high APR usually means very high risk. Pools advertising thousands of percent are often unsellable tokens."
+      "pitfall": "If you see a pool advertising thousands of percent a year, don't get excited. It almost always means the token you earn has no buyers later and you won't be able to sell it."
     },
     "signals": {
       "title": "AI signals",
@@ -833,7 +835,7 @@
       "step1": "The gauge combines RSI, MACD, Bollinger bands and moving averages into one score.",
       "step2": "Confidence shows how much those indicators agree — low confidence means the chart is unclear.",
       "step3": "The AI outlook adds recent news context and states what would invalidate the view.",
-      "pitfall": "No indicator predicts the future. Treat a strong score as one input among several, never as an instruction to trade."
+      "pitfall": "No analysis knows the future. Even on a 'strong buy' the price can fall. Treat it as one of several things you look at, not an instruction to follow."
     },
     "trade": {
       "title": "Practice trading",
@@ -841,7 +843,7 @@
       "step1": "The Trade, Invest and Predict screens use virtual NX credits, not real money.",
       "step2": "Prices are real and live, so the practice is realistic.",
       "step3": "Use it to learn order mechanics before risking anything on the Swap screen.",
-      "pitfall": "Profits here are not withdrawable and mean nothing financially. Don't let a winning streak on paper make you overconfident with real funds."
+      "pitfall": "The profit you see here isn't real money and can't be withdrawn. Winning a few times here doesn't mean the same will happen with real funds — real markets have emotions attached, this doesn't."
     },
     "security": {
       "title": "Staying safe",
@@ -851,7 +853,7 @@
       "step3": "Verify token contract addresses independently before swapping unknown tokens.",
       "step4": "Start with a small test transaction when using any new feature.",
       "step5": "Keep large holdings in a separate hardware wallet, not in an in-app wallet.",
-      "pitfall": "Nobody legitimate will ever ask for your seed phrase — not support, not us, not an admin in a group chat. That request is always theft."
+      "pitfall": "Nobody legitimate will ever ask for your 12 recovery words. Not our support, not a group admin, not any website. Anyone who asks is trying to take your money. Block them immediately."
     }
   },
   "audit": {

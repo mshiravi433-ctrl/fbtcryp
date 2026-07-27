@@ -2,11 +2,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import { useTelegram } from '../context/TelegramContext';
-import { IconChevronLeft, IconMail, IconTelegram, IconBuilding, IconTrend, IconPools, IconKey } from '../components/Icons';
-
-const TELEGRAM_URL = 'https://t.me/Shiravi4333';
-const EMAIL = 'Mshiravi433@gmail.com';
+import { IconChevronLeft, IconBuilding, IconTrend, IconPools, IconKey } from '../components/Icons';
 
 const OFFERS = [
   { id: 'listing', Icon: IconTrend },
@@ -18,13 +14,6 @@ const OFFERS = [
 export default function Business() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, tg } = useTelegram();
-
-  const open = (url) => {
-    haptic?.('light');
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
-  };
 
   return (
     <PageTransition>
@@ -62,18 +51,17 @@ export default function Business() {
 
       <section>
         <p className="section-label">{t('biz.contact')}</p>
-        <motion.div className="grid-2" style={{ marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-          <motion.button className="btn btn-primary" variants={riseIn} whileTap={{ scale: 0.96 }} onClick={() => open(TELEGRAM_URL)}>
-            <span style={{ display: 'inline-flex', gap: 7, alignItems: 'center', justifyContent: 'center' }}>
-              <IconTelegram width={16} height={16} /> {t('help.telegram')}
-            </span>
-          </motion.button>
-          <motion.button className="btn btn-ghost" variants={riseIn} whileTap={{ scale: 0.96 }} onClick={() => open(`mailto:${EMAIL}`)}>
-            <span style={{ display: 'inline-flex', gap: 7, alignItems: 'center', justifyContent: 'center' }}>
-              <IconMail width={16} height={16} /> {t('help.email')}
-            </span>
-          </motion.button>
-        </motion.div>
+        <motion.button
+          className="btn btn-primary"
+          variants={riseIn}
+          initial="hidden"
+          animate="show"
+          style={{ marginTop: 8 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate('/contact')}
+        >
+          {t('contact.title')}
+        </motion.button>
       </section>
 
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -83,13 +71,6 @@ export default function Business() {
           <div>
             <div className="faint">{t('about.company')}</div>
             <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{t('about.companyFull')}</div>
-          </div>
-        </div>
-        <div className="info-row">
-          <span className="info-row-icon"><IconMail width={17} height={17} /></span>
-          <div>
-            <div className="faint">{t('help.email')}</div>
-            <div className="mono" style={{ fontSize: 11.5, marginTop: 2, wordBreak: 'break-all' }}>{EMAIL}</div>
           </div>
         </div>
       </motion.section>
