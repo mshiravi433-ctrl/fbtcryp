@@ -14,6 +14,9 @@ support with RTL.
 The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
 SDK, so it cannot produce one locally).
 
+> **APK not appearing?** See [`docs/APK-FA.md`](docs/APK-FA.md) — نسخه فارسی
+> با تشخیص مشکل و راه‌حل قدم‌به‌قدم.
+
 ### ⚡ One-time setup — enable the workflow (phone-friendly)
 
 GitHub doesn't allow apps to commit workflow files, so you add it once
@@ -22,7 +25,9 @@ yourself. **No computer needed** — from a mobile browser:
 1. Open the repo → check the branch is `arena/019fa427-fbtcryp`
 2. **Add file** → **Create new file**
 3. Name it exactly `.github/workflows/build-apk.yml`
-4. Copy the contents of [`ci/build-apk.yml`](ci/build-apk.yml) and paste
+4. Copy the contents of [`ci/build-apk-minimal.yml`](ci/build-apk-minimal.yml)
+   and paste — **the contents, not the filename**. Open the `raw.` version of
+   the file so Select-all grabs only the text.
 5. **Commit changes**
 
 The build starts immediately. Full walkthrough with screenshots-by-step and

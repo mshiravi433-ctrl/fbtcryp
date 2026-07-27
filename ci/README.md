@@ -1,5 +1,13 @@
 # Building the APK from your phone
 
+> ### ⚠️ Builds failing? Read [`docs/APK-FA.md`](../docs/APK-FA.md) first
+> The most common failure is pasting the *filename* instead of the file
+> *contents* into the workflow editor. That produces a 17-byte file and every
+> run dies in 0 seconds. Use the 26-line minimal config in
+> [`ci/build-apk-minimal.yml`](build-apk-minimal.yml) — far easier to copy on
+> a phone than the 105-line full version.
+
+
 You don't need a computer. GitHub compiles the APK on its own servers — you
 just need to add one file, which you can do from a mobile browser.
 
