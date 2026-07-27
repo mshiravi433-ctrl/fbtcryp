@@ -25,6 +25,8 @@ const Contact = lazy(() => import('./pages/Contact'));
 const Legal = lazy(() => import('./pages/Legal'));
 const Perp = lazy(() => import('./pages/Perp'));
 const Farm = lazy(() => import('./pages/Farm'));
+const Signals = lazy(() => import('./pages/Signals'));
+const Stocks = lazy(() => import('./pages/Stocks'));
 
 function Loader() {
   return (
@@ -55,6 +57,8 @@ function AnimatedRoutes() {
           <Route path="/legal/:doc" element={<Legal />} />
           <Route path="/perp" element={<Perp />} />
           <Route path="/farm" element={<Farm />} />
+          <Route path="/signals" element={<Signals />} />
+          <Route path="/stocks" element={<Stocks />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>

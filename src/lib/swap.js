@@ -2,7 +2,9 @@
  * On-chain swap engine (PancakeSwap V2 router on BSC).
  *
  * Every function here builds a transaction that the USER signs from THEIR
- * wallet. There is no operator address, no fee-skim, and no server involvement.
+ * wallet — non-custodial throughout. A 0.5% platform fee is collected on-chain
+ * in the same transaction and paid to FBT's wallet; it is always disclosed in
+ * the UI before the user signs.
  *
  * Safety properties worth keeping if you edit this file:
  *   • `amountOutMin` is always enforced from a fresh on-chain quote, so a
@@ -90,10 +92,19 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
         parseUnits,
         formatUnits
       });
-    } catch {
-      // Aggregator unreachable or no route — fall through to PancakeSwap so
-      // the user can still trade. That swap carries no platform fee, which is
-      // the honest trade-off: a working swap beats a blocked one.
+    } catch (err) {
+      // COMMERCIAL RULE: this product must never execute a swap that skips the
+      // platform fee. If the aggregator can't quote, we surface the error
+      // instead of silently routing around our own revenue.
+      //
+      // The only exception is an explicit FEE_MODE=contract deployment, which
+      // collects the fee through our own router below.
+      if (!feeEnabled()) {
+        return {
+          error: err?.message === 'NO_ROUTE' ? 'NO_ROUTE' : 'QUOTE_FAILED',
+          retriable: true
+        };
+      }
     }
   }
   const cfg = EVM_CHAINS[chainId];
@@ -237,7 +248,10 @@ export async function executeSwap({
     return { hash: feeTx.hash, wait: () => feeTx.wait(), viaFeeRouter: true };
   }
 
-  // --- no fee router configured: swap directly, charging nothing ---
+  // Direct PancakeSwap path. Only reachable when a FeeRouter is deployed
+  // (which takes the fee on-chain) — never as a silent zero-fee fallback.
+  if (!feeEnabled()) throw new Error('FEE_ROUTE_UNAVAILABLE');
+
   const router = new Contract(cfg.router, ROUTER_ABI, signer);
   let tx;
   if (fromToken.native) {

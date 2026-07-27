@@ -2,14 +2,14 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
-import { IconSwap, IconTrend, IconPools, IconWallet, IconSettings } from './Icons';
+import { IconSwap, IconTrend, IconActivity, IconPools, IconWallet } from './Icons';
 
 const ITEMS = [
   { to: '/swap', key: 'nav.swap', Icon: IconSwap },
   { to: '/trade', key: 'nav.trade', Icon: IconTrend },
+  { to: '/signals', key: 'nav.signals', Icon: IconActivity },
   { to: '/farm', key: 'nav.farm', Icon: IconPools },
-  { to: '/wallet', key: 'nav.wallet', Icon: IconWallet },
-  { to: '/settings', key: 'nav.settings', Icon: IconSettings }
+  { to: '/wallet', key: 'nav.wallet', Icon: IconWallet }
 ];
 
 export default function BottomNav() {

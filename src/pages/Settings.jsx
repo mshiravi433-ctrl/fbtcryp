@@ -29,6 +29,8 @@ import {
   IconLock,
   IconMoon,
   IconShield,
+  IconSwap,
+  IconTrend,
   IconSun,
   IconUser,
   IconWallet
@@ -65,12 +67,10 @@ function Switch({ on, onChange }) {
 export default function Settings() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { haptic } = useTelegram();
+  const { haptic, tg } = useTelegram();
   const wallet = useWallet();
   const s = useSettingsStore();
 
-  const [nameSheet, setNameSheet] = useState(false);
-  const [nameDraft, setNameDraft] = useState(s.username);
   const [twoFaSheet, setTwoFaSheet] = useState(false);
   const [totpSecret, setTotpSecret] = useState(null);
   const [totpInput, setTotpInput] = useState('');
@@ -181,15 +181,6 @@ export default function Settings() {
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.profile')}</p>
         <div className="set-group">
           <Row
-            icon={IconUser}
-            label={t('settings.username')}
-            sub={s.username || t('settings.noUsername')}
-            onClick={() => {
-              setNameDraft(s.username);
-              setNameSheet(true);
-            }}
-          />
-          <Row
             icon={IconWallet}
             label={t('settings.wallet')}
             sub={wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
@@ -274,7 +265,58 @@ export default function Settings() {
           <Row
             icon={IconInfo}
             label={t('settings.reduceMotion')}
+            sub={t('settings.reduceMotionSub')}
             right={<Switch on={s.reduceMotion} onChange={() => s.toggle('reduceMotion')} />}
+          />
+          <Row
+            icon={IconTrend}
+            label={t('settings.compactMode')}
+            sub={t('settings.compactModeSub')}
+            right={<Switch on={s.compactMode} onChange={() => s.toggle('compactMode')} />}
+          />
+        </div>
+      </motion.section>
+
+      {/* ---------------- trading ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.trading')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconSwap}
+            label={t('settings.defaultSlippage')}
+            sub={t('settings.defaultSlippageSub')}
+            right={
+              <select
+                value={s.defaultSlippage}
+                onChange={(e) => s.setSlippage(e.target.value)}
+                style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
+              >
+                {[0.1, 0.5, 1, 3].map((v) => (
+                  <option key={v} value={v}>{v}%</option>
+                ))}
+              </select>
+            }
+          />
+          <Row
+            icon={IconShield}
+            label={t('settings.expertMode')}
+            sub={t('settings.expertModeSub')}
+            right={<Switch on={s.expertMode} onChange={() => s.toggle('expertMode')} />}
+          />
+          <Row
+            icon={IconGlobe}
+            label={t('settings.currency')}
+            right={
+              <select
+                value={s.currency}
+                onChange={(e) => s.setCurrency(e.target.value)}
+                style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
+              >
+                {['USD', 'EUR', 'IRT', 'AED'].map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            }
           />
         </div>
       </motion.section>
@@ -350,35 +392,23 @@ export default function Settings() {
         <div className="set-group">
           <Row icon={IconInfo} label={t('about.title')} onClick={() => navigate('/about')} />
           <Row icon={IconTelegram} label={t('contact.title')} sub="@Shiravi4333" onClick={() => navigate('/contact')} />
+          <Row
+            icon={IconTelegram}
+            label={t('settings.support')}
+            sub={t('settings.supportSub')}
+            onClick={() => {
+              haptic?.('light');
+              const url = 'https://t.me/Shiravi4333';
+              if (tg?.openLink) tg.openLink(url);
+              else window.open(url, '_blank', 'noopener,noreferrer');
+            }}
+          />
           <Row icon={IconDoc} label={t('settings.terms')} onClick={() => navigate('/legal/terms')} />
           <Row icon={IconShield} label={t('settings.privacy')} onClick={() => navigate('/legal/privacy')} />
         </div>
       </motion.section>
 
       <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FBT iran · v1.0.0</p>
-
-      {/* ---------------- username sheet ---------------- */}
-      <Sheet open={nameSheet} onClose={() => setNameSheet(false)} title={t('settings.username')}>
-        <input
-          type="text"
-          value={nameDraft}
-          maxLength={24}
-          onChange={(e) => setNameDraft(e.target.value)}
-          placeholder={t('settings.usernamePlaceholder')}
-        />
-        <p className="faint" style={{ marginTop: 8 }}>{t('settings.usernameNote')}</p>
-        <button
-          className="btn btn-primary"
-          style={{ marginTop: 12 }}
-          onClick={() => {
-            s.setUsername(nameDraft);
-            setNameSheet(false);
-            haptic?.('success');
-          }}
-        >
-          {t('common.confirm')}
-        </button>
-      </Sheet>
 
       {/* ---------------- 2FA sheet ---------------- */}
       <Sheet open={twoFaSheet} onClose={() => setTwoFaSheet(false)} title={t('settings.twoFactorSetup')}>

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { applyDirection } from '../i18n';
 import { useAppStore } from '../store/useAppStore';
 import { fmtNum } from '../lib/format';
+import { IconSettings } from './Icons';
 import AnimatedNumber from './AnimatedNumber';
 
 const LANGS = ['fa', 'en', 'ar'];
@@ -50,6 +51,18 @@ export default function Header() {
           <span style={{ fontSize: 11 }}>💎</span>
           <AnimatedNumber value={balance} format={(v) => fmtNum(v, 0)} />
           <span style={{ color: 'var(--text-3)', fontSize: 10 }}>L{level}</span>
+        </motion.button>
+
+        <motion.button
+          className="icon-btn"
+          onClick={() => navigate('/settings')}
+          whileTap={{ scale: 0.9, rotate: 45 }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14 }}
+          aria-label="settings"
+        >
+          <IconSettings width={17} height={17} />
         </motion.button>
 
         <div className="lang-switch">

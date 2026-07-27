@@ -15,10 +15,10 @@
  * the chain instead of just PancakeSwap.
  *
  * Trade-off, stated honestly: you depend on a third party. If KyberSwap's API
- * is down, swaps stop working (we fall back to PancakeSwap with no fee rather
- * than blocking the user). If they ever change their fee terms, your revenue
- * changes with it. The self-deployed FeeRouter has neither dependency — that's
- * the reason it's still in the repo as `FEE_MODE=contract`.
+ * is down, quoting fails and the user sees a retry prompt — we deliberately do
+ * NOT fall back to a fee-free swap, because this is a commercial product and
+ * routing around our own revenue would be the wrong default. Deploy the
+ * FeeRouter (`FEE_MODE=contract`) to remove the third-party dependency.
  *
  * Docs: https://docs.kyberswap.com/kyberswap-solutions/kyberswap-aggregator
  */

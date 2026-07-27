@@ -92,8 +92,6 @@ export default function Legal() {
         </motion.section>
       ))}
 
-      <p className="notice notice-danger">{t(`${ns}.disclaimer`)}</p>
-
       <div className="row" style={{ gap: 10 }}>
         <button className="btn btn-ghost" onClick={() => navigate(isPrivacy ? '/legal/terms' : '/legal/privacy')}>
           {isPrivacy ? t('terms.title') : t('privacy.title')}

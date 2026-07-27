@@ -16,6 +16,8 @@ export const useSettingsStore = create(
       theme: 'dark', // 'dark' | 'light' | 'auto'
       accent: 'rgb', // 'rgb' | 'cyan' | 'magenta' | 'mint'
       reduceMotion: false,
+      compactMode: false,
+      currency: 'USD',
 
       /* ---------------- profile ---------------- */
       username: '',
@@ -28,10 +30,13 @@ export const useSettingsStore = create(
       twoFactorSecret: null, // TOTP secret, stored encrypted by the caller
       autoLockMinutes: 5,
       hideBalances: false,
-      txConfirmations: true, // always show the review sheet before signing
+      txConfirmations: true,
+      expertMode: false,
+      defaultSlippage: 0.5, // always show the review sheet before signing
 
       /* ---------------- onboarding ---------------- */
       onboarded: false,
+      termsAcceptedAt: 0,
 
       /* ---------------- sync ---------------- */
       cloudSync: false,
@@ -52,6 +57,12 @@ export const useSettingsStore = create(
       toggle(key) {
         set((s) => ({ [key]: !s[key] }));
       },
+      setSlippage(v) {
+        set({ defaultSlippage: Math.min(50, Math.max(0.05, Number(v) || 0.5)) });
+      },
+      setCurrency(currency) {
+        set({ currency });
+      },
       setAutoLock(minutes) {
         set({ autoLockMinutes: Math.max(0, Math.min(120, Number(minutes) || 0)) });
       },
@@ -67,6 +78,9 @@ export const useSettingsStore = create(
       },
       disable2FA() {
         set({ twoFactorEnabled: false, twoFactorSecret: null });
+      },
+      acceptTerms() {
+        set({ termsAcceptedAt: Date.now() });
       },
       completeOnboarding() {
         set({ onboarded: true });
@@ -155,10 +169,17 @@ export function applyAccent(accent) {
 }
 
 /** Call once at boot. */
+export function applyCompact(on) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.setAttribute('data-compact', on ? 'true' : 'false');
+}
+
 export function initTheme() {
-  const { theme, accent } = useSettingsStore.getState();
+  const { theme, accent, compactMode } = useSettingsStore.getState();
   applyTheme(theme);
   applyAccent(accent);
+  applyCompact(compactMode);
+  useSettingsStore.subscribe((st) => applyCompact(st.compactMode));
 
   if (typeof window !== 'undefined' && window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => {

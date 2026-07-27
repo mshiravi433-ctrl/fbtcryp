@@ -3,13 +3,25 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useTelegram } from '../context/TelegramContext';
-import { IconChevronRight, IconShield, IconSwap, IconTrend } from '../components/Icons';
+import { useWallet, shortAddress } from '../context/WalletContext';
+import WalletConnectSheet from '../components/WalletConnectSheet';
+import Sheet from '../components/Sheet';
+import {
+  IconChevronRight,
+  IconShield,
+  IconSwap,
+  IconTrend,
+  IconWallet,
+  IconCheck
+} from '../components/Icons';
 
 /**
- * Three-screen welcome shown once on first launch.
- * Deliberately states the non-custodial trade-off on slide 3 rather than
- * burying it — someone whose first experience is "you alone hold the keys"
- * is far less likely to lose funds later.
+ * Five-step welcome: three feature slides, then wallet connect, then the
+ * terms agreement.
+ *
+ * The terms step is a hard gate — you cannot enter the app without ticking it.
+ * Wallet connect is skippable, because forcing it before someone has seen the
+ * product is a good way to lose them, and every screen prompts for it anyway.
  */
 
 const SLIDES = [
@@ -17,6 +29,8 @@ const SLIDES = [
   { key: 'swap', Icon: IconSwap, hues: ['#7c4dff', '#ff2d95'] },
   { key: 'custody', Icon: IconShield, hues: ['#00ff9d', '#00e5ff'] }
 ];
+
+const TOTAL = SLIDES.length + 2; // + wallet + terms
 
 function Art({ Icon, hues, index }) {
   return (
@@ -73,29 +87,54 @@ function Art({ Icon, hues, index }) {
 export default function Onboarding({ onDone }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
+  const wallet = useWallet();
   const complete = useSettingsStore((s) => s.completeOnboarding);
-  const [index, setIndex] = useState(0);
+  const acceptTerms = useSettingsStore((s) => s.acceptTerms);
 
+  const [index, setIndex] = useState(0);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [legalDoc, setLegalDoc] = useState(null);
+
+  const isSlide = index < SLIDES.length;
+  const isWallet = index === SLIDES.length;
+  const isTerms = index === SLIDES.length + 1;
   const slide = SLIDES[index];
-  const isLast = index === SLIDES.length - 1;
 
   const finish = () => {
+    acceptTerms();
     complete();
     onDone?.();
   };
 
   const next = () => {
     haptic?.('light');
-    if (isLast) finish();
-    else setIndex((i) => i + 1);
+    if (isTerms) {
+      if (!agreed) return;
+      finish();
+    } else {
+      setIndex((i) => i + 1);
+    }
   };
+
+  const canAdvance = !isTerms || agreed;
 
   return (
     <div className="onb-stage">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 18px 0' }}>
-        {!isLast && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px 0' }}>
+        {index > 0 ? (
           <button
-            onClick={finish}
+            onClick={() => setIndex((i) => i - 1)}
+            style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: 8 }}
+          >
+            {t('common.back')}
+          </button>
+        ) : (
+          <span />
+        )}
+        {isSlide && (
+          <button
+            onClick={() => setIndex(SLIDES.length)}
             style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: 8 }}
           >
             {t('onboarding.skip')}
@@ -106,51 +145,182 @@ export default function Onboarding({ onDone }) {
       <AnimatePresence mode="wait">
         <motion.div
           key={index}
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -40 }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Art Icon={slide.Icon} hues={slide.hues} index={index} />
+          {/* ---------------- feature slides ---------------- */}
+          {isSlide && (
+            <>
+              <Art Icon={slide.Icon} hues={slide.hues} index={index} />
+              <div style={{ padding: '0 26px', textAlign: 'center' }}>
+                <motion.h1
+                  className="h1"
+                  style={{ fontSize: 25, marginBottom: 10 }}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 }}
+                >
+                  {t(`onboarding.${slide.key}.title`)}
+                </motion.h1>
+                <motion.p
+                  className="muted"
+                  style={{ fontSize: 13.5, lineHeight: 1.75 }}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  {t(`onboarding.${slide.key}.body`)}
+                </motion.p>
+              </div>
+            </>
+          )}
 
-          <div style={{ padding: '0 26px', textAlign: 'center' }}>
-            <motion.h1
-              className="h1"
-              style={{ fontSize: 25, marginBottom: 10 }}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.12 }}
-            >
-              {t(`onboarding.${slide.key}.title`)}
-            </motion.h1>
-            <motion.p
-              className="muted"
-              style={{ fontSize: 13.5, lineHeight: 1.75 }}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              {t(`onboarding.${slide.key}.body`)}
-            </motion.p>
-          </div>
+          {/* ---------------- wallet connect ---------------- */}
+          {isWallet && (
+            <div style={{ padding: '10px 22px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <Art Icon={IconWallet} hues={['#00e5ff', '#00ff9d']} index={index} />
+              <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
+                {t('onboarding.wallet.title')}
+              </h1>
+              <p className="muted" style={{ textAlign: 'center', fontSize: 13, lineHeight: 1.75 }}>
+                {t('onboarding.wallet.body')}
+              </p>
+
+              {wallet.address ? (
+                <motion.div
+                  className="card card-rgb"
+                  initial={{ opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  style={{ marginTop: 16 }}
+                >
+                  <div className="sheen" />
+                  <div className="row" style={{ gap: 10, justifyContent: 'center' }}>
+                    <span style={{ color: 'var(--up)' }}><IconCheck width={19} height={19} /></span>
+                    <span className="mono" style={{ fontSize: 13 }}>{shortAddress(wallet.address)}</span>
+                  </div>
+                  <div className="faint" style={{ textAlign: 'center', marginTop: 5 }}>
+                    {t('onboarding.wallet.connected')}
+                  </div>
+                </motion.div>
+              ) : (
+                <button className="btn btn-primary" style={{ marginTop: 18 }} onClick={() => setConnectOpen(true)}>
+                  {t('wallet.connect')}
+                </button>
+              )}
+
+              <p className="faint" style={{ textAlign: 'center', marginTop: 12, lineHeight: 1.7 }}>
+                {t('onboarding.wallet.skipNote')}
+              </p>
+            </div>
+          )}
+
+          {/* ---------------- terms gate ---------------- */}
+          {isTerms && (
+            <div style={{ padding: '10px 22px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <Art Icon={IconShield} hues={['#7c4dff', '#ff2d95']} index={index} />
+              <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
+                {t('onboarding.terms.title')}
+              </h1>
+              <p className="muted" style={{ textAlign: 'center', fontSize: 13, lineHeight: 1.75 }}>
+                {t('onboarding.terms.body')}
+              </p>
+
+              <div className="row" style={{ gap: 9, marginTop: 14 }}>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setLegalDoc('terms')}>
+                  {t('terms.title')}
+                </button>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setLegalDoc('privacy')}>
+                  {t('privacy.title')}
+                </button>
+              </div>
+
+              <motion.label
+                whileTap={{ scale: 0.985 }}
+                className="card"
+                style={{
+                  display: 'flex',
+                  gap: 11,
+                  alignItems: 'flex-start',
+                  marginTop: 14,
+                  cursor: 'pointer',
+                  borderColor: agreed ? 'var(--rgb-1)' : 'var(--line)'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => {
+                    setAgreed(e.target.checked);
+                    haptic?.('select');
+                  }}
+                  style={{ width: 19, height: 19, marginTop: 1, accentColor: '#00e5ff', flexShrink: 0 }}
+                />
+                <span className="muted" style={{ fontSize: 12.3, lineHeight: 1.7 }}>
+                  {t('onboarding.terms.agree')}
+                </span>
+              </motion.label>
+            </div>
+          )}
         </motion.div>
       </AnimatePresence>
 
       <div className="onb-dots">
-        {SLIDES.map((s, i) => (
-          <div key={s.key} className="onb-dot" data-active={i === index} />
+        {Array.from({ length: TOTAL }).map((_, i) => (
+          <div key={i} className="onb-dot" data-active={i === index} />
         ))}
       </div>
 
       <div style={{ padding: '0 20px' }}>
-        <motion.button className="btn btn-primary" whileTap={{ scale: 0.97 }} onClick={next}>
+        <motion.button
+          className="btn btn-primary"
+          whileTap={{ scale: 0.97 }}
+          onClick={next}
+          disabled={!canAdvance}
+        >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, justifyContent: 'center' }}>
-            {isLast ? t('onboarding.start') : t('onboarding.next')}
-            {!isLast && <IconChevronRight width={17} height={17} />}
+            {isTerms ? t('onboarding.start') : t('onboarding.next')}
+            {!isTerms && <IconChevronRight width={17} height={17} />}
           </span>
         </motion.button>
       </div>
+
+      <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
+
+      <Sheet open={Boolean(legalDoc)} onClose={() => setLegalDoc(null)} title={t(`${legalDoc ?? 'terms'}.title`)}>
+        <div style={{ maxHeight: '58dvh', overflowY: 'auto' }}>
+          <LegalInline doc={legalDoc} />
+        </div>
+      </Sheet>
     </div>
+  );
+}
+
+/** Terms/Privacy body rendered inside the onboarding modal. */
+function LegalInline({ doc }) {
+  const { t } = useTranslation();
+  if (!doc) return null;
+  const keys =
+    doc === 'privacy'
+      ? ['collect', 'notCollect', 'onchain', 'thirdPartyData', 'storage', 'analytics', 'rights', 'contact']
+      : ['nature', 'noCustody', 'fees', 'risk', 'noAdvice', 'eligibility', 'prohibited', 'thirdParty', 'availability', 'liability', 'changes'];
+
+  return (
+    <>
+      <p className="muted" style={{ fontSize: 12.3 }}>{t(`${doc}.intro`)}</p>
+      {keys.map((k, i) => (
+        <div key={k} style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 12.8, marginBottom: 3 }}>
+            <span className="mono" style={{ color: 'var(--rgb-1)', marginInlineEnd: 6, fontSize: 10.5 }}>
+              {String(i + 1).padStart(2, '0')}
+            </span>
+            {t(`${doc}.${k}.title`)}
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t(`${doc}.${k}.body`)}</p>
+        </div>
+      ))}
+    </>
   );
 }

@@ -1150,3 +1150,103 @@ input, select, textarea { font-size: 16px !important; }
   .h1 { font-size: 19px; }
   .stat-value { font-size: 23px; }
 }
+
+/* ==========================================================================
+   Extended palette + richer motion
+   ========================================================================== */
+
+:root {
+  --rgb-6: #ff6d00;  /* ember  */
+  --rgb-7: #00e676;  /* signal */
+  --rgb-8: #d500f9;  /* orchid */
+  --rgb-9: #18ffff;  /* ice    */
+}
+
+/* Aurora ribbon behind hero cards */
+.aurora {
+  position: absolute;
+  inset: -40%;
+  background:
+    radial-gradient(closest-side, var(--rgb-1), transparent 70%),
+    radial-gradient(closest-side, var(--rgb-3), transparent 70%),
+    radial-gradient(closest-side, var(--rgb-4), transparent 70%);
+  background-size: 60% 60%, 55% 55%, 50% 50%;
+  background-repeat: no-repeat;
+  background-position: 12% 30%, 78% 20%, 45% 80%;
+  filter: blur(46px);
+  opacity: 0.28;
+  pointer-events: none;
+  animation: aurora-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-drift {
+  0%   { background-position: 12% 30%, 78% 20%, 45% 80%; }
+  50%  { background-position: 35% 55%, 55% 45%, 20% 40%; }
+  100% { background-position: 70% 25%, 20% 70%, 65% 60%; }
+}
+
+/* Pressable lift used on primary cards */
+.lift {
+  transition: transform 0.18s cubic-bezier(.22,1,.36,1), box-shadow 0.18s;
+}
+.lift:active {
+  transform: translateY(2px) scale(0.99);
+  box-shadow: 0 4px 14px -8px rgba(0,0,0,.6);
+}
+
+/* Shimmering value text for headline numbers */
+.shimmer {
+  background: linear-gradient(100deg, var(--text-1) 30%, var(--rgb-9) 50%, var(--text-1) 70%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-sweep 3.6s ease-in-out infinite;
+}
+@keyframes shimmer-sweep {
+  0%, 100% { background-position: 180% 0; }
+  50% { background-position: -40% 0; }
+}
+
+/* Animated grid backdrop for stat panels */
+.grid-glow {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse at 30% 20%, #000, transparent 72%);
+  -webkit-mask-image: radial-gradient(ellipse at 30% 20%, #000, transparent 72%);
+  animation: grid-glow-pan 22s linear infinite;
+  pointer-events: none;
+}
+@keyframes grid-glow-pan {
+  to { background-position: 26px 26px; }
+}
+
+/* Ambient pulse ring for live indicators */
+.pulse-ring::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  border: 1px solid var(--rgb-1);
+  opacity: 0;
+  animation: pulse-out 2.4s ease-out infinite;
+}
+@keyframes pulse-out {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* Compact layout option */
+:root[data-compact='true'] .page { gap: 9px; padding: 8px 12px 18px; }
+:root[data-compact='true'] .card { padding: 11px; }
+:root[data-compact='true'] .coin-row { padding: 8px 10px; }
+:root[data-compact='true'] .h1 { font-size: 19px; }
+
+/* Gradient border variants for visual variety */
+.edge-mint::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-4), var(--rgb-9), var(--rgb-7), var(--rgb-4)); }
+.edge-ember::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-5), var(--rgb-6), var(--rgb-3), var(--rgb-5)); }
+.edge-orchid::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-8), var(--rgb-2), var(--rgb-3), var(--rgb-8)); }

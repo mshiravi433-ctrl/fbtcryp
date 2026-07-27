@@ -140,13 +140,15 @@ Setting `VITE_FEE_ROUTER_ADDRESS` automatically switches `FEE_MODE` to
 | Variable | Default | Effect |
 |---|---|---|
 | `VITE_FEE_RECIPIENT` | `0xaf5CE154…24d6` | Where the 0.5% lands |
-| `VITE_FEE_MODE` | `aggregator` | `aggregator` \| `contract` \| `none` |
+| `VITE_FEE_MODE` | auto | `aggregator`, or `contract` when a FeeRouter address is set |
 | `VITE_FEE_ROUTER_ADDRESS` | *(blank)* | Your contract; setting it implies `contract` mode |
 
-**If `VITE_FEE_ROUTER_ADDRESS` is blank the app charges nothing** and swaps
-directly against PancakeSwap. It never silently falls back to a "please also
-pay us" second transaction — a half-executed swap is worse than one that
-doesn't run at all.
+**The 0.5% fee is always charged.** By default it is collected by the
+KyberSwap aggregator's audited router and paid to your wallet in the same
+transaction. If the aggregator can't return a route, the quote fails with a
+retry prompt rather than silently executing a fee-free swap — this is a
+commercial product and routing around its own revenue would be the wrong
+default.
 
 ### Safety properties built into the contract
 

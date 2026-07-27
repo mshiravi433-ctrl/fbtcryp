@@ -7,7 +7,6 @@ import { useAppStore } from '../store/useAppStore';
 import {
   IconBuilding,
   IconChevronLeft,
-  IconCopy,
   IconExternal,
   IconTelegram,
   IconMapPin,
@@ -84,16 +83,19 @@ export default function Contact() {
         </div>
       </motion.button>
 
-      <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => copy(`@${TELEGRAM}`, 'handleCopied')}>
-          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
-            <IconCopy width={15} height={15} /> {t('contact.copyHandle')}
-          </span>
-        </button>
-        <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => openLink(TELEGRAM_URL)}>
+      <motion.button
+        className="btn btn-primary"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        whileTap={{ scale: 0.97 }}
+        onClick={() => openLink(TELEGRAM_URL)}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+          <IconTelegram width={18} height={18} />
           {t('contact.openTelegram')}
-        </button>
-      </div>
+        </span>
+      </motion.button>
 
       {/* ---------- company card ---------- */}
       <motion.section className="card" variants={stagger} initial="hidden" animate="show">

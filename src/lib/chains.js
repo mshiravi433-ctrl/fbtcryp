@@ -62,10 +62,14 @@ export const FEE_ROUTER_ADDRESS =
 
 const isAddr = (a) => Boolean(a) && /^0x[a-fA-F0-9]{40}$/.test(a);
 
-/** 'aggregator' (default, zero setup) | 'contract' (self-deployed) | 'none' */
+/**
+ * 'aggregator' (default) | 'contract' (self-deployed FeeRouter)
+ *
+ * There is intentionally no 'none'. This is a commercial product: every swap
+ * carries the 0.5% platform fee. Removing it would require editing this file.
+ */
 export const FEE_MODE =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_MODE) ||
-  (isAddr(FEE_ROUTER_ADDRESS) ? 'contract' : 'aggregator');
+  isAddr(FEE_ROUTER_ADDRESS) ? 'contract' : 'aggregator';
 
 export const feeRecipientValid = () => isAddr(FEE_RECIPIENT);
 
