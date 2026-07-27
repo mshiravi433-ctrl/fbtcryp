@@ -50,7 +50,29 @@ function fail(msg) {
 
 if (!pk) fail('Set DEPLOYER_PRIVATE_KEY (a wallet with a little BNB for gas).');
 if (!recipient) fail('Set FEE_RECIPIENT (the wallet that receives the 0.5% fee).');
-if (!isAddress(recipient)) fail(`FEE_RECIPIENT "${recipient}" is not a valid address.`);
+
+// Catch the most common and most expensive mistake: pasting an address from
+// the wrong chain. BSC cannot pay to a Bitcoin address — funds sent toward one
+// are simply unrecoverable, so refuse loudly instead of deploying.
+if (/^(bc1|tb1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(recipient)) {
+  fail(
+    `FEE_RECIPIENT "${recipient}" looks like a BITCOIN address.\n` +
+      '  This contract runs on BNB Smart Chain and can only pay to an EVM\n' +
+      '  address (0x + 40 hex characters). Bitcoin and BSC are separate\n' +
+      '  networks with incompatible address formats — there is no way to\n' +
+      '  forward BEP-20 tokens to a bech32 address, and anything sent that\n' +
+      '  way is lost permanently.\n\n' +
+      '  Use an EVM wallet you control (MetaMask / Trust / a hardware wallet).\n' +
+      '  You can always swap the collected fees to BTC afterwards and withdraw\n' +
+      '  to this Bitcoin address from an exchange.'
+  );
+}
+if (!isAddress(recipient)) {
+  fail(
+    `FEE_RECIPIENT "${recipient}" is not a valid EVM address.\n` +
+      '  Expected 0x followed by 40 hexadecimal characters.'
+  );
+}
 if (feeBps > 100) fail('FEE_BPS cannot exceed 100 (1%) — the contract rejects it.');
 
 const artifactPath = path.join(root, 'src/lib/feeRouterArtifact.json');

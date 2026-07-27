@@ -1,11 +1,11 @@
-# FNT DEX — Decentralized Exchange
+# FBT Swap — Decentralized Exchange
 
 A non-custodial DEX as a Telegram Mini App **and** an Android app. Real
 on-chain swaps on BNB Smart Chain, a 0.5% platform fee collected by an
 audited-shaped smart contract, RGB dark/light theming, and full fa/en/ar
 support with RTL.
 
-**FNT iran** · Isfahan, Khomeyni Shahr · Project director: Dr. Mohammad Shiravi Khozani
+**FBT iran** · Isfahan, Khomeyni Shahr · Project director: Dr. Mohammad Shiravi Khozani
 
 ---
 
@@ -33,7 +33,7 @@ variables (WalletConnect ID, fee contract address, Firebase config).
 
 1. Open the [**Actions** tab](../../actions/workflows/build-apk.yml)
 2. Click the most recent successful run (green ✓)
-3. Download **`FNT-DEX-apk`** from the *Artifacts* section
+3. Download **`FBT-Swap-apk`** from the *Artifacts* section
 4. Unzip and install the `.apk` on your phone
 
 **Or from Releases:** tagged builds are published to
@@ -69,6 +69,26 @@ transaction they can decline.
 user ──approve──▶ FeeRouter ──0.5%──▶ your wallet
                       └──99.5%──▶ PancakeSwap ──▶ user gets output token
 ```
+
+### ⚠️ The fee wallet must be an EVM address, not Bitcoin
+
+`FEE_RECIPIENT` has to be a **BNB Smart Chain address** (`0x` + 40 hex chars) —
+something you control in MetaMask, Trust Wallet, or a hardware wallet.
+
+A Bitcoin address (`bc1…`) **cannot** receive the fee. Bitcoin and BSC are
+separate networks with incompatible address formats; there is no mechanism for
+a BEP-20 contract to pay out to a bech32 address, and value pushed that way is
+gone permanently. The deploy script now refuses a `bc1…` value outright rather
+than letting the mistake reach mainnet.
+
+**If you want the revenue in Bitcoin**, the normal flow is:
+
+1. Collect fees to an EVM wallet you control.
+2. Periodically swap BNB/USDT → BTC (in this app, or on any exchange).
+3. Withdraw the BTC to `bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2`.
+
+Keeping the fee wallet separate from your personal wallet also makes the
+accounting much easier at tax time.
 
 ### Deploy it (one-time, ~$1–3 of gas)
 
@@ -115,7 +135,7 @@ hold.
   The deployer key becomes the owner, and a hot deployer key is a liability.
 - **Test with a tiny swap** before announcing anything.
 - Charging a fee makes this a commercial financial service. Check what that
-  means for FNT iran's licensing and tax obligations locally.
+  means for FBT iran's licensing and tax obligations locally.
 
 ---
 
@@ -347,7 +367,7 @@ who breaches Firebase the keys to every user's funds.
 
 ## Company
 
-**FNT iran** — commercial trading company moving into the new digital economy.
+**FBT iran** — commercial trading company moving into the new digital economy.
 
 - Director: Dr. Mohammad Shiravi Khozani
 - Address: Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality

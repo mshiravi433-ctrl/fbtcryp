@@ -7,7 +7,7 @@ import ar from './locales/ar.json';
 export const SUPPORTED = ['fa', 'en', 'ar'];
 export const RTL_LANGS = ['fa', 'ar'];
 
-const STORAGE_KEY = 'nexus-lang';
+const STORAGE_KEY = 'fbt-lang';
 
 function detectLang() {
   const saved = localStorage.getItem(STORAGE_KEY);

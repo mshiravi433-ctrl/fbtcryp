@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /**
- * FNT DEX — FeeRouter
+ * FBT Swap — FeeRouter
  *
  * Takes a 0.5% platform fee from the INPUT token, then forwards the remainder
  * to the PancakeSwap V2 router in the SAME transaction. Atomic: the user

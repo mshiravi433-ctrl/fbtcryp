@@ -214,7 +214,7 @@ body {
   position: relative;
   z-index: 1;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
   -webkit-background-clip: text;

@@ -1,4 +1,4 @@
-package ir.fnt.dex;
+package ir.fbt.swap;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -41,9 +41,9 @@ export default function About() {
               fontFamily: 'var(--font-mono)'
             }}
           >
-            FNT
+            FBT
           </motion.div>
-          <h2 className="h2 gradient-text" style={{ fontSize: 21 }}>FNT iran</h2>
+          <h2 className="h2 gradient-text" style={{ fontSize: 21 }}>FBT iran</h2>
           <p className="faint" style={{ marginTop: 4 }}>{t('about.tagline')}</p>
         </div>
       </motion.section>
@@ -106,7 +106,7 @@ export default function About() {
           <span className="info-row-icon"><IconBuilding width={18} height={18} /></span>
           <div>
             <div className="faint">{t('about.company')}</div>
-            <div style={{ fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>FNT iran</div>
+            <div style={{ fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>FBT iran</div>
           </div>
         </div>
 

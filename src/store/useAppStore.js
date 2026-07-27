@@ -233,7 +233,7 @@ export const useAppStore = create(
 
       ensureRefCode(tgId) {
         if (get().refCode) return get().refCode;
-        const code = `NX${(tgId ?? Math.floor(Math.random() * 1e6)).toString(36).toUpperCase().slice(-6)}`;
+        const code = `FBT${(tgId ?? Math.floor(Math.random() * 1e6)).toString(36).toUpperCase().slice(-6)}`;
         set({ refCode: code });
         return code;
       },
@@ -259,7 +259,7 @@ export const useAppStore = create(
       }
     }),
     {
-      name: 'nexus-crypto-v1',
+      name: 'fbt-swap-v1',
       partialize: (s) => {
         const { notifications, ...rest } = s;
         void notifications;

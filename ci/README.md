@@ -15,7 +15,7 @@ Or via the GitHub web UI: **Actions → New workflow → set up a workflow
 yourself**, then paste the contents of `build-apk.yml` and commit.
 
 The first run starts automatically on push. When it finishes, the APK is under
-**Actions → the run → Artifacts → FNT-DEX-apk**.
+**Actions → the run → Artifacts → FBT-Swap-apk**.
 
 ## Optional repository variables
 

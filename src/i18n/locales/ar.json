@@ -188,7 +188,7 @@
     "referralDesc": "شارك رمزك واحصل على مكافآت",
     "referralNote": "أرصدة الإحالة افتراضية. برنامج الإحالة الذي يدفع قيمة حقيقية قد يُعد ترويجاً مالياً — راجع القوانين المحلية أولاً.",
     "shareInvite": "مشاركة رابط الدعوة",
-    "shareText": "انضم إليّ في نيكسوس — تطبيق العملات الرقمية في تيليجرام",
+    "shareText": "انضم إليّ في إف بي تي سواب — تطبيق العملات الرقمية في تيليجرام",
     "quests": "المهام",
     "quest": {
       "firstTrade": "نفّذ أول صفقة",
@@ -367,7 +367,7 @@
     },
     "custody": {
       "title": "Your keys, your coins",
-      "body": "FNT never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
+      "body": "FBT never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
     }
   },
   "settings": {
@@ -426,7 +426,7 @@
     "title": "من نحن",
     "tagline": "Trade & technology for a new economy",
     "who": "Who we are",
-    "body1": "FNT iran is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
+    "body1": "FBT iran is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
     "body2": "We built this exchange because we believe access to global markets shouldn't depend on where you happen to live, which bank will take you, or who is willing to hold your money. A decentralized exchange removes those gatekeepers: you connect your own wallet, you trade, and the assets never leave your control.",
     "body3": "We are a small team that prefers shipping honest software over marketing promises. The app tells you exactly what it does, what it charges, and what it cannot protect you from. We would rather you understand the risk than be pleasantly surprised by it later.",
     "values": "What we stand for",
@@ -456,7 +456,7 @@
     "addressValue": "أصفهان، خميني شهر، شارع الشهيد بهشتي، بجوار بلدية المنطقة ٤",
     "network": "Network",
     "custody": "We never hold your funds",
-    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FNT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
+    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FBT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
     "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations."
   },
   "contact": {
@@ -470,6 +470,6 @@
     "viewMap": "View on map",
     "support": "Support",
     "supportBody": "We answer Instagram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
-    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FNT is impersonating us. Our only official contact is the Instagram account shown above."
+    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FBT is impersonating us. Our only official contact is the Instagram account shown above."
   }
 }

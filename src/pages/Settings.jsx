@@ -335,7 +335,7 @@ export default function Settings() {
         </div>
       </motion.section>
 
-      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FNT iran · v1.0.0</p>
+      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FBT iran · v1.0.0</p>
 
       {/* ---------------- username sheet ---------------- */}
       <Sheet open={nameSheet} onClose={() => setNameSheet(false)}>

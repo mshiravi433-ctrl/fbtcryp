@@ -19,7 +19,7 @@
  * ──────────────────────────────────────────────────────────────────────────
  */
 
-const STORAGE_KEY = 'nexus-wallet-v1';
+const STORAGE_KEY = 'fbt-wallet-v1';
 const PBKDF2_ITERATIONS = 310_000; // OWASP 2023 guidance for PBKDF2-SHA256
 
 const enc = new TextEncoder();

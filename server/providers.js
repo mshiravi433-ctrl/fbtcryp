@@ -22,7 +22,7 @@ async function req(url, { headers = {}, timeout = TIMEOUT_MS } = {}) {
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { accept: 'application/json', 'user-agent': 'nexus-mini-app/1.0', ...headers }
+      headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0', ...headers }
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');

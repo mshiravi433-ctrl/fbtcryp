@@ -28,11 +28,11 @@ export default function Header() {
         transition={{ duration: 0.45 }}
       >
         <div className="brand-mark">
-          <span>NX</span>
+          <span>⇄</span>
         </div>
         <div className="brand-text">
-          <span className="brand-name gradient-text">NEXUS</span>
-          <span className="brand-sub">crypto terminal</span>
+          <span className="brand-name gradient-text">FBT Swap</span>
+          <span className="brand-sub">decentralized exchange</span>
         </div>
       </motion.div>
 

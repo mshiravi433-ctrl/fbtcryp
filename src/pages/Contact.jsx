@@ -103,7 +103,7 @@ export default function Contact() {
           <span className="info-row-icon"><IconBuilding width={18} height={18} /></span>
           <div style={{ flex: 1 }}>
             <div className="faint">{t('about.company')}</div>
-            <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>FNT iran</div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>FBT iran</div>
           </div>
         </motion.div>
 

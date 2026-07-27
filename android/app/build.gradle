@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "ir.fnt.dex"
+    namespace "ir.fbt.swap"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "ir.fnt.dex"
+        applicationId "ir.fbt.swap"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

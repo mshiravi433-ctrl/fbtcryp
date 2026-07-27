@@ -95,7 +95,7 @@ export const useSettingsStore = create(
       }
     }),
     {
-      name: 'fnt-settings-v1',
+      name: 'fbt-settings-v1',
       // 2FA secret stays out of the synced payload by construction
       partialize: (s) => {
         const { twoFactorSecret, ...rest } = s;

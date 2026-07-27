@@ -27,14 +27,14 @@ export async function startBot({ token, webAppUrl }) {
   const bot = new Telegraf(token);
 
   const launchKeyboard = webAppUrl
-    ? { reply_markup: { inline_keyboard: [[{ text: '🚀 Open NEXUS', web_app: { url: webAppUrl } }]] } }
+    ? { reply_markup: { inline_keyboard: [[{ text: '🚀 Open FBT SWAP', web_app: { url: webAppUrl } }]] } }
     : undefined;
 
   bot.start(async (ctx) => {
     const name = ctx.from?.first_name ?? 'trader';
     const referral = ctx.startPayload ? `\n🎟 Referral code: <code>${ctx.startPayload}</code>` : '';
     await ctx.replyWithHTML(
-      `<b>NEXUS — Crypto Terminal</b>\n\n` +
+      `<b>FBT Swap</b>\n\n` +
         `Hey ${name} 👋\n` +
         `Live market data, paper trading, yield plans, provably-fair mini-games and daily rewards — all inside Telegram.${referral}\n\n` +
         `<i>Everything runs on virtual NX credits. This bot never takes deposits and will never ask you to send crypto anywhere.</i>\n\n` +

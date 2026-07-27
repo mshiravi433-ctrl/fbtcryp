@@ -100,7 +100,7 @@ export async function verifyTotp(secretBase32, input, window = 1) {
 }
 
 /** otpauth:// URI for Google Authenticator / Authy QR codes. */
-export function totpUri(secret, account, issuer = 'FNT DEX') {
+export function totpUri(secret, account, issuer = 'FBT Swap') {
   return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account || 'wallet')}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
 
@@ -145,7 +145,7 @@ export async function registerBiometric(username = 'wallet') {
   const cred = await navigator.credentials.create({
     publicKey: {
       challenge,
-      rp: { name: 'FNT DEX', id: window.location.hostname },
+      rp: { name: 'FBT Swap', id: window.location.hostname },
       user: { id: userId, name: username, displayName: username },
       pubKeyCredParams: [
         { type: 'public-key', alg: -7 }, // ES256

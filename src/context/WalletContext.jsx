@@ -115,7 +115,7 @@ export function WalletProvider({ children }) {
         optionalChains: Object.keys(EVM_CHAINS).map(Number),
         showQrModal: true,
         metadata: {
-          name: 'NEXUS Crypto Terminal',
+          name: 'FBT SWAP Crypto Terminal',
           description: 'Non-custodial crypto terminal for Telegram',
           url: window.location.origin,
           icons: [`${window.location.origin}/icon.png`]

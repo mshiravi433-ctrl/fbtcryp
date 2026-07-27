@@ -1,6 +1,6 @@
 {
-  "appId": "ir.fnt.dex",
-  "appName": "FNT DEX",
+  "appId": "ir.fbt.swap",
+  "appName": "FBT Swap",
   "webDir": "dist",
   "android": {
     "allowMixedContent": false,
