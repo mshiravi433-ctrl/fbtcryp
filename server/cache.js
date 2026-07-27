@@ -3,6 +3,9 @@
 const store = new Map();
 const inflight = new Map();
 
+/** Exposed so blobCache.js can use the same hot-path map. */
+export const memoryStore = store;
+
 export function getCached(key) {
   const hit = store.get(key);
   if (!hit) return null;

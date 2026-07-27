@@ -11,7 +11,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
-import { withCache, cacheStats } from './cache.js';
+import { withCache, cacheStats, memoryStore } from './cache.js';
+import { blobConfigured, withPersistentCache } from './blobCache.js';
 import {
   fetchChart,
   fetchCoinDetail,
@@ -125,7 +126,7 @@ app.get('/api/prices', (req, res) => {
 const AI_TTL = Number(process.env.AI_CACHE_TTL_MS || 6 * 3600_000); // 6h
 
 app.get('/api/ai/status', (_req, res) =>
-  res.json({ enabled: aiConfigured(), news: newsConfigured() })
+  res.json({ enabled: aiConfigured(), news: newsConfigured(), persistentCache: blobConfigured() })
 );
 
 app.post('/api/ai/outlook', async (req, res) => {
@@ -139,10 +140,13 @@ app.post('/api/ai/outlook', async (req, res) => {
   const key = `ai:outlook:${id}:${lang || 'en'}:${day}`;
 
   try {
-    const { value, cached } = await withCache(key, AI_TTL, () =>
-      generateOutlook({ symbol, name, price, indicators, change24h, change7d, lang })
+    const { value, cached, tier } = await withPersistentCache(
+      key,
+      AI_TTL,
+      () => generateOutlook({ symbol, name, price, indicators, change24h, change7d, lang }),
+      memoryStore
     );
-    if (cached) res.set('x-cache', 'HIT');
+    res.set('x-cache', cached ? `HIT:${tier}` : 'MISS');
     return res.json(value);
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
@@ -158,8 +162,13 @@ app.post('/api/ai/brief', async (req, res) => {
   const key = `ai:brief:${lang || 'en'}:${day}:${Math.floor(hour / 6)}`;
 
   try {
-    const { value, cached } = await withCache(key, AI_TTL, () => generateMarketBrief({ global: g, top, lang }));
-    if (cached) res.set('x-cache', 'HIT');
+    const { value, cached, tier } = await withPersistentCache(
+      key,
+      AI_TTL,
+      () => generateMarketBrief({ global: g, top, lang }),
+      memoryStore
+    );
+    res.set('x-cache', cached ? `HIT:${tier}` : 'MISS');
     return res.json(value);
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
@@ -173,8 +182,13 @@ app.post('/api/ai/faq', async (req, res) => {
 
   const key = `ai:faq:${lang || 'en'}:${String(question).trim().toLowerCase().slice(0, 120)}`;
   try {
-    const { value, cached } = await withCache(key, 24 * 3600_000, () => answerFaq({ question, lang }));
-    if (cached) res.set('x-cache', 'HIT');
+    const { value, cached, tier } = await withPersistentCache(
+      key,
+      24 * 3600_000,
+      () => answerFaq({ question, lang }),
+      memoryStore
+    );
+    res.set('x-cache', cached ? `HIT:${tier}` : 'MISS');
     return res.json(value);
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });

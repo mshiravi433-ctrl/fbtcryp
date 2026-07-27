@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@tonconnect/ui-react": "^2.4.4",
+    "@vercel/blob": "^2.6.1",
     "@walletconnect/ethereum-provider": "^2.23.10",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
