@@ -24,3 +24,13 @@ jobs:
         with:
           name: FBT-Swap-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      # Also publish to Releases so the APK can be downloaded without a
+      # GitHub login — artifacts require one, which is painful on a phone.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: FBT Swap — latest build
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          body: |
+            Latest automatic build. Tap the .apk below to install.
+            Debug-signed: Android will warn about "unknown sources".

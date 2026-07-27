@@ -14,8 +14,11 @@ support with RTL.
 The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
 SDK, so it cannot produce one locally).
 
-> **APK not appearing?** See [`docs/APK-FA.md`](docs/APK-FA.md) — نسخه فارسی
-> با تشخیص مشکل و راه‌حل قدم‌به‌قدم.
+> ### ✅ APK is built and ready
+> **[⬇️ Releases page](../../releases)** · or
+> **[Actions artifact](../../actions/runs/30300111212)** (needs a GitHub login)
+> — 4.54 MB, package `ir.fbt.swap`.
+> Persian install guide: [`docs/APK-FA.md`](docs/APK-FA.md)
 
 ### ⚡ One-time setup — enable the workflow (phone-friendly)
 
