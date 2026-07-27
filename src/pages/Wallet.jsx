@@ -33,6 +33,7 @@ export default function Wallet() {
   const resetAccount = useAppStore((s) => s.resetAccount);
 
   const [confirmReset, setConfirmReset] = useState(false);
+  const [tab, setTab] = useState('overview');
   const [connectOpen, setConnectOpen] = useState(false);
   const [seedSheet, setSeedSheet] = useState(false);
   const [seedPw, setSeedPw] = useState('');
@@ -61,6 +62,15 @@ export default function Wallet() {
 
   return (
     <PageTransition>
+      <div className="segmented">
+        {['overview', 'liquidity', 'history'].map((k) => (
+          <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
+            {tab === k && <motion.span layoutId="wtab" className="seg-indicator" />}
+            {t(`wallet.tab.${k}`)}
+          </button>
+        ))}
+      </div>
+
       {/* ---------- profile ---------- */}
       <motion.section className="card card-rgb card-glow-magenta" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
@@ -93,6 +103,43 @@ export default function Wallet() {
         </div>
       </motion.section>
 
+      {tab === 'liquidity' && (
+        <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+          <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.tab.liquidity')}</p>
+          <p className="muted" style={{ fontSize: 12.3 }}>{t('wallet.liquidityBody')}</p>
+          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => navigate('/farm')}>
+            {t('wallet.viewPools')}
+          </button>
+        </motion.section>
+      )}
+
+      {tab === 'history' && (
+        <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+          <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.tab.history')}</p>
+          {orders.length === 0 ? (
+            <div className="empty">
+              <span className="empty-icon">🗒</span>
+              {t('wallet.noHistory')}
+            </div>
+          ) : (
+            orders.slice(0, 20).map((o) => (
+              <div key={o.id} className="row-between" style={{ padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+                <span className={`pill ${o.side === 'buy' ? 'pill-up' : 'pill-down'}`}>{t(`trade.${o.side}`)}</span>
+                <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(o.qty)} {o.symbol}</span>
+                <span className="faint mono" style={{ fontSize: 10 }}>{fmtDateTime(o.at)}</span>
+              </div>
+            ))
+          )}
+          {wallet.address && (
+            <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 11 }}
+              onClick={() => window.open(explorerAddr(wallet.chainId, wallet.address), '_blank', 'noopener')}>
+              {t('wallet.onchainHistory')}
+            </button>
+          )}
+        </motion.section>
+      )}
+
+      {tab === 'overview' && <>
       {/* ---------- allocation ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('wallet.allocation')}</p>
@@ -202,6 +249,8 @@ export default function Wallet() {
           </div>
         </div>
       </motion.section>
+
+      </>}
 
       {/* ---------- on-chain wallet (non-custodial) ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">

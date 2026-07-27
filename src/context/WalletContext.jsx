@@ -118,8 +118,8 @@ export function WalletProvider({ children }) {
         optionalChains: Object.keys(EVM_CHAINS).map(Number),
         showQrModal: true,
         metadata: {
-          name: 'FBT SWAP Crypto Terminal',
-          description: 'Non-custodial crypto terminal for Telegram',
+          name: 'FBT Swap',
+          description: 'Non-custodial decentralized exchange on BNB Smart Chain',
           url: window.location.origin,
           icons: [`${window.location.origin}/icon.png`]
         }

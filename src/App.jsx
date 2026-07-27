@@ -27,6 +27,12 @@ const Perp = lazy(() => import('./pages/Perp'));
 const Farm = lazy(() => import('./pages/Farm'));
 const Signals = lazy(() => import('./pages/Signals'));
 const Stocks = lazy(() => import('./pages/Stocks'));
+const Help = lazy(() => import('./pages/Help'));
+const Docs = lazy(() => import('./pages/Docs'));
+const Audit = lazy(() => import('./pages/Audit'));
+const Developers = lazy(() => import('./pages/Developers'));
+const Ecosystem = lazy(() => import('./pages/Ecosystem'));
+const Business = lazy(() => import('./pages/Business'));
 
 function Loader() {
   return (
@@ -59,6 +65,12 @@ function AnimatedRoutes() {
           <Route path="/farm" element={<Farm />} />
           <Route path="/signals" element={<Signals />} />
           <Route path="/stocks" element={<Stocks />} />
+          <Route path="/help" element={<Help />} />
+          <Route path="/docs" element={<Docs />} />
+          <Route path="/audit" element={<Audit />} />
+          <Route path="/developers" element={<Developers />} />
+          <Route path="/ecosystem" element={<Ecosystem />} />
+          <Route path="/business" element={<Business />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>

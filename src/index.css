@@ -1250,3 +1250,64 @@ input, select, textarea { font-size: 16px !important; }
 .edge-mint::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-4), var(--rgb-9), var(--rgb-7), var(--rgb-4)); }
 .edge-ember::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-5), var(--rgb-6), var(--rgb-3), var(--rgb-5)); }
 .edge-orchid::before { background: conic-gradient(from var(--angle,0deg), var(--rgb-8), var(--rgb-2), var(--rgb-3), var(--rgb-8)); }
+
+/* ==========================================================================
+   More drawer
+   ========================================================================== */
+
+.more-panel {
+  position: fixed;
+  z-index: 61;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 100%;
+  max-width: 520px;
+  background: #06070c;
+  border: 1px solid var(--line-strong);
+  border-bottom: none;
+  border-radius: 26px 26px 0 0;
+  padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
+  max-height: 86dvh;
+  overflow-y: auto;
+  box-shadow: 0 -20px 60px -20px rgba(0, 0, 0, 0.9);
+}
+
+:root[data-theme='light'] .more-panel { background: #fff; }
+
+.more-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 4px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  cursor: pointer;
+  min-height: 78px;
+  justify-content: center;
+}
+
+.more-tile-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 127, 0.07);
+}
+
+.more-tile-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+/* Nav item that opens the drawer */
+.nav-item[data-more='true'] .nav-icon { transition: transform 0.25s cubic-bezier(.34,1.56,.64,1); }
+.nav-item[data-more='true'][data-open='true'] .nav-icon { transform: rotate(90deg); }

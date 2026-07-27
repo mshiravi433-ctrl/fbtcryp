@@ -1,0 +1,142 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import { useTelegram } from '../context/TelegramContext';
+import {
+  IconChevronLeft, IconChevronRight, IconExternal, IconSwap,
+  IconPools, IconWallet, IconActivity, IconShield, IconTrend
+} from '../components/Icons';
+
+/**
+ * In-app documentation for beginners.
+ *
+ * Each section explains one screen: what it does, the steps to use it, and the
+ * mistake people actually make there. The "pitfall" line matters more than the
+ * steps — most losses come from not knowing what can go wrong, not from being
+ * unable to find a button.
+ *
+ * YouTube links point at well-known educational channels rather than anything
+ * we produced, and are labelled as third-party so nobody assumes we vetted
+ * every word.
+ */
+const SECTIONS = [
+  { id: 'start', Icon: IconWallet, steps: 4, video: 'https://www.youtube.com/results?search_query=how+to+use+metamask+beginner' },
+  { id: 'swap', Icon: IconSwap, steps: 5, video: 'https://www.youtube.com/results?search_query=how+to+swap+tokens+dex+beginner' },
+  { id: 'farm', Icon: IconPools, steps: 4, video: 'https://www.youtube.com/results?search_query=liquidity+pool+impermanent+loss+explained' },
+  { id: 'signals', Icon: IconActivity, steps: 3, video: 'https://www.youtube.com/results?search_query=rsi+macd+explained+beginners' },
+  { id: 'trade', Icon: IconTrend, steps: 3, video: null },
+  { id: 'security', Icon: IconShield, steps: 5, video: 'https://www.youtube.com/results?search_query=crypto+wallet+security+seed+phrase' }
+];
+
+export default function Docs() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { haptic, tg } = useTelegram();
+  const [openId, setOpenId] = useState('start');
+
+  const open = (url) => {
+    haptic?.('light');
+    if (tg?.openLink) tg.openLink(url);
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <PageTransition>
+      <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
+        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+          <IconChevronLeft width={18} height={18} />
+        </button>
+        <h1 className="h1" style={{ fontSize: 19 }}>{t('docs.title')}</h1>
+      </motion.div>
+
+      <p className="muted">{t('docs.intro')}</p>
+
+      <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
+        {SECTIONS.map(({ id, Icon, steps, video }) => {
+          const isOpen = openId === id;
+          return (
+            <motion.div key={id} className={`card ${isOpen ? 'card-rgb' : ''}`} variants={riseIn} layout>
+              <button
+                onClick={() => {
+                  haptic?.('select');
+                  setOpenId(isOpen ? null : id);
+                }}
+                style={{ background: 'none', border: 'none', width: '100%', padding: 0, cursor: 'pointer', textAlign: 'start' }}
+              >
+                <div className="row-between">
+                  <div className="row" style={{ gap: 11 }}>
+                    <span className="wallet-badge" style={{ width: 36, height: 36 }}>
+                      <Icon width={18} height={18} />
+                    </span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t(`docs.${id}.title`)}</div>
+                      <div className="faint">{t(`docs.${id}.sub`)}</div>
+                    </div>
+                  </div>
+                  <motion.span animate={{ rotate: isOpen ? 90 : 0 }} style={{ color: 'var(--text-3)' }}>
+                    <IconChevronRight width={17} height={17} />
+                  </motion.span>
+                </div>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div style={{ paddingTop: 13 }}>
+                      {Array.from({ length: steps }).map((_, i) => (
+                        <motion.div
+                          key={i}
+                          className="row"
+                          style={{ gap: 10, alignItems: 'flex-start', marginBottom: 9 }}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <span
+                            className="mono"
+                            style={{
+                              minWidth: 21, height: 21, borderRadius: 7, display: 'grid', placeItems: 'center',
+                              fontSize: 10, fontWeight: 700, flexShrink: 0,
+                              background: 'linear-gradient(135deg,var(--rgb-1),var(--rgb-2))', color: '#000'
+                            }}
+                          >
+                            {i + 1}
+                          </span>
+                          <span className="muted" style={{ fontSize: 12.3 }}>{t(`docs.${id}.step${i + 1}`)}</span>
+                        </motion.div>
+                      ))}
+
+                      <p className="notice notice-danger" style={{ marginTop: 10 }}>
+                        <strong>{t('docs.pitfall')}:</strong> {t(`docs.${id}.pitfall`)}
+                      </p>
+
+                      {video && (
+                        <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 10 }} onClick={() => open(video)}>
+                          <span style={{ display: 'inline-flex', gap: 7, alignItems: 'center', justifyContent: 'center' }}>
+                            <IconExternal width={14} height={14} /> {t('docs.watchVideo')}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      <p className="faint" style={{ lineHeight: 1.7 }}>{t('docs.videoNote')}</p>
+
+      <button className="btn btn-ghost" onClick={() => navigate('/help')}>{t('help.title')}</button>
+    </PageTransition>
+  );
+}

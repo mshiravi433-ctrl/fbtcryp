@@ -9,6 +9,7 @@ import { useChart, useGlobalStats, useMarkets } from '../hooks/useMarket';
 import { analyze, marketSentiment, projectRange } from '../lib/ai';
 import { fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
+import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
 
 const HORIZONS = [
   { days: 1, key: '1D' },
@@ -111,7 +112,7 @@ function IndicatorBar({ signal }) {
 }
 
 export default function Signals() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
 
@@ -121,6 +122,12 @@ export default function Signals() {
   const [coinId, setCoinId] = useState('bitcoin');
   const [horizon, setHorizon] = useState(HORIZONS[1]);
   const [scanning, setScanning] = useState(true);
+
+  const [ai, setAi] = useState({ enabled: false });
+  const [outlook, setOutlook] = useState(null);
+  const [brief, setBrief] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
   const { data: chart } = useChart(coinId, 30);
   const coin = useMemo(() => (coins ?? []).find((c) => c.id === coinId), [coins, coinId]);
@@ -136,6 +143,45 @@ export default function Signals() {
   );
 
   const sentiment = useMemo(() => marketSentiment(global), [global]);
+
+  useEffect(() => {
+    aiStatus().then(setAi);
+  }, []);
+
+  // Daily market brief. Server caches per 6h window, so this is one LLM call
+  // shared across all users rather than one per page view.
+  useEffect(() => {
+    if (!ai.enabled || !global || !coins?.length) return;
+    getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language })
+      .then(setBrief)
+      .catch(() => {});
+  }, [ai.enabled, global, coins, i18n.language]);
+
+  // Per-asset outlook, refreshed daily server-side.
+  useEffect(() => {
+    if (!ai.enabled || !analysis || !coin) return;
+    let alive = true;
+    setAiLoading(true);
+    setAiError(null);
+    setOutlook(null);
+    getOutlook({
+      id: coin.id,
+      symbol: coin.symbol,
+      name: coin.name,
+      price: coin.price,
+      indicators: analysis.indicators,
+      change24h: coin.change24h,
+      change7d: coin.change7d,
+      lang: i18n.language
+    })
+      .then((r) => alive && setOutlook(r))
+      .catch((e) => alive && setAiError(e.code || 'AI_FAILED'))
+      .finally(() => alive && setAiLoading(false));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ai.enabled, coin?.id, analysis?.score, i18n.language]);
 
   // brief "scanning" animation whenever the asset changes — signals that the
   // numbers were recomputed rather than left stale
@@ -206,6 +252,20 @@ export default function Signals() {
         </motion.section>
       )}
 
+      {brief && (
+        <motion.section className="card edge-mint card-rgb" variants={riseIn} initial="hidden" animate="show">
+          <div className="aurora" />
+          <div className="row-between" style={{ marginBottom: 7 }}>
+            <span className="field-label" style={{ margin: 0 }}>✦ {t('signals.dailyBrief')}</span>
+            <span className={`pill ${brief.bias === 'bullish' ? 'pill-up' : brief.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`}>
+              {t(`signals.bias.${brief.bias}`)}
+            </span>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 5 }}>{brief.headline}</div>
+          <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{brief.summary}</p>
+        </motion.section>
+      )}
+
       {/* ---------- asset picker ---------- */}
       <div className="tag-scroll">
         {(coins ?? []).slice(0, 14).map((c) => (
@@ -266,6 +326,113 @@ export default function Signals() {
           )}
         </AnimatePresence>
       </motion.section>
+
+      {/* ---------- AI outlook ---------- */}
+      {ai.enabled && (
+        <motion.section className="card card-rgb edge-orchid" variants={riseIn} initial="hidden" animate="show">
+          <div className="aurora" />
+          <div className="row-between" style={{ marginBottom: 10 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <motion.span
+                animate={{ scale: [1, 1.15, 1] }}
+                transition={{ duration: 2.4, repeat: Infinity }}
+                style={{ fontSize: 15 }}
+              >
+                ✦
+              </motion.span>
+              <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t('signals.aiOutlook')}</span>
+            </div>
+            {outlook && (
+              <span className={`pill ${outlook.bias === 'bullish' ? 'pill-up' : outlook.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`}>
+                {t(`signals.bias.${outlook.bias}`)} · {outlook.confidence}%
+              </span>
+            )}
+          </div>
+
+          {aiLoading && (
+            <div className="stack" style={{ gap: 8 }}>
+              {[92, 78, 60].map((w) => (
+                <motion.div
+                  key={w}
+                  className="skel"
+                  style={{ height: 11, width: `${w}%` }}
+                  animate={{ opacity: [0.4, 0.9, 0.4] }}
+                  transition={{ duration: 1.4, repeat: Infinity }}
+                />
+              ))}
+              <span className="faint" style={{ marginTop: 4 }}>{t('signals.aiThinking')}</span>
+            </div>
+          )}
+
+          {aiError && <p className="notice">{t('signals.aiUnavailable')}</p>}
+
+          {outlook && !aiLoading && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.6, marginBottom: 7 }}>
+                {outlook.headline}
+              </div>
+              <p className="muted" style={{ fontSize: 12.4, margin: 0 }}>{outlook.summary}</p>
+
+              {outlook.range?.low != null && (
+                <div className="card card-tight row-between" style={{ marginTop: 11 }}>
+                  <span className="faint">{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
+                  <span className="mono" style={{ fontSize: 12.5 }}>
+                    ${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}
+                  </span>
+                </div>
+              )}
+
+              {outlook.drivers?.length > 0 && (
+                <div style={{ marginTop: 11 }}>
+                  <div className="field-label">{t('signals.drivers')}</div>
+                  {outlook.drivers.map((d, i) => (
+                    <motion.div
+                      key={i}
+                      className="row"
+                      style={{ gap: 7, marginTop: 4, alignItems: 'flex-start' }}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 * i }}
+                    >
+                      <span className="up" style={{ fontSize: 11 }}>▲</span>
+                      <span className="muted" style={{ fontSize: 12 }}>{d}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              {outlook.risks?.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="field-label">{t('signals.risks')}</div>
+                  {outlook.risks.map((r, i) => (
+                    <motion.div
+                      key={i}
+                      className="row"
+                      style={{ gap: 7, marginTop: 4, alignItems: 'flex-start' }}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 * i }}
+                    >
+                      <span className="down" style={{ fontSize: 11 }}>▼</span>
+                      <span className="muted" style={{ fontSize: 12 }}>{r}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              {outlook.invalidation && (
+                <p className="notice" style={{ marginTop: 11 }}>
+                  <strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}
+                </p>
+              )}
+
+              <div className="faint" style={{ marginTop: 9, fontSize: 10 }}>
+                {t('signals.aiMeta', { model: outlook.model })}
+              </div>
+            </motion.div>
+          )}
+        </motion.section>
+      )}
 
       {/* ---------- indicator breakdown ---------- */}
       {analysis && !scanning && (

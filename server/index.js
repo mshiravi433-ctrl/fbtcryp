@@ -15,6 +15,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { startBot } from './bot.js';
+import { aiConfigured, answerFaq, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -111,6 +112,68 @@ app.get('/api/prices', (req, res) => {
     .slice(0, 50);
   if (!ids.length) return res.json({});
   return serve(res, 20000)(() => fetchSimplePrices(ids), `prices:${ids.sort().join(',')}`);
+});
+
+/* ------------------------------- AI routes ------------------------------- */
+/* Keys stay here. Responses cached hard so cost stays flat as users grow.    */
+
+const AI_TTL = Number(process.env.AI_CACHE_TTL_MS || 6 * 3600_000); // 6h
+
+app.get('/api/ai/status', (_req, res) =>
+  res.json({ enabled: aiConfigured(), news: newsConfigured() })
+);
+
+app.post('/api/ai/outlook', async (req, res) => {
+  if (!aiConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED' });
+  const { id, symbol, name, price, indicators, change24h, change7d, lang } = req.body ?? {};
+  if (!id || !symbol) return res.status(400).json({ error: 'BAD_REQUEST' });
+
+  // One entry per coin per language per day — a daily briefing doesn't need
+  // regenerating for every user who opens the screen.
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `ai:outlook:${id}:${lang || 'en'}:${day}`;
+
+  try {
+    const { value, cached } = await withCache(key, AI_TTL, () =>
+      generateOutlook({ symbol, name, price, indicators, change24h, change7d, lang })
+    );
+    if (cached) res.set('x-cache', 'HIT');
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+app.post('/api/ai/brief', async (req, res) => {
+  if (!aiConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED' });
+  const { global: g, top, lang } = req.body ?? {};
+  const day = new Date().toISOString().slice(0, 10);
+  const hour = new Date().getUTCHours();
+  // refresh the market brief every 6 hours
+  const key = `ai:brief:${lang || 'en'}:${day}:${Math.floor(hour / 6)}`;
+
+  try {
+    const { value, cached } = await withCache(key, AI_TTL, () => generateMarketBrief({ global: g, top, lang }));
+    if (cached) res.set('x-cache', 'HIT');
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+app.post('/api/ai/faq', async (req, res) => {
+  if (!aiConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED' });
+  const { question, lang } = req.body ?? {};
+  if (!question || String(question).trim().length < 3) return res.status(400).json({ error: 'BAD_REQUEST' });
+
+  const key = `ai:faq:${lang || 'en'}:${String(question).trim().toLowerCase().slice(0, 120)}`;
+  try {
+    const { value, cached } = await withCache(key, 24 * 3600_000, () => answerFaq({ question, lang }));
+    if (cached) res.set('x-cache', 'HIT');
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
+  }
 });
 
 app.get('/api/dex/:network', (req, res) =>

@@ -43,7 +43,7 @@ export default function About() {
           >
             FBT
           </motion.div>
-          <h2 className="h2 gradient-text" style={{ fontSize: 21 }}>FBT iran</h2>
+          <h2 className="h2 gradient-text" style={{ fontSize: 21 }}>{t('about.companyFull')}</h2>
           <p className="faint" style={{ marginTop: 4 }}>{t('about.tagline')}</p>
         </div>
       </motion.section>
@@ -93,14 +93,6 @@ export default function About() {
       {/* ---------- leadership + registry ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 10 }}>{t('about.details')}</p>
-
-        <div className="info-row">
-          <span className="info-row-icon"><IconUser width={18} height={18} /></span>
-          <div>
-            <div className="faint">{t('about.director')}</div>
-            <div style={{ fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>{t('about.directorName')}</div>
-          </div>
-        </div>
 
         <div className="info-row">
           <span className="info-row-icon"><IconBuilding width={18} height={18} /></span>

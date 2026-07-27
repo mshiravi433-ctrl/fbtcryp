@@ -1,24 +1,16 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { applyDirection } from '../i18n';
 import { useAppStore } from '../store/useAppStore';
 import { fmtNum } from '../lib/format';
 import { IconSettings } from './Icons';
 import AnimatedNumber from './AnimatedNumber';
 
-const LANGS = ['fa', 'en', 'ar'];
-
 export default function Header() {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const balance = useAppStore((s) => s.balance);
   const level = useAppStore((s) => s.level);
-
-  const setLang = (lng) => {
-    i18n.changeLanguage(lng);
-    applyDirection(lng);
-  };
 
   return (
     <header className="top-bar">
@@ -65,30 +57,6 @@ export default function Header() {
           <IconSettings width={17} height={17} />
         </motion.button>
 
-        <div className="lang-switch">
-          {LANGS.map((lng) => {
-            const active = i18n.language === lng;
-            return (
-              <button
-                key={lng}
-                className={`lang-btn ${active ? 'active' : ''}`}
-                onClick={() => setLang(lng)}
-                style={{ isolation: 'isolate' }}
-              >
-                <AnimatePresence>
-                  {active && (
-                    <motion.span
-                      layoutId="lang-pill"
-                      className="lang-pill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                    />
-                  )}
-                </AnimatePresence>
-                {lng}
-              </button>
-            );
-          })}
-        </div>
       </div>
     </header>
   );

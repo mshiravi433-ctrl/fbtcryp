@@ -24,6 +24,7 @@ import {
   IconGlobe,
   IconInfo,
   IconTelegram,
+  IconSettings as IconSettings2,
   IconDoc,
   IconKey,
   IconLock,
@@ -53,11 +54,18 @@ function Row({ icon: Icon, label, sub, right, onClick }) {
 }
 
 function Switch({ on, onChange }) {
+  // The knob is positioned with `inset-inline-start`, which flips sides in
+  // RTL — but `x` is a physical transform that always moves right. In Persian
+  // the knob therefore started at the right edge and slid further right, out
+  // of the track. Travel must follow the writing direction.
+  const rtl = typeof document !== 'undefined' && document.documentElement.getAttribute('dir') === 'rtl';
+  const travel = rtl ? -19 : 19;
+
   return (
     <button className="switch" data-on={on} onClick={onChange} type="button" role="switch" aria-checked={on}>
       <motion.span
         className="switch-knob"
-        animate={{ x: on ? 19 : 0 }}
+        animate={{ x: on ? travel : 0 }}
         transition={{ type: 'spring', stiffness: 500, damping: 32 }}
       />
     </button>
@@ -76,6 +84,8 @@ export default function Settings() {
   const [totpInput, setTotpInput] = useState('');
   const [recovery, setRecovery] = useState(null);
   const [twoFaErr, setTwoFaErr] = useState(null);
+  const [rpcSheet, setRpcSheet] = useState(false);
+  const [rpcDraft, setRpcDraft] = useState('');
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioErr, setBioErr] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -366,6 +376,59 @@ export default function Settings() {
         <p className="notice" style={{ marginTop: 10 }}>{t('settings.securityScope')}</p>
       </motion.section>
 
+      {/* ---------------- networks ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.networks')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconGlobe}
+            label={t('settings.testnet')}
+            sub={s.testnetMode ? t('settings.testnetOn') : t('settings.testnetOff')}
+            right={<Switch on={s.testnetMode} onChange={() => s.toggle('testnetMode')} />}
+          />
+          <Row
+            icon={IconKey}
+            label={t('settings.evmNetwork')}
+            sub={t('settings.evmNetworkSub')}
+            right={
+              <select
+                value={s.evmChainId}
+                onChange={(e) => s.setEvmChain(e.target.value)}
+                style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
+              >
+                <option value={56}>BSC</option>
+                <option value={1}>Ethereum</option>
+                <option value={137}>Polygon</option>
+                <option value={42161}>Arbitrum</option>
+                <option value={8453}>Base</option>
+              </select>
+            }
+          />
+          <Row
+            icon={IconGlobe}
+            label={t('settings.solana')}
+            sub={t('settings.solanaSub')}
+            right={
+              <select
+                value={s.solanaCluster}
+                onChange={(e) => s.setSolanaCluster(e.target.value)}
+                style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
+              >
+                <option value="mainnet-beta">Mainnet</option>
+                <option value="devnet">Devnet</option>
+              </select>
+            }
+          />
+          <Row
+            icon={IconSettings2}
+            label={t('settings.customRpc')}
+            sub={s.customEvmRpc || t('settings.customRpcSub')}
+            onClick={() => setRpcSheet(true)}
+          />
+        </div>
+        {s.testnetMode && <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('settings.testnetWarn')}</p>}
+      </motion.section>
+
       {/* ---------------- sync ---------------- */}
       {firebaseConfigured && (
         <motion.section variants={riseIn} initial="hidden" animate="show">
@@ -409,6 +472,39 @@ export default function Settings() {
       </motion.section>
 
       <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FBT iran · v1.0.0</p>
+
+      {/* ---------------- custom RPC ---------------- */}
+      <Sheet open={rpcSheet} onClose={() => setRpcSheet(false)} title={t('settings.customRpc')}>
+        <p className="muted" style={{ fontSize: 12.3 }}>{t('settings.customRpcHelp')}</p>
+        <label className="field-label" style={{ marginTop: 11 }}>EVM RPC</label>
+        <input
+          type="text"
+          value={rpcDraft || s.customEvmRpc}
+          onChange={(e) => setRpcDraft(e.target.value)}
+          placeholder="https://bsc-dataseed.binance.org"
+          style={{ fontSize: 13 }}
+        />
+        <label className="field-label" style={{ marginTop: 11 }}>Solana RPC</label>
+        <input
+          type="text"
+          defaultValue={s.solanaRpc}
+          onChange={(e) => s.setRpc('solanaRpc', e.target.value)}
+          placeholder="https://api.mainnet-beta.solana.com"
+          style={{ fontSize: 13 }}
+        />
+        <p className="notice" style={{ marginTop: 11 }}>{t('settings.rpcWarn')}</p>
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 11 }}
+          onClick={() => {
+            if (rpcDraft) s.setRpc('customEvmRpc', rpcDraft);
+            setRpcSheet(false);
+            haptic?.('success');
+          }}
+        >
+          {t('common.confirm')}
+        </button>
+      </Sheet>
 
       {/* ---------------- 2FA sheet ---------------- */}
       <Sheet open={twoFaSheet} onClose={() => setTwoFaSheet(false)} title={t('settings.twoFactorSetup')}>

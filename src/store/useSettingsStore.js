@@ -32,7 +32,16 @@ export const useSettingsStore = create(
       hideBalances: false,
       txConfirmations: true,
       expertMode: false,
-      defaultSlippage: 0.5, // always show the review sheet before signing
+      defaultSlippage: 0.5,
+
+      /* ---------------- networks ---------------- */
+      // Testnet is opt-in and off by default: this is a commercial product and
+      // the default experience must be the real one.
+      testnetMode: false,
+      evmChainId: 56,
+      solanaCluster: 'mainnet-beta',
+      solanaRpc: '',
+      customEvmRpc: '', // always show the review sheet before signing
 
       /* ---------------- onboarding ---------------- */
       onboarded: false,
@@ -59,6 +68,15 @@ export const useSettingsStore = create(
       },
       setSlippage(v) {
         set({ defaultSlippage: Math.min(50, Math.max(0.05, Number(v) || 0.5)) });
+      },
+      setEvmChain(id) {
+        set({ evmChainId: Number(id) || 56 });
+      },
+      setSolanaCluster(c) {
+        set({ solanaCluster: c });
+      },
+      setRpc(key, url) {
+        set({ [key]: String(url).slice(0, 200) });
       },
       setCurrency(currency) {
         set({ currency });
