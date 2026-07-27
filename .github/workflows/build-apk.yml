@@ -24,3 +24,10 @@ jobs:
         with:
           name: FBT-Swap-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+                - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: FBT Swap - latest
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          body: |
+            آخرین نسخه. روی فایل apk بزن تا نصب شود.
