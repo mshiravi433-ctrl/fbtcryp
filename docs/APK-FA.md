@@ -1,50 +1,48 @@
 # APK — دانلود
 
-## ⬇️ آخرین نسخه (v1.1.0)
+## ⬇️ آخرین نسخه آماده است
 
-**راه ۱ — صفحه Releases:**
+```
+github.com/mshiravi433-ctrl/fbtcryp/actions/runs/30304117148
+```
+
+صفحه را باز کن → پایین بیا → بخش **Artifacts** → روی **FBT-Swap-apk** بزن.
+
+یا از صفحه Releases:
 
 ```
 github.com/mshiravi433-ctrl/fbtcryp/releases
 ```
 
-**راه ۲ — مستقیم از build:**
+> ⚠️ دانلود از Artifacts نیاز به **لاگین گیت‌هاب** دارد.
 
-```
-github.com/mshiravi433-ctrl/fbtcryp/actions/runs/30303838744
-```
+**این نسخه همه تغییرات را دارد:** بیومتریک اصلاح‌شده، پاپ‌آپ وسط صفحه،
+فارسی پیش‌فرض، صفحه فیوچرز، صفحه فارم، شرایط استفاده و حریم خصوصی،
+تماس تلگرامی، و WalletConnect.
 
-صفحه را باز کن → پایین بیا → بخش **Artifacts** → روی **FBT-Swap-apk** بزن.
+### نصب
 
-> ⚠️ دانلود از Artifacts نیاز به **لاگین گیت‌هاب** دارد. اگر دکمه کار نکرد،
-> اول وارد حسابت شو.
-
-### نصب روی گوشی
-
-۱. فایل `.zip` دانلود می‌شود → با فایل‌منیجر بازش کن → `app-debug.apk` را بگیر
-۲. روی فایل apk بزن
-۳. اندروید هشدار «نصب از منابع ناشناس» می‌دهد — برای هر APK خارج از گوگل‌پلی
-   عادی است
-۴. اجازه بده → **Install**
-۵. بعد از نصب، آن اجازه را دوباره خاموش کن
-
-### مشخصات
+۱. فایل `.zip` را با فایل‌منیجر باز کن → `app-debug.apk` را بگیر
+۲. روی آن بزن → اندروید هشدار «منابع ناشناس» می‌دهد → اجازه بده → نصب
+۳. بعد از نصب، آن اجازه را دوباره خاموش کن
 
 | مورد | مقدار |
 |---|---|
-| نسخه | v1.1.0 |
 | حجم | ۴.۵۶ مگابایت |
-| نام بسته | `ir.fbt.swap` |
-| امضا | debug (تست و توزیع مستقیم) |
+| بسته | `ir.fbt.swap` |
 | کارمزد | ۰.۵٪ → `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
 
 ---
 
-## 🔧 پیشنهاد: خودکار کردن Release
+## ⚠️ فایل workflow خراب شده — یک خط باید اصلاح شود
 
-الان workflow فقط artifact می‌سازد، که دانلودش لاگین می‌خواهد و zip است. با
-اضافه کردن **۸ خط** به آخر فایل، از این به بعد APK خودکار در صفحه Releases
-منتشر می‌شود — بدون zip، بدون لاگین، یک لمس و نصب.
+آخرین build با `0s` شکست خورد. علتش دقیقاً یک چیز است: خط ۲۷ فایل workflow
+**۱۶ فاصله** از چپ دارد، ولی باید **۶ فاصله** داشته باشد.
+
+در YAML فاصله‌ها معنی دارند — با ۱۶ فاصله، گیت‌هاب فکر می‌کند آن خط بخشی از
+مرحله قبلی است و کل فایل را نامعتبر می‌داند.
+
+### راه‌حل: یک خط را اصلاح کن
 
 **۱.** این لینک را باز کن:
 
@@ -52,60 +50,94 @@ github.com/mshiravi433-ctrl/fbtcryp/actions/runs/30303838744
 github.com/mshiravi433-ctrl/fbtcryp/edit/arena/019fa427-fbtcryp/.github/workflows/build-apk.yml
 ```
 
-**۲.** برو به **آخر فایل** (بعد از خط
-`path: android/app/build/outputs/apk/debug/app-debug.apk`)
+**۲.** خط ۲۷ را پیدا کن. الان این‌طور است (با فاصله زیاد):
 
-**۳.** این ۸ خط را **اضافه** کن (چیزی را پاک نکن):
+```
+                - uses: softprops/action-gh-release@v2
+```
+
+**۳.** فاصله‌های اضافی ابتدای آن خط را پاک کن تا **دقیقاً هم‌تراز** با خط
+`- uses: actions/upload-artifact@v4` بالایش شود:
+
+```
+      - uses: softprops/action-gh-release@v2
+```
+
+هر دو باید ۶ فاصله داشته باشند.
+
+**۴.** **Commit changes**
+
+### چطور بفهمی درست شد
+
+بعد از commit، در تب **Actions**:
+
+| نشانه | یعنی |
+|---|---|
+| نام اجرا **Build APK** | ✅ درست شد |
+| زمان چند دقیقه‌ای | ✅ واقعاً اجرا شد |
+| نام اجرا `.github/workflows/build-apk.yml` | ❌ هنوز خراب است |
+| زمان `0s` و فوراً قرمز | ❌ هنوز خراب است |
+
+بعد از موفقیت، APK **خودکار** در صفحه Releases منتشر می‌شود — بدون zip،
+بدون لاگین، یک لمس و نصب.
+
+### اگر ساده‌تر می‌خواهی
+
+می‌توانی کل محتوای فایل را پاک کنی و این ۳۴ خط را جایگزین کنی:
 
 ```yaml
+name: Build APK
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: chmod +x android/gradlew
+      - run: cd android && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FBT-Swap-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: FBT Swap - latest
           files: android/app/build/outputs/apk/debug/app-debug.apk
-          body: |
-            آخرین نسخه. روی فایل apk بزن تا نصب شود.
 ```
-
-> فاصله‌های ابتدای خط مهم‌اند: `- uses:` باید **۶ فاصله** از چپ داشته باشد،
-> دقیقاً هم‌تراز با `- uses: actions/upload-artifact@v4` بالایش.
-
-**۴.** **Commit changes**
-
-از این به بعد هر build، APK را مستقیم در
-`github.com/mshiravi433-ctrl/fbtcryp/releases` می‌گذارد.
 
 ---
 
-## چرا خودم این کار را نمی‌کنم
+## چرا خودم درستش نمی‌کنم
 
-امتحان کردم، گیت‌هاب رد کرد:
+سه بار امتحان کردم، گیت‌هاب هر بار رد کرد:
 
 ```
 refusing to allow a GitHub App to create or update workflow
 `.github/workflows/build-apk.yml` without `workflows` permission
 ```
 
-توکن من اجازه نوشتن در پوشه `.github/workflows/` را ندارد. این تنها بخشی از
-پروژه است که باید خودت انجام بدهی.
+اجرای دستی هم رد شد:
 
-همچنین نمی‌توانم فایل APK را از سندباکس دانلود و به Release بچسبانم — سرور
+```
+HTTP 403: Resource not accessible by integration
+```
+
+توکن من نه می‌تواند فایل‌های داخل `.github/workflows/` را بنویسد، نه build را
+دستی اجرا کند. این تنها بخشی از پروژه است که باید خودت انجام بدهی.
+
+همچنین نمی‌توانم APK را از سندباکس دانلود کنم و به Release بچسبانم — سرور
 Azure که artifactها را سرو می‌کند از اینجا در دسترس نیست.
-
----
-
-## تاریخچه نسخه‌ها
-
-### v1.1.0
-
-- رفع باگ بیومتریک — شناسه اثر انگشت ذخیره نمی‌شد
-- پاپ‌آپ‌ها به وسط صفحه منتقل شدند، با دکمه بستن
-- فارسی پیش‌فرض شد
-- صفحه فیوچرز (Perp) و فارم اضافه شد
-- صفحات شرایط استفاده و حریم خصوصی
-- تماس با ما → تلگرام
-- WalletConnect وصل شد
-
-### v1.0.0
-
-اولین نسخه اندروید.
