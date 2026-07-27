@@ -66,47 +66,28 @@ user ──approve──▶ FeeRouter ──0.5%──▶ your wallet
                       └──99.5%──▶ PancakeSwap ──▶ user gets output token
 ```
 
-### Which wallet address do I send? (phone-only guide)
+### Revenue wallet — configured
 
-You need a **BNB Smart Chain (EVM) address** — `0x` followed by 40 hex
-characters. Any of these work, all installable on a phone:
+The 0.5% fee is paid to:
 
-| Wallet | Notes |
-|---|---|
-| **Trust Wallet** | Easiest on mobile, owned by Binance, supports BSC out of the box |
-| **MetaMask** | Most common; add the BSC network on first use |
-| **SafePal / TokenPocket** | Also fine, both BSC-native |
-| **Ledger / Trezor** | Best for holding revenue long-term |
+```
+0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6   (BNB Smart Chain)
+```
 
-**Getting the address (Trust Wallet example):**
+EIP-55 checksum verified. It's baked into `scripts/deploy-feerouter.mjs` as the
+default, so it can't be mistyped at deploy time. Override for a one-off with
+`FEE_RECIPIENT=0x...`, but if you want to change it permanently after launch,
+call `setFeeRecipient()` on the live contract instead of redeploying — that way
+you don't have to migrate users to a new contract address.
 
-1. Install Trust Wallet → **Create a new wallet**
-2. Write the 12 words on paper — this is the only backup, and whoever has it
-   owns the funds
-3. On the main screen tap **Receive** → choose **BNB Smart Chain (BEP20)**
-4. Tap **Copy** — you'll get something like `0x71C7…976F`
-5. That string is your `FEE_RECIPIENT`
+Fees arrive in whatever token the user sold: BNB from BNB→token swaps, USDT
+from USDT→token swaps, and so on. To convert to Bitcoin, swap to BTC (in this
+app or on any exchange) and withdraw to
+`bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2`.
 
-Make this a **dedicated wallet used only for revenue**. It keeps business
-income separate from personal funds, which matters a lot for bookkeeping and
-tax, and limits the damage if a personal device is compromised.
-
-### ⚠️ A Bitcoin address cannot receive the fee
-
-`bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2` is a **Bitcoin** address. The fee
-contract runs on BNB Smart Chain and can only pay to an EVM address.
-
-This isn't a limitation of this code: Bitcoin and BSC are entirely separate
-networks with incompatible address formats. There is no mechanism for a BEP-20
-contract to send value to a bech32 address, and anything pushed that way is
-**permanently unrecoverable**. The deploy script now refuses a `bc1…` value
-outright rather than letting the mistake reach mainnet.
-
-**To end up holding Bitcoin, do this instead:**
-
-1. Collect fees into your EVM wallet (above)
-2. Periodically swap BNB/USDT → BTC — in this app, or on any exchange
-3. Withdraw the BTC to `bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2`
+Verified in a real EVM (`npm run test:feerouter`): the contract deploys with
+this exact address as `feeRecipient`, and exactly 0.5% lands there across
+token→token, BNB→token and token→BNB.
 
 ### Deploy it (one-time, ~$1–3 of gas)
 

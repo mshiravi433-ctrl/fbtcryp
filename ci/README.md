@@ -67,7 +67,7 @@ variable**, then re-run the workflow.
 
 | Variable | What it does |
 |---|---|
-| `VITE_FEE_ROUTER_ADDRESS` | Your deployed FeeRouter — **required for the 0.5% revenue** |
+| `VITE_FEE_ROUTER_ADDRESS` | Your deployed FeeRouter — **required for the 0.5% revenue**. The fee wallet (`0xaf5C…24d6`) is already baked into the contract; this variable is the *contract* address you get after deploying. |
 | `VITE_WALLETCONNECT_PROJECT_ID` | Enables MetaMask/Trust connect (free at cloud.reown.com) |
 | `VITE_FIREBASE_API_KEY` | Firebase web config |
 | `VITE_FIREBASE_AUTH_DOMAIN` | Firebase web config |

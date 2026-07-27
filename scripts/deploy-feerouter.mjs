@@ -38,9 +38,17 @@ const NETWORKS = {
   }
 };
 
+/**
+ * FBT iran revenue wallet (BNB Smart Chain).
+ * Verified EIP-55 checksum. Override with FEE_RECIPIENT=0x... if it ever
+ * changes — but prefer calling setFeeRecipient() on the live contract so you
+ * don't have to redeploy and migrate users.
+ */
+const DEFAULT_FEE_RECIPIENT = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+
 const net = NETWORKS[process.env.NETWORK ?? 'mainnet'];
 const pk = process.env.DEPLOYER_PRIVATE_KEY;
-const recipient = process.env.FEE_RECIPIENT;
+const recipient = process.env.FEE_RECIPIENT ?? DEFAULT_FEE_RECIPIENT;
 const feeBps = Number(process.env.FEE_BPS ?? 50);
 
 function fail(msg) {
@@ -79,7 +87,7 @@ const artifactPath = path.join(root, 'src/lib/feeRouterArtifact.json');
 if (!fs.existsSync(artifactPath)) fail('Artifact missing. Run: node scripts/compile.mjs');
 const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
 
-const provider = new JsonRpcProvider(net.rpc, net.chainId);
+const provider = new JsonRpcProvider(net.rpc, net.chainId, { staticNetwork: true });
 const wallet = new Wallet(pk, provider);
 
 console.log('\n──────────────────────────────────────────────');
@@ -88,11 +96,20 @@ console.log('──────────────────────�
 console.log(' network    :', process.env.NETWORK ?? 'mainnet', `(chainId ${net.chainId})`);
 console.log(' deployer   :', wallet.address);
 console.log(' dex router :', net.router);
-console.log(' fee wallet :', recipient);
+console.log(' fee wallet :', recipient, process.env.FEE_RECIPIENT ? '(override)' : '(FBT default)');
 console.log(' fee        :', `${feeBps} bps = ${feeBps / 100}%`);
 console.log('──────────────────────────────────────────────\n');
 
-const balance = await provider.getBalance(wallet.address);
+let balance;
+try {
+  balance = await provider.getBalance(wallet.address);
+} catch {
+  fail(
+    `Could not reach the ${process.env.NETWORK ?? 'mainnet'} RPC (${net.rpc}).\n` +
+      '  Check your internet connection, or set a different endpoint —\n' +
+      '  public BSC nodes are sometimes rate-limited or geo-blocked.'
+  );
+}
 console.log(' deployer balance:', (Number(balance) / 1e18).toFixed(5), 'BNB');
 if (balance === 0n) fail('Deployer has no BNB. Fund it with ~0.01 BNB for gas.');
 

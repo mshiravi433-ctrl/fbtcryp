@@ -28,7 +28,8 @@ const vm = await VM.create({ common });
 
 const pk = hexToBytes('0x' + '11'.repeat(32));
 const owner = new Address(privateToAddress(pk));
-const feeWallet = new Address(hexToBytes('0x' + 'fe'.repeat(20)));
+const FBT_FEE_WALLET = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+const feeWallet = new Address(hexToBytes(FBT_FEE_WALLET.toLowerCase()));
 const user = owner;
 
 await vm.stateManager.putAccount(owner, new Account(0n, ethers.parseEther('1000')));
@@ -125,7 +126,9 @@ const balOf = async (tok, who) => (await call(tok.addr, tok.iface, 'balanceOf', 
 console.log('\n=== config sanity ===');
 console.log('feeBps      :', (await call(fr.addr, fr.iface,'feeBps',[]))[0].toString(), '(expect 50 = 0.5%)');
 console.log('MAX_FEE_BPS :', (await call(fr.addr, fr.iface,'MAX_FEE_BPS',[]))[0].toString(), '(expect 100 = 1% ceiling)');
-console.log('recipient   :', (await call(fr.addr, fr.iface,'feeRecipient',[]))[0].toLowerCase()===feeWallet.toString().toLowerCase());
+const onchainRecipient = (await call(fr.addr, fr.iface,'feeRecipient',[]))[0];
+console.log('recipient   :', onchainRecipient);
+console.log('  matches FBT wallet:', onchainRecipient.toLowerCase()===FBT_FEE_WALLET.toLowerCase(), '<<<');
 const [qf,qa] = await call(fr.addr, fr.iface,'quoteFee',[ethers.parseEther('1000')]);
 console.log('quoteFee(1000) -> fee', ethers.formatEther(qf), '| swap', ethers.formatEther(qa));
 
