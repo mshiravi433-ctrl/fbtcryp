@@ -14,7 +14,23 @@
  *     later at a wildly different price.
  */
 
-import { EVM_CHAINS, ERC20_ABI, ROUTER_ABI, FEE_ROUTER_ABI, FEE_ROUTER_ADDRESS, FEE_BPS, feeEnabled, buildPath } from './chains';
+import {
+  EVM_CHAINS,
+  ERC20_ABI,
+  ROUTER_ABI,
+  FEE_ROUTER_ABI,
+  FEE_ROUTER_ADDRESS,
+  FEE_BPS,
+  FEE_RECIPIENT,
+  feeEnabled,
+  aggregatorFeeEnabled,
+  buildPath
+} from './chains';
+import {
+  aggregatorSupports,
+  executeAggregatorSwap,
+  getAggregatorQuote
+} from './aggregator';
 
 const loadEthers = () => import('ethers');
 
@@ -58,6 +74,28 @@ export async function getBalances(provider, tokens, owner) {
 export async function getQuote({ provider, chainId, fromToken, toToken, amountIn, slippage = DEFAULT_SLIPPAGE }) {
   if (!amountIn || Number(amountIn) <= 0) return null;
   const { Contract, parseUnits, formatUnits } = await loadEthers();
+
+  // Preferred path: the aggregator finds a better route across every DEX AND
+  // collects our fee on-chain, with no contract of our own to deploy.
+  if (aggregatorFeeEnabled() && aggregatorSupports(chainId)) {
+    try {
+      return await getAggregatorQuote({
+        chainId,
+        fromToken,
+        toToken,
+        amountIn,
+        slippage,
+        feeBps: FEE_BPS,
+        feeReceiver: FEE_RECIPIENT,
+        parseUnits,
+        formatUnits
+      });
+    } catch {
+      // Aggregator unreachable or no route — fall through to PancakeSwap so
+      // the user can still trade. That swap carries no platform fee, which is
+      // the honest trade-off: a working swap beats a blocked one.
+    }
+  }
   const cfg = EVM_CHAINS[chainId];
   const router = new Contract(cfg.router, ROUTER_ABI, provider);
 
@@ -107,22 +145,27 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
 
 /* ------------------------------- allowance ------------------------------- */
 
-/** Whoever we approve must be whoever pulls the tokens. */
-export function spenderFor(chainId) {
+/**
+ * Whoever we approve must be whoever pulls the tokens.
+ * With the aggregator that's its router, which varies per quote — so callers
+ * pass the quote in and we read it from there.
+ */
+export function spenderFor(chainId, quote = null) {
+  if (quote?.source === 'aggregator' && quote.routerAddress) return quote.routerAddress;
   return feeEnabled() ? FEE_ROUTER_ADDRESS : EVM_CHAINS[chainId].router;
 }
 
-export async function getAllowance({ provider, chainId, token, owner }) {
+export async function getAllowance({ provider, chainId, token, owner, quote = null }) {
   if (token.native) return { raw: null, unlimited: true }; // gas coin needs no approval
   const { Contract } = await loadEthers();
   const c = new Contract(token.address, ERC20_ABI, provider);
-  const raw = await c.allowance(owner, spenderFor(chainId));
+  const raw = await c.allowance(owner, spenderFor(chainId, quote));
   return { raw, unlimited: false };
 }
 
-export async function needsApproval({ provider, chainId, token, owner, amountWei }) {
+export async function needsApproval({ provider, chainId, token, owner, amountWei, quote = null }) {
   if (token.native) return false;
-  const { raw } = await getAllowance({ provider, chainId, token, owner });
+  const { raw } = await getAllowance({ provider, chainId, token, owner, quote });
   return raw < amountWei;
 }
 
@@ -130,10 +173,10 @@ export async function needsApproval({ provider, chainId, token, owner, amountWei
  * Approve exactly `amountWei` (not infinite). Returns the tx receipt.
  * Some legacy tokens (USDT-style) require resetting to 0 first; we handle that.
  */
-export async function approveToken({ signer, chainId, token, amountWei }) {
+export async function approveToken({ signer, chainId, token, amountWei, quote = null }) {
   const { Contract } = await loadEthers();
   const c = new Contract(token.address, ERC20_ABI, signer);
-  const spender = spenderFor(chainId);
+  const spender = spenderFor(chainId, quote);
 
   const current = await c.allowance(await signer.getAddress(), spender);
   if (current > 0n && current < amountWei) {
@@ -162,6 +205,17 @@ export async function executeSwap({
   deadlineMinutes = DEFAULT_DEADLINE_MIN,
   supportFeeOnTransfer = true
 }) {
+  // Aggregator quotes carry their own prebuilt route; execute that.
+  if (quote.source === 'aggregator') {
+    return executeAggregatorSwap({
+      signer,
+      chainId,
+      quote,
+      slippage: quote.slippage ?? DEFAULT_SLIPPAGE,
+      deadlineMinutes
+    });
+  }
+
   const { Contract } = await loadEthers();
   const cfg = EVM_CHAINS[chainId];
   const to = await signer.getAddress();

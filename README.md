@@ -89,51 +89,52 @@ Verified in a real EVM (`npm run test:feerouter`): the contract deploys with
 this exact address as `feeRecipient`, and exactly 0.5% lands there across
 token→token, BNB→token and token→BNB.
 
-### Deploy the contract (one-time, ~$1–6 of gas)
+### ✅ Default: zero setup, fee already flowing
 
-The fee only starts flowing once `FeeRouter` is deployed and its address is set
-in `VITE_FEE_ROUTER_ADDRESS`.
+**You don't have to deploy anything.** By default swaps route through the
+**KyberSwap aggregator**, whose already-deployed and audited router splits the
+0.5% out and sends it straight to your wallet inside the same transaction.
 
-> 📖 **No computer / never deployed a contract before?**
-> **[راهنمای کامل فارسی قدم‌به‌قدم →](docs/DEPLOY-FA.md)**
-> Every click and value spelled out, plus a free testnet rehearsal, BscScan
-> verification, and nine common errors with fixes.
+```
+user swaps ──▶ KyberSwap router ──0.5%──▶ 0xaf5C…24d6  (your wallet)
+                     └──99.5%──▶ best price across every DEX on BSC
+```
 
-**From a computer:**
+No contract to deploy. No gas to spend. No audit to commission. And users
+usually get **better prices**, because the aggregator routes across every DEX
+on the chain instead of only PancakeSwap.
+
+Verified by test: the API request carries `feeAmount=50`, `isInBps=true`,
+`chargeFeeBy=currency_in` and `feeReceiver=0xaf5CE154…24d6`.
+
+If the aggregator is ever unreachable, the app falls back to a direct
+PancakeSwap swap **with no fee** — a working swap beats a blocked one.
+
+### Alternative: run your own contract
+
+Only worth it if you'd rather not depend on a third party. `contracts/FeeRouter.sol`
+does the same job from a contract you control. Costs ~$1–6 of gas to deploy and
+really should be audited before it sees serious volume.
+
+> 📖 **[راهنمای کامل فارسی قدم‌به‌قدم →](docs/DEPLOY-FA.md)** — every click,
+> a free testnet rehearsal, BscScan verification, and nine common errors.
 
 ```bash
 npm run compile:contract
-
-# testnet first — free, and proves the whole flow
-DEPLOYER_PRIVATE_KEY=0xyour_deployer_key NETWORK=testnet npm run deploy:feerouter
-
-# then mainnet
-DEPLOYER_PRIVATE_KEY=0xyour_deployer_key npm run deploy:feerouter
+DEPLOYER_PRIVATE_KEY=0x... NETWORK=testnet npm run deploy:feerouter   # test first
+DEPLOYER_PRIVATE_KEY=0x... npm run deploy:feerouter                   # mainnet
 ```
 
-**From a phone — Remix, no install needed:**
+Setting `VITE_FEE_ROUTER_ADDRESS` automatically switches `FEE_MODE` to
+`contract`; leaving it blank keeps the aggregator path.
 
-1. Open **remix.ethereum.org** (turn on *Request desktop site*)
-2. New file `FeeRouter.sol` ← paste [`contracts/FeeRouter.sol`](contracts/FeeRouter.sol)
-3. *Solidity Compiler*: version **0.8.26**, EVM version **paris**,
-   optimization **on / 200 runs** → **Compile**
-4. *Deploy & Run*: Environment **Injected Provider – MetaMask** (on BSC, chain 56)
-5. Expand the **Deploy** arrow and fill the three constructor arguments:
+### Fee configuration summary
 
-   | Argument | Value |
-   |---|---|
-   | `_dexRouter` | `0x10ED43C718714eb63d5aA57B78B54704E256024E` |
-   | `_feeRecipient` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-   | `_feeBps` | `50` |
-
-6. **Deploy** → confirm in MetaMask → **copy the deployed contract address**
-
-Then add that contract address as the GitHub repository variable
-`VITE_FEE_ROUTER_ADDRESS` and re-run the APK build.
-
-> The deployed **contract** address is not the same as your **wallet** address.
-> The wallet (`0xaf5C…24d6`) is baked into the contract; the variable takes the
-> contract. Mixing these up is the most common and most expensive mistake here.
+| Variable | Default | Effect |
+|---|---|---|
+| `VITE_FEE_RECIPIENT` | `0xaf5CE154…24d6` | Where the 0.5% lands |
+| `VITE_FEE_MODE` | `aggregator` | `aggregator` \| `contract` \| `none` |
+| `VITE_FEE_ROUTER_ADDRESS` | *(blank)* | Your contract; setting it implies `contract` mode |
 
 **If `VITE_FEE_ROUTER_ADDRESS` is blank the app charges nothing** and swaps
 directly against PancakeSwap. It never silently falls back to a "please also

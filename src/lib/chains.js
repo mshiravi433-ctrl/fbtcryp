@@ -41,10 +41,39 @@ export const DEFAULT_CHAIN = 56;
  * VITE_FEE_ROUTER_ADDRESS.
  */
 export const FEE_BPS = 50; // 0.50%
+
+/**
+ * Where the 0.5% goes. This is the ONLY value you must set to start earning.
+ *
+ * With just this set, swaps route through the KyberSwap aggregator, whose
+ * already-deployed audited router splits the fee out and sends it here inside
+ * the same transaction. No contract of your own to deploy, no gas to spend.
+ */
+export const FEE_RECIPIENT =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_RECIPIENT) ||
+  '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+
+/**
+ * Optional: your own deployed FeeRouter (contracts/FeeRouter.sol).
+ * Only needed if you'd rather not depend on a third-party aggregator.
+ */
 export const FEE_ROUTER_ADDRESS =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_ROUTER_ADDRESS) || null;
 
-export const feeEnabled = () => Boolean(FEE_ROUTER_ADDRESS) && /^0x[a-fA-F0-9]{40}$/.test(FEE_ROUTER_ADDRESS);
+const isAddr = (a) => Boolean(a) && /^0x[a-fA-F0-9]{40}$/.test(a);
+
+/** 'aggregator' (default, zero setup) | 'contract' (self-deployed) | 'none' */
+export const FEE_MODE =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_MODE) ||
+  (isAddr(FEE_ROUTER_ADDRESS) ? 'contract' : 'aggregator');
+
+export const feeRecipientValid = () => isAddr(FEE_RECIPIENT);
+
+/** True when swaps go through our own deployed FeeRouter contract. */
+export const feeEnabled = () => FEE_MODE === 'contract' && isAddr(FEE_ROUTER_ADDRESS);
+
+/** True when the aggregator collects the fee for us (no deployment needed). */
+export const aggregatorFeeEnabled = () => FEE_MODE === 'aggregator' && feeRecipientValid();
 
 /** Curated BEP-20 list. `native: true` means the chain's gas coin, not a contract. */
 export const TOKENS = {

@@ -146,12 +146,19 @@ export default function Swap() {
         chainId,
         token: fromToken,
         owner: wallet.address,
-        amountWei: quote.amountInWei
+        amountWei: quote.amountInWei,
+        quote
       });
 
       if (mustApprove) {
         setTxState({ stage: 'approving' });
-        const approval = await approveToken({ signer, chainId, token: fromToken, amountWei: quote.amountInWei });
+        const approval = await approveToken({
+          signer,
+          chainId,
+          token: fromToken,
+          amountWei: quote.amountInWei,
+          quote
+        });
         setTxState({ stage: 'approving', hash: approval.hash });
         await approval.wait();
       }
@@ -358,7 +365,9 @@ export default function Swap() {
               <div className="row-between">
                 <span className="faint">{t('swap.route')}</span>
                 <span className="mono faint" style={{ fontSize: 10.5 }}>
-                  {quote.hops} {t('swap.hops')}
+                  {quote.source === 'aggregator'
+                    ? t('swap.bestOf', { n: quote.hops })
+                    : `${quote.hops} ${t('swap.hops')}`}
                 </span>
               </div>
             </motion.div>
