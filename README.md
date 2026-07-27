@@ -14,10 +14,11 @@ support with RTL.
 The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
 SDK, so it cannot produce one locally).
 
-> ### ✅ APK ready
-> **[⬇️ download](../../actions/runs/30304117148)** (Artifacts → FBT-Swap-apk)
-> — 4.56 MB, `ir.fbt.swap`. Guide: [`docs/APK-FA.md`](docs/APK-FA.md)
-> ⚠️ The workflow file has a one-line indentation error — see the guide.
+> ### ⚠️ APK build blocked — one file needs fixing
+> The workflow YAML got corrupted during copy-paste (twice). Fix takes
+> 2 minutes: **[راهنمای فارسی →](docs/APK-FA.md)**
+> Build steps now live in `ci/build-apk.sh`, so the workflow is 27 lines
+> and you should never need to edit YAML again.
 
 ### ⚡ One-time setup — enable the workflow (phone-friendly)
 
