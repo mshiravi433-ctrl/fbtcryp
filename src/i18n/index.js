@@ -13,11 +13,11 @@ function detectLang() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved && SUPPORTED.includes(saved)) return saved;
 
+  // Persian is the product's primary language. We only auto-switch away from
+  // it when Telegram reports a language we support — never from navigator,
+  // which on most phones reports 'en' even for Iranian users.
   const tgLang = window?.Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
   if (tgLang && SUPPORTED.includes(tgLang)) return tgLang;
-
-  const nav = navigator.language?.slice(0, 2);
-  if (nav && SUPPORTED.includes(nav)) return nav;
 
   return 'fa';
 }

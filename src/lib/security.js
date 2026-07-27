@@ -120,7 +120,20 @@ export function generateRecoveryCodes(count = 6) {
 /* -------------------------------------------------------------------------- */
 
 export function biometricsSupported() {
-  return typeof window !== 'undefined' && Boolean(window.PublicKeyCredential) && Boolean(navigator.credentials);
+  if (typeof window === 'undefined') return false;
+  // WebAuthn is hard-gated to secure contexts. Over plain http:// the API
+  // exists but every call throws SecurityError, which looks like a broken
+  // feature rather than a misconfiguration — so check it explicitly.
+  if (!window.isSecureContext) return false;
+  return Boolean(window.PublicKeyCredential) && Boolean(navigator.credentials);
+}
+
+/** Why biometrics are unavailable, for an actionable error message. */
+export function biometricUnavailableReason() {
+  if (typeof window === 'undefined') return 'UNSUPPORTED';
+  if (!window.isSecureContext) return 'INSECURE_ORIGIN';
+  if (!window.PublicKeyCredential) return 'UNSUPPORTED';
+  return null;
 }
 
 export async function platformAuthenticatorAvailable() {

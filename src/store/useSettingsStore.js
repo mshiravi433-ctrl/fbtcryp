@@ -23,6 +23,7 @@ export const useSettingsStore = create(
 
       /* ---------------- security ---------------- */
       biometricEnabled: false,
+      biometricCredentialId: null,
       twoFactorEnabled: false,
       twoFactorSecret: null, // TOTP secret, stored encrypted by the caller
       autoLockMinutes: 5,
@@ -54,6 +55,13 @@ export const useSettingsStore = create(
       setAutoLock(minutes) {
         set({ autoLockMinutes: Math.max(0, Math.min(120, Number(minutes) || 0)) });
       },
+      enableBiometric(credentialId) {
+        set({ biometricEnabled: true, biometricCredentialId: credentialId });
+      },
+      disableBiometric() {
+        set({ biometricEnabled: false, biometricCredentialId: null });
+      },
+
       enable2FA(secret) {
         set({ twoFactorEnabled: true, twoFactorSecret: secret });
       },

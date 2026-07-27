@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
@@ -17,6 +17,7 @@ const PERCENTS = [25, 50, 75, 100];
 export default function Trade() {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
   const { data: coins } = useMarkets(60);
@@ -93,6 +94,14 @@ export default function Trade() {
         <h1 className="h1">{t('trade.title')}</h1>
         <p className="muted">{t('trade.subtitle')}</p>
       </motion.div>
+
+      {/* market-type switcher: spot (here), perpetuals, prediction */}
+      <div className="tag-scroll">
+        <button className="tag active">{t('trade.spot')}</button>
+        <button className="tag" onClick={() => navigate('/perp')}>{t('nav.perp')}</button>
+        <button className="tag" onClick={() => navigate('/predict')}>{t('nav.predict')}</button>
+        <button className="tag" onClick={() => navigate('/swap')}>{t('nav.swap')}</button>
+      </div>
 
       <p className="notice">{t('trade.paperNotice')}</p>
 
@@ -282,8 +291,7 @@ export default function Trade() {
       )}
 
       {/* ---------- asset picker ---------- */}
-      <Sheet open={pickerOpen} onClose={() => setPickerOpen(false)}>
-        <h2 className="h2" style={{ marginBottom: 10 }}>{t('trade.selectAsset')}</h2>
+      <Sheet open={pickerOpen} onClose={() => setPickerOpen(false)} title={t('trade.selectAsset')}>
         <input
           type="text"
           value={pickerQuery}
@@ -319,8 +327,7 @@ export default function Trade() {
       </Sheet>
 
       {/* ---------- confirm ---------- */}
-      <Sheet open={confirming} onClose={() => setConfirming(false)}>
-        <h2 className="h2" style={{ marginBottom: 12 }}>{t('trade.confirmTitle')}</h2>
+      <Sheet open={confirming} onClose={() => setConfirming(false)} title={t('trade.confirmTitle')}>
         <div className="card card-tight stack" style={{ gap: 8 }}>
           <div className="row-between">
             <span className="faint">{t('trade.action')}</span>

@@ -23,7 +23,8 @@ import {
   IconFingerprint,
   IconGlobe,
   IconInfo,
-  IconInstagram,
+  IconTelegram,
+  IconDoc,
   IconKey,
   IconLock,
   IconMoon,
@@ -119,19 +120,36 @@ export default function Settings() {
 
   const toggleBiometric = async () => {
     setBioErr(null);
+
     if (s.biometricEnabled) {
-      s.toggle('biometricEnabled');
+      s.disableBiometric();
+      haptic?.('warning');
       return;
     }
+
+    if (!bioAvailable) {
+      setBioErr('UNSUPPORTED');
+      return;
+    }
+
     try {
-      await registerBiometric(s.username || 'wallet');
-      const ok = await verifyBiometric();
-      if (ok) {
-        s.toggle('biometricEnabled');
-        haptic?.('success');
-      }
+      // Register, then immediately prove the same authenticator works —
+      // otherwise we'd enable a lock the user can't actually open.
+      const cred = await registerBiometric(s.username || 'wallet');
+      const ok = await verifyBiometric(cred.rawId);
+      if (!ok) throw new Error('FAILED');
+
+      s.enableBiometric(cred.rawId);
+      haptic?.('success');
     } catch (e) {
-      setBioErr(e.message === 'UNSUPPORTED' ? 'UNSUPPORTED' : 'FAILED');
+      const name = e?.name;
+      setBioErr(
+        e.message === 'UNSUPPORTED' ? 'UNSUPPORTED'
+        : name === 'NotAllowedError' ? 'CANCELLED'
+        : name === 'InvalidStateError' ? 'ALREADY_REGISTERED'
+        : name === 'SecurityError' ? 'INSECURE_ORIGIN'
+        : 'FAILED'
+      );
       haptic?.('error');
     }
   };
@@ -331,15 +349,16 @@ export default function Settings() {
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.company')}</p>
         <div className="set-group">
           <Row icon={IconInfo} label={t('about.title')} onClick={() => navigate('/about')} />
-          <Row icon={IconInstagram} label={t('contact.title')} sub="@Shiravi4333" onClick={() => navigate('/contact')} />
+          <Row icon={IconTelegram} label={t('contact.title')} sub="@Shiravi4333" onClick={() => navigate('/contact')} />
+          <Row icon={IconDoc} label={t('settings.terms')} onClick={() => navigate('/legal/terms')} />
+          <Row icon={IconShield} label={t('settings.privacy')} onClick={() => navigate('/legal/privacy')} />
         </div>
       </motion.section>
 
       <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FBT iran · v1.0.0</p>
 
       {/* ---------------- username sheet ---------------- */}
-      <Sheet open={nameSheet} onClose={() => setNameSheet(false)}>
-        <h2 className="h2" style={{ marginBottom: 10 }}>{t('settings.username')}</h2>
+      <Sheet open={nameSheet} onClose={() => setNameSheet(false)} title={t('settings.username')}>
         <input
           type="text"
           value={nameDraft}
@@ -362,8 +381,7 @@ export default function Settings() {
       </Sheet>
 
       {/* ---------------- 2FA sheet ---------------- */}
-      <Sheet open={twoFaSheet} onClose={() => setTwoFaSheet(false)}>
-        <h2 className="h2" style={{ marginBottom: 6 }}>{t('settings.twoFactorSetup')}</h2>
+      <Sheet open={twoFaSheet} onClose={() => setTwoFaSheet(false)} title={t('settings.twoFactorSetup')}>
 
         {!recovery ? (
           <>

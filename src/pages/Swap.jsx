@@ -394,8 +394,7 @@ export default function Swap() {
       </motion.section>
 
       {/* ---------------------------- token picker --------------------------- */}
-      <Sheet open={Boolean(picker)} onClose={() => setPicker(null)}>
-        <h2 className="h2" style={{ marginBottom: 10 }}>{t('swap.selectToken')}</h2>
+      <Sheet open={Boolean(picker)} onClose={() => setPicker(null)} title={t('swap.selectToken')}>
         <div className="stack" style={{ gap: 6 }}>
           {tokens.map((tk) => (
             <div
@@ -423,8 +422,7 @@ export default function Swap() {
       </Sheet>
 
       {/* ------------------------------ settings ----------------------------- */}
-      <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-        <h2 className="h2" style={{ marginBottom: 10 }}>{t('swap.settings')}</h2>
+      <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title={t('swap.settings')}>
         <label className="field-label">{t('swap.slippage')}</label>
         <div className="row" style={{ gap: 6 }}>
           {[0.1, 0.5, 1, 3].map((s) => (

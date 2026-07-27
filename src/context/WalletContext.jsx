@@ -98,7 +98,10 @@ export function WalletProvider({ children }) {
   /* --------------------------- WalletConnect v2 -------------------------- */
 
   const connectWalletConnect = useCallback(async () => {
-    const projectId = import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID;
+    // WalletConnect project IDs are public identifiers, not secrets — they
+    // are designed to ship in client bundles. Override via env if needed.
+    const projectId =
+      import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID || '14bdc2642bb5f01972ffe799e43b978d';
     if (!projectId) {
       setError('NO_WC_PROJECT_ID');
       return false;

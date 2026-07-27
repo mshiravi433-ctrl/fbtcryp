@@ -222,3 +222,17 @@ export const IconKey = (p) => (
     <path d="m21 2-9.6 9.6M15.5 7.5l3 3" />
   </svg>
 );
+
+export const IconTelegram = (p) => (
+  <svg {...base} {...p}>
+    <path d="M21.8 4.2 2.9 11.5c-1 .4-1 1.8.05 2.1l4.6 1.4 1.8 5.5c.3.9 1.4 1.1 2 .4l2.5-2.7 4.5 3.3c.8.6 1.9.1 2.1-.8l3-14.5c.2-1-.8-1.8-1.65-1.5z" />
+    <path d="m7.55 15 10.6-7.4-8.2 8.6" />
+  </svg>
+);
+
+export const IconDoc = (p) => (
+  <svg {...base} {...p}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6M8 13h8M8 17h5" />
+  </svg>
+);

@@ -9,13 +9,13 @@ import {
   IconChevronLeft,
   IconCopy,
   IconExternal,
-  IconInstagram,
+  IconTelegram,
   IconMapPin,
   IconUser
 } from '../components/Icons';
 
-const INSTAGRAM = 'Shiravi4333';
-const INSTAGRAM_URL = `https://instagram.com/${INSTAGRAM}`;
+const TELEGRAM = 'Shiravi4333';
+const TELEGRAM_URL = `https://t.me/${TELEGRAM}`;
 const ADDRESS_FA = 'اصفهان، خمینی‌شهر، بلوار شهید بهشتی، جنب شهرداری منطقه ۴';
 const MAPS_URL = `https://www.google.com/maps/search/${encodeURIComponent('خمینی شهر بلوار شهید بهشتی شهرداری منطقه 4')}`;
 
@@ -54,7 +54,7 @@ export default function Contact() {
         initial="hidden"
         animate="show"
         whileTap={{ scale: 0.985 }}
-        onClick={() => openLink(INSTAGRAM_URL)}
+        onClick={() => openLink(TELEGRAM_URL)}
         style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
       >
         <div className="sheen" />
@@ -67,16 +67,16 @@ export default function Contact() {
                 borderRadius: 15,
                 display: 'grid',
                 placeItems: 'center',
-                background: 'linear-gradient(135deg,#f9ce34,#ee2a7b 45%,#6228d7)',
+                background: 'linear-gradient(135deg,#2AABEE,#229ED9)',
                 color: '#fff',
                 flexShrink: 0
               }}
             >
-              <IconInstagram width={23} height={23} />
+              <IconTelegram width={23} height={23} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{t('contact.instagram')}</div>
-              <div className="mono" style={{ fontSize: 12.5, color: 'var(--rgb-1)' }}>@{INSTAGRAM}</div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{t('contact.telegram')}</div>
+              <div className="mono" style={{ fontSize: 12.5, color: 'var(--rgb-1)' }}>@{TELEGRAM}</div>
               <div className="faint" style={{ marginTop: 2 }}>{t('contact.primaryChannel')}</div>
             </div>
           </div>
@@ -85,13 +85,13 @@ export default function Contact() {
       </motion.button>
 
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => copy(`@${INSTAGRAM}`, 'handleCopied')}>
+        <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => copy(`@${TELEGRAM}`, 'handleCopied')}>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
             <IconCopy width={15} height={15} /> {t('contact.copyHandle')}
           </span>
         </button>
-        <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => openLink(INSTAGRAM_URL)}>
-          {t('contact.openInstagram')}
+        <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => openLink(TELEGRAM_URL)}>
+          {t('contact.openTelegram')}
         </button>
       </div>
 

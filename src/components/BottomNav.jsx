@@ -2,12 +2,12 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
-import { IconMarket, IconSwap, IconTrend, IconWallet, IconSettings } from './Icons';
+import { IconSwap, IconTrend, IconPools, IconWallet, IconSettings } from './Icons';
 
 const ITEMS = [
-  { to: '/', key: 'nav.market', Icon: IconMarket },
   { to: '/swap', key: 'nav.swap', Icon: IconSwap },
   { to: '/trade', key: 'nav.trade', Icon: IconTrend },
+  { to: '/farm', key: 'nav.farm', Icon: IconPools },
   { to: '/wallet', key: 'nav.wallet', Icon: IconWallet },
   { to: '/settings', key: 'nav.settings', Icon: IconSettings }
 ];

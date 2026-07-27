@@ -805,21 +805,54 @@ select option { background: #0a0c12; }
   backdrop-filter: blur(6px);
 }
 
-.sheet {
+/* Flex wrapper does the centering, so Framer Motion owns `transform`
+   without fighting a translate(-50%,-50%). */
+.sheet-layer {
   position: fixed;
+  inset: 0;
   z-index: 61;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.sheet {
+  pointer-events: auto;
   width: 100%;
-  max-width: 520px;
+  max-width: 440px;
   background: #06070c;
-  border: 1px solid var(--line);
-  border-bottom: none;
-  border-radius: 24px 24px 0 0;
-  padding: 8px 16px calc(22px + env(safe-area-inset-bottom));
-  max-height: 88dvh;
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
+  padding: 10px 18px 20px;
+  max-height: min(82dvh, 720px);
   overflow-y: auto;
+  box-shadow: 0 28px 80px -24px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* the drag handle only made sense on a bottom sheet */
+.sheet .sheet-handle { display: none; }
+
+.sheet-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0 12px;
+}
+
+.sheet-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
 }
 
 .sheet-handle {

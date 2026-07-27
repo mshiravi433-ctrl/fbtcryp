@@ -294,6 +294,7 @@ export default function Wallet() {
 
       {/* ---------- reveal seed ---------- */}
       <Sheet
+        title={t('wallet.revealSeed')}
         open={seedSheet}
         onClose={() => {
           setSeedSheet(false);
@@ -302,7 +303,7 @@ export default function Wallet() {
           setSeedErr(null);
         }}
       >
-        <h2 className="h2" style={{ marginBottom: 8 }}>{t('wallet.revealSeed')}</h2>
+        
         <p className="notice notice-danger" style={{ marginBottom: 12 }}>{t('wallet.backupWarning')}</p>
 
         {!seedWords ? (
@@ -338,8 +339,8 @@ export default function Wallet() {
         )}
       </Sheet>
 
-      <Sheet open={confirmReset} onClose={() => setConfirmReset(false)}>
-        <h2 className="h2" style={{ marginBottom: 8 }}>{t('wallet.settings')}</h2>
+      <Sheet open={confirmReset} onClose={() => setConfirmReset(false)} title={t('wallet.settings')}>
+        
         <p className="muted">{t('wallet.resetDesc')}</p>
         <button
           className="btn btn-danger"

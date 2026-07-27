@@ -7,7 +7,10 @@
     "earn": "Earn",
     "wallet": "Wallet",
     "swap": "Swap",
-    "settings": "Settings"
+    "settings": "Settings",
+    "perp": "Perp",
+    "farm": "Farm",
+    "predict": "Predict"
   },
   "common": {
     "balance": "Balance",
@@ -76,7 +79,8 @@
     "confirmTitle": "Confirm order",
     "action": "Action",
     "quantity": "Quantity",
-    "price": "Price"
+    "price": "Price",
+    "spot": "Spot"
   },
   "invest": {
     "title": "Invest",
@@ -414,14 +418,20 @@
     "securityScope": "These settings protect this app on this device — useful if someone picks up your unlocked phone. They cannot protect funds on-chain: anyone with your seed phrase can spend from any wallet app. Your seed phrase and wallet password remain the real protection.",
     "bioErr": {
       "UNSUPPORTED": "This device or browser doesn't support biometric unlock.",
-      "FAILED": "Biometric setup failed or was cancelled."
+      "FAILED": "Biometric setup failed or was cancelled.",
+      "CANCELLED": "You cancelled the prompt, or the device timed out.",
+      "ALREADY_REGISTERED": "This device is already registered. Turn the switch off and on again.",
+      "INSECURE_ORIGIN": "Biometrics need a secure (https) connection. They will not work over plain http."
     },
     "sync": "Sync",
     "cloudSync": "Cloud sync",
     "syncNow": "Sync",
     "neverSynced": "Never synced",
     "syncScope": "Syncs only your theme, accent, username and display preferences. Your seed phrase, wallet password and 2FA secret are never uploaded — they stay encrypted on this device.",
-    "company": "Company"
+    "company": "Company",
+    "legal": "Legal",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy"
   },
   "about": {
     "title": "About us",
@@ -462,15 +472,151 @@
   },
   "contact": {
     "title": "Contact us",
-    "intro": "Questions, partnership enquiries or a bug to report — reach us directly.",
-    "instagram": "Instagram",
+    "intro": "Questions, partnership enquiries or a bug to report — reach us directly on Telegram.",
     "primaryChannel": "Fastest way to reach us",
     "copyHandle": "Copy handle",
-    "openInstagram": "Open",
     "companyInfo": "Company information",
     "viewMap": "View on map",
     "support": "Support",
-    "supportBody": "We answer Instagram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
-    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FBT is impersonating us. Our only official contact is the Instagram account shown above."
+    "supportBody": "We answer Telegram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
+    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FBT is impersonating us. Our only official contact is the Telegram account shown above.",
+    "telegram": "Telegram",
+    "openTelegram": "Open Telegram"
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "updated": "Last updated: July 2026",
+    "intro": "By using FBT Swap you agree to these terms. Please read them — they describe real limits on what this app can do for you, and what happens if something goes wrong.",
+    "nature": {
+      "title": "What this app is",
+      "body": "FBT Swap is a non-custodial interface to decentralized exchanges on BNB Smart Chain. It is software that helps you build and sign your own blockchain transactions. It is not a bank, broker, exchange, or money transmitter, and it does not hold or manage anyone's assets."
+    },
+    "noCustody": {
+      "title": "We never hold your funds",
+      "body": "Your assets stay in your own wallet at all times. We have no deposit address, no access to your private keys or seed phrase, and no ability to move, freeze, reverse or recover your funds — including if you are hacked, scammed, or lose your seed phrase. Nobody at FBT iran can restore a lost wallet."
+    },
+    "fees": {
+      "title": "Platform fee",
+      "body": "A 0.5% fee is taken from the input amount of each swap and paid to FBT iran. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
+    },
+    "risk": {
+      "title": "You accept the risk",
+      "body": "Crypto assets are extremely volatile and you can lose everything. Blockchain transactions are irreversible — a wrong address or wrong network means permanent loss. Smart contracts can contain bugs. Tokens can be worthless, fraudulent, or designed so you cannot sell them. Prices shown are estimates and the amount you receive may differ."
+    },
+    "noAdvice": {
+      "title": "Not financial advice",
+      "body": "Nothing in this app is investment, financial, legal or tax advice. Prices, charts, rankings and any simulated features are for information only. You are solely responsible for your decisions and for any tax you owe."
+    },
+    "eligibility": {
+      "title": "Who may use it",
+      "body": "You must be of legal age where you live and legally permitted to use decentralized finance services there. Crypto rules differ sharply between countries and some restrict or prohibit this entirely. Confirming that you are allowed to use this app is your responsibility, not ours."
+    },
+    "prohibited": {
+      "title": "Prohibited use",
+      "body": "Do not use FBT Swap for money laundering, terrorist financing, sanctions evasion, fraud, market manipulation, or any illegal activity. Do not attempt to attack, reverse engineer for exploitation, or disrupt the service or its users."
+    },
+    "thirdParty": {
+      "title": "Third-party services",
+      "body": "Swaps route through third-party protocols such as the KyberSwap aggregator and PancakeSwap, and market data comes from providers like CoinGecko. Wallet connections use WalletConnect. We do not control these services and are not responsible for their failures, downtime, pricing or losses arising from them."
+    },
+    "availability": {
+      "title": "No guarantee of service",
+      "body": "The app is provided 'as is' with no warranty of any kind. We may change, suspend or discontinue any part of it at any time, without notice. We do not promise it will be available, error-free, or that quotes will always be accurate."
+    },
+    "liability": {
+      "title": "Limitation of liability",
+      "body": "To the fullest extent permitted by law, FBT iran and its team are not liable for any loss of funds, profits, or data arising from your use of this app — including losses from smart-contract bugs, third-party protocols, price movements, network failures, phishing, or your own mistakes."
+    },
+    "changes": {
+      "title": "Changes to these terms",
+      "body": "We may update these terms as the app evolves. Continuing to use FBT Swap after an update means you accept the revised terms. Significant changes will be noted in the app."
+    },
+    "disclaimer": "This document is a plain-language summary written by the FBT team, not legal advice. It has not been reviewed by a lawyer against Iranian law or the laws of any other jurisdiction. Before commercial launch you should have counsel review it."
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: July 2026",
+    "intro": "Short version: FBT Swap collects almost nothing. There is no signup, no email, no phone number, and no identity verification. Most of your data never leaves your device.",
+    "collect": {
+      "title": "What we collect",
+      "body": "If you enable cloud sync, we store your display preferences — theme, accent colour, chosen username and language — against an anonymous ID. That anonymous ID is generated by Firebase and is not linked to your name, email or phone number."
+    },
+    "notCollect": {
+      "title": "What we never collect",
+      "body": "We never collect or transmit your seed phrase, private keys, wallet password or two-factor secret. Those are encrypted on your own device and never sent anywhere. We cannot read them, and neither can anyone who breaches our systems — because they are not in our systems."
+    },
+    "onchain": {
+      "title": "Blockchain data is public",
+      "body": "Every swap you make is recorded permanently on the public blockchain, including your wallet address and amounts. This is inherent to how blockchains work, is visible to everyone, and is not something we or anyone else can delete. Treat your wallet address as public information."
+    },
+    "thirdPartyData": {
+      "title": "Third parties you touch",
+      "body": "Using the app sends requests to services we do not control: CoinGecko and GeckoTerminal for prices, the KyberSwap aggregator for routing, public BSC RPC nodes for balances, and WalletConnect when you connect a wallet. These services see your IP address and can set their own policies. Please read theirs."
+    },
+    "storage": {
+      "title": "On-device storage",
+      "body": "Your balances, settings, encrypted wallet and app history are stored in your device's local storage. Clearing your browser or app data deletes them permanently. If you delete an in-app wallet without saving its seed phrase, the funds are unrecoverable."
+    },
+    "analytics": {
+      "title": "Analytics",
+      "body": "If Firebase Analytics is enabled in a build, we may see aggregate usage such as which screens are opened. This is not tied to your wallet address or your identity, and we do not sell data to anyone."
+    },
+    "rights": {
+      "title": "Your control",
+      "body": "You can wipe every piece of local data at any time from Settings, or by uninstalling the app. To remove synced preferences, disable cloud sync and contact us. Because we hold no identity data, there is nothing else to request or delete."
+    },
+    "contact": {
+      "title": "Questions",
+      "body": "Reach us on Telegram at @Shiravi4333, or at the FBT iran office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
+    },
+    "disclaimer": "This policy describes how the app works today, written in plain language by the FBT team. It is not legal advice and has not been reviewed against GDPR, Iranian data-protection rules, or app-store requirements. Get counsel before commercial launch."
+  },
+  "perp": {
+    "title": "Perpetuals",
+    "subtitle": "Leveraged futures on live index prices.",
+    "riskNotice": "Leverage multiplies losses as fast as gains. At 100x a 1% move against you liquidates the entire position. Most retail perp traders lose money. Never use leverage with funds you need.",
+    "indexPrice": "Index price",
+    "indexNote": "Spot index from our market feed, shown for reference. Actual perp marks and funding rates are set by the venue you trade on.",
+    "honestTitle": "Why FBT doesn't run its own perp engine",
+    "honestBody": "A perpetual exchange needs an on-chain matching engine, oracle feeds, a liquidation keeper network, an insurance fund and market makers. PancakeSwap doesn't build this in-house either — their perp product is powered by ApolloX. Shipping a fake perp screen would be worse than shipping none, because you'd think your leveraged position was real. So we show live prices and route you to venues that actually run the infrastructure.",
+    "venues": "Trade perps on",
+    "pairs": "pairs",
+    "upTo": "up to",
+    "venue": {
+      "apx": {
+        "name": "ApolloX (APX)",
+        "short": "APX",
+        "desc": "Powers PancakeSwap's perpetual product. BNB Chain native."
+      },
+      "gmx": {
+        "name": "GMX",
+        "short": "GMX",
+        "desc": "Established decentralized perp DEX with a shared liquidity pool."
+      },
+      "dydx": {
+        "name": "dYdX",
+        "short": "dYdX",
+        "desc": "Order-book perp exchange on its own appchain."
+      }
+    },
+    "thirdPartyNotice": "These are independent third-party protocols. FBT iran is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
+    "tryPredict": "Prefer something simpler?",
+    "tryPredictSub": "Try up/down prediction on virtual credits"
+  },
+  "farm": {
+    "title": "Farm",
+    "subtitle": "Earn yield by providing liquidity.",
+    "whatTitle": "How farming works",
+    "whatBody": "You deposit two tokens into a liquidity pool and receive LP tokens representing your share. Traders swapping through that pool pay fees, which accrue to you. Staking the LP tokens in a farm adds a second reward stream on top.",
+    "defiTvl": "Estimated DeFi TVL",
+    "ilTitle": "Impermanent loss — read before depositing",
+    "ilBody": "If the two tokens change price relative to each other, you end up with more of the one that fell and less of the one that rose. You can finish worse off than if you had simply held them, even after collecting fees. The wider the price gap moves, the worse it gets. Stablecoin pairs barely suffer from this; volatile pairs suffer a lot.",
+    "pools": "Popular pools",
+    "lpPair": "LP pair · two tokens",
+    "singleStake": "Single-token staking · no impermanent loss",
+    "aprNote": "APR figures are indicative ranges, not promises. Real yield changes constantly with trading volume, emissions and how much liquidity is in the pool. Always check the live rate before depositing.",
+    "custodyNotice": "These farms are operated by PancakeSwap, not by FBT. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
+    "rewardsLink": "App rewards & quests",
+    "rewardsLinkSub": "Daily streak, XP and referrals"
   }
 }

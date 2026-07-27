@@ -22,6 +22,9 @@ const Wallet = lazy(() => import('./pages/Wallet'));
 const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Contact = lazy(() => import('./pages/Contact'));
+const Legal = lazy(() => import('./pages/Legal'));
+const Perp = lazy(() => import('./pages/Perp'));
+const Farm = lazy(() => import('./pages/Farm'));
 
 function Loader() {
   return (
@@ -49,6 +52,9 @@ function AnimatedRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/legal/:doc" element={<Legal />} />
+          <Route path="/perp" element={<Perp />} />
+          <Route path="/farm" element={<Farm />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>
