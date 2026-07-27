@@ -14,42 +14,38 @@ support with RTL.
 The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
 SDK, so it cannot produce one locally).
 
-### ⚡ One-time setup — enable the workflow
+### ⚡ One-time setup — enable the workflow (phone-friendly)
 
-GitHub doesn't let an app commit workflow files, so the build config ships in
-`ci/`. Activate it with:
+GitHub doesn't allow apps to commit workflow files, so you add it once
+yourself. **No computer needed** — from a mobile browser:
 
-```bash
-mkdir -p .github/workflows
-git mv ci/build-apk.yml .github/workflows/build-apk.yml
-git commit -m "ci: enable Android APK build"
-git push
-```
+1. Open the repo → check the branch is `arena/019fa427-fbtcryp`
+2. **Add file** → **Create new file**
+3. Name it exactly `.github/workflows/build-apk.yml`
+4. Copy the contents of [`ci/build-apk.yml`](ci/build-apk.yml) and paste
+5. **Commit changes**
 
-The build starts immediately. See `ci/README.md` for the optional repository
-variables (WalletConnect ID, fee contract address, Firebase config).
+The build starts immediately. Full walkthrough with screenshots-by-step and
+troubleshooting: [`ci/README.md`](ci/README.md).
+
+This repo is public, so **Actions minutes are free and unlimited**. A build
+takes about 5–8 minutes.
 
 **Then get the build:**
 
-1. Open the [**Actions** tab](../../actions/workflows/build-apk.yml)
-2. Click the most recent successful run (green ✓)
-3. Download **`FBT-Swap-apk`** from the *Artifacts* section
-4. Unzip and install the `.apk` on your phone
+1. Open the [**Actions** tab](../../actions)
+2. Tap the newest run and wait for the green ✓
+3. **Artifacts** → `FBT-Swap-apk` → downloads a `.zip`, extract the `.apk`
 
-**Or from Releases:** tagged builds are published to
-[**Releases**](../../releases) with the APK attached directly — no unzipping.
+For a one-tap install with no unzipping, run the workflow manually with
+**Also publish a GitHub Release** ticked — the APK is then attached directly
+to the [Releases](../../releases) page.
 
-To cut a release: `git tag v1.0.0 && git push origin v1.0.0`, or run the
-workflow manually with *Also publish a GitHub Release* ticked.
+> **Vercel/Netlify can't build APKs.** They have no Android SDK or JDK — they
+> build websites. Use Vercel to host the web app and Telegram Mini App, and
+> GitHub Actions to build the Android binary.
 
-> On first install Android will warn about "unknown apps" — that's expected for
-> any APK not from the Play Store. Allow it for your browser, install, then
-> revoke the permission.
->
-> These are **debug-signed** builds, fine for testing and direct distribution.
-> For Google Play you need a release build signed with your own upload key.
-
-Build it yourself (needs JDK 21 + Android SDK):
+Build it yourself (needs JDK 17 + Android SDK):
 
 ```bash
 npm ci && npm run android:apk
@@ -70,25 +66,47 @@ user ──approve──▶ FeeRouter ──0.5%──▶ your wallet
                       └──99.5%──▶ PancakeSwap ──▶ user gets output token
 ```
 
-### ⚠️ The fee wallet must be an EVM address, not Bitcoin
+### Which wallet address do I send? (phone-only guide)
 
-`FEE_RECIPIENT` has to be a **BNB Smart Chain address** (`0x` + 40 hex chars) —
-something you control in MetaMask, Trust Wallet, or a hardware wallet.
+You need a **BNB Smart Chain (EVM) address** — `0x` followed by 40 hex
+characters. Any of these work, all installable on a phone:
 
-A Bitcoin address (`bc1…`) **cannot** receive the fee. Bitcoin and BSC are
-separate networks with incompatible address formats; there is no mechanism for
-a BEP-20 contract to pay out to a bech32 address, and value pushed that way is
-gone permanently. The deploy script now refuses a `bc1…` value outright rather
-than letting the mistake reach mainnet.
+| Wallet | Notes |
+|---|---|
+| **Trust Wallet** | Easiest on mobile, owned by Binance, supports BSC out of the box |
+| **MetaMask** | Most common; add the BSC network on first use |
+| **SafePal / TokenPocket** | Also fine, both BSC-native |
+| **Ledger / Trezor** | Best for holding revenue long-term |
 
-**If you want the revenue in Bitcoin**, the normal flow is:
+**Getting the address (Trust Wallet example):**
 
-1. Collect fees to an EVM wallet you control.
-2. Periodically swap BNB/USDT → BTC (in this app, or on any exchange).
-3. Withdraw the BTC to `bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2`.
+1. Install Trust Wallet → **Create a new wallet**
+2. Write the 12 words on paper — this is the only backup, and whoever has it
+   owns the funds
+3. On the main screen tap **Receive** → choose **BNB Smart Chain (BEP20)**
+4. Tap **Copy** — you'll get something like `0x71C7…976F`
+5. That string is your `FEE_RECIPIENT`
 
-Keeping the fee wallet separate from your personal wallet also makes the
-accounting much easier at tax time.
+Make this a **dedicated wallet used only for revenue**. It keeps business
+income separate from personal funds, which matters a lot for bookkeeping and
+tax, and limits the damage if a personal device is compromised.
+
+### ⚠️ A Bitcoin address cannot receive the fee
+
+`bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2` is a **Bitcoin** address. The fee
+contract runs on BNB Smart Chain and can only pay to an EVM address.
+
+This isn't a limitation of this code: Bitcoin and BSC are entirely separate
+networks with incompatible address formats. There is no mechanism for a BEP-20
+contract to send value to a bech32 address, and anything pushed that way is
+**permanently unrecoverable**. The deploy script now refuses a `bc1…` value
+outright rather than letting the mistake reach mainnet.
+
+**To end up holding Bitcoin, do this instead:**
+
+1. Collect fees into your EVM wallet (above)
+2. Periodically swap BNB/USDT → BTC — in this app, or on any exchange
+3. Withdraw the BTC to `bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2`
 
 ### Deploy it (one-time, ~$1–3 of gas)
 
