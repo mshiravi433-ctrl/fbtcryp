@@ -1255,23 +1255,37 @@ input, select, textarea { font-size: 16px !important; }
    More drawer
    ========================================================================== */
 
-.more-panel {
+/* Flex wrapper owns the centering so Framer Motion can own `transform`.
+   Previously the panel centered with translateX(-50%) while Motion animated
+   `y` — Motion rewrites the whole transform property, so the -50% correction
+   was wiped and the panel sat with its edge at mid-screen. Direction-agnostic,
+   so it centers identically in RTL. */
+.more-layer {
   position: fixed;
+  inset: 0;
   z-index: 61;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.more-panel {
+  pointer-events: auto;
   width: 100%;
-  max-width: 520px;
+  max-width: 460px;
   background: #06070c;
   border: 1px solid var(--line-strong);
-  border-bottom: none;
-  border-radius: 26px 26px 0 0;
-  padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
-  max-height: 86dvh;
+  border-radius: 24px;
+  padding: 16px 16px 18px;
+  max-height: min(84dvh, 760px);
   overflow-y: auto;
-  box-shadow: 0 -20px 60px -20px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 28px 80px -24px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
+
+/* the drag handle only made sense when this slid up from the bottom */
+.more-panel .sheet-handle { display: none !important; }
 
 :root[data-theme='light'] .more-panel { background: #fff; }
 

@@ -94,21 +94,14 @@ export default function MoreSheet({ open, onClose }) {
             transition={{ duration: 0.18 }}
             onClick={onClose}
           />
-          <motion.div
-            className="more-panel"
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.4 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 110 || info.velocity.y > 700) onClose?.();
-            }}
-          >
-            <div className="sheet-handle" style={{ display: 'block' }} />
-
+          <div className="more-layer">
+            <motion.div
+              className="more-panel"
+              initial={{ opacity: 0, scale: 0.93, y: 14 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            >
             <div className="row-between" style={{ marginBottom: 14 }}>
               <h2 className="h2" style={{ margin: 0 }}>{t('nav.more')}</h2>
               <button className="sheet-close" onClick={onClose} aria-label="close" type="button">
@@ -148,7 +141,8 @@ export default function MoreSheet({ open, onClose }) {
                 </div>
               </div>
             ))}
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
