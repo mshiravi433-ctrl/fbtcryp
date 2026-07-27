@@ -898,3 +898,222 @@ select option { background: #0a0c12; }
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ==========================================================================
+   Light theme
+   Same token names, different values — every component follows automatically.
+   ========================================================================== */
+
+:root[data-theme='light'] {
+  --bg-void: #f4f5fa;
+  --bg-abyss: #eceef6;
+  --bg-panel: rgba(255, 255, 255, 0.82);
+  --bg-panel-solid: #ffffff;
+  --bg-raised: rgba(255, 255, 255, 0.95);
+  --line: rgba(16, 20, 40, 0.1);
+  --line-strong: rgba(16, 20, 40, 0.2);
+
+  --up: #00a86b;
+  --down: #e0244f;
+
+  --text-1: #0d1020;
+  --text-2: #4d5570;
+  --text-3: #838aa5;
+
+  --glow-cyan: 0 0 20px rgba(0, 150, 200, 0.18);
+}
+
+:root[data-theme='light'] body {
+  background: var(--bg-void);
+}
+
+/* the orb field is far too intense on a light canvas */
+:root[data-theme='light'] .rgb-orb { opacity: 0.16; filter: blur(90px); }
+:root[data-theme='light'] .rgb-grid {
+  background-image:
+    linear-gradient(rgba(16, 20, 40, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 20, 40, 0.05) 1px, transparent 1px);
+}
+:root[data-theme='light'] .rgb-vignette {
+  background: radial-gradient(ellipse at 50% 0%, transparent 35%, rgba(244, 245, 250, 0.9) 80%);
+}
+:root[data-theme='light'] .rgb-field { background: var(--bg-void); }
+
+:root[data-theme='light'] .card {
+  box-shadow: 0 2px 14px -6px rgba(16, 20, 40, 0.12);
+}
+
+:root[data-theme='light'] .top-bar {
+  background: linear-gradient(180deg, rgba(244, 245, 250, 0.94) 55%, transparent);
+}
+
+:root[data-theme='light'] .bottom-nav {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 -4px 24px -12px rgba(16, 20, 40, 0.25);
+}
+
+:root[data-theme='light'] .brand-mark::after { background: #fff; }
+:root[data-theme='light'] .sheet { background: #ffffff; }
+:root[data-theme='light'] .toast { background: rgba(255, 255, 255, 0.98); }
+:root[data-theme='light'] .crash-stage { background: radial-gradient(ellipse at 50% 110%, rgba(124,77,255,.12), transparent 62%), #fff; }
+:root[data-theme='light'] select option { background: #fff; }
+:root[data-theme='light'] .nav-glow {
+  background: linear-gradient(180deg, rgba(0, 150, 200, 0.14), rgba(124, 77, 255, 0.04));
+  border-color: rgba(0, 150, 200, 0.22);
+}
+:root[data-theme='light'] .sheen { display: none; }
+
+/* ==========================================================================
+   Mobile-first refinements
+   ========================================================================== */
+
+/* Bigger tap targets — 44px is the Apple/Android accessibility minimum. */
+.nav-item { min-height: 46px; }
+.tag { min-height: 34px; display: inline-flex; align-items: center; }
+.icon-btn { min-width: 38px; min-height: 38px; }
+
+/* 16px inputs stop iOS Safari auto-zooming on focus. */
+input, select, textarea { font-size: 16px !important; }
+
+/* Wallet picker cards */
+.wallet-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color 0.18s, transform 0.12s;
+  min-height: 64px;
+}
+.wallet-option:active { transform: scale(0.985); }
+.wallet-option[data-featured='true'] { border-color: rgba(0, 229, 255, 0.45); }
+
+.wallet-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: linear-gradient(140deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.16));
+  border: 1px solid var(--line);
+  color: var(--rgb-1);
+}
+
+/* Settings list rows */
+.set-group {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  overflow: hidden;
+  backdrop-filter: blur(14px);
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  cursor: pointer;
+  text-align: start;
+  min-height: 52px;
+}
+.set-row:last-child { border-bottom: none; }
+.set-row:active { background: rgba(127, 127, 127, 0.08); }
+.set-row-icon { color: var(--text-2); display: grid; place-items: center; flex-shrink: 0; }
+.set-row-label { flex: 1; min-width: 0; }
+.set-row-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* iOS-style switch */
+.switch {
+  position: relative;
+  width: 46px;
+  height: 27px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.28);
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.22s;
+}
+.switch[data-on='true'] { background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2)); }
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Onboarding */
+.onb-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-void);
+  padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 16px);
+}
+
+.onb-art {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.onb-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+}
+
+.onb-dots { display: flex; gap: 7px; justify-content: center; margin: 16px 0 18px; }
+.onb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: width 0.3s, background 0.3s;
+}
+.onb-dot[data-active='true'] {
+  width: 22px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
+}
+
+/* Info page rows */
+.info-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: flex-start;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row-icon { color: var(--rgb-1); flex-shrink: 0; margin-top: 1px; }
+
+@media (max-width: 380px) {
+  .nav-item { font-size: 8.5px; }
+  .h1 { font-size: 19px; }
+  .stat-value { font-size: 23px; }
+}

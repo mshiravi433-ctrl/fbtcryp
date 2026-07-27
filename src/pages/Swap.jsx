@@ -333,6 +333,14 @@ export default function Swap() {
                 <span className="faint">{t('swap.minReceived')}</span>
                 <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(quote.minOut)} {toToken.symbol}</span>
               </div>
+              {quote.feeBps > 0 && (
+                <div className="row-between">
+                  <span className="faint">{t('swap.platformFee', { pct: quote.feeBps / 100 })}</span>
+                  <span className="mono" style={{ fontSize: 11.5 }}>
+                    {fmtQty(quote.platformFee)} {fromToken.symbol}
+                  </span>
+                </div>
+              )}
               {impact != null && (
                 <div className="row-between">
                   <span className="faint">{t('swap.priceImpact')}</span>
@@ -460,6 +468,12 @@ export default function Swap() {
                 <span className="faint">{t('swap.minReceived')}</span>
                 <span className="mono">{fmtQty(quote.minOut)} {toToken.symbol}</span>
               </div>
+              {quote.feeBps > 0 && (
+                <div className="row-between">
+                  <span className="faint">{t('swap.platformFee', { pct: quote.feeBps / 100 })}</span>
+                  <span className="mono">{fmtQty(quote.platformFee)} {fromToken.symbol}</span>
+                </div>
+              )}
               <div className="row-between">
                 <span className="faint">{t('swap.slippage')}</span>
                 <span className="mono">{slippage}%</span>

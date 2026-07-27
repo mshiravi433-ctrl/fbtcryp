@@ -10,7 +10,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
-    "serve": "npm run build && node server/index.js"
+    "serve": "npm run build && node server/index.js",
+    "compile:contract": "node scripts/compile.mjs",
+    "deploy:feerouter": "node scripts/deploy-feerouter.mjs",
+    "test:feerouter": "node scripts/test-feerouter.mjs",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
     "@tonconnect/ui-react": "^2.4.4",
@@ -19,6 +25,7 @@
     "dotenv": "^17.4.2",
     "ethers": "^6.13.2",
     "express": "^5.2.1",
+    "firebase": "^11.10.0",
     "framer-motion": "^12.42.2",
     "i18next": "^23.14.0",
     "react": "^18.3.1",

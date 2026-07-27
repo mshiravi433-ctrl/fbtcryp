@@ -11,6 +11,7 @@ import {
   passwordStrength,
   validateMnemonic
 } from '../lib/localWallet';
+import { IconKey, IconLink, IconLock, IconPlus, IconWallet } from './Icons';
 
 /**
  * Wallet onboarding. Deliberately ordered so the safest option is first and
@@ -107,91 +108,65 @@ export default function WalletConnectSheet({ open, onClose }) {
           <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.connectTitle')}</h2>
           <p className="muted" style={{ marginBottom: 14 }}>{t('wallet.connectSubtitle')}</p>
 
-          <div className="stack" style={{ gap: 10 }}>
+          <div className="stack" style={{ gap: 9 }}>
             <motion.button
-              className="card card-rgb"
-              whileTap={{ scale: 0.985 }}
+              className="wallet-option"
+              data-featured="true"
+              whileTap={{ scale: 0.98 }}
               onClick={() => wallet.connectWalletConnect().then((ok) => ok && close())}
               disabled={wallet.connecting}
-              style={{ textAlign: 'start', cursor: 'pointer' }}
             >
-              <div className="sheen" />
-              <div className="row-between">
-                <div className="row" style={{ gap: 10 }}>
-                  <div className="coin-logo" style={{ fontSize: 17 }}>🔗</div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('wallet.wc')}</div>
-                    <div className="faint">{t('wallet.wcDesc')}</div>
-                  </div>
-                </div>
-                <span className="pill pill-up">{t('wallet.recommended')}</span>
-              </div>
+              <span className="wallet-badge">
+                <IconLink width={21} height={21} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.wc')}</span>
+                <span className="set-row-sub">{t('wallet.wcDesc')}</span>
+              </span>
+              <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
             </motion.button>
 
             {typeof window !== 'undefined' && window.ethereum && (
               <motion.button
-                className="card"
-                whileTap={{ scale: 0.985 }}
+                className="wallet-option"
+                whileTap={{ scale: 0.98 }}
                 onClick={() => wallet.connectInjected().then((ok) => ok && close())}
                 disabled={wallet.connecting}
-                style={{ textAlign: 'start', cursor: 'pointer' }}
               >
-                <div className="row" style={{ gap: 10 }}>
-                  <div className="coin-logo" style={{ fontSize: 17 }}>🦊</div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('wallet.injected')}</div>
-                    <div className="faint">{t('wallet.injectedDesc')}</div>
-                  </div>
-                </div>
+                <span className="wallet-badge">
+                  <IconWallet width={21} height={21} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.injected')}</span>
+                  <span className="set-row-sub">{t('wallet.injectedDesc')}</span>
+                </span>
               </motion.button>
             )}
 
             {hasVault() ? (
-              <motion.button
-                className="card"
-                whileTap={{ scale: 0.985 }}
-                onClick={() => setView('unlock')}
-                style={{ textAlign: 'start', cursor: 'pointer' }}
-              >
-                <div className="row" style={{ gap: 10 }}>
-                  <div className="coin-logo" style={{ fontSize: 17 }}>🔓</div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('wallet.unlockLocal')}</div>
-                    <div className="faint">{t('wallet.unlockLocalDesc')}</div>
-                  </div>
-                </div>
+              <motion.button className="wallet-option" whileTap={{ scale: 0.98 }} onClick={() => setView('unlock')}>
+                <span className="wallet-badge"><IconLock width={21} height={21} /></span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.unlockLocal')}</span>
+                  <span className="set-row-sub">{t('wallet.unlockLocalDesc')}</span>
+                </span>
               </motion.button>
             ) : (
               <>
-                <motion.button
-                  className="card"
-                  whileTap={{ scale: 0.985 }}
-                  onClick={startCreate}
-                  disabled={busy}
-                  style={{ textAlign: 'start', cursor: 'pointer' }}
-                >
-                  <div className="row" style={{ gap: 10 }}>
-                    <div className="coin-logo" style={{ fontSize: 17 }}>✨</div>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('wallet.createLocal')}</div>
-                      <div className="faint">{t('wallet.createLocalDesc')}</div>
-                    </div>
-                  </div>
+                <motion.button className="wallet-option" whileTap={{ scale: 0.98 }} onClick={startCreate} disabled={busy}>
+                  <span className="wallet-badge"><IconPlus width={21} height={21} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.createLocal')}</span>
+                    <span className="set-row-sub">{t('wallet.createLocalDesc')}</span>
+                  </span>
                 </motion.button>
 
-                <motion.button
-                  className="card"
-                  whileTap={{ scale: 0.985 }}
-                  onClick={() => setView('import')}
-                  style={{ textAlign: 'start', cursor: 'pointer' }}
-                >
-                  <div className="row" style={{ gap: 10 }}>
-                    <div className="coin-logo" style={{ fontSize: 17 }}>📥</div>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('wallet.importLocal')}</div>
-                      <div className="faint">{t('wallet.importLocalDesc')}</div>
-                    </div>
-                  </div>
+                <motion.button className="wallet-option" whileTap={{ scale: 0.98 }} onClick={() => setView('import')}>
+                  <span className="wallet-badge"><IconKey width={21} height={21} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.importLocal')}</span>
+                    <span className="set-row-sub">{t('wallet.importLocalDesc')}</span>
+                  </span>
                 </motion.button>
               </>
             )}

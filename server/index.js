@@ -12,8 +12,6 @@ import {
   fetchMarkets,
   fetchSimplePrices,
   fetchTrending,
-  fetchNobitexStats,
-  fetchNobitexOrderBook
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { startBot } from './bot.js';
@@ -114,13 +112,6 @@ app.get('/api/prices', (req, res) => {
   if (!ids.length) return res.json({});
   return serve(res, 20000)(() => fetchSimplePrices(ids), `prices:${ids.sort().join(',')}`);
 });
-
-// Nobitex: PUBLIC data only. No authenticated proxying — see providers.js.
-app.get('/api/nobitex/stats', (_req, res) => serve(res, 30000)(fetchNobitexStats, 'nbx:stats'));
-
-app.get('/api/nobitex/orderbook/:symbol', (req, res) =>
-  serve(res, 15000)(() => fetchNobitexOrderBook(req.params.symbol), `nbx:ob:${req.params.symbol}`)
-);
 
 app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)

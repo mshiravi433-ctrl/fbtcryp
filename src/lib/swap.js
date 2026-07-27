@@ -14,7 +14,7 @@
  *     later at a wildly different price.
  */
 
-import { EVM_CHAINS, ERC20_ABI, ROUTER_ABI, buildPath } from './chains';
+import { EVM_CHAINS, ERC20_ABI, ROUTER_ABI, FEE_ROUTER_ABI, FEE_ROUTER_ADDRESS, FEE_BPS, feeEnabled, buildPath } from './chains';
 
 const loadEthers = () => import('ethers');
 
@@ -66,9 +66,14 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
 
   const amountInWei = parseUnits(String(amountIn), fromToken.decimals);
 
+  // The platform fee comes off the INPUT first, so quote the DEX on the
+  // post-fee amount — otherwise the displayed output would be optimistic.
+  const platformFeeWei = feeEnabled() ? (amountInWei * BigInt(FEE_BPS)) / 10000n : 0n;
+  const swapInWei = amountInWei - platformFeeWei;
+
   let amounts;
   try {
-    amounts = await router.getAmountsOut(amountInWei, path);
+    amounts = await router.getAmountsOut(swapInWei, path);
   } catch {
     return { error: 'NO_ROUTE', path };
   }
@@ -86,6 +91,10 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   return {
     path,
     amountInWei,
+    swapInWei,
+    platformFeeWei,
+    platformFee: Number(formatUnits(platformFeeWei, fromToken.decimals)),
+    feeBps: feeEnabled() ? FEE_BPS : 0,
     amountOutWei: outWei,
     minOutWei,
     amountOut,
@@ -98,11 +107,16 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
 
 /* ------------------------------- allowance ------------------------------- */
 
+/** Whoever we approve must be whoever pulls the tokens. */
+export function spenderFor(chainId) {
+  return feeEnabled() ? FEE_ROUTER_ADDRESS : EVM_CHAINS[chainId].router;
+}
+
 export async function getAllowance({ provider, chainId, token, owner }) {
   if (token.native) return { raw: null, unlimited: true }; // gas coin needs no approval
   const { Contract } = await loadEthers();
   const c = new Contract(token.address, ERC20_ABI, provider);
-  const raw = await c.allowance(owner, EVM_CHAINS[chainId].router);
+  const raw = await c.allowance(owner, spenderFor(chainId));
   return { raw, unlimited: false };
 }
 
@@ -119,7 +133,7 @@ export async function needsApproval({ provider, chainId, token, owner, amountWei
 export async function approveToken({ signer, chainId, token, amountWei }) {
   const { Contract } = await loadEthers();
   const c = new Contract(token.address, ERC20_ABI, signer);
-  const spender = EVM_CHAINS[chainId].router;
+  const spender = spenderFor(chainId);
 
   const current = await c.allowance(await signer.getAddress(), spender);
   if (current > 0n && current < amountWei) {
@@ -150,12 +164,27 @@ export async function executeSwap({
 }) {
   const { Contract } = await loadEthers();
   const cfg = EVM_CHAINS[chainId];
-  const router = new Contract(cfg.router, ROUTER_ABI, signer);
   const to = await signer.getAddress();
   const deadline = BigInt(Math.floor(Date.now() / 1000) + deadlineMinutes * 60);
 
   const { path, amountInWei, minOutWei } = quote;
 
+  // --- fee path: one atomic tx that pays the platform and swaps the rest ---
+  if (feeEnabled()) {
+    const fee = new Contract(FEE_ROUTER_ADDRESS, FEE_ROUTER_ABI, signer);
+    let feeTx;
+    if (fromToken.native) {
+      feeTx = await fee.swapExactETHForTokens(minOutWei, path, to, deadline, { value: amountInWei });
+    } else if (toToken.native) {
+      feeTx = await fee.swapExactTokensForETH(amountInWei, minOutWei, path, to, deadline);
+    } else {
+      feeTx = await fee.swapExactTokensForTokens(amountInWei, minOutWei, path, to, deadline);
+    }
+    return { hash: feeTx.hash, wait: () => feeTx.wait(), viaFeeRouter: true };
+  }
+
+  // --- no fee router configured: swap directly, charging nothing ---
+  const router = new Contract(cfg.router, ROUTER_ABI, signer);
   let tx;
   if (fromToken.native) {
     tx = supportFeeOnTransfer
@@ -173,7 +202,7 @@ export async function executeSwap({
       : await router.swapExactTokensForTokens(amountInWei, minOutWei, path, to, deadline);
   }
 
-  return { hash: tx.hash, wait: () => tx.wait() };
+  return { hash: tx.hash, wait: () => tx.wait(), viaFeeRouter: false };
 }
 
 /* ------------------------------ plain send ------------------------------- */

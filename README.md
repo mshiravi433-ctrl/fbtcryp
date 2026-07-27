@@ -1,96 +1,123 @@
-# NEXUS — Crypto Terminal Mini App
+# FNT DEX — Decentralized Exchange
 
-A Telegram Mini App: pure-black RGB theme, heavy motion, live crypto market
-data, paper trading, yield plans, provably-fair arcade games, price prediction
-and a daily-rewards loop. Persian / English / Arabic with automatic RTL.
+A non-custodial DEX as a Telegram Mini App **and** an Android app. Real
+on-chain swaps on BNB Smart Chain, a 0.5% platform fee collected by an
+audited-shaped smart contract, RGB dark/light theming, and full fa/en/ar
+support with RTL.
 
-```
-┌─ Market ──── live prices, global cap, trending, search, filters, sparklines
-├─ Swap ────── REAL on-chain swaps via PancakeSwap V2, you sign from your wallet
-├─ IRT ─────── Nobitex toman prices + optional spot trading with your own key
-├─ Trade ───── paper spot trading with positions, P&L and order history
-├─ Invest ──── fixed-term yield plans with maturity tracking
-├─ Play ────── crash / dice / wheel, commit–reveal fairness
-├─ Predict ─── up-down rounds settled on real market prices
-├─ Earn ────── daily streak, XP levels, quests, referral links
-└─ Wallet ──── net worth, allocation, WalletConnect / in-app self-custody wallet
-```
-
-**Two clearly separated halves.** The Swap and IRT screens move *real value*.
-Trade, Invest, Play, Predict and Earn are *simulations* on virtual NX credits.
-The UI labels which is which on every screen — never blur that line.
+**FNT iran** · Isfahan, Khomeyni Shahr · Project director: Dr. Mohammad Shiravi Khozani
 
 ---
 
-## 🔴 Read this first — your API keys are burned
+## 📱 Download the Android APK
 
-You pasted these into a chat message, which means they must be treated as
-public. **Revoke and regenerate every one of them before doing anything else:**
+The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
+SDK, so it cannot produce one locally).
 
-| Key | Where to revoke |
+### ⚡ One-time setup — enable the workflow
+
+GitHub doesn't let an app commit workflow files, so the build config ships in
+`ci/`. Activate it with:
+
+```bash
+mkdir -p .github/workflows
+git mv ci/build-apk.yml .github/workflows/build-apk.yml
+git commit -m "ci: enable Android APK build"
+git push
+```
+
+The build starts immediately. See `ci/README.md` for the optional repository
+variables (WalletConnect ID, fee contract address, Firebase config).
+
+**Then get the build:**
+
+1. Open the [**Actions** tab](../../actions/workflows/build-apk.yml)
+2. Click the most recent successful run (green ✓)
+3. Download **`FNT-DEX-apk`** from the *Artifacts* section
+4. Unzip and install the `.apk` on your phone
+
+**Or from Releases:** tagged builds are published to
+[**Releases**](../../releases) with the APK attached directly — no unzipping.
+
+To cut a release: `git tag v1.0.0 && git push origin v1.0.0`, or run the
+workflow manually with *Also publish a GitHub Release* ticked.
+
+> On first install Android will warn about "unknown apps" — that's expected for
+> any APK not from the Play Store. Allow it for your browser, install, then
+> revoke the permission.
+>
+> These are **debug-signed** builds, fine for testing and direct distribution.
+> For Google Play you need a release build signed with your own upload key.
+
+Build it yourself (needs JDK 21 + Android SDK):
+
+```bash
+npm ci && npm run android:apk
+# -> android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+## 💰 The 0.5% fee — how it actually works
+
+`contracts/FeeRouter.sol` takes 0.5% of the **input** token and forwards the
+rest to PancakeSwap **in the same transaction**. It's atomic: a user cannot
+receive their swap without the fee being paid, and there's no second
+transaction they can decline.
+
+```
+user ──approve──▶ FeeRouter ──0.5%──▶ your wallet
+                      └──99.5%──▶ PancakeSwap ──▶ user gets output token
+```
+
+### Deploy it (one-time, ~$1–3 of gas)
+
+```bash
+npm run compile:contract
+
+DEPLOYER_PRIVATE_KEY=0xyour_deployer_key \
+FEE_RECIPIENT=0xYourFeeWallet \
+NETWORK=testnet \
+npm run deploy:feerouter          # test first!
+
+# then mainnet, and put the printed address in .env:
+VITE_FEE_ROUTER_ADDRESS=0x...
+```
+
+**If `VITE_FEE_ROUTER_ADDRESS` is blank the app charges nothing** and swaps
+directly against PancakeSwap. It never silently falls back to a "please also
+pay us" second transaction — a half-executed swap is worse than one that
+doesn't run at all.
+
+### Safety properties built into the contract
+
+| Property | Why |
 |---|---|
-| Telegram bot token `8860183907:AAF…` | @BotFather → `/revoke` → then `/token` for a new one |
-| Kraken API key + secret | https://www.kraken.com/c/account-settings/api → delete the key |
-| CoinGecko API key | CoinGecko dashboard → regenerate |
-| CoinRithm `crk_live_…` | CoinRithm agent studio → rotate |
-| The `Private key: B0u8dq…` blob | Whatever issued it — assume total compromise |
+| `MAX_FEE_BPS = 100` (1%) hard cap | Even a stolen owner key can't set a 100% fee and drain traders |
+| Reentrancy guard on every path | Standard defence against the classic drain |
+| Zero balance after each swap | Contract never custodies funds between transactions |
+| `SafeERC20`-style calls | Non-standard tokens (USDT) don't brick the router |
+| `amountOutMin` passed through untouched | Contract cannot weaken the user's slippage protection |
+| Owner can't touch user funds | `rescue()` only recovers tokens sent here by mistake |
 
-The Kraken key is the urgent one: a leaked trading key can drain an account.
-Log in, delete it, and check your recent activity. Nothing in this repository
-reads any of those values — they are not committed anywhere, and `.env` is
-gitignored — but they were exposed the moment they were typed into a chat.
+**Verified in a real EVM** (`npm run test:feerouter`) — deploys the contract
+with a mock DEX and asserts exactly 0.5% lands in the fee wallet across
+token→token, BNB→token and token→BNB, plus that the fee cap and access control
+hold.
 
-**Never put a key in a `VITE_*` variable.** Vite inlines those into the
-JavaScript bundle, so anyone can read them with View Source. Secrets belong in
-`.env` on the server only.
+### Before you route real volume
 
----
-
-## Quick start
-
-```bash
-npm install
-cp .env.example .env      # fill in TELEGRAM_BOT_TOKEN + COINGECKO_API_KEY
-npm run dev               # vite on :5173, API + bot on :8787
-```
-
-Expose it over HTTPS (Telegram will not load an HTTP URL):
-
-```bash
-ngrok http 5173           # or: cloudflared tunnel --url http://localhost:5173
-```
-
-Then in @BotFather: `/newapp` → pick your bot → paste the HTTPS URL. Put the
-same URL in `WEBAPP_URL` in `.env` so the bot's "Open NEXUS" button works.
-
-Production:
-
-```bash
-npm run serve             # builds, then serves dist/ + /api from one Node process
-```
+- **Get a professional audit.** The tests prove the fee works; they don't prove
+  the contract is free of every exploit class. A bug here loses other people's
+  money, not just yours.
+- **Verify the source on BscScan** so users can read what they're approving.
+- **Transfer ownership to a hardware wallet or multi-sig** right after deploy.
+  The deployer key becomes the owner, and a hot deployer key is a liability.
+- **Test with a tiny swap** before announcing anything.
+- Charging a fee makes this a commercial financial service. Check what that
+  means for FNT iran's licensing and tax obligations locally.
 
 ---
-
-## Architecture
-
-```
-src/
-  lib/api.js          three-tier data fetch: backend → public CoinGecko → offline
-  lib/offlineData.js  deterministic snapshot so the UI never shows a blank screen
-  lib/fairness.js     commit–reveal RNG (SHA-256)
-  store/useAppStore   zustand + localStorage: balance, positions, plans, bets
-  hooks/useMarket     polling that pauses when the tab is hidden
-  components/         RgbBackground, AnimatedNumber, Sparkline, Sheet, Toasts…
-  games/              CrashGame, DiceGame, WheelGame
-  pages/              Market, CoinDetail, Trade, Invest, Play, Predict, Earn, Wallet
-
-server/
-  index.js            Express: /api/*, rate limiting, SPA hosting
-  providers.js        CoinGecko / CoinLore / GeckoTerminal, keys stay here
-  cache.js            TTL cache + single-flight + stale-on-error
-  telegramAuth.js     verifies Mini App initData HMAC (tested)
-  bot.js              Telegraf: /price /top /global /trending + inline mode
-```
 
 ## Decentralized wallet layer
 
@@ -244,16 +271,8 @@ Tested against valid, wrong-token, tampered-payload and expired inputs.
 
 ## Notes on the other services you listed
 
-- **Nobitex** — now integrated, but deliberately constrained. Public IRT prices
-  are proxied and cached by our server (no key needed). Trading is
-  **bring-your-own-key**: each user's token is AES-GCM encrypted on their own
-  device and sent straight to Nobitex — it never touches our backend, because
-  relaying user exchange keys would make you a custodian of their accounts.
-  **Withdrawal endpoints are intentionally not implemented** (`withdraw()` throws
-  with an explanation), and the UI tells users to issue trade-only keys.
-  Note that Nobitex is centralized and custodial, which is the opposite of the
-  rest of this app, and that trading on an Iranian exchange raises
-  sanctions-compliance questions depending on where you and your users are.
+- **Nobitex** — removed at your request. It was a centralized custodial
+  exchange, which contradicted the decentralized architecture.
 - **CoinRithm agent trading / Freetime SDK** — these place real orders. Keep
   them in a separate service that the public web tier cannot reach, on a
   trade-only key with no withdrawal permission and an IP allowlist.
@@ -271,3 +290,66 @@ Tested against valid, wrong-token, tampered-payload and expired inputs.
 3. TON Connect for real in-Telegram wallet UX.
 4. Real leaderboards and a shared game feed.
 5. Legal review before *any* real value enters the system.
+
+## Screens
+
+```
+┌─ Market ──── live prices, global cap, trending, search, sparklines
+├─ Swap ────── REAL on-chain swaps, 0.5% fee, you sign from your wallet
+├─ Trade ───── paper trading on virtual credits (clearly labelled)
+├─ Wallet ──── net worth, allocation, WalletConnect / in-app self-custody
+└─ Settings ── theme, profile, 2FA, biometrics, about & contact
+```
+
+Plus Invest / Play / Predict / Earn (all simulated, reachable in-app) and a
+three-screen onboarding on first launch that ends on "your keys, your coins".
+
+## Settings & security
+
+- **Theme** — dark / light / follow-system, plus four accent palettes. Every
+  colour is a CSS custom property, so re-theming touches one block.
+- **Profile** — username (local only, never published on-chain) and wallet.
+- **2FA (TOTP)** — works with Google Authenticator / Authy. Verified against
+  all five official **RFC 6238 test vectors**, with ±1 step clock tolerance and
+  single-use recovery codes.
+- **Biometrics** — WebAuthn platform authenticator (fingerprint / face).
+- **Auto-lock**, hide-balances, and mandatory transaction review.
+
+**Scope, stated honestly:** these protect the *app on this device* — real
+protection if someone picks up your unlocked phone. They cannot protect funds
+on-chain, because anyone holding your seed phrase can spend from any other
+wallet app. The seed phrase and wallet password remain the actual security
+boundary, and the UI says exactly this rather than implying more.
+
+## Firebase
+
+Used for anonymous auth + settings sync (theme, accent, username, display
+preferences). Configure with the `VITE_FIREBASE_*` web-config values — those
+are public by design and Firebase expects them in your bundle.
+
+**Apply these Firestore rules**, or your database is world-writable no matter
+what keys you use:
+
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
+```
+
+Seed phrases, wallet passwords and 2FA secrets are **never** uploaded. They
+stay encrypted on-device — putting them in a cloud database would hand anyone
+who breaches Firebase the keys to every user's funds.
+
+## Company
+
+**FNT iran** — commercial trading company moving into the new digital economy.
+
+- Director: Dr. Mohammad Shiravi Khozani
+- Address: Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality
+- Contact: Instagram [@Shiravi4333](https://instagram.com/Shiravi4333)
+

@@ -6,3 +6,16 @@ dist/
 *.log
 .DS_Store
 .vite/
+
+# Capacitor / Android build output
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/release/
+*.apk
+*.aab
+*.keystore
+*.jks
+out/

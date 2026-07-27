@@ -7,7 +7,7 @@
     "earn": "Earn",
     "wallet": "Wallet",
     "swap": "Swap",
-    "irt": "IRT"
+    "settings": "Settings"
   },
   "common": {
     "balance": "Balance",
@@ -297,7 +297,9 @@
     "claimTooSoon": "Already claimed — try again later",
     "questReward": "Quest reward added",
     "predictionPlaced": "Prediction placed",
-    "linkCopied": "Invite link copied"
+    "linkCopied": "Invite link copied",
+    "handleCopied": "Handle copied",
+    "addressCopied": "Address copied"
   },
   "swap": {
     "title": "Swap",
@@ -348,50 +350,126 @@
       "INSUFFICIENT_GAS": "Not enough native coin to pay gas.",
       "SLIPPAGE": "Price moved beyond your slippage tolerance.",
       "TX_FAILED": "Transaction failed."
+    },
+    "platformFee": "Platform fee ({{pct}}%)"
+  },
+  "onboarding": {
+    "skip": "Skip",
+    "next": "Continue",
+    "start": "Get started",
+    "trade": {
+      "title": "Live markets, one tap away",
+      "body": "Real-time prices, charts and trends for thousands of tokens. Track what matters, spot moves early, and decide with data instead of noise."
+    },
+    "swap": {
+      "title": "Swap directly on-chain",
+      "body": "Trade any supported token straight from your own wallet through PancakeSwap. No account, no deposit, no waiting for withdrawals."
+    },
+    "custody": {
+      "title": "Your keys, your coins",
+      "body": "FNT never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
     }
   },
-  "nobitex": {
-    "title": "Nobitex (IRT)",
-    "subtitle": "Toman prices and optional spot trading with your own key.",
-    "custodialWarning": "Nobitex is a centralized, custodial exchange — the opposite of the rest of this app. Prices need no key. If you link a key, create it WITHOUT withdrawal permission: this app has no withdrawal code and never should. Also check whether trading on an Iranian exchange is lawful where you are.",
-    "usdtRate": "USDT price",
-    "toman": "Toman",
-    "markets": "IRT markets",
-    "noMarkets": "No market data available",
-    "fetchFailed": "Could not reach Nobitex. It may be geo-blocked from your network.",
-    "account": "Your account",
-    "noKey": "No API key linked",
-    "lockedKey": "Key saved, locked",
-    "unlocked": "Unlocked",
-    "linkKey": "Link key",
-    "unlink": "Remove key",
-    "linkTitle": "Link your Nobitex key",
-    "linkDesc": "Your token is encrypted with your password and stored only on this device.",
-    "keyWarning": "Create the key at nobitex.ir with TRADE permission only — never withdrawal. Your token is never sent to our server, but a key in a browser is always riskier than one on a server you control. Use limits on the exchange side.",
-    "apiToken": "API token",
-    "encryptPassword": "Encryption password",
-    "ackText": "I understand this key is stored on my device, that I created it without withdrawal permission, and that I am responsible for it.",
-    "saveKey": "Encrypt & save",
-    "unlockTitle": "Unlock your key",
-    "openOrders": "Open orders",
-    "limit": "Limit",
-    "market": "Market",
-    "amount": "Amount",
-    "price": "Price",
-    "estTotal": "Estimated total",
-    "last": "Last",
-    "needKeyToTrade": "Link your own Nobitex API key to place orders.",
-    "orderNotice": "This order goes directly from your browser to Nobitex using your key. It executes on their exchange under their terms.",
-    "orderPlaced": "Order placed",
-    "orderFailed": "Order failed",
-    "err": {
-      "BAD_TOKEN": "Nobitex rejected the token. Check it's valid and has trade permission.",
-      "FETCH_FAILED": "Could not reach Nobitex from this device (CORS or geo-block).",
-      "TOKEN_REQUIRED": "Enter your API token.",
-      "PASSWORD_SHORT": "Use at least 8 characters.",
-      "MUST_ACK": "Please confirm you understand.",
-      "SAVE_FAILED": "Could not save the key.",
-      "BAD_PASSWORD": "Wrong password."
-    }
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Appearance, security and account.",
+    "profile": "Profile",
+    "username": "Username",
+    "noUsername": "Not set",
+    "usernamePlaceholder": "Pick a display name",
+    "usernameNote": "Shown only inside this app. It is not published on-chain and is not tied to your wallet address.",
+    "wallet": "Wallet",
+    "noWallet": "Not connected",
+    "language": "Language",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeAuto": "System",
+    "accent": "Accent colour",
+    "hideBalances": "Hide balances",
+    "hideBalancesSub": "Mask amounts when others can see your screen",
+    "reduceMotion": "Reduce motion",
+    "security": "Security",
+    "biometric": "Biometric unlock",
+    "biometricSub": "Use fingerprint or face to open the app",
+    "biometricUnavailable": "Not available on this device",
+    "twoFactor": "Two-factor (TOTP)",
+    "twoFactorSub": "Require a 6-digit code from your authenticator",
+    "twoFactorSetup": "Set up two-factor",
+    "twoFactorHow": "Add this secret to Google Authenticator, Authy or any TOTP app, then enter the 6-digit code it shows to confirm.",
+    "secretKey": "Secret key",
+    "openInAuthApp": "Open in authenticator app",
+    "enterCode": "Enter the 6-digit code",
+    "badCode": "That code isn't right. Check your phone's clock is accurate and try the current code.",
+    "verifyEnable": "Verify & enable",
+    "enabled": "Enabled",
+    "recoveryWarning": "Save these recovery codes somewhere safe and offline. Each works once. If you lose your authenticator and these codes, you'll have to reinstall the app and restore from your seed phrase.",
+    "autoLock": "Auto-lock",
+    "never": "Never",
+    "afterMinutes": "After {{n}} minutes",
+    "txConfirm": "Confirm every transaction",
+    "txConfirmSub": "Always show a review screen before signing",
+    "securityScope": "These settings protect this app on this device — useful if someone picks up your unlocked phone. They cannot protect funds on-chain: anyone with your seed phrase can spend from any wallet app. Your seed phrase and wallet password remain the real protection.",
+    "bioErr": {
+      "UNSUPPORTED": "This device or browser doesn't support biometric unlock.",
+      "FAILED": "Biometric setup failed or was cancelled."
+    },
+    "sync": "Sync",
+    "cloudSync": "Cloud sync",
+    "syncNow": "Sync",
+    "neverSynced": "Never synced",
+    "syncScope": "Syncs only your theme, accent, username and display preferences. Your seed phrase, wallet password and 2FA secret are never uploaded — they stay encrypted on this device.",
+    "company": "Company"
+  },
+  "about": {
+    "title": "About us",
+    "tagline": "Trade & technology for a new economy",
+    "who": "Who we are",
+    "body1": "FNT iran is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
+    "body2": "We built this exchange because we believe access to global markets shouldn't depend on where you happen to live, which bank will take you, or who is willing to hold your money. A decentralized exchange removes those gatekeepers: you connect your own wallet, you trade, and the assets never leave your control.",
+    "body3": "We are a small team that prefers shipping honest software over marketing promises. The app tells you exactly what it does, what it charges, and what it cannot protect you from. We would rather you understand the risk than be pleasantly surprised by it later.",
+    "values": "What we stand for",
+    "value": {
+      "transparency": {
+        "title": "Transparency",
+        "body": "Fees are shown before you sign, every transaction is verifiable on-chain, and our contract is public."
+      },
+      "innovation": {
+        "title": "New economy",
+        "body": "We treat blockchain as real financial infrastructure, not a trend to chase."
+      },
+      "access": {
+        "title": "Open access",
+        "body": "No account, no approval, no minimum balance. A wallet is all you need."
+      },
+      "security": {
+        "title": "Self-custody",
+        "body": "We hold nothing. There is no company wallet for your funds to sit in and no withdrawal queue."
+      }
+    },
+    "details": "Company details",
+    "director": "Project director",
+    "directorName": "Dr. Mohammad Shiravi Khozani",
+    "company": "Company",
+    "address": "Address",
+    "addressValue": "Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality",
+    "network": "Network",
+    "custody": "We never hold your funds",
+    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FNT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
+    "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations."
+  },
+  "contact": {
+    "title": "Contact us",
+    "intro": "Questions, partnership enquiries or a bug to report — reach us directly.",
+    "instagram": "Instagram",
+    "primaryChannel": "Fastest way to reach us",
+    "copyHandle": "Copy handle",
+    "openInstagram": "Open",
+    "companyInfo": "Company information",
+    "viewMap": "View on map",
+    "support": "Support",
+    "supportBody": "We answer Instagram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
+    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FNT is impersonating us. Our only official contact is the Instagram account shown above."
   }
 }

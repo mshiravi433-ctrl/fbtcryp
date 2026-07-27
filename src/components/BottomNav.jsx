@@ -2,14 +2,14 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
+import { IconMarket, IconSwap, IconTrend, IconWallet, IconSettings } from './Icons';
 
 const ITEMS = [
-  { to: '/', key: 'nav.market', icon: '📊' },
-  { to: '/swap', key: 'nav.swap', icon: '🔄' },
-  { to: '/irt', key: 'nav.irt', icon: '🇮🇷' },
-  { to: '/play', key: 'nav.play', icon: '🎮' },
-  { to: '/earn', key: 'nav.earn', icon: '🎁' },
-  { to: '/wallet', key: 'nav.wallet', icon: '👛' }
+  { to: '/', key: 'nav.market', Icon: IconMarket },
+  { to: '/swap', key: 'nav.swap', Icon: IconSwap },
+  { to: '/trade', key: 'nav.trade', Icon: IconTrend },
+  { to: '/wallet', key: 'nav.wallet', Icon: IconWallet },
+  { to: '/settings', key: 'nav.settings', Icon: IconSettings }
 ];
 
 export default function BottomNav() {
@@ -40,10 +40,11 @@ export default function BottomNav() {
             )}
             <motion.span
               className="nav-icon"
-              animate={active ? { scale: 1.16, y: -1 } : { scale: 1, y: 0 }}
+              style={{ display: 'grid', placeItems: 'center' }}
+              animate={active ? { scale: 1.12, y: -1 } : { scale: 1, y: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 20 }}
             >
-              {item.icon}
+              <item.Icon width={21} height={21} strokeWidth={active ? 2 : 1.7} />
             </motion.span>
             <span>{t(item.key)}</span>
           </button>

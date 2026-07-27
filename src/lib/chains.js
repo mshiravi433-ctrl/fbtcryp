@@ -29,6 +29,23 @@ export const EVM_CHAINS = {
 
 export const DEFAULT_CHAIN = 56;
 
+/**
+ * Platform fee configuration.
+ *
+ * `feeRouter` is the deployed FeeRouter contract (contracts/FeeRouter.sol).
+ * When it is null the app swaps directly against the DEX with NO fee — it
+ * never silently falls back to a second "please also pay us" transaction,
+ * because a swap that half-executes is worse than one that doesn't run.
+ *
+ * Deploy with `node scripts/deploy-feerouter.mjs`, then paste the address into
+ * VITE_FEE_ROUTER_ADDRESS.
+ */
+export const FEE_BPS = 50; // 0.50%
+export const FEE_ROUTER_ADDRESS =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_ROUTER_ADDRESS) || null;
+
+export const feeEnabled = () => Boolean(FEE_ROUTER_ADDRESS) && /^0x[a-fA-F0-9]{40}$/.test(FEE_ROUTER_ADDRESS);
+
 /** Curated BEP-20 list. `native: true` means the chain's gas coin, not a contract. */
 export const TOKENS = {
   56: [
@@ -135,6 +152,16 @@ export function buildPath(chainId, fromToken, toToken) {
   if (a.toLowerCase() === wrapped.toLowerCase() || b.toLowerCase() === wrapped.toLowerCase()) return [a, b];
   return [a, wrapped, b];
 }
+
+export const FEE_ROUTER_ABI = [
+  'function feeBps() view returns (uint256)',
+  'function feeRecipient() view returns (address)',
+  'function quoteFee(uint256 amountIn) view returns (uint256 fee, uint256 amountAfterFee)',
+  'function totalFeesCollected(address token) view returns (uint256)',
+  'function swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable',
+  'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)',
+  'function swapExactTokensForETH(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)'
+];
 
 export const explorerTx = (chainId, hash) => `${EVM_CHAINS[chainId].explorer}/tx/${hash}`;
 export const explorerAddr = (chainId, addr) => `${EVM_CHAINS[chainId].explorer}/address/${addr}`;
