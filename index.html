@@ -1,18 +1,55 @@
 <!doctype html>
-<html lang="fa">
+<html lang="fa" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Market Mini App</title>
-    <!-- Telegram Mini App SDK — required to read theme, user info, and control the app chrome -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="NEXUS — crypto market data, paper trading, yield plans and provably-fair games inside Telegram." />
+    <title>NEXUS · Crypto Terminal</title>
+
+    <!-- Telegram Mini App SDK: theme, viewport, haptics, user identity -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+
+    <style>
+      /* paint black before React mounts so there is never a white flash */
+      html, body { background: #000; margin: 0; }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #000;
+        z-index: 999;
+        transition: opacity 0.4s ease;
+      }
+      #boot .ring {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: conic-gradient(from 0deg, #00e5ff, #7c4dff, #ff2d95, #00ff9d, #00e5ff);
+        animation: boot-spin 1s linear infinite;
+        position: relative;
+      }
+      #boot .ring::after {
+        content: '';
+        position: absolute;
+        inset: 5px;
+        border-radius: 50%;
+        background: #000;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
+    <div id="boot"><div class="ring"></div></div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
