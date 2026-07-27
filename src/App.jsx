@@ -11,6 +11,8 @@ import Toasts from './components/Toasts';
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Trade = lazy(() => import('./pages/Trade'));
+const Swap = lazy(() => import('./pages/Swap'));
+const Nobitex = lazy(() => import('./pages/Nobitex'));
 const Invest = lazy(() => import('./pages/Invest'));
 const Play = lazy(() => import('./pages/Play'));
 const Predict = lazy(() => import('./pages/Predict'));
@@ -34,6 +36,8 @@ function AnimatedRoutes() {
           <Route path="/" element={<Market />} />
           <Route path="/coin/:id" element={<CoinDetail />} />
           <Route path="/trade" element={<Trade />} />
+          <Route path="/swap" element={<Swap />} />
+          <Route path="/irt" element={<Nobitex />} />
           <Route path="/invest" element={<Invest />} />
           <Route path="/play" element={<Play />} />
           <Route path="/predict" element={<Predict />} />

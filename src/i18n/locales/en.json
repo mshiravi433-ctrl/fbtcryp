@@ -5,7 +5,9 @@
     "invest": "Invest",
     "play": "Play",
     "earn": "Earn",
-    "wallet": "Wallet"
+    "wallet": "Wallet",
+    "swap": "Swap",
+    "irt": "IRT"
   },
   "common": {
     "balance": "Balance",
@@ -17,7 +19,8 @@
     "days": "days",
     "loading": "Loading…",
     "notAdvice": "Market data is informational only and is not financial advice. Crypto is volatile — you can lose everything.",
-    "offlineData": "Live feed unreachable — showing a cached snapshot. Prices are not real."
+    "offlineData": "Live feed unreachable — showing a cached snapshot. Prices are not real.",
+    "done": "Done"
   },
   "market": {
     "totalMcap": "Total market cap",
@@ -97,12 +100,28 @@
     "matured": "Matured",
     "earlyExit": "Exit early",
     "earlyExitWarning": "Exiting before maturity forfeits all yield and charges a 2% penalty on the principal.",
-    "risk": { "low": "Low risk", "medium": "Medium risk", "high": "High risk" },
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
     "plan": {
-      "flex": { "name": "Flex Vault", "desc": "Short lock, steady drip" },
-      "core": { "name": "Core Yield", "desc": "Balanced monthly term" },
-      "growth": { "name": "Growth Engine", "desc": "Quarterly, higher variance" },
-      "alpha": { "name": "Alpha Reactor", "desc": "Long lock, aggressive target" }
+      "flex": {
+        "name": "Flex Vault",
+        "desc": "Short lock, steady drip"
+      },
+      "core": {
+        "name": "Core Yield",
+        "desc": "Balanced monthly term"
+      },
+      "growth": {
+        "name": "Growth Engine",
+        "desc": "Quarterly, higher variance"
+      },
+      "alpha": {
+        "name": "Alpha Reactor",
+        "desc": "Long lock, aggressive target"
+      }
     }
   },
   "game": {
@@ -209,7 +228,62 @@
     "activity": "Recent activity",
     "settings": "Settings",
     "resetDesc": "Reset your virtual balance, positions, plans and history back to the starting state.",
-    "resetAccount": "Reset account"
+    "resetAccount": "Reset account",
+    "connectTitle": "Connect a wallet",
+    "connectSubtitle": "You keep your keys. This app never sees them.",
+    "wc": "WalletConnect",
+    "wcDesc": "MetaMask, Trust, Rainbow… via QR or deep link",
+    "recommended": "Safest",
+    "injected": "Browser wallet",
+    "injectedDesc": "Use the wallet injected into this browser",
+    "createLocal": "Create in-app wallet",
+    "createLocalDesc": "New 12-word wallet, encrypted on this device",
+    "importLocal": "Import seed phrase",
+    "importLocalDesc": "Restore an existing 12/24-word wallet",
+    "unlockLocal": "Unlock in-app wallet",
+    "unlockLocalDesc": "Enter your password to sign transactions",
+    "localRisk": "The in-app wallet stores an encrypted key inside a Telegram WebView — no secure enclave, no hardware isolation. It is fine for small amounts, but anything you would be upset to lose belongs in MetaMask/Trust via WalletConnect, or on a hardware wallet.",
+    "noWcProject": "Set VITE_WALLETCONNECT_PROJECT_ID in your .env to enable WalletConnect. Get a free project ID at cloud.reown.com.",
+    "backupTitle": "Back up your seed phrase",
+    "backupWarning": "Write these 12 words down on paper, in order, and store them offline. Anyone with this phrase owns your funds forever. Nobody — not us, not Telegram — can recover it if you lose it. Never type it into any website or send it to anyone.",
+    "savedIt": "I've written it down",
+    "setPassword": "Set a password",
+    "importTitle": "Import wallet",
+    "seedPhrase": "Seed phrase",
+    "passwordDesc": "This password encrypts your key on this device. It is not recoverable — if you forget it you will need your seed phrase.",
+    "password": "Password",
+    "passwordConfirm": "Confirm password",
+    "createConfirm": "Create wallet",
+    "unlockTitle": "Unlock wallet",
+    "unlockDesc": "Your key is decrypted in memory only and cleared when you lock.",
+    "unlock": "Unlock",
+    "lock": "Lock",
+    "ackText": "I understand that I alone control this wallet, that my seed phrase is the only way to recover it, and that nobody can restore my funds if I lose it.",
+    "strength": {
+      "empty": "Enter a password",
+      "veryWeak": "Very weak",
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good",
+      "strong": "Strong"
+    },
+    "err": {
+      "PASSWORD_SHORT": "Use at least 8 characters.",
+      "PASSWORD_MISMATCH": "Passwords don't match.",
+      "MUST_ACK": "Please confirm you understand.",
+      "BAD_MNEMONIC": "That seed phrase isn't valid.",
+      "BAD_PASSWORD": "Wrong password.",
+      "CREATE_FAILED": "Could not create the wallet.",
+      "GENERATE_FAILED": "Could not generate a phrase."
+    },
+    "revealSeed": "Reveal seed phrase",
+    "forgetWallet": "Remove wallet from this device",
+    "forgetWarning": "This deletes the encrypted key from this device. Without your seed phrase the funds are gone forever.",
+    "mode": {
+      "injected": "Browser",
+      "wc": "WalletConnect",
+      "local": "In-app"
+    }
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -224,5 +298,100 @@
     "questReward": "Quest reward added",
     "predictionPlaced": "Prediction placed",
     "linkCopied": "Invite link copied"
+  },
+  "swap": {
+    "title": "Swap",
+    "subtitle": "Real on-chain swaps via {{dex}}",
+    "nonCustodialNotice": "Non-custodial: you sign every transaction from your own wallet and it broadcasts directly to the blockchain. This app takes no fee, holds no funds and has no address in the flow.",
+    "notConnected": "No wallet connected",
+    "from": "From",
+    "to": "To",
+    "balance": "Balance",
+    "rate": "Rate",
+    "minReceived": "Minimum received",
+    "priceImpact": "Price impact",
+    "networkFee": "Network fee",
+    "route": "Route",
+    "hops": "hop(s)",
+    "review": "Review swap",
+    "quoting": "Getting price…",
+    "selectToken": "Select a token",
+    "settings": "Swap settings",
+    "slippage": "Slippage tolerance",
+    "slippageHelp": "Your swap reverts if the price moves against you by more than this. Too low and it fails on volatile pairs; too high and you accept a worse fill.",
+    "slippageHigh": "Above 3% you are very exposed to sandwich attacks. Only raise this for illiquid tokens.",
+    "highImpact": "High price impact — this pool is thin and you will lose a lot of value on this trade. Consider a smaller amount.",
+    "insufficient": "Insufficient balance",
+    "confirmTitle": "Confirm swap",
+    "youPay": "You pay",
+    "youReceive": "You receive",
+    "recipient": "Recipient",
+    "confirmSwap": "Confirm & sign",
+    "viewOnExplorer": "View on explorer",
+    "dontClose": "Keep this screen open",
+    "success": "Swap complete",
+    "reviewNotice": "Your wallet will ask you to sign. Check the amounts there too — what your wallet shows is what actually executes.",
+    "verifyContracts": "Always verify token contract addresses independently. Fake tokens with real names are the most common way people get drained.",
+    "stage": {
+      "preparing": "Preparing…",
+      "approving": "Approving token…",
+      "quoting": "Refreshing price…",
+      "signing": "Waiting for signature…",
+      "pending": "Transaction pending…"
+    },
+    "err": {
+      "NO_ROUTE": "No route exists between these tokens.",
+      "NO_LIQUIDITY": "This pool has no liquidity.",
+      "QUOTE_FAILED": "Could not fetch a price. Check your connection.",
+      "QUOTE_EXPIRED": "The price moved. Try again.",
+      "USER_REJECTED": "You rejected the transaction.",
+      "INSUFFICIENT_GAS": "Not enough native coin to pay gas.",
+      "SLIPPAGE": "Price moved beyond your slippage tolerance.",
+      "TX_FAILED": "Transaction failed."
+    }
+  },
+  "nobitex": {
+    "title": "Nobitex (IRT)",
+    "subtitle": "Toman prices and optional spot trading with your own key.",
+    "custodialWarning": "Nobitex is a centralized, custodial exchange — the opposite of the rest of this app. Prices need no key. If you link a key, create it WITHOUT withdrawal permission: this app has no withdrawal code and never should. Also check whether trading on an Iranian exchange is lawful where you are.",
+    "usdtRate": "USDT price",
+    "toman": "Toman",
+    "markets": "IRT markets",
+    "noMarkets": "No market data available",
+    "fetchFailed": "Could not reach Nobitex. It may be geo-blocked from your network.",
+    "account": "Your account",
+    "noKey": "No API key linked",
+    "lockedKey": "Key saved, locked",
+    "unlocked": "Unlocked",
+    "linkKey": "Link key",
+    "unlink": "Remove key",
+    "linkTitle": "Link your Nobitex key",
+    "linkDesc": "Your token is encrypted with your password and stored only on this device.",
+    "keyWarning": "Create the key at nobitex.ir with TRADE permission only — never withdrawal. Your token is never sent to our server, but a key in a browser is always riskier than one on a server you control. Use limits on the exchange side.",
+    "apiToken": "API token",
+    "encryptPassword": "Encryption password",
+    "ackText": "I understand this key is stored on my device, that I created it without withdrawal permission, and that I am responsible for it.",
+    "saveKey": "Encrypt & save",
+    "unlockTitle": "Unlock your key",
+    "openOrders": "Open orders",
+    "limit": "Limit",
+    "market": "Market",
+    "amount": "Amount",
+    "price": "Price",
+    "estTotal": "Estimated total",
+    "last": "Last",
+    "needKeyToTrade": "Link your own Nobitex API key to place orders.",
+    "orderNotice": "This order goes directly from your browser to Nobitex using your key. It executes on their exchange under their terms.",
+    "orderPlaced": "Order placed",
+    "orderFailed": "Order failed",
+    "err": {
+      "BAD_TOKEN": "Nobitex rejected the token. Check it's valid and has trade permission.",
+      "FETCH_FAILED": "Could not reach Nobitex from this device (CORS or geo-block).",
+      "TOKEN_REQUIRED": "Enter your API token.",
+      "PASSWORD_SHORT": "Use at least 8 characters.",
+      "MUST_ACK": "Please confirm you understand.",
+      "SAVE_FAILED": "Could not save the key.",
+      "BAD_PASSWORD": "Wrong password."
+    }
   }
 }

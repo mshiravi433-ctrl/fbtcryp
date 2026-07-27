@@ -1,0 +1,140 @@
+/**
+ * Chain + token registry for the decentralized (non-custodial) layer.
+ *
+ * Only public infrastructure lives here: RPC endpoints, router addresses and
+ * well-known token contracts. No keys, no operator-owned addresses.
+ *
+ * VERIFY THESE ADDRESSES YOURSELF before sending real value. Token contract
+ * addresses are the #1 phishing vector in crypto — a single wrong character
+ * routes funds to an attacker's clone. Cross-check every one against the
+ * project's official docs and BscScan/Tonviewer.
+ */
+
+export const EVM_CHAINS = {
+  56: {
+    id: 56,
+    hexId: '0x38',
+    name: 'BNB Smart Chain',
+    short: 'BSC',
+    native: { symbol: 'BNB', decimals: 18, coingeckoId: 'binancecoin' },
+    rpc: ['https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.defibit.io'],
+    explorer: 'https://bscscan.com',
+    // PancakeSwap V2
+    router: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+    wrapped: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', // WBNB
+    dexName: 'PancakeSwap',
+    color: '#f0b90b'
+  }
+};
+
+export const DEFAULT_CHAIN = 56;
+
+/** Curated BEP-20 list. `native: true` means the chain's gas coin, not a contract. */
+export const TOKENS = {
+  56: [
+    { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },
+    {
+      symbol: 'USDT',
+      name: 'Tether USD',
+      address: '0x55d398326f99059fF775485246999027B3197955',
+      decimals: 18,
+      coingeckoId: 'tether'
+    },
+    {
+      symbol: 'USDC',
+      name: 'USD Coin',
+      address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+      decimals: 18,
+      coingeckoId: 'usd-coin'
+    },
+    {
+      symbol: 'BUSD',
+      name: 'BUSD',
+      address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
+      decimals: 18,
+      coingeckoId: 'binance-usd'
+    },
+    {
+      symbol: 'CAKE',
+      name: 'PancakeSwap',
+      address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82',
+      decimals: 18,
+      coingeckoId: 'pancakeswap-token'
+    },
+    {
+      symbol: 'ETH',
+      name: 'Ethereum Token',
+      address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8',
+      decimals: 18,
+      coingeckoId: 'ethereum'
+    },
+    {
+      symbol: 'BTCB',
+      name: 'Bitcoin BEP20',
+      address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c',
+      decimals: 18,
+      coingeckoId: 'bitcoin'
+    }
+  ]
+};
+
+/* -------------------------------------------------------------------------- */
+/* TON                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export const TON_CHAIN = {
+  name: 'TON',
+  short: 'TON',
+  native: { symbol: 'TON', decimals: 9, coingeckoId: 'the-open-network' },
+  explorer: 'https://tonviewer.com',
+  dexName: 'STON.fi',
+  color: '#0098ea'
+};
+
+export const TON_TOKENS = [
+  { symbol: 'TON', name: 'Toncoin', address: null, decimals: 9, native: true, coingeckoId: 'the-open-network' },
+  {
+    symbol: 'USDT',
+    name: 'Tether USD (Jetton)',
+    address: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs',
+    decimals: 6,
+    coingeckoId: 'tether'
+  }
+];
+
+/* -------------------------------------------------------------------------- */
+
+export const ERC20_ABI = [
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 value) returns (bool)',
+  'function transfer(address to, uint256 value) returns (bool)'
+];
+
+export const ROUTER_ABI = [
+  'function getAmountsOut(uint amountIn, address[] path) view returns (uint[] amounts)',
+  'function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)',
+  'function swapExactETHForTokens(uint amountOutMin, address[] path, address to, uint deadline) payable returns (uint[] amounts)',
+  'function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)',
+  'function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)',
+  'function swapExactETHForTokensSupportingFeeOnTransferTokens(uint amountOutMin, address[] path, address to, uint deadline) payable',
+  'function swapExactTokensForETHSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)'
+];
+
+export const getToken = (chainId, symbol) => (TOKENS[chainId] ?? []).find((t) => t.symbol === symbol);
+
+/** Build a swap path, routing through the wrapped native token when needed. */
+export function buildPath(chainId, fromToken, toToken) {
+  const { wrapped } = EVM_CHAINS[chainId];
+  const a = fromToken.native ? wrapped : fromToken.address;
+  const b = toToken.native ? wrapped : toToken.address;
+  if (a.toLowerCase() === b.toLowerCase()) return [a];
+  // direct pair if one side is the wrapped native, otherwise hop through it
+  if (a.toLowerCase() === wrapped.toLowerCase() || b.toLowerCase() === wrapped.toLowerCase()) return [a, b];
+  return [a, wrapped, b];
+}
+
+export const explorerTx = (chainId, hash) => `${EVM_CHAINS[chainId].explorer}/tx/${hash}`;
+export const explorerAddr = (chainId, addr) => `${EVM_CHAINS[chainId].explorer}/address/${addr}`;

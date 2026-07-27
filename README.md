@@ -6,13 +6,19 @@ and a daily-rewards loop. Persian / English / Arabic with automatic RTL.
 
 ```
 ┌─ Market ──── live prices, global cap, trending, search, filters, sparklines
+├─ Swap ────── REAL on-chain swaps via PancakeSwap V2, you sign from your wallet
+├─ IRT ─────── Nobitex toman prices + optional spot trading with your own key
 ├─ Trade ───── paper spot trading with positions, P&L and order history
 ├─ Invest ──── fixed-term yield plans with maturity tracking
 ├─ Play ────── crash / dice / wheel, commit–reveal fairness
 ├─ Predict ─── up-down rounds settled on real market prices
 ├─ Earn ────── daily streak, XP levels, quests, referral links
-└─ Wallet ──── net worth, allocation donut, stats, read-only on-chain connect
+└─ Wallet ──── net worth, allocation, WalletConnect / in-app self-custody wallet
 ```
+
+**Two clearly separated halves.** The Swap and IRT screens move *real value*.
+Trade, Invest, Play, Predict and Earn are *simulations* on virtual NX credits.
+The UI labels which is which on every screen — never blur that line.
 
 ---
 
@@ -85,6 +91,58 @@ server/
   telegramAuth.js     verifies Mini App initData HMAC (tested)
   bot.js              Telegraf: /price /top /global /trending + inline mode
 ```
+
+## Decentralized wallet layer
+
+Three connection modes, all self-custody. The private key never reaches this
+app's server in any of them:
+
+| Mode | How | When to use |
+|---|---|---|
+| **WalletConnect v2** | QR / deep link to MetaMask, Trust, Rainbow… | The real path inside Telegram. Safest. |
+| **Injected** | `window.ethereum` | Desktop browsers, wallet in-app browsers. |
+| **In-app wallet** | 12-word seed generated on-device, AES-GCM encrypted | Small amounts only — see the warning below. |
+
+Set `VITE_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com) to enable the
+first mode. That ID is public by design — it is not a secret.
+
+### About the in-app wallet
+
+It generates a BIP-39 mnemonic in the browser and encrypts it with the user's
+password using **AES-GCM + PBKDF2-SHA256 at 310,000 iterations** (OWASP 2023).
+Verified by test: the plaintext phrase never appears in `localStorage`, salt
+and IV are unique per encryption, and a wrong password fails closed.
+
+It is still weaker than an external wallet, and the UI says so in plain
+language rather than hiding it:
+
+- It lives in `localStorage` inside a Telegram WebView. Any XSS in this app **or
+  any dependency** can read the ciphertext and brute-force a weak password offline.
+- No secure enclave, no hardware isolation, no biometric gate.
+- Lose the seed phrase and the funds are gone. Nobody can restore it.
+
+Treat it as pocket money. Real value belongs in MetaMask/Trust via
+WalletConnect, or on hardware.
+
+### Swap safety properties
+
+`src/lib/swap.js` deliberately does these things — keep them if you edit it:
+
+- **`amountOutMin` from a fresh on-chain quote.** A sandwich attack can't take
+  more than the slippage the user explicitly accepted.
+- **Exact-amount approvals, never `MaxUint256`.** The common "infinite approve"
+  pattern means a later router exploit drains the user's whole balance. Verified
+  by test that we approve exactly the trade amount.
+- **Short deadlines (20 min).** A stuck transaction can't execute hours later at
+  a completely different price.
+- **Re-quote immediately before sending**, because the price moves while the
+  approval transaction confirms.
+- **Fee-on-transfer-tolerant router methods**, so taxed tokens don't revert.
+- **Price-impact warning above 5%**, which is the tell for a thin/rugged pool.
+
+Token addresses in `src/lib/chains.js` are checksum-verified, but **verify them
+yourself** against official sources before sending real value. Fake tokens with
+real names are the single most common way people get drained.
 
 ### Data flow
 
@@ -186,9 +244,16 @@ Tested against valid, wrong-token, tampered-payload and expired inputs.
 
 ## Notes on the other services you listed
 
-- **Nobitex** — Iranian exchange. Its API is usable, but routing user orders
-  through it exposes you to sanctions-compliance issues depending on where you
-  and your users are. Take advice before wiring it up.
+- **Nobitex** — now integrated, but deliberately constrained. Public IRT prices
+  are proxied and cached by our server (no key needed). Trading is
+  **bring-your-own-key**: each user's token is AES-GCM encrypted on their own
+  device and sent straight to Nobitex — it never touches our backend, because
+  relaying user exchange keys would make you a custodian of their accounts.
+  **Withdrawal endpoints are intentionally not implemented** (`withdraw()` throws
+  with an explanation), and the UI tells users to issue trade-only keys.
+  Note that Nobitex is centralized and custodial, which is the opposite of the
+  rest of this app, and that trading on an Iranian exchange raises
+  sanctions-compliance questions depending on where you and your users are.
 - **CoinRithm agent trading / Freetime SDK** — these place real orders. Keep
   them in a separate service that the public web tier cannot reach, on a
   trade-only key with no withdrawal permission and an IP allowlist.

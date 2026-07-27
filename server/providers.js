@@ -190,3 +190,41 @@ export async function fetchCoinDetail(id) {
     atl: md.atl?.usd ?? 0
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Nobitex — PUBLIC market data only.                                          */
+/*                                                                            */
+/* This proxy exists so the browser can read IRT prices despite CORS and       */
+/* geo-blocking, and so we can cache them. It deliberately handles NO          */
+/* authenticated endpoints: user API tokens stay encrypted on the user's       */
+/* device and go straight to Nobitex. The moment this server relays user keys, */
+/* you become a custodian of their exchange accounts — don't add that here.    */
+/* -------------------------------------------------------------------------- */
+
+const NOBITEX_BASE = process.env.NOBITEX_BASE || 'https://api.nobitex.ir';
+
+export async function fetchNobitexStats() {
+  const url = `${NOBITEX_BASE}/market/stats`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        srcCurrency: 'btc,eth,usdt,bnb,ada,doge,xrp,ltc,trx,sol,dot,link,matic,shib',
+        dstCurrency: 'rls'
+      })
+    });
+    if (!res.ok) throw new Error(`Nobitex ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchNobitexOrderBook(symbol = 'BTCIRT') {
+  const safe = String(symbol).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
+  return req(`${NOBITEX_BASE}/v2/orderbook/${safe}`);
+}

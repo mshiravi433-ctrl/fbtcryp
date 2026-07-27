@@ -11,6 +11,9 @@ import { fmtNum, fmtPct, fmtPrice, fmtQty, fmtDateTime } from '../lib/format';
 import { useAppStore, valuePortfolio, START_BALANCE_CONST } from '../store/useAppStore';
 import { shortAddress, useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
+import WalletConnectSheet from '../components/WalletConnectSheet';
+import { revealMnemonic } from '../lib/localWallet';
+import { explorerAddr } from '../lib/chains';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
 
@@ -30,6 +33,11 @@ export default function Wallet() {
   const resetAccount = useAppStore((s) => s.resetAccount);
 
   const [confirmReset, setConfirmReset] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [seedSheet, setSeedSheet] = useState(false);
+  const [seedPw, setSeedPw] = useState('');
+  const [seedWords, setSeedWords] = useState(null);
+  const [seedErr, setSeedErr] = useState(null);
 
   const portfolio = useMemo(() => valuePortfolio(positions, priceMap), [positions, priceMap]);
   const staked = investments.filter((i) => !i.claimedAt).reduce((s, i) => s + i.amount, 0);
@@ -195,7 +203,7 @@ export default function Wallet() {
         </div>
       </motion.section>
 
-      {/* ---------- on-chain wallet ---------- */}
+      {/* ---------- on-chain wallet (non-custodial) ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.onchain')}</p>
 
@@ -203,47 +211,64 @@ export default function Wallet() {
           <div className="stack" style={{ gap: 9 }}>
             <div className="row-between">
               <span className="row" style={{ gap: 7 }}>
-                <span className="dot" />
+                <span className="dot" style={{ background: wallet.locked ? 'var(--rgb-5)' : 'var(--up)' }} />
                 <span className="mono" style={{ fontSize: 12.5 }}>{shortAddress(wallet.address)}</span>
               </span>
-              <span className={`pill ${wallet.chainOk ? 'pill-up' : 'pill-down'}`}>
-                {wallet.chainOk ? 'BSC' : t('wallet.wrongNetwork')}
+              <span className="row" style={{ gap: 6 }}>
+                <span className="pill pill-rgb">{wallet.chain?.short ?? 'BSC'}</span>
+                <span className={`pill ${wallet.locked ? 'pill-down' : 'pill-up'}`}>
+                  {wallet.locked ? '🔒' : t(`wallet.mode.${wallet.mode}`)}
+                </span>
               </span>
             </div>
+
             {wallet.nativeBalance != null && (
               <div className="row-between">
-                <span className="faint">BNB</span>
+                <span className="faint">{wallet.chain?.native?.symbol ?? 'BNB'}</span>
                 <span className="mono" style={{ fontSize: 12.5 }}>{fmtQty(wallet.nativeBalance)}</span>
               </div>
             )}
+
             <div className="row" style={{ gap: 8 }}>
-              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => wallet.refresh?.()}>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => wallet.refreshBalance?.()}>
                 {t('common.refresh')}
               </button>
-              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.disconnect}>
-                {t('wallet.disconnect')}
-              </button>
+              {wallet.mode === 'local' && !wallet.locked && (
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.lock}>
+                  {t('wallet.lock')}
+                </button>
+              )}
+              {wallet.locked ? (
+                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => setConnectOpen(true)}>
+                  {t('wallet.unlock')}
+                </button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.disconnect}>
+                  {t('wallet.disconnect')}
+                </button>
+              )}
             </div>
+
+            <a
+              href={explorerAddr(wallet.chainId, wallet.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="faint"
+              style={{ fontSize: 11, textAlign: 'center', textDecoration: 'none' }}
+            >
+              {t('swap.viewOnExplorer')} ↗
+            </a>
+
+            {wallet.mode === 'local' && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setSeedSheet(true)}>
+                {t('wallet.revealSeed')}
+              </button>
+            )}
           </div>
         ) : (
-          <>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                haptic?.('light');
-                wallet.connect?.();
-              }}
-              disabled={wallet.connecting}
-            >
-              {wallet.connecting ? t('wallet.connecting') : t('wallet.connect')}
-            </button>
-            {wallet.error === 'NO_INJECTED_WALLET' && (
-              <p className="notice" style={{ marginTop: 10 }}>{t('wallet.noProvider')}</p>
-            )}
-            {wallet.error === 'CONNECT_FAILED' && (
-              <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
-            )}
-          </>
+          <button className="btn btn-primary" onClick={() => setConnectOpen(true)}>
+            {t('wallet.connect')}
+          </button>
         )}
 
         <p className="notice" style={{ marginTop: 12 }}>{t('wallet.custodyNotice')}</p>
@@ -265,6 +290,54 @@ export default function Wallet() {
         </section>
       )}
 
+      <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
+
+      {/* ---------- reveal seed ---------- */}
+      <Sheet
+        open={seedSheet}
+        onClose={() => {
+          setSeedSheet(false);
+          setSeedWords(null);
+          setSeedPw('');
+          setSeedErr(null);
+        }}
+      >
+        <h2 className="h2" style={{ marginBottom: 8 }}>{t('wallet.revealSeed')}</h2>
+        <p className="notice notice-danger" style={{ marginBottom: 12 }}>{t('wallet.backupWarning')}</p>
+
+        {!seedWords ? (
+          <>
+            <label className="field-label">{t('wallet.password')}</label>
+            <input type="password" value={seedPw} onChange={(e) => setSeedPw(e.target.value)} />
+            {seedErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.err.BAD_PASSWORD')}</p>}
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: 12 }}
+              disabled={!seedPw}
+              onClick={async () => {
+                try {
+                  setSeedWords(await revealMnemonic(seedPw));
+                  setSeedErr(null);
+                } catch {
+                  setSeedErr(true);
+                }
+              }}
+            >
+              {t('wallet.revealSeed')}
+            </button>
+          </>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 7 }}>
+            {seedWords.split(' ').map((w, i) => (
+              <div key={i} className="mono" style={{ fontSize: 11.5, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,.4)', border: '1px solid var(--line)' }}>
+                <span style={{ color: 'var(--text-3)', marginInlineEnd: 5 }}>{i + 1}</span>
+                {w}
+              </div>
+            ))}
+          </div>
+        )}
+      </Sheet>
+
       <Sheet open={confirmReset} onClose={() => setConfirmReset(false)}>
         <h2 className="h2" style={{ marginBottom: 8 }}>{t('wallet.settings')}</h2>
         <p className="muted">{t('wallet.resetDesc')}</p>
@@ -279,6 +352,21 @@ export default function Wallet() {
         >
           {t('wallet.resetAccount')}
         </button>
+        {wallet.hasLocalVault && (
+          <>
+            <p className="notice notice-danger" style={{ marginTop: 14 }}>{t('wallet.forgetWarning')}</p>
+            <button
+              className="btn btn-danger"
+              style={{ marginTop: 10 }}
+              onClick={() => {
+                wallet.forgetLocalWallet?.();
+                setConfirmReset(false);
+              }}
+            >
+              {t('wallet.forgetWallet')}
+            </button>
+          </>
+        )}
         <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => setConfirmReset(false)}>
           {t('common.cancel')}
         </button>

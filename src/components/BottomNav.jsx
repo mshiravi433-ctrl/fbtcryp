@@ -5,8 +5,8 @@ import { useTelegram } from '../context/TelegramContext';
 
 const ITEMS = [
   { to: '/', key: 'nav.market', icon: '📊' },
-  { to: '/trade', key: 'nav.trade', icon: '⚡' },
-  { to: '/invest', key: 'nav.invest', icon: '🏦' },
+  { to: '/swap', key: 'nav.swap', icon: '🔄' },
+  { to: '/irt', key: 'nav.irt', icon: '🇮🇷' },
   { to: '/play', key: 'nav.play', icon: '🎮' },
   { to: '/earn', key: 'nav.earn', icon: '🎁' },
   { to: '/wallet', key: 'nav.wallet', icon: '👛' }

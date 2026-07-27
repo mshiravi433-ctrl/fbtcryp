@@ -1,149 +1,333 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-
-/** ethers is ~300 kB — only pulled in when the user actually connects. */
-const loadEthers = () => import('ethers');
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
+import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
 
 /**
- * NON-CUSTODIAL BY DESIGN
+ * NON-CUSTODIAL WALLET LAYER
  * ---------------------------------------------------------------------------
- * This app never holds, requests or displays a deposit address that belongs to
- * the bot/admin. The only wallet involved is the user's own, and it is used
- * purely to (a) read their balance and (b) let *them* sign *their own*
- * transactions.
+ * Three connection modes, all self-custody. In every one of them the private
+ * key stays with the user and this app never sees, stores or transmits it:
  *
- * Everything on the trading / investing / gaming screens runs on a virtual
- * "NX" balance. Collecting real crypto into an operator wallet to trade,
- * invest or gamble on a user's behalf is exactly the shape of an unlicensed
- * money service — in most jurisdictions it needs a VASP/MSB registration,
- * KYC-AML, and for the betting side a gambling licence. Get those first, then
- * replace this layer with your licensed custodian's SDK. Don't bolt a hot
- * wallet onto a Telegram bot.
+ *   1. `injected`  — window.ethereum (MetaMask on desktop, wallet in-app browsers)
+ *   2. `wc`        — WalletConnect v2 (the real path inside Telegram: QR/deep link)
+ *   3. `local`     — an in-app wallet whose seed is AES-GCM encrypted on-device
  *
- * For real in-Telegram wallet UX, the two supported routes are:
- *   • TON Connect (`@tonconnect/ui-react`) — native to Telegram.
- *   • WalletConnect v2 (`@walletconnect/ethereum-provider`) — EVM chains.
- * Both are drop-in at the marked TODO below.
+ * There is no operator wallet, no deposit address, and no server-side signing
+ * anywhere in this codebase. Transactions are built client-side and signed by
+ * whichever wallet the user chose.
  */
-
-const CHAINS = {
-  56: {
-    chainId: '0x38',
-    chainName: 'BNB Smart Chain',
-    nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-    rpcUrls: ['https://bsc-dataseed.binance.org/'],
-    blockExplorerUrls: ['https://bscscan.com']
-  }
-};
-
-const TARGET_CHAIN = 56;
 
 const WalletContext = createContext(null);
 
+const loadEthers = () => import('ethers');
+
 export function WalletProvider({ children }) {
+  const [mode, setMode] = useState(null); // 'injected' | 'wc' | 'local'
   const [address, setAddress] = useState(null);
   const [chainId, setChainId] = useState(null);
   const [nativeBalance, setNativeBalance] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
+  const [locked, setLocked] = useState(false);
 
-  const readBalance = useCallback(async (addr) => {
-    if (!window.ethereum || !addr) return;
-    try {
-      const { BrowserProvider, formatEther } = await loadEthers();
-      const provider = new BrowserProvider(window.ethereum);
-      const wei = await provider.getBalance(addr);
-      setNativeBalance(Number(formatEther(wei)));
-    } catch {
-      setNativeBalance(null);
-    }
+  // Kept in refs so the signer/provider never lands in React state (and thus
+  // never in devtools snapshots or a serialized store).
+  const signerRef = useRef(null);
+  const eip1193Ref = useRef(null);
+  const wcRef = useRef(null);
+
+  const chain = EVM_CHAINS[chainId] ?? EVM_CHAINS[DEFAULT_CHAIN];
+
+  /* ----------------------------- read helpers ---------------------------- */
+
+  const getReadProvider = useCallback(async (targetChain = DEFAULT_CHAIN) => {
+    const { JsonRpcProvider, FallbackProvider } = await loadEthers();
+    const cfg = EVM_CHAINS[targetChain];
+    const providers = cfg.rpc.map((url, i) => ({
+      provider: new JsonRpcProvider(url, targetChain, { staticNetwork: true }),
+      priority: i + 1,
+      stallTimeout: 2500,
+      weight: 1
+    }));
+    return providers.length > 1 ? new FallbackProvider(providers, targetChain, { quorum: 1 }) : providers[0].provider;
   }, []);
 
-  const connect = useCallback(async () => {
+  const refreshBalance = useCallback(
+    async (addr = address, cid = chainId ?? DEFAULT_CHAIN) => {
+      if (!addr) return;
+      try {
+        const { formatEther } = await loadEthers();
+        const provider = await getReadProvider(cid);
+        const wei = await provider.getBalance(addr);
+        setNativeBalance(Number(formatEther(wei)));
+      } catch {
+        setNativeBalance(null);
+      }
+    },
+    [address, chainId, getReadProvider]
+  );
+
+  /* ------------------------------- injected ------------------------------ */
+
+  const connectInjected = useCallback(async () => {
     setError(null);
     setConnecting(true);
     try {
-      if (!window.ethereum) {
-        // TODO: swap in TON Connect or WalletConnect v2 here — Telegram's
-        // in-app browser exposes no injected provider.
-        throw new Error('NO_INJECTED_WALLET');
-      }
-
+      if (!window.ethereum) throw new Error('NO_INJECTED_WALLET');
       const { BrowserProvider } = await loadEthers();
       const provider = new BrowserProvider(window.ethereum);
       const accounts = await provider.send('eth_requestAccounts', []);
-      const account = accounts[0];
-      setAddress(account);
+      const net = await provider.getNetwork();
 
-      const network = await provider.getNetwork();
-      setChainId(Number(network.chainId));
-
-      if (Number(network.chainId) !== TARGET_CHAIN) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: CHAINS[TARGET_CHAIN].chainId }]
-          });
-          setChainId(TARGET_CHAIN);
-        } catch (switchErr) {
-          if (switchErr.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [CHAINS[TARGET_CHAIN]]
-            });
-            setChainId(TARGET_CHAIN);
-          } else {
-            throw switchErr;
-          }
-        }
-      }
-
-      await readBalance(account);
+      eip1193Ref.current = window.ethereum;
+      signerRef.current = await provider.getSigner();
+      setMode('injected');
+      setAddress(accounts[0]);
+      setChainId(Number(net.chainId));
+      setLocked(false);
+      await refreshBalance(accounts[0], Number(net.chainId));
+      return true;
     } catch (e) {
       setError(e.message === 'NO_INJECTED_WALLET' ? 'NO_INJECTED_WALLET' : 'CONNECT_FAILED');
+      return false;
     } finally {
       setConnecting(false);
     }
-  }, [readBalance]);
+  }, [refreshBalance]);
+
+  /* --------------------------- WalletConnect v2 -------------------------- */
+
+  const connectWalletConnect = useCallback(async () => {
+    const projectId = import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID;
+    if (!projectId) {
+      setError('NO_WC_PROJECT_ID');
+      return false;
+    }
+    setError(null);
+    setConnecting(true);
+    try {
+      const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+      const { BrowserProvider } = await loadEthers();
+
+      const wc = await EthereumProvider.init({
+        projectId,
+        chains: [DEFAULT_CHAIN],
+        optionalChains: Object.keys(EVM_CHAINS).map(Number),
+        showQrModal: true,
+        metadata: {
+          name: 'NEXUS Crypto Terminal',
+          description: 'Non-custodial crypto terminal for Telegram',
+          url: window.location.origin,
+          icons: [`${window.location.origin}/icon.png`]
+        }
+      });
+
+      await wc.connect();
+      const provider = new BrowserProvider(wc);
+      const signer = await provider.getSigner();
+
+      wcRef.current = wc;
+      eip1193Ref.current = wc;
+      signerRef.current = signer;
+      setMode('wc');
+      setAddress(await signer.getAddress());
+      setChainId(Number(wc.chainId));
+      setLocked(false);
+      await refreshBalance(await signer.getAddress(), Number(wc.chainId));
+
+      wc.on('disconnect', () => disconnect());
+      wc.on('accountsChanged', (accs) => (accs?.[0] ? setAddress(accs[0]) : disconnect()));
+      wc.on('chainChanged', (cid) => setChainId(Number(cid)));
+      return true;
+    } catch (e) {
+      setError(e?.message?.includes('User rejected') ? 'USER_REJECTED' : 'CONNECT_FAILED');
+      return false;
+    } finally {
+      setConnecting(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshBalance]);
+
+  /* ------------------------------ local vault ---------------------------- */
+
+  /** Attach a locally-stored wallet in LOCKED state (address only, no signer). */
+  const attachLocal = useCallback(() => {
+    const vault = loadVault();
+    if (!vault) return false;
+    setMode('local');
+    setAddress(vault.address);
+    setChainId(DEFAULT_CHAIN);
+    setLocked(true);
+    signerRef.current = null;
+    refreshBalance(vault.address, DEFAULT_CHAIN);
+    return true;
+  }, [refreshBalance]);
+
+  const unlockLocal = useCallback(
+    async (password) => {
+      setError(null);
+      try {
+        const provider = await getReadProvider(DEFAULT_CHAIN);
+        const signer = await unlockVault(password, provider);
+        signerRef.current = signer;
+        setMode('local');
+        setAddress(signer.address);
+        setChainId(DEFAULT_CHAIN);
+        setLocked(false);
+        await refreshBalance(signer.address, DEFAULT_CHAIN);
+        return true;
+      } catch (e) {
+        setError(e.message === 'BAD_PASSWORD' ? 'BAD_PASSWORD' : 'UNLOCK_FAILED');
+        return false;
+      }
+    },
+    [getReadProvider, refreshBalance]
+  );
+
+  /** Drop the in-memory signer but keep the encrypted vault on disk. */
+  const lock = useCallback(() => {
+    signerRef.current = null;
+    setLocked(true);
+  }, []);
+
+  const forgetLocalWallet = useCallback(() => {
+    clearVault();
+    signerRef.current = null;
+    setMode(null);
+    setAddress(null);
+    setLocked(false);
+    setNativeBalance(null);
+  }, []);
+
+  /* ------------------------------ disconnect ----------------------------- */
 
   const disconnect = useCallback(() => {
+    try {
+      wcRef.current?.disconnect?.();
+    } catch {
+      /* already gone */
+    }
+    wcRef.current = null;
+    eip1193Ref.current = null;
+    signerRef.current = null;
+    setMode(null);
     setAddress(null);
     setChainId(null);
     setNativeBalance(null);
+    setLocked(false);
     setError(null);
   }, []);
 
-  useEffect(() => {
-    if (!window.ethereum) return undefined;
-    const onAccounts = (accs) => {
-      if (!accs.length) disconnect();
-      else {
-        setAddress(accs[0]);
-        readBalance(accs[0]);
+  /* --------------------------- network switching ------------------------- */
+
+  const switchChain = useCallback(async (targetId) => {
+    const cfg = EVM_CHAINS[targetId];
+    if (!cfg) return false;
+    const eip = eip1193Ref.current;
+    if (!eip) {
+      setChainId(targetId); // local wallet: just point the RPC elsewhere
+      return true;
+    }
+    try {
+      await eip.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hexId }] });
+      setChainId(targetId);
+      return true;
+    } catch (e) {
+      if (e.code === 4902) {
+        await eip.request({
+          method: 'wallet_addEthereumChain',
+          params: [
+            {
+              chainId: cfg.hexId,
+              chainName: cfg.name,
+              nativeCurrency: { name: cfg.native.symbol, symbol: cfg.native.symbol, decimals: cfg.native.decimals },
+              rpcUrls: cfg.rpc,
+              blockExplorerUrls: [cfg.explorer]
+            }
+          ]
+        });
+        setChainId(targetId);
+        return true;
       }
-    };
+      return false;
+    }
+  }, []);
+
+  /* ------------------------------ auto-attach ---------------------------- */
+
+  useEffect(() => {
+    if (!address && loadVault()) attachLocal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const eip = window.ethereum;
+    if (!eip || mode !== 'injected') return undefined;
+    const onAccounts = (accs) => (accs?.length ? setAddress(accs[0]) : disconnect());
     const onChain = (hex) => setChainId(parseInt(hex, 16));
-    window.ethereum.on?.('accountsChanged', onAccounts);
-    window.ethereum.on?.('chainChanged', onChain);
+    eip.on?.('accountsChanged', onAccounts);
+    eip.on?.('chainChanged', onChain);
     return () => {
-      window.ethereum.removeListener?.('accountsChanged', onAccounts);
-      window.ethereum.removeListener?.('chainChanged', onChain);
+      eip.removeListener?.('accountsChanged', onAccounts);
+      eip.removeListener?.('chainChanged', onChain);
     };
-  }, [disconnect, readBalance]);
+  }, [mode, disconnect]);
+
+  // periodic balance refresh while connected
+  useEffect(() => {
+    if (!address) return undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshBalance();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [address, refreshBalance]);
 
   const value = useMemo(
     () => ({
+      mode,
       address,
-      chainId,
-      chainOk: chainId === TARGET_CHAIN,
+      chainId: chainId ?? DEFAULT_CHAIN,
+      chain,
+      chainOk: Boolean(chainId && EVM_CHAINS[chainId]),
       nativeBalance,
       connecting,
       error,
-      connect,
+      locked,
+      isConnected: Boolean(address) && !locked,
+      hasLocalVault: Boolean(loadVault()),
+      connectInjected,
+      connectWalletConnect,
+      attachLocal,
+      unlockLocal,
+      lock,
+      forgetLocalWallet,
       disconnect,
-      refresh: () => readBalance(address),
-      explorer: address ? `${CHAINS[TARGET_CHAIN].blockExplorerUrls[0]}/address/${address}` : null
+      switchChain,
+      refreshBalance,
+      getReadProvider,
+      getSigner: () => signerRef.current,
+      clearError: () => setError(null)
     }),
-    [address, chainId, nativeBalance, connecting, error, connect, disconnect, readBalance]
+    [
+      mode,
+      address,
+      chainId,
+      chain,
+      nativeBalance,
+      connecting,
+      error,
+      locked,
+      connectInjected,
+      connectWalletConnect,
+      attachLocal,
+      unlockLocal,
+      lock,
+      forgetLocalWallet,
+      disconnect,
+      switchChain,
+      refreshBalance,
+      getReadProvider
+    ]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
@@ -151,4 +335,4 @@ export function WalletProvider({ children }) {
 
 export const useWallet = () => useContext(WalletContext) ?? {};
 
-export const shortAddress = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
+export const shortAddress = (a, size = 4) => (a ? `${a.slice(0, 2 + size)}…${a.slice(-size)}` : '');
