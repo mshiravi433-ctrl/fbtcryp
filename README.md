@@ -89,19 +89,51 @@ Verified in a real EVM (`npm run test:feerouter`): the contract deploys with
 this exact address as `feeRecipient`, and exactly 0.5% lands there across
 token→token, BNB→token and token→BNB.
 
-### Deploy it (one-time, ~$1–3 of gas)
+### Deploy the contract (one-time, ~$1–6 of gas)
+
+The fee only starts flowing once `FeeRouter` is deployed and its address is set
+in `VITE_FEE_ROUTER_ADDRESS`.
+
+> 📖 **No computer / never deployed a contract before?**
+> **[راهنمای کامل فارسی قدم‌به‌قدم →](docs/DEPLOY-FA.md)**
+> Every click and value spelled out, plus a free testnet rehearsal, BscScan
+> verification, and nine common errors with fixes.
+
+**From a computer:**
 
 ```bash
 npm run compile:contract
 
-DEPLOYER_PRIVATE_KEY=0xyour_deployer_key \
-FEE_RECIPIENT=0xYourFeeWallet \
-NETWORK=testnet \
-npm run deploy:feerouter          # test first!
+# testnet first — free, and proves the whole flow
+DEPLOYER_PRIVATE_KEY=0xyour_deployer_key NETWORK=testnet npm run deploy:feerouter
 
-# then mainnet, and put the printed address in .env:
-VITE_FEE_ROUTER_ADDRESS=0x...
+# then mainnet
+DEPLOYER_PRIVATE_KEY=0xyour_deployer_key npm run deploy:feerouter
 ```
+
+**From a phone — Remix, no install needed:**
+
+1. Open **remix.ethereum.org** (turn on *Request desktop site*)
+2. New file `FeeRouter.sol` ← paste [`contracts/FeeRouter.sol`](contracts/FeeRouter.sol)
+3. *Solidity Compiler*: version **0.8.26**, EVM version **paris**,
+   optimization **on / 200 runs** → **Compile**
+4. *Deploy & Run*: Environment **Injected Provider – MetaMask** (on BSC, chain 56)
+5. Expand the **Deploy** arrow and fill the three constructor arguments:
+
+   | Argument | Value |
+   |---|---|
+   | `_dexRouter` | `0x10ED43C718714eb63d5aA57B78B54704E256024E` |
+   | `_feeRecipient` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
+   | `_feeBps` | `50` |
+
+6. **Deploy** → confirm in MetaMask → **copy the deployed contract address**
+
+Then add that contract address as the GitHub repository variable
+`VITE_FEE_ROUTER_ADDRESS` and re-run the APK build.
+
+> The deployed **contract** address is not the same as your **wallet** address.
+> The wallet (`0xaf5C…24d6`) is baked into the contract; the variable takes the
+> contract. Mixing these up is the most common and most expensive mistake here.
 
 **If `VITE_FEE_ROUTER_ADDRESS` is blank the app charges nothing** and swaps
 directly against PancakeSwap. It never silently falls back to a "please also
