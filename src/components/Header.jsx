@@ -20,20 +20,34 @@ export default function Header() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.45 }}
       >
+        {/* Coin mark. The glyph is stroked with an explicit gradient rather
+            than currentColor — the parent sets no colour and its ::after inset
+            sits on top, which is why this rendered as an empty black box. */}
         <div className="brand-mark">
           <motion.svg
-            width="17" height="17" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-            animate={{ rotate: [0, 180, 360] }}
-            transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', times: [0, 0.5, 1] }}
-            style={{ position: 'relative', zIndex: 1 }}
+            width="19"
+            height="19"
+            viewBox="0 0 24 24"
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            animate={{ rotateY: [0, 360] }}
+            transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ position: 'relative', zIndex: 2 }}
           >
-            <path d="M17 3.5a9 9 0 0 1 3.9 6.9" />
-            <path d="M7 20.5a9 9 0 0 1-3.9-6.9" />
-            <path d="M14.5 2 18 4.2l-2.4 3" />
-            <path d="M9.5 22 6 19.8l2.4-3" />
-            <path d="M3.2 10.4A9 9 0 0 1 12 3" />
-            <path d="M20.8 13.6A9 9 0 0 1 12 21" />
+            <defs>
+              <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#00e5ff" />
+                <stop offset="50%" stopColor="#7c4dff" />
+                <stop offset="100%" stopColor="#ff2d95" />
+              </linearGradient>
+            </defs>
+            <circle cx="12" cy="12" r="9.2" stroke="url(#brandGrad)" strokeWidth="2.1" />
+            <path d="M8.4 10.6a3.8 3.8 0 0 1 6.5-1.4" stroke="url(#brandGrad)" />
+            <path d="M15.6 13.4a3.8 3.8 0 0 1-6.5 1.4" stroke="url(#brandGrad)" />
+            <path d="M14.6 6.6v2.9h-2.9" stroke="url(#brandGrad)" />
+            <path d="M9.4 17.4v-2.9h2.9" stroke="url(#brandGrad)" />
           </motion.svg>
         </div>
         <div className="brand-text">

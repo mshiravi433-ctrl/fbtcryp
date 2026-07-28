@@ -22,6 +22,8 @@ import {
  * every word.
  */
 const SECTIONS = [
+  { id: 'why', Icon: IconTrend, steps: 5, video: null },
+  { id: 'strategy', Icon: IconPools, steps: 5, video: null },
   { id: 'start', Icon: IconWallet, steps: 4, video: 'https://www.youtube.com/results?search_query=how+to+use+metamask+beginner' },
   { id: 'swap', Icon: IconSwap, steps: 5, video: 'https://www.youtube.com/results?search_query=how+to+swap+tokens+dex+beginner' },
   { id: 'farm', Icon: IconPools, steps: 4, video: 'https://www.youtube.com/results?search_query=liquidity+pool+impermanent+loss+explained' },

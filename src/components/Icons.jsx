@@ -236,3 +236,25 @@ export const IconDoc = (p) => (
     <path d="M14 2v6h6M8 13h8M8 17h5" />
   </svg>
 );
+
+export const IconLinkedin = (p) => (
+  <svg {...base} {...p}>
+    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
+    <rect x="2" y="9" width="4" height="12" />
+    <circle cx="4" cy="4" r="2" />
+  </svg>
+);
+
+export const IconBriefcase = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2" y="7" width="20" height="14" rx="2" />
+    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16M2 13h20" />
+  </svg>
+);
+
+export const IconTrophy = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M6 3h12v6a6 6 0 0 1-12 0V3zM9 21h6M12 15v6" />
+  </svg>
+);

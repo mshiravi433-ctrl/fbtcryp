@@ -63,8 +63,104 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
     >
       <span className="ad-shine" style={{ animationDelay: `${delay}s` }} />
 
-      <span className="ad-icon" aria-hidden="true">
-        {cfg.icon}
+      {/* Animated illustration. Inline SVG keeps it on-theme and weightless —
+          a raster image would clash with the RGB palette and bloat the APK. */}
+      <span className="ad-art" aria-hidden="true">
+        <motion.span
+          className="ad-art-glow"
+          animate={{ scale: [1, 1.25, 1], opacity: [0.35, 0.6, 0.35] }}
+          transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.svg
+          viewBox="0 0 40 40"
+          width="40"
+          height="40"
+          fill="none"
+          animate={{ y: [0, -3, 0], rotate: [0, 4, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay }}
+          style={{ position: 'relative', zIndex: 1 }}
+        >
+          <defs>
+            <linearGradient id={`adg-${slot}`} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor={cfg.hues[0]} />
+              <stop offset="100%" stopColor={cfg.hues[1]} />
+            </linearGradient>
+          </defs>
+
+          {slot === 'swap' && (
+            <>
+              <circle cx="20" cy="20" r="14" stroke={`url(#adg-${slot})`} strokeWidth="2.2" />
+              <motion.path
+                d="M13 17h12l-3.5-3.5M27 23H15l3.5 3.5"
+                stroke={`url(#adg-${slot})`}
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                animate={{ pathLength: [0.3, 1, 0.3] }}
+                transition={{ duration: 3, repeat: Infinity }}
+              />
+            </>
+          )}
+
+          {slot === 'farm' && (
+            <>
+              <ellipse cx="20" cy="12" rx="11" ry="4" stroke={`url(#adg-${slot})`} strokeWidth="2.2" />
+              <motion.path
+                d="M9 12v8c0 2.2 4.9 4 11 4s11-1.8 11-4v-8"
+                stroke={`url(#adg-${slot})`}
+                strokeWidth="2.2"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2.6, repeat: Infinity }}
+              />
+              <motion.path
+                d="M9 20v8c0 2.2 4.9 4 11 4s11-1.8 11-4v-8"
+                stroke={`url(#adg-${slot})`}
+                strokeWidth="2.2"
+                animate={{ opacity: [1, 0.5, 1] }}
+                transition={{ duration: 2.6, repeat: Infinity }}
+              />
+            </>
+          )}
+
+          {slot === 'signals' && (
+            <motion.path
+              d="M5 27l7-8 6 5 9-12 8 7"
+              stroke={`url(#adg-${slot})`}
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              animate={{ pathLength: [0, 1] }}
+              transition={{ duration: 2.4, repeat: Infinity, repeatType: 'reverse' }}
+            />
+          )}
+
+          {slot === 'p2p' && (
+            <>
+              <circle cx="12" cy="14" r="5" stroke={`url(#adg-${slot})`} strokeWidth="2.2" />
+              <circle cx="28" cy="26" r="5" stroke={`url(#adg-${slot})`} strokeWidth="2.2" />
+              <motion.path
+                d="M16 18l8 4"
+                stroke={`url(#adg-${slot})`}
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1.8, repeat: Infinity }}
+              />
+            </>
+          )}
+
+          {slot === 'referral' && (
+            <motion.path
+              d="M20 6l4.2 8.6 9.5 1.4-6.9 6.7 1.7 9.4L20 27.6l-8.5 4.5 1.7-9.4-6.9-6.7 9.5-1.4z"
+              stroke={`url(#adg-${slot})`}
+              strokeWidth="2.2"
+              strokeLinejoin="round"
+              animate={{ rotate: [0, 12, 0], scale: [1, 1.08, 1] }}
+              transition={{ duration: 4.5, repeat: Infinity }}
+              style={{ transformOrigin: '20px 20px' }}
+            />
+          )}
+        </motion.svg>
       </span>
 
       <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>

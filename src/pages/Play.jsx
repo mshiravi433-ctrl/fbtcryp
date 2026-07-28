@@ -8,6 +8,8 @@ import Sheet from '../components/Sheet';
 import CrashGame from '../games/CrashGame';
 import DiceGame from '../games/DiceGame';
 import WheelGame from '../games/WheelGame';
+import MinesGame from '../games/MinesGame';
+import CoinFlipGame from '../games/CoinFlipGame';
 import { useFairSession } from '../hooks/useFairSession';
 import { fmtNum } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
@@ -15,7 +17,9 @@ import { useAppStore } from '../store/useAppStore';
 const GAMES = [
   { id: 'crash', emoji: '🚀', color: 'var(--rgb-1)' },
   { id: 'dice', emoji: '🎲', color: 'var(--rgb-3)' },
-  { id: 'wheel', emoji: '🎡', color: 'var(--rgb-2)' }
+  { id: 'wheel', emoji: '🎡', color: 'var(--rgb-2)' },
+  { id: 'mines', emoji: '💣', color: 'var(--rgb-5)' },
+  { id: 'coinflip', emoji: '🪙', color: 'var(--rgb-4)' }
 ];
 
 export default function Play() {
@@ -80,6 +84,8 @@ export default function Play() {
           {tab === 'crash' && <CrashGame fair={fair} />}
           {tab === 'dice' && <DiceGame fair={fair} />}
           {tab === 'wheel' && <WheelGame fair={fair} />}
+          {tab === 'mines' && <MinesGame fair={fair} />}
+          {tab === 'coinflip' && <CoinFlipGame fair={fair} />}
         </motion.div>
       </AnimatePresence>
 

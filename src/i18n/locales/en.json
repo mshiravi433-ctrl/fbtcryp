@@ -26,7 +26,8 @@
       "earn": "Earn",
       "more": "More"
     },
-    "p2p": "P2P"
+    "p2p": "P2P",
+    "leaderboard": "Ranking"
   },
   "common": {
     "balance": "Balance",
@@ -184,6 +185,23 @@
       "name": "Wheel",
       "spin": "Spin",
       "segments": "8 segments · 0× to 3× · 3% house edge"
+    },
+    "mines": {
+      "name": "Mines",
+      "start": "Start round",
+      "cashOut": "Cash out",
+      "count": "Number of mines",
+      "multiplier": "Multiplier",
+      "cashValue": "Cash value",
+      "next": "Next tile",
+      "boom": "Hit a mine — lost {{n}}"
+    },
+    "coinflip": {
+      "name": "Coin flip",
+      "flip": "Flip",
+      "flipping": "Flipping…",
+      "heads": "Heads",
+      "tails": "Tails"
     }
   },
   "predict": {
@@ -217,9 +235,46 @@
       "firstGame": "Play a round in the arcade",
       "firstPredict": "Make a price prediction",
       "addFavorite": "Star a coin",
-      "inviteFriend": "Invite a friend"
+      "inviteFriend": "Invite a friend",
+      "connectWallet": "Connect your wallet",
+      "firstSwap": "Make your first swap",
+      "addLiquidity": "Add liquidity to a pool",
+      "backupWallet": "Back up your wallet file",
+      "enable2fa": "Enable two-factor"
     },
-    "virtualNotice": "All rewards are virtual NX credits used inside this app. They have no monetary value and cannot be withdrawn."
+    "virtualNotice": "All rewards are virtual NX credits used inside this app. They have no monetary value and cannot be withdrawn.",
+    "tab": {
+      "real": "Real yield",
+      "points": "Points"
+    },
+    "realTitle": "Make your crypto work",
+    "realBody": "These are genuine on-chain opportunities. You deposit from your own wallet into audited protocols and keep everything you earn — we take nothing beyond the swap fee you'd pay anyway.",
+    "opportunities": "Ways to earn",
+    "yield": {
+      "stablePool": {
+        "title": "Stablecoin pool",
+        "body": "USDT/USDC pair — the lowest-risk way to earn trading fees"
+      },
+      "cakeStake": {
+        "title": "Single-token staking",
+        "body": "Stake one token, no impermanent loss"
+      },
+      "lpFarm": {
+        "title": "Liquidity farming",
+        "body": "Provide a token pair and earn fees plus rewards"
+      },
+      "lending": {
+        "title": "Lending",
+        "body": "Supply assets to a lending market and earn interest"
+      },
+      "liquidStake": {
+        "title": "Liquid staking",
+        "body": "Stake ETH and keep a tradable receipt token"
+      }
+    },
+    "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
+    "realRisk": "Yield is never free money. Pools can lose value through impermanent loss, lending markets can suffer bad debt, and any smart contract can be exploited. Start small and only use protocols you've read about.",
+    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all."
   },
   "wallet": {
     "guest": "Guest",
@@ -342,7 +397,8 @@
     "predictionPlaced": "Prediction placed",
     "linkCopied": "Invite link copied",
     "handleCopied": "Handle copied",
-    "addressCopied": "Address copied"
+    "addressCopied": "Address copied",
+    "pointsEarned": "Points earned"
   },
   "swap": {
     "title": "Swap",
@@ -541,7 +597,7 @@
     "custody": "We never hold your funds",
     "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FBT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
     "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations.",
-    "companyFull": "Fanous Bazaar Pishgam (FBT iran)"
+    "companyFull": "Fanos Bazaar Pishgam (FBT Iran)"
   },
   "contact": {
     "title": "Contact us",
@@ -554,7 +610,14 @@
     "supportBody": "We answer Telegram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
     "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FBT is impersonating us. Our only official contact is the Telegram account shown above.",
     "telegram": "Telegram",
-    "openTelegram": "Open Telegram"
+    "openTelegram": "Open Telegram",
+    "social": {
+      "telegram": "Telegram",
+      "instagram": "Instagram",
+      "linkedin": "LinkedIn",
+      "crunchbase": "Crunchbase",
+      "email": "Email"
+    }
   },
   "terms": {
     "title": "Terms of Service",
@@ -868,6 +931,26 @@
       "step4": "Start with a small test transaction when using any new feature.",
       "step5": "Keep large holdings in a separate hardware wallet, not in an in-app wallet.",
       "pitfall": "Nobody legitimate will ever ask for your 12 recovery words. Not our support, not a group admin, not any website. Anyone who asks is trying to take your money. Block them immediately."
+    },
+    "why": {
+      "title": "Why FBT is different",
+      "sub": "What we do that other apps don't",
+      "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
+      "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
+      "step3": "Truly non-custodial: no signup, no KYC, no deposit address. Your funds never sit in our account, so there is no withdrawal queue and nothing to freeze.",
+      "step4": "AI analysis built in, with honest confidence figures — it tells you when the signal is unclear instead of inventing certainty to look smart.",
+      "step5": "One clear fee: 0.5% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
+      "pitfall": "Compare the 'minimum received' figure, not the advertised rate. Some apps show a great headline rate then take a wide spread on top. Ours is the number you actually get."
+    },
+    "strategy": {
+      "title": "Getting more out of the app",
+      "sub": "Practical ways to grow what you have",
+      "step1": "Start with a stablecoin pool. USDT/USDC pairs barely move against each other, so you collect trading fees with very little impermanent loss.",
+      "step2": "Swap during high-volume hours. Deeper liquidity means less price impact, which matters far more on large trades than the fee does.",
+      "step3": "Check the Signals screen before entering. If confidence is under 40% the chart genuinely isn't saying anything — waiting is a position too.",
+      "step4": "Invite friends. Referrals are the fastest way up the leaderboard, and each new trader deepens the pools everyone uses.",
+      "step5": "Keep gas money on each chain you use. Running out mid-transaction wastes the fee you already paid.",
+      "pitfall": "Chasing the highest APR you can find is how most people lose money in DeFi. A steady 8% you understand beats a 900% pool whose token you can't sell."
     }
   },
   "audit": {
@@ -1088,5 +1171,43 @@
       }
     },
     "notice": "These are independent platforms. FBT iran does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
+  },
+  "rank": {
+    "title": "Ranking",
+    "points": "points",
+    "pts": "pts",
+    "you": "You",
+    "yourRank": "Rank #{{n}}",
+    "unranked": "Not ranked yet",
+    "toNext": "{{n}} points to {{tier}}",
+    "tiers": "Tiers",
+    "top": "Top traders",
+    "viewBoard": "View the leaderboard",
+    "refs": "{{n}} invites",
+    "swaps": "{{n}} swaps",
+    "howTo": "How to earn points",
+    "startEarning": "Start earning",
+    "demoNotice": "The leaderboard currently shows sample entries so you can see how ranking works. Live rankings from real users arrive once the backend is deployed — we'd rather label this clearly than pass invented names off as real traders.",
+    "tier": {
+      "bronze": "Bronze",
+      "silver": "Silver",
+      "gold": "Gold",
+      "platinum": "Platinum",
+      "diamond": "Diamond",
+      "legend": "Legend"
+    },
+    "action": {
+      "referral": "Invite a friend who joins",
+      "firstSwap": "Your first real swap",
+      "swap": "Each swap you make",
+      "addLiquidity": "Add liquidity to a pool",
+      "dailyCheckin": "Daily check-in",
+      "streakBonus": "Per streak day",
+      "quest": "Complete a quest",
+      "shareApp": "Share the app",
+      "connectWallet": "Connect a wallet",
+      "backupWallet": "Back up your wallet",
+      "enable2fa": "Turn on two-factor"
+    }
   }
 }

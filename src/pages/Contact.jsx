@@ -6,6 +6,10 @@ import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import {
   IconBuilding,
+  IconInstagram,
+  IconLinkedin,
+  IconBriefcase,
+  IconMail,
   IconChevronLeft,
   IconExternal,
   IconTelegram,
@@ -13,10 +17,49 @@ import {
   IconUser
 } from '../components/Icons';
 
-const TELEGRAM = 'Shiravi4333';
-const TELEGRAM_URL = `https://t.me/${TELEGRAM}`;
+const SOCIALS = [
+  {
+    id: 'telegram',
+    url: 'https://t.me/Shiravi4333',
+    grad: 'linear-gradient(135deg,#2AABEE,#229ED9)',
+    handle: '@Shiravi4333'
+  },
+  {
+    id: 'instagram',
+    url: 'https://www.instagram.com/fbt_company_',
+    grad: 'linear-gradient(135deg,#f9ce34,#ee2a7b 45%,#6228d7)',
+    handle: '@fbt_company_'
+  },
+  {
+    id: 'linkedin',
+    url: 'https://www.linkedin.com/in/mohammad-shiravi-a8891321b',
+    grad: 'linear-gradient(135deg,#0a66c2,#004182)',
+    handle: 'Mohammad Shiravi'
+  },
+  {
+    id: 'crunchbase',
+    url: 'https://www.crunchbase.com/organization/fbt-company',
+    grad: 'linear-gradient(135deg,#146aff,#0b47b3)',
+    handle: 'FBT Company'
+  },
+  {
+    id: 'email',
+    url: 'mailto:Mshiravi433@gmail.com',
+    grad: 'linear-gradient(135deg,var(--rgb-5),var(--rgb-6))',
+    handle: 'Mshiravi433@gmail.com'
+  }
+];
 const ADDRESS_FA = 'اصفهان، خمینی‌شهر، بلوار شهید بهشتی، جنب شهرداری منطقه ۴';
 const MAPS_URL = `https://www.google.com/maps/search/${encodeURIComponent('خمینی شهر بلوار شهید بهشتی شهرداری منطقه 4')}`;
+
+function SocialIcon({ id }) {
+  const size = { width: 21, height: 21 };
+  if (id === 'telegram') return <IconTelegram {...size} />;
+  if (id === 'instagram') return <IconInstagram {...size} />;
+  if (id === 'linkedin') return <IconLinkedin {...size} />;
+  if (id === 'crunchbase') return <IconBriefcase {...size} />;
+  return <IconMail {...size} />;
+}
 
 export default function Contact() {
   const { t } = useTranslation();
@@ -46,56 +89,46 @@ export default function Contact() {
 
       <p className="muted">{t('contact.intro')}</p>
 
-      {/* ---------- instagram ---------- */}
-      <motion.button
-        className="card card-rgb card-glow-magenta"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        whileTap={{ scale: 0.985 }}
-        onClick={() => openLink(TELEGRAM_URL)}
-        style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
-      >
-        <div className="sheen" />
-        <div className="row-between">
-          <div className="row" style={{ gap: 12 }}>
-            <div
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: 15,
-                display: 'grid',
-                placeItems: 'center',
-                background: 'linear-gradient(135deg,#2AABEE,#229ED9)',
-                color: '#fff',
-                flexShrink: 0
-              }}
-            >
-              <IconTelegram width={23} height={23} />
+      {/* ---------- social channels ---------- */}
+      <motion.div className="stack" style={{ gap: 9 }} variants={stagger} initial="hidden" animate="show">
+        {SOCIALS.map((soc) => (
+          <motion.button
+            key={soc.id}
+            className="card lift"
+            variants={riseIn}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => openLink(soc.url)}
+            style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
+          >
+            <div className="row-between">
+              <div className="row" style={{ gap: 12, minWidth: 0 }}>
+                <motion.span
+                  whileHover={{ rotate: 8, scale: 1.08 }}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 14,
+                    display: 'grid',
+                    placeItems: 'center',
+                    background: soc.grad,
+                    color: '#fff',
+                    flexShrink: 0
+                  }}
+                >
+                  <SocialIcon id={soc.id} />
+                </motion.span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t(`contact.social.${soc.id}`)}</div>
+                  <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', wordBreak: 'break-all' }}>
+                    {soc.handle}
+                  </div>
+                </div>
+              </div>
+              <IconExternal width={16} height={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
             </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{t('contact.telegram')}</div>
-              <div className="mono" style={{ fontSize: 12.5, color: 'var(--rgb-1)' }}>@{TELEGRAM}</div>
-              <div className="faint" style={{ marginTop: 2 }}>{t('contact.primaryChannel')}</div>
-            </div>
-          </div>
-          <IconExternal width={18} height={18} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-        </div>
-      </motion.button>
-
-      <motion.button
-        className="btn btn-primary"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        whileTap={{ scale: 0.97 }}
-        onClick={() => openLink(TELEGRAM_URL)}
-      >
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-          <IconTelegram width={18} height={18} />
-          {t('contact.openTelegram')}
-        </span>
-      </motion.button>
+          </motion.button>
+        ))}
+      </motion.div>
 
       {/* ---------- company card ---------- */}
       <motion.section className="card" variants={stagger} initial="hidden" animate="show">

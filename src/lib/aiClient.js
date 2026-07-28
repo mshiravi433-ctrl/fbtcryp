@@ -40,16 +40,61 @@ async function post(path, body, timeout = 60000) {
   }
 }
 
-export async function aiStatus() {
+import { directGeminiAvailable, directBrief, directFaq, directOutlook } from './geminiDirect';
+
+/**
+ * Resolution order for every AI call:
+ *   1. Our backend  — key stays server-side, responses cached, news grounding.
+ *   2. Direct Gemini — key ships in the app; only used when no backend exists,
+ *      because a dead feature is worse for users than an app-restricted key.
+ *
+ * `aiStatus()` reports which one is live so the UI can explain itself instead
+ * of silently doing nothing.
+ */
+
+let cachedStatus = null;
+
+export async function aiStatus(force = false) {
+  if (cachedStatus && !force) return cachedStatus;
+
+  // Probe the backend, but don't hang the UI on it.
   try {
-    const res = await fetch(`${API_BASE}/ai/status`);
-    if (!res.ok) return { enabled: false, news: false };
-    return await res.json();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(`${API_BASE}/ai/status`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.enabled) {
+        cachedStatus = { ...data, mode: 'server' };
+        return cachedStatus;
+      }
+    }
   } catch {
-    return { enabled: false, news: false };
+    /* no backend reachable — fall through to the direct path */
   }
+
+  cachedStatus = directGeminiAvailable()
+    ? { enabled: true, news: false, mode: 'direct' }
+    : { enabled: false, news: false, mode: 'none' };
+  return cachedStatus;
 }
 
-export const getOutlook = (payload) => post('/ai/outlook', payload);
-export const getMarketBrief = (payload) => post('/ai/brief', payload);
-export const askFaq = (question, lang) => post('/ai/faq', { question, lang }, 45000);
+async function viaServerOr(directFn, path, payload) {
+  const status = await aiStatus();
+  if (status.mode === 'server') {
+    try {
+      return await post(path, payload);
+    } catch (e) {
+      // A server that's up but erroring shouldn't block us if we can go direct.
+      if (!directGeminiAvailable()) throw e;
+    }
+  }
+  if (!directGeminiAvailable()) throw new Error('AI_NOT_CONFIGURED');
+  return directFn(payload);
+}
+
+export const getOutlook = (payload) => viaServerOr(directOutlook, '/ai/outlook', payload);
+export const getMarketBrief = (payload) => viaServerOr(directBrief, '/ai/brief', payload);
+export const askFaq = (question, lang) =>
+  viaServerOr((p) => directFaq(p), '/ai/faq', { question, lang });

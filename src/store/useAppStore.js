@@ -30,6 +30,11 @@ export const useAppStore = create(
       streak: 0,
       lastClaim: 0,
       referrals: 0,
+
+      /* Reputation points — a score, never a currency. Games keep using the
+         virtual NX balance; everything else awards points instead. */
+      points: 0,
+      pointsLog: [],
       refCode: null,
       soundOn: true,
       favorites: ['bitcoin', 'ethereum', 'solana'],
@@ -60,6 +65,22 @@ export const useAppStore = create(
         }
         set((s) => ({ balance: +(s.balance - amount).toFixed(2) }));
         if (reason) get().notify(reason, 'info');
+        return true;
+      },
+
+      /** Award reputation points for a named action. */
+      awardPoints(action, amount, meta = {}) {
+        if (!(amount > 0)) return;
+        set((st) => ({
+          points: st.points + amount,
+          pointsLog: [{ id: uid(), action, amount, at: Date.now(), ...meta }, ...st.pointsLog].slice(0, 100)
+        }));
+      },
+
+      /** Award once ever — used for milestones like first swap or 2FA setup. */
+      awardPointsOnce(action, amount) {
+        if (get().pointsLog.some((l) => l.action === action)) return false;
+        get().awardPoints(action, amount);
         return true;
       },
 
@@ -254,7 +275,9 @@ export const useAppStore = create(
           investments: [],
           bets: [],
           quests: {},
-          notifications: []
+          notifications: [],
+          points: 0,
+          pointsLog: []
         });
       }
     }),
