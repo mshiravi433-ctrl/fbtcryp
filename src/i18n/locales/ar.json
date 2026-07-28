@@ -647,12 +647,9 @@
     "social": {
       "telegram": "Telegram",
       "instagram": "Instagram",
-      "linkedin": "LinkedIn",
       "crunchbase": "Crunchbase",
       "email": "Email"
-    },
-    "phone": "هاتف الدعم",
-    "call": "اتصال"
+    }
   },
   "terms": {
     "title": "شروط الخدمة",

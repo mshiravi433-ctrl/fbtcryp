@@ -99,5 +99,44 @@ installDom();
 const { run: runScreens } = await import('./.out/screens/screens.js');
 report('screen smoke (all 12 languages)', await runScreens(document.getElementById('r')));
 
+/* --------------------------- 5. store-safe build -------------------------- */
+/*
+ * The arcade flag is a STORE COMPLIANCE control, not a UI toggle: Google Play
+ * and the Iranian stores reject gambling-styled content, and "route hidden but
+ * code still in the APK" does not satisfy that — a reviewer can unzip it.
+ *
+ * This caught a real bug: reading the flag from import.meta.env left Rollup
+ * unable to prove the lazy import was dead, so a 22KB Play chunk shipped even
+ * with games disabled. Asserting on the emitted files is the only check that
+ * would have noticed.
+ */
+console.log('\n▸ verifying the default build excludes the arcade…');
+{
+  const { readdirSync, rmSync, existsSync } = await import('node:fs');
+  const rows = [];
+  const gameChunk = /^(Play|Crash|Dice|Mines|Wheel|CoinFlip)/i;
+
+  rmSync('dist', { recursive: true, force: true });
+  npx(['vite', 'build', '--logLevel', 'error']);
+  const defaultAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
+  rows.push(['default build emits no arcade chunk', !defaultAssets.some((f) => gameChunk.test(f))]);
+  rows.push(['default build still produced a bundle', defaultAssets.length > 5]);
+
+  // And the opt-in must still work, or the flag is just broken rather than safe.
+  rmSync('dist', { recursive: true, force: true });
+  execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, VITE_ENABLE_GAMES: 'true' }
+  });
+  const optInAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
+  rows.push(['VITE_ENABLE_GAMES=true does emit the arcade', optInAssets.some((f) => gameChunk.test(f))]);
+
+  // Leave the tree in the store-safe state.
+  rmSync('dist', { recursive: true, force: true });
+  npx(['vite', 'build', '--logLevel', 'error']);
+
+  report('store-safe build', rows);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);

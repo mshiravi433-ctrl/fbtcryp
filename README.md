@@ -437,9 +437,8 @@ who breaches Firebase the keys to every user's funds.
 
 ## Company
 
-**FBT iran** — commercial trading company moving into the new digital economy.
+**Fanous Bazaar Pishgam** — commercial trading company moving into the new digital economy.
 
-- Director: Dr. Mohammad Shiravi Khozani
 - Address: Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality
-- Contact: Instagram [@Shiravi4333](https://instagram.com/Shiravi4333)
+- Contact: see the in-app Contact screen
 

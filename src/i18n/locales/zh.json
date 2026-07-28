@@ -424,9 +424,5 @@
     "shareInvite": "分享邀请",
     "quests": "任务",
     "virtualNotice": "此处的积分是分数，不是货币。它们不能提现、不能转让，也没有现金价值。"
-  },
-  "contact": {
-    "phone": "客服电话",
-    "call": "拨打"
   }
 }

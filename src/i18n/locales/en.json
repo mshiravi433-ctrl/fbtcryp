@@ -647,12 +647,9 @@
     "social": {
       "telegram": "Telegram",
       "instagram": "Instagram",
-      "linkedin": "LinkedIn",
       "crunchbase": "Crunchbase",
       "email": "Email"
-    },
-    "phone": "Support phone",
-    "call": "Call"
+    }
   },
   "terms": {
     "title": "Terms of Service",

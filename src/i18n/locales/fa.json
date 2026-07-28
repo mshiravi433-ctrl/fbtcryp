@@ -647,12 +647,9 @@
     "social": {
       "telegram": "تلگرام",
       "instagram": "اینستاگرام",
-      "linkedin": "لینکدین",
       "crunchbase": "کرانچ‌بیس",
       "email": "ایمیل"
-    },
-    "phone": "تلفن پشتیبانی",
-    "call": "تماس"
+    }
   },
   "terms": {
     "title": "شرایط استفاده",
