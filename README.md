@@ -5,7 +5,23 @@ on-chain swaps on BNB Smart Chain, a 0.5% platform fee collected by an
 audited-shaped smart contract, RGB dark/light theming, and full fa/en/ar
 support with RTL.
 
-**FBT iran** · Isfahan, Khomeyni Shahr · Project director: Dr. Mohammad Shiravi Khozani
+**FBT Iran — Fanos Bazaar Pishgam** · Isfahan, Khomeyni Shahr
+
+---
+
+## 📚 راهنماهای فارسی (Persian guides)
+
+قدم‌به‌قدم، برای انجام با گوشی و بدون کامپیوتر:
+
+| راهنما | موضوع |
+|---|---|
+| [VERCEL-FIX-FA.md](docs/VERCEL-FIX-FA.md) | چرا سایت ورسل بالا نمی‌آمد و چطور درستش کنیم |
+| [KEYSTORE-FA.md](docs/KEYSTORE-FA.md) | ساخت کلید امضای اپ با گوشی (Termux) |
+| [PRIVATE-REPO-FA.md](docs/PRIVATE-REPO-FA.md) | خصوصی کردن مخزن گیت‌هاب |
+| [APK-FA.md](docs/APK-FA.md) | ساخت فایل APK |
+| [DEPLOY-FA.md](docs/DEPLOY-FA.md) | انتشار مینی‌اپ تلگرام |
+| [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
+| [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
 
 ---
 
@@ -14,11 +30,9 @@ support with RTL.
 The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
 SDK, so it cannot produce one locally).
 
-> ### ⚠️ APK build blocked — one file needs fixing
-> The workflow YAML got corrupted during copy-paste (twice). Fix takes
-> 2 minutes: **[راهنمای فارسی →](docs/APK-FA.md)**
-> Build steps now live in `ci/build-apk.sh`, so the workflow is 27 lines
-> and you should never need to edit YAML again.
+> The workflow lives at `.github/workflows/build-apk.yml` and is working.
+> Build steps are in `ci/build-apk.sh`, so the YAML is 27 lines and rarely
+> needs editing. Persian walkthrough: **[docs/APK-FA.md](docs/APK-FA.md)**
 
 ### ⚡ One-time setup — enable the workflow (phone-friendly)
 
