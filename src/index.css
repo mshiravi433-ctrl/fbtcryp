@@ -8,7 +8,7 @@
   /* --- surfaces: true black base, layered smoke greys --- */
   --bg-void: #000000;
   --bg-abyss: #05060a;
-  --bg-panel: rgba(255, 255, 255, 0.035);
+  --bg-panel: rgba(255, 255, 255, 0.055); /* raised from .035 — compensates for the removed card backdrop-blur */
   --bg-panel-solid: #0a0c12;
   --bg-raised: rgba(255, 255, 255, 0.06);
   --line: rgba(255, 255, 255, 0.09);
@@ -71,6 +71,27 @@ body {
   background: var(--bg-void);
 }
 
+/*
+ * The orbs are large, heavily blurred and permanently in motion, so they are
+ * the single most expensive thing on screen when nothing is happening.
+ *
+ * `contain: strict` + `content-visibility` let the browser treat each orb as
+ * an isolated painting unit. Without containment, a moving orb marks the whole
+ * stacking context dirty, and everything above it that uses `backdrop-filter`
+ * (cards, the top bar, the nav) has to re-sample its backdrop — so three
+ * drifting orbs were forcing continuous repaints of the entire UI even on a
+ * completely idle screen.
+ *
+ * `translateZ(0)` promotes each orb to its own compositor layer so the drift
+ * animation is a texture transform rather than a repaint. `will-change` is
+ * kept to `transform` only; listing `filter` too would make the browser keep
+ * a second, blur-sized backing store per orb for no benefit, since the blur
+ * radius never animates.
+ *
+ * Note: CSS `contain` is deliberately NOT used here. Paint containment clips
+ * to the border box, and a 70px blur halo extends well outside it — the orbs
+ * would get visible hard edges.
+ */
 .rgb-orb {
   position: absolute;
   border-radius: 50%;
@@ -78,6 +99,7 @@ body {
   opacity: 0.5;
   mix-blend-mode: screen;
   will-change: transform;
+  transform: translateZ(0);
 }
 
 .rgb-orb.a { width: 60vw; height: 60vw; background: var(--rgb-1); top: -18vw; left: -14vw; animation: drift-a 17s ease-in-out infinite; }
@@ -99,22 +121,47 @@ body {
 }
 
 /* fine scanline / grid texture over the orbs */
+/*
+ * The scanline grid used to animate `background-position` directly on this
+ * full-screen element. Background-position is a paint property: every frame
+ * the browser had to re-tile two gradients across a box that is 200% of the
+ * viewport, re-apply the perspective transform, and re-apply the radial mask.
+ * That is a full-screen repaint at 60fps, forever, on the idle screen.
+ *
+ * Split into two elements instead: the outer one owns the perspective and the
+ * mask and never changes, the inner ::before owns the tiled gradient and is
+ * moved with `transform: translate3d`. Because the tile repeats every 46px,
+ * translating by exactly 46px is visually identical to scrolling the
+ * background by 46px — but a transform on a promoted layer is handled by the
+ * compositor with zero repaints.
+ *
+ * The inner element is oversized by one extra tile so the translation never
+ * exposes an untiled edge.
+ */
 .rgb-grid {
   position: absolute;
   inset: -50%;
+  transform: perspective(420px) rotateX(62deg);
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 62%);
+  overflow: hidden;
+}
+
+.rgb-grid::before {
+  content: '';
+  position: absolute;
+  inset: -46px 0 0 0;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
   background-size: 46px 46px;
-  transform: perspective(420px) rotateX(62deg);
-  mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 62%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 62%);
   animation: grid-scroll 14s linear infinite;
+  will-change: transform;
 }
 
 @keyframes grid-scroll {
-  from { background-position: 0 0; }
-  to { background-position: 0 46px; }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 46px, 0); }
 }
 
 .rgb-vignette {
@@ -281,13 +328,35 @@ body {
    Cards & surfaces
    ========================================================================== */
 
+/*
+ * THE EXPENSIVE ONE.
+ *
+ * `.card` appears 5–11 times on a typical page, and it used to carry
+ * `backdrop-filter: blur(16px)`. Backdrop-filter is the most costly common CSS
+ * effect there is: for each element the compositor must copy the region
+ * painted behind it into a texture, blur that texture, then draw the element
+ * over it. Eleven of those on one scrolling page means eleven backdrop
+ * captures per frame, and they cannot be cached while anything behind them
+ * moves — which, with three permanently drifting background orbs, is always.
+ *
+ * That is the stutter: it is not React being slow, it is the GPU redoing
+ * eleven blurs at 60Hz for an effect nobody can actually perceive, because the
+ * only thing behind the cards is a soft gradient field that is already blurred
+ * by 70px. Blurring an already-blurred gradient produces a visually identical
+ * result to just tinting it.
+ *
+ * So the blur is gone and the panel tint was raised slightly to compensate for
+ * the lost frostiness. Kept a real `backdrop-filter` only on the few surfaces
+ * where content genuinely scrolls underneath and legibility depends on it:
+ * the top bar, the bottom nav, sheet backdrops and toasts. Those are a fixed
+ * count — one each — not one per list item.
+ */
 .card {
   position: relative;
   background: var(--bg-panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 15px;
-  backdrop-filter: blur(16px);
   overflow: hidden;
 }
 
@@ -304,7 +373,19 @@ body {
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: rotate-angle 4s linear infinite;
+  /*
+   * `--angle` is a custom property, so this is a PAINT animation, not a
+   * compositor one: every frame the browser regenerates the conic gradient and
+   * re-applies the xor mask. At 60fps with up to three of these on a page that
+   * is real main-thread work for a decorative border.
+   *
+   * `steps(90)` cuts it to 15 repaints per second (4° per step) instead of 60.
+   * On a slowly rotating hue ring that is indistinguishable to the eye — the
+   * gradient itself is continuous, only the rotation is quantised — but it is
+   * a 4× reduction in paint work. Duration went 4s → 6s for the same reason:
+   * slower rotation makes the quantisation even less detectable.
+   */
+  animation: rotate-angle 6s steps(90) infinite;
   pointer-events: none;
   opacity: 0.85;
 }
@@ -336,6 +417,15 @@ body {
   transform: translateX(-100%);
   animation: sheen-sweep 4.5s ease-in-out infinite;
   pointer-events: none;
+  /*
+   * Paint containment. The sheen is a translating overlay inside a card; with
+   * no containment its movement invalidates the parent's paint area, which is
+   * how a purely decorative highlight ends up dirtying real content. It sits
+   * inside `overflow: hidden` already, so clipping to the border box changes
+   * nothing visually.
+   */
+  contain: paint;
+  will-change: transform;
 }
 @keyframes sheen-sweep {
   0%, 65% { transform: translateX(-100%); }
@@ -400,7 +490,8 @@ body {
   border: 1px solid var(--line);
   color: var(--text-1);
   font-weight: 600;
-  backdrop-filter: blur(10px);
+  /* backdrop-filter removed: this rule repeats many times per page and the
+     blur was imperceptible over the already-soft background. See .card. */
 }
 
 .btn-danger { background: linear-gradient(90deg, #ff3b6b, #ff2d95); color: #fff; }
@@ -732,6 +823,29 @@ select option { background: #0a0c12; }
   animation: spin-hue 0.8s linear infinite;
 }
 
+/*
+ * Stay invisible for 250ms, then fade in.
+ *
+ * A route chunk usually arrives in well under 250ms once it is cached, and a
+ * spinner that appears and disappears inside 100ms does not read as "loading",
+ * it reads as a flicker — a defect. Anything slower than 250ms genuinely needs
+ * feedback, and by then the spinner is there.
+ *
+ * `animation-fill-mode: backwards` applies the 0% keyframe (opacity 0) during
+ * the delay, which is what actually keeps it hidden rather than merely
+ * un-animated.
+ */
+.spinner-delayed {
+  animation:
+    spin-hue 0.8s linear infinite,
+    spinner-appear 0.2s ease 0.25s backwards;
+}
+
+@keyframes spinner-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ==========================================================================
    Game surfaces
    ========================================================================== */
@@ -1036,7 +1150,7 @@ select option { background: #0a0c12; }
 :root[data-theme='light'] {
   --bg-void: #f4f5fa;
   --bg-abyss: #eceef6;
-  --bg-panel: rgba(255, 255, 255, 0.82);
+  --bg-panel: rgba(255, 255, 255, 0.9);
   --bg-panel-solid: #ffffff;
   --bg-raised: rgba(255, 255, 255, 0.95);
   --line: rgba(16, 20, 40, 0.1);
@@ -1058,7 +1172,7 @@ select option { background: #0a0c12; }
 
 /* the orb field is far too intense on a light canvas */
 :root[data-theme='light'] .rgb-orb { opacity: 0.16; filter: blur(90px); }
-:root[data-theme='light'] .rgb-grid {
+:root[data-theme='light'] .rgb-grid::before { /* the gradient moved to ::before; see .rgb-grid */
   background-image:
     linear-gradient(rgba(16, 20, 40, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 20, 40, 0.05) 1px, transparent 1px);
@@ -1141,7 +1255,8 @@ input, select, textarea { font-size: 16px !important; }
   border: 1px solid var(--line);
   background: var(--bg-panel);
   overflow: hidden;
-  backdrop-filter: blur(14px);
+  /* backdrop-filter removed: this rule repeats many times per page and the
+     blur was imperceptible over the already-soft background. See .card. */
 }
 
 .set-row {
@@ -1561,7 +1676,8 @@ input, select, textarea { font-size: 16px !important; }
   color: var(--text-1);
   cursor: pointer;
   overflow: hidden;
-  backdrop-filter: blur(14px);
+  /* backdrop-filter removed: this rule repeats many times per page and the
+     blur was imperceptible over the already-soft background. See .card. */
   box-shadow: 0 10px 30px -18px var(--ad-a);
 }
 

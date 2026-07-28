@@ -47,12 +47,73 @@ const P2P = lazy(() => import('./pages/P2P'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
 const News = lazy(() => import('./pages/News'));
 
+/**
+ * Suspense fallback for a not-yet-downloaded route chunk.
+ *
+ * `minHeight: 55vh` is not decoration — it holds the scroll height roughly
+ * where the real page will be. Without it the document collapses to spinner
+ * height for a frame or two and the bottom nav, which is fixed but whose
+ * position the browser recomputes against the document, visibly hops.
+ *
+ * The spinner is delayed by 250ms via CSS (`.spinner-delayed`). A chunk that
+ * arrives in 80ms would otherwise flash a spinner for 80ms, and a flash is
+ * perceived as a glitch, whereas a brief pause with nothing happening is not
+ * perceived at all.
+ */
 function Loader() {
   return (
     <div style={{ display: 'grid', placeItems: 'center', minHeight: '55vh' }}>
-      <div className="spinner" />
+      <div className="spinner spinner-delayed" />
     </div>
   );
+}
+
+/**
+ * Warm the route chunks the user is most likely to open next.
+ *
+ * THE JOLT.
+ *
+ * Every page is `lazy()`, and `<Suspense>` sits OUTSIDE `<AnimatePresence>`.
+ * So the first time a route is opened, this sequence happens:
+ *
+ *   tap → outgoing page starts its exit animation → React hits the unresolved
+ *   lazy import → the whole subtree, mid-animation, is replaced by the
+ *   fallback spinner (a 55vh box, so the page height changes) → chunk arrives
+ *   → the real page mounts and animates in from scratch.
+ *
+ * That mid-animation swap to a differently-sized spinner and back is the
+ * "تکانه", the jolt. It is worst on the first visit to each tab and vanishes
+ * afterwards, which is exactly the "sometimes" the user described — and it is
+ * why it is easy to dismiss as imaginary.
+ *
+ * Rather than restructure Suspense, the reliable fix is to make sure the chunk
+ * is already resolved before the tap happens. These are the four bottom-nav
+ * destinations plus the two screens reachable in one tap from the market list.
+ * They are fetched during idle time after first paint, so they cost nothing on
+ * the critical path, and every one of them removes a suspend.
+ *
+ * Deliberately not prefetching all 27 routes: on a metered Iranian mobile
+ * connection that is real data for pages most people never open, and it would
+ * contend with the market API calls that the user is actually waiting on.
+ */
+function prefetchLikelyRoutes() {
+  const warm = [
+    () => import('./pages/Swap'),
+    () => import('./pages/Signals'),
+    () => import('./pages/Wallet'),
+    () => import('./pages/CoinDetail'),
+    () => import('./pages/Settings')
+  ];
+  // Sequential, not Promise.all: parallel requests would compete with the
+  // first market fetch for the same limited connection pool.
+  let i = 0;
+  const next = () => {
+    if (i >= warm.length) return;
+    warm[i++]().then(next).catch(next);
+  };
+  const start = () => next();
+  if ('requestIdleCallback' in window) window.requestIdleCallback(start, { timeout: 4000 });
+  else setTimeout(start, 2000);
 }
 
 function AnimatedRoutes() {
@@ -109,6 +170,7 @@ export default function App() {
   useEffect(() => {
     initTheme();
     initServiceWorker();
+    prefetchLikelyRoutes();
   }, []);
 
   // Background housekeeping, once per app open:
