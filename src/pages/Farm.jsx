@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import AdBanner from '../components/AdBanner';
 import { useGlobalStats } from '../hooks/useMarket';
 import { fmtCompact } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -166,6 +167,8 @@ export default function Farm() {
         </motion.div>
         <p className="faint" style={{ marginTop: 9, lineHeight: 1.7 }}>{t('farm.aprNote')}</p>
       </section>
+
+      <AdBanner slot="swap" />
 
       <p className="notice">{t('farm.custodyNotice')}</p>
 

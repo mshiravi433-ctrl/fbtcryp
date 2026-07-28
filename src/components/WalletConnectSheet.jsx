@@ -187,7 +187,8 @@ export default function WalletConnectSheet({ open, onClose }) {
       {view === 'backup' && (
         <>
           <h2 className="h2" style={{ marginBottom: 4 }}>{t('wallet.backupTitle')}</h2>
-          <p className="notice notice-danger" style={{ marginBottom: 12 }}>{t('wallet.backupWarning')}</p>
+          <p className="notice notice-danger" style={{ marginBottom: 10 }}>{t('wallet.backupWarning')}</p>
+          <p className="notice notice-danger" style={{ marginBottom: 12 }}>{t('wallet.lossWarning')}</p>
 
           <div
             style={{

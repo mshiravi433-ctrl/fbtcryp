@@ -25,7 +25,8 @@
       "markets": "Markets",
       "earn": "Earn",
       "more": "More"
-    }
+    },
+    "p2p": "P2P"
   },
   "common": {
     "balance": "Balance",
@@ -312,7 +313,20 @@
     "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
     "viewPools": "View pools",
     "noHistory": "No transactions yet",
-    "onchainHistory": "View full on-chain history"
+    "onchainHistory": "View full on-chain history",
+    "backupFile": "Backup file",
+    "backupSave": "Save to device",
+    "backupShare": "Share / send elsewhere",
+    "backupSaved": "Backup saved",
+    "backupLocation": "Saved to",
+    "backupWarn": "This file contains your wallet, encrypted with your password. Anyone who gets BOTH the file and your password controls your funds. And if you forget the password, the file is worthless — it cannot be decrypted by us or anyone else.",
+    "backupWhat": "What's inside: your seed phrase encrypted with AES-GCM. The plain seed is never written to disk. The file alone cannot spend anything.",
+    "backupPaperNote": "This does not replace writing your 12 words on paper. Phones get lost, wiped and stolen — and if you uninstall the app without a backup, the wallet is gone permanently.",
+    "backupErr": {
+      "NO_VAULT": "No in-app wallet to back up.",
+      "FAILED": "Could not write the file. Check storage permission."
+    },
+    "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not FBT, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue."
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -992,5 +1006,87 @@
       }
     },
     "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead."
+  },
+  "ads": {
+    "swap": {
+      "title": "Swap at the best rate",
+      "body": "Routed across every DEX on the chain",
+      "cta": "Trade"
+    },
+    "farm": {
+      "title": "Put idle tokens to work",
+      "body": "Earn yield from liquidity pools",
+      "cta": "Earn"
+    },
+    "signals": {
+      "title": "AI market signals",
+      "body": "Daily analysis on every major asset",
+      "cta": "View"
+    },
+    "p2p": {
+      "title": "Buy crypto with local currency",
+      "body": "Peer-to-peer desks with escrow",
+      "cta": "Open"
+    },
+    "referral": {
+      "title": "Invite friends",
+      "body": "Grow your daily reward streak",
+      "cta": "Share"
+    }
+  },
+  "p2p": {
+    "title": "P2P",
+    "subtitle": "Trade directly with other people.",
+    "tab": {
+      "otc": "On-chain OTC",
+      "fiat": "Buy with cash"
+    },
+    "otcTitle": "Direct wallet-to-wallet",
+    "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
+    "sendDirect": "Send to a person",
+    "yourAddress": "Your address",
+    "openSend": "Open send screen",
+    "connectFirst": "Connect a wallet to send crypto to someone directly.",
+    "otcNotice": "Double-check the address before sending. On-chain transfers are irreversible — there is no support desk that can reverse a mistake.",
+    "honestTitle": "Why we don't run our own fiat P2P",
+    "honestBody": "A fiat P2P desk needs escrow holding crypto while money moves, human arbitrators for disputes, and identity checks on both sides. Running one makes you a licensed money services business. We'd rather send you to desks that already have that infrastructure than build a fake escrow you'd trust with real money.",
+    "desks": "Established P2P desks",
+    "desk": {
+      "binance": {
+        "name": "Binance P2P",
+        "short": "BNB",
+        "desc": "Largest volume, supports many local currencies"
+      },
+      "okx": {
+        "name": "OKX P2P",
+        "short": "OKX",
+        "desc": "Escrow-protected, competitive spreads"
+      },
+      "bybit": {
+        "name": "Bybit P2P",
+        "short": "BYB",
+        "desc": "Zero-fee trading on many pairs"
+      }
+    },
+    "scamsTitle": "How people get scammed in P2P",
+    "scam": {
+      "reversal": {
+        "title": "Payment reversal",
+        "body": "They pay, you release the crypto, then they reverse the bank transfer or claim fraud. Wait for funds to fully clear — not just 'received'."
+      },
+      "thirdParty": {
+        "title": "Third-party payment",
+        "body": "Money arrives from someone else's account. That account may be stolen, and the bank will claw it back from you. Only accept payment from the buyer's own verified name."
+      },
+      "offPlatform": {
+        "title": "Moving off-platform",
+        "body": "They ask to continue on Telegram or WhatsApp for a 'better rate'. The moment you leave the platform, escrow no longer protects you. This is the most common trick."
+      },
+      "overpay": {
+        "title": "Fake overpayment",
+        "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
+      }
+    },
+    "notice": "These are independent platforms. FBT iran does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
   }
 }

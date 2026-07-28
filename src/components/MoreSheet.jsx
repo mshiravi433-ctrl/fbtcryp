@@ -14,6 +14,7 @@ import {
   IconPools,
   IconSettings,
   IconShield,
+  IconSwap,
   IconTrend,
   IconX
 } from './Icons';
@@ -32,7 +33,8 @@ const GROUPS = [
       { to: '/', key: 'nav.market', Icon: IconMarket, hue: 'var(--rgb-1)' },
       { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
-      { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' }
+      { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' },
+      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
     ]
   },
   {

@@ -19,6 +19,8 @@
     "android:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/share": "^6.0.4",
     "@tonconnect/ui-react": "^2.4.4",
     "@vercel/blob": "^2.6.1",
     "@walletconnect/ethereum-provider": "^2.23.10",

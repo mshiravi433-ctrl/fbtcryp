@@ -16,15 +16,26 @@
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const JINA_SEARCH_URL = 'https://s.jina.ai/';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
+const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const JINA_KEY = process.env.JINA_API_KEY || '';
 const MODEL = process.env.AI_MODEL || 'openai/gpt-4o-mini';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const SITE_URL = process.env.WEBAPP_URL || 'https://fbt-swap.app';
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
 
-export const aiConfigured = () => Boolean(OPENROUTER_KEY);
+/**
+ * Provider preference: Gemini first when a key is present, OpenRouter
+ * otherwise. Gemini's flash tier has a generous free quota, which matters
+ * because AI cost scales with users while this app's revenue scales with swap
+ * volume — the two aren't correlated, so a free tier is a real advantage.
+ * If Gemini errors we fall through to OpenRouter rather than failing.
+ */
+export const aiConfigured = () => Boolean(GEMINI_KEY || OPENROUTER_KEY);
 export const newsConfigured = () => Boolean(JINA_KEY);
+export const aiProvider = () => (GEMINI_KEY ? 'gemini' : OPENROUTER_KEY ? 'openrouter' : null);
 
 async function req(url, options, timeout = TIMEOUT_MS) {
   const ctrl = new AbortController();
@@ -150,6 +161,79 @@ function buildUserPrompt({ symbol, name, price, indicators, change24h, change7d,
   return lines.join('\n');
 }
 
+/**
+ * Call Gemini. Its API shape differs from OpenAI's: the system prompt goes in
+ * `systemInstruction`, and JSON mode is `responseMimeType`.
+ */
+async function geminiChat({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
+  const url = `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_KEY)}`;
+
+  const raw = await req(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: {
+        temperature,
+        maxOutputTokens: maxTokens,
+        ...(json ? { responseMimeType: 'application/json' } : {})
+      }
+    })
+  });
+
+  const text = raw?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
+  if (!text) {
+    // A blocked prompt returns no candidate but does explain why.
+    const reason = raw?.promptFeedback?.blockReason;
+    throw new Error(reason ? `BLOCKED:${reason}` : 'EMPTY_RESPONSE');
+  }
+  return text;
+}
+
+/** Call OpenRouter (OpenAI-compatible). */
+async function openRouterChat({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
+  const raw = await req(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_KEY}`,
+      'HTTP-Referer': SITE_URL,
+      'X-Title': 'FBT Swap',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
+      temperature,
+      max_tokens: maxTokens,
+      ...(json ? { response_format: { type: 'json_object' } } : {})
+    })
+  });
+  const text = raw?.choices?.[0]?.message?.content;
+  if (!text) throw new Error('EMPTY_RESPONSE');
+  return text;
+}
+
+/**
+ * Provider-agnostic entry point. Tries Gemini, falls back to OpenRouter so a
+ * quota error or outage on one doesn't take the feature down.
+ */
+async function chat(opts) {
+  if (GEMINI_KEY) {
+    try {
+      return { text: await geminiChat(opts), model: GEMINI_MODEL };
+    } catch (e) {
+      if (!OPENROUTER_KEY) throw e;
+      console.warn('[ai] gemini failed, falling back to openrouter:', e.message);
+    }
+  }
+  if (!OPENROUTER_KEY) throw new Error('AI_NOT_CONFIGURED');
+  return { text: await openRouterChat(opts), model: MODEL };
+}
+
 /** Strip markdown fences some models add despite instructions. */
 function parseJson(text) {
   let t = String(text).trim();
@@ -163,36 +247,18 @@ function parseJson(text) {
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
 
 export async function generateOutlook(payload) {
-  if (!OPENROUTER_KEY) throw new Error('AI_NOT_CONFIGURED');
+  if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
   const news = await fetchNews(`${payload.name} ${payload.symbol} crypto news analysis`, 6);
 
-  const body = {
-    model: MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserPrompt({ ...payload, news }) }
-    ],
+  const { text, model } = await chat({
+    system: SYSTEM_PROMPT,
+    user: buildUserPrompt({ ...payload, news }),
     temperature: 0.3,
-    max_tokens: 700,
-    response_format: { type: 'json_object' }
-  };
-
-  const raw = await req(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_KEY}`,
-      'HTTP-Referer': SITE_URL,
-      'X-Title': 'FBT Swap',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
+    maxTokens: 700
   });
 
-  const content = raw?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('EMPTY_RESPONSE');
-
-  const parsed = parseJson(content);
+  const parsed = parseJson(text);
 
   // Normalise and clamp — never trust model output shape blindly.
   return {
@@ -211,14 +277,14 @@ export async function generateOutlook(payload) {
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 3).map((r) => String(r).slice(0, 160)) : [],
     invalidation: String(parsed.invalidation ?? '').slice(0, 240),
     sources: news.map((n) => ({ title: n.title, url: n.url })),
-    model: MODEL,
+    model,
     generatedAt: Date.now()
   };
 }
 
 /** Short market-wide briefing for the Signals landing card. */
 export async function generateMarketBrief({ global, top, lang }) {
-  if (!OPENROUTER_KEY) throw new Error('AI_NOT_CONFIGURED');
+  if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
   const news = await fetchNews('crypto market today bitcoin ethereum analysis', 5);
 
@@ -237,30 +303,14 @@ export async function generateMarketBrief({ global, top, lang }) {
     lang === 'ar' ? '\nWrite the text fields in Arabic. Keep JSON keys in English.' : ''
   ].join('\n');
 
-  const raw = await req(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_KEY}`,
-      'HTTP-Referer': SITE_URL,
-      'X-Title': 'FBT Swap',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: `${SYSTEM_PROMPT}\n\nFor this market-wide brief use exactly this JSON shape:\n{"bias":"bullish|bearish|neutral","confidence":0-100,"headline":"max 90 chars","summary":"2-3 sentences","drivers":["..."],"risks":["..."]}`
-        },
-        { role: 'user', content: user }
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-      response_format: { type: 'json_object' }
-    })
+  const { text, model } = await chat({
+    system: `${SYSTEM_PROMPT}\n\nFor this market-wide brief use exactly this JSON shape:\n{"bias":"bullish|bearish|neutral","confidence":0-100,"headline":"max 90 chars","summary":"2-3 sentences","drivers":["..."],"risks":["..."]}`,
+    user,
+    temperature: 0.3,
+    maxTokens: 500
   });
 
-  const parsed = parseJson(raw?.choices?.[0]?.message?.content ?? '');
+  const parsed = parseJson(text);
   return {
     bias: ['bullish', 'bearish', 'neutral'].includes(parsed.bias) ? parsed.bias : 'neutral',
     confidence: clamp(parsed.confidence, 0, 90),
@@ -269,14 +319,14 @@ export async function generateMarketBrief({ global, top, lang }) {
     drivers: Array.isArray(parsed.drivers) ? parsed.drivers.slice(0, 3).map((d) => String(d).slice(0, 160)) : [],
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 3).map((r) => String(r).slice(0, 160)) : [],
     sources: news.map((n) => ({ title: n.title, url: n.url })),
-    model: MODEL,
+    model,
     generatedAt: Date.now()
   };
 }
 
 /** FAQ answering, grounded in a fixed knowledge base about this app. */
 export async function answerFaq({ question, lang }) {
-  if (!OPENROUTER_KEY) throw new Error('AI_NOT_CONFIGURED');
+  if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
   const kb = `FBT Swap facts you must use when answering:
 - Non-custodial DEX on BNB Smart Chain. The app never holds user funds and has no deposit address.
@@ -296,28 +346,13 @@ RULES:
 - Keep it under 130 words.
 ${lang === 'fa' ? '- Answer in Persian (فارسی).' : lang === 'ar' ? '- Answer in Arabic.' : '- Answer in English.'}`;
 
-  const raw = await req(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_KEY}`,
-      'HTTP-Referer': SITE_URL,
-      'X-Title': 'FBT Swap',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: kb },
-        { role: 'user', content: String(question).slice(0, 500) }
-      ],
-      temperature: 0.2,
-      max_tokens: 400
-    })
+  const { text, model } = await chat({
+    system: kb,
+    user: String(question).slice(0, 500),
+    temperature: 0.2,
+    maxTokens: 400,
+    json: false
   });
 
-  return {
-    answer: raw?.choices?.[0]?.message?.content?.trim() ?? '',
-    model: MODEL,
-    generatedAt: Date.now()
-  };
+  return { answer: text.trim(), model, generatedAt: Date.now() };
 }

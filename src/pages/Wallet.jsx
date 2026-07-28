@@ -13,6 +13,8 @@ import { shortAddress, useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import { revealMnemonic } from '../lib/localWallet';
+import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
+import AdBanner from '../components/AdBanner';
 import { explorerAddr } from '../lib/chains';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
@@ -39,6 +41,9 @@ export default function Wallet() {
   const [seedPw, setSeedPw] = useState('');
   const [seedWords, setSeedWords] = useState(null);
   const [seedErr, setSeedErr] = useState(null);
+  const [backupSheet, setBackupSheet] = useState(false);
+  const [backupResult, setBackupResult] = useState(null);
+  const [backupErr, setBackupErr] = useState(null);
 
   const portfolio = useMemo(() => valuePortfolio(positions, priceMap), [positions, priceMap]);
   const staked = investments.filter((i) => !i.claimedAt).reduce((s, i) => s + i.amount, 0);
@@ -140,6 +145,7 @@ export default function Wallet() {
       )}
 
       {tab === 'overview' && <>
+      <AdBanner slot="farm" compact />
       {/* ---------- allocation ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('wallet.allocation')}</p>
@@ -309,9 +315,22 @@ export default function Wallet() {
             </a>
 
             {wallet.mode === 'local' && (
-              <button className="btn btn-ghost btn-sm" onClick={() => setSeedSheet(true)}>
-                {t('wallet.revealSeed')}
-              </button>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setSeedSheet(true)}>
+                  {t('wallet.revealSeed')}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setBackupResult(null);
+                    setBackupErr(null);
+                    setBackupSheet(true);
+                  }}
+                >
+                  {t('wallet.backupFile')}
+                </button>
+              </div>
             )}
           </div>
         ) : (
@@ -338,6 +357,69 @@ export default function Wallet() {
           </div>
         </section>
       )}
+
+      {/* ---------- encrypted file backup ---------- */}
+      <Sheet open={backupSheet} onClose={() => setBackupSheet(false)} title={t('wallet.backupFile')}>
+        <p className="notice notice-danger">{t('wallet.backupWarn')}</p>
+
+        <div className="card card-tight" style={{ marginTop: 11 }}>
+          <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{t('wallet.backupWhat')}</p>
+        </div>
+
+        {backupResult && (
+          <motion.div
+            className="card card-tight"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ marginTop: 11, borderColor: 'var(--up)' }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 5 }} className="up">
+              ✓ {t('wallet.backupSaved')}
+            </div>
+            <div className="faint">{t('wallet.backupLocation')}</div>
+            <div className="mono" style={{ fontSize: 11.5, marginTop: 3, wordBreak: 'break-all' }}>
+              {backupResult.hint} / {BACKUP_FILENAME}
+            </div>
+          </motion.div>
+        )}
+
+        {backupErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`wallet.backupErr.${backupErr}`)}</p>}
+
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 12 }}
+          onClick={async () => {
+            setBackupErr(null);
+            try {
+              const res = await exportWallet();
+              setBackupResult(res);
+              haptic?.('success');
+            } catch (e) {
+              setBackupErr(e.message === 'NO_VAULT' ? 'NO_VAULT' : 'FAILED');
+              haptic?.('error');
+            }
+          }}
+        >
+          {t('wallet.backupSave')}
+        </button>
+
+        <button
+          className="btn btn-ghost"
+          style={{ marginTop: 9 }}
+          onClick={async () => {
+            try {
+              await shareWalletBackup();
+              haptic?.('success');
+            } catch {
+              setBackupErr('FAILED');
+            }
+          }}
+        >
+          {t('wallet.backupShare')}
+        </button>
+
+        <p className="notice" style={{ marginTop: 12 }}>{t('wallet.backupPaperNote')}</p>
+      </Sheet>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
 

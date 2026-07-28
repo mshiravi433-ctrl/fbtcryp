@@ -33,6 +33,7 @@ const Audit = lazy(() => import('./pages/Audit'));
 const Developers = lazy(() => import('./pages/Developers'));
 const Ecosystem = lazy(() => import('./pages/Ecosystem'));
 const Business = lazy(() => import('./pages/Business'));
+const P2P = lazy(() => import('./pages/P2P'));
 
 function Loader() {
   return (
@@ -71,6 +72,7 @@ function AnimatedRoutes() {
           <Route path="/developers" element={<Developers />} />
           <Route path="/ecosystem" element={<Ecosystem />} />
           <Route path="/business" element={<Business />} />
+          <Route path="/p2p" element={<P2P />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>

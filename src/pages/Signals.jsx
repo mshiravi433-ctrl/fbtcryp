@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useChart, useGlobalStats, useMarkets } from '../hooks/useMarket';
@@ -527,6 +528,8 @@ export default function Signals() {
           </p>
         </motion.section>
       )}
+
+      <AdBanner slot="swap" />
 
       {/* ---------- market scan ---------- */}
       {ranked.length > 0 && (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -52,6 +53,16 @@ export default function Swap() {
 
   const fromToken = useMemo(() => tokens.find((x) => x.symbol === fromSym) ?? tokens[0], [tokens, fromSym]);
   const toToken = useMemo(() => tokens.find((x) => x.symbol === toSym) ?? tokens[1], [tokens, toSym]);
+
+  // Switching chains invalidates the selected pair — a BSC token address means
+  // nothing on Arbitrum, and quoting it would fail confusingly.
+  useEffect(() => {
+    const list = TOKENS[chainId] ?? [];
+    if (!list.length) return;
+    if (!list.some((x) => x.symbol === fromSym)) setFromSym(list[0].symbol);
+    if (!list.some((x) => x.symbol === toSym)) setToSym(list[1]?.symbol ?? list[0].symbol);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chainId]);
 
   const quoteSeq = useRef(0);
 
@@ -243,6 +254,36 @@ export default function Swap() {
         )}
       </motion.div>
 
+      {/* --------------------------- chain selector -------------------------- */}
+      <div className="tag-scroll">
+        {Object.values(EVM_CHAINS).map((c) => (
+          <motion.button
+            key={c.id}
+            className={`tag ${chainId === c.id ? 'active' : ''}`}
+            whileTap={{ scale: 0.94 }}
+            onClick={async () => {
+              haptic?.('select');
+              await wallet.switchChain?.(c.id);
+              setAmount('');
+              setQuote(null);
+            }}
+            style={chainId === c.id ? undefined : { borderColor: `${c.color}55` }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: c.color,
+                marginInlineEnd: 6
+              }}
+            />
+            {c.short}
+          </motion.button>
+        ))}
+      </div>
+
       {/* ------------------------------ ticket ------------------------------ */}
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
@@ -392,6 +433,8 @@ export default function Swap() {
           {!wallet.isConnected ? t('wallet.connect') : quoting ? t('swap.quoting') : t('swap.review')}
         </button>
       </motion.section>
+
+      <AdBanner slot="p2p" />
 
       {/* ---------------------------- token picker --------------------------- */}
       <Sheet open={Boolean(picker)} onClose={() => setPicker(null)} title={t('swap.selectToken')}>

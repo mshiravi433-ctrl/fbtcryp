@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import AdBanner from '../components/AdBanner';
 import Ticker from '../components/Ticker';
 import CoinRow from '../components/CoinRow';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -155,6 +156,8 @@ export default function Market() {
           </div>
         </motion.section>
       )}
+
+      <AdBanner slot="signals" />
 
       {/* ---------- trending ---------- */}
       {trending?.length > 0 && (
