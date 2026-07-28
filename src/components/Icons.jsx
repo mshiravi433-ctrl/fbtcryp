@@ -258,3 +258,47 @@ export const IconTrophy = (p) => (
     <path d="M6 3h12v6a6 6 0 0 1-12 0V3zM9 21h6M12 15v6" />
   </svg>
 );
+
+export const IconNews = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 5h11a1 1 0 0 1 1 1v13H5a1 1 0 0 1-1-1V5z" />
+    <path d="M16 9h3a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2h-2" />
+    <path d="M7 8h5M7 11.5h5M7 15h3" />
+  </svg>
+);
+
+export const IconBell = (p) => (
+  <svg {...base} {...p}>
+    <path d="M18 8a6 6 0 1 0-12 0c0 4.5-1.5 6-1.5 6h15S18 12.5 18 8z" />
+    <path d="M10.3 20a2 2 0 0 0 3.4 0" />
+  </svg>
+);
+
+export const IconSearch = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.6-3.6" />
+  </svg>
+);
+
+export const IconLanguages = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 5h11M9 3v2c0 5-2.5 8-6 9" />
+    <path d="M6.5 10c1.6 3.1 4 5 7 6" />
+    <path d="m12.5 21 4.5-10 4.5 10M14.5 17h6" />
+  </svg>
+);
+
+export const IconVolume = (p) => (
+  <svg {...base} {...p}>
+    <path d="M11 5 6.5 9H3v6h3.5L11 19V5z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a9 9 0 0 1 0 12" />
+  </svg>
+);
+
+export const IconVibrate = (p) => (
+  <svg {...base} {...p}>
+    <rect x="8" y="3" width="8" height="18" rx="1.6" />
+    <path d="M4 9v6M2 11v2M20 9v6M22 11v2" />
+  </svg>
+);

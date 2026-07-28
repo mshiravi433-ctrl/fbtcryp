@@ -12,6 +12,7 @@ import {
   IconInfo,
   IconKey,
   IconMarket,
+  IconNews,
   IconPools,
   IconSettings,
   IconShield,
@@ -52,6 +53,7 @@ const GROUPS = [
   {
     id: 'more',
     items: [
+      { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/help', key: 'nav.help', Icon: IconInfo, hue: 'var(--rgb-9)' },
       { to: '/docs', key: 'nav.docs', Icon: IconDoc, hue: 'var(--rgb-1)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },

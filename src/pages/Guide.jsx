@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { FEE_BPS } from '../lib/chains';
+import LanguagePicker from '../components/LanguagePicker';
 import {
   IconSwap,
   IconTrend,
@@ -138,15 +139,75 @@ export default function Guide({ onDone }) {
     setSeen((prev) => new Set(prev).add(next));
   };
 
+  /**
+   * Finish and leave.
+   *
+   * `markGuideRead()` alone unmounts this component instantly, which reads as
+   * a flicker rather than a transition. We play a short confirmation state
+   * first, then persist — so the screen visibly dissolves instead of blinking
+   * out from under the finger that just tapped it.
+   */
+  const [leaving, setLeaving] = useState(false);
+
   const finish = () => {
-    if (!allSeen) return;
+    if (!allSeen || leaving) return;
     haptic?.('success');
-    markGuideRead();
-    onDone?.();
+    setLeaving(true);
+    setTimeout(() => {
+      markGuideRead();
+      onDone?.();
+    }, 620);
   };
 
   return (
-    <div className="guide-stage">
+    <motion.div
+      className="guide-stage"
+      animate={leaving ? { opacity: 0, scale: 1.03, filter: 'blur(8px)' } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {/* Confirmation beat before the screen disappears for good. */}
+      <AnimatePresence>
+        {leaving && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 5,
+              display: 'grid',
+              placeItems: 'center',
+              background: 'rgba(0,0,0,.72)',
+              backdropFilter: 'blur(6px)',
+              textAlign: 'center',
+              padding: 24
+            }}
+          >
+            <div>
+              <motion.div
+                initial={{ scale: 0.5, rotate: -20 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 16 }}
+                style={{
+                  width: 66,
+                  height: 66,
+                  margin: '0 auto 14px',
+                  borderRadius: 22,
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#000',
+                  background: 'linear-gradient(140deg, var(--rgb-4), var(--rgb-1))'
+                }}
+              >
+                <IconCheck width={32} height={32} strokeWidth={2.4} />
+              </motion.div>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{t('guide.closing')}</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ------------------------------ header ------------------------------ */}
       <div className="guide-head">
         <div className="guide-head-top">
@@ -164,6 +225,16 @@ export default function Guide({ onDone }) {
           >
             <section.Icon width={22} height={22} />
           </motion.div>
+        </div>
+
+        {/* Language switch lives IN the guide, not only in a header the
+            reader may not be able to read. The guide is the one screen a
+            first-time user cannot skip, so it must be readable first. */}
+        <div className="guide-lang">
+          <span className="guide-lang-label">{t('guide.language')}</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <LanguagePicker variant="compact" />
+          </div>
         </div>
 
         <div className="guide-rail">
@@ -271,7 +342,7 @@ export default function Guide({ onDone }) {
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

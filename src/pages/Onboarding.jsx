@@ -6,8 +6,11 @@ import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import Sheet from '../components/Sheet';
+import LanguagePicker from '../components/LanguagePicker';
 import {
+  IconChevronLeft,
   IconChevronRight,
+  IconLanguages,
   IconShield,
   IconSwap,
   IconTrend,
@@ -16,12 +19,27 @@ import {
 } from '../components/Icons';
 
 /**
- * Five-step welcome: three feature slides, then wallet connect, then the
- * terms agreement.
+ * Six-step welcome: language, three feature slides, wallet connect, terms.
  *
  * The terms step is a hard gate — you cannot enter the app without ticking it.
  * Wallet connect is skippable, because forcing it before someone has seen the
  * product is a good way to lose them, and every screen prompts for it anyway.
+ *
+ * LAYOUT — why it is built this way
+ * The previous version put the slide content and the footer in one column with
+ * no fixed regions, so a long Persian paragraph pushed the buttons off the
+ * bottom of the screen: tapping "Next" appeared to jump you to the end of the
+ * page. It also sized Back and Next from their own text, and Persian labels
+ * are wider than English ones, so the two buttons came out visibly different
+ * sizes — worse in RTL, where the eye lands on the wide one first.
+ *
+ * The fix, mirroring the guide screen:
+ *   .onb-stage   fixed, full height, flex column — never animated
+ *   .onb-scroll  the ONLY scrolling element      — never transformed
+ *   .onb-foot    outside the scroll box, safe-area aware
+ * and both footer buttons are `flex: 1` with a shared min-height, so they are
+ * always exactly the same size in every language and both directions. The
+ * chevrons flip under RTL so "forward" still points forward.
  */
 
 const SLIDES = [
@@ -30,7 +48,9 @@ const SLIDES = [
   { key: 'custody', Icon: IconShield, hues: ['#00ff9d', '#00e5ff'] }
 ];
 
-const TOTAL = SLIDES.length + 2; // + wallet + terms
+// language + slides + wallet + terms
+const LANG_STEP = 0;
+const TOTAL = SLIDES.length + 3;
 
 function Art({ Icon, hues, index }) {
   return (
@@ -96,10 +116,11 @@ export default function Onboarding({ onDone }) {
   const [agreed, setAgreed] = useState(false);
   const [legalDoc, setLegalDoc] = useState(null);
 
-  const isSlide = index < SLIDES.length;
-  const isWallet = index === SLIDES.length;
-  const isTerms = index === SLIDES.length + 1;
-  const slide = SLIDES[index];
+  const isLang = index === LANG_STEP;
+  const isSlide = index > LANG_STEP && index <= SLIDES.length;
+  const isWallet = index === SLIDES.length + 1;
+  const isTerms = index === SLIDES.length + 2;
+  const slide = isSlide ? SLIDES[index - 1] : null;
 
   const finish = () => {
     acceptTerms();
@@ -119,38 +140,69 @@ export default function Onboarding({ onDone }) {
 
   const canAdvance = !isTerms || agreed;
 
+  // Slide direction: forward is +1, back is -1, so the exit animation moves
+  // the right way when the user taps Back instead of always sliding left.
+  const [dir, setDir] = useState(1);
+  const goTo = (i) => {
+    setDir(i > index ? 1 : -1);
+    setIndex(i);
+  };
+
   return (
     <div className="onb-stage">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px 0' }}>
-        {index > 0 ? (
-          <button
-            onClick={() => setIndex((i) => i - 1)}
-            style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: 8 }}
-          >
-            {t('common.back')}
-          </button>
-        ) : (
-          <span />
-        )}
-        {isSlide && (
-          <button
-            onClick={() => setIndex(SLIDES.length)}
-            style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: 8 }}
-          >
-            {t('onboarding.skip')}
-          </button>
-        )}
+      <div className="onb-topbar">
+        <button
+          className="onb-link"
+          onClick={() => goTo(index - 1)}
+          disabled={index === 0}
+          style={{ visibility: index === 0 ? 'hidden' : 'visible' }}
+        >
+          {t('common.back')}
+        </button>
+
+        {/* A compact language switch stays reachable on every step, not just
+            the first one — someone who taps through the language screen too
+            fast should not have to reinstall to fix it. */}
+        <button className="onb-link" onClick={() => goTo(LANG_STEP)} aria-label={t('common.language')}>
+          <IconLanguages width={16} height={16} />
+        </button>
+
+        <button
+          className="onb-link"
+          onClick={() => goTo(SLIDES.length + 1)}
+          style={{ visibility: isSlide ? 'visible' : 'hidden' }}
+        >
+          {t('onboarding.skip')}
+        </button>
       </div>
 
-      <AnimatePresence mode="wait">
+      {/* The ONLY scrolling element. Never transformed — see the header note. */}
+      <div className="onb-scroll">
+      <AnimatePresence mode="wait" custom={dir}>
         <motion.div
           key={index}
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}
-          initial={{ opacity: 0, x: 40 }}
+          custom={dir}
+          initial={{ opacity: 0, x: 40 * dir }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -40 }}
+          exit={{ opacity: 0, x: -40 * dir }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         >
+          {/* ---------------- language ---------------- */}
+          {isLang && (
+            <div style={{ padding: '4px 4px 0' }}>
+              <Art Icon={IconLanguages} hues={['#00e5ff', '#7c4dff']} index={index} />
+              <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
+                {t('onboarding.language.title')}
+              </h1>
+              <p className="muted" style={{ textAlign: 'center', fontSize: 13, lineHeight: 1.8 }}>
+                {t('onboarding.language.body')}
+              </p>
+              <div style={{ marginTop: 16 }}>
+                <LanguagePicker />
+              </div>
+            </div>
+          )}
+
           {/* ---------------- feature slides ---------------- */}
           {isSlide && (
             <>
@@ -267,24 +319,50 @@ export default function Onboarding({ onDone }) {
         </motion.div>
       </AnimatePresence>
 
-      <div className="onb-dots">
-        {Array.from({ length: TOTAL }).map((_, i) => (
-          <div key={i} className="onb-dot" data-active={i === index} />
-        ))}
       </div>
 
-      <div style={{ padding: '0 20px' }}>
-        <motion.button
-          className="btn btn-primary"
-          whileTap={{ scale: 0.97 }}
-          onClick={next}
-          disabled={!canAdvance}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, justifyContent: 'center' }}>
-            {isTerms ? t('onboarding.start') : t('onboarding.next')}
+      {/* Footer lives outside the scroll box so it can never scroll away, and
+          both buttons are flex:1 with the same min-height so they stay exactly
+          the same size regardless of how wide the translated label is. */}
+      <div className="onb-foot">
+        <div className="onb-dots">
+          {Array.from({ length: TOTAL }).map((_, i) => (
+            <button
+              key={i}
+              className="onb-dot"
+              data-active={i === index}
+              onClick={() => goTo(i)}
+              aria-label={`${i + 1}`}
+              type="button"
+            />
+          ))}
+        </div>
+
+        <div className="onb-foot-row">
+          <motion.button
+            className="btn btn-ghost onb-btn"
+            whileTap={{ scale: index === 0 ? 1 : 0.97 }}
+            onClick={() => goTo(index - 1)}
+            disabled={index === 0}
+            style={{ opacity: index === 0 ? 0.35 : 1 }}
+          >
+            <IconChevronLeft width={17} height={17} />
+            <span>{t('common.back')}</span>
+          </motion.button>
+
+          <motion.button
+            className="btn btn-primary onb-btn"
+            whileTap={{ scale: canAdvance ? 0.97 : 1 }}
+            onClick={() => {
+              setDir(1);
+              next();
+            }}
+            disabled={!canAdvance}
+          >
+            <span>{isTerms ? t('onboarding.start') : t('onboarding.next')}</span>
             {!isTerms && <IconChevronRight width={17} height={17} />}
-          </span>
-        </motion.button>
+          </motion.button>
+        </div>
       </div>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />

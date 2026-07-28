@@ -1,0 +1,60 @@
+{
+  "nav": {
+    "market": "Marché",
+    "swap": "Échanger",
+    "wallet": "Portefeuille",
+    "signals": "Signaux",
+    "news": "Actualités",
+    "more": "Plus",
+    "settings": "Réglages",
+    "help": "Aide",
+    "about": "À propos"
+  },
+  "common": {
+    "back": "Retour",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "done": "Terminé",
+    "loading": "Chargement…",
+    "refresh": "Actualiser",
+    "language": "Langue",
+    "notAdvice": "Les données de marché sont fournies à titre informatif et ne constituent pas un conseil financier. Les cryptos sont volatiles : vous pouvez tout perdre."
+  },
+  "welcome": {
+    "title": "Choisissez votre langue",
+    "subtitle": "Vous pourrez le modifier à tout moment dans les réglages.",
+    "continue": "Continuer",
+    "partial": "Les écrans principaux sont traduits ; les textes plus spécialisés restent en anglais.",
+    "full": "Traduction complète"
+  },
+  "onboarding": {
+    "next": "Continuer",
+    "skip": "Passer",
+    "start": "Commencer"
+  },
+  "guide": {
+    "next": "Suivant",
+    "back": "Précédent",
+    "done": "J'ai lu toutes les instructions",
+    "language": "Langue du guide"
+  },
+  "swap": {
+    "title": "Échanger",
+    "searchToken": "Rechercher un nom, un symbole ou coller une adresse…",
+    "gasBody": "Le gas est toujours payé dans la monnaie native du réseau, depuis le même portefeuille — pas seulement en BNB.",
+    "nonCustodialNotice": "Non dépositaire : chaque transaction est signée et envoyée par votre propre portefeuille. Nous ne détenons pas vos fonds.",
+    "verifyContracts": "Figurer dans une liste n'est pas une recommandation. Vérifiez l'adresse du contrat sur le site officiel avant d'échanger.",
+    "review": "Vérifier",
+    "confirmSwap": "Confirmer l'échange"
+  },
+  "wallet": {
+    "connect": "Connecter le portefeuille"
+  },
+  "news": {
+    "title": "Actualités crypto",
+    "subtitle": "Actualisé toutes les 24 heures"
+  },
+  "predict": {
+    "riskNotice": "Cet écran fonctionne uniquement avec du crédit virtuel ; aucun fonds réel ne peut y être connecté. Les paris à court terme sur le prix avec de l'argent réel sont interdits par la loi iranienne et aux particuliers au Royaume-Uni et dans l'UE."
+  }
+}

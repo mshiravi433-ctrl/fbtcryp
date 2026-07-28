@@ -3,12 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { fmtNum } from '../lib/format';
-import { IconSettings } from './Icons';
+import { IconLanguages, IconNews, IconSettings } from './Icons';
 import AnimatedNumber from './AnimatedNumber';
+import Sheet from './Sheet';
+import LanguagePicker from './LanguagePicker';
+import { useState } from 'react';
 
 export default function Header() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [langOpen, setLangOpen] = useState(false);
   const balance = useAppStore((s) => s.balance);
   const level = useAppStore((s) => s.level);
 
@@ -74,6 +78,33 @@ export default function Header() {
 
         <motion.button
           className="icon-btn"
+          onClick={() => navigate('/news')}
+          whileTap={{ scale: 0.9 }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          aria-label={t('nav.news')}
+        >
+          <IconNews width={17} height={17} />
+        </motion.button>
+
+        {/* Language is one tap from every screen, not buried in Settings —
+            the person who most needs it is the one who cannot read the menu
+            they would have to navigate to reach it. */}
+        <motion.button
+          className="icon-btn"
+          onClick={() => setLangOpen(true)}
+          whileTap={{ scale: 0.9 }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13 }}
+          aria-label={t('common.language')}
+        >
+          <IconLanguages width={17} height={17} />
+        </motion.button>
+
+        <motion.button
+          className="icon-btn"
           onClick={() => navigate('/settings')}
           whileTap={{ scale: 0.9, rotate: 45 }}
           initial={{ opacity: 0, y: -8 }}
@@ -85,6 +116,12 @@ export default function Header() {
         </motion.button>
 
       </div>
+
+      <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('common.language')}>
+        <div style={{ maxHeight: '58dvh', overflowY: 'auto' }}>
+          <LanguagePicker onPick={() => setLangOpen(false)} />
+        </div>
+      </Sheet>
     </header>
   );
 }

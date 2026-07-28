@@ -98,7 +98,7 @@ export default function About() {
           <span className="info-row-icon"><IconBuilding width={18} height={18} /></span>
           <div>
             <div className="faint">{t('about.company')}</div>
-            <div style={{ fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>FBT iran</div>
+            <div style={{ fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>{t('about.companyFull')}</div>
           </div>
         </div>
 

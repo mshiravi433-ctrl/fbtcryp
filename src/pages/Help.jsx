@@ -48,7 +48,13 @@ export default function Help() {
 
     try {
       const res = await askFaq(text, i18n.language);
-      setThread((prev) => [...prev, { role: 'ai', text: res.answer }]);
+      if (res?.answer) {
+        // Label where the answer came from. A canned answer presented as a
+        // live model is a small lie that erodes trust in every other answer.
+        setThread((prev) => [...prev, { role: 'ai', text: res.answer, source: res.source }]);
+      } else {
+        setThread((prev) => [...prev, { role: 'ai', text: t('help.aiNoAnswer'), source: 'none' }]);
+      }
     } catch {
       setThread((prev) => [...prev, { role: 'error', text: t('help.aiFailed') }]);
     } finally {
@@ -92,9 +98,13 @@ export default function Help() {
         </div>
         <p className="faint" style={{ marginBottom: 11 }}>{t('help.askAiSub')}</p>
 
-        {!ai.enabled ? (
-          <p className="notice notice-danger">{t('help.aiOffline')}</p>
-        ) : (
+        {/* There is no "AI unavailable" dead end any more. With no backend and
+            no packaged key, answers come from the built-in knowledge base —
+            which for questions about fees, gas and failed swaps is written by
+            us about this exact app, and is therefore better than a general
+            model guessing. We just say which one answered. */}
+        {ai.mode === 'local' && <p className="notice">{t('help.aiLocalMode')}</p>}
+        {(
           <>
             {thread.length === 0 && (
               <div className="stack" style={{ gap: 6, marginBottom: 11 }}>
@@ -141,6 +151,11 @@ export default function Help() {
                     }}
                   >
                     {m.text}
+                    {m.role === 'ai' && m.source && m.source !== 'none' && (
+                      <div className="faint" style={{ fontSize: 9.5, marginTop: 6, opacity: 0.8 }}>
+                        {m.source === 'local' ? t('help.aiSourceLocal') : t('help.aiSourceModel')}
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </AnimatePresence>

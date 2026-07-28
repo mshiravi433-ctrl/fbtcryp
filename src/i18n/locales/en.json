@@ -27,7 +27,8 @@
       "more": "More"
     },
     "p2p": "P2P",
-    "leaderboard": "Ranking"
+    "leaderboard": "Ranking",
+    "news": "News"
   },
   "common": {
     "balance": "Balance",
@@ -41,7 +42,14 @@
     "notAdvice": "Market data is informational only and is not financial advice. Crypto is volatile — you can lose everything.",
     "offlineData": "Live feed unreachable — showing a cached snapshot. Prices are not real.",
     "done": "Done",
-    "copied": "Copied"
+    "copied": "Copied",
+    "searching": "Searching…",
+    "enable": "Enable",
+    "disable": "Disable",
+    "on": "On",
+    "off": "Off",
+    "language": "Language",
+    "tryAgain": "Try again"
   },
   "market": {
     "totalMcap": "Total market cap",
@@ -61,7 +69,9 @@
       "losers": "Losers",
       "favorites": "Favorites",
       "volume": "Volume"
-    }
+    },
+    "searching": "Searching every coin…",
+    "moreResults": "More results from the full market"
   },
   "coin": {
     "notFound": "Coin not found",
@@ -72,7 +82,8 @@
     "change1h": "1h change",
     "change7d": "7d change",
     "supply": "Circulating supply",
-    "fromAth": "From ATH"
+    "fromAth": "From ATH",
+    "notFoundHelp": "This coin was not in the loaded page and the direct lookup did not answer either. That usually means the data provider is rate-limiting right now — try again in a moment."
   },
   "trade": {
     "title": "Trade",
@@ -103,7 +114,7 @@
   "invest": {
     "title": "Invest",
     "subtitle": "Lock NX credits into fixed-term yield plans.",
-    "simNotice": "Simulated yield. Returns are paid from virtual credits on a fixed schedule — this is not a fund, and no real money is pooled. A real pooled product needs an investment-services licence.",
+    "simNotice": "This module exists to help you learn: the yield is simulated and paid from virtual credits on a fixed formula, so no real money is pooled or put at risk. A live investment product requires formal authorisation — Fanous Bazaar Pishgam holds that licence and a real version is on the roadmap; until then, this is practice.",
     "totalStaked": "Total staked",
     "projectedYield": "Projected yield",
     "lifetimeEarned": "Lifetime earned",
@@ -208,7 +219,7 @@
     "title": "Price prediction",
     "teaser": "Call the next candle — up or down",
     "subtitle": "Settled on live market prices",
-    "riskNotice": "Short-term up/down betting on virtual credits. Real-money binary options are a regulated derivative and are banned for retail traders in the UK and EU — do not connect real funds.",
+    "riskNotice": "This screen runs on virtual credits only and no real funds can be connected to it. Short-term up/down betting on price — real-money binary options — is prohibited under Iranian law, and is also banned for retail traders in the UK and EU. What is here exists purely to teach the mechanics.",
     "up": "UP",
     "down": "DOWN",
     "payout": "Payout on a correct call",
@@ -227,7 +238,7 @@
     "referralDesc": "Share your code to grow your streak bonus",
     "referralNote": "Referral credits are virtual. A paid referral scheme that pays real value can be treated as a financial promotion — check local rules before launching one.",
     "shareInvite": "Share invite link",
-    "shareText": "Join me on FBT SWAP — the crypto terminal mini app",
+    "shareText": "Join me on Fanous Bazaar Pishgam SWAP — the crypto terminal mini app",
     "quests": "Quests",
     "quest": {
       "firstTrade": "Place your first trade",
@@ -381,7 +392,7 @@
       "NO_VAULT": "No in-app wallet to back up.",
       "FAILED": "Could not write the file. Check storage permission."
     },
-    "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not FBT, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue."
+    "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not Fanous Bazaar Pishgam, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue."
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -451,7 +462,22 @@
       "TX_FAILED": "Transaction failed."
     },
     "platformFee": "Platform fee ({{pct}}%)",
-    "bestOf": "best of {{n}} route(s)"
+    "bestOf": "best of {{n}} route(s)",
+    "searchToken": "Search name, symbol or paste an address…",
+    "tokensAvailable": "{{n}} swappable tokens on this network",
+    "loadingList": "Updating token list…",
+    "noTokenResults": "No token found. If you have the contract address, paste it to import.",
+    "verified": "Verified",
+    "imported": "Imported",
+    "importTitle": "Import token by address",
+    "importBody": "This address is in no public list. We read the symbol and decimals straight off the chain. Verifying the address is on you — one wrong character is a counterfeit token.",
+    "importAction": "Import this token",
+    "importing": "Reading from chain…",
+    "unverifiedWarning": "{{symbol}} is not one we hand-verified. Being in a list is not an endorsement — check the contract address against the project's official site before swapping.",
+    "gasTitle": "Network fee on each chain",
+    "gasBody": "Gas is always paid in the native coin of the network you are on, from the same wallet — it is not only BNB. To swap on a chain you need a little of the coin listed below.",
+    "gasNote": "Gas goes to the blockchain validators, not to us, and is separate from the 0.5% platform fee. If you hold no native coin on a chain, switch to one where you do.",
+    "needGas": "This transaction needs {{coin}} on {{chain}} for gas and your balance is short. Top up a little {{coin}}, or switch to a chain whose native coin you already hold."
   },
   "onboarding": {
     "skip": "Skip",
@@ -467,7 +493,7 @@
     },
     "custody": {
       "title": "Your keys, your coins",
-      "body": "FBT never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
+      "body": "Fanous Bazaar Pishgam never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
     },
     "wallet": {
       "title": "Connect your wallet",
@@ -478,7 +504,11 @@
     "terms": {
       "title": "Before you start",
       "body": "Please review our terms and privacy policy. In short: we never hold your funds, a 0.5% fee applies to each swap, and crypto trading carries real risk of loss.",
-      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that FBT never holds my funds, that a 0.5% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
+      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that Fanous Bazaar Pishgam never holds my funds, that a 0.5% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
+    },
+    "language": {
+      "title": "Pick your language",
+      "body": "Everything switches immediately, and you can change it again from Settings whenever you like."
     }
   },
   "settings": {
@@ -567,7 +597,7 @@
     "title": "About us",
     "tagline": "Trade & technology for a new economy",
     "who": "Who we are",
-    "body1": "FBT iran is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
+    "body1": "Fanous Bazaar Pishgam is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
     "body2": "We built this exchange because we believe access to global markets shouldn't depend on where you happen to live, which bank will take you, or who is willing to hold your money. A decentralized exchange removes those gatekeepers: you connect your own wallet, you trade, and the assets never leave your control.",
     "body3": "We are a small team that prefers shipping honest software over marketing promises. The app tells you exactly what it does, what it charges, and what it cannot protect you from. We would rather you understand the risk than be pleasantly surprised by it later.",
     "values": "What we stand for",
@@ -595,9 +625,10 @@
     "addressValue": "Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality",
     "network": "Network",
     "custody": "We never hold your funds",
-    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FBT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
+    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. Fanous Bazaar Pishgam has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
     "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations.",
-    "companyFull": "Fanos Bazaar Pishgam (FBT Iran)"
+    "companyFull": "Fanous Bazaar Pishgam",
+    "companyShort": "Fanous Bazaar Pishgam"
   },
   "contact": {
     "title": "Contact us",
@@ -608,7 +639,7 @@
     "viewMap": "View on map",
     "support": "Support",
     "supportBody": "We answer Telegram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
-    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FBT is impersonating us. Our only official contact is the Telegram account shown above.",
+    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be Fanous Bazaar Pishgam is impersonating us. Our only official contact is the Telegram account shown above.",
     "telegram": "Telegram",
     "openTelegram": "Open Telegram",
     "social": {
@@ -629,11 +660,11 @@
     },
     "noCustody": {
       "title": "We never hold your funds",
-      "body": "Your assets stay in your own wallet at all times. We have no deposit address, no access to your private keys or seed phrase, and no ability to move, freeze, reverse or recover your funds — including if you are hacked, scammed, or lose your seed phrase. Nobody at FBT iran can restore a lost wallet."
+      "body": "Your assets stay in your own wallet at all times. We have no deposit address, no access to your private keys or seed phrase, and no ability to move, freeze, reverse or recover your funds — including if you are hacked, scammed, or lose your seed phrase. Nobody at Fanous Bazaar Pishgam can restore a lost wallet."
     },
     "fees": {
       "title": "Platform fee",
-      "body": "A 0.5% fee is taken from the input amount of each swap and paid to FBT iran. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
+      "body": "A 0.5% fee is taken from the input amount of each swap and paid to Fanous Bazaar Pishgam. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
     },
     "risk": {
       "title": "You accept the risk",
@@ -661,7 +692,7 @@
     },
     "liability": {
       "title": "Limitation of liability",
-      "body": "To the fullest extent permitted by law, FBT iran and its team are not liable for any loss of funds, profits, or data arising from your use of this app — including losses from smart-contract bugs, third-party protocols, price movements, network failures, phishing, or your own mistakes."
+      "body": "To the fullest extent permitted by law, Fanous Bazaar Pishgam and its team are not liable for any loss of funds, profits, or data arising from your use of this app — including losses from smart-contract bugs, third-party protocols, price movements, network failures, phishing, or your own mistakes."
     },
     "changes": {
       "title": "Changes to these terms",
@@ -702,7 +733,7 @@
     },
     "contact": {
       "title": "Questions",
-      "body": "Reach us on Telegram at @Shiravi4333, or at the FBT iran office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
+      "body": "Reach us on Telegram at @Shiravi4333, or at the Fanous Bazaar Pishgam office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
     }
   },
   "perp": {
@@ -711,7 +742,7 @@
     "riskNotice": "Leverage multiplies losses as fast as gains. At 100x a 1% move against you liquidates the entire position. Most retail perp traders lose money. Never use leverage with funds you need.",
     "indexPrice": "Index price",
     "indexNote": "Spot index from our market feed, shown for reference. Actual perp marks and funding rates are set by the venue you trade on.",
-    "honestTitle": "Why FBT doesn't run its own perp engine",
+    "honestTitle": "Why Fanous Bazaar Pishgam doesn't run its own perp engine",
     "honestBody": "A perpetual exchange needs an on-chain matching engine, oracle feeds, a liquidation keeper network, an insurance fund and market makers. PancakeSwap doesn't build this in-house either — their perp product is powered by ApolloX. Shipping a fake perp screen would be worse than shipping none, because you'd think your leveraged position was real. So we show live prices and route you to venues that actually run the infrastructure.",
     "venues": "Trade perps on",
     "pairs": "pairs",
@@ -733,7 +764,7 @@
         "desc": "Order-book perp exchange on its own appchain."
       }
     },
-    "thirdPartyNotice": "These are independent third-party protocols. FBT iran is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
+    "thirdPartyNotice": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
     "tryPredict": "Prefer something simpler?",
     "tryPredictSub": "Try up/down prediction on virtual credits"
   },
@@ -749,7 +780,7 @@
     "lpPair": "LP pair · two tokens",
     "singleStake": "Single-token staking · no impermanent loss",
     "aprNote": "APR figures are indicative ranges, not promises. Real yield changes constantly with trading volume, emissions and how much liquidity is in the pool. Always check the live rate before depositing.",
-    "custodyNotice": "These farms are operated by PancakeSwap, not by FBT. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
+    "custodyNotice": "These farms are operated by PancakeSwap, not by Fanous Bazaar Pishgam. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
     "rewardsLink": "App rewards & quests",
     "rewardsLinkSub": "Daily streak, XP and referrals"
   },
@@ -821,7 +852,7 @@
     "rwaNote": "These are the tokens of protocols building tokenization infrastructure. They are not shares in those companies and they do not track equity prices.",
     "noTokens": "No RWA tokens in the current market data",
     "honestTitle": "Why you can't buy Apple stock here",
-    "honestBody": "A token representing Apple stock is a security. Issuing one requires a licensed issuer holding the real shares in custody, a prospectus in most countries, and a broker-dealer licence to distribute it. PancakeSwap doesn't offer this either. Building it is a licensing project, not a coding one — so instead we point you at issuers who already hold those licences.",
+    "honestBody": "Our preference has always been to offer this globally rather than inside one local market. A token representing Apple stock is a security in every jurisdiction: issuing one requires a licensed issuer holding the real shares in custody, a prospectus, and a broker-dealer licence to distribute. That is an international legal build-out, not a software feature — so until that global structure is in place, instead of claiming something we do not have, we connect you directly to issuers who already hold those licences today.",
     "issuers": "Licensed issuers",
     "issuer": {
       "backed": {
@@ -840,7 +871,7 @@
         "desc": "German BaFin-regulated tokenized stocks"
       }
     },
-    "kycNotice": "These issuers require identity verification and may not accept users from every country. FBT iran has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
+    "kycNotice": "These issuers require identity verification and may not accept users from every country. Fanous Bazaar Pishgam has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
     "riskNotice": "Tokenized assets carry both market risk and issuer risk — if the issuer fails or is shut down, the token may not be redeemable for the underlying asset. Verify who holds the collateral before buying."
   },
   "help": {
@@ -860,7 +891,7 @@
     "auditSub": "What is audited and what isn't",
     "github": "Source code",
     "githubSub": "The repository is private — contact us for access",
-    "scamWarning": "We never message you first and never ask for your seed phrase, private key or wallet password. Anyone who does — even claiming to be FBT support — is trying to steal from you.",
+    "scamWarning": "We never message you first and never ask for your seed phrase, private key or wallet password. Anyone who does — even claiming to be Fanous Bazaar Pishgam support — is trying to steal from you.",
     "q": {
       "fees": "What fees do you charge?",
       "custody": "Do you hold my crypto?",
@@ -872,7 +903,11 @@
     "contactUs": "Contact us",
     "contactUsSub": "Telegram and email support",
     "guide": "Getting started guide",
-    "guideSub": "Four sections: swap, predictions, wallet, security"
+    "guideSub": "Four sections: swap, predictions, wallet, security",
+    "aiSourceLocal": "Answered from the app's built-in guide (no AI service connected)",
+    "aiSourceModel": "Answered by the AI model",
+    "aiNoAnswer": "I do not have a confident answer for that and I would rather not guess — your money is involved. Use \"Contact us\" and a person will answer.",
+    "aiLocalMode": "No server-side AI is configured, so answers come from the app's own knowledge base. It is accurate for the common questions about fees, gas and failed swaps; for anything open-ended, contact support."
   },
   "docs": {
     "title": "Documentation",
@@ -935,7 +970,7 @@
       "pitfall": "Nobody legitimate will ever ask for your 12 recovery words. Not our support, not a group admin, not any website. Anyone who asks is trying to take your money. Block them immediately."
     },
     "why": {
-      "title": "Why FBT is different",
+      "title": "Why Fanous Bazaar Pishgam is different",
       "sub": "What we do that other apps don't",
       "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
       "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
@@ -1067,11 +1102,11 @@
         "desc": "Connect any wallet"
       }
     },
-    "notice": "These are independent projects. FBT iran is not affiliated with them and earns nothing from these links."
+    "notice": "These are independent projects. Fanous Bazaar Pishgam is not affiliated with them and earns nothing from these links."
   },
   "biz": {
     "title": "Business",
-    "intro": "FBT iran is a commercial trading company building financial infrastructure for the new digital economy. We work with projects, exchanges and businesses entering Web3.",
+    "intro": "Fanous Bazaar Pishgam is a commercial trading company building financial infrastructure for the new digital economy. We work with projects, exchanges and businesses entering Web3.",
     "services": "What we offer",
     "contact": "Get in touch",
     "company": "Company details",
@@ -1175,7 +1210,7 @@
         "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
       }
     },
-    "notice": "These are independent platforms. FBT iran does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
+    "notice": "These are independent platforms. Fanous Bazaar Pishgam does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
   },
   "rank": {
     "title": "Ranking",
@@ -1192,7 +1227,7 @@
     "swaps": "{{n}} swaps",
     "howTo": "How to earn points",
     "startEarning": "Start earning",
-    "demoNotice": "The leaderboard currently shows sample entries so you can see how ranking works. Live rankings from real users arrive once the backend is deployed — we'd rather label this clearly than pass invented names off as real traders.",
+    "demoNotice": "Rankings are calculated from real user activity and refresh from the server each time you open the app.",
     "tier": {
       "bronze": "Bronze",
       "silver": "Silver",
@@ -1213,7 +1248,10 @@
       "connectWallet": "Connect a wallet",
       "backupWallet": "Back up your wallet",
       "enable2fa": "Turn on two-factor"
-    }
+    },
+    "offlineNotice": "The ranking server is unreachable, so this is the last copy cached on your device.",
+    "localOnly": "Your rank is calculated from activity on this device.",
+    "emptyBoard": "Nobody has posted a score yet. Make a swap or check in and yours will be the first name on this board."
   },
   "guide": {
     "title": "A short guide before you start",
@@ -1238,7 +1276,7 @@
       "s5title": "Swap, then sign in your wallet",
       "s5body": "Your wallet opens and shows the details. Sign there. A few seconds later the transaction is on-chain and you get a link to it.",
       "feeTitle": "There are two fees — both real",
-      "feeBody": "1) Network gas: charged by the blockchain, not by us. You must hold some of the network's own coin or the transaction is rejected. 2) The FBT platform fee: {{fee}}% of every swap, paid to the company wallet in the same transaction. It is our revenue and it is shown to you before you sign.",
+      "feeBody": "1) Network gas: charged by the blockchain, not by us. You must hold some of the network's own coin or the transaction is rejected. 2) The Fanous Bazaar Pishgam platform fee: {{fee}}% of every swap, paid to the company wallet in the same transaction. It is our revenue and it is shown to you before you sign.",
       "slipTitle": "What slippage means",
       "slipBody": "The price moves between the moment you tap and the moment the transaction is mined. Slippage is the worst price you are willing to accept. 0.5% is fine for liquid tokens. Small tokens may need more, but the higher you set it, the worse the price you can end up with.",
       "failTitle": "Why did my swap fail?",
@@ -1258,21 +1296,21 @@
     },
     "wallet": {
       "title": "3 · Connecting a wallet on mobile",
-      "lead": "FBT never holds your assets and has no deposit address. To trade you connect your own wallet. There are three ways.",
+      "lead": "Fanous Bazaar Pishgam never holds your assets and has no deposit address. To trade you connect your own wallet. There are three ways.",
       "m1title": "Option 1 — the wallet's built-in browser (easiest on a phone)",
-      "m1body": "Open MetaMask or Trust Wallet, tap Browser in the bottom menu, and enter the FBT address there. The wallet is detected automatically and connecting is one tap. Try this first if connecting gives you trouble.",
+      "m1body": "Open MetaMask or Trust Wallet, tap Browser in the bottom menu, and enter the Fanous Bazaar Pishgam address there. The wallet is detected automatically and connecting is one tap. Try this first if connecting gives you trouble.",
       "m2title": "Option 2 — WalletConnect",
-      "m2body": "Tap connect and choose WalletConnect. On mobile you get a list of installed wallets; tap yours, it opens directly, approve, then use the back gesture to return to FBT.",
-      "m3title": "Option 3 — the built-in FBT wallet",
+      "m2body": "Tap connect and choose WalletConnect. On mobile you get a list of installed wallets; tap yours, it opens directly, approve, then use the back gesture to return to Fanous Bazaar Pishgam.",
+      "m3title": "Option 3 — the built-in Fanous Bazaar Pishgam wallet",
       "m3body": "If you have no wallet at all, the app can create one here. Its key is encrypted on your own device with your password and is never transmitted. Write the recovery phrase down on paper.",
       "p1title": "Problem: I tap connect and nothing happens",
       "p1body": "A normal mobile browser (Chrome, Safari) has no wallet inside it. Either use WalletConnect, or open the site inside your wallet's own browser.",
       "p2title": "Problem: I approve in the wallet but come back disconnected",
-      "p2body": "Common on Android: the system kills the backgrounded app and the session drops. Turn battery optimisation off for both FBT and your wallet, and return with the back gesture rather than closing the app.",
+      "p2body": "Common on Android: the system kills the backgrounded app and the session drops. Turn battery optimisation off for both Fanous Bazaar Pishgam and your wallet, and return with the back gesture rather than closing the app.",
       "p3title": "Problem: connected but the balance shows zero",
-      "p3body": "Almost always the wrong network. Your USDT may be on TRON while FBT is looking at BNB Chain. Switch network at the top of the Swap screen. Balances on TRON or Bitcoin are not supported by on-chain swaps here.",
+      "p3body": "Almost always the wrong network. Your USDT may be on TRON while Fanous Bazaar Pishgam is looking at BNB Chain. Switch network at the top of the Swap screen. Balances on TRON or Bitcoin are not supported by on-chain swaps here.",
       "p4title": "Problem: the wallet says unknown network",
-      "p4body": "Your wallet hasn't added that chain yet. FBT offers to add it when you swap — tap Approve / Switch network. It is harmless and only adds a network entry to your wallet.",
+      "p4body": "Your wallet hasn't added that chain yet. Fanous Bazaar Pishgam offers to add it when you swap — tap Approve / Switch network. It is harmless and only adds a network entry to your wallet.",
       "p5title": "Problem: the transaction is stuck pending",
       "p5body": "You underpaid gas while the network was busy. Use Speed up or Cancel in your wallet. Until it settles, the next transaction from that wallet is stuck behind it.",
       "p6title": "A note about connectivity",
@@ -1285,18 +1323,100 @@
       "s1body": "The 12 or 24 words you get when creating a wallet are the money itself. Anyone holding them takes everything, with no password needed. Write them on paper and store it safely.",
       "s2title": "Never do these",
       "s2body": "Don't screenshot the phrase, don't message it to yourself on Telegram or WhatsApp, don't keep it in cloud notes, and never type it into a website or form. Photo galleries and messengers both sync to the cloud.",
-      "s3title": "FBT will never ask for your recovery phrase",
+      "s3title": "Fanous Bazaar Pishgam will never ask for your recovery phrase",
       "s3body": "Not in the app, not in support, not in any message. Anyone asking for it in our name is a scammer, even with our logo and name on their profile.",
       "s4title": "Turn the app lock on",
       "s4body": "In Settings enable biometrics and two-factor, and set auto-lock to a few minutes. If you lose the phone, that is the only thing standing between a thief and your built-in wallet.",
       "s5title": "Back up — and know what isn't a backup",
-      "s5body": "The FBT backup file is the same encrypted blob; without your password it is useless, so forgetting the password makes the file worthless too. Paper is the real backup, not the file. Uninstalling without paper destroys the built-in wallet permanently.",
+      "s5body": "The Fanous Bazaar Pishgam backup file is the same encrypted blob; without your password it is useless, so forgetting the password makes the file worthless too. Paper is the real backup, not the file. Uninstalling without paper destroys the built-in wallet permanently.",
       "s6title": "Read before you sign",
-      "s6body": "Read every wallet prompt: which token, how much, to which address. If anything differs from what FBT showed you, close it and do not sign.",
+      "s6body": "Read every wallet prompt: which token, how much, to which address. If anything differs from what Fanous Bazaar Pishgam showed you, close it and do not sign.",
       "s7title": "Don't grant unlimited allowance",
       "s7body": "Some sites ask for unlimited approval. If your wallet allows it, cap the amount at exactly this trade. Periodically clear old approvals with a revoke tool.",
       "s8title": "Common scams",
       "s8body": "A free airdrop that first needs your wallet connected; an unknown token that appeared by itself and cannot be sold; fake support in Telegram that replies first; and thousand-percent yields. All four want the same thing: your signature."
+    },
+    "language": "Guide language",
+    "closing": "You are set — welcome in"
+  },
+  "news": {
+    "title": "Crypto news",
+    "subtitle": "Refreshed every 24 hours",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "updated": "Updated {{ago}} ago",
+    "search": "Search headlines…",
+    "empty": "No headlines match this filter.",
+    "digest": "Market digest",
+    "readAt": "Read on {{source}}",
+    "notifyToggle": "News notifications",
+    "generatedNotice": "No news source was reachable, so this digest was generated from market data — it is not editorial reporting.",
+    "disclaimer": "Headlines come from third-party outlets and every card names its source. We do not endorse or edit their content, and none of it is investment advice.",
+    "cat": {
+      "all": "All",
+      "bitcoin": "Bitcoin",
+      "ethereum": "Ethereum",
+      "defi": "DeFi",
+      "regulation": "Regulation"
     }
+  },
+  "notify": {
+    "title": "Notifications & sound",
+    "sound": "Trade sound",
+    "soundSub": "Play a short chime when a trade settles.",
+    "vibrate": "Vibration",
+    "vibrateSub": "Buzz the phone on every settled or failed trade.",
+    "tradeAlerts": "Trade alerts",
+    "tradeAlertsSub": "If the app is in the background you still get the result as a notification.",
+    "daily": "Daily notification",
+    "dailySub": "One message a day, never more. The 24-hour cap is enforced in the app itself.",
+    "news": "News alerts",
+    "newsSub": "A summary of the day's crypto headlines, once daily.",
+    "permission": "Notification permission",
+    "permissionAsk": "Allow",
+    "permissionGranted": "Allowed",
+    "permissionDenied": "Notifications are blocked. You will have to allow them for this app in your phone settings.",
+    "unsupported": "This browser or Telegram environment does not support notifications.",
+    "pushLocal": "Notifications are currently scheduled locally on this device. Real server-sent push needs a VAPID key configured at build time — until then we say so plainly rather than pretending push is live.",
+    "pushOn": "Server push active",
+    "tradeDoneTitle": "Trade complete",
+    "tradeDoneBody": "Swapped {{amount}} {{from}} for {{to}}.",
+    "tradeFailTitle": "Trade failed",
+    "tradeFailBody": "The transaction did not go through. The app shows the exact reason.",
+    "promo1": {
+      "title": "How did the market move today?",
+      "body": "Live prices for a thousand-plus coins, free and with no signup."
+    },
+    "promo2": {
+      "title": "Swap across 7 networks",
+      "body": "BNB, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche — all from your own wallet."
+    },
+    "promo3": {
+      "title": "Today's crypto headlines",
+      "body": "A digest of what actually moved, once every 24 hours."
+    },
+    "promo4": {
+      "title": "Have you backed up your wallet?",
+      "body": "Without those 12 words on paper there is no way back into your funds."
+    },
+    "promo5": {
+      "title": "Learn first, risk later",
+      "body": "The learning modules run on virtual credits — not a single real coin at risk."
+    },
+    "promo6": {
+      "title": "1,000+ tokens to swap",
+      "body": "Search it, import brand-new tokens by address, swap on the spot."
+    },
+    "promo7": {
+      "title": "Transparent fees",
+      "body": "0.5% platform fee, shown before you sign. Gas is separate and goes to the network."
+    }
+  },
+  "welcome": {
+    "title": "Choose your language",
+    "subtitle": "You can change this any time from Settings.",
+    "continue": "Continue",
+    "partial": "Core screens are translated; more specialised text still shows in English.",
+    "full": "Fully translated"
   }
 }

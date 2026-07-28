@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { FEE_BPS, FEE_RECIPIENT, EVM_CHAINS } from '../lib/chains';
+import { payoutTable } from '../lib/payout';
 import { IconChevronLeft, IconExternal, IconShield } from '../components/Icons';
 
 /**
@@ -99,9 +100,23 @@ export default function Audit() {
             <span className="faint">{t('audit.feeWallet')}</span>
             <span className="mono" style={{ fontSize: 10.5 }}>{FEE_RECIPIENT.slice(0, 10)}…{FEE_RECIPIENT.slice(-6)}</span>
           </div>
-          <div className="row-between">
+          {/* Every network we accept value on, with the address it lands at
+              and the coin that pays gas there. Publishing all of them is the
+              point of an audit page: anyone can check on-chain that the fee
+              they paid arrived where we said it would. */}
+          <div className="stack" style={{ gap: 6, marginTop: 4 }}>
             <span className="faint">{t('audit.network')}</span>
-            <span className="mono" style={{ fontSize: 11.5 }}>{EVM_CHAINS[56].name}</span>
+            {payoutTable().map((row) => (
+              <div className="row-between" key={row.id} style={{ gap: 10 }}>
+                <span className="row" style={{ gap: 7, minWidth: 0 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{row.label}</span>
+                </span>
+                <span className="mono faint" style={{ fontSize: 10, direction: 'ltr' }}>
+                  {row.address.slice(0, 6)}…{row.address.slice(-4)} · {row.gas}
+                </span>
+              </div>
+            ))}
           </div>
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}
             onClick={() => open(`${EVM_CHAINS[56].explorer}/address/${FEE_RECIPIENT}`)}>

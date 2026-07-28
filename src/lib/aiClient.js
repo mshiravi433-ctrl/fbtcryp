@@ -41,6 +41,7 @@ async function post(path, body, timeout = 60000) {
 }
 
 import { directGeminiAvailable, directBrief, directFaq, directOutlook } from './geminiDirect';
+import { localAnswer } from './faqLocal';
 
 /**
  * Resolution order for every AI call:
@@ -74,9 +75,12 @@ export async function aiStatus(force = false) {
     /* no backend reachable — fall through to the direct path */
   }
 
+  // No backend and no packaged key: the assistant still answers, from the
+  // built-in knowledge base. `enabled` stays true because the feature really
+  // does work — `mode` tells the UI to label the source honestly.
   cachedStatus = directGeminiAvailable()
     ? { enabled: true, news: false, mode: 'direct' }
-    : { enabled: false, news: false, mode: 'none' };
+    : { enabled: true, news: false, mode: 'local' };
   return cachedStatus;
 }
 
@@ -96,5 +100,28 @@ async function viaServerOr(directFn, path, payload) {
 
 export const getOutlook = (payload) => viaServerOr(directOutlook, '/ai/outlook', payload);
 export const getMarketBrief = (payload) => viaServerOr(directBrief, '/ai/brief', payload);
-export const askFaq = (question, lang) =>
-  viaServerOr((p) => directFaq(p), '/ai/faq', { question, lang });
+
+/**
+ * Answer a support question.
+ *
+ * Order: backend model -> packaged Gemini -> built-in knowledge base. The
+ * local tier is not a stub; for the questions people actually ask about fees,
+ * gas and failed swaps it is more accurate than a general model, because we
+ * wrote it about this exact app. The response carries `source` so the UI can
+ * say where the answer came from instead of implying a live model answered.
+ */
+export async function askFaq(question, lang) {
+  try {
+    const res = await viaServerOr((p) => directFaq(p), '/ai/faq', { question, lang });
+    if (res?.answer) return { ...res, source: 'model' };
+  } catch {
+    /* fall through to the offline knowledge base */
+  }
+
+  const local = localAnswer(question, lang);
+  if (local) return { answer: local.answer, source: 'local', confidence: local.confidence };
+
+  // Nothing matched: say so plainly and point at a human, rather than
+  // inventing an answer about someone's money.
+  return { answer: null, source: 'none' };
+}

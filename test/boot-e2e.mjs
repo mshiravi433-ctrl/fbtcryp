@@ -96,8 +96,13 @@ check('React mounted despite the dead network', Boolean(root && root.children.le
 check('__FBT_BOOTED__ was set', dom.window.__FBT_BOOTED__ === true);
 check('boot overlay was dismissed', !boot || boot.style.opacity === '0');
 check('watchdog did not fire', !boot || boot.getAttribute('data-failed') !== 'true');
-// A fresh install lands on onboarding; the guide gates the app right after it.
-check('Persian UI rendered (onboarding first screen)', /[\u0600-\u06FF]/.test(text) && text.includes('رد کردن'));
+// A fresh install now lands on the LANGUAGE screen, then onboarding, then the
+// guide. Persian is still the default until the user chooses otherwise, so the
+// first paint must render Persian — and it must render the picker, which is
+// the one screen that has to be usable before you can read anything else.
+check('Persian UI rendered on first paint', /[\u0600-\u06FF]/.test(text));
+check('first screen is the language picker', text.includes('زبان'));
+check('every language is offered as a real choice', doc.querySelectorAll('.lang-card').length >= 10);
 check('no uncaught script errors', jsErrors.length === 0);
 
 console.log('  external hosts blocked:', [...new Set(blocked.map((u) => new URL(u).host))].join(', ') || 'none');

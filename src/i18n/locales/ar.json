@@ -27,7 +27,8 @@
       "more": "More"
     },
     "p2p": "نظير لنظير",
-    "leaderboard": "الترتيب"
+    "leaderboard": "الترتيب",
+    "news": "الأخبار"
   },
   "common": {
     "balance": "الرصيد",
@@ -41,7 +42,14 @@
     "notAdvice": "بيانات السوق للاطلاع فقط وليست نصيحة مالية. سوق العملات الرقمية شديد التقلب وقد تخسر كل رأس مالك.",
     "offlineData": "تعذّر الوصول للبيانات الحية — يتم عرض نسخة مخزنة. هذه الأسعار ليست حقيقية.",
     "done": "تم",
-    "copied": "Copied"
+    "copied": "Copied",
+    "searching": "جارٍ البحث…",
+    "enable": "تفعيل",
+    "disable": "تعطيل",
+    "on": "مفعّل",
+    "off": "متوقف",
+    "language": "اللغة",
+    "tryAgain": "حاول مجدداً"
   },
   "market": {
     "totalMcap": "القيمة السوقية الكلية",
@@ -61,7 +69,9 @@
       "losers": "الخاسرون",
       "favorites": "المفضلة",
       "volume": "الحجم"
-    }
+    },
+    "searching": "جارٍ البحث في كل العملات…",
+    "moreResults": "نتائج إضافية من السوق كامل"
   },
   "coin": {
     "notFound": "العملة غير موجودة",
@@ -72,7 +82,8 @@
     "change1h": "تغير ساعة",
     "change7d": "تغير ٧ أيام",
     "supply": "المعروض المتداول",
-    "fromAth": "من القمة"
+    "fromAth": "من القمة",
+    "notFoundHelp": "لم تكن هذه العملة ضمن الصفحة المحمّلة ولم يستجب الجلب المباشر أيضاً. غالباً بسبب تقييد مزوّد البيانات مؤقتاً — أعد المحاولة بعد قليل."
   },
   "trade": {
     "title": "تداول",
@@ -103,7 +114,7 @@
   "invest": {
     "title": "استثمار",
     "subtitle": "اقفل رصيد NX في خطط عائد ثابتة.",
-    "simNotice": "عائد محاكى. يُدفع من رصيد افتراضي وفق صيغة ثابتة — هذا ليس صندوقاً ولا تُجمع أموال حقيقية. المنتج الاستثماري الحقيقي يتطلب ترخيصاً رسمياً.",
+    "simNotice": "هذه الوحدة للتعلم: العائد محاكى ويُدفع من رصيد افتراضي، فلا تُجمع أموال حقيقية. المنتج الاستثماري الحقيقي يتطلب ترخيصاً رسمياً، وشركة فانوس بازار بيشغام تملكه وستطلق نسخة حقيقية لاحقاً.",
     "totalStaked": "إجمالي المقفل",
     "projectedYield": "العائد المتوقع",
     "lifetimeEarned": "إجمالي الأرباح",
@@ -208,7 +219,7 @@
     "title": "توقع السعر",
     "teaser": "توقع اتجاه الشمعة القادمة",
     "subtitle": "التسوية على أسعار السوق الحية",
-    "riskNotice": "مراهنة قصيرة المدى صعود/هبوط برصيد افتراضي. الخيارات الثنائية بأموال حقيقية أداة مشتقة خاضعة للتنظيم ومحظورة على الأفراد في بريطانيا والاتحاد الأوروبي — لا تربط أموالاً حقيقية.",
+    "riskNotice": "تعمل هذه الشاشة برصيد افتراضي فقط. المراهنة قصيرة المدى على اتجاه السعر محظورة بموجب القانون الإيراني ومحظورة أيضاً على الأفراد في بريطانيا والاتحاد الأوروبي.",
     "up": "صعود",
     "down": "هبوط",
     "payout": "العائد عند التوقع الصحيح",
@@ -451,7 +462,22 @@
       "TX_FAILED": "Transaction failed."
     },
     "platformFee": "Platform fee ({{pct}}%)",
-    "bestOf": "أفضل من {{n}} مسار"
+    "bestOf": "أفضل من {{n}} مسار",
+    "searchToken": "ابحث بالاسم أو الرمز أو الصق عنوان العقد…",
+    "tokensAvailable": "{{n}} عملة قابلة للتبادل على هذه الشبكة",
+    "loadingList": "جارٍ تحديث قائمة العملات…",
+    "noTokenResults": "لم يُعثر على عملة. الصق عنوان العقد لإضافتها.",
+    "verified": "موثّق",
+    "imported": "مستورد",
+    "importTitle": "استيراد عملة بالعنوان",
+    "importBody": "هذا العنوان غير موجود في أي قائمة عامة. نقرأ الرمز والخانات العشرية من السلسلة مباشرة. التحقق من العنوان مسؤوليتك.",
+    "importAction": "استيراد هذه العملة",
+    "importing": "جارٍ القراءة من السلسلة…",
+    "unverifiedWarning": "{{symbol}} ليست ضمن العملات التي تحققنا منها يدوياً. وجودها في قائمة ليس تزكية — تحقق من عنوان العقد قبل التبادل.",
+    "gasTitle": "رسوم الشبكة على كل سلسلة",
+    "gasBody": "يُدفع الغاز دائماً بعملة الشبكة الأصلية ومن نفس المحفظة — وليس BNB فقط.",
+    "gasNote": "يذهب الغاز إلى مدققي الشبكة لا إلينا، وهو منفصل عن رسوم المنصة البالغة ٠٫٥٪.",
+    "needGas": "تحتاج هذه المعاملة إلى {{coin}} على {{chain}} للغاز ورصيدك غير كافٍ."
   },
   "onboarding": {
     "skip": "تخطي",
@@ -467,7 +493,7 @@
     },
     "custody": {
       "title": "Your keys, your coins",
-      "body": "FBT never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
+      "body": "فانوس بازار بيشغام never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
     },
     "wallet": {
       "title": "Connect your wallet",
@@ -478,7 +504,11 @@
     "terms": {
       "title": "Before you start",
       "body": "Please review our terms and privacy policy. In short: we never hold your funds, a 0.5% fee applies to each swap, and crypto trading carries real risk of loss.",
-      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that FBT never holds my funds, that a 0.5% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
+      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that فانوس بازار بيشغام never holds my funds, that a 0.5% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
+    },
+    "language": {
+      "title": "اختر لغتك",
+      "body": "يتغير كل شيء فوراً ويمكنك تعديله لاحقاً من الإعدادات."
     }
   },
   "settings": {
@@ -567,7 +597,7 @@
     "title": "من نحن",
     "tagline": "Trade & technology for a new economy",
     "who": "Who we are",
-    "body1": "FBT iran is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
+    "body1": "فانوس بازار بيشغام is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
     "body2": "We built this exchange because we believe access to global markets shouldn't depend on where you happen to live, which bank will take you, or who is willing to hold your money. A decentralized exchange removes those gatekeepers: you connect your own wallet, you trade, and the assets never leave your control.",
     "body3": "We are a small team that prefers shipping honest software over marketing promises. The app tells you exactly what it does, what it charges, and what it cannot protect you from. We would rather you understand the risk than be pleasantly surprised by it later.",
     "values": "What we stand for",
@@ -595,9 +625,10 @@
     "addressValue": "أصفهان، خميني شهر، شارع الشهيد بهشتي، بجوار بلدية المنطقة ٤",
     "network": "Network",
     "custody": "We never hold your funds",
-    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FBT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
+    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. فانوس بازار بيشغام has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
     "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations.",
-    "companyFull": "فانوس بازار بيشغام (FBT Iran)"
+    "companyFull": "فانوس بازار بيشغام",
+    "companyShort": "فانوس بازار بيشغام"
   },
   "contact": {
     "title": "اتصل بنا",
@@ -608,7 +639,7 @@
     "viewMap": "View on map",
     "support": "Support",
     "supportBody": "نرد على رسائل تيليجرام خلال ساعات العمل، عادة خلال يوم عمل واحد. عند الإبلاغ عن مشكلة، أرفق هاش المعاملة.",
-    "scamWarning": "لن نراسلك أولاً أبداً، ولن نطلب عبارتك السرية أو كلمة مرور محفظتك، ولن نطلب منك إرسال عملات إلى أي عنوان. أي شخص يفعل ذلك وينتحل صفة FBT هو محتال.",
+    "scamWarning": "لن نراسلك أولاً أبداً، ولن نطلب عبارتك السرية أو كلمة مرور محفظتك، ولن نطلب منك إرسال عملات إلى أي عنوان. أي شخص يفعل ذلك وينتحل صفة فانوس بازار بيشغام هو محتال.",
     "telegram": "تيليجرام",
     "openTelegram": "افتح تيليجرام",
     "social": {
@@ -629,11 +660,11 @@
     },
     "noCustody": {
       "title": "We never hold your funds",
-      "body": "Your assets stay in your own wallet at all times. We have no deposit address, no access to your private keys or seed phrase, and no ability to move, freeze, reverse or recover your funds — including if you are hacked, scammed, or lose your seed phrase. Nobody at FBT iran can restore a lost wallet."
+      "body": "Your assets stay in your own wallet at all times. We have no deposit address, no access to your private keys or seed phrase, and no ability to move, freeze, reverse or recover your funds — including if you are hacked, scammed, or lose your seed phrase. Nobody at فانوس بازار بيشغام can restore a lost wallet."
     },
     "fees": {
       "title": "Platform fee",
-      "body": "A 0.5% fee is taken from the input amount of each swap and paid to FBT iran. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
+      "body": "A 0.5% fee is taken from the input amount of each swap and paid to فانوس بازار بيشغام. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
     },
     "risk": {
       "title": "You accept the risk",
@@ -661,7 +692,7 @@
     },
     "liability": {
       "title": "Limitation of liability",
-      "body": "To the fullest extent permitted by law, FBT iran and its team are not liable for any loss of funds, profits, or data arising from your use of this app — including losses from smart-contract bugs, third-party protocols, price movements, network failures, phishing, or your own mistakes."
+      "body": "To the fullest extent permitted by law, فانوس بازار بيشغام and its team are not liable for any loss of funds, profits, or data arising from your use of this app — including losses from smart-contract bugs, third-party protocols, price movements, network failures, phishing, or your own mistakes."
     },
     "changes": {
       "title": "Changes to these terms",
@@ -702,7 +733,7 @@
     },
     "contact": {
       "title": "Questions",
-      "body": "Reach us on Telegram at @Shiravi4333, or at the FBT iran office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
+      "body": "Reach us on Telegram at @Shiravi4333, or at the فانوس بازار بيشغام office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
     }
   },
   "perp": {
@@ -711,7 +742,7 @@
     "riskNotice": "Leverage multiplies losses as fast as gains. At 100x a 1% move against you liquidates the entire position. Most retail perp traders lose money. Never use leverage with funds you need.",
     "indexPrice": "Index price",
     "indexNote": "Spot index from our market feed, shown for reference. Actual perp marks and funding rates are set by the venue you trade on.",
-    "honestTitle": "Why FBT doesn't run its own perp engine",
+    "honestTitle": "Why فانوس بازار بيشغام doesn't run its own perp engine",
     "honestBody": "A perpetual exchange needs an on-chain matching engine, oracle feeds, a liquidation keeper network, an insurance fund and market makers. PancakeSwap doesn't build this in-house either — their perp product is powered by ApolloX. Shipping a fake perp screen would be worse than shipping none, because you'd think your leveraged position was real. So we show live prices and route you to venues that actually run the infrastructure.",
     "venues": "Trade perps on",
     "pairs": "pairs",
@@ -733,7 +764,7 @@
         "desc": "Order-book perp exchange on its own appchain."
       }
     },
-    "thirdPartyNotice": "These are independent third-party protocols. FBT iran is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
+    "thirdPartyNotice": "These are independent third-party protocols. فانوس بازار بيشغام is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
     "tryPredict": "Prefer something simpler?",
     "tryPredictSub": "Try up/down prediction on virtual credits"
   },
@@ -749,7 +780,7 @@
     "lpPair": "LP pair · two tokens",
     "singleStake": "Single-token staking · no impermanent loss",
     "aprNote": "APR figures are indicative ranges, not promises. Real yield changes constantly with trading volume, emissions and how much liquidity is in the pool. Always check the live rate before depositing.",
-    "custodyNotice": "These farms are operated by PancakeSwap, not by FBT. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
+    "custodyNotice": "These farms are operated by PancakeSwap, not by فانوس بازار بيشغام. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
     "rewardsLink": "App rewards & quests",
     "rewardsLinkSub": "Daily streak, XP and referrals"
   },
@@ -821,7 +852,7 @@
     "rwaNote": "These are the tokens of protocols building tokenization infrastructure. They are not shares in those companies and they do not track equity prices.",
     "noTokens": "No RWA tokens in the current market data",
     "honestTitle": "Why you can't buy Apple stock here",
-    "honestBody": "A token representing Apple stock is a security. Issuing one requires a licensed issuer holding the real shares in custody, a prospectus in most countries, and a broker-dealer licence to distribute it. PancakeSwap doesn't offer this either. Building it is a licensing project, not a coding one — so instead we point you at issuers who already hold those licences.",
+    "honestBody": "تفضيلنا دائماً أن نقدّم هذه الخدمة عالمياً لا ضمن سوق محلي واحد. التوكن الذي يمثل سهم آبل ورقة مالية في كل الولايات القضائية ويتطلب جهة إصدار مرخّصة ونشرة إصدار وترخيص وساطة. لذلك نوجهك إلى جهات إصدار تملك هذه التراخيص فعلاً.",
     "issuers": "Licensed issuers",
     "issuer": {
       "backed": {
@@ -840,7 +871,7 @@
         "desc": "German BaFin-regulated tokenized stocks"
       }
     },
-    "kycNotice": "These issuers require identity verification and may not accept users from every country. FBT iran has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
+    "kycNotice": "These issuers require identity verification and may not accept users from every country. فانوس بازار بيشغام has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
     "riskNotice": "Tokenized assets carry both market risk and issuer risk — if the issuer fails or is shut down, the token may not be redeemable for the underlying asset. Verify who holds the collateral before buying."
   },
   "help": {
@@ -860,7 +891,7 @@
     "auditSub": "What is audited and what isn't",
     "github": "Source code",
     "githubSub": "The repository is private — contact us for access",
-    "scamWarning": "We never message you first and never ask for your seed phrase, private key or wallet password. Anyone who does — even claiming to be FBT support — is trying to steal from you.",
+    "scamWarning": "We never message you first and never ask for your seed phrase, private key or wallet password. Anyone who does — even claiming to be فانوس بازار بيشغام support — is trying to steal from you.",
     "q": {
       "fees": "What fees do you charge?",
       "custody": "Do you hold my crypto?",
@@ -872,7 +903,11 @@
     "contactUs": "اتصل بنا",
     "contactUsSub": "دعم تيليجرام والبريد",
     "guide": "Getting started guide",
-    "guideSub": "Four sections: swap, predictions, wallet, security"
+    "guideSub": "Four sections: swap, predictions, wallet, security",
+    "aiSourceLocal": "إجابة من الدليل المدمج في التطبيق",
+    "aiSourceModel": "إجابة من نموذج ذكاء اصطناعي",
+    "aiNoAnswer": "ليست لديّ إجابة موثوقة ولا أفضّل التخمين. استخدم «اتصل بنا» ليجيبك شخص حقيقي.",
+    "aiLocalMode": "لا يوجد ذكاء اصطناعي على الخادم، لذا تأتي الإجابات من قاعدة معرفة التطبيق نفسه."
   },
   "docs": {
     "title": "Documentation",
@@ -935,7 +970,7 @@
       "pitfall": "Nobody legitimate will ever ask for your 12 recovery words. Not our support, not a group admin, not any website. Anyone who asks is trying to take your money. Block them immediately."
     },
     "why": {
-      "title": "Why FBT is different",
+      "title": "Why فانوس بازار بيشغام is different",
       "sub": "What we do that other apps don't",
       "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
       "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
@@ -1067,11 +1102,11 @@
         "desc": "Connect any wallet"
       }
     },
-    "notice": "These are independent projects. FBT iran is not affiliated with them and earns nothing from these links."
+    "notice": "These are independent projects. فانوس بازار بيشغام is not affiliated with them and earns nothing from these links."
   },
   "biz": {
     "title": "Business",
-    "intro": "FBT iran is a commercial trading company building financial infrastructure for the new digital economy. We work with projects, exchanges and businesses entering Web3.",
+    "intro": "فانوس بازار بيشغام is a commercial trading company building financial infrastructure for the new digital economy. We work with projects, exchanges and businesses entering Web3.",
     "services": "What we offer",
     "contact": "Get in touch",
     "company": "Company details",
@@ -1175,7 +1210,7 @@
         "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
       }
     },
-    "notice": "These are independent platforms. FBT iran does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
+    "notice": "These are independent platforms. فانوس بازار بيشغام does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
   },
   "rank": {
     "title": "الترتيب",
@@ -1192,7 +1227,7 @@
     "swaps": "{{n}} swaps",
     "howTo": "How to earn points",
     "startEarning": "Start earning",
-    "demoNotice": "The leaderboard currently shows sample entries so you can see how ranking works. Live rankings from real users arrive once the backend is deployed — we'd rather label this clearly than pass invented names off as real traders.",
+    "demoNotice": "يُحتسب الترتيب من نشاط المستخدمين الحقيقي ويُحدَّث من الخادم عند كل فتح للتطبيق.",
     "tier": {
       "bronze": "Bronze",
       "silver": "Silver",
@@ -1213,7 +1248,10 @@
       "connectWallet": "Connect a wallet",
       "backupWallet": "Back up your wallet",
       "enable2fa": "Turn on two-factor"
-    }
+    },
+    "offlineNotice": "تعذر الوصول إلى خادم الترتيب، لذا تظهر آخر نسخة محفوظة على جهازك.",
+    "localOnly": "يُحتسب ترتيبك من نشاط هذا الجهاز.",
+    "emptyBoard": "لم يسجّل أحد نقاطاً بعد. كن أول اسم على هذه اللوحة."
   },
   "guide": {
     "title": "A short guide before you start",
@@ -1238,7 +1276,7 @@
       "s5title": "Swap, then sign in your wallet",
       "s5body": "Your wallet opens and shows the details. Sign there. A few seconds later the transaction is on-chain and you get a link to it.",
       "feeTitle": "There are two fees — both real",
-      "feeBody": "1) Network gas: charged by the blockchain, not by us. You must hold some of the network's own coin or the transaction is rejected. 2) The FBT platform fee: {{fee}}% of every swap, paid to the company wallet in the same transaction. It is our revenue and it is shown to you before you sign.",
+      "feeBody": "1) Network gas: charged by the blockchain, not by us. You must hold some of the network's own coin or the transaction is rejected. 2) The فانوس بازار بيشغام platform fee: {{fee}}% of every swap, paid to the company wallet in the same transaction. It is our revenue and it is shown to you before you sign.",
       "slipTitle": "What slippage means",
       "slipBody": "The price moves between the moment you tap and the moment the transaction is mined. Slippage is the worst price you are willing to accept. 0.5% is fine for liquid tokens. Small tokens may need more, but the higher you set it, the worse the price you can end up with.",
       "failTitle": "Why did my swap fail?",
@@ -1258,21 +1296,21 @@
     },
     "wallet": {
       "title": "3 · Connecting a wallet on mobile",
-      "lead": "FBT never holds your assets and has no deposit address. To trade you connect your own wallet. There are three ways.",
+      "lead": "فانوس بازار بيشغام never holds your assets and has no deposit address. To trade you connect your own wallet. There are three ways.",
       "m1title": "Option 1 — the wallet's built-in browser (easiest on a phone)",
-      "m1body": "Open MetaMask or Trust Wallet, tap Browser in the bottom menu, and enter the FBT address there. The wallet is detected automatically and connecting is one tap. Try this first if connecting gives you trouble.",
+      "m1body": "Open MetaMask or Trust Wallet, tap Browser in the bottom menu, and enter the فانوس بازار بيشغام address there. The wallet is detected automatically and connecting is one tap. Try this first if connecting gives you trouble.",
       "m2title": "Option 2 — WalletConnect",
-      "m2body": "Tap connect and choose WalletConnect. On mobile you get a list of installed wallets; tap yours, it opens directly, approve, then use the back gesture to return to FBT.",
-      "m3title": "Option 3 — the built-in FBT wallet",
+      "m2body": "Tap connect and choose WalletConnect. On mobile you get a list of installed wallets; tap yours, it opens directly, approve, then use the back gesture to return to فانوس بازار بيشغام.",
+      "m3title": "Option 3 — the built-in فانوس بازار بيشغام wallet",
       "m3body": "If you have no wallet at all, the app can create one here. Its key is encrypted on your own device with your password and is never transmitted. Write the recovery phrase down on paper.",
       "p1title": "Problem: I tap connect and nothing happens",
       "p1body": "A normal mobile browser (Chrome, Safari) has no wallet inside it. Either use WalletConnect, or open the site inside your wallet's own browser.",
       "p2title": "Problem: I approve in the wallet but come back disconnected",
-      "p2body": "Common on Android: the system kills the backgrounded app and the session drops. Turn battery optimisation off for both FBT and your wallet, and return with the back gesture rather than closing the app.",
+      "p2body": "Common on Android: the system kills the backgrounded app and the session drops. Turn battery optimisation off for both فانوس بازار بيشغام and your wallet, and return with the back gesture rather than closing the app.",
       "p3title": "Problem: connected but the balance shows zero",
-      "p3body": "Almost always the wrong network. Your USDT may be on TRON while FBT is looking at BNB Chain. Switch network at the top of the Swap screen. Balances on TRON or Bitcoin are not supported by on-chain swaps here.",
+      "p3body": "Almost always the wrong network. Your USDT may be on TRON while فانوس بازار بيشغام is looking at BNB Chain. Switch network at the top of the Swap screen. Balances on TRON or Bitcoin are not supported by on-chain swaps here.",
       "p4title": "Problem: the wallet says unknown network",
-      "p4body": "Your wallet hasn't added that chain yet. FBT offers to add it when you swap — tap Approve / Switch network. It is harmless and only adds a network entry to your wallet.",
+      "p4body": "Your wallet hasn't added that chain yet. فانوس بازار بيشغام offers to add it when you swap — tap Approve / Switch network. It is harmless and only adds a network entry to your wallet.",
       "p5title": "Problem: the transaction is stuck pending",
       "p5body": "You underpaid gas while the network was busy. Use Speed up or Cancel in your wallet. Until it settles, the next transaction from that wallet is stuck behind it.",
       "p6title": "A note about connectivity",
@@ -1285,18 +1323,100 @@
       "s1body": "The 12 or 24 words you get when creating a wallet are the money itself. Anyone holding them takes everything, with no password needed. Write them on paper and store it safely.",
       "s2title": "Never do these",
       "s2body": "Don't screenshot the phrase, don't message it to yourself on Telegram or WhatsApp, don't keep it in cloud notes, and never type it into a website or form. Photo galleries and messengers both sync to the cloud.",
-      "s3title": "FBT will never ask for your recovery phrase",
+      "s3title": "فانوس بازار بيشغام will never ask for your recovery phrase",
       "s3body": "Not in the app, not in support, not in any message. Anyone asking for it in our name is a scammer, even with our logo and name on their profile.",
       "s4title": "Turn the app lock on",
       "s4body": "In Settings enable biometrics and two-factor, and set auto-lock to a few minutes. If you lose the phone, that is the only thing standing between a thief and your built-in wallet.",
       "s5title": "Back up — and know what isn't a backup",
-      "s5body": "The FBT backup file is the same encrypted blob; without your password it is useless, so forgetting the password makes the file worthless too. Paper is the real backup, not the file. Uninstalling without paper destroys the built-in wallet permanently.",
+      "s5body": "The فانوس بازار بيشغام backup file is the same encrypted blob; without your password it is useless, so forgetting the password makes the file worthless too. Paper is the real backup, not the file. Uninstalling without paper destroys the built-in wallet permanently.",
       "s6title": "Read before you sign",
-      "s6body": "Read every wallet prompt: which token, how much, to which address. If anything differs from what FBT showed you, close it and do not sign.",
+      "s6body": "Read every wallet prompt: which token, how much, to which address. If anything differs from what فانوس بازار بيشغام showed you, close it and do not sign.",
       "s7title": "Don't grant unlimited allowance",
       "s7body": "Some sites ask for unlimited approval. If your wallet allows it, cap the amount at exactly this trade. Periodically clear old approvals with a revoke tool.",
       "s8title": "Common scams",
       "s8body": "A free airdrop that first needs your wallet connected; an unknown token that appeared by itself and cannot be sold; fake support in Telegram that replies first; and thousand-percent yields. All four want the same thing: your signature."
+    },
+    "language": "لغة الدليل",
+    "closing": "أنت جاهز — أهلاً بك"
+  },
+  "news": {
+    "title": "أخبار العملات الرقمية",
+    "subtitle": "يُحدَّث كل ٢٤ ساعة",
+    "refresh": "تحديث",
+    "loading": "جارٍ التحميل…",
+    "updated": "آخر تحديث قبل {{ago}}",
+    "search": "ابحث في العناوين…",
+    "empty": "لا توجد عناوين مطابقة.",
+    "digest": "ملخص السوق",
+    "readAt": "اقرأ على {{source}}",
+    "notifyToggle": "إشعارات الأخبار",
+    "generatedNotice": "تعذّر الوصول إلى أي مصدر أخبار، لذا وُلّد هذا الملخص من بيانات السوق.",
+    "disclaimer": "العناوين من جهات خارجية وكل بطاقة تذكر مصدرها. لا نصادق على محتواها وليست نصيحة استثمارية.",
+    "cat": {
+      "all": "الكل",
+      "bitcoin": "بيتكوين",
+      "ethereum": "إيثريوم",
+      "defi": "ديفاي",
+      "regulation": "التنظيم"
     }
+  },
+  "notify": {
+    "title": "الإشعارات والصوت",
+    "sound": "صوت الصفقة",
+    "soundSub": "تشغيل نغمة قصيرة عند إتمام الصفقة.",
+    "vibrate": "الاهتزاز",
+    "vibrateSub": "اهتزاز الهاتف عند كل صفقة.",
+    "tradeAlerts": "تنبيهات الصفقات",
+    "tradeAlertsSub": "ستصلك النتيجة كإشعار حتى لو كان التطبيق في الخلفية.",
+    "daily": "إشعار يومي",
+    "dailySub": "رسالة واحدة يومياً فقط، والحد مفروض داخل التطبيق.",
+    "news": "تنبيهات الأخبار",
+    "newsSub": "ملخص لعناوين اليوم مرة واحدة يومياً.",
+    "permission": "إذن الإشعارات",
+    "permissionAsk": "اسمح",
+    "permissionGranted": "مسموح",
+    "permissionDenied": "الإشعارات محظورة؛ فعّلها من إعدادات الهاتف.",
+    "unsupported": "هذه البيئة لا تدعم الإشعارات.",
+    "pushLocal": "تُجدوَل الإشعارات محلياً على هذا الجهاز حالياً. الدفع الحقيقي من الخادم يتطلب مفتاح VAPID.",
+    "pushOn": "الدفع من الخادم مفعّل",
+    "tradeDoneTitle": "تمت الصفقة",
+    "tradeDoneBody": "تم تبديل {{amount}} {{from}} مقابل {{to}}.",
+    "tradeFailTitle": "فشلت الصفقة",
+    "tradeFailBody": "لم تكتمل المعاملة. التفاصيل داخل التطبيق.",
+    "promo1": {
+      "title": "كيف تحرك السوق اليوم؟",
+      "body": "أسعار حية لأكثر من ألف عملة مجاناً."
+    },
+    "promo2": {
+      "title": "التبادل على ٧ شبكات",
+      "body": "من محفظتك مباشرة على سبع شبكات."
+    },
+    "promo3": {
+      "title": "عناوين اليوم",
+      "body": "ملخص لما تحرك فعلاً كل ٢٤ ساعة."
+    },
+    "promo4": {
+      "title": "هل نسخت محفظتك احتياطياً؟",
+      "body": "بدون الكلمات الـ١٢ على ورق لا سبيل لاستعادة أموالك."
+    },
+    "promo5": {
+      "title": "تعلّم أولاً",
+      "body": "وحدات التعلم تعمل برصيد افتراضي بالكامل."
+    },
+    "promo6": {
+      "title": "أكثر من ١٠٠٠ عملة",
+      "body": "ابحث واستورد بالعنوان وبادل فوراً."
+    },
+    "promo7": {
+      "title": "رسوم شفافة",
+      "body": "٠٫٥٪ رسوم المنصة تُعرض قبل التوقيع."
+    }
+  },
+  "welcome": {
+    "title": "اختر لغتك",
+    "subtitle": "يمكنك تغييرها لاحقاً من الإعدادات.",
+    "continue": "متابعة",
+    "partial": "الشاشات الأساسية مترجمة؛ النصوص المتخصصة تظهر بالإنجليزية.",
+    "full": "مترجم بالكامل"
   }
 }

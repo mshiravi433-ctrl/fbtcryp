@@ -8,7 +8,7 @@ import Ticker from '../components/Ticker';
 import CoinRow from '../components/CoinRow';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
-import { useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
+import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 
@@ -34,11 +34,17 @@ export default function Market() {
   const favorites = useAppStore((s) => s.favorites);
 
   const { data: global } = useGlobalStats();
-  const { data: coins, loading } = useMarkets(60);
+  // 250 rows instead of 60: the old page made most coins untappable, because
+  // the detail screen looked the id up in THIS list and said "not found" when
+  // it wasn't there.
+  const { data: coins, loading } = useMarkets(250);
   const { data: trending } = useTrending();
 
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
+
+  // Anything not in the loaded page is found by querying the full universe.
+  const { results: remoteHits, searching } = useCoinSearch(query);
 
   const list = useMemo(() => {
     let out = coins ?? [];
@@ -59,6 +65,14 @@ export default function Market() {
         return out;
     }
   }, [coins, filter, query, favorites]);
+
+  // Coins the search found that aren't in the loaded page. Shown separately so
+  // it's obvious they came from a wider lookup, and tappable like any other.
+  const extraHits = useMemo(() => {
+    if (!query.trim()) return [];
+    const have = new Set((list ?? []).map((c) => c.id));
+    return (remoteHits ?? []).filter((c) => !have.has(c.id));
+  }, [remoteHits, list, query]);
 
   const hero = coins?.[0];
   const isOffline = global?.offline || coins?.[0]?.offline;
@@ -205,16 +219,39 @@ export default function Market() {
               <div key={i} className="skel" style={{ height: 58 }} />
             ))}
           </div>
-        ) : list.length === 0 ? (
+        ) : list.length === 0 && extraHits.length === 0 ? (
           <div className="empty">
             <span className="empty-icon">🔍</span>
-            {t('market.noResults')}
+            {searching ? t('market.searching') : t('market.noResults')}
           </div>
         ) : (
           <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
             {list.map((c, i) => (
               <CoinRow key={c.id} coin={c} rank={i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
             ))}
+
+            {extraHits.length > 0 && (
+              <>
+                <p className="section-label" style={{ marginTop: 8 }}>{t('market.moreResults')}</p>
+                {extraHits.map((c) => (
+                  <button
+                    key={c.id}
+                    className="coin-row"
+                    onClick={() => navigate(`/coin/${c.id}`)}
+                    style={{ width: '100%', textAlign: 'start' }}
+                  >
+                    <div className="coin-logo">
+                      {c.image ? <img src={c.image} alt="" /> : c.symbol.slice(0, 3)}
+                    </div>
+                    <div className="coin-meta">
+                      <div className="coin-sym">{c.symbol}</div>
+                      <div className="coin-name">{c.name}</div>
+                    </div>
+                    {c.rank > 0 && <span className="faint mono" style={{ fontSize: 11 }}>#{c.rank}</span>}
+                  </button>
+                ))}
+              </>
+            )}
           </motion.div>
         )}
       </section>

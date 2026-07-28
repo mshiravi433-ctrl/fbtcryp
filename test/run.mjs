@@ -58,6 +58,16 @@ console.error = (...a) => {
   realError(...a);
 };
 
+/* ------------------------------ 0. units -------------------------------- */
+/* Pure logic first: it is the fastest suite and the one whose failures point
+   most precisely at a cause. Bundled with Vite so extensionless imports and
+   `import.meta.env` resolve exactly as they do in the app. */
+console.log('▸ building unit suite…');
+npx(['vite', 'build', '-c', 'test/vite.units.mjs', '--logLevel', 'error']);
+installDom();
+const { default: runUnits } = await import('./.out/units/units.js');
+report('units (tokens · payout · faq · news)', runUnits());
+
 /* ------------------------------- 1. boot -------------------------------- */
 console.log('▸ building app as a classic script for jsdom…');
 npx(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);

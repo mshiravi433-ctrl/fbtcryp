@@ -23,7 +23,7 @@ import {
   FEE_ROUTER_ABI,
   FEE_ROUTER_ADDRESS,
   FEE_BPS,
-  FEE_RECIPIENT,
+  feeRecipientFor,
   feeEnabled,
   aggregatorFeeEnabled,
   buildPath
@@ -79,7 +79,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
 
   // Preferred path: the aggregator finds a better route across every DEX AND
   // collects our fee on-chain, with no contract of our own to deploy.
-  if (aggregatorFeeEnabled() && aggregatorSupports(chainId)) {
+  if (aggregatorFeeEnabled(chainId) && aggregatorSupports(chainId)) {
     try {
       return await getAggregatorQuote({
         chainId,
@@ -88,7 +88,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
         amountIn,
         slippage,
         feeBps: FEE_BPS,
-        feeReceiver: FEE_RECIPIENT,
+        feeReceiver: feeRecipientFor(chainId),
         parseUnits,
         formatUnits
       });

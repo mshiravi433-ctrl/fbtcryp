@@ -26,7 +26,7 @@ export default function Business() {
 
       <motion.section className="card card-rgb edge-ember" variants={riseIn} initial="hidden" animate="show">
         <div className="aurora" />
-        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }} className="gradient-text">FBT iran</div>
+        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }} className="gradient-text">{t('about.companyFull')}</div>
         <p className="muted" style={{ fontSize: 12.4, margin: 0 }}>{t('biz.intro')}</p>
       </motion.section>
 

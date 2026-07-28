@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getChart, getGlobal, getMarkets, getTrending } from '../lib/api';
+import { getChart, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
 
 /** Generic polling hook — pauses while the tab is hidden to save battery/quota. */
 export function usePoll(fn, deps = [], intervalMs = 30000) {
@@ -54,6 +54,42 @@ export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
 export const useMarkets = (perPage = 50) => usePoll(() => getMarkets({ perPage }), [perPage], 30000);
 export const useTrending = () => usePoll(() => getTrending(), [], 120000);
 export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], 60000);
+
+/**
+ * One coin by id, fetched directly instead of being looked up inside the
+ * paged markets list. This is what fixes "coin not found" on anything outside
+ * the top of the market-cap table.
+ */
+export const useCoin = (id) => usePoll(() => (id ? getCoin(id) : Promise.resolve(null)), [id], 30000);
+
+/** Debounced universe-wide coin search (name / ticker), not just this page. */
+export function useCoinSearch(query, minLength = 2) {
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const q = String(query || '').trim();
+    if (q.length < minLength) {
+      setResults([]);
+      setSearching(false);
+      return undefined;
+    }
+    setSearching(true);
+    let alive = true;
+    const timer = setTimeout(() => {
+      searchCoins(q)
+        .then((r) => alive && setResults(r ?? []))
+        .catch(() => alive && setResults([]))
+        .finally(() => alive && setSearching(false));
+    }, 350);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [query, minLength]);
+
+  return { results, searching };
+}
 
 /** Map of `coinId -> price` for portfolio valuation. */
 export function usePriceMap(perPage = 50) {

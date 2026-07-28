@@ -1,0 +1,60 @@
+{
+  "nav": {
+    "market": "Mercado",
+    "swap": "Intercambiar",
+    "wallet": "Cartera",
+    "signals": "Señales",
+    "news": "Noticias",
+    "more": "Más",
+    "settings": "Ajustes",
+    "help": "Ayuda",
+    "about": "Acerca de"
+  },
+  "common": {
+    "back": "Atrás",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "done": "Hecho",
+    "loading": "Cargando…",
+    "refresh": "Actualizar",
+    "language": "Idioma",
+    "notAdvice": "Los datos de mercado son solo informativos y no constituyen asesoramiento financiero. Las criptomonedas son volátiles: puedes perderlo todo."
+  },
+  "welcome": {
+    "title": "Elige tu idioma",
+    "subtitle": "Puedes cambiarlo en cualquier momento desde Ajustes.",
+    "continue": "Continuar",
+    "partial": "Las pantallas principales están traducidas; el texto más especializado aún aparece en inglés.",
+    "full": "Traducción completa"
+  },
+  "onboarding": {
+    "next": "Continuar",
+    "skip": "Omitir",
+    "start": "Empezar"
+  },
+  "guide": {
+    "next": "Siguiente",
+    "back": "Anterior",
+    "done": "He leído todas las instrucciones",
+    "language": "Idioma de la guía"
+  },
+  "swap": {
+    "title": "Intercambiar",
+    "searchToken": "Busca por nombre, símbolo o pega una dirección…",
+    "gasBody": "El gas siempre se paga en la moneda nativa de la red y desde la misma cartera; no es solo BNB.",
+    "nonCustodialNotice": "No custodial: cada transacción la firma y envía tu propia cartera. No guardamos tus fondos ni tenemos dirección de depósito.",
+    "verifyContracts": "Aparecer en la lista no es un aval. Verifica la dirección del contrato en el sitio oficial antes de intercambiar.",
+    "review": "Revisar",
+    "confirmSwap": "Confirmar intercambio"
+  },
+  "wallet": {
+    "connect": "Conectar cartera"
+  },
+  "news": {
+    "title": "Noticias cripto",
+    "subtitle": "Se actualiza cada 24 horas"
+  },
+  "predict": {
+    "riskNotice": "Esta pantalla funciona solo con crédito virtual; no se pueden conectar fondos reales. Las apuestas a corto plazo sobre el precio con dinero real están prohibidas por la ley iraní y también para minoristas en el Reino Unido y la UE."
+  }
+}

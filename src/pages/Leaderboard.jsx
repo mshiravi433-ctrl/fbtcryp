@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +7,9 @@ import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useAppStore } from '../store/useAppStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { buildLeaderboard, tierFor, nextTier, tierProgress, TIERS, TOP_N, POINT_VALUES } from '../lib/ranks';
+import { tierFor, nextTier, tierProgress, TIERS, TOP_N, POINT_VALUES } from '../lib/ranks';
+import { decorate, fetchLeaderboard, publishScore } from '../lib/leaderboard';
+import { useTelegram } from '../context/TelegramContext';
 import { fmtNum } from '../lib/format';
 import { IconChevronLeft } from '../components/Icons';
 
@@ -66,11 +68,41 @@ export default function Leaderboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
+  const { tg } = useTelegram();
   const points = useAppStore((s) => s.points);
   const referrals = useAppStore((s) => s.referrals);
   const username = useSettingsStore((s) => s.username);
 
-  const rows = useMemo(() => buildLeaderboard(points, username), [points, username]);
+  /**
+   * Live board from the API. Opening the screen also publishes this device's
+   * score, which is why the board fills up on its own once the app is in real
+   * hands — no seeding required, and nothing invented.
+   */
+  const [board, setBoard] = useState({ rows: [], live: true, durable: true, at: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      // Publish first so our own row is in the response we are about to read.
+      await publishScore({
+        name: username,
+        points,
+        referrals,
+        telegramInitData: tg?.initData
+      });
+      const data = await fetchLeaderboard();
+      if (!alive) return;
+      setBoard(data);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, username, referrals]);
+
+  const rows = useMemo(() => decorate(board.rows, { points, username }), [board, points, username]);
   const top = rows.slice(0, TOP_N);
   const me = rows.find((r) => r.isUser);
 
@@ -176,11 +208,23 @@ export default function Leaderboard() {
       {/* ---------------- podium ---------------- */}
       <section>
         <p className="section-label">{t('rank.top')}</p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 12 }}>
-          {top.slice(0, 3).map((r, i) => (
-            <Podium key={r.id} row={r} place={i + 1} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="skel" style={{ height: 120, marginTop: 12 }} />
+        ) : top.length === 0 ? (
+          // An empty real board beats a full fake one. It fills up on its own
+          // as people use the app, and saying that is more reassuring than
+          // pretending fifty strangers already out-ranked you.
+          <div className="empty" style={{ marginTop: 10 }}>
+            <span className="empty-icon">🏆</span>
+            {t('rank.emptyBoard')}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 12 }}>
+            {top.slice(0, 3).map((r, i) => (
+              <Podium key={r.id} row={r} place={i + 1} />
+            ))}
+          </div>
+        )}
       </section>
 
       <AdBanner slot="referral" compact />
@@ -243,7 +287,14 @@ export default function Leaderboard() {
         </button>
       </motion.section>
 
-      <p className="notice">{t('rank.demoNotice')}</p>
+      {/* Say what this board actually is, in the state it is actually in. */}
+      <p className="notice">
+        {!board.live
+          ? t('rank.offlineNotice')
+          : board.durable
+            ? t('rank.demoNotice')
+            : t('rank.localOnly')}
+      </p>
     </PageTransition>
   );
 }

@@ -1806,3 +1806,269 @@ input, select, textarea { font-size: 16px !important; }
 @media (prefers-reduced-motion: reduce) {
   .guide-rail-fill { transition: none; }
 }
+
+/* ==========================================================================
+   WELCOME · LANGUAGE PICKER · ONBOARDING LAYOUT
+   --------------------------------------------------------------------------
+   Same layer discipline as the guide screen, and for the same reason: the
+   stage is fixed and never animated, exactly one element scrolls, and that
+   element is never transformed. Framer Motion writes `transform` on whatever
+   it animates, which creates a containing block — animate the scroll box and
+   any `position: fixed` child or `100dvh` height inside it resolves against
+   the wrong rectangle, which is what pushed the old onboarding footer off the
+   bottom of the screen.
+   ========================================================================== */
+
+.welcome-stage,
+.onb-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-void);
+  height: 100dvh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.welcome-stage::before,
+.onb-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 40% at 15% 0%, rgba(0, 229, 255, 0.14), transparent 70%),
+    radial-gradient(60% 38% at 92% 8%, rgba(255, 45, 149, 0.11), transparent 72%);
+}
+
+.welcome-head {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: calc(env(safe-area-inset-top) + 26px) 22px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.welcome-badge {
+  width: 60px;
+  height: 60px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 18px 46px -18px var(--rgb-1);
+}
+
+.welcome-scroll,
+.onb-scroll {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;              /* without this the footer gets pushed off */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 6px 20px 10px;
+}
+
+.welcome-foot,
+.onb-foot {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: 12px 20px calc(env(safe-area-inset-bottom) + 14px);
+  border-top: 1px solid var(--line);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.55));
+  backdrop-filter: blur(12px);
+}
+
+/* --------------------------- language picker ---------------------------- */
+
+.lang-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
+@media (min-width: 520px) {
+  .lang-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.lang-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 14px 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.lang-card.active {
+  border-color: var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 10%, var(--bg-panel));
+  box-shadow: 0 10px 30px -18px var(--rgb-1);
+}
+
+.lang-flag { font-size: 22px; line-height: 1.1; }
+
+.lang-endonym {
+  font-size: 13.5px;
+  font-weight: 700;
+  /* Long endonyms ("Bahasa Indonesia") must not blow the grid apart. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lang-name { font-size: 10.5px; color: var(--text-3); }
+
+.lang-badge {
+  margin-top: 4px;
+  font-size: 8.5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  line-height: 1.5;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lang-badge.full { background: rgba(0, 255, 157, 0.12); color: var(--up, #00ff9d); }
+.lang-badge.partial { background: rgba(255, 179, 0, 0.12); color: #ffb300; }
+
+/* ----------------------------- onboarding ------------------------------- */
+
+.onb-topbar {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 10px) 14px 4px;
+}
+
+.onb-link {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.onb-link:disabled { cursor: default; }
+
+.onb-foot-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+/*
+ * BOTH footer buttons are identical in size. They used to be sized by their
+ * own label, and "قبلی" vs "ادامه" are different widths, so Back rendered
+ * noticeably larger than Next in Persian. flex:1 + a shared min-height makes
+ * them symmetrical in every language and both text directions.
+ */
+.onb-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s;
+}
+
+.onb-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chevrons mean "forward"/"back", which are mirrored in RTL. */
+[dir='rtl'] .onb-btn svg,
+[dir='rtl'] .welcome-foot .onb-btn svg { transform: scaleX(-1); }
+
+.onb-dots {
+  display: flex;
+  gap: 7px;
+  justify-content: center;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.onb-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s;
+}
+.onb-dot[data-active='true'] {
+  width: 22px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
+}
+
+/* The art block sized itself with flex:1 inside a column that no longer
+   exists; inside the scroll box it needs a fixed, modest height so the copy
+   below it is visible without scrolling on a short phone. */
+.onb-scroll .onb-art {
+  flex: none;
+  height: clamp(150px, 26dvh, 230px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onb-btn,
+  .onb-dot { transition: none; }
+}
+
+/* ------------------------ guide: language row --------------------------- */
+
+.guide-lang {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.guide-lang-label {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* The guide footer buttons get the same equal-size treatment. */
+.guide-back,
+.guide-cta {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 50px;
+  white-space: nowrap;
+}

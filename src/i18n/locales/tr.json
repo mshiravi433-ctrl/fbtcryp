@@ -1,0 +1,60 @@
+{
+  "nav": {
+    "market": "Piyasa",
+    "swap": "Takas",
+    "wallet": "Cüzdan",
+    "signals": "Sinyaller",
+    "news": "Haberler",
+    "more": "Daha",
+    "settings": "Ayarlar",
+    "help": "Yardım",
+    "about": "Hakkında"
+  },
+  "common": {
+    "back": "Geri",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "done": "Tamam",
+    "loading": "Yükleniyor…",
+    "refresh": "Yenile",
+    "language": "Dil",
+    "notAdvice": "Piyasa verileri yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir. Kripto oynaktır — her şeyinizi kaybedebilirsiniz."
+  },
+  "welcome": {
+    "title": "Dilinizi seçin",
+    "subtitle": "Bunu istediğiniz zaman Ayarlar'dan değiştirebilirsiniz.",
+    "continue": "Devam",
+    "partial": "Ana ekranlar çevrildi; daha teknik metinler şimdilik İngilizce görünür.",
+    "full": "Tam çeviri"
+  },
+  "onboarding": {
+    "next": "Devam",
+    "skip": "Atla",
+    "start": "Başla"
+  },
+  "guide": {
+    "next": "İleri",
+    "back": "Geri",
+    "done": "Tüm açıklamaları okudum",
+    "language": "Kılavuz dili"
+  },
+  "swap": {
+    "title": "Takas",
+    "searchToken": "Ad, sembol arayın veya sözleşme adresi yapıştırın…",
+    "gasBody": "Gas her zaman bulunduğunuz ağın yerel coini ile ve aynı cüzdandan ödenir — sadece BNB değil.",
+    "nonCustodialNotice": "Saklamasız: her işlemi kendi cüzdanınız imzalar ve gönderir. Varlıklarınızı tutmayız, yatırma adresimiz yoktur.",
+    "verifyContracts": "Listede olmak onay anlamına gelmez. Takas öncesi sözleşme adresini projenin resmi sitesinden doğrulayın.",
+    "review": "İncele",
+    "confirmSwap": "Takası onayla"
+  },
+  "wallet": {
+    "connect": "Cüzdan bağla"
+  },
+  "news": {
+    "title": "Kripto haberleri",
+    "subtitle": "24 saatte bir güncellenir"
+  },
+  "predict": {
+    "riskNotice": "Bu ekran yalnızca sanal kredi ile çalışır; gerçek para bağlanamaz. Gerçek parayla kısa vadeli yön bahsi İran yasalarında yasaktır; Birleşik Krallık ve AB'de de bireysel yatırımcılara yasaktır."
+  }
+}

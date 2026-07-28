@@ -1,0 +1,60 @@
+{
+  "nav": {
+    "market": "市场",
+    "swap": "兑换",
+    "wallet": "钱包",
+    "signals": "信号",
+    "news": "新闻",
+    "more": "更多",
+    "settings": "设置",
+    "help": "帮助",
+    "about": "关于"
+  },
+  "common": {
+    "back": "返回",
+    "cancel": "取消",
+    "confirm": "确认",
+    "done": "完成",
+    "loading": "加载中…",
+    "refresh": "刷新",
+    "language": "语言",
+    "notAdvice": "市场数据仅供参考，不构成投资建议。加密资产波动剧烈，你可能损失全部本金。"
+  },
+  "welcome": {
+    "title": "选择你的语言",
+    "subtitle": "之后可以随时在设置中更改。",
+    "continue": "继续",
+    "partial": "主要界面已翻译；更专业的内容暂时显示英文。",
+    "full": "完整翻译"
+  },
+  "onboarding": {
+    "next": "继续",
+    "skip": "跳过",
+    "start": "开始使用"
+  },
+  "guide": {
+    "next": "下一步",
+    "back": "上一步",
+    "done": "我已读完全部说明",
+    "language": "教程语言"
+  },
+  "swap": {
+    "title": "兑换",
+    "searchToken": "搜索名称、代号或粘贴合约地址…",
+    "gasBody": "网络费（Gas）始终以所在链的原生币支付，并从同一个钱包扣除——不只是 BNB。",
+    "nonCustodialNotice": "非托管：每一笔交易都由你自己的钱包签名并发送，我们不持有你的资产，也没有任何充值地址。",
+    "verifyContracts": "代币出现在列表中并不代表我们背书。兑换前请对照项目官网核对合约地址。",
+    "review": "查看并确认",
+    "confirmSwap": "确认兑换"
+  },
+  "wallet": {
+    "connect": "连接钱包"
+  },
+  "news": {
+    "title": "加密新闻",
+    "subtitle": "每 24 小时更新一次"
+  },
+  "predict": {
+    "riskNotice": "本页仅使用虚拟额度，无法接入真实资金。以真实资金进行的短期涨跌押注（二元期权）在伊朗法律下被禁止，在英国和欧盟也对散户禁止。这里的内容只用于理解机制。"
+  }
+}

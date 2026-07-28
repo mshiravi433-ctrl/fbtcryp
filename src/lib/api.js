@@ -132,6 +132,101 @@ export function normalizeCoin(c = {}) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Single coin                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Look up ONE coin by id.
+ *
+ * WHY THIS EXISTS
+ * The coin detail screen used to search the already-loaded markets page for
+ * the id and render "coin not found" when it wasn't there. That is not an API
+ * failure — the markets list is paged (top 60 by market cap), so tapping any
+ * coin found via search, trending, or a deep link outside that window always
+ * produced the error, and it looked like the data provider was broken.
+ *
+ * Now the detail screen asks for the coin directly. Order: our backend, then
+ * public CoinGecko `/coins/markets?ids=`, then the single-coin endpoint, then
+ * the offline snapshot. Only a coin that exists nowhere returns null.
+ */
+export function getCoin(id, vs = 'usd') {
+  if (!id) return Promise.resolve(null);
+  return resilient(`coin:${id}:${vs}`, {
+    ttl: 30000,
+    backend: () => fetchJson(`${API_BASE}/coin/${encodeURIComponent(id)}`),
+    direct: async () => {
+      // The markets endpoint gives us sparkline + 1h/7d changes in one call,
+      // which is exactly the shape the detail screen renders.
+      const rows = await fetchJson(
+        `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&ids=${encodeURIComponent(id)}` +
+          `&sparkline=true&price_change_percentage=1h,24h,7d`
+      );
+      if (Array.isArray(rows) && rows[0]) return normalizeCoin(rows[0]);
+
+      // Some ids only resolve on the detail endpoint (delisted, or an id that
+      // came from /search rather than /markets).
+      const raw = await fetchJson(
+        `${PUBLIC_CG}/coins/${encodeURIComponent(id)}?localization=false&tickers=false` +
+          `&market_data=true&community_data=false&developer_data=false`
+      );
+      const md = raw.market_data ?? {};
+      return {
+        id: raw.id,
+        symbol: (raw.symbol || '').toUpperCase(),
+        name: raw.name,
+        image: raw.image?.large ?? raw.image?.small,
+        price: md.current_price?.[vs] ?? 0,
+        change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
+        change24h: md.price_change_percentage_24h ?? 0,
+        change7d: md.price_change_percentage_7d ?? 0,
+        mcap: md.market_cap?.[vs] ?? 0,
+        volume: md.total_volume?.[vs] ?? 0,
+        rank: raw.market_cap_rank ?? 0,
+        high24h: md.high_24h?.[vs] ?? 0,
+        low24h: md.low_24h?.[vs] ?? 0,
+        ath: md.ath?.[vs] ?? 0,
+        athChange: md.ath_change_percentage?.[vs] ?? 0,
+        supply: md.circulating_supply ?? 0,
+        description: raw.description?.en?.slice(0, 700) || '',
+        homepage: raw.links?.homepage?.[0] || null,
+        sparkline: md.sparkline_7d?.price ?? []
+      };
+    },
+    fallback: () => offlineMarkets(250).find((c) => c.id === id) ?? null
+  });
+}
+
+/**
+ * Search the whole coin universe by name/ticker, not just the loaded page.
+ * Falls back to filtering the offline snapshot so the box still does something
+ * useful with no network.
+ */
+export function searchCoins(query) {
+  const q = String(query || '').trim();
+  if (q.length < 2) return Promise.resolve([]);
+  return resilient(`search:${q.toLowerCase()}`, {
+    ttl: 120000,
+    backend: () => fetchJson(`${API_BASE}/search?q=${encodeURIComponent(q)}`),
+    direct: async () => {
+      const raw = await fetchJson(`${PUBLIC_CG}/search?query=${encodeURIComponent(q)}`);
+      return (raw.coins || []).slice(0, 25).map((c) => ({
+        id: c.id,
+        symbol: (c.symbol || '').toUpperCase(),
+        name: c.name,
+        image: c.thumb || c.large,
+        rank: c.market_cap_rank ?? 0
+      }));
+    },
+    fallback: () => {
+      const lower = q.toLowerCase();
+      return offlineMarkets(250)
+        .filter((c) => c.symbol.toLowerCase().includes(lower) || c.name.toLowerCase().includes(lower))
+        .slice(0, 25);
+    }
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Trending / charts / DEX                                                     */
 /* -------------------------------------------------------------------------- */
 

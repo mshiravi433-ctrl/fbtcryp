@@ -37,8 +37,17 @@ export async function run(container) {
   await act(async () => { rail()[3].click(); });
   results.push(['finish ENABLED once all four seen', cta().disabled === false]);
 
+  // Finishing now plays a short confirmation beat before it commits, so the
+  // screen dissolves instead of blinking out from under the user's finger.
+  // The gate must still close — just not on the same tick.
   await act(async () => { cta().click(); });
-  results.push(['onDone fired', doneCalled === 1]);
+  results.push(['confirmation shown immediately', Boolean(q('.guide-stage'))]);
+  results.push(['not committed on the same tick', doneCalled === 0]);
+
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 900));
+  });
+  results.push(['onDone fired after the exit animation', doneCalled === 1]);
   results.push(['guideReadAt persisted', useSettingsStore.getState().guideReadAt > 0]);
 
   // replayGuide must clear it so Help can re-open the guide.

@@ -164,7 +164,29 @@ export async function fetchDexPools(network = 'bsc') {
   });
 }
 
-export async function fetchCoinDetail(id) {
+/**
+ * One coin, in the SAME shape as a `/markets` row.
+ *
+ * The client's coin screen renders market rows, so returning a different shape
+ * here meant the detail page silently lost 1h/7d change, high/low and the
+ * sparkline. We try `/coins/markets?ids=` first for exactly that reason and
+ * only fall back to the heavier detail endpoint for ids it does not cover.
+ */
+export async function fetchCoinDetail(id, vs = 'usd') {
+  try {
+    const rows = await req(
+      cgUrl('/coins/markets', {
+        vs_currency: vs,
+        ids: id,
+        sparkline: 'true',
+        price_change_percentage: '1h,24h,7d'
+      })
+    );
+    if (Array.isArray(rows) && rows[0]) return normalizeCoin(rows[0]);
+  } catch {
+    /* fall through to the detail endpoint */
+  }
+
   const raw = await req(
     cgUrl(`/coins/${encodeURIComponent(id)}`, {
       localization: 'false',
@@ -179,14 +201,34 @@ export async function fetchCoinDetail(id) {
     id: raw.id,
     symbol: (raw.symbol || '').toUpperCase(),
     name: raw.name,
-    image: raw.image?.large,
-    description: raw.description?.en?.slice(0, 600) || '',
+    image: raw.image?.large ?? raw.image?.small,
+    description: raw.description?.en?.slice(0, 700) || '',
     homepage: raw.links?.homepage?.[0] || null,
-    price: md.current_price?.usd ?? 0,
-    mcap: md.market_cap?.usd ?? 0,
-    volume: md.total_volume?.usd ?? 0,
+    price: md.current_price?.[vs] ?? 0,
+    change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
     change24h: md.price_change_percentage_24h ?? 0,
-    ath: md.ath?.usd ?? 0,
-    atl: md.atl?.usd ?? 0
+    change7d: md.price_change_percentage_7d ?? 0,
+    mcap: md.market_cap?.[vs] ?? 0,
+    volume: md.total_volume?.[vs] ?? 0,
+    rank: raw.market_cap_rank ?? 0,
+    high24h: md.high_24h?.[vs] ?? 0,
+    low24h: md.low_24h?.[vs] ?? 0,
+    ath: md.ath?.[vs] ?? 0,
+    atl: md.atl?.[vs] ?? 0,
+    athChange: md.ath_change_percentage?.[vs] ?? 0,
+    supply: md.circulating_supply ?? 0,
+    sparkline: md.sparkline_7d?.price ?? []
   };
+}
+
+/** Universe-wide coin search by name or ticker. */
+export async function fetchSearch(query) {
+  const raw = await req(cgUrl('/search', { query }));
+  return (raw.coins || []).slice(0, 25).map((c) => ({
+    id: c.id,
+    symbol: (c.symbol || '').toUpperCase(),
+    name: c.name,
+    image: c.thumb || c.large,
+    rank: c.market_cap_rank ?? 0
+  }));
 }

@@ -10,6 +10,8 @@
  * project's official docs and BscScan/Tonviewer.
  */
 
+import { FAMILY, PAYOUT_ADDRESSES, payoutAddress } from './payout';
+
 /**
  * Supported chains.
  *
@@ -129,15 +131,28 @@ export const DEFAULT_CHAIN = 56;
 export const FEE_BPS = 50; // 0.50%
 
 /**
- * Where the 0.5% goes. This is the ONLY value you must set to start earning.
+ * Where the 0.5% goes.
  *
- * With just this set, swaps route through the KyberSwap aggregator, whose
- * already-deployed audited router splits the fee out and sends it here inside
- * the same transaction. No contract of your own to deploy, no gas to spend.
+ * Resolution is per-chain and lives in `lib/payout.js`: each network has its
+ * own receiving address, and if one isn't configured the resolver falls back
+ * to the next valid address **of the same address family**. It never falls
+ * back across families — an EVM address on Tron is a burn, not a payment.
+ *
+ * `FEE_RECIPIENT` stays exported as the EVM default so existing callers and
+ * the deploy script keep working unchanged.
  */
 export const FEE_RECIPIENT =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_RECIPIENT) ||
-  '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+  PAYOUT_ADDRESSES.evm;
+
+/** Per-chain fee recipient with fallback. Use this in new code. */
+export function feeRecipientFor(chainId) {
+  // An explicit VITE_FEE_RECIPIENT override wins everywhere — one knob for
+  // anyone who just wants all EVM revenue in a single wallet.
+  const override = typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_RECIPIENT;
+  if (override && /^0x[a-fA-F0-9]{40}$/.test(override)) return override;
+  return payoutAddress(chainId, FAMILY.EVM);
+}
 
 /**
  * Optional: your own deployed FeeRouter (contracts/FeeRouter.sol).
@@ -157,13 +172,13 @@ const isAddr = (a) => Boolean(a) && /^0x[a-fA-F0-9]{40}$/.test(a);
 export const FEE_MODE =
   isAddr(FEE_ROUTER_ADDRESS) ? 'contract' : 'aggregator';
 
-export const feeRecipientValid = () => isAddr(FEE_RECIPIENT);
+export const feeRecipientValid = (chainId = 56) => isAddr(feeRecipientFor(chainId));
 
 /** True when swaps go through our own deployed FeeRouter contract. */
 export const feeEnabled = () => FEE_MODE === 'contract' && isAddr(FEE_ROUTER_ADDRESS);
 
 /** True when the aggregator collects the fee for us (no deployment needed). */
-export const aggregatorFeeEnabled = () => FEE_MODE === 'aggregator' && feeRecipientValid();
+export const aggregatorFeeEnabled = (chainId = 56) => FEE_MODE === 'aggregator' && feeRecipientValid(chainId);
 
 /** Curated BEP-20 list. `native: true` means the chain's gas coin, not a contract. */
 export const TOKENS = {

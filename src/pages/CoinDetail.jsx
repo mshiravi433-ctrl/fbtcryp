@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
@@ -47,14 +47,23 @@ export default function CoinDetail() {
   const { haptic } = useTelegram();
   const [range, setRange] = useState(RANGES[1]);
 
+  // Fetch the coin by id rather than hunting for it inside the paged markets
+  // list — that lookup is what produced "coin not found" for anything outside
+  // the top 60 by market cap, which looked like a broken API but never was.
   const { data: coins } = useMarkets(60);
+  const { data: fetched, loading: coinLoading } = useCoin(id);
   const { data: series, loading } = useChart(id, range.days);
 
   const favorites = useAppStore((s) => s.favorites);
   const toggleFavorite = useAppStore((s) => s.toggleFavorite);
   const isFav = favorites.includes(id);
 
-  const coin = useMemo(() => (coins ?? []).find((c) => c.id === id), [coins, id]);
+  // Prefer the direct fetch; fall back to the list row so the header paints
+  // instantly when the user tapped through from the market table.
+  const coin = useMemo(
+    () => fetched ?? (coins ?? []).find((c) => c.id === id) ?? null,
+    [fetched, coins, id]
+  );
 
   const chartData = series ?? [];
   const first = chartData[0]?.p ?? 0;
@@ -63,15 +72,21 @@ export default function CoinDetail() {
   const up = rangeChange >= 0;
   const color = up ? '#00ff9d' : '#ff3b6b';
 
-  if (!coin && !loading) {
+  if (!coin && !loading && !coinLoading) {
     return (
       <PageTransition>
         <div className="empty">
           <span className="empty-icon">🪙</span>
           {t('coin.notFound')}
-          <div style={{ marginTop: 14 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.8 }}>
+            {t('coin.notFoundHelp')}
+          </p>
+          <div className="row" style={{ gap: 10, marginTop: 14 }}>
             <button className="btn btn-ghost" onClick={() => navigate('/')}>
               {t('common.back')}
+            </button>
+            <button className="btn btn-primary" onClick={() => window.location.reload()}>
+              {t('common.refresh')}
             </button>
           </div>
         </div>

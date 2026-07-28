@@ -19,10 +19,19 @@ import {
   fetchDexPools,
   fetchGlobal,
   fetchMarkets,
+  fetchSearch,
   fetchSimplePrices,
   fetchTrending,
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
+import { fetchNews } from './news.js';
+import {
+  addSubscription,
+  readLeaderboard,
+  removeSubscription,
+  storeDurable,
+  submitScore
+} from './store.js';
 import { aiConfigured, answerFaq, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -193,6 +202,82 @@ app.post('/api/ai/faq', async (req, res) => {
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
   }
+});
+
+/* ------------------------------- news ------------------------------------ */
+/* One upstream sweep per 24h, shared by every user.                          */
+
+app.get('/api/news', (_req, res) =>
+  // 24h TTL matches the product promise ("new headlines every day") and keeps
+  // us far inside every publisher's fair-use expectations.
+  serve(res, 24 * 3600_000)(fetchNews, 'news:v1')
+);
+
+/* ---------------------------- coin lookup -------------------------------- */
+/* The client falls back to public CoinGecko, but going through here means the
+ * key (if configured) is used and the response is cached for everyone.       */
+
+app.get('/api/search', (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 60);
+  if (q.length < 2) return res.json([]);
+  return serve(res, 300_000)(() => fetchSearch(q), `search:${q.toLowerCase()}`);
+});
+
+/* ---------------------------- leaderboard -------------------------------- */
+
+app.get('/api/leaderboard', async (_req, res) => {
+  try {
+    const rows = await readLeaderboard();
+    // `durable` tells the client whether this is a real global board or a
+    // per-instance one that a cold start will wipe. The UI labels it either
+    // way rather than implying a global ranking that isn't there.
+    res.json({ rows, durable: storeDurable(), at: Date.now() });
+  } catch (err) {
+    res.status(502).json({ error: 'LEADERBOARD_FAILED', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+app.post('/api/leaderboard', async (req, res) => {
+  const { name, points, swaps, referrals, clientId } = req.body ?? {};
+  // A verified Telegram id is preferred; an anonymous client id is accepted
+  // but recorded as unverified, because anyone can POST a score.
+  const tgId = req.tgUser?.id;
+  const id = tgId ? `tg:${tgId}` : clientId ? `anon:${String(clientId).slice(0, 40)}` : null;
+  if (!id) return res.status(400).json({ error: 'NO_IDENTITY' });
+
+  try {
+    const result = await submitScore({
+      id,
+      name: name ?? req.tgUser?.first_name,
+      points,
+      swaps,
+      referrals,
+      verified: Boolean(tgId)
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: String(err.message).slice(0, 80) });
+  }
+});
+
+/* ------------------------------- push ------------------------------------ */
+/* Storing subscriptions is useful even before a sender exists — it means the
+ * day you add one, you already have an audience. Actually SENDING requires a
+ * VAPID keypair and the `web-push` library; see docs/PUSH-FA.md.             */
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const { subscription, lang } = req.body ?? {};
+  try {
+    return res.json(await addSubscription(subscription, lang));
+  } catch (err) {
+    return res.status(400).json({ error: String(err.message).slice(0, 80) });
+  }
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body ?? {};
+  if (!endpoint) return res.status(400).json({ error: 'NO_ENDPOINT' });
+  return res.json(await removeSubscription(endpoint));
 });
 
 app.get('/api/dex/:network', (req, res) =>

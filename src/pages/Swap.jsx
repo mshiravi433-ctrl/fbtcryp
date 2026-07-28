@@ -10,6 +10,14 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { EVM_CHAINS, TOKENS, explorerTx } from '../lib/chains';
 import {
+  getTokensSync,
+  importTokenByAddress,
+  loadTokens,
+  searchTokens,
+  tokenKey
+} from '../lib/tokenLists';
+import { notifyTrade, primeAudio } from '../lib/notify';
+import {
   DEFAULT_SLIPPAGE,
   approveToken,
   estimateGasCost,
@@ -20,12 +28,28 @@ import {
   needsApproval
 } from '../lib/swap';
 import { fmtQty } from '../lib/format';
+import { IconSearch } from '../components/Icons';
+import { PAYOUT_DIRECTORY } from '../lib/payout';
 
 /**
- * Real on-chain swap screen (PancakeSwap V2).
+ * Real on-chain swap screen.
  *
- * Every transaction is signed by the user's own wallet and broadcast from it.
- * This app takes no fee, holds no funds, and has no address in the flow.
+ * Every transaction is signed by the user's own wallet and broadcast from it;
+ * we hold no funds and have no deposit address anywhere in the flow. A 0.5%
+ * platform fee is taken on-chain in the same transaction and always shown
+ * before signing.
+ *
+ * TOKEN UNIVERSE
+ * The picker is not a curated shortlist. It loads the public token lists for
+ * the active chain — thousands of tokens — with ranked search over ticker,
+ * name and contract address, exactly like PancakeSwap. Anything too new to be
+ * in a list can be imported by pasting its contract address.
+ *
+ * BALANCES
+ * We only read balances for the curated set plus whatever is currently
+ * selected. Reading four thousand ERC-20 balances on every render would
+ * hammer the RPC and freeze a cheap phone; the picker shows balances where we
+ * have them and stays silent where we don't, rather than blocking on it.
  */
 export default function Swap() {
   const { t } = useTranslation();
@@ -33,11 +57,15 @@ export default function Swap() {
   const wallet = useWallet();
 
   const chainId = wallet.chainId ?? 56;
-  const tokens = TOKENS[chainId] ?? TOKENS[56];
   const cfg = EVM_CHAINS[chainId] ?? EVM_CHAINS[56];
+  const curated = TOKENS[chainId] ?? TOKENS[56];
 
-  const [fromSym, setFromSym] = useState('BNB');
-  const [toSym, setToSym] = useState('USDT');
+  // Whole token universe for this chain: curated first, then public lists.
+  const [tokens, setTokens] = useState(() => getTokensSync(chainId));
+  const [listLoading, setListLoading] = useState(false);
+
+  const [fromToken, setFromToken] = useState(() => curated[0]);
+  const [toToken, setToToken] = useState(() => curated[1] ?? curated[0]);
   const [amount, setAmount] = useState('');
   const [slippage, setSlippage] = useState(DEFAULT_SLIPPAGE);
   const [quote, setQuote] = useState(null);
@@ -46,37 +74,130 @@ export default function Swap() {
   const [impact, setImpact] = useState(null);
   const [gasCost, setGasCost] = useState(null);
   const [picker, setPicker] = useState(null); // 'from' | 'to'
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState(null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [txState, setTxState] = useState(null); // { stage, hash, error }
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const fromToken = useMemo(() => tokens.find((x) => x.symbol === fromSym) ?? tokens[0], [tokens, fromSym]);
-  const toToken = useMemo(() => tokens.find((x) => x.symbol === toSym) ?? tokens[1], [tokens, toSym]);
+  const fromSym = fromToken?.symbol;
+  const toSym = toToken?.symbol;
+
+  /* --------------------------- token list load --------------------------- */
+
+  useEffect(() => {
+    let alive = true;
+    // Paint whatever is cached immediately, then refresh in the background.
+    setTokens(getTokensSync(chainId));
+    setListLoading(true);
+    loadTokens(chainId)
+      .then((list) => alive && setTokens(list))
+      .catch(() => {})
+      .finally(() => alive && setListLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [chainId]);
 
   // Switching chains invalidates the selected pair — a BSC token address means
   // nothing on Arbitrum, and quoting it would fail confusingly.
   useEffect(() => {
     const list = TOKENS[chainId] ?? [];
     if (!list.length) return;
-    if (!list.some((x) => x.symbol === fromSym)) setFromSym(list[0].symbol);
-    if (!list.some((x) => x.symbol === toSym)) setToSym(list[1]?.symbol ?? list[0].symbol);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setFromToken(list[0]);
+    setToToken(list[1] ?? list[0]);
+    setAmount('');
+    setQuote(null);
   }, [chainId]);
 
   const quoteSeq = useRef(0);
 
-  /* ------------------------------ balances ------------------------------ */
+  /* ------------------------------ picker ------------------------------- */
 
-  const loadBalances = useCallback(async () => {
-    if (!wallet.address) return;
+  const pickerResults = useMemo(
+    () => searchTokens(tokens, pickerQuery, 150),
+    [tokens, pickerQuery]
+  );
+
+  // A contract address that matches nothing in any list — offer to import it.
+  const importable = useMemo(() => {
+    const q = pickerQuery.trim();
+    return /^0x[a-fA-F0-9]{40}$/.test(q) && pickerResults.length === 0 ? q : null;
+  }, [pickerQuery, pickerResults]);
+
+  const choose = (tk) => {
+    const other = picker === 'from' ? toToken : fromToken;
+    if (tokenKey(tk) === tokenKey(other)) {
+      // Selecting the token already on the other side means "flip", which is
+      // what every DEX does and what the user obviously meant.
+      flip();
+    } else if (picker === 'from') {
+      setFromToken(tk);
+    } else {
+      setToToken(tk);
+    }
+    setPicker(null);
+    setPickerQuery('');
+    haptic?.('select');
+  };
+
+  const runImport = async () => {
+    if (!importable) return;
+    setImporting(true);
+    setImportError(null);
     try {
       const provider = await wallet.getReadProvider(chainId);
-      setBalances(await getBalances(provider, tokens, wallet.address));
+      const tk = await importTokenByAddress(provider, chainId, importable);
+      setTokens(getTokensSync(chainId));
+      choose(tk);
+    } catch (e) {
+      setImportError(String(e?.message || e).slice(0, 90));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  /* ------------------------------ balances ------------------------------ */
+
+  /**
+   * Read balances for the curated set plus the two selected tokens.
+   *
+   * Deliberately NOT the whole universe: four thousand `balanceOf` calls per
+   * chain switch would rate-limit the public RPC and lock up a low-end phone
+   * for seconds. Keyed by contract address, because symbols are not unique
+   * once you load public lists — there are dozens of tokens called "USDT".
+   */
+  const loadBalances = useCallback(async () => {
+    if (!wallet.address) return;
+    const wanted = [];
+    const seen = new Set();
+    for (const tk of [...curated, fromToken, toToken]) {
+      if (!tk) continue;
+      const k = tokenKey(tk);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      wanted.push(tk);
+    }
+    try {
+      const provider = await wallet.getReadProvider(chainId);
+      const byKey = {};
+      await Promise.all(
+        wanted.map(async (tk) => {
+          try {
+            const list = await getBalances(provider, [tk], wallet.address);
+            byKey[tokenKey(tk)] = list[tk.symbol];
+          } catch {
+            byKey[tokenKey(tk)] = { raw: 0n, formatted: 0 };
+          }
+        })
+      );
+      setBalances((prev) => ({ ...prev, ...byKey }));
     } catch {
       /* leave stale balances rather than blanking the UI */
     }
-  }, [wallet, chainId, tokens]);
+  }, [wallet, chainId, curated, fromToken, toToken]);
 
   useEffect(() => {
     loadBalances();
@@ -86,7 +207,7 @@ export default function Swap() {
 
   useEffect(() => {
     const n = Number(amount);
-    if (!n || n <= 0 || fromSym === toSym) {
+    if (!n || n <= 0 || !fromToken || !toToken || tokenKey(fromToken) === tokenKey(toToken)) {
       setQuote(null);
       setImpact(null);
       return undefined;
@@ -128,16 +249,16 @@ export default function Swap() {
 
   /* -------------------------------- actions ------------------------------ */
 
-  const flip = () => {
+  function flip() {
     haptic?.('select');
-    setFromSym(toSym);
-    setToSym(fromSym);
+    setFromToken(toToken);
+    setToToken(fromToken);
     setAmount('');
     setQuote(null);
-  };
+  }
 
   const setMax = () => {
-    const bal = balances[fromSym]?.formatted ?? 0;
+    const bal = balances[tokenKey(fromToken)]?.formatted ?? 0;
     // leave a little gas behind when spending the native coin
     const usable = fromToken.native ? Math.max(0, bal - 0.002) : bal;
     setAmount(String(Number(usable.toFixed(8))));
@@ -185,8 +306,20 @@ export default function Swap() {
       haptic?.('medium');
 
       const receipt = await tx.wait();
-      setTxState({ stage: receipt.status === 1 ? 'success' : 'failed', hash: tx.hash });
-      haptic?.(receipt.status === 1 ? 'success' : 'error');
+      const ok = receipt.status === 1;
+      setTxState({ stage: ok ? 'success' : 'failed', hash: tx.hash });
+
+      // Ring + vibrate the moment the trade settles. A swap can take a minute
+      // to confirm and people put the phone down — a silent success is a
+      // success they miss, and then they resubmit.
+      notifyTrade({
+        ok,
+        haptic,
+        title: t(ok ? 'notify.tradeDoneTitle' : 'notify.tradeFailTitle'),
+        body: ok
+          ? t('notify.tradeDoneBody', { amount, from: fromToken.symbol, to: toToken.symbol })
+          : t('notify.tradeFailBody')
+      });
 
       if (receipt.status === 1) {
         setAmount('');
@@ -203,14 +336,37 @@ export default function Swap() {
         : /INSUFFICIENT_OUTPUT_AMOUNT/i.test(msg) ? 'SLIPPAGE'
         : 'TX_FAILED';
       setTxState({ stage: 'error', error: code, detail: msg.slice(0, 140) });
-      haptic?.('error');
+      // A rejection in the wallet is the user's own choice — buzzing at them
+      // for it is noise. Everything else is a real failure worth signalling.
+      if (code !== 'USER_REJECTED') {
+        notifyTrade({ ok: false, haptic, title: t('notify.tradeFailTitle'), body: t(`swap.err.${code}`) });
+      } else {
+        haptic?.('warning');
+      }
     }
   };
 
-  const fromBal = balances[fromSym]?.formatted ?? 0;
+  const fromBal = balances[tokenKey(fromToken)]?.formatted ?? 0;
   const insufficient = Number(amount) > fromBal;
   const canSwap = wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
   const highImpact = impact != null && impact > 5;
+
+  /**
+   * Gas warning. The native balance has to cover the estimated gas AND, when
+   * the input token IS the native coin, the amount being swapped. Warning
+   * before the wallet does is cheaper than a reverted transaction that still
+   * burns the gas it failed on.
+   */
+  const nativeBal = wallet.nativeBalance ?? 0;
+  const gasNeeded = (gasCost ?? 0) * 1.35; // headroom for a gas-price bump
+  const spendingNative = Boolean(fromToken?.native);
+  const lowGas =
+    wallet.isConnected &&
+    gasCost != null &&
+    nativeBal < gasNeeded + (spendingNative ? Number(amount) || 0 : 0);
+
+  /** The side we are buying into, when it isn't hand-verified. */
+  const unverifiedTarget = toToken && !toToken.verified && !toToken.native ? toToken : null;
 
   /* --------------------------------- UI ---------------------------------- */
 
@@ -331,7 +487,7 @@ export default function Swap() {
         <div className="row-between" style={{ marginBottom: 6 }}>
           <span className="field-label" style={{ margin: 0 }}>{t('swap.to')}</span>
           <span className="faint mono">
-            {t('swap.balance')}: {fmtQty(balances[toSym]?.formatted ?? 0)}
+            {t('swap.balance')}: {fmtQty(balances[tokenKey(toToken)]?.formatted ?? 0)}
           </span>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -421,6 +577,22 @@ export default function Swap() {
         {highImpact && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.highImpact')}</p>}
         {insufficient && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.insufficient')}</p>}
 
+        {/* Gas is paid in the chain's own coin, from the same wallet, and it
+            is NOT covered by the platform fee. Saying which coin, per chain,
+            removes the single most common support question. */}
+        {lowGas && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {t('swap.needGas', { coin: cfg.native.symbol, chain: cfg.name })}
+          </p>
+        )}
+
+        {/* Being in a public token list is not an endorsement. */}
+        {unverifiedTarget && (
+          <p className="notice" style={{ marginTop: 10 }}>
+            {t('swap.unverifiedWarning', { symbol: unverifiedTarget.symbol })}
+          </p>
+        )}
+
         <button
           className="btn btn-primary"
           style={{ marginTop: 14 }}
@@ -434,33 +606,150 @@ export default function Swap() {
         </button>
       </motion.section>
 
-      <AdBanner slot="p2p" />
-
-      {/* ---------------------------- token picker --------------------------- */}
-      <Sheet open={Boolean(picker)} onClose={() => setPicker(null)} title={t('swap.selectToken')}>
-        <div className="stack" style={{ gap: 6 }}>
-          {tokens.map((tk) => (
-            <div
-              key={tk.symbol}
-              className="coin-row"
-              onClick={() => {
-                const other = picker === 'from' ? toSym : fromSym;
-                if (tk.symbol === other) flip();
-                else if (picker === 'from') setFromSym(tk.symbol);
-                else setToSym(tk.symbol);
-                setPicker(null);
-                haptic?.('select');
-              }}
-            >
-              <div className="coin-logo">{tk.symbol.slice(0, 3)}</div>
-              <div className="coin-meta">
-                <div className="coin-sym">{tk.symbol}</div>
-                <div className="coin-name">{tk.name}</div>
-              </div>
-              <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(balances[tk.symbol]?.formatted ?? 0)}</span>
+      {/* ------------------------- gas / networks card ----------------------- */}
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginTop: 0 }}>{t('swap.gasTitle')}</p>
+        <p className="muted" style={{ fontSize: 12, lineHeight: 1.85, marginTop: 0 }}>
+          {t('swap.gasBody')}
+        </p>
+        <div className="stack" style={{ gap: 5, marginTop: 8 }}>
+          {PAYOUT_DIRECTORY.map((row) => (
+            <div className="row-between" key={row.id}>
+              <span className="row" style={{ gap: 7 }}>
+                <span
+                  style={{ width: 7, height: 7, borderRadius: '50%', background: row.color, display: 'inline-block' }}
+                />
+                <span style={{ fontSize: 12 }}>{row.label}</span>
+              </span>
+              <span className="mono faint" style={{ fontSize: 11 }}>{row.gas}</span>
             </div>
           ))}
         </div>
+        <p className="faint" style={{ marginTop: 9, lineHeight: 1.8 }}>{t('swap.gasNote')}</p>
+      </motion.section>
+
+      <AdBanner slot="p2p" />
+
+      {/* ---------------------------- token picker --------------------------- */}
+      <Sheet
+        open={Boolean(picker)}
+        onClose={() => {
+          setPicker(null);
+          setPickerQuery('');
+          setImportError(null);
+        }}
+        title={t('swap.selectToken')}
+      >
+        {/* Search over the whole list: ticker, name, or a pasted contract. */}
+        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+          <span className="icon-btn" style={{ pointerEvents: 'none' }}>
+            <IconSearch width={16} height={16} />
+          </span>
+          <input
+            type="text"
+            value={pickerQuery}
+            autoFocus
+            onChange={(e) => {
+              setPickerQuery(e.target.value);
+              setImportError(null);
+            }}
+            placeholder={t('swap.searchToken')}
+            style={{ flex: 1 }}
+          />
+        </div>
+
+        {/* Common pairs, so the frequent case stays one tap. */}
+        {!pickerQuery && (
+          <div className="tag-scroll" style={{ marginBottom: 10 }}>
+            {curated.slice(0, 6).map((tk) => (
+              <button key={tokenKey(tk)} className="tag" onClick={() => choose(tk)}>
+                {tk.symbol}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="row-between" style={{ marginBottom: 8 }}>
+          <span className="faint">
+            {t('swap.tokensAvailable', { n: tokens.length.toLocaleString() })}
+          </span>
+          {listLoading && <span className="faint">{t('swap.loadingList')}</span>}
+        </div>
+
+        {/* Virtualisation would be overkill: the result set is capped at 150,
+            which scrolls smoothly even on a slow device. */}
+        <div className="stack" style={{ gap: 6, maxHeight: '48dvh', overflowY: 'auto' }}>
+          {pickerResults.map((tk) => {
+            const bal = balances[tokenKey(tk)]?.formatted;
+            return (
+              <button
+                key={tokenKey(tk)}
+                className="coin-row"
+                style={{ width: '100%', textAlign: 'start' }}
+                onClick={() => choose(tk)}
+              >
+                <div className="coin-logo">
+                  {tk.logoURI ? (
+                    <img src={tk.logoURI} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  ) : (
+                    tk.symbol.slice(0, 3)
+                  )}
+                </div>
+                <div className="coin-meta" style={{ minWidth: 0 }}>
+                  <div className="coin-sym" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>{tk.symbol}</span>
+                    {tk.verified && (
+                      <span className="pill pill-up" style={{ fontSize: 9, padding: '1px 6px' }}>
+                        {t('swap.verified')}
+                      </span>
+                    )}
+                    {tk.imported && (
+                      <span className="pill" style={{ fontSize: 9, padding: '1px 6px' }}>
+                        {t('swap.imported')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="coin-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {tk.name}
+                    {/* Show the contract for anything we did not hand-verify —
+                        a familiar ticker is exactly how clones get bought. */}
+                    {!tk.verified && !tk.native && tk.address && (
+                      <span className="mono faint" style={{ marginInlineStart: 6, fontSize: 9.5 }}>
+                        {tk.address.slice(0, 6)}…{tk.address.slice(-4)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {bal != null && bal > 0 && (
+                  <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(bal)}</span>
+                )}
+              </button>
+            );
+          })}
+
+          {!pickerResults.length && !importable && (
+            <div className="empty" style={{ padding: '18px 0' }}>
+              {listLoading ? t('swap.loadingList') : t('swap.noTokenResults')}
+            </div>
+          )}
+        </div>
+
+        {/* Import by contract address — the escape hatch for tokens that
+            launched an hour ago and are in no public list yet. */}
+        {importable && (
+          <div className="card card-tight" style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 12.5 }}>{t('swap.importTitle')}</div>
+            <p className="muted" style={{ fontSize: 11.5, margin: '5px 0 9px', lineHeight: 1.75 }}>
+              {t('swap.importBody')}
+            </p>
+            <span className="mono faint" style={{ fontSize: 10, wordBreak: 'break-all' }}>{importable}</span>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 9 }} onClick={runImport} disabled={importing}>
+              {importing ? t('swap.importing') : t('swap.importAction')}
+            </button>
+            {importError && <p className="notice notice-danger" style={{ marginTop: 8 }}>{importError}</p>}
+          </div>
+        )}
+
         <p className="notice" style={{ marginTop: 12 }}>{t('swap.verifyContracts')}</p>
       </Sheet>
 
@@ -538,7 +827,18 @@ export default function Swap() {
 
             <div className="row" style={{ gap: 10, marginTop: 12 }}>
               <button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button>
-              <button className="btn btn-primary" onClick={runSwap}>{t('swap.confirmSwap')}</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  // Browsers only unlock audio inside a user gesture; do it
+                  // here so the chime can actually play a minute later when
+                  // the transaction settles.
+                  primeAudio();
+                  runSwap();
+                }}
+              >
+                {t('swap.confirmSwap')}
+              </button>
             </div>
           </>
         )}

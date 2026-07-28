@@ -1,0 +1,60 @@
+{
+  "nav": {
+    "market": "Pasar",
+    "swap": "Tukar",
+    "wallet": "Dompet",
+    "signals": "Sinyal",
+    "news": "Berita",
+    "more": "Lainnya",
+    "settings": "Pengaturan",
+    "help": "Bantuan",
+    "about": "Tentang"
+  },
+  "common": {
+    "back": "Kembali",
+    "cancel": "Batal",
+    "confirm": "Konfirmasi",
+    "done": "Selesai",
+    "loading": "Memuat…",
+    "refresh": "Segarkan",
+    "language": "Bahasa",
+    "notAdvice": "Data pasar hanya bersifat informatif dan bukan nasihat keuangan. Kripto sangat fluktuatif — Anda bisa kehilangan semuanya."
+  },
+  "welcome": {
+    "title": "Pilih bahasa Anda",
+    "subtitle": "Anda dapat mengubahnya kapan saja di Pengaturan.",
+    "continue": "Lanjutkan",
+    "partial": "Layar utama sudah diterjemahkan; teks yang lebih teknis masih dalam bahasa Inggris.",
+    "full": "Terjemahan lengkap"
+  },
+  "onboarding": {
+    "next": "Lanjut",
+    "skip": "Lewati",
+    "start": "Mulai"
+  },
+  "guide": {
+    "next": "Berikutnya",
+    "back": "Sebelumnya",
+    "done": "Saya sudah membaca semua panduan",
+    "language": "Bahasa panduan"
+  },
+  "swap": {
+    "title": "Tukar",
+    "searchToken": "Cari nama, simbol, atau tempel alamat kontrak…",
+    "gasBody": "Gas selalu dibayar dengan koin asli jaringan dari dompet yang sama — bukan hanya BNB.",
+    "nonCustodialNotice": "Non-kustodial: setiap transaksi ditandatangani dan dikirim oleh dompet Anda sendiri. Kami tidak menyimpan dana Anda.",
+    "verifyContracts": "Ada di daftar bukan berarti kami merekomendasikan. Verifikasi alamat kontrak di situs resmi sebelum menukar.",
+    "review": "Tinjau",
+    "confirmSwap": "Konfirmasi tukar"
+  },
+  "wallet": {
+    "connect": "Hubungkan dompet"
+  },
+  "news": {
+    "title": "Berita kripto",
+    "subtitle": "Diperbarui setiap 24 jam"
+  },
+  "predict": {
+    "riskNotice": "Layar ini hanya berjalan dengan kredit virtual; dana nyata tidak dapat dihubungkan. Taruhan arah harga jangka pendek dengan uang nyata dilarang oleh hukum Iran dan juga bagi ritel di Inggris dan UE."
+  }
+}

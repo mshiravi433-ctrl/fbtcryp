@@ -1,0 +1,60 @@
+{
+  "nav": {
+    "market": "Mercado",
+    "swap": "Trocar",
+    "wallet": "Carteira",
+    "signals": "Sinais",
+    "news": "Notícias",
+    "more": "Mais",
+    "settings": "Definições",
+    "help": "Ajuda",
+    "about": "Sobre"
+  },
+  "common": {
+    "back": "Voltar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "done": "Concluído",
+    "loading": "A carregar…",
+    "refresh": "Atualizar",
+    "language": "Idioma",
+    "notAdvice": "Os dados de mercado são apenas informativos e não constituem aconselhamento financeiro. As criptomoedas são voláteis: pode perder tudo."
+  },
+  "welcome": {
+    "title": "Escolha o seu idioma",
+    "subtitle": "Pode alterar isto a qualquer momento nas Definições.",
+    "continue": "Continuar",
+    "partial": "Os ecrãs principais estão traduzidos; o texto mais especializado ainda aparece em inglês.",
+    "full": "Tradução completa"
+  },
+  "onboarding": {
+    "next": "Continuar",
+    "skip": "Ignorar",
+    "start": "Começar"
+  },
+  "guide": {
+    "next": "Seguinte",
+    "back": "Anterior",
+    "done": "Li todas as instruções",
+    "language": "Idioma do guia"
+  },
+  "swap": {
+    "title": "Trocar",
+    "searchToken": "Pesquise nome, símbolo ou cole um endereço…",
+    "gasBody": "O gás é sempre pago na moeda nativa da rede, a partir da mesma carteira — não é só BNB.",
+    "nonCustodialNotice": "Não custodial: cada transação é assinada e enviada pela sua própria carteira. Não guardamos os seus fundos.",
+    "verifyContracts": "Estar numa lista não é um aval. Verifique o endereço do contrato no site oficial antes de trocar.",
+    "review": "Rever",
+    "confirmSwap": "Confirmar troca"
+  },
+  "wallet": {
+    "connect": "Ligar carteira"
+  },
+  "news": {
+    "title": "Notícias cripto",
+    "subtitle": "Atualizado a cada 24 horas"
+  },
+  "predict": {
+    "riskNotice": "Este ecrã funciona apenas com crédito virtual; não é possível ligar fundos reais. As apostas de curto prazo na direção do preço com dinheiro real são proibidas pela lei iraniana e também a retalho no Reino Unido e na UE."
+  }
+}

@@ -17,10 +17,27 @@ import {
   verifyBiometric,
   verifyTotp
 } from '../lib/security';
-import { applyDirection } from '../i18n';
+import { langMeta } from '../i18n/languages';
+import LanguagePicker from '../components/LanguagePicker';
 import {
+  getNotifySettings,
+  notificationPermission,
+  notificationsSupported,
+  playSound,
+  primeAudio,
+  pushConfigured,
+  registerPush,
+  requestNotificationPermission,
+  setNotifySettings,
+  vibrate
+} from '../lib/notify';
+import {
+  IconBell,
   IconChevronRight,
   IconFingerprint,
+  IconNews,
+  IconVibrate,
+  IconVolume,
   IconGlobe,
   IconInfo,
   IconTelegram,
@@ -89,10 +106,25 @@ export default function Settings() {
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioErr, setBioErr] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+
+  // Notification prefs live outside the zustand store on purpose: lib/notify
+  // is also called from a service worker context and from module scope before
+  // React mounts, so localStorage is the only shared surface both can use.
+  const [notif, setNotif] = useState(() => getNotifySettings());
+  const [perm, setPerm] = useState(() => notificationPermission());
 
   useEffect(() => {
     platformAuthenticatorAvailable().then(setBioAvailable);
   }, []);
+
+  const patchNotif = (patch) => setNotif(setNotifySettings(patch));
+
+  const askPermission = async () => {
+    const result = await requestNotificationPermission();
+    setPerm(result);
+    if (result === 'granted' && pushConfigured()) await registerPush();
+  };
 
   /* ------------------------------ handlers ------------------------------ */
 
@@ -196,29 +228,96 @@ export default function Settings() {
             sub={wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
             onClick={() => navigate('/wallet')}
           />
+          {/* Twelve languages no longer fit in an inline three-button strip,
+              so this opens the same picker the welcome screen uses. */}
           <Row
             icon={IconGlobe}
             label={t('settings.language')}
-            sub={{ fa: 'فارسی', en: 'English', ar: 'العربية' }[i18n.language] ?? i18n.language}
+            sub={`${langMeta(i18n.language).flag} ${langMeta(i18n.language).endonym}`}
+            onClick={() => setLangOpen(true)}
+          />
+        </div>
+      </motion.section>
+
+      {/* ---------------- notifications & feedback ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('notify.title')}</p>
+        <div className="set-group">
+          {/* Sound. Tapping the row plays the chime, because a toggle whose
+              effect you only discover during a real trade is untestable. */}
+          <Row
+            icon={IconVolume}
+            label={t('notify.sound')}
+            sub={t('notify.soundSub')}
             right={
-              <div className="lang-switch">
-                {['fa', 'en', 'ar'].map((lng) => (
-                  <button
-                    key={lng}
-                    className={`lang-btn ${i18n.language === lng ? 'active' : ''}`}
-                    onClick={() => {
-                      i18n.changeLanguage(lng);
-                      applyDirection(lng);
-                    }}
-                    style={{ isolation: 'isolate' }}
-                  >
-                    {i18n.language === lng && <motion.span layoutId="set-lang" className="lang-pill" />}
-                    {lng}
-                  </button>
-                ))}
-              </div>
+              <Switch
+                on={notif.sound}
+                onChange={() => {
+                  const next = !notif.sound;
+                  patchNotif({ sound: next });
+                  if (next) {
+                    primeAudio();
+                    setTimeout(() => playSound('success'), 60);
+                  }
+                }}
+              />
             }
           />
+          <Row
+            icon={IconVibrate}
+            label={t('notify.vibrate')}
+            sub={t('notify.vibrateSub')}
+            right={
+              <Switch
+                on={notif.vibrate}
+                onChange={() => {
+                  const next = !notif.vibrate;
+                  patchNotif({ vibrate: next });
+                  if (next) vibrate([40, 60, 40], haptic);
+                }}
+              />
+            }
+          />
+          <Row
+            icon={IconBell}
+            label={t('notify.tradeAlerts')}
+            sub={t('notify.tradeAlertsSub')}
+            right={<Switch on={notif.tradeAlerts} onChange={() => patchNotif({ tradeAlerts: !notif.tradeAlerts })} />}
+          />
+          <Row
+            icon={IconBell}
+            label={t('notify.daily')}
+            sub={t('notify.dailySub')}
+            right={<Switch on={notif.dailyPromo} onChange={() => patchNotif({ dailyPromo: !notif.dailyPromo })} />}
+          />
+          <Row
+            icon={IconNews}
+            label={t('notify.news')}
+            sub={t('notify.newsSub')}
+            right={<Switch on={notif.news} onChange={() => patchNotif({ news: !notif.news })} />}
+          />
+
+          {/* Permission state, described exactly as it is. */}
+          {!notificationsSupported() ? (
+            <Row icon={IconInfo} label={t('notify.permission')} sub={t('notify.unsupported')} />
+          ) : perm === 'granted' ? (
+            <Row
+              icon={IconInfo}
+              label={t('notify.permission')}
+              sub={pushConfigured() ? t('notify.pushOn') : t('notify.pushLocal')}
+              right={<span className="pill pill-up">{t('notify.permissionGranted')}</span>}
+            />
+          ) : perm === 'denied' ? (
+            <Row icon={IconInfo} label={t('notify.permission')} sub={t('notify.permissionDenied')} />
+          ) : (
+            <Row
+              icon={IconBell}
+              label={t('notify.permission')}
+              sub={t('notify.dailySub')}
+              onClick={askPermission}
+              right={<span className="pill pill-rgb">{t('notify.permissionAsk')}</span>}
+            />
+          )}
         </div>
       </motion.section>
 
@@ -471,7 +570,7 @@ export default function Settings() {
         </div>
       </motion.section>
 
-      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FBT iran · v1.0.0</p>
+      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>{t('about.companyFull')} · v1.0.0</p>
 
       {/* ---------------- custom RPC ---------------- */}
       <Sheet open={rpcSheet} onClose={() => setRpcSheet(false)} title={t('settings.customRpc')}>
@@ -587,6 +686,11 @@ export default function Settings() {
             </button>
           </>
         )}
+      </Sheet>
+      <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('common.language')}>
+        <div style={{ maxHeight: '60dvh', overflowY: 'auto' }}>
+          <LanguagePicker onPick={() => setLangOpen(false)} />
+        </div>
       </Sheet>
     </PageTransition>
   );

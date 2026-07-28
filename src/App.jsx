@@ -1,16 +1,21 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { TelegramProvider } from './context/TelegramContext';
 import { WalletProvider } from './context/WalletContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Toasts from './components/Toasts';
+import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { GAMES_ENABLED } from './lib/features';
+import { languageIsUnset } from './i18n';
+import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
+import { newsIsStale, getNews } from './lib/news';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -40,6 +45,7 @@ const Ecosystem = lazy(() => import('./pages/Ecosystem'));
 const Business = lazy(() => import('./pages/Business'));
 const P2P = lazy(() => import('./pages/P2P'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const News = lazy(() => import('./pages/News'));
 
 function Loader() {
   return (
@@ -80,6 +86,7 @@ function AnimatedRoutes() {
           <Route path="/business" element={<Business />} />
           <Route path="/p2p" element={<P2P />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/news" element={<News />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>
@@ -88,16 +95,40 @@ function AnimatedRoutes() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const onboarded = useSettingsStore((s) => s.onboarded);
   // Subscribed rather than read once, so "replay guide" from Help re-opens it
   // immediately instead of only after a restart.
   const guideReadAt = useSettingsStore((s) => s.guideReadAt);
 
+  // Welcome (language) comes before onboarding, and only for someone who has
+  // never picked a language. Returning users never see it again.
+  const [showWelcome, setShowWelcome] = useState(() => !onboarded && languageIsUnset());
   const [showOnb, setShowOnb] = useState(!onboarded);
 
   useEffect(() => {
     initTheme();
+    initServiceWorker();
   }, []);
+
+  // Background housekeeping, once per app open:
+  //   • refresh the news cache when it is older than 24h
+  //   • fire at most one promotional notification per 24h (the cap lives in
+  //     lib/notify, not here, so every caller inherits it)
+  // Both are deliberately fire-and-forget: neither may delay first paint, and
+  // a failure in either must never surface as an error to the user.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (newsIsStale()) getNews({ force: true }).catch(() => {});
+      maybeSendDailyPromo((key) => ({
+        title: t(`notify.${key}.title`),
+        body: t(`notify.${key}.body`)
+      }));
+    }, 2500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  void pickPromoKey;
 
   // First-launch order: onboarding → four-part guide → the app.
   // The guide is a hard gate: nothing else mounts until it is acknowledged,
@@ -106,7 +137,9 @@ export default function App() {
   const showGuide = !showOnb && !guideReadAt;
 
   let screen;
-  if (showOnb) {
+  if (showWelcome) {
+    screen = <Welcome onDone={() => setShowWelcome(false)} />;
+  } else if (showOnb) {
     screen = <Onboarding onDone={() => setShowOnb(false)} />;
   } else if (showGuide) {
     screen = <Guide />;
