@@ -97,14 +97,22 @@ fi
 # which variant ran.
 mkdir -p out
 cp "$SRC" "out/$OUT"
-cp "$SRC" "out/app-debug.apk"   # stable name for the release asset
 
-# The checked-in workflow uploads a hardcoded path:
+# NOTE: a SIGNED build is deliberately NOT copied to "out/app-debug.apk".
+# It used to be, as a "stable name", which meant a correctly signed release
+# appeared on the releases page labelled debug — so you could not tell by
+# looking whether signing had actually worked, which is the one thing you need
+# to know before uploading to Play. The name now always reflects the variant:
+# app-release.apk when signed, app-debug.apk when not.
+
+# Compatibility shim for the OLD workflow, which uploads a hardcoded path:
 #   android/app/build/outputs/apk/debug/app-debug.apk
-# A RELEASE build never writes there, so a signed run would upload nothing.
-# GitHub blocks agent tokens from editing .github/workflows/, so rather than
-# require a manual workflow edit, the script guarantees that path always holds
-# the freshest artefact.
+# A RELEASE build never writes there, so under the old workflow a signed run
+# would upload nothing at all. Keeping this copy means an un-updated workflow
+# still publishes something rather than failing silently.
+#
+# Once ci/WORKFLOW-FIXED.yml is in place this shim is redundant, because that
+# workflow collects out/*.apk and out/*.aab directly.
 STABLE_DIR="android/app/build/outputs/apk/debug"
 mkdir -p "$STABLE_DIR"
 if [ "$SRC" != "$STABLE_DIR/app-debug.apk" ]; then
