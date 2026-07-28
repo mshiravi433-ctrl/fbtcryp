@@ -5,6 +5,27 @@
 # copy-paste.
 set -euo pipefail
 
+# ---------------------------------------------------------------------------
+# Toolchain preflight.
+#
+# AGP 8.7 requires JDK 17 or newer and Gradle 8.9+. The checked-in workflow
+# pins JDK 17, which is correct for Capacitor 6 — but a build that fails
+# thirty lines into Gradle with a cryptic class-version error costs far more
+# time than a clear message here does.
+# ---------------------------------------------------------------------------
+if command -v java >/dev/null 2>&1; then
+  JAVA_MAJOR="$(java -version 2>&1 | head -1 | sed -E 's/.*"([0-9]+).*/\1/')"
+  echo "▸ java ${JAVA_MAJOR}"
+  if [ "${JAVA_MAJOR:-0}" -lt 17 ]; then
+    echo "✗ AGP 8.7 needs JDK 17+. Found ${JAVA_MAJOR}."
+    echo "  Set java-version: 17 in the setup-java step of your workflow."
+    exit 1
+  fi
+else
+  echo "✗ No JDK found. Add actions/setup-java (temurin, 17) to the workflow."
+  exit 1
+fi
+
 echo "▸ installing dependencies"
 npm ci
 
