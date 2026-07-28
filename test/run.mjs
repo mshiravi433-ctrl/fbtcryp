@@ -58,6 +58,21 @@ console.error = (...a) => {
   realError(...a);
 };
 
+/* --------------------------- 0. static checks --------------------------- */
+// Cheapest and catches a whole bug class Vite does not: identifiers used but
+// never imported build fine and crash at runtime.
+report('static source checks', (await import('./static-checks.mjs')).default);
+
+/* --------------------------- 0b. token registry ------------------------- */
+console.log('\n▸ building token-registry suite…');
+npx(['vite', 'build', '-c', 'test/vite.tokens.mjs', '--logLevel', 'error']);
+report('token registry', await (await import('./.out/tokens/token-list.js')).run());
+
+/* ----------------------------- 0c. faq + gas ---------------------------- */
+console.log('\n▸ building faq/gas suite…');
+npx(['vite', 'build', '-c', 'test/vite.faqgas.mjs', '--logLevel', 'error']);
+report('local FAQ + gas readiness', await (await import('./.out/faqgas/faq-gas.js')).run());
+
 /* ------------------------------- 1. boot -------------------------------- */
 console.log('▸ building app as a classic script for jsdom…');
 npx(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);

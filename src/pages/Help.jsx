@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, askFaq } from '../lib/aiClient';
+import { findLocalAnswer } from '../lib/localFaq';
 import { IconChevronLeft, IconChevronRight, IconDoc, IconInfo, IconLock, IconShield } from '../components/Icons';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -37,6 +38,16 @@ export default function Help() {
     else window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  /**
+   * Answering order: AI when it is configured, otherwise our own curated
+   * answers, and only then an apology.
+   *
+   * The local layer exists because AI needs a deployed backend or a build-time
+   * key, and until one of those exists this box was dead for every user. The
+   * questions people actually ask an exchange are a small, stable set — fees,
+   * gas, why a swap failed, is my money safe — and those answers are better
+   * hand-written than generated anyway.
+   */
   const ask = async (q) => {
     const text = String(q ?? question).trim();
     if (!text || busy) return;
@@ -46,11 +57,24 @@ export default function Help() {
     setBusy(true);
     haptic?.('light');
 
+    const localHit = findLocalAnswer(text);
+
     try {
-      const res = await askFaq(text, i18n.language);
-      setThread((prev) => [...prev, { role: 'ai', text: res.answer }]);
+      if (ai.enabled) {
+        const res = await askFaq(text, i18n.language);
+        setThread((prev) => [...prev, { role: 'ai', text: res.answer }]);
+      } else if (localHit) {
+        // Small delay so the answer doesn't appear before the question has
+        // finished animating in — instant feels like a canned error.
+        await new Promise((r) => setTimeout(r, 260));
+        setThread((prev) => [...prev, { role: 'ai', text: t(localHit.key), local: true }]);
+      } else {
+        setThread((prev) => [...prev, { role: 'error', text: t('help.noAnswer') }]);
+      }
     } catch {
-      setThread((prev) => [...prev, { role: 'error', text: t('help.aiFailed') }]);
+      // AI was configured but the call failed — fall back rather than give up.
+      if (localHit) setThread((prev) => [...prev, { role: 'ai', text: t(localHit.key), local: true }]);
+      else setThread((prev) => [...prev, { role: 'error', text: t('help.aiFailed') }]);
     } finally {
       setBusy(false);
     }
@@ -90,12 +114,13 @@ export default function Help() {
           <motion.span animate={{ scale: [1, 1.18, 1] }} transition={{ duration: 2.4, repeat: Infinity }}>✦</motion.span>
           <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.askAi')}</span>
         </div>
-        <p className="faint" style={{ marginBottom: 11 }}>{t('help.askAiSub')}</p>
+        <p className="faint" style={{ marginBottom: 11 }}>
+          {ai.enabled ? t('help.askAiSub') : t('help.askLocalSub')}
+        </p>
 
-        {!ai.enabled ? (
-          <p className="notice notice-danger">{t('help.aiOffline')}</p>
-        ) : (
-          <>
+        {/* No longer gated on ai.enabled: with the local answer engine the
+            box works for everyone, and gets smarter when AI is configured. */}
+        <>
             {thread.length === 0 && (
               <div className="stack" style={{ gap: 6, marginBottom: 11 }}>
                 {QUICK.map((k, i) => (

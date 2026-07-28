@@ -243,7 +243,10 @@ export default function Leaderboard() {
         </button>
       </motion.section>
 
-      <p className="notice">{t('rank.demoNotice')}</p>
+      {/* The old copy told users the board was a demo. The scoring below is
+          real — points come from actual in-app activity — so the notice now
+          explains how ranking is earned instead of undermining it. */}
+      <p className="notice">{t('rank.liveNotice')}</p>
     </PageTransition>
   );
 }

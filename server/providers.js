@@ -137,6 +137,42 @@ export async function fetchTrending() {
   }));
 }
 
+/** Search the whole CoinGecko universe, not just the loaded markets page. */
+export async function fetchSearch(query) {
+  const raw = await req(cgUrl('/search', { query }));
+  return (raw.coins || []).slice(0, 30).map((c) => ({
+    id: c.id,
+    symbol: (c.symbol || '').toUpperCase(),
+    name: c.name,
+    image: c.thumb ?? c.large ?? null,
+    rank: c.market_cap_rank ?? 0
+  }));
+}
+
+/**
+ * Crypto news.
+ *
+ * CryptoCompare's news endpoint is public, needs no key, returns a usable
+ * summary and image per item, and supports language selection. That keeps the
+ * feature free — AI cost scales with users while swap-fee revenue scales with
+ * volume, and the two are not correlated.
+ */
+export async function fetchNews({ limit = 30 } = {}) {
+  const raw = await req('https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=latest');
+  const items = Array.isArray(raw?.Data) ? raw.Data : [];
+  return items.slice(0, limit).map((n) => ({
+    id: String(n.id ?? n.guid ?? n.url),
+    title: String(n.title ?? '').slice(0, 240),
+    body: String(n.body ?? '').slice(0, 600),
+    url: n.url,
+    source: n.source_info?.name ?? n.source ?? '',
+    image: n.imageurl || null,
+    // CryptoCompare returns seconds; the UI works in milliseconds.
+    publishedAt: Number(n.published_on ?? 0) * 1000,
+    categories: String(n.categories ?? '').split('|').filter(Boolean).slice(0, 4)
+  }));
+}
+
 export async function fetchChart(id, days = 1, vs = 'usd') {
   const raw = await req(cgUrl(`/coins/${encodeURIComponent(id)}/market_chart`, { vs_currency: vs, days: String(days) }));
   return (raw.prices || []).map(([t, p]) => ({ t, p }));

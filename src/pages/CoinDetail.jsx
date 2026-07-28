@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
@@ -47,14 +47,21 @@ export default function CoinDetail() {
   const { haptic } = useTelegram();
   const [range, setRange] = useState(RANGES[1]);
 
+  // Fetch the coin directly. Previously this filtered the 60-row markets list,
+  // so anything outside the top 60 — trending coins, search results, saved
+  // favourites — showed "coin not found" while the API knew it fine.
   const { data: coins } = useMarkets(60);
+  const { data: fetched, loading: coinLoading } = useCoin(id);
   const { data: series, loading } = useChart(id, range.days);
 
   const favorites = useAppStore((s) => s.favorites);
   const toggleFavorite = useAppStore((s) => s.toggleFavorite);
   const isFav = favorites.includes(id);
 
-  const coin = useMemo(() => (coins ?? []).find((c) => c.id === id), [coins, id]);
+  // The markets row renders instantly when we already have it; the direct
+  // fetch then fills in the richer fields (description, categories, homepage).
+  const listed = useMemo(() => (coins ?? []).find((c) => c.id === id), [coins, id]);
+  const coin = fetched ?? listed;
 
   const chartData = series ?? [];
   const first = chartData[0]?.p ?? 0;
@@ -63,14 +70,20 @@ export default function CoinDetail() {
   const up = rangeChange >= 0;
   const color = up ? '#00ff9d' : '#ff3b6b';
 
-  if (!coin && !loading) {
+  if (!coin && !loading && !coinLoading) {
     return (
       <PageTransition>
         <div className="empty">
           <span className="empty-icon">🪙</span>
-          {t('coin.notFound')}
-          <div style={{ marginTop: 14 }}>
-            <button className="btn btn-ghost" onClick={() => navigate('/')}>
+          {t('coin.loadFailed')}
+          <div className="faint" style={{ marginTop: 6, maxWidth: 280, lineHeight: 1.7 }}>
+            {t('coin.loadFailedHint')}
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 14 }}>
+            <button className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>
+              {t('common.retry')}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
               {t('common.back')}
             </button>
           </div>

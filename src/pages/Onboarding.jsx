@@ -6,13 +6,15 @@ import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import Sheet from '../components/Sheet';
+import LanguagePicker from '../components/LanguagePicker';
 import {
   IconChevronRight,
   IconShield,
   IconSwap,
   IconTrend,
   IconWallet,
-  IconCheck
+  IconCheck,
+  IconGlobe
 } from '../components/Icons';
 
 /**
@@ -30,7 +32,9 @@ const SLIDES = [
   { key: 'custody', Icon: IconShield, hues: ['#00ff9d', '#00e5ff'] }
 ];
 
-const TOTAL = SLIDES.length + 2; // + wallet + terms
+// Language first: everything that follows is text, and asking someone to read
+// a welcome screen in a language they don't speak is a strange first impression.
+const TOTAL = SLIDES.length + 3; // language + slides + wallet + terms
 
 function Art({ Icon, hues, index }) {
   return (
@@ -96,10 +100,11 @@ export default function Onboarding({ onDone }) {
   const [agreed, setAgreed] = useState(false);
   const [legalDoc, setLegalDoc] = useState(null);
 
-  const isSlide = index < SLIDES.length;
-  const isWallet = index === SLIDES.length;
-  const isTerms = index === SLIDES.length + 1;
-  const slide = SLIDES[index];
+  const isLang = index === 0;
+  const isSlide = index > 0 && index <= SLIDES.length;
+  const isWallet = index === SLIDES.length + 1;
+  const isTerms = index === SLIDES.length + 2;
+  const slide = isSlide ? SLIDES[index - 1] : null;
 
   const finish = () => {
     acceptTerms();
@@ -134,7 +139,7 @@ export default function Onboarding({ onDone }) {
         )}
         {isSlide && (
           <button
-            onClick={() => setIndex(SLIDES.length)}
+            onClick={() => setIndex(SLIDES.length + 1)}
             style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: 8 }}
           >
             {t('onboarding.skip')}
@@ -151,8 +156,27 @@ export default function Onboarding({ onDone }) {
           exit={{ opacity: 0, x: -40 }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         >
+          {/* ---------------- language ---------------- */}
+          {isLang && (
+            <div style={{ padding: '6px 22px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <Art Icon={IconGlobe} hues={['#00e5ff', '#ffb300']} index={index} />
+              <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
+                {t('lang.title')}
+              </h1>
+              <p className="muted" style={{ textAlign: 'center', fontSize: 13, lineHeight: 1.75 }}>
+                {t('lang.subtitle')}
+              </p>
+              <div style={{ overflowY: 'auto', minHeight: 0, paddingBottom: 6 }}>
+                <LanguagePicker />
+              </div>
+              <p className="faint" style={{ textAlign: 'center', marginTop: 8, lineHeight: 1.7 }}>
+                {t('lang.changeLater')}
+              </p>
+            </div>
+          )}
+
           {/* ---------------- feature slides ---------------- */}
-          {isSlide && (
+          {isSlide && slide && (
             <>
               <Art Icon={slide.Icon} hues={slide.hues} index={index} />
               <div style={{ padding: '0 26px', textAlign: 'center' }}>

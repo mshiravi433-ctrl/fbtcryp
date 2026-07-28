@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useTelegram } from '../context/TelegramContext';
+import LanguagePicker from '../components/LanguagePicker';
+import Sheet from '../components/Sheet';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { FEE_BPS } from '../lib/chains';
 import {
@@ -13,7 +15,8 @@ import {
   IconChevronRight,
   IconChevronLeft,
   IconInfo,
-  IconLock
+  IconLock,
+  IconGlobe
 } from '../components/Icons';
 
 /**
@@ -104,6 +107,8 @@ export default function Guide({ onDone }) {
   const markGuideRead = useSettingsStore((s) => s.markGuideRead);
 
   const [index, setIndex] = useState(0);
+  const [langOpen, setLangOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   // Every section must actually be opened before the finish button unlocks —
   // otherwise "I read the guide" is a lie the user tells themselves in one tap.
   const [seen, setSeen] = useState(() => new Set([0]));
@@ -138,15 +143,26 @@ export default function Guide({ onDone }) {
     setSeen((prev) => new Set(prev).add(next));
   };
 
+  // AnimatePresence needs the import; kept next to its only other use.
+
   const finish = () => {
     if (!allSeen) return;
     haptic?.('success');
-    markGuideRead();
-    onDone?.();
+    // Play the exit animation before unmounting; flipping the store first
+    // makes App swap the tree instantly and the guide just blinks away.
+    setLeaving(true);
+    setTimeout(() => {
+      markGuideRead();
+      onDone?.();
+    }, 420);
   };
 
   return (
-    <div className="guide-stage">
+    <motion.div
+      className="guide-stage"
+      animate={leaving ? { opacity: 0, scale: 0.96, filter: 'blur(6px)' } : { opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+    >
       {/* ------------------------------ header ------------------------------ */}
       <div className="guide-head">
         <div className="guide-head-top">
@@ -154,16 +170,26 @@ export default function Guide({ onDone }) {
             <div className="guide-kicker mono">{t('guide.step', { n: i18n.language === 'fa' ? toFa(index + 1) : index + 1 })}</div>
             <h1 className="guide-title">{t('guide.title')}</h1>
           </div>
-          <motion.div
-            className="guide-badge"
-            style={{ background: `linear-gradient(140deg, ${section.hues[0]}, ${section.hues[1]})` }}
-            key={section.key}
-            initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
-            animate={{ scale: 1, rotate: 0, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-          >
-            <section.Icon width={22} height={22} />
-          </motion.div>
+          <div className="row" style={{ gap: 8 }}>
+            {/* Language is offered here as well as on welcome: someone who
+                realises mid-guide that they'd rather read it in another
+                language shouldn't have to reinstall to change it. */}
+            <button className="guide-lang-btn" onClick={() => setLangOpen(true)} aria-label={t('lang.title')}>
+              <IconGlobe width={15} height={15} />
+              <span>{(i18n.language || 'fa').toUpperCase()}</span>
+            </button>
+
+            <motion.div
+              className="guide-badge"
+              style={{ background: `linear-gradient(140deg, ${section.hues[0]}, ${section.hues[1]})` }}
+              key={section.key}
+              initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+            >
+              <section.Icon width={22} height={22} />
+            </motion.div>
+          </div>
         </div>
 
         <div className="guide-rail">
@@ -246,17 +272,36 @@ export default function Guide({ onDone }) {
         {!allSeen && isLast && <p className="guide-hint">{t('guide.doneHint')}</p>}
 
         <div className="guide-foot-row">
-          {index > 0 && (
-            <motion.button className="btn btn-ghost guide-back" whileTap={{ scale: 0.96 }} onClick={() => go(index - 1)}>
-              <IconChevronLeft width={16} height={16} />
-              <span>{t('guide.back')}</span>
-            </motion.button>
-          )}
+          {/* Both buttons are flex:1 with a fixed height, so Back and Next are
+              always exactly the same size. Previously Back was auto-width and
+              Next was flex:1, which made Back balloon on the last step and
+              looked especially wrong in Persian where the labels are longer.
+              AnimatePresence keeps Back from popping in and out abruptly. */}
+          <AnimatePresence initial={false} mode="popLayout">
+            {index > 0 && (
+              <motion.button
+                key="back"
+                layout
+                className="btn btn-ghost guide-btn"
+                initial={{ opacity: 0, scale: 0.9, width: 0 }}
+                animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                exit={{ opacity: 0, scale: 0.9, width: 0 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => go(index - 1)}
+              >
+                <IconChevronLeft width={16} height={16} />
+                <span>{t('guide.back')}</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
 
           {isLast ? (
             <motion.button
-              className="btn btn-primary guide-cta"
+              layout
+              className="btn btn-primary guide-btn"
               whileTap={{ scale: allSeen ? 0.97 : 1 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               onClick={finish}
               disabled={!allSeen}
             >
@@ -264,14 +309,26 @@ export default function Guide({ onDone }) {
               <span>{t('guide.done')}</span>
             </motion.button>
           ) : (
-            <motion.button className="btn btn-primary guide-cta" whileTap={{ scale: 0.97 }} onClick={() => go(index + 1)}>
+            <motion.button
+              layout
+              className="btn btn-primary guide-btn"
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              onClick={() => go(index + 1)}
+            >
               <span>{t('guide.next')}</span>
               <IconChevronRight width={17} height={17} />
             </motion.button>
           )}
         </div>
+
+        <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('lang.title')}>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>{t('lang.subtitle')}</p>
+          <LanguagePicker onPick={() => setLangOpen(false)} />
+        </Sheet>
+
       </div>
-    </div>
+    </motion.div>
   );
 }
 

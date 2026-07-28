@@ -36,7 +36,8 @@ const GROUPS = [
       { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
       { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' },
-      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
+      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' },
+      { to: '/news', key: 'nav.news', Icon: IconDoc, hue: 'var(--rgb-5)' }
     ]
   },
   {

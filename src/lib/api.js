@@ -131,6 +131,80 @@ export function normalizeCoin(c = {}) {
   };
 }
 
+/**
+ * One coin by id.
+ *
+ * WHY THIS EXISTS: CoinDetail used to look the coin up inside the 60-row
+ * markets list. Anything outside the top 60 — every trending coin, every
+ * search result, every bookmarked altcoin — rendered "coin not found" even
+ * though the API knew about it perfectly well. It looked like the API was
+ * broken; it was never asked.
+ */
+export function getCoin(id) {
+  if (!id) return Promise.resolve(null);
+  return resilient(`coin:${id}`, {
+    ttl: 60000,
+    backend: () => fetchJson(`${API_BASE}/coin/${id}`),
+    direct: async () => {
+      const c = await fetchJson(
+        `${PUBLIC_CG}/coins/${encodeURIComponent(id)}` +
+          '?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true'
+      );
+      const m = c.market_data ?? {};
+      const pick = (o) => (o && typeof o === 'object' ? o.usd ?? 0 : o ?? 0);
+      return {
+        id: c.id,
+        symbol: (c.symbol || '').toUpperCase(),
+        name: c.name,
+        image: c.image?.large ?? c.image?.small ?? c.image?.thumb ?? null,
+        price: pick(m.current_price),
+        change1h: m.price_change_percentage_1h_in_currency?.usd ?? 0,
+        change24h: m.price_change_percentage_24h ?? 0,
+        change7d: m.price_change_percentage_7d ?? 0,
+        mcap: pick(m.market_cap),
+        volume: pick(m.total_volume),
+        rank: c.market_cap_rank ?? 0,
+        high24h: pick(m.high_24h),
+        low24h: pick(m.low_24h),
+        ath: pick(m.ath),
+        athChange: m.ath_change_percentage?.usd ?? 0,
+        supply: m.circulating_supply ?? 0,
+        sparkline: m.sparkline_7d?.price ?? [],
+        description: typeof c.description?.en === 'string' ? c.description.en.slice(0, 1200) : '',
+        homepage: c.links?.homepage?.find(Boolean) ?? null,
+        categories: Array.isArray(c.categories) ? c.categories.filter(Boolean).slice(0, 6) : []
+      };
+    },
+    // No offline record for an arbitrary coin — null lets the UI say "couldn't
+    // load, retry" rather than inventing numbers for a real asset.
+    fallback: () => null
+  });
+}
+
+/**
+ * Coin search across the whole CoinGecko universe (~17k assets), not just the
+ * page of markets currently in memory.
+ */
+export function searchCoins(query) {
+  const q = String(query ?? '').trim();
+  if (q.length < 2) return Promise.resolve([]);
+  return resilient(`search:${q.toLowerCase()}`, {
+    ttl: 300000,
+    backend: () => fetchJson(`${API_BASE}/search?q=${encodeURIComponent(q)}`),
+    direct: async () => {
+      const raw = await fetchJson(`${PUBLIC_CG}/search?query=${encodeURIComponent(q)}`);
+      return (raw.coins || []).slice(0, 30).map((c) => ({
+        id: c.id,
+        symbol: (c.symbol || '').toUpperCase(),
+        name: c.name,
+        image: c.thumb ?? c.large ?? null,
+        rank: c.market_cap_rank ?? 0
+      }));
+    },
+    fallback: () => []
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Trending / charts / DEX                                                     */
 /* -------------------------------------------------------------------------- */
@@ -163,6 +237,33 @@ export function getChart(id, days = 1, vs = 'usd') {
       return (raw.prices || []).map(([t, p]) => ({ t, p }));
     },
     fallback: () => offlineChart(id, days)
+  });
+}
+
+/**
+ * Crypto news. Refreshed at most once every 6 hours on the client and cached
+ * 30 minutes on the server — a headline feed does not need to be live, and
+ * every needless refresh spends the user's mobile data.
+ */
+export function getNews(limit = 30) {
+  return resilient(`news:${limit}`, {
+    ttl: 6 * 3600 * 1000,
+    backend: () => fetchJson(`${API_BASE}/news?limit=${limit}`),
+    direct: async () => {
+      const raw = await fetchJson('https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=latest');
+      const items = Array.isArray(raw?.Data) ? raw.Data : [];
+      return items.slice(0, limit).map((n) => ({
+        id: String(n.id ?? n.guid ?? n.url),
+        title: String(n.title ?? '').slice(0, 240),
+        body: String(n.body ?? '').slice(0, 600),
+        url: n.url,
+        source: n.source_info?.name ?? n.source ?? '',
+        image: n.imageurl || null,
+        publishedAt: Number(n.published_on ?? 0) * 1000,
+        categories: String(n.categories ?? '').split('|').filter(Boolean).slice(0, 4)
+      }));
+    },
+    fallback: () => []
   });
 }
 

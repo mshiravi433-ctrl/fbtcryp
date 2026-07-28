@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getChart, getGlobal, getMarkets, getTrending } from '../lib/api';
+import { getChart, getCoin, getGlobal, getMarkets, getTrending } from '../lib/api';
 
 /** Generic polling hook — pauses while the tab is hidden to save battery/quota. */
 export function usePoll(fn, deps = [], intervalMs = 30000) {
@@ -53,6 +53,12 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
 export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
 export const useMarkets = (perPage = 50) => usePoll(() => getMarkets({ perPage }), [perPage], 30000);
 export const useTrending = () => usePoll(() => getTrending(), [], 120000);
+/**
+ * A single coin, fetched by id rather than filtered out of the markets page.
+ * See getCoin() for why — the old approach broke for anything outside top 60.
+ */
+export const useCoin = (id) => usePoll(() => getCoin(id), [id], 60000);
+
 export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], 60000);
 
 /** Map of `coinId -> price` for portfolio valuation. */

@@ -19,6 +19,8 @@ import {
   fetchDexPools,
   fetchGlobal,
   fetchMarkets,
+  fetchNews,
+  fetchSearch,
   fetchSimplePrices,
   fetchTrending,
 } from './providers.js';
@@ -193,6 +195,22 @@ app.post('/api/ai/faq', async (req, res) => {
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
   }
+});
+
+app.get('/api/search', (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 60);
+  if (q.length < 2) return res.json([]);
+  return serve(res, 300000)(() => fetchSearch(q), `search:${q.toLowerCase()}`);
+});
+
+/**
+ * Crypto news. Cached for 30 minutes server-side: the feed updates constantly
+ * but nobody needs second-by-second freshness, and this keeps us well inside
+ * the upstream rate limit no matter how many users we have.
+ */
+app.get('/api/news', (req, res) => {
+  const limit = Math.min(50, Math.max(5, Number(req.query.limit) || 30));
+  return serve(res, 30 * 60_000)(() => fetchNews({ limit }), `news:${limit}`);
 });
 
 app.get('/api/dex/:network', (req, res) =>

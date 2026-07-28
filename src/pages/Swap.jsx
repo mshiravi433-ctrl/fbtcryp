@@ -5,6 +5,10 @@ import PageTransition, { riseIn } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
+import TokenPicker from '../components/TokenPicker';
+import { playFeedback, primeAudio } from '../lib/feedback';
+import { hasEnoughGas, scanGas, suggestChain } from '../lib/gas';
+import { useSettingsStore } from '../store/useSettingsStore';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -32,12 +36,19 @@ export default function Swap() {
   const { haptic } = useTelegram();
   const wallet = useWallet();
 
+  const tradeSound = useSettingsStore((st) => st.tradeSound);
+  const tradeVibrate = useSettingsStore((st) => st.tradeVibrate);
+  const fb = (kind) => playFeedback(kind, { sound: tradeSound, vibrate: tradeVibrate });
+
   const chainId = wallet.chainId ?? 56;
   const tokens = TOKENS[chainId] ?? TOKENS[56];
   const cfg = EVM_CHAINS[chainId] ?? EVM_CHAINS[56];
 
-  const [fromSym, setFromSym] = useState('BNB');
-  const [toSym, setToSym] = useState('USDT');
+  // Held as full token objects rather than symbols: a token picked from the
+  // multi-thousand list — or resolved from a pasted contract address — does not
+  // exist in the curated TOKENS array, so a symbol lookup would find nothing.
+  const [fromToken, setFromToken] = useState(() => (TOKENS[56] ?? [])[0]);
+  const [toToken, setToToken] = useState(() => (TOKENS[56] ?? [])[1]);
   const [amount, setAmount] = useState('');
   const [slippage, setSlippage] = useState(DEFAULT_SLIPPAGE);
   const [quote, setQuote] = useState(null);
@@ -50,17 +61,19 @@ export default function Swap() {
   const [reviewing, setReviewing] = useState(false);
   const [txState, setTxState] = useState(null); // { stage, hash, error }
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [gasScan, setGasScan] = useState(null);
+  const [gasScanning, setGasScanning] = useState(false);
 
-  const fromToken = useMemo(() => tokens.find((x) => x.symbol === fromSym) ?? tokens[0], [tokens, fromSym]);
-  const toToken = useMemo(() => tokens.find((x) => x.symbol === toSym) ?? tokens[1], [tokens, toSym]);
+  const fromSym = fromToken?.symbol;
+  const toSym = toToken?.symbol;
 
   // Switching chains invalidates the selected pair — a BSC token address means
   // nothing on Arbitrum, and quoting it would fail confusingly.
   useEffect(() => {
     const list = TOKENS[chainId] ?? [];
     if (!list.length) return;
-    if (!list.some((x) => x.symbol === fromSym)) setFromSym(list[0].symbol);
-    if (!list.some((x) => x.symbol === toSym)) setToSym(list[1]?.symbol ?? list[0].symbol);
+    setFromToken(list[0]);
+    setToToken(list[1] ?? list[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chainId]);
 
@@ -72,11 +85,18 @@ export default function Swap() {
     if (!wallet.address) return;
     try {
       const provider = await wallet.getReadProvider(chainId);
-      setBalances(await getBalances(provider, tokens, wallet.address));
+      // The curated list plus whatever is actually selected. Without the
+      // selected pair, a token chosen from the full list (or pasted as an
+      // address) would always read as zero balance and MAX would do nothing.
+      const wanted = [...tokens];
+      for (const tk of [fromToken, toToken]) {
+        if (tk && !wanted.some((x) => x.symbol === tk.symbol)) wanted.push(tk);
+      }
+      setBalances(await getBalances(provider, wanted, wallet.address));
     } catch {
       /* leave stale balances rather than blanking the UI */
     }
-  }, [wallet, chainId, tokens]);
+  }, [wallet, chainId, tokens, fromToken, toToken]);
 
   useEffect(() => {
     loadBalances();
@@ -130,8 +150,8 @@ export default function Swap() {
 
   const flip = () => {
     haptic?.('select');
-    setFromSym(toSym);
-    setToSym(fromSym);
+    setFromToken(toToken);
+    setToToken(fromToken);
     setAmount('');
     setQuote(null);
   };
@@ -148,6 +168,9 @@ export default function Swap() {
     const signer = wallet.getSigner?.();
     if (!signer || !quote || quote.error) return;
 
+    // Unlock audio inside the tap gesture, or mobile browsers silently swallow
+    // the success chime later when no gesture is in progress.
+    primeAudio();
     setTxState({ stage: 'preparing' });
     try {
       // 1. approve if the router can't move enough of the input token yet
@@ -183,10 +206,15 @@ export default function Swap() {
       const tx = await executeSwap({ signer, chainId, fromToken, toToken, quote: fresh });
       setTxState({ stage: 'pending', hash: tx.hash });
       haptic?.('medium');
+      fb('pending');
 
       const receipt = await tx.wait();
-      setTxState({ stage: receipt.status === 1 ? 'success' : 'failed', hash: tx.hash });
-      haptic?.(receipt.status === 1 ? 'success' : 'error');
+      const ok = receipt.status === 1;
+      setTxState({ stage: ok ? 'success' : 'failed', hash: tx.hash });
+      haptic?.(ok ? 'success' : 'error');
+      // Ring + buzz on the on-chain result. Users routinely put the phone down
+      // while a transaction mines, and a silent success looks like a stall.
+      fb(ok ? 'success' : 'error');
 
       if (receipt.status === 1) {
         setAmount('');
@@ -204,11 +232,39 @@ export default function Swap() {
         : 'TX_FAILED';
       setTxState({ stage: 'error', error: code, detail: msg.slice(0, 140) });
       haptic?.('error');
+      // A user-cancelled signature is not a failure worth alarming about.
+      if (code !== 'USER_REJECTED') fb('error');
     }
   };
 
   const fromBal = balances[fromSym]?.formatted ?? 0;
   const insufficient = Number(amount) > fromBal;
+
+  /* ------------------------------- gas check ------------------------------ */
+  // Gas is always paid in the chain's OWN coin by the signing account. It
+  // cannot be taken from another wallet or another network — no app can change
+  // that. So rather than pretend, we check up front and point the user at a
+  // network they can actually trade on right now.
+  const nativeBal = wallet.nativeBalance ?? balances[cfg?.native?.symbol]?.formatted ?? null;
+  const gasShort = wallet.isConnected && nativeBal != null && !hasEnoughGas(chainId, nativeBal);
+  const gasAlternative = gasScan ? suggestChain(gasScan, chainId) : null;
+
+  const runGasScan = async () => {
+    if (!wallet.address || gasScanning) return;
+    setGasScanning(true);
+    try {
+      setGasScan(await scanGas(wallet.getReadProvider, wallet.address));
+    } finally {
+      setGasScanning(false);
+    }
+  };
+
+  // Scan automatically the moment we detect a shortfall, so the answer is
+  // already on screen instead of behind another tap.
+  useEffect(() => {
+    if (gasShort && !gasScan && !gasScanning) runGasScan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gasShort]);
   const canSwap = wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
   const highImpact = impact != null && impact > 5;
 
@@ -421,6 +477,40 @@ export default function Swap() {
         {highImpact && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.highImpact')}</p>}
         {insufficient && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.insufficient')}</p>}
 
+        {/* Gas shortfall — explain the rule, then offer a network that works. */}
+        {gasShort && (
+          <motion.div
+            className="card"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ marginTop: 10, borderColor: 'rgba(255,179,0,.4)', background: 'rgba(255,179,0,.06)' }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, color: 'var(--rgb-5)' }}>
+              {t('swap.gasTitle')}
+            </div>
+            <p className="muted" style={{ fontSize: 12.2, margin: 0, lineHeight: 1.8 }}>
+              {t('swap.gasBody', { chain: cfg.name, symbol: cfg.native?.symbol })}
+            </p>
+
+            {gasScanning && (
+              <div className="row" style={{ gap: 8, marginTop: 10 }}>
+                <div className="spinner" style={{ width: 15, height: 15 }} />
+                <span className="faint">{t('swap.gasScan')}</span>
+              </div>
+            )}
+
+            {gasAlternative && (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ width: '100%', marginTop: 10 }}
+                onClick={() => wallet.switchChain?.(gasAlternative.chainId)}
+              >
+                {t('swap.gasSwitch', { chain: gasAlternative.name })}
+              </button>
+            )}
+          </motion.div>
+        )}
+
         <button
           className="btn btn-primary"
           style={{ marginTop: 14 }}
@@ -437,32 +527,26 @@ export default function Swap() {
       <AdBanner slot="p2p" />
 
       {/* ---------------------------- token picker --------------------------- */}
-      <Sheet open={Boolean(picker)} onClose={() => setPicker(null)} title={t('swap.selectToken')}>
-        <div className="stack" style={{ gap: 6 }}>
-          {tokens.map((tk) => (
-            <div
-              key={tk.symbol}
-              className="coin-row"
-              onClick={() => {
-                const other = picker === 'from' ? toSym : fromSym;
-                if (tk.symbol === other) flip();
-                else if (picker === 'from') setFromSym(tk.symbol);
-                else setToSym(tk.symbol);
-                setPicker(null);
-                haptic?.('select');
-              }}
-            >
-              <div className="coin-logo">{tk.symbol.slice(0, 3)}</div>
-              <div className="coin-meta">
-                <div className="coin-sym">{tk.symbol}</div>
-                <div className="coin-name">{tk.name}</div>
-              </div>
-              <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(balances[tk.symbol]?.formatted ?? 0)}</span>
-            </div>
-          ))}
-        </div>
-        <p className="notice" style={{ marginTop: 12 }}>{t('swap.verifyContracts')}</p>
-      </Sheet>
+      {/* Full multi-thousand list with search, replacing the 7-token sheet.
+          Every pair we can't offer is a fee we don't earn. */}
+      <TokenPicker
+        open={Boolean(picker)}
+        onClose={() => setPicker(null)}
+        chainId={chainId}
+        selectedSymbol={picker === 'from' ? fromSym : toSym}
+        excludeAddress={picker === 'from' ? toToken?.address : fromToken?.address}
+        getProvider={wallet.getReadProvider}
+        onSelect={(tk) => {
+          const other = picker === 'from' ? toToken : fromToken;
+          const same =
+            (tk.address ?? '').toLowerCase() === (other?.address ?? '').toLowerCase() &&
+            Boolean(tk.address) === Boolean(other?.address);
+          if (same) flip();
+          else if (picker === 'from') setFromToken(tk);
+          else setToToken(tk);
+          haptic?.('select');
+        }}
+      />
 
       {/* ------------------------------ settings ----------------------------- */}
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title={t('swap.settings')}>

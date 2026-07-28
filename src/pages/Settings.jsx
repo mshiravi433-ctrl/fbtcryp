@@ -3,6 +3,9 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import LanguagePicker from '../components/LanguagePicker';
+import { playFeedback, primeAudio } from '../lib/feedback';
+import { cancelDaily, notificationsAvailable, requestPermission, scheduleDaily } from '../lib/notifications';
 import Sheet from '../components/Sheet';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useWallet, shortAddress } from '../context/WalletContext';
@@ -17,8 +20,9 @@ import {
   verifyBiometric,
   verifyTotp
 } from '../lib/security';
-import { applyDirection } from '../i18n';
+import { applyDirection, languageMeta } from '../i18n';
 import {
+  IconActivity,
   IconChevronRight,
   IconFingerprint,
   IconGlobe,
@@ -73,6 +77,8 @@ function Switch({ on, onChange }) {
 }
 
 export default function Settings() {
+  const [notifMsg, setNotifMsg] = useState(null);
+  const [langOpen, setLangOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
@@ -196,28 +202,13 @@ export default function Settings() {
             sub={wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
             onClick={() => navigate('/wallet')}
           />
+          {/* Ten languages no longer fit in an inline 3-button switch, so this
+              opens a sheet. languageMeta gives us the native name to show. */}
           <Row
             icon={IconGlobe}
             label={t('settings.language')}
-            sub={{ fa: 'فارسی', en: 'English', ar: 'العربية' }[i18n.language] ?? i18n.language}
-            right={
-              <div className="lang-switch">
-                {['fa', 'en', 'ar'].map((lng) => (
-                  <button
-                    key={lng}
-                    className={`lang-btn ${i18n.language === lng ? 'active' : ''}`}
-                    onClick={() => {
-                      i18n.changeLanguage(lng);
-                      applyDirection(lng);
-                    }}
-                    style={{ isolation: 'isolate' }}
-                  >
-                    {i18n.language === lng && <motion.span layoutId="set-lang" className="lang-pill" />}
-                    {lng}
-                  </button>
-                ))}
-              </div>
-            }
+            sub={`${languageMeta(i18n.language).flag}  ${languageMeta(i18n.language).name}`}
+            onClick={() => setLangOpen(true)}
           />
         </div>
       </motion.section>
@@ -329,6 +320,118 @@ export default function Settings() {
             }
           />
         </div>
+      </motion.section>
+
+      {/* ---------------- sound & vibration ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.feedback')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconActivity}
+            label={t('settings.tradeSound')}
+            sub={t('settings.tradeSoundSub')}
+            right={
+              <Switch
+                on={s.tradeSound}
+                onChange={() => {
+                  // Prime inside the tap: mobile browsers keep the audio
+                  // context suspended until a real gesture, so priming here
+                  // means the first real trade chime is actually audible.
+                  primeAudio();
+                  const next = !s.tradeSound;
+                  s.toggle('tradeSound');
+                  if (next) playFeedback('success', { sound: true, vibrate: false });
+                }}
+              />
+            }
+          />
+          <Row
+            icon={IconActivity}
+            label={t('settings.tradeVibrate')}
+            sub={t('settings.tradeVibrateSub')}
+            right={
+              <Switch
+                on={s.tradeVibrate}
+                onChange={() => {
+                  const next = !s.tradeVibrate;
+                  s.toggle('tradeVibrate');
+                  if (next) playFeedback('success', { sound: false, vibrate: true });
+                }}
+              />
+            }
+          />
+          <button
+            className="set-row"
+            onClick={() => {
+              primeAudio();
+              playFeedback('success', { sound: s.tradeSound, vibrate: s.tradeVibrate });
+            }}
+          >
+            <span className="set-row-icon"><IconActivity width={19} height={19} /></span>
+            <span className="set-row-label"><div>{t('settings.testSound')}</div></span>
+          </button>
+        </div>
+      </motion.section>
+
+      {/* ---------------- notifications ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.notifications')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconInfo}
+            label={t('settings.dailyNotif')}
+            sub={t('settings.dailyNotifSub')}
+            right={
+              <Switch
+                on={s.dailyNotification}
+                onChange={async () => {
+                  setNotifMsg(null);
+                  if (s.dailyNotification) {
+                    await cancelDaily();
+                    s.setDailyNotification(false);
+                    return;
+                  }
+                  // Only ask for the OS permission when the user opts in —
+                  // prompting at launch, before any value is shown, is the
+                  // fastest route to a permanent denial.
+                  if (!(await notificationsAvailable())) {
+                    setNotifMsg('notifUnavailable');
+                    return;
+                  }
+                  const granted = await requestPermission();
+                  if (!granted) {
+                    setNotifMsg('notifDenied');
+                    return;
+                  }
+                  await scheduleDaily(t, s.dailyHour);
+                  s.setDailyNotification(true);
+                }}
+              />
+            }
+          />
+          {s.dailyNotification && (
+            <Row
+              icon={IconInfo}
+              label={t('settings.dailyHour')}
+              right={
+                <select
+                  value={s.dailyHour}
+                  onChange={async (e) => {
+                    const h = Number(e.target.value);
+                    s.setDailyHour(h);
+                    await scheduleDaily(t, h);
+                  }}
+                  style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
+                >
+                  {[8, 9, 10, 11, 12, 14, 16, 18, 20, 21].map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              }
+            />
+          )}
+        </div>
+        {notifMsg && <p className="notice notice-danger">{t(`settings.${notifMsg}`)}</p>}
       </motion.section>
 
       {/* ---------------- security ---------------- */}
@@ -471,7 +574,7 @@ export default function Settings() {
         </div>
       </motion.section>
 
-      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>FBT iran · v1.0.0</p>
+      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>{t('about.companyName')} · v1.0.0</p>
 
       {/* ---------------- custom RPC ---------------- */}
       <Sheet open={rpcSheet} onClose={() => setRpcSheet(false)} title={t('settings.customRpc')}>
@@ -588,6 +691,13 @@ export default function Settings() {
           </>
         )}
       </Sheet>
+      <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('lang.title')}>
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>{t('lang.subtitle')}</p>
+        <div style={{ maxHeight: '58dvh', overflowY: 'auto' }}>
+          <LanguagePicker />
+        </div>
+      </Sheet>
+
     </PageTransition>
   );
 }

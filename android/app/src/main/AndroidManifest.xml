@@ -74,6 +74,12 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Android 13+ requires this to be granted at runtime. We only request it
+         when the user turns the daily reminder on in Settings — never at
+         launch, because a permission prompt before any value has been shown is
+         the fastest way to a permanent denial. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Biometric hardware is optional: the app works fine without it, so
          don't let Play hide the listing from devices that lack a sensor. -->
     <uses-feature

@@ -96,8 +96,11 @@ check('React mounted despite the dead network', Boolean(root && root.children.le
 check('__FBT_BOOTED__ was set', dom.window.__FBT_BOOTED__ === true);
 check('boot overlay was dismissed', !boot || boot.style.opacity === '0');
 check('watchdog did not fire', !boot || boot.getAttribute('data-failed') !== 'true');
-// A fresh install lands on onboarding; the guide gates the app right after it.
-check('Persian UI rendered (onboarding first screen)', /[\u0600-\u06FF]/.test(text) && text.includes('رد کردن'));
+// A fresh install now opens on the language chooser — you cannot read a
+// welcome screen in a language you don't speak. All ten options must render.
+check('Persian UI rendered on first screen', /[\u0600-\u06FF]/.test(text));
+check('language chooser is the first screen', text.includes('زبان'));
+check('all 10 languages offered', ['فارسی','English','العربية','Türkçe','Русский','中文','Español','हिन्दी','Français','Deutsch'].every((n) => text.includes(n)));
 check('no uncaught script errors', jsErrors.length === 0);
 
 console.log('  external hosts blocked:', [...new Set(blocked.map((u) => new URL(u).host))].join(', ') || 'none');

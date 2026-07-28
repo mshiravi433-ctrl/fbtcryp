@@ -43,6 +43,15 @@ export const useSettingsStore = create(
       solanaRpc: '',
       customEvmRpc: '', // always show the review sheet before signing
 
+      /* ---------------- feedback & alerts ---------------- */
+      // Sound and vibration are separate: plenty of people want the buzz in a
+      // meeting but not the chime, and a trading app that can't be silenced
+      // gets uninstalled.
+      tradeSound: true,
+      tradeVibrate: true,
+      dailyNotification: false, // opt-in; we never ask for the permission unprompted
+      dailyHour: 11,
+
       /* ---------------- onboarding ---------------- */
       onboarded: false,
       termsAcceptedAt: 0,
@@ -113,6 +122,12 @@ export const useSettingsStore = create(
       },
       markGuideRead() {
         set({ guideReadAt: Date.now() });
+      },
+      setDailyNotification(on) {
+        set({ dailyNotification: Boolean(on) });
+      },
+      setDailyHour(h) {
+        set({ dailyHour: Math.max(0, Math.min(23, Number(h) || 11)) });
       },
       /** Lets the user replay the guide from Help without redoing onboarding. */
       replayGuide() {

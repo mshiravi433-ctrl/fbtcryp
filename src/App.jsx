@@ -40,6 +40,7 @@ const Ecosystem = lazy(() => import('./pages/Ecosystem'));
 const Business = lazy(() => import('./pages/Business'));
 const P2P = lazy(() => import('./pages/P2P'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const News = lazy(() => import('./pages/News'));
 
 function Loader() {
   return (
@@ -80,6 +81,7 @@ function AnimatedRoutes() {
           <Route path="/business" element={<Business />} />
           <Route path="/p2p" element={<P2P />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/news" element={<News />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>
