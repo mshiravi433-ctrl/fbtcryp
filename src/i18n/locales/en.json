@@ -911,7 +911,8 @@
     "aiSourceLocal": "Answered from the app's built-in guide (no AI service connected)",
     "aiSourceModel": "Answered by the AI model",
     "aiNoAnswer": "I do not have a confident answer for that and I would rather not guess — your money is involved. Use \"Contact us\" and a person will answer.",
-    "aiLocalMode": "No server-side AI is configured, so answers come from the app's own knowledge base. It is accurate for the common questions about fees, gas and failed swaps; for anything open-ended, contact support."
+    "aiLocalMode": "No server-side AI is configured, so answers come from the app's own knowledge base. It is accurate for the common questions about fees, gas and failed swaps; for anything open-ended, contact support.",
+    "aiWhy": "Why is the server-side AI not working?"
   },
   "docs": {
     "title": "Documentation",

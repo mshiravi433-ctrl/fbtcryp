@@ -34,6 +34,95 @@ const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
  * If Gemini errors we fall through to OpenRouter rather than failing.
  */
 export const aiConfigured = () => Boolean(GEMINI_KEY || OPENROUTER_KEY);
+
+/**
+ * Live self-test for the configured provider.
+ *
+ * "AI doesn't work" is nearly always one of five specific things, and from the
+ * outside they all look identical — the UI just falls back. This makes the
+ * actual cause visible: sends a one-token prompt to whichever provider is
+ * configured and reports precisely what came back.
+ *
+ * Deliberately NOT cached: the whole point is to reflect the state right now.
+ * It costs a fraction of a cent per call, and it is only reachable with the
+ * diagnostic secret.
+ */
+export async function aiSelfTest() {
+  const out = {
+    geminiKeyPresent: Boolean(GEMINI_KEY),
+    openrouterKeyPresent: Boolean(OPENROUTER_KEY),
+    jinaKeyPresent: Boolean(JINA_KEY),
+    provider: aiProvider(),
+    geminiModel: GEMINI_MODEL,
+    openrouterModel: MODEL
+  };
+
+  if (!aiConfigured()) {
+    out.ok = false;
+    out.reason = 'NO_KEY';
+    out.fix =
+      'Set GEMINI_API_KEY (free tier at aistudio.google.com/apikey) or ' +
+      'OPENROUTER_API_KEY in your host environment, then redeploy. Note these ' +
+      'must NOT have a VITE_ prefix — that would ship the key to every browser.';
+    return out;
+  }
+
+  const started = Date.now();
+  try {
+    const { text, model } = await chat({
+      system: 'Reply with the single word: ok',
+      user: 'ping',
+      temperature: 0,
+      maxTokens: 12,
+      json: false
+    });
+    out.ok = true;
+    out.model = model;
+    out.latencyMs = Date.now() - started;
+    out.sample = String(text).trim().slice(0, 40);
+    return out;
+  } catch (err) {
+    const msg = String(err.message || err);
+    out.ok = false;
+    out.latencyMs = Date.now() - started;
+    out.error = msg.slice(0, 300);
+
+    // Translate the provider's error into the thing you actually have to fix.
+    if (/API_KEY_INVALID|API key not valid/i.test(msg)) {
+      out.reason = 'KEY_INVALID';
+      out.fix = 'The key is wrong or was revoked. Generate a new one and redeploy.';
+    } else if (/^403|PERMISSION_DENIED|SERVICE_DISABLED/i.test(msg)) {
+      out.reason = 'KEY_RESTRICTED';
+      out.fix =
+        'The key is valid but not allowed to make this call. In Google Cloud ' +
+        'Console check that the Generative Language API is enabled, and that ' +
+        'any application/IP restriction on the key permits a server-side call ' +
+        '(an Android-restricted key will NOT work from a server).';
+    } else if (/^429|RESOURCE_EXHAUSTED|quota/i.test(msg)) {
+      out.reason = 'QUOTA';
+      out.fix = 'Rate limit or free-tier quota exhausted. Wait, or enable billing.';
+    } else if (/^404|not found for API version|is not found/i.test(msg)) {
+      out.reason = 'MODEL_NOT_FOUND';
+      out.fix =
+        `The model "${GEMINI_MODEL}" is not available to this key. Try ` +
+        'GEMINI_MODEL=gemini-2.0-flash or gemini-1.5-flash.';
+    } else if (/abort|timeout/i.test(msg)) {
+      out.reason = 'TIMEOUT';
+      out.fix =
+        'The provider did not answer in time. On Vercel Hobby the function ' +
+        'ceiling is 60s (already set in vercel.json); a smaller model helps.';
+    } else if (/fetch failed|ENOTFOUND|EAI_AGAIN/i.test(msg)) {
+      out.reason = 'NETWORK';
+      out.fix =
+        'The server could not reach the provider. Google blocks some regions ' +
+        'outright — check your deployment region.';
+    } else {
+      out.reason = 'UNKNOWN';
+      out.fix = 'See `error` for the provider response.';
+    }
+    return out;
+  }
+}
 export const newsConfigured = () => Boolean(JINA_KEY);
 export const aiProvider = () => (GEMINI_KEY ? 'gemini' : OPENROUTER_KEY ? 'openrouter' : null);
 

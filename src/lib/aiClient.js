@@ -152,6 +152,24 @@ export async function getMarketBrief(payload) {
  * wrote it about this exact app. The response carries `source` so the UI can
  * say where the answer came from instead of implying a live model answered.
  */
+/**
+ * Ask the backend why AI is unavailable, in words a non-developer can act on.
+ * Returns null when there is no backend at all — `aiStatus()` already covers
+ * that case and a second signal for it would just be noise.
+ */
+export async function aiDiagnose() {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(`${API_BASE}/ai/diagnose`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function askFaq(question, lang) {
   try {
     const res = await viaServerOr((p) => directFaq(p), '/ai/faq', { question, lang });

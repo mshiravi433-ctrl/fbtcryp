@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
-import { aiStatus, askFaq } from '../lib/aiClient';
+import { aiDiagnose, aiStatus, askFaq } from '../lib/aiClient';
 import { IconChevronLeft, IconChevronRight, IconDoc, IconInfo, IconLock, IconShield } from '../components/Icons';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -23,9 +23,23 @@ export default function Help() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
 
+  const [diag, setDiag] = useState(null);
+
   useEffect(() => {
     aiStatus().then(setAi);
   }, []);
+
+  /**
+   * When the assistant is running on the built-in knowledge base, ask the
+   * backend WHY. "AI unavailable" with no cause is the least actionable
+   * message an app can show its own operator.
+   */
+  useEffect(() => {
+    if (ai.mode !== 'local') return;
+    aiDiagnose().then((d) => {
+      if (d && d.ok === false && d.fix) setDiag(d);
+    });
+  }, [ai.mode]);
 
   useEffect(() => {
     // `scrollIntoView` is missing on some older Android WebViews (and in
@@ -110,7 +124,28 @@ export default function Help() {
             which for questions about fees, gas and failed swaps is written by
             us about this exact app, and is therefore better than a general
             model guessing. We just say which one answered. */}
-        {ai.mode === 'local' && <p className="notice">{t('help.aiLocalMode')}</p>}
+        {ai.mode === 'local' && (
+          <>
+            <p className="notice">{t('help.aiLocalMode')}</p>
+            {/* Operator-facing detail. Rendered only when the backend actually
+                reported a fault, so ordinary users never see it. */}
+            {diag && (
+              <details className="notice" style={{ marginTop: 8 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 11.5 }}>
+                  {t('help.aiWhy')}
+                </summary>
+                <div className="mono" style={{ fontSize: 10.5, marginTop: 8, lineHeight: 1.8 }}>
+                  <div>reason: {diag.reason}</div>
+                  {diag.model && <div>model: {diag.model}</div>}
+                  {diag.error && <div style={{ wordBreak: 'break-all' }}>error: {diag.error}</div>}
+                </div>
+                <p className="muted" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.8 }}>
+                  {diag.fix}
+                </p>
+              </details>
+            )}
+          </>
+        )}
         {(
           <>
             {thread.length === 0 && (

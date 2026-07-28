@@ -34,7 +34,7 @@ import {
   storeDurable,
   submitScore
 } from './store.js';
-import { aiConfigured, answerFaq, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
+import { aiConfigured, aiSelfTest, answerFaq, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -139,6 +139,37 @@ const AI_TTL = Number(process.env.AI_CACHE_TTL_MS || 6 * 3600_000); // 6h
 app.get('/api/ai/status', (_req, res) =>
   res.json({ enabled: aiConfigured(), news: newsConfigured(), persistentCache: blobConfigured() })
 );
+
+/**
+ * Live AI diagnosis: actually calls the provider and reports why it failed.
+ *
+ * Guarded by CRON_SECRET because it costs a real (tiny) amount per call and
+ * because the response describes your configuration. Without the secret set,
+ * it still runs but only reports which keys are PRESENT — never their values,
+ * and never a live call. That keeps it useful on a fresh deploy without
+ * turning it into a free inference endpoint for strangers.
+ */
+app.get('/api/ai/diagnose', async (req, res) => {
+  const secret = process.env.CRON_SECRET || '';
+  const provided =
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-cron-secret') || '';
+
+  if (secret && provided !== secret) {
+    return res.json({
+      ok: aiConfigured(),
+      note: 'Add ?Authorization: Bearer <CRON_SECRET> for a live provider test.',
+      geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
+      openrouterKeyPresent: Boolean(process.env.OPENROUTER_API_KEY),
+      enabled: aiConfigured()
+    });
+  }
+
+  try {
+    return res.json(await aiSelfTest());
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err.message).slice(0, 200) });
+  }
+});
 
 app.post('/api/ai/outlook', async (req, res) => {
   if (!aiConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED' });
