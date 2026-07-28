@@ -34,7 +34,8 @@ with full RTL support.
 | [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
 | [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
 | [APIS-FA.md](docs/APIS-FA.md) | کدام API لازم است، کدام نیست، و هر کلید چه چیزی اضافه می‌کند |
-| **[BUILD-NOW-FA.md](docs/BUILD-NOW-FA.md)** | **شروع از اینجا** — ساخت اپ و انتشار، گام به گام با گوشی |
+| **[DOWNLOAD-FA.md](docs/DOWNLOAD-FA.md)** | **دانلود اپ و انتشار** — لینک مستقیم + ساخت نسخه امضاشده |
+| [BUILD-NOW-FA.md](docs/BUILD-NOW-FA.md) | **شروع از اینجا** — ساخت اپ و انتشار، گام به گام با گوشی |
 | [PLAY-STORE-FA.md](docs/PLAY-STORE-FA.md) | **انتشار در Google Play** — کلید امضا، AAB، Data safety، چک‌لیست |
 
 ---
