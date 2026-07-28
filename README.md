@@ -34,6 +34,7 @@ with full RTL support.
 | [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
 | [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
 | [APIS-FA.md](docs/APIS-FA.md) | کدام API لازم است، کدام نیست، و هر کلید چه چیزی اضافه می‌کند |
+| [PLAY-STORE-FA.md](docs/PLAY-STORE-FA.md) | **انتشار در Google Play** — کلید امضا، AAB، Data safety، چک‌لیست |
 
 ---
 

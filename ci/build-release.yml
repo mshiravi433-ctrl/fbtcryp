@@ -1,0 +1,104 @@
+# =============================================================================
+# SIGNED RELEASE BUILD — produces the .aab you upload to Google Play
+# =============================================================================
+#
+# Copy this file's CONTENTS into `.github/workflows/build-release.yml` in the
+# GitHub web editor. GitHub blocks app tokens from writing under
+# .github/workflows/, so it has to be added by you once, by hand.
+#
+# BEFORE THE FIRST RUN, add these repository secrets
+# (Settings → Secrets and variables → Actions → New repository secret):
+#
+#   ANDROID_KEYSTORE_BASE64   your keystore, base64-encoded (see docs/PLAY-STORE-FA.md)
+#   ANDROID_KEYSTORE_PASSWORD the store password you chose
+#   ANDROID_KEY_ALIAS         the alias you chose (e.g. fbt)
+#   ANDROID_KEY_PASSWORD      the key password you chose
+#
+# and this repository VARIABLE (not a secret — it is a public URL):
+#
+#   VITE_API_BASE             https://<your-vercel-app>.vercel.app/api
+#
+# WHY VITE_API_BASE MATTERS: the packaged app serves its pages from
+# https://localhost, so a relative "/api" path has no host to resolve against.
+# Without this the market data still works (it falls back to public endpoints)
+# but the AI, news and leaderboard backends are unreachable.
+#
+# ⚠ LOSING THE KEYSTORE MEANS LOSING THE APP. Google Play ties your listing to
+# that signing key forever. If it is lost you cannot update your own app — you
+# have to publish a new listing under a new package name and every existing
+# install is stranded. Back it up somewhere you will still have in five years.
+# =============================================================================
+
+name: Build signed release (AAB + APK)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name shown in Play (e.g. 1.0.1)'
+        required: true
+        default: '1.0.0'
+      version_code:
+        description: 'Version code — MUST be higher than the last upload'
+        required: true
+        default: '1'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # AGP 8.7 requires JDK 17.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      # Play rejects an upload whose versionCode is not higher than the last
+      # one. Driving it from the workflow input makes that a deliberate choice
+      # rather than something you discover at upload time.
+      - name: Stamp version
+        run: |
+          sed -i "s/versionCode 1/versionCode ${{ inputs.version_code }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"${{ inputs.version_name }}\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+        run: bash ci/build-apk.sh
+
+      # Fails the build if the signature is missing, so an unsigned artefact
+      # can never be mistaken for a releasable one.
+      - name: Verify the bundle is signed
+        run: |
+          if [ ! -f out/app-release.aab ]; then
+            echo "::error::No AAB was produced. Are the keystore secrets set?"
+            exit 1
+          fi
+          echo "AAB present: $(du -h out/app-release.aab | cut -f1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: play-release-bundle
+          path: |
+            out/app-release.aab
+            out/app-release.apk
+          retention-days: 30

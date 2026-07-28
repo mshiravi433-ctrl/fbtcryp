@@ -38,6 +38,14 @@ if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
   ./gradlew assembleRelease --no-daemon --stacktrace
   BUILT="app/build/outputs/apk/release/app-release.apk"
   OUT="app-release.apk"
+
+  # Google Play does not accept APKs for new apps — it requires an Android App
+  # Bundle. The APK above is still built because it is what you sideload for
+  # testing and what Iranian stores (Bazaar, Myket) accept, so we produce both
+  # from the same signed configuration rather than making you choose.
+  echo "▸ building SIGNED release AAB (this is what Google Play needs)"
+  ./gradlew bundleRelease --no-daemon --stacktrace
+  BUNDLE="app/build/outputs/bundle/release/app-release.aab"
 else
   echo "▸ no keystore supplied — building debug APK"
   echo "  (debug builds install fine for testing but cannot go on Google Play)"
@@ -60,6 +68,19 @@ cp "$SRC" "out/$OUT"
 cp "$SRC" "out/app-debug.apk"   # stable name for the release asset
 
 echo "✓ APK built: $(du -h "$SRC" | cut -f1) → out/$OUT"
+
+# Copy the Play-ready bundle out too, when one was produced.
+if [ -n "${BUNDLE:-}" ]; then
+  BSRC="android/$BUNDLE"
+  if [ -f "$BSRC" ]; then
+    cp "$BSRC" out/app-release.aab
+    echo "✓ AAB built: $(du -h "$BSRC" | cut -f1) → out/app-release.aab"
+    echo "  ↳ upload THIS file to Google Play Console, not the .apk"
+  else
+    echo "✗ expected AAB at $BSRC but it is missing"
+    exit 1
+  fi
+fi
 
 # Report what signed it, so a mis-signed build is obvious in the log.
 if command -v keytool >/dev/null 2>&1 && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
