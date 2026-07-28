@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, setLanguage } from '../i18n';
+import { coverageFor, isComplete } from '../i18n/languages';
 import { useTelegram } from '../context/TelegramContext';
 import { IconCheck } from './Icons';
 
@@ -80,8 +81,11 @@ export default function LanguagePicker({ variant = 'list', onPick, showCoverage 
               <span className="lang-name">{l.name}</span>
             </span>
 
-            {showCoverage && !l.complete && (
-              <span className="lang-badge partial">{t('welcome.partial')}</span>
+            {/* Show the measured figure, not a hand-set flag. A user who sees
+                "38%" and then meets English is not surprised; one who was told
+                "fully translated" is misled. */}
+            {showCoverage && !isComplete(l.code) && (
+              <span className="lang-badge partial">{coverageFor(l.code)}%</span>
             )}
 
             <motion.span

@@ -28,3 +28,4 @@ release.keystore
 
 # test harness build output
 test/.out/
+scripts/locales/ar-todo.txt

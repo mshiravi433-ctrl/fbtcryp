@@ -149,18 +149,29 @@ export default function Signals() {
     aiStatus().then(setAi);
   }, []);
 
-  // Daily market brief. Server caches per 6h window, so this is one LLM call
-  // shared across all users rather than one per page view.
+  // Daily market brief. When a model is configured the server caches it per
+  // 6h window, so it is one call shared by every user; otherwise it is
+  // narrated locally from the same global stats. Either way it renders.
   useEffect(() => {
-    if (!ai.enabled || !global || !coins?.length) return;
+    if (!global || !coins?.length) return;
     getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language })
       .then(setBrief)
       .catch(() => {});
-  }, [ai.enabled, global, coins, i18n.language]);
+  }, [global, coins, i18n.language]);
 
-  // Per-asset outlook, refreshed daily server-side.
+  /**
+   * Per-asset outlook.
+   *
+   * No longer gated on a model being configured. The indicators this narrates
+   * are computed locally either way, so gating the narration on a remote key
+   * meant hiding analysis we had already done — the screen said "temporarily
+   * unavailable" when in fact nothing was ever wrong or ever configured.
+   *
+   * `analysis` is passed through so the local narrator has the full signal
+   * breakdown; the remote tiers ignore the extra field.
+   */
   useEffect(() => {
-    if (!ai.enabled || !analysis || !coin) return;
+    if (!analysis || !coin) return undefined;
     let alive = true;
     setAiLoading(true);
     setAiError(null);
@@ -173,16 +184,19 @@ export default function Signals() {
       indicators: analysis.indicators,
       change24h: coin.change24h,
       change7d: coin.change7d,
-      lang: i18n.language
+      lang: i18n.language,
+      analysis,
+      coin,
+      days: horizon.days
     })
-      .then((r) => alive && setOutlook(r))
+      .then((r) => alive && (r ? setOutlook(r) : setAiError('AI_FAILED')))
       .catch((e) => alive && setAiError(e.code || 'AI_FAILED'))
       .finally(() => alive && setAiLoading(false));
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ai.enabled, coin?.id, analysis?.score, i18n.language]);
+  }, [coin?.id, analysis?.score, i18n.language, horizon.days]);
 
   // brief "scanning" animation whenever the asset changes — signals that the
   // numbers were recomputed rather than left stale
@@ -329,7 +343,7 @@ export default function Signals() {
       </motion.section>
 
       {/* ---------- AI outlook ---------- */}
-      {ai.enabled && (
+      {(
         <motion.section className="card card-rgb edge-orchid" variants={riseIn} initial="hidden" animate="show">
           <div className="aurora" />
           <div className="row-between" style={{ marginBottom: 10 }}>
@@ -341,7 +355,9 @@ export default function Signals() {
               >
                 ✦
               </motion.span>
-              <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t('signals.aiOutlook')}</span>
+              <span style={{ fontWeight: 700, fontSize: 13.5 }}>
+                {outlook?.source === 'local' ? t('signals.outlookLocal') : t('signals.aiOutlook')}
+              </span>
             </div>
             {outlook && (
               <span className={`pill ${outlook.bias === 'bullish' ? 'pill-up' : outlook.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`}>
@@ -427,8 +443,13 @@ export default function Signals() {
                 </p>
               )}
 
-              <div className="faint" style={{ marginTop: 9, fontSize: 10 }}>
-                {t('signals.aiMeta', { model: outlook.model })}
+              {/* Name the source. Attributing a locally-narrated read to a
+                  model would be a small lie that makes every other attribution
+                  in the app worthless. */}
+              <div className="faint" style={{ marginTop: 9, fontSize: 10, lineHeight: 1.7 }}>
+                {outlook.source === 'local'
+                  ? t('signals.aiMetaLocal')
+                  : t('signals.aiMeta', { model: outlook.model })}
               </div>
             </motion.div>
           )}

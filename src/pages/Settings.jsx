@@ -26,7 +26,7 @@ import {
   notificationsSupported,
   playSound,
   primeAudio,
-  pushConfigured,
+  pushMode,
   registerPush,
   requestNotificationPermission,
   setNotifySettings,
@@ -115,6 +115,13 @@ export default function Settings() {
   // React mounts, so localStorage is the only shared surface both can use.
   const [notif, setNotif] = useState(() => getNotifySettings());
   const [perm, setPerm] = useState(() => notificationPermission());
+  // 'server' | 'local' | 'unsupported'. Resolved from the API, not from a
+  // build flag, so we never promise push the backend cannot actually send.
+  const [pmode, setPmode] = useState('local');
+
+  useEffect(() => {
+    pushMode().then(setPmode);
+  }, []);
 
   useEffect(() => {
     platformAuthenticatorAvailable().then(setBioAvailable);
@@ -125,7 +132,10 @@ export default function Settings() {
   const askPermission = async () => {
     const result = await requestNotificationPermission();
     setPerm(result);
-    if (result === 'granted' && pushConfigured()) await registerPush();
+    if (result !== 'granted') return;
+    const mode = await pushMode(true);
+    setPmode(mode);
+    if (mode === 'server') await registerPush();
   };
 
   /* ------------------------------ handlers ------------------------------ */
@@ -297,7 +307,7 @@ export default function Settings() {
           <Row
             icon={IconBell}
             label={t('notify.daily')}
-            sub={t('notify.dailySub')}
+            sub={pmode === 'server' ? t('notify.dailySub') : t('notify.dailySubLocal')}
             right={<Switch on={notif.dailyPromo} onChange={() => patchNotif({ dailyPromo: !notif.dailyPromo })} />}
           />
           <Row
@@ -314,8 +324,12 @@ export default function Settings() {
             <Row
               icon={IconInfo}
               label={t('notify.permission')}
-              sub={pushConfigured() ? t('notify.pushOn') : t('notify.pushLocal')}
-              right={<span className="pill pill-up">{t('notify.permissionGranted')}</span>}
+              sub={pmode === 'server' ? t('notify.pushOn') : t('notify.pushLocal')}
+              right={
+                <span className={`pill ${pmode === 'server' ? 'pill-up' : 'pill-rgb'}`}>
+                  {pmode === 'server' ? t('notify.modeServer') : t('notify.modeLocal')}
+                </span>
+              }
             />
           ) : perm === 'denied' ? (
             <Row icon={IconInfo} label={t('notify.permission')} sub={t('notify.permissionDenied')} />

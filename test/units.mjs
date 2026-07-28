@@ -9,6 +9,10 @@ import { FAMILY, isValidFor, resolvePayout, payoutTable } from '../src/lib/payou
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { pickPromoKey } from '../src/lib/notify.js';
+import { analyze } from '../src/lib/ai.js';
+import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
+import coverage from '../src/i18n/coverage.json';
+import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 
 export default function run() {
   const rows = [];
@@ -119,6 +123,96 @@ export default function run() {
   const d2 = new Date('2026-01-02T10:00:00Z');
   t('promo copy is stable within a day', pickPromoKey(d1) === pickPromoKey(d1Later));
   t('promo copy rotates across days', pickPromoKey(d1) !== pickPromoKey(d2));
+
+  /* ------------------- local AI narrator (no model) -------------------- */
+  /* The whole point: the analysis screen must produce real prose with zero
+     configuration, because the indicators behind it are computed locally
+     anyway and gating them on a remote key hid work already done. */
+
+  const upTrend = Array.from({ length: 80 }, (_, i) => 100 + i * 0.8 + Math.sin(i / 3) * 2);
+  const downTrend = Array.from({ length: 80 }, (_, i) => 180 - i * 0.7 + Math.sin(i / 4) * 3);
+  const flat = Array.from({ length: 80 }, (_, i) => 100 + Math.sin(i / 5) * 0.6);
+
+  const aUp = analyze(upTrend, { symbol: 'BTC', change24h: 2.1, change7d: 6.4 });
+  const aDown = analyze(downTrend, { symbol: 'ETH', change24h: -2.4, change7d: -7.1 });
+  const aFlat = analyze(flat, { symbol: 'USDC', change24h: 0.01, change7d: 0.02 });
+
+  t('analyze() produces a result from real price history', Boolean(aUp && aDown && aFlat));
+
+  for (const [name, a] of [['uptrend', aUp], ['downtrend', aDown], ['flat', aFlat]]) {
+    const o = localOutlook({ analysis: a, coin: { symbol: 'X' }, lang: 'en' });
+    t(`${name}: outlook is produced without any model`, Boolean(o?.summary));
+    t(`${name}: has a headline`, Boolean(o.headline && o.headline.length > 8));
+    t(`${name}: summary is real prose, not a stub`, o.summary.length > 80);
+    t(`${name}: always states at least one risk`, o.risks.length >= 1);
+    t(`${name}: always states an invalidation level`, Boolean(o.invalidation));
+    t(`${name}: labels itself as locally generated`, o.source === 'local');
+    t(`${name}: confidence never exceeds the 88 cap`, o.confidence <= 88);
+    t(`${name}: no unresolved {placeholder} left in the prose`, !/\{\w+\}/.test(o.summary + o.headline + o.invalidation));
+    t(`${name}: gives a range, never a single target`, !o.range || o.range.low < o.range.high);
+  }
+
+  // The honest-risk guarantee: it must always admit it cannot see news.
+  const oNews = localOutlook({ analysis: aUp, coin: { symbol: 'X' }, lang: 'en' });
+  t('always discloses that it reads price only', oNews.risks.some((r) => /news/i.test(r)));
+
+  // Localisation of the narration itself.
+  const oFa = localOutlook({ analysis: aUp, coin: { symbol: 'BTC' }, lang: 'fa' });
+  t('narrates in Persian', /[\u0600-\u06FF]/.test(oFa.summary));
+  t('uses Persian-Indic digits in Persian prose', /[۰-۹]/.test(oFa.summary));
+  t('keeps currency figures in Latin digits', !/\$[۰-۹]/.test(oFa.invalidation));
+  t('no unresolved placeholder in Persian', !/\{\w+\}/.test(oFa.summary + oFa.headline));
+
+  const oAr = localOutlook({ analysis: aUp, coin: { symbol: 'BTC' }, lang: 'ar' });
+  t('narrates in Arabic', /[\u0600-\u06FF]/.test(oAr.summary));
+
+  // An unsupported language must fall back to English, not to a blank.
+  const oZh = localOutlook({ analysis: aUp, coin: { symbol: 'BTC' }, lang: 'zh' });
+  t('unsupported narration language falls back to English prose', oZh.summary.length > 80);
+
+  t('no analysis means no invented outlook', localOutlook({ analysis: null, lang: 'en' }) === null);
+
+  /* ------------------------------ brief -------------------------------- */
+
+  const bDown = localBrief({
+    global: { mcapChange: -2.3, btcDominance: 54.2 },
+    top: [
+      { symbol: 'BTC', change24h: -1.2 },
+      { symbol: 'ETH', change24h: -3.4 },
+      { symbol: 'SOL', change24h: -2.2 }
+    ],
+    lang: 'en'
+  });
+  t('brief reads breadth, not just the index', /3 of 3|broad/i.test(bDown.summary));
+  t('brief detects a bearish tape', bDown.bias === 'bearish');
+
+  const bMixed = localBrief({
+    global: { mcapChange: 0.1, btcDominance: 50 },
+    top: [
+      { symbol: 'BTC', change24h: 1 },
+      { symbol: 'ETH', change24h: -1 }
+    ],
+    lang: 'en'
+  });
+  t('brief calls a mixed tape neutral rather than picking a side', bMixed.bias === 'neutral');
+  t('brief labels itself as locally generated', bDown.source === 'local');
+
+  /* --------------------- translation coverage honesty ------------------- */
+  /*
+   * ar.json used to claim completeness while 686 of its strings were still
+   * English. Coverage is now measured; these assertions stop it drifting back
+   * into a comfortable lie.
+   */
+  t('coverage data is generated for every language', LANGUAGES.every((l) => coverage.coverage[l.code] !== undefined));
+  t('English is the source and therefore 100%', coverageFor('en') === 100);
+  t('Persian is effectively complete', coverageFor('fa') >= 90);
+  t('every language reports a plausible percentage', LANGUAGES.every((l) => coverageFor(l.code) >= 0 && coverageFor(l.code) <= 100));
+  t(
+    'a language is only called complete when measurement agrees',
+    LANGUAGES.every((l) => isComplete(l.code) === coverageFor(l.code) >= 90)
+  );
+  t('partial languages are not marked complete', !isComplete('zh') && !isComplete('tr'));
+  t('coverage counts against the real key total', coverage.total > 900);
 
   return rows;
 }

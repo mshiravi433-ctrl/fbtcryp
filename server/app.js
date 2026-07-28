@@ -25,6 +25,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
+import { pushConfigured, sendDailyPromo } from './push.js';
 import {
   addSubscription,
   readLeaderboard,
@@ -261,9 +262,36 @@ app.post('/api/leaderboard', async (req, res) => {
 });
 
 /* ------------------------------- push ------------------------------------ */
-/* Storing subscriptions is useful even before a sender exists — it means the
- * day you add one, you already have an audience. Actually SENDING requires a
- * VAPID keypair and the `web-push` library; see docs/PUSH-FA.md.             */
+
+/** Lets the client state plainly whether push is real here or local-only. */
+app.get('/api/push/status', (_req, res) =>
+  res.json({ configured: pushConfigured(), durable: storeDurable() })
+);
+
+/**
+ * Daily promotional broadcast.
+ *
+ * Intended for a scheduler (Vercel Cron, GitHub Actions, or plain cron) once
+ * per day. Protected by a shared secret rather than left open: an unprotected
+ * endpoint that notifies every user is a button anyone on the internet can
+ * press repeatedly, and the punishment for spamming is the user revoking
+ * notification permission — after which we cannot reach them for the things
+ * that matter either.
+ */
+app.post('/api/push/daily', async (req, res) => {
+  const secret = process.env.CRON_SECRET || '';
+  if (!secret) return res.status(503).json({ error: 'CRON_SECRET_NOT_SET' });
+
+  const provided =
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-cron-secret') || '';
+  if (provided !== secret) return res.status(401).json({ error: 'UNAUTHORIZED' });
+
+  try {
+    return res.json(await sendDailyPromo());
+  } catch (err) {
+    return res.status(500).json({ error: 'SEND_FAILED', detail: String(err.message).slice(0, 160) });
+  }
+});
 
 app.post('/api/push/subscribe', async (req, res) => {
   const { subscription, lang } = req.body ?? {};

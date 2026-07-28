@@ -211,12 +211,24 @@ export function showLocalNotification(title, options = {}) {
 /**
  * One promotional notification per 24h per install.
  *
- * Deliberately rate-limited in code, not just by intent: a nagging app gets
- * its notification permission revoked, and then you can't reach the user for
- * anything that matters (a filled order, a security notice). One a day is the
- * most that stays welcome.
+ * ⚠️ READ THIS BEFORE RELYING ON IT
+ * This is a LOCAL fallback and it can only fire while the app is running,
+ * because that is when this function is called. In other words the only
+ * person it can reach is someone already looking at the app — which is
+ * precisely the person a re-engagement notification is useless for.
  *
- * The message rotates so it doesn't read like a stuck robot.
+ * Real re-engagement needs server-sent push (`server/push.js` +
+ * `POST /api/push/daily` on a scheduler). When that is configured,
+ * `pushConfigured()` is true and this local path stands down entirely so the
+ * user never gets the same message twice.
+ *
+ * Kept because it is still genuinely useful for a build with no backend: it
+ * surfaces the day's message the next time the app is opened, which is better
+ * than nothing and is exactly what the Settings screen says it does.
+ *
+ * Rate-limited in code, not just by intent: a nagging app gets its
+ * notification permission revoked, and after that you cannot reach the user
+ * for the things that matter either.
  */
 const PROMO_KEYS = ['promo1', 'promo2', 'promo3', 'promo4', 'promo5', 'promo6', 'promo7'];
 
@@ -233,6 +245,9 @@ export function maybeSendDailyPromo(resolve) {
   const s = getNotifySettings();
   if (!s.dailyPromo) return false;
   if (notificationPermission() !== 'granted') return false;
+  // The server owns the schedule when push is live — sending here too would
+  // double up.
+  if (pushConfigured() && s.pushSubscribed) return false;
   if (Date.now() - (s.lastPromoAt || 0) < 24 * 60 * 60 * 1000) return false;
 
   const { title, body } = resolve(pickPromoKey());
@@ -257,7 +272,51 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+/**
+ * True when this BUILD carries a VAPID public key.
+ *
+ * Note the distinction from `pushMode()` below: a key in the bundle only means
+ * the client can attempt to subscribe. Whether the server can actually send is
+ * a separate question, answered by `/api/push/status`, and the UI must not
+ * promise push on the strength of a build flag alone.
+ */
 export const pushConfigured = () => Boolean(VAPID_PUBLIC_KEY);
+
+let cachedPushMode = null;
+
+/**
+ * What push actually is on this install, right now.
+ *
+ *   'server' — a VAPID key is present AND the API confirms it can send.
+ *              Notifications arrive with the app closed.
+ *   'local'  — no server sender. Messages are shown the next time the app is
+ *              opened. This is a real feature, but it is NOT push, and the UI
+ *              says so rather than implying otherwise.
+ *   'unsupported' — the browser/WebView has no Notification API at all.
+ */
+export async function pushMode(force = false) {
+  if (cachedPushMode && !force) return cachedPushMode;
+  if (!notificationsSupported()) {
+    cachedPushMode = 'unsupported';
+    return cachedPushMode;
+  }
+  if (!pushConfigured()) {
+    cachedPushMode = 'local';
+    return cachedPushMode;
+  }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(`${API_BASE}/push/status`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = res.ok ? await res.json() : null;
+    cachedPushMode = data?.configured ? 'server' : 'local';
+  } catch {
+    // Cannot confirm the server can send, so do not claim it can.
+    cachedPushMode = 'local';
+  }
+  return cachedPushMode;
+}
 
 /**
  * Subscribe this device to server-sent push.

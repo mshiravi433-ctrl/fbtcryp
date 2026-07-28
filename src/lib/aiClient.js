@@ -42,6 +42,7 @@ async function post(path, body, timeout = 60000) {
 
 import { directGeminiAvailable, directBrief, directFaq, directOutlook } from './geminiDirect';
 import { localAnswer } from './faqLocal';
+import { localBrief, localOutlook } from './localOutlook';
 
 /**
  * Resolution order for every AI call:
@@ -98,8 +99,49 @@ async function viaServerOr(directFn, path, payload) {
   return directFn(payload);
 }
 
-export const getOutlook = (payload) => viaServerOr(directOutlook, '/ai/outlook', payload);
-export const getMarketBrief = (payload) => viaServerOr(directBrief, '/ai/brief', payload);
+/**
+ * Per-asset outlook.
+ *
+ * Order: backend model -> packaged Gemini -> local narrator.
+ *
+ * The local tier is not a placeholder. RSI, MACD, Bollinger, the moving
+ * averages and realised volatility are all computed locally in `lib/ai.js`
+ * from real price history — a model was only ever putting sentences around
+ * those numbers. `localOutlook` writes those sentences deterministically, in
+ * the user's language, from the same values.
+ *
+ * It is also the safer narrator: a model asked to comment on indicators will
+ * occasionally invent a level or a news event, and this cannot. Where a model
+ * genuinely wins is news grounding and open-ended reasoning, which is why it
+ * still takes priority whenever one is configured.
+ *
+ * Callers pass `analysis` and `coin` alongside the model payload so the local
+ * tier has what it needs; the remote tiers simply ignore the extras.
+ */
+export async function getOutlook(payload) {
+  try {
+    const res = await viaServerOr(directOutlook, '/ai/outlook', payload);
+    if (res?.summary) return { ...res, source: res.source ?? 'model' };
+  } catch {
+    /* fall through to the local narrator */
+  }
+  return localOutlook({
+    analysis: payload?.analysis,
+    coin: { symbol: payload?.symbol, name: payload?.name, ...payload?.coin },
+    lang: payload?.lang,
+    days: payload?.days ?? 7
+  });
+}
+
+export async function getMarketBrief(payload) {
+  try {
+    const res = await viaServerOr(directBrief, '/ai/brief', payload);
+    if (res?.summary) return { ...res, source: res.source ?? 'model' };
+  } catch {
+    /* fall through */
+  }
+  return localBrief({ global: payload?.global, top: payload?.top, lang: payload?.lang });
+}
 
 /**
  * Answer a support question.

@@ -1,6 +1,7 @@
 {
   "nav": {
     "market": "Mercado",
+    "trade": "Operar",
     "swap": "Intercambiar",
     "wallet": "Cartera",
     "signals": "Señales",
@@ -8,58 +9,283 @@
     "more": "Más",
     "settings": "Ajustes",
     "help": "Ayuda",
-    "about": "Acerca de"
+    "about": "Acerca de",
+    "invest": "Invertir",
+    "earn": "Ganar",
+    "farm": "Farming",
+    "perp": "Perpetuos",
+    "predict": "Predecir",
+    "stocks": "Acciones",
+    "p2p": "P2P",
+    "leaderboard": "Clasificación",
+    "docs": "Guías",
+    "audit": "Auditoría",
+    "developers": "Desarrolladores",
+    "ecosystem": "Ecosistema",
+    "business": "Negocios",
+    "play": "Juegos",
+    "group": {
+      "markets": "Mercados",
+      "earn": "Ganar",
+      "more": "Más"
+    }
   },
   "common": {
+    "balance": "Saldo",
     "back": "Atrás",
     "cancel": "Cancelar",
     "confirm": "Confirmar",
-    "done": "Hecho",
-    "loading": "Cargando…",
+    "copy": "Copiar",
+    "copied": "Copiado",
     "refresh": "Actualizar",
+    "days": "días",
+    "loading": "Cargando…",
+    "done": "Hecho",
+    "searching": "Buscando…",
+    "enable": "Activar",
+    "disable": "Desactivar",
+    "on": "Activado",
+    "off": "Desactivado",
     "language": "Idioma",
-    "notAdvice": "Los datos de mercado son solo informativos y no constituyen asesoramiento financiero. Las criptomonedas son volátiles: puedes perderlo todo."
+    "tryAgain": "Reintentar",
+    "notAdvice": "Los datos de mercado son solo informativos y no constituyen asesoramiento financiero. Las criptomonedas son volátiles: puedes perderlo todo.",
+    "offlineData": "Sin conexión en directo: se muestra una copia en caché. Los precios no son reales."
+  },
+  "toast": {
+    "copied": "Copiado al portapapeles"
+  },
+  "wallet": {
+    "connect": "Conectar cartera",
+    "connecting": "Conectando…",
+    "disconnect": "Desconectar",
+    "unlock": "Desbloquear",
+    "wrongNetwork": "Red incorrecta",
+    "netWorth": "Patrimonio",
+    "holdings": "Posiciones",
+    "noHoldings": "Sin posiciones aún",
+    "activity": "Actividad reciente",
+    "custodyNotice": "Solo lectura. Esta app no tiene dirección de depósito y nunca te pedirá enviar cripto a ningún sitio. Cualquier bot que lo pida es una estafa."
+  },
+  "settings": {
+    "title": "Ajustes",
+    "profile": "Perfil",
+    "appearance": "Apariencia",
+    "trading": "Operaciones",
+    "security": "Seguridad",
+    "networks": "Redes",
+    "company": "Empresa",
+    "language": "Idioma",
+    "wallet": "Cartera",
+    "noWallet": "Sin conectar",
+    "theme": "Tema",
+    "themeDark": "Oscuro",
+    "themeLight": "Claro",
+    "themeAuto": "Auto",
+    "accent": "Color de acento",
+    "hideBalances": "Ocultar saldos",
+    "reduceMotion": "Reducir animaciones",
+    "compactMode": "Modo compacto",
+    "defaultSlippage": "Deslizamiento por defecto"
+  },
+  "profile": {
+    "username": "Nombre visible",
+    "usernameLabel": "Nombre visible (opcional)",
+    "usernamePlaceholder": "p. ej. Ana",
+    "usernameUnset": "Sin definir",
+    "username_tooShort": "Al menos 2 caracteres.",
+    "usernameHelp": "Es el nombre que aparece junto a tu puntuación en la clasificación. No es una cuenta, no tiene contraseña y no se reserva: solo un apodo. Tu identidad real aquí es tu dirección de cartera."
+  },
+  "market": {
+    "totalMcap": "Cap. total",
+    "volume24h": "Volumen 24h",
+    "btcDominance": "Dominancia BTC",
+    "ethDominance": "Dominancia ETH",
+    "coins": "Monedas",
+    "markets": "Mercados",
+    "avgChange": "Cambio medio",
+    "trending": "Tendencias",
+    "allCoins": "Todas las monedas",
+    "search": "Buscar monedas…",
+    "noResults": "Sin resultados",
+    "searching": "Buscando en todas las monedas…",
+    "moreResults": "Más resultados del mercado completo",
+    "filter": {
+      "all": "Todo",
+      "gainers": "Ganadores",
+      "losers": "Perdedores",
+      "favorites": "Favoritos",
+      "volume": "Volumen"
+    }
+  },
+  "coin": {
+    "notFound": "Moneda no encontrada",
+    "high24h": "Máx. 24h",
+    "low24h": "Mín. 24h",
+    "mcap": "Capitalización",
+    "volume": "Volumen",
+    "change1h": "Cambio 1h",
+    "change7d": "Cambio 7d",
+    "supply": "Suministro",
+    "fromAth": "Desde máx. histórico",
+    "notFoundHelp": "Esta moneda no estaba en la página cargada y la consulta directa tampoco respondió. Suele significar que el proveedor de datos está limitando peticiones: inténtalo en un momento."
+  },
+  "swap": {
+    "title": "Intercambiar",
+    "from": "Desde",
+    "to": "A",
+    "balance": "Saldo",
+    "rate": "Tasa",
+    "minReceived": "Mínimo recibido",
+    "priceImpact": "Impacto en precio",
+    "networkFee": "Comisión de red",
+    "route": "Ruta",
+    "review": "Revisar",
+    "quoting": "Cotizando…",
+    "selectToken": "Elegir token",
+    "settings": "Ajustes de intercambio",
+    "slippage": "Deslizamiento",
+    "confirmTitle": "Confirmar intercambio",
+    "confirmSwap": "Confirmar intercambio",
+    "youPay": "Pagas",
+    "youReceive": "Recibes",
+    "recipient": "Destinatario",
+    "viewOnExplorer": "Ver en el explorador",
+    "dontClose": "No cierres esta pantalla.",
+    "success": "Intercambio completado",
+    "notConnected": "Cartera no conectada",
+    "insufficient": "Saldo insuficiente",
+    "flip": "Invertir los dos tokens",
+    "searchToken": "Busca por nombre, símbolo o pega una dirección…",
+    "tokensAvailable": "{{n}} tokens intercambiables en esta red",
+    "loadingList": "Actualizando lista de tokens…",
+    "verified": "Verificado",
+    "imported": "Importado",
+    "importTitle": "Importar token por dirección",
+    "importAction": "Importar este token",
+    "importing": "Leyendo de la cadena…",
+    "noTokenResults": "No se encontró el token. Si tienes la dirección del contrato, pégala para importarlo.",
+    "gasTitle": "Comisión de red en cada cadena",
+    "nonCustodialNotice": "No custodial: cada transacción la firma y envía tu propia cartera. No guardamos tus fondos ni tenemos dirección de depósito.",
+    "verifyContracts": "Aparecer en la lista no es un aval. Verifica la dirección del contrato en el sitio oficial antes de intercambiar.",
+    "unverifiedWarning": "{{symbol}} no ha sido verificado manualmente por nosotros. Estar en una lista no es un aval: comprueba la dirección del contrato antes de intercambiar.",
+    "gasBody": "El gas siempre se paga en la moneda nativa de la red y desde la misma cartera; no es solo BNB. Para intercambiar en una cadena necesitas algo de la moneda indicada abajo.",
+    "gasNote": "El gas va a los validadores de la cadena, no a nosotros, y es independiente de la comisión del 0,5%. Si no tienes la moneda nativa de una cadena, cambia a otra donde sí la tengas.",
+    "needGas": "Esta transacción necesita {{coin}} en {{chain}} para el gas y tu saldo no alcanza. Añade un poco de {{coin}} o cambia a una cadena cuya moneda nativa ya tengas.",
+    "importBody": "Esta dirección no está en ninguna lista pública. Leemos el símbolo y los decimales directamente de la cadena. Verificar la dirección es cosa tuya: un carácter equivocado es un token falso."
+  },
+  "signals": {
+    "title": "Señales",
+    "confidence": "Confianza",
+    "breakdown": "Desglose de señales",
+    "volatility": "Volatilidad",
+    "support": "Soporte",
+    "resistance": "Resistencia",
+    "projection": "Rango proyectado",
+    "drivers": "A favor",
+    "risks": "Riesgos",
+    "invalidation": "Se invalida si",
+    "aiThinking": "Leyendo el mercado…",
+    "aiOutlook": "Perspectiva IA",
+    "outlookLocal": "Lectura de indicadores",
+    "aiRange": "Rango de {{d}} días",
+    "aiMetaLocal": "Generado en el dispositivo a partir de los indicadores (RSI, MACD, Bollinger, medias móviles, volatilidad). No interviene ningún modelo de lenguaje.",
+    "disclaimer": "Son indicadores técnicos clásicos (RSI, MACD, Bollinger, medias móviles) calculados sobre historial real de precios: lo mismo que hay detrás de la mayoría de productos de \"señales IA\". Resumen lo que hace el gráfico, no predicen el futuro. A corto plazo los mercados son casi aleatorios. Nunca operes solo por una puntuación.",
+    "coneExplain": "Es un rango de volatilidad, no un pronóstico. Si el movimiento a {{d}} días continúa al ritmo reciente, en torno al {{p}}% de los resultados caerá dentro de esta banda. No dice nada sobre la dirección.",
+    "label": {
+      "strongBuy": "Compra fuerte",
+      "buy": "Compra",
+      "neutral": "Neutral",
+      "sell": "Venta",
+      "strongSell": "Venta fuerte"
+    },
+    "bias": {
+      "bullish": "Alcista",
+      "bearish": "Bajista",
+      "neutral": "Neutral"
+    }
+  },
+  "news": {
+    "title": "Noticias cripto",
+    "subtitle": "Se actualiza cada 24 horas",
+    "refresh": "Actualizar",
+    "loading": "Cargando…",
+    "search": "Buscar titulares…",
+    "empty": "Ningún titular coincide.",
+    "digest": "Resumen de mercado",
+    "updated": "Actualizado hace {{ago}}",
+    "readAt": "Leer en {{source}}",
+    "notifyToggle": "Notificaciones de noticias",
+    "cat": {
+      "all": "Todo",
+      "bitcoin": "Bitcoin",
+      "ethereum": "Ethereum",
+      "defi": "DeFi",
+      "regulation": "Regulación"
+    },
+    "disclaimer": "Los titulares provienen de medios de terceros y cada tarjeta indica su fuente. No respaldamos ni editamos su contenido, y nada de esto es asesoramiento de inversión.",
+    "generatedNotice": "No se pudo acceder a ninguna fuente de noticias, así que este resumen se generó a partir de datos de mercado: no es periodismo."
+  },
+  "notify": {
+    "title": "Notificaciones y sonido",
+    "sound": "Sonido de operación",
+    "vibrate": "Vibración",
+    "tradeAlerts": "Alertas de operaciones",
+    "daily": "Notificación diaria",
+    "news": "Alertas de noticias",
+    "permission": "Permiso de notificaciones",
+    "permissionAsk": "Permitir",
+    "modeServer": "Push activo",
+    "modeLocal": "Solo en el dispositivo",
+    "tradeDoneTitle": "Operación completada",
+    "tradeFailTitle": "Operación fallida",
+    "tradeDoneBody": "Se cambiaron {{amount}} {{from}} por {{to}}.",
+    "pushLocal": "Esta versión no tiene push desde el servidor. Las notificaciones aparecen la próxima vez que abras la app: es una función real, pero no es push, y no vamos a fingir lo contrario.",
+    "pushOn": "Push desde el servidor activo: las notificaciones llegan aunque la app esté cerrada.",
+    "dailySubLocal": "Como máximo una al día. En esta versión aparece la próxima vez que abras la app, no llega sola al teléfono."
   },
   "welcome": {
     "title": "Elige tu idioma",
     "subtitle": "Puedes cambiarlo en cualquier momento desde Ajustes.",
     "continue": "Continuar",
-    "partial": "Las pantallas principales están traducidas; el texto más especializado aún aparece en inglés.",
+    "partial": "Traducción parcial",
     "full": "Traducción completa"
   },
   "onboarding": {
     "next": "Continuar",
     "skip": "Omitir",
-    "start": "Empezar"
+    "start": "Empezar",
+    "language": {
+      "title": "Elige tu idioma",
+      "body": "Todo cambia al instante y puedes volver a cambiarlo desde Ajustes cuando quieras."
+    },
+    "custody": {
+      "title": "Tus claves, tus monedas"
+    }
   },
   "guide": {
     "next": "Siguiente",
     "back": "Anterior",
     "done": "He leído todas las instrucciones",
-    "language": "Idioma de la guía"
-  },
-  "swap": {
-    "title": "Intercambiar",
-    "searchToken": "Busca por nombre, símbolo o pega una dirección…",
-    "gasBody": "El gas siempre se paga en la moneda nativa de la red y desde la misma cartera; no es solo BNB.",
-    "nonCustodialNotice": "No custodial: cada transacción la firma y envía tu propia cartera. No guardamos tus fondos ni tenemos dirección de depósito.",
-    "verifyContracts": "Aparecer en la lista no es un aval. Verifica la dirección del contrato en el sitio oficial antes de intercambiar.",
-    "review": "Revisar",
-    "confirmSwap": "Confirmar intercambio"
-  },
-  "wallet": {
-    "connect": "Conectar cartera"
-  },
-  "news": {
-    "title": "Noticias cripto",
-    "subtitle": "Se actualiza cada 24 horas"
+    "language": "Idioma de la guía",
+    "title": "Antes de empezar",
+    "step": "Paso {{n}}",
+    "doneHint": "Abre las cuatro secciones primero.",
+    "closing": "Todo listo — bienvenido"
   },
   "predict": {
-    "riskNotice": "Esta pantalla funciona solo con crédito virtual; no se pueden conectar fondos reales. Las apuestas a corto plazo sobre el precio con dinero real están prohibidas por la ley iraní y también para minoristas en el Reino Unido y la UE."
+    "riskNotice": "Esta pantalla funciona solo con crédito virtual; no se pueden conectar fondos reales. Las apuestas a corto plazo sobre el precio con dinero real están prohibidas por la ley iraní y también para minoristas en el Reino Unido y la UE. Esto existe solo para enseñar el mecanismo."
   },
-  "profile": {
-    "usernameLabel": "Nombre visible (opcional)",
-    "usernamePlaceholder": "p. ej. Ana",
-    "usernameUnset": "Sin definir"
+  "invest": {
+    "simNotice": "Este módulo existe para aprender: el rendimiento es simulado y se paga con crédito virtual según una fórmula fija, así que no se agrupa ni se arriesga dinero real. Un producto de inversión real requiere autorización formal: Fanous Bazaar Pishgam posee esa licencia y una versión real está en la hoja de ruta; hasta entonces, esto es práctica."
+  },
+  "stocks": {
+    "honestBody": "Nuestra preferencia siempre ha sido ofrecer esto a escala global y no dentro de un único mercado local. Un token que representa acciones de Apple es un valor en todas las jurisdicciones: emitirlo exige un emisor autorizado que custodie las acciones reales, un folleto y una licencia de intermediación para distribuirlo. Eso es una construcción jurídica internacional, no una función de software; hasta que esa estructura global exista, en lugar de afirmar algo que no tenemos, te conectamos con emisores que ya poseen esas licencias."
+  },
+  "rank": {
+    "demoNotice": "La clasificación se calcula con actividad real de usuarios y se actualiza desde el servidor cada vez que abres la app.",
+    "emptyBoard": "Nadie ha publicado una puntuación todavía. Haz un intercambio o registra tu visita diaria y serás el primer nombre del tablero."
+  },
+  "help": {
+    "aiNoAnswer": "No tengo una respuesta fiable para eso y prefiero no adivinar: está en juego tu dinero. Usa \"Contáctanos\" y te responderá una persona."
   }
 }

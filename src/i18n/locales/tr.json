@@ -1,6 +1,7 @@
 {
   "nav": {
     "market": "Piyasa",
+    "trade": "İşlem",
     "swap": "Takas",
     "wallet": "Cüzdan",
     "signals": "Sinyaller",
@@ -8,58 +9,283 @@
     "more": "Daha",
     "settings": "Ayarlar",
     "help": "Yardım",
-    "about": "Hakkında"
+    "about": "Hakkında",
+    "invest": "Yatırım",
+    "earn": "Kazan",
+    "farm": "Çiftlik",
+    "perp": "Vadesiz",
+    "predict": "Tahmin",
+    "stocks": "Hisseler",
+    "p2p": "P2P",
+    "leaderboard": "Sıralama",
+    "docs": "Belgeler",
+    "audit": "Denetim",
+    "developers": "Geliştiriciler",
+    "ecosystem": "Ekosistem",
+    "business": "Kurumsal",
+    "play": "Oyunlar",
+    "group": {
+      "markets": "Piyasalar",
+      "earn": "Kazan",
+      "more": "Daha"
+    }
   },
   "common": {
+    "balance": "Bakiye",
     "back": "Geri",
     "cancel": "İptal",
     "confirm": "Onayla",
-    "done": "Tamam",
-    "loading": "Yükleniyor…",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı",
     "refresh": "Yenile",
+    "days": "gün",
+    "loading": "Yükleniyor…",
+    "done": "Tamam",
+    "searching": "Aranıyor…",
+    "enable": "Etkinleştir",
+    "disable": "Devre dışı",
+    "on": "Açık",
+    "off": "Kapalı",
     "language": "Dil",
-    "notAdvice": "Piyasa verileri yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir. Kripto oynaktır — her şeyinizi kaybedebilirsiniz."
+    "tryAgain": "Tekrar dene",
+    "notAdvice": "Piyasa verileri yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir. Kripto oynaktır — her şeyinizi kaybedebilirsiniz.",
+    "offlineData": "Canlı akış yok — önbellek gösteriliyor. Fiyatlar gerçek değil."
+  },
+  "toast": {
+    "copied": "Panoya kopyalandı"
+  },
+  "wallet": {
+    "connect": "Cüzdan bağla",
+    "connecting": "Bağlanıyor…",
+    "disconnect": "Bağlantıyı kes",
+    "unlock": "Kilidi aç",
+    "wrongNetwork": "Yanlış ağ",
+    "netWorth": "Net değer",
+    "holdings": "Varlıklar",
+    "noHoldings": "Henüz varlık yok",
+    "activity": "Son işlemler",
+    "custodyNotice": "Salt okunur. Bu uygulamanın yatırma adresi yoktur ve sizden asla kripto göndermenizi istemez. İsteyen her bot dolandırıcıdır."
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "profile": "Profil",
+    "appearance": "Görünüm",
+    "trading": "İşlem",
+    "security": "Güvenlik",
+    "networks": "Ağlar",
+    "company": "Şirket",
+    "language": "Dil",
+    "wallet": "Cüzdan",
+    "noWallet": "Bağlı değil",
+    "theme": "Tema",
+    "themeDark": "Koyu",
+    "themeLight": "Açık",
+    "themeAuto": "Otomatik",
+    "accent": "Vurgu rengi",
+    "hideBalances": "Bakiyeleri gizle",
+    "reduceMotion": "Hareketi azalt",
+    "compactMode": "Sıkışık mod",
+    "defaultSlippage": "Varsayılan kayma"
+  },
+  "profile": {
+    "username": "Görünen ad",
+    "usernameLabel": "Görünen ad (isteğe bağlı)",
+    "usernamePlaceholder": "örn. Ayşe",
+    "usernameUnset": "Ayarlanmadı",
+    "username_tooShort": "En az 2 karakter.",
+    "usernameHelp": "Bu, sıralamada puanınızın yanında görünen addır. Hesap değildir, parolası yoktur ve rezerve edilmez — sadece bir takma ad. Buradaki gerçek kimliğiniz cüzdan adresinizdir."
+  },
+  "market": {
+    "totalMcap": "Toplam piyasa değeri",
+    "volume24h": "24s hacim",
+    "btcDominance": "BTC hakimiyeti",
+    "ethDominance": "ETH hakimiyeti",
+    "coins": "Coinler",
+    "markets": "Piyasalar",
+    "avgChange": "Ort. değişim",
+    "trending": "Öne çıkan",
+    "allCoins": "Tüm coinler",
+    "search": "Coin ara…",
+    "noResults": "Sonuç yok",
+    "searching": "Tüm coinlerde aranıyor…",
+    "moreResults": "Tüm piyasadan daha fazla sonuç",
+    "filter": {
+      "all": "Tümü",
+      "gainers": "Yükselenler",
+      "losers": "Düşenler",
+      "favorites": "Favoriler",
+      "volume": "Hacim"
+    }
+  },
+  "coin": {
+    "notFound": "Coin bulunamadı",
+    "high24h": "24s en yüksek",
+    "low24h": "24s en düşük",
+    "mcap": "Piyasa değeri",
+    "volume": "Hacim",
+    "change1h": "1s değişim",
+    "change7d": "7g değişim",
+    "supply": "Arz",
+    "fromAth": "ATH'den",
+    "notFoundHelp": "Bu coin yüklü listede yoktu ve doğrudan sorgu da yanıt vermedi. Genellikle veri sağlayıcı istekleri sınırlıyordur — birazdan tekrar deneyin."
+  },
+  "swap": {
+    "title": "Takas",
+    "from": "Gönderilen",
+    "to": "Alınan",
+    "balance": "Bakiye",
+    "rate": "Kur",
+    "minReceived": "En az alınacak",
+    "priceImpact": "Fiyat etkisi",
+    "networkFee": "Ağ ücreti",
+    "route": "Rota",
+    "review": "İncele",
+    "quoting": "Fiyat alınıyor…",
+    "selectToken": "Token seç",
+    "settings": "Takas ayarları",
+    "slippage": "Kayma",
+    "confirmTitle": "Takası onayla",
+    "confirmSwap": "Takası onayla",
+    "youPay": "Ödersiniz",
+    "youReceive": "Alırsınız",
+    "recipient": "Alıcı",
+    "viewOnExplorer": "Gezginde görüntüle",
+    "dontClose": "Bu ekranı kapatmayın.",
+    "success": "Takas tamamlandı",
+    "notConnected": "Cüzdan bağlı değil",
+    "insufficient": "Yetersiz bakiye",
+    "flip": "İki tokeni değiştir",
+    "searchToken": "Ad, sembol arayın veya sözleşme adresi yapıştırın…",
+    "tokensAvailable": "Bu ağda {{n}} takas edilebilir token",
+    "loadingList": "Token listesi güncelleniyor…",
+    "verified": "Doğrulanmış",
+    "imported": "İçe aktarıldı",
+    "importTitle": "Adresle token içe aktar",
+    "importAction": "Bu tokeni içe aktar",
+    "importing": "Zincirden okunuyor…",
+    "noTokenResults": "Token bulunamadı. Sözleşme adresiniz varsa yapıştırıp içe aktarın.",
+    "gasTitle": "Her zincirde ağ ücreti",
+    "nonCustodialNotice": "Saklamasız: her işlemi kendi cüzdanınız imzalar ve gönderir. Varlıklarınızı tutmayız, yatırma adresimiz yoktur.",
+    "verifyContracts": "Listede olmak onay anlamına gelmez. Takas öncesi sözleşme adresini projenin resmi sitesinden doğrulayın.",
+    "unverifiedWarning": "{{symbol}} tarafımızca elle doğrulanmadı. Listede olmak onay değildir — takas öncesi sözleşme adresini kontrol edin.",
+    "gasBody": "Gas her zaman bulunduğunuz ağın yerel coini ile ve aynı cüzdandan ödenir — sadece BNB değil. Bir zincirde takas için aşağıdaki coinden gerekir.",
+    "gasNote": "Gas ağ doğrulayıcılarına gider, bize değil, ve %0,5 platform ücretinden ayrıdır. Bir zincirin yerel coini yoksa sahip olduğunuz bir zincire geçin.",
+    "needGas": "Bu işlem {{chain}} üzerinde {{coin}} gerektiriyor ve bakiyeniz yetersiz. Biraz {{coin}} ekleyin veya başka bir zincire geçin.",
+    "importBody": "Bu adres hiçbir genel listede yok. Sembol ve ondalıkları doğrudan zincirden okuyoruz. Adresi doğrulamak size ait — bir karakter hatası sahte token demektir."
+  },
+  "signals": {
+    "title": "Sinyaller",
+    "confidence": "Güven",
+    "breakdown": "Sinyal dökümü",
+    "volatility": "Oynaklık",
+    "support": "Destek",
+    "resistance": "Direnç",
+    "projection": "Öngörülen aralık",
+    "drivers": "Destekleyen",
+    "risks": "Riskler",
+    "invalidation": "Geçersiz olur",
+    "aiThinking": "Piyasa okunuyor…",
+    "aiOutlook": "YZ görünümü",
+    "outlookLocal": "Gösterge okuması",
+    "aiRange": "{{d}} günlük aralık",
+    "aiMetaLocal": "Cihazda göstergelerden (RSI, MACD, Bollinger, hareketli ortalamalar, oynaklık) üretildi. Dil modeli kullanılmadı.",
+    "disclaimer": "Bunlar gerçek fiyat geçmişi üzerinden hesaplanan klasik teknik göstergelerdir (RSI, MACD, Bollinger, hareketli ortalamalar) — çoğu \"YZ sinyali\" ürününün altında da bu vardır. Grafiğin ne yaptığını özetler, geleceği tahmin edemez. Asla yalnızca bir skora bakarak işlem yapmayın.",
+    "coneExplain": "Bu bir oynaklık aralığıdır, tahmin değil. {{d}} günlük hareket son hızıyla sürerse sonuçların yaklaşık %{{p}}'i bu bandın içinde kalır. Yön hakkında bir şey söylemez.",
+    "label": {
+      "strongBuy": "Güçlü al",
+      "buy": "Al",
+      "neutral": "Nötr",
+      "sell": "Sat",
+      "strongSell": "Güçlü sat"
+    },
+    "bias": {
+      "bullish": "Yükseliş",
+      "bearish": "Düşüş",
+      "neutral": "Nötr"
+    }
+  },
+  "news": {
+    "title": "Kripto haberleri",
+    "subtitle": "24 saatte bir güncellenir",
+    "refresh": "Yenile",
+    "loading": "Yükleniyor…",
+    "search": "Başlık ara…",
+    "empty": "Bu filtreye uygun haber yok.",
+    "digest": "Piyasa özeti",
+    "updated": "{{ago}} önce güncellendi",
+    "readAt": "{{source}} üzerinde oku",
+    "notifyToggle": "Haber bildirimleri",
+    "cat": {
+      "all": "Tümü",
+      "bitcoin": "Bitcoin",
+      "ethereum": "Ethereum",
+      "defi": "DeFi",
+      "regulation": "Düzenleme"
+    },
+    "disclaimer": "Başlıklar üçüncü taraf yayınlardan gelir ve her kartta kaynağı yazar. İçeriklerini onaylamaz veya düzenlemeyiz; hiçbiri yatırım tavsiyesi değildir.",
+    "generatedNotice": "Hiçbir haber kaynağına erişilemedi, bu nedenle bu özet piyasa verilerinden üretildi — gazetecilik değildir."
+  },
+  "notify": {
+    "title": "Bildirimler ve ses",
+    "sound": "İşlem sesi",
+    "vibrate": "Titreşim",
+    "tradeAlerts": "İşlem uyarıları",
+    "daily": "Günlük bildirim",
+    "news": "Haber uyarıları",
+    "permission": "Bildirim izni",
+    "permissionAsk": "İzin ver",
+    "modeServer": "Push açık",
+    "modeLocal": "Yalnızca cihazda",
+    "tradeDoneTitle": "İşlem tamamlandı",
+    "tradeFailTitle": "İşlem başarısız",
+    "tradeDoneBody": "{{amount}} {{from}}, {{to}} ile takas edildi.",
+    "pushLocal": "Bu sürümde sunucu push yok. Bildirimler uygulamayı bir sonraki açışınızda görünür — bu gerçek bir özellik ama push değil ve öyleymiş gibi davranmayacağız.",
+    "pushOn": "Sunucu push açık: uygulama tamamen kapalıyken bile bildirimler ulaşır.",
+    "dailySubLocal": "Günde en fazla bir tane. Bu sürümde uygulamayı açtığınızda görünür, telefona kendiliğinden gelmez."
   },
   "welcome": {
     "title": "Dilinizi seçin",
     "subtitle": "Bunu istediğiniz zaman Ayarlar'dan değiştirebilirsiniz.",
     "continue": "Devam",
-    "partial": "Ana ekranlar çevrildi; daha teknik metinler şimdilik İngilizce görünür.",
+    "partial": "Kısmi çeviri",
     "full": "Tam çeviri"
   },
   "onboarding": {
     "next": "Devam",
     "skip": "Atla",
-    "start": "Başla"
+    "start": "Başla",
+    "language": {
+      "title": "Dilinizi seçin",
+      "body": "Her şey anında değişir; istediğinizde Ayarlar'dan tekrar değiştirebilirsiniz."
+    },
+    "custody": {
+      "title": "Anahtarlarınız, coinleriniz"
+    }
   },
   "guide": {
     "next": "İleri",
     "back": "Geri",
     "done": "Tüm açıklamaları okudum",
-    "language": "Kılavuz dili"
-  },
-  "swap": {
-    "title": "Takas",
-    "searchToken": "Ad, sembol arayın veya sözleşme adresi yapıştırın…",
-    "gasBody": "Gas her zaman bulunduğunuz ağın yerel coini ile ve aynı cüzdandan ödenir — sadece BNB değil.",
-    "nonCustodialNotice": "Saklamasız: her işlemi kendi cüzdanınız imzalar ve gönderir. Varlıklarınızı tutmayız, yatırma adresimiz yoktur.",
-    "verifyContracts": "Listede olmak onay anlamına gelmez. Takas öncesi sözleşme adresini projenin resmi sitesinden doğrulayın.",
-    "review": "İncele",
-    "confirmSwap": "Takası onayla"
-  },
-  "wallet": {
-    "connect": "Cüzdan bağla"
-  },
-  "news": {
-    "title": "Kripto haberleri",
-    "subtitle": "24 saatte bir güncellenir"
+    "language": "Kılavuz dili",
+    "title": "Başlamadan önce",
+    "step": "Adım {{n}}",
+    "doneHint": "Önce dört bölümü de açın.",
+    "closing": "Hazırsınız — hoş geldiniz"
   },
   "predict": {
-    "riskNotice": "Bu ekran yalnızca sanal kredi ile çalışır; gerçek para bağlanamaz. Gerçek parayla kısa vadeli yön bahsi İran yasalarında yasaktır; Birleşik Krallık ve AB'de de bireysel yatırımcılara yasaktır."
+    "riskNotice": "Bu ekran yalnızca sanal kredi ile çalışır; gerçek para bağlanamaz. Gerçek parayla kısa vadeli yön bahsi İran yasalarında yasaktır; Birleşik Krallık ve AB'de de bireysel yatırımcılara yasaktır. Burası yalnızca mekanizmayı öğretmek içindir."
   },
-  "profile": {
-    "usernameLabel": "Görünen ad (isteğe bağlı)",
-    "usernamePlaceholder": "örn. Ayşe",
-    "usernameUnset": "Ayarlanmadı"
+  "invest": {
+    "simNotice": "Bu modül öğrenmek içindir: getiri simüledir ve sabit bir formülle sanal krediden ödenir; gerçek para toplanmaz ve riske atılmaz. Gerçek bir yatırım ürünü resmi izin gerektirir — Fanous Bazaar Pishgam bu lisansa sahiptir ve gerçek sürüm yol haritasındadır; o zamana kadar burası pratiktir."
+  },
+  "stocks": {
+    "honestBody": "Tercihimiz bunu tek bir yerel pazarda değil, küresel olarak sunmak oldu. Apple hissesini temsil eden bir token her yargı alanında menkul kıymettir: ihracı için gerçek hisseleri saklayan lisanslı bir ihraççı, izahname ve dağıtım için aracı kurum lisansı gerekir. Bu uluslararası bir hukuk projesidir, bir yazılım özelliği değil — o yapı kurulana kadar sahip olmadığımız bir şeyi iddia etmek yerine sizi bu lisanslara bugün sahip olan ihraççılara yönlendiriyoruz."
+  },
+  "rank": {
+    "demoNotice": "Sıralama gerçek kullanıcı etkinliğinden hesaplanır ve uygulamayı her açtığınızda sunucudan yenilenir.",
+    "emptyBoard": "Henüz kimse puan göndermedi. Bir takas yapın veya günlük giriş yapın; bu tablodaki ilk isim siz olun."
+  },
+  "help": {
+    "aiNoAnswer": "Bunun için güvenilir bir cevabım yok ve tahmin yürütmeyi tercih etmem — söz konusu olan sizin paranız. \"Bize ulaşın\"a dokunun, gerçek bir kişi yanıtlayacak."
   }
 }

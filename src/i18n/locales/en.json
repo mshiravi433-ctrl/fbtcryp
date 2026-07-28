@@ -409,7 +409,8 @@
     "linkCopied": "Invite link copied",
     "handleCopied": "Handle copied",
     "addressCopied": "Address copied",
-    "pointsEarned": "Points earned"
+    "pointsEarned": "Points earned",
+    "copied": "Copied to clipboard"
   },
   "swap": {
     "title": "Swap",
@@ -827,7 +828,7 @@
     },
     "aiOutlook": "AI outlook",
     "aiThinking": "Reading the market…",
-    "aiUnavailable": "AI analysis is temporarily unavailable. The indicator signals above are still live.",
+    "aiUnavailable": "No outlook could be built for this asset — usually that means there is not enough price history. The indicator signals above are still live.",
     "aiRange": "{{d}}-day range",
     "drivers": "Supporting",
     "risks": "Risks",
@@ -838,7 +839,9 @@
       "bullish": "Bullish",
       "bearish": "Bearish",
       "neutral": "Neutral"
-    }
+    },
+    "outlookLocal": "Indicator read",
+    "aiMetaLocal": "Generated on this device straight from the indicators (RSI, MACD, Bollinger, moving averages, volatility). No language model is involved — every sentence comes from a number that was actually computed."
   },
   "stocks": {
     "title": "Stocks",
@@ -1378,8 +1381,8 @@
     "permissionGranted": "Allowed",
     "permissionDenied": "Notifications are blocked. You will have to allow them for this app in your phone settings.",
     "unsupported": "This browser or Telegram environment does not support notifications.",
-    "pushLocal": "Notifications are currently scheduled locally on this device. Real server-sent push needs a VAPID key configured at build time — until then we say so plainly rather than pretending push is live.",
-    "pushOn": "Server push active",
+    "pushLocal": "No server-side push is configured. Notifications are scheduled locally and appear the next time you open the app. That is a real feature, but it is not push — and we would rather say so than pretend otherwise.",
+    "pushOn": "Server push is active: notifications arrive even when the app is fully closed.",
     "tradeDoneTitle": "Trade complete",
     "tradeDoneBody": "Swapped {{amount}} {{from}} for {{to}}.",
     "tradeFailTitle": "Trade failed",
@@ -1411,7 +1414,10 @@
     "promo7": {
       "title": "Transparent fees",
       "body": "0.5% platform fee, shown before you sign. Gas is separate and goes to the network."
-    }
+    },
+    "modeServer": "Push active",
+    "modeLocal": "Device only",
+    "dailySubLocal": "At most one a day. In this build it appears the next time you open the app rather than arriving on your phone by itself, because no server-side push is configured."
   },
   "welcome": {
     "title": "Choose your language",

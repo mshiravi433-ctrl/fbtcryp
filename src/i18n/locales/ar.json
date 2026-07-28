@@ -409,7 +409,8 @@
     "linkCopied": "تم نسخ رابط الدعوة",
     "handleCopied": "Handle copied",
     "addressCopied": "Address copied",
-    "pointsEarned": "Points earned"
+    "pointsEarned": "Points earned",
+    "copied": "تم النسخ"
   },
   "swap": {
     "title": "مبادلة",
@@ -827,7 +828,7 @@
     },
     "aiOutlook": "AI outlook",
     "aiThinking": "Reading the market…",
-    "aiUnavailable": "AI analysis is temporarily unavailable. The indicator signals above are still live.",
+    "aiUnavailable": "تعذّر بناء قراءة لهذا الأصل — غالباً بسبب قلة التاريخ السعري. مؤشرات الأعلى لا تزال حية.",
     "aiRange": "{{d}}-day range",
     "drivers": "Supporting",
     "risks": "Risks",
@@ -838,7 +839,9 @@
       "bullish": "Bullish",
       "bearish": "Bearish",
       "neutral": "Neutral"
-    }
+    },
+    "outlookLocal": "قراءة المؤشرات",
+    "aiMetaLocal": "وُلّد على هذا الجهاز مباشرة من المؤشرات (RSI، MACD، بولينجر، المتوسطات المتحركة، التذبذب). لا يشارك أي نموذج لغوي — كل جملة مبنية على رقم محسوب فعلاً."
   },
   "stocks": {
     "title": "الأسهم",
@@ -1378,8 +1381,8 @@
     "permissionGranted": "مسموح",
     "permissionDenied": "الإشعارات محظورة؛ فعّلها من إعدادات الهاتف.",
     "unsupported": "هذه البيئة لا تدعم الإشعارات.",
-    "pushLocal": "تُجدوَل الإشعارات محلياً على هذا الجهاز حالياً. الدفع الحقيقي من الخادم يتطلب مفتاح VAPID.",
-    "pushOn": "الدفع من الخادم مفعّل",
+    "pushLocal": "لم يُهيَّأ الدفع من الخادم. تُجدوَل الإشعارات محلياً وتظهر عند فتحك التطبيق لاحقاً. هذه ميزة حقيقية لكنها ليست دفعاً، ونفضّل قول ذلك بوضوح.",
+    "pushOn": "الدفع من الخادم مفعّل: تصل الإشعارات حتى والتطبيق مغلق تماماً.",
     "tradeDoneTitle": "تمت الصفقة",
     "tradeDoneBody": "تم تبديل {{amount}} {{from}} مقابل {{to}}.",
     "tradeFailTitle": "فشلت الصفقة",
@@ -1411,7 +1414,10 @@
     "promo7": {
       "title": "رسوم شفافة",
       "body": "٠٫٥٪ رسوم المنصة تُعرض قبل التوقيع."
-    }
+    },
+    "modeServer": "الدفع مفعّل",
+    "modeLocal": "على الجهاز فقط",
+    "dailySubLocal": "رسالة واحدة يومياً كحد أقصى. في هذه النسخة تظهر عند فتحك التطبيق لاحقاً ولا تصل إلى هاتفك تلقائياً، لعدم تهيئة الدفع من الخادم."
   },
   "welcome": {
     "title": "اختر لغتك",
