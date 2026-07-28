@@ -334,3 +334,313 @@ export function AnimatedLanguages({ active, still, ...p }) {
     </svg>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* MENU ICONS                                                                  */
+/* -------------------------------------------------------------------------- */
+/*
+ * The drawer tiles used the static line-art set, so opening the menu showed
+ * twelve motionless glyphs. These animate their own geometry on entry — each
+ * one staggered by the tile index — which turns the drawer from a grid of
+ * symbols into something that reads as a single deliberate motion.
+ *
+ * `delay` is passed by the tile so the sweep follows the grid order. Entry
+ * animations only: nothing here loops, because a permanently moving menu is
+ * noise, and because looping SVG filters on twelve tiles at once is exactly
+ * how you drop frames on a budget phone.
+ */
+
+const entry = (delay = 0, duration = 0.5) => ({
+  duration,
+  delay,
+  ease: [0.22, 1, 0.36, 1]
+});
+
+/** Trend line draws itself, then the arrowhead pops. */
+export function MenuTrend({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M3 16.5 9 10l4 4 7.5-8"
+        initial={still ? false : { pathLength: 0, opacity: 0.3 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={entry(delay, 0.6)}
+      />
+      <motion.path
+        d="M21 3h-4M21 3v4"
+        initial={still ? false : { scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={entry(delay + 0.28, 0.35)}
+        style={{ transformOrigin: '19px 4px' }}
+      />
+    </svg>
+  );
+}
+
+/** Liquidity pool: layers settle downward one by one. */
+export function MenuPools({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      {[6, 12, 18].map((cy, i) => (
+        <motion.ellipse
+          key={cy}
+          cx="12"
+          cy={cy}
+          rx="8.5"
+          ry="3.2"
+          initial={still ? false : { y: -7, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={entry(delay + i * 0.09, 0.45)}
+        />
+      ))}
+      <motion.path
+        d="M3.5 6v12M20.5 6v12"
+        initial={still ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={entry(delay + 0.3, 0.3)}
+      />
+    </svg>
+  );
+}
+
+/** Globe: the meridian sweeps across as if the sphere turns. */
+export function MenuGlobe({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <motion.path
+        d="M3 12h18"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay + 0.1, 0.45)}
+      />
+      <motion.ellipse
+        cx="12"
+        cy="12"
+        rx="4"
+        ry="9"
+        initial={still ? false : { rx: 0.5, opacity: 0 }}
+        animate={{ rx: 4, opacity: 1 }}
+        transition={entry(delay + 0.18, 0.55)}
+      />
+    </svg>
+  );
+}
+
+/** Shield: outline draws, then the tick lands inside it. */
+export function MenuShield({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M12 3l7.5 3v6c0 4.6-3.1 7.9-7.5 9.3C7.6 19.9 4.5 16.6 4.5 12V6L12 3z"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay, 0.6)}
+      />
+      <motion.path
+        d="m8.8 12.2 2.2 2.2 4.2-4.4"
+        initial={still ? false : { pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={entry(delay + 0.3, 0.4)}
+      />
+    </svg>
+  );
+}
+
+/** Document with lines that type themselves in. */
+export function MenuDoc({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M6 3h8l4 4v14H6z"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay, 0.55)}
+      />
+      <path d="M14 3v4h4" />
+      {[11, 14, 17].map((y, i) => (
+        <motion.line
+          key={y}
+          x1="9"
+          x2={i === 2 ? 13 : 15}
+          y1={y}
+          y2={y}
+          initial={still ? false : { pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={entry(delay + 0.25 + i * 0.07, 0.3)}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/** Building: floors rise from the ground up. */
+export function MenuBuilding({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M4 21V6.5L12 3l8 3.5V21"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay, 0.55)}
+      />
+      <path d="M2.5 21h19" />
+      {[
+        [9, 10],
+        [14, 10],
+        [9, 14],
+        [14, 14]
+      ].map(([x, y], i) => (
+        <motion.rect
+          key={`${x}-${y}`}
+          x={x - 1.1}
+          y={y - 1.1}
+          width="2.2"
+          height="2.2"
+          rx="0.4"
+          initial={still ? false : { scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={entry(delay + 0.22 + i * 0.05, 0.3)}
+          style={{ transformOrigin: `${x}px ${y}px` }}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/** Key: the bit swings out from the bow. */
+export function MenuKey({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.circle
+        cx="7.5"
+        cy="15.5"
+        r="4"
+        initial={still ? false : { scale: 0.3, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={entry(delay, 0.45)}
+        style={{ transformOrigin: '7.5px 15.5px' }}
+      />
+      <motion.path
+        d="m10.5 12.5 8-8M16 7l2.5 2.5M18.5 4.5 21 7"
+        initial={still ? false : { pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={entry(delay + 0.2, 0.45)}
+      />
+    </svg>
+  );
+}
+
+/** Info: the dot drops onto the stem. */
+export function MenuInfo({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.circle
+        cx="12"
+        cy="12"
+        r="9"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay, 0.55)}
+      />
+      <motion.path
+        d="M12 11v5"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay + 0.25, 0.3)}
+      />
+      <motion.circle
+        cx="12"
+        cy="7.8"
+        r="0.9"
+        fill="currentColor"
+        stroke="none"
+        initial={still ? false : { y: -5, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={entry(delay + 0.32, 0.35)}
+      />
+    </svg>
+  );
+}
+
+/** Cog for the menu tile — turns a quarter on entry. */
+export function MenuSettings({ still, delay = 0, ...p }) {
+  return (
+    <motion.svg
+      {...svgBase}
+      {...p}
+      initial={still ? false : { rotate: -70, opacity: 0 }}
+      animate={{ rotate: 0, opacity: 1 }}
+      transition={entry(delay, 0.6)}
+      style={{ transformOrigin: 'center' }}
+    >
+      <circle cx="12" cy="12" r="3.1" />
+      <path d="M12 2.2v2.6M12 19.2v2.6M2.2 12h2.6M19.2 12h2.6M5.1 5.1l1.9 1.9M17 17l1.9 1.9M18.9 5.1 17 7M7 17l-1.9 1.9" />
+    </motion.svg>
+  );
+}
+
+/** Two arrows circling — P2P / exchange between people. */
+export function MenuP2P({ still, delay = 0, ...p }) {
+  return (
+    <svg {...svgBase} {...p}>
+      <motion.path
+        d="M4 9h12l-3-3M20 15H8l3 3"
+        initial={still ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={entry(delay, 0.6)}
+      />
+      <motion.circle
+        cx="12"
+        cy="12"
+        r="9.2"
+        strokeDasharray="3 4"
+        initial={still ? false : { rotate: -60, opacity: 0 }}
+        animate={{ rotate: 0, opacity: 0.45 }}
+        transition={entry(delay + 0.15, 0.6)}
+        style={{ transformOrigin: 'center' }}
+      />
+    </svg>
+  );
+}
+
+/** Trophy for the ranking tile — rises and settles. */
+export function MenuTrophy({ still, delay = 0, ...p }) {
+  return (
+    <motion.svg
+      {...svgBase}
+      {...p}
+      initial={still ? false : { y: 6, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 16, delay }}
+    >
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M6 3h12v6a6 6 0 0 1-12 0V3zM9 21h6M12 15v6" />
+    </motion.svg>
+  );
+}
+
+/** Candlestick chart — bars grow from the axis. */
+export function MenuMarket({ still, delay = 0, ...p }) {
+  const bars = [
+    { x: 6, top: 6, bot: 15 },
+    { x: 12, top: 4, bot: 18 },
+    { x: 18, top: 9, bot: 20 }
+  ];
+  return (
+    <svg {...svgBase} {...p}>
+      {bars.map((b, i) => (
+        <motion.g
+          key={b.x}
+          initial={still ? false : { scaleY: 0, opacity: 0 }}
+          animate={{ scaleY: 1, opacity: 1 }}
+          transition={entry(delay + i * 0.08, 0.45)}
+          style={{ transformOrigin: `${b.x}px 21px` }}
+        >
+          <line x1={b.x} x2={b.x} y1={b.top} y2={b.bot} />
+          <rect x={b.x - 2} y={b.top + 2} width="4" height={b.bot - b.top - 4} rx="1" />
+        </motion.g>
+      ))}
+    </svg>
+  );
+}

@@ -95,11 +95,22 @@ function fallbackPool(family, chainId) {
  */
 export function resolvePayout(chainId, family = FAMILY.EVM) {
   const pool = fallbackPool(family, chainId);
-  const preferred = pool[0];
+
+  // An UNSET per-chain override is the normal, intended configuration — the
+  // same key controls the same EVM address on every chain. Only report
+  // "fallback" when a preferred address was actually configured and had to be
+  // skipped, which is a real misconfiguration worth surfacing.
+  const preferred = String(pool[0] || '').trim();
+  const preferredWasSet = preferred.length > 0;
+
   for (let i = 0; i < pool.length; i += 1) {
     const candidate = String(pool[i] || '').trim();
     if (isValidFor(family, candidate)) {
-      return { address: candidate, family, fallback: candidate !== String(preferred || '').trim() };
+      return {
+        address: candidate,
+        family,
+        fallback: preferredWasSet && candidate !== preferred
+      };
     }
   }
   return null;

@@ -25,6 +25,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
+import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import {
   addSubscription,
@@ -278,20 +279,69 @@ app.get('/api/push/status', (_req, res) =>
  * notification permission — after which we cannot reach them for the things
  * that matter either.
  */
-app.post('/api/push/daily', async (req, res) => {
+/**
+ * Shared handler for the daily broadcast.
+ *
+ * Exposed twice on purpose:
+ *   GET  /api/cron/daily  — what Vercel Cron calls. Vercel only issues GET and
+ *                           attaches `Authorization: Bearer $CRON_SECRET`
+ *                           itself, so this is the path in vercel.json.
+ *   POST /api/push/daily  — manual triggering, and external schedulers
+ *                           (GitHub Actions, plain cron) that prefer POST.
+ *
+ * NOTE FOR ANYONE ADAPTING A NEXT.JS CRON SNIPPET: this project is Vite +
+ * Express, not Next.js. `next/server` and `NextResponse` do not exist here and
+ * importing them breaks the build. Express req/res is the equivalent.
+ */
+async function runDailyCron(req, res) {
   const secret = process.env.CRON_SECRET || '';
-  if (!secret) return res.status(503).json({ error: 'CRON_SECRET_NOT_SET' });
+  if (!secret) return res.status(503).json({ ok: false, error: 'CRON_SECRET_NOT_SET' });
 
   const provided =
     req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-cron-secret') || '';
-  if (provided !== secret) return res.status(401).json({ error: 'UNAUTHORIZED' });
+
+  // Length check first: timingSafeEqual throws on a length mismatch, and a
+  // timing oracle on a secret that can notify every user is not worth leaving
+  // open even though the risk is small.
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return res.status(401).json({ ok: false, error: 'UNAUTHORIZED' });
+  }
 
   try {
-    return res.json(await sendDailyPromo());
+    const result = await sendDailyPromo();
+    return res.json({ ok: true, ...result });
   } catch (err) {
-    return res.status(500).json({ error: 'SEND_FAILED', detail: String(err.message).slice(0, 160) });
+    return res
+      .status(500)
+      .json({ ok: false, error: 'SEND_FAILED', detail: String(err.message).slice(0, 160) });
   }
-});
+}
+
+app.get('/api/cron/daily', runDailyCron);
+app.post('/api/push/daily', runDailyCron);
+
+/**
+ * Confirms the schedule is wired up WITHOUT notifying anyone. Safe to open in
+ * a browser, and it names whatever is actually blocking a real send instead of
+ * making you guess.
+ */
+app.get('/api/cron/status', (_req, res) =>
+  res.json({
+    ok: true,
+    cronSecretSet: Boolean(process.env.CRON_SECRET),
+    pushConfigured: pushConfigured(),
+    storeDurable: storeDurable(),
+    wouldSend: Boolean(process.env.CRON_SECRET) && pushConfigured(),
+    blockedBy: !process.env.CRON_SECRET
+      ? 'CRON_SECRET is not set'
+      : !pushConfigured()
+        ? 'VAPID keys are not set (VITE_VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY)'
+        : null,
+    serverTime: new Date().toISOString()
+  })
+);
 
 app.post('/api/push/subscribe', async (req, res) => {
   const { subscription, lang } = req.body ?? {};

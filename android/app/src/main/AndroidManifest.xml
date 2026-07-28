@@ -74,6 +74,16 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!--
+      Android 13 (API 33) made notifications a RUNTIME permission. Without
+      this declaration the OS silently drops every notification the app posts
+      on 13+, which is most devices now — the feature appears to work in code
+      and simply never reaches the user. Declaring it is also what lets the
+      web layer's Notification.requestPermission() actually show a prompt
+      inside the WebView.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Biometric hardware is optional: the app works fine without it, so
          don't let Play hide the listing from devices that lack a sensor. -->
     <uses-feature

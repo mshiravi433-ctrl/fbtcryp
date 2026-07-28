@@ -110,8 +110,35 @@ export async function getAggregatorRoute({
   const summary = body?.data?.routeSummary;
   if (!summary) throw new Error('NO_ROUTE');
 
+  /**
+   * VERIFY THE FEE CAME BACK.
+   *
+   * This is the single most important assertion in the file. We ask for the
+   * fee via query params, but the fee that actually gets enforced on-chain is
+   * whatever ends up inside `routeSummary.extraFee` — that object is signed
+   * into the calldata by /route/build. If the aggregator silently ignored our
+   * params (bad address, fee larger than amountIn, an API change), the swap
+   * would still succeed and the user would still pay gas, but WE would earn
+   * nothing and nobody would notice for weeks.
+   *
+   * So we check the echo, and we check the recipient matches the address we
+   * asked for — a mismatch means the fee is going somewhere that is not us,
+   * which is worse than earning nothing.
+   */
+  if (feeBps > 0 && feeReceiver) {
+    const echoed = summary.extraFee;
+    if (!echoed || String(echoed.feeAmount) !== String(feeBps)) {
+      throw new Error('FEE_NOT_APPLIED');
+    }
+    if (String(echoed.feeReceiver).toLowerCase() !== String(feeReceiver).toLowerCase()) {
+      throw new Error('FEE_RECIPIENT_MISMATCH');
+    }
+  }
+
   return {
     routeSummary: summary,
+    // Echoed back so callers can display and re-verify what will be charged.
+    extraFee: summary.extraFee ?? null,
     routerAddress: body.data.routerAddress,
     amountOutWei: BigInt(summary.amountOut),
     amountInWei: BigInt(summary.amountIn),
@@ -228,8 +255,33 @@ export async function getAggregatorQuote({
  * Execute an aggregator swap. The user signs a plain transaction carrying the
  * aggregator's calldata — we never take custody at any point.
  */
-export async function executeAggregatorSwap({ signer, chainId, quote, slippage = 0.5, deadlineMinutes = 20 }) {
+export async function executeAggregatorSwap({
+  signer,
+  chainId,
+  quote,
+  slippage = 0.5,
+  deadlineMinutes = 20,
+  expectFeeReceiver = null,
+  expectFeeBps = 0
+}) {
   const sender = await signer.getAddress();
+
+  /**
+   * Last line of defence before the user signs.
+   *
+   * `routeSummary` is what gets encoded into calldata, so this is the final
+   * moment the fee can be checked against what we intended. A quote can sit on
+   * screen for a while, and a stale or tampered one must not be signed.
+   */
+  if (expectFeeBps > 0 && expectFeeReceiver) {
+    const fee = quote?.routeSummary?.extraFee;
+    if (!fee || String(fee.feeAmount) !== String(expectFeeBps)) {
+      throw new Error('FEE_NOT_APPLIED');
+    }
+    if (String(fee.feeReceiver).toLowerCase() !== String(expectFeeReceiver).toLowerCase()) {
+      throw new Error('FEE_RECIPIENT_MISMATCH');
+    }
+  }
 
   const built = await buildAggregatorTx({
     chainId,

@@ -1369,15 +1369,71 @@ input, select, textarea { font-size: 16px !important; }
 
 .more-panel {
   pointer-events: auto;
+  position: relative;
   width: 100%;
   max-width: 460px;
   background: #06070c;
   border: 1px solid var(--line-strong);
-  border-radius: 24px;
-  padding: 16px 16px 18px;
+  padding: 20px 18px 18px;
   max-height: min(84dvh, 760px);
   overflow-y: auto;
   box-shadow: 0 28px 80px -24px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(255, 255, 255, 0.04);
+
+  /*
+   * NOTCHED PANEL SHAPE
+   * A plain rounded rectangle is what every framework hands you, so it reads
+   * as generic. Chamfering the top-left and bottom-right corners gives the
+   * drawer a silhouette you recognise before you read a single label — the
+   * same trick hardware brands use on a bezel.
+   *
+   * `clip-path` rather than a border-radius because the cut is a straight
+   * diagonal, not a curve, and because clip-path is GPU-composited so it costs
+   * nothing to animate the panel underneath it.
+   *
+   * The trade-off, stated plainly: clip-path clips the border too, so the
+   * 1px outline disappears along the diagonals. The ::before below redraws
+   * the two cut edges as gradient hairlines to put the definition back.
+   */
+  --cut: 26px;
+  border-radius: 24px;
+  clip-path: polygon(
+    var(--cut) 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%,
+    0 var(--cut)
+  );
+}
+
+/* Redraws the two chamfered edges, which clip-path cuts away. */
+.more-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, var(--rgb-1) 0 1.5px, transparent 1.5px) top left / 42px 42px no-repeat,
+    linear-gradient(135deg, transparent calc(100% - 1.5px), var(--rgb-3) calc(100% - 1.5px)) bottom right / 42px 42px no-repeat;
+  opacity: 0.85;
+}
+
+/* RTL mirrors the silhouette so the cut leads the reading direction. */
+[dir='rtl'] .more-panel {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+
+[dir='rtl'] .more-panel::before {
+  background:
+    linear-gradient(225deg, var(--rgb-1) 0 1.5px, transparent 1.5px) top right / 42px 42px no-repeat,
+    linear-gradient(225deg, transparent calc(100% - 1.5px), var(--rgb-3) calc(100% - 1.5px)) bottom left / 42px 42px no-repeat;
 }
 
 /* the drag handle only made sense when this slid up from the bottom */
@@ -1391,23 +1447,40 @@ input, select, textarea { font-size: 16px !important; }
   align-items: center;
   gap: 7px;
   padding: 12px 4px;
-  border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--bg-panel);
   color: var(--text-1);
   cursor: pointer;
   min-height: 78px;
   justify-content: center;
+
+  /* Tiles echo the panel's chamfer at a smaller scale, so the shape language
+     is consistent rather than the panel being the only odd one out. */
+  border-radius: 16px;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  transition: background 0.2s, border-color 0.2s;
 }
+
+[dir='rtl'] .more-tile {
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+
+.more-tile:active { background: rgba(127, 127, 127, 0.13); }
 
 .more-tile-icon {
   width: 38px;
   height: 38px;
-  border-radius: 12px;
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
   background: rgba(127, 127, 127, 0.07);
+  border-radius: 12px;
+  /* Same cut again, one level down. */
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
+[dir='rtl'] .more-tile-icon {
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
 }
 
 .more-tile-label {

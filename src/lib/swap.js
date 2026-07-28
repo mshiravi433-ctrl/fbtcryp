@@ -218,12 +218,17 @@ export async function executeSwap({
 }) {
   // Aggregator quotes carry their own prebuilt route; execute that.
   if (quote.source === 'aggregator') {
+    // Pass what we EXPECT to be charged so the aggregator layer can verify the
+    // signed route still carries our fee. Without this the app would happily
+    // sign a route that pays us nothing.
     return executeAggregatorSwap({
       signer,
       chainId,
       quote,
       slippage: quote.slippage ?? DEFAULT_SLIPPAGE,
-      deadlineMinutes
+      deadlineMinutes,
+      expectFeeBps: FEE_BPS,
+      expectFeeReceiver: feeRecipientFor(chainId)
     });
   }
 

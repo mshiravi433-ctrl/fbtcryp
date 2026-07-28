@@ -2,7 +2,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useState } from 'react';
-import { useStill } from './AnimatedIcon';
+import {
+  AnimatedActivity,
+  AnimatedNews,
+  AnimatedSwap,
+  MenuBuilding,
+  MenuDoc,
+  MenuGlobe,
+  MenuInfo,
+  MenuKey,
+  MenuMarket,
+  MenuP2P,
+  MenuPools,
+  MenuSettings,
+  MenuShield,
+  MenuTrend,
+  MenuTrophy,
+  useStill
+} from './AnimatedIcon';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
@@ -36,35 +53,35 @@ const GROUPS = [
   {
     id: 'markets',
     items: [
-      { to: '/', key: 'nav.market', Icon: IconMarket, hue: 'var(--rgb-1)' },
-      { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
-      { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
-      { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' },
-      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
+      { to: '/', key: 'nav.market', Icon: MenuMarket, hue: 'var(--rgb-1)' },
+      { to: '/perp', key: 'nav.perp', Icon: MenuTrend, hue: 'var(--rgb-3)' },
+      { to: '/stocks', key: 'nav.stocks', Icon: MenuBuilding, hue: 'var(--rgb-5)' },
+      { to: '/predict', key: 'nav.predict', Icon: AnimatedActivity, hue: 'var(--rgb-8)' },
+      { to: '/p2p', key: 'nav.p2p', Icon: MenuP2P, hue: 'var(--rgb-6)' }
     ]
   },
   {
     id: 'earn',
     items: [
-      { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
-      ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' }] : []),
-      { to: '/earn', key: 'nav.earn', Icon: IconGlobe, hue: 'var(--rgb-7)' },
-      { to: '/leaderboard', key: 'nav.leaderboard', Icon: IconTrophy, hue: 'var(--rgb-5)' },
-      { to: '/invest', key: 'nav.invest', Icon: IconTrend, hue: 'var(--rgb-6)' }
+      { to: '/farm', key: 'nav.farm', Icon: MenuPools, hue: 'var(--rgb-4)' },
+      ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: AnimatedActivity, hue: 'var(--rgb-2)' }] : []),
+      { to: '/earn', key: 'nav.earn', Icon: MenuGlobe, hue: 'var(--rgb-7)' },
+      { to: '/leaderboard', key: 'nav.leaderboard', Icon: MenuTrophy, hue: 'var(--rgb-5)' },
+      { to: '/invest', key: 'nav.invest', Icon: MenuTrend, hue: 'var(--rgb-6)' }
     ]
   },
   {
     id: 'more',
     items: [
-      { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
-      { to: '/help', key: 'nav.help', Icon: IconInfo, hue: 'var(--rgb-9)' },
-      { to: '/docs', key: 'nav.docs', Icon: IconDoc, hue: 'var(--rgb-1)' },
-      { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
-      { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },
-      { to: '/ecosystem', key: 'nav.ecosystem', Icon: IconGlobe, hue: 'var(--rgb-3)' },
-      { to: '/business', key: 'nav.business', Icon: IconBuilding, hue: 'var(--rgb-5)' },
-      { to: '/about', key: 'nav.about', Icon: IconInfo, hue: 'var(--rgb-8)' },
-      { to: '/settings', key: 'nav.settings', Icon: IconSettings, hue: 'var(--rgb-6)' }
+      { to: '/news', key: 'nav.news', Icon: AnimatedNews, hue: 'var(--rgb-1)' },
+      { to: '/help', key: 'nav.help', Icon: MenuInfo, hue: 'var(--rgb-9)' },
+      { to: '/docs', key: 'nav.docs', Icon: MenuDoc, hue: 'var(--rgb-1)' },
+      { to: '/audit', key: 'nav.audit', Icon: MenuShield, hue: 'var(--rgb-4)' },
+      { to: '/developers', key: 'nav.developers', Icon: MenuKey, hue: 'var(--rgb-2)' },
+      { to: '/ecosystem', key: 'nav.ecosystem', Icon: MenuGlobe, hue: 'var(--rgb-3)' },
+      { to: '/business', key: 'nav.business', Icon: MenuBuilding, hue: 'var(--rgb-5)' },
+      { to: '/about', key: 'nav.about', Icon: MenuInfo, hue: 'var(--rgb-8)' },
+      { to: '/settings', key: 'nav.settings', Icon: MenuSettings, hue: 'var(--rgb-6)' }
     ]
   }
 ];
@@ -159,7 +176,12 @@ export default function MoreSheet({ open, onClose }) {
                         whileHover={still ? undefined : { rotate: 8, scale: 1.06 }}
                         transition={{ type: 'spring', stiffness: 420, damping: 15 }}
                       >
-                        <item.Icon width={19} height={19} />
+                        <item.Icon
+                          width={19}
+                          height={19}
+                          still={still}
+                          delay={gi * 0.05 + i * 0.035}
+                        />
                       </motion.span>
                       <span className="more-tile-label">{t(item.key)}</span>
                     </motion.button>
