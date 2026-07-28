@@ -6,6 +6,30 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# fail <<'MSG'
+#
+# Print a failure so it is visible WITHOUT opening the log.
+#
+# `::error::` is a GitHub Actions workflow command: the runner turns it into an
+# annotation, which appears in a red box at the top of the run's summary page
+# and in the checks API. The build log is buried three clicks deep and, on a
+# phone, is close to unreadable — so the one line that says what to fix has to
+# be somewhere else. The same text is also appended to the job summary.
+#
+# Annotations must be single-line (\n is not rendered), so the message is
+# collapsed for the annotation and printed in full to stdout.
+# ---------------------------------------------------------------------------
+fail() {
+  local msg; msg="$(cat)"
+  printf '%s\n' "$msg"
+  printf '::error title=Build failed::%s\n' "$(printf '%s' "$msg" | tr '\n' ' ' | tr -s ' ')"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    { echo "### ✗ Build failed"; echo '```'; printf '%s\n' "$msg"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+  fi
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
 # Toolchain preflight.
 #
 # AGP 8.7 requires JDK 17 or newer and Gradle 8.9+. The checked-in workflow
@@ -82,63 +106,76 @@ if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
 
   # Strip whitespace, newlines and CRs. A correct value has none of these, and
   # every one of them is a paste artefact rather than something the user meant.
-  printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > /tmp/release.keystore 2>/tmp/b64err.txt || {
-    echo ""
-    echo "✗ ANDROID_KEYSTORE_BASE64 is not valid base64."
-    echo "  $(cat /tmp/b64err.txt)"
-    echo ""
-    echo "  Regenerate it on ONE line and re-paste the secret:"
-    echo "    base64 -w 0 ~/fbt-keystore/fbt-release.keystore"
-    echo "  Make sure you copied the whole string with no characters missing."
-    exit 1
-  }
+  printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > /tmp/release.keystore 2>/tmp/b64err.txt || fail <<MSG
+ANDROID_KEYSTORE_BASE64 is not valid base64. ($(cat /tmp/b64err.txt))
+Fix: in Termux run
+    base64 -w 0 ~/fbt-keystore/fbt-release.keystore
+and paste the ENTIRE one-line output as the secret value.
+MSG
 
   KS_BYTES=$(wc -c < /tmp/release.keystore)
   echo "  decoded ${KS_BYTES} bytes"
   if [ "$KS_BYTES" -lt 1000 ]; then
-    echo ""
-    echo "✗ The decoded keystore is only ${KS_BYTES} bytes — far too small."
-    echo "  A real keystore is roughly 2-3 KB. The secret was truncated,"
-    echo "  most likely by a partial copy. Re-copy the FULL base64 string."
-    exit 1
+    fail <<MSG
+The decoded keystore is only ${KS_BYTES} bytes - far too small.
+A real keystore is about 2-3 KB, so the secret was truncated by a
+partial copy. Re-copy the FULL base64 string into
+ANDROID_KEYSTORE_BASE64.
+MSG
   fi
 
-  : "${ANDROID_KEY_ALIAS:?ANDROID_KEY_ALIAS secret is not set (it should be: fbt)}"
-  : "${ANDROID_KEYSTORE_PASSWORD:?ANDROID_KEYSTORE_PASSWORD secret is not set}"
+  # These two are checked explicitly rather than with `${VAR:?}` so the message
+  # is an annotation the user can read from the summary page, not a bash
+  # one-liner buried in the log.
+  [ -n "${ANDROID_KEY_ALIAS:-}" ] || fail <<MSG
+The ANDROID_KEY_ALIAS secret is not set. Add it at
+Settings > Secrets and variables > Actions > Secrets.
+Its value should be: fbt
+MSG
+  [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] || fail <<MSG
+The ANDROID_KEYSTORE_PASSWORD secret is not set. Add it at
+Settings > Secrets and variables > Actions > Secrets.
+Its value is the password you typed when you ran mk.sh.
+MSG
 
   # Prove the password and the alias are right, with keytool, before Gradle
   # gets a chance to fail obscurely.
   if ! keytool -list -keystore /tmp/release.keystore \
         -storepass "$ANDROID_KEYSTORE_PASSWORD" > /tmp/kslist.txt 2>&1; then
-    echo ""
-    echo "✗ Could not open the keystore. keytool said:"
-    sed 's/^/    /' /tmp/kslist.txt | head -5
-    echo ""
     if grep -qi 'tampered\|password was incorrect\|wrong password' /tmp/kslist.txt; then
-      echo "  → ANDROID_KEYSTORE_PASSWORD is wrong. This is the password you"
-      echo "    typed when you ran mk.sh, not your GitHub or Google password."
+      fail <<MSG
+ANDROID_KEYSTORE_PASSWORD is wrong.
+This is the password you typed when you ran mk.sh - not your GitHub
+password and not your Google password. keytool said:
+$(head -3 /tmp/kslist.txt)
+MSG
     else
-      echo "  → The file decoded but is not a readable keystore. Re-run mk.sh"
-      echo "    and re-copy both the base64 and the password."
+      fail <<MSG
+The secret decoded, but the result is not a readable keystore.
+Re-run mk.sh and re-copy both the base64 and the password. keytool said:
+$(head -3 /tmp/kslist.txt)
+MSG
     fi
-    exit 1
   fi
 
   if ! grep -qi "^${ANDROID_KEY_ALIAS}," /tmp/kslist.txt; then
-    echo ""
-    echo "✗ Alias '${ANDROID_KEY_ALIAS}' is not in this keystore."
-    echo "  It actually contains:"
-    grep -iE '^[a-z0-9_.-]+,' /tmp/kslist.txt | sed 's/^/    /'
-    echo ""
-    echo "  → Set ANDROID_KEY_ALIAS to the name shown above (mk.sh uses 'fbt')."
-    exit 1
+    fail <<MSG
+Alias '${ANDROID_KEY_ALIAS}' is not in this keystore.
+It actually contains: $(grep -iE '^[a-z0-9_.-]+,' /tmp/kslist.txt | cut -d, -f1 | tr '\n' ' ')
+Fix: set the ANDROID_KEY_ALIAS secret to that name (mk.sh uses 'fbt').
+MSG
   fi
 
   echo "  ✓ keystore opens, alias '${ANDROID_KEY_ALIAS}' present"
   export ANDROID_KEYSTORE_PATH=/tmp/release.keystore
 
   echo "▸ building SIGNED release APK"
-  ./gradlew assembleRelease --no-daemon --stacktrace
+  ./gradlew assembleRelease --no-daemon --stacktrace || fail <<MSG
+Gradle failed while building the signed release APK.
+The keystore itself was already verified as valid, so this is a build
+error rather than a signing/secret problem. Open the run log and look
+for the first line starting with "* What went wrong:".
+MSG
   BUILT="app/build/outputs/apk/release/app-release.apk"
   OUT="app-release.apk"
 
@@ -147,7 +184,11 @@ if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
   # testing and what Iranian stores (Bazaar, Myket) accept, so we produce both
   # from the same signed configuration rather than making you choose.
   echo "▸ building SIGNED release AAB (this is what Google Play needs)"
-  ./gradlew bundleRelease --no-daemon --stacktrace
+  ./gradlew bundleRelease --no-daemon --stacktrace || fail <<MSG
+Gradle failed while building the signed AAB, even though the release
+APK built successfully. Open the run log and look for the first line
+starting with "* What went wrong:".
+MSG
   BUNDLE="app/build/outputs/bundle/release/app-release.aab"
 else
   echo "▸ no keystore supplied — building debug APK"
@@ -212,4 +253,35 @@ fi
 if command -v keytool >/dev/null 2>&1 && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
   echo "▸ signature:"
   keytool -printcert -jarfile "$SRC" 2>/dev/null | head -6 || true
+fi
+
+# ---------------------------------------------------------------------------
+# Success summary, written to the run's summary page.
+#
+# Same reasoning as `fail`: the one thing that must be checked before uploading
+# to Play is whether the artifact is SIGNED or a debug build, and that should
+# not require scrolling a log on a phone.
+# ---------------------------------------------------------------------------
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+      echo "### ✓ SIGNED release build"
+      echo ""
+      echo "| file | size | use |"
+      echo "|---|---|---|"
+      [ -f out/app-release.aab ] && echo "| \`app-release.aab\` | $(du -h out/app-release.aab | cut -f1) | **upload this to Google Play** |"
+      [ -f out/app-release.apk ] && echo "| \`app-release.apk\` | $(du -h out/app-release.apk | cut -f1) | sideload / Bazaar / Myket |"
+      echo ""
+      echo "versionCode: \`${APP_VERSION_CODE:-1}\` — Play rejects a re-upload with the same value."
+    else
+      echo "### ⚠ DEBUG build (not publishable)"
+      echo ""
+      echo "No keystore was supplied, so this is debug-signed. It installs for"
+      echo "testing but Google Play will reject it."
+      echo ""
+      echo "Set the four \`ANDROID_*\` secrets and run the workflow again."
+    fi
+    echo ""
+    echo "Download: [Releases → latest](https://github.com/mshiravi433-ctrl/fbtcryp/releases/tag/latest)"
+  } >> "$GITHUB_STEP_SUMMARY"
 fi
