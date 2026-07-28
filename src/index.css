@@ -1504,3 +1504,305 @@ input, select, textarea { font-size: 16px !important; }
   filter: blur(9px);
   pointer-events: none;
 }
+
+/* ==========================================================================
+   FIRST-LAUNCH GUIDE
+   Layer discipline matters here. The stage is fixed and never animated; the
+   scroll box is the only scrollable element and is never transformed; the
+   animated content sits inside it with no height of its own. Mixing those
+   three (as the old onboarding did) makes Framer Motion's `transform` create
+   a containing block, which is what pushed panels half off-screen.
+   ========================================================================== */
+
+.guide-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-void);
+  /* dvh, not vh: mobile browser chrome collapses and vh over-reports */
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* soft colour wash so the screen isn't a flat black wall of text */
+.guide-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 40% at 15% 0%, rgba(0, 229, 255, 0.13), transparent 70%),
+    radial-gradient(60% 38% at 92% 8%, rgba(255, 45, 149, 0.11), transparent 72%);
+}
+
+/* ------------------------------- header --------------------------------- */
+
+.guide-head {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: calc(env(safe-area-inset-top) + 16px) 20px 12px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.55));
+  backdrop-filter: blur(12px);
+}
+
+.guide-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.guide-kicker {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rgb-1);
+  margin-bottom: 4px;
+}
+
+.guide-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.guide-badge {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  color: #000;
+  box-shadow: 0 12px 30px -12px currentColor;
+}
+
+.guide-rail {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.guide-rail-item {
+  flex: 1;
+  height: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line-strong);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.guide-rail-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.guide-rail-item[data-state='active'] .guide-rail-fill { width: 100%; }
+.guide-rail-item[data-state='seen'] .guide-rail-fill {
+  width: 100%;
+  background: var(--rgb-4);
+  opacity: 0.55;
+}
+
+/* ------------------------------ scroll box ------------------------------- */
+
+.guide-scroll {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;          /* without this a flex child refuses to shrink and
+                             the footer gets pushed off the bottom */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 18px 20px 8px;
+}
+
+.guide-sec-title {
+  font-size: 16.5px;
+  font-weight: 800;
+  margin: 0 0 8px;
+  background: linear-gradient(100deg, var(--rgb-1), var(--rgb-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.guide-lead {
+  font-size: 13px;
+  line-height: 1.95;
+  color: var(--text-2);
+  margin: 0 0 18px;
+}
+
+.guide-steps { display: flex; flex-direction: column; gap: 14px; }
+
+.guide-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.guide-step-num {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #000;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2));
+}
+.guide-step-num[data-danger='true'] {
+  background: linear-gradient(140deg, var(--rgb-3), var(--rgb-5));
+}
+
+.guide-step-title {
+  font-size: 13.2px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  line-height: 1.55;
+}
+
+.guide-step-body {
+  font-size: 12.4px;
+  line-height: 1.95;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.guide-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0 14px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.guide-divider::before,
+.guide-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.guide-problem {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(255, 45, 149, 0.045);
+}
+
+.guide-problem-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.8px;
+  font-weight: 700;
+  margin-bottom: 5px;
+  line-height: 1.6;
+}
+
+.guide-problem-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rgb-3);
+  box-shadow: 0 0 10px var(--rgb-3);
+}
+
+.guide-note {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+.guide-note-warn {
+  border-color: rgba(255, 179, 0, 0.35);
+  background: rgba(255, 179, 0, 0.07);
+}
+.guide-note-info {
+  border-color: rgba(0, 229, 255, 0.28);
+  background: rgba(0, 229, 255, 0.055);
+}
+.guide-note-icon { flex-shrink: 0; margin-top: 1px; }
+.guide-note-warn .guide-note-icon { color: var(--rgb-5); }
+.guide-note-info .guide-note-icon { color: var(--rgb-1); }
+.guide-note-title { font-size: 12.8px; font-weight: 700; }
+
+.guide-reopen {
+  margin-top: 18px;
+  font-size: 11.5px;
+  line-height: 1.85;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* -------------------------------- footer --------------------------------- */
+
+.guide-foot {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: 12px 20px calc(env(safe-area-inset-bottom) + 14px);
+  border-top: 1px solid var(--line);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(12px);
+}
+
+.guide-hint {
+  margin: 0 0 9px;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--rgb-5);
+}
+
+.guide-foot-row { display: flex; gap: 10px; }
+
+.guide-back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-inline: 16px;
+}
+
+.guide-cta {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+/* Chevrons point at "forward", which is leftwards in RTL. */
+[dir='rtl'] .guide-cta svg,
+[dir='rtl'] .guide-back svg { transform: scaleX(-1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-rail-fill { transition: none; }
+}

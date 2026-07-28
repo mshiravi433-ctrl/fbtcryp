@@ -859,7 +859,7 @@
     "audit": "Security & audits",
     "auditSub": "What is audited and what isn't",
     "github": "Source code",
-    "githubSub": "Read or fork the repository",
+    "githubSub": "The repository is private — contact us for access",
     "scamWarning": "We never message you first and never ask for your seed phrase, private key or wallet password. Anyone who does — even claiming to be FBT support — is trying to steal from you.",
     "q": {
       "fees": "What fees do you charge?",
@@ -870,7 +870,9 @@
       "slippage": "What is slippage?"
     },
     "contactUs": "Contact us",
-    "contactUsSub": "Telegram and email support"
+    "contactUsSub": "Telegram and email support",
+    "guide": "Getting started guide",
+    "guideSub": "Four sections: swap, predictions, wallet, security"
   },
   "docs": {
     "title": "Documentation",
@@ -976,19 +978,20 @@
     },
     "ours": "Our own contract",
     "ourContractBody": "FeeRouter.sol is an optional contract for collecting the fee without a third party. It has been tested in a local EVM but has NOT had a professional audit. It is not used by default — the aggregator path is. Do not route significant volume through it until it is audited.",
-    "readSource": "Read the source",
+    "readSource": "Request a code review",
     "feeTransparency": "Fee transparency",
     "feeRate": "Platform fee",
     "feeWallet": "Fee wallet",
     "network": "Network",
     "viewOnChain": "View on BscScan",
-    "bounty": "Found a security issue? Message us on Telegram before disclosing it publicly. We'll respond within 48 hours."
+    "bounty": "Found a security issue? Message us on Telegram before disclosing it publicly. We'll respond within 48 hours.",
+    "sourceNote": "The contract source is kept private. Read access is granted to auditors and technical partners via the Contact page. The on-chain contract address is listed on this page and anyone can inspect the fee transactions on BscScan."
   },
   "dev": {
     "title": "Developers",
     "intro": "This app is open source. Read the code, self-host it, or build on the public API.",
-    "openSource": "GitHub repository",
-    "openSourceSub": "Full source, issues and pull requests",
+    "openSource": "Source code — private",
+    "openSourceSub": "This project’s repository is private and not published publicly",
     "api": "Public API",
     "apiIntro": "Read-only market endpoints, no key required. Rate limited per IP.",
     "ep": {
@@ -1002,10 +1005,12 @@
     },
     "example": "Example",
     "selfHost": "Self-hosting",
-    "selfHostBody": "Clone, install, copy the env template and run. The web app and API run from one Node process.",
+    "selfHostBody": "The repository is private. If you need access for a technical review or a partnership, request it from the Contact page and read access can be granted.",
     "keysTitle": "About API keys",
     "keysBody": "AI endpoints need OPENROUTER_API_KEY and JINA_API_KEY set server-side. Never put them in VITE_ variables — those are compiled into the browser bundle and would be harvested within hours.",
-    "rateLimit": "Please keep requests reasonable. Sustained heavy polling will be rate limited; if you need higher throughput, self-host your own instance."
+    "rateLimit": "Please keep requests reasonable. Sustained heavy polling will be rate limited; if you need higher throughput, self-host your own instance.",
+    "sourcePrivate": "Why isn’t the source public?",
+    "sourcePrivateBody": "The repository is private. The app signing key, release configuration and fee infrastructure live in it, and making that public would let anyone ship a fake \"FBT Swap\" that looks identical to the real one and drains users’ wallets. For technical review or partnership, get in touch via the Contact page."
   },
   "eco": {
     "title": "Ecosystem",
@@ -1208,6 +1213,90 @@
       "connectWallet": "Connect a wallet",
       "backupWallet": "Back up your wallet",
       "enable2fa": "Turn on two-factor"
+    }
+  },
+  "guide": {
+    "title": "A short guide before you start",
+    "subtitle": "Four sections, under three minutes. Read it once so you don't lose money to something avoidable.",
+    "step": "Section {{n}} of 4",
+    "next": "Next section",
+    "back": "Back",
+    "done": "I have read the guide",
+    "doneHint": "Open all four sections to enable the button.",
+    "reopen": "You can reopen this guide any time from Help → Getting started.",
+    "swap": {
+      "title": "1 · Swap — exchanging tokens",
+      "lead": "A swap converts one token directly into another with no deposit to any exchange. Tokens leave your own wallet and the new token arrives in your own wallet in the same transaction.",
+      "s1title": "Pick the network",
+      "s1body": "At the top of the Swap screen you choose the network (BNB, Ethereum, Polygon…). Tokens only exist on the network they were issued on. If your USDT is on BNB Chain, set the network to BNB Chain.",
+      "s2title": "Choose two tokens and an amount",
+      "s2body": "The top box is what you pay, the bottom box is what you receive. As soon as you type an amount, the app searches several decentralised exchanges for the best route and shows what you would get.",
+      "s3title": "Check the price",
+      "s3body": "Three numbers matter: the rate, the price impact, and the minimum received. A price impact above 2% means that pair is thin and you are overpaying — reduce the amount or pick a different pair.",
+      "s4title": "Approve first",
+      "s4body": "The first time you trade a given token, you must send an approval transaction so the contract may move it. It costs network gas but is needed only once per token. The network's own coin (e.g. BNB) never needs approval.",
+      "s5title": "Swap, then sign in your wallet",
+      "s5body": "Your wallet opens and shows the details. Sign there. A few seconds later the transaction is on-chain and you get a link to it.",
+      "feeTitle": "There are two fees — both real",
+      "feeBody": "1) Network gas: charged by the blockchain, not by us. You must hold some of the network's own coin or the transaction is rejected. 2) The FBT platform fee: {{fee}}% of every swap, paid to the company wallet in the same transaction. It is our revenue and it is shown to you before you sign.",
+      "slipTitle": "What slippage means",
+      "slipBody": "The price moves between the moment you tap and the moment the transaction is mined. Slippage is the worst price you are willing to accept. 0.5% is fine for liquid tokens. Small tokens may need more, but the higher you set it, the worse the price you can end up with.",
+      "failTitle": "Why did my swap fail?",
+      "failBody": "Three common causes: not enough gas (top up the network's coin), slippage too tight for a moving price, or you skipped the approval. A failed transaction does not take your tokens, but the gas it burned is not refunded."
+    },
+    "predict": {
+      "title": "2 · Predictions and signals",
+      "lead": "This section helps you read the market. None of it is investment advice, and nobody knows the future.",
+      "s1title": "Predictions use points, not money",
+      "s1body": "On the Predict screen you guess whether a coin goes up or down. Wins and losses are in points, which exist only for ranking and fun and have no monetary value. Nothing is taken from you and nothing is paid out.",
+      "s2title": "How to read a signal",
+      "s2body": "Every signal has three parts: a price range (never a single exact number), an invalidation level at which the idea is wrong, and a confidence score. Anywhere you see a guaranteed number, you are being scammed — we never publish one.",
+      "s3title": "What the indicators mean",
+      "s3body": "RSI above 70 suggests heavy buying, below 30 heavy selling. MACD shows the direction of momentum. These are aids only; markets can move against an indicator for a long time.",
+      "s4title": "The simple rule about capital",
+      "s4body": "Never put in money you need. Crypto has dropped 30% in a single day many times. If your thesis is wrong, taking a small loss beats waiting and hoping."
+    },
+    "wallet": {
+      "title": "3 · Connecting a wallet on mobile",
+      "lead": "FBT never holds your assets and has no deposit address. To trade you connect your own wallet. There are three ways.",
+      "m1title": "Option 1 — the wallet's built-in browser (easiest on a phone)",
+      "m1body": "Open MetaMask or Trust Wallet, tap Browser in the bottom menu, and enter the FBT address there. The wallet is detected automatically and connecting is one tap. Try this first if connecting gives you trouble.",
+      "m2title": "Option 2 — WalletConnect",
+      "m2body": "Tap connect and choose WalletConnect. On mobile you get a list of installed wallets; tap yours, it opens directly, approve, then use the back gesture to return to FBT.",
+      "m3title": "Option 3 — the built-in FBT wallet",
+      "m3body": "If you have no wallet at all, the app can create one here. Its key is encrypted on your own device with your password and is never transmitted. Write the recovery phrase down on paper.",
+      "p1title": "Problem: I tap connect and nothing happens",
+      "p1body": "A normal mobile browser (Chrome, Safari) has no wallet inside it. Either use WalletConnect, or open the site inside your wallet's own browser.",
+      "p2title": "Problem: I approve in the wallet but come back disconnected",
+      "p2body": "Common on Android: the system kills the backgrounded app and the session drops. Turn battery optimisation off for both FBT and your wallet, and return with the back gesture rather than closing the app.",
+      "p3title": "Problem: connected but the balance shows zero",
+      "p3body": "Almost always the wrong network. Your USDT may be on TRON while FBT is looking at BNB Chain. Switch network at the top of the Swap screen. Balances on TRON or Bitcoin are not supported by on-chain swaps here.",
+      "p4title": "Problem: the wallet says unknown network",
+      "p4body": "Your wallet hasn't added that chain yet. FBT offers to add it when you swap — tap Approve / Switch network. It is harmless and only adds a network entry to your wallet.",
+      "p5title": "Problem: the transaction is stuck pending",
+      "p5body": "You underpaid gas while the network was busy. Use Speed up or Cancel in your wallet. Until it settles, the next transaction from that wallet is stuck behind it.",
+      "p6title": "A note about connectivity",
+      "p6body": "Some wallet and node services are restricted on certain networks. If prices stay blank or a connection hangs, switch between mobile data and Wi-Fi and try again."
+    },
+    "security": {
+      "title": "4 · Security — the part that matters most",
+      "lead": "In crypto, stolen money does not come back. There is no bank to complain to and no transaction to reverse. Take these rules seriously.",
+      "s1title": "Your recovery phrase is your money",
+      "s1body": "The 12 or 24 words you get when creating a wallet are the money itself. Anyone holding them takes everything, with no password needed. Write them on paper and store it safely.",
+      "s2title": "Never do these",
+      "s2body": "Don't screenshot the phrase, don't message it to yourself on Telegram or WhatsApp, don't keep it in cloud notes, and never type it into a website or form. Photo galleries and messengers both sync to the cloud.",
+      "s3title": "FBT will never ask for your recovery phrase",
+      "s3body": "Not in the app, not in support, not in any message. Anyone asking for it in our name is a scammer, even with our logo and name on their profile.",
+      "s4title": "Turn the app lock on",
+      "s4body": "In Settings enable biometrics and two-factor, and set auto-lock to a few minutes. If you lose the phone, that is the only thing standing between a thief and your built-in wallet.",
+      "s5title": "Back up — and know what isn't a backup",
+      "s5body": "The FBT backup file is the same encrypted blob; without your password it is useless, so forgetting the password makes the file worthless too. Paper is the real backup, not the file. Uninstalling without paper destroys the built-in wallet permanently.",
+      "s6title": "Read before you sign",
+      "s6body": "Read every wallet prompt: which token, how much, to which address. If anything differs from what FBT showed you, close it and do not sign.",
+      "s7title": "Don't grant unlimited allowance",
+      "s7body": "Some sites ask for unlimited approval. If your wallet allows it, cap the amount at exactly this trade. Periodically clear old approvals with a revoke tool.",
+      "s8title": "Common scams",
+      "s8body": "A free airdrop that first needs your wallet connected; an unknown token that appeared by itself and cannot be sold; fake support in Telegram that replies first; and thousand-percent yields. All four want the same thing: your signature."
     }
   }
 }

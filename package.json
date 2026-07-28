@@ -16,7 +16,8 @@
     "test:feerouter": "node scripts/test-feerouter.mjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "test": "node test/run.mjs"
   },
   "dependencies": {
     "@capacitor/filesystem": "^6.0.4",

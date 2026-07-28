@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, askFaq } from '../lib/aiClient';
-import { IconChevronLeft, IconChevronRight, IconDoc, IconExternal, IconShield } from '../components/Icons';
+import { IconChevronLeft, IconChevronRight, IconDoc, IconInfo, IconLock, IconShield } from '../components/Icons';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 /** Questions worth surfacing without the user having to think of them. */
 const QUICK = ['fees', 'custody', 'seedLost', 'realMoney', 'network', 'slippage'];
@@ -14,6 +15,7 @@ export default function Help() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
+  const replayGuide = useSettingsStore((s) => s.replayGuide);
 
   const [ai, setAi] = useState({ enabled: false });
   const [question, setQuestion] = useState('');
@@ -191,6 +193,23 @@ export default function Help() {
       <motion.section variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('help.resources')}</p>
         <div className="set-group">
+          {/* Replaying the guide clears guideReadAt, which App.jsx watches, so
+              the four-part guide takes over immediately. */}
+          <button
+            className="set-row"
+            onClick={() => {
+              haptic?.('light');
+              replayGuide();
+            }}
+          >
+            <span className="set-row-icon"><IconInfo width={19} height={19} /></span>
+            <span className="set-row-label">
+              <div>{t('help.guide')}</div>
+              <div className="set-row-sub">{t('help.guideSub')}</div>
+            </span>
+            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
+          </button>
+
           <button className="set-row" onClick={() => navigate('/docs')}>
             <span className="set-row-icon"><IconDoc width={19} height={19} /></span>
             <span className="set-row-label">
@@ -221,13 +240,13 @@ export default function Help() {
             <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
           </button>
 
-          <button className="set-row" onClick={() => open('https://github.com/mshiravi433-ctrl/fbtcryp')}>
-            <span className="set-row-icon"><IconExternal width={19} height={19} /></span>
+          <button className="set-row" onClick={() => navigate('/contact')}>
+            <span className="set-row-icon"><IconLock width={19} height={19} /></span>
             <span className="set-row-label">
               <div>{t('help.github')}</div>
               <div className="set-row-sub">{t('help.githubSub')}</div>
             </span>
-            <IconExternal width={15} height={15} style={{ color: 'var(--text-3)' }} />
+            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
           </button>
         </div>
       </motion.section>

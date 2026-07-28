@@ -1,6 +1,4 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-
-const GAMES_ENABLED_STATIC = import.meta.env?.VITE_DISABLE_GAMES !== 'true';
 import { AnimatePresence } from 'framer-motion';
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { TelegramProvider } from './context/TelegramContext';
@@ -10,7 +8,9 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Toasts from './components/Toasts';
 import Onboarding from './pages/Onboarding';
+import Guide from './pages/Guide';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
+import { GAMES_ENABLED } from './lib/features';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -20,9 +20,7 @@ const Invest = lazy(() => import('./pages/Invest'));
 // Conditional so the chunk isn't emitted at all in a store-safe build —
 // an unreachable route still leaves the code inside the APK for a reviewer
 // (or anyone) to find by unzipping it.
-const Play = GAMES_ENABLED_STATIC
-  ? lazy(() => import('./pages/Play'))
-  : () => null;
+const Play = GAMES_ENABLED ? lazy(() => import('./pages/Play')) : () => null;
 const Predict = lazy(() => import('./pages/Predict'));
 const Earn = lazy(() => import('./pages/Earn'));
 const Wallet = lazy(() => import('./pages/Wallet'));
@@ -50,16 +48,6 @@ function Loader() {
     </div>
   );
 }
-
-/**
- * Iranian app stores (Bazaar, Myket) restrict gambling-styled content, and the
- * arcade — even on valueless points — looks like gambling to a reviewer. This
- * flag builds a store-safe variant with those routes removed entirely rather
- * than merely hidden, so a reviewer can't reach them.
- */
-const GAMES_ENABLED = GAMES_ENABLED_STATIC;
-
-export { GAMES_ENABLED };
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -101,27 +89,44 @@ function AnimatedRoutes() {
 
 export default function App() {
   const onboarded = useSettingsStore((s) => s.onboarded);
+  // Subscribed rather than read once, so "replay guide" from Help re-opens it
+  // immediately instead of only after a restart.
+  const guideReadAt = useSettingsStore((s) => s.guideReadAt);
+
   const [showOnb, setShowOnb] = useState(!onboarded);
 
   useEffect(() => {
     initTheme();
   }, []);
 
+  // First-launch order: onboarding → four-part guide → the app.
+  // The guide is a hard gate: nothing else mounts until it is acknowledged,
+  // which is the point — someone who swaps before reading about gas and
+  // slippage loses real money, and that refunds to nobody.
+  const showGuide = !showOnb && !guideReadAt;
+
+  let screen;
+  if (showOnb) {
+    screen = <Onboarding onDone={() => setShowOnb(false)} />;
+  } else if (showGuide) {
+    screen = <Guide />;
+  } else {
+    screen = (
+      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <div className="app-shell">
+          <Header />
+          <AnimatedRoutes />
+          <BottomNav />
+        </div>
+      </HashRouter>
+    );
+  }
+
   return (
     <TelegramProvider>
       <WalletProvider>
         <RgbBackground />
-        {showOnb ? (
-          <Onboarding onDone={() => setShowOnb(false)} />
-        ) : (
-          <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            <div className="app-shell">
-              <Header />
-              <AnimatedRoutes />
-              <BottomNav />
-            </div>
-          </HashRouter>
-        )}
+        {screen}
         <Toasts />
       </WalletProvider>
     </TelegramProvider>

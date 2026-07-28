@@ -4,9 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
-import { IconChevronLeft, IconCopy, IconExternal, IconDoc, IconKey } from '../components/Icons';
+import { IconChevronLeft, IconChevronRight, IconCopy, IconKey, IconLock, IconShield } from '../components/Icons';
 
-const REPO = 'https://github.com/mshiravi433-ctrl/fbtcryp';
+/**
+ * The repository is private (it holds the signing key, release config and fee
+ * infrastructure), so there is no public URL to link to. Linking to a private
+ * repo would send every user to a GitHub 404 and look broken.
+ */
 
 /** Public read-only endpoints this app already exposes. */
 const ENDPOINTS = [
@@ -22,13 +26,7 @@ const ENDPOINTS = [
 export default function Developers() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, tg } = useTelegram();
-
-  const open = (url) => {
-    haptic?.('light');
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
-  };
+  const { haptic } = useTelegram();
 
   const copy = (text) => {
     navigator.clipboard?.writeText(text);
@@ -51,21 +49,31 @@ export default function Developers() {
         className="card card-rgb lift"
         variants={riseIn} initial="hidden" animate="show"
         whileTap={{ scale: 0.985 }}
-        onClick={() => open(REPO)}
+        onClick={() => navigate('/contact')}
         style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
       >
         <div className="aurora" />
         <div className="row-between">
           <div className="row" style={{ gap: 11 }}>
-            <span className="wallet-badge"><IconDoc width={20} height={20} /></span>
+            <span className="wallet-badge"><IconLock width={20} height={20} /></span>
             <div>
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('dev.openSource')}</div>
               <div className="faint">{t('dev.openSourceSub')}</div>
             </div>
           </div>
-          <IconExternal width={17} height={17} style={{ color: 'var(--text-3)' }} />
+          <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)' }} />
         </div>
       </motion.button>
+
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ color: 'var(--rgb-1)' }}><IconShield width={19} height={19} /></span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('dev.sourcePrivate')}</div>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t('dev.sourcePrivateBody')}</p>
+          </div>
+        </div>
+      </motion.section>
 
       <section>
         <p className="section-label">{t('dev.api')}</p>
@@ -117,8 +125,7 @@ export default function Developers() {
               background: 'rgba(0,0,0,.35)', padding: 12, borderRadius: 11,
               border: '1px solid var(--line)', direction: 'ltr', textAlign: 'left'
             }}
-          >{`git clone ${REPO}
-npm install
+          >{`npm install
 cp .env.example .env
 npm run dev`}</pre>
         </motion.div>

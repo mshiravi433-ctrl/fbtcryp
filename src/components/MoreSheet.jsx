@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
-import { GAMES_ENABLED } from '../App';
+import { GAMES_ENABLED } from '../lib/features';
 import {
   IconActivity,
   IconBuilding,

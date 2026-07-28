@@ -7,20 +7,42 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="FBT Swap — crypto market data, paper trading, yield plans and provably-fair games inside Telegram." />
+    <meta name="description" content="FBT Swap — صرافی غیرمتمرکز، سواپ روی زنجیره، تحلیل بازار و کیف پول غیرحضانتی." />
     <title>FBT Swap</title>
 
-    <!-- Telegram Mini App SDK: theme, viewport, haptics, user identity -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!--
+      NOTHING IN THIS <head> IS ALLOWED TO BLOCK RENDERING.
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+      The app used to load two third-party resources synchronously here:
+      telegram.org/js/telegram-web-app.js and fonts.googleapis.com. Both are
+      unreachable from a large share of Iranian networks. A classic <script>
+      in <head> blocks the HTML parser until it resolves — so on those
+      networks the browser sat on the boot spinner until the TCP connection
+      finally timed out (30-90s), and the module bundle never started.
+      That was the "it just spins forever" bug.
+
+      Fonts are now self-hosted from /fonts, and the Telegram SDK is loaded
+      asynchronously below with its own timeout.
+    -->
+    <link rel="preload" href="/fonts/Vazirmatn-var.woff2" as="font" type="font/woff2" crossorigin />
 
     <style>
+      /* Self-hosted so the app renders identically with no internet at all. */
+      @font-face {
+        font-family: 'Vazirmatn';
+        src: url('/fonts/Vazirmatn-var.woff2') format('woff2-variations');
+        font-weight: 100 900;
+        font-display: swap;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'JetBrains Mono';
+        src: url('/fonts/JetBrainsMono-var.woff2') format('woff2-variations');
+        font-weight: 100 800;
+        font-display: swap;
+        font-style: normal;
+      }
+
       /* paint black before React mounts so there is never a white flash */
       html, body { background: #000; margin: 0; }
       #boot {
@@ -31,6 +53,10 @@
         background: #000;
         z-index: 999;
         transition: opacity 0.4s ease;
+        font-family: 'Vazirmatn', system-ui, sans-serif;
+        color: #fff;
+        padding: 24px;
+        text-align: center;
       }
       #boot .ring {
         width: 46px;
@@ -48,11 +74,90 @@
         background: #000;
       }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
+
+      /* Shown by the watchdog when the bundle fails to boot, so the user gets
+         a reason and a retry button instead of an eternal spinner. */
+      #boot-fail { display: none; max-width: 340px; }
+      #boot[data-failed='true'] .ring { display: none; }
+      #boot[data-failed='true'] #boot-fail { display: block; }
+      #boot-fail h2 { font-size: 17px; margin: 0 0 10px; }
+      #boot-fail p { font-size: 13px; line-height: 1.85; color: #9aa4bf; margin: 0 0 8px; }
+      #boot-fail code {
+        display: block;
+        font-family: ui-monospace, monospace;
+        font-size: 10.5px;
+        color: #5b647f;
+        direction: ltr;
+        margin-top: 12px;
+        word-break: break-all;
+      }
+      #boot-fail button {
+        margin-top: 16px;
+        width: 100%;
+        padding: 13px;
+        border-radius: 14px;
+        border: 0;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        color: #000;
+        background: linear-gradient(120deg, #00e5ff, #7c4dff);
+      }
     </style>
   </head>
   <body>
-    <div id="boot"><div class="ring"></div></div>
+    <div id="boot">
+      <div class="ring"></div>
+      <div id="boot-fail">
+        <h2>برنامه بالا نیامد</h2>
+        <p>بارگذاری برنامه بیشتر از حد معمول طول کشید. معمولاً یعنی اتصال اینترنت قطع شده یا فایل‌های برنامه ناقص دانلود شده‌اند.</p>
+        <p>دکمه زیر را بزنید تا دوباره تلاش شود. اگر باز هم نشد، اینترنت را عوض کنید (داده موبایل ↔ وای‌فای) و دوباره امتحان کنید.</p>
+        <code id="boot-diag"></code>
+        <button onclick="location.reload()">تلاش دوباره</button>
+      </div>
+    </div>
     <div id="root"></div>
+
+    <script>
+      // ---------------------------------------------------------------------
+      // Telegram Mini App SDK — loaded async, never blocking.
+      // Outside Telegram (browser, APK) this simply never resolves anything
+      // and the app runs standalone; TelegramContext already tolerates that.
+      // ---------------------------------------------------------------------
+      (function () {
+        var s = document.createElement('script');
+        s.src = 'https://telegram.org/js/telegram-web-app.js';
+        s.async = true;
+        document.head.appendChild(s);
+      })();
+
+      // ---------------------------------------------------------------------
+      // Boot watchdog. main.jsx sets window.__FBT_BOOTED__ once React paints.
+      // If that hasn't happened after 12s the bundle is broken or the network
+      // died mid-download — say so instead of spinning forever.
+      // ---------------------------------------------------------------------
+      window.__FBT_BOOT_ERR__ = '';
+      window.addEventListener('error', function (e) {
+        if (!window.__FBT_BOOT_ERR__) {
+          window.__FBT_BOOT_ERR__ = String((e && (e.message || (e.target && e.target.src))) || 'error');
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        if (!window.__FBT_BOOT_ERR__) {
+          window.__FBT_BOOT_ERR__ = String((e && e.reason && e.reason.message) || 'promise');
+        }
+      });
+
+      setTimeout(function () {
+        if (window.__FBT_BOOTED__) return;
+        var boot = document.getElementById('boot');
+        if (!boot) return;
+        boot.setAttribute('data-failed', 'true');
+        var diag = document.getElementById('boot-diag');
+        if (diag) diag.textContent = (window.__FBT_BOOT_ERR__ || 'timeout after 12s').slice(0, 220);
+      }, 12000);
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

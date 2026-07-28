@@ -46,6 +46,11 @@ export const useSettingsStore = create(
       /* ---------------- onboarding ---------------- */
       onboarded: false,
       termsAcceptedAt: 0,
+      // The four-part guide (swap / predict / wallet / security) is shown once
+      // on first launch and gates the rest of the app until acknowledged.
+      // Kept separate from `onboarded` so an existing install that already
+      // finished onboarding still sees the guide once.
+      guideReadAt: 0,
 
       /* ---------------- sync ---------------- */
       cloudSync: false,
@@ -104,7 +109,14 @@ export const useSettingsStore = create(
         set({ onboarded: true });
       },
       resetOnboarding() {
-        set({ onboarded: false });
+        set({ onboarded: false, guideReadAt: 0 });
+      },
+      markGuideRead() {
+        set({ guideReadAt: Date.now() });
+      },
+      /** Lets the user replay the guide from Help without redoing onboarding. */
+      replayGuide() {
+        set({ guideReadAt: 0 });
       },
       markSynced() {
         set({ lastSyncedAt: Date.now() });

@@ -77,8 +77,12 @@ export default function Audit() {
             <span className="pill pill-down">{t('audit.notAudited')}</span>
           </div>
           <p className="muted" style={{ fontSize: 12.2 }}>{t('audit.ourContractBody')}</p>
+          {/* The repo is private, so there is no public file to link to.
+              Auditors get read access on request; the on-chain address below
+              is the part that actually lets anyone verify the fee. */}
+          <p className="faint" style={{ marginTop: 9, lineHeight: 1.75 }}>{t('audit.sourceNote')}</p>
           <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 10 }}
-            onClick={() => open('https://github.com/mshiravi433-ctrl/fbtcryp/blob/main/contracts/FeeRouter.sol')}>
+            onClick={() => navigate('/contact')}>
             {t('audit.readSource')}
           </button>
         </motion.div>

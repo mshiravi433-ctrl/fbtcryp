@@ -25,3 +25,6 @@ out/
 *.jks
 keystore.properties
 release.keystore
+
+# test harness build output
+test/.out/
