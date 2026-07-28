@@ -1,46 +1,1302 @@
 {
-  "nav": { "home": "Home", "analysis": "Analysis", "trade": "Trade", "portfolio": "Portfolio" },
-  "home": {
-    "greeting": "Hey {{name}} 👋",
-    "walletPrompt": "Connect your wallet to get started",
-    "connectWallet": "Connect wallet",
-    "connected": "Connected",
-    "marketPulse": "Market pulse",
-    "sentimentLabel": "Market sentiment",
-    "topMovers": "Today's top movers"
+  "nav": {
+    "market": "Market",
+    "trade": "Trade",
+    "invest": "Invest",
+    "play": "Games",
+    "earn": "Earn",
+    "wallet": "Wallet",
+    "swap": "Swap",
+    "settings": "Settings",
+    "perp": "Perp",
+    "farm": "Farm",
+    "predict": "Predict",
+    "signals": "Signals",
+    "stocks": "Stocks",
+    "more": "More",
+    "help": "Help",
+    "docs": "Docs",
+    "audit": "Audit",
+    "developers": "Developers",
+    "ecosystem": "Ecosystem",
+    "business": "Business",
+    "about": "About",
+    "group": {
+      "markets": "Markets",
+      "earn": "Earn",
+      "more": "More"
+    },
+    "p2p": "P2P",
+    "leaderboard": "Ranking"
   },
-  "analysis": {
-    "title": "AI market analysis",
-    "sentiment": "Sentiment analysis",
-    "pricePrediction": "Price prediction",
-    "confidence": "Confidence",
-    "disclaimer": "Educational content only, not financial advice. Crypto markets are high risk.",
-    "horizon24h": "Next 24 hours",
-    "bullish": "Bullish",
-    "bearish": "Bearish",
-    "neutral": "Neutral"
+  "common": {
+    "balance": "Balance",
+    "back": "Back",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "refresh": "Refresh",
+    "days": "days",
+    "loading": "Loading…",
+    "notAdvice": "Market data is informational only and is not financial advice. Crypto is volatile — you can lose everything.",
+    "offlineData": "Live feed unreachable — showing a cached snapshot. Prices are not real.",
+    "done": "Done",
+    "copied": "Copied"
+  },
+  "market": {
+    "totalMcap": "Total market cap",
+    "volume24h": "24h volume",
+    "btcDominance": "BTC dominance",
+    "ethDominance": "ETH dominance",
+    "coins": "Coins",
+    "markets": "Markets",
+    "avgChange": "Avg change",
+    "trending": "Trending",
+    "allCoins": "All coins",
+    "search": "Search a coin…",
+    "noResults": "Nothing matched your search",
+    "filter": {
+      "all": "All",
+      "gainers": "Gainers",
+      "losers": "Losers",
+      "favorites": "Favorites",
+      "volume": "Volume"
+    }
+  },
+  "coin": {
+    "notFound": "Coin not found",
+    "high24h": "24h high",
+    "low24h": "24h low",
+    "mcap": "Market cap",
+    "volume": "24h volume",
+    "change1h": "1h change",
+    "change7d": "7d change",
+    "supply": "Circulating supply",
+    "fromAth": "From ATH"
   },
   "trade": {
     "title": "Trade",
-    "subtitle": "Trade directly from your own wallet on BSC — we never hold your funds",
-    "from": "From",
-    "to": "To",
-    "amount": "Amount",
-    "reviewSwap": "Review & sign transaction",
-    "connectFirst": "Connect your wallet to trade",
-    "networkFee": "Estimated network fee",
-    "custodyNotice": "⚠️ This bot will never ask you to send funds to another address. Every transaction is signed from your own wallet only."
+    "subtitle": "Practice spot trading against live market prices.",
+    "paperNotice": "Paper trading: orders fill instantly at the live price using virtual NX credits. No real money, no real custody.",
+    "buy": "Buy",
+    "sell": "Sell",
+    "available": "Available",
+    "positionsValue": "Positions",
+    "amountUsd": "Amount (NX)",
+    "amountCoin": "Amount ({{sym}})",
+    "youReceive": "You receive",
+    "youGet": "You get",
+    "fee": "Fee",
+    "total": "Total",
+    "yourPosition": "Your position",
+    "buyNow": "Buy {{sym}}",
+    "sellNow": "Sell {{sym}}",
+    "openPositions": "Open positions",
+    "history": "Recent orders",
+    "selectAsset": "Select an asset",
+    "confirmTitle": "Confirm order",
+    "action": "Action",
+    "quantity": "Quantity",
+    "price": "Price",
+    "spot": "Spot"
   },
-  "portfolio": {
-    "title": "Portfolio",
-    "subtitle": "Read-only view of your wallet's holdings",
-    "totalValue": "Total value",
-    "assets": "Assets",
-    "noWallet": "Connect a wallet to view your portfolio"
+  "invest": {
+    "title": "Invest",
+    "subtitle": "Lock NX credits into fixed-term yield plans.",
+    "simNotice": "Simulated yield. Returns are paid from virtual credits on a fixed schedule — this is not a fund, and no real money is pooled. A real pooled product needs an investment-services licence.",
+    "totalStaked": "Total staked",
+    "projectedYield": "Projected yield",
+    "lifetimeEarned": "Lifetime earned",
+    "plans": "Plans",
+    "active": "Active plans",
+    "closed": "Closed plans",
+    "lockDays": "{{days}}d lock",
+    "min": "Min",
+    "amount": "Amount",
+    "lockPeriod": "Lock period",
+    "estimatedReturn": "Estimated yield",
+    "totalAtMaturity": "Total at maturity",
+    "confirmStake": "Open plan",
+    "minRequired": "Minimum {{min}} NX",
+    "claim": "Claim",
+    "matured": "Matured",
+    "earlyExit": "Exit early",
+    "earlyExitWarning": "Exiting before maturity forfeits all yield and charges a 2% penalty on the principal.",
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
+    "plan": {
+      "flex": {
+        "name": "Flex Vault",
+        "desc": "Short lock, steady drip"
+      },
+      "core": {
+        "name": "Core Yield",
+        "desc": "Balanced monthly term"
+      },
+      "growth": {
+        "name": "Growth Engine",
+        "desc": "Quarterly, higher variance"
+      },
+      "alpha": {
+        "name": "Alpha Reactor",
+        "desc": "Long lock, aggressive target"
+      }
+    }
+  },
+  "game": {
+    "title": "Arcade",
+    "subtitle": "Provably fair mini-games on virtual credits.",
+    "riskNotice": "These are gambling-style games played with virtual NX credits only. Never connect real funds to them: real-money betting needs a gambling licence, age/KYC checks and an audited RNG. Games are designed to lose money over time — the house edge is 3%.",
+    "stake": "Stake",
+    "rolling": "Rolling…",
+    "spinning": "Spinning…",
+    "totalWagered": "Total wagered",
+    "fairness": "Provably fair",
+    "fairnessExplain": "Each round is derived from a server seed (committed in advance as a hash), your client seed and a nonce. After you rotate the seed you can re-hash the revealed server seed and confirm it matches the commitment.",
+    "serverSeedHash": "Server seed hash (commitment)",
+    "clientSeed": "Your client seed",
+    "nonce": "Nonce",
+    "applySeed": "Apply seed",
+    "revealRotate": "Reveal & rotate seed",
+    "revealedSeed": "Revealed server seed",
+    "verifyHint": "SHA-256 of this seed must equal the previous commitment. It covered {{rounds}} round(s).",
+    "fairnessLimitation": "Honest limitation: the seed is generated in your own browser here, so it proves the UI didn't change the result mid-round — it is not equivalent to a licensed operator's independently audited RNG.",
+    "crash": {
+      "name": "Crash",
+      "launch": "Launch",
+      "cashOut": "Cash out",
+      "autoCashout": "Auto cash-out (×)",
+      "busted": "Crashed at {{x}}×"
+    },
+    "dice": {
+      "name": "Dice",
+      "roll": "Roll",
+      "under": "Under {{n}}",
+      "over": "Over {{n}}",
+      "target": "Target",
+      "chance": "Win chance",
+      "multiplier": "Payout",
+      "profit": "Profit"
+    },
+    "wheel": {
+      "name": "Wheel",
+      "spin": "Spin",
+      "segments": "8 segments · 0× to 3× · 3% house edge"
+    },
+    "mines": {
+      "name": "Mines",
+      "start": "Start round",
+      "cashOut": "Cash out",
+      "count": "Number of mines",
+      "multiplier": "Multiplier",
+      "cashValue": "Cash value",
+      "next": "Next tile",
+      "boom": "Hit a mine — lost {{n}}"
+    },
+    "coinflip": {
+      "name": "Coin flip",
+      "flip": "Flip",
+      "flipping": "Flipping…",
+      "heads": "Heads",
+      "tails": "Tails"
+    }
+  },
+  "predict": {
+    "title": "Price prediction",
+    "teaser": "Call the next candle — up or down",
+    "subtitle": "Settled on live market prices",
+    "riskNotice": "Short-term up/down betting on virtual credits. Real-money binary options are a regulated derivative and are banned for retail traders in the UK and EU — do not connect real funds.",
+    "up": "UP",
+    "down": "DOWN",
+    "payout": "Payout on a correct call",
+    "openRounds": "Open rounds",
+    "results": "Results"
+  },
+  "earn": {
+    "title": "Earn",
+    "subtitle": "Daily rewards, quests and referrals.",
+    "level": "Level",
+    "dailyReward": "Daily reward",
+    "streakDays": "{{n}}-day streak",
+    "claimNow": "Claim reward",
+    "comeBackIn": "Come back in {{h}}h",
+    "referral": "Invite friends",
+    "referralDesc": "Share your code to grow your streak bonus",
+    "referralNote": "Referral credits are virtual. A paid referral scheme that pays real value can be treated as a financial promotion — check local rules before launching one.",
+    "shareInvite": "Share invite link",
+    "shareText": "Join me on FBT SWAP — the crypto terminal mini app",
+    "quests": "Quests",
+    "quest": {
+      "firstTrade": "Place your first trade",
+      "firstStake": "Open an investment plan",
+      "firstGame": "Play a round in the arcade",
+      "firstPredict": "Make a price prediction",
+      "addFavorite": "Star a coin",
+      "inviteFriend": "Invite a friend",
+      "connectWallet": "Connect your wallet",
+      "firstSwap": "Make your first swap",
+      "addLiquidity": "Add liquidity to a pool",
+      "backupWallet": "Back up your wallet file",
+      "enable2fa": "Enable two-factor"
+    },
+    "virtualNotice": "All rewards are virtual NX credits used inside this app. They have no monetary value and cannot be withdrawn.",
+    "tab": {
+      "real": "Real yield",
+      "points": "Points"
+    },
+    "realTitle": "Make your crypto work",
+    "realBody": "These are genuine on-chain opportunities. You deposit from your own wallet into audited protocols and keep everything you earn — we take nothing beyond the swap fee you'd pay anyway.",
+    "opportunities": "Ways to earn",
+    "yield": {
+      "stablePool": {
+        "title": "Stablecoin pool",
+        "body": "USDT/USDC pair — the lowest-risk way to earn trading fees"
+      },
+      "cakeStake": {
+        "title": "Single-token staking",
+        "body": "Stake one token, no impermanent loss"
+      },
+      "lpFarm": {
+        "title": "Liquidity farming",
+        "body": "Provide a token pair and earn fees plus rewards"
+      },
+      "lending": {
+        "title": "Lending",
+        "body": "Supply assets to a lending market and earn interest"
+      },
+      "liquidStake": {
+        "title": "Liquid staking",
+        "body": "Stake ETH and keep a tradable receipt token"
+      }
+    },
+    "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
+    "realRisk": "Yield is never free money. Pools can lose value through impermanent loss, lending markets can suffer bad debt, and any smart contract can be exploited. Start small and only use protocols you've read about.",
+    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all."
   },
   "wallet": {
-    "chooseProvider": "Choose a wallet",
-    "disconnect": "Disconnect"
+    "guest": "Guest",
+    "localSession": "Local session",
+    "netWorth": "Net worth",
+    "allTime": "all time",
+    "allocation": "Allocation",
+    "cash": "Cash",
+    "positions": "Positions",
+    "staked": "Staked",
+    "holdings": "Holdings",
+    "noHoldings": "No holdings yet",
+    "startTrading": "Start trading",
+    "stats": "Stats",
+    "trades": "Trades",
+    "betsPlaced": "Bets",
+    "winRate": "Win rate",
+    "plans": "Plans",
+    "onchain": "On-chain wallet",
+    "connect": "Connect wallet",
+    "connecting": "Connecting…",
+    "disconnect": "Disconnect",
+    "wrongNetwork": "Wrong network",
+    "noProvider": "No injected wallet found. Telegram's in-app browser has no wallet provider — add TON Connect or WalletConnect v2 for production (see WalletContext.jsx).",
+    "connectFailed": "Connection failed or was rejected.",
+    "custodyNotice": "Read-only. This app has no deposit address and never asks you to send crypto anywhere. Any bot that asks you to transfer funds to it should be treated as a scam.",
+    "activity": "Recent activity",
+    "settings": "Settings",
+    "resetDesc": "Reset your virtual balance, positions, plans and history back to the starting state.",
+    "resetAccount": "Reset account",
+    "connectTitle": "Connect a wallet",
+    "connectSubtitle": "You keep your keys. This app never sees them.",
+    "wc": "WalletConnect",
+    "wcDesc": "MetaMask, Trust, Rainbow… via QR or deep link",
+    "recommended": "Safest",
+    "injected": "Browser wallet",
+    "injectedDesc": "Use the wallet injected into this browser",
+    "createLocal": "Create in-app wallet",
+    "createLocalDesc": "New 12-word wallet, encrypted on this device",
+    "importLocal": "Import seed phrase",
+    "importLocalDesc": "Restore an existing 12/24-word wallet",
+    "unlockLocal": "Unlock in-app wallet",
+    "unlockLocalDesc": "Enter your password to sign transactions",
+    "localRisk": "The in-app wallet stores an encrypted key inside a Telegram WebView — no secure enclave, no hardware isolation. It is fine for small amounts, but anything you would be upset to lose belongs in MetaMask/Trust via WalletConnect, or on a hardware wallet.",
+    "noWcProject": "Set VITE_WALLETCONNECT_PROJECT_ID in your .env to enable WalletConnect. Get a free project ID at cloud.reown.com.",
+    "backupTitle": "Back up your seed phrase",
+    "backupWarning": "Write these 12 words down on paper, in order, and store them offline. Anyone with this phrase owns your funds forever. Nobody — not us, not Telegram — can recover it if you lose it. Never type it into any website or send it to anyone.",
+    "savedIt": "I've written it down",
+    "setPassword": "Set a password",
+    "importTitle": "Import wallet",
+    "seedPhrase": "Seed phrase",
+    "passwordDesc": "This password encrypts your key on this device. It is not recoverable — if you forget it you will need your seed phrase.",
+    "password": "Password",
+    "passwordConfirm": "Confirm password",
+    "createConfirm": "Create wallet",
+    "unlockTitle": "Unlock wallet",
+    "unlockDesc": "Your key is decrypted in memory only and cleared when you lock.",
+    "unlock": "Unlock",
+    "lock": "Lock",
+    "ackText": "I understand that I alone control this wallet, that my seed phrase is the only way to recover it, and that nobody can restore my funds if I lose it.",
+    "strength": {
+      "empty": "Enter a password",
+      "veryWeak": "Very weak",
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good",
+      "strong": "Strong"
+    },
+    "err": {
+      "PASSWORD_SHORT": "Use at least 8 characters.",
+      "PASSWORD_MISMATCH": "Passwords don't match.",
+      "MUST_ACK": "Please confirm you understand.",
+      "BAD_MNEMONIC": "That seed phrase isn't valid.",
+      "BAD_PASSWORD": "Wrong password.",
+      "CREATE_FAILED": "Could not create the wallet.",
+      "GENERATE_FAILED": "Could not generate a phrase."
+    },
+    "revealSeed": "Reveal seed phrase",
+    "forgetWallet": "Remove wallet from this device",
+    "forgetWarning": "This deletes the encrypted key from this device. Without your seed phrase the funds are gone forever.",
+    "mode": {
+      "injected": "Browser",
+      "wc": "WalletConnect",
+      "local": "In-app"
+    },
+    "tab": {
+      "overview": "Overview",
+      "liquidity": "Liquidity",
+      "history": "History"
+    },
+    "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
+    "viewPools": "View pools",
+    "noHistory": "No transactions yet",
+    "onchainHistory": "View full on-chain history",
+    "backupFile": "Backup file",
+    "backupSave": "Save to device",
+    "backupShare": "Share / send elsewhere",
+    "backupSaved": "Backup saved",
+    "backupLocation": "Saved to",
+    "backupWarn": "This file contains your wallet, encrypted with your password. Anyone who gets BOTH the file and your password controls your funds. And if you forget the password, the file is worthless — it cannot be decrypted by us or anyone else.",
+    "backupWhat": "What's inside: your seed phrase encrypted with AES-GCM. The plain seed is never written to disk. The file alone cannot spend anything.",
+    "backupPaperNote": "This does not replace writing your 12 words on paper. Phones get lost, wiped and stolen — and if you uninstall the app without a backup, the wallet is gone permanently.",
+    "backupErr": {
+      "NO_VAULT": "No in-app wallet to back up.",
+      "FAILED": "Could not write the file. Check storage permission."
+    },
+    "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not FBT, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue."
   },
-  "riskBanner": "This bot never gives financial advice and never custodies your funds."
+  "toast": {
+    "insufficientBalance": "Not enough balance",
+    "insufficientPosition": "Not enough of that asset",
+    "buyFilled": "Buy order filled",
+    "sellFilled": "Sell order filled",
+    "investmentOpened": "Plan opened",
+    "investmentClaimed": "Plan claimed",
+    "investmentEarlyExit": "Exited early — penalty applied",
+    "dailyClaimed": "Daily reward claimed",
+    "claimTooSoon": "Already claimed — try again later",
+    "questReward": "Quest reward added",
+    "predictionPlaced": "Prediction placed",
+    "linkCopied": "Invite link copied",
+    "handleCopied": "Handle copied",
+    "addressCopied": "Address copied",
+    "pointsEarned": "Points earned"
+  },
+  "swap": {
+    "title": "Swap",
+    "subtitle": "Real on-chain swaps via {{dex}}",
+    "nonCustodialNotice": "Non-custodial: you sign every transaction from your own wallet and it broadcasts directly to the blockchain. This app takes no fee, holds no funds and has no address in the flow.",
+    "notConnected": "No wallet connected",
+    "from": "From",
+    "to": "To",
+    "balance": "Balance",
+    "rate": "Rate",
+    "minReceived": "Minimum received",
+    "priceImpact": "Price impact",
+    "networkFee": "Network fee",
+    "route": "Route",
+    "hops": "hop(s)",
+    "review": "Review swap",
+    "quoting": "Getting price…",
+    "selectToken": "Select a token",
+    "settings": "Swap settings",
+    "slippage": "Slippage tolerance",
+    "slippageHelp": "Your swap reverts if the price moves against you by more than this. Too low and it fails on volatile pairs; too high and you accept a worse fill.",
+    "slippageHigh": "Above 3% you are very exposed to sandwich attacks. Only raise this for illiquid tokens.",
+    "highImpact": "High price impact — this pool is thin and you will lose a lot of value on this trade. Consider a smaller amount.",
+    "insufficient": "Insufficient balance",
+    "confirmTitle": "Confirm swap",
+    "youPay": "You pay",
+    "youReceive": "You receive",
+    "recipient": "Recipient",
+    "confirmSwap": "Confirm & sign",
+    "viewOnExplorer": "View on explorer",
+    "dontClose": "Keep this screen open",
+    "success": "Swap complete",
+    "reviewNotice": "Your wallet will ask you to sign. Check the amounts there too — what your wallet shows is what actually executes.",
+    "verifyContracts": "Always verify token contract addresses independently. Fake tokens with real names are the most common way people get drained.",
+    "stage": {
+      "preparing": "Preparing…",
+      "approving": "Approving token…",
+      "quoting": "Refreshing price…",
+      "signing": "Waiting for signature…",
+      "pending": "Transaction pending…"
+    },
+    "err": {
+      "NO_ROUTE": "No route exists between these tokens.",
+      "NO_LIQUIDITY": "This pool has no liquidity.",
+      "QUOTE_FAILED": "Could not fetch a price. Check your connection.",
+      "QUOTE_EXPIRED": "The price moved. Try again.",
+      "USER_REJECTED": "You rejected the transaction.",
+      "INSUFFICIENT_GAS": "Not enough native coin to pay gas.",
+      "SLIPPAGE": "Price moved beyond your slippage tolerance.",
+      "TX_FAILED": "Transaction failed."
+    },
+    "platformFee": "Platform fee ({{pct}}%)",
+    "bestOf": "best of {{n}} route(s)"
+  },
+  "onboarding": {
+    "skip": "Skip",
+    "next": "Continue",
+    "start": "Get started",
+    "trade": {
+      "title": "Live markets, one tap away",
+      "body": "Real-time prices, charts and trends for thousands of tokens. Track what matters, spot moves early, and decide with data instead of noise."
+    },
+    "swap": {
+      "title": "Swap directly on-chain",
+      "body": "Trade any supported token straight from your own wallet through PancakeSwap. No account, no deposit, no waiting for withdrawals."
+    },
+    "custody": {
+      "title": "Your keys, your coins",
+      "body": "FBT never holds your funds and has no deposit address. You sign every transaction yourself. That also means your seed phrase is the only way back in — write it down and keep it offline."
+    },
+    "wallet": {
+      "title": "Connect your wallet",
+      "body": "FBT Swap is non-custodial — trades execute straight from your own wallet and we never hold your funds.",
+      "connected": "Wallet connected",
+      "skipNote": "You can skip this and connect later. You'll need a wallet before your first swap."
+    },
+    "terms": {
+      "title": "Before you start",
+      "body": "Please review our terms and privacy policy. In short: we never hold your funds, a 0.5% fee applies to each swap, and crypto trading carries real risk of loss.",
+      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that FBT never holds my funds, that a 0.5% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Appearance, security and account.",
+    "profile": "Profile",
+    "username": "Username",
+    "noUsername": "Not set",
+    "usernamePlaceholder": "Pick a display name",
+    "usernameNote": "Shown only inside this app. It is not published on-chain and is not tied to your wallet address.",
+    "wallet": "Wallet",
+    "noWallet": "Not connected",
+    "language": "Language",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeAuto": "System",
+    "accent": "Accent colour",
+    "hideBalances": "Hide balances",
+    "hideBalancesSub": "Mask amounts when others can see your screen",
+    "reduceMotion": "Reduce motion",
+    "security": "Security",
+    "biometric": "Biometric unlock",
+    "biometricSub": "Use fingerprint or face to open the app",
+    "biometricUnavailable": "Not available on this device",
+    "twoFactor": "Two-factor (TOTP)",
+    "twoFactorSub": "Require a 6-digit code from your authenticator",
+    "twoFactorSetup": "Set up two-factor",
+    "twoFactorHow": "Add this secret to Google Authenticator, Authy or any TOTP app, then enter the 6-digit code it shows to confirm.",
+    "secretKey": "Secret key",
+    "openInAuthApp": "Open in authenticator app",
+    "enterCode": "Enter the 6-digit code",
+    "badCode": "That code isn't right. Check your phone's clock is accurate and try the current code.",
+    "verifyEnable": "Verify & enable",
+    "enabled": "Enabled",
+    "recoveryWarning": "Save these recovery codes somewhere safe and offline. Each works once. If you lose your authenticator and these codes, you'll have to reinstall the app and restore from your seed phrase.",
+    "autoLock": "Auto-lock",
+    "never": "Never",
+    "afterMinutes": "After {{n}} minutes",
+    "txConfirm": "Confirm every transaction",
+    "txConfirmSub": "Always show a review screen before signing",
+    "securityScope": "These settings protect this app on this device — useful if someone picks up your unlocked phone. They cannot protect funds on-chain: anyone with your seed phrase can spend from any wallet app. Your seed phrase and wallet password remain the real protection.",
+    "bioErr": {
+      "UNSUPPORTED": "This device or browser doesn't support biometric unlock.",
+      "FAILED": "Biometric setup failed or was cancelled.",
+      "CANCELLED": "You cancelled the prompt, or the device timed out.",
+      "ALREADY_REGISTERED": "This device is already registered. Turn the switch off and on again.",
+      "INSECURE_ORIGIN": "Biometrics need a secure (https) connection. They will not work over plain http."
+    },
+    "sync": "Sync",
+    "cloudSync": "Cloud sync",
+    "syncNow": "Sync",
+    "neverSynced": "Never synced",
+    "syncScope": "Syncs only your theme, accent, username and display preferences. Your seed phrase, wallet password and 2FA secret are never uploaded — they stay encrypted on this device.",
+    "company": "Company",
+    "legal": "Legal",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy",
+    "support": "Support",
+    "supportSub": "Message us on Telegram",
+    "trading": "Trading",
+    "defaultSlippage": "Default slippage",
+    "defaultSlippageSub": "Applied to new swaps",
+    "expertMode": "Expert mode",
+    "expertModeSub": "Skip confirmation screens and allow high slippage",
+    "currency": "Display currency",
+    "reduceMotionSub": "Fewer animations, longer battery",
+    "compactMode": "Compact layout",
+    "compactModeSub": "Fit more on screen",
+    "networks": "Networks",
+    "testnet": "Testnet mode",
+    "testnetOn": "Using test networks — funds are not real",
+    "testnetOff": "Using real networks",
+    "testnetWarn": "Testnet mode is on. Tokens have no value and swaps do not affect real funds. Turn this off to trade for real.",
+    "evmNetwork": "EVM network",
+    "evmNetworkSub": "Chain used for swaps",
+    "solana": "Solana cluster",
+    "solanaSub": "For Solana features",
+    "customRpc": "Custom RPC",
+    "customRpcSub": "Use your own node",
+    "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",
+    "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust."
+  },
+  "about": {
+    "title": "About us",
+    "tagline": "Trade & technology for a new economy",
+    "who": "Who we are",
+    "body1": "FBT iran is a commercial trading company based in Khomeyni Shahr, Isfahan. Our roots are in conventional commerce, and our direction is firmly toward the new digital economy — where value moves without intermediaries and markets stay open around the clock.",
+    "body2": "We built this exchange because we believe access to global markets shouldn't depend on where you happen to live, which bank will take you, or who is willing to hold your money. A decentralized exchange removes those gatekeepers: you connect your own wallet, you trade, and the assets never leave your control.",
+    "body3": "We are a small team that prefers shipping honest software over marketing promises. The app tells you exactly what it does, what it charges, and what it cannot protect you from. We would rather you understand the risk than be pleasantly surprised by it later.",
+    "values": "What we stand for",
+    "value": {
+      "transparency": {
+        "title": "Transparency",
+        "body": "Fees are shown before you sign, every transaction is verifiable on-chain, and our contract is public."
+      },
+      "innovation": {
+        "title": "New economy",
+        "body": "We treat blockchain as real financial infrastructure, not a trend to chase."
+      },
+      "access": {
+        "title": "Open access",
+        "body": "No account, no approval, no minimum balance. A wallet is all you need."
+      },
+      "security": {
+        "title": "Self-custody",
+        "body": "We hold nothing. There is no company wallet for your funds to sit in and no withdrawal queue."
+      }
+    },
+    "details": "Company details",
+    "company": "Company",
+    "address": "Address",
+    "addressValue": "Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality",
+    "network": "Network",
+    "custody": "We never hold your funds",
+    "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. FBT iran has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
+    "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations.",
+    "companyFull": "Fanos Bazaar Pishgam (FBT Iran)"
+  },
+  "contact": {
+    "title": "Contact us",
+    "intro": "Questions, partnership enquiries or a bug to report — reach us directly on Telegram.",
+    "primaryChannel": "Fastest way to reach us",
+    "copyHandle": "Copy handle",
+    "companyInfo": "Company information",
+    "viewMap": "View on map",
+    "support": "Support",
+    "supportBody": "We answer Telegram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
+    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be FBT is impersonating us. Our only official contact is the Telegram account shown above.",
+    "telegram": "Telegram",
+    "openTelegram": "Open Telegram",
+    "social": {
+      "telegram": "Telegram",
+      "instagram": "Instagram",
+      "linkedin": "LinkedIn",
+      "crunchbase": "Crunchbase",
+      "email": "Email"
+    }
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "updated": "Last updated: July 2026",
+    "intro": "By using FBT Swap you agree to these terms. Please read them — they describe real limits on what this app can do for you, and what happens if something goes wrong.",
+    "nature": {
+      "title": "What this app is",
+      "body": "FBT Swap is a non-custodial interface to decentralized exchanges on BNB Smart Chain. It is software that helps you build and sign your own blockchain transactions. It is not a bank, broker, exchange, or money transmitter, and it does not hold or manage anyone's assets."
+    },
+    "noCustody": {
+      "title": "We never hold your funds",
+      "body": "Your assets stay in your own wallet at all times. We have no deposit address, no access to your private keys or seed phrase, and no ability to move, freeze, reverse or recover your funds — including if you are hacked, scammed, or lose your seed phrase. Nobody at FBT iran can restore a lost wallet."
+    },
+    "fees": {
+      "title": "Platform fee",
+      "body": "A 0.5% fee is taken from the input amount of each swap and paid to FBT iran. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
+    },
+    "risk": {
+      "title": "You accept the risk",
+      "body": "Crypto assets are extremely volatile and you can lose everything. Blockchain transactions are irreversible — a wrong address or wrong network means permanent loss. Smart contracts can contain bugs. Tokens can be worthless, fraudulent, or designed so you cannot sell them. Prices shown are estimates and the amount you receive may differ."
+    },
+    "noAdvice": {
+      "title": "Not financial advice",
+      "body": "Nothing in this app is investment, financial, legal or tax advice. Prices, charts, rankings and any simulated features are for information only. You are solely responsible for your decisions and for any tax you owe."
+    },
+    "eligibility": {
+      "title": "Who may use it",
+      "body": "You must be of legal age where you live and legally permitted to use decentralized finance services there. Crypto rules differ sharply between countries and some restrict or prohibit this entirely. Confirming that you are allowed to use this app is your responsibility, not ours."
+    },
+    "prohibited": {
+      "title": "Prohibited use",
+      "body": "Do not use FBT Swap for money laundering, terrorist financing, sanctions evasion, fraud, market manipulation, or any illegal activity. Do not attempt to attack, reverse engineer for exploitation, or disrupt the service or its users."
+    },
+    "thirdParty": {
+      "title": "Third-party services",
+      "body": "Swaps route through third-party protocols such as the KyberSwap aggregator and PancakeSwap, and market data comes from providers like CoinGecko. Wallet connections use WalletConnect. We do not control these services and are not responsible for their failures, downtime, pricing or losses arising from them."
+    },
+    "availability": {
+      "title": "No guarantee of service",
+      "body": "The app is provided 'as is' with no warranty of any kind. We may change, suspend or discontinue any part of it at any time, without notice. We do not promise it will be available, error-free, or that quotes will always be accurate."
+    },
+    "liability": {
+      "title": "Limitation of liability",
+      "body": "To the fullest extent permitted by law, FBT iran and its team are not liable for any loss of funds, profits, or data arising from your use of this app — including losses from smart-contract bugs, third-party protocols, price movements, network failures, phishing, or your own mistakes."
+    },
+    "changes": {
+      "title": "Changes to these terms",
+      "body": "We may update these terms as the app evolves. Continuing to use FBT Swap after an update means you accept the revised terms. Significant changes will be noted in the app."
+    }
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: July 2026",
+    "intro": "Short version: FBT Swap collects almost nothing. There is no signup, no email, no phone number, and no identity verification. Most of your data never leaves your device.",
+    "collect": {
+      "title": "What we collect",
+      "body": "If you enable cloud sync, we store your display preferences — theme, accent colour, chosen username and language — against an anonymous ID. That anonymous ID is generated by Firebase and is not linked to your name, email or phone number."
+    },
+    "notCollect": {
+      "title": "What we never collect",
+      "body": "We never collect or transmit your seed phrase, private keys, wallet password or two-factor secret. Those are encrypted on your own device and never sent anywhere. We cannot read them, and neither can anyone who breaches our systems — because they are not in our systems."
+    },
+    "onchain": {
+      "title": "Blockchain data is public",
+      "body": "Every swap you make is recorded permanently on the public blockchain, including your wallet address and amounts. This is inherent to how blockchains work, is visible to everyone, and is not something we or anyone else can delete. Treat your wallet address as public information."
+    },
+    "thirdPartyData": {
+      "title": "Third parties you touch",
+      "body": "Using the app sends requests to services we do not control: CoinGecko and GeckoTerminal for prices, the KyberSwap aggregator for routing, public BSC RPC nodes for balances, and WalletConnect when you connect a wallet. These services see your IP address and can set their own policies. Please read theirs."
+    },
+    "storage": {
+      "title": "On-device storage",
+      "body": "Your balances, settings, encrypted wallet and app history are stored in your device's local storage. Clearing your browser or app data deletes them permanently. If you delete an in-app wallet without saving its seed phrase, the funds are unrecoverable."
+    },
+    "analytics": {
+      "title": "Analytics",
+      "body": "If Firebase Analytics is enabled in a build, we may see aggregate usage such as which screens are opened. This is not tied to your wallet address or your identity, and we do not sell data to anyone."
+    },
+    "rights": {
+      "title": "Your control",
+      "body": "You can wipe every piece of local data at any time from Settings, or by uninstalling the app. To remove synced preferences, disable cloud sync and contact us. Because we hold no identity data, there is nothing else to request or delete."
+    },
+    "contact": {
+      "title": "Questions",
+      "body": "Reach us on Telegram at @Shiravi4333, or at the FBT iran office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
+    }
+  },
+  "perp": {
+    "title": "Perpetuals",
+    "subtitle": "Leveraged futures on live index prices.",
+    "riskNotice": "Leverage multiplies losses as fast as gains. At 100x a 1% move against you liquidates the entire position. Most retail perp traders lose money. Never use leverage with funds you need.",
+    "indexPrice": "Index price",
+    "indexNote": "Spot index from our market feed, shown for reference. Actual perp marks and funding rates are set by the venue you trade on.",
+    "honestTitle": "Why FBT doesn't run its own perp engine",
+    "honestBody": "A perpetual exchange needs an on-chain matching engine, oracle feeds, a liquidation keeper network, an insurance fund and market makers. PancakeSwap doesn't build this in-house either — their perp product is powered by ApolloX. Shipping a fake perp screen would be worse than shipping none, because you'd think your leveraged position was real. So we show live prices and route you to venues that actually run the infrastructure.",
+    "venues": "Trade perps on",
+    "pairs": "pairs",
+    "upTo": "up to",
+    "venue": {
+      "apx": {
+        "name": "ApolloX (APX)",
+        "short": "APX",
+        "desc": "Powers PancakeSwap's perpetual product. BNB Chain native."
+      },
+      "gmx": {
+        "name": "GMX",
+        "short": "GMX",
+        "desc": "Established decentralized perp DEX with a shared liquidity pool."
+      },
+      "dydx": {
+        "name": "dYdX",
+        "short": "dYdX",
+        "desc": "Order-book perp exchange on its own appchain."
+      }
+    },
+    "thirdPartyNotice": "These are independent third-party protocols. FBT iran is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
+    "tryPredict": "Prefer something simpler?",
+    "tryPredictSub": "Try up/down prediction on virtual credits"
+  },
+  "farm": {
+    "title": "Farm",
+    "subtitle": "Earn yield by providing liquidity.",
+    "whatTitle": "How farming works",
+    "whatBody": "You deposit two tokens into a liquidity pool and receive LP tokens representing your share. Traders swapping through that pool pay fees, which accrue to you. Staking the LP tokens in a farm adds a second reward stream on top.",
+    "defiTvl": "Estimated DeFi TVL",
+    "ilTitle": "Impermanent loss — read before depositing",
+    "ilBody": "If the two tokens change price relative to each other, you end up with more of the one that fell and less of the one that rose. You can finish worse off than if you had simply held them, even after collecting fees. The wider the price gap moves, the worse it gets. Stablecoin pairs barely suffer from this; volatile pairs suffer a lot.",
+    "pools": "Popular pools",
+    "lpPair": "LP pair · two tokens",
+    "singleStake": "Single-token staking · no impermanent loss",
+    "aprNote": "APR figures are indicative ranges, not promises. Real yield changes constantly with trading volume, emissions and how much liquidity is in the pool. Always check the live rate before depositing.",
+    "custodyNotice": "These farms are operated by PancakeSwap, not by FBT. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
+    "rewardsLink": "App rewards & quests",
+    "rewardsLinkSub": "Daily streak, XP and referrals"
+  },
+  "signals": {
+    "title": "AI Signals",
+    "subtitle": "Technical analysis across the market, updated live.",
+    "marketMood": "Market mood",
+    "analyzing": "Analyzing…",
+    "confidence": "Confidence",
+    "breakdown": "Signal breakdown",
+    "volatility": "Volatility",
+    "support": "Support",
+    "resistance": "Resistance",
+    "projection": "Projected range",
+    "low": "Low",
+    "mid": "Mid",
+    "high": "High",
+    "coneExplain": "This is a volatility range, not a forecast. If {{d}}-day price movement continues at its recent pace, roughly {{p}}% of outcomes fall inside this band. It says nothing about direction.",
+    "topSignals": "Strongest signals right now",
+    "viewChart": "View chart",
+    "disclaimer": "These are classical technical indicators (RSI, MACD, Bollinger, moving averages) computed on real price history — the same maths behind most 'AI signal' products. They summarise what the chart is doing; they cannot predict the future. Markets are close to random at short horizons. Never trade purely on a score.",
+    "label": {
+      "strongBuy": "Strong buy",
+      "buy": "Buy",
+      "neutral": "Neutral",
+      "sell": "Sell",
+      "strongSell": "Strong sell"
+    },
+    "mood": {
+      "extremeFear": "Extreme fear",
+      "fear": "Fear",
+      "neutral": "Neutral",
+      "greed": "Greed",
+      "extremeGreed": "Extreme greed"
+    },
+    "ind": {
+      "rsi": "RSI momentum",
+      "macd": "MACD trend",
+      "bollinger": "Bollinger position",
+      "ma20": "20-period MA",
+      "cross": "MA crossover",
+      "momentum": "Recent momentum"
+    },
+    "aiOutlook": "AI outlook",
+    "aiThinking": "Reading the market…",
+    "aiUnavailable": "AI analysis is temporarily unavailable. The indicator signals above are still live.",
+    "aiRange": "{{d}}-day range",
+    "drivers": "Supporting",
+    "risks": "Risks",
+    "invalidation": "Invalidated if",
+    "aiMeta": "Generated by {{model}} · refreshed daily",
+    "dailyBrief": "Daily brief",
+    "bias": {
+      "bullish": "Bullish",
+      "bearish": "Bearish",
+      "neutral": "Neutral"
+    }
+  },
+  "stocks": {
+    "title": "Stocks",
+    "subtitle": "Tokenized real-world assets.",
+    "tab": {
+      "rwa": "RWA tokens",
+      "equity": "Tokenized equity"
+    },
+    "rwaTitle": "Real-world assets on-chain",
+    "rwaBody": "RWA protocols bring treasury bills, credit and commodities onto the blockchain. Their governance tokens trade like any other crypto asset and you can swap them here.",
+    "rwaTokens": "RWA sector tokens",
+    "rwaNote": "These are the tokens of protocols building tokenization infrastructure. They are not shares in those companies and they do not track equity prices.",
+    "noTokens": "No RWA tokens in the current market data",
+    "honestTitle": "Why you can't buy Apple stock here",
+    "honestBody": "A token representing Apple stock is a security. Issuing one requires a licensed issuer holding the real shares in custody, a prospectus in most countries, and a broker-dealer licence to distribute it. PancakeSwap doesn't offer this either. Building it is a licensing project, not a coding one — so instead we point you at issuers who already hold those licences.",
+    "issuers": "Licensed issuers",
+    "issuer": {
+      "backed": {
+        "name": "Backed Finance",
+        "short": "bTKN",
+        "desc": "Swiss-regulated tokenized equities and ETFs"
+      },
+      "ondo": {
+        "name": "Ondo Finance",
+        "short": "ONDO",
+        "desc": "Tokenized US treasuries and short-term bonds"
+      },
+      "swarm": {
+        "name": "Swarm Markets",
+        "short": "SWRM",
+        "desc": "German BaFin-regulated tokenized stocks"
+      }
+    },
+    "kycNotice": "These issuers require identity verification and may not accept users from every country. FBT iran has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
+    "riskNotice": "Tokenized assets carry both market risk and issuer risk — if the issuer fails or is shut down, the token may not be redeemable for the underlying asset. Verify who holds the collateral before buying."
+  },
+  "help": {
+    "title": "Help & support",
+    "telegram": "Telegram",
+    "email": "Email",
+    "askAi": "Ask AI",
+    "askAiSub": "Answers about this app, grounded in how it actually works.",
+    "askPlaceholder": "Ask anything…",
+    "aiOffline": "The AI assistant needs a server connection and none is configured in this build. Everything else works normally — for help, use the contact options above.",
+    "aiFailed": "Couldn't reach the assistant. Try again, or message us on Telegram.",
+    "aiCaveat": "Answers come from an AI model and can be wrong. For anything involving your funds, confirm with us on Telegram.",
+    "resources": "Resources",
+    "docs": "Documentation",
+    "docsSub": "How each screen works, step by step",
+    "audit": "Security & audits",
+    "auditSub": "What is audited and what isn't",
+    "github": "Source code",
+    "githubSub": "The repository is private — contact us for access",
+    "scamWarning": "We never message you first and never ask for your seed phrase, private key or wallet password. Anyone who does — even claiming to be FBT support — is trying to steal from you.",
+    "q": {
+      "fees": "What fees do you charge?",
+      "custody": "Do you hold my crypto?",
+      "seedLost": "What if I lose my seed phrase?",
+      "realMoney": "Which parts use real money?",
+      "network": "Which networks are supported?",
+      "slippage": "What is slippage?"
+    },
+    "contactUs": "Contact us",
+    "contactUsSub": "Telegram and email support",
+    "guide": "Getting started guide",
+    "guideSub": "Four sections: swap, predictions, wallet, security"
+  },
+  "docs": {
+    "title": "Documentation",
+    "intro": "Short guides for each screen. If you're new to crypto, start at the top.",
+    "pitfall": "⚠️ Watch out",
+    "watchVideo": "Watch a tutorial",
+    "videoNote": "Video links open YouTube searches from independent educators. We didn't make them and don't control their content.",
+    "start": {
+      "title": "Getting started",
+      "sub": "Wallet setup and first steps",
+      "step1": "Install a wallet — Trust Wallet or MetaMask are the easiest on mobile.",
+      "step2": "Write your 12-word recovery phrase on paper. Never photograph it or store it in a chat.",
+      "step3": "Add BNB Smart Chain in the wallet, then send a small amount of BNB for gas fees.",
+      "step4": "Open FBT Swap, tap Connect wallet and approve the connection.",
+      "pitfall": "When withdrawing from an exchange, always pick the 'BEP20' network. Choose the wrong one and your money goes somewhere nobody can retrieve it — not us, not the exchange."
+    },
+    "swap": {
+      "title": "Swapping tokens",
+      "sub": "Trading one token for another",
+      "step1": "Pick the token you're paying with and the one you want.",
+      "step2": "Enter an amount — the quote updates automatically.",
+      "step3": "Check the rate, minimum received and the 0.5% platform fee.",
+      "step4": "Tap Review, then approve the token if this is your first time using it.",
+      "step5": "Confirm in your wallet and wait for the transaction to settle.",
+      "pitfall": "Check the 'price impact' number before you confirm. Above 5% means there aren't enough buyers for this trade and you'll lose value. Try a smaller amount or a different token."
+    },
+    "farm": {
+      "title": "Liquidity & farming",
+      "sub": "Earning yield on your tokens",
+      "step1": "Understand impermanent loss before depositing anything.",
+      "step2": "Choose a pool — stablecoin pairs are lowest risk.",
+      "step3": "Deposit both tokens in equal value and receive LP tokens.",
+      "step4": "Stake the LP tokens to earn additional rewards.",
+      "pitfall": "If you see a pool advertising thousands of percent a year, don't get excited. It almost always means the token you earn has no buyers later and you won't be able to sell it."
+    },
+    "signals": {
+      "title": "AI signals",
+      "sub": "Reading the analysis screen",
+      "step1": "The gauge combines RSI, MACD, Bollinger bands and moving averages into one score.",
+      "step2": "Confidence shows how much those indicators agree — low confidence means the chart is unclear.",
+      "step3": "The AI outlook adds recent news context and states what would invalidate the view.",
+      "pitfall": "No analysis knows the future. Even on a 'strong buy' the price can fall. Treat it as one of several things you look at, not an instruction to follow."
+    },
+    "trade": {
+      "title": "Practice trading",
+      "sub": "Learning with virtual credits",
+      "step1": "The Trade, Invest and Predict screens use virtual NX credits, not real money.",
+      "step2": "Prices are real and live, so the practice is realistic.",
+      "step3": "Use it to learn order mechanics before risking anything on the Swap screen.",
+      "pitfall": "The profit you see here isn't real money and can't be withdrawn. Winning a few times here doesn't mean the same will happen with real funds — real markets have emotions attached, this doesn't."
+    },
+    "security": {
+      "title": "Staying safe",
+      "sub": "Protecting your funds",
+      "step1": "Your seed phrase is the only backup. Written on paper, stored offline, never typed into a website.",
+      "step2": "Enable biometric unlock and two-factor in Settings for device-level protection.",
+      "step3": "Verify token contract addresses independently before swapping unknown tokens.",
+      "step4": "Start with a small test transaction when using any new feature.",
+      "step5": "Keep large holdings in a separate hardware wallet, not in an in-app wallet.",
+      "pitfall": "Nobody legitimate will ever ask for your 12 recovery words. Not our support, not a group admin, not any website. Anyone who asks is trying to take your money. Block them immediately."
+    },
+    "why": {
+      "title": "Why FBT is different",
+      "sub": "What we do that other apps don't",
+      "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
+      "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
+      "step3": "Truly non-custodial: no signup, no KYC, no deposit address. Your funds never sit in our account, so there is no withdrawal queue and nothing to freeze.",
+      "step4": "AI analysis built in, with honest confidence figures — it tells you when the signal is unclear instead of inventing certainty to look smart.",
+      "step5": "One clear fee: 0.5% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
+      "pitfall": "Compare the 'minimum received' figure, not the advertised rate. Some apps show a great headline rate then take a wide spread on top. Ours is the number you actually get."
+    },
+    "strategy": {
+      "title": "Getting more out of the app",
+      "sub": "Practical ways to grow what you have",
+      "step1": "Start with a stablecoin pool. USDT/USDC pairs barely move against each other, so you collect trading fees with very little impermanent loss.",
+      "step2": "Swap during high-volume hours. Deeper liquidity means less price impact, which matters far more on large trades than the fee does.",
+      "step3": "Check the Signals screen before entering. If confidence is under 40% the chart genuinely isn't saying anything — waiting is a position too.",
+      "step4": "Invite friends. Referrals are the fastest way up the leaderboard, and each new trader deepens the pools everyone uses.",
+      "step5": "Keep gas money on each chain you use. Running out mid-transaction wastes the fee you already paid.",
+      "pitfall": "Chasing the highest APR you can find is how most people lose money in DeFi. A steady 8% you understand beats a 900% pool whose token you can't sell."
+    }
+  },
+  "audit": {
+    "title": "Security & audits",
+    "intro": "What has been independently audited, and what hasn't. We'd rather tell you plainly than imply more safety than exists.",
+    "nonCustodial": "We hold nothing",
+    "nonCustodialBody": "FBT Swap has no deposit address and cannot move your funds. Even if our servers were fully compromised, an attacker could not touch assets in your wallet.",
+    "audited": "Audited third-party contracts",
+    "notAudited": "Not audited",
+    "item": {
+      "kyber": {
+        "name": "KyberSwap Aggregator",
+        "desc": "Routes swaps and collects the platform fee"
+      },
+      "pancake": {
+        "name": "PancakeSwap V2",
+        "desc": "Fallback router and liquidity pools"
+      },
+      "walletconnect": {
+        "name": "WalletConnect / Reown",
+        "desc": "Wallet connection protocol"
+      }
+    },
+    "ours": "Our own contract",
+    "ourContractBody": "FeeRouter.sol is an optional contract for collecting the fee without a third party. It has been tested in a local EVM but has NOT had a professional audit. It is not used by default — the aggregator path is. Do not route significant volume through it until it is audited.",
+    "readSource": "Request a code review",
+    "feeTransparency": "Fee transparency",
+    "feeRate": "Platform fee",
+    "feeWallet": "Fee wallet",
+    "network": "Network",
+    "viewOnChain": "View on BscScan",
+    "bounty": "Found a security issue? Message us on Telegram before disclosing it publicly. We'll respond within 48 hours.",
+    "sourceNote": "The contract source is kept private. Read access is granted to auditors and technical partners via the Contact page. The on-chain contract address is listed on this page and anyone can inspect the fee transactions on BscScan."
+  },
+  "dev": {
+    "title": "Developers",
+    "intro": "This app is open source. Read the code, self-host it, or build on the public API.",
+    "openSource": "Source code — private",
+    "openSourceSub": "This project’s repository is private and not published publicly",
+    "api": "Public API",
+    "apiIntro": "Read-only market endpoints, no key required. Rate limited per IP.",
+    "ep": {
+      "globalStats": "Total market cap, volume and dominance",
+      "markets": "Ranked coin list with sparklines",
+      "chart": "Price history for one asset",
+      "trending": "Currently trending coins",
+      "dexPools": "Hot DEX pools on a network",
+      "aiOutlook": "AI analysis for one asset",
+      "aiFaq": "AI answer about the app"
+    },
+    "example": "Example",
+    "selfHost": "Self-hosting",
+    "selfHostBody": "The repository is private. If you need access for a technical review or a partnership, request it from the Contact page and read access can be granted.",
+    "keysTitle": "About API keys",
+    "keysBody": "AI endpoints need OPENROUTER_API_KEY and JINA_API_KEY set server-side. Never put them in VITE_ variables — those are compiled into the browser bundle and would be harvested within hours.",
+    "rateLimit": "Please keep requests reasonable. Sustained heavy polling will be rate limited; if you need higher throughput, self-host your own instance.",
+    "sourcePrivate": "Why isn’t the source public?",
+    "sourcePrivateBody": "The repository is private. The app signing key, release configuration and fee infrastructure live in it, and making that public would let anyone ship a fake \"FBT Swap\" that looks identical to the real one and drains users’ wallets. For technical review or partnership, get in touch via the Contact page."
+  },
+  "eco": {
+    "title": "Ecosystem",
+    "intro": "The protocols and tools FBT Swap is built on.",
+    "group": {
+      "infra": "Infrastructure",
+      "tools": "Data & explorers",
+      "wallets": "Wallets"
+    },
+    "item": {
+      "bnb": {
+        "name": "BNB Chain",
+        "short": "BNB",
+        "desc": "The blockchain we run on"
+      },
+      "pancake": {
+        "name": "PancakeSwap",
+        "short": "CAKE",
+        "desc": "Liquidity and farms"
+      },
+      "kyber": {
+        "name": "KyberSwap",
+        "short": "KNC",
+        "desc": "Swap routing aggregator"
+      },
+      "bscscan": {
+        "name": "BscScan",
+        "short": "SCAN",
+        "desc": "Verify any transaction"
+      },
+      "coingecko": {
+        "name": "CoinGecko",
+        "short": "GECK",
+        "desc": "Market data source"
+      },
+      "geckoterminal": {
+        "name": "GeckoTerminal",
+        "short": "TERM",
+        "desc": "DEX pool analytics"
+      },
+      "metamask": {
+        "name": "MetaMask",
+        "short": "MM",
+        "desc": "Most widely used wallet"
+      },
+      "trust": {
+        "name": "Trust Wallet",
+        "short": "TWT",
+        "desc": "Mobile-first, BSC native"
+      },
+      "walletconnect": {
+        "name": "WalletConnect",
+        "short": "WC",
+        "desc": "Connect any wallet"
+      }
+    },
+    "notice": "These are independent projects. FBT iran is not affiliated with them and earns nothing from these links."
+  },
+  "biz": {
+    "title": "Business",
+    "intro": "FBT iran is a commercial trading company building financial infrastructure for the new digital economy. We work with projects, exchanges and businesses entering Web3.",
+    "services": "What we offer",
+    "contact": "Get in touch",
+    "company": "Company details",
+    "offer": {
+      "listing": {
+        "title": "Token listing",
+        "body": "Get your token surfaced in our market data and swap interface."
+      },
+      "liquidity": {
+        "title": "Liquidity partnership",
+        "body": "Work with us on pool depth and market-making for your pair."
+      },
+      "whitelabel": {
+        "title": "White-label DEX",
+        "body": "Your own branded swap interface built on this infrastructure."
+      },
+      "integration": {
+        "title": "API integration",
+        "body": "Embed our market data or swap routing in your own product."
+      }
+    },
+    "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead."
+  },
+  "ads": {
+    "swap": {
+      "title": "Swap at the best rate",
+      "body": "Routed across every DEX on the chain",
+      "cta": "Trade"
+    },
+    "farm": {
+      "title": "Put idle tokens to work",
+      "body": "Earn yield from liquidity pools",
+      "cta": "Earn"
+    },
+    "signals": {
+      "title": "AI market signals",
+      "body": "Daily analysis on every major asset",
+      "cta": "View"
+    },
+    "p2p": {
+      "title": "Buy crypto with local currency",
+      "body": "Peer-to-peer desks with escrow",
+      "cta": "Open"
+    },
+    "referral": {
+      "title": "Invite friends",
+      "body": "Grow your daily reward streak",
+      "cta": "Share"
+    }
+  },
+  "p2p": {
+    "title": "P2P",
+    "subtitle": "Trade directly with other people.",
+    "tab": {
+      "otc": "On-chain OTC",
+      "fiat": "Buy with cash"
+    },
+    "otcTitle": "Direct wallet-to-wallet",
+    "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
+    "sendDirect": "Send to a person",
+    "yourAddress": "Your address",
+    "openSend": "Open send screen",
+    "connectFirst": "Connect a wallet to send crypto to someone directly.",
+    "otcNotice": "Double-check the address before sending. On-chain transfers are irreversible — there is no support desk that can reverse a mistake.",
+    "honestTitle": "Why we don't run our own fiat P2P",
+    "honestBody": "A fiat P2P desk needs escrow holding crypto while money moves, human arbitrators for disputes, and identity checks on both sides. Running one makes you a licensed money services business. We'd rather send you to desks that already have that infrastructure than build a fake escrow you'd trust with real money.",
+    "desks": "Established P2P desks",
+    "desk": {
+      "binance": {
+        "name": "Binance P2P",
+        "short": "BNB",
+        "desc": "Largest volume, supports many local currencies"
+      },
+      "okx": {
+        "name": "OKX P2P",
+        "short": "OKX",
+        "desc": "Escrow-protected, competitive spreads"
+      },
+      "bybit": {
+        "name": "Bybit P2P",
+        "short": "BYB",
+        "desc": "Zero-fee trading on many pairs"
+      }
+    },
+    "scamsTitle": "How people get scammed in P2P",
+    "scam": {
+      "reversal": {
+        "title": "Payment reversal",
+        "body": "They pay, you release the crypto, then they reverse the bank transfer or claim fraud. Wait for funds to fully clear — not just 'received'."
+      },
+      "thirdParty": {
+        "title": "Third-party payment",
+        "body": "Money arrives from someone else's account. That account may be stolen, and the bank will claw it back from you. Only accept payment from the buyer's own verified name."
+      },
+      "offPlatform": {
+        "title": "Moving off-platform",
+        "body": "They ask to continue on Telegram or WhatsApp for a 'better rate'. The moment you leave the platform, escrow no longer protects you. This is the most common trick."
+      },
+      "overpay": {
+        "title": "Fake overpayment",
+        "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
+      }
+    },
+    "notice": "These are independent platforms. FBT iran does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
+  },
+  "rank": {
+    "title": "Ranking",
+    "points": "points",
+    "pts": "pts",
+    "you": "You",
+    "yourRank": "Rank #{{n}}",
+    "unranked": "Not ranked yet",
+    "toNext": "{{n}} points to {{tier}}",
+    "tiers": "Tiers",
+    "top": "Top traders",
+    "viewBoard": "View the leaderboard",
+    "refs": "{{n}} invites",
+    "swaps": "{{n}} swaps",
+    "howTo": "How to earn points",
+    "startEarning": "Start earning",
+    "demoNotice": "The leaderboard currently shows sample entries so you can see how ranking works. Live rankings from real users arrive once the backend is deployed — we'd rather label this clearly than pass invented names off as real traders.",
+    "tier": {
+      "bronze": "Bronze",
+      "silver": "Silver",
+      "gold": "Gold",
+      "platinum": "Platinum",
+      "diamond": "Diamond",
+      "legend": "Legend"
+    },
+    "action": {
+      "referral": "Invite a friend who joins",
+      "firstSwap": "Your first real swap",
+      "swap": "Each swap you make",
+      "addLiquidity": "Add liquidity to a pool",
+      "dailyCheckin": "Daily check-in",
+      "streakBonus": "Per streak day",
+      "quest": "Complete a quest",
+      "shareApp": "Share the app",
+      "connectWallet": "Connect a wallet",
+      "backupWallet": "Back up your wallet",
+      "enable2fa": "Turn on two-factor"
+    }
+  },
+  "guide": {
+    "title": "A short guide before you start",
+    "subtitle": "Four sections, under three minutes. Read it once so you don't lose money to something avoidable.",
+    "step": "Section {{n}} of 4",
+    "next": "Next section",
+    "back": "Back",
+    "done": "I have read the guide",
+    "doneHint": "Open all four sections to enable the button.",
+    "reopen": "You can reopen this guide any time from Help → Getting started.",
+    "swap": {
+      "title": "1 · Swap — exchanging tokens",
+      "lead": "A swap converts one token directly into another with no deposit to any exchange. Tokens leave your own wallet and the new token arrives in your own wallet in the same transaction.",
+      "s1title": "Pick the network",
+      "s1body": "At the top of the Swap screen you choose the network (BNB, Ethereum, Polygon…). Tokens only exist on the network they were issued on. If your USDT is on BNB Chain, set the network to BNB Chain.",
+      "s2title": "Choose two tokens and an amount",
+      "s2body": "The top box is what you pay, the bottom box is what you receive. As soon as you type an amount, the app searches several decentralised exchanges for the best route and shows what you would get.",
+      "s3title": "Check the price",
+      "s3body": "Three numbers matter: the rate, the price impact, and the minimum received. A price impact above 2% means that pair is thin and you are overpaying — reduce the amount or pick a different pair.",
+      "s4title": "Approve first",
+      "s4body": "The first time you trade a given token, you must send an approval transaction so the contract may move it. It costs network gas but is needed only once per token. The network's own coin (e.g. BNB) never needs approval.",
+      "s5title": "Swap, then sign in your wallet",
+      "s5body": "Your wallet opens and shows the details. Sign there. A few seconds later the transaction is on-chain and you get a link to it.",
+      "feeTitle": "There are two fees — both real",
+      "feeBody": "1) Network gas: charged by the blockchain, not by us. You must hold some of the network's own coin or the transaction is rejected. 2) The FBT platform fee: {{fee}}% of every swap, paid to the company wallet in the same transaction. It is our revenue and it is shown to you before you sign.",
+      "slipTitle": "What slippage means",
+      "slipBody": "The price moves between the moment you tap and the moment the transaction is mined. Slippage is the worst price you are willing to accept. 0.5% is fine for liquid tokens. Small tokens may need more, but the higher you set it, the worse the price you can end up with.",
+      "failTitle": "Why did my swap fail?",
+      "failBody": "Three common causes: not enough gas (top up the network's coin), slippage too tight for a moving price, or you skipped the approval. A failed transaction does not take your tokens, but the gas it burned is not refunded."
+    },
+    "predict": {
+      "title": "2 · Predictions and signals",
+      "lead": "This section helps you read the market. None of it is investment advice, and nobody knows the future.",
+      "s1title": "Predictions use points, not money",
+      "s1body": "On the Predict screen you guess whether a coin goes up or down. Wins and losses are in points, which exist only for ranking and fun and have no monetary value. Nothing is taken from you and nothing is paid out.",
+      "s2title": "How to read a signal",
+      "s2body": "Every signal has three parts: a price range (never a single exact number), an invalidation level at which the idea is wrong, and a confidence score. Anywhere you see a guaranteed number, you are being scammed — we never publish one.",
+      "s3title": "What the indicators mean",
+      "s3body": "RSI above 70 suggests heavy buying, below 30 heavy selling. MACD shows the direction of momentum. These are aids only; markets can move against an indicator for a long time.",
+      "s4title": "The simple rule about capital",
+      "s4body": "Never put in money you need. Crypto has dropped 30% in a single day many times. If your thesis is wrong, taking a small loss beats waiting and hoping."
+    },
+    "wallet": {
+      "title": "3 · Connecting a wallet on mobile",
+      "lead": "FBT never holds your assets and has no deposit address. To trade you connect your own wallet. There are three ways.",
+      "m1title": "Option 1 — the wallet's built-in browser (easiest on a phone)",
+      "m1body": "Open MetaMask or Trust Wallet, tap Browser in the bottom menu, and enter the FBT address there. The wallet is detected automatically and connecting is one tap. Try this first if connecting gives you trouble.",
+      "m2title": "Option 2 — WalletConnect",
+      "m2body": "Tap connect and choose WalletConnect. On mobile you get a list of installed wallets; tap yours, it opens directly, approve, then use the back gesture to return to FBT.",
+      "m3title": "Option 3 — the built-in FBT wallet",
+      "m3body": "If you have no wallet at all, the app can create one here. Its key is encrypted on your own device with your password and is never transmitted. Write the recovery phrase down on paper.",
+      "p1title": "Problem: I tap connect and nothing happens",
+      "p1body": "A normal mobile browser (Chrome, Safari) has no wallet inside it. Either use WalletConnect, or open the site inside your wallet's own browser.",
+      "p2title": "Problem: I approve in the wallet but come back disconnected",
+      "p2body": "Common on Android: the system kills the backgrounded app and the session drops. Turn battery optimisation off for both FBT and your wallet, and return with the back gesture rather than closing the app.",
+      "p3title": "Problem: connected but the balance shows zero",
+      "p3body": "Almost always the wrong network. Your USDT may be on TRON while FBT is looking at BNB Chain. Switch network at the top of the Swap screen. Balances on TRON or Bitcoin are not supported by on-chain swaps here.",
+      "p4title": "Problem: the wallet says unknown network",
+      "p4body": "Your wallet hasn't added that chain yet. FBT offers to add it when you swap — tap Approve / Switch network. It is harmless and only adds a network entry to your wallet.",
+      "p5title": "Problem: the transaction is stuck pending",
+      "p5body": "You underpaid gas while the network was busy. Use Speed up or Cancel in your wallet. Until it settles, the next transaction from that wallet is stuck behind it.",
+      "p6title": "A note about connectivity",
+      "p6body": "Some wallet and node services are restricted on certain networks. If prices stay blank or a connection hangs, switch between mobile data and Wi-Fi and try again."
+    },
+    "security": {
+      "title": "4 · Security — the part that matters most",
+      "lead": "In crypto, stolen money does not come back. There is no bank to complain to and no transaction to reverse. Take these rules seriously.",
+      "s1title": "Your recovery phrase is your money",
+      "s1body": "The 12 or 24 words you get when creating a wallet are the money itself. Anyone holding them takes everything, with no password needed. Write them on paper and store it safely.",
+      "s2title": "Never do these",
+      "s2body": "Don't screenshot the phrase, don't message it to yourself on Telegram or WhatsApp, don't keep it in cloud notes, and never type it into a website or form. Photo galleries and messengers both sync to the cloud.",
+      "s3title": "FBT will never ask for your recovery phrase",
+      "s3body": "Not in the app, not in support, not in any message. Anyone asking for it in our name is a scammer, even with our logo and name on their profile.",
+      "s4title": "Turn the app lock on",
+      "s4body": "In Settings enable biometrics and two-factor, and set auto-lock to a few minutes. If you lose the phone, that is the only thing standing between a thief and your built-in wallet.",
+      "s5title": "Back up — and know what isn't a backup",
+      "s5body": "The FBT backup file is the same encrypted blob; without your password it is useless, so forgetting the password makes the file worthless too. Paper is the real backup, not the file. Uninstalling without paper destroys the built-in wallet permanently.",
+      "s6title": "Read before you sign",
+      "s6body": "Read every wallet prompt: which token, how much, to which address. If anything differs from what FBT showed you, close it and do not sign.",
+      "s7title": "Don't grant unlimited allowance",
+      "s7body": "Some sites ask for unlimited approval. If your wallet allows it, cap the amount at exactly this trade. Periodically clear old approvals with a revoke tool.",
+      "s8title": "Common scams",
+      "s8body": "A free airdrop that first needs your wallet connected; an unknown token that appeared by itself and cannot be sold; fake support in Telegram that replies first; and thousand-percent yields. All four want the same thing: your signature."
+    }
+  }
 }

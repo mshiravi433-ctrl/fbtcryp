@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vite/
+
+# Capacitor / Android build output
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/release/
+*.apk
+*.aab
+*.keystore
+*.jks
+out/
+
+# Signing material — never commit these
+*.keystore
+*.jks
+keystore.properties
+release.keystore
+
+# test harness build output
+test/.out/

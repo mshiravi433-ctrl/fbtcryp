@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ backup rules.
+
+  The encrypted wallet, 2FA secret and biometric credential must NEVER leave
+  the device via cloud backup or device-to-device transfer. Even though the
+  seed is AES-encrypted, exporting it widens the attack surface for no user
+  benefit — and a backup restored onto an attacker's device is exactly the
+  scenario we're guarding against. allowBackup="false" already covers this;
+  these rules make the intent explicit and survive any future flag change.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" />
+        <exclude domain="database" />
+        <exclude domain="file" />
+        <exclude domain="root" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" />
+        <exclude domain="database" />
+        <exclude domain="file" />
+        <exclude domain="root" />
+    </device-transfer>
+</data-extraction-rules>

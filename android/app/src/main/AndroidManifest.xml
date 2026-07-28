@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deep links: wallets return here after signing, e.g.
+                 WalletConnect redirecting back with ir.fbt.swap:// -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/custom_url_scheme" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- ====================================================================
+         Permissions
+
+         Deliberately minimal. A crypto wallet asking for contacts, SMS,
+         location or storage is a red flag to any careful user, and app stores
+         require a justification for each one. We request only what the app
+         genuinely uses:
+
+           INTERNET        — market data, swap routing, AI endpoints
+           ACCESS_NETWORK_STATE — detect offline so we show cached prices
+                             instead of spinning forever
+           USE_BIOMETRIC   — the fingerprint/face unlock in Settings
+           VIBRATE         — haptic feedback on taps and confirmations
+
+         NOT requested, and should stay that way:
+           CAMERA          — WalletConnect pairs by deep link inside the app,
+                             so no QR scanner is needed on mobile
+           READ/WRITE_EXTERNAL_STORAGE — the encrypted wallet lives in app
+                             storage; nothing is written to shared storage
+           ACCESS_FINE_LOCATION, READ_CONTACTS, SEND_SMS — no legitimate use
+         ==================================================================== -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Biometric hardware is optional: the app works fine without it, so
+         don't let Play hide the listing from devices that lack a sensor. -->
+    <uses-feature
+        android:name="android.hardware.fingerprint"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <!-- Android 11+ package visibility: needed so the app can hand off to a
+         browser or an installed wallet via openLink / deep links. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+
+</manifest>
