@@ -89,5 +89,15 @@ installDom();
 const { run: runFlow } = await import('./.out/flow/first-launch-flow.js');
 report('first-launch flow', await runFlow(document.getElementById('r')));
 
+/* ------------------------------ 4. screens ------------------------------- */
+/* Lazy routes fail silently: a broken import in News or Swap does not break
+   the build and does not break the boot test either — it breaks for whoever
+   taps that tab. Mount each one directly. */
+console.log('\n▸ building screen smoke suite…');
+npx(['vite', 'build', '-c', 'test/vite.screens.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runScreens } = await import('./.out/screens/screens.js');
+report('screen smoke (all 12 languages)', await runScreens(document.getElementById('r')));
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);

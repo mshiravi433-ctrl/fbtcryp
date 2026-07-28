@@ -1,11 +1,22 @@
 # FBT Swap — Decentralized Exchange
 
 A non-custodial DEX as a Telegram Mini App **and** an Android app. Real
-on-chain swaps on BNB Smart Chain, a 0.5% platform fee collected by an
-audited-shaped smart contract, RGB dark/light theming, and full fa/en/ar
-support with RTL.
+on-chain swaps across seven EVM networks, thousands of swappable tokens with
+search and import-by-address, a 0.5% platform fee collected on-chain in the
+same transaction the user signs, RGB dark/light theming, and twelve languages
+with full RTL support.
 
-**FBT Iran — Fanos Bazaar Pishgam** · Isfahan, Khomeyni Shahr
+**Fanous Bazaar Pishgam** · Isfahan, Khomeyni Shahr
+
+### At a glance
+
+| | |
+|---|---|
+| **Networks** | BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche (swaps) · Solana, Tron (payouts) |
+| **Tokens** | Public token lists per chain — thousands — plus ~90 bundled hand-verified tokens that work offline, plus import-any-contract |
+| **Gas** | Paid in each chain's own native coin, warned about before signing. Not only BNB, and never taken from the platform fee |
+| **Languages** | fa · en · ar fully translated; zh · hi · es · fr · ru · tr · ur · id · pt cover navigation, onboarding, the guide, the swap flow and every safety warning |
+| **Keys required to run** | None. See [docs/APIS-FA.md](docs/APIS-FA.md) for what each optional key buys |
 
 ---
 
@@ -22,6 +33,7 @@ support with RTL.
 | [DEPLOY-FA.md](docs/DEPLOY-FA.md) | انتشار مینی‌اپ تلگرام |
 | [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
 | [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
+| [APIS-FA.md](docs/APIS-FA.md) | کدام API لازم است، کدام نیست، و هر کلید چه چیزی اضافه می‌کند |
 
 ---
 

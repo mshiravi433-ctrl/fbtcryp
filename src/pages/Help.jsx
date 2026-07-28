@@ -28,7 +28,14 @@ export default function Help() {
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // `scrollIntoView` is missing on some older Android WebViews (and in
+    // jsdom). Calling it unguarded throws inside an effect, which unmounts the
+    // whole screen — so the entire Help page would go blank the moment someone
+    // on an old phone asked their first question.
+    const el = endRef.current;
+    if (typeof el?.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }, [thread, busy]);
 
   const open = (url) => {
