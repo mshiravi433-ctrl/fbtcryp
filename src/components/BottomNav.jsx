@@ -44,6 +44,16 @@ export default function BottomNav() {
   // like a dropped input.
   const [pulse, setPulse] = useState(0);
 
+  /**
+   * Exactly one destination owns the highlight at a time.
+   *
+   * While the drawer is open it takes the highlight; otherwise the current
+   * route has it. Computing it in one place is what guarantees the layoutId
+   * is unique, rather than relying on two independent booleans never being
+   * true together — which is precisely how the twitch happened.
+   */
+  const activeGlow = moreOpen ? '__more' : ITEMS.some((i) => i.to === pathname) ? pathname : null;
+
   return (
     <>
       <nav className="bottom-nav">
@@ -60,7 +70,17 @@ export default function BottomNav() {
                 navigate(item.to);
               }}
             >
-              {active && (
+              {/*
+                THE JITTER BUG.
+                This used to share `layoutId="nav-glow"` with the More button.
+                When the drawer opened, BOTH elements existed with the same
+                layoutId for a frame, so Framer Motion tried to animate one
+                shared element between two positions at once and the highlight
+                visibly twitched. A layoutId must be unique among mounted
+                elements at any instant — the highlight is now driven by
+                `activeGlow`, which can only ever match one of them.
+              */}
+              {activeGlow === item.to && (
                 <motion.span
                   layoutId="nav-glow"
                   className="nav-glow"
@@ -113,7 +133,7 @@ export default function BottomNav() {
             setMoreOpen(true);
           }}
         >
-          {moreOpen && (
+          {activeGlow === '__more' && (
             <motion.span
               layoutId="nav-glow"
               className="nav-glow"

@@ -13,7 +13,10 @@ export const useSettingsStore = create(
   persist(
     (set, get) => ({
       /* ---------------- appearance ---------------- */
-      theme: 'dark', // 'dark' | 'light' | 'auto'
+      // Light is the default. Changing this also means index.html's boot
+      // screen must be light, or a new install flashes black before React
+      // mounts — see the comment there.
+      theme: 'light', // 'light' | 'dark' | 'auto'
       accent: 'rgb', // 'rgb' | 'cyan' | 'magenta' | 'mint'
       reduceMotion: false,
       compactMode: false,

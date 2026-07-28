@@ -15,10 +15,23 @@
  */
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const JINA_SEARCH_URL = 'https://s.jina.ai/';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
+const GROQ_KEY = process.env.GROQ_API_KEY || '';
+/**
+ * Groq serves open-weight models. `gpt-oss-20b` is the current default because
+ * it is on the free tier, answers in well under a second, and is more than
+ * capable of the two jobs we give it (narrating indicators, answering support
+ * questions from a fixed knowledge base).
+ *
+ * Groq deprecates model IDs on a published schedule, so this is intentionally
+ * an env var: when a shutdown date lands you change one variable rather than
+ * redeploying code.
+ */
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const JINA_KEY = process.env.JINA_API_KEY || '';
 const MODEL = process.env.AI_MODEL || 'openai/gpt-4o-mini';
@@ -27,13 +40,23 @@ const SITE_URL = process.env.WEBAPP_URL || 'https://fbt-swap.app';
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
 
 /**
- * Provider preference: Gemini first when a key is present, OpenRouter
- * otherwise. Gemini's flash tier has a generous free quota, which matters
- * because AI cost scales with users while this app's revenue scales with swap
- * volume — the two aren't correlated, so a free tier is a real advantage.
- * If Gemini errors we fall through to OpenRouter rather than failing.
+ * Provider preference: Groq -> Gemini -> OpenRouter.
+ *
+ * Groq is first for a specific, practical reason. Gemini's endpoint is
+ * geo-blocked in a number of countries, and a server deployed in the wrong
+ * region gets a bare `fetch failed` that looks like the app is broken. Groq
+ * has no such restriction, has a genuinely usable free tier, and is
+ * OpenAI-compatible so the request shape is the same one OpenRouter already
+ * uses.
+ *
+ * Cost matters here because AI spend scales with users while this app's
+ * revenue scales with swap volume — the two are not correlated, so a free
+ * tier is a real structural advantage rather than a nicety.
+ *
+ * Each provider falls through to the next on error, so one outage or quota
+ * wall does not take the feature down.
  */
-export const aiConfigured = () => Boolean(GEMINI_KEY || OPENROUTER_KEY);
+export const aiConfigured = () => Boolean(GROQ_KEY || GEMINI_KEY || OPENROUTER_KEY);
 
 /**
  * Live self-test for the configured provider.
@@ -49,10 +72,12 @@ export const aiConfigured = () => Boolean(GEMINI_KEY || OPENROUTER_KEY);
  */
 export async function aiSelfTest() {
   const out = {
+    groqKeyPresent: Boolean(GROQ_KEY),
     geminiKeyPresent: Boolean(GEMINI_KEY),
     openrouterKeyPresent: Boolean(OPENROUTER_KEY),
     jinaKeyPresent: Boolean(JINA_KEY),
     provider: aiProvider(),
+    groqModel: GROQ_MODEL,
     geminiModel: GEMINI_MODEL,
     openrouterModel: MODEL
   };
@@ -61,9 +86,10 @@ export async function aiSelfTest() {
     out.ok = false;
     out.reason = 'NO_KEY';
     out.fix =
-      'Set GEMINI_API_KEY (free tier at aistudio.google.com/apikey) or ' +
-      'OPENROUTER_API_KEY in your host environment, then redeploy. Note these ' +
-      'must NOT have a VITE_ prefix — that would ship the key to every browser.';
+      'Set GROQ_API_KEY (free tier at console.groq.com, no card needed and not ' +
+      'geo-blocked), or GEMINI_API_KEY, or OPENROUTER_API_KEY in your host ' +
+      'environment, then redeploy. These must NOT have a VITE_ prefix — that ' +
+      'would compile the key into the browser bundle for anyone to read.';
     return out;
   }
 
@@ -88,9 +114,11 @@ export async function aiSelfTest() {
     out.error = msg.slice(0, 300);
 
     // Translate the provider's error into the thing you actually have to fix.
-    if (/API_KEY_INVALID|API key not valid/i.test(msg)) {
+    if (/API_KEY_INVALID|API key not valid|invalid_api_key|^401/i.test(msg)) {
       out.reason = 'KEY_INVALID';
-      out.fix = 'The key is wrong or was revoked. Generate a new one and redeploy.';
+      out.fix =
+        'The key is wrong, was revoked, or has a stray space/quote around it. ' +
+        'Generate a fresh one and paste it with no surrounding characters.';
     } else if (/^403|PERMISSION_DENIED|SERVICE_DISABLED/i.test(msg)) {
       out.reason = 'KEY_RESTRICTED';
       out.fix =
@@ -101,6 +129,16 @@ export async function aiSelfTest() {
     } else if (/^429|RESOURCE_EXHAUSTED|quota/i.test(msg)) {
       out.reason = 'QUOTA';
       out.fix = 'Rate limit or free-tier quota exhausted. Wait, or enable billing.';
+    } else if (/model_not_found|does not exist|decommissioned|model_decommissioned/i.test(msg)) {
+      // Groq retires model IDs on a schedule, so this is a routine failure
+      // rather than an exotic one, and it must name the variable to change.
+      out.reason = 'MODEL_NOT_FOUND';
+      out.fix =
+        `The model "${GROQ_KEY ? GROQ_MODEL : GEMINI_MODEL}" is not available. ` +
+        (GROQ_KEY
+          ? 'Groq retires model IDs periodically — set GROQ_MODEL to a current ' +
+            'one, e.g. openai/gpt-oss-20b or openai/gpt-oss-120b.'
+          : 'Try GEMINI_MODEL=gemini-2.0-flash or gemini-1.5-flash.');
     } else if (/^404|not found for API version|is not found/i.test(msg)) {
       out.reason = 'MODEL_NOT_FOUND';
       out.fix =
@@ -113,9 +151,13 @@ export async function aiSelfTest() {
         'ceiling is 60s (already set in vercel.json); a smaller model helps.';
     } else if (/fetch failed|ENOTFOUND|EAI_AGAIN/i.test(msg)) {
       out.reason = 'NETWORK';
-      out.fix =
-        'The server could not reach the provider. Google blocks some regions ' +
-        'outright — check your deployment region.';
+      out.fix = GEMINI_KEY && !GROQ_KEY
+        ? 'The server could not reach the provider. Google geo-blocks a number ' +
+          'of countries outright, and this is what that looks like. Either move ' +
+          'the deployment region, or set GROQ_API_KEY instead — Groq is not ' +
+          'geo-restricted and has a free tier.'
+        : 'The server could not reach the provider. Check the deployment has ' +
+          'outbound internet access.';
     } else {
       out.reason = 'UNKNOWN';
       out.fix = 'See `error` for the provider response.';
@@ -124,7 +166,8 @@ export async function aiSelfTest() {
   }
 }
 export const newsConfigured = () => Boolean(JINA_KEY);
-export const aiProvider = () => (GEMINI_KEY ? 'gemini' : OPENROUTER_KEY ? 'openrouter' : null);
+export const aiProvider = () =>
+  GROQ_KEY ? 'groq' : GEMINI_KEY ? 'gemini' : OPENROUTER_KEY ? 'openrouter' : null;
 
 async function req(url, options, timeout = TIMEOUT_MS) {
   const ctrl = new AbortController();
@@ -307,10 +350,52 @@ async function openRouterChat({ system, user, temperature = 0.3, maxTokens = 700
 }
 
 /**
- * Provider-agnostic entry point. Tries Gemini, falls back to OpenRouter so a
+ * Groq speaks the OpenAI chat-completions dialect, so this is the same shape
+ * as `openRouterChat` with a different host and no referer headers.
+ *
+ * One incompatibility worth knowing: Groq's OpenAI compatibility is close but
+ * not total. `response_format: json_object` IS supported on the models we use,
+ * which is the only non-trivial thing we rely on.
+ */
+async function groqChat({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
+  const raw = await req(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${GROQ_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
+      temperature,
+      max_tokens: maxTokens,
+      ...(json ? { response_format: { type: 'json_object' } } : {})
+    })
+  });
+  const text = raw?.choices?.[0]?.message?.content;
+  if (!text) throw new Error('EMPTY_RESPONSE');
+  return text;
+}
+
+/**
+ * Provider-agnostic entry point. Tries each configured provider in turn so a
  * quota error or outage on one doesn't take the feature down.
  */
 async function chat(opts) {
+  if (GROQ_KEY) {
+    try {
+      return { text: await groqChat(opts), model: GROQ_MODEL };
+    } catch (e) {
+      // Only fall through if there is somewhere to fall through TO. Otherwise
+      // rethrow, so the diagnostic endpoint reports Groq's real error rather
+      // than a generic "not configured".
+      if (!GEMINI_KEY && !OPENROUTER_KEY) throw e;
+      console.warn('[ai] groq failed, trying next provider:', e.message);
+    }
+  }
   if (GEMINI_KEY) {
     try {
       return { text: await geminiChat(opts), model: GEMINI_MODEL };

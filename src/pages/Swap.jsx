@@ -28,6 +28,7 @@ import {
   needsApproval
 } from '../lib/swap';
 import { fmtQty } from '../lib/format';
+import { NATIVE_GAS_FLOOR, formatUnitsExact } from '../lib/swap';
 import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
 import { PAYOUT_DIRECTORY } from '../lib/payout';
 
@@ -260,12 +261,54 @@ export default function Swap() {
     setQuote(null);
   }
 
+  /**
+   * MAX had three real bugs, all of which end in a reverted transaction that
+   * still burns gas:
+   *
+   * 1. `toFixed(8)` ROUNDS. On a large balance it rounds UP, producing an
+   *    amount fractionally greater than what the wallet holds — the swap then
+   *    reverts on transfer. Truncating is the only safe direction here.
+   * 2. `toFixed(8)` also floors any 18-decimal token below 1e-8 to exactly
+   *    zero, so MAX on a small holding filled in "0".
+   * 3. The gas reserve was a flat 0.002 native coin. That is ~$1 of BNB but
+   *    ~$7 of ETH, and on a chain with expensive gas it can still be too
+   *    little. We now reserve the live estimate with headroom and fall back to
+   *    a per-chain floor.
+   *
+   * Working from the raw BigInt balance avoids float error entirely; the
+   * float is only used for display.
+   */
   const setMax = () => {
-    const bal = balances[tokenKey(fromToken)]?.formatted ?? 0;
-    // leave a little gas behind when spending the native coin
-    const usable = fromToken.native ? Math.max(0, bal - 0.002) : bal;
-    setAmount(String(Number(usable.toFixed(8))));
+    const entry = balances[tokenKey(fromToken)];
+    const raw = entry?.raw;
     haptic?.('select');
+
+    if (raw == null) {
+      setAmount('');
+      return;
+    }
+
+    let usableWei = raw;
+
+    if (fromToken.native) {
+      // Reserve real gas, not a guess. gasCost is in native units; scale it
+      // into wei and add 60% headroom for a gas-price spike between the quote
+      // and the signature.
+      const estimated = gasCost != null && gasCost > 0 ? gasCost * 1.6 : 0;
+      const floor = NATIVE_GAS_FLOOR[chainId] ?? 0.002;
+      const reserve = Math.max(estimated, floor);
+
+      // parseUnits via string to avoid float→BigInt precision loss.
+      const reserveWei = BigInt(Math.floor(reserve * 1e9)) * 10n ** BigInt(fromToken.decimals - 9);
+      usableWei = raw > reserveWei ? raw - reserveWei : 0n;
+    }
+
+    if (usableWei <= 0n) {
+      setAmount('');
+      return;
+    }
+
+    setAmount(formatUnitsExact(usableWei, fromToken.decimals));
   };
 
   const runSwap = async () => {
@@ -350,7 +393,20 @@ export default function Swap() {
   };
 
   const fromBal = balances[tokenKey(fromToken)]?.formatted ?? 0;
-  const insufficient = Number(amount) > fromBal;
+  /**
+   * Compare against the RAW balance, not the float.
+   *
+   * `Number(amount) > fromBal` compares two doubles, and an 18-decimal balance
+   * does not fit in one. The classic failure: tap MAX on a large holding, the
+   * float comparison says it fits, the chain disagrees, and the transaction
+   * reverts after the user has already paid gas. `quote.amountInWei` is the
+   * exact integer the router will actually pull, so that is what we check.
+   */
+  const fromRaw = balances[tokenKey(fromToken)]?.raw;
+  const insufficient =
+    quote?.amountInWei != null && fromRaw != null
+      ? quote.amountInWei > fromRaw
+      : Number(amount) > fromBal;
   const canSwap = wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
   const highImpact = impact != null && impact > 5;
 

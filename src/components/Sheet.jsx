@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { lockBodyScroll } from '../lib/scrollLock';
 import { IconX } from './Icons';
 
 /**
@@ -28,14 +29,13 @@ import { IconX } from './Icons';
 export default function Sheet({ open, onClose, children, title, size = 'md' }) {
   useEffect(() => {
     if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
 
     const onKey = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', onKey);
 
     return () => {
-      document.body.style.overflow = prev;
+      unlock();
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);

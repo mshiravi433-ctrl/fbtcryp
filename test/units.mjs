@@ -10,6 +10,7 @@ import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
+import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
 import coverage from '../src/i18n/coverage.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
@@ -123,6 +124,40 @@ export default function run() {
   const d2 = new Date('2026-01-02T10:00:00Z');
   t('promo copy is stable within a day', pickPromoKey(d1) === pickPromoKey(d1Later));
   t('promo copy rotates across days', pickPromoKey(d1) !== pickPromoKey(d2));
+
+  /* ------------------------ swap MAX precision ------------------------- */
+  /*
+   * The old MAX used Number(bal).toFixed(8), which had three failure modes,
+   * all ending in a reverted transaction the user still paid gas for.
+   */
+
+  // 1. Rounding UP past the real balance. toFixed rounds; this must not.
+  const bigWei = 1234567123456789012345678n;
+  t(
+    'MAX never rounds a balance upward',
+    formatUnitsExact(bigWei, 18) === '1234567.123456789012345678'
+  );
+  t(
+    'the old float path really did lose precision (regression guard)',
+    Number('1234567.123456789012345678').toFixed(8) !== '1234567.123456789012345678'
+  );
+
+  // 2. Small 18-decimal holdings flushed to zero.
+  t('a tiny 18-decimal balance is not flattened to 0', formatUnitsExact(123456n, 18) === '0.000000000000123456');
+  t('the old path DID flatten it (regression guard)', Number(0.000000000000123456.toFixed(8)) === 0);
+
+  // 3. General correctness.
+  t('6-decimal token formats correctly', formatUnitsExact(1500000n, 6) === '1.5');
+  t('whole amounts have no trailing dot', formatUnitsExact(2n * 10n ** 18n, 18) === '2');
+  t('zero formats as 0', formatUnitsExact(0n, 18) === '0');
+  t('trailing zeros are trimmed', formatUnitsExact(1100000000000000000n, 18) === '1.1');
+  t('one wei survives', formatUnitsExact(1n, 18) === '0.000000000000000001');
+
+  // Gas reserve is per-chain, because a flat constant is wrong in both
+  // directions: 0.002 ETH strands ~$7, and on a busy L1 it can be too little.
+  t('every swappable chain declares a gas floor', [56, 1, 137, 42161, 8453, 10, 43114].every((c) => NATIVE_GAS_FLOOR[c] > 0));
+  t('the ETH floor is larger than the L2 floor', NATIVE_GAS_FLOOR[1] > NATIVE_GAS_FLOOR[42161]);
+  t('no floor is absurdly large', Object.values(NATIVE_GAS_FLOOR).every((v) => v < 1));
 
   /* ------------------- local AI narrator (no model) -------------------- */
   /* The whole point: the analysis screen must produce real prose with zero

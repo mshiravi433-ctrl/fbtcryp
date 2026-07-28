@@ -39,6 +39,50 @@ const loadEthers = () => import('ethers');
 export const DEFAULT_SLIPPAGE = 0.5; // percent
 export const DEFAULT_DEADLINE_MIN = 20;
 
+/**
+ * Minimum native coin to leave behind for gas, per chain, when a user taps MAX.
+ *
+ * These are floors, not estimates — the live estimate is used when it is
+ * larger. They differ per chain because a flat constant is wrong in both
+ * directions: 0.002 ETH is about $7 and needlessly strands value, while on a
+ * congested L1 it can still be too little to cover the transaction at all.
+ *
+ * Erring high is the cheaper mistake. Leaving a few cents unswapped is an
+ * annoyance; leaving too little means the swap reverts and the user pays gas
+ * for nothing.
+ */
+export const NATIVE_GAS_FLOOR = {
+  56: 0.0015,   // BNB — cheap and predictable
+  1: 0.0035,    // ETH — mainnet gas is the expensive case
+  137: 0.05,    // POL — very cheap per unit, so a larger count is still tiny
+  42161: 0.0004, // ETH on Arbitrum
+  8453: 0.0003,  // ETH on Base
+  10: 0.0003,    // ETH on Optimism
+  43114: 0.01    // AVAX
+};
+
+/**
+ * BigInt -> decimal string with NO rounding.
+ *
+ * `Number(x).toFixed(n)` rounds, and rounding a balance upward produces an
+ * amount the wallet does not have, which reverts on transfer. It also flushes
+ * anything below 1e-8 to zero, which silently empties MAX for holders of
+ * small amounts of an 18-decimal token. Doing it on the integer avoids both.
+ */
+export function formatUnitsExact(wei, decimals) {
+  const negative = wei < 0n;
+  const abs = negative ? -wei : wei;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const frac = abs % base;
+
+  if (frac === 0n) return `${negative ? '-' : ''}${whole}`;
+
+  // Pad to full precision, then drop trailing zeros only.
+  const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole}.${fracStr}`;
+}
+
 /* ------------------------------- balances -------------------------------- */
 
 export async function getTokenBalance(provider, token, owner) {

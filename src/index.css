@@ -2282,3 +2282,54 @@ input, select, textarea { font-size: 16px !important; }
   min-height: 50px;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   LIGHT THEME — full-screen stages
+   --------------------------------------------------------------------------
+   Light is now the default theme, which exposed a set of hardcoded black
+   gradients in chrome that was written when dark was the only option. The
+   welcome, onboarding and guide screens are full-screen stages with their own
+   sticky header/footer bars, and those bars were painting near-opaque black
+   over a light background — legible only because the text was also white.
+
+   These are the same gradients inverted. They are scoped to the light theme
+   rather than replaced with a variable because the dark versions are tuned
+   for contrast against pure black and look washed out if genericised.
+   ========================================================================== */
+
+:root[data-theme='light'] .guide-head,
+:root[data-theme='light'] .onb-topbar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.6));
+}
+
+:root[data-theme='light'] .guide-foot,
+:root[data-theme='light'] .welcome-foot,
+:root[data-theme='light'] .onb-foot {
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.62));
+}
+
+/* The colour wash behind each stage is tuned for black; soften it on light
+   so it reads as a tint rather than a stain. */
+:root[data-theme='light'] .welcome-stage::before,
+:root[data-theme='light'] .onb-stage::before,
+:root[data-theme='light'] .guide-stage::before {
+  opacity: 0.55;
+}
+
+:root[data-theme='light'] .lang-row,
+:root[data-theme='light'] .username-input,
+:root[data-theme='light'] .more-tile {
+  background: #ffffff;
+}
+
+/* The guide's exit overlay dimmed to black over a white page. */
+:root[data-theme='light'] .guide-leave-veil {
+  background: rgba(255, 255, 255, 0.82) !important;
+}
+
+/* Panel shadows calibrated for black are invisible on white; a lighter,
+   tighter shadow gives the same sense of elevation. */
+:root[data-theme='light'] .sheet,
+:root[data-theme='light'] .more-panel {
+  box-shadow: 0 20px 60px -20px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.06);
+}

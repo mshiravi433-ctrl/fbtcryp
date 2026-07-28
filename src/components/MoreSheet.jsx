@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { lockBodyScroll } from '../lib/scrollLock';
 import { useState } from 'react';
 import {
   AnimatedActivity,
@@ -97,12 +98,11 @@ export default function MoreSheet({ open, onClose }) {
 
   useEffect(() => {
     if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     const onKey = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlock();
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);
