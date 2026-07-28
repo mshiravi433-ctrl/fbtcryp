@@ -424,5 +424,9 @@
     "shareInvite": "Daveti paylaş",
     "quests": "Görevler",
     "virtualNotice": "Buradaki puanlar bir skordur, para birimi değil. Çekilemez, devredilemez ve nakit değeri yoktur."
+  },
+  "contact": {
+    "phone": "Destek telefonu",
+    "call": "Ara"
   }
 }

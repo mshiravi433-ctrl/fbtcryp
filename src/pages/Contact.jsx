@@ -14,8 +14,18 @@ import {
   IconExternal,
   IconTelegram,
   IconMapPin,
-  IconUser
+  IconUser,
+  IconPhone
 } from '../components/Icons';
+
+/**
+ * Support phone. Stored in two forms on purpose: E.164 for the `tel:` link
+ * (the only form that dials reliably from every locale) and a spaced form for
+ * reading. `direction: ltr` on the display element because a phone number is
+ * a left-to-right sequence even inside Persian text.
+ */
+const PHONE_E164 = '+989398381061';
+const PHONE_DISPLAY = '+98 939 838 1061';
 
 const SOCIALS = [
   {
@@ -153,6 +163,30 @@ export default function Contact() {
               </button>
               <button className="tag" onClick={() => openLink(MAPS_URL)}>
                 {t('contact.viewMap')}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/*
+          Google Play requires a reachable support contact, and a store listing
+          without a phone number gets flagged during review for a financial
+          app. `tel:` opens the dialer directly rather than making someone
+          transcribe digits from a screen.
+        */}
+        <motion.div className="info-row" variants={riseIn}>
+          <span className="info-row-icon"><IconPhone width={18} height={18} /></span>
+          <div style={{ flex: 1 }}>
+            <div className="faint">{t('contact.phone')}</div>
+            <div className="mono" style={{ fontSize: 13, marginTop: 3, direction: 'ltr' }}>
+              {PHONE_DISPLAY}
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 9 }}>
+              <button className="tag" onClick={() => openLink(`tel:${PHONE_E164}`)}>
+                {t('contact.call')}
+              </button>
+              <button className="tag" onClick={() => copy(PHONE_DISPLAY, 'handleCopied')}>
+                {t('common.copy')}
               </button>
             </div>
           </div>

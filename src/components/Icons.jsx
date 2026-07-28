@@ -302,3 +302,9 @@ export const IconVibrate = (p) => (
     <path d="M4 9v6M2 11v2M20 9v6M22 11v2" />
   </svg>
 );
+
+export const IconPhone = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6.6 3.5h3l1.5 3.7-1.9 1.1a11.5 11.5 0 0 0 5.5 5.5l1.1-1.9 3.7 1.5v3a1.6 1.6 0 0 1-1.8 1.6C10.9 17.3 6.7 13.1 5 5.3A1.6 1.6 0 0 1 6.6 3.5z" />
+  </svg>
+);

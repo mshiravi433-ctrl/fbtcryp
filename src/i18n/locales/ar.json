@@ -650,7 +650,9 @@
       "linkedin": "LinkedIn",
       "crunchbase": "Crunchbase",
       "email": "Email"
-    }
+    },
+    "phone": "هاتف الدعم",
+    "call": "اتصال"
   },
   "terms": {
     "title": "شروط الخدمة",

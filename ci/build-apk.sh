@@ -20,6 +20,17 @@ else
 fi
 npm run build
 
+# Play rejects any upload whose versionCode is not higher than the last one.
+# Driving it from the environment means a new version can be released by
+# setting a repository variable, with no workflow edit and no code change.
+if [ -n "${APP_VERSION_CODE:-}" ]; then
+  echo "▸ stamping versionCode=$APP_VERSION_CODE versionName=${APP_VERSION_NAME:-1.0}"
+  sed -i.bak -E "s/versionCode [0-9]+/versionCode ${APP_VERSION_CODE}/" android/app/build.gradle
+  sed -i.bak -E "s/versionName \"[^\"]*\"/versionName \"${APP_VERSION_NAME:-1.0}\"/" android/app/build.gradle
+  rm -f android/app/build.gradle.bak
+  grep -nE "versionCode|versionName" android/app/build.gradle
+fi
+
 echo "▸ syncing Capacitor"
 npx cap sync android
 
@@ -67,6 +78,18 @@ mkdir -p out
 cp "$SRC" "out/$OUT"
 cp "$SRC" "out/app-debug.apk"   # stable name for the release asset
 
+# The checked-in workflow uploads a hardcoded path:
+#   android/app/build/outputs/apk/debug/app-debug.apk
+# A RELEASE build never writes there, so a signed run would upload nothing.
+# GitHub blocks agent tokens from editing .github/workflows/, so rather than
+# require a manual workflow edit, the script guarantees that path always holds
+# the freshest artefact.
+STABLE_DIR="android/app/build/outputs/apk/debug"
+mkdir -p "$STABLE_DIR"
+if [ "$SRC" != "$STABLE_DIR/app-debug.apk" ]; then
+  cp "$SRC" "$STABLE_DIR/app-debug.apk"
+fi
+
 echo "✓ APK built: $(du -h "$SRC" | cut -f1) → out/$OUT"
 
 # Copy the Play-ready bundle out too, when one was produced.
@@ -74,6 +97,9 @@ if [ -n "${BUNDLE:-}" ]; then
   BSRC="android/$BUNDLE"
   if [ -f "$BSRC" ]; then
     cp "$BSRC" out/app-release.aab
+    # Also drop it beside the APK the workflow already collects, so the Play
+    # bundle is attached to the release without touching the workflow file.
+    cp "$BSRC" "$STABLE_DIR/app-release.aab"
     echo "✓ AAB built: $(du -h "$BSRC" | cut -f1) → out/app-release.aab"
     echo "  ↳ upload THIS file to Google Play Console, not the .apk"
   else

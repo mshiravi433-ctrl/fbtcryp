@@ -424,5 +424,9 @@
     "shareInvite": "Compartir invitación",
     "quests": "Misiones",
     "virtualNotice": "Los puntos aquí son una puntuación, no una moneda. No se pueden retirar ni transferir y no tienen valor en efectivo."
+  },
+  "contact": {
+    "phone": "Teléfono de soporte",
+    "call": "Llamar"
   }
 }

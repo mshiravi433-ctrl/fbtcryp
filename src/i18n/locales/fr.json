@@ -424,5 +424,9 @@
     "shareInvite": "Partager l'invitation",
     "quests": "Quêtes",
     "virtualNotice": "Les points ici sont un score, pas une monnaie. Ils ne peuvent être ni retirés ni transférés et n'ont aucune valeur monétaire."
+  },
+  "contact": {
+    "phone": "Téléphone du support",
+    "call": "Appeler"
   }
 }

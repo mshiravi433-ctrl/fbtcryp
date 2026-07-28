@@ -151,6 +151,10 @@ export default {
   'rank.tiers': { zh: '等级', hi: 'स्तर', es: 'Niveles', fr: 'Paliers', ru: 'Уровни', tr: 'Seviyeler', ur: 'درجات', id: 'Tingkatan', pt: 'Níveis' },
   'rank.top': { zh: '顶尖交易者', hi: 'शीर्ष ट्रेडर', es: 'Mejores traders', fr: 'Meilleurs traders', ru: 'Лучшие трейдеры', tr: 'En iyi yatırımcılar', ur: 'بہترین ٹریڈرز', id: 'Trader teratas', pt: 'Melhores traders' },
 
+  /* ------------------------------ contact ----------------------------- */
+  'contact.phone': { zh: '客服电话', hi: 'सहायता फ़ोन', es: 'Teléfono de soporte', fr: 'Téléphone du support', ru: 'Телефон поддержки', tr: 'Destek telefonu', ur: 'سپورٹ فون', id: 'Telepon dukungan', pt: 'Telefone de apoio' },
+  'contact.call': { zh: '拨打', hi: 'कॉल करें', es: 'Llamar', fr: 'Appeler', ru: 'Позвонить', tr: 'Ara', ur: 'کال کریں', id: 'Telepon', pt: 'Ligar' },
+
   /* -------------------------------- help ------------------------------ */
   'help.title': { zh: '帮助与支持', hi: 'सहायता', es: 'Ayuda y soporte', fr: 'Aide et support', ru: 'Помощь и поддержка', tr: 'Yardım ve destek', ur: 'مدد اور معاونت', id: 'Bantuan & dukungan', pt: 'Ajuda e suporte' },
   'help.askAi': { zh: '询问助手', hi: 'सहायक से पूछें', es: 'Pregunta al asistente', fr: 'Demander à l\'assistant', ru: 'Спросить помощника', tr: 'Asistana sor', ur: 'اسسٹنٹ سے پوچھیں', id: 'Tanya asisten', pt: 'Perguntar ao assistente' },
