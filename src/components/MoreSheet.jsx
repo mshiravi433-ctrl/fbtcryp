@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
+import { GAMES_ENABLED } from '../App';
 import {
   IconActivity,
   IconBuilding,
@@ -42,9 +43,9 @@ const GROUPS = [
     id: 'earn',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
+      ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' }] : []),
       { to: '/earn', key: 'nav.earn', Icon: IconGlobe, hue: 'var(--rgb-7)' },
       { to: '/leaderboard', key: 'nav.leaderboard', Icon: IconTrophy, hue: 'var(--rgb-5)' },
-      { to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' },
       { to: '/invest', key: 'nav.invest', Icon: IconTrend, hue: 'var(--rgb-6)' }
     ]
   },

@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+
+const GAMES_ENABLED_STATIC = import.meta.env?.VITE_DISABLE_GAMES !== 'true';
 import { AnimatePresence } from 'framer-motion';
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { TelegramProvider } from './context/TelegramContext';
@@ -15,7 +17,12 @@ const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Trade = lazy(() => import('./pages/Trade'));
 const Swap = lazy(() => import('./pages/Swap'));
 const Invest = lazy(() => import('./pages/Invest'));
-const Play = lazy(() => import('./pages/Play'));
+// Conditional so the chunk isn't emitted at all in a store-safe build —
+// an unreachable route still leaves the code inside the APK for a reviewer
+// (or anyone) to find by unzipping it.
+const Play = GAMES_ENABLED_STATIC
+  ? lazy(() => import('./pages/Play'))
+  : () => null;
 const Predict = lazy(() => import('./pages/Predict'));
 const Earn = lazy(() => import('./pages/Earn'));
 const Wallet = lazy(() => import('./pages/Wallet'));
@@ -44,6 +51,16 @@ function Loader() {
   );
 }
 
+/**
+ * Iranian app stores (Bazaar, Myket) restrict gambling-styled content, and the
+ * arcade — even on valueless points — looks like gambling to a reviewer. This
+ * flag builds a store-safe variant with those routes removed entirely rather
+ * than merely hidden, so a reviewer can't reach them.
+ */
+const GAMES_ENABLED = GAMES_ENABLED_STATIC;
+
+export { GAMES_ENABLED };
+
 function AnimatedRoutes() {
   const location = useLocation();
   return (
@@ -55,7 +72,7 @@ function AnimatedRoutes() {
           <Route path="/trade" element={<Trade />} />
           <Route path="/swap" element={<Swap />} />
           <Route path="/invest" element={<Invest />} />
-          <Route path="/play" element={<Play />} />
+          {GAMES_ENABLED && <Route path="/play" element={<Play />} />}
           <Route path="/predict" element={<Predict />} />
           <Route path="/earn" element={<Earn />} />
           <Route path="/wallet" element={<Wallet />} />
