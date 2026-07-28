@@ -115,6 +115,44 @@ MSG
 
   KS_BYTES=$(wc -c < /tmp/release.keystore)
   echo "  decoded ${KS_BYTES} bytes"
+
+  # -------------------------------------------------------------------------
+  # EXACT TRUNCATION CHECK.
+  #
+  # A size floor is not enough: a partial copy that still lands above the floor
+  # decodes "successfully" and then dies inside keytool as java.io.EOFException,
+  # which names nothing.
+  #
+  # A PKCS12 keystore is DER, so it begins with a SEQUENCE tag (0x30) followed
+  # by a long-form length. For these files that is 0x82, meaning "the next two
+  # bytes are the content length". So the complete file must be exactly
+  # 4 + that length bytes. Comparing the declared length against the real size
+  # detects a truncated paste precisely, and can say how much is missing.
+  # -------------------------------------------------------------------------
+  DECLARED=$(od -An -tu1 -N4 /tmp/release.keystore | awk '{ if ($1==48 && $2==130) print 4 + $3*256 + $4; else print 0 }')
+  if [ "${DECLARED:-0}" -gt 0 ] && [ "$KS_BYTES" -ne "$DECLARED" ]; then
+    if [ "$KS_BYTES" -lt "$DECLARED" ]; then
+      fail <<MSG
+ANDROID_KEYSTORE_BASE64 is INCOMPLETE.
+The keystore says it should be ${DECLARED} bytes but only ${KS_BYTES} arrived
+- $((DECLARED - KS_BYTES)) bytes are missing, so the copy was cut short.
+This is the most common phone mistake: the base64 string is ~3000
+characters and the browser or clipboard silently kept only part of it.
+Fix: in Termux run
+    base64 -w 0 ~/fbt-keystore/fbt-release.keystore > ~/ks.txt
+    termux-setup-storage && cp ~/ks.txt ~/storage/downloads/
+then open ks.txt from Downloads with a text editor, Select All, Copy,
+and paste that as the ANDROID_KEYSTORE_BASE64 secret value.
+MSG
+    else
+      fail <<MSG
+ANDROID_KEYSTORE_BASE64 has ${KS_BYTES} bytes but the keystore declares
+${DECLARED}. Extra data came along with the copy - most likely another
+line, or text from the terminal prompt. Re-copy ONLY the base64 string.
+MSG
+    fi
+  fi
+
   if [ "$KS_BYTES" -lt 1000 ]; then
     fail <<MSG
 The decoded keystore is only ${KS_BYTES} bytes - far too small.
@@ -150,10 +188,22 @@ password and not your Google password. keytool said:
 $(head -3 /tmp/kslist.txt)
 MSG
     else
+      if grep -qi 'EOFException' /tmp/kslist.txt; then
+        fail <<MSG
+The keystore is truncated - it ended before keytool expected
+(java.io.EOFException). ${KS_BYTES} bytes were decoded, which is not a
+complete file. The base64 secret was only partly copied.
+Fix: in Termux run
+    base64 -w 0 ~/fbt-keystore/fbt-release.keystore > ~/ks.txt
+    termux-setup-storage && cp ~/ks.txt ~/storage/downloads/
+then open ks.txt from Downloads, Select All, Copy, and paste the whole
+thing as ANDROID_KEYSTORE_BASE64.
+MSG
+      fi
       fail <<MSG
-The secret decoded, but the result is not a readable keystore.
-Re-run mk.sh and re-copy both the base64 and the password. keytool said:
-$(head -3 /tmp/kslist.txt)
+The secret decoded (${KS_BYTES} bytes) but the result is not a readable
+keystore. Re-run mk.sh and re-copy both the base64 and the password.
+keytool said: $(head -3 /tmp/kslist.txt)
 MSG
     fi
   fi
