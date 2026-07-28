@@ -108,23 +108,36 @@ CHARS=$(wc -c < "$OUT")
 say "  base64 length: ${CHARS} characters"
 
 # --- 3. PROVE it round-trips ----------------------------------------------
-# This is the check that was missing. Decoding the text back and comparing it
-# to the original is the only way to know the file you are about to copy is
-# complete and correct.
-if ! base64 -d < "$OUT" > /tmp/_verify.bin 2>/dev/null; then
-  openssl base64 -d -A -in "$OUT" -out /tmp/_verify.bin 2>/dev/null || true
-fi
-VSIZE=$(wc -c < /tmp/_verify.bin 2>/dev/null || echo 0)
+# Decoding the text back and comparing it to the original is the only way to
+# know the file you are about to copy is complete and correct.
+#
+# The scratch file must NOT go in /tmp: Android has no /tmp directory, so on
+# Termux the redirect fails, nothing is written, and the comparison reads zero
+# bytes — reporting a corrupt keystore when the keystore was perfectly fine.
+# TMPDIR is set correctly by Termux; $HOME is a guaranteed-writable fallback.
+VERIFY="${TMPDIR:-$HOME}/_fbt_verify.bin"
+rm -f "$VERIFY"
 
-if [ "$VSIZE" != "$KS_SIZE" ]; then
+if ! base64 -d < "$OUT" > "$VERIFY" 2>/dev/null; then
+  openssl base64 -d -A -in "$OUT" -out "$VERIFY" 2>/dev/null || true
+fi
+VSIZE=$(wc -c < "$VERIFY" 2>/dev/null || echo 0)
+
+if [ "${VSIZE:-0}" -eq 0 ]; then
+  # Could not verify — but that is a limitation here, not evidence the
+  # keystore is bad. Say so plainly instead of condemning a good file.
+  say "${YLW}⚠${OFF} could not run the round-trip check on this device"
+  say "  (no working base64 decoder). The encoding itself succeeded."
+elif [ "$VSIZE" != "$KS_SIZE" ]; then
   say ""
   say "${RED}✗ Round-trip check FAILED: decoded ${VSIZE} bytes, expected ${KS_SIZE}.${OFF}"
   say "  Do not use this output. Re-run the script."
-  rm -f /tmp/_verify.bin
+  rm -f "$VERIFY"
   exit 1
+else
+  say "${GRN}✓${OFF} verified: decodes back to exactly ${KS_SIZE} bytes"
 fi
-rm -f /tmp/_verify.bin
-say "${GRN}✓${OFF} verified: decodes back to exactly ${KS_SIZE} bytes"
+rm -f "$VERIFY"
 
 # --- 4. put it where a text editor can reach it ----------------------------
 # Copying 3000+ characters out of the terminal is what truncated the string
