@@ -405,15 +405,4 @@ export default {
     id: 'Belum ada yang mencatat skor. Lakukan satu pertukaran atau check-in harian dan nama Anda jadi yang pertama.',
     pt: 'Ainda ninguém publicou uma pontuação. Faça uma troca ou o registo diário e será o primeiro nome deste quadro.'
   },
-  'help.aiNoAnswer': {
-    zh: '这个问题我没有把握，而且不想猜——这关系到你的钱。请点"联系我们"，会有真人回复。',
-    hi: 'इसका मुझे भरोसेमंद उत्तर नहीं पता और मैं अनुमान नहीं लगाऊँगा — मामला आपके पैसे का है। "संपर्क करें" दबाएँ, कोई असली व्यक्ति जवाब देगा।',
-    es: 'No tengo una respuesta fiable para eso y prefiero no adivinar: está en juego tu dinero. Usa "Contáctanos" y te responderá una persona.',
-    fr: 'Je n\'ai pas de réponse fiable à cela et je préfère ne pas deviner : votre argent est en jeu. Utilisez « Nous contacter », une personne vous répondra.',
-    ru: 'У меня нет уверенного ответа, и я не буду гадать — речь о ваших деньгах. Нажмите «Связаться с нами», ответит живой человек.',
-    tr: 'Bunun için güvenilir bir cevabım yok ve tahmin yürütmeyi tercih etmem — söz konusu olan sizin paranız. "Bize ulaşın"a dokunun, gerçek bir kişi yanıtlayacak.',
-    ur: 'اس کا مجھے یقینی جواب معلوم نہیں اور میں اندازہ نہیں لگاؤں گا — معاملہ آپ کے پیسے کا ہے۔ "ہم سے رابطہ" دبائیں، ایک حقیقی شخص جواب دے گا۔',
-    id: 'Saya tidak punya jawaban yang meyakinkan dan tidak akan menebak — ini menyangkut uang Anda. Gunakan "Hubungi kami" dan orang sungguhan akan menjawab.',
-    pt: 'Não tenho uma resposta segura para isso e prefiro não adivinhar — está em causa o seu dinheiro. Use "Contacte-nos" e uma pessoa responderá.'
-  }
 };

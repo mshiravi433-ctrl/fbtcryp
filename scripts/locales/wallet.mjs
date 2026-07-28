@@ -151,33 +151,34 @@ export default {
   'rank.tiers': { zh: '等级', hi: 'स्तर', es: 'Niveles', fr: 'Paliers', ru: 'Уровни', tr: 'Seviyeler', ur: 'درجات', id: 'Tingkatan', pt: 'Níveis' },
   'rank.top': { zh: '顶尖交易者', hi: 'शीर्ष ट्रेडर', es: 'Mejores traders', fr: 'Meilleurs traders', ru: 'Лучшие трейдеры', tr: 'En iyi yatırımcılar', ur: 'بہترین ٹریڈرز', id: 'Trader teratas', pt: 'Melhores traders' },
 
+  /* ------------------------------- FAQ -------------------------------- */
+  /*
+   * Question labels only. The ANSWERS live in src/lib/faqLocal.js and are
+   * currently fa/en/ar; other languages fall back to English there. That is
+   * deliberate — these answers cover irreversible transactions and lost
+   * recovery phrases, and a confidently-worded mistranslation of those is
+   * worse than a paragraph the reader can tell is not in their language.
+   */
+  'help.faqTitle': { zh: '常见问题', hi: 'अक्सर पूछे जाने वाले सवाल', es: 'Preguntas frecuentes', fr: 'Questions fréquentes', ru: 'Частые вопросы', tr: 'Sık sorulan sorular', ur: 'اکثر پوچھے گئے سوالات', id: 'Pertanyaan umum', pt: 'Perguntas frequentes' },
+  'help.faqSubtitle': { zh: '由团队针对本应用撰写，非自动生成。', hi: 'टीम द्वारा इसी ऐप के लिए लिखा गया — स्वतः जनरेट नहीं।', es: 'Escritas por el equipo sobre esta app, no generadas automáticamente.', fr: 'Rédigées par l\'équipe pour cette app, non générées automatiquement.', ru: 'Написаны командой об этом приложении, а не сгенерированы.', tr: 'Ekip tarafından bu uygulama için yazıldı, otomatik üretilmedi.', ur: 'ٹیم نے اسی ایپ کے بارے میں لکھا — خودکار نہیں۔', id: 'Ditulis tim tentang aplikasi ini, bukan dibuat otomatis.', pt: 'Escritas pela equipa sobre esta app, não geradas automaticamente.' },
+  'help.guideCta': { zh: '打开分步指南', hi: 'चरण-दर-चरण गाइड खोलें', es: 'Abrir la guía paso a paso', fr: 'Ouvrir le guide pas à pas', ru: 'Открыть пошаговое руководство', tr: 'Adım adım kılavuzu aç', ur: 'مرحلہ وار گائیڈ کھولیں', id: 'Buka panduan langkah demi langkah', pt: 'Abrir o guia passo a passo' },
+  'help.guideCtaSub': { zh: '兑换、钱包、安全与信号的完整讲解', hi: 'स्वैप, वॉलेट, सुरक्षा और सिग्नल की पूरी जानकारी', es: 'Recorrido completo de intercambios, carteras, seguridad y señales', fr: 'Tour complet des échanges, portefeuilles, sécurité et signaux', ru: 'Полный разбор обменов, кошельков, безопасности и сигналов', tr: 'Takas, cüzdan, güvenlik ve sinyallerin tam anlatımı', ur: 'سویپ، والٹ، سیکیورٹی اور سگنلز کی مکمل رہنمائی', id: 'Panduan lengkap tukar, dompet, keamanan, dan sinyal', pt: 'Percurso completo de trocas, carteiras, segurança e sinais' },
+  'help.stillStuck': { zh: '没找到答案？', hi: 'जवाब नहीं मिला?', es: '¿No encontraste tu respuesta?', fr: 'Vous n\'avez pas trouvé ?', ru: 'Не нашли ответ?', tr: 'Cevabını bulamadın mı?', ur: 'جواب نہیں ملا؟', id: 'Belum menemukan jawaban?', pt: 'Não encontrou a resposta?' },
+  'help.stillStuckSub': { zh: '直接联系客服，会有真人回复。', hi: 'सीधे सपोर्ट को मैसेज करें — असली व्यक्ति जवाब देगा।', es: 'Escribe a soporte: responde una persona real.', fr: 'Écrivez au support : une vraie personne répond.', ru: 'Напишите в поддержку — ответит живой человек.', tr: 'Doğrudan desteğe yazın — gerçek bir kişi yanıtlar.', ur: 'براہ راست سپورٹ کو پیغام بھیجیں — حقیقی شخص جواب دے گا۔', id: 'Kirim pesan ke dukungan — dijawab orang sungguhan.', pt: 'Envie mensagem ao apoio — responde uma pessoa real.' },
+
+  'help.q.fees': { zh: '你们收取什么费用？', hi: 'आप क्या फ़ीस लेते हैं?', es: '¿Qué comisiones cobráis?', fr: 'Quels frais prenez-vous ?', ru: 'Какие комиссии вы берёте?', tr: 'Hangi ücretleri alıyorsunuz?', ur: 'آپ کیا فیس لیتے ہیں؟', id: 'Berapa biaya yang dikenakan?', pt: 'Que taxas cobram?' },
+  'help.q.gas': { zh: 'Gas 是什么？用哪种币支付？', hi: 'गैस क्या है और कौन सा सिक्का देना होता है?', es: '¿Qué es el gas y con qué moneda se paga?', fr: 'Qu\'est-ce que le gas et avec quelle monnaie ?', ru: 'Что такое газ и какой монетой он платится?', tr: 'Gas nedir ve hangi coin ile ödenir?', ur: 'گیس کیا ہے اور کس سکے سے ادا ہوتی ہے؟', id: 'Apa itu gas dan dibayar dengan koin apa?', pt: 'O que é o gás e com que moeda se paga?' },
+  'help.q.failed': { zh: '我的兑换为什么失败了？', hi: 'मेरा स्वैप क्यों विफल हुआ?', es: '¿Por qué falló mi intercambio?', fr: 'Pourquoi mon échange a-t-il échoué ?', ru: 'Почему мой обмен не прошёл?', tr: 'Takasım neden başarısız oldu?', ur: 'میرا سویپ کیوں ناکام ہوا؟', id: 'Kenapa pertukaran saya gagal?', pt: 'Porque falhou a minha troca?' },
+  'help.q.slippage': { zh: '滑点是什么意思？', hi: 'स्लिपेज का क्या मतलब है?', es: '¿Qué significa el deslizamiento?', fr: 'Que signifie le slippage ?', ru: 'Что означает проскальзывание?', tr: 'Kayma ne demek?', ur: 'سلپیج کا کیا مطلب ہے؟', id: 'Apa arti slippage?', pt: 'O que significa derrapagem?' },
+  'help.q.custody': { zh: '我的资产在你们手里吗？', hi: 'क्या मेरे फंड आपके पास हैं?', es: '¿Guardáis mis fondos?', fr: 'Détenez-vous mes fonds ?', ru: 'Вы храните мои средства?', tr: 'Paramı siz mi tutuyorsunuz?', ur: 'کیا میرے فنڈز آپ کے پاس ہیں؟', id: 'Apakah dana saya Anda simpan?', pt: 'Guardam os meus fundos?' },
+  'help.q.seed': { zh: '如果我弄丢了助记词会怎样？', hi: 'अगर मैं सीड फ़्रेज़ खो दूँ तो?', es: '¿Qué pasa si pierdo mi frase semilla?', fr: 'Que se passe-t-il si je perds ma phrase de récupération ?', ru: 'Что если я потеряю seed-фразу?', tr: 'Kurtarma ifademi kaybedersem ne olur?', ur: 'اگر میں ریکوری فقرہ کھو دوں تو؟', id: 'Bagaimana jika frasa pemulihan hilang?', pt: 'E se perder a frase de recuperação?' },
+  'help.q.coins': { zh: '可以兑换多少种币？找不到我的币怎么办？', hi: 'कितने सिक्के स्वैप हो सकते हैं, मेरा न मिले तो?', es: '¿Cuántas monedas puedo intercambiar y si falta la mía?', fr: 'Combien de cryptos puis-je échanger, et si la mienne manque ?', ru: 'Сколько монет доступно и что если моей нет?', tr: 'Kaç coin takas edilebilir, benimki yoksa?', ur: 'کتنے سکے سویپ ہو سکتے ہیں، میرا نہ ہو تو؟', id: 'Berapa koin bisa ditukar, kalau punya saya tak ada?', pt: 'Quantas moedas posso trocar e se faltar a minha?' },
+  'help.q.chains': { zh: '支持哪些网络？', hi: 'कौन से नेटवर्क समर्थित हैं?', es: '¿Qué redes están soportadas?', fr: 'Quels réseaux sont pris en charge ?', ru: 'Какие сети поддерживаются?', tr: 'Hangi ağlar destekleniyor?', ur: 'کون سے نیٹ ورک سپورٹ ہیں؟', id: 'Jaringan apa saja yang didukung?', pt: 'Que redes são suportadas?' },
+  'help.q.connect': { zh: '怎么连接我的钱包？', hi: 'अपना वॉलेट कैसे कनेक्ट करूँ?', es: '¿Cómo conecto mi cartera?', fr: 'Comment connecter mon portefeuille ?', ru: 'Как подключить кошелёк?', tr: 'Cüzdanımı nasıl bağlarım?', ur: 'اپنا والٹ کیسے منسلک کروں؟', id: 'Bagaimana menghubungkan dompet?', pt: 'Como ligo a minha carteira?' },
+  'help.q.realMoney': { zh: '哪些部分使用真实资金？', hi: 'कौन से हिस्से असली पैसे से चलते हैं?', es: '¿Qué partes usan dinero real?', fr: 'Quelles parties utilisent de l\'argent réel ?', ru: 'Какие разделы используют реальные деньги?', tr: 'Hangi bölümler gerçek para kullanıyor?', ur: 'کون سے حصے اصل پیسے سے چلتے ہیں؟', id: 'Bagian mana yang memakai uang nyata?', pt: 'Que partes usam dinheiro real?' },
+  'help.q.notFound': { zh: '为什么有时显示"找不到该币种"？', hi: 'कभी-कभी "सिक्का नहीं मिला" क्यों आता है?', es: '¿Por qué a veces dice "moneda no encontrada"?', fr: 'Pourquoi affiche-t-il parfois « crypto introuvable » ?', ru: 'Почему иногда пишет «монета не найдена»?', tr: 'Neden bazen "coin bulunamadı" diyor?', ur: 'کبھی "سکہ نہیں ملا" کیوں آتا ہے؟', id: 'Kenapa kadang muncul "koin tidak ditemukan"?', pt: 'Porque diz às vezes "moeda não encontrada"?' },
+  'help.q.iranLegal': { zh: '在伊朗的法律状况如何？', hi: 'ईरान में क़ानूनी स्थिति क्या है?', es: '¿Cuál es la situación legal en Irán?', fr: 'Quelle est la situation légale en Iran ?', ru: 'Каков правовой статус в Иране?', tr: 'İran\'daki yasal durum nedir?', ur: 'ایران میں قانونی حیثیت کیا ہے؟', id: 'Bagaimana status hukum di Iran?', pt: 'Qual é a situação legal no Irão?' },
+
   /* -------------------------------- help ------------------------------ */
   'help.title': { zh: '帮助与支持', hi: 'सहायता', es: 'Ayuda y soporte', fr: 'Aide et support', ru: 'Помощь и поддержка', tr: 'Yardım ve destek', ur: 'مدد اور معاونت', id: 'Bantuan & dukungan', pt: 'Ajuda e suporte' },
-  'help.askAi': { zh: '询问助手', hi: 'सहायक से पूछें', es: 'Pregunta al asistente', fr: 'Demander à l\'assistant', ru: 'Спросить помощника', tr: 'Asistana sor', ur: 'اسسٹنٹ سے پوچھیں', id: 'Tanya asisten', pt: 'Perguntar ao assistente' },
-  'help.askPlaceholder': { zh: '输入你的问题…', hi: 'अपना सवाल लिखें…', es: 'Escribe tu pregunta…', fr: 'Posez votre question…', ru: 'Задайте вопрос…', tr: 'Sorunuzu yazın…', ur: 'اپنا سوال لکھیں…', id: 'Tulis pertanyaan Anda…', pt: 'Escreva a sua pergunta…' },
-  'help.contactUs': { zh: '联系我们', hi: 'संपर्क करें', es: 'Contáctanos', fr: 'Nous contacter', ru: 'Связаться с нами', tr: 'Bize ulaşın', ur: 'ہم سے رابطہ', id: 'Hubungi kami', pt: 'Contacte-nos' },
-  'help.resources': { zh: '资源', hi: 'संसाधन', es: 'Recursos', fr: 'Ressources', ru: 'Материалы', tr: 'Kaynaklar', ur: 'وسائل', id: 'Sumber', pt: 'Recursos' },
-  'help.guide': { zh: '重新查看新手指南', hi: 'गाइड फिर देखें', es: 'Volver a ver la guía', fr: 'Revoir le guide', ru: 'Пересмотреть руководство', tr: 'Kılavuzu tekrar izle', ur: 'گائیڈ دوبارہ دیکھیں', id: 'Lihat panduan lagi', pt: 'Rever o guia' },
-  'help.scamWarning': {
-    zh: '我们绝不会主动私信你，绝不会索要你的助记词或钱包密码，也绝不会以任何理由要求你向某个地址转币。任何这样做还自称是我们的人，都是冒充。',
-    hi: 'हम कभी पहले मैसेज नहीं करते, कभी आपका सीड फ़्रेज़ या वॉलेट पासवर्ड नहीं माँगते, और किसी भी बहाने से किसी पते पर क्रिप्टो भेजने को नहीं कहते। ऐसा करने वाला कोई भी व्यक्ति, चाहे हमारा नाम ले, ठग है।',
-    es: 'Nunca te escribimos primero, nunca pedimos tu frase semilla ni la contraseña de tu cartera, y nunca te pedimos que envíes cripto a ninguna dirección por ningún motivo. Cualquiera que lo haga en nuestro nombre es un impostor.',
-    fr: 'Nous ne vous écrivons jamais en premier, ne demandons jamais votre phrase de récupération ni votre mot de passe, et ne vous demandons jamais d\'envoyer des cryptos à une adresse, sous aucun prétexte. Quiconque le fait en notre nom est un imposteur.',
-    ru: 'Мы никогда не пишем первыми, никогда не просим seed-фразу или пароль от кошелька и никогда не просим отправить куда-либо криптовалюту. Любой, кто делает это от нашего имени, — мошенник.',
-    tr: 'Size asla ilk biz yazmayız, kurtarma ifadenizi veya cüzdan parolanızı asla istemeyiz ve hiçbir bahaneyle bir adrese kripto göndermenizi istemeyiz. Bunu adımıza yapan herkes sahtekârdır.',
-    ur: 'ہم کبھی پہلے پیغام نہیں بھیجتے، کبھی آپ کا ریکوری فقرہ یا والٹ پاس ورڈ نہیں مانگتے، اور کسی بھی بہانے سے کسی ایڈریس پر کرپٹو بھیجنے کو نہیں کہتے۔ ایسا کرنے والا ہر شخص جعل ساز ہے۔',
-    id: 'Kami tidak pernah menghubungi Anda lebih dulu, tidak pernah meminta frasa pemulihan atau kata sandi dompet, dan tidak pernah meminta Anda mengirim kripto ke alamat mana pun. Siapa pun yang melakukannya atas nama kami adalah penipu.',
-    pt: 'Nunca lhe escrevemos primeiro, nunca pedimos a sua frase de recuperação ou palavra-passe, e nunca lhe pedimos para enviar cripto para qualquer endereço. Quem o fizer em nosso nome é um impostor.'
-  },
-  'help.aiCaveat': {
-    zh: '助手可能出错。涉及资金的操作，请以应用内显示的实际数字为准。',
-    hi: 'सहायक ग़लत हो सकता है। पैसे से जुड़ी किसी भी बात के लिए ऐप में दिख रहे असली आँकड़ों पर भरोसा करें।',
-    es: 'El asistente puede equivocarse. Para cualquier cosa que implique dinero, fíate de las cifras reales que muestra la app.',
-    fr: 'L\'assistant peut se tromper. Pour tout ce qui touche à l\'argent, fiez-vous aux chiffres réels affichés dans l\'app.',
-    ru: 'Помощник может ошибаться. Во всём, что касается денег, полагайтесь на реальные цифры в приложении.',
-    tr: 'Asistan hata yapabilir. Parayla ilgili her şeyde uygulamada görünen gerçek rakamlara güvenin.',
-    ur: 'اسسٹنٹ غلط ہو سکتا ہے۔ پیسے سے متعلق ہر بات کے لیے ایپ میں دکھائے گئے اصل اعداد پر بھروسہ کریں۔',
-    id: 'Asisten bisa salah. Untuk apa pun yang menyangkut uang, percayai angka nyata yang ditampilkan aplikasi.',
-    pt: 'O assistente pode errar. Para tudo o que envolva dinheiro, confie nos números reais que a app mostra.'
-  }
 };

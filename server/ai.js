@@ -499,34 +499,3 @@ export async function generateMarketBrief({ global, top, lang }) {
 }
 
 /** FAQ answering, grounded in a fixed knowledge base about this app. */
-export async function answerFaq({ question, lang }) {
-  if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
-
-  const kb = `FBT Swap facts you must use when answering:
-- Non-custodial DEX on BNB Smart Chain. The app never holds user funds and has no deposit address.
-- A 0.5% platform fee is taken from the input token of every swap, on-chain, in the same transaction.
-- Network gas fees are separate and paid to blockchain validators, not to FBT.
-- Swaps route through the KyberSwap aggregator across all BSC DEXes; PancakeSwap V2 is the fallback.
-- Wallets: WalletConnect, injected browser wallets, or an in-app wallet whose seed is AES-GCM encrypted on-device.
-- If a user loses their seed phrase, nobody — including FBT — can recover their funds.
-- Games and the Trade/Invest/Predict screens use virtual NX credits, not real money. Swap and Farm are real.
-- Company: FBT iran (Fanous Bazaar Pishgam), Khomeyni Shahr, Isfahan. Support: Telegram @Shiravi4333, email Mshiravi433@gmail.com.
-- The app is not a bank, broker or exchange and does not give financial advice.
-
-RULES:
-- Answer ONLY from these facts plus general crypto knowledge. If you don't know, say so and point to Telegram support.
-- Never invent features, fees, dates or guarantees.
-- Never tell anyone to share their seed phrase — warn them instead if they mention it.
-- Keep it under 130 words.
-${lang === 'fa' ? '- Answer in Persian (فارسی).' : lang === 'ar' ? '- Answer in Arabic.' : '- Answer in English.'}`;
-
-  const { text, model } = await chat({
-    system: kb,
-    user: String(question).slice(0, 500),
-    temperature: 0.2,
-    maxTokens: 400,
-    json: false
-  });
-
-  return { answer: text.trim(), model, generatedAt: Date.now() };
-}

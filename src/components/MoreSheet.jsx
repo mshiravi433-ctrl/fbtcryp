@@ -1,30 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { lockBodyScroll } from '../lib/scrollLock';
-import { useState } from 'react';
-import {
-  AnimatedActivity,
-  AnimatedNews,
-  AnimatedSwap,
-  MenuBuilding,
-  MenuDoc,
-  MenuGlobe,
-  MenuInfo,
-  MenuKey,
-  MenuMarket,
-  MenuP2P,
-  MenuPools,
-  MenuSettings,
-  MenuShield,
-  MenuTrend,
-  MenuTrophy,
-  useStill
-} from './AnimatedIcon';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
 import { GAMES_ENABLED } from '../lib/features';
+import { useStill } from './AnimatedIcon';
 import {
   IconActivity,
   IconBuilding,
@@ -46,43 +28,72 @@ import {
 /**
  * The "More" drawer.
  *
- * The nav can hold five items comfortably; everything else lives here in a
- * grid that staggers in. Grouped by intent rather than alphabetically, so
- * people scan by what they're trying to do.
+ * WHY THE ANIMATION WAS JITTERY — and what changed
+ * ---------------------------------------------------------------------------
+ * The first version tried to be clever and paid for it on real hardware. On
+ * open it ran, all at once:
+ *
+ *   • the panel animating `scale` 0.93 → 1
+ *   • 18 tiles each with their own spring on opacity/y/scale
+ *   • 18 icon wrappers with a second spring
+ *   • hand-authored SVG icons animating `pathLength` on 2-4 paths each
+ *
+ * That is roughly 90 simultaneous animations, most of them on SVG geometry,
+ * inside a parent that was itself scaling. Two things make that specifically
+ * bad rather than merely heavy:
+ *
+ *   1. Animating `scale` on a parent forces the browser to re-rasterise every
+ *      descendant on every frame. Normally cheap; not with 18 clip-paths and
+ *      dozens of animating SVG paths inside.
+ *   2. `pathLength` is not a compositor property. Each step runs on the main
+ *      thread, so they compete with React's own render work during the exact
+ *      frames the panel is moving.
+ *
+ * The fix is to stop asking for so much:
+ *   • The panel fades and slides (opacity + y). No scale, so children are not
+ *     re-rasterised mid-flight.
+ *   • Tiles fade in as ONE group via a CSS animation on the grid, not 18
+ *     independent springs.
+ *   • Icons are static during the open. They still animate on tap, which is
+ *     the moment feedback actually means something.
+ *
+ * The result reads as one deliberate motion instead of a swarm, and it costs
+ * a fraction of the frames. That is the better design as well as the faster
+ * one — a menu that explodes into 18 separately-springing tiles is noise.
  */
 const GROUPS = [
   {
     id: 'markets',
     items: [
-      { to: '/', key: 'nav.market', Icon: MenuMarket, hue: 'var(--rgb-1)' },
-      { to: '/perp', key: 'nav.perp', Icon: MenuTrend, hue: 'var(--rgb-3)' },
-      { to: '/stocks', key: 'nav.stocks', Icon: MenuBuilding, hue: 'var(--rgb-5)' },
-      { to: '/predict', key: 'nav.predict', Icon: AnimatedActivity, hue: 'var(--rgb-8)' },
-      { to: '/p2p', key: 'nav.p2p', Icon: MenuP2P, hue: 'var(--rgb-6)' }
+      { to: '/', key: 'nav.market', Icon: IconMarket, hue: 'var(--rgb-1)' },
+      { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
+      { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
+      { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' },
+      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
     ]
   },
   {
     id: 'earn',
     items: [
-      { to: '/farm', key: 'nav.farm', Icon: MenuPools, hue: 'var(--rgb-4)' },
-      ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: AnimatedActivity, hue: 'var(--rgb-2)' }] : []),
-      { to: '/earn', key: 'nav.earn', Icon: MenuGlobe, hue: 'var(--rgb-7)' },
-      { to: '/leaderboard', key: 'nav.leaderboard', Icon: MenuTrophy, hue: 'var(--rgb-5)' },
-      { to: '/invest', key: 'nav.invest', Icon: MenuTrend, hue: 'var(--rgb-6)' }
+      { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
+      ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' }] : []),
+      { to: '/earn', key: 'nav.earn', Icon: IconGlobe, hue: 'var(--rgb-7)' },
+      { to: '/leaderboard', key: 'nav.leaderboard', Icon: IconTrophy, hue: 'var(--rgb-5)' },
+      { to: '/invest', key: 'nav.invest', Icon: IconTrend, hue: 'var(--rgb-6)' }
     ]
   },
   {
     id: 'more',
     items: [
-      { to: '/news', key: 'nav.news', Icon: AnimatedNews, hue: 'var(--rgb-1)' },
-      { to: '/help', key: 'nav.help', Icon: MenuInfo, hue: 'var(--rgb-9)' },
-      { to: '/docs', key: 'nav.docs', Icon: MenuDoc, hue: 'var(--rgb-1)' },
-      { to: '/audit', key: 'nav.audit', Icon: MenuShield, hue: 'var(--rgb-4)' },
-      { to: '/developers', key: 'nav.developers', Icon: MenuKey, hue: 'var(--rgb-2)' },
-      { to: '/ecosystem', key: 'nav.ecosystem', Icon: MenuGlobe, hue: 'var(--rgb-3)' },
-      { to: '/business', key: 'nav.business', Icon: MenuBuilding, hue: 'var(--rgb-5)' },
-      { to: '/about', key: 'nav.about', Icon: MenuInfo, hue: 'var(--rgb-8)' },
-      { to: '/settings', key: 'nav.settings', Icon: MenuSettings, hue: 'var(--rgb-6)' }
+      { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
+      { to: '/help', key: 'nav.help', Icon: IconInfo, hue: 'var(--rgb-9)' },
+      { to: '/docs', key: 'nav.docs', Icon: IconDoc, hue: 'var(--rgb-1)' },
+      { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
+      { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },
+      { to: '/ecosystem', key: 'nav.ecosystem', Icon: IconGlobe, hue: 'var(--rgb-3)' },
+      { to: '/business', key: 'nav.business', Icon: IconBuilding, hue: 'var(--rgb-5)' },
+      { to: '/about', key: 'nav.about', Icon: IconInfo, hue: 'var(--rgb-8)' },
+      { to: '/settings', key: 'nav.settings', Icon: IconSettings, hue: 'var(--rgb-6)' }
     ]
   }
 ];
@@ -92,8 +103,6 @@ export default function MoreSheet({ open, onClose }) {
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const still = useStill();
-  // Which tile is mid-animation. A tile animates on tap, then the drawer
-  // closes — so the icon confirms the tap before the screen changes under it.
   const [pressed, setPressed] = useState(null);
 
   useEffect(() => {
@@ -107,11 +116,22 @@ export default function MoreSheet({ open, onClose }) {
     };
   }, [open, onClose]);
 
+  // Reset the tap highlight when the drawer closes, or the same tile would
+  // still look pressed the next time it opens.
+  useEffect(() => {
+    if (!open) setPressed(null);
+  }, [open]);
+
   const go = (to) => {
     haptic?.('light');
     setPressed(to);
-    navigate(to);
-    onClose?.();
+    // Let the tap feedback land before the route swaps under the finger.
+    // 90ms is below the ~100ms threshold where a delay becomes perceptible as
+    // lag, but long enough for the press state to be seen.
+    setTimeout(() => {
+      navigate(to);
+      onClose?.();
+    }, 90);
   };
 
   // Portalled for the same reason as Sheet: a transformed ancestor becomes the
@@ -128,67 +148,70 @@ export default function MoreSheet({ open, onClose }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.16 }}
             onClick={onClose}
           />
           <div className="more-layer">
             <motion.div
               className="more-panel"
-              initial={{ opacity: 0, scale: 0.93, y: 14 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+              /*
+               * opacity + y only. No `scale`: scaling this parent re-rasterises
+               * every tile, clip-path and icon underneath it on every frame,
+               * which is what produced the stutter. A tween rather than a
+               * spring so the duration is bounded and predictable.
+               */
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: still ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
             >
-            <div className="row-between" style={{ marginBottom: 14 }}>
-              <h2 className="h2" style={{ margin: 0 }}>{t('nav.more')}</h2>
-              <button className="sheet-close" onClick={onClose} aria-label="close" type="button">
-                <IconX width={15} height={15} />
-              </button>
-            </div>
-
-            {GROUPS.map((g, gi) => (
-              <div key={g.id} style={{ marginBottom: 16 }}>
-                <p className="section-label" style={{ marginBottom: 9 }}>{t(`nav.group.${g.id}`)}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 9 }}>
-                  {g.items.map((item, i) => (
-                    <motion.button
-                      key={item.to + item.key}
-                      className="more-tile"
-                      initial={{ opacity: 0, y: 16, scale: 0.9 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{
-                        delay: gi * 0.05 + i * 0.035,
-                        type: 'spring',
-                        stiffness: 420,
-                        damping: 26
-                      }}
-                      whileTap={{ scale: 0.88 }}
-                      onClick={() => go(item.to)}
-                    >
-                      <motion.span
-                        className="more-tile-icon"
-                        style={{ color: item.hue, borderColor: `color-mix(in srgb, ${item.hue} 40%, transparent)` }}
-                        animate={
-                          pressed === item.to && !still
-                            ? { scale: [1, 1.25, 1], rotate: [0, -12, 0] }
-                            : { scale: 1, rotate: 0 }
-                        }
-                        whileHover={still ? undefined : { rotate: 8, scale: 1.06 }}
-                        transition={{ type: 'spring', stiffness: 420, damping: 15 }}
-                      >
-                        <item.Icon
-                          width={19}
-                          height={19}
-                          still={still}
-                          delay={gi * 0.05 + i * 0.035}
-                        />
-                      </motion.span>
-                      <span className="more-tile-label">{t(item.key)}</span>
-                    </motion.button>
-                  ))}
-                </div>
+              <div className="row-between" style={{ marginBottom: 14 }}>
+                <h2 className="h2" style={{ margin: 0 }}>{t('nav.more')}</h2>
+                <button className="sheet-close" onClick={onClose} aria-label="close" type="button">
+                  <IconX width={15} height={15} />
+                </button>
               </div>
-            ))}
+
+              {GROUPS.map((g, gi) => (
+                <div key={g.id} className="more-group">
+                  <p className="section-label" style={{ marginBottom: 9 }}>
+                    {t(`nav.group.${g.id}`)}
+                  </p>
+
+                  {/*
+                    One CSS animation per GROUP (three total) instead of one
+                    spring per tile (eighteen). The stagger between groups is
+                    enough to read as sequenced; per-tile stagger was invisible
+                    at this size and cost the most frames.
+                  */}
+                  <div
+                    className="more-grid"
+                    style={still ? undefined : { animationDelay: `${gi * 60}ms` }}
+                    data-still={still ? 'true' : 'false'}
+                  >
+                    {g.items.map((item) => (
+                      <button
+                        key={item.to + item.key}
+                        type="button"
+                        className="more-tile"
+                        data-pressed={pressed === item.to ? 'true' : 'false'}
+                        onClick={() => go(item.to)}
+                      >
+                        <span
+                          className="more-tile-icon"
+                          style={{
+                            color: item.hue,
+                            borderColor: `color-mix(in srgb, ${item.hue} 40%, transparent)`
+                          }}
+                        >
+                          <item.Icon width={19} height={19} />
+                        </span>
+                        <span className="more-tile-label">{t(item.key)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </motion.div>
           </div>
         </>

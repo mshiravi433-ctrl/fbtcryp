@@ -398,17 +398,6 @@
     "tiers": "Seviyeler",
     "top": "En iyi yatırımcılar"
   },
-  "help": {
-    "aiNoAnswer": "Bunun için güvenilir bir cevabım yok ve tahmin yürütmeyi tercih etmem — söz konusu olan sizin paranız. \"Bize ulaşın\"a dokunun, gerçek bir kişi yanıtlayacak.",
-    "title": "Yardım ve destek",
-    "askAi": "Asistana sor",
-    "askPlaceholder": "Sorunuzu yazın…",
-    "contactUs": "Bize ulaşın",
-    "resources": "Kaynaklar",
-    "guide": "Kılavuzu tekrar izle",
-    "scamWarning": "Size asla ilk biz yazmayız, kurtarma ifadenizi veya cüzdan parolanızı asla istemeyiz ve hiçbir bahaneyle bir adrese kripto göndermenizi istemeyiz. Bunu adımıza yapan herkes sahtekârdır.",
-    "aiCaveat": "Asistan hata yapabilir. Parayla ilgili her şeyde uygulamada görünen gerçek rakamlara güvenin."
-  },
   "trade": {
     "buy": "Al",
     "sell": "Sat",
@@ -424,5 +413,28 @@
     "shareInvite": "Daveti paylaş",
     "quests": "Görevler",
     "virtualNotice": "Buradaki puanlar bir skordur, para birimi değil. Çekilemez, devredilemez ve nakit değeri yoktur."
+  },
+  "help": {
+    "faqTitle": "Sık sorulan sorular",
+    "faqSubtitle": "Ekip tarafından bu uygulama için yazıldı, otomatik üretilmedi.",
+    "guideCta": "Adım adım kılavuzu aç",
+    "guideCtaSub": "Takas, cüzdan, güvenlik ve sinyallerin tam anlatımı",
+    "stillStuck": "Cevabını bulamadın mı?",
+    "stillStuckSub": "Doğrudan desteğe yazın — gerçek bir kişi yanıtlar.",
+    "q": {
+      "fees": "Hangi ücretleri alıyorsunuz?",
+      "gas": "Gas nedir ve hangi coin ile ödenir?",
+      "failed": "Takasım neden başarısız oldu?",
+      "slippage": "Kayma ne demek?",
+      "custody": "Paramı siz mi tutuyorsunuz?",
+      "seed": "Kurtarma ifademi kaybedersem ne olur?",
+      "coins": "Kaç coin takas edilebilir, benimki yoksa?",
+      "chains": "Hangi ağlar destekleniyor?",
+      "connect": "Cüzdanımı nasıl bağlarım?",
+      "realMoney": "Hangi bölümler gerçek para kullanıyor?",
+      "notFound": "Neden bazen \"coin bulunamadı\" diyor?",
+      "iranLegal": "İran'daki yasal durum nedir?"
+    },
+    "title": "Yardım ve destek"
   }
 }

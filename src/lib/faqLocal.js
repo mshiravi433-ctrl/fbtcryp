@@ -228,5 +228,47 @@ export function localAnswer(question, lang = 'fa') {
   return { id: best.id, answer, confidence: Math.min(1, bestScore / 6) };
 }
 
+/**
+ * The knowledge base as a browsable FAQ.
+ *
+ * These twelve entries were written by hand, about this exact app, and each
+ * one has been checked against what the code actually does. That makes them
+ * strictly better than a model answering the same question — a model can
+ * invent a fee, a network or a recovery path, and these cannot.
+ *
+ * The Help screen renders them directly as an accordion. Questions come from
+ * i18n (`help.q.*`) so they read naturally per language; answers come from
+ * here because they are long-form and safety-relevant.
+ *
+ * Order matters: the questions people actually arrive with are first. Fees,
+ * gas and "why did my swap fail" account for most support contact.
+ */
+export const FAQ_ORDER = [
+  'fees',
+  'gas',
+  'failed',
+  'slippage',
+  'custody',
+  'seed',
+  'coins',
+  'chains',
+  'connect',
+  'realMoney',
+  'notFound',
+  'iranLegal'
+];
+
+/** Answer text for a FAQ id, in the given language. English is the fallback. */
+export function faqAnswer(id, lang = 'en') {
+  const entry = KB.find((e) => e.id === id);
+  if (!entry) return null;
+  return entry.a[lang] ?? entry.a.en;
+}
+
+/** Every FAQ entry, ready to render. */
+export function faqList(lang = 'en') {
+  return FAQ_ORDER.map((id) => ({ id, answer: faqAnswer(id, lang) })).filter((x) => x.answer);
+}
+
 /** Suggested questions for the empty state, in the KB's own words. */
 export const FAQ_TOPICS = KB.map((e) => e.id);

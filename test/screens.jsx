@@ -42,6 +42,11 @@ export async function run(container) {
   console.error = (...a) => {
     const s = String(a[0] ?? '');
     if (s.includes('useLayoutEffect') || s.includes('act(') || s.includes('not wrapped')) return;
+    // jsdom implements no layout engine, so window.scrollTo and friends are
+    // stubs that log "Not implemented". Every real browser and WebView has
+    // them. Treating this as a failure would push us to remove working code
+    // to satisfy the test environment, which is backwards.
+    if (s.includes('Not implemented')) return;
     errors.push(s);
   };
 
@@ -172,6 +177,43 @@ export async function run(container) {
     await act(async () => root.unmount());
     host.remove();
     useSettingsStore.setState({ username: '' });
+  }
+
+  /* ---------------------- Help: FAQ, not a chat box ---------------------- */
+  /*
+   * The AI assistant was removed deliberately (see the header of Help.jsx).
+   * Assert both halves: the chat input is gone, and the FAQ that replaced it
+   * actually renders answers — a "removal" that leaves an empty screen would
+   * be worse than what was there before.
+   */
+  {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    setLanguage('fa');
+    await act(async () => {
+      root.render(
+        <Wrap>
+          <Help />
+        </Wrap>
+      );
+    });
+
+    out.push(['Help has no AI chat input', !host.querySelector('input[type="text"]')]);
+
+    const rows = [...host.querySelectorAll('.faq-q')];
+    out.push([`Help lists the FAQ (${rows.length} questions)`, rows.length >= 10]);
+    out.push(['FAQ questions are translated, not raw keys', rows.every((r) => !/^help\.q\./.test(r.textContent.trim()))]);
+    out.push(['answers are collapsed until asked for', !host.querySelector('.faq-a')]);
+
+    // Expanding must reveal a real answer, in the active language.
+    await act(async () => rows[0].click());
+    const answer = host.querySelector('.faq-a');
+    out.push(['tapping a question reveals its answer', Boolean(answer && answer.textContent.length > 60)]);
+    out.push(['the answer is in the active language', /[\u0600-\u06FF]/.test(answer?.textContent ?? '')]);
+
+    await act(async () => root.unmount());
+    host.remove();
   }
 
   setLanguage('fa');

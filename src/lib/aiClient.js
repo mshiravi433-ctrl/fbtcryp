@@ -40,9 +40,18 @@ async function post(path, body, timeout = 60000) {
   }
 }
 
-import { directGeminiAvailable, directBrief, directFaq, directOutlook } from './geminiDirect';
-import { localAnswer } from './faqLocal';
+import { directGeminiAvailable, directBrief, directOutlook } from './geminiDirect';
 import { localBrief, localOutlook } from './localOutlook';
+
+/*
+ * NOTE: the support chat box that used to live in Help has been removed — see
+ * the comment at the top of src/pages/Help.jsx for why. What remains here
+ * serves the Signals screen, where the model NARRATES indicators that are
+ * computed locally, and where a local narrator (lib/localOutlook.js) takes
+ * over whenever no model is configured. That distinction matters: the model
+ * is optional colour on top of real analysis, never the source of a fact
+ * about someone's money.
+ */
 
 /**
  * Resolution order for every AI call:
@@ -141,47 +150,4 @@ export async function getMarketBrief(payload) {
     /* fall through */
   }
   return localBrief({ global: payload?.global, top: payload?.top, lang: payload?.lang });
-}
-
-/**
- * Answer a support question.
- *
- * Order: backend model -> packaged Gemini -> built-in knowledge base. The
- * local tier is not a stub; for the questions people actually ask about fees,
- * gas and failed swaps it is more accurate than a general model, because we
- * wrote it about this exact app. The response carries `source` so the UI can
- * say where the answer came from instead of implying a live model answered.
- */
-/**
- * Ask the backend why AI is unavailable, in words a non-developer can act on.
- * Returns null when there is no backend at all — `aiStatus()` already covers
- * that case and a second signal for it would just be noise.
- */
-export async function aiDiagnose() {
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(`${API_BASE}/ai/diagnose`, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-export async function askFaq(question, lang) {
-  try {
-    const res = await viaServerOr((p) => directFaq(p), '/ai/faq', { question, lang });
-    if (res?.answer) return { ...res, source: 'model' };
-  } catch {
-    /* fall through to the offline knowledge base */
-  }
-
-  const local = localAnswer(question, lang);
-  if (local) return { answer: local.answer, source: 'local', confidence: local.confidence };
-
-  // Nothing matched: say so plainly and point at a human, rather than
-  // inventing an answer about someone's money.
-  return { answer: null, source: 'none' };
 }

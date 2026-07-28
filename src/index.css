@@ -1441,6 +1441,29 @@ input, select, textarea { font-size: 16px !important; }
 
 :root[data-theme='light'] .more-panel { background: #fff; }
 
+/*
+ * Tiles fade in as a GROUP, not individually.
+ *
+ * Eighteen independent Framer springs plus animated SVG paths, inside a
+ * parent that was also scaling, is what made this drawer stutter. Three CSS
+ * animations run on the compositor and cost essentially nothing.
+ */
+.more-group { margin-bottom: 16px; }
+
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+  animation: more-grid-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.more-grid[data-still='true'] { animation: none; }
+
+@keyframes more-grid-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
 .more-tile {
   display: flex;
   flex-direction: column;
@@ -1458,14 +1481,37 @@ input, select, textarea { font-size: 16px !important; }
      is consistent rather than the panel being the only odd one out. */
   border-radius: 16px;
   clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
-  transition: background 0.2s, border-color 0.2s;
+
+  /* Transform is listed so the press state below is compositor-driven. */
+  transition: background 0.18s, border-color 0.18s, transform 0.12s ease-out;
 }
 
 [dir='rtl'] .more-tile {
   clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
 }
 
-.more-tile:active { background: rgba(127, 127, 127, 0.13); }
+/*
+ * Tap feedback in CSS rather than a Framer `whileTap`. :active covers touch
+ * and mouse, and [data-pressed] holds the state for the ~90ms between the tap
+ * and the route change so the press is actually visible before the screen
+ * swaps.
+ */
+.more-tile:active,
+.more-tile[data-pressed='true'] {
+  background: rgba(127, 127, 127, 0.13);
+  transform: scale(0.94);
+}
+
+.more-tile[data-pressed='true'] {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .more-grid { animation: none; }
+  .more-tile { transition: background 0.18s, border-color 0.18s; }
+  .more-tile:active,
+  .more-tile[data-pressed='true'] { transform: none; }
+}
 
 .more-tile-icon {
   width: 38px;
@@ -2332,4 +2378,63 @@ input, select, textarea { font-size: 16px !important; }
 :root[data-theme='light'] .sheet,
 :root[data-theme='light'] .more-panel {
   box-shadow: 0 20px 60px -20px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(15, 23, 42, 0.06);
+}
+
+/* ==========================================================================
+   FAQ ACCORDION (Help screen)
+   --------------------------------------------------------------------------
+   Replaced the AI chat box. Every question is visible at a glance, so nobody
+   has to guess the right phrasing to get an answer — which was the quiet
+   failure of the chat interface even when it worked.
+   ========================================================================== */
+
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.faq-item[data-open='true'] {
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+}
+
+.faq-q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  /* 52px keeps the row above the 44px minimum touch target even when the
+     question wraps to a single short line. */
+  min-height: 52px;
+  padding: 13px 14px;
+  background: none;
+  border: 0;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.65;
+  text-align: start;
+  cursor: pointer;
+}
+
+.faq-chev {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
+/* The chevron means "expand", and it points inward in RTL. */
+[dir='rtl'] .faq-chev { transform: scaleX(-1); }
+
+.faq-a {
+  margin: 0;
+  padding: 0 14px 14px;
+  font-size: 12.4px;
+  line-height: 1.95;
+  color: var(--text-2);
 }

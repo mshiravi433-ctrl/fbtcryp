@@ -1,86 +1,59 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
-import { aiDiagnose, aiStatus, askFaq } from '../lib/aiClient';
-import { IconChevronLeft, IconChevronRight, IconDoc, IconInfo, IconLock, IconShield } from '../components/Icons';
+import { faqList } from '../lib/faqLocal';
 import { useSettingsStore } from '../store/useSettingsStore';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconDoc,
+  IconInfo,
+  IconLock,
+  IconShield
+} from '../components/Icons';
 
-/** Questions worth surfacing without the user having to think of them. */
-const QUICK = ['fees', 'custody', 'seedLost', 'realMoney', 'network', 'slippage'];
-
+/**
+ * HELP
+ * ---------------------------------------------------------------------------
+ * WHY THERE IS NO "ASK THE AI" HERE ANY MORE
+ *
+ * It was removed on purpose, and the reasoning is worth keeping.
+ *
+ * A chat box in a wallet app sets an expectation it cannot meet: that you can
+ * ask anything and get a trustworthy answer about your money. In practice
+ * three things went wrong. Without a configured model it answered from a
+ * fixed knowledge base while still *looking* like a chatbot. With a model, it
+ * could invent a fee, a network or a recovery path that does not exist — and
+ * someone acting on an invented recovery path loses funds. And either way the
+ * user had to guess the right question before they got anything at all.
+ *
+ * The knowledge base was always the honest part: twelve answers written by
+ * hand, about this exact app, checked against what the code actually does. So
+ * that is now the whole feature, presented as what it is — a browsable FAQ.
+ * You can see every question at a glance instead of guessing, every answer is
+ * one we can stand behind, and it works offline with nothing configured.
+ *
+ * Anything the FAQ does not cover routes to the two places that can actually
+ * help: the step-by-step guide, and a human on Telegram.
+ */
 export default function Help() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, tg } = useTelegram();
+  const { haptic } = useTelegram();
   const replayGuide = useSettingsStore((s) => s.replayGuide);
 
-  const [ai, setAi] = useState({ enabled: false });
-  const [question, setQuestion] = useState('');
-  const [thread, setThread] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const endRef = useRef(null);
+  // Which FAQ row is expanded. One at a time: an accordion where everything
+  // can be open at once is just a wall of text with extra taps.
+  const [openId, setOpenId] = useState(null);
 
-  const [diag, setDiag] = useState(null);
+  const faqs = useMemo(() => faqList(i18n.language), [i18n.language]);
 
-  useEffect(() => {
-    aiStatus().then(setAi);
-  }, []);
-
-  /**
-   * When the assistant is running on the built-in knowledge base, ask the
-   * backend WHY. "AI unavailable" with no cause is the least actionable
-   * message an app can show its own operator.
-   */
-  useEffect(() => {
-    if (ai.mode !== 'local') return;
-    aiDiagnose().then((d) => {
-      if (d && d.ok === false && d.fix) setDiag(d);
-    });
-  }, [ai.mode]);
-
-  useEffect(() => {
-    // `scrollIntoView` is missing on some older Android WebViews (and in
-    // jsdom). Calling it unguarded throws inside an effect, which unmounts the
-    // whole screen — so the entire Help page would go blank the moment someone
-    // on an old phone asked their first question.
-    const el = endRef.current;
-    if (typeof el?.scrollIntoView === 'function') {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [thread, busy]);
-
-  const open = (url) => {
-    haptic?.('light');
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const ask = async (q) => {
-    const text = String(q ?? question).trim();
-    if (!text || busy) return;
-
-    setThread((prev) => [...prev, { role: 'user', text }]);
-    setQuestion('');
-    setBusy(true);
-    haptic?.('light');
-
-    try {
-      const res = await askFaq(text, i18n.language);
-      if (res?.answer) {
-        // Label where the answer came from. A canned answer presented as a
-        // live model is a small lie that erodes trust in every other answer.
-        setThread((prev) => [...prev, { role: 'ai', text: res.answer, source: res.source }]);
-      } else {
-        setThread((prev) => [...prev, { role: 'ai', text: t('help.aiNoAnswer'), source: 'none' }]);
-      }
-    } catch {
-      setThread((prev) => [...prev, { role: 'error', text: t('help.aiFailed') }]);
-    } finally {
-      setBusy(false);
-    }
+  const toggle = (id) => {
+    haptic?.('select');
+    setOpenId((cur) => (cur === id ? null : id));
   };
 
   return (
@@ -92,6 +65,94 @@ export default function Help() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('help.title')}</h1>
       </motion.div>
 
+      {/* ---------- step-by-step guide: the highest-value destination ------- */}
+      <motion.button
+        className="card lift"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        whileTap={{ scale: 0.985 }}
+        onClick={() => {
+          haptic?.('light');
+          replayGuide();
+        }}
+        style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
+      >
+        <div className="row-between">
+          <div className="row" style={{ gap: 11, minWidth: 0 }}>
+            <span
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 12,
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0,
+                color: '#000',
+                background: 'linear-gradient(140deg, var(--rgb-1), var(--rgb-2))'
+              }}
+            >
+              <IconInfo width={19} height={19} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.guideCta')}</div>
+              <div className="faint" style={{ lineHeight: 1.6 }}>{t('help.guideCtaSub')}</div>
+            </div>
+          </div>
+          <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        </div>
+      </motion.button>
+
+      {/* -------------------------------- FAQ ------------------------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 4 }}>{t('help.faqTitle')}</p>
+        <p className="faint" style={{ margin: '0 0 10px', lineHeight: 1.7 }}>
+          {t('help.faqSubtitle')}
+        </p>
+
+        <motion.div className="stack" style={{ gap: 7 }} variants={stagger} initial="hidden" animate="show">
+          {faqs.map(({ id, answer }) => {
+            const isOpen = openId === id;
+            return (
+              <motion.div key={id} className="faq-item" data-open={isOpen} variants={riseIn}>
+                <button
+                  type="button"
+                  className="faq-q"
+                  onClick={() => toggle(id)}
+                  aria-expanded={isOpen}
+                >
+                  <span>{t(`help.q.${id}`)}</span>
+                  <motion.span
+                    className="faq-chev"
+                    animate={{ rotate: isOpen ? 90 : 0 }}
+                    transition={{ duration: 0.18 }}
+                    aria-hidden="true"
+                  >
+                    <IconChevronRight width={15} height={15} />
+                  </motion.span>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      key="a"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <p className="faq-a">{answer}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+      </motion.section>
+
+      {/* ------------------- nothing matched → talk to a human -------------- */}
       <motion.button
         className="card lift"
         variants={riseIn}
@@ -103,170 +164,17 @@ export default function Help() {
       >
         <div className="row-between">
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.contactUs')}</div>
-            <div className="faint">{t('help.contactUsSub')}</div>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.stillStuck')}</div>
+            <div className="faint" style={{ lineHeight: 1.6 }}>{t('help.stillStuckSub')}</div>
           </div>
           <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)' }} />
         </div>
       </motion.button>
 
-      {/* ---------- AI FAQ ---------- */}
-      <motion.section className="card card-rgb edge-orchid" variants={riseIn} initial="hidden" animate="show">
-        <div className="aurora" />
-        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-          <motion.span animate={{ scale: [1, 1.18, 1] }} transition={{ duration: 2.4, repeat: Infinity }}>✦</motion.span>
-          <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.askAi')}</span>
-        </div>
-        <p className="faint" style={{ marginBottom: 11 }}>{t('help.askAiSub')}</p>
-
-        {/* There is no "AI unavailable" dead end any more. With no backend and
-            no packaged key, answers come from the built-in knowledge base —
-            which for questions about fees, gas and failed swaps is written by
-            us about this exact app, and is therefore better than a general
-            model guessing. We just say which one answered. */}
-        {ai.mode === 'local' && (
-          <>
-            <p className="notice">{t('help.aiLocalMode')}</p>
-            {/* Operator-facing detail. Rendered only when the backend actually
-                reported a fault, so ordinary users never see it. */}
-            {diag && (
-              <details className="notice" style={{ marginTop: 8 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 11.5 }}>
-                  {t('help.aiWhy')}
-                </summary>
-                <div className="mono" style={{ fontSize: 10.5, marginTop: 8, lineHeight: 1.8 }}>
-                  <div>reason: {diag.reason}</div>
-                  {diag.model && <div>model: {diag.model}</div>}
-                  {diag.error && <div style={{ wordBreak: 'break-all' }}>error: {diag.error}</div>}
-                </div>
-                <p className="muted" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.8 }}>
-                  {diag.fix}
-                </p>
-              </details>
-            )}
-          </>
-        )}
-        {(
-          <>
-            {thread.length === 0 && (
-              <div className="stack" style={{ gap: 6, marginBottom: 11 }}>
-                {QUICK.map((k, i) => (
-                  <motion.button
-                    key={k}
-                    className="set-row"
-                    style={{ borderRadius: 12, border: '1px solid var(--line)', borderBottom: '1px solid var(--line)' }}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    whileTap={{ scale: 0.985 }}
-                    onClick={() => ask(t(`help.q.${k}`))}
-                  >
-                    <span className="set-row-label" style={{ fontSize: 12.5 }}>{t(`help.q.${k}`)}</span>
-                    <IconChevronRight width={15} height={15} style={{ color: 'var(--text-3)' }} />
-                  </motion.button>
-                ))}
-              </div>
-            )}
-
-            <div className="stack" style={{ gap: 9, maxHeight: 340, overflowY: 'auto' }}>
-              <AnimatePresence initial={false}>
-                {thread.map((m, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 10, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    style={{
-                      alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                      maxWidth: '88%',
-                      padding: '10px 13px',
-                      borderRadius: 15,
-                      fontSize: 12.5,
-                      lineHeight: 1.75,
-                      background:
-                        m.role === 'user'
-                          ? 'linear-gradient(135deg,var(--rgb-1),var(--rgb-2))'
-                          : m.role === 'error'
-                            ? 'rgba(255,59,107,.12)'
-                            : 'rgba(127,127,127,.12)',
-                      color: m.role === 'user' ? '#000' : 'var(--text-1)',
-                      border: m.role === 'error' ? '1px solid rgba(255,59,107,.3)' : '1px solid var(--line)'
-                    }}
-                  >
-                    {m.text}
-                    {m.role === 'ai' && m.source && m.source !== 'none' && (
-                      <div className="faint" style={{ fontSize: 9.5, marginTop: 6, opacity: 0.8 }}>
-                        {m.source === 'local' ? t('help.aiSourceLocal') : t('help.aiSourceModel')}
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              {busy && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="row"
-                  style={{ gap: 5, alignSelf: 'flex-start', padding: '10px 13px' }}
-                >
-                  {[0, 1, 2].map((i) => (
-                    <motion.span
-                      key={i}
-                      animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
-                      transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
-                      style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--rgb-1)' }}
-                    />
-                  ))}
-                </motion.div>
-              )}
-              <div ref={endRef} />
-            </div>
-
-            <div className="row" style={{ gap: 8, marginTop: 11 }}>
-              <input
-                type="text"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && ask()}
-                placeholder={t('help.askPlaceholder')}
-                style={{ flex: 1 }}
-              />
-              <button
-                className="btn btn-primary"
-                style={{ width: 'auto', padding: '12px 16px' }}
-                onClick={() => ask()}
-                disabled={busy || !question.trim()}
-              >
-                →
-              </button>
-            </div>
-
-            <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }}>{t('help.aiCaveat')}</p>
-          </>
-        )}
-      </motion.section>
-
       {/* ---------- docs & legal ---------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('help.resources')}</p>
         <div className="set-group">
-          {/* Replaying the guide clears guideReadAt, which App.jsx watches, so
-              the four-part guide takes over immediately. */}
-          <button
-            className="set-row"
-            onClick={() => {
-              haptic?.('light');
-              replayGuide();
-            }}
-          >
-            <span className="set-row-icon"><IconInfo width={19} height={19} /></span>
-            <span className="set-row-label">
-              <div>{t('help.guide')}</div>
-              <div className="set-row-sub">{t('help.guideSub')}</div>
-            </span>
-            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
-          </button>
-
           <button className="set-row" onClick={() => navigate('/docs')}>
             <span className="set-row-icon"><IconDoc width={19} height={19} /></span>
             <span className="set-row-label">

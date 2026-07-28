@@ -398,17 +398,6 @@
     "tiers": "Tingkatan",
     "top": "Trader teratas"
   },
-  "help": {
-    "aiNoAnswer": "Saya tidak punya jawaban yang meyakinkan dan tidak akan menebak — ini menyangkut uang Anda. Gunakan \"Hubungi kami\" dan orang sungguhan akan menjawab.",
-    "title": "Bantuan & dukungan",
-    "askAi": "Tanya asisten",
-    "askPlaceholder": "Tulis pertanyaan Anda…",
-    "contactUs": "Hubungi kami",
-    "resources": "Sumber",
-    "guide": "Lihat panduan lagi",
-    "scamWarning": "Kami tidak pernah menghubungi Anda lebih dulu, tidak pernah meminta frasa pemulihan atau kata sandi dompet, dan tidak pernah meminta Anda mengirim kripto ke alamat mana pun. Siapa pun yang melakukannya atas nama kami adalah penipu.",
-    "aiCaveat": "Asisten bisa salah. Untuk apa pun yang menyangkut uang, percayai angka nyata yang ditampilkan aplikasi."
-  },
   "trade": {
     "buy": "Beli",
     "sell": "Jual",
@@ -424,5 +413,28 @@
     "shareInvite": "Bagikan undangan",
     "quests": "Misi",
     "virtualNotice": "Poin di sini adalah skor, bukan mata uang. Tidak bisa ditarik atau dipindahkan dan tidak punya nilai tunai."
+  },
+  "help": {
+    "faqTitle": "Pertanyaan umum",
+    "faqSubtitle": "Ditulis tim tentang aplikasi ini, bukan dibuat otomatis.",
+    "guideCta": "Buka panduan langkah demi langkah",
+    "guideCtaSub": "Panduan lengkap tukar, dompet, keamanan, dan sinyal",
+    "stillStuck": "Belum menemukan jawaban?",
+    "stillStuckSub": "Kirim pesan ke dukungan — dijawab orang sungguhan.",
+    "q": {
+      "fees": "Berapa biaya yang dikenakan?",
+      "gas": "Apa itu gas dan dibayar dengan koin apa?",
+      "failed": "Kenapa pertukaran saya gagal?",
+      "slippage": "Apa arti slippage?",
+      "custody": "Apakah dana saya Anda simpan?",
+      "seed": "Bagaimana jika frasa pemulihan hilang?",
+      "coins": "Berapa koin bisa ditukar, kalau punya saya tak ada?",
+      "chains": "Jaringan apa saja yang didukung?",
+      "connect": "Bagaimana menghubungkan dompet?",
+      "realMoney": "Bagian mana yang memakai uang nyata?",
+      "notFound": "Kenapa kadang muncul \"koin tidak ditemukan\"?",
+      "iranLegal": "Bagaimana status hukum di Iran?"
+    },
+    "title": "Bantuan & dukungan"
   }
 }

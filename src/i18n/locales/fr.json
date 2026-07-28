@@ -398,17 +398,6 @@
     "tiers": "Paliers",
     "top": "Meilleurs traders"
   },
-  "help": {
-    "aiNoAnswer": "Je n'ai pas de réponse fiable à cela et je préfère ne pas deviner : votre argent est en jeu. Utilisez « Nous contacter », une personne vous répondra.",
-    "title": "Aide et support",
-    "askAi": "Demander à l'assistant",
-    "askPlaceholder": "Posez votre question…",
-    "contactUs": "Nous contacter",
-    "resources": "Ressources",
-    "guide": "Revoir le guide",
-    "scamWarning": "Nous ne vous écrivons jamais en premier, ne demandons jamais votre phrase de récupération ni votre mot de passe, et ne vous demandons jamais d'envoyer des cryptos à une adresse, sous aucun prétexte. Quiconque le fait en notre nom est un imposteur.",
-    "aiCaveat": "L'assistant peut se tromper. Pour tout ce qui touche à l'argent, fiez-vous aux chiffres réels affichés dans l'app."
-  },
   "trade": {
     "buy": "Acheter",
     "sell": "Vendre",
@@ -424,5 +413,28 @@
     "shareInvite": "Partager l'invitation",
     "quests": "Quêtes",
     "virtualNotice": "Les points ici sont un score, pas une monnaie. Ils ne peuvent être ni retirés ni transférés et n'ont aucune valeur monétaire."
+  },
+  "help": {
+    "faqTitle": "Questions fréquentes",
+    "faqSubtitle": "Rédigées par l'équipe pour cette app, non générées automatiquement.",
+    "guideCta": "Ouvrir le guide pas à pas",
+    "guideCtaSub": "Tour complet des échanges, portefeuilles, sécurité et signaux",
+    "stillStuck": "Vous n'avez pas trouvé ?",
+    "stillStuckSub": "Écrivez au support : une vraie personne répond.",
+    "q": {
+      "fees": "Quels frais prenez-vous ?",
+      "gas": "Qu'est-ce que le gas et avec quelle monnaie ?",
+      "failed": "Pourquoi mon échange a-t-il échoué ?",
+      "slippage": "Que signifie le slippage ?",
+      "custody": "Détenez-vous mes fonds ?",
+      "seed": "Que se passe-t-il si je perds ma phrase de récupération ?",
+      "coins": "Combien de cryptos puis-je échanger, et si la mienne manque ?",
+      "chains": "Quels réseaux sont pris en charge ?",
+      "connect": "Comment connecter mon portefeuille ?",
+      "realMoney": "Quelles parties utilisent de l'argent réel ?",
+      "notFound": "Pourquoi affiche-t-il parfois « crypto introuvable » ?",
+      "iranLegal": "Quelle est la situation légale en Iran ?"
+    },
+    "title": "Aide et support"
   }
 }

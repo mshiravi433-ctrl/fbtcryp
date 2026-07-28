@@ -398,17 +398,6 @@
     "tiers": "Níveis",
     "top": "Melhores traders"
   },
-  "help": {
-    "aiNoAnswer": "Não tenho uma resposta segura para isso e prefiro não adivinhar — está em causa o seu dinheiro. Use \"Contacte-nos\" e uma pessoa responderá.",
-    "title": "Ajuda e suporte",
-    "askAi": "Perguntar ao assistente",
-    "askPlaceholder": "Escreva a sua pergunta…",
-    "contactUs": "Contacte-nos",
-    "resources": "Recursos",
-    "guide": "Rever o guia",
-    "scamWarning": "Nunca lhe escrevemos primeiro, nunca pedimos a sua frase de recuperação ou palavra-passe, e nunca lhe pedimos para enviar cripto para qualquer endereço. Quem o fizer em nosso nome é um impostor.",
-    "aiCaveat": "O assistente pode errar. Para tudo o que envolva dinheiro, confie nos números reais que a app mostra."
-  },
   "trade": {
     "buy": "Comprar",
     "sell": "Vender",
@@ -424,5 +413,28 @@
     "shareInvite": "Partilhar convite",
     "quests": "Missões",
     "virtualNotice": "Os pontos aqui são uma pontuação, não uma moeda. Não podem ser levantados nem transferidos e não têm valor monetário."
+  },
+  "help": {
+    "faqTitle": "Perguntas frequentes",
+    "faqSubtitle": "Escritas pela equipa sobre esta app, não geradas automaticamente.",
+    "guideCta": "Abrir o guia passo a passo",
+    "guideCtaSub": "Percurso completo de trocas, carteiras, segurança e sinais",
+    "stillStuck": "Não encontrou a resposta?",
+    "stillStuckSub": "Envie mensagem ao apoio — responde uma pessoa real.",
+    "q": {
+      "fees": "Que taxas cobram?",
+      "gas": "O que é o gás e com que moeda se paga?",
+      "failed": "Porque falhou a minha troca?",
+      "slippage": "O que significa derrapagem?",
+      "custody": "Guardam os meus fundos?",
+      "seed": "E se perder a frase de recuperação?",
+      "coins": "Quantas moedas posso trocar e se faltar a minha?",
+      "chains": "Que redes são suportadas?",
+      "connect": "Como ligo a minha carteira?",
+      "realMoney": "Que partes usam dinheiro real?",
+      "notFound": "Porque diz às vezes \"moeda não encontrada\"?",
+      "iranLegal": "Qual é a situação legal no Irão?"
+    },
+    "title": "Ajuda e suporte"
   }
 }
