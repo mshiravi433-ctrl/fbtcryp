@@ -1,0 +1,51 @@
+name: Build APK
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+
+      # GitHub does NOT expose secrets to a script automatically — they only
+      # reach the process through an explicit `env:` block. Without this the
+      # build silently falls back to a debug APK even when all four secrets
+      # are set, which looks like the keystore "not working".
+      - run: bash ci/build-apk.sh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+          APP_VERSION_CODE: ${{ vars.APP_VERSION_CODE }}
+          APP_VERSION_NAME: ${{ vars.APP_VERSION_NAME }}
+
+      # Upload whatever was produced. `if-no-files-found: ignore` on the AAB
+      # keeps unsigned (debug) runs from failing the job.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FBT-Swap-app
+          path: |
+            out/*.apk
+            out/*.aab
+          if-no-files-found: warn
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: FBT Swap - latest
+          files: |
+            out/*.apk
+            out/*.aab

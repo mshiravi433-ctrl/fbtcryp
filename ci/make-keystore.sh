@@ -108,7 +108,7 @@ keytool -genkeypair \
   -storetype PKCS12 \
   -storepass "$PASS" \
   -keypass "$PASS" \
-  -dname "CN=FBT Swap, OU=FBT, O=Fanos Bazaar Pishgam, L=Isfahan, C=IR" \
+  -dname "CN=FBT Swap, OU=Mobile, O=Fanous Bazaar Pishgam, L=Isfahan, ST=Isfahan, C=IR" \
   >/dev/null 2>&1
 
 [ -f "$KS_PATH" ] || { say "${RED}✗ keystore was not created${OFF}"; exit 1; }
@@ -153,8 +153,8 @@ hr
 say "${BLD}Signing fingerprint (SHA-1)${OFF}"
 say "  ${CYN}${SHA1}${OFF}"
 say ""
-say "You need this to restrict the Gemini API key in Google Cloud Console"
-say "to your app only. Save it."
+say "Save it. Play Console shows this same fingerprint after your first"
+say "upload — if they ever disagree, you signed with the wrong keystore."
 hr
 say ""
 say "${YLW}${BLD}BACK UP THE KEYSTORE NOW.${OFF}"
