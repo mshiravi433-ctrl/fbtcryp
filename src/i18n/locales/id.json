@@ -56,5 +56,10 @@
   },
   "predict": {
     "riskNotice": "Layar ini hanya berjalan dengan kredit virtual; dana nyata tidak dapat dihubungkan. Taruhan arah harga jangka pendek dengan uang nyata dilarang oleh hukum Iran dan juga bagi ritel di Inggris dan UE."
+  },
+  "profile": {
+    "usernameLabel": "Nama tampilan (opsional)",
+    "usernamePlaceholder": "mis. Budi",
+    "usernameUnset": "Belum diatur"
   }
 }

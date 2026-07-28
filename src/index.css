@@ -867,8 +867,19 @@ select option { background: #0a0c12; }
   backdrop-filter: blur(6px);
 }
 
-/* Flex wrapper does the centering, so Framer Motion owns `transform`
-   without fighting a translate(-50%,-50%). */
+/*
+ * Flex wrapper does the centering, so Framer Motion owns `transform` without
+ * fighting a translate(-50%,-50%).
+ *
+ * This only works because Sheet portals into <body>. Rendered in place it sat
+ * inside PageTransition's animated <main>, and a transformed ancestor is the
+ * containing block for `position: fixed` — so `inset: 0` resolved against the
+ * page box and the dialog centred itself somewhere down the page instead of
+ * on screen. Keep the portal.
+ *
+ * The safe-area insets matter on notched phones: without them a tall dialog
+ * tucks its top edge under the status bar.
+ */
 .sheet-layer {
   position: fixed;
   inset: 0;
@@ -876,32 +887,55 @@ select option { background: #0a0c12; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding:
+    calc(env(safe-area-inset-top) + 16px)
+    16px
+    calc(env(safe-area-inset-bottom) + 16px);
   pointer-events: none;
 }
 
 .sheet {
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 440px;
   background: #06070c;
   border: 1px solid var(--line-strong);
   border-radius: 22px;
-  padding: 10px 18px 20px;
-  max-height: min(82dvh, 720px);
-  overflow-y: auto;
+  padding: 14px 18px 18px;
+  /* Bound by the layer's own height so the dialog can never exceed the space
+     the safe-area padding left it. */
+  max-height: 100%;
+  overflow: hidden;
   box-shadow: 0 28px 80px -24px rgba(0, 0, 0, 0.92), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.sheet-sm { max-width: 360px; }
+.sheet-lg { max-width: 560px; }
+
+/* The title stays put and only the body scrolls — a long list must not push
+   the close button out of reach. */
+.sheet-body {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* Room for a focus ring on the last row. */
+  padding: 2px;
+  margin: -2px;
 }
 
 /* the drag handle only made sense on a bottom sheet */
 .sheet .sheet-handle { display: none; }
 
 .sheet-title {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 2px 0 12px;
+  margin: 0 0 12px;
 }
 
 .sheet-close {
@@ -1888,68 +1922,171 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 /* --------------------------- language picker ---------------------------- */
+/*
+ * A single-column list, not a grid. On a phone a two-up grid gives each
+ * language a ~150px box: "Bahasa Indonesia" truncates, and every tap has two
+ * adjacent mis-tap targets. Full-width rows give a 56px target and room for
+ * the endonym, the English name and the coverage badge to coexist.
+ */
 
-.lang-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  padding-bottom: 6px;
-}
-
-@media (min-width: 520px) {
-  .lang-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-.lang-card {
+.lang-list {
   display: flex;
   flex-direction: column;
+  gap: 7px;
+  padding-bottom: 4px;
+}
+
+.lang-row {
+  display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 14px 10px 12px;
-  border-radius: var(--radius);
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  border-radius: 15px;
   border: 1px solid var(--line);
   background: var(--bg-panel);
   color: var(--text-1);
   cursor: pointer;
-  text-align: center;
-  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  text-align: start;
+  transition: border-color 0.2s, background 0.2s;
 }
 
-.lang-card.active {
+.lang-row.active {
   border-color: var(--rgb-1);
-  background: color-mix(in srgb, var(--rgb-1) 10%, var(--bg-panel));
-  box-shadow: 0 10px 30px -18px var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 11%, var(--bg-panel));
+  box-shadow: 0 10px 30px -20px var(--rgb-1);
 }
 
-.lang-flag { font-size: 22px; line-height: 1.1; }
+.lang-flag {
+  font-size: 23px;
+  line-height: 1;
+  flex-shrink: 0;
+  /* Emoji flags are colour glyphs; keep them off the text gradient. */
+  filter: saturate(1.05);
+}
+
+.lang-names {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
 
 .lang-endonym {
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 700;
-  /* Long endonyms ("Bahasa Indonesia") must not blow the grid apart. */
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lang-name { font-size: 10.5px; color: var(--text-3); }
+.lang-name {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .lang-badge {
-  margin-top: 4px;
-  font-size: 8.5px;
-  padding: 2px 7px;
+  flex-shrink: 0;
+  font-size: 9px;
+  padding: 3px 8px;
   border-radius: 999px;
   line-height: 1.5;
-  max-width: 100%;
+  max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lang-badge.full { background: rgba(0, 255, 157, 0.12); color: var(--up, #00ff9d); }
+.lang-badge.full { background: rgba(0, 255, 157, 0.12); color: #00ff9d; }
 .lang-badge.partial { background: rgba(255, 179, 0, 0.12); color: #ffb300; }
 
-/* ----------------------------- onboarding ------------------------------- */
+.lang-check {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2));
+}
+
+/* ---------------------------- username field ---------------------------- */
+
+.username-field { margin-top: 20px; }
+
+.username-input {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  min-height: 52px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.username-input:focus-within {
+  border-color: var(--rgb-1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 16%, transparent);
+}
+
+.username-input.has-error {
+  border-color: var(--down, #ff3b6b);
+}
+
+.username-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 15px;
+  color: var(--text-1);
+  outline: none;
+}
+
+.username-icon { color: var(--text-3); flex-shrink: 0; display: grid; place-items: center; }
+
+.username-check {
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: linear-gradient(140deg, var(--rgb-4), var(--rgb-1));
+}
+
+.username-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-3);
+  /* A counter is a number; it reads backwards if it inherits RTL. */
+  direction: ltr;
+}
+
+.username-hint {
+  margin: 7px 2px 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+.username-hint.error { color: var(--down, #ff3b6b); }
+
+.welcome-name {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* ----------------------------- onboarding ------------------------------- *//* ----------------------------- onboarding ------------------------------- */
 
 .onb-topbar {
   position: relative;

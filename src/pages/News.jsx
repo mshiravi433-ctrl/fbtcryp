@@ -8,7 +8,8 @@ import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { getNews } from '../lib/news';
 import { timeAgo } from '../lib/format';
-import { IconBell, IconChevronLeft, IconExternal, IconNews, IconSearch } from '../components/Icons';
+import { IconChevronLeft, IconExternal, IconNews } from '../components/Icons';
+import { AnimatedBell, AnimatedSearch, useStill } from '../components/AnimatedIcon';
 import {
   getNotifySettings,
   notificationPermission,
@@ -48,6 +49,9 @@ export default function News() {
   const [cat, setCat] = useState('all');
   const [query, setQuery] = useState('');
   const [notifyOn, setNotifyOn] = useState(() => getNotifySettings().news);
+  // Bumped on each toggle so the bell re-rings, confirming the tap.
+  const [ring, setRing] = useState(0);
+  const still = useStill();
 
   const load = useCallback(
     async (force = false) => {
@@ -98,6 +102,7 @@ export default function News() {
     const next = !notifyOn;
     setNotifySettings({ news: next });
     setNotifyOn(next);
+    if (next) setRing((n) => n + 1);
   };
 
   return (
@@ -118,7 +123,7 @@ export default function News() {
           aria-label={t('news.notifyToggle')}
           style={{ color: notifyOn ? 'var(--rgb-1)' : undefined }}
         >
-          <IconBell width={18} height={18} />
+          <AnimatedBell key={ring} active={notifyOn} still={still} width={18} height={18} />
         </button>
       </motion.div>
 
@@ -135,7 +140,7 @@ export default function News() {
 
       <div className="row" style={{ gap: 8 }}>
         <span className="icon-btn" style={{ pointerEvents: 'none' }}>
-          <IconSearch width={16} height={16} />
+          <AnimatedSearch active={Boolean(query)} still={still} width={16} height={16} />
         </span>
         <input
           type="text"

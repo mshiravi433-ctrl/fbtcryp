@@ -19,6 +19,7 @@ import {
 } from '../lib/security';
 import { langMeta } from '../i18n/languages';
 import LanguagePicker from '../components/LanguagePicker';
+import UsernameField from '../components/UsernameField';
 import {
   getNotifySettings,
   notificationPermission,
@@ -107,6 +108,7 @@ export default function Settings() {
   const [bioErr, setBioErr] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [nameOpen, setNameOpen] = useState(false);
 
   // Notification prefs live outside the zustand store on purpose: lib/notify
   // is also called from a service worker context and from module scope before
@@ -227,6 +229,14 @@ export default function Settings() {
             label={t('settings.wallet')}
             sub={wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
             onClick={() => navigate('/wallet')}
+          />
+          {/* Display name — the label next to your score on the leaderboard.
+              Not an account, no password, nothing reserved. */}
+          <Row
+            icon={IconUser}
+            label={t('profile.username')}
+            sub={s.username || t('profile.usernameUnset')}
+            onClick={() => setNameOpen(true)}
           />
           {/* Twelve languages no longer fit in an inline three-button strip,
               so this opens the same picker the welcome screen uses. */}
@@ -687,10 +697,15 @@ export default function Settings() {
           </>
         )}
       </Sheet>
+      <Sheet open={nameOpen} onClose={() => setNameOpen(false)} title={t('profile.username')}>
+        <UsernameField autoFocus />
+        <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setNameOpen(false)}>
+          {t('common.done')}
+        </button>
+      </Sheet>
+
       <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('common.language')}>
-        <div style={{ maxHeight: '60dvh', overflowY: 'auto' }}>
-          <LanguagePicker onPick={() => setLangOpen(false)} />
-        </div>
+        <LanguagePicker onPick={() => setLangOpen(false)} />
       </Sheet>
     </PageTransition>
   );

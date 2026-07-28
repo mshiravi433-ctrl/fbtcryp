@@ -1,27 +1,33 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import LanguagePicker from '../components/LanguagePicker';
-import { IconChevronRight, IconLanguages } from '../components/Icons';
+import UsernameField from '../components/UsernameField';
+import { IconChevronRight } from '../components/Icons';
+import { AnimatedLanguages, useStill } from '../components/AnimatedIcon';
 
 /**
  * WELCOME — the very first screen, shown once, before onboarding.
  *
- * It does exactly one thing: pick a language. Putting it first is deliberate.
- * The old flow opened straight into a Persian onboarding carousel, which means
- * a Turkish or Indonesian user's first experience of the app was a wall of
- * text they could not read, with the language switch buried behind three taps
- * in a header they also could not read.
+ * Two things, in this order: pick a language, then pick a display name.
+ * Language comes first for the obvious reason — the name field's own label is
+ * unreadable until the language is right.
+ *
+ * Putting language before onboarding at all is deliberate. The old flow opened
+ * straight into a Persian carousel, so a Turkish or Indonesian user's first
+ * experience was a wall of text they could not read, with the language switch
+ * buried behind a header they also could not read.
  *
  * Layout notes that matter on real phones:
  *   • The stage is fixed and never animated; only the inner list scrolls.
  *     Animating a scroll container makes Framer Motion write a `transform`,
- *     which creates a containing block and pushes fixed/dvh children off
- *     screen — the exact bug the onboarding footer used to have.
+ *     which becomes the containing block for fixed/dvh children and pushes
+ *     them off screen — the exact bug the onboarding footer used to have.
  *   • The footer sits outside the scroll area and respects the safe-area
- *     inset, so the Continue button clears the gesture bar.
+ *     inset, so Continue clears the gesture bar.
  */
 export default function Welcome({ onDone }) {
   const { t } = useTranslation();
+  const still = useStill();
 
   return (
     <div className="welcome-stage">
@@ -32,7 +38,7 @@ export default function Welcome({ onDone }) {
           animate={{ scale: 1, rotate: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 260, damping: 18 }}
         >
-          <IconLanguages width={26} height={26} />
+          <AnimatedLanguages active still={still} width={26} height={26} />
         </motion.div>
         <motion.h1
           className="h1"
@@ -55,7 +61,18 @@ export default function Welcome({ onDone }) {
       </div>
 
       <div className="welcome-scroll">
-        <LanguagePicker onPick={() => {}} />
+        <LanguagePicker />
+
+        {/* Optional, and labelled as such. Nobody should feel gated behind a
+            form field before they have seen the product. */}
+        <motion.div
+          className="welcome-name"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.42, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <UsernameField />
+        </motion.div>
       </div>
 
       <div className="welcome-foot">

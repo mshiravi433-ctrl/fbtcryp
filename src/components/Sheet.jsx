@@ -1,15 +1,31 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IconX } from './Icons';
 
 /**
  * Centered modal dialog.
  *
- * Was a bottom sheet, but on tall phones that pinned content to the very
- * bottom edge and looked cramped. A centered dialog reads better and keeps the
- * primary action near the thumb without hugging the screen edge.
+ * WHY THIS RENDERS THROUGH A PORTAL
+ * ---------------------------------------------------------------------------
+ * It didn't, and that was the bug behind "the swap settings popup isn't
+ * centred". Every screen is wrapped in `PageTransition`, which animates
+ * `transform` and `filter` on a `<motion.main>`. Per CSS spec, an element with
+ * a transform or filter becomes the **containing block for fixed-position
+ * descendants** — so `position: fixed; inset: 0` inside a page resolved
+ * against the scrolled page box instead of the viewport. The sheet therefore
+ * centred itself inside whatever slice of the page happened to be rendered,
+ * which on a long screen like Swap put it well below the fold.
+ *
+ * Portalling to `document.body` moves the sheet out of every transformed
+ * ancestor, so `fixed` means fixed and the flex wrapper centres it in the
+ * viewport — on every screen, at every scroll position, in both directions.
+ *
+ * (The same reasoning is why the guide and onboarding stages are never
+ * animated: the animated layer and the positioned layer must not be the same
+ * element.)
  */
-export default function Sheet({ open, onClose, children, title }) {
+export default function Sheet({ open, onClose, children, title, size = 'md' }) {
   useEffect(() => {
     if (!open) return undefined;
     const prev = document.body.style.overflow;
@@ -17,16 +33,17 @@ export default function Sheet({ open, onClose, children, title }) {
 
     const onKey = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', onKey);
-    document.addEventListener('keydown', onKey);
 
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);
 
-  return (
+  // SSR / test harnesses have no document until mount.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -40,7 +57,7 @@ export default function Sheet({ open, onClose, children, title }) {
           />
           <div className="sheet-layer">
             <motion.div
-              className="sheet"
+              className={`sheet sheet-${size}`}
               role="dialog"
               aria-modal="true"
               initial={{ opacity: 0, scale: 0.94, y: 12 }}
@@ -56,11 +73,12 @@ export default function Sheet({ open, onClose, children, title }) {
                   </button>
                 </div>
               )}
-              {children}
+              <div className="sheet-body">{children}</div>
             </motion.div>
           </div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

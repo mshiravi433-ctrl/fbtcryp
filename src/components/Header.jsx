@@ -3,16 +3,24 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { fmtNum } from '../lib/format';
-import { IconLanguages, IconNews, IconSettings } from './Icons';
-import AnimatedNumber from './AnimatedNumber';
-import Sheet from './Sheet';
-import LanguagePicker from './LanguagePicker';
 import { useState } from 'react';
+import AnimatedNumber from './AnimatedNumber';
+import { AnimatedSettings, useStill } from './AnimatedIcon';
 
+/**
+ * Top bar: brand, balance, settings.
+ *
+ * News and language used to sit here too. Four icon buttons plus a balance
+ * chip is a crowded 44px row on a small phone, and the two extras were
+ * shortcuts to places that already have a home — news is a nav destination,
+ * language now lives in Settings (and on the welcome screen, where a new user
+ * actually needs it). One icon, one job.
+ */
 export default function Header() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [langOpen, setLangOpen] = useState(false);
+  const still = useStill();
+  const [cogSpin, setCogSpin] = useState(false);
   const balance = useAppStore((s) => s.balance);
   const level = useAppStore((s) => s.level);
 
@@ -76,52 +84,26 @@ export default function Header() {
           <span style={{ color: 'var(--text-3)', fontSize: 10 }}>L{level}</span>
         </motion.button>
 
+        {/* The cog turns rather than the button rotating whole — the gear
+            teeth moving is what reads as a mechanism. */}
         <motion.button
           className="icon-btn"
-          onClick={() => navigate('/news')}
+          onClick={() => {
+            setCogSpin(true);
+            navigate('/settings');
+          }}
+          onHoverStart={() => setCogSpin(true)}
+          onHoverEnd={() => setCogSpin(false)}
           whileTap={{ scale: 0.9 }}
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12 }}
-          aria-label={t('nav.news')}
-        >
-          <IconNews width={17} height={17} />
-        </motion.button>
-
-        {/* Language is one tap from every screen, not buried in Settings —
-            the person who most needs it is the one who cannot read the menu
-            they would have to navigate to reach it. */}
-        <motion.button
-          className="icon-btn"
-          onClick={() => setLangOpen(true)}
-          whileTap={{ scale: 0.9 }}
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.13 }}
-          aria-label={t('common.language')}
-        >
-          <IconLanguages width={17} height={17} />
-        </motion.button>
-
-        <motion.button
-          className="icon-btn"
-          onClick={() => navigate('/settings')}
-          whileTap={{ scale: 0.9, rotate: 45 }}
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.14 }}
-          aria-label="settings"
+          aria-label={t('nav.settings')}
         >
-          <IconSettings width={17} height={17} />
+          <AnimatedSettings active={cogSpin} still={still} width={17} height={17} />
         </motion.button>
 
       </div>
-
-      <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('common.language')}>
-        <div style={{ maxHeight: '58dvh', overflowY: 'auto' }}>
-          <LanguagePicker onPick={() => setLangOpen(false)} />
-        </div>
-      </Sheet>
     </header>
   );
 }

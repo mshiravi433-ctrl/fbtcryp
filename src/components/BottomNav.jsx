@@ -4,12 +4,31 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
 import MoreSheet from './MoreSheet';
-import { IconSwap, IconActivity, IconWallet, IconPlus } from './Icons';
+import {
+  AnimatedActivity,
+  AnimatedPlus,
+  AnimatedSwap,
+  AnimatedWallet,
+  useStill
+} from './AnimatedIcon';
 
+/**
+ * Bottom navigation.
+ *
+ * The icons animate their own geometry now rather than being scaled whole by
+ * the parent — arrows travel, the activity trace redraws, the wallet flap
+ * opens. `AnimatedIcon` explains why that needs SVG and how it is switched off
+ * for anyone who has asked for reduced motion.
+ *
+ * The tab keeps a short "pop" on selection because that is feedback for a tap
+ * the user just made. Nothing here loops: a permanently animating nav bar
+ * competes with the live prices, which are the thing that should be pulling
+ * the eye.
+ */
 const ITEMS = [
-  { to: '/swap', key: 'nav.swap', Icon: IconSwap },
-  { to: '/signals', key: 'nav.signals', Icon: IconActivity },
-  { to: '/wallet', key: 'nav.wallet', Icon: IconWallet }
+  { to: '/swap', key: 'nav.swap', Icon: AnimatedSwap },
+  { to: '/signals', key: 'nav.signals', Icon: AnimatedActivity },
+  { to: '/wallet', key: 'nav.wallet', Icon: AnimatedWallet }
 ];
 
 export default function BottomNav() {
@@ -18,84 +37,101 @@ export default function BottomNav() {
   const { pathname } = useLocation();
   const { haptic } = useTelegram();
   const [moreOpen, setMoreOpen] = useState(false);
+  const still = useStill();
+
+  // Bumped on every tap so re-tapping the tab you are already on replays the
+  // icon animation. Without it, the second tap does nothing visible and feels
+  // like a dropped input.
+  const [pulse, setPulse] = useState(0);
 
   return (
     <>
-    <nav className="bottom-nav">
-      {ITEMS.map((item) => {
-        const active = pathname === item.to;
-        return (
-          <motion.button
-            key={item.to}
-            className={`nav-item ${active ? 'active' : ''}`}
-            whileTap={{ scale: 0.88 }}
-            onClick={() => {
-              haptic?.('light');
-              navigate(item.to);
-            }}
-          >
-            {active && (
-              <motion.span
-                layoutId="nav-glow"
-                className="nav-glow"
-                transition={{ type: 'spring', stiffness: 460, damping: 34 }}
-              />
-            )}
-            <motion.span
-              className="nav-icon"
-              style={{ display: 'grid', placeItems: 'center' }}
-              animate={
-                active
-                  ? { scale: [1, 1.28, 1.14], y: [-1, -5, -2], rotate: [0, -7, 0] }
-                  : { scale: 1, y: 0, rotate: 0 }
-              }
-              transition={
-                active
-                  ? { duration: 0.5, times: [0, 0.55, 1], ease: [0.34, 1.56, 0.64, 1] }
-                  : { type: 'spring', stiffness: 420, damping: 22 }
-              }
+      <nav className="bottom-nav">
+        {ITEMS.map((item) => {
+          const active = pathname === item.to;
+          return (
+            <motion.button
+              key={item.to}
+              className={`nav-item ${active ? 'active' : ''}`}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                haptic?.('light');
+                setPulse((n) => n + 1);
+                navigate(item.to);
+              }}
             >
-              <item.Icon width={21} height={21} strokeWidth={active ? 2.1 : 1.7} />
-            </motion.span>
-            <motion.span
-              animate={active ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0.75, y: 1, scale: 0.94 }}
-              transition={{ duration: 0.22 }}
-            >
-              {t(item.key)}
-            </motion.span>
-          </motion.button>
-        );
-      })}
-      <motion.button
-        className={`nav-item ${moreOpen ? 'active' : ''}`}
-        data-more="true"
-        data-open={moreOpen}
-        whileTap={{ scale: 0.88 }}
-        onClick={() => {
-          haptic?.('light');
-          setMoreOpen(true);
-        }}
-      >
-        {moreOpen && (
-          <motion.span
-            layoutId="nav-glow"
-            className="nav-glow"
-            transition={{ type: 'spring', stiffness: 460, damping: 34 }}
-          />
-        )}
-        <motion.span
-          className="nav-icon"
-          style={{ display: 'grid', placeItems: 'center' }}
-          animate={moreOpen ? { scale: 1.16, rotate: 135 } : { scale: 1, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 17 }}
-        >
-          <IconPlus width={21} height={21} strokeWidth={moreOpen ? 2.1 : 1.7} />
-        </motion.span>
-        <span>{t('nav.more')}</span>
-      </motion.button>
-    </nav>
+              {active && (
+                <motion.span
+                  layoutId="nav-glow"
+                  className="nav-glow"
+                  transition={{ type: 'spring', stiffness: 460, damping: 34 }}
+                />
+              )}
 
-    <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+              <motion.span
+                className="nav-icon"
+                animate={
+                  active && !still
+                    ? { scale: [1, 1.22, 1.1], y: [0, -4, -2] }
+                    : { scale: 1, y: 0 }
+                }
+                transition={
+                  active
+                    ? { duration: 0.46, times: [0, 0.55, 1], ease: [0.34, 1.56, 0.64, 1] }
+                    : { type: 'spring', stiffness: 420, damping: 22 }
+                }
+              >
+                {/* Remounting on `pulse` restarts the path animations, which
+                    is what makes a repeat tap feel responsive. */}
+                <item.Icon
+                  key={`${item.to}-${active ? pulse : 'off'}`}
+                  active={active}
+                  still={still}
+                  width={21}
+                  height={21}
+                  strokeWidth={active ? 2.05 : 1.7}
+                />
+              </motion.span>
+
+              <motion.span
+                animate={active ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0.75, y: 1, scale: 0.94 }}
+                transition={{ duration: 0.22 }}
+              >
+                {t(item.key)}
+              </motion.span>
+            </motion.button>
+          );
+        })}
+
+        <motion.button
+          className={`nav-item ${moreOpen ? 'active' : ''}`}
+          data-more="true"
+          data-open={moreOpen}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => {
+            haptic?.('light');
+            setMoreOpen(true);
+          }}
+        >
+          {moreOpen && (
+            <motion.span
+              layoutId="nav-glow"
+              className="nav-glow"
+              transition={{ type: 'spring', stiffness: 460, damping: 34 }}
+            />
+          )}
+          <motion.span
+            className="nav-icon"
+            animate={moreOpen && !still ? { scale: 1.14 } : { scale: 1 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 17 }}
+          >
+            <AnimatedPlus active={moreOpen} still={still} width={21} height={21} />
+          </motion.span>
+          <span>{t('nav.more')}</span>
+        </motion.button>
+      </nav>
+
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
     </>
   );
 }

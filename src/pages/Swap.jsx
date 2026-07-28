@@ -28,7 +28,7 @@ import {
   needsApproval
 } from '../lib/swap';
 import { fmtQty } from '../lib/format';
-import { IconSearch } from '../components/Icons';
+import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
 import { PAYOUT_DIRECTORY } from '../lib/payout';
 
 /**
@@ -81,6 +81,8 @@ export default function Swap() {
   const [reviewing, setReviewing] = useState(false);
   const [txState, setTxState] = useState(null); // { stage, hash, error }
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [flipCount, setFlipCount] = useState(0);
+  const still = useStill();
 
   const fromSym = fromToken?.symbol;
   const toSym = toToken?.symbol;
@@ -251,6 +253,7 @@ export default function Swap() {
 
   function flip() {
     haptic?.('select');
+    setFlipCount((n) => n + 1);
     setFromToken(toToken);
     setToToken(fromToken);
     setAmount('');
@@ -377,7 +380,16 @@ export default function Swap() {
           <h1 className="h1">{t('swap.title')}</h1>
           <p className="muted">{t('swap.subtitle', { dex: cfg.dexName })}</p>
         </div>
-        <button className="icon-btn" onClick={() => setSettingsOpen(true)}>⚙</button>
+        {/* Was a bare "⚙" character: renders differently on every OS, can't
+            be recoloured, and looked nothing like the rest of the icon set. */}
+        <motion.button
+          className="icon-btn"
+          onClick={() => setSettingsOpen(true)}
+          whileTap={{ scale: 0.9 }}
+          aria-label={t('swap.settings')}
+        >
+          <AnimatedSettings active={settingsOpen} still={still} width={17} height={17} />
+        </motion.button>
       </motion.div>
 
       <p className="notice">{t('swap.nonCustodialNotice')}</p>
@@ -473,13 +485,17 @@ export default function Swap() {
 
         {/* flip */}
         <div style={{ display: 'grid', placeItems: 'center', margin: '10px 0' }}>
+          {/* The arrows physically trade places, which is the action. */}
           <motion.button
-            className="icon-btn"
-            whileTap={{ scale: 0.86, rotate: 180 }}
+            className="icon-btn swap-flip"
+            whileTap={{ scale: 0.86 }}
+            animate={still ? {} : { rotate: flipCount * 180 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             onClick={flip}
             style={{ borderColor: 'var(--rgb-1)', color: 'var(--rgb-1)' }}
+            aria-label={t('swap.flip')}
           >
-            ⇅
+            <AnimatedSwap key={flipCount} active still={still} width={19} height={19} />
           </motion.button>
         </div>
 
@@ -643,7 +659,7 @@ export default function Swap() {
         {/* Search over the whole list: ticker, name, or a pasted contract. */}
         <div className="row" style={{ gap: 8, marginBottom: 10 }}>
           <span className="icon-btn" style={{ pointerEvents: 'none' }}>
-            <IconSearch width={16} height={16} />
+            <AnimatedSearch active={Boolean(pickerQuery)} still={still} width={16} height={16} />
           </span>
           <input
             type="text"

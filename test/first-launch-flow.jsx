@@ -18,11 +18,22 @@ export async function run(container) {
   await act(async () => { root.render(<App />); });
   out.push(['fresh install shows the language screen first', has('.welcome-stage')]);
   out.push(['onboarding is behind the language screen', !has('.onb-stage')]);
-  out.push(['language grid offers at least 10 languages', container.querySelectorAll('.lang-card').length >= 10]);
+  const langRows = () => [...container.querySelectorAll('.lang-row')];
+  out.push(['language list offers at least 10 languages', langRows().length >= 10]);
+  // One per row: a two-up grid clipped long endonyms and put a mis-tap target
+  // either side of every choice.
+  out.push([
+    'each language is its own full-width row',
+    langRows().every((r) => r.querySelector('.lang-endonym'))
+  ]);
+
+  // A display name can be set right here, before anything else.
+  out.push(['welcome offers a display name field', Boolean(container.querySelector('#fbt-username'))]);
 
   // Picking a language dismisses it permanently.
-  await act(async () => { container.querySelectorAll('.lang-card')[1].click(); });
+  await act(async () => { langRows()[1].click(); });
   out.push(['choosing a language persists it', Boolean(localStorage.getItem('fbt-lang'))]);
+  out.push(['the chosen row is marked selected', langRows()[1].classList.contains('active')]);
   await act(async () => { container.querySelector('.welcome-foot .onb-btn').click(); });
   out.push(['welcome dismissed after continue', !has('.welcome-stage')]);
   out.push(['fresh install shows onboarding', has('.onb-stage')]);

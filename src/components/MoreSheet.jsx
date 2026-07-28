@@ -1,5 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useState } from 'react';
+import { useStill } from './AnimatedIcon';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
@@ -70,6 +73,10 @@ export default function MoreSheet({ open, onClose }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
+  const still = useStill();
+  // Which tile is mid-animation. A tile animates on tap, then the drawer
+  // closes — so the icon confirms the tap before the screen changes under it.
+  const [pressed, setPressed] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -85,11 +92,17 @@ export default function MoreSheet({ open, onClose }) {
 
   const go = (to) => {
     haptic?.('light');
+    setPressed(to);
     navigate(to);
     onClose?.();
   };
 
-  return (
+  // Portalled for the same reason as Sheet: a transformed ancestor becomes the
+  // containing block for `position: fixed`, so a drawer rendered inside an
+  // animated page centres itself against the page box rather than the screen.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -132,13 +145,19 @@ export default function MoreSheet({ open, onClose }) {
                         stiffness: 420,
                         damping: 26
                       }}
-                      whileTap={{ scale: 0.9 }}
+                      whileTap={{ scale: 0.88 }}
                       onClick={() => go(item.to)}
                     >
                       <motion.span
                         className="more-tile-icon"
                         style={{ color: item.hue, borderColor: `color-mix(in srgb, ${item.hue} 40%, transparent)` }}
-                        whileHover={{ rotate: 6 }}
+                        animate={
+                          pressed === item.to && !still
+                            ? { scale: [1, 1.25, 1], rotate: [0, -12, 0] }
+                            : { scale: 1, rotate: 0 }
+                        }
+                        whileHover={still ? undefined : { rotate: 8, scale: 1.06 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 15 }}
                       >
                         <item.Icon width={19} height={19} />
                       </motion.span>
@@ -152,6 +171,7 @@ export default function MoreSheet({ open, onClose }) {
           </div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

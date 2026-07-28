@@ -102,7 +102,7 @@ check('watchdog did not fire', !boot || boot.getAttribute('data-failed') !== 'tr
 // the one screen that has to be usable before you can read anything else.
 check('Persian UI rendered on first paint', /[\u0600-\u06FF]/.test(text));
 check('first screen is the language picker', text.includes('زبان'));
-check('every language is offered as a real choice', doc.querySelectorAll('.lang-card').length >= 10);
+check('every language is offered as a real choice', doc.querySelectorAll('.lang-row').length >= 10);
 check('no uncaught script errors', jsErrors.length === 0);
 
 console.log('  external hosts blocked:', [...new Set(blocked.map((u) => new URL(u).host))].join(', ') || 'none');

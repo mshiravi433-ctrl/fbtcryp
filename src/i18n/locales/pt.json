@@ -56,5 +56,10 @@
   },
   "predict": {
     "riskNotice": "Este ecrã funciona apenas com crédito virtual; não é possível ligar fundos reais. As apostas de curto prazo na direção do preço com dinheiro real são proibidas pela lei iraniana e também a retalho no Reino Unido e na UE."
+  },
+  "profile": {
+    "usernameLabel": "Nome de exibição (opcional)",
+    "usernamePlaceholder": "ex. João",
+    "usernameUnset": "Não definido"
   }
 }

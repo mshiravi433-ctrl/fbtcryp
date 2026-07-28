@@ -56,5 +56,10 @@
   },
   "predict": {
     "riskNotice": "Cet écran fonctionne uniquement avec du crédit virtuel ; aucun fonds réel ne peut y être connecté. Les paris à court terme sur le prix avec de l'argent réel sont interdits par la loi iranienne et aux particuliers au Royaume-Uni et dans l'UE."
+  },
+  "profile": {
+    "usernameLabel": "Nom affiché (facultatif)",
+    "usernamePlaceholder": "ex. Marie",
+    "usernameUnset": "Non défini"
   }
 }

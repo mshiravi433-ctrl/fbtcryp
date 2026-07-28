@@ -56,5 +56,10 @@
   },
   "predict": {
     "riskNotice": "Bu ekran yalnızca sanal kredi ile çalışır; gerçek para bağlanamaz. Gerçek parayla kısa vadeli yön bahsi İran yasalarında yasaktır; Birleşik Krallık ve AB'de de bireysel yatırımcılara yasaktır."
+  },
+  "profile": {
+    "usernameLabel": "Görünen ad (isteğe bağlı)",
+    "usernamePlaceholder": "örn. Ayşe",
+    "usernameUnset": "Ayarlanmadı"
   }
 }

@@ -56,5 +56,10 @@
   },
   "predict": {
     "riskNotice": "本页仅使用虚拟额度，无法接入真实资金。以真实资金进行的短期涨跌押注（二元期权）在伊朗法律下被禁止，在英国和欧盟也对散户禁止。这里的内容只用于理解机制。"
+  },
+  "profile": {
+    "usernameLabel": "显示名称（可选）",
+    "usernamePlaceholder": "例如：小明",
+    "usernameUnset": "未设置"
   }
 }

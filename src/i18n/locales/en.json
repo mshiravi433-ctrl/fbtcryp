@@ -477,7 +477,8 @@
     "gasTitle": "Network fee on each chain",
     "gasBody": "Gas is always paid in the native coin of the network you are on, from the same wallet — it is not only BNB. To swap on a chain you need a little of the coin listed below.",
     "gasNote": "Gas goes to the blockchain validators, not to us, and is separate from the 0.5% platform fee. If you hold no native coin on a chain, switch to one where you do.",
-    "needGas": "This transaction needs {{coin}} on {{chain}} for gas and your balance is short. Top up a little {{coin}}, or switch to a chain whose native coin you already hold."
+    "needGas": "This transaction needs {{coin}} on {{chain}} for gas and your balance is short. Top up a little {{coin}}, or switch to a chain whose native coin you already hold.",
+    "flip": "Swap the two tokens"
   },
   "onboarding": {
     "skip": "Skip",
@@ -1418,5 +1419,13 @@
     "continue": "Continue",
     "partial": "Core screens are translated; more specialised text still shows in English.",
     "full": "Fully translated"
+  },
+  "profile": {
+    "username": "Display name",
+    "usernameLabel": "Display name (optional)",
+    "usernamePlaceholder": "e.g. Ali",
+    "usernameUnset": "Not set",
+    "usernameHelp": "This is the name shown next to your score on the leaderboard. It is not an account, it has no password and nothing is reserved — just a nickname. Your real identity here is your wallet address.",
+    "username_tooShort": "At least 2 characters."
   }
 }
