@@ -63,7 +63,78 @@ cd android
 # requires a key you control (never a generated throwaway).
 if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
   echo "▸ decoding keystore"
-  echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
+
+  # -------------------------------------------------------------------------
+  # VALIDATE THE KEYSTORE BEFORE HANDING IT TO GRADLE.
+  #
+  # This used to be a bare `base64 -d` straight into Gradle. Every way of
+  # getting this wrong — and on a phone there are several — surfaced 200 lines
+  # later as a Gradle stack trace that names none of them:
+  #
+  #   • the base64 got line-wrapped by the terminal or the paste
+  #   • a stray space / CR (\r) came along from a mobile clipboard
+  #   • the password is wrong
+  #   • the alias is not the one inside the keystore
+  #
+  # Each has a completely different fix, so guessing is expensive. We check
+  # each one here and say which it is.
+  # -------------------------------------------------------------------------
+
+  # Strip whitespace, newlines and CRs. A correct value has none of these, and
+  # every one of them is a paste artefact rather than something the user meant.
+  printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > /tmp/release.keystore 2>/tmp/b64err.txt || {
+    echo ""
+    echo "✗ ANDROID_KEYSTORE_BASE64 is not valid base64."
+    echo "  $(cat /tmp/b64err.txt)"
+    echo ""
+    echo "  Regenerate it on ONE line and re-paste the secret:"
+    echo "    base64 -w 0 ~/fbt-keystore/fbt-release.keystore"
+    echo "  Make sure you copied the whole string with no characters missing."
+    exit 1
+  }
+
+  KS_BYTES=$(wc -c < /tmp/release.keystore)
+  echo "  decoded ${KS_BYTES} bytes"
+  if [ "$KS_BYTES" -lt 1000 ]; then
+    echo ""
+    echo "✗ The decoded keystore is only ${KS_BYTES} bytes — far too small."
+    echo "  A real keystore is roughly 2-3 KB. The secret was truncated,"
+    echo "  most likely by a partial copy. Re-copy the FULL base64 string."
+    exit 1
+  fi
+
+  : "${ANDROID_KEY_ALIAS:?ANDROID_KEY_ALIAS secret is not set (it should be: fbt)}"
+  : "${ANDROID_KEYSTORE_PASSWORD:?ANDROID_KEYSTORE_PASSWORD secret is not set}"
+
+  # Prove the password and the alias are right, with keytool, before Gradle
+  # gets a chance to fail obscurely.
+  if ! keytool -list -keystore /tmp/release.keystore \
+        -storepass "$ANDROID_KEYSTORE_PASSWORD" > /tmp/kslist.txt 2>&1; then
+    echo ""
+    echo "✗ Could not open the keystore. keytool said:"
+    sed 's/^/    /' /tmp/kslist.txt | head -5
+    echo ""
+    if grep -qi 'tampered\|password was incorrect\|wrong password' /tmp/kslist.txt; then
+      echo "  → ANDROID_KEYSTORE_PASSWORD is wrong. This is the password you"
+      echo "    typed when you ran mk.sh, not your GitHub or Google password."
+    else
+      echo "  → The file decoded but is not a readable keystore. Re-run mk.sh"
+      echo "    and re-copy both the base64 and the password."
+    fi
+    exit 1
+  fi
+
+  if ! grep -qi "^${ANDROID_KEY_ALIAS}," /tmp/kslist.txt; then
+    echo ""
+    echo "✗ Alias '${ANDROID_KEY_ALIAS}' is not in this keystore."
+    echo "  It actually contains:"
+    grep -iE '^[a-z0-9_.-]+,' /tmp/kslist.txt | sed 's/^/    /'
+    echo ""
+    echo "  → Set ANDROID_KEY_ALIAS to the name shown above (mk.sh uses 'fbt')."
+    exit 1
+  fi
+
+  echo "  ✓ keystore opens, alias '${ANDROID_KEY_ALIAS}' present"
   export ANDROID_KEYSTORE_PATH=/tmp/release.keystore
 
   echo "▸ building SIGNED release APK"
