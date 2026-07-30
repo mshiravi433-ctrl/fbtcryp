@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.2.2 — versionCode 5
+
+Three API routes the app calls every day did not exist on the server. All
+three were verified live against the production domain, and all three returned
+`{"error":"NOT_FOUND"}`.
+
+### Fixed
+
+- **`GET /api/search`** — `fetchSearch` was imported in `server/app.js` and
+  never routed. Coin search silently fell through to the public CoinGecko
+  endpoint, which is rate-limited per user IP, so search bypassed our cache
+  and spent the user's own quota instead of ours.
+- **`GET /api/news`** — same shape: `fetchNews` imported, no route. Every
+  device fetched public RSS directly, which is precisely the per-user fan-out
+  that aggregating on the server exists to prevent (one upstream request a day
+  for everyone, not one per user per open).
+- **`GET /api/push/status`** — never written at all, though `src/lib/notify.js`
+  has always called it. The 404 read back as `undefined`, so **every web user
+  was pinned to device-only notifications** even with push fully configured.
+  This is a second, independent cause of "notifications don't work", separate
+  from the Android WebView gating fixed in 1.2.1 — that one was native-only,
+  this one was web-only, and each hid the other.
+
+  The route reports the **web** channel only. Native Android short-circuits to
+  server mode before ever calling it, so answering with `web || fcm` would
+  tell a browser the server can reach it over a channel a browser cannot
+  receive on.
+
+Why none of this showed up as an error: the client degrades instead of
+failing. Search still returned results, news still filled the page,
+notifications still appeared to be "on". The app just quietly ran slower,
+rate-limited, and undeliverable, with nothing in any log to say so.
+
+### Testing
+
+- New wiring check: every `${API_BASE}/...` template in `src/` must resolve to
+  a real route in `server/app.js`, plus the mirror check for a handler that is
+  imported but never mounted — the exact shape this bug takes in a diff.
+  Verified non-vacuous by renaming a route and confirming the check fails.
+  This is the sixth time this bug class has shipped (push subscribe/unsubscribe,
+  leaderboard, OTC send, swap prefill, order watch, and now these three), so it
+  is now enforced rather than remembered. 25 wiring checks pass.
+
 ## 1.2.0 — versionCode 3
 
 The theme of this release is that several features looked finished and were
