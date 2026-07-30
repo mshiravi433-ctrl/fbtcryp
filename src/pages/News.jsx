@@ -29,13 +29,26 @@ import {
  * clearly labelled as generated rather than reported.
  */
 
-const CATEGORIES = ['all', 'bitcoin', 'ethereum', 'defi', 'regulation'];
+/*
+ * Tabs.
+ *
+ * The first group is the desk-style categories, which come pre-tagged from
+ * lib/news.js (it knows which feed each story came from, so a story from the
+ * regulation desk is tagged 'policy' even if its headline never says
+ * "regulation"). The second group is the old topic filters, which are pure
+ * keyword matches over the text.
+ *
+ * Keeping both matters: 'policy' answers "what are governments doing", while
+ * 'bitcoin' answers "what about this asset". They are different questions.
+ */
+const DESK_CATEGORIES = ['all', 'regional', 'policy', 'events', 'future', 'lang'];
+const TOPIC_CATEGORIES = ['bitcoin', 'ethereum', 'defi'];
+const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
 
 const CATEGORY_TERMS = {
   bitcoin: ['bitcoin', 'btc', 'satoshi', 'halving'],
   ethereum: ['ethereum', 'eth', 'vitalik', 'layer 2', 'l2'],
-  defi: ['defi', 'dex', 'liquidity', 'yield', 'swap', 'staking', 'uniswap', 'pancake'],
-  regulation: ['sec', 'regulat', 'lawsuit', 'ban', 'law', 'court', 'etf', 'compliance']
+  defi: ['defi', 'dex', 'liquidity', 'yield', 'swap', 'staking', 'uniswap', 'pancake']
 };
 
 export default function News() {
@@ -73,11 +86,22 @@ export default function News() {
   const items = useMemo(() => {
     let out = feed.items ?? [];
     if (cat !== 'all') {
-      const terms = CATEGORY_TERMS[cat] ?? [];
-      out = out.filter((i) => {
-        const hay = `${i.title} ${i.summary}`.toLowerCase();
-        return terms.some((term) => hay.includes(term));
-      });
+      if (DESK_CATEGORIES.includes(cat)) {
+        // Pre-tagged by lib/news.js from the source desk plus keyword scoring.
+        // Older cached items predate `cats`, so fall back to the raw text
+        // rather than showing an empty tab after an upgrade.
+        out = out.filter((i) =>
+          Array.isArray(i.cats)
+            ? i.cats.includes(cat)
+            : `${i.title} ${i.summary}`.toLowerCase().includes(cat)
+        );
+      } else {
+        const terms = CATEGORY_TERMS[cat] ?? [];
+        out = out.filter((i) => {
+          const hay = `${i.title} ${i.summary}`.toLowerCase();
+          return terms.some((term) => hay.includes(term));
+        });
+      }
     }
     if (query.trim()) {
       const q = query.trim().toLowerCase();

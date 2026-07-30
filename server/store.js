@@ -142,3 +142,39 @@ export async function removeSubscription(endpoint) {
   await storeSet(PUSH_KEY, next);
   return { removed: subs.length - next.length, total: next.length };
 }
+
+/* -------------------------------------------------------------------------- */
+/* FCM device tokens                                                           */
+/*                                                                             */
+/* Stored separately from web-push subscriptions because they are a different  */
+/* shape and a different transport. A device can legitimately appear in both   */
+/* lists (PWA installed AND the APK installed); the shared notification `tag`  */
+/* collapses the duplicate in the OS shade rather than showing it twice.       */
+/* -------------------------------------------------------------------------- */
+
+const FCM_KEY = 'push:fcm:v1';
+
+export async function readFcmTokens() {
+  const rows = await storeGet(FCM_KEY, []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function addFcmToken(token, lang = 'fa') {
+  // FCM registration tokens are long opaque strings; a short value is a bug or
+  // an attempt to poison the list, and storing it would waste a send forever.
+  if (typeof token !== 'string' || token.length < 40) throw new Error('BAD_TOKEN');
+  const rows = await readFcmTokens();
+  if (rows.some((r) => r.token === token)) return { added: false, total: rows.length };
+  if (rows.length >= MAX_SUBS) return { added: false, total: rows.length, full: true };
+
+  rows.push({ token, lang: String(lang).slice(0, 5), at: Date.now() });
+  await storeSet(FCM_KEY, rows);
+  return { added: true, total: rows.length };
+}
+
+export async function removeFcmToken(token) {
+  const rows = await readFcmTokens();
+  const next = rows.filter((r) => r.token !== token);
+  await storeSet(FCM_KEY, next);
+  return { removed: rows.length - next.length, total: next.length };
+}

@@ -42,14 +42,37 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-html, body, #root { height: 100%; margin: 0; }
+/*
+ * SCROLLING.
+ *
+ * This was `height: 100%` on html, body and #root, which pins the document to
+ * exactly one viewport. Anything taller simply overflowed and could not be
+ * reached — long pages (Guide, Legal, Settings, a full market list) were cut
+ * off at the fold with no way to scroll to the rest.
+ *
+ * `min-height` lets the document grow to its content while still filling the
+ * screen when the content is short. 100dvh rather than 100vh because mobile
+ * browser chrome collapses on scroll and vh over-reports, leaving a strip of
+ * background below the fold.
+ */
+html, body { margin: 0; min-height: 100%; }
+
+#root { min-height: 100dvh; }
 
 body {
   background: var(--bg-void);
   color: var(--text-1);
   font-family: var(--font-display);
-  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
+  /*
+   * `overscroll-behavior-y: none` also disables PULL-TO-REFRESH. That is
+   * correct inside the Telegram Mini App — an accidental pull there reloads
+   * the whole webview and drops any half-filled swap form. `contain` keeps
+   * that protection (a scroll that reaches the end does not chain to the
+   * host page) while still allowing normal momentum scrolling.
+   */
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Latin numerals stay LTR even inside RTL copy */
@@ -1227,6 +1250,110 @@ select option { background: #0a0c12; }
   border-color: rgba(0, 150, 200, 0.22);
 }
 :root[data-theme='light'] .sheen { display: none; }
+
+/* ==========================================================================
+   LIGHT THEME — READABLE ACCENTS
+   ==========================================================================
+   The palette is built to GLOW on black. Neon works by being far brighter
+   than its background, so on a white card those same colours are nearly
+   invisible. Measured contrast of the accent colours against a white card:
+
+     cyan    #00e5ff  1.54:1   ← unreadable
+     mint    #00ff9d  1.33:1   ← unreadable
+     amber   #ffb300  1.79:1   ← unreadable
+     magenta #ff2d95  3.46:1   ← fails
+     violet  #7c4dff  4.81:1   ← the only one that passed
+
+   WCAG AA needs 4.5:1 for body text. That is the "banners are washed out and
+   you can't read anything" bug: the layout was fine, the text was simply
+   painted in a colour with almost no contrast against its own background.
+
+   These overrides keep the same HUE but lower the lightness until each one
+   measures at least 4.5:1 on white. Dark theme is untouched — it still gets
+   the full neon.
+
+   IMPORTANT: only accent tokens used for TEXT, ICONS and BORDERS are
+   overridden. --rgb-* stay neon for the background orbs, where they are
+   decorative and deliberately faint.
+   ========================================================================== */
+
+:root[data-theme='light'] {
+  /* Readable variants, used anywhere a colour carries meaning as text. */
+  --ink-cyan: #008392;
+  --ink-violet: #6a3ae0;
+  --ink-magenta: #e70073;
+  --ink-mint: #008854;
+  --ink-amber: #9d6e00;
+  --ink-orange: #c55400;
+  --ink-purple: #c800ea;
+}
+
+/* Dark theme: the "ink" tokens are just the neon colours themselves. */
+:root {
+  --ink-cyan: var(--rgb-1);
+  --ink-violet: var(--rgb-2);
+  --ink-magenta: var(--rgb-3);
+  --ink-mint: var(--rgb-4);
+  --ink-amber: var(--rgb-5);
+  --ink-orange: #ff6d00;
+  --ink-purple: #d500f9;
+}
+
+/*
+ * Promo banners. `--ad-a` is set inline per slot from the neon palette, so in
+ * light theme the CTA text, the border and the tint all inherited an
+ * unreadable colour. Darkening --ad-a for the whole banner fixes the text,
+ * the pill and the border in one place.
+ */
+:root[data-theme='light'] .ad-banner {
+  /* Solid white card: the neon tint at 14% over a translucent panel was most
+     of what made these look washed out. */
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--ad-ink) 8%, transparent),
+      color-mix(in srgb, var(--ad-ink-b) 6%, transparent)),
+    #ffffff;
+  border-color: color-mix(in srgb, var(--ad-ink) 30%, transparent);
+  box-shadow: 0 3px 16px -8px rgba(16, 20, 40, 0.22);
+}
+
+/* The sweeping highlight is a white-on-white no-op in light theme. */
+:root[data-theme='light'] .ad-shine { display: none; }
+
+/* The icon tile keeps the neon gradient but needs light glyphs on it. */
+:root[data-theme='light'] .ad-icon { color: #fff; }
+
+:root[data-theme='light'] .ad-cta {
+  color: var(--ad-ink);
+  background: color-mix(in srgb, var(--ad-ink) 10%, #fff);
+  border-color: color-mix(in srgb, var(--ad-ink) 34%, transparent);
+}
+
+/* The soft radial glow behind the banner art is invisible on white and only
+   muddies the card. */
+:root[data-theme='light'] .ad-art-glow { opacity: 0.35; }
+
+/* Gradient text is set with background-clip; on white the neon end of the
+   gradient disappears, so use the readable inks. */
+:root[data-theme='light'] .gradient-text {
+  background-image: linear-gradient(90deg, var(--ink-cyan), var(--ink-violet), var(--ink-magenta));
+}
+
+/* Section labels, mono accents and stat highlights that used raw neon. */
+:root[data-theme='light'] .section-label,
+:root[data-theme='light'] .mono-accent {
+  color: var(--ink-violet);
+}
+
+/* Tag pills: the active state is a neon gradient with BLACK text, which is
+   fine, but the inactive state used --text-2 on a translucent white panel. */
+:root[data-theme='light'] .tag.active { color: #fff; }
+
+/* Chips/badges that colour themselves from the accent. */
+:root[data-theme='light'] .pill-cyan { color: var(--ink-cyan); }
+:root[data-theme='light'] .pill-violet { color: var(--ink-violet); }
+:root[data-theme='light'] .pill-magenta { color: var(--ink-magenta); }
+:root[data-theme='light'] .pill-mint { color: var(--ink-mint); }
 
 /* ==========================================================================
    Mobile-first refinements
@@ -2585,4 +2712,41 @@ input, select, textarea { font-size: 16px !important; }
    * pre-line keeps the line breaks and still wraps long lines normally.
    */
   white-space: pre-line;
+}
+
+/* ==========================================================================
+   QR SCANNER
+   ========================================================================== */
+
+.qr-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 46dvh;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+}
+
+.qr-video {
+  width: 100%;
+  height: 100%;
+  /* cover, not contain: letterboxing shrinks the code in frame and makes it
+     harder to detect. */
+  object-fit: cover;
+  display: block;
+}
+
+/*
+ * Corner brackets rather than a full overlay box. A solid frame invites people
+ * to line the code up exactly, which is slower; brackets read as "somewhere in
+ * here" and the detector scans the whole frame anyway.
+ */
+.qr-reticle {
+  position: absolute;
+  inset: 14%;
+  border-radius: 14px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--rgb-1);
+  pointer-events: none;
 }

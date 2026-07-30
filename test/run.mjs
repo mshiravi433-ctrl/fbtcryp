@@ -186,5 +186,48 @@ console.log('\n▸ checking modal stacking order…');
   ]);
 }
 
+/*
+ * LIGHT-THEME CONTRAST.
+ *
+ * Real bug: the palette is neon, designed to glow against black. On a white
+ * card the same colours measured 1.33-1.79:1 against their own background,
+ * where WCAG AA wants 4.5:1 for text — so promo banners rendered as
+ * near-invisible text on near-white. Nothing was broken structurally, which
+ * is why it survived: only a colour measurement catches it.
+ */
+console.log('\n▸ measuring light-theme contrast…');
+{
+  const { readFileSync } = await import('node:fs');
+  const ad = readFileSync('src/components/AdBanner.jsx', 'utf8');
+
+  const relLum = (hex) => {
+    const h = hex.replace('#', '');
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const f = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const ratio = (a, b) => {
+    const [la, lb] = [relLum(a), relLum(b)];
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  };
+
+  // Pull every `inks: [...]` pair out of the slot table.
+  const inks = [...ad.matchAll(/inks:\s*\['(#[0-9a-fA-F]{6})',\s*'(#[0-9a-fA-F]{6})'\]/g)];
+  const rows = [];
+  rows.push(['every slot defines a readable ink pair', inks.length === 5]);
+
+  for (const [, a] of inks) {
+    const r = ratio(a, '#ffffff');
+    rows.push([`ink ${a} reaches AA on white (${r.toFixed(2)}:1)`, r >= 4.5]);
+  }
+
+  // And the neon originals must still be the ones used for the dark theme,
+  // otherwise we have "fixed" light mode by dulling both.
+  const hues = [...ad.matchAll(/hues:\s*\['(#[0-9a-fA-F]{6})'/g)].map((m) => m[1]);
+  rows.push(['dark theme keeps the neon hues', hues.includes('#00e5ff') && hues.includes('#00ff9d')]);
+
+  report('light-theme contrast', rows);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);

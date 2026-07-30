@@ -326,7 +326,11 @@
       "bitcoin": "Bitcoin",
       "ethereum": "Ethereum",
       "defi": "DeFi",
-      "regulation": "Regulación"
+      "policy": "Política y regulación",
+      "regional": "Irán y Oriente Medio",
+      "events": "Eventos",
+      "future": "El futuro cripto",
+      "lang": "Otros idiomas"
     },
     "disclaimer": "Los titulares provienen de medios de terceros y cada tarjeta indica su fuente. No respaldamos ni editamos su contenido, y nada de esto es asesoramiento de inversión.",
     "generatedNotice": "No se pudo acceder a ninguna fuente de noticias, así que este resumen se generó a partir de datos de mercado: no es periodismo."

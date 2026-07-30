@@ -150,6 +150,27 @@ export function WalletProvider({ children }) {
         chains: [DEFAULT_CHAIN],
         optionalChains: Object.keys(EVM_CHAINS).map(Number),
         showQrModal: true,
+        /*
+         * MOBILE: the QR modal alone is not enough.
+         *
+         * On a phone the wallet is another app on the SAME device, so there is
+         * no second screen to point a camera at. WalletConnect's modal does
+         * offer deep links, but it only lists wallets it has explicitly been
+         * told about; with no explorer hints the sheet can come up empty, which
+         * is the "I press connect and nothing happens" case.
+         *
+         * These IDs are WalletConnect's own registry entries for MetaMask,
+         * Trust and Rainbow — the three most likely to already be installed.
+         */
+        optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+        qrModalOptions: {
+          themeMode: 'dark',
+          explorerRecommendedWalletIds: [
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+            '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust
+            '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369'  // Rainbow
+          ]
+        },
         metadata: {
           name: 'FBT Swap',
           description: 'Non-custodial decentralized exchange',

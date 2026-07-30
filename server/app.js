@@ -27,9 +27,13 @@ import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
+import { fcmBroadcast, fcmConfigured } from './fcm.js';
 import {
+  addFcmToken,
   addSubscription,
+  readFcmTokens,
   readLeaderboard,
+  removeFcmToken,
   removeSubscription,
   storeDurable,
   submitScore
@@ -227,6 +231,138 @@ app.post('/api/ai/brief', async (req, res) => {
 app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)
 );
+
+/* -------------------------------- push ------------------------------------ */
+/*
+ * These routes were MISSING. `addSubscription`, `sendDailyPromo` and
+ * pushConfigured were all imported at the top of this file but never mounted,
+ * so the client's POST /api/push/subscribe always 404'd and no device was ever
+ * registered. Notifications could not have worked no matter how the VAPID keys
+ * were configured — which is exactly the reported symptom.
+ */
+
+/** Constant-time compare so the secret cannot be recovered by timing. */
+function cronAuthorized(req) {
+  const secret = process.env.CRON_SECRET || '';
+  if (!secret) return false;
+  const provided =
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-cron-secret') || '';
+  const a = Buffer.from(secret);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Register a browser/PWA push subscription (VAPID). */
+app.post('/api/push/subscribe', async (req, res) => {
+  const { subscription, lang } = req.body ?? {};
+  try {
+    const out = await addSubscription(subscription, lang || 'fa');
+    return res.json({ ok: true, ...out });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e.message).slice(0, 120) });
+  }
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body ?? {};
+  if (!endpoint) return res.status(400).json({ ok: false, error: 'NO_ENDPOINT' });
+  return res.json({ ok: true, ...(await removeSubscription(endpoint)) });
+});
+
+/*
+ * Register a native Android (FCM) token.
+ *
+ * A Capacitor WebView has no Push API at all, so an APK user can never receive
+ * VAPID web push. FCM is the only channel that reaches them.
+ */
+app.post('/api/push/fcm', async (req, res) => {
+  const { token, lang } = req.body ?? {};
+  try {
+    const out = await addFcmToken(token, lang || 'fa');
+    return res.json({ ok: true, ...out });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e.message).slice(0, 120) });
+  }
+});
+
+app.post('/api/push/fcm/remove', async (req, res) => {
+  const { token } = req.body ?? {};
+  if (!token) return res.status(400).json({ ok: false, error: 'NO_TOKEN' });
+  return res.json({ ok: true, ...(await removeFcmToken(token)) });
+});
+
+/**
+ * Say exactly what is blocking a send.
+ *
+ * Push has many independent ways to be silently off — missing keys, zero
+ * subscribers, no cron secret. Reporting which one it is turns a
+ * half-hour of guessing into a glance. Never returns key VALUES.
+ */
+app.get('/api/cron/status', async (_req, res) => {
+  const [subs, fcm] = await Promise.all([readSubscriptionsSafe(), readFcmTokensSafe()]);
+  const webReady = pushConfigured();
+  const fcmReady = fcmConfigured();
+  res.json({
+    web: {
+      configured: webReady,
+      subscribers: subs,
+      missing: webReady ? [] : ['VITE_VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'].filter(
+        (k) => !process.env[k] && !(k === 'VITE_VAPID_PUBLIC_KEY' && process.env.VAPID_PUBLIC_KEY)
+      )
+    },
+    fcm: {
+      configured: fcmReady,
+      devices: fcm,
+      missing: fcmReady ? [] : ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'].filter(
+        (k) => !process.env[k]
+      )
+    },
+    cronSecretSet: Boolean(process.env.CRON_SECRET),
+    durableStorage: storeDurable(),
+    canSend: (webReady && subs > 0) || (fcmReady && fcm > 0)
+  });
+});
+
+async function readSubscriptionsSafe() {
+  try {
+    const { readSubscriptions } = await import('./store.js');
+    return (await readSubscriptions()).length;
+  } catch {
+    return 0;
+  }
+}
+async function readFcmTokensSafe() {
+  try {
+    return (await readFcmTokens()).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Daily broadcast. Fans out to BOTH channels; each is independent. */
+app.get('/api/cron/daily', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const [web, fcm] = await Promise.allSettled([sendDailyPromo(), sendDailyFcm()]);
+  res.json({
+    web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
+    fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) }
+  });
+});
+
+/** The FCM half of the daily promo, reusing push.js's copy deck. */
+async function sendDailyFcm() {
+  if (!fcmConfigured()) return { sent: 0, skipped: 'NOT_CONFIGURED' };
+  const { promoForToday } = await import('./push.js');
+  const { PROMOS } = await import('./promos.js');
+  const key = promoForToday();
+  return fcmBroadcast(
+    (lang) => {
+      const [title, body] = PROMOS[key][lang] ?? PROMOS[key].en;
+      return { title, body, url: '/' };
+    },
+    { tag: 'fbt-daily' }
+  );
+}
 
 /* ----------------------------- static frontend ---------------------------- */
 

@@ -22,13 +22,100 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
-/** Public RSS endpoints, read via a JSON bridge that adds CORS headers. */
+/**
+ * CATEGORIES
+ *
+ * Every source is keyless public RSS, so this works in a fresh clone with
+ * nothing configured. `cat` is what the tab filter matches on.
+ *
+ * A note on the 'regional' and 'policy' desks: there is no reliable
+ * keyless English feed dedicated to Iranian crypto specifically, and
+ * inventing one would be worse than omitting it. Instead those tabs pull from
+ * outlets that genuinely cover MENA markets and regulation, and items are
+ * additionally keyword-scored (see REGION_TERMS) so the regionally relevant
+ * stories float to the top of the tab rather than being faked.
+ */
 const RSS_SOURCES = [
-  { id: 'cointelegraph', url: 'https://cointelegraph.com/rss' },
-  { id: 'coindesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' },
-  { id: 'decrypt', url: 'https://decrypt.co/feed' },
-  { id: 'bitcoinmagazine', url: 'https://bitcoinmagazine.com/feed' }
+  // general crypto
+  { id: 'cointelegraph', url: 'https://cointelegraph.com/rss', cat: 'all' },
+  { id: 'coindesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', cat: 'all' },
+  { id: 'decrypt', url: 'https://decrypt.co/feed', cat: 'all' },
+  { id: 'bitcoinmagazine', url: 'https://bitcoinmagazine.com/feed', cat: 'all' },
+
+  // policy / regulation — the desks that actually cover rulemaking
+  { id: 'coindesk-policy', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml&category=policy', cat: 'policy' },
+  { id: 'cointelegraph-regulation', url: 'https://cointelegraph.com/rss/tag/regulation', cat: 'policy' },
+
+  // events / conferences and protocol milestones
+  { id: 'cointelegraph-events', url: 'https://cointelegraph.com/rss/tag/blockchain-events', cat: 'events' },
+
+  // the future / research / tech direction
+  { id: 'cointelegraph-tech', url: 'https://cointelegraph.com/rss/tag/technology', cat: 'future' },
+  { id: 'ethresearch', url: 'https://ethereum-magicians.org/latest.rss', cat: 'future' },
+
+  // MENA / regional coverage
+  { id: 'arabianbusiness', url: 'https://www.arabianbusiness.com/feed', cat: 'regional' },
+  { id: 'cointelegraph-mena', url: 'https://cointelegraph.com/rss/tag/middle-east', cat: 'regional' },
+
+  // other languages
+  { id: 'cointelegraph-ar', url: 'https://ar.cointelegraph.com/rss', cat: 'lang', lang: 'ar' },
+  { id: 'cointelegraph-tr', url: 'https://tr.cointelegraph.com/rss', cat: 'lang', lang: 'tr' },
+  { id: 'cointelegraph-es', url: 'https://es.cointelegraph.com/rss', cat: 'lang', lang: 'es' }
 ];
+
+/** Tab ids, in display order. 'all' must stay first. */
+export const NEWS_CATEGORIES = ['all', 'regional', 'policy', 'events', 'future', 'lang'];
+
+/**
+ * Terms that mark a story as regionally relevant.
+ *
+ * Used to SCORE, never to fabricate: an item only gets the 'regional' tag if
+ * it genuinely mentions one of these. A tab with three honest stories is
+ * better than one padded with unrelated global headlines.
+ */
+const REGION_TERMS = [
+  'iran', 'iranian', 'tehran', 'rial', 'toman',
+  'middle east', 'mena', 'gulf', 'persian gulf',
+  'uae', 'dubai', 'abu dhabi', 'emirates', 'saudi', 'riyadh',
+  'qatar', 'bahrain', 'kuwait', 'oman', 'turkey', 'turkish', 'lira',
+  'israel', 'egypt', 'iraq', 'jordan', 'lebanon', 'pakistan'
+];
+
+const POLICY_TERMS = [
+  'regulat', 'sanction', 'ban ', 'banned', 'legal', 'law', 'court', 'sec ',
+  'cbdc', 'central bank', 'tax', 'licence', 'license', 'compliance', 'aml',
+  'government', 'parliament', 'policy', 'ruling', 'lawsuit'
+];
+
+const FUTURE_TERMS = [
+  'roadmap', 'upgrade', 'testnet', 'mainnet', 'research', 'proposal', 'eip',
+  'scaling', 'zk', 'rollup', 'layer 2', 'l2', 'quantum', 'ai ', 'future',
+  'forecast', 'outlook', 'prediction', '2027', '2028', '2030'
+];
+
+const EVENT_TERMS = [
+  'conference', 'summit', 'hackathon', 'expo', 'meetup', 'event',
+  'halving', 'launch', 'listing', 'airdrop', 'fork'
+];
+
+const hasAny = (text, terms) => terms.some((w) => text.includes(w));
+
+/**
+ * Tag an item with every category it genuinely belongs to.
+ * An item can be in several; 'all' always applies.
+ */
+function categorize(item) {
+  const text = `${item.title} ${item.summary}`.toLowerCase();
+  const cats = ['all'];
+  if (item.sourceCat && item.sourceCat !== 'all' && !cats.includes(item.sourceCat)) {
+    cats.push(item.sourceCat);
+  }
+  if (hasAny(text, REGION_TERMS) && !cats.includes('regional')) cats.push('regional');
+  if (hasAny(text, POLICY_TERMS) && !cats.includes('policy')) cats.push('policy');
+  if (hasAny(text, FUTURE_TERMS) && !cats.includes('future')) cats.push('future');
+  if (hasAny(text, EVENT_TERMS) && !cats.includes('events')) cats.push('events');
+  return cats;
+}
 
 const RSS_BRIDGE = 'https://api.rss2json.com/v1/api.json?rss_url=';
 
@@ -71,16 +158,19 @@ const clean = (html) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-function normalize(item, source) {
-  return {
-    id: item.guid || item.link || `${source}-${item.title}`,
+function normalize(item, src) {
+  const base = {
+    id: item.guid || item.link || `${src.id}-${item.title}`,
     title: clean(item.title).slice(0, 180),
     summary: clean(item.description || item.content).slice(0, 320),
     url: item.link,
     image: item.thumbnail || item.enclosure?.link || null,
-    source,
+    source: src.id,
+    sourceCat: src.cat,
+    lang: src.lang ?? 'en',
     at: item.pubDate ? new Date(item.pubDate).getTime() : Date.now()
   };
+  return { ...base, cats: categorize(base) };
 }
 
 /** Build a digest from market data when no external feed is reachable. */
@@ -148,7 +238,7 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
     for (const r of results) {
       if (r.status !== 'fulfilled') continue;
       const items = r.value.d?.items ?? [];
-      collected.push(...items.slice(0, 8).map((i) => normalize(i, r.value.s.id)));
+      collected.push(...items.slice(0, 8).map((i) => normalize(i, r.value.s)));
     }
   }
 

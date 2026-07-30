@@ -1321,7 +1321,11 @@
    "p5title": "Problem: the transaction is stuck pending",
    "p5body": "You underpaid gas while the network was busy. Use Speed up or Cancel in your wallet. Until it settles, the next transaction from that wallet is stuck behind it.",
    "p6title": "A note about connectivity",
-   "p6body": "Some wallet and node services are restricted on certain networks. If prices stay blank or a connection hangs, switch between mobile data and Wi-Fi and try again."
+   "p6body": "Some wallet and node services are restricted on certain networks. If prices stay blank or a connection hangs, switch between mobile data and Wi-Fi and try again.",
+   "p7title": "مشكلة: يفتح MetaMask لكنه يقول إن الرابط غير صالح",
+   "p7body": "كان هذا خطأً في الإصدارات السابقة. حدّث إلى أحدث إصدار، أو استخدم متصفح المحفظة نفسه.",
+   "p8title": "نصيحة: امسح الرمز بدل كتابة العنوان",
+   "p8body": "العنوان ٤٢ حرفاً والتحويل غير قابل للعكس. استخدم المسح، أو تحقق من أول وآخر أربعة أحرف بعد اللصق."
   },
   "security": {
    "title": "4 · Security — the part that matters most",
@@ -1361,10 +1365,14 @@
   "disclaimer": "العناوين من جهات خارجية وكل بطاقة تذكر مصدرها. لا نصادق على محتواها وليست نصيحة استثمارية.",
   "cat": {
    "all": "الكل",
+   "regional": "إيران والشرق الأوسط",
+   "policy": "السياسات",
+   "events": "الفعاليات",
+   "future": "مستقبل العملات",
+   "lang": "لغات أخرى",
    "bitcoin": "بيتكوين",
    "ethereum": "إيثريوم",
-   "defi": "ديفاي",
-   "regulation": "التنظيم"
+   "defi": "ديفاي"
   }
  },
  "notify": {
@@ -1436,5 +1444,16 @@
   "usernameUnset": "غير محدد",
   "usernameHelp": "هذا الاسم يظهر بجوار نقاطك في لوحة الترتيب. ليس حساباً ولا كلمة مرور له — مجرد لقب. هويتك الحقيقية هنا هي عنوان محفظتك.",
   "username_tooShort": "حرفان على الأقل."
+ },
+ "scan": {
+  "title": "مسح رمز QR",
+  "hint": "وجّه الكاميرا نحو رمز QR للمحفظة.",
+  "err": {
+   "UNSUPPORTED": "هذا الجهاز لا يستطيع مسح رموز QR داخل التطبيق. الصق العنوان بدلاً من ذلك.",
+   "DENIED": "تم رفض الوصول إلى الكاميرا. اسمح بالكاميرا في إعدادات الجهاز ثم أعد المحاولة.",
+   "NO_CAMERA": "لم يتم العثور على كاميرا. الصق العنوان بدلاً من ذلك.",
+   "NOT_AN_ADDRESS": "رمز QR هذا ليس عنوان محفظة.",
+   "FAILED": "تعذّر تشغيل الكاميرا. أغلق النافذة وحاول مجدداً."
+  }
  }
 }

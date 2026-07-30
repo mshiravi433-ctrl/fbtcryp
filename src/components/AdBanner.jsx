@@ -18,12 +18,27 @@ import { IconChevronRight, IconExternal } from './Icons';
  * markets, and users who feel tricked don't come back.
  */
 
+/*
+ * Each slot carries TWO palettes.
+ *
+ * `hues` is the neon pair, which is built to glow against black. On a white
+ * card those same colours measure 1.3-1.8:1 against their own background —
+ * WCAG AA wants 4.5:1 for text — so the CTA label and border were effectively
+ * invisible in light theme. That is the "banners are washed out" bug.
+ *
+ * `inks` are the same hues with the lightness lowered until each measures at
+ * least 4.5:1 on white. They are only used for things that must be READ.
+ *
+ * This has to live here rather than in a CSS override because the component
+ * sets `--ad-a` as an inline style, and an inline custom property beats any
+ * stylesheet rule — a `:root[data-theme='light']` block could never win.
+ */
 const SLOTS = {
-  swap: { to: '/swap', hues: ['#00e5ff', '#7c4dff'], icon: '⇄' },
-  farm: { to: '/farm', hues: ['#00ff9d', '#00e5ff'], icon: '◈' },
-  signals: { to: '/signals', hues: ['#7c4dff', '#ff2d95'], icon: '✦' },
-  p2p: { to: '/p2p', hues: ['#ffb300', '#ff6d00'], icon: '⇅' },
-  referral: { to: '/earn', hues: ['#ff2d95', '#d500f9'], icon: '★' }
+  swap: { to: '/swap', hues: ['#00e5ff', '#7c4dff'], inks: ['#008392', '#6a3ae0'], icon: '⇄' },
+  farm: { to: '/farm', hues: ['#00ff9d', '#00e5ff'], inks: ['#008854', '#008392'], icon: '◈' },
+  signals: { to: '/signals', hues: ['#7c4dff', '#ff2d95'], inks: ['#6a3ae0', '#e70073'], icon: '✦' },
+  p2p: { to: '/p2p', hues: ['#ffb300', '#ff6d00'], inks: ['#9d6e00', '#c55400'], icon: '⇅' },
+  referral: { to: '/earn', hues: ['#ff2d95', '#d500f9'], inks: ['#e70073', '#c800ea'], icon: '★' }
 };
 
 export default function AdBanner({ slot = 'swap', compact = false, external = null }) {
@@ -58,6 +73,10 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
       style={{
         '--ad-a': cfg.hues[0],
         '--ad-b': cfg.hues[1],
+        // Readable variants for text/borders; the stylesheet picks these up
+        // in light theme only. See SLOTS.
+        '--ad-ink': cfg.inks[0],
+        '--ad-ink-b': cfg.inks[1],
         padding: compact ? '11px 13px' : '14px 15px'
       }}
     >

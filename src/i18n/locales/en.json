@@ -1321,7 +1321,11 @@
    "p5title": "Problem: the transaction is stuck pending",
    "p5body": "You underpaid gas while the network was busy. Use Speed up or Cancel in your wallet. Until it settles, the next transaction from that wallet is stuck behind it.",
    "p6title": "A note about connectivity",
-   "p6body": "Some wallet and node services are restricted on certain networks. If prices stay blank or a connection hangs, switch between mobile data and Wi-Fi and try again."
+   "p6body": "Some wallet and node services are restricted on certain networks. If prices stay blank or a connection hangs, switch between mobile data and Wi-Fi and try again.",
+   "p7title": "Problem: MetaMask opens but says the URL is invalid",
+   "p7body": "This was a bug in older builds: the app sent 'https://localhost' as its identity, which means nothing to a wallet running as a separate app. Update to the latest version. If it still happens, use the wallet's own browser instead (Option 1).",
+   "p8title": "Tip: scan instead of typing an address",
+   "p8body": "Wherever an address is needed, use the scan button rather than typing. An address is 42 characters with no checksum you can read by eye, transfers are irreversible, and one wrong character sends the money nowhere. If your device cannot scan, paste it and then check the first four and last four characters against the original."
   },
   "security": {
    "title": "4 · Security — the part that matters most",
@@ -1361,10 +1365,14 @@
   "disclaimer": "Headlines come from third-party outlets and every card names its source. We do not endorse or edit their content, and none of it is investment advice.",
   "cat": {
    "all": "All",
+   "regional": "Iran & Middle East",
+   "policy": "Policy",
+   "events": "Events",
+   "future": "The future",
+   "lang": "Other languages",
    "bitcoin": "Bitcoin",
    "ethereum": "Ethereum",
-   "defi": "DeFi",
-   "regulation": "Regulation"
+   "defi": "DeFi"
   }
  },
  "notify": {
@@ -1436,5 +1444,16 @@
   "usernameUnset": "Not set",
   "usernameHelp": "This is the name shown next to your score on the leaderboard. It is not an account, it has no password and nothing is reserved — just a nickname. Your real identity here is your wallet address.",
   "username_tooShort": "At least 2 characters."
+ },
+ "scan": {
+  "title": "Scan QR code",
+  "hint": "Point the camera at a wallet QR code.",
+  "err": {
+   "UNSUPPORTED": "This device cannot scan QR codes in the app. Paste the address instead — and check the first and last four characters against the original before you send.",
+   "DENIED": "Camera access was refused. Allow the camera in your device settings for this app, then try again.",
+   "NO_CAMERA": "No camera was found on this device. Paste the address instead.",
+   "NOT_AN_ADDRESS": "That QR code is not a wallet address. Scan the code shown by the wallet or exchange you are sending to.",
+   "FAILED": "The camera could not be started. Close the sheet and try again, or paste the address."
+  }
  }
 }

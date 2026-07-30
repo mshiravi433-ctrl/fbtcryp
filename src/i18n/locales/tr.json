@@ -326,7 +326,11 @@
       "bitcoin": "Bitcoin",
       "ethereum": "Ethereum",
       "defi": "DeFi",
-      "regulation": "Düzenleme"
+      "policy": "Politika ve düzenleme",
+      "regional": "İran ve Orta Doğu",
+      "events": "Etkinlikler",
+      "future": "Kriptonun geleceği",
+      "lang": "Diğer diller"
     },
     "disclaimer": "Başlıklar üçüncü taraf yayınlardan gelir ve her kartta kaynağı yazar. İçeriklerini onaylamaz veya düzenlemeyiz; hiçbiri yatırım tavsiyesi değildir.",
     "generatedNotice": "Hiçbir haber kaynağına erişilemedi, bu nedenle bu özet piyasa verilerinden üretildi — gazetecilik değildir."

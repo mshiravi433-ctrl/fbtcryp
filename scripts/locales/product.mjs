@@ -252,7 +252,11 @@ export default {
   'news.cat.bitcoin': { zh: '比特币', hi: 'बिटकॉइन', es: 'Bitcoin', fr: 'Bitcoin', ru: 'Биткоин', tr: 'Bitcoin', ur: 'بٹ کوائن', id: 'Bitcoin', pt: 'Bitcoin' },
   'news.cat.ethereum': { zh: '以太坊', hi: 'एथेरियम', es: 'Ethereum', fr: 'Ethereum', ru: 'Эфириум', tr: 'Ethereum', ur: 'ایتھیریم', id: 'Ethereum', pt: 'Ethereum' },
   'news.cat.defi': { zh: 'DeFi', hi: 'DeFi', es: 'DeFi', fr: 'DeFi', ru: 'DeFi', tr: 'DeFi', ur: 'DeFi', id: 'DeFi', pt: 'DeFi' },
-  'news.cat.regulation': { zh: '监管', hi: 'नियमन', es: 'Regulación', fr: 'Régulation', ru: 'Регулирование', tr: 'Düzenleme', ur: 'ضابطہ', id: 'Regulasi', pt: 'Regulação' },
+  'news.cat.policy': { zh: '政策法规', hi: 'नीति व नियमन', es: 'Política y regulación', fr: 'Politique et régulation', ru: 'Политика и регулирование', tr: 'Politika ve düzenleme', ur: 'پالیسی و ضابطہ', id: 'Kebijakan & regulasi', pt: 'Política e regulação' },
+  'news.cat.regional': { zh: '伊朗与中东', hi: 'ईरान और मध्य पूर्व', es: 'Irán y Oriente Medio', fr: 'Iran et Moyen-Orient', ru: 'Иран и Ближний Восток', tr: 'İran ve Orta Doğu', ur: 'ایران اور مشرقِ وسطیٰ', id: 'Iran & Timur Tengah', pt: 'Irão e Médio Oriente' },
+  'news.cat.events': { zh: '活动', hi: 'कार्यक्रम', es: 'Eventos', fr: 'Événements', ru: 'События', tr: 'Etkinlikler', ur: 'تقریبات', id: 'Acara', pt: 'Eventos' },
+  'news.cat.future': { zh: '加密货币的未来', hi: 'क्रिप्टो का भविष्य', es: 'El futuro cripto', fr: 'L\'avenir de la crypto', ru: 'Будущее криптовалют', tr: 'Kriptonun geleceği', ur: 'کرپٹو کا مستقبل', id: 'Masa depan kripto', pt: 'O futuro da cripto' },
+  'news.cat.lang': { zh: '其他语言', hi: 'अन्य भाषाएँ', es: 'Otros idiomas', fr: 'Autres langues', ru: 'Другие языки', tr: 'Diğer diller', ur: 'دیگر زبانیں', id: 'Bahasa lain', pt: 'Outros idiomas' },
   'news.disclaimer': {
     zh: '标题来自第三方媒体，每张卡片都注明来源。我们不认可也不编辑其内容，其中任何内容都不构成投资建议。',
     hi: 'हेडलाइन तीसरे पक्ष के स्रोतों से हैं और हर कार्ड पर स्रोत लिखा है। हम उनकी सामग्री का समर्थन या संपादन नहीं करते, और इनमें से कुछ भी निवेश सलाह नहीं है।',
