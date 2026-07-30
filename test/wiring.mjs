@@ -135,5 +135,54 @@ export default function run() {
   t(`Persian covers at least 95% of keys (${enKeys.length - faMissing.length}/${enKeys.length})`,
     faMissing.length / enKeys.length < 0.05);
 
+  /* --------------------- 6. no false "we take no fee" -------------------- */
+  /*
+   * REAL BUG: the swap screen said "This app takes no fee" directly above a
+   * line reading "Platform fee 0.5%". Two contradictory claims on one screen,
+   * about money, in the user's primary language.
+   *
+   * A user who catches the app being wrong about its own fee has no reason to
+   * believe the irreversibility warnings either — and those are the ones that
+   * protect them. This is also exactly the kind of contradiction an app-store
+   * reviewer flags as misleading.
+   *
+   * The fee is the business model, so the copy is checked against it: if
+   * FEE_BPS > 0, no string may claim otherwise. Scans every locale, because
+   * the nine partial languages inherited the English text verbatim and a
+   * stale copy is just as false.
+   */
+  {
+    const feeSrc = read('src/lib/chains.js');
+    const defMatch = /const FEE_BPS_DEFAULT = (\d+)/.exec(feeSrc);
+    const chargesFee = defMatch ? Number(defMatch[1]) > 0 : true;
+
+    /*
+     * Must match a claim about OUR fee, not a description of someone else's.
+     * "Zero-fee trading on many pairs" under p2p.desk.bybit is a fact about
+     * Bybit and is fine; a broad /no fee/ pattern flagged it and would have
+     * trained us to ignore this check.
+     */
+    const claim =
+      /(this app|the app|we|fbt[a-z ]*)\s*(takes?|charges?|has)\s*no\s*fee|این اپ[^.]{0,40}هیچ کارمزدی نمی|ما[^.]{0,30}کارمزدی نمی‌گیریم/i;
+    const offenders = [];
+
+    for (const f of readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'))) {
+      const data = JSON.parse(read(join('src/i18n/locales', f)));
+      const scan = (obj, path = '') => {
+        for (const [k, v] of Object.entries(obj)) {
+          if (typeof v === 'string') {
+            if (claim.test(v)) offenders.push(`${f}:${path}${k}`);
+          } else if (v && typeof v === 'object') scan(v, `${path}${k}.`);
+        }
+      };
+      scan(data);
+    }
+
+    t(
+      `no locale claims the app is fee-free while it charges${offenders.length ? ` — ${offenders.slice(0, 3).join(', ')}` : ''}`,
+      !chargesFee || offenders.length === 0
+    );
+  }
+
   return rows;
 }

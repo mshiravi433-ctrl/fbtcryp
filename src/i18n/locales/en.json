@@ -421,7 +421,7 @@
  "swap": {
   "title": "Swap",
   "subtitle": "Real on-chain swaps via {{dex}}",
-  "nonCustodialNotice": "Non-custodial: you sign every transaction from your own wallet and it broadcasts directly to the blockchain. This app takes no fee, holds no funds and has no address in the flow.",
+  "nonCustodialNotice": "Non-custodial: you sign every transaction from your own wallet and it broadcasts straight to the blockchain. This app never holds your funds and cannot reverse, freeze or recover a swap. The platform fee shown above is taken on-chain inside the same transaction you sign, and network gas is paid separately to the network itself.",
   "notConnected": "No wallet connected",
   "from": "From",
   "to": "To",
