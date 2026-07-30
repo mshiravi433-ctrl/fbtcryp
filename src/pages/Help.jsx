@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { faqList } from '../lib/faqLocal';
+import AskHelp from '../components/AskHelp';
 import { useSettingsStore } from '../store/useSettingsStore';
 import {
   IconChevronLeft,
@@ -102,6 +103,14 @@ export default function Help() {
           <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
         </div>
       </motion.button>
+
+      {/* ------------------------------ ask --------------------------------- */}
+      {/* Above the FAQ: someone with a specific question should not have to
+          scan twelve headings first. The component tries the local FAQ before
+          any network call, so this is not a downgrade for common questions. */}
+      <motion.div variants={riseIn} initial="hidden" animate="show">
+        <AskHelp />
+      </motion.div>
 
       {/* -------------------------------- FAQ ------------------------------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show">

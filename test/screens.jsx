@@ -242,7 +242,37 @@ export async function run(container) {
       );
     });
 
-    out.push(['Help has no AI chat input', !host.querySelector('input[type="text"]')]);
+    /*
+     * The ask box is back, so "no input" is no longer the requirement. What
+     * MUST hold is that it cannot become an ungrounded chatbot inventing fees:
+     * it answers from the local FAQ first, and every answer is labelled with
+     * its source. Assert those properties instead of asserting absence.
+     */
+    const askInput = host.querySelector('input[type="text"]');
+    out.push(['Help has an ask box', Boolean(askInput)]);
+
+    if (askInput) {
+      // A question the local FAQ answers confidently must never hit the
+      // network — there is no server in this test, so a network answer would
+      // be impossible and the assertion would fail loudly.
+      const proto = Object.getPrototypeOf(askInput);
+      const setValue = Object.getOwnPropertyDescriptor(proto, 'value').set;
+      await act(async () => {
+        setValue.call(askInput, 'کارمزد چقدر است');
+        askInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+      await act(async () => {
+        host.querySelector('form')?.dispatchEvent(
+          new window.Event('submit', { bubbles: true, cancelable: true })
+        );
+      });
+      // Let the (synchronous) local path settle.
+      await act(async () => { await Promise.resolve(); });
+
+      const text = host.textContent;
+      out.push(['a known question is answered without a server', text.includes('۰.۵٪') || text.includes('0.5')]);
+      out.push(['the answer is labelled as coming from our docs', text.includes('از مستندات ما')]);
+    }
 
     const rows = [...host.querySelectorAll('.faq-q')];
     out.push([`Help lists the FAQ (${rows.length} questions)`, rows.length >= 10]);

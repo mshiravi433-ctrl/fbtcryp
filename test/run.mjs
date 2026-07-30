@@ -161,6 +161,24 @@ console.log('\n▸ verifying the default build excludes the arcade…');
  * to break: a language that fails to load silently, leaving raw keys or the
  * wrong language on screen. This asserts the switch really works.
  */
+/*
+ * BODY SCROLL LOCK.
+ *
+ * The old implementation snapshotted body.style.overflow on lock and restored
+ * that snapshot on unlock. With two overlapping modals (SendSheet opening
+ * QrScanner) the inner lock snapshots 'hidden', so if the unlocks run in any
+ * order other than strict reverse the last one restores 'hidden' and the page
+ * can never scroll again until reload. React does not guarantee sibling
+ * unmount order, so that ordering could not be relied on.
+ */
+console.log('\n▸ checking body scroll lock…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.scrolllock.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runLock } = await import('./.out/scrolllock/scrolllock-probe.js');
+  report('scroll lock', await runLock());
+}
+
 console.log('\n▸ checking lazy locale loading…');
 {
   npx(['vite', 'build', '-c', 'test/vite.i18n.mjs', '--logLevel', 'error']);

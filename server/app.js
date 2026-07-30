@@ -38,7 +38,7 @@ import {
   storeDurable,
   submitScore
 } from './store.js';
-import { aiConfigured, aiSelfTest, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
+import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -231,6 +231,42 @@ app.post('/api/ai/brief', async (req, res) => {
 app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)
 );
+
+/* -------------------------------- support --------------------------------- */
+/*
+ * "Ask the AI" in Help.
+ *
+ * The client matches its local FAQ first and only calls this when the local
+ * matcher is not confident, so the common questions never reach a model at
+ * all — a hand-written answer about our own fee structure is strictly better
+ * than a generated one, and free.
+ *
+ * `context` is the FAQ text the client already matched. The prompt in ai.js
+ * forbids answering beyond it, which is what stops a model inventing a fee.
+ */
+app.post('/api/ai/ask', async (req, res) => {
+  if (!aiConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED' });
+
+  const { question, context, lang } = req.body ?? {};
+  if (typeof question !== 'string' || !question.trim()) {
+    return res.status(400).json({ error: 'EMPTY_QUESTION' });
+  }
+
+  try {
+    const out = await answerSupportQuestion({
+      question,
+      context: Array.isArray(context) ? context : [],
+      lang: typeof lang === 'string' ? lang.slice(0, 5) : 'fa'
+    });
+    return res.json(out);
+  } catch (err) {
+    const msg = String(err.message || '');
+    // 503 not 500: the feature is unavailable, not broken. The client shows
+    // the local FAQ instead of an error.
+    const status = msg.includes('NOT_CONFIGURED') ? 503 : 502;
+    return res.status(status).json({ error: 'AI_FAILED', detail: msg.slice(0, 200) });
+  }
+});
 
 /* ----------------------------- leaderboard -------------------------------- */
 /*

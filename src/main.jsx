@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import './i18n';
 import './index.css';
 
@@ -26,6 +27,15 @@ class BootBoundary extends React.Component {
   componentDidCatch(error) {
     // Surface it to the HTML watchdog too, in case we crashed before paint.
     window.__FBT_BOOT_ERR__ = String(error?.message || error);
+
+    /*
+     * A component that throws never runs its effect cleanups, so a modal that
+     * was holding a body-scroll lock when it crashed would leave the page
+     * permanently unscrollable — the error screen itself included. Releasing
+     * every lock here costs nothing and prevents "the app froze" on top of
+     * whatever actually broke.
+     */
+    releaseAllScrollLocks();
   }
 
   render() {

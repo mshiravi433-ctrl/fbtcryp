@@ -2820,3 +2820,16 @@ input, select, textarea { font-size: 16px !important; }
 }
 .p2p-steps li::marker { color: var(--rgb-1); font-weight: 700; }
 :root[data-theme='light'] .p2p-steps li::marker { color: var(--ink-cyan); }
+
+/*
+ * The ask-box answer. Deliberately NOT .faq-a: an expanded FAQ row and a
+ * generated answer are different things and should not share a class, or
+ * neither the DOM nor a test can tell them apart.
+ */
+.ask-a {
+  margin: 0 0 8px;
+  font-size: 12.4px;
+  line-height: 1.95;
+  color: var(--text-2);
+  white-space: pre-line;
+}

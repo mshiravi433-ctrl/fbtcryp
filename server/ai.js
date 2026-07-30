@@ -420,6 +420,67 @@ function parseJson(text) {
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
 
+/**
+ * ANSWER A SUPPORT QUESTION ABOUT THIS APP.
+ *
+ * ─── THE RULE THAT MAKES THIS SAFE ──────────────────────────────────────────
+ * A general model asked "what is the fee on FBT Swap?" will confidently invent
+ * a number. On a finance app that is not a wrong answer, it is a lie the user
+ * may act on. So the model is NEVER the source of facts here.
+ *
+ * The client sends `context` — the matching hand-written FAQ entries — and the
+ * system prompt forbids going beyond them. The model's only job is to rephrase
+ * the supplied facts as a direct answer to the exact question asked, in the
+ * user's language. Anything not covered gets "I do not know, contact support",
+ * which is a correct answer.
+ *
+ * This is why the client tries its local FAQ matcher FIRST and only calls here
+ * when confidence is low: for the common questions a hand-written answer is
+ * strictly better, and free.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+export async function answerSupportQuestion({ question, context = [], lang = 'fa' }) {
+  if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
+
+  const q = String(question || '').slice(0, 500);
+  if (!q.trim()) throw new Error('EMPTY_QUESTION');
+
+  const facts = context
+    .slice(0, 4)
+    .map((c, i) => `[${i + 1}] ${String(c).slice(0, 900)}`)
+    .join('\n\n');
+
+  const system = [
+    'You are the support assistant for FBT Swap, a non-custodial crypto exchange.',
+    '',
+    'ABSOLUTE RULES:',
+    '- Answer ONLY from the REFERENCE section below. It is the sole source of truth.',
+    '- Never invent a fee, a percentage, a network name, an address or a recovery method.',
+    '- If the reference does not cover the question, say you do not know and suggest contacting support. Do not guess.',
+    '- Never ask for a seed phrase, private key or password, and never suggest the user share one.',
+    '- On-chain transactions are irreversible. Never imply anything can be refunded, reversed or recovered.',
+    '- This is not financial advice. Never recommend buying or selling a specific asset.',
+    '',
+    `Reply in this language code: ${lang}. Keep it under 90 words, plain and direct.`,
+    '',
+    'REFERENCE:',
+    facts || '(no reference supplied — you must say you do not know)'
+  ].join('\n');
+
+  const { text, model } = await chat({
+    system,
+    user: q,
+    maxTokens: 320,
+    temperature: 0.2, // low: this is retrieval phrasing, not creative writing
+    // Every provider here defaults json:true because the other callers parse
+    // structured output. This one wants a sentence, and leaving the default
+    // would return a JSON object rendered verbatim into the chat bubble.
+    json: false
+  });
+
+  return { answer: String(text || '').trim(), model, grounded: context.length > 0 };
+}
+
 export async function generateOutlook(payload) {
   if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
