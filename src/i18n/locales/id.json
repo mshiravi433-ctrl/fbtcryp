@@ -422,6 +422,8 @@
     "stillStuck": "Belum menemukan jawaban?",
     "stillStuckSub": "Kirim pesan ke dukungan — dijawab orang sungguhan.",
     "q": {
+      "howToSwap": "Bagaimana melakukan swap pertama saya?",
+      "deposit": "Bagaimana cara menyetor dana ke aplikasi?",
       "fees": "Berapa biaya yang dikenakan?",
       "gas": "Apa itu gas dan dibayar dengan koin apa?",
       "failed": "Kenapa pertukaran saya gagal?",

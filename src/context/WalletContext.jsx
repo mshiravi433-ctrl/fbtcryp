@@ -112,6 +112,39 @@ export function WalletProvider({ children }) {
       const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
       const { BrowserProvider } = await loadEthers();
 
+      /*
+       * WALLETCONNECT METADATA — why this is not just window.location.origin.
+       *
+       * Symptom: tapping Connect opened MetaMask, which then refused with an
+       * invalid-URL error instead of showing an approval prompt.
+       *
+       * Two causes, both here:
+       *
+       *  1. `icons` pointed at `/icon.png`, which does not exist — the files
+       *     are icon-192.png and icon-512.png. Wallets fetch this URL to draw
+       *     the connection dialog and reject metadata whose icon 404s.
+       *
+       *  2. Inside the packaged Android app the page is served from
+       *     `https://localhost`, so `window.location.origin` was literally
+       *     "https://localhost". A wallet is a SEPARATE app: that origin means
+       *     the wallet's own device, where nothing is listening. It cannot be
+       *     fetched and cannot be shown to the user as "who is asking for
+       *     permission", so the request is rejected outright.
+       *
+       * The dapp URL must therefore be a publicly reachable origin. We use the
+       * deployed site, falling back to the live origin only when that really
+       * is a public URL. VITE_PUBLIC_URL has no secret in it — this value is
+       * shown to the user by their wallet and is meant to be public.
+       */
+      const runtimeOrigin = window.location.origin;
+      const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|10\.|192\.168\.|\[::1\])/.test(runtimeOrigin)
+        || runtimeOrigin.startsWith('capacitor://')
+        || runtimeOrigin.startsWith('file://');
+
+      const publicUrl =
+        import.meta.env?.VITE_PUBLIC_URL?.replace(/\/$/, '') ||
+        (isLocal ? 'https://fbtcryp.vercel.app' : runtimeOrigin);
+
       const wc = await EthereumProvider.init({
         projectId,
         chains: [DEFAULT_CHAIN],
@@ -119,9 +152,9 @@ export function WalletProvider({ children }) {
         showQrModal: true,
         metadata: {
           name: 'FBT Swap',
-          description: 'Non-custodial decentralized exchange on BNB Smart Chain',
-          url: window.location.origin,
-          icons: [`${window.location.origin}/icon.png`]
+          description: 'Non-custodial decentralized exchange',
+          url: publicUrl,
+          icons: [`${publicUrl}/icon-512.png`]
         }
       });
 

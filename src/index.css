@@ -2577,4 +2577,12 @@ input, select, textarea { font-size: 16px !important; }
   font-size: 12.4px;
   line-height: 1.95;
   color: var(--text-2);
+  /*
+   * The longer answers ("how do I swap", "how do I deposit") are numbered
+   * step lists separated by newlines. HTML collapses newlines into single
+   * spaces, so without this the steps ran together into one unreadable
+   * paragraph — which defeats the point of writing them as steps.
+   * pre-line keeps the line breaks and still wraps long lines normally.
+   */
+  white-space: pre-line;
 }

@@ -422,6 +422,8 @@
     "stillStuck": "Cevabını bulamadın mı?",
     "stillStuckSub": "Doğrudan desteğe yazın — gerçek bir kişi yanıtlar.",
     "q": {
+      "howToSwap": "İlk takasımı nasıl yaparım?",
+      "deposit": "Uygulamaya nasıl para yatırırım?",
       "fees": "Hangi ücretleri alıyorsunuz?",
       "gas": "Gas nedir ve hangi coin ile ödenir?",
       "failed": "Takasım neden başarısız oldu?",

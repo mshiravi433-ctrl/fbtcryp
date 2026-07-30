@@ -422,6 +422,8 @@
     "stillStuck": "Não encontrou a resposta?",
     "stillStuckSub": "Envie mensagem ao apoio — responde uma pessoa real.",
     "q": {
+      "howToSwap": "Como faço a minha primeira troca?",
+      "deposit": "Como deposito dinheiro na app?",
       "fees": "Que taxas cobram?",
       "gas": "O que é o gás e com que moeda se paga?",
       "failed": "Porque falhou a minha troca?",

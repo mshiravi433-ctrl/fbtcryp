@@ -26,6 +26,32 @@
  */
 const KB = [
   {
+    id: 'deposit',
+    k: {
+      en: ['deposit', 'how do i add money', 'fund', 'top up', 'receive', 'send coins to', 'buy crypto', 'no deposit button', 'where is deposit'],
+      fa: ['واریز', 'شارژ', 'پول بریزم', 'دریافت', 'چطور پول اضافه کنم', 'دکمه واریز', 'خرید ارز', 'کجا واریز کنم'],
+      ar: ['إيداع', 'شحن', 'كيف أضيف أموال', 'استلام']
+    },
+    a: {
+      en: 'There is no deposit button, and that is deliberate — this app never holds your money, so there is nothing to deposit INTO. Your coins live in your own wallet and you swap them straight from there.\n\nSo "funding" means funding your wallet, not this app:\n\n1. Open your wallet (MetaMask, Trust, or the in-app wallet) and copy YOUR address.\n2. Send coins to that address from wherever you already hold them — an exchange, or another person.\n3. Pick the right network when you send. An address that looks identical exists on BNB Chain, Ethereum and Polygon; sending on the wrong network can lose the funds permanently.\n4. Also send a little of the network\'s own coin for gas (BNB on BNB Chain, ETH on Ethereum). Without it you will hold tokens you cannot move.\n5. Come back, connect the wallet, and the balance appears by itself.',
+      fa: 'دکمه واریز وجود ندارد و این عمدی است — این اپ هیچ‌وقت پول تو را نگه نمی‌دارد، پس جایی نیست که «به آن» واریز کنی. کوین‌ها در کیف پول خودت می‌مانند و مستقیم از همان‌جا سواپ می‌شوند.\n\nپس «شارژ کردن» یعنی شارژ کیف پول خودت، نه این اپ:\n\n۱. کیف پولت را باز کن (متامسک، تراست، یا کیف پول داخل اپ) و آدرس خودت را کپی کن.\n۲. از هرجا که ارز داری — صرافی یا شخص دیگر — به همان آدرس بفرست.\n۳. موقع ارسال حتماً شبکه درست را انتخاب کن. یک آدرس با ظاهر کاملاً یکسان روی BNB Chain و اتریوم و پالیگان وجود دارد؛ ارسال روی شبکه اشتباه می‌تواند دارایی را برای همیشه از بین ببرد.\n۴. کمی هم از کوین بومی شبکه برای گس بفرست (BNB روی BNB Chain، ETH روی اتریوم). بدون آن توکن داری ولی نمی‌توانی جابه‌جایش کنی.\n۵. برگرد، کیف پول را وصل کن، موجودی خودش ظاهر می‌شود.',
+      ar: 'لا يوجد زر إيداع، وهذا مقصود: التطبيق لا يحتفظ بأموالك أبداً. أرسل عملاتك إلى عنوان محفظتك أنت، على الشبكة الصحيحة، مع القليل من عملة الشبكة للغاز، ثم اربط المحفظة وسيظهر الرصيد تلقائياً.'
+    }
+  },
+  {
+    id: 'howToSwap',
+    k: {
+      en: ['how to swap', 'how do i swap', 'first swap', 'steps to swap', 'exchange tokens', 'trade tokens', 'how does it work'],
+      fa: ['چطور سواپ کنم', 'چگونه معامله', 'اولین سواپ', 'مراحل سواپ', 'تبدیل ارز', 'چطور کار میکند'],
+      ar: ['كيف أبادل', 'خطوات التبادل', 'أول عملية']
+    },
+    a: {
+      en: 'Six steps:\n\n1. Connect a wallet (Wallet tab). Nothing works until this is done.\n2. Choose the network at the top of the Swap screen. Both tokens must be on the SAME network — this app does not bridge between chains.\n3. Pick the token you are paying with, and the one you want. If a token is missing, paste its contract address to import it.\n4. Type an amount. MAX leaves a little native coin behind on purpose, so you can still afford gas.\n5. Read the quote: the rate, the price impact, the 0.5% platform fee, and the estimated gas. Everything is shown BEFORE you sign, never after.\n6. Press Swap and approve in your wallet. For a non-native token there are two prompts — first Approve (permission for the router to move that token), then the swap itself. Two prompts is normal, not a bug.\n\nOnce signed it is on-chain and irreversible. Nobody — not us, not the wallet — can cancel or reverse it.',
+      fa: 'شش قدم:\n\n۱. یک کیف پول وصل کن (تب کیف پول). تا این کار انجام نشود هیچ‌چیز کار نمی‌کند.\n۲. شبکه را از بالای صفحه سواپ انتخاب کن. هر دو توکن باید روی **یک شبکه** باشند — این اپ بین زنجیره‌ها پل نمی‌زند.\n۳. توکنی که می‌دهی و توکنی که می‌خواهی را انتخاب کن. اگر توکنی نبود، آدرس قراردادش را جای‌گذاری کن تا اضافه شود.\n۴. مقدار را بنویس. دکمه MAX عمداً کمی کوین بومی باقی می‌گذارد تا گس داشته باشی.\n۵. قیمت را بخوان: نرخ، اثر قیمتی، کارمزد ۰.۵٪ پلتفرم و گس تخمینی. همه‌چیز **قبل** از امضا نشان داده می‌شود، نه بعدش.\n۶. Swap را بزن و در کیف پولت تأیید کن. برای توکن غیربومی دو بار تأیید می‌خواهد — اول Approve (اجازه جابه‌جایی آن توکن به روتر) و بعد خود سواپ. دو تأیید طبیعی است، باگ نیست.\n\nبعد از امضا تراکنش روی زنجیره ثبت و برگشت‌ناپذیر است. هیچ‌کس — نه ما، نه کیف پول — نمی‌تواند لغو یا برگردانش کند.',
+      ar: 'اربط محفظتك، اختر الشبكة (يجب أن يكون كلا الرمزين على نفس الشبكة)، اختر الرمزين، أدخل المبلغ، راجع السعر والرسوم قبل التوقيع، ثم وقّع. للرموز غير الأصلية ستظهر موافقتان: Approve ثم التبادل. بعد التوقيع تصبح المعاملة نهائية ولا يمكن التراجع عنها.'
+    }
+  },
+  {
     id: 'fees',
     k: {
       en: ['fee', 'fees', 'commission', 'cost', 'charge', 'how much', '0.5', 'percent'],
@@ -244,6 +270,8 @@ export function localAnswer(question, lang = 'fa') {
  * gas and "why did my swap fail" account for most support contact.
  */
 export const FAQ_ORDER = [
+  'howToSwap',
+  'deposit',
   'fees',
   'gas',
   'failed',
