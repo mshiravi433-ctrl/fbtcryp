@@ -119,8 +119,38 @@ export function generateRecoveryCodes(count = 6) {
 /* WebAuthn / biometrics                                                      */
 /* -------------------------------------------------------------------------- */
 
+/** True inside the packaged native app rather than a browser. */
+function isNative() {
+  return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+}
+
+/*
+ * ─── WHY THE NATIVE APP CANNOT USE WebAuthn ─────────────────────────────────
+ * A Capacitor WebView serves the page from https://localhost, so
+ * `window.location.hostname` is "localhost" and WebAuthn's Relying Party id
+ * becomes "localhost". Android refuses to create a platform credential for a
+ * relying party it cannot verify by domain, so registration fails — and it
+ * fails at the OS layer, well after our checks pass, which is why the toggle
+ * looked available and then simply did nothing.
+ *
+ * Raising the app's hostname to the real domain would not help either: the
+ * origin still would not match, because the page is not actually served from
+ * there.
+ *
+ * So on native we use the OS biometric prompt directly (BiometricAuth), which
+ * is what a native app is supposed to use. It is also strictly better here:
+ * WebAuthn on a local origin proves possession of a browser-scoped key, while
+ * the native API asks the fingerprint sensor.
+ *
+ * Both paths gate the SAME thing — unlocking the local UI — so they are
+ * interchangeable for our purposes. Neither protects funds on-chain; that is
+ * the wallet's job and is stated in the UI.
+ */
+
 export function biometricsSupported() {
   if (typeof window === 'undefined') return false;
+  // Native: the OS prompt does not care about origins at all.
+  if (isNative()) return true;
   // WebAuthn is hard-gated to secure contexts. Over plain http:// the API
   // exists but every call throws SecurityError, which looks like a broken
   // feature rather than a misconfiguration — so check it explicitly.
@@ -131,12 +161,23 @@ export function biometricsSupported() {
 /** Why biometrics are unavailable, for an actionable error message. */
 export function biometricUnavailableReason() {
   if (typeof window === 'undefined') return 'UNSUPPORTED';
+  if (isNative()) return null;
   if (!window.isSecureContext) return 'INSECURE_ORIGIN';
   if (!window.PublicKeyCredential) return 'UNSUPPORTED';
   return null;
 }
 
 export async function platformAuthenticatorAvailable() {
+  if (isNative()) {
+    try {
+      const { NativeBiometric } = await import('capacitor-native-biometric');
+      const res = await NativeBiometric.isAvailable();
+      return Boolean(res?.isAvailable);
+    } catch {
+      // Plugin missing or no enrolled fingerprint — either way, unavailable.
+      return false;
+    }
+  }
   if (!biometricsSupported()) return false;
   try {
     return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
@@ -151,6 +192,25 @@ export async function platformAuthenticatorAvailable() {
  * here because this is a local gate, not a login.
  */
 export async function registerBiometric(username = 'wallet') {
+  /*
+   * Native: there is nothing to "register". The OS already holds the enrolled
+   * fingerprint; we just confirm one exists and that the user can pass it
+   * once, so enabling the toggle proves the sensor works rather than failing
+   * later at unlock time.
+   */
+  if (isNative()) {
+    const { NativeBiometric } = await import('capacitor-native-biometric');
+    const avail = await NativeBiometric.isAvailable();
+    if (!avail?.isAvailable) throw new Error('UNSUPPORTED');
+    await NativeBiometric.verifyIdentity({
+      reason: 'Enable unlock for FBT Swap',
+      title: 'FBT Swap',
+      subtitle: 'Confirm it is you'
+    });
+    // A stable marker instead of a credential id — the OS owns the key.
+    return { id: 'native', rawId: 'native' };
+  }
+
   if (!biometricsSupported()) throw new Error('UNSUPPORTED');
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userId = crypto.getRandomValues(new Uint8Array(16));
@@ -180,6 +240,21 @@ export async function registerBiometric(username = 'wallet') {
 
 /** Prompt for the stored biometric. Resolves true only on a real verification. */
 export async function verifyBiometric(credentialId) {
+  if (isNative()) {
+    const { NativeBiometric } = await import('capacitor-native-biometric');
+    /*
+     * verifyIdentity RESOLVES on success and REJECTS on failure or cancel.
+     * Returning true unconditionally after the call would make a cancelled
+     * prompt read as a successful unlock — so the rejection must propagate.
+     */
+    await NativeBiometric.verifyIdentity({
+      reason: 'Unlock FBT Swap',
+      title: 'FBT Swap',
+      subtitle: 'Confirm it is you'
+    });
+    return true;
+  }
+
   if (!biometricsSupported()) throw new Error('UNSUPPORTED');
   const challenge = crypto.getRandomValues(new Uint8Array(32));
 

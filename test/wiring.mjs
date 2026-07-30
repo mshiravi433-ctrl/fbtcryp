@@ -289,5 +289,44 @@ export default function run() {
     t('all four signing secrets are still passed', (wf.match(/ANDROID_\w+:/g) || []).length >= 4);
   }
 
+  /* ------------- 10. native app must not be gated by web APIs ------------- */
+  /*
+   * REAL BUG: fingerprint unlock and notifications both appeared unavailable
+   * in the packaged Android app, for the same underlying reason — the code
+   * gated on browser APIs a Capacitor WebView does not have:
+   *
+   *   biometrics : `window.PublicKeyCredential` is absent, and WebAuthn's
+   *                rp.id would be "localhost" anyway, which Android refuses.
+   *   push       : `window.Notification` is absent, so pushMode() returned
+   *                'unsupported'; and pushConfigured() wants a VAPID key,
+   *                which FCM does not use, so it fell back to 'local'.
+   *
+   * Either check alone silently disabled the feature. Both files must
+   * therefore branch on the native platform BEFORE any web capability test.
+   */
+  {
+    const sec = read('src/lib/security.js');
+    const notif = read('src/lib/notify.js');
+
+    t('security.js detects the native platform', /isNativePlatform/.test(sec));
+    t('notify.js detects the native platform', /isNativePlatform/.test(notif));
+
+    // The native branch must come before the secure-context / API checks,
+    // otherwise it is unreachable on the very platform it exists for.
+    const nativeIdx = sec.indexOf('if (isNative()) return true;');
+    const secureIdx = sec.indexOf('if (!window.isSecureContext) return false;');
+    t('biometrics checks native before secure-context', nativeIdx > 0 && nativeIdx < secureIdx);
+
+    const pmNative = notif.indexOf('cachedPushMode = \'server\';');
+    const pmUnsup = notif.indexOf("cachedPushMode = 'unsupported';");
+    t('pushMode checks native before the web API test', pmNative > 0 && pmNative < pmUnsup);
+
+    // A native build needs the plugins, or both paths throw at import.
+    const pkg = JSON.parse(read('package.json'));
+    const deps = { ...pkg.dependencies };
+    t('native biometric plugin is a dependency', 'capacitor-native-biometric' in deps);
+    t('native push plugin is a dependency', '@capacitor/push-notifications' in deps);
+  }
+
   return rows;
 }

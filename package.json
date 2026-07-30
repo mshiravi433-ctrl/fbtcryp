@@ -1,7 +1,7 @@
 {
   "name": "fbt-swap",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node --watch server/index.js\"",
@@ -27,6 +27,7 @@
     "@tonconnect/ui-react": "^2.4.4",
     "@vercel/blob": "^2.6.1",
     "@walletconnect/ethereum-provider": "^2.23.10",
+    "capacitor-native-biometric": "^4.2.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "ethers": "^6.13.2",

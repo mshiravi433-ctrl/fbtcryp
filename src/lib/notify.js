@@ -179,6 +179,28 @@ export function notificationPermission() {
 }
 
 export async function requestNotificationPermission() {
+  /*
+   * On the packaged Android app there is no `Notification` API, so
+   * notificationsSupported() is false and this returned 'unsupported' — which
+   * made the Settings toggle give up before ever reaching the native path.
+   * The OS permission dialog was never even shown.
+   *
+   * Capacitor exposes the real Android 13+ runtime permission, so ask through
+   * the plugin instead.
+   */
+  if (isNativeApp()) {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      let status = await PushNotifications.checkPermissions();
+      if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
+        status = await PushNotifications.requestPermissions();
+      }
+      return status.receive === 'granted' ? 'granted' : 'denied';
+    } catch {
+      return 'denied';
+    }
+  }
+
   if (!notificationsSupported()) return 'unsupported';
   try {
     return await Notification.requestPermission();
@@ -296,6 +318,25 @@ let cachedPushMode = null;
  */
 export async function pushMode(force = false) {
   if (cachedPushMode && !force) return cachedPushMode;
+
+  /*
+   * Native Android is decided before the web checks run, and for two reasons:
+   *
+   *   1. `notificationsSupported()` tests for the web Notification API, which
+   *      a Capacitor WebView does not have — so this returned 'unsupported'
+   *      and the whole feature was switched off before FCM was considered.
+   *
+   *   2. `pushConfigured()` tests for a VAPID public key. FCM does not use
+   *      VAPID at all, so a correctly configured native build with no VAPID
+   *      key was downgraded to 'local' (device-only) notifications.
+   *
+   * Either check alone was enough to silently disable server push on the APK.
+   */
+  if (isNativeApp()) {
+    cachedPushMode = 'server';
+    return cachedPushMode;
+  }
+
   if (!notificationsSupported()) {
     cachedPushMode = 'unsupported';
     return cachedPushMode;
