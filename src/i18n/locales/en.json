@@ -916,16 +916,24 @@
   "stillStuck": "Did not find your answer?",
   "stillStuckSub": "Message support directly — a real person replies.",
   "ask": {
-   "title": "Ask a question",
-   "subtitle": "Answered from our own documentation, not from the open internet.",
-   "placeholder": "e.g. why did my swap fail?",
-   "send": "Ask",
-   "thinking": "Checking…",
+   "title": "Ask anything",
+   "subtitle": "Crypto questions, or how this app works.",
+   "placeholder": "Ask a question…",
+   "send": "Send",
+   "thinking": "Thinking…",
+   "clear": "Clear",
    "noAnswer": "We do not have a reliable answer for that. Please contact support on Telegram so a person can look at it — include the transaction hash if it is about a trade.",
-   "verify": "Reworded by a language model from our documentation. If it contradicts anything else in the app, trust the app and contact support.",
+   "disclaimer": "Answers about FBT Swap come from our own documentation. General answers may use a web search and can be wrong — never share your recovery phrase with anyone, including this assistant.",
+   "s": {
+    "fee": "What fees do you charge?",
+    "blockchain": "What is a blockchain?",
+    "failed": "Why did my swap fail?",
+    "safe": "How do I keep my wallet safe?"
+   },
    "source": {
-    "local": "From our documentation",
-    "model": "Reworded by AI from our docs",
+    "local": "From our docs",
+    "model": "AI · from our docs",
+    "web": "AI · web search",
     "none": "No answer found"
    }
   }

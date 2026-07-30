@@ -2821,15 +2821,221 @@ input, select, textarea { font-size: 16px !important; }
 .p2p-steps li::marker { color: var(--rgb-1); font-weight: 700; }
 :root[data-theme='light'] .p2p-steps li::marker { color: var(--ink-cyan); }
 
-/*
- * The ask-box answer. Deliberately NOT .faq-a: an expanded FAQ row and a
- * generated answer are different things and should not share a class, or
- * neither the DOM nor a test can tell them apart.
- */
-.ask-a {
-  margin: 0 0 8px;
-  font-size: 12.4px;
-  line-height: 1.95;
-  color: var(--text-2);
-  white-space: pre-line;
+
+
+/* ==========================================================================
+   ASK — help assistant
+   A conversation, not a form. Styled as a distinct surface so it reads as a
+   different kind of thing from the FAQ list below it.
+   ========================================================================== */
+
+.ask-card {
+  position: relative;
+  border-radius: var(--radius);
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-2) 30%, transparent);
+  background:
+    linear-gradient(150deg,
+      color-mix(in srgb, var(--rgb-1) 9%, transparent),
+      color-mix(in srgb, var(--rgb-2) 7%, transparent) 55%,
+      transparent),
+    var(--bg-panel);
+  overflow: hidden;
 }
+
+:root[data-theme='light'] .ask-card {
+  background:
+    linear-gradient(150deg, rgba(0, 131, 146, 0.07), rgba(106, 58, 224, 0.06) 55%, transparent),
+    #fff;
+  border-color: rgba(106, 58, 224, 0.26);
+  box-shadow: 0 3px 18px -10px rgba(16, 20, 40, 0.25);
+}
+
+.ask-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+
+.ask-badge {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 0 16px -4px var(--rgb-2);
+}
+:root[data-theme='light'] .ask-badge { color: #fff; }
+
+.ask-title { font-weight: 800; font-size: 14px; letter-spacing: -0.01em; }
+
+.ask-clear {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  background: none;
+  border: 0;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+/* -------------------------------- chips ---------------------------------- */
+
+.ask-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 11px;
+}
+
+.ask-chip {
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.ask-chip:active { transform: scale(0.97); }
+.ask-chip:hover { border-color: var(--rgb-2); color: var(--text-1); }
+
+/* ------------------------------- thread ---------------------------------- */
+
+.ask-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 46dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;  /* don't scroll the page at the ends */
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 11px;
+  padding-inline-end: 2px;
+}
+
+.ask-msg { display: flex; flex-direction: column; gap: 4px; max-width: 88%; }
+.ask-user { align-self: flex-end; align-items: flex-end; }
+.ask-bot { align-self: flex-start; align-items: flex-start; }
+
+.ask-bubble {
+  border-radius: 14px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.85;
+  /* Answers are written as short paragraphs; HTML would collapse the breaks. */
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.ask-user .ask-bubble {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #000;
+  font-weight: 600;
+  border-end-end-radius: 5px;
+}
+:root[data-theme='light'] .ask-user .ask-bubble { color: #fff; }
+
+.ask-bot .ask-bubble {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--text-1);
+  border-end-start-radius: 5px;
+}
+
+/* ------------------------------ provenance -------------------------------- */
+
+.ask-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding-inline-start: 3px;
+}
+
+/*
+ * The source label is colour-coded on purpose. "Written by us about this app"
+ * and "generated from a web search" carry very different weight, and a user
+ * deciding whether to act on an answer about money should be able to tell
+ * them apart at a glance rather than by reading the fine print.
+ */
+.ask-src {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.ask-src-local  { color: var(--ink-mint);   background: color-mix(in srgb, var(--ink-mint) 13%, transparent);   border-color: color-mix(in srgb, var(--ink-mint) 30%, transparent); }
+.ask-src-model  { color: var(--ink-cyan);   background: color-mix(in srgb, var(--ink-cyan) 13%, transparent);   border-color: color-mix(in srgb, var(--ink-cyan) 30%, transparent); }
+.ask-src-web    { color: var(--ink-violet); background: color-mix(in srgb, var(--ink-violet) 13%, transparent); border-color: color-mix(in srgb, var(--ink-violet) 30%, transparent); }
+.ask-src-none   { color: var(--text-3);     background: var(--bg-raised);                                       border-color: var(--line); }
+
+.ask-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-decoration: none;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.ask-link:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+/* ------------------------------- typing ----------------------------------- */
+
+.ask-typing { display: flex; gap: 4px; align-items: center; padding: 12px; }
+.ask-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: ask-dot 1.1s ease-in-out infinite;
+}
+.ask-typing i:nth-child(2) { animation-delay: 0.16s; }
+.ask-typing i:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes ask-dot {
+  0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-3px); }
+}
+
+/* -------------------------------- form ------------------------------------ */
+
+.ask-form { display: flex; gap: 7px; align-items: center; }
+.ask-form input { flex: 1; min-width: 0; }
+
+.ask-send {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+:root[data-theme='light'] .ask-send { color: #fff; }
+.ask-send:disabled { opacity: 0.4; cursor: default; }
+.ask-send:active:not(:disabled) { transform: scale(0.94); }
+
+/* The arrow means "forward", which is leftward in RTL. */
+[dir='rtl'] .ask-send svg { transform: scaleX(-1); }
+
+.ask-foot { margin-top: 9px; line-height: 1.65; }

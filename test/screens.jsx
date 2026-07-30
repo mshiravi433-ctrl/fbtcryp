@@ -250,6 +250,7 @@ export async function run(container) {
      */
     const askInput = host.querySelector('input[type="text"]');
     out.push(['Help has an ask box', Boolean(askInput)]);
+    out.push(['starter suggestions are offered', host.querySelectorAll('.ask-chip').length >= 3]);
 
     if (askInput) {
       // A question the local FAQ answers confidently must never hit the
@@ -272,6 +273,31 @@ export async function run(container) {
       const text = host.textContent;
       out.push(['a known question is answered without a server', text.includes('۰.۵٪') || text.includes('0.5')]);
       out.push(['the answer is labelled as coming from our docs', text.includes('از مستندات ما')]);
+
+      // Threaded: the question stays on screen next to its answer, so a
+      // follow-up has context. A single-answer box loses that.
+      out.push(['the question is kept in the thread', Boolean(host.querySelector('.ask-user'))]);
+      out.push(['the answer is a bot turn', Boolean(host.querySelector('.ask-bot'))]);
+
+      /*
+       * A general question has no FAQ match, so with no server reachable it
+       * MUST fall through to the "contact support" message. Answering it
+       * anyway would mean something invented the answer.
+       */
+      await act(async () => {
+        setValue.call(askInput, 'قیمت طلا فردا چقدر است');
+        askInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+      await act(async () => {
+        host.querySelector('form')?.dispatchEvent(
+          new window.Event('submit', { bubbles: true, cancelable: true })
+        );
+      });
+      await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+      out.push([
+        'an unknown question offline points at human support, it does not invent',
+        host.textContent.includes('پشتیبانی')
+      ]);
     }
 
     const rows = [...host.querySelectorAll('.faq-q')];

@@ -224,6 +224,66 @@ export async function fetchNews(query, limit = 6) {
   }
 }
 
+/**
+ * Keyless web search fallback (DuckDuckGo Instant Answer).
+ *
+ * Jina gives much better results but needs a paid key, so without one the
+ * assistant would answer every current-events question from its training
+ * cutoff — months stale, stated with full confidence. DDG's public endpoint
+ * needs no key and covers exactly the "what is X" questions people ask a help
+ * screen.
+ *
+ * It returns definitions and related topics rather than ranked pages, so it is
+ * genuinely weaker than Jina. That is why it runs second, and why a miss is
+ * silent: no results simply means the model answers from its own knowledge,
+ * which is the previous behaviour and still useful.
+ */
+async function ddgSearch(query, limit = 4) {
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+    const raw = await req(url, { headers: { accept: 'application/json' } }, 8000);
+
+    const out = [];
+    if (raw?.AbstractText) {
+      out.push({
+        title: raw.Heading || query,
+        url: raw.AbstractURL || '',
+        snippet: String(raw.AbstractText).slice(0, 300)
+      });
+    }
+    for (const topic of raw?.RelatedTopics ?? []) {
+      if (out.length >= limit) break;
+      // Nested "Topics" groups have no Text of their own; skip them rather
+      // than emitting an entry with an empty snippet.
+      if (!topic?.Text) continue;
+      out.push({
+        title: String(topic.Text).split(' - ')[0].slice(0, 120),
+        url: topic.FirstURL || '',
+        snippet: String(topic.Text).slice(0, 300)
+      });
+    }
+    return out.slice(0, limit);
+  } catch {
+    // A search failure must never fail the answer.
+    return [];
+  }
+}
+
+/**
+ * Search the web, best source first.
+ *
+ * Jina when a key is configured, DuckDuckGo otherwise. Returns [] rather than
+ * throwing: grounding is an enhancement, and losing it should degrade the
+ * answer, not break it.
+ */
+export async function webSearch(query, limit = 4) {
+  if (JINA_KEY) {
+    const viaJina = await fetchNews(query, limit);
+    if (viaJina.length) return viaJina;
+  }
+  return ddgSearch(query, limit);
+}
+
 /* -------------------------------------------------------------------------- */
 /* OpenRouter — the analyst                                                   */
 /* -------------------------------------------------------------------------- */
@@ -439,46 +499,118 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
  * strictly better, and free.
  * ────────────────────────────────────────────────────────────────────────────
  */
-export async function answerSupportQuestion({ question, context = [], lang = 'fa' }) {
+export async function answerSupportQuestion({ question, context = [], lang = 'fa', web = true }) {
   if (!aiConfigured()) throw new Error('AI_NOT_CONFIGURED');
 
   const q = String(question || '').slice(0, 500);
   if (!q.trim()) throw new Error('EMPTY_QUESTION');
+
+  /*
+   * TWO MODES, chosen by whether our own docs matched.
+   *
+   * The previous prompt said "answer ONLY from the reference", which made the
+   * assistant useless for the thing people actually want to ask — "what is a
+   * blockchain", "is Bitcoin going up", "what does staking mean". Refusing
+   * those is not safety, it is just an unhelpful product.
+   *
+   * But the reverse is worse: a model asked "what fee does FBT charge?" will
+   * invent a number, and an invented fee on a finance app is a lie the user
+   * may act on.
+   *
+   * So the mode depends on the question:
+   *
+   *   GROUNDED  — our FAQ matched, so the question is about THIS app. The
+   *               reference is the only permitted source. No invention.
+   *
+   *   GENERAL   — no FAQ match, so it is a general crypto question. The model
+   *               may use its own knowledge, but it is explicitly told it does
+   *               NOT know anything about FBT Swap specifically and must not
+   *               guess about our fees, addresses or features.
+   *
+   * Both modes keep the safety floor: never request a seed phrase, never imply
+   * a transaction can be reversed, never give financial advice.
+   */
+  const grounded = context.length > 0;
 
   const facts = context
     .slice(0, 4)
     .map((c, i) => `[${i + 1}] ${String(c).slice(0, 900)}`)
     .join('\n\n');
 
-  const system = [
-    'You are the support assistant for FBT Swap, a non-custodial crypto exchange.',
-    '',
-    'ABSOLUTE RULES:',
-    '- Answer ONLY from the REFERENCE section below. It is the sole source of truth.',
-    '- Never invent a fee, a percentage, a network name, an address or a recovery method.',
-    '- If the reference does not cover the question, say you do not know and suggest contacting support. Do not guess.',
-    '- Never ask for a seed phrase, private key or password, and never suggest the user share one.',
-    '- On-chain transactions are irreversible. Never imply anything can be refunded, reversed or recovered.',
-    '- This is not financial advice. Never recommend buying or selling a specific asset.',
-    '',
-    `Reply in this language code: ${lang}. Keep it under 90 words, plain and direct.`,
-    '',
-    'REFERENCE:',
-    facts || '(no reference supplied — you must say you do not know)'
+  // Live web results, when a search key is configured. Without this the model
+  // answers "what is the price of bitcoin" from its training cutoff, which is
+  // months stale and stated with full confidence.
+  let sources = [];
+  if (web && !grounded) {
+    sources = await webSearch(q, 4);
+  }
+
+  const webBlock = sources.length
+    ? [
+        '',
+        'LIVE WEB RESULTS (today — prefer these over your training data for anything time-sensitive):',
+        ...sources.map((s2, i) => `(${i + 1}) ${s2.title} — ${s2.snippet}`)
+      ].join('\n')
+    : '';
+
+  const safety = [
+    'SAFETY RULES THAT ALWAYS APPLY:',
+    '- Never ask for, or suggest sharing, a seed phrase, private key or password. No legitimate service ever asks.',
+    '- On-chain transactions are irreversible. Never imply a swap or transfer can be refunded, reversed or recovered.',
+    '- Never recommend buying or selling a specific asset, and never predict a price. Explain instead.',
+    '- If you are not sure, say so. A wrong answer about money is worse than no answer.'
   ].join('\n');
+
+  const system = grounded
+    ? [
+        'You are the support assistant for FBT Swap, a non-custodial crypto exchange.',
+        '',
+        'This question is about FBT Swap itself, and the REFERENCE below is our own',
+        'documentation. It is the ONLY permitted source for facts about this app.',
+        '- Never invent a fee, percentage, network, address or recovery method.',
+        '- If the reference does not cover part of the question, say so and point to support.',
+        '',
+        safety,
+        '',
+        `Reply in language code: ${lang}. Under 90 words, plain and direct.`,
+        '',
+        'REFERENCE:',
+        facts
+      ].join('\n')
+    : [
+        'You are a knowledgeable, friendly crypto educator inside the FBT Swap app.',
+        '',
+        'Answer the question helpfully using your general knowledge. Explain clearly',
+        'for someone who may be new to crypto.',
+        '',
+        'CRITICAL: you do NOT have documentation about FBT Swap in front of you. If the',
+        'question turns out to be about this app specifically — its fees, its supported',
+        'networks, its addresses, its features — say you are not certain and tell the',
+        'user to check the Help page or contact support. Never guess about FBT Swap.',
+        '',
+        safety,
+        webBlock,
+        '',
+        `Reply in language code: ${lang}. Under 120 words. No markdown headings.`
+      ].join('\n');
 
   const { text, model } = await chat({
     system,
     user: q,
-    maxTokens: 320,
-    temperature: 0.2, // low: this is retrieval phrasing, not creative writing
-    // Every provider here defaults json:true because the other callers parse
-    // structured output. This one wants a sentence, and leaving the default
-    // would return a JSON object rendered verbatim into the chat bubble.
+    maxTokens: 420,
+    temperature: grounded ? 0.2 : 0.4,
+    // The shared chat() defaults to json:true because other callers parse
+    // structured output. This one wants prose; leaving the default renders a
+    // raw JSON object into the chat bubble.
     json: false
   });
 
-  return { answer: String(text || '').trim(), model, grounded: context.length > 0 };
+  return {
+    answer: String(text || '').trim(),
+    model,
+    grounded,
+    sources: sources.map((s2) => ({ title: s2.title, url: s2.url }))
+  };
 }
 
 export async function generateOutlook(payload) {
