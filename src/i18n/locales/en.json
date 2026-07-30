@@ -29,7 +29,8 @@
   "p2p": "P2P",
   "leaderboard": "Ranking",
   "news": "News",
-  "explore": "Explorer"
+  "explore": "Explorer",
+  "discover": "Discover"
  },
  "common": {
   "balance": "Balance",
@@ -312,7 +313,7 @@
   "wrongNetwork": "Wrong network",
   "noProvider": "No injected wallet found. Telegram's in-app browser has no wallet provider — add TON Connect or WalletConnect v2 for production (see WalletContext.jsx).",
   "connectFailed": "Connection failed or was rejected.",
-  "custodyNotice": "Read-only. This app has no deposit address and never asks you to send crypto anywhere. Any bot that asks you to transfer funds to it should be treated as a scam.",
+  "custodyNotice": "Self-custody. Your keys stay in your own wallet — Fanous Bazaar Pishgam never holds your assets, cannot freeze them and cannot reverse a transaction. Use Receive to get your own address. We will never message you first or ask you to send crypto to an address: anyone doing so is impersonating us.",
   "activity": "Recent activity",
   "settings": "Settings",
   "resetDesc": "Reset your virtual balance, positions, plans and history back to the starting state.",
@@ -1559,6 +1560,44 @@
     "q": "How many confirmations?",
     "a": "One confirmation is normally enough on BNB Chain or Polygon. For large amounts, waiting for a few more is safer."
    }
+  }
+ },
+ "discover": {
+  "title": "Discover",
+  "subtitle": "Trusted crypto sites, opened in your browser.",
+  "cat": {
+   "all": "All",
+   "dex": "Exchanges",
+   "data": "Charts & data",
+   "explorer": "Explorers",
+   "wallet": "Wallets",
+   "nft": "NFT markets",
+   "learn": "Learn"
+  },
+  "safety": "These open in your phone’s own browser, so the real address bar stays visible and its security warnings still apply. We never ask you to type a site address here — that is how lookalike-domain scams work. If a message tells you to open a site in your wallet, treat it as a scam.",
+  "site": {
+   "pancakeswap": "PancakeSwap",
+   "uniswap": "Uniswap",
+   "kyberswap": "KyberSwap",
+   "quickswap": "QuickSwap",
+   "coingecko": "CoinGecko",
+   "geckoterminal": "GeckoTerminal",
+   "defillama": "DefiLlama",
+   "dexscreener": "DEX Screener",
+   "bscscan": "BscScan",
+   "etherscan": "Etherscan",
+   "polygonscan": "PolygonScan",
+   "arbiscan": "Arbiscan",
+   "metamask": "MetaMask",
+   "trustwallet": "Trust Wallet",
+   "walletconnect": "WalletConnect",
+   "opensea": "OpenSea",
+   "blur": "Blur",
+   "magiceden": "Magic Eden",
+   "element": "Element",
+   "bnbchain": "BNB Chain",
+   "ethereum": "Ethereum.org",
+   "l2beat": "L2BEAT"
   }
  }
 }

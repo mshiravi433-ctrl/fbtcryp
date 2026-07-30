@@ -20,6 +20,7 @@
     "test": "node test/run.mjs"
   },
   "dependencies": {
+    "@capacitor/browser": "^6.0.6",
     "@capacitor/filesystem": "^6.0.4",
     "@capacitor/share": "^6.0.4",
     "@tonconnect/ui-react": "^2.4.4",

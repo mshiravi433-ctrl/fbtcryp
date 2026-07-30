@@ -18,6 +18,7 @@ import { revealMnemonic } from '../lib/localWallet';
 import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
 import AdBanner from '../components/AdBanner';
 import { explorerAddr } from '../lib/chains';
+import { IconQr } from '../components/Icons';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
 
@@ -149,24 +150,6 @@ export default function Wallet() {
       )}
 
       {tab === 'overview' && <>
-      {/*
-        Send / Receive sit at the top of the wallet, above everything else.
-        They are the two things a wallet is FOR, and burying them under a
-        portfolio chart is what made people ask where the deposit button was.
-        Shown only when connected: offering "Receive" with no address would
-        open a sheet that can only apologise.
-      */}
-      {wallet.isConnected && (
-        <motion.div className="row" style={{ gap: 8 }} variants={riseIn} initial="hidden" animate="show">
-          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setReceiveOpen(true)}>
-            {t('receive.title')}
-          </button>
-          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setSendOpen(true)}>
-            {t('send.title')}
-          </button>
-        </motion.div>
-      )}
-
       <AdBanner slot="farm" compact />
       {/* ---------- allocation ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -297,6 +280,38 @@ export default function Wallet() {
                   {wallet.locked ? '🔒' : t(`wallet.mode.${wallet.mode}`)}
                 </span>
               </span>
+            </div>
+
+            {/*
+              Send / Receive, directly under the address they act on.
+              These are the two things a wallet is FOR, so they get the
+              largest, highest-contrast controls on the screen rather than
+              sitting among the row of small ghost buttons below — which is
+              where they were invisible.
+            */}
+            <div className="wal-actions">
+              <button className="wal-action wal-recv" onClick={() => setReceiveOpen(true)}>
+                <span className="wal-action-icon" aria-hidden="true">
+                  <IconQr width={18} height={18} />
+                </span>
+                <span className="wal-action-label">{t('receive.title')}</span>
+              </button>
+              <button
+                className="wal-action wal-send"
+                onClick={() => setSendOpen(true)}
+                /* Locked means no signer, so a send could only fail at the
+                   final step. Better to disable it than to let someone fill
+                   in an address and an amount for nothing. */
+                disabled={wallet.locked}
+              >
+                <span className="wal-action-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                </span>
+                <span className="wal-action-label">{t('send.title')}</span>
+              </button>
             </div>
 
             {wallet.nativeBalance != null && (

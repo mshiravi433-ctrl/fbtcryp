@@ -47,6 +47,7 @@ const P2P = lazy(() => import('./pages/P2P'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
 const News = lazy(() => import('./pages/News'));
 const Explore = lazy(() => import('./pages/Explore'));
+const Discover = lazy(() => import('./pages/Discover'));
 
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
@@ -150,6 +151,7 @@ function AnimatedRoutes() {
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/news" element={<News />} />
           <Route path="/explore" element={<Explore />} />
+          <Route path="/discover" element={<Discover />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>

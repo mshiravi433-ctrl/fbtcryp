@@ -29,7 +29,8 @@
   "p2p": "نظير لنظير",
   "leaderboard": "الترتيب",
   "news": "الأخبار",
-  "explore": "المستكشف"
+  "explore": "المستكشف",
+  "discover": "اكتشف"
  },
  "common": {
   "balance": "الرصيد",
@@ -312,7 +313,7 @@
   "wrongNetwork": "شبكة خاطئة",
   "noProvider": "لم يتم العثور على محفظة. متصفح تيليجرام الداخلي لا يوفر محفظة — أضف TON Connect أو WalletConnect v2 للإنتاج (راجع WalletContext.jsx).",
   "connectFailed": "فشل الاتصال أو تم رفضه.",
-  "custodyNotice": "للقراءة فقط. لا يملك هذا التطبيق أي عنوان إيداع ولن يطلب منك إرسال أي عملات. أي بوت يطلب تحويل أموال إليه هو احتيال.",
+  "custodyNotice": "حفظ ذاتي. مفاتيحك تبقى في محفظتك — لا نحتفظ بأصولك ولا يمكننا تجميدها أو عكس معاملة. استخدم «استلام» للحصول على عنوانك. لن نراسلك أولاً ولن نطلب منك إرسال عملات إلى أي عنوان.",
   "activity": "النشاط الأخير",
   "settings": "الإعدادات",
   "resetDesc": "إعادة الرصيد الافتراضي والمراكز والخطط والسجل إلى الحالة الأولية.",
@@ -1559,6 +1560,44 @@
     "q": "كم تأكيداً؟",
     "a": "تأكيد واحد يكفي عادةً على BNB Chain أو بوليجون."
    }
+  }
+ },
+ "discover": {
+  "title": "اكتشف",
+  "subtitle": "مواقع موثوقة، تُفتح في متصفحك.",
+  "cat": {
+   "all": "الكل",
+   "dex": "المنصات",
+   "data": "الرسوم والبيانات",
+   "explorer": "المستكشفات",
+   "wallet": "المحافظ",
+   "nft": "أسواق NFT",
+   "learn": "تعلّم"
+  },
+  "safety": "تُفتح في متصفح هاتفك، فيبقى شريط العنوان الحقيقي ظاهراً وتعمل تحذيرات الأمان. لا نطلب منك كتابة عنوان موقع هنا أبداً.",
+  "site": {
+   "pancakeswap": "PancakeSwap",
+   "uniswap": "Uniswap",
+   "kyberswap": "KyberSwap",
+   "quickswap": "QuickSwap",
+   "coingecko": "CoinGecko",
+   "geckoterminal": "GeckoTerminal",
+   "defillama": "DefiLlama",
+   "dexscreener": "DEX Screener",
+   "bscscan": "BscScan",
+   "etherscan": "Etherscan",
+   "polygonscan": "PolygonScan",
+   "arbiscan": "Arbiscan",
+   "metamask": "MetaMask",
+   "trustwallet": "Trust Wallet",
+   "walletconnect": "WalletConnect",
+   "opensea": "OpenSea",
+   "blur": "Blur",
+   "magiceden": "Magic Eden",
+   "element": "Element",
+   "bnbchain": "BNB Chain",
+   "ethereum": "Ethereum.org",
+   "l2beat": "L2BEAT"
   }
  }
 }

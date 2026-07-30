@@ -14,6 +14,7 @@ import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
 import qrcode from 'qrcode-generator';
 import { classifyQuery } from '../src/pages/Explore.jsx';
+import { isSafeUrl } from '../src/lib/browser.js';
 import coverage from '../src/i18n/coverage.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 
@@ -300,6 +301,25 @@ export default function run() {
     t('junk is reported as unrecognised', classifyQuery('hello world').kind === 'unknown');
     // A truncated hash must NOT be silently treated as an address.
     t('a truncated hash is not mistaken for an address', classifyQuery(hash.slice(0, 50)).kind === 'unknown');
+  }
+
+  /* --------------------------- browser safety ------------------------------ */
+  /*
+   * The in-app browser must refuse anything but plain https. javascript: and
+   * data: URLs can execute in the opening context, and http: is trivially
+   * rewritten on a hostile network — which, on a page about crypto, means an
+   * attacker editing the addresses the user is about to copy.
+   */
+  {
+    t('https is allowed', isSafeUrl('https://pancakeswap.finance'));
+    t('http is refused', !isSafeUrl('http://pancakeswap.finance'));
+    t('javascript: is refused', !isSafeUrl('javascript:alert(1)'));
+    t('data: is refused', !isSafeUrl('data:text/html,<script>alert(1)</script>'));
+    t('file: is refused', !isSafeUrl('file:///etc/passwd'));
+    t('garbage is refused', !isSafeUrl('not a url'));
+    t('empty is refused', !isSafeUrl(''));
+    // Case and whitespace tricks must not slip past the scheme check.
+    t('uppercase JAVASCRIPT: is refused', !isSafeUrl('JavaScript:alert(1)'));
   }
 
   return rows;

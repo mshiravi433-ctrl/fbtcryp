@@ -29,7 +29,8 @@
   "p2p": "همتا به همتا",
   "leaderboard": "رتبه‌بندی",
   "news": "اخبار",
-  "explore": "کاوشگر"
+  "explore": "کاوشگر",
+  "discover": "کشف"
  },
  "common": {
   "balance": "موجودی",
@@ -312,7 +313,7 @@
   "wrongNetwork": "شبکه اشتباه",
   "noProvider": "کیف پولی پیدا نشد. مرورگر داخلی تلگرام کیف پول تزریق‌شده ندارد — برای نسخه نهایی TON Connect یا WalletConnect v2 اضافه کن (فایل WalletContext.jsx).",
   "connectFailed": "اتصال ناموفق بود یا رد شد.",
-  "custodyNotice": "فقط خواندنی. این اپ هیچ آدرس واریزی ندارد و هرگز از تو نمی‌خواهد ارز به جایی بفرستی. هر رباتی که بخواهد پول به آن منتقل کنی را کلاهبرداری فرض کن.",
+  "custodyNotice": "خودحضانتی. کلیدها در کیف پول خودت می‌مانند — فانوس بازار پیشگام هرگز دارایی‌ات را نگه نمی‌دارد، نمی‌تواند مسدودش کند و نمی‌تواند تراکنشی را برگرداند. برای گرفتن آدرس خودت از «دریافت» استفاده کن. ما هرگز اول به تو پیام نمی‌دهیم و هرگز نمی‌خواهیم ارز به آدرسی بفرستی: هرکس چنین بخواهد، خودش را جای ما جا زده.",
   "activity": "فعالیت اخیر",
   "settings": "تنظیمات",
   "resetDesc": "بازگرداندن موجودی مجازی، پوزیشن‌ها، طرح‌ها و تاریخچه به حالت اولیه.",
@@ -1559,6 +1560,44 @@
     "q": "چند تأیید لازم است؟",
     "a": "روی BNB Chain یا پالیگان معمولاً یک تأیید کافی است. برای مبالغ بزرگ، صبر کردن برای چند تأیید بیشتر امن‌تر است."
    }
+  }
+ },
+ "discover": {
+  "title": "کشف",
+  "subtitle": "سایت‌های معتبر ارز دیجیتال، در مرورگر خودت باز می‌شوند.",
+  "cat": {
+   "all": "همه",
+   "dex": "صرافی‌ها",
+   "data": "نمودار و داده",
+   "explorer": "کاوشگرها",
+   "wallet": "کیف پول‌ها",
+   "nft": "بازار NFT",
+   "learn": "آموزش"
+  },
+  "safety": "اینها در مرورگر خود گوشی باز می‌شوند، پس نوار آدرس واقعی دیده می‌شود و هشدارهای امنیتی مرورگر هم کار می‌کنند. ما هیچ‌وقت از تو نمی‌خواهیم آدرس سایتی را اینجا تایپ کنی — کلاهبرداری با دامنه‌های شبیه‌هم دقیقاً همین‌طور کار می‌کند. اگر پیامی گفت سایتی را در کیف پولت باز کن، کلاهبرداری فرض کن.",
+  "site": {
+   "pancakeswap": "PancakeSwap",
+   "uniswap": "Uniswap",
+   "kyberswap": "KyberSwap",
+   "quickswap": "QuickSwap",
+   "coingecko": "CoinGecko",
+   "geckoterminal": "GeckoTerminal",
+   "defillama": "DefiLlama",
+   "dexscreener": "DEX Screener",
+   "bscscan": "BscScan",
+   "etherscan": "Etherscan",
+   "polygonscan": "PolygonScan",
+   "arbiscan": "Arbiscan",
+   "metamask": "MetaMask",
+   "trustwallet": "Trust Wallet",
+   "walletconnect": "WalletConnect",
+   "opensea": "OpenSea",
+   "blur": "Blur",
+   "magiceden": "Magic Eden",
+   "element": "Element",
+   "bnbchain": "BNB Chain",
+   "ethereum": "Ethereum.org",
+   "l2beat": "L2BEAT"
   }
  }
 }
