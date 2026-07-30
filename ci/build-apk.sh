@@ -90,34 +90,36 @@ GRADLE_CODE="$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gradl
 GRADLE_NAME="$(sed -nE 's/.*versionName "([^"]*)".*/\1/p' android/app/build.gradle | head -1)"
 echo "▸ build.gradle declares versionCode=${GRADLE_CODE} versionName=${GRADLE_NAME}"
 
-if [ -n "${APP_VERSION_CODE:-}" ] && [ "${APP_VERSION_CODE}" -lt "${GRADLE_CODE:-0}" ]; then
-  fail <<MSG
-The APP_VERSION_CODE repository variable (${APP_VERSION_CODE}) is LOWER than
-the versionCode committed in android/app/build.gradle (${GRADLE_CODE}).
-
-Stamping it would silently downgrade this build and Google Play would
-reject the upload with "version code ${APP_VERSION_CODE} has already been used"
-- after the build and the upload had both appeared to succeed.
-
-This almost always means the variable was set once and never updated,
-while the release commit bumped the file as intended.
-
-Fix: either set APP_VERSION_CODE to ${GRADLE_CODE} or higher at
-Settings > Secrets and variables > Actions > Variables, or delete the
-variable entirely and let build.gradle be the single source of truth
-(recommended - one number to bump, in the commit that releases it).
-MSG
-fi
+# This is NOT hypothetical. The variable was found set to 1 while build.gradle
+# said 5, which means every CI build ever produced here was stamped
+# versionCode 1 — including the ones prepared for a Play upload.
+#
+# Rather than fail the build (which blocks releasing from a phone, where
+# changing a repo variable is awkward), take the HIGHER of the two. That can
+# never downgrade, never blocks, and still lets the variable raise a version
+# without a code change. The stale value is reported loudly instead.
+STAMP_CODE="${GRADLE_CODE:-1}"
+STAMP_NAME="${GRADLE_NAME:-1.0}"
+VERSION_WARNING=""
 
 if [ -n "${APP_VERSION_CODE:-}" ]; then
-  echo "▸ stamping versionCode=$APP_VERSION_CODE versionName=${APP_VERSION_NAME:-1.0}"
-  sed -i.bak -E "s/versionCode [0-9]+/versionCode ${APP_VERSION_CODE}/" android/app/build.gradle
-  sed -i.bak -E "s/versionName \"[^\"]*\"/versionName \"${APP_VERSION_NAME:-1.0}\"/" android/app/build.gradle
-  rm -f android/app/build.gradle.bak
-  grep -nE "versionCode|versionName" android/app/build.gradle
+  if [ "${APP_VERSION_CODE}" -lt "${GRADLE_CODE:-0}" ]; then
+    VERSION_WARNING="APP_VERSION_CODE variable is ${APP_VERSION_CODE} but build.gradle says ${GRADLE_CODE}; using ${GRADLE_CODE}. Update or delete the variable at Settings > Secrets and variables > Actions > Variables."
+    echo "  ⚠  ${VERSION_WARNING}"
+    printf '::warning title=Stale APP_VERSION_CODE::%s\n' "$VERSION_WARNING"
+  else
+    STAMP_CODE="${APP_VERSION_CODE}"
+    STAMP_NAME="${APP_VERSION_NAME:-${GRADLE_NAME:-1.0}}"
+  fi
 else
   echo "  (no APP_VERSION_CODE variable set — using the committed values, which is fine)"
 fi
+
+echo "▸ stamping versionCode=${STAMP_CODE} versionName=${STAMP_NAME}"
+sed -i.bak -E "s/versionCode [0-9]+/versionCode ${STAMP_CODE}/" android/app/build.gradle
+sed -i.bak -E "s/versionName \"[^\"]*\"/versionName \"${STAMP_NAME}\"/" android/app/build.gradle
+rm -f android/app/build.gradle.bak
+grep -nE "versionCode|versionName" android/app/build.gradle
 
 # Whatever path we took, report what the build will ACTUALLY carry. This is
 # the number Play compares against, so it belongs in the log unconditionally
@@ -376,6 +378,7 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
       # they differ whenever the variable is unset, and the whole point of
       # this line is to be trustworthy before a Play upload.
       echo "versionCode: \`${EFFECTIVE_CODE:-?}\` · versionName: \`${EFFECTIVE_NAME:-?}\` — Play rejects a re-upload with the same code."
+      [ -n "${VERSION_WARNING:-}" ] && { echo ""; echo "> ⚠ ${VERSION_WARNING}"; }
     else
       echo "### ⚠ DEBUG build (not publishable)"
       echo ""
