@@ -68,13 +68,63 @@ npm run build
 # Play rejects any upload whose versionCode is not higher than the last one.
 # Driving it from the environment means a new version can be released by
 # setting a repository variable, with no workflow edit and no code change.
+#
+# ---------------------------------------------------------------------------
+# ...but the override must never go BACKWARDS.
+#
+# This stamp is unconditional: whatever APP_VERSION_CODE says wins, even if it
+# is lower than the number committed in build.gradle. That is a trap, because
+# the repository variable is set once and then forgotten, while build.gradle
+# gets bumped in the release commit. Months later the variable still says 4,
+# every release commit bumps the file to 5, 6, 7 — and every single build
+# silently ships as 4 again.
+#
+# The failure surfaces at the worst possible moment: after a full build, after
+# the upload, as a Play Console rejection ("version code 4 has already been
+# used"), with a green CI run insisting everything was fine. The APK on the
+# releases page is also indistinguishable by eye from the correct one.
+#
+# So: the variable may raise the version, never lower it.
+# ---------------------------------------------------------------------------
+GRADLE_CODE="$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gradle | head -1)"
+GRADLE_NAME="$(sed -nE 's/.*versionName "([^"]*)".*/\1/p' android/app/build.gradle | head -1)"
+echo "▸ build.gradle declares versionCode=${GRADLE_CODE} versionName=${GRADLE_NAME}"
+
+if [ -n "${APP_VERSION_CODE:-}" ] && [ "${APP_VERSION_CODE}" -lt "${GRADLE_CODE:-0}" ]; then
+  fail <<MSG
+The APP_VERSION_CODE repository variable (${APP_VERSION_CODE}) is LOWER than
+the versionCode committed in android/app/build.gradle (${GRADLE_CODE}).
+
+Stamping it would silently downgrade this build and Google Play would
+reject the upload with "version code ${APP_VERSION_CODE} has already been used"
+- after the build and the upload had both appeared to succeed.
+
+This almost always means the variable was set once and never updated,
+while the release commit bumped the file as intended.
+
+Fix: either set APP_VERSION_CODE to ${GRADLE_CODE} or higher at
+Settings > Secrets and variables > Actions > Variables, or delete the
+variable entirely and let build.gradle be the single source of truth
+(recommended - one number to bump, in the commit that releases it).
+MSG
+fi
+
 if [ -n "${APP_VERSION_CODE:-}" ]; then
   echo "▸ stamping versionCode=$APP_VERSION_CODE versionName=${APP_VERSION_NAME:-1.0}"
   sed -i.bak -E "s/versionCode [0-9]+/versionCode ${APP_VERSION_CODE}/" android/app/build.gradle
   sed -i.bak -E "s/versionName \"[^\"]*\"/versionName \"${APP_VERSION_NAME:-1.0}\"/" android/app/build.gradle
   rm -f android/app/build.gradle.bak
   grep -nE "versionCode|versionName" android/app/build.gradle
+else
+  echo "  (no APP_VERSION_CODE variable set — using the committed values, which is fine)"
 fi
+
+# Whatever path we took, report what the build will ACTUALLY carry. This is
+# the number Play compares against, so it belongs in the log unconditionally
+# rather than only when an override happened to be set.
+EFFECTIVE_CODE="$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gradle | head -1)"
+EFFECTIVE_NAME="$(sed -nE 's/.*versionName "([^"]*)".*/\1/p' android/app/build.gradle | head -1)"
+echo "▸ building versionCode=${EFFECTIVE_CODE} versionName=${EFFECTIVE_NAME}"
 
 echo "▸ syncing Capacitor"
 npx cap sync android
@@ -322,7 +372,10 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
       [ -f out/app-release.aab ] && echo "| \`app-release.aab\` | $(du -h out/app-release.aab | cut -f1) | **upload this to Google Play** |"
       [ -f out/app-release.apk ] && echo "| \`app-release.apk\` | $(du -h out/app-release.apk | cut -f1) | sideload / Bazaar / Myket |"
       echo ""
-      echo "versionCode: \`${APP_VERSION_CODE:-1}\` — Play rejects a re-upload with the same value."
+      # Report the version actually compiled in, not the override variable —
+      # they differ whenever the variable is unset, and the whole point of
+      # this line is to be trustworthy before a Play upload.
+      echo "versionCode: \`${EFFECTIVE_CODE:-?}\` · versionName: \`${EFFECTIVE_NAME:-?}\` — Play rejects a re-upload with the same code."
     else
       echo "### ⚠ DEBUG build (not publishable)"
       echo ""
