@@ -33,6 +33,7 @@
   "common": {
     "balance": "Saldo",
     "back": "Voltar",
+    "close": "Fechar",
     "cancel": "Cancelar",
     "confirm": "Confirmar",
     "copy": "Copiar",

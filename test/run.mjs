@@ -179,6 +179,17 @@ console.log('\n▸ checking body scroll lock…');
   report('scroll lock', await runLock());
 }
 
+/*
+ * Wiring audit — pure file analysis, no bundler or DOM needed, so it runs
+ * first and fails fast. Catches the class of bug where everything renders and
+ * the build is green but a button does nothing or shows a raw key.
+ */
+console.log('\n▸ auditing wiring (keys · routes · dead files)…');
+{
+  const { default: runWiring } = await import('./wiring.mjs');
+  report('wiring', runWiring());
+}
+
 console.log('\n▸ checking lazy locale loading…');
 {
   npx(['vite', 'build', '-c', 'test/vite.i18n.mjs', '--logLevel', 'error']);

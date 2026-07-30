@@ -42,6 +42,7 @@ export default {
   /* ------------------------------ common ------------------------------ */
   'common.balance': { zh: '余额', hi: 'बैलेंस', es: 'Saldo', fr: 'Solde', ru: 'Баланс', tr: 'Bakiye', ur: 'بیلنس', id: 'Saldo', pt: 'Saldo' },
   'common.back': { zh: '返回', hi: 'वापस', es: 'Atrás', fr: 'Retour', ru: 'Назад', tr: 'Geri', ur: 'واپس', id: 'Kembali', pt: 'Voltar' },
+  'common.close': { zh: '关闭', hi: 'बंद करें', es: 'Cerrar', fr: 'Fermer', ru: 'Закрыть', tr: 'Kapat', ur: 'بند کریں', id: 'Tutup', pt: 'Fechar' },
   'common.cancel': { zh: '取消', hi: 'रद्द करें', es: 'Cancelar', fr: 'Annuler', ru: 'Отмена', tr: 'İptal', ur: 'منسوخ', id: 'Batal', pt: 'Cancelar' },
   'common.confirm': { zh: '确认', hi: 'पुष्टि करें', es: 'Confirmar', fr: 'Confirmer', ru: 'Подтвердить', tr: 'Onayla', ur: 'تصدیق', id: 'Konfirmasi', pt: 'Confirmar' },
   'common.copy': { zh: '复制', hi: 'कॉपी', es: 'Copiar', fr: 'Copier', ru: 'Копировать', tr: 'Kopyala', ur: 'کاپی', id: 'Salin', pt: 'Copiar' },

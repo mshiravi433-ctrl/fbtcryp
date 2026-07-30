@@ -53,7 +53,8 @@
   "off": "Off",
   "language": "Language",
   "tryAgain": "Try again",
-  "retry": "Try again"
+  "retry": "Try again",
+  "close": "Close"
  },
  "market": {
   "totalMcap": "Total market cap",

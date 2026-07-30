@@ -33,6 +33,7 @@
   "common": {
     "balance": "余额",
     "back": "返回",
+    "close": "关闭",
     "cancel": "取消",
     "confirm": "确认",
     "copy": "复制",
