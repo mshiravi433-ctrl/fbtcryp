@@ -219,5 +219,29 @@ export default function run() {
     );
   }
 
+  /* --------------------------- 8. release version ------------------------ */
+  /*
+   * Play rejects any upload whose versionCode is not strictly higher than the
+   * last one, and the rejection happens AFTER the upload — so a stale number
+   * costs a full build-and-upload cycle to discover.
+   *
+   * versionName is what users see; keeping it in step with package.json means
+   * a bug report naming "1.2.0" maps to an exact commit.
+   */
+  {
+    const pkg = JSON.parse(read('package.json'));
+    const gradle = read('android/app/build.gradle');
+
+    const code = Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]);
+    const name = /versionName\s+"([^"]+)"/.exec(gradle)?.[1];
+
+    t('android declares a versionCode', Number.isInteger(code) && code > 0);
+    t(`versionName matches package.json (${name} / ${pkg.version})`, name === pkg.version);
+    t('versionName is semver', /^\d+\.\d+\.\d+$/.test(String(name)));
+    // v1.1.1 is already published, so anything at or below its code is a
+    // guaranteed rejection.
+    t(`versionCode is past the last release (${code} > 2)`, code > 2);
+  }
+
   return rows;
 }
