@@ -3039,3 +3039,49 @@ input, select, textarea { font-size: 16px !important; }
 [dir='rtl'] .ask-send svg { transform: scaleX(-1); }
 
 .ask-foot { margin-top: 9px; line-height: 1.65; }
+
+/* ==========================================================================
+   RECEIVE
+   ========================================================================== */
+
+.recv-wrap { display: flex; flex-direction: column; align-items: center; }
+
+/*
+ * The QR sits on a WHITE card in BOTH themes, never on the page background.
+ * Scanners expect dark modules on a light field; inverting it for dark mode
+ * makes many readers fail, and the padding is the "quiet zone" the spec
+ * requires — without it the code often will not scan at all.
+ */
+.recv-qr {
+  width: min(232px, 62vw);
+  padding: 14px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 26px -14px rgba(0, 0, 0, 0.6);
+}
+.recv-qr svg { display: block; width: 100%; height: auto; }
+
+.recv-net {
+  margin: 13px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--rgb-5);
+}
+:root[data-theme='light'] .recv-net { color: var(--ink-amber); }
+
+.recv-addr {
+  margin-top: 9px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.85;
+  text-align: center;
+  word-break: break-all;
+  /* Hex must stay left-to-right even inside an RTL layout, or the characters
+     visually reorder and the user cannot verify what they are looking at. */
+  direction: ltr;
+  user-select: all;
+}

@@ -408,9 +408,10 @@
   "predictionPlaced": "تم تسجيل التوقع",
   "linkCopied": "تم نسخ رابط الدعوة",
   "handleCopied": "Handle copied",
-  "addressCopied": "Address copied",
+  "addressCopied": "تم نسخ العنوان",
   "pointsEarned": "Points earned",
-  "copied": "تم النسخ"
+  "copied": "تم النسخ",
+  "copyFailed": "تعذّر النسخ — حدد العنوان يدوياً"
  },
  "swap": {
   "title": "مبادلة",
@@ -1510,5 +1511,15 @@
    "NO_SIGNER": "المحفظة مقفلة. افتحها وحاول مجدداً.",
    "WRONG_NETWORK": "محفظتك على شبكة غير مدعومة. بدّل إلى BNB Smart Chain أو إيثريوم أو بوليجون أو أربيتروم أو بيس أو أوبتيميزم أو أفالانش."
   }
+ },
+ "receive": {
+  "title": "استلام",
+  "copy": "نسخ العنوان",
+  "copied": "تم النسخ",
+  "share": "مشاركة",
+  "onlyOn": "أرسل فقط على شبكة {{network}}",
+  "unknownNetwork": "هذه الشبكة",
+  "connectFirst": "اربط محفظة أولاً — لا يوجد عنوان لعرضه بعد.",
+  "warning": "الإرسال على شبكة مختلفة يعني عادةً فقدان الأموال نهائياً. تحقق من الشبكة قبل التأكيد."
  }
 }

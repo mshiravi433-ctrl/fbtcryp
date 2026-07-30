@@ -25,6 +25,7 @@ import Settings from '../src/pages/Settings.jsx';
 import Earn from '../src/pages/Earn.jsx';
 import Signals from '../src/pages/Signals.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
+import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
 import Sheet from '../src/components/Sheet.jsx';
 import UsernameField, { sanitizeUsername } from '../src/components/UsernameField.jsx';
@@ -117,6 +118,7 @@ export async function run(container) {
    * "unsupported network" notice rather than throw.
    */
   await mount('SendSheet (no wallet)', <SendSheet open onClose={() => {}} />, { portal: true });
+  await mount('ReceiveSheet (no wallet)', <ReceiveSheet open onClose={() => {}} />, { portal: true });
 
   /* Every language must render the picker without throwing. RTL languages in
      particular have bitten this app before — direction is applied to the

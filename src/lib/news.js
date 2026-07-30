@@ -20,6 +20,16 @@
 const CACHE_KEY = 'fbt-news-v1';
 const DAY = 24 * 60 * 60 * 1000;
 
+/*
+ * How long a headline stays in the list, and how many we keep.
+ *
+ * Three days rather than one: the feed refreshes every 24h, so a 24h window
+ * would empty the screen for anyone who opened the app a day late. Three days
+ * keeps continuity without letting genuinely stale prices linger.
+ */
+const MAX_AGE = 3 * DAY;
+const MAX_ITEMS = 60;
+
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 /**
@@ -230,10 +240,37 @@ export function digestFromMarket(coins = [], lang = 'en') {
  * @param {boolean} opts.force skip the 24h cache
  * @param {Array}   opts.coins market rows, used for the fallback digest
  */
+/**
+ * Drop anything older than MAX_AGE and cap the list.
+ *
+ * Without this the cache only ever grew: each refresh merged new headlines in
+ * and nothing was ever removed, so week-old stories kept their place in the
+ * list and localStorage crept toward its quota until writes started failing
+ * silently. "Yesterday's news" in a crypto app is not just clutter — a price
+ * story from last week is actively misleading.
+ */
+function pruneOld(items) {
+  const cutoff = Date.now() - MAX_AGE;
+  return items
+    .filter((i) => {
+      // An item with no timestamp is kept: a missing date is a feed quirk, and
+      // deleting real news over it would be worse than showing it one day too
+      // long. Everything with a date must be inside the window.
+      const at = Number(i?.at);
+      return !Number.isFinite(at) || at >= cutoff;
+    })
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+    .slice(0, MAX_ITEMS);
+}
+
 export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
   const cached = readCache();
   if (cached && !force && Date.now() - cached.at < DAY) {
-    return { items: cached.items, at: cached.at, stale: false };
+    // Prune on read too. A user who opens the app three days running would
+    // otherwise keep seeing the same stale cache until it happens to expire.
+    const fresh = pruneOld(cached.items);
+    if (fresh.length) return { items: fresh, at: cached.at, stale: false };
+    // Everything expired — fall through and refetch rather than show nothing.
   }
 
   const collected = [];
@@ -318,12 +355,13 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
     }
   }
 
-  // 3. dedupe by title, newest first
+  // 3. dedupe by title, drop anything stale, newest first
   const seen = new Set();
-  let items = collected
-    .filter((i) => i?.title && !seen.has(i.title.toLowerCase()) && seen.add(i.title.toLowerCase()))
-    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
-    .slice(0, 60);
+  let items = pruneOld(
+    collected.filter(
+      (i) => i?.title && !seen.has(i.title.toLowerCase()) && seen.add(i.title.toLowerCase())
+    )
+  );
 
   // 4. never return an empty screen
   if (!items.length) {

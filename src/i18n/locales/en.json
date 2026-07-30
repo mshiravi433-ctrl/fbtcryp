@@ -410,7 +410,8 @@
   "handleCopied": "Handle copied",
   "addressCopied": "Address copied",
   "pointsEarned": "Points earned",
-  "copied": "Copied to clipboard"
+  "copied": "Copied to clipboard",
+  "copyFailed": "Could not copy — select the address manually"
  },
  "swap": {
   "title": "Swap",
@@ -1510,5 +1511,15 @@
    "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
    "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism or Avalanche and try again."
   }
+ },
+ "receive": {
+  "title": "Receive",
+  "copy": "Copy address",
+  "copied": "Copied",
+  "share": "Share",
+  "onlyOn": "Only send assets on {{network}}",
+  "unknownNetwork": "this network",
+  "connectFirst": "Connect a wallet first — there is no address to show yet.",
+  "warning": "Sending on a different network than the one shown will usually lose the funds permanently. Always check the network in the sending app before you confirm."
  }
 }

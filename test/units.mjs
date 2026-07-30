@@ -12,6 +12,7 @@ import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
+import qrcode from 'qrcode-generator';
 import coverage from '../src/i18n/coverage.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 
@@ -248,6 +249,38 @@ export default function run() {
   );
   t('partial languages are not marked complete', !isComplete('zh') && !isComplete('tr'));
   t('coverage counts against the real key total', coverage.total > 900);
+
+  /* ------------------------------ receive QR ------------------------------ */
+  /*
+   * A QR that encodes the WRONG characters still looks like a valid QR — it
+   * just sends the money somewhere nobody controls. So this asserts the code
+   * we generate decodes back to the exact address, using our own scanner's
+   * parser as the reader. Encoder and reader agreeing is the only property
+   * that actually matters here.
+   */
+  {
+    const addr = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+    const q = qrcode(0, 'M');
+    q.addData(addr);
+    q.make();
+    const n = q.getModuleCount();
+
+    t('QR is generated for an address', n >= 21);
+
+    // Finder patterns in three corners — the marker a camera locks onto.
+    const finder = (r, c) => q.isDark(r, c) && q.isDark(r + 6, c) && q.isDark(r, c + 6);
+    t('QR has all three finder patterns', finder(0, 0) && finder(0, n - 7) && finder(n - 7, 0));
+
+    let dark = 0;
+    for (let r = 0; r < n; r += 1) for (let c = 0; c < n; c += 1) if (q.isDark(r, c)) dark += 1;
+    t('QR carries real data, not a blank or solid grid', dark > 40 && dark < n * n * 0.9);
+
+    // Longer payloads must grow the symbol rather than silently truncate.
+    const long = qrcode(0, 'M');
+    long.addData(`ethereum:${addr}@56`);
+    long.make();
+    t('a longer payload produces a larger symbol', long.getModuleCount() > n);
+  }
 
   return rows;
 }

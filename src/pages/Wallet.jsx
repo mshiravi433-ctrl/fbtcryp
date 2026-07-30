@@ -12,6 +12,8 @@ import { useAppStore, valuePortfolio, START_BALANCE_CONST } from '../store/useAp
 import { shortAddress, useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
+import SendSheet from '../components/SendSheet';
+import ReceiveSheet from '../components/ReceiveSheet';
 import { revealMnemonic } from '../lib/localWallet';
 import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
 import AdBanner from '../components/AdBanner';
@@ -35,6 +37,8 @@ export default function Wallet() {
   const resetAccount = useAppStore((s) => s.resetAccount);
 
   const [confirmReset, setConfirmReset] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [tab, setTab] = useState('overview');
   const [connectOpen, setConnectOpen] = useState(false);
   const [seedSheet, setSeedSheet] = useState(false);
@@ -145,6 +149,24 @@ export default function Wallet() {
       )}
 
       {tab === 'overview' && <>
+      {/*
+        Send / Receive sit at the top of the wallet, above everything else.
+        They are the two things a wallet is FOR, and burying them under a
+        portfolio chart is what made people ask where the deposit button was.
+        Shown only when connected: offering "Receive" with no address would
+        open a sheet that can only apologise.
+      */}
+      {wallet.isConnected && (
+        <motion.div className="row" style={{ gap: 8 }} variants={riseIn} initial="hidden" animate="show">
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setReceiveOpen(true)}>
+            {t('receive.title')}
+          </button>
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setSendOpen(true)}>
+            {t('send.title')}
+          </button>
+        </motion.div>
+      )}
+
       <AdBanner slot="farm" compact />
       {/* ---------- allocation ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -422,6 +444,9 @@ export default function Wallet() {
       </Sheet>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
+
+      <SendSheet open={sendOpen} onClose={() => setSendOpen(false)} />
+      <ReceiveSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} />
 
       {/* ---------- reveal seed ---------- */}
       <Sheet
