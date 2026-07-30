@@ -1485,7 +1485,8 @@
    "INSUFFICIENT": "More than your balance. Remember the network fee is paid on top.",
    "REJECTED": "You rejected the request in your wallet.",
    "FAILED": "The transfer failed. Nothing was sent.",
-   "NO_SIGNER": "Wallet is locked. Unlock it and try again."
+   "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
+   "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism or Avalanche and try again."
   }
  }
 }

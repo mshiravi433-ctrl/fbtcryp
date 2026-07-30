@@ -17,6 +17,14 @@ import News from '../src/pages/News.jsx';
 import Swap from '../src/pages/Swap.jsx';
 import Leaderboard from '../src/pages/Leaderboard.jsx';
 import Help from '../src/pages/Help.jsx';
+import P2P from '../src/pages/P2P.jsx';
+import Predict from '../src/pages/Predict.jsx';
+import Market from '../src/pages/Market.jsx';
+import Wallet from '../src/pages/Wallet.jsx';
+import Settings from '../src/pages/Settings.jsx';
+import Earn from '../src/pages/Earn.jsx';
+import Signals from '../src/pages/Signals.jsx';
+import SendSheet from '../src/components/SendSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
 import Sheet from '../src/components/Sheet.jsx';
 import UsernameField, { sanitizeUsername } from '../src/components/UsernameField.jsx';
@@ -50,14 +58,22 @@ export async function run(container) {
     errors.push(s);
   };
 
-  async function mount(name, node) {
+  /**
+   * @param {object} [opts]
+   * @param {boolean} [opts.portal] component renders through a portal to
+   *   document.body (Sheet does), so `container` is legitimately empty and the
+   *   assertion has to look at the body instead. Without this the test would
+   *   report a false failure and push us to "fix" working code.
+   */
+  async function mount(name, node, opts = {}) {
     const before = errors.length;
     const root = createRoot(container);
     try {
       await act(async () => {
         root.render(<Wrap>{node}</Wrap>);
       });
-      const rendered = container.textContent.trim().length > 0;
+      const scope = opts.portal ? document.body : container;
+      const rendered = scope.textContent.trim().length > 0;
       out.push([`${name} renders`, rendered]);
       out.push([`${name} renders without a React error`, errors.length === before]);
     } catch (e) {
@@ -74,6 +90,33 @@ export async function run(container) {
   await mount('Swap', <Swap />);
   await mount('Leaderboard', <Leaderboard />);
   await mount('Help', <Help />);
+
+  /*
+   * P2P was NOT in this list, and that is exactly how a crash reached the
+   * user: SendSheet read `chain.tokens[0]`, but EVM_CHAINS entries carry no
+   * `tokens` key (the lists live in a separate TOKENS map), so the page threw
+   * "Cannot read properties of undefined (reading '0')" the moment it
+   * mounted. A smoke render would have caught it in one second.
+   *
+   * The lesson is not "add P2P" — it is that every routed screen belongs
+   * here, because a lazy route that throws fails silently at build time and
+   * loudly in the user's hands.
+   */
+  await mount('P2P', <P2P />);
+  await mount('Predict', <Predict />);
+  await mount('Market', <Market />);
+  await mount('Wallet', <Wallet />);
+  await mount('Settings', <Settings />);
+  await mount('Earn', <Earn />);
+  await mount('Signals', <Signals />);
+
+  /*
+   * SendSheet with no wallet connected: chainId is undefined, so both the
+   * chain and the token lookup come back empty. That is a legitimate state
+   * (the user opened the sheet before connecting) and must render the
+   * "unsupported network" notice rather than throw.
+   */
+  await mount('SendSheet (no wallet)', <SendSheet open onClose={() => {}} />, { portal: true });
 
   /* Every language must render the picker without throwing. RTL languages in
      particular have bitten this app before — direction is applied to the

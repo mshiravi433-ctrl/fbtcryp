@@ -4,7 +4,7 @@ import Sheet from './Sheet';
 import QrScanner, { scannerSupported } from './QrScanner';
 import { useWallet } from '../context/WalletContext';
 import { formatUnitsExact, getTokenBalance, NATIVE_GAS_FLOOR, sendToken } from '../lib/swap';
-import { EVM_CHAINS } from '../lib/chains';
+import { EVM_CHAINS, TOKENS } from '../lib/chains';
 import { IconQr } from './Icons';
 
 /**
@@ -48,7 +48,21 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
   const [hash, setHash] = useState(null);
 
   const chain = EVM_CHAINS[wallet.chainId];
-  const token = initialToken ?? (chain ? { ...chain.tokens[0], native: true } : null);
+
+  /*
+   * THE CRASH: this read `chain.tokens[0]`, but EVM_CHAINS entries have no
+   * `tokens` key — the token lists live in a separate TOKENS map keyed by
+   * chain id. So `chain.tokens` was undefined and indexing it threw
+   * "Cannot read properties of undefined (reading '0')", which the error
+   * boundary caught as an unexpected failure the moment P2P mounted.
+   *
+   * Also note this must not assume the chain is known. A wallet can be
+   * connected to a network we do not support (the user switched it in
+   * MetaMask), in which case both lookups legitimately come back empty and
+   * the sheet has to say so rather than crash.
+   */
+  const chainTokens = TOKENS[wallet.chainId] ?? [];
+  const token = initialToken ?? chainTokens[0] ?? null;
 
   // Reset every time the sheet opens: a stale address from a previous send is
   // the kind of thing that quietly sends money to the wrong person.
@@ -124,7 +138,18 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
   /** Break the address into 4-character groups so it can be read aloud. */
   const chunked = (addr) => (addr.match(/.{1,4}/g) ?? []).join(' ');
 
-  if (!token) return null;
+  /*
+   * An unsupported network is a real state, not an impossible one — so say
+   * what is wrong and how to fix it. Returning null here just made the button
+   * appear broken.
+   */
+  if (!token || !chain) {
+    return (
+      <Sheet open={open} onClose={onClose} title={t('send.title')}>
+        <p className="notice">{t('send.err.WRONG_NETWORK')}</p>
+      </Sheet>
+    );
+  }
 
   return (
     <>
