@@ -29,6 +29,20 @@ jobs:
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
           VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+          # Anything the code reads via import.meta.env must be listed here or
+          # Vite bakes in the DEFAULT at build time. Setting VITE_FEE_BPS in
+          # Vercel changes the website but leaves the APK on 0.5% — the fee
+          # silently differs between platforms, which is the worst outcome
+          # because both look correct in isolation.
+          VITE_FEE_BPS: ${{ vars.VITE_FEE_BPS }}
+          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          VITE_FEE_RECIPIENT: ${{ vars.VITE_FEE_RECIPIENT }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_SENDER_ID: ${{ vars.VITE_FIREBASE_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           APP_VERSION_CODE: ${{ vars.APP_VERSION_CODE }}
           APP_VERSION_NAME: ${{ vars.APP_VERSION_NAME }}
 

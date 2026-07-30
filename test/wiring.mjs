@@ -243,5 +243,51 @@ export default function run() {
     t(`versionCode is past the last release (${code} > 2)`, code > 2);
   }
 
+  /* ------------------- 9. build-time env reaches the APK ------------------ */
+  /*
+   * REAL GAP: the code read 16 VITE_ variables; the workflow passed 3. Vite
+   * inlines these at BUILD time, so a variable set in Vercel changes the
+   * website while the APK keeps the compiled-in default.
+   *
+   * That is worse than a plain outage: setting VITE_FEE_BPS=70 would charge
+   * 0.7% on the web and 0.5% in the app, and both look correct in isolation.
+   * Nobody would notice until the revenue numbers disagreed.
+   *
+   * Checks the reference workflow in ci/, since the live one under
+   * .github/workflows/ cannot be written by this toolchain.
+   */
+  {
+    const wf = read('ci/WORKFLOW-FIXED.yml');
+
+    // Variables the client genuinely reads.
+    const used = new Set();
+    for (const f of files) {
+      for (const m of read(f).matchAll(/import\.meta\.env\??\.(VITE_\w+)/g)) used.add(m[1]);
+    }
+
+    /*
+     * Not every variable belongs in CI. VITE_ENABLE_GAMES must stay unset so
+     * the arcade is compiled out of store builds, and the Gemini keys are
+     * dev-only overrides for a path the server owns in production.
+     */
+    const intentionallyUnset = new Set([
+      'VITE_ENABLE_GAMES',
+      'VITE_GEMINI_API_KEY',
+      'VITE_GEMINI_MODEL',
+      'VITE_FEE_ROUTER_ADDRESS'
+    ]);
+
+    const missing = [...used].filter((v) => !intentionallyUnset.has(v) && !wf.includes(`${v}:`));
+    t(
+      `every build-time env var reaches the APK${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
+      missing.length === 0
+    );
+
+    // The fee is the business model; it must be settable without a code change.
+    t('the fee can be configured per build', wf.includes('VITE_FEE_BPS:'));
+    // Signing must still be wired, or the build silently produces a debug APK.
+    t('all four signing secrets are still passed', (wf.match(/ANDROID_\w+:/g) || []).length >= 4);
+  }
+
   return rows;
 }
