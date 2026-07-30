@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "353454762754",
+    "project_id": "fbt-room-a46fc",
+    "storage_bucket": "fbt-room-a46fc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:353454762754:android:ff2e16f0af75d19324b01b",
+        "android_client_info": {
+          "package_name": "ir.fbt.swap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDxvqfPOMaZZpzVMrlImoubWjT-NUXVvoI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
