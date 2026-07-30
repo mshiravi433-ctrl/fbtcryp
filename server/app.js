@@ -576,7 +576,29 @@ app.get('/api/cron/status', async (_req, res) => {
       devices: fcm,
       missing: fcmReady ? [] : ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'].filter(
         (k) => !process.env[k]
-      )
+      ),
+      /*
+       * "not configured, but nothing missing" was a dead end.
+       *
+       * fcmConfigured() needs all three vars AND the key to actually contain
+       * a PEM header. So a set-but-malformed FIREBASE_PRIVATE_KEY produced
+       * `configured:false` with `missing:[]` — the report said everything was
+       * present and still refused to work, which is the least actionable
+       * output this endpoint could give.
+       *
+       * The overwhelmingly likely cause is pasting `private_key_id` (a short
+       * hex string that sits directly above the real key in the JSON) instead
+       * of `private_key`. Say so, without ever echoing the value.
+       */
+      problem: (() => {
+        if (fcmReady) return null;
+        const raw = process.env.FIREBASE_PRIVATE_KEY || '';
+        if (!raw) return null; // genuinely absent — `missing` already says so
+        if (!raw.replace(/\\n/g, '\n').includes('BEGIN PRIVATE KEY')) {
+          return `FIREBASE_PRIVATE_KEY is set (${raw.length} chars) but has no "-----BEGIN PRIVATE KEY-----" header. You have most likely pasted private_key_id instead of private_key — they sit next to each other in the service-account JSON. Paste the whole private_key value, keeping its \\n sequences exactly as they are.`;
+        }
+        return null;
+      })()
     },
     cronSecretSet: Boolean(process.env.CRON_SECRET),
     durableStorage: storeDurable(),
