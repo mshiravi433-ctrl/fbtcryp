@@ -317,12 +317,19 @@ const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AP
  */
 export async function syncWatches(orders) {
   try {
-    if (typeof navigator === 'undefined' || !navigator.serviceWorker) return false;
-    const reg = await navigator.serviceWorker.getRegistration();
-    const sub = await reg?.pushManager?.getSubscription();
-    // No push subscription means there is nothing to notify, so there is no
+    /*
+     * Ask for whichever push identity this device actually has. In a browser
+     * that is a web-push endpoint; in the packaged Android app it is an FCM
+     * token, because a Capacitor WebView has no Push API at all.
+     *
+     * This used to read pushManager directly, which meant every APK user
+     * silently registered nothing and never received an order alert.
+     */
+    const { pushIdentity } = await import('./notify.js');
+    const identity = await pushIdentity();
+    // No push identity means there is nothing to notify, so there is no
     // reason to hand the server a watch list at all.
-    if (!sub?.endpoint) return false;
+    if (!identity?.endpoint) return false;
 
     const items = orders
       .filter((o) => o.status === 'active' && o.type === 'limit')
@@ -342,7 +349,7 @@ export async function syncWatches(orders) {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        endpoint: sub.endpoint,
+        endpoint: identity.endpoint,
         items,
         lang: document.documentElement.lang || 'fa'
       })

@@ -47,6 +47,8 @@ const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 64;
 const isSym = (v) => typeof v === 'string' && /^[A-Za-z0-9._-]{1,16}$/.test(v);
 const isCgId = (v) => typeof v === 'string' && /^[a-z0-9-]{1,64}$/.test(v);
 
+export { parseIdentity };
+
 export async function readWatches() {
   const rows = await storeGet(WATCH_KEY, []);
   return Array.isArray(rows) ? rows : [];
@@ -59,10 +61,26 @@ export async function readWatches() {
  * own orders, so a cancelled order disappears on the next sync instead of
  * needing a separate delete call that could be missed.
  */
-export async function putWatches(endpoint, items, lang = 'fa') {
-  if (typeof endpoint !== 'string' || !endpoint.startsWith('https://')) {
-    throw new Error('BAD_ENDPOINT');
+/**
+ * An identity is either a web-push endpoint (https://…) or a native FCM token
+ * (fcm:…).
+ *
+ * Accepting both is what makes order alerts work in the packaged Android app:
+ * a Capacitor WebView has no Push API, so an APK user has no https endpoint
+ * and could never have registered a watch. Rejecting them here meant the
+ * feature was quietly web-only.
+ */
+function parseIdentity(endpoint) {
+  if (typeof endpoint !== 'string') return null;
+  if (endpoint.startsWith('https://')) return { kind: 'web', value: endpoint };
+  if (endpoint.startsWith('fcm:') && endpoint.length > 44) {
+    return { kind: 'fcm', value: endpoint.slice(4) };
   }
+  return null;
+}
+
+export async function putWatches(endpoint, items, lang = 'fa') {
+  if (!parseIdentity(endpoint)) throw new Error('BAD_ENDPOINT');
   if (!Array.isArray(items)) throw new Error('BAD_ITEMS');
 
   const clean = [];

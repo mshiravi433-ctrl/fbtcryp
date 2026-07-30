@@ -123,6 +123,53 @@ async function accessToken() {
  *        registered with. The OS notification shade renders this text
  *        directly — the app never gets a chance to translate it.
  */
+/**
+ * Send to ONE device token.
+ *
+ * The counterpart to push.js's sendToEndpoint. Order alerts are addressed to a
+ * single person — broadcasting one would be both spam and a disclosure of that
+ * user's trading intent to everyone else.
+ */
+export async function fcmSendToToken(deviceToken, payload) {
+  if (!fcmConfigured()) return false;
+
+  let token;
+  try {
+    token = await accessToken();
+  } catch {
+    return false;
+  }
+
+  try {
+    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          token: deviceToken,
+          notification: { title: payload.title, body: payload.body },
+          data: { url: payload.url || '/', tag: payload.tag || 'fbt' },
+          android: {
+            // High priority: a price alert is time-sensitive, and normal
+            // priority lets Android hold it until the next maintenance window,
+            // by which point the price has moved.
+            priority: 'high',
+            ttl: '3600s',
+            notification: { tag: payload.tag || 'fbt', icon: 'ic_launcher', color: '#7c4dff' }
+          }
+        }
+      })
+    });
+
+    if (res.ok) return true;
+    // Dead token: pruning keeps future cycles from paying for it forever.
+    if (res.status === 404 || res.status === 400) await removeFcmToken(deviceToken).catch(() => {});
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
   if (!fcmConfigured()) return { sent: 0, failed: 0, skipped: 'NOT_CONFIGURED' };
 

@@ -27,7 +27,7 @@ import {
   playSound,
   primeAudio,
   pushMode,
-  registerPush,
+  registerPushAnywhere,
   requestNotificationPermission,
   setNotifySettings,
   vibrate
@@ -135,7 +135,10 @@ export default function Settings() {
     if (result !== 'granted') return;
     const mode = await pushMode(true);
     setPmode(mode);
-    if (mode === 'server') await registerPush();
+    // registerPushAnywhere, not registerPush: on the packaged Android app the
+    // WebView has no Push API, so the web path returns UNSUPPORTED and the
+    // toggle would appear to succeed while registering nothing.
+    if (mode === 'server') await registerPushAnywhere();
   };
 
   /* ------------------------------ handlers ------------------------------ */

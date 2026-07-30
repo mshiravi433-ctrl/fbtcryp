@@ -304,8 +304,19 @@ app.get('/api/cron/watch', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
 
   const { sendToEndpoint } = await import('./push.js');
-  const out = await runWatchCycle(async (endpoint, lang, payload) =>
-    sendToEndpoint(endpoint, {
+  const { fcmSendToToken } = await import('./fcm.js');
+  const { parseIdentity } = await import('./watch.js');
+
+  const out = await runWatchCycle(async (endpoint, lang, payload) => {
+    /*
+     * Route by transport. A packaged Android user has an fcm: identity and no
+     * web-push endpoint at all, so sending everything through web push made
+     * order alerts silently web-only.
+     */
+    const id = parseIdentity(endpoint);
+    if (!id) return false;
+
+    const message = {
       title: ORDER_ALERT[lang]?.title ?? ORDER_ALERT.en.title,
       body: (ORDER_ALERT[lang]?.body ?? ORDER_ALERT.en.body)
         .replace('{base}', payload.base)
@@ -313,8 +324,10 @@ app.get('/api/cron/watch', async (req, res) => {
         .replace('{rate}', String(payload.rate)),
       url: '/#/orders',
       tag: `fbt-order-${payload.id}`
-    })
-  );
+    };
+
+    return id.kind === 'fcm' ? fcmSendToToken(id.value, message) : sendToEndpoint(id.value, message);
+  });
   return res.json(out);
 });
 

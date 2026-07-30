@@ -70,5 +70,23 @@ try {
         apply plugin: 'com.google.gms.google-services'
     }
 } catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+    /*
+     * This was logger.info, which is hidden at default Gradle verbosity - so a
+     * build with no google-services.json looked completely successful and
+     * produced an APK where push notifications silently never arrive. That is
+     * the worst failure mode: everything appears to work until a user reports
+     * that order alerts never fire.
+     *
+     * logger.warn is shown by default, so the omission is at least visible in
+     * the CI log.
+     */
+    logger.warn("")
+    logger.warn("========================================================")
+    logger.warn(" WARNING: android/app/google-services.json is MISSING")
+    logger.warn(" Native push (FCM) will NOT work in this build.")
+    logger.warn(" Limit-order alerts will not arrive while the app is closed.")
+    logger.warn(" Download it from the Firebase console > Project settings >")
+    logger.warn(" Your apps > Android app 'ir.fbt.swap'.")
+    logger.warn("========================================================")
+    logger.warn("")
 }

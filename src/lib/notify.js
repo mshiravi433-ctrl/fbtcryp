@@ -385,3 +385,116 @@ export async function initServiceWorker() {
     return null;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Native Android push (FCM)                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ─── WHY THIS EXISTS SEPARATELY FROM registerPush() ─────────────────────────
+ * `registerPush()` uses the Web Push API. Inside the packaged Android app the
+ * page runs in a Capacitor WebView, and a WebView has NO Push API at all — no
+ * `PushManager`, no `pushManager.subscribe()`. So on the APK that function
+ * returns UNSUPPORTED and exits, and every push-driven feature silently does
+ * nothing.
+ *
+ * That is not a small gap: the whole point of server-side order watching is
+ * that the alert arrives with the app CLOSED, and "app closed" on a phone
+ * means the native layer, not a WebView.
+ *
+ * FCM is the channel that reaches those users. The server has supported it
+ * since server/fcm.js was added; this is the client half that was missing, so
+ * no APK user had ever registered a token.
+ */
+
+/** True when running inside the packaged native app rather than a browser. */
+export function isNativeApp() {
+  return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+}
+
+/**
+ * Register this device for native push and hand the token to the server.
+ *
+ * Returns the same {ok, reason} shape as registerPush() so callers can treat
+ * the two transports identically.
+ */
+export async function registerNativePush() {
+  if (!isNativeApp()) return { ok: false, reason: 'NOT_NATIVE' };
+
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+
+    // Android 13+ made notifications a runtime permission. Without this the OS
+    // silently drops every notification and the app looks broken rather than
+    // denied.
+    let status = await PushNotifications.checkPermissions();
+    if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
+      status = await PushNotifications.requestPermissions();
+    }
+    if (status.receive !== 'granted') return { ok: false, reason: 'DENIED' };
+
+    // The token arrives asynchronously via an event, so wrap it in a promise
+    // with a timeout — a registration that never resolves would hang the
+    // settings toggle forever with no explanation.
+    const token = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('TIMEOUT')), 15000);
+
+      PushNotifications.addListener('registration', (t) => {
+        clearTimeout(timer);
+        resolve(t.value);
+      });
+      PushNotifications.addListener('registrationError', (e) => {
+        clearTimeout(timer);
+        reject(new Error(String(e?.error || 'REGISTRATION_FAILED')));
+      });
+
+      PushNotifications.register();
+    });
+
+    if (!token) return { ok: false, reason: 'NO_TOKEN' };
+
+    const res = await fetch(`${API_BASE}/push/fcm`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, lang: document.documentElement.lang || 'fa' })
+    });
+    if (!res.ok) return { ok: false, reason: 'SERVER_REJECTED' };
+
+    setNotifySettings({ pushSubscribed: true, fcmToken: token });
+    return { ok: true, token };
+  } catch (e) {
+    const msg = String(e?.message || e);
+    // A missing Firebase config is the most common setup failure and produces
+    // a very unhelpful native error, so name it.
+    if (/FirebaseApp|google-services/i.test(msg)) {
+      return { ok: false, reason: 'FIREBASE_NOT_CONFIGURED' };
+    }
+    return { ok: false, reason: msg === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED', detail: msg.slice(0, 120) };
+  }
+}
+
+/**
+ * Register for push on whichever transport this device actually supports.
+ *
+ * Callers should use this rather than picking a transport themselves — that
+ * choice is exactly the thing that was got wrong, and getting it wrong is
+ * invisible until someone reports that notifications never arrive.
+ */
+export async function registerPushAnywhere() {
+  return isNativeApp() ? registerNativePush() : registerPush();
+}
+
+/** The identifier the server watches against, whichever transport is in use. */
+export async function pushIdentity() {
+  if (isNativeApp()) {
+    const token = getNotifySettings().fcmToken;
+    return token ? { kind: 'fcm', endpoint: `fcm:${token}` } : null;
+  }
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    const sub = await reg?.pushManager?.getSubscription();
+    return sub?.endpoint ? { kind: 'web', endpoint: sub.endpoint } : null;
+  } catch {
+    return null;
+  }
+}

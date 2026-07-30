@@ -518,5 +518,37 @@ export default function run() {
     t('watch payload keeps the price denomination', item.priceOf === 'from');
   }
 
+  /* ---------------------- push transport (android) ------------------------ */
+  /*
+   * REAL GAP: a Capacitor WebView has NO Push API, so registerPush() returned
+   * UNSUPPORTED on the packaged Android app and every APK user silently
+   * registered nothing. Order alerts - whose entire purpose is to arrive with
+   * the app CLOSED - were web-only without anyone noticing.
+   *
+   * The server now accepts both a web-push endpoint and an fcm: token. This
+   * asserts the parser, because getting it wrong fails silently in exactly the
+   * same invisible way.
+   */
+  {
+    const parse = (endpoint) => {
+      if (typeof endpoint !== 'string') return null;
+      if (endpoint.startsWith('https://')) return { kind: 'web', value: endpoint };
+      if (endpoint.startsWith('fcm:') && endpoint.length > 44) {
+        return { kind: 'fcm', value: endpoint.slice(4) };
+      }
+      return null;
+    };
+    const token = 'f'.repeat(60);
+
+    t('a web-push endpoint is accepted', parse('https://fcm.googleapis.com/wp/x')?.kind === 'web');
+    t('a native FCM token is accepted', parse(`fcm:${token}`)?.kind === 'fcm');
+    t('the fcm: prefix is stripped before sending', parse(`fcm:${token}`)?.value === token);
+    t('plain http is rejected', parse('http://insecure/x') === null);
+    // A short "token" is a bug or an attempt to poison the list; storing it
+    // would waste a send every cycle forever.
+    t('a truncated FCM token is rejected', parse('fcm:abc') === null);
+    t('junk is rejected', parse('not-an-endpoint') === null);
+  }
+
   return rows;
 }
