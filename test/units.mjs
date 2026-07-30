@@ -11,6 +11,7 @@ import { digestFromMarket } from '../src/lib/news.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
+import { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
 import qrcode from 'qrcode-generator';
 import { classifyQuery } from '../src/pages/Explore.jsx';
@@ -346,6 +347,22 @@ export default function run() {
     t('data: images are dropped', safeImage('data:image/svg+xml,<svg onload=alert(1)>') === null);
     t('ipfs is rewritten to a gateway', String(safeImage('ipfs://QmHash/1.png')).startsWith('https://'));
     t('garbage image urls are dropped', safeImage('not a url') === null);
+  }
+
+  /* -------------------------------- fee dial ------------------------------- */
+  /*
+   * The fee is the entire business model, so it gets asserted rather than
+   * trusted. The cap matters most: a mistyped env var must never be able to
+   * take an outrageous cut of someone's swap.
+   */
+  {
+    t('fee is a whole number of basis points', Number.isInteger(FEE_BPS));
+    t('fee is never negative', FEE_BPS >= 0);
+    t(`fee never exceeds the ${FEE_BPS_MAX} bps cap`, FEE_BPS <= FEE_BPS_MAX);
+    t('the cap is 1% or less', FEE_BPS_MAX <= 100);
+    t('default is 50 bps', FEE_BPS_DEFAULT === 50);
+    // With no env override configured, the default must be what ships.
+    t('unset env yields the default', FEE_BPS === FEE_BPS_DEFAULT);
   }
 
   return rows;
