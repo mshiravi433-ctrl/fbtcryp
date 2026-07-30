@@ -102,9 +102,9 @@ body {
   transform: translateZ(0);
 }
 
-.rgb-orb.a { width: 60vw; height: 60vw; background: var(--rgb-1); top: -18vw; left: -14vw; animation: drift-a 17s ease-in-out infinite; }
-.rgb-orb.b { width: 55vw; height: 55vw; background: var(--rgb-3); bottom: -16vw; right: -14vw; animation: drift-b 21s ease-in-out infinite; }
-.rgb-orb.c { width: 48vw; height: 48vw; background: var(--rgb-2); top: 34%; left: 24%; animation: drift-c 26s ease-in-out infinite; }
+.rgb-orb.a { width: 60vw; height: 60vw; background: var(--rgb-1); top: -18vw; left: -14vw; animation: drift-a 34s ease-in-out infinite; }
+.rgb-orb.b { width: 55vw; height: 55vw; background: var(--rgb-3); bottom: -16vw; right: -14vw; animation: drift-b 42s ease-in-out infinite; }
+.rgb-orb.c { width: 48vw; height: 48vw; background: var(--rgb-2); top: 34%; left: 24%; animation: drift-c 52s ease-in-out infinite; }
 
 @keyframes drift-a {
   0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
@@ -155,7 +155,7 @@ body {
     linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
   background-size: 46px 46px;
-  animation: grid-scroll 14s linear infinite;
+  animation: grid-scroll 28s linear infinite;
   will-change: transform;
 }
 
@@ -243,7 +243,9 @@ body {
   height: 30px;
   border-radius: 9px;
   background: conic-gradient(from 0deg, var(--rgb-1), var(--rgb-2), var(--rgb-3), var(--rgb-4), var(--rgb-1));
-  animation: spin-hue 6s linear infinite;
+  /* was 6s; the header is on every screen, so a fast spin here is
+     permanent peripheral motion */
+  animation: spin-hue 18s linear infinite;
   display: grid;
   place-items: center;
   box-shadow: 0 0 18px rgba(124, 77, 255, 0.6);
@@ -385,7 +387,7 @@ body {
    * a 4× reduction in paint work. Duration went 4s → 6s for the same reason:
    * slower rotation makes the quantisation even less detectable.
    */
-  animation: rotate-angle 6s steps(90) infinite;
+  animation: rotate-angle 12s steps(90) infinite;
   pointer-events: none;
   opacity: 0.85;
 }
@@ -415,7 +417,15 @@ body {
   inset: 0;
   background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.09) 45%, transparent 60%);
   transform: translateX(-100%);
-  animation: sheen-sweep 4.5s ease-in-out infinite;
+  /*
+   * The sweep is OFF by default now. It ran every 4.5s on as many as 14 cards
+   * per screen, all unsynchronised, so something was always moving in the
+   * corner of the eye - which is what reads as "the app is glitching" rather
+   * than "the app is alive". The gradient is kept (it gives cards a subtle
+   * sheen at rest) but it no longer travels.
+   */
+  animation: none;
+  opacity: 0.5;
   pointer-events: none;
   /*
    * Paint containment. The sheen is a translating overlay inside a card; with
@@ -450,7 +460,7 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: text-flow 6s linear infinite;
+  animation: text-flow 12s linear infinite;
 }
 @keyframes text-flow { to { background-position: 300% 0; } }
 
@@ -481,7 +491,7 @@ body {
   color: #000;
   background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3), var(--rgb-1));
   background-size: 300% 100%;
-  animation: text-flow 5s linear infinite;
+  animation: text-flow 10s linear infinite;
   box-shadow: 0 10px 32px -14px rgba(0, 229, 255, 0.9);
 }
 
@@ -693,7 +703,7 @@ select option { background: #0a0c12; }
   box-shadow:
     0 18px 46px -14px rgba(0, 0, 0, 0.85),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  animation: nav-float 6s ease-in-out infinite;
+  animation: nav-float 12s ease-in-out infinite;
 }
 
 :root[data-theme='light'] .bottom-nav {
@@ -727,7 +737,7 @@ select option { background: #0a0c12; }
     transparent
   );
   background-size: 220% 100%;
-  animation: nav-wave 4.5s linear infinite;
+  animation: nav-wave 9s linear infinite;
   opacity: 0.85;
 }
 
@@ -746,7 +756,7 @@ select option { background: #0a0c12; }
   filter: blur(20px);
   opacity: 0.22;
   z-index: -1;
-  animation: nav-glow-shift 8s ease-in-out infinite alternate;
+  animation: nav-glow-shift 16s ease-in-out infinite alternate;
 }
 
 @keyframes nav-glow-shift {
@@ -973,10 +983,22 @@ select option { background: #0a0c12; }
   background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
 }
 
+/*
+ * Z-INDEX: THE TERMS MODAL DID NOT APPEAR.
+ *
+ * The onboarding stage is `position: fixed; z-index: 95`. The sheet backdrop
+ * was 60 and the sheet itself 61, so tapping "Terms of Service" during
+ * onboarding opened the dialog UNDERNEATH the onboarding screen. It mounted,
+ * it locked scrolling, it just was not visible — which reads as a dead button.
+ *
+ * The full-screen stages are the highest layers in the app (welcome/onboarding
+ * 95, guide 120), and a modal must always sit above whatever opened it. These
+ * are now 200/201, above every stage.
+ */
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 200;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(6px);
 }
@@ -997,7 +1019,7 @@ select option { background: #0a0c12; }
 .sheet-layer {
   position: fixed;
   inset: 0;
-  z-index: 61;
+  z-index: 201;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1387,7 +1409,7 @@ input, select, textarea { font-size: 16px !important; }
   filter: blur(46px);
   opacity: 0.28;
   pointer-events: none;
-  animation: aurora-drift 18s ease-in-out infinite alternate;
+  animation: aurora-drift 36s ease-in-out infinite alternate;
 }
 
 @keyframes aurora-drift {
@@ -1412,7 +1434,7 @@ input, select, textarea { font-size: 16px !important; }
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: shimmer-sweep 3.6s ease-in-out infinite;
+  animation: shimmer-sweep 9s ease-in-out infinite;
 }
 @keyframes shimmer-sweep {
   0%, 100% { background-position: 180% 0; }
@@ -1429,7 +1451,7 @@ input, select, textarea { font-size: 16px !important; }
   background-size: 26px 26px;
   mask-image: radial-gradient(ellipse at 30% 20%, #000, transparent 72%);
   -webkit-mask-image: radial-gradient(ellipse at 30% 20%, #000, transparent 72%);
-  animation: grid-glow-pan 22s linear infinite;
+  animation: grid-glow-pan 44s linear infinite;
   pointer-events: none;
 }
 @keyframes grid-glow-pan {
@@ -1474,7 +1496,9 @@ input, select, textarea { font-size: 16px !important; }
 .more-layer {
   position: fixed;
   inset: 0;
-  z-index: 61;
+  /* Must stay just above .sheet-backdrop (200), which MoreSheet reuses.
+     Left at 61 it would have rendered behind its own backdrop. */
+  z-index: 201;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1691,7 +1715,7 @@ input, select, textarea { font-size: 16px !important; }
     transparent 65%
   );
   transform: translateX(-100%);
-  animation: ad-sweep 5.5s ease-in-out infinite;
+  animation: ad-sweep 12s ease-in-out infinite;
   pointer-events: none;
 }
 

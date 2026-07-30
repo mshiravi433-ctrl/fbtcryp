@@ -138,5 +138,53 @@ console.log('\n▸ verifying the default build excludes the arcade…');
   report('store-safe build', rows);
 }
 
+/*
+ * STACKING ORDER — a modal must never open behind the thing that opened it.
+ *
+ * Real bug this catches: the onboarding stage is `position: fixed; z-index:
+ * 95`, while the Sheet backdrop was 60 and the sheet 61. So tapping "Terms of
+ * Service" on the onboarding terms step mounted the dialog UNDERNEATH the
+ * onboarding screen. It rendered, it locked body scroll, it was simply
+ * invisible — indistinguishable from a dead button, and invisible to a test
+ * that only asserts the element exists.
+ *
+ * jsdom does not composite, so no render test can catch this. Reading the
+ * declared z-index out of the stylesheet can.
+ */
+console.log('\n▸ checking modal stacking order…');
+{
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('src/index.css', 'utf8');
+
+  // Last declaration wins in CSS, so take the final value for each selector.
+  const zOf = (selector) => {
+    const re = new RegExp(`\\${selector}\\s*(?:,[^{]*)?\\{([^}]*)\\}`, 'g');
+    let m, last = null;
+    while ((m = re.exec(css))) {
+      const z = /z-index:\s*(-?\d+)/.exec(m[1]);
+      if (z) last = Number(z[1]);
+    }
+    return last;
+  };
+
+  const sheetLayer = zOf('.sheet-layer');
+  const sheetBackdrop = zOf('.sheet-backdrop');
+  const moreLayer = zOf('.more-layer');
+  const onb = zOf('.onb-stage');
+  const guide = zOf('.guide-stage');
+  const welcome = zOf('.welcome-stage') ?? onb;
+
+  const topStage = Math.max(onb ?? 0, guide ?? 0, welcome ?? 0);
+
+  report('modal stacking', [
+    ['every z-index was found', [sheetLayer, sheetBackdrop, moreLayer, onb, guide].every((v) => typeof v === 'number')],
+    [`sheet backdrop (${sheetBackdrop}) is above the top stage (${topStage})`, sheetBackdrop > topStage],
+    [`sheet layer (${sheetLayer}) is above the top stage (${topStage})`, sheetLayer > topStage],
+    ['sheet panel sits above its own backdrop', sheetLayer > sheetBackdrop],
+    [`more drawer (${moreLayer}) is above the top stage (${topStage})`, moreLayer > topStage],
+    ['more drawer sits above the shared backdrop', moreLayer > sheetBackdrop]
+  ]);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);
