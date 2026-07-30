@@ -28,7 +28,8 @@
   },
   "p2p": "P2P",
   "leaderboard": "Ranking",
-  "news": "News"
+  "news": "News",
+  "explore": "Explorer"
  },
  "common": {
   "balance": "Balance",
@@ -1521,5 +1522,43 @@
   "unknownNetwork": "this network",
   "connectFirst": "Connect a wallet first — there is no address to show yet.",
   "warning": "Sending on a different network than the one shown will usually lose the funds permanently. Always check the network in the sending app before you confirm."
+ },
+ "explore": {
+  "title": "Explorer",
+  "subtitle": "Paste a transaction hash or wallet address to look it up on-chain.",
+  "placeholder": "0x… hash, address, or block number",
+  "useMine": "Use my wallet address",
+  "openOn": "Open on",
+  "chainHint": "The same hash or address can exist on several networks. If one shows “not found”, try the next — it does not mean the funds are gone.",
+  "nonEvmNote": "This address belongs to a non-EVM network, which has its own explorer.",
+  "unrecognised": "That does not look like a transaction hash, an address or a block number. A hash is 66 characters starting with 0x; an address is 42.",
+  "kind": {
+   "empty": "",
+   "tx": "Transaction hash (66 characters)",
+   "address": "Wallet or contract address (42 characters)",
+   "block": "Block number",
+   "tron": "Tron address",
+   "solana": "Solana address",
+   "unknown": "Not recognised"
+  },
+  "learnTitle": "What am I looking at?",
+  "learn": {
+   "hash": {
+    "q": "Transaction hash",
+    "a": "The receipt for one transaction. Anyone with it can verify exactly what moved, when, and between which addresses."
+   },
+   "address": {
+    "q": "Address",
+    "a": "A wallet or a contract. Its full history is public — balances and every transaction are visible to everyone, forever."
+   },
+   "pending": {
+    "q": "It says pending",
+    "a": "The network has accepted it but not yet included it in a block. Wait. Sending again usually means paying twice."
+   },
+   "confirm": {
+    "q": "How many confirmations?",
+    "a": "One confirmation is normally enough on BNB Chain or Polygon. For large amounts, waiting for a few more is safer."
+   }
+  }
  }
 }

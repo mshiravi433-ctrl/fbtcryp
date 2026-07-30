@@ -13,6 +13,7 @@ import { analyze } from '../src/lib/ai.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
 import qrcode from 'qrcode-generator';
+import { classifyQuery } from '../src/pages/Explore.jsx';
 import coverage from '../src/i18n/coverage.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 
@@ -280,6 +281,25 @@ export default function run() {
     long.addData(`ethereum:${addr}@56`);
     long.make();
     t('a longer payload produces a larger symbol', long.getModuleCount() > n);
+  }
+
+  /* ------------------------------ explorer -------------------------------- */
+  /*
+   * Telling a 66-char hash from a 42-char address is the whole value of the
+   * explorer screen: guess wrong and the user gets "not found" and concludes
+   * their money is gone.
+   */
+  {
+    const addr = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+    const hash = `0x${'a'.repeat(64)}`;
+    t('a 66-char hash is a transaction', classifyQuery(hash).kind === 'tx');
+    t('a 42-char string is an address', classifyQuery(addr).kind === 'address');
+    t('digits are a block number', classifyQuery('12345678').kind === 'block');
+    t('Tron addresses are detected', classifyQuery('TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ').kind === 'tron');
+    t('empty input is not an error', classifyQuery('  ').kind === 'empty');
+    t('junk is reported as unrecognised', classifyQuery('hello world').kind === 'unknown');
+    // A truncated hash must NOT be silently treated as an address.
+    t('a truncated hash is not mistaken for an address', classifyQuery(hash.slice(0, 50)).kind === 'unknown');
   }
 
   return rows;

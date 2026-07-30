@@ -18,6 +18,7 @@ import Swap from '../src/pages/Swap.jsx';
 import Leaderboard from '../src/pages/Leaderboard.jsx';
 import Help from '../src/pages/Help.jsx';
 import P2P from '../src/pages/P2P.jsx';
+import Explore from '../src/pages/Explore.jsx';
 import Predict from '../src/pages/Predict.jsx';
 import Market from '../src/pages/Market.jsx';
 import Wallet from '../src/pages/Wallet.jsx';
@@ -104,6 +105,7 @@ export async function run(container) {
    * loudly in the user's hands.
    */
   await mount('P2P', <P2P />);
+  await mount('Explore', <Explore />);
   await mount('Predict', <Predict />);
   await mount('Market', <Market />);
   await mount('Wallet', <Wallet />);
