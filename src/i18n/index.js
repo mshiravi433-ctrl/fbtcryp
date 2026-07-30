@@ -1,17 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import fa from './locales/fa.json';
 import en from './locales/en.json';
-import ar from './locales/ar.json';
-import zh from './locales/zh.json';
-import hi from './locales/hi.json';
-import es from './locales/es.json';
-import fr from './locales/fr.json';
-import ru from './locales/ru.json';
-import tr from './locales/tr.json';
-import ur from './locales/ur.json';
-import id from './locales/id.json';
-import pt from './locales/pt.json';
 import { LANGUAGES, RTL_LANGS, SUPPORTED } from './languages';
 
 export { LANGUAGES, RTL_LANGS, SUPPORTED };
@@ -27,20 +16,56 @@ const STORAGE_KEY = 'fbt-lang';
  * never as a raw key. A user seeing `swap.err.NO_ROUTE` assumes the app is
  * broken; a user seeing "No route found" simply reads English for a moment.
  */
+/*
+ * ─── WHY ONLY ENGLISH IS IMPORTED STATICALLY ────────────────────────────────
+ * All twelve locale files used to be imported at the top of this module. They
+ * total 508 KB of JSON, and because this module is loaded on the very first
+ * line of the app, every one of them landed in the entry chunk. A Persian user
+ * downloaded eleven languages they will never see before the first frame could
+ * paint — on a slow mobile connection that is seconds of blank screen.
+ *
+ * Now: English is bundled because it is the fallback for every missing key and
+ * must be available synchronously — a missing fallback shows raw keys like
+ * `swap.err.NO_ROUTE`, which reads as a broken app. Every other language is a
+ * dynamic import, so Rollup emits it as its own chunk and the browser fetches
+ * exactly one of them.
+ *
+ * `import.meta.glob` (not a bare template-literal import) so Vite can see the
+ * complete set at build time and emit a chunk per file. A computed
+ * `import('./locales/' + code + '.json')` would make Rollup include all of
+ * them again as a fallback, which is the trap this is avoiding.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+const localeLoaders = import.meta.glob('./locales/*.json');
+
 const resources = {
-  fa: { translation: fa },
-  en: { translation: en },
-  ar: { translation: ar },
-  zh: { translation: zh },
-  hi: { translation: hi },
-  es: { translation: es },
-  fr: { translation: fr },
-  ru: { translation: ru },
-  tr: { translation: tr },
-  ur: { translation: ur },
-  id: { translation: id },
-  pt: { translation: pt }
+  en: { translation: en }
 };
+
+/** Languages already fetched, so a repeat switch is instant. */
+const loaded = new Set(['en']);
+
+/**
+ * Fetch a locale and register it with i18next.
+ *
+ * Resolves to false when the language cannot be loaded — the caller keeps the
+ * current language rather than switching to a blank one. Falling back to
+ * English on a failed fetch would be worse: the user asked for a change, saw
+ * a different change happen, and has no idea why.
+ */
+async function loadLocale(code) {
+  if (loaded.has(code)) return true;
+  const loader = localeLoaders[`./locales/${code}.json`];
+  if (!loader) return false;
+  try {
+    const mod = await loader();
+    i18n.addResourceBundle(code, 'translation', mod.default ?? mod, true, true);
+    loaded.add(code);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function detectLang() {
   try {
@@ -78,7 +103,9 @@ const initialLang = detectLang();
 
 i18n.use(initReactI18next).init({
   resources,
-  lng: initialLang,
+  // Starts on English; the detected language is swapped in below as soon as
+  // its chunk resolves. Naming it here would render every key as a miss.
+  lng: 'en',
   fallbackLng: 'en',
   supportedLngs: SUPPORTED,
   interpolation: { escapeValue: false },
@@ -107,13 +134,34 @@ export function applyDirection(lang, persist = true) {
 }
 
 /** Change language + direction in one call, and remember the choice. */
-export function setLanguage(lang) {
-  if (!SUPPORTED.includes(lang)) return;
-  i18n.changeLanguage(lang);
+/**
+ * Change language + direction in one call, and remember the choice.
+ *
+ * Async now, because the locale may still need fetching. Direction is applied
+ * only AFTER the strings are in place: flipping to RTL while the old
+ * language's text is still on screen produces a visible scramble.
+ */
+export async function setLanguage(lang) {
+  if (!SUPPORTED.includes(lang)) return false;
+  const ok = await loadLocale(lang);
+  if (!ok && lang !== 'en') return false;
+  await i18n.changeLanguage(lang);
   applyDirection(lang, true);
+  return true;
 }
 
+/*
+ * Boot: apply direction immediately from the detected language so the very
+ * first paint is laid out correctly, then fetch that language's strings.
+ * Until they arrive i18next serves English, which is a readable intermediate
+ * state rather than a blank or key-filled one.
+ */
 applyDirection(initialLang, false);
+if (initialLang !== 'en') {
+  loadLocale(initialLang).then((ok) => {
+    if (ok) i18n.changeLanguage(initialLang);
+  });
+}
 i18n.on('languageChanged', (lng) => applyDirection(lng, true));
 
 export default i18n;

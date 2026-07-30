@@ -254,20 +254,53 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
    * a single burst gets the whole batch rate-limited, and on a mobile
    * connection it also saturates the connection pool the market data needs.
    *
-   * So: fetch in small waves, and stop as soon as there is enough to fill the
-   * screen. A user opening the news tab wants headlines now, not the complete
-   * union of every desk.
+   * So: fetch in small waves, and stop as soon as there is enough.
    *
-   * Ordering matters — RSS_SOURCES lists the general desks first, so a partial
-   * fetch still produces a sensible front page rather than nothing but
-   * German-language policy pieces.
+   * ─── THE BUG THAT MADE THE "OTHER LANGUAGES" TAB EMPTY ──────────────────
+   * The waves ran in list order and the loop stopped at 36 items. The general
+   * desks are listed first and produce ~30 items between them, so the loop
+   * broke after wave 1 or 2 — and every local-language feed sits at index 11
+   * or later. They were never fetched at all, so the tab was permanently
+   * empty. It looked like the feeds were broken; they were simply never asked.
+   *
+   * A per-category budget fixes it properly: each wave is built by taking the
+   * next unfetched source from EVERY category in turn, so no category can be
+   * starved by one that happens to be listed earlier. "Enough" is now counted
+   * per category rather than globally.
+   * ────────────────────────────────────────────────────────────────────────
    */
   if (collected.length < 12) {
-    const WAVE = 5;
-    const ENOUGH = 36;
-    for (let i = 0; i < RSS_SOURCES.length; i += WAVE) {
-      if (collected.length >= ENOUGH) break;
-      const wave = RSS_SOURCES.slice(i, i + WAVE);
+    const WAVE = 4;
+    const PER_CAT = 8; // enough to fill any single tab
+
+    // Round-robin the sources by category so every tab gets a fair share.
+    const byCat = new Map();
+    for (const src of RSS_SOURCES) {
+      if (!byCat.has(src.cat)) byCat.set(src.cat, []);
+      byCat.get(src.cat).push(src);
+    }
+    const queues = [...byCat.values()];
+    const ordered = [];
+    for (let round = 0; ordered.length < RSS_SOURCES.length; round += 1) {
+      let added = false;
+      for (const q of queues) {
+        if (q[round]) {
+          ordered.push(q[round]);
+          added = true;
+        }
+      }
+      if (!added) break;
+    }
+
+    const perCat = new Map();
+    for (let i = 0; i < ordered.length; i += WAVE) {
+      const wave = ordered
+        .slice(i, i + WAVE)
+        // Skip a source whose category already has plenty; that budget is
+        // what stops the general desks from consuming the whole fetch.
+        .filter((src) => (perCat.get(src.cat) ?? 0) < PER_CAT);
+      if (!wave.length) continue;
+
       const results = await Promise.allSettled(
         wave.map((src) =>
           jget(`${RSS_BRIDGE}${encodeURIComponent(src.url)}`, 10000).then((d) => ({ src, d }))
@@ -278,7 +311,9 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
         // the screen; the wave simply contributes nothing.
         if (r.status !== 'fulfilled') continue;
         const items = r.value.d?.items ?? [];
-        collected.push(...items.slice(0, 6).map((i) => normalize(i, r.value.src)));
+        const take = items.slice(0, 5).map((i) => normalize(i, r.value.src));
+        collected.push(...take);
+        perCat.set(r.value.src.cat, (perCat.get(r.value.src.cat) ?? 0) + take.length);
       }
     }
   }

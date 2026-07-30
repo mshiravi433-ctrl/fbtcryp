@@ -151,6 +151,24 @@ console.log('\n▸ verifying the default build excludes the arcade…');
  * jsdom does not composite, so no render test can catch this. Reading the
  * declared z-index out of the stylesheet can.
  */
+/*
+ * LAZY LOCALES.
+ *
+ * All twelve locale files (508 KB) used to be static imports in
+ * src/i18n/index.js, so every one of them shipped in the entry chunk and a
+ * Persian user downloaded eleven languages they will never see before the
+ * first frame could paint. They are dynamic now — which introduces a new way
+ * to break: a language that fails to load silently, leaving raw keys or the
+ * wrong language on screen. This asserts the switch really works.
+ */
+console.log('\n▸ checking lazy locale loading…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.i18n.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runI18n } = await import('./.out/i18n/i18n-probe.js');
+  report('lazy locales', await runI18n());
+}
+
 console.log('\n▸ checking modal stacking order…');
 {
   const { readFileSync } = await import('node:fs');
