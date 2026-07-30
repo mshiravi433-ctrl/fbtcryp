@@ -30,7 +30,8 @@
   "leaderboard": "Ranking",
   "news": "News",
   "explore": "Explorer",
-  "discover": "Discover"
+  "discover": "Discover",
+  "nft": "My NFTs"
  },
  "common": {
   "balance": "Balance",
@@ -51,7 +52,8 @@
   "on": "On",
   "off": "Off",
   "language": "Language",
-  "tryAgain": "Try again"
+  "tryAgain": "Try again",
+  "retry": "Try again"
  },
  "market": {
   "totalMcap": "Total market cap",
@@ -1598,6 +1600,28 @@
    "bnbchain": "BNB Chain",
    "ethereum": "Ethereum.org",
    "l2beat": "L2BEAT"
+  }
+ },
+ "nft": {
+  "title": "My NFTs",
+  "subtitle": "The NFTs held by your connected wallet. Read-only — nothing here can be sold or moved from this screen.",
+  "connectFirst": "Connect a wallet to see the NFTs it holds.",
+  "notConfigured": "The NFT indexer is not configured on this deployment, so holdings cannot be listed yet.",
+  "chainUnsupported": "{{network}} is not indexed for NFTs. Pick one of the networks above.",
+  "empty": "No NFTs found in this wallet on this network. If you were expecting one, check you are on the right network — the same wallet holds different NFTs on each chain.",
+  "verified": "Verified collection",
+  "collection": "Collection",
+  "standard": "Standard",
+  "tokenId": "Token ID",
+  "owned": "You own",
+  "viewContract": "View contract on explorer",
+  "unverified": "This collection is not verified. Anyone can create an NFT and send it to any wallet, and unsolicited ones are usually bait — never connect your wallet to a site one links to, and never approve a transaction to “claim” it.",
+  "safety": "Receiving an NFT you did not buy is normal and does not mean your wallet is compromised. Nobody can take your assets by sending you something. The danger is only in acting on it: visiting its site, or approving a transaction.",
+  "err": {
+   "NFT_NOT_CONFIGURED": "The NFT indexer is not configured on this deployment.",
+   "CHAIN_NOT_SUPPORTED": "This network is not indexed for NFTs.",
+   "BAD_ADDRESS": "That wallet address is not valid.",
+   "FAILED": "Could not load your NFTs. Check your connection and try again."
   }
  }
 }

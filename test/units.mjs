@@ -15,6 +15,7 @@ import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
 import qrcode from 'qrcode-generator';
 import { classifyQuery } from '../src/pages/Explore.jsx';
 import { isSafeUrl } from '../src/lib/browser.js';
+import { clean as nftClean, safeImage } from '../server/nft.js';
 import coverage from '../src/i18n/coverage.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 
@@ -320,6 +321,31 @@ export default function run() {
     t('empty is refused', !isSafeUrl(''));
     // Case and whitespace tricks must not slip past the scheme check.
     t('uppercase JAVASCRIPT: is refused', !isSafeUrl('JavaScript:alert(1)'));
+  }
+
+  /* --------------------------- NFT sanitising ------------------------------ */
+  /*
+   * Anyone can mint an NFT into anyone's wallet with arbitrary metadata, so
+   * every string here is attacker-supplied. Airdropped scam NFTs use the name
+   * field as the payload. These assertions are the boundary.
+   */
+  {
+    t('markup is stripped from names', !nftClean('<img src=x onerror=alert(1)>').includes('<'));
+    t('quotes are stripped', !nftClean(`Claim '$5000' now`).includes("'"));
+    t('backslashes are stripped', !nftClean('a\\b').includes('\\'));
+    // A bidi override can render `moc.dab.evil` as `evil.bad.com`.
+    t('bidi overrides are removed', !/[\u202A-\u202E\u2066-\u2069]/.test(nftClean('Free\u202EmureP\u202Cdrop')));
+    t('control characters are removed', !/[\u0000-\u001f]/.test(nftClean('a\u0000b\nc')));
+    t('names are length-capped', nftClean('A'.repeat(500)).length <= 120);
+    t('normal names survive intact', nftClean('Bored Ape #1234') === 'Bored Ape #1234');
+    t('non-Latin names survive', nftClean('نمونه توکن') === 'نمونه توکن');
+
+    t('https images are kept', safeImage('https://cdn.test/a.png') === 'https://cdn.test/a.png');
+    t('http images are dropped', safeImage('http://cdn.test/a.png') === null);
+    t('javascript: images are dropped', safeImage('javascript:alert(1)') === null);
+    t('data: images are dropped', safeImage('data:image/svg+xml,<svg onload=alert(1)>') === null);
+    t('ipfs is rewritten to a gateway', String(safeImage('ipfs://QmHash/1.png')).startsWith('https://'));
+    t('garbage image urls are dropped', safeImage('not a url') === null);
   }
 
   return rows;

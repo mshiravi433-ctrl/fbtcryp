@@ -20,6 +20,7 @@ import Help from '../src/pages/Help.jsx';
 import P2P from '../src/pages/P2P.jsx';
 import Explore from '../src/pages/Explore.jsx';
 import Discover from '../src/pages/Discover.jsx';
+import Nft from '../src/pages/Nft.jsx';
 import Predict from '../src/pages/Predict.jsx';
 import Market from '../src/pages/Market.jsx';
 import Wallet from '../src/pages/Wallet.jsx';
@@ -108,6 +109,7 @@ export async function run(container) {
   await mount('P2P', <P2P />);
   await mount('Explore', <Explore />);
   await mount('Discover', <Discover />);
+  await mount('Nft', <Nft />);
   await mount('Predict', <Predict />);
   await mount('Market', <Market />);
   await mount('Wallet', <Wallet />);

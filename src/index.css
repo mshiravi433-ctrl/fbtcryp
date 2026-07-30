@@ -3258,3 +3258,103 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 .disc-go { color: var(--text-3); flex-shrink: 0; display: grid; place-items: center; }
+
+/* ==========================================================================
+   NFT VIEWER
+   ========================================================================== */
+
+.nft-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+@media (min-width: 420px) { .nft-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.nft-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 0 9px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.nft-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  /* Fixed square: NFT art is every possible aspect ratio, and letting each
+     card size itself makes the grid jump as images arrive. */
+  aspect-ratio: 1 / 1;
+  background: var(--bg-raised);
+}
+.nft-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.nft-noimg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.nft-badge {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: var(--rgb-4);
+}
+:root[data-theme='light'] .nft-badge { color: #fff; background: var(--ink-mint); }
+
+.nft-name {
+  padding: 0 9px;
+  font-size: 11.8px;
+  font-weight: 700;
+  /* Names are attacker-supplied. One line, clipped, so a very long or padded
+     name cannot push the layout around. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nft-coll {
+  padding: 0 9px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nft-skel {
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.09) 50%, rgba(255,255,255,.04) 75%);
+  background-size: 200% 100%;
+  animation: skel-shine 1.3s ease-in-out infinite;
+  border: 1px solid var(--line);
+}
+
+.nft-hero {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  margin-bottom: 12px;
+}
+.nft-hero img { width: 100%; display: block; max-height: 40dvh; object-fit: contain; }
+
+.nft-rows { display: flex; flex-direction: column; gap: 9px; }

@@ -23,7 +23,8 @@ import {
   IconTrend,
   IconTrophy,
   IconX,
-  IconSearch
+  IconSearch,
+  IconSparkle
 } from './Icons';
 
 /**
@@ -89,6 +90,7 @@ const GROUPS = [
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore', key: 'nav.explore', Icon: IconSearch, hue: 'var(--rgb-4)' },
       { to: '/discover', key: 'nav.discover', Icon: IconGlobe, hue: 'var(--rgb-2)' },
+      { to: '/nft', key: 'nav.nft', Icon: IconSparkle, hue: 'var(--rgb-3)' },
       { to: '/help', key: 'nav.help', Icon: IconInfo, hue: 'var(--rgb-9)' },
       { to: '/docs', key: 'nav.docs', Icon: IconDoc, hue: 'var(--rgb-1)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },

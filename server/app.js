@@ -28,6 +28,7 @@ import { fetchNews } from './news.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
+import { fetchNfts, nftChains, nftConfigured } from './nft.js';
 import {
   addFcmToken,
   addSubscription,
@@ -266,6 +267,38 @@ app.post('/api/ai/ask', async (req, res) => {
     const status = msg.includes('NOT_CONFIGURED') ? 503 : 502;
     return res.status(status).json({ error: 'AI_FAILED', detail: msg.slice(0, 200) });
   }
+});
+
+/* --------------------------------- NFTs ----------------------------------- */
+/*
+ * Read-only viewer. Nothing here can move an asset — it is a GET against an
+ * indexer, so the worst case is a stale or empty list.
+ *
+ * Cached for 5 minutes per address: NFT holdings change far less often than
+ * prices, and an uncached endpoint would burn the free indexer quota every
+ * time someone re-opened the tab.
+ */
+app.get('/api/nft/chains', (_req, res) =>
+  res.json({ configured: nftConfigured(), chains: nftChains() })
+);
+
+app.get('/api/nft/:chainId/:owner', (req, res) => {
+  if (!nftConfigured()) return res.status(503).json({ error: 'NFT_NOT_CONFIGURED' });
+
+  const { chainId, owner } = req.params;
+  // Validate before it reaches the cache key, so a malformed address cannot
+  // poison the cache with an error response.
+  if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) {
+    return res.status(400).json({ error: 'BAD_ADDRESS' });
+  }
+  if (!nftChains().includes(Number(chainId))) {
+    return res.status(400).json({ error: 'CHAIN_NOT_SUPPORTED', chains: nftChains() });
+  }
+
+  return serve(res, 300000)(
+    () => fetchNfts(chainId, owner),
+    `nft:${chainId}:${owner.toLowerCase()}`
+  );
 });
 
 /* ----------------------------- leaderboard -------------------------------- */
