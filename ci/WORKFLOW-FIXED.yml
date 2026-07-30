@@ -56,10 +56,27 @@ jobs:
             out/*.aab
           if-no-files-found: warn
 
+      # Always refresh the rolling "latest" release.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: FBT Swap - latest
+          files: |
+            out/*.apk
+            out/*.aab
+
+      # AND, when the run was triggered by a version tag, attach the very same
+      # artifacts to that tag's release.
+      #
+      # Without this, `tag_name: latest` was hardcoded, so a build triggered by
+      # pushing v1.2.2 uploaded its APK to `latest` and left the v1.2.2 release
+      # with no files at all. The version you tag is the one someone links to
+      # months later, and it was always empty; the only downloadable build was
+      # a rolling tag that silently changes underneath you, so "the APK from
+      # v1.2.0" was never actually recoverable.
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
           files: |
             out/*.apk
             out/*.aab
