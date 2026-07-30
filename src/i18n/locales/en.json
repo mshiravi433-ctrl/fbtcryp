@@ -1656,8 +1656,8 @@
    "dca": "DCA"
   },
   "when": {
-   "above": "When 1 unit ≥ {{rate}} {{to}}",
-   "below": "When 1 unit ≤ {{rate}} {{to}}"
+   "above": "Fires when 1 {{from}} ≥ {{rate}} {{to}}",
+   "below": "Fires when 1 {{from}} ≤ {{rate}} {{to}}"
   },
   "every": {
    "daily": "Every day",
@@ -1665,8 +1665,8 @@
    "monthly": "Every month"
   },
   "dir": {
-   "below": "Buy when it drops",
-   "above": "Sell when it rises"
+   "below": "Price falls to",
+   "above": "Price rises to"
   },
   "now": "now",
   "noPrice": "price unavailable",
@@ -1687,6 +1687,7 @@
   "dcaTotal": "Total over the plan: {{total}} {{symbol}}",
   "create": "Create",
   "notifyTitle": "Your order is ready",
-  "notifyBody": "{{amount}} {{from}} → {{to}} has reached your target. Open the app to swap."
+  "notifyBody": "{{amount}} {{from}} → {{to}} has reached your target. Open the app to swap.",
+  "pairHint": "You are swapping {{from}} → {{to}}. The price below is how many {{to}} one {{from}} is worth right now."
  }
 }

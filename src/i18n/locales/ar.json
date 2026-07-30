@@ -1656,8 +1656,8 @@
    "dca": "DCA"
   },
   "when": {
-   "above": "عندما ≥ {{rate}} {{to}}",
-   "below": "عندما ≤ {{rate}} {{to}}"
+   "above": "عندما 1 {{from}} ≥ {{rate}} {{to}}",
+   "below": "عندما 1 {{from}} ≤ {{rate}} {{to}}"
   },
   "every": {
    "daily": "كل يوم",
@@ -1665,8 +1665,8 @@
    "monthly": "كل شهر"
   },
   "dir": {
-   "below": "اشترِ عند الانخفاض",
-   "above": "بِع عند الارتفاع"
+   "below": "ينخفض السعر إلى",
+   "above": "يرتفع السعر إلى"
   },
   "now": "الآن",
   "noPrice": "السعر غير متاح",
@@ -1687,6 +1687,7 @@
   "dcaTotal": "الإجمالي: {{total}} {{symbol}}",
   "create": "إنشاء",
   "notifyTitle": "أمرك جاهز",
-  "notifyBody": "{{amount}} {{from}} ← {{to}} وصل إلى هدفك."
+  "notifyBody": "{{amount}} {{from}} ← {{to}} وصل إلى هدفك.",
+  "pairHint": "أنت تبادل {{from}} إلى {{to}}. السعر أدناه هو كم {{to}} يساوي {{from}} واحد الآن."
  }
 }

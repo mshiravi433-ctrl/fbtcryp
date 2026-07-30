@@ -179,7 +179,17 @@ export default function Orders() {
         {o.type === 'limit' ? (
           <div className="ord-meta">
             <span className="faint">
-              {t(`orders.when.${o.direction}`, { rate: fmtQty(o.targetRate), to: o.toToken.symbol })}
+              {/*
+                The label must name BOTH tokens. "When 1 unit ≥ 700 USDT" was
+                ambiguous: the rate is always priced in the TO token, and which
+                side is being sold depends on which token sits in the FROM
+                slot — not on the direction. Naming both removes the guess.
+              */}
+              {t(`orders.when.${o.direction}`, {
+                from: o.fromToken.symbol,
+                rate: fmtQty(o.targetRate),
+                to: o.toToken.symbol
+              })}
             </span>
             {Number.isFinite(rate) ? (
               <span className={`mono ${pct >= 0 ? 'up' : 'down'}`}>
@@ -351,6 +361,16 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
 
         {kind === 'limit' ? (
           <>
+            {/*
+              Spell out what the rate means BEFORE the direction toggle. The
+              old "Buy when it drops / Sell when it rises" labels were simply
+              wrong: with from=BNB to=USDT you are selling BNB either way, and
+              the direction only picks the trigger condition.
+            */}
+            <p className="faint" style={{ lineHeight: 1.7 }}>
+              {t('orders.pairHint', { from: fromSym, to: toSym })}
+            </p>
+
             <div className="segmented">
               {['below', 'above'].map((d) => (
                 <button key={d} className={direction === d ? 'active' : ''} onClick={() => setDirection(d)}>

@@ -184,5 +184,40 @@ export default function run() {
     );
   }
 
+  /* ------------- 7. order direction labels must not lie ------------------ */
+  /*
+   * REAL BUG: the direction toggle read "Buy when it drops / Sell when it
+   * rises". Both were wrong. The rate is always "1 FROM = ? TO", so which side
+   * is being sold is decided by which token sits in the FROM slot - not by the
+   * direction. With from=BNB to=USDT you are selling BNB either way; the
+   * direction only chooses the trigger condition.
+   *
+   * A label that names a trade the app is not making is the worst kind of
+   * wrong on a money screen, so the words buy/sell are banned from these keys.
+   */
+  {
+    const offenders = [];
+    for (const f of readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'))) {
+      const d = JSON.parse(read(join('src/i18n/locales', f)));
+      const dir = d?.orders?.dir;
+      if (!dir) continue;
+      for (const [k, v] of Object.entries(dir)) {
+        if (/\bbuy\b|\bsell\b|بخر|بفروش|اشتر|بِع/i.test(String(v))) offenders.push(`${f}:orders.dir.${k}`);
+      }
+    }
+    t(
+      `direction labels describe the condition, not a buy/sell${offenders.length ? ` — ${offenders.slice(0, 3).join(', ')}` : ''}`,
+      offenders.length === 0
+    );
+
+    // The trigger label must name the FROM token, or "1 unit" is ambiguous.
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const when = en?.orders?.when ?? {};
+    t(
+      'the trigger label names both tokens',
+      Object.values(when).every((v) => v.includes('{{from}}') && v.includes('{{to}}'))
+    );
+  }
+
   return rows;
 }
