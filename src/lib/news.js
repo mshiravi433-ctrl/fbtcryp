@@ -57,7 +57,23 @@ const RSS_SOURCES = [
   { id: 'arabianbusiness', url: 'https://www.arabianbusiness.com/feed', cat: 'regional' },
   { id: 'cointelegraph-mena', url: 'https://cointelegraph.com/rss/tag/middle-east', cat: 'regional' },
 
-  // other languages
+  /*
+   * LOCAL-LANGUAGE DESKS
+   *
+   * These are outlets writing in their own language for their own market, not
+   * translations of English wire copy. That distinction matters: a Persian
+   * crypto desk covers Iranian exchange rules and rial pricing, which no
+   * amount of translating CoinDesk will ever surface.
+   *
+   * `lang` is what the UI shows as the badge on the card, so a reader can see
+   * at a glance which language they are about to open.
+   */
+  { id: 'arzdigital', url: 'https://arzdigital.com/feed/', cat: 'lang', lang: 'fa' },
+  { id: 'ramzarz', url: 'https://ramzarz.news/feed/', cat: 'lang', lang: 'fa' },
+  { id: 'btc-echo', url: 'https://www.btc-echo.de/feed/', cat: 'lang', lang: 'de' },
+  { id: 'coinkurier', url: 'https://coinkurier.de/feed/', cat: 'lang', lang: 'de' },
+  { id: 'cointelegraph-hi', url: 'https://hi.cointelegraph.com/rss', cat: 'lang', lang: 'hi' },
+  { id: 'coingape-hi', url: 'https://hindi.coingape.com/feed/', cat: 'lang', lang: 'hi' },
   { id: 'cointelegraph-ar', url: 'https://ar.cointelegraph.com/rss', cat: 'lang', lang: 'ar' },
   { id: 'cointelegraph-tr', url: 'https://tr.cointelegraph.com/rss', cat: 'lang', lang: 'tr' },
   { id: 'cointelegraph-es', url: 'https://es.cointelegraph.com/rss', cat: 'lang', lang: 'es' }
@@ -230,15 +246,40 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
     /* no backend deployed */
   }
 
-  // 2. public RSS, in parallel — one slow desk shouldn't hold up the rest
+  /*
+   * 2. Public RSS.
+   *
+   * The source list grew from 4 desks to 20 (regional, policy, events, future
+   * and six local-language outlets). Firing all 20 at one free JSON bridge in
+   * a single burst gets the whole batch rate-limited, and on a mobile
+   * connection it also saturates the connection pool the market data needs.
+   *
+   * So: fetch in small waves, and stop as soon as there is enough to fill the
+   * screen. A user opening the news tab wants headlines now, not the complete
+   * union of every desk.
+   *
+   * Ordering matters — RSS_SOURCES lists the general desks first, so a partial
+   * fetch still produces a sensible front page rather than nothing but
+   * German-language policy pieces.
+   */
   if (collected.length < 12) {
-    const results = await Promise.allSettled(
-      RSS_SOURCES.map((s) => jget(`${RSS_BRIDGE}${encodeURIComponent(s.url)}`, 10000).then((d) => ({ s, d })))
-    );
-    for (const r of results) {
-      if (r.status !== 'fulfilled') continue;
-      const items = r.value.d?.items ?? [];
-      collected.push(...items.slice(0, 8).map((i) => normalize(i, r.value.s)));
+    const WAVE = 5;
+    const ENOUGH = 36;
+    for (let i = 0; i < RSS_SOURCES.length; i += WAVE) {
+      if (collected.length >= ENOUGH) break;
+      const wave = RSS_SOURCES.slice(i, i + WAVE);
+      const results = await Promise.allSettled(
+        wave.map((src) =>
+          jget(`${RSS_BRIDGE}${encodeURIComponent(src.url)}`, 10000).then((d) => ({ src, d }))
+        )
+      );
+      for (const r of results) {
+        // A dead or renamed feed is expected over time and must never break
+        // the screen; the wave simply contributes nothing.
+        if (r.status !== 'fulfilled') continue;
+        const items = r.value.d?.items ?? [];
+        collected.push(...items.slice(0, 6).map((i) => normalize(i, r.value.src)));
+      }
     }
   }
 
@@ -247,7 +288,7 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
   let items = collected
     .filter((i) => i?.title && !seen.has(i.title.toLowerCase()) && seen.add(i.title.toLowerCase()))
     .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
-    .slice(0, 40);
+    .slice(0, 60);
 
   // 4. never return an empty screen
   if (!items.length) {

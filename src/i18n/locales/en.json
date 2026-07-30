@@ -1217,7 +1217,14 @@
     "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
    }
   },
-  "notice": "These are independent platforms. Fanous Bazaar Pishgam does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
+  "notice": "These are independent platforms. Fanous Bazaar Pishgam does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade.",
+  "step": {
+   "s1": "Agree the price and amount with the other person first — off the app. FBT Swap is not involved in that negotiation and cannot arbitrate it.",
+   "s2": "Ask them for their receiving address AND the network it is on. The same address string can exist on several networks; sending on the wrong one usually loses the funds.",
+   "s3": "Scan their QR code instead of typing. If you must type or paste, compare the first four and last four characters against the original before continuing.",
+   "s4": "Send a small test amount first when the sum is large. Losing a dollar to a mistake is a lesson; losing the whole amount is not recoverable.",
+   "s5": "Send the rest, then give them the transaction link so they can verify it on-chain themselves."
+  }
  },
  "rank": {
   "title": "Ranking",
@@ -1454,6 +1461,31 @@
    "NO_CAMERA": "No camera was found on this device. Paste the address instead.",
    "NOT_AN_ADDRESS": "That QR code is not a wallet address. Scan the code shown by the wallet or exchange you are sending to.",
    "FAILED": "The camera could not be started. Close the sheet and try again, or paste the address."
+  }
+ },
+ "send": {
+  "title": "Send crypto",
+  "toAddress": "Recipient address",
+  "amount": "Amount",
+  "max": "Max",
+  "scan": "Scan",
+  "review": "Review transfer",
+  "confirmTitle": "Check this carefully",
+  "youSend": "You send",
+  "onNetwork": "on {{network}}",
+  "confirm": "Confirm and send",
+  "sending": "Sending…",
+  "sent": "Transfer submitted",
+  "sentBody": "The network is confirming it now. Once it settles it cannot be undone or recalled.",
+  "viewTx": "View on explorer",
+  "irreversible": "On-chain transfers are final. If the address is wrong the funds are gone — nobody, including us, can reverse or recover them. Check the address again before confirming.",
+  "gasReserve": "Max leaves a small amount of the network coin behind so you can still pay the transaction fee. Sending everything would leave the wallet unable to move funds.",
+  "err": {
+   "INVALID_ADDRESS": "That is not a valid address. It must start with 0x and be 42 characters long.",
+   "INSUFFICIENT": "More than your balance. Remember the network fee is paid on top.",
+   "REJECTED": "You rejected the request in your wallet.",
+   "FAILED": "The transfer failed. Nothing was sent.",
+   "NO_SIGNER": "Wallet is locked. Unlock it and try again."
   }
  }
 }

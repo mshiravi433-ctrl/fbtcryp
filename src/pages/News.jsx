@@ -206,8 +206,22 @@ export default function News() {
               style={{ cursor: n.url ? 'pointer' : 'default' }}
             >
               <div className="row-between" style={{ marginBottom: 5 }}>
-                <span className="pill pill-rgb" style={{ fontSize: 10 }}>
-                  {n.digest ? t('news.digest') : n.source}
+                <span className="row" style={{ gap: 5 }}>
+                  <span className="pill pill-rgb" style={{ fontSize: 10 }}>
+                    {n.digest ? t('news.digest') : n.source}
+                  </span>
+                  {/*
+                    Language badge. Without it the "other languages" tab is a
+                    trap: you tap a headline expecting your own language and
+                    land on a German page. Shown only when the article is NOT
+                    in the language the UI is already set to, so it stays quiet
+                    in the common case.
+                  */}
+                  {n.lang && n.lang !== i18n.language && (
+                    <span className="pill" style={{ fontSize: 9.5, textTransform: 'uppercase' }}>
+                      {n.lang}
+                    </span>
+                  )}
                 </span>
                 <span className="faint mono" style={{ fontSize: 10.5 }}>{timeAgo(n.at, i18n.language)}</span>
               </div>

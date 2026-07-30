@@ -1217,7 +1217,14 @@
     "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
    }
   },
-  "notice": "These are independent platforms. فانوس بازار بيشغام does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade."
+  "notice": "These are independent platforms. فانوس بازار بيشغام does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade.",
+  "step": {
+   "s1": "اتفق على السعر والمبلغ خارج التطبيق أولاً. التطبيق ليس طرفاً في التفاوض.",
+   "s2": "اطلب عنوان الاستلام والشبكة معاً. الإرسال على شبكة خاطئة يعني ضياع الأموال غالباً.",
+   "s3": "امسح رمز QR بدل الكتابة. إن اضطررت للصق، قارن أول وآخر أربعة أحرف.",
+   "s4": "أرسل مبلغاً تجريبياً صغيراً أولاً عندما يكون المبلغ كبيراً.",
+   "s5": "أرسل الباقي ثم شارك رابط المعاملة ليتحقق منها بنفسه."
+  }
  },
  "rank": {
   "title": "الترتيب",
@@ -1454,6 +1461,31 @@
    "NO_CAMERA": "لم يتم العثور على كاميرا. الصق العنوان بدلاً من ذلك.",
    "NOT_AN_ADDRESS": "رمز QR هذا ليس عنوان محفظة.",
    "FAILED": "تعذّر تشغيل الكاميرا. أغلق النافذة وحاول مجدداً."
+  }
+ },
+ "send": {
+  "title": "إرسال العملات",
+  "toAddress": "عنوان المستلم",
+  "amount": "المبلغ",
+  "max": "الحد الأقصى",
+  "scan": "مسح",
+  "review": "مراجعة التحويل",
+  "confirmTitle": "تحقق بعناية",
+  "youSend": "سترسل",
+  "onNetwork": "على {{network}}",
+  "confirm": "تأكيد وإرسال",
+  "sending": "جارٍ الإرسال…",
+  "sent": "تم إرسال التحويل",
+  "sentBody": "الشبكة تؤكده الآن. بعد اكتماله لا يمكن التراجع عنه.",
+  "viewTx": "عرض في المستكشف",
+  "irreversible": "التحويلات على السلسلة نهائية. إذا كان العنوان خاطئاً تضيع الأموال ولا يمكن لأحد استرجاعها.",
+  "gasReserve": "يترك زر الحد الأقصى مبلغاً صغيراً من عملة الشبكة لدفع رسوم المعاملة.",
+  "err": {
+   "INVALID_ADDRESS": "عنوان غير صالح. يجب أن يبدأ بـ 0x ويتكون من ٤٢ حرفاً.",
+   "INSUFFICIENT": "أكثر من رصيدك. رسوم الشبكة تُدفع إضافةً إلى ذلك.",
+   "REJECTED": "رفضت الطلب في محفظتك.",
+   "FAILED": "فشل التحويل. لم يُرسل شيء.",
+   "NO_SIGNER": "المحفظة مقفلة. افتحها وحاول مجدداً."
   }
  }
 }

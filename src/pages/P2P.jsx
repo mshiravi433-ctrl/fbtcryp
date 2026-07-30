@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
+import SendSheet from '../components/SendSheet';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap } from '../components/Icons';
 
 /**
@@ -46,6 +47,7 @@ export default function P2P() {
   const wallet = useWallet();
 
   const [tab, setTab] = useState('otc');
+  const [sendOpen, setSendOpen] = useState(false);
 
   const open = (url) => {
     haptic?.('light');
@@ -96,9 +98,21 @@ export default function P2P() {
                   <span className="faint">{t('p2p.yourAddress')}</span>
                   <span className="mono" style={{ fontSize: 12 }}>{shortAddress(wallet.address)}</span>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate('/wallet?action=send')}>
+                {/*
+                  This used to navigate to `/wallet?action=send`, but Wallet.jsx
+                  never read that query parameter and no send form existed — the
+                  button changed the URL and did nothing else. It now opens the
+                  real transfer sheet.
+                */}
+                <button className="btn btn-primary" onClick={() => setSendOpen(true)}>
                   {t('p2p.openSend')}
                 </button>
+
+                <ol className="p2p-steps">
+                  {['s1', 's2', 's3', 's4', 's5'].map((k) => (
+                    <li key={k}>{t(`p2p.step.${k}`)}</li>
+                  ))}
+                </ol>
               </>
             ) : (
               <>
@@ -112,6 +126,8 @@ export default function P2P() {
           </motion.section>
 
           <AdBanner slot="swap" />
+
+          <SendSheet open={sendOpen} onClose={() => setSendOpen(false)} />
         </>
       ) : (
         <>

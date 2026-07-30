@@ -168,6 +168,15 @@ export const IconCopy = (p) => (
   </svg>
 );
 
+export const IconQr = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <path d="M14 14h3v3h-3zM19 14h2M14 19h3M19 19h2" />
+  </svg>
+);
+
 export const IconExternal = (p) => (
   <svg {...base} {...p}>
     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />

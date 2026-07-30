@@ -966,20 +966,72 @@ select option { background: #0a0c12; }
    Misc
    ========================================================================== */
 
+/*
+ * NOTICES
+ *
+ * A 7%-alpha amber wash reads clearly on black and all but vanishes on white,
+ * so in light theme these turned into a bare line of grey text with no border,
+ * no colour and no icon — the risk warning at the bottom of Predict looked
+ * like a stray sentence rather than a warning. A safety notice that does not
+ * look like one is not doing its job.
+ *
+ * Fixed by giving light theme its own stronger values, and by adding a leading
+ * icon so the block is recognisable as a warning before a word is read.
+ */
 .notice {
+  position: relative;
   font-size: 11.5px;
   line-height: 1.7;
   color: var(--text-2);
   background: rgba(255, 179, 0, 0.07);
   border: 1px solid rgba(255, 179, 0, 0.28);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 34px;
 }
+
+/* Warning glyph, drawn in CSS so it costs no markup change at every call site. */
+.notice::before {
+  content: '!';
+  position: absolute;
+  inset-inline-start: 11px;
+  top: 10px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  color: #1a1200;
+  background: var(--rgb-5);
+}
+
+[dir='rtl'] .notice { padding: 10px 34px 10px 12px; }
 
 .notice-danger {
   background: rgba(255, 59, 107, 0.08);
   border-color: rgba(255, 59, 107, 0.3);
 }
+.notice-danger::before { background: var(--down); color: #fff; }
+
+/*
+ * Light theme: raise the tint and border until the block reads as a distinct
+ * surface, and darken the text so it meets contrast on a white card.
+ */
+:root[data-theme='light'] .notice {
+  background: #fff8e6;
+  border-color: rgba(157, 110, 0, 0.42);
+  color: #4a3800;
+}
+:root[data-theme='light'] .notice::before { background: var(--ink-amber); color: #fff; }
+
+:root[data-theme='light'] .notice-danger {
+  background: #fff0f3;
+  border-color: rgba(224, 36, 79, 0.45);
+  color: #6b0f22;
+}
+:root[data-theme='light'] .notice-danger::before { background: var(--down); color: #fff; }
 
 .balance-chip {
   display: inline-flex;
@@ -2750,3 +2802,21 @@ input, select, textarea { font-size: 16px !important; }
   border: 2px solid var(--rgb-1);
   pointer-events: none;
 }
+
+/*
+ * OTC step list. Numbered because the ORDER is the safety property: agreeing
+ * the price after sending, or sending before checking the network, is how the
+ * money goes missing.
+ */
+.p2p-steps {
+  margin: 12px 0 0;
+  padding-inline-start: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.2px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+.p2p-steps li::marker { color: var(--rgb-1); font-weight: 700; }
+:root[data-theme='light'] .p2p-steps li::marker { color: var(--ink-cyan); }

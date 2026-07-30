@@ -232,6 +232,52 @@ app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)
 );
 
+/* ----------------------------- leaderboard -------------------------------- */
+/*
+ * These were MISSING too. `readLeaderboard` and `submitScore` were imported at
+ * the top of this file but never mounted, so GET /api/leaderboard always 404'd
+ * and the client's catch-all turned that into "could not reach the server" —
+ * a message that pointed at the network when the route simply did not exist.
+ */
+
+app.get('/api/leaderboard', async (_req, res) => {
+  try {
+    const rows = await readLeaderboard();
+    res.json({ rows, durable: storeDurable(), at: Date.now() });
+  } catch (e) {
+    res.status(500).json({ error: 'READ_FAILED', detail: String(e.message).slice(0, 120) });
+  }
+});
+
+app.post('/api/leaderboard', async (req, res) => {
+  const { name, points, swaps, referrals, clientId } = req.body ?? {};
+
+  /*
+   * Identity: prefer the Telegram id, which telegramAuth has already verified
+   * against the bot token's HMAC. Fall back to the client-generated id, but
+   * flag the row as unverified — anyone can POST a number to a public
+   * endpoint, and a board that hides which rows are self-reported is just a
+   * lie with a ranking on it.
+   */
+  const tgId = req.tgUser?.id;
+  const id = tgId ? `tg:${tgId}` : (typeof clientId === 'string' && clientId.slice(0, 64));
+  if (!id) return res.status(400).json({ error: 'NO_ID' });
+
+  try {
+    const out = await submitScore({
+      id,
+      name,
+      points,
+      swaps,
+      referrals,
+      verified: Boolean(tgId)
+    });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message).slice(0, 120) });
+  }
+});
+
 /* -------------------------------- push ------------------------------------ */
 /*
  * These routes were MISSING. `addSubscription`, `sendDailyPromo` and
