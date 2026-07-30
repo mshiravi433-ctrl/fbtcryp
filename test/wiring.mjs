@@ -328,5 +328,93 @@ export default function run() {
     t('native push plugin is a dependency', '@capacitor/push-notifications' in deps);
   }
 
+  /* ------------- 11. every API the client calls must be routed ------------ */
+  /*
+   * THE MOST EXPENSIVE BUG CLASS IN THIS PROJECT — found six times now:
+   * a handler is written, imported at the top of server/app.js, and then no
+   * `app.get`/`app.post` line is ever added. The import makes it look wired.
+   * Everything builds. The route answers {"error":"NOT_FOUND"}.
+   *
+   * Previously: push subscribe/unsubscribe, leaderboard, orders/watch.
+   * Verified live on www.lawpoetics.ir this round:
+   *   GET /api/search      → NOT_FOUND  (fetchSearch imported, never routed)
+   *   GET /api/news        → NOT_FOUND  (fetchNews imported, never routed)
+   *   GET /api/push/status → NOT_FOUND  (never written at all)
+   *
+   * What makes it so hard to notice is that the client hides it. api.js falls
+   * back to public CoinGecko, news.js falls back to public RSS, and notify.js
+   * treats a failed status call as "server push not available". So the app
+   * degrades quietly instead of erroring — the user just gets a slower,
+   * rate-limited, notification-less version and nobody sees a red log line.
+   *
+   * So: extract every `${API_BASE}/...` template in src/ and require a
+   * matching route in server/app.js.
+   */
+  {
+    const serverSrc = read('server/app.js');
+
+    // Routes the server declares, as regexes so /nft/:chainId/:owner matches.
+    const declared = [...serverSrc.matchAll(/app\.(get|post)\(\s*'\/api\/([^']*)'/g)].map(
+      ([, method, p]) => ({
+        method,
+        re: new RegExp(`^${p.replace(/:[a-zA-Z]+/g, '[^/]+').replace(/\//g, '\\/')}$`)
+      })
+    );
+
+    // Paths the client asks for. Strip the query string and any ${...} the
+    // template interpolates — those are path params, matched by :param above.
+    const called = new Set();
+    for (const f of files) {
+      for (const m of read(f).matchAll(/\$\{API_BASE\}\/([^`'"?]*)/g)) {
+        const clean = m[1].replace(/\$\{[^}]*\}/g, 'X').replace(/\/+$/, '');
+        if (clean) called.add(clean);
+      }
+    }
+
+    const unrouted = [...called].filter((p) => !declared.some((d) => d.re.test(p)));
+    t(
+      `every /api path the client calls is routed${unrouted.length ? ` — unrouted: ${unrouted.join(', ')}` : ''}`,
+      unrouted.length === 0
+    );
+    t(`a meaningful number of API paths were checked (${called.size})`, called.size >= 15);
+
+    /*
+     * And the mirror image: a handler imported but never mounted. This is the
+     * shape the bug actually takes in the diff, so catching it here names the
+     * cause rather than the symptom.
+     */
+    const handlerImports = [
+      'fetchSearch',
+      'fetchNews',
+      'fetchGlobal',
+      'fetchTrending',
+      'fetchMarkets',
+      'fetchChart',
+      'fetchCoinDetail',
+      'fetchSimplePrices',
+      'fetchDexPools',
+      'fetchNfts',
+      'readLeaderboard',
+      'submitScore',
+      'addSubscription',
+      'removeSubscription',
+      'addFcmToken',
+      'removeFcmToken',
+      'putWatches',
+      'clearWatches',
+      'readWatches',
+      'runWatchCycle'
+    ];
+    // Imported at the top AND referenced somewhere below the route section.
+    const routeBody = serverSrc.slice(serverSrc.indexOf("app.get('/api/health'"));
+    const dangling = handlerImports.filter(
+      (h) => new RegExp(`\\b${h}\\b`).test(serverSrc) && !new RegExp(`\\b${h}\\b`).test(routeBody)
+    );
+    t(
+      `no handler is imported without being used in a route${dangling.length ? ` — dangling: ${dangling.join(', ')}` : ''}`,
+      dangling.length === 0
+    );
+  }
+
   return rows;
 }

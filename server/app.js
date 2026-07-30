@@ -127,6 +127,38 @@ app.get('/api/coin/:id', (req, res) =>
   serve(res, 120000)(() => fetchCoinDetail(req.params.id), `coin:${req.params.id}`)
 );
 
+/*
+ * COIN SEARCH.
+ *
+ * `fetchSearch` was imported at the top of this file and then never routed —
+ * the same "imported but never mounted" failure that hit push, leaderboard and
+ * the watch routes. `/api/search?q=btc` answered `{"error":"NOT_FOUND"}` on the
+ * live site while the import sat there looking correct.
+ *
+ * The client (src/lib/api.js searchCoins) hides this: when the backend 404s it
+ * silently falls through to the public CoinGecko endpoint, which is rate
+ * limited per user IP. So search "worked" while quietly bypassing our cache
+ * and burning the user's own quota.
+ */
+app.get('/api/search', (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 64);
+  if (q.length < 2) return res.json([]);
+  return serve(res, 120000)(() => fetchSearch(q), `search:${q.toLowerCase()}`);
+});
+
+/*
+ * NEWS.
+ *
+ * Same story: `fetchNews` imported, no route. The client then fell back to
+ * public RSS through a third-party JSON bridge from every device — which is
+ * exactly what aggregating server-side was supposed to avoid (one upstream
+ * request per day for everyone, instead of one per user per open).
+ *
+ * TTL is 30 minutes rather than the 24h the client caches for: the client
+ * decides how long to keep it, the server only decides how often to refetch.
+ */
+app.get('/api/news', (_req, res) => serve(res, 1_800_000)(fetchNews, 'news'));
+
 app.get('/api/prices', (req, res) => {
   const ids = String(req.query.ids || '')
     .split(',')
@@ -478,6 +510,40 @@ app.post('/api/push/fcm', async (req, res) => {
   } catch (e) {
     return res.status(400).json({ ok: false, error: String(e.message).slice(0, 120) });
   }
+});
+
+/*
+ * "Can the server actually push to me?"
+ *
+ * src/lib/notify.js has always called GET /api/push/status to decide between
+ * 'server' and 'local' notification mode. The route did not exist, so the
+ * fetch returned 404 → `data?.configured` was undefined → every WEB user was
+ * pinned to 'local' (device-only) notifications, even with VAPID configured.
+ * Native Android is unaffected because it short-circuits to 'server' earlier.
+ *
+ * This deliberately reports only booleans and counts, never key values.
+ */
+app.get('/api/push/status', async (_req, res) => {
+  const webReady = pushConfigured();
+  const fcmReady = fcmConfigured();
+  res.json({
+    /*
+     * `configured` is what notify.js reads to choose 'server' over 'local'.
+     *
+     * It reports the WEB channel only, and deliberately so. This route is
+     * reached from a browser or PWA, and a browser can only ever be delivered
+     * to over VAPID — native Android never gets here, because pushMode()
+     * short-circuits to 'server' before making this call. Reporting
+     * `web || fcm` would tell a browser "the server can reach you" on the
+     * strength of a channel that physically cannot, which is how the app ends
+     * up promising notifications it will never deliver.
+     */
+    configured: webReady,
+    web: webReady,
+    fcm: fcmReady,
+    subscribers: await readSubscriptionsSafe(),
+    devices: await readFcmTokensSafe()
+  });
 });
 
 app.post('/api/push/fcm/remove', async (req, res) => {
