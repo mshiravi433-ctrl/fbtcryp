@@ -291,3 +291,64 @@ export function removeOrder(id) {
   saveOrders(next);
   return next;
 }
+
+/* -------------------------------------------------------------------------- */
+/* server-side watching                                                       */
+/* -------------------------------------------------------------------------- */
+
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+
+/**
+ * Mirror the active LIMIT orders to the server so it can alert while the app
+ * is closed.
+ *
+ * ─── WHAT DELIBERATELY DOES NOT GET SENT ────────────────────────────────────
+ * No wallet address and no amount. The server needs neither to decide whether
+ * a price was hit, and a watch list that names amounts is a shopping list for
+ * anyone who breaches it — "this endpoint wants to sell 40 BNB at 700" has
+ * real value to the wrong person. The notification says an order is ready; the
+ * app fills in the details from local storage.
+ *
+ * DCA plans are not sent either. They are time-based, so the device can decide
+ * on its own without the server learning the schedule.
+ *
+ * Best-effort: a failure here costs the background alert, not the order. The
+ * in-app watcher still works, so this never surfaces an error.
+ */
+export async function syncWatches(orders) {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) return false;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager?.getSubscription();
+    // No push subscription means there is nothing to notify, so there is no
+    // reason to hand the server a watch list at all.
+    if (!sub?.endpoint) return false;
+
+    const items = orders
+      .filter((o) => o.status === 'active' && o.type === 'limit')
+      .filter((o) => o.fromToken?.coingeckoId && o.toToken?.coingeckoId)
+      .map((o) => ({
+        id: o.id,
+        fromSym: o.fromToken.symbol,
+        toSym: o.toToken.symbol,
+        fromId: o.fromToken.coingeckoId,
+        toId: o.toToken.coingeckoId,
+        targetRate: o.targetRate,
+        direction: o.direction,
+        priceOf: o.priceOf ?? 'from'
+      }));
+
+    await fetch(`${API_BASE}/orders/watch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: sub.endpoint,
+        items,
+        lang: document.documentElement.lang || 'fa'
+      })
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

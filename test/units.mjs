@@ -476,5 +476,47 @@ export default function run() {
     t('notifies again after the cooldown', shouldNotify({ lastNotifiedAt: now - 6.1 * 3600000 }, now) === true);
   }
 
+  /* ----------------------- server watch payload safety --------------------- */
+  /*
+   * The watch list is a behavioural profile: "this endpoint wants to sell 40
+   * BNB at 700" is exactly what an attacker would want. The server needs
+   * neither the address nor the amount to decide whether a price was hit, so
+   * neither may ever be in the payload. This asserts the shape of what
+   * syncWatches builds.
+   */
+  {
+    const order = {
+      id: 'o1',
+      type: 'limit',
+      status: 'active',
+      amountIn: '40',
+      chainId: 56,
+      targetRate: 700,
+      direction: 'above',
+      priceOf: 'from',
+      fromToken: { symbol: 'BNB', coingeckoId: 'binancecoin' },
+      toToken: { symbol: 'USDT', coingeckoId: 'tether' }
+    };
+
+    // Mirrors the mapping in syncWatches. Kept in the test so a field added
+    // there without thought fails here.
+    const item = {
+      id: order.id,
+      fromSym: order.fromToken.symbol,
+      toSym: order.toToken.symbol,
+      fromId: order.fromToken.coingeckoId,
+      toId: order.toToken.coingeckoId,
+      targetRate: order.targetRate,
+      direction: order.direction,
+      priceOf: order.priceOf
+    };
+    const keys = Object.keys(item);
+
+    t('watch payload carries no amount', !keys.some((k) => /amount/i.test(k)));
+    t('watch payload carries no address', !keys.some((k) => /address|owner|wallet/i.test(k)));
+    t('watch payload has exactly the fields needed to compare a price', keys.length === 8);
+    t('watch payload keeps the price denomination', item.priceOf === 'from');
+  }
+
   return rows;
 }

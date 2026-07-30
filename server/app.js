@@ -29,6 +29,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
 import { fetchNfts, nftChains, nftConfigured } from './nft.js';
+import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import {
   addFcmToken,
   addSubscription,
@@ -268,6 +269,72 @@ app.post('/api/ai/ask', async (req, res) => {
     return res.status(status).json({ error: 'AI_FAILED', detail: msg.slice(0, 200) });
   }
 });
+
+/* ------------------------------ order watch -------------------------------- */
+/*
+ * Server-side price watching for limit orders, so an alert arrives with the
+ * app closed.
+ *
+ * PRIVACY: the payload carries no wallet address and no amount — see
+ * server/watch.js. A watch list is a behavioural profile, and the less of one
+ * we hold the less there is to leak. The server needs neither field to decide
+ * whether a price was hit.
+ *
+ * This can never execute a swap. There is no signer, allowance or router in
+ * this path by design.
+ */
+app.post('/api/orders/watch', async (req, res) => {
+  const { endpoint, items, lang } = req.body ?? {};
+  try {
+    const out = await putWatches(endpoint, items, lang);
+    return res.json({ ok: true, ...out });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e.message).slice(0, 80) });
+  }
+});
+
+app.post('/api/orders/unwatch', async (req, res) => {
+  const { endpoint } = req.body ?? {};
+  if (typeof endpoint !== 'string') return res.status(400).json({ error: 'BAD_ENDPOINT' });
+  return res.json({ ok: true, ...(await clearWatches(endpoint)) });
+});
+
+/** Run one watch cycle. Cron-driven, guarded by the same secret. */
+app.get('/api/cron/watch', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+
+  const { sendToEndpoint } = await import('./push.js');
+  const out = await runWatchCycle(async (endpoint, lang, payload) =>
+    sendToEndpoint(endpoint, {
+      title: ORDER_ALERT[lang]?.title ?? ORDER_ALERT.en.title,
+      body: (ORDER_ALERT[lang]?.body ?? ORDER_ALERT.en.body)
+        .replace('{base}', payload.base)
+        .replace('{quote}', payload.quote)
+        .replace('{rate}', String(payload.rate)),
+      url: '/#/orders',
+      tag: `fbt-order-${payload.id}`
+    })
+  );
+  return res.json(out);
+});
+
+/** How many watches are registered, for debugging a silent cron. */
+app.get('/api/orders/watch/status', async (_req, res) => {
+  const rows = await readWatches().catch(() => []);
+  res.json({ watches: rows.length, cronSecretSet: Boolean(process.env.CRON_SECRET) });
+});
+
+/*
+ * Alert copy lives here rather than in promos.js: this is transactional, not
+ * promotional, and it must render in the OS shade without the app translating
+ * it. Falls back to English for the nine partial locales rather than shipping
+ * a machine translation of a message about someone's money.
+ */
+const ORDER_ALERT = {
+  en: { title: 'Your order is ready', body: '1 {base} reached {rate} {quote}. Open the app to swap.' },
+  fa: { title: 'سفارشت آماده است', body: '۱ {base} به {rate} {quote} رسید. برای سواپ اپ را باز کن.' },
+  ar: { title: 'أمرك جاهز', body: '1 {base} وصل إلى {rate} {quote}. افتح التطبيق للتبادل.' }
+};
 
 /* --------------------------------- NFTs ----------------------------------- */
 /*

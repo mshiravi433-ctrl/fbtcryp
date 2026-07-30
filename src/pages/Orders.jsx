@@ -21,6 +21,7 @@ import {
   removeOrder,
   saveOrders,
   shouldNotify,
+  syncWatches,
   updateOrder
 } from '../lib/orders';
 import { showLocalNotification } from '../lib/notify';
@@ -105,6 +106,26 @@ export default function Orders() {
       setOrders(next);
     }
   }, [orders, rateFor, t]);
+
+  /*
+   * Keep the server's watch list in step with the local one.
+   *
+   * Keyed on the active limit orders only — re-sending on every render, or on
+   * a DCA counter tick, would be a request per price poll for no benefit.
+   */
+  const watchKey = useMemo(
+    () =>
+      orders
+        .filter((o) => o.status === 'active' && o.type === 'limit')
+        .map((o) => `${o.id}:${o.targetRate}:${o.direction}:${o.priceOf ?? 'from'}`)
+        .join('|'),
+    [orders]
+  );
+
+  useEffect(() => {
+    syncWatches(orders);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchKey]);
 
   const ready = useMemo(
     () => orders.filter((o) => o.status === 'active' && evaluateOrder(o, rateFor(o)).ready),

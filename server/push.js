@@ -60,6 +60,43 @@ async function lib() {
  *        the notification renders in the OS shade, where the app has no
  *        opportunity to translate anything.
  */
+/**
+ * Send to ONE subscriber.
+ *
+ * `broadcast` fans out to everybody, which is right for a daily promo and
+ * completely wrong for "your order hit its price" — that is addressed to one
+ * person and telling 20,000 others about it would be both spam and a leak of
+ * that user's trading intent.
+ *
+ * Returns a boolean rather than throwing: the caller uses it to decide whether
+ * to start a cooldown, and a transient failure must be retryable rather than
+ * silencing the alert.
+ */
+export async function sendToEndpoint(endpoint, payload) {
+  const wp = await lib();
+  if (!wp) return false;
+
+  const subs = await readSubscriptions();
+  const sub = subs.find((x) => x.endpoint === endpoint);
+  if (!sub) return false;
+
+  try {
+    await wp.sendNotification(
+      { endpoint: sub.endpoint, keys: sub.keys },
+      JSON.stringify(payload),
+      // Shorter TTL than the promo: a price alert that arrives twelve hours
+      // late is actively misleading, because the price has moved on.
+      { TTL: 3600 }
+    );
+    return true;
+  } catch (err) {
+    const code = err?.statusCode;
+    // Permanently gone — prune so future cycles do not keep paying for it.
+    if (code === 404 || code === 410) await removeSubscription(endpoint).catch(() => {});
+    return false;
+  }
+}
+
 export async function broadcast(build, { tag = 'fbt-daily' } = {}) {
   const wp = await lib();
   if (!wp) return { sent: 0, failed: 0, pruned: 0, reason: 'NOT_CONFIGURED' };
