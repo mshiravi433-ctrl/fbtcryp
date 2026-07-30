@@ -428,7 +428,8 @@
   "orderErr.BAD_DIRECTION": "Choose buy or sell",
   "orderErr.BAD_INTERVAL": "Choose how often",
   "orderErr.BAD_RUNS": "Choose between 1 and 365 times",
-  "orderErr.TOO_MANY": "You already have 50 active orders"
+  "orderErr.TOO_MANY": "You already have 50 active orders",
+  "orderErr.BAD_PRICE_OF": "Choose which token the price refers to"
  },
  "swap": {
   "title": "Swap",
@@ -1680,7 +1681,7 @@
   "from": "From",
   "to": "To",
   "amount": "Amount each time",
-  "targetRate": "Target price in {{to}}",
+  "targetRate": "Target: 1 {{base}} in {{quote}}",
   "currentRate": "Right now:",
   "interval": "How often",
   "runs": "How many times",
@@ -1688,6 +1689,9 @@
   "create": "Create",
   "notifyTitle": "Your order is ready",
   "notifyBody": "{{amount}} {{from}} → {{to}} has reached your target. Open the app to swap.",
-  "pairHint": "You are swapping {{from}} → {{to}}. The price below is how many {{to}} one {{from}} is worth right now."
+  "watch": "Watch the price of",
+  "priceOfFrom": "{{sym}} (what you are selling)",
+  "priceOfTo": "{{sym}} (what you are buying)",
+  "willSwap": "When it triggers, the swap will be {{from}} → {{to}}."
  }
 }

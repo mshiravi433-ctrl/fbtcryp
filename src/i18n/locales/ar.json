@@ -428,7 +428,8 @@
   "orderErr.BAD_DIRECTION": "اختر شراء أو بيع",
   "orderErr.BAD_INTERVAL": "اختر التكرار",
   "orderErr.BAD_RUNS": "اختر بين ١ و ٣٦٥",
-  "orderErr.TOO_MANY": "لديك ٥٠ أمراً نشطاً"
+  "orderErr.TOO_MANY": "لديك ٥٠ أمراً نشطاً",
+  "orderErr.BAD_PRICE_OF": "اختر الرمز الذي يشير إليه السعر"
  },
  "swap": {
   "title": "مبادلة",
@@ -1680,7 +1681,7 @@
   "from": "من",
   "to": "إلى",
   "amount": "المبلغ كل مرة",
-  "targetRate": "السعر المستهدف بـ {{to}}",
+  "targetRate": "الهدف: 1 {{base}} بـ {{quote}}",
   "currentRate": "الآن:",
   "interval": "كل متى",
   "runs": "كم مرة",
@@ -1688,6 +1689,9 @@
   "create": "إنشاء",
   "notifyTitle": "أمرك جاهز",
   "notifyBody": "{{amount}} {{from}} ← {{to}} وصل إلى هدفك.",
-  "pairHint": "أنت تبادل {{from}} إلى {{to}}. السعر أدناه هو كم {{to}} يساوي {{from}} واحد الآن."
+  "watch": "راقب سعر",
+  "priceOfFrom": "{{sym}} (ما تبيعه)",
+  "priceOfTo": "{{sym}} (ما تشتريه)",
+  "willSwap": "عند التفعيل سيكون التبادل {{from}} ← {{to}}."
  }
 }

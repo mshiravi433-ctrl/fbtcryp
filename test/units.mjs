@@ -436,6 +436,40 @@ export default function run() {
     t('DCA completes after the requested number of runs', cur.status === 'filled' && cur.runsDone === 4);
     t('a finished plan never fires again', evaluateOrder(cur, null, now + 99 * DCA_INTERVALS.weekly).ready === false);
 
+    /*
+     * PRICING THE TARGET IN EITHER TOKEN.
+     *
+     * REAL BUG: "buy when it rises" was unusable. The rate is always
+     * "1 FROM = ? TO", so to buy BNB with USDT above 700 the user had to enter
+     * the reciprocal 0.00142857 AND pick "below", because as BNB rises the
+     * USDT→BNB rate falls. Nobody can express an intent that way, and the
+     * obvious attempt sets the exact opposite of what was meant.
+     *
+     * Pricing in the TO token lets them type 700 and pick above instead.
+     */
+    const rateUsdtToBnb = (bnbPrice) => 1 / bnbPrice; // 1 USDT = ? BNB
+
+    const buyBreakout = createOrder({
+      type: 'limit', chainId: 56, fromToken: USDT, toToken: BNB,
+      amountIn: '700', targetRate: 700, direction: 'above', priceOf: 'to'
+    }, now).order;
+    t('buy-on-breakout waits below the target', evaluateOrder(buyBreakout, rateUsdtToBnb(600), now).ready === false);
+    t('buy-on-breakout fires above the target', evaluateOrder(buyBreakout, rateUsdtToBnb(750), now).ready === true);
+
+    const buyDip = createOrder({
+      type: 'limit', chainId: 56, fromToken: USDT, toToken: BNB,
+      amountIn: '500', targetRate: 500, direction: 'below', priceOf: 'to'
+    }, now).order;
+    t('buy-the-dip fires when the base token gets cheap', evaluateOrder(buyDip, rateUsdtToBnb(400), now).ready === true);
+    t('buy-the-dip waits while the base token is expensive', evaluateOrder(buyDip, rateUsdtToBnb(600), now).ready === false);
+
+    // Inversion must not break the unknown-price guard.
+    t('inverted pricing still refuses an unknown price', evaluateOrder(buyBreakout, null, now).ready === false);
+    t('inverted pricing still refuses a zero price', evaluateOrder(buyBreakout, 0, now).ready === false);
+
+    t('defaults to pricing in the FROM token', createOrder({ ...base, type: 'limit', targetRate: 700, direction: 'above' }, now).order.priceOf === 'from');
+    t('rejects a bogus priceOf', validateOrder({ ...base, type: 'limit', targetRate: 1, direction: 'above', priceOf: 'sideways' }) === 'BAD_PRICE_OF');
+
     // Notification cooldown — spam costs us every future fill.
     t('notifies the first time', shouldNotify({ lastNotifiedAt: 0 }, now) === true);
     t('suppresses a repeat within the cooldown', shouldNotify({ lastNotifiedAt: now }, now) === false);

@@ -428,7 +428,8 @@
   "orderErr.BAD_DIRECTION": "خرید یا فروش را انتخاب کن",
   "orderErr.BAD_INTERVAL": "بازهٔ زمانی را انتخاب کن",
   "orderErr.BAD_RUNS": "بین ۱ تا ۳۶۵ بار انتخاب کن",
-  "orderErr.TOO_MANY": "همین حالا ۵۰ سفارش فعال داری"
+  "orderErr.TOO_MANY": "همین حالا ۵۰ سفارش فعال داری",
+  "orderErr.BAD_PRICE_OF": "انتخاب کن قیمت مربوط به کدام توکن است"
  },
  "swap": {
   "title": "سواپ",
@@ -1680,7 +1681,7 @@
   "from": "از",
   "to": "به",
   "amount": "مقدار هر بار",
-  "targetRate": "قیمت هدف به {{to}}",
+  "targetRate": "هدف: ۱ {{base}} چند {{quote}}",
   "currentRate": "همین الان:",
   "interval": "هر چند وقت",
   "runs": "چند بار",
@@ -1688,6 +1689,9 @@
   "create": "ایجاد",
   "notifyTitle": "سفارشت آماده است",
   "notifyBody": "{{amount}} {{from}} ← {{to}} به هدفت رسید. اپ را باز کن تا سواپ کنی.",
-  "pairHint": "داری {{from}} را به {{to}} تبدیل می‌کنی. قیمت زیر یعنی هر یک {{from}} الان چند {{to}} می‌ارزد."
+  "watch": "قیمت کدام را بپایم",
+  "priceOfFrom": "{{sym}} (چیزی که می‌دهی)",
+  "priceOfTo": "{{sym}} (چیزی که می‌گیری)",
+  "willSwap": "وقتی شرط برقرار شد، سواپ {{from}} ← {{to}} انجام می‌شود."
  }
 }

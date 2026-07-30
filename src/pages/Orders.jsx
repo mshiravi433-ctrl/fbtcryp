@@ -161,7 +161,10 @@ export default function Orders() {
   };
 
   const Row = ({ o, isReady }) => {
-    const rate = rateFor(o);
+    const raw = rateFor(o);
+    // Display in whichever unit the order was written in.
+    const rate =
+      o.type === 'limit' && o.priceOf === 'to' && Number.isFinite(raw) && raw > 0 ? 1 / raw : raw;
     const pct =
       o.type === 'limit' && Number.isFinite(rate) && o.targetRate
         ? ((rate - o.targetRate) / o.targetRate) * 100
@@ -186,9 +189,9 @@ export default function Orders() {
                 slot — not on the direction. Naming both removes the guess.
               */}
               {t(`orders.when.${o.direction}`, {
-                from: o.fromToken.symbol,
+                from: o.priceOf === 'to' ? o.toToken.symbol : o.fromToken.symbol,
                 rate: fmtQty(o.targetRate),
-                to: o.toToken.symbol
+                to: o.priceOf === 'to' ? o.fromToken.symbol : o.toToken.symbol
               })}
             </span>
             {Number.isFinite(rate) ? (
@@ -313,6 +316,7 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
   const [amount, setAmount] = useState('');
   const [target, setTarget] = useState('');
   const [direction, setDirection] = useState('below');
+  const [priceOf, setPriceOf] = useState('from');
   const [interval, setInterval] = useState('weekly');
   const [runs, setRuns] = useState('4');
 
@@ -327,11 +331,21 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
   const fromToken = tokens.find((x) => x.symbol === fromSym);
   const toToken = tokens.find((x) => x.symbol === toSym);
 
+  /*
+   * The rate shown next to the input must be in the SAME unit the user is
+   * typing, or the live number and the target number are not comparable and
+   * the hint actively misleads.
+   */
   const liveRate = useMemo(() => {
     const a = prices?.[fromToken?.coingeckoId]?.price;
     const b = prices?.[toToken?.coingeckoId]?.price;
-    return Number.isFinite(a) && Number.isFinite(b) && b > 0 ? a / b : null;
-  }, [prices, fromToken, toToken]);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
+    return priceOf === 'to' ? b / a : a / b;
+  }, [prices, fromToken, toToken, priceOf]);
+
+  // Which symbol is being priced, and in what.
+  const baseSym = priceOf === 'to' ? toSym : fromSym;
+  const quoteSym = priceOf === 'to' ? fromSym : toSym;
 
   if (!kind) return null;
 
@@ -362,14 +376,22 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
         {kind === 'limit' ? (
           <>
             {/*
-              Spell out what the rate means BEFORE the direction toggle. The
-              old "Buy when it drops / Sell when it rises" labels were simply
-              wrong: with from=BNB to=USDT you are selling BNB either way, and
-              the direction only picks the trigger condition.
+              WHICH TOKEN AM I WATCHING?
+              This is the fix for "buy when it rises doesn't work". The rate is
+              always "1 FROM = ? TO", so a user buying BNB with USDT had to
+              enter the reciprocal (0.00142857) and pick the OPPOSITE direction
+              to express "when BNB goes above 700". Unusable, and easy to set
+              backwards by accident.
+              Letting them choose which side is priced means they always type
+              the number they actually have in mind.
             */}
-            <p className="faint" style={{ lineHeight: 1.7 }}>
-              {t('orders.pairHint', { from: fromSym, to: toSym })}
-            </p>
+            <label className="ord-field">
+              <span className="faint">{t('orders.watch')}</span>
+              <select value={priceOf} onChange={(e) => setPriceOf(e.target.value)}>
+                <option value="from">{t('orders.priceOfFrom', { sym: fromSym })}</option>
+                <option value="to">{t('orders.priceOfTo', { sym: toSym })}</option>
+              </select>
+            </label>
 
             <div className="segmented">
               {['below', 'above'].map((d) => (
@@ -378,18 +400,24 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
                 </button>
               ))}
             </div>
+
             <label className="ord-field">
-              <span className="faint">{t('orders.targetRate', { to: toSym })}</span>
+              <span className="faint">{t('orders.targetRate', { base: baseSym, quote: quoteSym })}</span>
               <input type="number" inputMode="decimal" value={target}
                      onChange={(e) => setTarget(e.target.value)} placeholder="0.0" />
             </label>
-            {/* Showing the live rate next to the input is what stops someone
-                setting a target the market passed months ago. */}
+
+            {/* Live rate in the same unit, so the target can be sanity-checked
+                against it at a glance. */}
             {liveRate != null && (
               <p className="faint">
-                {t('orders.currentRate')} <span className="mono">{fmtQty(liveRate)}</span> {toSym}
+                {t('orders.currentRate')} 1 {baseSym} = <span className="mono">{fmtQty(liveRate)}</span> {quoteSym}
               </p>
             )}
+
+            <p className="faint" style={{ lineHeight: 1.7 }}>
+              {t('orders.willSwap', { from: fromSym, to: toSym })}
+            </p>
           </>
         ) : (
           <>
@@ -428,6 +456,7 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
               amountIn: amount,
               targetRate: target,
               direction,
+              priceOf,
               interval,
               totalRuns: Number(runs)
             })

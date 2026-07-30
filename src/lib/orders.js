@@ -77,6 +77,8 @@ export function validateOrder(o) {
     // A direction is required. Without it "target 700" is ambiguous — fill
     // above or below? — and guessing would fill at the wrong time.
     if (o.direction !== 'above' && o.direction !== 'below') return 'BAD_DIRECTION';
+    // Which token the target price is quoted in. Must be one of the pair.
+    if (o.priceOf && o.priceOf !== 'from' && o.priceOf !== 'to') return 'BAD_PRICE_OF';
   }
 
   if (o.type === 'dca') {
@@ -124,6 +126,21 @@ export function createOrder(input, now = Date.now()) {
         ...base,
         targetRate: Number(input.targetRate),
         direction: input.direction,
+        /*
+         * WHICH TOKEN THE TARGET IS PRICED IN.
+         *
+         * 'from' (default) — "1 FROM is worth N TO", the natural way to think
+         *   about selling: "sell my BNB when it reaches 700 USDT".
+         *
+         * 'to' — "1 TO is worth N FROM", the natural way to think about
+         *   buying: "buy BNB when BNB costs 700 USDT" with USDT as the input.
+         *
+         * Without this, a buy order forced the user to enter the RECIPROCAL:
+         * to buy BNB above 700 they had to type 0.00142857 and pick "below",
+         * because as BNB rises the USDT→BNB rate falls. Nobody can use that,
+         * and anyone who tried would set the opposite of what they meant.
+         */
+        priceOf: input.priceOf === 'to' ? 'to' : 'from',
         // Limit orders expire. An order set at a price the market left behind
         // a year ago is not a plan, it is litter that fires at the worst
         // possible moment if the price ever wanders back.
@@ -163,7 +180,17 @@ export function evaluateOrder(order, rate, now = Date.now()) {
     // an outage at whatever price happened to exist.
     if (!Number.isFinite(rate) || rate <= 0) return { ready: false, reason: 'NO_PRICE' };
 
-    const hit = order.direction === 'above' ? rate >= order.targetRate : rate <= order.targetRate;
+    /*
+     * `rate` always arrives as "1 FROM = ? TO". When the user priced the
+     * target in the TO token instead, invert the observed rate so both sides
+     * of the comparison are in the same unit. Inverting the RATE (not the
+     * target) keeps the user's number exactly as they typed it, so the UI can
+     * echo it back unchanged.
+     */
+    const observed = order.priceOf === 'to' ? 1 / rate : rate;
+    if (!Number.isFinite(observed) || observed <= 0) return { ready: false, reason: 'NO_PRICE' };
+
+    const hit = order.direction === 'above' ? observed >= order.targetRate : observed <= order.targetRate;
     return { ready: hit, reason: hit ? 'TARGET_HIT' : 'WAITING' };
   }
 
