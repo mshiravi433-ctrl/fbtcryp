@@ -31,7 +31,8 @@
   "news": "الأخبار",
   "explore": "المستكشف",
   "discover": "اكتشف",
-  "nft": "NFT الخاصة بي"
+  "nft": "NFT الخاصة بي",
+  "orders": "الأوامر"
  },
  "common": {
   "balance": "الرصيد",
@@ -416,7 +417,18 @@
   "addressCopied": "تم نسخ العنوان",
   "pointsEarned": "Points earned",
   "copied": "تم النسخ",
-  "copyFailed": "تعذّر النسخ — حدد العنوان يدوياً"
+  "copyFailed": "تعذّر النسخ — حدد العنوان يدوياً",
+  "orderCreated": "تم إنشاء الأمر",
+  "orderErr.BAD_TYPE": "نوع غير معروف",
+  "orderErr.BAD_CHAIN": "اختر شبكة",
+  "orderErr.BAD_TOKENS": "اختر الرمزين",
+  "orderErr.SAME_TOKEN": "اختر رمزين مختلفين",
+  "orderErr.BAD_AMOUNT": "أدخل مبلغاً أكبر من صفر",
+  "orderErr.BAD_TARGET": "أدخل سعراً أكبر من صفر",
+  "orderErr.BAD_DIRECTION": "اختر شراء أو بيع",
+  "orderErr.BAD_INTERVAL": "اختر التكرار",
+  "orderErr.BAD_RUNS": "اختر بين ١ و ٣٦٥",
+  "orderErr.TOO_MANY": "لديك ٥٠ أمراً نشطاً"
  },
  "swap": {
   "title": "مبادلة",
@@ -1624,5 +1636,57 @@
    "BAD_ADDRESS": "عنوان غير صالح.",
    "FAILED": "تعذّر التحميل. حاول مجدداً."
   }
+ },
+ "orders": {
+  "title": "الأوامر والخطط",
+  "subtitle": "حدد السعر الذي تريده، أو اشترِ بانتظام. نراقب ونخبرك.",
+  "newLimit": "أمر محدد",
+  "newDca": "خطة DCA",
+  "new": {
+   "limit": "أمر محدد جديد",
+   "dca": "خطة DCA جديدة"
+  },
+  "manualNotice": "هذه تنبيهات وليست تداولاً آلياً. التطبيق لا يحتفظ بمفاتيحك، فلا شيء يمكنه التبادل نيابةً عنك.",
+  "readyNow": "جاهز الآن",
+  "waiting": "في الانتظار",
+  "history": "منتهية",
+  "empty": "لا توجد أوامر بعد.",
+  "type": {
+   "limit": "محدد",
+   "dca": "DCA"
+  },
+  "when": {
+   "above": "عندما ≥ {{rate}} {{to}}",
+   "below": "عندما ≤ {{rate}} {{to}}"
+  },
+  "every": {
+   "daily": "كل يوم",
+   "weekly": "كل أسبوع",
+   "monthly": "كل شهر"
+  },
+  "dir": {
+   "below": "اشترِ عند الانخفاض",
+   "above": "بِع عند الارتفاع"
+  },
+  "now": "الآن",
+  "noPrice": "السعر غير متاح",
+  "swapNow": "بادل الآن",
+  "cancel": "إلغاء",
+  "remove": "حذف",
+  "status": {
+   "filled": "تم",
+   "expired": "منتهٍ"
+  },
+  "from": "من",
+  "to": "إلى",
+  "amount": "المبلغ كل مرة",
+  "targetRate": "السعر المستهدف بـ {{to}}",
+  "currentRate": "الآن:",
+  "interval": "كل متى",
+  "runs": "كم مرة",
+  "dcaTotal": "الإجمالي: {{total}} {{symbol}}",
+  "create": "إنشاء",
+  "notifyTitle": "أمرك جاهز",
+  "notifyBody": "{{amount}} {{from}} ← {{to}} وصل إلى هدفك."
  }
 }

@@ -175,6 +175,13 @@ export const IconSparkle = (p) => (
   </svg>
 );
 
+export const IconClock = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.2 1.9" />
+  </svg>
+);
+
 export const IconQr = (p) => (
   <svg {...base} {...p}>
     <rect x="3" y="3" width="7" height="7" rx="1" />

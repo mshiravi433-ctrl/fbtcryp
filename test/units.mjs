@@ -12,6 +12,15 @@ import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
+import {
+  DCA_INTERVALS,
+  advanceOrder,
+  createOrder,
+  evaluateOrder,
+  expireStale,
+  shouldNotify,
+  validateOrder
+} from '../src/lib/orders.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
 import qrcode from 'qrcode-generator';
 import { classifyQuery } from '../src/pages/Explore.jsx';
@@ -363,6 +372,74 @@ export default function run() {
     t('default is 50 bps', FEE_BPS_DEFAULT === 50);
     // With no env override configured, the default must be what ships.
     t('unset env yields the default', FEE_BPS === FEE_BPS_DEFAULT);
+  }
+
+  /* --------------------------- limit orders & DCA -------------------------- */
+  /*
+   * This engine decides when real money moves, so the dangerous directions get
+   * asserted rather than the happy path.
+   */
+  {
+    const BNB = { symbol: 'BNB', decimals: 18 };
+    const USDT = { symbol: 'USDT', decimals: 18 };
+    const base = { chainId: 56, fromToken: BNB, toToken: USDT, amountIn: '1' };
+    const now = Date.now();
+
+    // Validation
+    t('rejects swapping a token for itself', validateOrder({ ...base, type: 'limit', toToken: BNB, targetRate: 1, direction: 'above' }) === 'SAME_TOKEN');
+    t('rejects a zero amount', validateOrder({ ...base, type: 'limit', amountIn: '0', targetRate: 1, direction: 'above' }) === 'BAD_AMOUNT');
+    t('rejects a negative amount', validateOrder({ ...base, type: 'limit', amountIn: '-5', targetRate: 1, direction: 'above' }) === 'BAD_AMOUNT');
+    // Without a direction, "target 700" is ambiguous and would fire wrongly.
+    t('rejects a limit order with no direction', validateOrder({ ...base, type: 'limit', targetRate: 700 }) === 'BAD_DIRECTION');
+    t('rejects an unbounded DCA plan', validateOrder({ ...base, type: 'dca', interval: 'weekly', totalRuns: 0 }) === 'BAD_RUNS');
+    t('accepts a well-formed limit order', validateOrder({ ...base, type: 'limit', targetRate: 700, direction: 'above' }) === null);
+
+    // Firing conditions
+    const { order: lim } = createOrder({ ...base, type: 'limit', targetRate: 700, direction: 'above' }, now);
+    t('does not fire below target', evaluateOrder(lim, 650, now).ready === false);
+    t('fires exactly at target', evaluateOrder(lim, 700, now).ready === true);
+
+    /*
+     * THE MOST IMPORTANT ASSERTION HERE. An unknown price must never count as
+     * "condition met", or an upstream outage fires every open order at once.
+     */
+    t('never fires when the price is unknown', evaluateOrder(lim, null, now).ready === false);
+    t('never fires on a zero price', evaluateOrder(lim, 0, now).ready === false);
+    t('never fires on NaN', evaluateOrder(lim, NaN, now).ready === false);
+
+    const { order: below } = createOrder({ ...base, type: 'limit', targetRate: 500, direction: 'below' }, now);
+    t('buy-the-dip fires when cheap enough', evaluateOrder(below, 450, now).ready === true);
+    t('buy-the-dip waits while expensive', evaluateOrder(below, 550, now).ready === false);
+
+    // Expiry — a stale order must not fire when the price wanders back.
+    const later = now + 31 * 86400000;
+    t('an expired order never fires', evaluateOrder(lim, 9999, later).ready === false);
+    t('expiry is marked, not hidden', expireStale([lim], later)[0].status === 'expired');
+
+    // DCA scheduling
+    const { order: dca } = createOrder({ ...base, type: 'dca', interval: 'weekly', totalRuns: 4 }, now);
+    t('the first DCA buy is due immediately', evaluateOrder(dca, null, now).ready === true);
+    t('DCA does not need a price to be due', evaluateOrder(dca, null, now).reason === 'DUE');
+    let cur = advanceOrder(dca, now);
+    t('a completed run is counted', cur.runsDone === 1);
+    t('DCA is not due again immediately', evaluateOrder(cur, null, now).ready === false);
+    t('DCA is due after the interval', evaluateOrder(cur, null, now + DCA_INTERVALS.weekly).ready === true);
+
+    /*
+     * Rescheduling is from NOW, not from the missed due time. Otherwise a user
+     * offline for ten weeks returns to ten overdue buys firing at once.
+     */
+    const late = now + 10 * DCA_INTERVALS.weekly;
+    t('a missed DCA does not stack up catch-up runs', advanceOrder(dca, late).nextRunAt === late + DCA_INTERVALS.weekly);
+
+    for (let i = 0; i < 3; i += 1) cur = advanceOrder(cur, now + (i + 2) * DCA_INTERVALS.weekly);
+    t('DCA completes after the requested number of runs', cur.status === 'filled' && cur.runsDone === 4);
+    t('a finished plan never fires again', evaluateOrder(cur, null, now + 99 * DCA_INTERVALS.weekly).ready === false);
+
+    // Notification cooldown — spam costs us every future fill.
+    t('notifies the first time', shouldNotify({ lastNotifiedAt: 0 }, now) === true);
+    t('suppresses a repeat within the cooldown', shouldNotify({ lastNotifiedAt: now }, now) === false);
+    t('notifies again after the cooldown', shouldNotify({ lastNotifiedAt: now - 6.1 * 3600000 }, now) === true);
   }
 
   return rows;

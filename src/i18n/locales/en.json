@@ -31,7 +31,8 @@
   "news": "News",
   "explore": "Explorer",
   "discover": "Discover",
-  "nft": "My NFTs"
+  "nft": "My NFTs",
+  "orders": "Orders & plans"
  },
  "common": {
   "balance": "Balance",
@@ -416,7 +417,18 @@
   "addressCopied": "Address copied",
   "pointsEarned": "Points earned",
   "copied": "Copied to clipboard",
-  "copyFailed": "Could not copy — select the address manually"
+  "copyFailed": "Could not copy — select the address manually",
+  "orderCreated": "Order created",
+  "orderErr.BAD_TYPE": "Unknown order type",
+  "orderErr.BAD_CHAIN": "Pick a network",
+  "orderErr.BAD_TOKENS": "Pick both tokens",
+  "orderErr.SAME_TOKEN": "Pick two different tokens",
+  "orderErr.BAD_AMOUNT": "Enter an amount above zero",
+  "orderErr.BAD_TARGET": "Enter a target price above zero",
+  "orderErr.BAD_DIRECTION": "Choose buy or sell",
+  "orderErr.BAD_INTERVAL": "Choose how often",
+  "orderErr.BAD_RUNS": "Choose between 1 and 365 times",
+  "orderErr.TOO_MANY": "You already have 50 active orders"
  },
  "swap": {
   "title": "Swap",
@@ -1624,5 +1636,57 @@
    "BAD_ADDRESS": "That wallet address is not valid.",
    "FAILED": "Could not load your NFTs. Check your connection and try again."
   }
+ },
+ "orders": {
+  "title": "Orders & plans",
+  "subtitle": "Set a price you want, or buy a little on a schedule. We watch and tell you when it is time.",
+  "newLimit": "Limit order",
+  "newDca": "DCA plan",
+  "new": {
+   "limit": "New limit order",
+   "dca": "New DCA plan"
+  },
+  "manualNotice": "These are alerts, not automatic trades. This app never holds your keys, so nothing can swap on your behalf — when a target is hit we notify you and the swap is one tap away, already filled in. If your phone is off, the order waits.",
+  "readyNow": "Ready now",
+  "waiting": "Waiting",
+  "history": "Finished",
+  "empty": "No orders yet. A limit order tells you when a price you want arrives. A DCA plan reminds you to buy a fixed amount on a schedule, which spreads your entry instead of guessing the bottom.",
+  "type": {
+   "limit": "LIMIT",
+   "dca": "DCA"
+  },
+  "when": {
+   "above": "When 1 unit ≥ {{rate}} {{to}}",
+   "below": "When 1 unit ≤ {{rate}} {{to}}"
+  },
+  "every": {
+   "daily": "Every day",
+   "weekly": "Every week",
+   "monthly": "Every month"
+  },
+  "dir": {
+   "below": "Buy when it drops",
+   "above": "Sell when it rises"
+  },
+  "now": "now",
+  "noPrice": "price unavailable",
+  "swapNow": "Swap now",
+  "cancel": "Cancel",
+  "remove": "Remove",
+  "status": {
+   "filled": "Done",
+   "expired": "Expired"
+  },
+  "from": "From",
+  "to": "To",
+  "amount": "Amount each time",
+  "targetRate": "Target price in {{to}}",
+  "currentRate": "Right now:",
+  "interval": "How often",
+  "runs": "How many times",
+  "dcaTotal": "Total over the plan: {{total}} {{symbol}}",
+  "create": "Create",
+  "notifyTitle": "Your order is ready",
+  "notifyBody": "{{amount}} {{from}} → {{to}} has reached your target. Open the app to swap."
  }
 }

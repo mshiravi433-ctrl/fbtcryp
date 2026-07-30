@@ -49,6 +49,7 @@ const News = lazy(() => import('./pages/News'));
 const Explore = lazy(() => import('./pages/Explore'));
 const Discover = lazy(() => import('./pages/Discover'));
 const Nft = lazy(() => import('./pages/Nft'));
+const Orders = lazy(() => import('./pages/Orders'));
 
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
@@ -154,6 +155,7 @@ function AnimatedRoutes() {
           <Route path="/explore" element={<Explore />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/nft" element={<Nft />} />
+          <Route path="/orders" element={<Orders />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>

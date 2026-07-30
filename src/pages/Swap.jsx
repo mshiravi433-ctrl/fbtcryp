@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
@@ -71,6 +72,42 @@ export default function Swap() {
   const [slippage, setSlippage] = useState(DEFAULT_SLIPPAGE);
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
+
+  /*
+   * PRE-FILL FROM A LIMIT ORDER / DCA PLAN.
+   *
+   * The Orders screen hands off with ?from=BNB&to=USDT&amount=1. Without this
+   * the "Swap now" button on a triggered order would land on an empty form and
+   * make the user re-enter everything they already specified — at which point
+   * the feature is worse than a plain reminder.
+   *
+   * Applied once, then the params are cleared from the URL: leaving them means
+   * a later refresh silently resets whatever the user has since typed.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const prefillDone = useRef(false);
+
+  useEffect(() => {
+    if (prefillDone.current) return;
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    const amt = searchParams.get('amount');
+    if (!from && !to && !amt) return;
+
+    prefillDone.current = true;
+
+    // Match against the curated list only. A symbol from the URL must never
+    // select an arbitrary imported token — two different contracts can share
+    // a ticker, and picking the wrong one sends funds to the wrong asset.
+    const pick = (sym) => curated.find((x) => x.symbol === sym);
+    const f = from && pick(from);
+    const tk = to && pick(to);
+    if (f) setFromToken(f);
+    if (tk) setToToken(tk);
+    if (amt && Number(amt) > 0) setAmount(String(amt));
+
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams, curated]);
   const [balances, setBalances] = useState({});
   const [impact, setImpact] = useState(null);
   const [gasCost, setGasCost] = useState(null);
