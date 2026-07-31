@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.2.3 — versionCode 6
+
+### Fixed
+
+- **Biometric unlock never locked anything.** Settings had a working toggle:
+  flipping it really did read the fingerprint and really did persist
+  `biometricEnabled: true`. That was the entire feature. The flag was read in
+  exactly two places, both inside `Settings.jsx` — once to prompt on flip,
+  once to draw the switch. **No lock screen existed anywhere in the codebase.**
+
+  Both reported symptoms follow exactly:
+  - *"it reads the finger but the screen never closes"* — that prompt was for
+    **enabling** the toggle, not for unlocking. There was nothing to close.
+  - *"it never asks me to log in"* — nothing asked, because nothing was built
+    to ask.
+
+  This is worse than a missing feature. The user believed the app was locked
+  and behaved accordingly while it was not, which makes a security setting
+  that silently does nothing an active hazard rather than a cosmetic gap.
+
+  Adds `src/components/AppLock.jsx`, mounted **before** onboarding, the guide
+  and the router — anything above it would be readable by whoever picked up
+  the phone. Locks on app open only (chosen deliberately: re-locking on every
+  return from background trains people to dismiss the prompt reflexively).
+
+  Falls back to the **wallet password**, verified by actually decrypting the
+  vault rather than comparing a stored hash. Without a second door, a broken
+  sensor or a removed fingerprint would lock the owner out permanently, and
+  reinstalling destroys the encrypted vault.
+
+  A cancelled OS prompt is reported neutrally rather than as "authentication
+  failed" — cancelling is the common case, and the rejection must never read
+  as a successful unlock.
+
+### Testing
+
+- New wiring check: every persisted security flag must be consumed **outside**
+  the screen that sets it, plus assertions that the lock is mounted, ordered
+  before any content screen, has a non-biometric fallback, and does not unlock
+  from a `catch`. Verified non-vacuous by unmounting the lock — two checks
+  fail. 34 checks pass.
+
 ## 1.2.2 — versionCode 5
 
 Three API routes the app calls every day did not exist on the server. All

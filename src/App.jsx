@@ -11,6 +11,7 @@ import Toasts from './components/Toasts';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
+import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { GAMES_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
@@ -175,6 +176,21 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(() => !onboarded && languageIsUnset());
   const [showOnb, setShowOnb] = useState(!onboarded);
 
+  /*
+   * APP LOCK.
+   *
+   * `biometricEnabled` used to be read in exactly two places, both inside
+   * Settings.jsx — the toggle wrote it, the toggle drew it, and nothing else
+   * ever looked. There was no lock screen at all, so the setting did nothing:
+   * the fingerprint prompt on enabling was mistaken for a lock that then
+   * "never asked again".
+   *
+   * Read as initial state, not subscribed. Subscribing would re-lock the app
+   * the instant the user switches the toggle ON in Settings, throwing them out
+   * of the screen they are configuring.
+   */
+  const [locked, setLocked] = useState(() => useSettingsStore.getState().biometricEnabled);
+
   useEffect(() => {
     initTheme();
     initServiceWorker();
@@ -207,7 +223,14 @@ export default function App() {
   const showGuide = !showOnb && !guideReadAt;
 
   let screen;
-  if (showWelcome) {
+  /*
+   * The lock comes FIRST — before onboarding, the guide and the router.
+   * Anything mounted above it is content an unauthenticated holder of the
+   * phone can read, which would defeat the point of the lock.
+   */
+  if (locked) {
+    screen = <AppLock onUnlock={() => setLocked(false)} />;
+  } else if (showWelcome) {
     screen = <Welcome onDone={() => setShowWelcome(false)} />;
   } else if (showOnb) {
     screen = <Onboarding onDone={() => setShowOnb(false)} />;

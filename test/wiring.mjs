@@ -470,5 +470,82 @@ export default function run() {
     t('the watch cycle still runs from the daily cron', /runWatchCycle\(\)/.test(serverSrc));
   }
 
+  /* ---- 13. a setting that changes nothing is a lie to the user ---------- */
+  /*
+   * REAL BUG, and the sixth instance of this class.
+   *
+   * Settings had a "Biometric unlock" toggle. Flipping it really did read the
+   * fingerprint and really did persist `biometricEnabled: true`. That was the
+   * whole feature: the flag was read in exactly two places, both inside
+   * Settings.jsx — once to prompt on flip, once to draw the switch. No lock
+   * screen existed anywhere in the codebase.
+   *
+   * The user reported it precisely: "it reads the finger but the screen never
+   * closes" (that prompt was for enabling, not unlocking) and "it never asks
+   * me to log in" (nothing was built to ask). A switch wired to nothing.
+   *
+   * This is worse than a missing feature. The user believed the app was
+   * locked, and behaved accordingly, while it was not — a security setting
+   * that silently does nothing is an active hazard.
+   *
+   * So: every persisted security flag must be consumed OUTSIDE the screen
+   * that sets it.
+   */
+  {
+    const store = read('src/store/useSettingsStore.js');
+    const settingsPage = read('src/pages/Settings.jsx');
+
+    // Flags that must actually gate behaviour somewhere.
+    const enforced = ['biometricEnabled'];
+
+    const inert = [];
+    for (const flag of enforced) {
+      if (!store.includes(flag)) continue; // not a real setting, skip
+      const readers = files.filter(
+        (f) =>
+          !f.includes('useSettingsStore') &&
+          !f.includes('pages/Settings') &&
+          new RegExp(`\\b${flag}\\b`).test(read(f))
+      );
+      if (readers.length === 0) inert.push(flag);
+    }
+
+    t(
+      `every security setting is enforced outside Settings${inert.length ? ` — inert: ${inert.join(', ')}` : ''}`,
+      inert.length === 0
+    );
+
+    // The lock must gate the app itself, not merely exist as a component.
+    const app = read('src/App.jsx');
+    t('App renders a lock gate', /AppLock/.test(app));
+
+    /*
+     * Order matters as much as presence: a lock rendered after onboarding or
+     * the router would leave real content mounted underneath it.
+     */
+    const lockIdx = app.indexOf('screen = <AppLock');
+    const welcomeIdx = app.indexOf('screen = <Welcome');
+    t(
+      'the lock is checked before any content screen',
+      lockIdx > 0 && welcomeIdx > 0 && lockIdx < welcomeIdx
+    );
+
+    /*
+     * A biometric-only lock permanently locks out anyone whose sensor breaks
+     * or whose enrolled finger is removed, and reinstalling destroys the
+     * encrypted vault. There must be a second door.
+     */
+    const lock = read('src/components/AppLock.jsx');
+    t('the lock has a non-biometric fallback', /unlockVault/.test(lock));
+
+    // Cancelling the OS prompt must not read as a successful unlock.
+    t(
+      'a failed biometric call does not unlock',
+      /catch/.test(lock) && !/catch\s*\([^)]*\)\s*\{\s*onUnlock/.test(lock)
+    );
+
+    void settingsPage;
+  }
+
   return rows;
 }

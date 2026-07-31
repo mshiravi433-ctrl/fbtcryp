@@ -3439,3 +3439,105 @@ input, select, textarea { font-size: 16px !important; }
 .ord-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
 .ord-field > span { font-size: 11px; }
 .ord-field input, .ord-field select { width: 100%; }
+
+/* ---------------------------------------------------------------------------
+   APP LOCK
+
+   Full-bleed and opaque on purpose: a translucent lock would let someone read
+   balances through it, which is the exact thing it exists to prevent.
+   --------------------------------------------------------------------------- */
+.applock {
+  position: fixed;
+  inset: 0;
+  z-index: 400; /* above sheets (201) and the top stage (120) */
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg, #06070c);
+}
+
+.applock-card {
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.applock-icon {
+  color: var(--accent, #14f195);
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
+.applock-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--ink, #fff);
+}
+
+.applock-sub {
+  font-size: 0.92rem;
+  margin: 0 0 8px;
+  color: var(--ink-dim, #9aa3b2);
+  line-height: 1.5;
+}
+
+.applock-err {
+  font-size: 0.88rem;
+  margin: 0;
+  color: #ff6b6b;
+  line-height: 1.5;
+}
+
+.applock-btn {
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--accent, #14f195);
+  color: #04120b;
+}
+
+.applock-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.applock-link {
+  background: none;
+  border: 0;
+  padding: 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--ink-dim, #9aa3b2);
+  text-decoration: underline;
+}
+
+.applock-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.applock-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-size: 1rem;
+  color: var(--ink, #fff);
+  background: var(--surface, #11131b);
+  border: 1px solid var(--line, #232735);
+}
+
+.applock-input:focus {
+  outline: 2px solid var(--accent, #14f195);
+  outline-offset: 1px;
+}
