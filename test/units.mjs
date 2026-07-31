@@ -29,7 +29,6 @@ import {
   validateOrder
 } from '../src/lib/orders.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
-import { buildOnrampUrl, onrampNetwork, onrampSupportsChain } from '../src/lib/onramp.js';
 import qrcode from 'qrcode-generator';
 import { classifyQuery } from '../src/pages/Explore.jsx';
 import { isSafeUrl } from '../src/lib/browser.js';
@@ -377,7 +376,15 @@ export default function run() {
     t('fee is never negative', FEE_BPS >= 0);
     t(`fee never exceeds the ${FEE_BPS_MAX} bps cap`, FEE_BPS <= FEE_BPS_MAX);
     t('the cap is 1% or less', FEE_BPS_MAX <= 100);
-    t('default is 50 bps', FEE_BPS_DEFAULT === 50);
+    /*
+     * 70 bps, deliberately. Measured in-wallet rates 2026: MetaMask 0.875%,
+     * Phantom 0.85%, Rainbow 0.85%, Trust 0.70%, ZenGo 0.50%, Rabby 0.25% —
+     * median 0.70%. It sat at 50 for months with a comment saying to set
+     * VITE_FEE_BPS=70; the variable was never set, so a default nobody changes
+     * turned out to BE the configuration. Asserting it here means a silent
+     * revert shows up as a failing test rather than as missing revenue.
+     */
+    t('default is 70 bps (market median)', FEE_BPS_DEFAULT === 70);
     // With no env override configured, the default must be what ships.
     t('unset env yields the default', FEE_BPS === FEE_BPS_DEFAULT);
   }
@@ -575,45 +582,6 @@ export default function run() {
     // The pipeline total is what makes this screen a revenue instrument.
     t('pipeline sums active orders only', pipelineFeeUsd([limitOrder, { ...limitOrder, status: 'filled' }], priceMap, 50) === 7);
     t('pipeline skips unpriced orders rather than failing', pipelineFeeUsd([limitOrder], {}, 50) === 0);
-  }
-
-  /* ------------------------------ fiat on-ramp ----------------------------- */
-  /*
-   * The address guard is the only thing standing between a user and buying
-   * coins into a wallet they do not control. A widget opened with no
-   * destination lets the PROVIDER pick one, and the money is gone for good.
-   */
-  {
-    const good = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
-    const url = buildOnrampUrl({ provider: 'moonpay', address: good, coin: 'usdt', amount: 100, chainId: 56 });
-
-    t('builds a checkout url', typeof url === 'string' && url.startsWith('https://buy.moonpay.com'));
-    t('the destination address is carried through', url.includes(good));
-    t('the amount is carried through', url.includes('100'));
-
-    // Every refusal below would otherwise become a real, unrecoverable payment.
-    t('refuses a missing address', buildOnrampUrl({ address: undefined }) === null);
-    t('refuses an empty address', buildOnrampUrl({ address: '' }) === null);
-    t('refuses a truncated address', buildOnrampUrl({ address: '0xdead' }) === null);
-    t('refuses a non-EVM address', buildOnrampUrl({ address: 'TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ' }) === null);
-    t('refuses an unknown provider', buildOnrampUrl({ provider: 'nope', address: good }) === null);
-
-    // A negative or absurd amount must not reach the provider.
-    t('drops a negative amount', !String(buildOnrampUrl({ address: good, amount: -50 })).includes('-50'));
-    t('caps an absurd amount', String(buildOnrampUrl({ address: good, amount: 9e9 })).includes('20000'));
-    t('tolerates a non-numeric amount', typeof buildOnrampUrl({ address: good, amount: 'abc' }) === 'string');
-
-    // Offering a chain the provider cannot settle on produces a failed
-    // purchase AFTER the user has paid.
-    t('maps a supported chain', onrampNetwork(56) === 'bsc');
-    t('rejects an unsupported chain', onrampSupportsChain(999) === false);
-    t('tron is not offered as EVM', onrampNetwork(null) === null);
-
-    // All three providers must build a real https URL.
-    for (const p of ['moonpay', 'transak', 'ramp']) {
-      const u = buildOnrampUrl({ provider: p, address: good, chainId: 1 });
-      t(`${p} builds an https checkout`, typeof u === 'string' && u.startsWith('https://'));
-    }
   }
 
   /* ----------------------- server watch payload safety --------------------- */

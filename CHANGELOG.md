@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.4.1 — versionCode 12
+
+### Fee raised to 0.70% — no configuration needed
+
+The default was 50 bps with a comment saying "set `VITE_FEE_BPS=70`". That
+variable was never set, so **every build ever shipped at 0.50%** while the
+reasoning sat in the source unused. A default nobody changes *is* the
+configuration, so the default is now the intended rate.
+
+Measured in-wallet rates, 2026: MetaMask 0.875%, Phantom 0.85%, Rainbow 0.85%,
+Trust 0.70%, ZenGo 0.50%, Rabby 0.25% — median **0.70%**. We are now at the
+median and still cheaper than the three largest wallets. **+40% revenue on
+identical volume.**
+
+`VITE_FEE_BPS` still overrides it, and the 100 bps hard cap is unchanged. A
+unit test now asserts the default, so a silent revert fails CI instead of
+quietly costing money.
+
+### Removed: the fiat on-ramp
+
+Shipped in 1.4.0 and removed one version later, because it could not work for
+this app's actual users. MoonPay, Transak and Ramp all block Iran under OFAC
+sanctions — the screen would have been a dead end for the primary audience.
+
+The alternative was worse. On **2 June 2026** OFAC designated Nobitex, Wallex,
+Bitpin and Ramzinex with **secondary sanctions**, meaning any non-US
+institution that processes for them risks being cut off from the US financial
+system. Integrating an Iranian exchange would expose the app, Google Play
+distribution and the company itself. Neither path is available, so the honest
+move is to ship neither rather than a button that fails.
+
+What remains is the P2P screen, which already routes users to external desks
+without us holding funds or acting as an intermediary.
+
 ## 1.4.0 — versionCode 11
 
 ### New: Buy crypto (fiat on-ramp) — the second revenue stream

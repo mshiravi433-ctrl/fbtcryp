@@ -19,7 +19,6 @@ import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/noti
 import { newsIsStale, getNews } from './lib/news';
 
 const Market = lazy(() => import('./pages/Market'));
-const Buy = lazy(() => import('./pages/Buy'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Trade = lazy(() => import('./pages/Trade'));
 const Swap = lazy(() => import('./pages/Swap'));
@@ -132,7 +131,6 @@ function AnimatedRoutes() {
           <Route path="/coin/:id" element={<CoinDetail />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/swap" element={<Swap />} />
-          <Route path="/buy" element={<Buy />} />
           <Route path="/invest" element={<Invest />} />
           {GAMES_ENABLED && <Route path="/play" element={<Play />} />}
           <Route path="/predict" element={<Predict />} />

@@ -141,6 +141,13 @@ export const DEFAULT_CHAIN = 56;
  * Moving 0.50% → 0.70% is +40% revenue on identical volume and still cheaper
  * than MetaMask, Phantom and Rainbow.
  *
+ * ─── WHY THE DEFAULT IS 70, NOT 50 ──────────────────────────────────────────
+ * It used to be 50 with a note saying "set VITE_FEE_BPS=70". That variable was
+ * never set, so every build shipped at 0.50% while the reasoning above sat
+ * here unused — a default nobody changes IS the configuration. The default is
+ * now the intended rate, and VITE_FEE_BPS remains available to move it without
+ * a code change.
+ *
  * ─── THE CAP IS NOT NEGOTIABLE ──────────────────────────────────────────────
  * Hard-limited to 100 bps (1%). A misconfigured environment variable must
  * never be able to quietly take 10% of someone's swap, and a fee that high
@@ -150,7 +157,7 @@ export const DEFAULT_CHAIN = 56;
  * clamping silently, because a typo'd 700 meaning 7.00% should not become
  * 1.00% without anyone noticing.
  */
-const FEE_BPS_DEFAULT = 50;
+const FEE_BPS_DEFAULT = 70;
 const FEE_BPS_MAX = 100;
 
 function resolveFeeBps() {
