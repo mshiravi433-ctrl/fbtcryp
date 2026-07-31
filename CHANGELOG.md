@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.3.1 — versionCode 10
+
+### Ecosystem screen rebuilt
+
+The "buggy" feel was real and measurable, not cosmetic:
+
+- **Nine permanent GPU animations.** Every card pulsed a `repeat: Infinity`
+  halo built on an 80px `filter: blur(30px)`. Blur is the most expensive
+  filter to composite, and nine running forever kept the GPU busy the entire
+  time the screen was open — visible scroll jank on a mid-range phone, plus a
+  real battery cost. Replaced with a static border and a cheap gradient wash.
+
+- **It bypassed the safe link path.** It called `window.open` directly instead
+  of `openUrl` (Custom Tabs). Inside the packaged app that opens a WebView
+  with no address bar, so the user cannot see which domain they landed on and
+  we are implicitly vouching for it. In a wallet that is a phishing surface,
+  not a styling preference.
+
+- **Real logos** instead of letter tiles, with a monogram fallback so a failed
+  icon never leaves a hole in the grid.
+
+- **Search**, and **17 entries** instead of 9 — added Uniswap, Arbitrum, Base,
+  DefiLlama, DEX Screener, Chainlist, Rabby and Safe.
+
+### Fixed
+
+- **No web manifest existed.** The site could not be installed to a home
+  screen at all, and wallets that read a dapp's manifest when drawing the
+  connection dialog found a 404 where the name and icon should be.
+
+### Notes on the AI assistant
+
+"Ask" is wired correctly — the server reports `{"enabled":false}` because no
+AI key is set. It is not broken code: with no key it falls back to the
+hand-written FAQ, which is deliberate (a generated answer about our own fee
+would be worse than a checked one). Setting `GROQ_API_KEY` in Vercel turns on
+the general-question path. Groq has a free tier and is not geo-blocked.
+
+### Testing
+
+- 10 new wiring checks: no permanent animations, links go through the safe
+  helper, every entry named in both languages, all links https, manifest
+  present with icons that exist on disk, and the WalletConnect metadata icon
+  resolving to a real file. 63 checks pass.
+- The first version of the animation check matched its own explanatory
+  comment and failed on correct code; it now strips comments before scanning.
+  A test that flags prose teaches people to ignore it.
+
 ## 1.3.0 — versionCode 9
 
 **"Orders & plans" is now "Auto Orders"** (`سفارش خودکار`) — the old name

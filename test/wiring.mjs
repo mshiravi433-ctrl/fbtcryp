@@ -20,7 +20,7 @@
  *      the bundle and still gets maintained. Home/Portfolio/Analysis sat there
  *      for months, and their missing translation keys polluted every audit.
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const read = (p) => readFileSync(p, 'utf8');
@@ -675,6 +675,81 @@ export default function run() {
     t(
       `the WC metadata fallback is not the dead vercel host (${fallback})`,
       Boolean(fallback) && !fallback.includes('fbtcryp.vercel.app')
+    );
+  }
+
+  /* ---- 16. Ecosystem, external links, and PWA/wallet identity ----------- */
+  {
+    const eco = read('src/pages/Ecosystem.jsx');
+
+    /*
+     * REAL BUG: every card ran a `repeat: Infinity` pulse on a blurred 80px
+     * halo. Blur is the most expensive filter to composite, and nine of them
+     * animating forever kept the GPU busy the whole time the screen was open —
+     * which is what "the page looks buggy" actually was.
+     */
+    /*
+     * Strip comments before scanning. The first version of this check matched
+     * the very comment explaining the fix, so it failed on correct code — a
+     * test that flags prose teaches people to ignore it.
+     */
+    const stripComments = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const ecoCode = stripComments(eco);
+
+    t('Ecosystem has no permanent animations', !/repeat:\s*Infinity/.test(ecoCode));
+
+    /*
+     * External links must go through lib/browser (Custom Tabs), which shows
+     * the real domain. window.open inside the packaged app hides it, so the
+     * user cannot tell a real site from a lookalike — in a wallet, that is a
+     * phishing delivery mechanism, not a styling choice.
+     */
+    t('Ecosystem opens links through the safe helper', /openUrl/.test(ecoCode));
+    t('Ecosystem does not call window.open directly', !/window\.open/.test(ecoCode));
+
+    // A failed favicon must degrade to a monogram, never a broken-image glyph.
+    t('Ecosystem tolerates a logo that fails to load', /onError/.test(eco));
+
+    // Every listed item needs a name, or the tile renders its raw id.
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const ids = [...eco.matchAll(/\{\s*id:\s*'([a-z0-9]+)',\s*url:/g)].map((m) => m[1]);
+    const unnamed = ids.filter((id) => !en.eco?.item?.[id]?.name || !fa.eco?.item?.[id]?.name);
+    t(
+      `every ecosystem entry is named in en+fa (${ids.length} entries)${unnamed.length ? ` — missing: ${unnamed.join(', ')}` : ''}`,
+      ids.length > 0 && unnamed.length === 0
+    );
+
+    // Only https, and no dead host may be shipped as a destination.
+    const urls = [...eco.matchAll(/url:\s*'([^']+)'/g)].map((m) => m[1]);
+    t('every ecosystem link is https', urls.every((u) => u.startsWith('https://')));
+
+    /*
+     * The web manifest was missing entirely: the site could not be installed,
+     * and wallets reading a dapp manifest for the connection dialog got a 404
+     * where the name and icon should be.
+     */
+    const html = read('index.html');
+    t('the page links a web manifest', /rel="manifest"/.test(html));
+    const manifest = JSON.parse(read('public/manifest.webmanifest'));
+    t('the manifest names the app', manifest.name === 'FBT Swap');
+    const iconPaths = (manifest.icons || []).map((i) => i.src.replace(/^\//, ''));
+    const missingIcons = iconPaths.filter((p) => !existsSync(join('public', p)));
+    t(
+      `every manifest icon exists${missingIcons.length ? ` — missing: ${missingIcons.join(', ')}` : ''}`,
+      iconPaths.length > 0 && missingIcons.length === 0
+    );
+
+    /*
+     * WalletConnect FETCHES metadata.icons to draw the connection dialog, so a
+     * 404 there is grounds to reject the request. The icon must be a real file.
+     */
+    const wallet = read('src/context/WalletContext.jsx');
+    const wcIcon = /icons:\s*\[`\$\{publicUrl\}\/([^`]+)`\]/.exec(wallet)?.[1];
+    t(
+      `the WC metadata icon is a real file (${wcIcon})`,
+      Boolean(wcIcon) && existsSync(join('public', wcIcon))
     );
   }
 

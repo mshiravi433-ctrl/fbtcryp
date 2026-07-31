@@ -1148,9 +1148,51 @@
         "name": "WalletConnect",
         "short": "WC",
         "desc": "Connect any wallet"
+      },
+      "uniswap": {
+        "short": "UNI",
+        "name": "Uniswap",
+        "desc": "The largest DEX protocol, and the router we use on Ethereum and Base."
+      },
+      "arbitrum": {
+        "short": "ARB",
+        "name": "Arbitrum",
+        "desc": "Ethereum layer-2 with low fees. Supported for swaps."
+      },
+      "base": {
+        "short": "BASE",
+        "name": "Base",
+        "desc": "Coinbase layer-2. Cheap transactions, supported for swaps."
+      },
+      "defillama": {
+        "short": "LLA",
+        "name": "DefiLlama",
+        "desc": "Independent data on protocol size and real revenue."
+      },
+      "dexscreener": {
+        "short": "DEX",
+        "name": "DEX Screener",
+        "desc": "Live charts for any pair, including brand-new tokens."
+      },
+      "chainlist": {
+        "short": "CHL",
+        "name": "Chainlist",
+        "desc": "Verified RPC endpoints for adding a network to your wallet."
+      },
+      "rabby": {
+        "short": "RBY",
+        "name": "Rabby",
+        "desc": "Wallet that previews what a transaction will actually do."
+      },
+      "safe": {
+        "short": "SAFE",
+        "name": "Safe",
+        "desc": "Multi-signature wallet for funds that need more than one approver."
       }
     },
-    "notice": "These are independent projects. Fanous Bazaar Pishgam is not affiliated with them and earns nothing from these links."
+    "notice": "These are independent projects. Fanous Bazaar Pishgam is not affiliated with them and earns nothing from these links.",
+    "search": "Search the ecosystem",
+    "noResults": "Nothing matches “{{q}}”."
   },
   "biz": {
     "title": "Business",

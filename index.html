@@ -6,6 +6,13 @@
     <meta name="theme-color" content="#f4f5fa" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!--
+      Web app manifest. Missing entirely until now, which had two effects:
+      the site could not be installed to a home screen at all, and wallets
+      that read a dapp's manifest when rendering a connection request found
+      a 404 where the name and icon should be.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="color-scheme" content="dark" />
     <meta name="description" content="FBT Swap — صرافی غیرمتمرکز، سواپ روی زنجیره، تحلیل بازار و کیف پول غیرحضانتی." />
     <title>FBT Swap</title>

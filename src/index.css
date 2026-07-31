@@ -3571,3 +3571,96 @@ input, select, textarea { font-size: 16px !important; }
   border: 1px solid color-mix(in srgb, var(--ink-cyan) 22%, transparent);
   background: color-mix(in srgb, var(--ink-cyan) 7%, transparent);
 }
+
+/* --- Ecosystem -----------------------------------------------------------
+   No infinite animations here on purpose. The previous version pulsed a
+   blurred 80px halo behind EVERY card forever; blur is the most expensive
+   filter to composite and nine of them kept the GPU busy the whole time the
+   screen was open, which showed up as scroll jank on mid-range Android. The
+   colour accent is now a static border + a cheap gradient wash.
+   ------------------------------------------------------------------------- */
+.eco-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 13px;
+  margin: 12px 0 4px;
+  border-radius: 13px;
+  color: var(--text-3);
+  border: 1px solid var(--line, #232735);
+  background: var(--surface, #11131b);
+}
+
+.eco-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-size: 0.92rem;
+  color: var(--ink, #fff);
+}
+
+.eco-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.eco-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 13px 12px 12px;
+  border-radius: 15px;
+  cursor: pointer;
+  text-align: start;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--eco-hue) 26%, transparent);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--eco-hue) 11%, transparent), transparent 62%),
+    var(--surface, #11131b);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.eco-card:active { border-color: color-mix(in srgb, var(--eco-hue) 55%, transparent); }
+
+.eco-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  margin-bottom: 7px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--eco-hue) 18%, transparent);
+}
+
+.eco-logo img { display: block; border-radius: 6px; }
+
+/* Fallback when the favicon fails: a readable monogram, never a broken image. */
+.eco-logo-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+}
+
+.eco-name { font-weight: 700; font-size: 12.5px; }
+
+.eco-desc {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.eco-ext {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 12px;
+  color: var(--text-3);
+  opacity: 0.55;
+}
