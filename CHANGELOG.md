@@ -1,5 +1,64 @@
 # Changelog
 
+## 1.4.0 — versionCode 11
+
+### New: Buy crypto (fiat on-ramp) — the second revenue stream
+
+A swap-only app can only earn from people who **already hold crypto**. This is
+the step where someone with none becomes someone with a funded wallet, and
+every future swap fee depends on it happening.
+
+Measured 2026 wallet monetisation: swap fees run 0.4–1.0% of volume, on-ramp
+referral pays roughly 0.3–1% of purchase value — and card buyers move far more
+per transaction than the same person swapping later. It costs nothing to
+build: the provider handles KYC, payments, fraud and compliance.
+
+Three providers (MoonPay, Transak, Ramp) so users can compare rates, which
+differ substantially. **We never take custody** — the coins go straight to the
+user's own address, which is why a non-custodial app may do this at all: we
+are an introducer, not a money transmitter.
+
+Safety rules enforced in code, not just copy:
+- A malformed or non-EVM address **refuses to build a URL**. A widget opened
+  with no destination lets the *provider* pick one, and the user would buy
+  into an address they do not control — unrecoverable.
+- Amounts are capped and negatives dropped before reaching the provider.
+- Chains the providers cannot settle on are blocked, rather than producing a
+  failed purchase *after* payment.
+- Opens in a Custom Tab so the real domain is visible. A payment page inside a
+  WebView we draw is indistinguishable from a phishing page.
+- The disclosure — that a third party takes the money and we cannot refund,
+  cancel or trace it — appears *before* the user leaves.
+
+### Fixed
+
+- **NFT screen showed a meaningless error.** The live cause is `Alchemy 403`
+  (the API key is revoked), but `serve()` flattened every failure into
+  `UPSTREAM_FAILED`, for which no translation existed — so it rendered as a
+  generic "something went wrong". Now 401/403 → "our key needs renewing",
+  429 → rate limited, 5xx → provider down, each translated.
+
+  `serve()` also leaked the raw upstream message into `detail`, and for
+  Alchemy **the API key sits in the URL path** — so an error string could
+  carry it to the browser. This route now emits fixed codes only.
+
+- **Ecosystem restyled as glass**, for both themes. Not with
+  `backdrop-filter`: see the note above `.card` explaining why it was stripped
+  from repeating elements — the compositor must capture and blur the region
+  behind *every* instance, every frame, and the background never stops moving.
+  17 tiles of that would reintroduce exactly that stutter. The frost is built
+  from a translucent tint, a top-left sheen and a hairline highlight, which
+  cost nothing to composite. Light theme is defined separately because
+  translucent white over white is invisible.
+
+### Testing
+
+- 18 new checks (266 unit + 72 wiring). One wiring check initially **passed
+  when the code was deliberately broken** — the env var is built from a
+  template literal, which defeated the regex. Rewritten to scan string
+  literals; now verified to fail on the sabotaged version. A check that cannot
+  fail is worse than no check, because it is trusted.
+
 ## 1.3.1 — versionCode 10
 
 ### Ecosystem screen rebuilt

@@ -111,7 +111,28 @@ export async function fetchNfts(chainId, owner, { limit = 50 } = {}) {
     `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner` +
     `?owner=${owner}&withMetadata=true&excludeFilters[]=SPAM&pageSize=${Math.min(100, limit)}`;
 
-  const raw = await req(url);
+  /*
+   * TRANSLATE UPSTREAM FAILURES INTO SOMETHING ACTIONABLE.
+   *
+   * `req` throws `HTTP 403`, which reached the client as the generic
+   * UPSTREAM_FAILED and rendered as "something went wrong" — the reported
+   * symptom. But 403 from Alchemy has exactly one common cause: the key is
+   * revoked, wrong, or has that network disabled on the dashboard. Saying so
+   * turns an unactionable error into a two-minute fix.
+   *
+   * The key itself is in the URL path, so error text must never be echoed to
+   * the client verbatim — these are fixed codes, not upstream messages.
+   */
+  let raw;
+  try {
+    raw = await req(url);
+  } catch (err) {
+    const msg = String(err?.message || '');
+    if (/\b401\b|\b403\b/.test(msg)) throw new Error('NFT_KEY_REJECTED');
+    if (/\b429\b/.test(msg)) throw new Error('NFT_RATE_LIMITED');
+    if (/\b5\d\d\b/.test(msg)) throw new Error('NFT_UPSTREAM_DOWN');
+    throw new Error('FAILED');
+  }
 
   const items = (raw?.ownedNfts ?? []).map((n) => {
     const contract = n?.contract ?? {};

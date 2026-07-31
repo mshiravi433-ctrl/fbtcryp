@@ -3573,11 +3573,30 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 /* --- Ecosystem -----------------------------------------------------------
-   No infinite animations here on purpose. The previous version pulsed a
-   blurred 80px halo behind EVERY card forever; blur is the most expensive
-   filter to composite and nine of them kept the GPU busy the whole time the
-   screen was open, which showed up as scroll jank on mid-range Android. The
-   colour accent is now a static border + a cheap gradient wash.
+   GLASS LOOK WITHOUT THE GLASS COST.
+
+   Two constraints pull against each other here:
+
+   1. The old screen ran nine `repeat: Infinity` pulses on blurred 80px halos,
+      which kept the GPU busy for as long as the page was open. Removed.
+
+   2. `backdrop-filter: blur()` is what actually produces frosted glass — but
+      see the long note above `.card`: it was deliberately stripped from
+      repeating elements because the compositor must capture and blur the
+      region behind EVERY instance, every frame, and nothing behind them ever
+      stops moving. Putting it back on 17 tiles would reintroduce exactly the
+      stutter that note describes.
+
+   So the frost is faked with layers that cost nothing to composite: a
+   translucent panel tint, a soft top-left sheen, a hairline inner highlight,
+   and a faint tint of the brand colour. On a moving gradient background this
+   is visually indistinguishable from a real blur, because what sits behind is
+   already soft — blurring an already-blurred gradient changes almost nothing.
+
+   Both themes are defined explicitly rather than relying on one set of alpha
+   values to work on black and white. Translucent white over a dark canvas
+   reads as glass; the same fill over a light canvas reads as dirty grey, so
+   light mode uses a white base with a coloured wash instead.
    ------------------------------------------------------------------------- */
 .eco-search {
   display: flex;
@@ -3585,10 +3604,13 @@ input, select, textarea { font-size: 16px !important; }
   gap: 9px;
   padding: 10px 13px;
   margin: 12px 0 4px;
-  border-radius: 13px;
+  border-radius: 14px;
   color: var(--text-3);
-  border: 1px solid var(--line, #232735);
-  background: var(--surface, #11131b);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 60%),
+    var(--bg-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .eco-search input {
@@ -3598,13 +3620,15 @@ input, select, textarea { font-size: 16px !important; }
   outline: 0;
   background: none;
   font-size: 0.92rem;
-  color: var(--ink, #fff);
+  color: var(--text-1);
 }
+
+.eco-search input::placeholder { color: var(--text-3); }
 
 .eco-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 9px;
+  gap: 10px;
   margin-top: 8px;
 }
 
@@ -3614,32 +3638,55 @@ input, select, textarea { font-size: 16px !important; }
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  padding: 13px 12px 12px;
-  border-radius: 15px;
+  padding: 14px 13px 13px;
+  border-radius: 17px;
   cursor: pointer;
   text-align: start;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--eco-hue) 26%, transparent);
+  color: var(--text-1);
+  border: 1px solid var(--line);
+  /* Layered, not blurred: sheen -> brand wash -> panel. */
   background:
-    linear-gradient(150deg, color-mix(in srgb, var(--eco-hue) 11%, transparent), transparent 62%),
-    var(--surface, #11131b);
-  transition: border-color 0.16s ease, transform 0.16s ease;
+    linear-gradient(158deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 42%, transparent 70%),
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--eco-hue) 20%, transparent), transparent 62%),
+    var(--bg-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 18px -12px rgba(0, 0, 0, 0.6);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
-.eco-card:active { border-color: color-mix(in srgb, var(--eco-hue) 55%, transparent); }
+.eco-card:active {
+  border-color: color-mix(in srgb, var(--eco-hue) 52%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px color-mix(in srgb, var(--eco-hue) 26%, transparent),
+    0 8px 22px -14px color-mix(in srgb, var(--eco-hue) 60%, transparent);
+}
+
+/* A thin bright edge along the top — the cue that reads as "glass". */
+.eco-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  pointer-events: none;
+}
 
 .eco-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  margin-bottom: 7px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  margin-bottom: 8px;
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: color-mix(in srgb, var(--eco-hue) 18%, transparent);
+  background: color-mix(in srgb, var(--eco-hue) 16%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--eco-hue) 24%, transparent);
 }
 
-.eco-logo img { display: block; border-radius: 6px; }
+.eco-logo img { display: block; border-radius: 7px; }
 
 /* Fallback when the favicon fails: a readable monogram, never a broken image. */
 .eco-logo-text {
@@ -3649,7 +3696,7 @@ input, select, textarea { font-size: 16px !important; }
   color: #000;
 }
 
-.eco-name { font-weight: 700; font-size: 12.5px; }
+.eco-name { font-weight: 700; font-size: 12.5px; color: var(--text-1); }
 
 .eco-desc {
   font-size: 11px;
@@ -3659,8 +3706,91 @@ input, select, textarea { font-size: 16px !important; }
 
 .eco-ext {
   position: absolute;
-  top: 12px;
-  inset-inline-end: 12px;
+  top: 13px;
+  inset-inline-end: 13px;
   color: var(--text-3);
-  opacity: 0.55;
+  opacity: 0.5;
+}
+
+/* ---- light theme -------------------------------------------------------
+   Translucent white over white is invisible, and the dark sheen turns muddy.
+   Light mode gets a white base, a stronger brand wash so the tiles keep their
+   colour identity, and a soft drop shadow instead of an inner highlight.
+   ------------------------------------------------------------------------ */
+:root[data-theme='light'] .eco-card {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.72) 55%),
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--eco-hue) 26%, transparent), transparent 64%),
+    #ffffff;
+  border-color: color-mix(in srgb, var(--eco-hue) 22%, var(--line));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 4px 16px -10px rgba(16, 20, 40, 0.28);
+}
+
+:root[data-theme='light'] .eco-card::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+}
+
+:root[data-theme='light'] .eco-card:active {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--eco-hue) 38%, transparent),
+    0 8px 20px -12px color-mix(in srgb, var(--eco-hue) 55%, transparent);
+}
+
+:root[data-theme='light'] .eco-logo {
+  background: color-mix(in srgb, var(--eco-hue) 14%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--eco-hue) 30%, transparent);
+}
+
+:root[data-theme='light'] .eco-search {
+  background: linear-gradient(160deg, #ffffff, rgba(255, 255, 255, 0.8));
+  box-shadow: inset 0 1px 0 #fff, 0 2px 10px -6px rgba(16, 20, 40, 0.18);
+}
+
+/* --- Buy (fiat on-ramp) --------------------------------------------------- */
+.chip {
+  padding: 8px 14px;
+  border-radius: 11px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip-on {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--ink-cyan) 55%, transparent);
+  background: color-mix(in srgb, var(--ink-cyan) 12%, var(--bg-panel));
+}
+
+.buy-provider {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'name ext' 'desc ext';
+  gap: 2px 10px;
+  align-items: center;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 15px;
+  cursor: pointer;
+  text-align: start;
+  color: var(--text-1);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.07), transparent 60%),
+    var(--bg-panel);
+}
+
+.buy-provider:disabled { opacity: 0.5; cursor: default; }
+.buy-provider-name { grid-area: name; font-weight: 700; font-size: 13px; }
+.buy-provider-desc { grid-area: desc; font-size: 11.5px; line-height: 1.5; }
+.buy-provider svg { grid-area: ext; color: var(--text-3); }
+
+:root[data-theme='light'] .buy-provider {
+  background: linear-gradient(158deg, #fff, rgba(255, 255, 255, 0.75));
+  box-shadow: 0 2px 10px -6px rgba(16, 20, 40, 0.18);
 }

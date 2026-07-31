@@ -753,5 +753,58 @@ export default function run() {
     );
   }
 
+  /* ---- 17. on-ramp: revenue path must be reachable and honest ----------- */
+  {
+    const buy = read('src/pages/Buy.jsx');
+    const lib = read('src/lib/onramp.js');
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    // A page nobody can reach earns nothing — this is the whole point of it.
+    t('Buy has a route', /path="\/buy"/.test(app));
+    t('Buy is linked from the menu', read('src/components/MoreSheet.jsx').includes("'/buy'"));
+
+    /*
+     * The partner id is a public identifier (like the WalletConnect project
+     * id) so VITE_ is correct here — but no SECRET may ever gain that prefix,
+     * since VITE_ values compile into the bundle every user downloads.
+     */
+    /*
+     * The env var name is built with a template literal, so a naive regex for
+     * VITE_..._SECRET never matches. Scan every string and template chunk
+     * instead — the first version of this check passed even when the code was
+     * changed to read a _SECRET var, which made it worse than no check.
+     */
+    const libCode = lib.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const litParts = [...libCode.matchAll(/[`'"]([^`'"]*)[`'"]/g)].map((m) => m[1]);
+    t(
+      'on-ramp reads no secret-looking env var',
+      !litParts.some((s) => /(SECRET|PRIVATE)/i.test(s))
+    );
+
+    /*
+     * Every provider must be named in both languages, or the button renders a
+     * raw key next to a payment form.
+     */
+    const ids = [...lib.matchAll(/^\s*id: '([a-z]+)',$/gm)].map((m) => m[1]);
+    const unnamed = ids.filter((i) => !en.buy?.p?.[i]?.name || !fa.buy?.p?.[i]?.name);
+    t(
+      `every on-ramp provider is named in en+fa (${ids.length})${unnamed.length ? ` — missing: ${unnamed.join(', ')}` : ''}`,
+      ids.length > 0 && unnamed.length === 0
+    );
+
+    // We are an introducer, not the merchant. Saying so before the user leaves
+    // is the difference between a disclosure and a complaint.
+    t('the third-party disclosure exists', /buy\.disclosure/.test(buy));
+    t('the disclosure denies refund ability', /cannot refund/i.test(en.buy?.disclosure ?? ''));
+
+    // Payment pages must open where the real domain is visible.
+    t('Buy opens the provider in a Custom Tab', /openUrl/.test(buy));
+    t('Buy never uses window.open', !/window\.open/.test(buy));
+
+    // The destination is the user's own money; it must be shown, not assumed.
+    t('Buy shows the destination address', /deliverTo/.test(buy));
+  }
+
   return rows;
 }

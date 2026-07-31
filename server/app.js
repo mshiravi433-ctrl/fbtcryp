@@ -407,10 +407,36 @@ app.get('/api/nft/:chainId/:owner', (req, res) => {
     return res.status(400).json({ error: 'CHAIN_NOT_SUPPORTED', chains: nftChains() });
   }
 
-  return serve(res, 300000)(
-    () => fetchNfts(chainId, owner),
-    `nft:${chainId}:${owner.toLowerCase()}`
-  );
+  /*
+   * Not `serve()` here.
+   *
+   * serve() wraps every throw as {error:'UPSTREAM_FAILED', detail:<message>},
+   * which is right for market data but wrong here: fetchNfts raises specific,
+   * actionable codes (NFT_KEY_REJECTED, NFT_RATE_LIMITED) and serve() buried
+   * them under a generic failure that rendered as "something went wrong".
+   *
+   * It also leaked the raw upstream message into `detail` — and for Alchemy
+   * the API key sits in the URL path, so an error string could carry it to
+   * the browser. Fixed codes only.
+   */
+  const key = `nft:${chainId}:${owner.toLowerCase()}`;
+  return withCache(key, 300000, () => fetchNfts(chainId, owner))
+    .then(({ value }) => {
+      res.set('cache-control', 'public, max-age=300');
+      res.json(value);
+    })
+    .catch((err) => {
+      const code = String(err?.message || 'FAILED');
+      const known = [
+        'NFT_KEY_REJECTED',
+        'NFT_RATE_LIMITED',
+        'NFT_UPSTREAM_DOWN',
+        'NFT_NOT_CONFIGURED',
+        'CHAIN_NOT_SUPPORTED',
+        'BAD_ADDRESS'
+      ];
+      res.status(502).json({ error: known.includes(code) ? code : 'FAILED' });
+    });
 });
 
 /* ----------------------------- leaderboard -------------------------------- */

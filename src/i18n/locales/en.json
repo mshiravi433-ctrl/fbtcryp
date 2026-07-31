@@ -32,7 +32,8 @@
     "explore": "Explorer",
     "discover": "Discover",
     "nft": "My NFTs",
-    "orders": "Auto Orders"
+    "orders": "Auto Orders",
+    "buy": "Buy crypto"
   },
   "common": {
     "balance": "Balance",
@@ -1677,7 +1678,10 @@
       "NFT_NOT_CONFIGURED": "The NFT indexer is not configured on this deployment.",
       "CHAIN_NOT_SUPPORTED": "This network is not indexed for NFTs.",
       "BAD_ADDRESS": "That wallet address is not valid.",
-      "FAILED": "Could not load your NFTs. Check your connection and try again."
+      "FAILED": "Could not load your NFTs. Check your connection and try again.",
+      "NFT_KEY_REJECTED": "Our NFT data provider rejected the request. This is on our side — the access key needs renewing. Everything else in the app is unaffected.",
+      "NFT_RATE_LIMITED": "Too many requests to the NFT provider right now. Try again in a minute.",
+      "NFT_UPSTREAM_DOWN": "The NFT data provider is down. Your NFTs are safe on-chain — this screen just cannot read them right now."
     }
   },
   "orders": {
@@ -1780,5 +1784,33 @@
     "codePlaceholder": "6-digit code",
     "badCode": "That code isn't right. Check your phone's clock and try the current code.",
     "noFallback": "No backup method is set up. If the sensor won't recognise you, reinstall the app — you have no in-app wallet stored, so nothing is lost."
+  },
+  "buy": {
+    "title": "Buy crypto",
+    "subtitle": "Pay by card or bank transfer. The coins arrive in your own wallet — we never hold them.",
+    "needWallet": "Connect a wallet first",
+    "needWalletBody": "The coins need somewhere to land. Create or connect a wallet, then come back.",
+    "openWallet": "Open wallet",
+    "deliverTo": "Coins will be sent to",
+    "deliverToNote": "This is your address. Check it looks right — a purchase cannot be reversed or redirected once it settles.",
+    "chainUnsupported": "Card purchases are not available on the network you are currently on. Switch to Ethereum, BNB Chain, Polygon, Arbitrum, Base or Optimism.",
+    "amount": "Amount",
+    "coin": "Coin",
+    "provider": "Choose a provider",
+    "disclosure": "The purchase is handled by the provider you pick, not by us. They take the payment, run identity checks and set their own rates and limits. We cannot refund, cancel or track a payment — contact the provider directly if something goes wrong. Compare rates: they differ, sometimes a lot.",
+    "p": {
+      "moonpay": {
+        "name": "MoonPay",
+        "desc": "Widest card and local payment support"
+      },
+      "transak": {
+        "name": "Transak",
+        "desc": "Often lower fees on bank transfers"
+      },
+      "ramp": {
+        "name": "Ramp",
+        "desc": "Strong in Europe and the UK"
+      }
+    }
   }
 }
