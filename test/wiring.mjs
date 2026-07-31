@@ -416,5 +416,59 @@ export default function run() {
     );
   }
 
+  /* ------------- 12. vercel.json must stay deployable on Hobby ----------- */
+  /*
+   * THE BUG THAT SILENTLY STOPPED EVERY DEPLOY FOR ~22 HOURS.
+   *
+   * A second cron was added for /api/cron/watch on a 15-minute schedule. The
+   * Vercel Hobby plan allows at most 2 cron jobs AND at most one invocation
+   * per day each, so 96/day is refused.
+   *
+   * What made it so expensive to find: the project still BUILDS. It just
+   * never runs, and no failed deployment is recorded - the deploy list simply
+   * stops growing. That is indistinguishable from a broken Git connection, so
+   * the search went to the branch, the webhook and the daily quota in turn,
+   * when the only thing that had changed was one line in one JSON file.
+   *
+   * A cron expression is a line of JSON that no test covered and no build
+   * step validates. It is covered now.
+   */
+  {
+    const vercel = JSON.parse(read('vercel.json'));
+    const crons = vercel.crons ?? [];
+
+    t(`at most 2 cron jobs on Hobby (found ${crons.length})`, crons.length <= 2);
+
+    /*
+     * Reject any schedule that fires more than once a day. The only shape
+     * Hobby accepts is a fixed hour and minute. A step, list or range in
+     * either field means it repeats, and repeating is what gets refused.
+     */
+    const tooOften = crons.filter((c) => {
+      const [min, hour] = String(c.schedule ?? '').trim().split(/\s+/);
+      const fixed = (f) => /^\d+$/.test(f ?? '');
+      return !(fixed(min) && fixed(hour));
+    });
+    t(
+      `every cron runs at most once a day${tooOften.length ? ` — offending: ${tooOften.map((c) => `${c.path} "${c.schedule}"`).join(', ')}` : ''}`,
+      tooOften.length === 0
+    );
+
+    // A cron pointing at a non-existent route 404s once a day forever.
+    const serverSrc = read('server/app.js');
+    const deadCron = crons.filter((c) => !serverSrc.includes(`'${c.path}'`));
+    t(
+      `every cron path is a real route${deadCron.length ? ` — missing: ${deadCron.map((c) => c.path).join(', ')}` : ''}`,
+      deadCron.length === 0
+    );
+
+    /*
+     * Removing the 15-minute cron would silently delete order watching unless
+     * the work moved somewhere that still runs. Assert it is still invoked so
+     * the fix cannot degrade into a quiet feature removal.
+     */
+    t('the watch cycle still runs from the daily cron', /runWatchCycle\(\)/.test(serverSrc));
+  }
+
   return rows;
 }

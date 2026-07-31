@@ -18,10 +18,6 @@
     {
       "path": "/api/cron/daily",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/watch",
-      "schedule": "*/15 * * * *"
     }
   ]
 }

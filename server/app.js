@@ -623,12 +623,36 @@ async function readFcmTokensSafe() {
 }
 
 /** Daily broadcast. Fans out to BOTH channels; each is independent. */
+/*
+ * WHY THE PRICE WATCH RUNS FROM HERE INSTEAD OF ITS OWN SCHEDULE.
+ *
+ * This used to be a second cron entry in vercel.json running every 15
+ * minutes. That broke every deployment: Hobby allows at most 2 cron jobs and
+ * only ONE INVOCATION PER DAY each, so 96/day is rejected. The project still
+ * builds and then refuses to run, which is far more confusing than a build
+ * error - the deploy list simply stops receiving new entries, which looks
+ * exactly like a disconnected Git integration.
+ *
+ * So the watch cycle is folded into the daily job. Be honest about the cost:
+ * a limit order is now checked ONCE A DAY, not every 15 minutes. That is a
+ * real downgrade, and it is why orders.js must keep describing these as
+ * alerts rather than fills. The alternative - a paid plan - is not worth
+ * buying before the app has users.
+ *
+ * runWatchCycle sits in the same Promise.allSettled as the two sends: one
+ * failing channel must not cancel the others.
+ */
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
-  const [web, fcm] = await Promise.allSettled([sendDailyPromo(), sendDailyFcm()]);
+  const [web, fcm, watch] = await Promise.allSettled([
+    sendDailyPromo(),
+    sendDailyFcm(),
+    runWatchCycle()
+  ]);
   res.json({
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
-    fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) }
+    fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
+    watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) }
   });
 });
 
