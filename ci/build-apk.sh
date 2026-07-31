@@ -403,6 +403,38 @@ if [ -n "${BUNDLE:-}" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# FINAL GATE: a signed build MUST produce the file Google Play accepts.
+#
+# A run just finished with every step green and no AAB on the release page.
+# Gradle's bundleRelease is guarded by `|| fail`, and the copy block below
+# exits non-zero if $BSRC is missing — but ONLY when $BUNDLE is set. If the
+# signed branch is ever restructured so $BUNDLE ends up empty, the whole AAB
+# section is skipped, the job stays green, and the only signal is a file
+# quietly absent from a release page nobody re-reads.
+#
+# That is the same failure shape as the missing API routes: everything reports
+# success and the artifact simply is not there. So assert the end state rather
+# than trusting the steps that were supposed to create it.
+# ---------------------------------------------------------------------------
+if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+  [ -f out/app-release.aab ] || fail <<MSG
+This is a SIGNED build, but out/app-release.aab does not exist.
+
+The APK alone cannot be published: Google Play requires an Android App
+Bundle for new apps and for every update. A release without it looks
+complete on the releases page and then blocks the upload.
+
+Gradle reported success, so the bundle step was skipped rather than
+failed - check that the bundleRelease branch still sets \$BUNDLE.
+MSG
+  [ -s out/app-release.aab ] || fail <<MSG
+out/app-release.aab exists but is empty. Something truncated it after the
+build; do not upload this file.
+MSG
+  echo "  ✓ Play bundle present: $(du -h out/app-release.aab | cut -f1)"
+fi
+
 # Report what signed it, so a mis-signed build is obvious in the log.
 if command -v keytool >/dev/null 2>&1 && [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
   echo "▸ signature:"
