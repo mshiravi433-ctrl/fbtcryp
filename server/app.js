@@ -189,16 +189,42 @@ app.get('/api/ai/status', (_req, res) =>
  */
 app.get('/api/ai/diagnose', async (req, res) => {
   const secret = process.env.CRON_SECRET || '';
+  /*
+   * Accept the secret as a query parameter as well as a header.
+   *
+   * The note below used to say `?Authorization: Bearer <CRON_SECRET>`, but a
+   * leading `?` means a QUERY STRING while the code only ever read headers.
+   * So the instruction was impossible to follow from a phone browser — the one
+   * place this endpoint is actually opened — and the live test could never be
+   * reached. Either the note or the code had to change; supporting `?key=` is
+   * the one that helps, since typing a custom header on a phone is not
+   * realistic.
+   *
+   * This is a diagnostic, not an authenticated action: it moves no money and
+   * returns booleans, never key values. A secret in a URL can leak through
+   * logs and referrers, so it stays acceptable ONLY because of that.
+   */
   const provided =
-    req.get('authorization')?.replace(/^Bearer\s+/i, '') || req.get('x-cron-secret') || '';
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+    req.get('x-cron-secret') ||
+    String(req.query.key || '') ||
+    '';
 
   if (secret && provided !== secret) {
     return res.json({
       ok: aiConfigured(),
-      note: 'Add ?Authorization: Bearer <CRON_SECRET> for a live provider test.',
+      /*
+       * Report EVERY provider, not just two. Groq was omitted here, so a
+       * working Groq setup showed `geminiKeyPresent:false,
+       * openrouterKeyPresent:false` next to `enabled:true` — which reads as
+       * "it works but nothing is configured" and sends you looking for a
+       * problem that does not exist.
+       */
+      groqKeyPresent: Boolean(process.env.GROQ_API_KEY),
       geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
       openrouterKeyPresent: Boolean(process.env.OPENROUTER_API_KEY),
-      enabled: aiConfigured()
+      enabled: aiConfigured(),
+      note: 'Append ?key=<CRON_SECRET> to run a live provider test.'
     });
   }
 

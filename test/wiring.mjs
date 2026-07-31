@@ -753,5 +753,65 @@ export default function run() {
     );
   }
 
+  /* ---- 17. diagnostics must be followable and complete ------------------ */
+  /*
+   * Both bugs came from one real /api/ai/diagnose response:
+   *
+   *   {"ok":true,"note":"Add ?Authorization: Bearer <CRON_SECRET> ...",
+   *    "geminiKeyPresent":false,"openrouterKeyPresent":false,"enabled":true}
+   *
+   * 1. The note said `?Authorization:` — a leading `?` means a query string,
+   *    but the code only read HTTP headers. The instruction was impossible to
+   *    follow from a phone browser, which is the only place this URL is ever
+   *    opened, so the live provider test was unreachable.
+   *
+   * 2. Groq was missing from the report. A correctly configured Groq setup
+   *    therefore showed two `false`s beside `enabled:true`, which reads as
+   *    "working, but nothing is configured" and sends you hunting a
+   *    non-existent problem.
+   *
+   * A diagnostic that cannot be acted on is worse than none: it burns the time
+   * of someone already debugging.
+   */
+  {
+    const server = read('server/app.js');
+    const block = /app\.get\('\/api\/ai\/diagnose'[\s\S]*?\n\}\);/.exec(server)?.[0] ?? '';
+
+    /*
+     * Scope this to the UNAUTHORIZED branch specifically. Scanning the whole
+     * handler passed even with Groq deleted from the report, because
+     * aiSelfTest() further down also mentions it — so the check looked green
+     * while the exact bug was present. The public branch is the one a user
+     * actually sees.
+     */
+    const publicBranchRaw =
+      /if \(secret && provided !== secret\) \{[\s\S]*?\n  \}/.exec(block)?.[0] ?? '';
+    /*
+     * Strip comments first. The explanatory comment inside this very branch
+     * names all three providers, so the check passed on prose even with the
+     * Groq line deleted — the third time a check in this file has matched its
+     * own documentation instead of the code it guards.
+     */
+    const publicBranch = publicBranchRaw
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const reported = ['GROQ_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY'].filter((k) =>
+      publicBranch.includes(k)
+    );
+    t(
+      `the public diagnostic reports every AI provider (${reported.length}/3)`,
+      reported.length === 3
+    );
+
+    /*
+     * The stated way in must actually work. If the note advertises a query
+     * parameter, the handler has to read one.
+     */
+    const advertisesQuery = /\?key=/.test(block);
+    const readsQuery = /req\.query\.key/.test(block);
+    t('the diagnostic instruction matches what the code reads', advertisesQuery === readsQuery);
+    t('the diagnostic is reachable from a plain browser URL', readsQuery);
+  }
+
   return rows;
 }
