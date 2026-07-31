@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.4 — versionCode 7
+
+Release build for Google Play.
+
+### Build
+
+- **A signed build now refuses to ship without a working API base.**
+  `VITE_API_BASE` is inlined by Vite at build time. If it is unset — or set as
+  a repository *secret* when the workflow reads `vars.*` — the bundle silently
+  keeps its `/api` default. Inside the APK that resolves against
+  `https://localhost`, i.e. the phone itself, so every market, push and order
+  request fails on a device while working perfectly in a browser.
+
+  The previous check printed a warning, which is invisible in a 200-line log
+  on a phone. It now **fails the build**, and not by trusting the environment
+  variable: it greps the built bundle for the actual origin, so a value that
+  never reached Vite is caught rather than assumed. Verified in both
+  directions — present when set, absent when not.
+
+  Only enforced for signed builds. An unsigned local build against a relative
+  `/api` is legitimate, because the dev server shares the origin.
+
 ## 1.2.3 — versionCode 6
 
 ### Fixed

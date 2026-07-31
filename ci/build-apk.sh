@@ -65,6 +65,58 @@ else
 fi
 npm run build
 
+# ---------------------------------------------------------------------------
+# PROVE THE API BASE IS COMPILED IN — do not take the env var's word for it.
+#
+# Vite inlines import.meta.env at BUILD time. If VITE_API_BASE is unset, or is
+# set on the wrong scope, the bundle silently keeps the '/api' default. Inside
+# the APK that resolves against https://localhost, so every backend call fails
+# and the app looks broken while CI stays green and the release page shows a
+# perfectly normal signed artifact.
+#
+# The existing check only printed a warning, which is invisible in a 200-line
+# log on a phone. For a SIGNED build - the kind that goes to Play - a missing
+# API base is not a warning, it is a defect that costs a full release cycle to
+# discover. So: grep the built bundle for the actual origin.
+#
+# Only enforced when signing. An unsigned local/debug build against a relative
+# '/api' is legitimate: it runs on the dev server on the same origin.
+# ---------------------------------------------------------------------------
+if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+  if [ -z "${VITE_API_BASE:-}" ]; then
+    fail <<MSG
+VITE_API_BASE is not set, and this is a SIGNED (release) build.
+
+The APK serves its pages from https://localhost, so the compiled-in default
+'/api' points at the phone itself. Every market, push and order request would
+fail on a device while working perfectly in a browser - and you would not find
+out until after the Play upload.
+
+Fix: add a repository VARIABLE (not a secret) at
+  Settings > Secrets and variables > Actions > Variables
+  Name:  VITE_API_BASE
+  Value: https://www.lawpoetics.ir/api
+then re-run this workflow.
+MSG
+  fi
+
+  # The origin must really be in the output, not merely in the environment.
+  API_ORIGIN="$(printf '%s' "$VITE_API_BASE" | sed -E 's#^(https?://[^/]+).*#\1#')"
+  if ! grep -rqF "$API_ORIGIN" dist/assets/ 2>/dev/null; then
+    fail <<MSG
+VITE_API_BASE is set to "$VITE_API_BASE" but "$API_ORIGIN" does not appear
+anywhere in dist/assets/ after the build.
+
+That means the value did not reach Vite. The usual cause is defining it as a
+repository SECRET instead of a VARIABLE - the workflow reads \${{ vars.* }},
+so a secret of the same name is silently ignored and the bundle keeps '/api'.
+
+Move it to Settings > Secrets and variables > Actions > Variables.
+MSG
+  fi
+  echo "  ✓ verified $API_ORIGIN is compiled into the bundle"
+fi
+
 # Play rejects any upload whose versionCode is not higher than the last one.
 # Driving it from the environment means a new version can be released by
 # setting a repository variable, with no workflow edit and no code change.
