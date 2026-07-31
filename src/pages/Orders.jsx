@@ -8,17 +8,22 @@ import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { usePriceMap } from '../hooks/useMarket';
-import { EVM_CHAINS, TOKENS } from '../lib/chains';
+import { EVM_CHAINS, FEE_BPS, TOKENS } from '../lib/chains';
 import { fmtQty } from '../lib/format';
 import {
   DCA_INTERVALS,
+  TRAIL_MAX_PCT,
+  TRAIL_MIN_PCT,
   addOrder,
   advanceOrder,
   createOrder,
   evaluateOrder,
   expireStale,
   loadOrders,
+  orderNotionalUsd,
+  pauseOrder,
   removeOrder,
+  resumeOrder,
   saveOrders,
   shouldNotify,
   syncWatches,
@@ -86,20 +91,36 @@ export default function Orders() {
     let changed = false;
     const next = orders.map((o) => {
       if (o.status !== 'active') return o;
-      const { ready } = evaluateOrder(o, rateFor(o), now);
-      if (!ready || !shouldNotify(o, now)) return o;
+      const res = evaluateOrder(o, rateFor(o), now);
+      const { ready } = res;
+
+      /*
+       * PERSIST THE TRAILING HIGH-WATER MARK.
+       *
+       * evaluateOrder is pure and returns the new peak instead of mutating, so
+       * something has to store it. Without this the peak would reset to null
+       * on every render and the stop could never trigger — the order would sit
+       * "active" forever while appearing to work.
+       */
+      let cur = o;
+      if (o.type === 'trailing' && Number.isFinite(res.peak) && res.peak !== o.peakRate) {
+        cur = { ...o, peakRate: res.peak };
+        changed = true;
+      }
+
+      if (!ready || !shouldNotify(cur, now)) return cur;
       changed = true;
       // Tagged per order so a re-fire replaces the old notification rather
       // than stacking a second copy in the shade.
       showLocalNotification(t('orders.notifyTitle'), {
         body: t('orders.notifyBody', {
-          from: o.fromToken.symbol,
-          to: o.toToken.symbol,
-          amount: o.amountIn
+          from: cur.fromToken.symbol,
+          to: cur.toToken.symbol,
+          amount: cur.amountIn
         }),
-        tag: `fbt-order-${o.id}`
+        tag: `fbt-order-${cur.id}`
       });
-      return { ...o, lastNotifiedAt: now };
+      return { ...cur, lastNotifiedAt: now };
     });
     if (changed) {
       saveOrders(next);
@@ -127,6 +148,19 @@ export default function Orders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchKey]);
 
+  /*
+   * usePriceMap is keyed by coingecko id with a `.price` field; the order
+   * helpers take a plain {id: {usd}} shape so they stay testable without
+   * importing the hook. Adapt once here rather than in every row.
+   */
+  const usdMap = useMemo(() => {
+    const out = {};
+    for (const [id, v] of Object.entries(prices || {})) {
+      if (Number.isFinite(v?.price)) out[id] = { usd: v.price };
+    }
+    return out;
+  }, [prices]);
+
   const ready = useMemo(
     () => orders.filter((o) => o.status === 'active' && evaluateOrder(o, rateFor(o)).ready),
     [orders, rateFor]
@@ -135,7 +169,25 @@ export default function Orders() {
     () => orders.filter((o) => o.status === 'active' && !ready.includes(o)),
     [orders, ready]
   );
-  const done = useMemo(() => orders.filter((o) => o.status !== 'active'), [orders]);
+  const paused = useMemo(() => orders.filter((o) => o.status === 'paused'), [orders]);
+  const done = useMemo(
+    () => orders.filter((o) => o.status !== 'active' && o.status !== 'paused'),
+    [orders]
+  );
+
+  /*
+   * Total value queued across active orders.
+   *
+   * This is the honest version of a "pipeline" figure: it counts what the user
+   * has actually scheduled, skips anything we cannot price rather than
+   * guessing, and is denominated in the money being traded — not in our fee,
+   * which would be a strange thing to advertise to the person paying it.
+   */
+  const queuedUsd = useMemo(
+    () =>
+      [...ready, ...active].reduce((sum, o) => sum + (orderNotionalUsd(o, usdMap) ?? 0), 0),
+    [ready, active, usdMap]
+  );
 
   const submit = (input) => {
     const { order, error } = createOrder(input);
@@ -181,7 +233,22 @@ export default function Orders() {
     setOrders(removeOrder(id));
   };
 
+  /*
+   * Pause instead of delete.
+   *
+   * Before this the only way to silence an alert was to delete it, which threw
+   * away the settings — so someone waiting out a volatile week had to rebuild
+   * the order from scratch afterwards, and most simply would not. Every order
+   * that gets rebuilt is a swap that eventually earns a fee; every one that
+   * does not is revenue that quietly disappears.
+   */
+  const togglePause = (o) => {
+    haptic?.('light');
+    setOrders(updateOrder(o.id, o.status === 'paused' ? resumeOrder(o) : pauseOrder(o)));
+  };
+
   const Row = ({ o, isReady }) => {
+    const notional = orderNotionalUsd(o, usdMap);
     const raw = rateFor(o);
     // Display in whichever unit the order was written in.
     const rate =
@@ -200,7 +267,26 @@ export default function Orders() {
           </span>
         </div>
 
-        {o.type === 'limit' ? (
+        {o.type === 'trailing' ? (
+          <div className="ord-meta">
+            <span className="faint">
+              {t('orders.trailPct')} {o.trailPct}%
+            </span>
+            {Number.isFinite(o.peakRate) && o.peakRate > 0 ? (
+              <span className="mono faint">
+                {t('orders.peak')} {fmtQty(o.peakRate)} · {t('orders.stopAt')}{' '}
+                {fmtQty(o.peakRate * (1 - o.trailPct / 100))}
+              </span>
+            ) : (
+              /*
+               * A trailing order has no peak until the first price arrives.
+               * Showing "0" or a blank would read as broken, so say what is
+               * actually happening.
+               */
+              <span className="faint mono">{t('orders.notYetTracking')}</span>
+            )}
+          </div>
+        ) : o.type === 'limit' ? (
           <div className="ord-meta">
             <span className="faint">
               {/*
@@ -232,18 +318,45 @@ export default function Orders() {
           </div>
         )}
 
+        {/*
+          Trade size, and the fee it carries.
+          
+          Shown rather than hidden for the same reason the swap screen had to
+          stop claiming it was free: a plan that quietly costs more than the
+          user expects is the kind of surprise that loses the customer, and
+          six scheduled buys carry six fees.
+        */}
+        {notional !== null && (
+          <div className="ord-meta">
+            <span className="faint">
+              {o.type === 'dca' ? t('orders.planValue') : t('orders.tradeValue')}
+            </span>
+            <span className="mono">
+              ${notional < 1 ? notional.toFixed(4) : notional.toFixed(2)}
+              <span className="faint"> · {t('orders.feeNote', { pct: FEE_BPS / 100 })}</span>
+            </span>
+          </div>
+        )}
+
+        {o.status === 'paused' && <p className="faint" style={{ margin: '6px 0 0' }}>{t('orders.pausedHint')}</p>}
+
         <div className="row" style={{ gap: 7, marginTop: 9 }}>
           {isReady && (
             <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => execute(o)}>
               {t('orders.swapNow')}
             </button>
           )}
-          {o.status === 'active' && (
-            <button className="btn btn-ghost btn-sm" style={{ flex: isReady ? 0 : 1 }} onClick={() => cancel(o.id)}>
-              {t('orders.cancel')}
-            </button>
+          {(o.status === 'active' || o.status === 'paused') && (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => togglePause(o)}>
+                {o.status === 'paused' ? t('orders.resume') : t('orders.pause')}
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{ flex: isReady ? 0 : 1 }} onClick={() => cancel(o.id)}>
+                {t('orders.cancel')}
+              </button>
+            </>
           )}
-          {o.status !== 'active' && (
+          {o.status !== 'active' && o.status !== 'paused' && (
             <>
               <span className={`ord-status ord-${o.status}`}>{t(`orders.status.${o.status}`)}</span>
               <button className="btn btn-ghost btn-sm" onClick={() => cancel(o.id)}>
@@ -272,6 +385,10 @@ export default function Orders() {
           <IconTrend width={17} height={17} />
           {t('orders.newLimit')}
         </button>
+        <button className="ord-new ord-new-trailing" onClick={() => setSheet('trailing')}>
+          <IconTrend width={17} height={17} />
+          {t('orders.newTrailing')}
+        </button>
         <button className="ord-new ord-new-dca" onClick={() => setSheet('dca')}>
           <IconClock width={17} height={17} />
           {t('orders.newDca')}
@@ -282,6 +399,22 @@ export default function Orders() {
       <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
         {t('orders.manualNotice')}
       </motion.p>
+
+      {/*
+        What is currently scheduled. Only shown once something exists, so an
+        empty screen is not cluttered with a zero.
+      */}
+      {ready.length + active.length > 0 && (
+        <motion.div className="ord-pipeline" variants={riseIn} initial="hidden" animate="show">
+          <span className="faint">{t('orders.pipelineTitle')}</span>
+          <span className="mono">
+            {t('orders.pipelineValue', {
+              count: ready.length + active.length,
+              value: queuedUsd > 0 ? `$${queuedUsd.toFixed(2)}` : '—'
+            })}
+          </span>
+        </motion.div>
+      )}
 
       {ready.length > 0 && (
         <motion.section variants={stagger} initial="hidden" animate="show">
@@ -297,6 +430,15 @@ export default function Orders() {
           <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.waiting')}</p>
           <div className="stack" style={{ gap: 8 }}>
             <AnimatePresence>{active.map((o) => <Row key={o.id} o={o} />)}</AnimatePresence>
+          </div>
+        </motion.section>
+      )}
+
+      {paused.length > 0 && (
+        <motion.section variants={stagger} initial="hidden" animate="show">
+          <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.paused')}</p>
+          <div className="stack" style={{ gap: 8 }}>
+            <AnimatePresence>{paused.map((o) => <Row key={o.id} o={o} />)}</AnimatePresence>
           </div>
         </motion.section>
       )}
@@ -340,6 +482,7 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
   const [priceOf, setPriceOf] = useState('from');
   const [interval, setInterval] = useState('weekly');
   const [runs, setRuns] = useState('4');
+  const [trailPct, setTrailPct] = useState('10');
 
   useEffect(() => {
     if (!kind || !tokens.length) return;
@@ -440,6 +583,67 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
               {t('orders.willSwap', { from: fromSym, to: toSym })}
             </p>
           </>
+        ) : kind === 'trailing' ? (
+          <>
+            {/*
+              WHICH SIDE IS BEING WATCHED.
+              Same reasoning as the limit form: the raw rate is always
+              "1 FROM = ? TO", so without this choice a user watching the token
+              they are buying would be reasoning about a reciprocal.
+            */}
+            <label className="ord-field">
+              <span className="faint">{t('orders.watch')}</span>
+              <select value={priceOf} onChange={(e) => setPriceOf(e.target.value)}>
+                <option value="from">{t('orders.priceOfFrom', { sym: fromSym })}</option>
+                <option value="to">{t('orders.priceOfTo', { sym: toSym })}</option>
+              </select>
+            </label>
+
+            {/*
+              Presets cover what people actually pick, while the number input
+              stays available. Typing a percentage on a phone keypad is the
+              step where a slip of one digit turns a 10% stop into 1%.
+            */}
+            <div className="segmented">
+              {['5', '10', '15', '20'].map((v) => (
+                <button key={v} className={trailPct === v ? 'active' : ''} onClick={() => setTrailPct(v)}>
+                  {v}%
+                </button>
+              ))}
+            </div>
+
+            <label className="ord-field">
+              <span className="faint">{t('orders.trailPct')}</span>
+              <input type="number" inputMode="decimal" value={trailPct}
+                     onChange={(e) => setTrailPct(e.target.value)}
+                     min={TRAIL_MIN_PCT} max={TRAIL_MAX_PCT} step="0.5" />
+            </label>
+
+            <p className="faint" style={{ lineHeight: 1.7 }}>{t('orders.trailHint')}</p>
+
+            {/*
+              Say where this is tracked, before it is created.
+              
+              A trailing stop needs a peak that only moves one way, which means
+              per-order state the server would have to keep. Our cron runs once
+              a day on the free plan, and a trailing stop checked daily is not
+              a trailing stop - it would miss the whole move. Rather than ship
+              something that looks live and is not, this one is app-open only
+              and says so.
+            */}
+            <p className="notice">{t('orders.trailScope')}</p>
+
+            {/* Show where the stop would sit if the price never moved again,
+                so the abstraction becomes a concrete number before saving. */}
+            {liveRate != null && Number(trailPct) > 0 && (
+              <p className="faint">
+                {t('orders.currentRate')} 1 {baseSym} = <span className="mono">{fmtQty(liveRate)}</span> {quoteSym}
+                {' · '}
+                {t('orders.stopAt')}{' '}
+                <span className="mono">{fmtQty(liveRate * (1 - Number(trailPct) / 100))}</span>
+              </p>
+            )}
+          </>
         ) : (
           <>
             <label className="ord-field">
@@ -479,7 +683,8 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
               direction,
               priceOf,
               interval,
-              totalRuns: Number(runs)
+              totalRuns: Number(runs),
+              trailPct: Number(trailPct)
             })
           }
         >

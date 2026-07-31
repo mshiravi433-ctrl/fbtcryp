@@ -32,7 +32,7 @@
     "explore": "Explorer",
     "discover": "Discover",
     "nft": "My NFTs",
-    "orders": "Orders & plans"
+    "orders": "Auto Orders"
   },
   "common": {
     "balance": "Balance",
@@ -1639,13 +1639,14 @@
     }
   },
   "orders": {
-    "title": "Orders & plans",
-    "subtitle": "Set a price you want, or buy a little on a schedule. We watch and tell you when it is time.",
+    "title": "Auto Orders",
+    "subtitle": "Set it once and let it watch the market for you — a target price, a trailing stop that follows gains up, or steady scheduled buys.",
     "newLimit": "Limit order",
     "newDca": "DCA plan",
     "new": {
       "limit": "New limit order",
-      "dca": "New DCA plan"
+      "dca": "New DCA plan",
+      "trailing": "New trailing stop"
     },
     "manualNotice": "These are alerts, not automatic trades. This app never holds your keys, so nothing can swap on your behalf — when a target is hit we notify you and the swap is one tap away, already filled in. If your phone is off, the order waits.",
     "readyNow": "Ready now",
@@ -1654,7 +1655,8 @@
     "empty": "No orders yet. A limit order tells you when a price you want arrives. A DCA plan reminds you to buy a fixed amount on a schedule, which spreads your entry instead of guessing the bottom.",
     "type": {
       "limit": "LIMIT",
-      "dca": "DCA"
+      "dca": "DCA",
+      "trailing": "TRAILING"
     },
     "when": {
       "above": "Fires when 1 {{from}} ≥ {{rate}} {{to}}",
@@ -1676,7 +1678,8 @@
     "remove": "Remove",
     "status": {
       "filled": "Done",
-      "expired": "Expired"
+      "expired": "Expired",
+      "paused": "Paused"
     },
     "from": "From",
     "to": "To",
@@ -1692,7 +1695,33 @@
     "watch": "Watch the price of",
     "priceOfFrom": "{{sym}} (what you are selling)",
     "priceOfTo": "{{sym}} (what you are buying)",
-    "willSwap": "When it triggers, the swap will be {{from}} → {{to}}."
+    "willSwap": "When it triggers, the swap will be {{from}} → {{to}}.",
+    "newTrailing": "Trailing stop",
+    "trailPct": "Trail distance",
+    "trailHint": "Sells after the price falls this far from its highest point since you created the order.",
+    "peak": "Peak seen",
+    "stopAt": "Sells at",
+    "notYetTracking": "Tracking starts at the next price check",
+    "pause": "Pause",
+    "resume": "Resume",
+    "paused": "Paused",
+    "pausedHint": "Not watching. Your settings are kept.",
+    "tradeValue": "Trade size",
+    "planValue": "Plan total",
+    "feeNote": "Includes {{pct}}% platform fee",
+    "pipelineTitle": "Scheduled",
+    "pipelineValue": "{{count}} active · {{value}} queued",
+    "sortBy": "Sort",
+    "sortNewest": "Newest",
+    "sortValue": "Largest",
+    "sortReady": "Ready first",
+    "filterAll": "All",
+    "filterActive": "Active",
+    "filterDone": "Done",
+    "err": {
+      "BAD_TRAIL": "Choose a trail between 0.5% and 50%."
+    },
+    "trailScope": "Trailing stops are tracked while the app is open. Target-price orders are also watched on our server, so those still reach you when it is closed."
   },
   "lock": {
     "title": "Locked",

@@ -48,8 +48,19 @@ const STORAGE_KEY = 'fbt-orders-v1';
 /** Hard ceiling on stored orders — a runaway loop must not fill localStorage. */
 export const MAX_ORDERS = 50;
 
-export const ORDER_TYPES = ['limit', 'dca'];
+export const ORDER_TYPES = ['limit', 'dca', 'trailing'];
 export const DCA_INTERVALS = { daily: 86400000, weekly: 604800000, monthly: 2592000000 };
+
+/**
+ * Trailing stop distance, in percent, clamped to a sane band.
+ *
+ * Below ~0.5% ordinary spread noise triggers it constantly; above 50% it is
+ * not a stop in any meaningful sense. Rejecting outside the band is better
+ * than clamping, because a user who typed 90 meant something we cannot
+ * honestly deliver and should be told.
+ */
+export const TRAIL_MIN_PCT = 0.5;
+export const TRAIL_MAX_PCT = 50;
 
 /* -------------------------------------------------------------------------- */
 /* creation & validation                                                      */
@@ -78,6 +89,12 @@ export function validateOrder(o) {
     // above or below? — and guessing would fill at the wrong time.
     if (o.direction !== 'above' && o.direction !== 'below') return 'BAD_DIRECTION';
     // Which token the target price is quoted in. Must be one of the pair.
+    if (o.priceOf && o.priceOf !== 'from' && o.priceOf !== 'to') return 'BAD_PRICE_OF';
+  }
+
+  if (o.type === 'trailing') {
+    const pct = Number(o.trailPct);
+    if (!Number.isFinite(pct) || pct < TRAIL_MIN_PCT || pct > TRAIL_MAX_PCT) return 'BAD_TRAIL';
     if (o.priceOf && o.priceOf !== 'from' && o.priceOf !== 'to') return 'BAD_PRICE_OF';
   }
 
@@ -149,6 +166,24 @@ export function createOrder(input, now = Date.now()) {
     };
   }
 
+  if (input.type === 'trailing') {
+    return {
+      order: {
+        ...base,
+        trailPct: Number(input.trailPct),
+        priceOf: input.priceOf === 'to' ? 'to' : 'from',
+        /*
+         * The high-water mark. Null until the first price is seen, rather than
+         * 0: seeding it at 0 would make the very first observation look like a
+         * huge rise, and seeding it at the creation-time price would require a
+         * price fetch inside a pure function.
+         */
+        peakRate: null,
+        expiresAt: now + (Number(input.expiryDays) || 30) * 86400000
+      }
+    };
+  }
+
   return {
     order: {
       ...base,
@@ -194,6 +229,49 @@ export function evaluateOrder(order, rate, now = Date.now()) {
     return { ready: hit, reason: hit ? 'TARGET_HIT' : 'WAITING' };
   }
 
+  /*
+   * TRAILING STOP.
+   *
+   * Follows the price up and sells only after it falls `trailPct` from the
+   * best level seen. This is the order people actually want when they say "let
+   * it run but don't give the gains back" — a fixed limit either sells too
+   * early or never.
+   *
+   * Two rules that matter:
+   *
+   *  1. The peak only ever RISES. If a price feed hiccups and returns a low
+   *     value, the peak must not follow it down, or the stop would drift
+   *     downward and never trigger.
+   *
+   *  2. An unknown price does nothing at all — it neither updates the peak nor
+   *     triggers. Same reasoning as the limit branch: firing on a missing
+   *     price sells at whatever number happened to exist during an outage.
+   *
+   * Pure: returns the new peak for the caller to persist rather than mutating.
+   */
+  if (order.type === 'trailing') {
+    if (order.expiresAt && now >= order.expiresAt) return { ready: false, reason: 'EXPIRED' };
+    if (!Number.isFinite(rate) || rate <= 0) return { ready: false, reason: 'NO_PRICE' };
+
+    const observed = order.priceOf === 'to' ? 1 / rate : rate;
+    if (!Number.isFinite(observed) || observed <= 0) return { ready: false, reason: 'NO_PRICE' };
+
+    const prevPeak = Number.isFinite(order.peakRate) && order.peakRate > 0 ? order.peakRate : null;
+    const peak = prevPeak === null ? observed : Math.max(prevPeak, observed);
+    const stopAt = peak * (1 - order.trailPct / 100);
+
+    // On the very first observation there is no drawdown yet by definition,
+    // so a stop can never fire on the same tick that establishes the peak.
+    const hit = prevPeak !== null && observed <= stopAt;
+
+    return {
+      ready: hit,
+      reason: hit ? 'TRAIL_HIT' : 'WAITING',
+      peak,
+      stopAt
+    };
+  }
+
   // DCA is time-based, so a missing price does not block it: the user asked to
   // buy on a schedule regardless of price. That is the point of DCA.
   if (order.runsDone >= order.totalRuns) return { ready: false, reason: 'COMPLETE' };
@@ -206,7 +284,7 @@ export function evaluateOrder(order, rate, now = Date.now()) {
  * Pure: returns the next state rather than mutating.
  */
 export function advanceOrder(order, now = Date.now()) {
-  if (order.type === 'limit') {
+  if (order.type === 'limit' || order.type === 'trailing') {
     return { ...order, status: 'filled', filledAt: now, runsDone: 1 };
   }
   const runsDone = order.runsDone + 1;
@@ -226,10 +304,41 @@ export function advanceOrder(order, now = Date.now()) {
 /** Mark expiry so the list can show why an order stopped, rather than hiding it. */
 export function expireStale(orders, now = Date.now()) {
   return orders.map((o) =>
-    o.status === 'active' && o.type === 'limit' && o.expiresAt && now >= o.expiresAt
+    o.status === 'active' && o.expiresAt && now >= o.expiresAt
       ? { ...o, status: 'expired' }
       : o
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* pause / resume                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Pause an order without deleting it.
+ *
+ * Before this the only way to stop an alert was to delete it, which threw away
+ * the settings — so a user riding out a volatile week had to rebuild the order
+ * afterwards, and most simply would not. A paused DCA also must not silently
+ * accumulate missed runs, so resume reschedules from NOW for the same reason
+ * advanceOrder does.
+ */
+export function pauseOrder(order) {
+  if (!order || order.status !== 'active') return order;
+  return { ...order, status: 'paused' };
+}
+
+export function resumeOrder(order, now = Date.now()) {
+  if (!order || order.status !== 'paused') return order;
+  const next = { ...order, status: 'active' };
+  if (order.type === 'dca') next.nextRunAt = now;
+  /*
+   * Reset the trailing peak on resume. Keeping a peak from before the pause
+   * would compare today's price against a high that may be weeks stale and
+   * trigger an immediate sell the instant the order is re-enabled.
+   */
+  if (order.type === 'trailing') next.peakRate = null;
+  return next;
 }
 
 /**
@@ -358,4 +467,56 @@ export async function syncWatches(orders) {
   } catch {
     return false;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* value & fee estimation                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Estimate the notional USD value an order will trade when it fills.
+ *
+ * Used for two honest purposes: sorting the list by what matters, and showing
+ * the user the size of the trade they are scheduling. A DCA plan reports the
+ * value of ALL remaining runs, because "you are committing $600 over 6 weeks"
+ * is the number a person needs before confirming, not "$100".
+ *
+ * Returns null rather than 0 when the price is unknown — 0 would render as a
+ * confident "$0.00" next to a real order, and a wrong number about money is
+ * worse than an absent one.
+ */
+export function orderNotionalUsd(order, priceMap) {
+  const id = order?.fromToken?.coingeckoId;
+  const unit = id && priceMap ? Number(priceMap[id]?.usd ?? priceMap[id]) : NaN;
+  const amount = Number(order?.amountIn);
+  if (!Number.isFinite(unit) || unit <= 0 || !Number.isFinite(amount) || amount <= 0) return null;
+
+  const perRun = amount * unit;
+  if (order.type !== 'dca') return perRun;
+
+  const remaining = Math.max(0, (Number(order.totalRuns) || 0) - (Number(order.runsDone) || 0));
+  return perRun * remaining;
+}
+
+/**
+ * Platform fee this order will generate, at the given rate in basis points.
+ *
+ * This is shown to the USER, not hidden: an order screen that quietly omits
+ * the fee while the swap screen charges it is the same contradiction that had
+ * to be fixed on the swap screen itself. Someone scheduling six DCA buys
+ * should see the total cost of the plan before committing to it.
+ */
+export function orderFeeUsd(order, priceMap, feeBps) {
+  const notional = orderNotionalUsd(order, priceMap);
+  if (notional === null) return null;
+  const bps = Number(feeBps);
+  if (!Number.isFinite(bps) || bps < 0) return null;
+  return (notional * bps) / 10000;
+}
+
+/** Aggregate pending fee across active orders. Skips unpriced ones. */
+export function pipelineFeeUsd(orders, priceMap, feeBps) {
+  return (orders || [])
+    .filter((o) => o.status === 'active')
+    .reduce((sum, o) => sum + (orderFeeUsd(o, priceMap, feeBps) ?? 0), 0);
 }

@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.3.0 — versionCode 9
+
+**"Orders & plans" is now "Auto Orders"** (`سفارش خودکار`) — the old name
+described a filing cabinet; the feature is an assistant that watches the market
+while you don't.
+
+### New
+
+- **Trailing stop.** Follows the price up and sells only after it falls a set
+  percentage from the best level seen. This is what people actually mean by
+  "let it run but don't give the gains back" — a fixed limit either sells too
+  early or never triggers.
+
+  The dangerous parts are the ones tested hardest: the peak **only ever rises**
+  (a feed hiccup must not ratchet the stop downward and quietly disable it),
+  the first observation can never trigger a sale (no drawdown exists yet), and
+  an unknown price neither updates the peak nor fires.
+
+- **Pause / resume.** Previously the only way to silence an alert was to delete
+  it, discarding the settings — so anyone waiting out a volatile week had to
+  rebuild the order afterwards, and most wouldn't. Resuming resets a stale
+  trailing peak, otherwise a week-old high would trigger an instant sell, and
+  reschedules a DCA from *now* rather than firing every missed run at once.
+
+- **Trade size and fee, shown per order.** A DCA reports the value of *all
+  remaining runs* — "$600 over six weeks" is the number needed before
+  committing, not "$100". Unpriced tokens show nothing rather than `$0.00`,
+  because a confident wrong number about money is worse than an absent one.
+
+- **Scheduled summary** — how many orders are live and their total value.
+
+### Honest limitations
+
+- Trailing stops are tracked **only while the app is open**, and the screen
+  says so before you create one. A trailing peak needs per-order state the
+  server would have to keep, and the free-plan cron runs once a day; a
+  trailing stop checked daily would miss the entire move. Target-price orders
+  are still watched server-side and reach you with the app closed.
+
+### Fixed
+
+- **WalletConnect metadata pointed at a dead host.** The fallback URL was
+  `fbtcryp.vercel.app`, which now returns `DEPLOYMENT_NOT_FOUND`. Wallets
+  *fetch* this URL to draw "who is asking to connect", and a 404 is grounds to
+  reject the request outright — so an unset `VITE_PUBLIC_URL` would have broken
+  every connection with no visible cause.
+
+### Testing
+
+- 30 new engine tests covering the ratchet, the first-tick guard, feed
+  outages, pause/resume state, and fee maths. Verified non-vacuous: breaking
+  the ratchet fails four unit tests and one wiring check; breaking peak
+  persistence fails another.
+- 10 new wiring checks: every order type must be labelled *and* creatable, the
+  fee must be disclosed, the trailing limitation must be stated, and the WC
+  fallback must not be the dead host. 53 checks pass.
+
 ## 1.2.5 — versionCode 8
 
 Five device-reported bugs. Four share one root cause: **a native capability

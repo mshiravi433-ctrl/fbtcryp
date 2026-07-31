@@ -3541,3 +3541,33 @@ input, select, textarea { font-size: 16px !important; }
   outline: 2px solid var(--accent, #14f195);
   outline-offset: 1px;
 }
+
+/* --- Auto Orders: trailing stop, pause state, pipeline summary ------------ */
+.ord-new-trailing {
+  border-color: color-mix(in srgb, var(--rgb-3, var(--rgb-1)) 45%, transparent);
+  color: var(--ink-amber, var(--ink-cyan));
+}
+
+.ord-trailing {
+  color: var(--ink-amber, var(--ink-cyan));
+  background: color-mix(in srgb, var(--ink-amber, var(--ink-cyan)) 14%, transparent);
+}
+
+.ord-paused { color: var(--ink-dim); background: color-mix(in srgb, var(--ink-dim) 14%, transparent); }
+
+/* A paused order stays legible but visibly inactive, so it is never mistaken
+   for one that is still watching the market. */
+.ord-row:has(.ord-paused) { opacity: 0.72; }
+
+.ord-pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  border: 1px solid color-mix(in srgb, var(--ink-cyan) 22%, transparent);
+  background: color-mix(in srgb, var(--ink-cyan) 7%, transparent);
+}

@@ -141,9 +141,22 @@ export function WalletProvider({ children }) {
         || runtimeOrigin.startsWith('capacitor://')
         || runtimeOrigin.startsWith('file://');
 
+      /*
+       * The fallback used to be https://fbtcryp.vercel.app, which no longer
+       * resolves — that deployment is gone and now answers DEPLOYMENT_NOT_FOUND.
+       *
+       * That matters more than a dead link: wallets FETCH this URL and its
+       * icon to draw "who is asking to connect". A metadata URL that 404s is
+       * grounds for the wallet to reject the request outright, so if
+       * VITE_PUBLIC_URL were ever unset in a packaged build, every connection
+       * attempt would fail with no obvious cause.
+       *
+       * Pointing at the live domain means the fallback is at least a real
+       * site. VITE_PUBLIC_URL still overrides it for other deployments.
+       */
       const publicUrl =
         import.meta.env?.VITE_PUBLIC_URL?.replace(/\/$/, '') ||
-        (isLocal ? 'https://fbtcryp.vercel.app' : runtimeOrigin);
+        (isLocal ? 'https://www.lawpoetics.ir' : runtimeOrigin);
 
       const wc = await EthereumProvider.init({
         projectId,

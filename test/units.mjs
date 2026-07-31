@@ -14,10 +14,17 @@ import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
 import {
   DCA_INTERVALS,
+  TRAIL_MAX_PCT,
+  TRAIL_MIN_PCT,
   advanceOrder,
   createOrder,
   evaluateOrder,
   expireStale,
+  orderFeeUsd,
+  orderNotionalUsd,
+  pauseOrder,
+  pipelineFeeUsd,
+  resumeOrder,
   shouldNotify,
   validateOrder
 } from '../src/lib/orders.js';
@@ -474,6 +481,99 @@ export default function run() {
     t('notifies the first time', shouldNotify({ lastNotifiedAt: 0 }, now) === true);
     t('suppresses a repeat within the cooldown', shouldNotify({ lastNotifiedAt: now }, now) === false);
     t('notifies again after the cooldown', shouldNotify({ lastNotifiedAt: now - 6.1 * 3600000 }, now) === true);
+
+    /* ------------------------- trailing stop ------------------------------ */
+    /*
+     * The most dangerous order type in the app: it decides to SELL based on a
+     * moving reference the user cannot see. Every failure mode below would
+     * either sell someone's position early or never protect it at all.
+     */
+    const mkTrail = (pct = 10) =>
+      createOrder({ ...base, type: 'trailing', trailPct: pct }, now).order;
+
+    t('rejects a trail below the floor', validateOrder({ ...base, type: 'trailing', trailPct: 0.1 }) === 'BAD_TRAIL');
+    t('rejects a trail above the ceiling', validateOrder({ ...base, type: 'trailing', trailPct: 90 }) === 'BAD_TRAIL');
+    t('rejects a non-numeric trail', validateOrder({ ...base, type: 'trailing', trailPct: 'abc' }) === 'BAD_TRAIL');
+    t('accepts a trail at the floor', validateOrder({ ...base, type: 'trailing', trailPct: TRAIL_MIN_PCT }) === null);
+    t('accepts a trail at the ceiling', validateOrder({ ...base, type: 'trailing', trailPct: TRAIL_MAX_PCT }) === null);
+    t('a new trailing order has no peak yet', mkTrail().peakRate === null);
+
+    // The first observation establishes the peak and must NEVER sell: there is
+    // no drawdown yet, so firing here would dump the position instantly.
+    const firstTick = evaluateOrder(mkTrail(10), 700, now);
+    t('the first price never triggers a trailing stop', firstTick.ready === false);
+    t('the first price establishes the peak', firstTick.peak === 700);
+    t('the stop sits below the peak by the trail', Math.abs(firstTick.stopAt - 630) < 1e-9);
+
+    // Rising price lifts the peak, so the stop rises with it.
+    const rising = { ...mkTrail(10), peakRate: 700 };
+    t('a higher price raises the peak', evaluateOrder(rising, 800, now).peak === 800);
+    t('a raised peak does not sell', evaluateOrder(rising, 800, now).ready === false);
+
+    // THE CRITICAL ONE: the peak must never follow the price down, or the stop
+    // ratchets lower forever and never protects anything.
+    t('a lower price does not lower the peak', evaluateOrder(rising, 650, now).peak === 700);
+
+    // Trigger only once the drawdown is actually reached.
+    t('holds just above the stop', evaluateOrder(rising, 631, now).ready === false);
+    t('fires exactly at the stop', evaluateOrder(rising, 630, now).ready === true);
+    t('fires below the stop', evaluateOrder(rising, 500, now).ready === true);
+    t('reports why it fired', evaluateOrder(rising, 500, now).reason === 'TRAIL_HIT');
+
+    // A price-feed outage must neither trigger nor corrupt the peak.
+    t('an unknown price never triggers a trail', evaluateOrder(rising, null, now).ready === false);
+    t('a zero price never triggers a trail', evaluateOrder(rising, 0, now).ready === false);
+    t('NaN never triggers a trail', evaluateOrder(rising, NaN, now).ready === false);
+
+    // Expiry applies to trailing orders too — this was a real gap: expireStale
+    // only looked at type === 'limit'.
+    const oldTrail = { ...mkTrail(10), expiresAt: now - 1 };
+    t('an expired trailing order does not fire', evaluateOrder(oldTrail, 1, now).reason === 'EXPIRED');
+    t('expireStale marks trailing orders too', expireStale([oldTrail], now)[0].status === 'expired');
+
+    // A filled trailing order is finished, not repeating.
+    t('a filled trailing order is done', advanceOrder(mkTrail(10), now).status === 'filled');
+
+    /* --------------------------- pause / resume --------------------------- */
+    t('pausing an active order parks it', pauseOrder(mkTrail(10)).status === 'paused');
+    t('a paused order never evaluates ready', evaluateOrder(pauseOrder(mkTrail(10)), 1, now).ready === false);
+    t('resuming reactivates', resumeOrder(pauseOrder(mkTrail(10))).status === 'active');
+    // Resuming with a stale peak would sell instantly against a weeks-old high.
+    t('resuming clears a stale trailing peak', resumeOrder({ ...pauseOrder(mkTrail(10)), peakRate: 9999 }).peakRate === null);
+    // A resumed DCA must not fire every missed run at once.
+    const pausedDca = pauseOrder(createOrder({ ...base, type: 'dca', interval: 'daily', totalRuns: 5 }, now - 10 * 86400000).order);
+    t('resuming a DCA reschedules from now', resumeOrder(pausedDca, now).nextRunAt === now);
+    t('pause ignores an already-filled order', pauseOrder({ status: 'filled' }).status === 'filled');
+
+    /* --------------------- notional & fee estimation ---------------------- */
+    /*
+     * These numbers are shown to the user before they commit, so an
+     * overstatement is a lie about cost and an understatement is a surprise.
+     */
+    const priceMap = { binancecoin: { usd: 700 } };
+    const priced = { ...base, fromToken: { ...BNB, coingeckoId: 'binancecoin' }, amountIn: '2' };
+    const limitOrder = createOrder({ ...priced, type: 'limit', targetRate: 700, direction: 'above' }, now).order;
+
+    t('notional multiplies amount by unit price', orderNotionalUsd(limitOrder, priceMap) === 1400);
+    t('fee at 50 bps is 0.5%', orderFeeUsd(limitOrder, priceMap, 50) === 7);
+    t('fee at 70 bps is 0.7%', Math.abs(orderFeeUsd(limitOrder, priceMap, 70) - 9.8) < 1e-9);
+
+    // A DCA commits the user across ALL remaining runs — that is the number
+    // they need before confirming, not the per-run figure.
+    const dcaPlan = createOrder({ ...priced, type: 'dca', interval: 'weekly', totalRuns: 6 }, now).order;
+    t('a DCA counts every remaining run', orderNotionalUsd(dcaPlan, priceMap) === 8400);
+    t('a partly-run DCA counts only what is left', orderNotionalUsd({ ...dcaPlan, runsDone: 4 }, priceMap) === 2800);
+    t('a completed DCA has nothing left', orderNotionalUsd({ ...dcaPlan, runsDone: 6 }, priceMap) === 0);
+
+    // Unknown price must be null, never 0 — "$0.00" beside a real order reads
+    // as a confident answer.
+    t('an unpriced token yields null, not zero', orderNotionalUsd(limitOrder, {}) === null);
+    t('an unpriced fee yields null', orderFeeUsd(limitOrder, {}, 50) === null);
+    t('a negative fee rate is refused', orderFeeUsd(limitOrder, priceMap, -5) === null);
+
+    // The pipeline total is what makes this screen a revenue instrument.
+    t('pipeline sums active orders only', pipelineFeeUsd([limitOrder, { ...limitOrder, status: 'filled' }], priceMap, 50) === 7);
+    t('pipeline skips unpriced orders rather than failing', pipelineFeeUsd([limitOrder], {}, 50) === 0);
   }
 
   /* ----------------------- server watch payload safety --------------------- */

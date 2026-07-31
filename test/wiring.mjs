@@ -615,5 +615,68 @@ export default function run() {
     t('the lock explains itself when no fallback exists', /noFallback/.test(lock));
   }
 
+  /* ---- 15. Auto Orders: revenue surface must stay honest and wired ------ */
+  {
+    const ordersLib = read('src/lib/orders.js');
+    const ordersPage = read('src/pages/Orders.jsx');
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    // Every order type the engine accepts must be creatable and labelled, or
+    // it is dead code the user can never reach.
+    const types = ['limit', 'dca', 'trailing'];
+    const unlabelled = types.filter((k) => !en.orders?.type?.[k] || !fa.orders?.type?.[k]);
+    t(
+      `every order type has a label in en+fa${unlabelled.length ? ` — missing: ${unlabelled.join(', ')}` : ''}`,
+      unlabelled.length === 0
+    );
+    const uncreatable = types.filter((k) => !ordersPage.includes(`setSheet('${k}')`));
+    t(
+      `every order type can be created${uncreatable.length ? ` — no button: ${uncreatable.join(', ')}` : ''}`,
+      uncreatable.length === 0
+    );
+
+    /*
+     * The trailing peak is returned by a pure function, so SOMETHING must
+     * persist it. Without this the peak resets every render and the stop can
+     * never fire — the order would sit "active" forever while looking healthy.
+     */
+    t('the trailing peak is persisted by the page', /peakRate:\s*res\.peak/.test(ordersPage));
+
+    // A stop that follows the price down protects nothing.
+    t('the peak only ever rises', /Math\.max\(prevPeak, observed\)/.test(ordersLib));
+
+    // Pause must be reachable, or deleting stays the only way to stop an alert.
+    t('orders can be paused from the UI', /togglePause/.test(ordersPage));
+
+    /*
+     * Fee disclosure. The swap screen once claimed to be free while charging;
+     * this screen schedules MULTIPLE charges, so it must not repeat that.
+     */
+    t('the order list discloses the platform fee', /orders\.feeNote/.test(ordersPage));
+    t('the fee note names a real rate', /FEE_BPS/.test(ordersPage));
+
+    /*
+     * Trailing stops only run with the app open. Saying so is the difference
+     * between a limitation and a false promise about someone's money.
+     */
+    t('the trailing scope limitation is stated', /trailScope/.test(ordersPage));
+
+    // Unknown price must never render as a confident zero.
+    t('notional returns null when unpriced', /return null;/.test(ordersLib));
+
+    /*
+     * WalletConnect metadata is FETCHED by the wallet. A dead URL is grounds
+     * to reject the connection, so the fallback must not point at a
+     * deployment that no longer exists.
+     */
+    const wallet = read('src/context/WalletContext.jsx');
+    const fallback = /isLocal \? '(https:\/\/[^']+)'/.exec(wallet)?.[1];
+    t(
+      `the WC metadata fallback is not the dead vercel host (${fallback})`,
+      Boolean(fallback) && !fallback.includes('fbtcryp.vercel.app')
+    );
+  }
+
   return rows;
 }
