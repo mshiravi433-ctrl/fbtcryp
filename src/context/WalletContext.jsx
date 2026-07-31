@@ -175,7 +175,33 @@ export function WalletProvider({ children }) {
           name: 'FBT Swap',
           description: 'Non-custodial decentralized exchange',
           url: publicUrl,
-          icons: [`${publicUrl}/icon-512.png`]
+          icons: [`${publicUrl}/icon-512.png`],
+          /*
+           * RETURNING TO THIS APP AFTER APPROVAL.
+           *
+           * Symptom: the wallet opens, you approve, and then you are simply
+           * left sitting in the wallet. Coming back by hand shows the app
+           * still disconnected.
+           *
+           * Cause: `metadata.redirect` was absent. The approval genuinely
+           * succeeds and the session is established, but the wallet has no
+           * link to send the user back through, so control never returns.
+           * `wc.connect()` keeps awaiting in a WebView that is now in the
+           * background, and Android may freeze or evict it before it settles
+           * — so the promise that would have set the address never resolves.
+           *
+           * `native` is the custom scheme declared in AndroidManifest.xml
+           * (ir.fbt.swap://), which the MainActivity intent-filter already
+           * catches. `universal` gives wallets that refuse custom schemes an
+           * https route to the same place.
+           *
+           * This is metadata about where to return, not a permission: it
+           * cannot grant a wallet any additional access.
+           */
+          redirect: {
+            native: 'ir.fbt.swap://',
+            universal: publicUrl
+          }
         }
       });
 

@@ -547,5 +547,73 @@ export default function run() {
     void settingsPage;
   }
 
+  /* ---- 14. native capabilities must not be gated by web-only APIs ------- */
+  /*
+   * Instances SEVEN and EIGHT of the same class, both reported from a real
+   * device on the same day:
+   *
+   *   notifications — Settings called notificationsSupported() directly, and
+   *     that only tested `'Notification' in window`. A Capacitor WebView has
+   *     no Notification API, so the row rendered "not available on this
+   *     device" and never offered to ask. pushMode() had already been fixed to
+   *     branch on native first, but the CALLER re-implemented the same gate
+   *     one level above the fix — fixing a helper is not enough when a caller
+   *     repeats its logic.
+   *
+   *   camera — scannerSupported() required `'BarcodeDetector' in window`,
+   *     which Android's WebView does not ship, so the scanner reported
+   *     UNSUPPORTED before ever calling getUserMedia. No permission dialog
+   *     could appear. CAMERA was also absent from the manifest, so even
+   *     reaching getUserMedia would have been refused: two independent causes
+   *     of the same black screen.
+   */
+  {
+    const notif = read('src/lib/notify.js');
+    const scanner = read('src/components/QrScanner.jsx');
+    const manifest = read('android/app/src/main/AndroidManifest.xml');
+
+    // The capability probe itself must know about native, not just pushMode.
+    const supFn = /notificationsSupported = \(\) => \{[\s\S]*?\n\};/.exec(notif)?.[0] ?? '';
+    t('notificationsSupported() treats native as supported', /isNativeApp\(\)/.test(supFn));
+
+    // A QR scanner that hard-requires BarcodeDetector cannot run in a WebView.
+    const scanFn = /export function scannerSupported\(\)[\s\S]*?\n\}/.exec(scanner)?.[0] ?? '';
+    t(
+      'scannerSupported() does not hard-require BarcodeDetector',
+      !/BarcodeDetector/.test(scanFn)
+    );
+    t('a decoder fallback exists for platforms without BarcodeDetector', /jsqr/i.test(scanner));
+
+    // Declaring the permission is what makes the runtime prompt possible.
+    t('CAMERA permission is declared', /uses-permission[^>]*permission\.CAMERA/.test(manifest));
+    t(
+      'POST_NOTIFICATIONS permission is declared',
+      /uses-permission[^>]*POST_NOTIFICATIONS/.test(manifest)
+    );
+
+    /*
+     * WalletConnect: without metadata.redirect the wallet has no route back,
+     * so approval succeeds and the user is stranded in the wallet app.
+     */
+    const wallet = read('src/context/WalletContext.jsx');
+    t('WalletConnect declares a redirect back to the app', /redirect:\s*\{/.test(wallet));
+    const scheme = /<string name="custom_url_scheme">([^<]+)</.exec(
+      read('android/app/src/main/res/values/strings.xml')
+    )?.[1];
+    t(
+      `the WC redirect matches the manifest scheme (${scheme})`,
+      Boolean(scheme) && wallet.includes(`${scheme}://`)
+    );
+
+    /*
+     * The lock must never be able to strand its owner. A WalletConnect-only
+     * user has no vault, so gating the fallback on hasVault() alone left them
+     * with no way in at all if the sensor failed.
+     */
+    const lock = read('src/components/AppLock.jsx');
+    t('the lock offers a fallback beyond the local vault', /verifyTotp/.test(lock));
+    t('the lock explains itself when no fallback exists', /noFallback/.test(lock));
+  }
+
   return rows;
 }

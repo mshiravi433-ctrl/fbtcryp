@@ -65,10 +65,24 @@ export function parseScanned(raw) {
   return null;
 }
 
+/*
+ * WHY BarcodeDetector IS NOT REQUIRED HERE ANY MORE.
+ *
+ * This used to demand `'BarcodeDetector' in window`. Android's WebView does
+ * not ship that API, so inside the packaged app the scanner reported
+ * UNSUPPORTED and never even reached getUserMedia — no camera prompt was ever
+ * shown, and the sheet just sat there. Combined with CAMERA missing from the
+ * manifest (now added), there were two independent reasons the scanner could
+ * never work on the one platform it is most needed on.
+ *
+ * So BarcodeDetector is now an optimisation, not a requirement: we use it when
+ * present (it is hardware-accelerated) and fall back to decoding frames with
+ * jsQR, which is pure JS and runs anywhere a canvas does.
+ *
+ * The only hard requirement is a camera.
+ */
 export function scannerSupported() {
-  return typeof window !== 'undefined'
-    && 'BarcodeDetector' in window
-    && Boolean(navigator.mediaDevices?.getUserMedia);
+  return typeof window !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
 }
 
 export default function QrScanner({ open, onClose, onResult }) {
@@ -116,14 +130,45 @@ export default function QrScanner({ open, onClose, onResult }) {
         video.muted = true;
         await video.play();
 
-        // eslint-disable-next-line no-undef
-        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        /*
+         * Native detector when the platform has one, jsQR otherwise. Chrome on
+         * desktop and recent Android system WebViews expose BarcodeDetector and
+         * decode on the GPU; the Capacitor WebView generally does not.
+         */
+        let detect;
+        if ('BarcodeDetector' in window) {
+          // eslint-disable-next-line no-undef
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          detect = async (video) => (await detector.detect(video))?.[0]?.rawValue;
+        } else {
+          const jsQR = (await import('jsqr')).default;
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          detect = (video) => {
+            const w = video.videoWidth;
+            const h = video.videoHeight;
+            if (!w || !h) return undefined; // first frames arrive before metadata
+            /*
+             * Downscale to at most 640px on the long edge. A full-resolution
+             * frame is ~8 MP; scanning that in JS every frame pegs the CPU and
+             * makes the preview stutter, which reads as a frozen camera. QR
+             * decoding does not benefit from the extra pixels.
+             */
+            const scale = Math.min(1, 640 / Math.max(w, h));
+            canvas.width = Math.round(w * scale);
+            canvas.height = Math.round(h * scale);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            return jsQR(img.data, img.width, img.height, {
+              inversionAttempts: 'dontInvert'
+            })?.data;
+          };
+        }
 
         const tick = async () => {
           if (cancelled || !videoRef.current) return;
           try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes?.[0]?.rawValue;
+            const value = await detect(videoRef.current);
             if (value) {
               const parsed = parseScanned(value);
               if (parsed) {

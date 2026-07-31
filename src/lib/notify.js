@@ -171,7 +171,27 @@ export function notifyTrade({ ok = true, title, body, haptic } = {}) {
 /* notifications                                                               */
 /* -------------------------------------------------------------------------- */
 
-export const notificationsSupported = () => typeof window !== 'undefined' && 'Notification' in window;
+/*
+ * SEVENTH INSTANCE OF THE NATIVE-GATED-BY-WEB-API BUG.
+ *
+ * A Capacitor WebView has no `window.Notification`, so this returned false on
+ * the packaged Android app and Settings rendered "not available on this
+ * device" with no way to even ask for permission — on the one platform where
+ * notifications matter most, because the app can be fully closed.
+ *
+ * pushMode() was already fixed to branch on native first, but Settings calls
+ * THIS function directly to decide whether to draw the permission row, so the
+ * feature was switched off one level above the fix. Fixing a helper is not
+ * enough when a caller re-implements the same gate.
+ *
+ * Native uses FCM through @capacitor/push-notifications, which does not need
+ * the web Notification API at all.
+ */
+export const notificationsSupported = () => {
+  if (typeof window === 'undefined') return false;
+  if (isNativeApp()) return true;
+  return 'Notification' in window;
+};
 
 export function notificationPermission() {
   if (!notificationsSupported()) return 'unsupported';

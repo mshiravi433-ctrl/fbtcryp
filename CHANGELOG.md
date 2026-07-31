@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.2.5 — versionCode 8
+
+Five device-reported bugs. Four share one root cause: **a native capability
+gated behind a web-only API check**, now the seventh and eighth instance of
+that class in this project.
+
+### Fixed
+
+- **Notifications said "not available on this device."** `notificationsSupported()`
+  tested only `'Notification' in window`, which a Capacitor WebView does not
+  have. `pushMode()` had already been fixed to check native first — but
+  Settings calls `notificationsSupported()` **directly**, re-implementing the
+  same gate one level above the fix. Fixing a helper is not enough when a
+  caller repeats its logic. Native now reports supported and uses FCM.
+
+- **The QR scanner never asked for the camera.** Two independent causes, either
+  alone sufficient:
+  1. `CAMERA` was missing from `AndroidManifest.xml` — an app cannot prompt for
+     a permission it never declared, so the OS refuses `getUserMedia()` before
+     any dialog can appear.
+  2. `scannerSupported()` required `BarcodeDetector`, absent from Android's
+     WebView, so it returned UNSUPPORTED before even reaching the camera call.
+
+  `BarcodeDetector` is now an optimisation rather than a requirement, with a
+  **jsQR** fallback that runs anywhere a canvas does. Frames are downscaled to
+  640px before decoding — scanning a full 8 MP frame in JS stutters the preview
+  badly enough to look frozen. Verified by decoding a QR produced by our own
+  generator.
+
+- **WalletConnect approved but never came back.** `metadata.redirect` was
+  absent, so the wallet had no route back to us. The session really was
+  established; the user was just left sitting in the wallet app while
+  `wc.connect()` awaited in a backgrounded WebView that Android may freeze
+  before it settles. Now declares `ir.fbt.swap://`, matching the manifest
+  scheme, with an https universal link for wallets that reject custom schemes.
+
+- **The lock screen could strand its owner.** The password fallback was gated
+  on `hasVault()`. A WalletConnect-only user has no vault, so a failed
+  fingerprint left *no* way in — and reinstalling, the only escape, destroys
+  the encrypted seed for anyone who does have one.
+
+- **Two-factor codes are now useful.** TOTP was set up in Settings and then
+  never asked for anywhere. It is now the lock fallback when no vault exists.
+  When neither is configured, the screen says so and explains that reinstalling
+  is safe *because* there is no vault to lose, rather than silently trapping
+  the user.
+
+### Testing
+
+- Nine new wiring checks covering the capability probes themselves (not just
+  their callers), both Android permissions, the WC redirect matching the
+  manifest scheme, and the lock's fallbacks. Verified non-vacuous by
+  reintroducing all three regressions — each fails its own check. 43 pass.
+
 ## 1.2.4 — versionCode 7
 
 Release build for Google Play.

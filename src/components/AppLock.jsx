@@ -39,7 +39,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { verifyBiometric } from '../lib/security';
+import { verifyBiometric, verifyTotp } from '../lib/security';
 import { hasVault, unlockVault } from '../lib/localWallet';
 
 export default function AppLock({ onUnlock }) {
@@ -53,7 +53,25 @@ export default function AppLock({ onUnlock }) {
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState('');
 
+  /*
+   * WHICH FALLBACKS THIS DEVICE CAN ACTUALLY OFFER.
+   *
+   * REAL BUG: the password button was gated on `hasVault()` alone. A user who
+   * connects through WalletConnect never creates a local vault, so there was
+   * no vault, no button, and — if the fingerprint failed — no way into the app
+   * at all. The only escape was reinstalling, which on a user WITH a vault
+   * would destroy their encrypted seed.
+   *
+   * A lock screen that can strand its owner is a worse outcome than the one it
+   * prevents, so it must always leave at least one door open.
+   *
+   * TOTP is offered whenever 2FA is configured. That also answers the request
+   * to make the existing two-factor code useful somewhere: it was set up in
+   * Settings and then never asked for.
+   */
   const vaultExists = hasVault();
+  const totpSecret = useSettingsStore((s) => s.twoFactorEnabled && s.twoFactorSecret);
+  const hasAnyFallback = Boolean(vaultExists || totpSecret);
 
   /*
    * Guard against double-prompting. On some devices the biometric sheet is
@@ -109,11 +127,22 @@ export default function AppLock({ onUnlock }) {
        * knowledge of the password. Keeping a live key in memory from the lock
        * screen would widen the window in which it can leak.
        */
-      await unlockVault(password);
+      if (vaultExists) {
+        await unlockVault(password);
+      } else {
+        /*
+         * No vault (WalletConnect-only user), so the secret being proved is
+         * the TOTP code instead. verifyTotp allows a +/-1 step window, which
+         * covers ordinary clock drift without widening the guess space
+         * meaningfully.
+         */
+        const ok = await verifyTotp(totpSecret, password.trim());
+        if (!ok) throw new Error('BAD');
+      }
       setPassword('');
       onUnlock();
     } catch {
-      setError('BAD_PASSWORD');
+      setError(vaultExists ? 'BAD_PASSWORD' : 'BAD_CODE');
     } finally {
       setBusy(false);
     }
@@ -139,6 +168,7 @@ export default function AppLock({ onUnlock }) {
         {error === 'UNSUPPORTED' && <p className="applock-err">{t('lock.unsupported')}</p>}
         {error === 'RETRY' && <p className="applock-err">{t('lock.retryHint')}</p>}
         {error === 'BAD_PASSWORD' && <p className="applock-err">{t('lock.badPassword')}</p>}
+        {error === 'BAD_CODE' && <p className="applock-err">{t('lock.badCode')}</p>}
 
         {!showPassword && (
           <>
@@ -153,24 +183,33 @@ export default function AppLock({ onUnlock }) {
              * encrypted vault. The password is the same secret that protects
              * the seed, so this is an equal door, not a weaker one.
              */}
-            {vaultExists && (
+            {hasAnyFallback && (
               <button className="applock-link" onClick={() => { setError(null); setShowPassword(true); }}>
-                {t('lock.usePassword')}
+                {vaultExists ? t('lock.usePassword') : t('lock.useCode')}
               </button>
             )}
+
+            {/*
+             * Nothing to fall back on: no vault and no 2FA. Rather than
+             * silently trap the user behind a sensor that may never succeed,
+             * say so and explain the one route out. Reinstalling is safe HERE
+             * precisely because there is no vault to destroy.
+             */}
+            {!hasAnyFallback && <p className="applock-sub">{t('lock.noFallback')}</p>}
           </>
         )}
 
         {showPassword && (
           <form onSubmit={submitPassword} className="applock-form">
             <input
-              type="password"
+              type={vaultExists ? 'password' : 'text'}
               className="applock-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={t('lock.passwordPlaceholder')}
+              placeholder={vaultExists ? t('lock.passwordPlaceholder') : t('lock.codePlaceholder')}
               autoFocus
-              autoComplete="current-password"
+              inputMode={vaultExists ? undefined : 'numeric'}
+              autoComplete={vaultExists ? 'current-password' : 'one-time-code'}
               disabled={busy}
             />
             <button className="applock-btn" type="submit" disabled={busy || !password}>

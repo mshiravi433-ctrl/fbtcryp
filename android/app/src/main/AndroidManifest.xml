@@ -60,10 +60,10 @@
                              instead of spinning forever
            USE_BIOMETRIC   — the fingerprint/face unlock in Settings
            VIBRATE         — haptic feedback on taps and confirmations
+           CAMERA          — the QR scanner for reading wallet addresses
+           POST_NOTIFICATIONS — price alerts and order triggers
 
          NOT requested, and should stay that way:
-           CAMERA          — WalletConnect pairs by deep link inside the app,
-                             so no QR scanner is needed on mobile
            READ/WRITE_EXTERNAL_STORAGE — the encrypted wallet lives in app
                              storage; nothing is written to shared storage
            ACCESS_FINE_LOCATION, READ_CONTACTS, SEND_SMS — no legitimate use
@@ -73,6 +73,26 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+      CAMERA — for the QR scanner (src/components/QrScanner.jsx).
+
+      The comment above used to say the camera was deliberately NOT requested
+      because WalletConnect pairs by deep link. That was true when written, and
+      then a QR scanner was added for reading wallet addresses without it being
+      re-examined.
+
+      The result: getUserMedia() inside the WebView is refused by the OS before
+      any permission dialog can appear, because an app cannot prompt for a
+      permission it never declared. The scanner opened to a black screen and no
+      dialog was ever shown - which reads as "the camera is broken" rather than
+      "permission denied".
+
+      Declaring it is what makes the runtime prompt possible at all. It stays
+      optional hardware below, so Play does not hide the listing from devices
+      without a camera.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!--
       Android 13 (API 33) made notifications a RUNTIME permission. Without
