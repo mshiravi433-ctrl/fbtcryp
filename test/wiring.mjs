@@ -886,5 +886,92 @@ export default function run() {
     t('mailto is handled rather than silently dropped', /mailto:/.test(code));
   }
 
+  /* ---- 21. no fake money in the chrome; real wallet first --------------- */
+  /*
+   * The header showed `useAppStore.balance` - NX credits, the play money used
+   * by the arcade and paper-trading screens - next to the brand on EVERY page.
+   * So the first number a user saw on a non-custodial exchange was a fake
+   * balance that looked like theirs. On a product whose whole promise is "you
+   * hold your own keys", that is the most misleading pixel in the app.
+   */
+  {
+    const header = read('src/components/Header.jsx');
+    const code = header.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    t('the header shows no virtual balance', !/balance-chip/.test(code));
+    t('the header does not read the play-money store', !/useAppStore/.test(code));
+
+    /*
+     * Order is a claim about what matters. The on-chain wallet used to sit
+     * below the virtual balance, the allocation pie and the paper history.
+     */
+    const wallet = read('src/pages/Wallet.jsx');
+    const onchainIdx = wallet.indexOf('on-chain wallet (non-custodial)');
+    const allocIdx = wallet.indexOf('---------- allocation ----------');
+    t(
+      'the real wallet is rendered before the virtual allocation',
+      onchainIdx > 0 && allocIdx > 0 && onchainIdx < allocIdx
+    );
+  }
+
+  /* ---- 22. the ad banner must not animate forever on native ------------- */
+  /*
+   * AdBanner ran EIGHT `repeat: Infinity` animations plus a ninth CSS sweep,
+   * and it renders on nine pages including Market, Swap and Wallet. Every one
+   * of those screens carried nine permanent timers on top of the three blurred
+   * background orbs - the most likely source of the intermittent freezing.
+   *
+   * `useStill()` already existed for precisely this and the banner never
+   * called it: not a missing feature, an unused one.
+   */
+  {
+    /*
+     * Strip comments first. Three checks in this block initially matched the
+     * comments EXPLAINING the fix rather than the code implementing it - the
+     * fourth time that has happened in this file. A check that reads prose is
+     * not a check.
+     */
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const ad = strip(read('src/components/AdBanner.jsx'));
+    const css = read('src/index.css');
+    t('the ad banner respects reduced motion', /useStill/.test(ad));
+    t('the ad banner freezes on native', /isNativePlatform/.test(ad));
+    const infinite = (ad.match(/repeat: Infinity/g) || []).length;
+    const gated = (ad.match(/still \? \{ duration: 0 \}/g) || []).length;
+    t(`every looping banner animation is gated (${gated}/${infinite})`, infinite > 0 && gated >= infinite);
+    t('the CSS sweep is frozen too', /\.ad-shine \{ animation: none/.test(css));
+  }
+
+  /* ---- 23. contact details and version must be real --------------------- */
+  {
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const contact = strip(read('src/pages/Contact.jsx'));
+    const settingsRaw = read('src/pages/Settings.jsx');
+    const settings = strip(settingsRaw);
+
+    // Telegram removed at the owner's request; email is the contact route.
+    t('Telegram is no longer a contact route', !/t\.me\/Shiravi4333/.test(contact + settings));
+    t('X is linked', /x\.com\/CompanyFbt/.test(contact));
+    t('LinkedIn is linked', /linkedin\.com\/in\/mohammad-shiravi/.test(contact));
+
+    /*
+     * Tracking parameters stripped: the shared LinkedIn URL carried
+     * utm_source/utm_content/utm_medium, which would tell LinkedIn every visit
+     * came from an Android share sheet.
+     */
+    t('social links carry no utm tracking', !/utm_source|utm_medium/.test(contact));
+
+    // A hardcoded version string nobody updates points bug reports at the
+    // wrong build. It read v1.0.0 while the app shipped 1.5.x.
+    t('the version is not hardcoded', !/v1\.0\.0/.test(settings));
+    t('the version comes from the build', /__APP_VERSION__/.test(settings));
+    /*
+     * And it must be guarded: test harnesses bundle without our `define`, so a
+     * bare __APP_VERSION__ threw at boot and crashed the entire app.
+     */
+    t('the version reference is guarded for other bundlers', /typeof __APP_VERSION__ !== 'undefined'/.test(settingsRaw));
+  }
+
   return rows;
 }

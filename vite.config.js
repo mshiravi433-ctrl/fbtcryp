@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -20,7 +21,17 @@ export default defineConfig({
    * Play chunk is emitted.
    */
   define: {
-    __GAMES_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_GAMES === 'true')
+    __GAMES_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_GAMES === 'true'),
+    /*
+     * Version string, read from package.json at build time.
+     *
+     * Settings used to print a hardcoded 'v1.0.0' while the app shipped 1.5.x.
+     * A version nobody remembers to update is worse than none: a bug report
+     * quoting it points at the wrong build entirely.
+     */
+    __APP_VERSION__: JSON.stringify(
+      JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+    )
   },
   server: {
     host: true, // so a tunnel (ngrok/cloudflared) can reach the dev server

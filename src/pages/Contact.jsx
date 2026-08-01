@@ -11,17 +11,33 @@ import {
   IconMail,
   IconChevronLeft,
   IconExternal,
-  IconTelegram,
+  IconXLogo,
+  IconLinkedin,
   IconMapPin,
   IconUser
 } from '../components/Icons';
 
 const SOCIALS = [
+  /*
+   * Telegram removed at the owner's request - email is the contact route.
+   * X and LinkedIn are the public company profiles.
+   *
+   * The LinkedIn URL is stored WITHOUT its utm_source/utm_content/utm_medium
+   * parameters. Those were on the shared link and would have told LinkedIn
+   * every visit came from an Android share sheet, which is both wrong and a
+   * needless detail about our users to hand over.
+   */
   {
-    id: 'telegram',
-    url: 'https://t.me/Shiravi4333',
-    grad: 'linear-gradient(135deg,#2AABEE,#229ED9)',
-    handle: '@Shiravi4333'
+    id: 'x',
+    url: 'https://x.com/CompanyFbt',
+    grad: 'linear-gradient(135deg,#1a1a1a,#4a4a4a)',
+    handle: '@CompanyFbt'
+  },
+  {
+    id: 'linkedin',
+    url: 'https://www.linkedin.com/in/mohammad-shiravi-a8891321b',
+    grad: 'linear-gradient(135deg,#0a66c2,#004182)',
+    handle: 'Mohammad Shiravi'
   },
   {
     id: 'instagram',
@@ -47,7 +63,8 @@ const MAPS_URL = `https://www.google.com/maps/search/${encodeURIComponent('خم�
 
 function SocialIcon({ id }) {
   const size = { width: 21, height: 21 };
-  if (id === 'telegram') return <IconTelegram {...size} />;
+  if (id === 'x') return <IconXLogo {...size} />;
+  if (id === 'linkedin') return <IconLinkedin {...size} />;
   if (id === 'instagram') return <IconInstagram {...size} />;
   if (id === 'crunchbase') return <IconBriefcase {...size} />;
   return <IconMail {...size} />;

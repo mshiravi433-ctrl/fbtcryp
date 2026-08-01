@@ -3993,3 +3993,11 @@ input, select, textarea { font-size: 16px !important; }
   background: #fff;
   box-shadow: 0 2px 8px -5px rgba(16, 20, 40, 0.25);
 }
+
+/* The banner's sweep is a NINTH looping animation, in CSS rather than JS, and
+   AdBanner renders on nine pages. Freeze it wherever the JS ones are frozen. */
+:root[data-native='true'] .ad-shine { animation: none; opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-shine { animation: none; opacity: 0; }
+}

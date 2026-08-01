@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useStill } from './AnimatedIcon';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
@@ -42,6 +43,19 @@ const SLOTS = {
 };
 
 export default function AdBanner({ slot = 'swap', compact = false, external = null }) {
+  /*
+   * FREEZE THE BANNER ON NATIVE AND UNDER REDUCED MOTION.
+   *
+   * This component ran EIGHT `repeat: Infinity` animations - a pulsing glow, a
+   * floating SVG, and six looping details - and it is rendered on nine pages
+   * including Market, Swap and Wallet. Every one of those screens therefore
+   * carried eight permanent animation timers on top of the three blurred
+   * background orbs.
+   *
+   * `useStill()` already existed for exactly this and the banner simply never
+   * called it. That is the whole bug: not a missing feature, an unused one.
+   */
+  const still = useStill() || (typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.()));
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
@@ -87,16 +101,16 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
       <span className="ad-art" aria-hidden="true">
         <motion.span
           className="ad-art-glow"
-          animate={{ scale: [1, 1.25, 1], opacity: [0.35, 0.6, 0.35] }}
-          transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+          animate={still ? { scale: 1, opacity: 0.45 } : { scale: [1, 1.25, 1], opacity: [0.35, 0.6, 0.35] }}
+          transition={still ? { duration: 0 } : { duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.svg
           viewBox="0 0 40 40"
           width="40"
           height="40"
           fill="none"
-          animate={{ y: [0, -3, 0], rotate: [0, 4, 0] }}
-          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay }}
+          animate={still ? { y: 0, rotate: 0 } : { y: [0, -3, 0], rotate: [0, 4, 0] }}
+          transition={still ? { duration: 0 } : { duration: 4, repeat: Infinity, ease: 'easeInOut', delay }}
           style={{ position: 'relative', zIndex: 1 }}
         >
           <defs>
@@ -116,7 +130,7 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 animate={{ pathLength: [0.3, 1, 0.3] }}
-                transition={{ duration: 3, repeat: Infinity }}
+                transition={still ? { duration: 0 } : { duration: 3, repeat: Infinity }}
               />
             </>
           )}
@@ -129,14 +143,14 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
                 stroke={`url(#adg-${slot})`}
                 strokeWidth="2.2"
                 animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2.6, repeat: Infinity }}
+                transition={still ? { duration: 0 } : { duration: 2.6, repeat: Infinity }}
               />
               <motion.path
                 d="M9 20v8c0 2.2 4.9 4 11 4s11-1.8 11-4v-8"
                 stroke={`url(#adg-${slot})`}
                 strokeWidth="2.2"
                 animate={{ opacity: [1, 0.5, 1] }}
-                transition={{ duration: 2.6, repeat: Infinity }}
+                transition={still ? { duration: 0 } : { duration: 2.6, repeat: Infinity }}
               />
             </>
           )}
@@ -149,7 +163,7 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
               strokeLinecap="round"
               strokeLinejoin="round"
               animate={{ pathLength: [0, 1] }}
-              transition={{ duration: 2.4, repeat: Infinity, repeatType: 'reverse' }}
+              transition={still ? { duration: 0 } : { duration: 2.4, repeat: Infinity, repeatType: 'reverse' }}
             />
           )}
 
@@ -163,7 +177,7 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
                 strokeWidth="2.2"
                 strokeLinecap="round"
                 animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 1.8, repeat: Infinity }}
+                transition={still ? { duration: 0 } : { duration: 1.8, repeat: Infinity }}
               />
             </>
           )}
@@ -175,7 +189,7 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
               strokeWidth="2.2"
               strokeLinejoin="round"
               animate={{ rotate: [0, 12, 0], scale: [1, 1.08, 1] }}
-              transition={{ duration: 4.5, repeat: Infinity }}
+              transition={still ? { duration: 0 } : { duration: 4.5, repeat: Infinity }}
               style={{ transformOrigin: '20px 20px' }}
             />
           )}

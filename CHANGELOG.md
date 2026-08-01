@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.5.2 — versionCode 16
+
+### Fake money removed from the chrome
+
+The header showed `useAppStore.balance` — **NX credits**, the play money used
+by the arcade and paper-trading screens — next to the brand on *every* page.
+So the first number a user saw on a non-custodial exchange was a fake balance
+that looked like theirs. On a product whose entire promise is "you hold your
+own keys", that was the most misleading pixel in the app. It is gone.
+
+On **/wallet**, the real on-chain wallet now renders **above** the virtual
+balance, the allocation pie and the paper history. Order is a claim about what
+matters, and the real one leads.
+
+### Fixed: intermittent freezing
+
+`AdBanner` ran **eight** `repeat: Infinity` animations plus a ninth CSS sweep —
+and it renders on **nine pages**, including Market, Swap and Wallet. Every one
+of those screens therefore carried nine permanent animation timers *on top of*
+the three blurred background orbs fixed in 1.5.1.
+
+`useStill()` already existed for exactly this purpose and the banner simply
+never called it. Not a missing feature — an unused one. All nine now freeze on
+native and under `prefers-reduced-motion`.
+
+### Contact
+
+- **Telegram removed**; email is the contact route, in Contact *and* Settings.
+- Added **X** ([@CompanyFbt](https://x.com/CompanyFbt)) and **LinkedIn**, with
+  a proper X logo — `IconX` is the close/dismiss cross, and reusing it would
+  have put a "close" glyph on a social link.
+- The LinkedIn URL is stored **without** its `utm_source`/`utm_content`/
+  `utm_medium` parameters, which would have told LinkedIn every visit came
+  from an Android share sheet.
+
+### Fixed: stale version string
+
+Settings printed a hardcoded **`v1.0.0`** while the app shipped 1.5.x — a
+version nobody updates points bug reports at the wrong build. It now comes
+from `package.json` at build time.
+
 ## 1.5.1 — versionCode 15
 
 ### Fixed: the app could lock you out permanently

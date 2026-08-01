@@ -1,4 +1,18 @@
 import { useEffect, useState } from 'react';
+
+/*
+ * The footer read a hardcoded 'v1.0.0' while the app shipped 1.5.x — a version
+ * string nobody updates is worse than none, because a bug report quoting it
+ * points at the wrong build.
+ */
+/*
+ * The `typeof` guard matters: test harnesses bundle with their own vite
+ * configs that do not carry our `define`, so a bare `__APP_VERSION__` threw
+ * "ReferenceError: __APP_VERSION__ is not defined" and crashed the whole app
+ * at boot. lib/features.js already guards __GAMES_ENABLED__ the same way for
+ * exactly this reason - I should have followed that pattern first time.
+ */
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -41,7 +55,7 @@ import {
   IconVolume,
   IconGlobe,
   IconInfo,
-  IconTelegram,
+  IconMail,
   IconSettings as IconSettings2,
   IconDoc,
   IconKey,
@@ -580,16 +594,19 @@ export default function Settings() {
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.company')}</p>
         <div className="set-group">
           <Row icon={IconInfo} label={t('about.title')} onClick={() => navigate('/about')} />
-          <Row icon={IconTelegram} label={t('contact.title')} sub="@Shiravi4333" onClick={() => navigate('/contact')} />
+          <Row icon={IconMail} label={t('contact.title')} sub="Mshiravi433@gmail.com" onClick={() => navigate('/contact')} />
+          {/*
+            Support goes to email, not Telegram - the owner's choice, and the
+            more durable channel: an email address does not depend on an app
+            that is blocked or renamed in some markets.
+          */}
           <Row
-            icon={IconTelegram}
+            icon={IconMail}
             label={t('settings.support')}
             sub={t('settings.supportSub')}
             onClick={() => {
               haptic?.('light');
-              const url = 'https://t.me/Shiravi4333';
-              if (tg?.openLink) tg.openLink(url);
-              else window.open(url, '_blank', 'noopener,noreferrer');
+              window.location.href = 'mailto:Mshiravi433@gmail.com';
             }}
           />
           <Row icon={IconDoc} label={t('settings.terms')} onClick={() => navigate('/legal/terms')} />
@@ -597,7 +614,7 @@ export default function Settings() {
         </div>
       </motion.section>
 
-      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>{t('about.companyFull')} · v1.0.0</p>
+      <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>{t('about.companyFull')} · v{APP_VERSION}</p>
 
       {/* ---------------- custom RPC ---------------- */}
       <Sheet open={rpcSheet} onClose={() => setRpcSheet(false)} title={t('settings.customRpc')}>

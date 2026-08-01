@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '../lib/browser';
-import { IconInstagram, IconMail, IconTelegram } from '../components/Icons';
+import { IconInstagram, IconLinkedin, IconMail, IconXLogo } from '../components/Icons';
 
 /*
  * The same accounts Contact links to — deliberately not a second, invented
@@ -9,7 +9,8 @@ import { IconInstagram, IconMail, IconTelegram } from '../components/Icons';
  * up pointing at a dead handle.
  */
 const SOCIALS = [
-  { id: 'telegram', url: 'https://t.me/Shiravi4333', Icon: IconTelegram, label: 'Telegram' },
+  { id: 'x', url: 'https://x.com/CompanyFbt', Icon: IconXLogo, label: 'X' },
+  { id: 'linkedin', url: 'https://www.linkedin.com/in/mohammad-shiravi-a8891321b', Icon: IconLinkedin, label: 'LinkedIn' },
   { id: 'instagram', url: 'https://www.instagram.com/fbt_company_', Icon: IconInstagram, label: 'Instagram' },
   { id: 'email', url: 'mailto:Mshiravi433@gmail.com', Icon: IconMail, label: 'Email' }
 ];

@@ -1,14 +1,11 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '../store/useAppStore';
-import { fmtNum } from '../lib/format';
 import { useState } from 'react';
-import AnimatedNumber from './AnimatedNumber';
 import { AnimatedSettings, useStill } from './AnimatedIcon';
 
 /**
- * Top bar: brand, balance, settings.
+ * Top bar: brand and settings.
  *
  * News and language used to sit here too. Four icon buttons plus a balance
  * chip is a crowded 44px row on a small phone, and the two extras were
@@ -21,8 +18,6 @@ export default function Header() {
   const navigate = useNavigate();
   const still = useStill();
   const [cogSpin, setCogSpin] = useState(false);
-  const balance = useAppStore((s) => s.balance);
-  const level = useAppStore((s) => s.level);
 
   return (
     <header className="top-bar">
@@ -69,20 +64,19 @@ export default function Header() {
       </motion.div>
 
       <div className="row" style={{ gap: 8 }}>
-        <motion.button
-          className="balance-chip"
-          onClick={() => navigate('/wallet')}
-          whileTap={{ scale: 0.94 }}
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          style={{ border: 'none', color: 'var(--text-1)', cursor: 'pointer' }}
-          aria-label={t('common.balance')}
-        >
-          <span style={{ fontSize: 11 }}>💎</span>
-          <AnimatedNumber value={balance} format={(v) => fmtNum(v, 0)} />
-          <span style={{ color: 'var(--text-3)', fontSize: 10 }}>L{level}</span>
-        </motion.button>
+        {/*
+          THE VIRTUAL BALANCE CHIP IS GONE.
+          
+          It showed `useAppStore.balance` — NX credits, the play-money used by
+          the arcade and paper-trading screens. In the header it sat next to
+          the brand on EVERY page, so the first number a user saw on a
+          non-custodial exchange was a fake balance that looked like their
+          money. On a screen whose entire promise is "you hold your own keys",
+          that is the most misleading pixel in the app.
+          
+          Real balances live on /wallet, where they are labelled and where the
+          on-chain wallet now sits above the virtual one.
+        */}
 
         {/* The cog turns rather than the button rotating whole — the gear
             teeth moving is what reads as a mechanism. */}

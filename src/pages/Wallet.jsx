@@ -113,6 +113,132 @@ export default function Wallet() {
         </div>
       </motion.section>
 
+      {/*
+        THE REAL WALLET COMES FIRST.
+        
+        This section used to sit BELOW the virtual NX balance, the allocation
+        pie and the paper-trading history — so on a non-custodial exchange the
+        first numbers a user saw were play money, and their actual on-chain
+        wallet was several screens down.
+        
+        Order is a claim about what matters. The real one leads.
+      */}
+      {/* ---------- on-chain wallet (non-custodial) ---------- */}
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.onchain')}</p>
+
+        {wallet.address ? (
+          <div className="stack" style={{ gap: 9 }}>
+            <div className="row-between">
+              <span className="row" style={{ gap: 7 }}>
+                <span className="dot" style={{ background: wallet.locked ? 'var(--rgb-5)' : 'var(--up)' }} />
+                <span className="mono" style={{ fontSize: 12.5 }}>{shortAddress(wallet.address)}</span>
+              </span>
+              <span className="row" style={{ gap: 6 }}>
+                <span className="pill pill-rgb">{wallet.chain?.short ?? 'BSC'}</span>
+                <span className={`pill ${wallet.locked ? 'pill-down' : 'pill-up'}`}>
+                  {wallet.locked ? '🔒' : t(`wallet.mode.${wallet.mode}`)}
+                </span>
+              </span>
+            </div>
+
+            {/*
+              Send / Receive, directly under the address they act on.
+              These are the two things a wallet is FOR, so they get the
+              largest, highest-contrast controls on the screen rather than
+              sitting among the row of small ghost buttons below — which is
+              where they were invisible.
+            */}
+            <div className="wal-actions">
+              <button className="wal-action wal-recv" onClick={() => setReceiveOpen(true)}>
+                <span className="wal-action-icon" aria-hidden="true">
+                  <IconQr width={18} height={18} />
+                </span>
+                <span className="wal-action-label">{t('receive.title')}</span>
+              </button>
+              <button
+                className="wal-action wal-send"
+                onClick={() => setSendOpen(true)}
+                /* Locked means no signer, so a send could only fail at the
+                   final step. Better to disable it than to let someone fill
+                   in an address and an amount for nothing. */
+                disabled={wallet.locked}
+              >
+                <span className="wal-action-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                </span>
+                <span className="wal-action-label">{t('send.title')}</span>
+              </button>
+            </div>
+
+            {wallet.nativeBalance != null && (
+              <div className="row-between">
+                <span className="faint">{wallet.chain?.native?.symbol ?? 'BNB'}</span>
+                <span className="mono" style={{ fontSize: 12.5 }}>{fmtQty(wallet.nativeBalance)}</span>
+              </div>
+            )}
+
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => wallet.refreshBalance?.()}>
+                {t('common.refresh')}
+              </button>
+              {wallet.mode === 'local' && !wallet.locked && (
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.lock}>
+                  {t('wallet.lock')}
+                </button>
+              )}
+              {wallet.locked ? (
+                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => setConnectOpen(true)}>
+                  {t('wallet.unlock')}
+                </button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.disconnect}>
+                  {t('wallet.disconnect')}
+                </button>
+              )}
+            </div>
+
+            <a
+              href={explorerAddr(wallet.chainId, wallet.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="faint"
+              style={{ fontSize: 11, textAlign: 'center', textDecoration: 'none' }}
+            >
+              {t('swap.viewOnExplorer')} ↗
+            </a>
+
+            {wallet.mode === 'local' && (
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setSeedSheet(true)}>
+                  {t('wallet.revealSeed')}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setBackupResult(null);
+                    setBackupErr(null);
+                    setBackupSheet(true);
+                  }}
+                >
+                  {t('wallet.backupFile')}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button className="btn btn-primary" onClick={() => setConnectOpen(true)}>
+            {t('wallet.connect')}
+          </button>
+        )}
+
+        <p className="notice" style={{ marginTop: 12 }}>{t('wallet.custodyNotice')}</p>
+      </motion.section>
+
       {tab === 'liquidity' && (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.tab.liquidity')}</p>
@@ -263,121 +389,6 @@ export default function Wallet() {
 
       </>}
 
-      {/* ---------- on-chain wallet (non-custodial) ---------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.onchain')}</p>
-
-        {wallet.address ? (
-          <div className="stack" style={{ gap: 9 }}>
-            <div className="row-between">
-              <span className="row" style={{ gap: 7 }}>
-                <span className="dot" style={{ background: wallet.locked ? 'var(--rgb-5)' : 'var(--up)' }} />
-                <span className="mono" style={{ fontSize: 12.5 }}>{shortAddress(wallet.address)}</span>
-              </span>
-              <span className="row" style={{ gap: 6 }}>
-                <span className="pill pill-rgb">{wallet.chain?.short ?? 'BSC'}</span>
-                <span className={`pill ${wallet.locked ? 'pill-down' : 'pill-up'}`}>
-                  {wallet.locked ? '🔒' : t(`wallet.mode.${wallet.mode}`)}
-                </span>
-              </span>
-            </div>
-
-            {/*
-              Send / Receive, directly under the address they act on.
-              These are the two things a wallet is FOR, so they get the
-              largest, highest-contrast controls on the screen rather than
-              sitting among the row of small ghost buttons below — which is
-              where they were invisible.
-            */}
-            <div className="wal-actions">
-              <button className="wal-action wal-recv" onClick={() => setReceiveOpen(true)}>
-                <span className="wal-action-icon" aria-hidden="true">
-                  <IconQr width={18} height={18} />
-                </span>
-                <span className="wal-action-label">{t('receive.title')}</span>
-              </button>
-              <button
-                className="wal-action wal-send"
-                onClick={() => setSendOpen(true)}
-                /* Locked means no signer, so a send could only fail at the
-                   final step. Better to disable it than to let someone fill
-                   in an address and an amount for nothing. */
-                disabled={wallet.locked}
-              >
-                <span className="wal-action-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 19V5M5 12l7-7 7 7" />
-                  </svg>
-                </span>
-                <span className="wal-action-label">{t('send.title')}</span>
-              </button>
-            </div>
-
-            {wallet.nativeBalance != null && (
-              <div className="row-between">
-                <span className="faint">{wallet.chain?.native?.symbol ?? 'BNB'}</span>
-                <span className="mono" style={{ fontSize: 12.5 }}>{fmtQty(wallet.nativeBalance)}</span>
-              </div>
-            )}
-
-            <div className="row" style={{ gap: 8 }}>
-              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => wallet.refreshBalance?.()}>
-                {t('common.refresh')}
-              </button>
-              {wallet.mode === 'local' && !wallet.locked && (
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.lock}>
-                  {t('wallet.lock')}
-                </button>
-              )}
-              {wallet.locked ? (
-                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => setConnectOpen(true)}>
-                  {t('wallet.unlock')}
-                </button>
-              ) : (
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.disconnect}>
-                  {t('wallet.disconnect')}
-                </button>
-              )}
-            </div>
-
-            <a
-              href={explorerAddr(wallet.chainId, wallet.address)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="faint"
-              style={{ fontSize: 11, textAlign: 'center', textDecoration: 'none' }}
-            >
-              {t('swap.viewOnExplorer')} ↗
-            </a>
-
-            {wallet.mode === 'local' && (
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setSeedSheet(true)}>
-                  {t('wallet.revealSeed')}
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ flex: 1 }}
-                  onClick={() => {
-                    setBackupResult(null);
-                    setBackupErr(null);
-                    setBackupSheet(true);
-                  }}
-                >
-                  {t('wallet.backupFile')}
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <button className="btn btn-primary" onClick={() => setConnectOpen(true)}>
-            {t('wallet.connect')}
-          </button>
-        )}
-
-        <p className="notice" style={{ marginTop: 12 }}>{t('wallet.custodyNotice')}</p>
-      </motion.section>
 
       {/* ---------- recent activity ---------- */}
       {orders.length > 0 && (

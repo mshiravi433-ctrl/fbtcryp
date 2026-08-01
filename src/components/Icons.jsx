@@ -260,6 +260,22 @@ export const IconDoc = (p) => (
   </svg>
 );
 
+/*
+ * The X (formerly Twitter) logo.
+ *
+ * NOT IconX — that is a close/dismiss cross used on sheets. Reusing it here
+ * would have put a "close" glyph on a social link, which reads as a broken
+ * button rather than a brand.
+ *
+ * Filled rather than stroked: the mark is a solid glyph, and stroking it at
+ * 18px produces a muddy asterisk.
+ */
+export const IconXLogo = (p) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" {...p}>
+    <path d="M17.53 3h3.1l-6.77 7.74L21.83 21h-6.24l-4.89-6.39L5.1 21H2l7.24-8.28L2.17 3h6.4l4.42 5.84L17.53 3zm-1.09 16.14h1.72L7.64 4.77H5.8l10.64 14.37z" />
+  </svg>
+);
+
 export const IconLinkedin = (p) => (
   <svg {...base} {...p}>
     <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
