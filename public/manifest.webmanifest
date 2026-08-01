@@ -5,10 +5,12 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#06070c",
   "theme_color": "#06070c",
-  "categories": ["finance"],
+  "categories": [
+    "finance"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -27,6 +29,52 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "browser"
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "lang": "en",
+  "dir": "auto",
+  "id": "/",
+  "shortcuts": [
+    {
+      "name": "Swap",
+      "short_name": "Swap",
+      "url": "/#/swap",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Market",
+      "short_name": "Market",
+      "url": "/#/",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "short_name": "Wallet",
+      "url": "/#/wallet",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

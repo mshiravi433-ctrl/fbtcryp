@@ -4039,3 +4039,54 @@ input, select, textarea { font-size: 16px !important; }
   gap: 7px;
   padding-inline-start: 6px;
 }
+
+/* ---------------------------------------------------------------------------
+   DESKTOP / WIDE SCREENS
+
+   The shell is capped at 520px, which is right on a phone and looks like a
+   mistake on a 1920px monitor - a narrow strip of app floating in empty space.
+   Now that the manifest allows installation as a desktop PWA, that is the
+   first impression on Windows, macOS and ChromeOS.
+
+   Deliberately NOT a rewrite into a multi-column desktop layout. That would
+   mean maintaining two designs and re-testing every screen, and this app's
+   users are overwhelmingly on phones. This widens the column, centres it
+   properly, and makes the fixed bottom nav stop stretching edge-to-edge -
+   cheap changes that remove the "phone app stuck in a browser" feeling
+   without creating a second layout to keep in sync.
+   --------------------------------------------------------------------------- */
+@media (min-width: 900px) {
+  .app-shell {
+    max-width: 680px;
+  }
+
+  /* The nav is position:fixed, so it spans the whole viewport unless it is
+     given the same width and centring as the shell. */
+  .bottom-nav {
+    max-width: 680px;
+    inset-inline: 0;
+    margin-inline: auto;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .top-bar {
+    max-width: 680px;
+    margin-inline: auto;
+  }
+
+  /* Two-up on wide screens: these grids are single-column on a phone and
+     leave a lot of dead space once the column grows. */
+  .eco-grid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  }
+}
+
+/* Large desktop: a little wider still, but capped. Beyond ~760px a single
+   column of financial rows becomes hard to scan - the eye loses the line. */
+@media (min-width: 1400px) {
+  .app-shell,
+  .bottom-nav,
+  .top-bar {
+    max-width: 760px;
+  }
+}

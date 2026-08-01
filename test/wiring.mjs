@@ -1158,5 +1158,49 @@ export default function run() {
     t('the verification token is real, not a placeholder', Boolean(gsv) && !/PASTE|TODO|XXX/i.test(gsv) && gsv.length > 20);
   }
 
+  /* ---- 28. the PWA must be installable on desktop, not just phones ------ */
+  /*
+   * The manifest had orientation:"portrait", which locks a DESKTOP window to a
+   * phone shape - the app installs on Windows/macOS/ChromeOS and then refuses
+   * to resize sensibly. Since Apple bars Iranian developers from the App Store
+   * entirely and blocks the App Store inside Iran, the installable web app is
+   * the ONLY route to iPhone and desktop users, so it has to be right.
+   */
+  {
+    const m = JSON.parse(read('public/manifest.webmanifest'));
+    const css = read('src/index.css');
+
+    t('the manifest does not lock orientation', m.orientation !== 'portrait');
+    t('the manifest declares an id', Boolean(m.id));
+    t('the manifest is installable (standalone)', m.display === 'standalone');
+    t('desktop window controls are supported', Array.isArray(m.display_override) && m.display_override.includes('window-controls-overlay'));
+    t('the manifest offers shortcuts', Array.isArray(m.shortcuts) && m.shortcuts.length >= 2);
+
+    /*
+     * Every shortcut URL must be a route the app can actually open. A
+     * shortcut to a dead path is a menu item that lands on the catch-all -
+     * the same dead-control failure this project keeps repeating.
+     */
+    const appSrc = read('src/App.jsx');
+    const badShortcut = (m.shortcuts || []).filter((sc) => {
+      const path = String(sc.url || '').replace(/^\/#/, '') || '/';
+      return path !== '/' && !appSrc.includes(`path="${path}"`);
+    });
+    t(
+      `every shortcut points at a real route${badShortcut.length ? ` — broken: ${badShortcut.map((x) => x.url).join(', ')}` : ''}`,
+      badShortcut.length === 0
+    );
+
+    /*
+     * The shell caps at 520px, which is a narrow strip on a monitor. Widen it
+     * on desktop - but the fixed bottom nav must be widened too, or it spans
+     * the whole viewport while the content is centred.
+     */
+    t('there is a desktop breakpoint', /@media \(min-width: 900px\)/.test(css));
+    const desktopBlock = /@media \(min-width: 900px\) \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
+    t('desktop widens the app shell', /\.app-shell[\s\S]{0,80}max-width/.test(desktopBlock));
+    t('the fixed bottom nav is widened with it', /\.bottom-nav/.test(desktopBlock));
+  }
+
   return rows;
 }
