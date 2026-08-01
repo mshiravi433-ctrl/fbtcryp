@@ -12,12 +12,27 @@
 
 ---
 
-## لینک‌ها
+## 🔗 لینک درست — این مهم است
 
-🔗 **داشبورد:** https://dappradar.com/dashboard
-📧 **پشتیبانی:** developers@dappradar.com
+آدرس `/dashboard` که قبلاً دادم **به صفحهٔ اصلی ریدایرکت می‌شود** و جای ثبت‌نام ندارد. راهنمای رسمی خودشان مسیر دیگری می‌دهد:
 
-مسیر: ثبت‌نام با `fbtswap@gmail.com` ← تأیید ایمیل ← دکمهٔ **Submit Dapp**
+**۱.** برو به: **https://dappradar.com/developers**
+
+**۲.** دکمهٔ **«Submit project»** را بزن
+
+**۳.** *حالا* صفحهٔ ورود/ثبت‌نام می‌آید. سه راه داری:
+   - ایمیل (`fbtswap@gmail.com`)
+   - حساب گوگل
+   - کیف پول
+
+**۴.** ایمیل تأیید را باز کن و لینکش را بزن
+
+**۵.** داخل داشبورد، **گوشهٔ پایین-راست** دنبال **«Submit new dapp»** بگرد
+
+> ترتیب مهم است: صفحهٔ ثبت‌نام **بعد از** زدن Submit project می‌آید، نه قبلش. برای همین `/dashboard` خالی به نظر می‌رسید.
+
+📧 اگر گیر کردی: developers@dappradar.com
+💬 دیسکورد: https://discord.com/invite/4ybbssrHkm
 
 ---
 
@@ -52,6 +67,8 @@ https://www.lawpoetics.ir
 ---
 
 ## فیلد ۴ — Short description
+
+> سقف رسمی: **۱۶۰ کاراکتر**. متن زیر ۱۱۰ کاراکتر است.
 
 ```
 Non-custodial DEX interface for swapping crypto across nine networks. You hold your keys and sign every trade.
@@ -135,9 +152,13 @@ Email:    fbtswap@gmail.com
 
 ## فیلد ۹ — لوگو و تصاویر
 
+**⚠️ لوگو مشخصات سختگیرانه دارد: دقیقاً ۲۵۰×۲۵۰ پیکسل و حداکثر ۱۵۰ کیلوبایت.**
+
+لوگوی قبلی ما ۵۱۲×۵۱۲ و ۴۱۲ کیلوبایت بود — **رد می‌شد**. یکی مطابق مشخصات ساختم:
+
 | چیز | فایل |
 |---|---|
-| لوگو | `store/icon-512.png` |
+| **لوگو** | `store/dappradar-logo-250.png` ← ۲۵۰×۲۵۰ · ۲۷KB ✅ |
 | اسکرین‌شات ۱ | `store/promo-1-swap.png` |
 | اسکرین‌شات ۲ | `store/promo-2-market.png` |
 | اسکرین‌شات ۳ | `store/promo-3-security.png` |
