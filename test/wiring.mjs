@@ -152,9 +152,15 @@ export default function run() {
    * stale copy is just as false.
    */
   {
-    const feeSrc = read('src/lib/chains.js');
+    // Reads lib/feeBps.js, which is where the rate lives. It used to read
+    // chains.js; when the constant moved, the regex silently stopped matching
+    // and `chargesFee` fell back to its default — the check kept "passing"
+    // without ever seeing the real number. So the match itself is asserted.
+    const feeSrc = read('src/lib/feeBps.js');
     const defMatch = /const FEE_BPS_DEFAULT = (\d+)/.exec(feeSrc);
-    const chargesFee = defMatch ? Number(defMatch[1]) > 0 : true;
+    t('the fee constant is where this check looks for it', defMatch !== null);
+    const feeBps = defMatch ? Number(defMatch[1]) : 70;
+    const chargesFee = feeBps > 0;
 
     /*
      * Must match a claim about OUR fee, not a description of someone else's.
@@ -182,6 +188,60 @@ export default function run() {
       `no locale claims the app is fee-free while it charges${offenders.length ? ` — ${offenders.slice(0, 3).join(', ')}` : ''}`,
       !chargesFee || offenders.length === 0
     );
+
+    /*
+     * REAL BUG, same class, found later: ten locale files spelled the fee out
+     * as "0.5%" in prose — including the terms-of-service checkbox the user
+     * has to tick — while the engine had moved to 0.70%. The check above only
+     * caught "we take NO fee", so a wrong-but-nonzero number sailed through
+     * for months.
+     *
+     * The rate must now be interpolated ({{fee}}), never typed. Any literal
+     * percentage in a sentence about the platform fee is a defect, whatever
+     * the number is: even a correct literal goes stale the next time the dial
+     * moves. Slippage and trailing-stop copy legitimately mention percentages,
+     * so this only looks at the keys that describe OUR fee.
+     */
+    const FEE_COPY_KEYS = [
+      'swap.gasNote',
+      'onboarding.terms.body',
+      'onboarding.terms.agree',
+      'terms.fees.body',
+      'docs.swap.step3',
+      'docs.why.step5',
+      'notify.promo7.body'
+    ];
+    // Latin, Persian and Arabic-Indic digits, with either decimal separator.
+    const LITERAL_PCT = /[\d۰-۹٠-٩]+\s?[.,٫]\s?[\d۰-۹٠-٩]+\s?[%٪]|[%٪]\s?[\d۰-۹٠-٩]+[.,٫][\d۰-۹٠-٩]+/;
+    const hardCoded = [];
+    for (const f of readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'))) {
+      const d = JSON.parse(read(join('src/i18n/locales', f)));
+      for (const key of FEE_COPY_KEYS) {
+        const v = key.split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), d);
+        if (typeof v === 'string' && LITERAL_PCT.test(v)) hardCoded.push(`${f}:${key}`);
+      }
+    }
+    t(
+      `fee copy interpolates the rate instead of hard-coding it${hardCoded.length ? ` — ${hardCoded.slice(0, 3).join(', ')}` : ''}`,
+      hardCoded.length === 0
+    );
+
+    /*
+     * The placeholder is worthless if nothing fills it. i18next only
+     * substitutes {{fee}} because it is registered as a default interpolation
+     * variable at init — a user would otherwise read the literal text
+     * "{{fee}}%" inside the terms they are agreeing to.
+     */
+    const i18nSrc = read('src/i18n/index.js');
+    t('{{fee}} has a default interpolation value', /defaultVariables:\s*\{[^}]*fee/.test(i18nSrc));
+    t('the fee variable follows the active language', /languageChanged'?,\s*syncFeeVariable/.test(i18nSrc));
+
+    /*
+     * The offline FAQ and the server's push copy bypass i18next entirely, so
+     * they each need their own substitution. Both hard-coded 0.5% too.
+     */
+    t('the offline FAQ fills the fee placeholder', /fillFee\(/.test(read('src/lib/faqLocal.js')));
+    t('server push copy derives the fee', /FEE_PCT/.test(read('server/promos.js')));
   }
 
   /* ------------- 7. order direction labels must not lie ------------------ */

@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import { LANGUAGES, RTL_LANGS, SUPPORTED } from './languages';
+import { feePercentString, toEasternDigits } from '../lib/feeBps';
 
 export { LANGUAGES, RTL_LANGS, SUPPORTED };
 
@@ -111,6 +112,40 @@ export function languageIsUnset() {
 
 const initialLang = detectLang();
 
+/*
+ * ─── THE FEE IS INTERPOLATED, NEVER TYPED ───────────────────────────────────
+ * Ten locale files used to spell the platform fee out as "0.5%" in prose —
+ * in the terms-of-service checkbox, the gas note, the docs and the onboarding
+ * copy — while `lib/feeBps.js` charged 0.70%. The app was quoting a price it
+ * does not take, inside the sentence the user has to agree to. That is a trust
+ * problem first and a store-rejection reason second (both Google Play and
+ * every alternative store treat "listing says one price, app charges another"
+ * as a misrepresentation).
+ *
+ * Those strings now carry a `{{fee}}` placeholder, and the number is supplied
+ * here as a default interpolation variable so no call site has to remember to
+ * pass it. Change VITE_FEE_BPS and every language updates itself.
+ *
+ * The numerals are localised too: Persian/Urdu/Arabic scripts render digits
+ * and the decimal separator differently, and European locales use a comma.
+ * Getting "0.7" right in English but showing "0.7٪" inside a Persian sentence
+ * looks like untranslated debris.
+ */
+const EASTERN_DIGITS = {
+  fa: '۰۱۲۳۴۵۶۷۸۹',
+  ur: '۰۱۲۳۴۵۶۷۸۹',
+  ar: '٠١٢٣٤٥٦٧٨٩'
+};
+const COMMA_DECIMAL = ['es', 'fr', 'pt', 'id', 'ru', 'tr'];
+
+function localisedFee(lang) {
+  const plain = feePercentString();
+  const digits = EASTERN_DIGITS[lang];
+  if (digits) return toEasternDigits(plain, digits).replace('.', '٫');
+  if (COMMA_DECIMAL.includes(lang)) return plain.replace('.', ',');
+  return plain;
+}
+
 i18n.use(initReactI18next).init({
   resources,
   // Starts on English; the detected language is swapped in below as soon as
@@ -118,9 +153,23 @@ i18n.use(initReactI18next).init({
   lng: 'en',
   fallbackLng: 'en',
   supportedLngs: SUPPORTED,
-  interpolation: { escapeValue: false },
+  interpolation: {
+    escapeValue: false,
+    defaultVariables: { fee: localisedFee('en') }
+  },
   returnEmptyString: false
 });
+
+/**
+ * Keep {{fee}} in the active language's numerals.
+ *
+ * i18next reads `defaultVariables` fresh on every interpolation, so mutating
+ * the object is enough — no re-init, no reload.
+ */
+function syncFeeVariable(lng) {
+  i18n.options.interpolation.defaultVariables.fee = localisedFee(lng);
+}
+i18n.on('languageChanged', syncFeeVariable);
 
 /**
  * Apply text direction for a language.

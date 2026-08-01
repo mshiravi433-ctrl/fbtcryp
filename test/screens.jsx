@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { HashRouter } from 'react-router-dom';
 import '../src/i18n/index.js';
+import { FEE_BPS } from '../src/lib/feeBps.js';
 import { TelegramProvider } from '../src/context/TelegramContext.jsx';
 import { WalletProvider } from '../src/context/WalletContext.jsx';
 import Welcome from '../src/pages/Welcome.jsx';
@@ -281,7 +282,18 @@ export async function run(container) {
       await act(async () => { await Promise.resolve(); });
 
       const text = host.textContent;
-      out.push(['a known question is answered without a server', text.includes('۰.۵٪') || text.includes('0.5')]);
+      /*
+       * Derived from FEE_BPS, not typed. This line used to assert the literal
+       * '۰.۵٪', so it stayed green while the canned Persian answer quoted a
+       * fee the app had stopped charging — the test agreed with the bug.
+       */
+      const feePctFa = String(Number((FEE_BPS / 100).toFixed(2)))
+        .replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
+        .replace('.', '٫');
+      out.push([
+        `a known question is answered without a server (quotes ${FEE_BPS} bps)`,
+        text.includes(feePctFa)
+      ]);
       out.push(['the answer is labelled as coming from our docs', text.includes('از مستندات ما')]);
 
       // Threaded: the question stays on screen next to its answer, so a

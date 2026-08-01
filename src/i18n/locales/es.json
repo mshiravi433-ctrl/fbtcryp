@@ -276,7 +276,7 @@
     "verifyContracts": "Aparecer en la lista no es un aval. Verifica la dirección del contrato en el sitio oficial antes de intercambiar.",
     "unverifiedWarning": "{{symbol}} no ha sido verificado manualmente por nosotros. Estar en una lista no es un aval: comprueba la dirección del contrato antes de intercambiar.",
     "gasBody": "El gas siempre se paga en la moneda nativa de la red y desde la misma cartera; no es solo BNB. Para intercambiar en una cadena necesitas algo de la moneda indicada abajo.",
-    "gasNote": "El gas va a los validadores de la cadena, no a nosotros, y es independiente de la comisión del 0,5%. Si no tienes la moneda nativa de una cadena, cambia a otra donde sí la tengas.",
+    "gasNote": "El gas va a los validadores de la cadena, no a nosotros, y es independiente de la comisión del {{fee}}%. Si no tienes la moneda nativa de una cadena, cambia a otra donde sí la tengas.",
     "needGas": "Esta transacción necesita {{coin}} en {{chain}} para el gas y tu saldo no alcanza. Añade un poco de {{coin}} o cambia a una cadena cuya moneda nativa ya tengas.",
     "importBody": "Esta dirección no está en ninguna lista pública. Leemos el símbolo y los decimales directamente de la cadena. Verificar la dirección es cosa tuya: un carácter equivocado es un token falso."
   },

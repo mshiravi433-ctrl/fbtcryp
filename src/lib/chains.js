@@ -127,56 +127,14 @@ export const DEFAULT_CHAIN = 56;
  * FEE_RECIPIENT inside the same transaction the user signs. There is no
  * zero-fee path: if the aggregator can't quote, the swap fails with a retry
  * rather than executing without our cut.
+ *
+ * The rate itself now lives in `lib/feeBps.js` and is re-exported here so all
+ * existing imports keep working. It was moved because `src/i18n/index.js`
+ * interpolates the number into every locale string that mentions the fee, and
+ * importing it from this file would pull the whole chain + token registry into
+ * the entry chunk.
  */
-/**
- * Default 50 bps (0.50%), overridable with VITE_FEE_BPS.
- *
- * ─── WHY THIS IS A DIAL AND WHERE IT SHOULD SIT ─────────────────────────────
- * Measured in-wallet swap fees, 2026: MetaMask 0.875%, Phantom 0.85%,
- * Rainbow 0.85%, Trust Wallet 0.70%, ZenGo 0.50%, Rabby 0.25%. The median is
- * 0.70%, so 0.50% is BELOW market for this product category — a wallet
- * interface, not a DEX protocol. (Comparing against Uniswap's 0.25% pool fee
- * was the wrong benchmark: that is the protocol's cut, not an interface's.)
- *
- * Moving 0.50% → 0.70% is +40% revenue on identical volume and still cheaper
- * than MetaMask, Phantom and Rainbow.
- *
- * ─── WHY THE DEFAULT IS 70, NOT 50 ──────────────────────────────────────────
- * It used to be 50 with a note saying "set VITE_FEE_BPS=70". That variable was
- * never set, so every build shipped at 0.50% while the reasoning above sat
- * here unused — a default nobody changes IS the configuration. The default is
- * now the intended rate, and VITE_FEE_BPS remains available to move it without
- * a code change.
- *
- * ─── THE CAP IS NOT NEGOTIABLE ──────────────────────────────────────────────
- * Hard-limited to 100 bps (1%). A misconfigured environment variable must
- * never be able to quietly take 10% of someone's swap, and a fee that high
- * would also breach the "fees shown before you sign" promise in the listing —
- * the number would be shown, but no user reads a 10% fee as intended
- * behaviour. Out-of-range values fall back to the default rather than
- * clamping silently, because a typo'd 700 meaning 7.00% should not become
- * 1.00% without anyone noticing.
- */
-const FEE_BPS_DEFAULT = 70;
-const FEE_BPS_MAX = 100;
-
-function resolveFeeBps() {
-  const raw = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_FEE_BPS : undefined;
-  if (raw == null || raw === '') return FEE_BPS_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > FEE_BPS_MAX) {
-    // Loud, because a silently-ignored fee setting is a silently-wrong invoice.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[fee] VITE_FEE_BPS="${raw}" is invalid (want an integer 0-${FEE_BPS_MAX}); using ${FEE_BPS_DEFAULT}`
-    );
-    return FEE_BPS_DEFAULT;
-  }
-  return n;
-}
-
-export const FEE_BPS = resolveFeeBps();
-export { FEE_BPS_MAX, FEE_BPS_DEFAULT };
+export { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from './feeBps';
 
 /**
  * Where the 0.5% goes.

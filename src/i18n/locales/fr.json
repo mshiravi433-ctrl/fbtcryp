@@ -276,7 +276,7 @@
     "verifyContracts": "Figurer dans une liste n'est pas une recommandation. Vérifiez l'adresse du contrat sur le site officiel avant d'échanger.",
     "unverifiedWarning": "{{symbol}} n'a pas été vérifié manuellement par nos soins. Figurer dans une liste n'est pas une recommandation : vérifiez l'adresse du contrat.",
     "gasBody": "Le gas est toujours payé dans la monnaie native du réseau, depuis le même portefeuille — pas seulement en BNB. Pour échanger sur une chaîne, il vous faut la monnaie indiquée ci-dessous.",
-    "gasNote": "Le gas revient aux validateurs, pas à nous, et il est distinct des 0,5 % de frais. Si vous n'avez pas la monnaie native d'une chaîne, changez de réseau.",
+    "gasNote": "Le gas revient aux validateurs, pas à nous, et il est distinct des {{fee}}% de frais. Si vous n'avez pas la monnaie native d'une chaîne, changez de réseau.",
     "needGas": "Cette transaction nécessite du {{coin}} sur {{chain}} pour le gas et votre solde est insuffisant. Ajoutez un peu de {{coin}} ou changez de chaîne.",
     "importBody": "Cette adresse ne figure dans aucune liste publique. Nous lisons le symbole et les décimales directement sur la chaîne. La vérification vous incombe : un caractère erroné, c'est un faux token."
   },

@@ -55,7 +55,7 @@ The swap settles on-chain, directly between your wallet and the protocol.
 
 FEES, STATED PLAINLY
 
-• Platform fee: 0.5% of the amount you are swapping, taken from the input
+• Platform fee: 0.70% of the amount you are swapping, taken from the input
   token inside the same on-chain transaction. It is shown on screen before
   you sign — never after.
 • Network gas: paid in the network's own coin (BNB on BNB Chain, ETH on

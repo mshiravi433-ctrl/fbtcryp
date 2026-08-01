@@ -276,7 +276,7 @@
     "verifyContracts": "Listede olmak onay anlamına gelmez. Takas öncesi sözleşme adresini projenin resmi sitesinden doğrulayın.",
     "unverifiedWarning": "{{symbol}} tarafımızca elle doğrulanmadı. Listede olmak onay değildir — takas öncesi sözleşme adresini kontrol edin.",
     "gasBody": "Gas her zaman bulunduğunuz ağın yerel coini ile ve aynı cüzdandan ödenir — sadece BNB değil. Bir zincirde takas için aşağıdaki coinden gerekir.",
-    "gasNote": "Gas ağ doğrulayıcılarına gider, bize değil, ve %0,5 platform ücretinden ayrıdır. Bir zincirin yerel coini yoksa sahip olduğunuz bir zincire geçin.",
+    "gasNote": "Gas ağ doğrulayıcılarına gider, bize değil, ve {{fee}}% platform ücretinden ayrıdır. Bir zincirin yerel coini yoksa sahip olduğunuz bir zincire geçin.",
     "needGas": "Bu işlem {{chain}} üzerinde {{coin}} gerektiriyor ve bakiyeniz yetersiz. Biraz {{coin}} ekleyin veya başka bir zincire geçin.",
     "importBody": "Bu adres hiçbir genel listede yok. Sembol ve ondalıkları doğrudan zincirden okuyoruz. Adresi doğrulamak size ait — bir karakter hatası sahte token demektir."
   },

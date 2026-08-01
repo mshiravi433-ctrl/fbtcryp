@@ -276,7 +276,7 @@
     "verifyContracts": "Ada di daftar bukan berarti kami merekomendasikan. Verifikasi alamat kontrak di situs resmi sebelum menukar.",
     "unverifiedWarning": "{{symbol}} belum kami verifikasi manual. Ada di daftar bukan rekomendasi — periksa alamat kontrak sebelum menukar.",
     "gasBody": "Gas selalu dibayar dengan koin asli jaringan dari dompet yang sama — bukan hanya BNB. Untuk menukar di suatu rantai Anda perlu koin di bawah ini.",
-    "gasNote": "Gas untuk validator jaringan, bukan kami, dan terpisah dari biaya platform 0,5%. Jika tak punya koin asli suatu rantai, pindah ke rantai lain.",
+    "gasNote": "Gas untuk validator jaringan, bukan kami, dan terpisah dari biaya platform {{fee}}%. Jika tak punya koin asli suatu rantai, pindah ke rantai lain.",
     "needGas": "Transaksi ini butuh {{coin}} di {{chain}} untuk gas dan saldo Anda kurang. Tambah sedikit {{coin}} atau pindah rantai.",
     "importBody": "Alamat ini tidak ada di daftar publik mana pun. Kami membaca simbol dan desimal langsung dari rantai. Verifikasi alamat adalah tanggung jawab Anda."
   },

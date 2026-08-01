@@ -24,6 +24,28 @@
  * Each entry: id, keyword sets per language, and the answer per language.
  * `k` are match terms (lowercased, accent-free); `a` are the answers.
  */
+import { feePercentString, toEasternDigits } from './feeBps';
+
+/**
+ * Resolve the `{{fee}}` placeholder inside a canned answer.
+ *
+ * These answers are plain strings, not i18next resources, so they never pass
+ * through the interpolator that handles the locale files. Before this existed
+ * they hard-coded "0.5%" while the swap engine charged 0.70% — the offline
+ * assistant confidently quoted the wrong price, which is worse than the
+ * assistant saying nothing at all.
+ */
+const FEE_DIGITS = { fa: '۰۱۲۳۴۵۶۷۸۹', ur: '۰۱۲۳۴۵۶۷۸۹', ar: '٠١٢٣٤٥٦٧٨٩' };
+
+function fillFee(text, lang) {
+  if (typeof text !== 'string' || !text.includes('{{fee}}')) return text;
+  const digits = FEE_DIGITS[lang];
+  const value = digits
+    ? toEasternDigits(feePercentString(), digits).replace('.', '٫')
+    : feePercentString();
+  return text.replaceAll('{{fee}}', value);
+}
+
 const KB = [
   {
     id: 'deposit',
@@ -46,8 +68,8 @@ const KB = [
       ar: ['كيف أبادل', 'خطوات التبادل', 'أول عملية']
     },
     a: {
-      en: 'Six steps:\n\n1. Connect a wallet (Wallet tab). Nothing works until this is done.\n2. Choose the network at the top of the Swap screen. Both tokens must be on the SAME network — this app does not bridge between chains.\n3. Pick the token you are paying with, and the one you want. If a token is missing, paste its contract address to import it.\n4. Type an amount. MAX leaves a little native coin behind on purpose, so you can still afford gas.\n5. Read the quote: the rate, the price impact, the 0.5% platform fee, and the estimated gas. Everything is shown BEFORE you sign, never after.\n6. Press Swap and approve in your wallet. For a non-native token there are two prompts — first Approve (permission for the router to move that token), then the swap itself. Two prompts is normal, not a bug.\n\nOnce signed it is on-chain and irreversible. Nobody — not us, not the wallet — can cancel or reverse it.',
-      fa: 'شش قدم:\n\n۱. یک کیف پول وصل کن (تب کیف پول). تا این کار انجام نشود هیچ‌چیز کار نمی‌کند.\n۲. شبکه را از بالای صفحه سواپ انتخاب کن. هر دو توکن باید روی **یک شبکه** باشند — این اپ بین زنجیره‌ها پل نمی‌زند.\n۳. توکنی که می‌دهی و توکنی که می‌خواهی را انتخاب کن. اگر توکنی نبود، آدرس قراردادش را جای‌گذاری کن تا اضافه شود.\n۴. مقدار را بنویس. دکمه MAX عمداً کمی کوین بومی باقی می‌گذارد تا گس داشته باشی.\n۵. قیمت را بخوان: نرخ، اثر قیمتی، کارمزد ۰.۵٪ پلتفرم و گس تخمینی. همه‌چیز **قبل** از امضا نشان داده می‌شود، نه بعدش.\n۶. Swap را بزن و در کیف پولت تأیید کن. برای توکن غیربومی دو بار تأیید می‌خواهد — اول Approve (اجازه جابه‌جایی آن توکن به روتر) و بعد خود سواپ. دو تأیید طبیعی است، باگ نیست.\n\nبعد از امضا تراکنش روی زنجیره ثبت و برگشت‌ناپذیر است. هیچ‌کس — نه ما، نه کیف پول — نمی‌تواند لغو یا برگردانش کند.',
+      en: 'Six steps:\n\n1. Connect a wallet (Wallet tab). Nothing works until this is done.\n2. Choose the network at the top of the Swap screen. Both tokens must be on the SAME network — this app does not bridge between chains.\n3. Pick the token you are paying with, and the one you want. If a token is missing, paste its contract address to import it.\n4. Type an amount. MAX leaves a little native coin behind on purpose, so you can still afford gas.\n5. Read the quote: the rate, the price impact, the {{fee}}% platform fee, and the estimated gas. Everything is shown BEFORE you sign, never after.\n6. Press Swap and approve in your wallet. For a non-native token there are two prompts — first Approve (permission for the router to move that token), then the swap itself. Two prompts is normal, not a bug.\n\nOnce signed it is on-chain and irreversible. Nobody — not us, not the wallet — can cancel or reverse it.',
+      fa: 'شش قدم:\n\n۱. یک کیف پول وصل کن (تب کیف پول). تا این کار انجام نشود هیچ‌چیز کار نمی‌کند.\n۲. شبکه را از بالای صفحه سواپ انتخاب کن. هر دو توکن باید روی **یک شبکه** باشند — این اپ بین زنجیره‌ها پل نمی‌زند.\n۳. توکنی که می‌دهی و توکنی که می‌خواهی را انتخاب کن. اگر توکنی نبود، آدرس قراردادش را جای‌گذاری کن تا اضافه شود.\n۴. مقدار را بنویس. دکمه MAX عمداً کمی کوین بومی باقی می‌گذارد تا گس داشته باشی.\n۵. قیمت را بخوان: نرخ، اثر قیمتی، کارمزد {{fee}}٪ پلتفرم و گس تخمینی. همه‌چیز **قبل** از امضا نشان داده می‌شود، نه بعدش.\n۶. Swap را بزن و در کیف پولت تأیید کن. برای توکن غیربومی دو بار تأیید می‌خواهد — اول Approve (اجازه جابه‌جایی آن توکن به روتر) و بعد خود سواپ. دو تأیید طبیعی است، باگ نیست.\n\nبعد از امضا تراکنش روی زنجیره ثبت و برگشت‌ناپذیر است. هیچ‌کس — نه ما، نه کیف پول — نمی‌تواند لغو یا برگردانش کند.',
       ar: 'اربط محفظتك، اختر الشبكة (يجب أن يكون كلا الرمزين على نفس الشبكة)، اختر الرمزين، أدخل المبلغ، راجع السعر والرسوم قبل التوقيع، ثم وقّع. للرموز غير الأصلية ستظهر موافقتان: Approve ثم التبادل. بعد التوقيع تصبح المعاملة نهائية ولا يمكن التراجع عنها.'
     }
   },
@@ -59,9 +81,9 @@ const KB = [
       ar: ['رسوم', 'عمولة', 'تكلفة', 'كم']
     },
     a: {
-      en: 'Every swap carries two separate costs. (1) The platform fee: 0.5% of the amount you send in, taken on-chain in the same transaction and shown to you before you sign. (2) The network fee (gas), paid in the chain\'s own coin — BNB on BNB Chain, ETH on Ethereum/Arbitrum/Base/Optimism, POL on Polygon, AVAX on Avalanche, TRX on Tron, SOL on Solana. Gas goes to the blockchain validators, not to us, and we cannot reduce or refund it.',
-      fa: 'هر سواپ دو هزینه جدا دارد. ۱) کارمزد پلتفرم: ۰.۵٪ از مبلغ ورودی که روی زنجیره و در همان تراکنش برداشته می‌شود و قبل از امضا به تو نشان داده می‌شود. ۲) کارمزد شبکه (گس) که با کوین بومی همان شبکه پرداخت می‌شود — BNB روی BNB Chain، ETH روی اتریوم/آربیتروم/بیس/اپتیمیسم، POL روی پالیگان، AVAX روی آوالانچ، TRX روی ترون و SOL روی سولانا. گس به اعتبارسنج‌های بلاکچین می‌رسد نه به ما، و نه می‌توانیم کمش کنیم نه برگردانیم.',
-      ar: 'كل عملية تبادل لها تكلفتان: رسوم المنصة ٠٫٥٪ من المبلغ المُدخل تُخصم على السلسلة في نفس المعاملة، ورسوم الشبكة (الغاز) تُدفع بعملة الشبكة نفسها وتذهب للمُدققين وليس لنا.'
+      en: 'Every swap carries two separate costs. (1) The platform fee: {{fee}}% of the amount you send in, taken on-chain in the same transaction and shown to you before you sign. (2) The network fee (gas), paid in the chain\'s own coin — BNB on BNB Chain, ETH on Ethereum/Arbitrum/Base/Optimism, POL on Polygon, AVAX on Avalanche, TRX on Tron, SOL on Solana. Gas goes to the blockchain validators, not to us, and we cannot reduce or refund it.',
+      fa: 'هر سواپ دو هزینه جدا دارد. ۱) کارمزد پلتفرم: {{fee}}٪ از مبلغ ورودی که روی زنجیره و در همان تراکنش برداشته می‌شود و قبل از امضا به تو نشان داده می‌شود. ۲) کارمزد شبکه (گس) که با کوین بومی همان شبکه پرداخت می‌شود — BNB روی BNB Chain، ETH روی اتریوم/آربیتروم/بیس/اپتیمیسم، POL روی پالیگان، AVAX روی آوالانچ، TRX روی ترون و SOL روی سولانا. گس به اعتبارسنج‌های بلاکچین می‌رسد نه به ما، و نه می‌توانیم کمش کنیم نه برگردانیم.',
+      ar: 'كل عملية تبادل لها تكلفتان: رسوم المنصة {{fee}}٪ من المبلغ المُدخل تُخصم على السلسلة في نفس المعاملة، ورسوم الشبكة (الغاز) تُدفع بعملة الشبكة نفسها وتذهب للمُدققين وليس لنا.'
     }
   },
   {
@@ -250,7 +272,7 @@ export function localAnswer(question, lang = 'fa') {
   }
 
   if (!best || bestScore < 2) return null;
-  const answer = best.a[lang] ?? best.a.en;
+  const answer = fillFee(best.a[lang] ?? best.a.en, lang);
   return { id: best.id, answer, confidence: Math.min(1, bestScore / 6) };
 }
 
@@ -290,7 +312,7 @@ export const FAQ_ORDER = [
 export function faqAnswer(id, lang = 'en') {
   const entry = KB.find((e) => e.id === id);
   if (!entry) return null;
-  return entry.a[lang] ?? entry.a.en;
+  return fillFee(entry.a[lang] ?? entry.a.en, lang);
 }
 
 /** Every FAQ entry, ready to render. */

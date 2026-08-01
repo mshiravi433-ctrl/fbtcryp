@@ -496,7 +496,7 @@
     "unverifiedWarning": "{{symbol}} is not one we hand-verified. Being in a list is not an endorsement — check the contract address against the project's official site before swapping.",
     "gasTitle": "Network fee on each chain",
     "gasBody": "Gas is always paid in the native coin of the network you are on, from the same wallet — it is not only BNB. To swap on a chain you need a little of the coin listed below.",
-    "gasNote": "Gas goes to the blockchain validators, not to us, and is separate from the 0.5% platform fee. If you hold no native coin on a chain, switch to one where you do.",
+    "gasNote": "Gas goes to the blockchain validators, not to us, and is separate from the {{fee}}% platform fee. If you hold no native coin on a chain, switch to one where you do.",
     "needGas": "This transaction needs {{coin}} on {{chain}} for gas and your balance is short. Top up a little {{coin}}, or switch to a chain whose native coin you already hold.",
     "flip": "Swap the two tokens"
   },
@@ -524,8 +524,8 @@
     },
     "terms": {
       "title": "Before you start",
-      "body": "Please review our terms and privacy policy. In short: we never hold your funds, a 0.5% fee applies to each swap, and crypto trading carries real risk of loss.",
-      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that Fanous Bazaar Pishgam never holds my funds, that a 0.5% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
+      "body": "Please review our terms and privacy policy. In short: we never hold your funds, a {{fee}}% fee applies to each swap, and crypto trading carries real risk of loss.",
+      "agree": "I have read and accept the Terms of Service and Privacy Policy. I understand that Fanous Bazaar Pishgam never holds my funds, that a {{fee}}% platform fee applies to every swap, and that I am solely responsible for my trading decisions."
     },
     "language": {
       "title": "Pick your language",
@@ -684,7 +684,7 @@
     },
     "fees": {
       "title": "Platform fee",
-      "body": "A 0.5% fee is taken from the input amount of each swap and paid to Fanous Bazaar Pishgam. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
+      "body": "A {{fee}}% fee is taken from the input amount of each swap and paid to Fanous Bazaar Pishgam. It is shown in the app before you confirm, and it is charged on-chain in the same transaction. Network gas fees are separate and go to blockchain validators, not to us."
     },
     "risk": {
       "title": "You accept the risk",
@@ -977,7 +977,7 @@
       "sub": "Trading one token for another",
       "step1": "Pick the token you're paying with and the one you want.",
       "step2": "Enter an amount — the quote updates automatically.",
-      "step3": "Check the rate, minimum received and the 0.5% platform fee.",
+      "step3": "Check the rate, minimum received and the {{fee}}% platform fee.",
       "step4": "Tap Review, then approve the token if this is your first time using it.",
       "step5": "Confirm in your wallet and wait for the transaction to settle.",
       "pitfall": "Check the 'price impact' number before you confirm. Above 5% means there aren't enough buyers for this trade and you'll lose value. Try a smaller amount or a different token."
@@ -1024,7 +1024,7 @@
       "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
       "step3": "Truly non-custodial: no signup, no KYC, no deposit address. Your funds never sit in our account, so there is no withdrawal queue and nothing to freeze.",
       "step4": "AI analysis built in, with honest confidence figures — it tells you when the signal is unclear instead of inventing certainty to look smart.",
-      "step5": "One clear fee: 0.5% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
+      "step5": "One clear fee: {{fee}}% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
       "pitfall": "Compare the 'minimum received' figure, not the advertised rate. Some apps show a great headline rate then take a wide spread on top. Ours is the number you actually get."
     },
     "strategy": {
@@ -1514,7 +1514,7 @@
     },
     "promo7": {
       "title": "Transparent fees",
-      "body": "0.5% platform fee, shown before you sign. Gas is separate and goes to the network."
+      "body": "{{fee}}% platform fee, shown before you sign. Gas is separate and goes to the network."
     },
     "modeServer": "Push active",
     "modeLocal": "Device only",

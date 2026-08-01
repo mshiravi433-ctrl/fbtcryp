@@ -12,6 +12,28 @@
  * language when they leave the server.
  */
 
+/**
+ * The platform fee, for the one promo that quotes it.
+ *
+ * The server cannot import `src/lib/feeBps.js` — that module reads
+ * `import.meta.env`, which only exists inside the Vite bundle. So the rate is
+ * mirrored here from `FEE_BPS` in the environment, with the same 70 bps
+ * default and the same 100 bps cap.
+ *
+ * Keeping the two in step matters: this string is rendered by the OS
+ * notification shade, so a stale number reaches the user as a push telling
+ * them a price the app does not charge. That is exactly the bug this replaced
+ * — the copy said 0.5% while every swap took 0.70%.
+ */
+const FEE_BPS = (() => {
+  const n = Number(process.env.FEE_BPS ?? process.env.VITE_FEE_BPS);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : 70;
+})();
+
+const FEE_PCT = String(Number((FEE_BPS / 100).toFixed(2)));
+const FEE_PCT_FA = FEE_PCT.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]).replace('.', '٫');
+const FEE_PCT_AR = FEE_PCT.replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]).replace('.', '٫');
+
 export const PROMOS = {
   promo1: {
     fa: ['بازار امروز چطور بود؟', 'قیمت زنده بیش از هزار ارز، رایگان و بدون ثبت‌نام.'],
@@ -44,8 +66,8 @@ export const PROMOS = {
     ar: ['أكثر من ١٠٠٠ عملة', 'ابحث واستورد بالعنوان وبادل فوراً.']
   },
   promo7: {
-    fa: ['کارمزد شفاف', '۰.۵٪ کارمزد پلتفرم، قبل از امضا نمایش داده می‌شود. گس جداست و به شبکه می‌رود.'],
-    en: ['Transparent fees', '0.5% platform fee, shown before you sign. Gas is separate and goes to the network.'],
-    ar: ['رسوم شفافة', '٠٫٥٪ رسوم المنصة تُعرض قبل التوقيع.']
+    fa: ['کارمزد شفاف', `${FEE_PCT_FA}٪ کارمزد پلتفرم، قبل از امضا نمایش داده می‌شود. گس جداست و به شبکه می‌رود.`],
+    en: ['Transparent fees', `${FEE_PCT}% platform fee, shown before you sign. Gas is separate and goes to the network.`],
+    ar: ['رسوم شفافة', `${FEE_PCT_AR}٪ رسوم المنصة تُعرض قبل التوقيع.`]
   }
 };

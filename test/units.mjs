@@ -117,7 +117,21 @@ export default function run() {
   /* ------------------------------- FAQ -------------------------------- */
 
   t('gas question answered in Persian', /گس/.test(localAnswer('گس چیه و چرا لازمه؟', 'fa')?.answer ?? ''));
-  t('fee question answered in English', /0\.5%/.test(localAnswer('how much is the fee?', 'en')?.answer ?? ''));
+  /*
+   * Derived from FEE_BPS, never typed. This assertion used to read /0\.5%/ and
+   * kept passing after the fee moved to 70 bps, because the canned answer
+   * hard-coded the old number too — the test and the bug agreed with each
+   * other. Computing the expected string from the same constant the swap
+   * engine charges from is the only version of this check that can fail.
+   */
+  t(
+    `fee question quotes the real ${FEE_BPS} bps`,
+    localAnswer('how much is the fee?', 'en')?.answer?.includes(`${FEE_BPS / 100}%`) === true
+  );
+  t(
+    'no canned answer still hard-codes a stale rate',
+    !/\b0\.5% (platform )?fee\b/.test(localAnswer('how much is the fee?', 'en')?.answer ?? '')
+  );
   t('mixed-script question still matches', Boolean(localAnswer('fee چقدره؟', 'fa')));
   t('seed-phrase question matches', localAnswer('I lost my recovery phrase', 'en')?.id === 'seed');
   t('unrelated question returns null rather than guessing', localAnswer('what is the weather in Isfahan', 'en') === null);

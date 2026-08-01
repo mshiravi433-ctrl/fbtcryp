@@ -25,6 +25,8 @@
  * ──────────────────────────────────────────────────────────────────────────
  */
 
+import { feePercentString } from './feeBps';
+
 const KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || '';
 const MODEL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_MODEL) || 'gemini-2.0-flash';
@@ -182,7 +184,7 @@ export async function directBrief({ global, top, lang }) {
 
 const KB = `FBT Swap facts — answer only from these plus general crypto knowledge:
 - Non-custodial DEX on BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche.
-- 0.5% platform fee taken from the input token of every swap, on-chain, same transaction.
+- ${feePercentString()}% platform fee taken from the input token of every swap, on-chain, same transaction.
 - Network gas is separate and goes to validators, not FBT.
 - Swaps route via the KyberSwap aggregator across all DEXes on the chain.
 - Wallets: WalletConnect, browser wallets, or an in-app wallet with the seed AES-GCM encrypted on-device.
