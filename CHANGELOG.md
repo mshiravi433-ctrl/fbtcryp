@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.5.0 — versionCode 14
+
+### New first-run experience
+
+- **Splash screen.** Logo, app name and a single **Start** button. Animated
+  entrances plus one slow orbiting ring — deliberately restrained, because the
+  Ecosystem page shipped with nine permanent blur pulses and felt broken on a
+  mid-range phone. Nothing here keeps running once the screen unmounts, and
+  `prefers-reduced-motion` is honoured: a spinning first screen is a real
+  accessibility problem on the one screen nobody can skip.
+
+- **The language question is no longer asked twice.** Welcome asked for a
+  language, then onboarding asked again as step 0. Two consecutive screens
+  posing the same question read as a bug — before the user had seen anything
+  the product does. Onboarding now opens on the first feature slide, and the
+  language switch in its header opens a sheet instead (it had briefly been
+  left with no handler at all, which is precisely the dead-control failure
+  this project keeps hitting).
+
+- **Default language is now English.** It was Persian, which meant anyone
+  whose device gave no usable hint opened a right-to-left app in a script they
+  might not read, and had to find the language control before doing anything.
+  English is already the fallback locale, so it is the one language guaranteed
+  to have every key translated — and Persian is one tap away on the next
+  screen.
+
+Flow is now: **splash → language + name → features → wallet → terms → guide → app**
+(six steps, down from seven).
+
+### Testing
+
+Three existing suites asserted the old behaviour and correctly failed:
+`boot-e2e` demanded Persian on first paint, `first-launch-flow` expected
+Welcome first, `i18n-probe` expected `fa` to autoload. All three were updated
+to the new intent rather than relaxed. Verified non-vacuous by disabling the
+splash — five checks fail, including the real-browser boot test.
+
 ## 1.4.1 — versionCode 12
 
 ### Fee raised to 0.70% — no configuration needed

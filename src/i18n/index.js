@@ -85,9 +85,19 @@ function detectLang() {
   const navLang = (navigator?.language || '').slice(0, 2).toLowerCase();
   if (navLang && navLang !== 'en' && SUPPORTED.includes(navLang)) return navLang;
 
-  // No signal at all: show the language picker on first launch (Welcome) and
-  // default to Persian, the product's primary language, until then.
-  return 'fa';
+  /*
+   * No signal at all: default to English and let Welcome ask.
+   *
+   * This used to return 'fa'. Persian is the primary market, but defaulting to
+   * it meant anyone whose device gave no usable hint opened a right-to-left
+   * app in a script they may not read, and had to find the language control
+   * before they could do anything at all.
+   *
+   * English is the safer neutral here: it is already the fallback locale, so
+   * it is the one language guaranteed to have every key translated, and a
+   * Persian speaker is one tap away on the very next screen.
+   */
+  return 'en';
 }
 
 /** True when the user has never made an explicit choice. */

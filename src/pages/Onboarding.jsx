@@ -48,9 +48,16 @@ const SLIDES = [
   { key: 'custody', Icon: IconShield, hues: ['#00ff9d', '#00e5ff'] }
 ];
 
-// language + slides + wallet + terms
-const LANG_STEP = 0;
-const TOTAL = SLIDES.length + 3;
+/*
+ * Steps: three feature slides, then wallet, then terms.
+ *
+ * The language step that used to sit at index 0 is GONE. Welcome already asks
+ * for a language, so this was the second consecutive screen asking the same
+ * question — before the user had seen anything the product does. The compact
+ * language switch in the header (below) still lets anyone change it from any
+ * step, which was the only real justification for keeping it here.
+ */
+const TOTAL = SLIDES.length + 2;
 
 function Art({ Icon, hues, index }) {
   return (
@@ -115,12 +122,12 @@ export default function Onboarding({ onDone }) {
   const [connectOpen, setConnectOpen] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [legalDoc, setLegalDoc] = useState(null);
+  const [langOpen, setLangOpen] = useState(false);
 
-  const isLang = index === LANG_STEP;
-  const isSlide = index > LANG_STEP && index <= SLIDES.length;
-  const isWallet = index === SLIDES.length + 1;
-  const isTerms = index === SLIDES.length + 2;
-  const slide = isSlide ? SLIDES[index - 1] : null;
+  const isSlide = index < SLIDES.length;
+  const isWallet = index === SLIDES.length;
+  const isTerms = index === SLIDES.length + 1;
+  const slide = isSlide ? SLIDES[index] : null;
 
   const finish = () => {
     acceptTerms();
@@ -160,16 +167,23 @@ export default function Onboarding({ onDone }) {
           {t('common.back')}
         </button>
 
-        {/* A compact language switch stays reachable on every step, not just
-            the first one — someone who taps through the language screen too
-            fast should not have to reinstall to fix it. */}
-        <button className="onb-link" onClick={() => goTo(LANG_STEP)} aria-label={t('common.language')}>
+        {/*
+          The language switch stays reachable on every step. It matters more
+          now that the dedicated language step is gone: someone who picked the
+          wrong language on Welcome must be able to fix it here rather than
+          reinstall.
+
+          It opens a sheet. Removing the step left this button with no onClick
+          at all for a moment — a control that looks live and does nothing,
+          which is the exact failure this project keeps hitting.
+        */}
+        <button className="onb-link" onClick={() => setLangOpen(true)} aria-label={t('common.language')}>
           <IconLanguages width={16} height={16} />
         </button>
 
         <button
           className="onb-link"
-          onClick={() => goTo(SLIDES.length + 1)}
+          onClick={() => goTo(SLIDES.length)}
           style={{ visibility: isSlide ? 'visible' : 'hidden' }}
         >
           {t('onboarding.skip')}
@@ -187,22 +201,6 @@ export default function Onboarding({ onDone }) {
           exit={{ opacity: 0, x: -40 * dir }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         >
-          {/* ---------------- language ---------------- */}
-          {isLang && (
-            <div style={{ padding: '4px 4px 0' }}>
-              <Art Icon={IconLanguages} hues={['#00e5ff', '#7c4dff']} index={index} />
-              <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
-                {t('onboarding.language.title')}
-              </h1>
-              <p className="muted" style={{ textAlign: 'center', fontSize: 13, lineHeight: 1.8 }}>
-                {t('onboarding.language.body')}
-              </p>
-              <div style={{ marginTop: 16 }}>
-                <LanguagePicker />
-              </div>
-            </div>
-          )}
-
           {/* ---------------- feature slides ---------------- */}
           {isSlide && (
             <>
@@ -364,6 +362,10 @@ export default function Onboarding({ onDone }) {
           </motion.button>
         </div>
       </div>
+
+      <Sheet open={langOpen} onClose={() => setLangOpen(false)} title={t('common.language')}>
+        <LanguagePicker />
+      </Sheet>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
 

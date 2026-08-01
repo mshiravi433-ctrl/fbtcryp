@@ -11,6 +11,7 @@ import Toasts from './components/Toasts';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
+import Splash from './pages/Splash';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { GAMES_ENABLED } from './lib/features';
@@ -171,8 +172,18 @@ export default function App() {
   // immediately instead of only after a restart.
   const guideReadAt = useSettingsStore((s) => s.guideReadAt);
 
-  // Welcome (language) comes before onboarding, and only for someone who has
-  // never picked a language. Returning users never see it again.
+  /*
+   * FIRST-RUN ORDER: splash -> welcome (language + name) -> guide -> app.
+   *
+   * The splash is a branded moment with a Start button, shown once. It exists
+   * because the flow used to ask for a language TWICE - on Welcome, then again
+   * as step 0 of Onboarding - which reads as a bug before the user has seen
+   * anything the product does.
+   *
+   * Only shown to someone who has not onboarded. A returning user goes
+   * straight to the app; a splash on every launch is a delay, not a brand.
+   */
+  const [showSplash, setShowSplash] = useState(!onboarded);
   const [showWelcome, setShowWelcome] = useState(() => !onboarded && languageIsUnset());
   const [showOnb, setShowOnb] = useState(!onboarded);
 
@@ -230,6 +241,8 @@ export default function App() {
    */
   if (locked) {
     screen = <AppLock onUnlock={() => setLocked(false)} />;
+  } else if (showSplash) {
+    screen = <Splash onStart={() => setShowSplash(false)} />;
   } else if (showWelcome) {
     screen = <Welcome onDone={() => setShowWelcome(false)} />;
   } else if (showOnb) {

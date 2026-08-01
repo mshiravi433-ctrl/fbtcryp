@@ -96,13 +96,25 @@ check('React mounted despite the dead network', Boolean(root && root.children.le
 check('__FBT_BOOTED__ was set', dom.window.__FBT_BOOTED__ === true);
 check('boot overlay was dismissed', !boot || boot.style.opacity === '0');
 check('watchdog did not fire', !boot || boot.getAttribute('data-failed') !== 'true');
-// A fresh install now lands on the LANGUAGE screen, then onboarding, then the
-// guide. Persian is still the default until the user chooses otherwise, so the
-// first paint must render Persian — and it must render the picker, which is
-// the one screen that has to be usable before you can read anything else.
-check('Persian UI rendered on first paint', /[\u0600-\u06FF]/.test(text));
-check('first screen is the language picker', text.includes('زبان'));
-check('every language is offered as a real choice', doc.querySelectorAll('.lang-row').length >= 10);
+/*
+ * A fresh install lands on the SPLASH: logo, app name, one Start button. The
+ * language picker is the screen after it.
+ *
+ * The default language is now English, not Persian. Defaulting to Persian
+ * meant anyone whose device gave no usable hint opened a right-to-left app in
+ * a script they might not read, and had to find the language control before
+ * they could do anything. English is the fallback locale anyway, so it is the
+ * one language guaranteed to have every key translated.
+ *
+ * This is asserted on the REAL rendered document, so it catches the splash
+ * failing to mount — which a component test that renders <Splash> directly
+ * would not.
+ */
+check('splash is the first screen', Boolean(doc.querySelector('.splash')));
+check('splash shows the app name', text.includes('FBT'));
+check('splash offers a start button', Boolean(doc.querySelector('.splash-btn')));
+check('first paint is English, not Persian', !/[\u0600-\u06FF]/.test(text));
+check('no language picker until after start', doc.querySelectorAll('.lang-row').length === 0);
 check('no uncaught script errors', jsErrors.length === 0);
 
 console.log('  external hosts blocked:', [...new Set(blocked.map((u) => new URL(u).host))].join(', ') || 'none');

@@ -1,4 +1,4 @@
-/** Proves the first-launch order: welcome → onboarding → guide → app shell. */
+/** Proves the first-launch order: splash → welcome → onboarding → guide → app shell. */
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import App from '../src/App.jsx';
@@ -16,7 +16,22 @@ export async function run(container) {
   localStorage.removeItem('fbt-lang');
   act(() => { useSettingsStore.setState({ onboarded: false, guideReadAt: 0 }); });
   await act(async () => { root.render(<App />); });
-  out.push(['fresh install shows the language screen first', has('.welcome-stage')]);
+
+  /*
+   * The splash comes first: one branded moment with a Start button. It replaced
+   * a duplicated language step — the flow used to ask for a language on
+   * Welcome and again as onboarding step 0, which reads as a bug before the
+   * user has seen anything the product does.
+   */
+  out.push(['fresh install shows the splash first', has('.splash')]);
+  out.push(['splash has a start button', Boolean(container.querySelector('.splash-btn'))]);
+  out.push(['welcome is behind the splash', !has('.welcome-stage')]);
+  out.push(['onboarding is behind the splash', !has('.onb-stage')]);
+
+  await act(async () => { container.querySelector('.splash-btn').click(); });
+  out.push(['start dismisses the splash', !has('.splash')]);
+
+  out.push(['language screen comes after the splash', has('.welcome-stage')]);
   out.push(['onboarding is behind the language screen', !has('.onb-stage')]);
   const langRows = () => [...container.querySelectorAll('.lang-row')];
   out.push(['language list offers at least 10 languages', langRows().length >= 10]);
@@ -37,6 +52,15 @@ export async function run(container) {
   await act(async () => { container.querySelector('.welcome-foot .onb-btn').click(); });
   out.push(['welcome dismissed after continue', !has('.welcome-stage')]);
   out.push(['fresh install shows onboarding', has('.onb-stage')]);
+
+  /*
+   * Onboarding must NOT ask for a language again — that duplicate is the whole
+   * reason the splash exists. It opens on the first feature slide instead.
+   */
+  out.push([
+    'onboarding does not repeat the language question',
+    !container.querySelector('.onb-scroll .lang-row')
+  ]);
   out.push(['guide not shown yet', !has('.guide-stage')]);
   out.push(['app shell not shown yet', !has('.app-shell')]);
 
