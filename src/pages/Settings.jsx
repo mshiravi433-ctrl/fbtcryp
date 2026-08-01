@@ -32,6 +32,7 @@ import {
   verifyTotp
 } from '../lib/security';
 import { langMeta } from '../i18n/languages';
+import { CURRENCIES, currencyOf } from '../lib/currency';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
 import {
@@ -457,13 +458,22 @@ export default function Settings() {
             icon={IconGlobe}
             label={t('settings.currency')}
             right={
+              /*
+                IRT is gone: no price feed we use quotes Iranian rial, so it
+                could only ever have been a rial label over a dollar number -
+                the most dangerous kind of wrong on a money screen.
+                
+                currencyOf() maps any stored legacy value (including 'IRT')
+                back to USD, so existing installs do not render a blank
+                selection after upgrading.
+              */
               <select
-                value={s.currency}
+                value={currencyOf(s.currency).code}
                 onChange={(e) => s.setCurrency(e.target.value)}
                 style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
               >
-                {['USD', 'EUR', 'IRT', 'AED'].map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>{c.code}</option>
                 ))}
               </select>
             }
@@ -594,7 +604,7 @@ export default function Settings() {
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.company')}</p>
         <div className="set-group">
           <Row icon={IconInfo} label={t('about.title')} onClick={() => navigate('/about')} />
-          <Row icon={IconMail} label={t('contact.title')} sub="Mshiravi433@gmail.com" onClick={() => navigate('/contact')} />
+          <Row icon={IconMail} label={t('contact.title')} sub="fbtswap@gmail.com" onClick={() => navigate('/contact')} />
           {/*
             Support goes to email, not Telegram - the owner's choice, and the
             more durable channel: an email address does not depend on an app
@@ -606,11 +616,12 @@ export default function Settings() {
             sub={t('settings.supportSub')}
             onClick={() => {
               haptic?.('light');
-              window.location.href = 'mailto:Mshiravi433@gmail.com';
+              window.location.href = 'mailto:fbtswap@gmail.com';
             }}
           />
           <Row icon={IconDoc} label={t('settings.terms')} onClick={() => navigate('/legal/terms')} />
           <Row icon={IconShield} label={t('settings.privacy')} onClick={() => navigate('/legal/privacy')} />
+          <Row icon={IconDoc} label={t('disclaimer.title')} onClick={() => navigate('/legal/disclaimer')} />
         </div>
       </motion.section>
 

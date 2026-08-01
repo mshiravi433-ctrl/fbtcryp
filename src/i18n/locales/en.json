@@ -590,7 +590,7 @@
     "terms": "Terms of Service",
     "privacy": "Privacy Policy",
     "support": "Support",
-    "supportSub": "Message us on Telegram",
+    "supportSub": "Email us",
     "trading": "Trading",
     "defaultSlippage": "Default slippage",
     "defaultSlippageSub": "Applied to new swaps",
@@ -653,16 +653,16 @@
   },
   "contact": {
     "title": "Contact us",
-    "intro": "Questions, partnership enquiries or a bug to report — reach us directly on Telegram.",
+    "intro": "Questions, partnership enquiries or a bug to report — email us directly.",
     "primaryChannel": "Fastest way to reach us",
     "copyHandle": "Copy handle",
     "companyInfo": "Company information",
     "viewMap": "View on map",
     "support": "Support",
-    "supportBody": "We answer Telegram messages during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
-    "scamWarning": "We will never DM you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be Fanous Bazaar Pishgam is impersonating us. Our only official contact is the Telegram account shown above.",
+    "supportBody": "We answer email during Iranian business hours, usually within one working day. When reporting a problem with a trade, include the transaction hash — it lets us see exactly what happened on-chain.",
+    "scamWarning": "We will never message you first, never ask for your seed phrase or wallet password, and never ask you to send crypto to an address for any reason. Anyone doing so while claiming to be Fanous Bazaar Pishgam is impersonating us. Our only official contact is the email address shown above.",
     "telegram": "Telegram",
-    "openTelegram": "Open Telegram",
+    "openTelegram": "Send email",
     "social": {
       "telegram": "Telegram",
       "instagram": "Instagram",
@@ -753,7 +753,7 @@
     },
     "contact": {
       "title": "Questions",
-      "body": "Reach us on Telegram at @Shiravi4333, or at the Fanous Bazaar Pishgam office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
+      "body": "Email us at fbtswap@gmail.com, or visit the Fanous Bazaar Pishgam office in Khomeyni Shahr, Isfahan. We will never message you first and will never ask for your seed phrase."
     }
   },
   "perp": {
@@ -941,7 +941,7 @@
       "send": "Send",
       "thinking": "Thinking…",
       "clear": "Clear",
-      "noAnswer": "We do not have a reliable answer for that. Please contact support on Telegram so a person can look at it — include the transaction hash if it is about a trade.",
+      "noAnswer": "We do not have a reliable answer for that. Please email fbtswap@gmail.com so a person can look at it — include the transaction hash if it is about a trade.",
       "disclaimer": "Answers about FBT Swap come from our own documentation. General answers may use a web search and can be wrong — never share your recovery phrase with anyone, including this assistant.",
       "s": {
         "fee": "What fees do you charge?",
@@ -1067,7 +1067,7 @@
     "feeWallet": "Fee wallet",
     "network": "Network",
     "viewOnChain": "View on BscScan",
-    "bounty": "Found a security issue? Message us on Telegram before disclosing it publicly. We'll respond within 48 hours.",
+    "bounty": "Found a security issue? Email us at fbtswap@gmail.com before disclosing it publicly. We'll respond within 48 hours.",
     "sourceNote": "The contract source is kept private. Read access is granted to auditors and technical partners via the Contact page. The on-chain contract address is listed on this page and anyone can inspect the fee transactions on BscScan."
   },
   "dev": {
@@ -1788,5 +1788,50 @@
   "splash": {
     "tagline": "Swap crypto. Keep your keys.",
     "start": "Start"
+  },
+  "disclaimer": {
+    "title": "Legal Disclaimer",
+    "updated": "Last updated: August 2026",
+    "intro": "Read this before using FBT Swap. It sets out plainly what this software is, what it is not, and what we cannot do for you.",
+    "nature": {
+      "title": "What this is",
+      "body": "FBT Swap is a non-custodial interface to public decentralized exchanges. It is software, not a financial institution. Fanous Bazaar Pishgam Co. is not a bank, exchange, broker, custodian, money transmitter or investment adviser, and is not licensed as any of them."
+    },
+    "noCustody": {
+      "title": "We never hold your funds",
+      "body": "Your keys stay on your device. Every transaction is signed by you, in your own wallet, and broadcast directly to a public blockchain. We cannot access, move, freeze, seize or recover your assets — not for you, and not for anyone else who asks."
+    },
+    "noAdvice": {
+      "title": "Nothing here is advice",
+      "body": "Prices, charts, signals, AI answers and any other content are information only. They are not investment, financial, legal or tax advice, and not a recommendation to buy or sell anything. Do your own research. Only risk what you can afford to lose entirely."
+    },
+    "irreversible": {
+      "title": "Transactions cannot be undone",
+      "body": "A confirmed blockchain transaction is permanent. Sending to a wrong address, approving a malicious contract, or accepting bad slippage results in a loss nobody can reverse — including us. Check every address and amount before you sign."
+    },
+    "thirdParty": {
+      "title": "Third-party services",
+      "body": "Swaps route through independent DEX aggregators and protocols. Prices come from third-party feeds. Wallet connections use WalletConnect. We do not control these services, do not guarantee their availability or accuracy, and are not responsible for their failures, outages or bugs."
+    },
+    "availability": {
+      "title": "No guarantee of service",
+      "body": "The app is provided as-is with no uptime guarantee. Features may change or be withdrawn. Access may be limited in some jurisdictions. Nothing here creates an obligation to keep any part of the service running."
+    },
+    "noWarranty": {
+      "title": "No warranty",
+      "body": "The software is provided without warranty of any kind, express or implied, including merchantability, fitness for a particular purpose and non-infringement. Smart contracts may contain defects. Price feeds may be delayed or wrong."
+    },
+    "liability": {
+      "title": "Limitation of liability",
+      "body": "To the maximum extent permitted by law, we are not liable for any loss of funds, profits, data or opportunity arising from your use of this software — whether from market movements, transaction errors, protocol exploits, third-party failures, or defects in the app itself."
+    },
+    "ip": {
+      "title": "Intellectual property",
+      "body": "The source code, design, name and marks of FBT Swap are the property of Fanous Bazaar Pishgam Co. The repository is public for auditability, which is not a licence to copy it. Redistributing the app, publishing a derivative to any store, or using the FBT name or logo requires written permission. See the LICENSE file."
+    },
+    "jurisdiction": {
+      "title": "Your responsibility",
+      "body": "Cryptocurrency rules differ by country and change often. You are responsible for complying with the laws and tax obligations that apply to you, and for confirming you are permitted to use this software where you live. Questions: fbtswap@gmail.com"
+    }
   }
 }

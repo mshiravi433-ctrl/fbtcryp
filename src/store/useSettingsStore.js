@@ -8,6 +8,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { currencyOf } from '../lib/currency';
+import { setDisplaySymbol } from '../lib/format';
 
 export const useSettingsStore = create(
   persist(
@@ -221,6 +223,18 @@ export function applyCompact(on) {
  * the React tree where the background field lives. A `.rgb-still ~ *` rule
  * would have looked right and matched nothing.
  */
+/**
+ * Push the chosen currency's symbol into the formatter.
+ *
+ * Without this the selector wrote a value nobody read: every price kept its
+ * hardcoded `$`. Legacy stores may still hold 'IRT' - currencyOf() maps
+ * anything unsupported back to USD so those installs do not render
+ * `undefined` beside every number after upgrading.
+ */
+export function applyCurrency(code) {
+  setDisplaySymbol(currencyOf(code).symbol);
+}
+
 export function applyNativeFlag() {
   if (typeof document === 'undefined') return;
   const native = Boolean(window.Capacitor?.isNativePlatform?.());
@@ -232,7 +246,10 @@ export function initTheme() {
   applyTheme(theme);
   applyAccent(accent);
   applyCompact(compactMode);
+  applyCurrency(useSettingsStore.getState().currency);
   applyNativeFlag();
+  // Re-apply whenever the user changes it, so prices update without a reload.
+  useSettingsStore.subscribe((st) => applyCurrency(st.currency));
   useSettingsStore.subscribe((st) => applyCompact(st.compactMode));
 
   if (typeof window !== 'undefined' && window.matchMedia) {

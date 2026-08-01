@@ -1,0 +1,96 @@
+Copyright (c) 2026 Fanous Bazaar Pishgam Co. (فانوس بازار پیشگام)
+Khomeyni Shahr, Isfahan, Iran. All rights reserved.
+
+================================================================================
+PROPRIETARY SOFTWARE — ALL RIGHTS RESERVED
+================================================================================
+
+This repository and everything in it — source code, designs, text, icons,
+translations, build configuration and documentation (the "Software") — is the
+exclusive property of Fanous Bazaar Pishgam Co. ("the Owner").
+
+The Software is published for transparency and auditability. Publication is
+NOT a grant of any licence.
+
+--------------------------------------------------------------------------------
+WHY THIS FILE EXISTS
+--------------------------------------------------------------------------------
+
+Until now this repository was public with no LICENSE file at all. That is not
+a neutral state. Under the Berne Convention and the copyright law of virtually
+every country, unlicensed work is "all rights reserved" by default — but in
+practice, a public repository with no licence invites the assumption that the
+code is free to take, and leaves the Owner arguing after the fact.
+
+Naming the terms explicitly is what makes them enforceable without a dispute.
+
+--------------------------------------------------------------------------------
+YOU MAY
+--------------------------------------------------------------------------------
+
+  * View and read the source.
+  * Audit it for security or correctness.
+  * Quote short excerpts for review, reporting, teaching or research, with
+    attribution (fair dealing / fair use).
+  * Report vulnerabilities to fbtswap@gmail.com.
+
+--------------------------------------------------------------------------------
+YOU MAY NOT, WITHOUT PRIOR WRITTEN PERMISSION
+--------------------------------------------------------------------------------
+
+  * Copy, reproduce or redistribute the Software, in whole or in substantial
+    part.
+  * Build, publish or distribute an application derived from it — including to
+    Google Play, the App Store, Cafe Bazaar, Myket, or any other channel.
+  * Use the name "FBT Swap", the FBT mark, the logo, or any confusingly
+    similar name or mark.
+  * Remove, alter or obscure the platform fee, the fee recipient addresses, or
+    any copyright or attribution notice.
+  * Use the Software, or any part of it, in a commercial product or service.
+  * Train a machine-learning model on this repository for the purpose of
+    reproducing it.
+
+Forking on GitHub for the sole purpose of submitting a pull request to this
+project is permitted. Any other fork is not.
+
+--------------------------------------------------------------------------------
+NON-CUSTODIAL — WHAT THIS SOFTWARE DOES NOT DO
+--------------------------------------------------------------------------------
+
+FBT Swap is a non-custodial interface. It never takes possession of user
+funds, never holds private keys, and cannot move, freeze, reverse or recover
+any transaction. Every transaction is signed by the user, in their own wallet,
+and broadcast directly to a public blockchain.
+
+The Owner is not a bank, an exchange, a broker, a custodian, or a money
+services business, and does not provide investment advice.
+
+--------------------------------------------------------------------------------
+NO WARRANTY
+--------------------------------------------------------------------------------
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+Cryptocurrency trading carries substantial risk, including total loss of
+capital. Blockchain transactions are irreversible. Smart contracts may contain
+defects. Prices are supplied by third-party feeds and may be delayed or wrong.
+
+IN NO EVENT SHALL THE OWNER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------------
+
+This project depends on open-source packages listed in package.json, each
+governed by its own licence. Those licences apply to those packages only and
+grant no rights over this Software.
+
+--------------------------------------------------------------------------------
+CONTACT
+--------------------------------------------------------------------------------
+
+Licensing, partnership or permission enquiries: fbtswap@gmail.com

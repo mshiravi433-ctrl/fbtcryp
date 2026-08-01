@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChart, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
+import { useSettingsStore } from '../store/useSettingsStore';
+import { vsOf } from '../lib/currency';
 
 /** Generic polling hook — pauses while the tab is hidden to save battery/quota. */
 export function usePoll(fn, deps = [], intervalMs = 30000) {
@@ -51,7 +53,21 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
 }
 
 export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
-export const useMarkets = (perPage = 50) => usePoll(() => getMarkets({ perPage }), [perPage], 30000);
+/*
+ * Market data is fetched in the user's DISPLAY CURRENCY.
+ *
+ * Changing the symbol alone would be a lie: EUR beside a dollar number. The
+ * conversion is done upstream by the price feed (`vs_currency`), so the number
+ * is genuinely in that currency rather than multiplied client-side against a
+ * rate that would drift out of date.
+ *
+ * `vs` is part of the poll key, so switching currency refetches immediately
+ * instead of showing converted symbols over stale figures until the next tick.
+ */
+export const useMarkets = (perPage = 50) => {
+  const vs = vsOf(useSettingsStore((s) => s.currency));
+  return usePoll(() => getMarkets({ perPage, vs }), [perPage, vs], 30000);
+};
 export const useTrending = () => usePoll(() => getTrending(), [], 120000);
 export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], 60000);
 

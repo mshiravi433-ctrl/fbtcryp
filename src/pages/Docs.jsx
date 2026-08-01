@@ -138,7 +138,15 @@ export default function Docs() {
 
       <p className="faint" style={{ lineHeight: 1.7 }}>{t('docs.videoNote')}</p>
 
-      <button className="btn btn-ghost" onClick={() => navigate('/help')}>{t('help.title')}</button>
+      {/*
+        The disclaimer belongs in the docs, not only buried in Settings: it is
+        the page to hand to an exchange listing reviewer or a store, and it
+        states the copyright position now that the repository is public.
+      */}
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/help')}>{t('help.title')}</button>
+        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/legal/disclaimer')}>{t('disclaimer.title')}</button>
+      </div>
     </PageTransition>
   );
 }

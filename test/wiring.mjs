@@ -973,5 +973,92 @@ export default function run() {
     t('the version reference is guarded for other bundlers', /typeof __APP_VERSION__ !== 'undefined'/.test(settingsRaw));
   }
 
+  /* ---- 24. the currency selector must actually change prices ------------ */
+  /*
+   * REAL BUG, same class as the biometric toggle: Settings offered
+   * USD/EUR/IRT/AED, wrote `currency` to the store, and NOTHING read it. Every
+   * price went through fmtUsd, which hardcoded a `$`. A user who picked EUR
+   * read dollar signs over dollar numbers - told their portfolio was worth
+   * something it was not.
+   *
+   * IRT is gone because no feed we use quotes Iranian rial, so it could only
+   * ever have been a rial label over a USD figure.
+   */
+  {
+    /*
+     * Strip comments. Checks in this file have now matched their own
+     * explanatory prose FIVE times; the comments here legitimately mention
+     * 'IRT' while explaining why it was removed.
+     */
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const cur = strip(read('src/lib/currency.js'));
+    const fmt = read('src/lib/format.js');
+    const store = read('src/store/useSettingsStore.js');
+    const hook = read('src/hooks/useMarket.js');
+    const settings = strip(read('src/pages/Settings.jsx'));
+
+    t('IRT is no longer offered', !/'IRT'/.test(settings) && !/'IRT'/.test(cur));
+    /*
+     * Assert the actual template, not just that the word appears somewhere -
+     * renaming the variable left the check green while the `$` was back.
+     */
+    t(
+      'fmtUsd uses the active symbol, not a hardcoded $',
+      /return `\$\{activeSymbol\}\$\{fmtPrice/.test(fmt)
+    );
+    t('there is a setter for the display symbol', /export function setDisplaySymbol/.test(fmt));
+    t('the store applies the chosen currency', /applyCurrency/.test(store));
+    t('the currency is re-applied when it changes', /subscribe\(\(st\) => applyCurrency/.test(store));
+
+    /*
+     * Symbol alone is a lie - EUR beside a dollar number. The feed must be
+     * asked for the currency so the FIGURE converts too.
+     */
+    t('market data is fetched in the display currency', /vsOf\(/.test(hook));
+
+    // A legacy stored value must not render `undefined` beside every price.
+    t('unknown/legacy codes fall back rather than breaking', /\?\? DEFAULT/.test(cur));
+  }
+
+  /* ---- 25. contact + legal --------------------------------------------- */
+  {
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    // The old address and the Telegram handle must be gone everywhere.
+    const allLocales = readdirSync('src/i18n/locales')
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => read(join('src/i18n/locales', f)))
+      .join('\n');
+    t('the old email is gone from every locale', !/Mshiravi433/.test(allLocales));
+    t('the Telegram handle is gone from every locale', !/Shiravi4333/.test(allLocales));
+    t('the new email is present', /fbtswap@gmail\.com/.test(allLocales));
+
+    /*
+     * The security warning told users to report issues on Telegram. That is
+     * now wrong AND unreachable - it must name email.
+     */
+    t('the security bounty points at email', /fbtswap@gmail\.com/.test(en.audit?.bounty ?? ''));
+    t('the scam warning names email as the only channel', /email/i.test(en.contact?.scamWarning ?? ''));
+
+    // The disclaimer must exist in both languages and be reachable.
+    for (const [lang, d] of [['en', en], ['fa', fa]]) {
+      t(`${lang} has a legal disclaimer`, Boolean(d.disclaimer?.title && d.disclaimer?.ip));
+    }
+    const legal = read('src/pages/Legal.jsx');
+    t('the disclaimer route is handled', /disclaimer/.test(legal));
+    t('the disclaimer is linked from Settings', /legal\/disclaimer/.test(strip(read('src/pages/Settings.jsx'))));
+    t('the disclaimer is linked from Docs', /legal\/disclaimer/.test(strip(read('src/pages/Docs.jsx'))));
+
+    // A public repo with no LICENSE reads as "free to take".
+    t('a LICENSE file exists', existsSync('LICENSE'));
+    const lic = existsSync('LICENSE') ? read('LICENSE') : '';
+    t('the licence reserves rights', /ALL RIGHTS RESERVED/i.test(lic));
+    t('the licence forbids removing the fee', /fee recipient/i.test(lic));
+  }
+
   return rows;
 }

@@ -13,20 +13,44 @@ export function fmtPrice(v) {
   return nf({ maximumFractionDigits: 0 }).format(v);
 }
 
+/*
+ * ACTIVE DISPLAY SYMBOL.
+ *
+ * fmtUsd hardcoded `$`, so the currency selector in Settings changed a stored
+ * value and nothing else - a user who picked EUR still read dollar signs over
+ * dollar numbers.
+ *
+ * Formatting reads this module-level symbol rather than taking a prop, because
+ * fmtUsd is called from ~40 call sites across pages, sheets and charts and
+ * threading a currency argument through all of them would guarantee some get
+ * missed - and a screen where SOME prices are converted is worse than one
+ * where none are.
+ *
+ * The upstream feed does the actual conversion (`vs_currency`), so the number
+ * is already in the chosen currency by the time it reaches here. This only
+ * supplies the symbol; it never multiplies by a rate of its own, which would
+ * silently drift out of date.
+ */
+let activeSymbol = '$';
+
+export function setDisplaySymbol(symbol) {
+  activeSymbol = symbol || '$';
+}
+
 export function fmtUsd(v, opts = {}) {
   if (v == null || Number.isNaN(v)) return '—';
-  return `$${fmtPrice(v, opts)}`;
+  return `${activeSymbol}${fmtPrice(v, opts)}`;
 }
 
 export function fmtCompact(v) {
   if (v == null || Number.isNaN(v)) return '—';
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
-  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(2)}K`;
-  return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 1e12) return `${sign}${activeSymbol}${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${sign}${activeSymbol}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}${activeSymbol}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${sign}${activeSymbol}${(abs / 1e3).toFixed(2)}K`;
+  return `${sign}${activeSymbol}${abs.toFixed(2)}`;
 }
 
 export function fmtNum(v, digits = 0) {

@@ -12,7 +12,7 @@ const SOCIALS = [
   { id: 'x', url: 'https://x.com/CompanyFbt', Icon: IconXLogo, label: 'X' },
   { id: 'linkedin', url: 'https://www.linkedin.com/in/mohammad-shiravi-a8891321b', Icon: IconLinkedin, label: 'LinkedIn' },
   { id: 'instagram', url: 'https://www.instagram.com/fbt_company_', Icon: IconInstagram, label: 'Instagram' },
-  { id: 'email', url: 'mailto:Mshiravi433@gmail.com', Icon: IconMail, label: 'Email' }
+  { id: 'email', url: 'mailto:fbtswap@gmail.com', Icon: IconMail, label: 'Email' }
 ];
 
 /**

@@ -32,14 +32,29 @@ const TERMS_SECTIONS = [
 
 const PRIVACY_SECTIONS = ['collect', 'notCollect', 'onchain', 'thirdPartyData', 'storage', 'analytics', 'rights', 'contact'];
 
+/*
+ * A standalone disclaimer, separate from Terms.
+ *
+ * Terms are a contract nobody reads. The disclaimer is the short, blunt list
+ * of what this software is NOT - not a bank, not custodial, not advice, not
+ * reversible - plus the copyright position now that the repository is public.
+ * Keeping it as its own page means it can be linked directly from a store
+ * listing, an exchange listing application, or a support reply.
+ */
+const DISCLAIMER_SECTIONS = [
+  'nature', 'noCustody', 'noAdvice', 'irreversible', 'thirdParty',
+  'availability', 'noWarranty', 'liability', 'ip', 'jurisdiction'
+];
+
 export default function Legal() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { doc } = useParams();
 
   const isPrivacy = doc === 'privacy';
-  const ns = isPrivacy ? 'privacy' : 'terms';
-  const sections = isPrivacy ? PRIVACY_SECTIONS : TERMS_SECTIONS;
+  const isDisclaimer = doc === 'disclaimer';
+  const ns = isPrivacy ? 'privacy' : isDisclaimer ? 'disclaimer' : 'terms';
+  const sections = isPrivacy ? PRIVACY_SECTIONS : isDisclaimer ? DISCLAIMER_SECTIONS : TERMS_SECTIONS;
 
   return (
     <PageTransition>
@@ -93,8 +108,9 @@ export default function Legal() {
       ))}
 
       <div className="row" style={{ gap: 10 }}>
-        <button className="btn btn-ghost" onClick={() => navigate(isPrivacy ? '/legal/terms' : '/legal/privacy')}>
-          {isPrivacy ? t('terms.title') : t('privacy.title')}
+        {/* Cycle through all three rather than toggling between two. */}
+        <button className="btn btn-ghost" onClick={() => navigate(isPrivacy ? '/legal/terms' : isDisclaimer ? '/legal/privacy' : '/legal/disclaimer')}>
+          {isPrivacy ? t('terms.title') : isDisclaimer ? t('privacy.title') : t('disclaimer.title')}
         </button>
         <button className="btn btn-ghost" onClick={() => navigate('/contact')}>
           {t('contact.title')}

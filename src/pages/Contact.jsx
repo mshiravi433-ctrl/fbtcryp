@@ -53,9 +53,9 @@ const SOCIALS = [
   },
   {
     id: 'email',
-    url: 'mailto:Mshiravi433@gmail.com',
+    url: 'mailto:fbtswap@gmail.com',
     grad: 'linear-gradient(135deg,var(--rgb-5),var(--rgb-6))',
-    handle: 'Mshiravi433@gmail.com'
+    handle: 'fbtswap@gmail.com'
   }
 ];
 const ADDRESS_FA = 'اصفهان، خمینی‌شهر، بلوار شهید بهشتی، جنب شهرداری منطقه ۴';

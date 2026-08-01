@@ -189,7 +189,7 @@ const KB = `FBT Swap facts — answer only from these plus general crypto knowle
 - Lose your seed phrase and nobody, including FBT, can recover your funds.
 - Swap, Farm and P2P use real money. Only the Games use virtual points with no value.
 - Company: Fanos Bazaar Pishgam (FBT Iran), Khomeyni Shahr, Isfahan.
-- Support: Telegram @Shiravi4333, email Mshiravi433@gmail.com.
+- Support: email fbtswap@gmail.com (the only official contact channel).
 - Not a bank or broker; gives no financial advice.
 
 RULES:
