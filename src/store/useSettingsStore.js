@@ -207,11 +207,32 @@ export function applyCompact(on) {
   document.documentElement.setAttribute('data-compact', on ? 'true' : 'false');
 }
 
+/**
+ * Mark the document when running inside the packaged app.
+ *
+ * CSS needs to know: a Capacitor WebView composites through the host app and
+ * shares a GPU with the native layer, so effects a browser tab absorbs without
+ * complaint (full-screen backdrop blurs, permanently animating 70px-blurred
+ * orbs) are what make the APK feel heavier than the website while running
+ * identical code.
+ *
+ * Set on <html> rather than derived with a sibling selector, because the
+ * elements that need it - sheet backdrops - are portalled into <body>, outside
+ * the React tree where the background field lives. A `.rgb-still ~ *` rule
+ * would have looked right and matched nothing.
+ */
+export function applyNativeFlag() {
+  if (typeof document === 'undefined') return;
+  const native = Boolean(window.Capacitor?.isNativePlatform?.());
+  document.documentElement.setAttribute('data-native', native ? 'true' : 'false');
+}
+
 export function initTheme() {
   const { theme, accent, compactMode } = useSettingsStore.getState();
   applyTheme(theme);
   applyAccent(accent);
   applyCompact(compactMode);
+  applyNativeFlag();
   useSettingsStore.subscribe((st) => applyCompact(st.compactMode));
 
   if (typeof window !== 'undefined' && window.matchMedia) {

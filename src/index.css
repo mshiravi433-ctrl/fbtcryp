@@ -3902,3 +3902,94 @@ input, select, textarea { font-size: 16px !important; }
   background: linear-gradient(158deg, #fff, rgba(255, 255, 255, 0.7));
   box-shadow: inset 0 1px 0 #fff, 0 16px 40px -22px rgba(124, 77, 255, 0.5);
 }
+
+/* ---------------------------------------------------------------------------
+   NATIVE PERFORMANCE: freeze the background field.
+
+   Three orbs at 60/55/48vw with blur(70px) means ~1M blurred pixels the
+   compositor re-blurs every frame, on every screen, for the whole session -
+   RgbBackground sits above the router and never unmounts.
+
+   A browser tab absorbs that. A Capacitor WebView does not: it composites
+   through the host app, shares a GPU with the native layer, and gets none of
+   the browser's page-visibility optimisations. This is the single largest
+   reason the APK felt heavier than the website while running the same code.
+
+   Frozen, the orbs still paint - same colours, same depth - they just stop
+   being re-composited 60 times a second. Cutting the blur radius as well keeps
+   the first paint cheap on low-end GPUs.
+   --------------------------------------------------------------------------- */
+.rgb-still .rgb-orb {
+  animation: none !important;
+  filter: blur(52px);
+  will-change: auto;
+}
+
+/* A drifting background is a classic vestibular trigger. This should always
+   have been honoured; it costs nothing and the field reads fine static. */
+@media (prefers-reduced-motion: reduce) {
+  .rgb-orb {
+    animation: none !important;
+    will-change: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   NATIVE: drop the full-screen backdrop blur.
+
+   `.sheet-backdrop` covers the whole viewport and blurs everything behind it -
+   which includes the three drifting orbs. So opening any sheet meant the
+   compositor re-blurred the entire screen every frame while the orbs moved
+   underneath: a full-viewport backdrop capture stacked on top of ~1M pixels of
+   already-blurred orb.
+
+   That is the More-menu jitter. The menu's own animation was already reduced
+   to opacity+y with no per-tile springs; the cost was never in the menu, it
+   was in what sat behind it.
+
+   Freezing the orbs (.rgb-still) removes most of it. Dropping this blur on
+   native removes the rest, at the price of a slightly less frosted overlay -
+   and the backdrop is 70% black already, so there is very little to see
+   through in the first place.
+   --------------------------------------------------------------------------- */
+/*
+ * Keyed off a root attribute, not a sibling selector. The backdrop is
+ * portalled into <body> while .rgb-field lives inside the React tree, so
+ * `.rgb-still ~ *` would never have matched it - the rule would have looked
+ * correct and done nothing, which is this project's most-repeated bug.
+ */
+:root[data-native='true'] .sheet-backdrop {
+  backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* Splash social row */
+.splash-socials {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.splash-social {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  cursor: pointer;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.splash-social:active {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--ink-cyan) 45%, transparent);
+}
+
+:root[data-theme='light'] .splash-social {
+  background: #fff;
+  box-shadow: 0 2px 8px -5px rgba(16, 20, 40, 0.25);
+}

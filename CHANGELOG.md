@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.5.1 — versionCode 15
+
+### Fixed: the app could lock you out permanently
+
+Reported as *"I went into settings, the app crashed, and it never worked
+again."* The crash and the lockout were two different things, and the second
+was the serious one.
+
+Enabling biometrics persists `biometricEnabled: true`, and `AppLock` mounts
+before everything else on every launch. A user with **no in-app vault and no
+2FA** then had no way past it once the sensor stopped recognising them — and
+because the flag survives a restart, force-quitting did not help. The only
+exit was reinstalling, which for anyone who *did* have a vault destroys the
+encrypted seed.
+
+The lock screen now offers **"turn off the lock and open the app"** when no
+other factor exists. That is safe precisely *because* there is no vault and no
+second factor: there is no secret the button could expose. A settings toggle
+must never be able to brick the app.
+
+### Fixed: severe slowness, and the More-menu jitter
+
+Both had the same root cause, and it was not the menu.
+
+Three background orbs sized 60/55/48vw, each with `filter: blur(70px)`, drift
+**forever behind every screen** — `RgbBackground` sits above the router and
+never unmounts. That is roughly **a million blurred pixels recomposited every
+frame, for the entire session**. On top of that, `.sheet-backdrop` blurs the
+whole viewport, so opening any sheet stacked a full-screen backdrop capture on
+those moving orbs.
+
+A browser tab absorbs this. A Capacitor WebView cannot: it composites through
+the host app, shares a GPU with the native layer, and gets none of the
+browser's page-visibility optimisations. **This is why the APK felt heavier
+than the website while running identical code.**
+
+On native the orbs now render static — same palette, same depth, zero
+per-frame cost — and the full-screen backdrop blur is dropped. The More menu's
+own animation was already reduced to opacity+y with no per-tile springs; the
+cost was always in what sat behind it. `prefers-reduced-motion` now freezes
+the field everywhere, which it should have done from the start.
+
+### Splash
+
+- The mark is now an **F** for FBT. It was drawing a **B**.
+- **Social links** under Start — Telegram, Instagram, email, reusing the exact
+  accounts Contact already links to rather than a second invented list.
+  `mailto:` is handled separately because `openUrl` accepts https only by
+  design, so that button would have looked live and done nothing.
+
 ## 1.5.0 — versionCode 14
 
 ### New first-run experience

@@ -1,5 +1,18 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { openUrl } from '../lib/browser';
+import { IconInstagram, IconMail, IconTelegram } from '../components/Icons';
+
+/*
+ * The same accounts Contact links to — deliberately not a second, invented
+ * list. Two sources of truth for "where to find us" is how one of them ends
+ * up pointing at a dead handle.
+ */
+const SOCIALS = [
+  { id: 'telegram', url: 'https://t.me/Shiravi4333', Icon: IconTelegram, label: 'Telegram' },
+  { id: 'instagram', url: 'https://www.instagram.com/fbt_company_', Icon: IconInstagram, label: 'Instagram' },
+  { id: 'email', url: 'mailto:Mshiravi433@gmail.com', Icon: IconMail, label: 'Email' }
+];
 
 /**
  * SPLASH — the first thing anyone sees.
@@ -70,11 +83,15 @@ export default function Splash({ onStart }) {
               animate={{ pathLength: 1 }}
               transition={{ duration: 1, ease: 'easeOut' }}
             />
+            {/*
+              An "F" for FBT. This was a "B" — the glyph was drawn with two
+              stacked bowls, which is the wrong initial for the product.
+              Three strokes: the stem, the top arm, the middle arm.
+            */}
             <motion.path
-              d="M9 9h5.2a2.4 2.4 0 0 1 0 4.8H9V9zm0 4.8h5.6a2.4 2.4 0 0 1 0 4.8H9v-4.8z"
-              stroke="url(#splashGrad)" strokeWidth="1.7"
+              d="M9.6 7.2v9.6M9.6 7.2h5.2M9.6 11.6h4.2"
+              stroke="url(#splashGrad)" strokeWidth="1.9"
               strokeLinecap="round" strokeLinejoin="round"
-              transform="translate(0 -3)"
               initial={{ pathLength: 0, opacity: 0 }}
               animate={{ pathLength: 1, opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.35, ease: 'easeOut' }}
@@ -116,6 +133,38 @@ export default function Splash({ onStart }) {
         >
           {t('splash.start')}
         </motion.button>
+
+        {/*
+          Social links under Start.
+          
+          openUrl (Custom Tabs) rather than window.open: inside the packaged
+          app a bare WebView hides the address bar, so the user cannot see
+          which domain they landed on — and a wallet vouching for an
+          unverifiable page is a phishing surface. mailto: falls through to the
+          OS handler, which openUrl already accounts for.
+        */}
+        <div className="splash-socials">
+          {SOCIALS.map(({ id, url, Icon, label }) => (
+            <button
+              key={id}
+              type="button"
+              className="splash-social"
+              onClick={() => {
+                /*
+                 * openUrl only accepts https - by design, so no caller can
+                 * introduce a javascript: or data: link. mailto: is therefore
+                 * REJECTED by it and the button would have looked live and
+                 * done nothing. Hand mail to the OS handler directly.
+                 */
+                if (url.startsWith('mailto:')) window.location.href = url;
+                else openUrl(url);
+              }}
+              aria-label={label}
+            >
+              <Icon width={18} height={18} />
+            </button>
+          ))}
+        </div>
       </motion.div>
     </div>
   );

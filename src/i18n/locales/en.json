@@ -1782,7 +1782,8 @@
     "useCode": "Use two-factor code instead",
     "codePlaceholder": "6-digit code",
     "badCode": "That code isn't right. Check your phone's clock and try the current code.",
-    "noFallback": "No backup method is set up. If the sensor won't recognise you, reinstall the app — you have no in-app wallet stored, so nothing is lost."
+    "noFallback": "No backup method is set up. If the sensor won't recognise you, reinstall the app — you have no in-app wallet stored, so nothing is lost.",
+    "turnOff": "Turn off the lock and open the app"
   },
   "splash": {
     "tagline": "Swap crypto. Keep your keys.",

@@ -813,5 +813,78 @@ export default function run() {
     t('the diagnostic is reachable from a plain browser URL', readsQuery);
   }
 
+  /* ---- 18. the lock must never be able to strand its owner -------------- */
+  /*
+   * REPORTED: "I went into settings, the app crashed, and it never worked
+   * again."
+   *
+   * Enabling biometrics persists biometricEnabled:true, and AppLock mounts
+   * before everything else on every launch. A user with no in-app vault and no
+   * 2FA then had NO way past it once the sensor stopped recognising them - and
+   * because the flag survives a restart, force-quitting did not help. The only
+   * exit was reinstalling, which for anyone who DID have a vault destroys the
+   * encrypted seed.
+   *
+   * A settings toggle must never be able to produce that.
+   */
+  {
+    const lock = read('src/components/AppLock.jsx');
+    t('the lock can be switched off from the lock screen', /disableBiometric\(\)/.test(lock));
+    t('the escape hatch also lets the user in', /disableBiometric\(\)[\s\S]{0,120}onUnlock\(\)/.test(lock));
+  }
+
+  /* ---- 19. native must not pay for browser-only eye candy --------------- */
+  /*
+   * REPORTED: the app is very slow, and the More menu jitters.
+   *
+   * Three orbs at 60/55/48vw with blur(70px) drift forever behind EVERY
+   * screen - RgbBackground sits above the router and never unmounts. That is
+   * ~1M blurred pixels recomposited every frame for the whole session. On top
+   * of it, .sheet-backdrop blurs the entire viewport, so opening any sheet
+   * stacked a full-screen backdrop capture on those moving orbs. That is the
+   * jitter: the menu's own animation was already stripped to opacity+y.
+   *
+   * A browser tab absorbs this. A Capacitor WebView composites through the
+   * host app and shares a GPU with the native layer, which is why the APK felt
+   * heavier than the site while running identical code.
+   */
+  {
+    const css = read('src/index.css');
+    const bg = read('src/components/RgbBackground.jsx');
+    const store = read('src/store/useSettingsStore.js');
+
+    t('the background field detects native', /isNativePlatform/.test(bg));
+    t('native freezes the drifting orbs', /\.rgb-still \.rgb-orb[\s\S]{0,120}animation: none/.test(css));
+    t('reduced motion also freezes them', /prefers-reduced-motion[\s\S]{0,200}\.rgb-orb[\s\S]{0,80}animation: none/.test(css));
+    t('native drops the full-screen backdrop blur', /data-native='true'\] \.sheet-backdrop[\s\S]{0,90}backdrop-filter: none/.test(css));
+
+    /*
+     * The CSS above is keyed off a root attribute, so something must SET it.
+     * A rule guarded by an attribute nobody writes is the dead-code failure
+     * this project keeps repeating.
+     */
+    t('the native flag is actually applied to the document', /data-native/.test(store));
+    t('the flag is set during boot', /applyNativeFlag\(\);/.test(store));
+  }
+
+  /* ---- 20. splash: right initial, working links ------------------------- */
+  {
+    const splash = read('src/pages/Splash.jsx');
+    const code = splash.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // The mark is an F for FBT. It used to draw a B.
+    t('the splash mark is not the old B glyph', !/M9 9h5\.2a2\.4/.test(code));
+    t('the splash draws an F stem and arms', /M9\.6 7\.2v9\.6/.test(code));
+
+    // Social buttons must go somewhere real.
+    t('the splash offers social links', /SOCIALS/.test(code));
+    t('social links open through the safe helper', /openUrl/.test(code));
+    /*
+     * openUrl only accepts https, by design. mailto: would be silently
+     * rejected and the button would look live while doing nothing.
+     */
+    t('mailto is handled rather than silently dropped', /mailto:/.test(code));
+  }
+
   return rows;
 }

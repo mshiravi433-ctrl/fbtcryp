@@ -195,7 +195,36 @@ export default function AppLock({ onUnlock }) {
              * say so and explain the one route out. Reinstalling is safe HERE
              * precisely because there is no vault to destroy.
              */}
-            {!hasAnyFallback && <p className="applock-sub">{t('lock.noFallback')}</p>}
+            {/*
+             * THE LOCKOUT: reported as "I went into settings, it crashed, and
+             * it never worked again".
+             *
+             * Enabling biometrics persists biometricEnabled:true, and AppLock
+             * mounts before everything else on every launch. A user with no
+             * in-app vault and no 2FA had no way past it once the sensor
+             * stopped recognising them — and because the flag survives a
+             * restart, force-quitting did not help either. Reinstalling was
+             * the only exit, which is a catastrophic answer to a toggle.
+             *
+             * Offering "turn it off" is safe here precisely BECAUSE there is
+             * no vault and no second factor: there is no secret this button
+             * could expose. The lock guards the UI, and the UI is exactly what
+             * the user is locked out of.
+             */}
+            {!hasAnyFallback && (
+              <>
+                <p className="applock-sub">{t('lock.noFallback')}</p>
+                <button
+                  className="applock-link"
+                  onClick={() => {
+                    useSettingsStore.getState().disableBiometric();
+                    onUnlock();
+                  }}
+                >
+                  {t('lock.turnOff')}
+                </button>
+              </>
+            )}
           </>
         )}
 
