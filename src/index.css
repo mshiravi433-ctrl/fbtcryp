@@ -4001,3 +4001,41 @@ input, select, textarea { font-size: 16px !important; }
 @media (prefers-reduced-motion: reduce) {
   .ad-shine { animation: none; opacity: 0; }
 }
+
+/* --- Token icons -----------------------------------------------------------
+   Always renders something: the resolver walks logoURI -> TrustWallet ->
+   CoinGecko -> a coloured monogram. The old markup hid the <img> on error,
+   which left an empty circle - and no built-in token had a logo at all.
+   --------------------------------------------------------------------------- */
+.tok-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--bg-raised, rgba(255, 255, 255, 0.06));
+}
+
+.tok-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.tok-icon-text {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.2px;
+}
+
+/* Quick-pick token chips: logo + ticker, so the common case is recognised
+   rather than read. */
+.tag-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-inline-start: 6px;
+}

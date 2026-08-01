@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Routes are hash-based (/#/swap), which crawlers do NOT index as separate
+  pages - everything after the # is never sent to the server. So this lists
+  the one real URL rather than inventing entries that would 404 on inspection
+  and make the sitemap look broken to a reviewer.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.lawpoetics.ir/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

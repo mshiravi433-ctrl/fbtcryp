@@ -28,6 +28,7 @@ import {
   getQuote,
   needsApproval
 } from '../lib/swap';
+import TokenIcon from '../lib/tokenIcon';
 import { fmtQty } from '../lib/format';
 import { NATIVE_GAS_FLOOR, formatUnitsExact } from '../lib/swap';
 import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
@@ -767,12 +768,19 @@ export default function Swap() {
           />
         </div>
 
-        {/* Common pairs, so the frequent case stays one tap. */}
+        {/*
+          Common pairs, so the frequent case stays one tap.
+          
+          Now with icons: a row of six bare tickers is read letter by letter,
+          while a logo is recognised at a glance. This is the control most
+          users hit, so it is the one worth making instant.
+        */}
         {!pickerQuery && (
           <div className="tag-scroll" style={{ marginBottom: 10 }}>
             {curated.slice(0, 6).map((tk) => (
-              <button key={tokenKey(tk)} className="tag" onClick={() => choose(tk)}>
-                {tk.symbol}
+              <button key={tokenKey(tk)} className="tag tag-token" onClick={() => choose(tk)}>
+                <TokenIcon token={tk} chainId={chainId} size={18} />
+                <span>{tk.symbol}</span>
               </button>
             ))}
           </div>
@@ -797,13 +805,13 @@ export default function Swap() {
                 style={{ width: '100%', textAlign: 'start' }}
                 onClick={() => choose(tk)}
               >
-                <div className="coin-logo">
-                  {tk.logoURI ? (
-                    <img src={tk.logoURI} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                  ) : (
-                    tk.symbol.slice(0, 3)
-                  )}
-                </div>
+                {/*
+                  TokenIcon walks logoURI -> TrustWallet (by contract address)
+                  -> CoinGecko -> a coloured monogram. The old code hid the
+                  <img> on error, which left an empty circle - and no built-in
+                  token had a logoURI at all, so that was every stock token.
+                */}
+                <TokenIcon token={tk} chainId={chainId} size={34} />
                 <div className="coin-meta" style={{ minWidth: 0 }}>
                   <div className="coin-sym" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>{tk.symbol}</span>

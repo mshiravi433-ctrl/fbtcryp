@@ -1060,5 +1060,89 @@ export default function run() {
     t('the licence forbids removing the fee', /fee recipient/i.test(lic));
   }
 
+  /* ---- 26. token icons must always render something --------------------- */
+  /*
+   * REAL BUG: the picker rendered `tk.logoURI` or the first three letters of
+   * the symbol. Not ONE of the ~46 built-in tokens in lib/chains.js has a
+   * logoURI - that field only exists on user-imported tokens. And when an
+   * imported token's image 404'd, onError set display:none, leaving an empty
+   * circle, which reads as broken rather than as a placeholder.
+   */
+  {
+    const icon = read('src/lib/tokenIcon.jsx');
+    const swap = read('src/pages/Swap.jsx');
+    const chains = read('src/lib/chains.js');
+
+    t('a token icon resolver exists', /export default function TokenIcon/.test(icon));
+    t('the swap picker uses it', /<TokenIcon/.test(swap));
+    t('the old display:none error handler is gone', !/currentTarget\.style\.display = 'none'/.test(swap));
+    t('there is a monogram fallback that always renders', /tok-icon-text/.test(icon));
+
+    /*
+     * Icons resolve by CONTRACT ADDRESS, never by symbol. Symbols are not
+     * unique and are trivially spoofed - a scam token can call itself USDT,
+     * but it cannot occupy Tether's address. Symbol-keyed lookup would hand a
+     * fake token the real one's logo, which is the most effective way to make
+     * a phishing token look legitimate.
+     */
+    t('icons are keyed by address, not symbol', /assets\/\$\{token\.address\}/.test(icon));
+    t('only https icon sources are accepted', /startsWith\('https:\/\/'\)/.test(icon));
+
+    // Confirms the premise: if built-in tokens ever gain logos, this check
+    // stops being meaningful and should be revisited rather than left green.
+    t('built-in tokens still carry no logoURI (resolver is required)', !/logoURI/.test(chains));
+  }
+
+  /* ---- 27. SEO: the site must be indexable and shareable ---------------- */
+  /*
+   * The page had a bare <title>FBT Swap</title>, a Persian-only description,
+   * and no Open Graph tags at all. Three costs: nothing for a search engine
+   * to rank on, every shared link rendering as a bare URL with no image, and
+   * listing sites (DappRadar, DefiLlama) having nothing to scrape.
+   */
+  {
+    const html = read('index.html');
+
+    t('the title carries keywords, not just the brand', /<title>[^<]*(DEX|Swap)[^<]*(DEX|Swap|Chains)/i.test(html));
+    t('there is a canonical URL', /rel="canonical"/.test(html));
+    t('crawlers are told to index', /name="robots"/.test(html));
+
+    // Shared links must preview. This is the largest avoidable loss of
+    // click-through for a link people pass around in chat.
+    for (const tag of ['og:title', 'og:description', 'og:image', 'og:url']) {
+      t(`${tag} is present`, html.includes(tag));
+    }
+    t('a Twitter/X card is declared', /twitter:card/.test(html));
+
+    // Structured data is what turns us from an untyped page into a
+    // recognised application in a directory or a rich result.
+    t('structured data is present', /application\/ld\+json/.test(html));
+    const ld = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)?.[1];
+    let ldOk = false;
+    try {
+      const parsed = JSON.parse(ld);
+      ldOk = parsed['@type'] === 'SoftwareApplication' && Boolean(parsed.name);
+    } catch {
+      ldOk = false;
+    }
+    t('the structured data is valid JSON-LD', ldOk);
+
+    // A missing robots.txt means crawlers hit /api/ and burn our upstream quota.
+    t('robots.txt exists', existsSync('public/robots.txt'));
+    const robots = existsSync('public/robots.txt') ? read('public/robots.txt') : '';
+    t('robots keeps crawlers out of the API', /Disallow: \/api\//.test(robots));
+    t('robots points at the sitemap', /Sitemap:/.test(robots));
+
+    t('sitemap.xml exists', existsSync('public/sitemap.xml'));
+    const sm = existsSync('public/sitemap.xml') ? read('public/sitemap.xml') : '';
+    // The namespace is sitemaps.org (plural). I got this wrong first time and
+    // a wrong namespace makes the file silently invalid to every crawler.
+    t('the sitemap namespace is correct', /www\.sitemaps\.org\/schemas\/sitemap/.test(sm));
+
+    // Every absolute URL in the SEO block must point at the live domain.
+    const badHost = /https:\/\/(fbtcryp\.vercel\.app|localhost)/.test(html);
+    t('SEO URLs point at the live domain', !badHost);
+  }
+
   return rows;
 }

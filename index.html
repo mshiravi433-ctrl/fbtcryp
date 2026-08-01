@@ -14,8 +14,97 @@
     -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="FBT Swap — صرافی غیرمتمرکز، سواپ روی زنجیره، تحلیل بازار و کیف پول غیرحضانتی." />
-    <title>FBT Swap</title>
+
+    <!--
+      ═══════════════════════════════════════════════════════════════════════
+      SEO AND SOCIAL PREVIEW
+
+      Before this the page had a bare title ("FBT Swap") and a Persian-only
+      description. Three consequences:
+
+        1. Search engines had nothing to rank on. The title carried no
+           keywords, so "decentralized exchange" or "swap BNB" could never
+           match us, and the Persian-only description meant we were invisible
+           to every non-Persian query.
+        2. Every share - Telegram, X, WhatsApp, LinkedIn - rendered a bare
+           link with no image and no summary, because there were no Open
+           Graph or Twitter Card tags at all. That is the single biggest
+           avoidable loss of click-through for a link people pass around.
+        3. Listing sites (DappRadar, DefiLlama, CoinGecko) scrape exactly
+           these tags to populate a directory entry. With none present, an
+           application has to be filled in entirely by hand and often reads
+           as a low-effort submission.
+
+      The description is English because that is the language of the
+      directories and of most search traffic; the app itself still opens in
+      the user's own language.
+      ═══════════════════════════════════════════════════════════════════════
+    -->
+    <title>FBT Swap — Non-Custodial DEX &amp; Crypto Swap on 9 Chains</title>
+    <meta
+      name="description"
+      content="Swap crypto across BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Solana and Tron. Non-custodial: you hold your keys, you sign every trade. Live prices, limit orders and DCA."
+    />
+    <meta
+      name="keywords"
+      content="dex, decentralized exchange, crypto swap, non-custodial wallet, bnb chain, defi, token swap, limit orders, dca"
+    />
+    <link rel="canonical" href="https://www.lawpoetics.ir/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Open Graph: Telegram, WhatsApp, LinkedIn, Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FBT Swap" />
+    <meta property="og:title" content="FBT Swap — Non-Custodial DEX &amp; Crypto Swap" />
+    <meta
+      property="og:description"
+      content="Swap crypto across 9 networks without giving up your keys. Live prices, limit orders and DCA, in 12 languages."
+    />
+    <meta property="og:url" content="https://www.lawpoetics.ir/" />
+    <meta property="og:image" content="https://www.lawpoetics.ir/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="fa_IR" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@CompanyFbt" />
+    <meta name="twitter:title" content="FBT Swap — Non-Custodial DEX" />
+    <meta
+      name="twitter:description"
+      content="Swap crypto across 9 networks without giving up your keys."
+    />
+    <meta name="twitter:image" content="https://www.lawpoetics.ir/icon-512.png" />
+
+    <!--
+      Structured data. This is what a directory or a search engine reads to
+      build a rich result: name, category, price, platform. Without it we are
+      an untyped page; with it we are a recognised SoftwareApplication.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "FBT Swap",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "Android, Web",
+        "url": "https://www.lawpoetics.ir/",
+        "description": "Non-custodial decentralized exchange interface. Swap crypto across nine networks while holding your own keys.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": {
+          "@type": "Organization",
+          "name": "Fanous Bazaar Pishgam Co.",
+          "email": "fbtswap@gmail.com",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Khomeyni Shahr",
+            "addressRegion": "Isfahan",
+            "addressCountry": "IR"
+          }
+        }
+      }
+    </script>
 
     <!--
       NOTHING IN THIS <head> IS ALLOWED TO BLOCK RENDERING.

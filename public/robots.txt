@@ -1,0 +1,14 @@
+# FBT Swap — https://www.lawpoetics.ir
+#
+# There was no robots.txt at all before this. That is not neutral: crawlers
+# treat a missing file as "crawl everything", including the API, which wastes
+# our rate limit on requests no search engine can use.
+
+User-agent: *
+Allow: /
+
+# The API returns JSON, never anything a search result should link to. Every
+# crawl of it is a wasted upstream call against our CoinGecko quota.
+Disallow: /api/
+
+Sitemap: https://www.lawpoetics.ir/sitemap.xml
