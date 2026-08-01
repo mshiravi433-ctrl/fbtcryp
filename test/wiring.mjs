@@ -1142,6 +1142,20 @@ export default function run() {
     // Every absolute URL in the SEO block must point at the live domain.
     const badHost = /https:\/\/(fbtcryp\.vercel\.app|localhost)/.test(html);
     t('SEO URLs point at the live domain', !badHost);
+
+    /*
+     * Google re-checks the verification tag periodically and SILENTLY DROPS
+     * the property if it vanishes - taking the sitemap submission and all
+     * indexing history with it. A tag this easy to delete during an unrelated
+     * <head> edit needs a test holding it in place.
+     *
+     * Also assert it is not the placeholder: Google records a wrong token as a
+     * failed verification, which is harder to diagnose than a missing tag
+     * because the console cannot tell you which one it is.
+     */
+    const gsv = /<meta name="google-site-verification" content="([^"]*)"/.exec(html)?.[1];
+    t('the Search Console verification tag is present', Boolean(gsv));
+    t('the verification token is real, not a placeholder', Boolean(gsv) && !/PASTE|TODO|XXX/i.test(gsv) && gsv.length > 20);
   }
 
   return rows;
