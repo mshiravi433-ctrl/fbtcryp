@@ -25,6 +25,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
+import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
@@ -335,6 +336,37 @@ app.post('/api/ai/brief', async (req, res) => {
 app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)
 );
+
+/* --------------------------------- Solana --------------------------------- */
+/*
+ * Jupiter proxy. The client cannot hold the API key — a VITE_ variable is
+ * compiled into the browser bundle and the APK — so these two routes exist to
+ * attach it server-side. See server/solana.js for why the parameter list is an
+ * allow-list rather than a pass-through.
+ *
+ * Placed above the AI budget's siblings but under the same /api rate limit as
+ * everything else; these calls are cheap for us (one upstream request) and the
+ * expensive-endpoint budget is reserved for the model routes.
+ */
+app.get('/api/solana/status', (_req, res) =>
+  res.json({
+    configured: jupiterConfigured(),
+    // The honest signal the UI needs: swaps work without this, but our fee is
+    // silently zero, which looks identical to a working integration.
+    feeReady: Boolean(referralAccount()),
+    referralAccount: referralAccount() || null
+  })
+);
+
+app.get('/api/solana/order', async (req, res) => {
+  const r = await solanaOrder(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.post('/api/solana/execute', async (req, res) => {
+  const r = await solanaExecute(req.body);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
 
 /* -------------------------------- support --------------------------------- */
 /*

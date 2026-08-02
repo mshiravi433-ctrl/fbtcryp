@@ -9,6 +9,17 @@ import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
+import {
+  REFERRAL_FEE_MAX_BPS,
+  REFERRAL_FEE_MIN_BPS,
+  executeSucceeded,
+  fromBaseUnits,
+  isSolanaAddress,
+  netFeeBps,
+  orderErrorKey,
+  referralFeeBps,
+  toBaseUnits
+} from '../src/lib/solana.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
@@ -945,6 +956,120 @@ export default function run() {
       'items with no language default to English rather than vanishing',
       trimKeepingLanguages([{ id: 'x', title: 'x', at: 1 }]).length === 1
     );
+  }
+
+  /* ------------------------- Solana / Jupiter ----------------------------- */
+  /*
+   * The Solana path shares no code with the EVM swap: different aggregator,
+   * different address format, different fee mechanism. Everything that can
+   * silently cost money is asserted here rather than trusted.
+   */
+  {
+    /* ---- base units: the precision trap ---- */
+    /*
+     * The obvious implementation is `amount * 10 ** decimals`, and it is
+     * wrong. In IEEE-754, 0.1 * 1e9 is 100000000.00000001 — Jupiter rejects a
+     * non-integer amount, so the swap fails for a perfectly ordinary input.
+     * These assert the string-based conversion is exact.
+     */
+    t('0.1 SOL converts exactly', toBaseUnits(0.1, 9) === '100000000');
+    t('1 SOL converts exactly', toBaseUnits(1, 9) === '1000000000');
+    t('the smallest USDC unit converts', toBaseUnits(0.000001, 6) === '1');
+    t('a long fraction converts exactly', toBaseUnits(123.456789, 9) === '123456789000');
+    /*
+     * These two are the proof, not decoration. `8.31 * 1e9` evaluates to
+     * 8310000000.000001 and `1.005 * 1e9` to 1004999999.9999999 — both are
+     * non-integers, both are amounts a user can plausibly type, and Jupiter
+     * rejects the order outright. An earlier version of this test only used
+     * 0.1 and 1.5, which happen to survive the float path, so it passed
+     * against a deliberately broken implementation.
+     */
+    t('8.31 does not lose precision', toBaseUnits(8.31, 9) === '8310000000');
+    t('1.005 does not lose precision', toBaseUnits(1.005, 9) === '1005000000');
+    t('the naive float path really is broken for 8.31',
+      !Number.isInteger(8.31 * 10 ** 9));
+    t('the naive float path really is broken for 1.005',
+      !Number.isInteger(1.005 * 10 ** 9));
+
+    // Every result must be a pure integer string, or Jupiter 400s.
+    for (const [amt, dec] of [[0.1, 9], [1.5, 6], [0.07, 9], [8.31, 9], [1.005, 9], [999.999999, 6]]) {
+      t(`${amt}@${dec} yields an integer string`, /^\d+$/.test(toBaseUnits(amt, dec) ?? ''));
+    }
+
+    // Round-trips must be lossless, or the confirmation screen lies.
+    for (const [amt, dec] of [[0.1, 9], [1.5, 6], [123.456789, 9]]) {
+      t(`${amt} survives a round-trip`, fromBaseUnits(toBaseUnits(amt, dec), dec) === String(amt));
+    }
+
+    t('zero is rejected', toBaseUnits(0, 9) === null);
+    t('a negative amount is rejected', toBaseUnits(-1, 9) === null);
+    t('junk is rejected', toBaseUnits('abc', 9) === null);
+
+    /* ---- referral fee: Jupiter's hard range ---- */
+    /*
+     * Jupiter accepts 50-255 bps and rejects the whole /order request outside
+     * it. Our 70 bps sits inside, so the Solana rate matches EVM exactly and
+     * there is no second number to explain to a user.
+     */
+    t('our 70 bps fee is inside Jupiter\'s range',
+      FEE_BPS >= REFERRAL_FEE_MIN_BPS && FEE_BPS <= REFERRAL_FEE_MAX_BPS);
+    t('the fee passes through unchanged', referralFeeBps(70) === 70);
+    t('a too-low fee is raised to the minimum', referralFeeBps(20) === REFERRAL_FEE_MIN_BPS);
+    t('a too-high fee is capped', referralFeeBps(900) === REFERRAL_FEE_MAX_BPS);
+    t('a junk fee falls back to the minimum', referralFeeBps('x') === REFERRAL_FEE_MIN_BPS);
+
+    /*
+     * Jupiter keeps 20% of the integrator fee. The disclosure must state what
+     * we ACTUALLY receive, not imply the whole 0.70% arrives.
+     */
+    t('the net fee accounts for Jupiter\'s 20% cut', netFeeBps(70) === 56);
+    t('the net fee is always below the gross', netFeeBps(70) < referralFeeBps(70));
+
+    /* ---- error mapping: the same code means different things ---- */
+    /*
+     * REAL TRAP in the V2 docs: errorCode 2 is "insufficient SOL for gas" on
+     * the aggregator routers and "missing associated token account" on
+     * JupiterZ. Mapping on the code alone would confidently tell a user to top
+     * up SOL when the real problem is a missing token account, or vice versa.
+     */
+    t('aggregator code 2 means gas',
+      orderErrorKey({ transaction: '', errorCode: 2, router: 'metis' }) === 'INSUFFICIENT_GAS');
+    t('JupiterZ code 2 means a missing token account',
+      orderErrorKey({ transaction: '', errorCode: 2, router: 'jupiterz' }) === 'NO_TOKEN_ACCOUNT');
+    t('the two routers really do differ on code 2',
+      orderErrorKey({ transaction: '', errorCode: 2, router: 'metis' }) !==
+      orderErrorKey({ transaction: '', errorCode: 2, router: 'jupiterz' }));
+    t('code 1 is a balance problem on both',
+      orderErrorKey({ transaction: '', errorCode: 1, router: 'metis' }) === 'INSUFFICIENT_BALANCE' &&
+      orderErrorKey({ transaction: '', errorCode: 1, router: 'jupiterz' }) === 'INSUFFICIENT_BALANCE');
+    t('an unknown code still yields a message',
+      orderErrorKey({ transaction: '', errorCode: 99, router: 'metis' }) === 'ORDER_FAILED');
+    // A usable order must NOT be reported as an error.
+    t('a real transaction is not an error', orderErrorKey({ transaction: 'AQAB' }) === null);
+    t('a null order is not an error', orderErrorKey(null) === null);
+
+    /* ---- execute result ---- */
+    /*
+     * Both fields must agree. Treating status alone as success would report a
+     * failed swap as done, which is the worst possible lie on this screen.
+     */
+    t('success needs status AND code 0',
+      executeSucceeded({ status: 'Success', code: 0 }) === true);
+    t('a non-zero code is not success',
+      executeSucceeded({ status: 'Success', code: -1000 }) === false);
+    t('a failed status is not success',
+      executeSucceeded({ status: 'Failed', code: 0 }) === false);
+    t('an empty response is not success', executeSucceeded(null) === false);
+
+    /* ---- address validation ---- */
+    t('a real Solana address validates',
+      isSolanaAddress('9Z4wtiosH7JMXhKg8JpUPDCtB5ZyM8vzby14HwDidgVz'));
+    t('an EVM address is rejected',
+      !isSolanaAddress('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
+    // Base58 excludes 0, O, I and l precisely to stop look-alike typos.
+    t('base58-illegal characters are rejected',
+      !isSolanaAddress('0OIl000000000000000000000000000000'));
+    t('an empty string is rejected', !isSolanaAddress(''));
   }
 
   return rows;

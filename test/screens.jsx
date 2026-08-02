@@ -23,6 +23,7 @@ import Explore from '../src/pages/Explore.jsx';
 import Discover from '../src/pages/Discover.jsx';
 import Nft from '../src/pages/Nft.jsx';
 import Orders from '../src/pages/Orders.jsx';
+import SolanaSwap from '../src/pages/SolanaSwap.jsx';
 import Predict from '../src/pages/Predict.jsx';
 import Market from '../src/pages/Market.jsx';
 import Wallet from '../src/pages/Wallet.jsx';
@@ -113,6 +114,13 @@ export async function run(container) {
   await mount('Discover', <Discover />);
   await mount('Nft', <Nft />);
   await mount('Orders', <Orders />);
+  /*
+   * Solana renders with NO wallet injected, which is the state every user is
+   * in before installing Phantom. The page must show the "install a wallet"
+   * notice rather than throw on a null provider — the class of crash that took
+   * out P2P and Settings before.
+   */
+  await mount('SolanaSwap (no wallet)', <SolanaSwap />);
   await mount('Predict', <Predict />);
   await mount('Market', <Market />);
   await mount('Wallet', <Wallet />);

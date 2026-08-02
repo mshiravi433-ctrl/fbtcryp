@@ -32,7 +32,8 @@
     "explore": "Explorer",
     "discover": "Discover",
     "nft": "My NFTs",
-    "orders": "Auto Orders"
+    "orders": "Auto Orders",
+    "solana": "Solana swap"
   },
   "common": {
     "balance": "Balance",
@@ -610,7 +611,7 @@
     "evmNetwork": "EVM network",
     "evmNetworkSub": "Chain used for swaps",
     "solana": "Solana cluster",
-    "solanaSub": "Used for receiving on Solana. Swaps are EVM-only for now.",
+    "solanaSub": "Network used for Solana swaps and receiving.",
     "customRpc": "Custom RPC",
     "customRpcSub": "Use your own node",
     "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",
@@ -1834,6 +1835,39 @@
     "jurisdiction": {
       "title": "Your responsibility",
       "body": "Cryptocurrency rules differ by country and change often. You are responsible for complying with the laws and tax obligations that apply to you, and for confirming you are permitted to use this software where you live. Questions: fbtswap@gmail.com"
+    }
+  },
+  "solana": {
+    "title": "Solana wallet",
+    "notConnected": "Not connected",
+    "detected": "{{name}} detected. Connect to swap on Solana.",
+    "noWallet": "No Solana wallet found. Install Phantom or Solflare, then reopen this page. Your EVM wallet (MetaMask, Trust) cannot sign Solana transactions — they are different networks.",
+    "router": "Route",
+    "importTitle": "Swap any Solana token",
+    "importBody": "Most memecoins are not on any list. Paste the token's mint address and it becomes swappable straight away.",
+    "mintPlaceholder": "Paste a mint address",
+    "importedToken": "Imported token",
+    "feeNotice": "Platform fee {{fee}}% on Solana, taken by the Jupiter aggregator inside the same transaction. Jupiter keeps 20% of it, so {{net}}% reaches us. Shown before you sign, never after.",
+    "feeNotConfigured": "Fee collection is not configured yet: swaps work normally, but no platform fee is being collected on Solana.",
+    "err": {
+      "NO_WALLET": "No Solana wallet is installed.",
+      "REJECTED": "You cancelled the request in your wallet.",
+      "CONNECT_FAILED": "Could not connect to the wallet.",
+      "NO_ACCOUNT": "The wallet returned no account.",
+      "CANNOT_SIGN": "This wallet cannot sign transactions.",
+      "BAD_TRANSACTION": "The transaction from the aggregator could not be read.",
+      "SIGN_FAILED": "Signing failed.",
+      "QUOTE_FAILED": "Could not fetch a price. Check your connection.",
+      "BAD_MINT": "That is not a valid Solana mint address.",
+      "SAME_TOKEN": "Pick two different tokens.",
+      "BAD_AMOUNT": "Enter an amount greater than zero.",
+      "ALREADY_ADDED": "That token is already in the list.",
+      "INSUFFICIENT_BALANCE": "Not enough balance for this swap.",
+      "INSUFFICIENT_GAS": "Not enough SOL to pay the network fee.",
+      "BELOW_MINIMUM": "This amount is below the minimum for this route.",
+      "NO_TOKEN_ACCOUNT": "Your wallet has no account for this token yet. A small amount of SOL is needed to create one.",
+      "NO_ROUTE": "No route found for this pair.",
+      "ORDER_FAILED": "The aggregator could not build this swap."
     }
   }
 }

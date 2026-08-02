@@ -1384,10 +1384,24 @@ export default function run() {
       if (!key || !entry?.version || !entry?.resolved) continue;
       const tarball = String(entry.resolved).split('/').pop() ?? '';
       if (!tarball.endsWith('.tgz')) continue;
-      // Strip the trailing -<version>.tgz and compare.
-      const inName = tarball.slice(0, -4).match(/-(\d[^-]*(?:-[^-]+)*)$/)?.[1];
-      if (inName && inName !== entry.version) {
-        mismatched.push(`${key} declares ${entry.version} but resolves ${inName}`);
+      /*
+       * Derive the expected filename from the package NAME rather than trying
+       * to parse the version out of the filename.
+       *
+       * The first version of this check searched for a trailing -<digits...>
+       * and mis-parsed every package whose own name contains a number:
+       * `utf-8-validate-5.0.10.tgz` yielded "8-validate-5.0.10" and was
+       * reported as corrupt. A guard that cries wolf on healthy input is worse
+       * than no guard, because the next real corruption gets waved through.
+       *
+       * The package name is the last path segment of the key, so the
+       * filename must be exactly `<name>-<version>.tgz`.
+       */
+      const pkgName = key.split('node_modules/').pop() ?? '';
+      const short = pkgName.includes('/') ? pkgName.split('/').pop() : pkgName;
+      const expected = `${short}-${entry.version}.tgz`;
+      if (tarball !== expected) {
+        mismatched.push(`${key}: expected ${expected}, resolved ${tarball}`);
       }
     }
     t(

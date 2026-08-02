@@ -53,6 +53,9 @@ const Explore = lazy(() => import('./pages/Explore'));
 const Discover = lazy(() => import('./pages/Discover'));
 const Nft = lazy(() => import('./pages/Nft'));
 const Orders = lazy(() => import('./pages/Orders'));
+// Lazy on purpose: pulls @solana/web3.js, which is 19 MB installed and is
+// only needed by users who actually open the Solana screen.
+const SolanaSwap = lazy(() => import('./pages/SolanaSwap'));
 
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
@@ -159,6 +162,7 @@ function AnimatedRoutes() {
           <Route path="/discover" element={<Discover />} />
           <Route path="/nft" element={<Nft />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/solana" element={<SolanaSwap />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>

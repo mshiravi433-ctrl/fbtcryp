@@ -32,7 +32,8 @@
     "explore": "المستكشف",
     "discover": "اكتشف",
     "nft": "NFT الخاصة بي",
-    "orders": "الأوامر"
+    "orders": "الأوامر",
+    "solana": "تبادل سولانا"
   },
   "common": {
     "balance": "الرصيد",
@@ -610,7 +611,7 @@
     "evmNetwork": "EVM network",
     "evmNetworkSub": "Chain used for swaps",
     "solana": "شبكة سولانا",
-    "solanaSub": "تُستخدم للاستلام على سولانا. التبادل يعمل حالياً على شبكات EVM فقط.",
+    "solanaSub": "الشبكة المستخدمة للتبادل والاستلام على سولانا.",
     "customRpc": "Custom RPC",
     "customRpcSub": "Use your own node",
     "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",

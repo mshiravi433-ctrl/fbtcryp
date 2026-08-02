@@ -72,7 +72,10 @@ const GROUPS = [
       { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
       { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' },
-      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
+      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' },
+      // Solana lives on its own screen, not as a tab inside Swap: it uses a
+      // different aggregator, wallet and signing scheme, so nothing is shared.
+      { to: '/solana', key: 'nav.solana', Icon: IconSwap, hue: '#14f195' }
     ]
   },
   {
