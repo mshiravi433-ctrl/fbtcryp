@@ -190,6 +190,21 @@ console.log('\n▸ auditing wiring (keys · routes · dead files)…');
   report('wiring', runWiring());
 }
 
+/*
+ * Native notification probe — runs the REAL notify.js with `Notification`
+ * deleted and Capacitor injected, which is the one environment shape that
+ * exists on the APK and can never occur in jsdom or a browser. This is the
+ * suite that catches "Settings crashes on the phone but not on the web".
+ *
+ * It installs its own DOM per case, so it must run before anything that
+ * depends on the shared jsdom set up by installDom().
+ */
+console.log('\n▸ probing notifications with no web Notification API…');
+{
+  const { default: runNative } = await import('./native-notify-probe.mjs');
+  report('native notifications', await runNative());
+}
+
 console.log('\n▸ checking lazy locale loading…');
 {
   npx(['vite', 'build', '-c', 'test/vite.i18n.mjs', '--logLevel', 'error']);

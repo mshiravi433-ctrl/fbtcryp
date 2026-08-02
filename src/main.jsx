@@ -71,8 +71,30 @@ class BootBoundary extends React.Component {
           >
             {String(this.state.error?.message || this.state.error).slice(0, 220)}
           </code>
+          {/*
+            * RECOVERY MUST LEAVE THE ROUTE THAT CRASHED.
+            *
+            * This used to be a plain location.reload(). The app is a
+            * HashRouter, so a crash on Settings left the URL at `#/settings`
+            * — reloading went straight back to the screen that had just
+            * thrown, threw again, and showed this same page. The user was
+            * permanently locked out of that screen with a button that looked
+            * like a fix and was actually a loop. Reported as
+            * «دیگه درست نمیشه».
+            *
+            * Clearing the hash first sends the reload to the home route, so
+            * one tap always gets the user back into a working app even when
+            * the underlying defect is still there.
+            */}
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              try {
+                window.location.hash = '#/';
+              } catch {
+                /* fall through to the reload regardless */
+              }
+              window.location.reload();
+            }}
             style={{
               width: '100%',
               padding: 13,

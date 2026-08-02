@@ -636,6 +636,53 @@ export default function run() {
     const supFn = /notificationsSupported = \(\) => \{[\s\S]*?\n\};/.exec(notif)?.[0] ?? '';
     t('notificationsSupported() treats native as supported', /isNativeApp\(\)/.test(supFn));
 
+    /*
+     * INSTANCE NINE, and the worst of the family — it did not merely disable a
+     * feature, it CRASHED the app.
+     *
+     * Making notificationsSupported() return true on native was right, but it
+     * turned three call sites that read the bare global `Notification.*` into
+     * live grenades: a Capacitor WebView has no such global, so they threw
+     * `ReferenceError: Notification is not defined`. Settings calls
+     * notificationPermission() in a useState initialiser — during render — so
+     * the whole tree unmounted into the BootBoundary the moment the user
+     * opened Settings, on the APK only.
+     *
+     * Every read of the global must sit behind an existence check. Note this
+     * is a static check and therefore weak by nature: it can only see the
+     * shape of the code. test/native-notify-probe.mjs is the real guard — it
+     * deletes the global and CALLS these functions.
+     */
+    const bareReads = [];
+    for (const m of notif.matchAll(/^(?!\s*[/*]).*\bNotification\.(permission|requestPermission)\b.*$/gm)) {
+      bareReads.push(m[0].trim().slice(0, 60));
+    }
+    // Each surviving read must be preceded by the guard within its function.
+    const guarded = notif.split(/\n(?=export (?:async )?function|export const)/).every((fn) => {
+      if (!/\bNotification\.(permission|requestPermission)\b/.test(fn)) return true;
+      return /webNotificationApi\(\)/.test(fn);
+    });
+    t(
+      `every bare Notification.* read is guarded by an existence check${bareReads.length && !guarded ? ` — ${bareReads[0]}` : ''}`,
+      guarded
+    );
+    t(
+      'the guard uses typeof, not a window lookup that still names the global',
+      /typeof Notification !== 'undefined'/.test(notif)
+    );
+
+    /*
+     * The other half of the report was "دیگه درست نمیشه" — it never gets
+     * better. With HashRouter, a crash leaves the URL on the route that threw,
+     * so location.reload() re-enters it and the error screen recurs forever.
+     * Recovery has to clear the hash first.
+     */
+    const boundary = read('src/main.jsx');
+    t(
+      'the crash screen escapes the route that crashed before reloading',
+      /location\.hash\s*=/.test(boundary) && /location\.reload\(\)/.test(boundary)
+    );
+
     // A QR scanner that hard-requires BarcodeDetector cannot run in a WebView.
     const scanFn = /export function scannerSupported\(\)[\s\S]*?\n\}/.exec(scanner)?.[0] ?? '';
     t(

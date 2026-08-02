@@ -193,10 +193,57 @@ export const notificationsSupported = () => {
   return 'Notification' in window;
 };
 
+/**
+ * True when the WEB Notification API actually exists.
+ *
+ * ─── WHY THIS IS SEPARATE FROM notificationsSupported() ─────────────────────
+ * The two questions look identical and are not:
+ *
+ *   notificationsSupported()  "can this device show notifications at all?"
+ *                             → true on native, via FCM
+ *   webNotificationApi()      "does `window.Notification` exist right now?"
+ *                             → FALSE on native
+ *
+ * Conflating them is what crashed the app. `notificationsSupported()` was
+ * (correctly) taught to return true on native, but three call sites then read
+ * the bare global `Notification.permission` behind that check. In a Capacitor
+ * WebView there is no such global, so it threw
+ *
+ *     ReferenceError: Notification is not defined
+ *
+ * Settings calls notificationPermission() inside a useState initialiser, i.e.
+ * DURING RENDER, so the throw propagated to the top-level BootBoundary and the
+ * user got «خطای غیرمنتظره» the instant they opened Settings.
+ *
+ * And it never recovered: the app uses HashRouter, so the URL stayed at
+ * `#/settings`, and the error screen's only button is location.reload() —
+ * which reloads straight back into the route that just threw. A permanent
+ * lockout out of Settings, on the APK only. A browser has `Notification`, so
+ * no amount of testing on the web build could ever show it.
+ *
+ * `typeof` rather than `'Notification' in window`, because a bare reference to
+ * a missing global is exactly the throw being defended against.
+ */
+const webNotificationApi = () => typeof Notification !== 'undefined';
+/*
+ * Last known native permission, so the Settings row reflects reality after the
+ * user answers the OS prompt. Starts at 'default' = not yet asked.
+ */
+let nativePermissionCache = 'default';
+
 export function notificationPermission() {
   if (!notificationsSupported()) return 'unsupported';
+  /*
+   * Native: there is no web permission to read. Report the FCM registration
+   * state we already track instead of guessing — 'default' means "we have not
+   * asked yet", which is what makes Settings draw the "allow" row. The real
+   * Android 13+ permission is requested through the Capacitor plugin in
+   * requestNotificationPermission().
+   */
+  if (!webNotificationApi()) return nativePermissionCache;
   return Notification.permission;
 }
+
 
 export async function requestNotificationPermission() {
   /*
@@ -215,13 +262,18 @@ export async function requestNotificationPermission() {
       if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
         status = await PushNotifications.requestPermissions();
       }
-      return status.receive === 'granted' ? 'granted' : 'denied';
+      // Remember it: notificationPermission() has no web API to read on
+      // native, so without this the Settings row would keep offering "allow"
+      // even after the user had already granted it.
+      nativePermissionCache = status.receive === 'granted' ? 'granted' : 'denied';
+      return nativePermissionCache;
     } catch {
+      nativePermissionCache = 'denied';
       return 'denied';
     }
   }
 
-  if (!notificationsSupported()) return 'unsupported';
+  if (!notificationsSupported() || !webNotificationApi()) return 'unsupported';
   try {
     return await Notification.requestPermission();
   } catch {
@@ -230,7 +282,18 @@ export async function requestNotificationPermission() {
 }
 
 export function showLocalNotification(title, options = {}) {
-  if (!notificationsSupported() || Notification.permission !== 'granted') return null;
+  if (!notificationsSupported()) return null;
+  /*
+   * Guarded before the global is touched. This line used to read
+   * `Notification.permission` straight after the support check, which throws
+   * on native for the same reason notificationPermission() did.
+   *
+   * On native we fall through to the service-worker path below when one
+   * exists; a Capacitor WebView has none, so this correctly returns null and
+   * the caller falls back to FCM, which is the right transport there anyway.
+   */
+  if (!webNotificationApi()) return null;
+  if (Notification.permission !== 'granted') return null;
   try {
     // Going through the service worker when there is one means the
     // notification survives the page being frozen or closed.
