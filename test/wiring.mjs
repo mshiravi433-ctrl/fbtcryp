@@ -1723,5 +1723,55 @@ export default function run() {
     );
   }
 
+  /* ---- 21. no stale Telegram claims in wallet safety copy ---------------- */
+  /*
+   * REAL BUG, reported: the in-app wallet's risk warning said the key is kept
+   * "inside the Telegram WebView". This app is a website and an Android APK.
+   * It is not a Telegram Mini App, and the Telegram support channel was
+   * removed earlier for the same reason.
+   *
+   * That matters more than a stale brand name. A user reading a security
+   * warning about a product they are not using has been given a reason to
+   * distrust the whole warning — and this particular one is the difference
+   * between keeping $50 and keeping $50,000 in a browser-stored key.
+   *
+   * The same wrong claim was in `noProvider` ("Telegram's browser has no
+   * injected wallet") and `backupWarning` ("not us, not Telegram"). All three
+   * were rewritten for en/fa/ar and DELETED from the nine partial languages,
+   * so those fall back to corrected English rather than keeping a wrong
+   * statement in their own language. Safety copy is never machine-translated
+   * here.
+   */
+  {
+    const offenders = [];
+    for (const f of readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'))) {
+      const d = JSON.parse(read(join('src/i18n/locales', f)));
+      for (const key of ['localRisk', 'noProvider', 'backupWarning']) {
+        const v = d?.wallet?.[key];
+        if (typeof v !== 'string') continue; // absent = falls back to English
+        if (/telegram|تلگرام|تليجرام|Телеграм|电报/i.test(v)) offenders.push(`${f}:wallet.${key}`);
+      }
+    }
+    t(
+      `wallet safety copy makes no Telegram claim${offenders.length ? ` — ${offenders.slice(0, 3).join(', ')}` : ''}`,
+      offenders.length === 0
+    );
+
+    // English must still carry all three, since everything falls back to it.
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    for (const key of ['localRisk', 'noProvider', 'backupWarning']) {
+      t(`English still defines wallet.${key}`, typeof en?.wallet?.[key] === 'string');
+    }
+
+    /*
+     * The holdings list must show what the user OWNS, not just a total: the
+     * token's identity alongside the amount.
+     */
+    const w = read('src/pages/Wallet.jsx');
+    t('holdings render a token icon', /<TokenIcon/.test(w));
+    t('holdings show the token name, not only the ticker', /\{r\.name\}/.test(w));
+    t('holdings show the quantity', /fmtQty\(r\.amount\)/.test(w));
+  }
+
   return rows;
 }

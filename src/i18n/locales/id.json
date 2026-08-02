@@ -109,9 +109,6 @@
     "unlockLocal": "Buka kunci dompet aplikasi",
     "unlockLocalDesc": "Masukkan kata sandi untuk menandatangani",
     "backupTitle": "Cadangkan frasa pemulihan",
-    "backupWarning": "Tulis 12 kata ini di kertas, sesuai urutan, dan simpan offline. Siapa pun yang memiliki frasa ini memiliki dana Anda selamanya. Jika hilang, tidak ada yang bisa memulihkannya — kami tidak, Telegram tidak. Jangan pernah mengetiknya di situs mana pun atau mengirimkannya ke siapa pun.",
-    "localRisk": "Dompet dalam aplikasi menyimpan kunci terenkripsi di dalam WebView Telegram — tanpa secure enclave, tanpa isolasi perangkat keras. Cukup untuk jumlah kecil, tetapi apa pun yang sayang hilang sebaiknya di MetaMask/Trust lewat WalletConnect, atau dompet perangkat keras.",
-    "noProvider": "Tidak ada dompet peramban. Peramban dalam Telegram tidak punya — gunakan WalletConnect atau dompet aplikasi.",
     "connectFailed": "Koneksi gagal atau ditolak.",
     "resetDesc": "Mengembalikan saldo virtual, posisi, rencana, dan riwayat ke keadaan awal.",
     "noWcProject": "Atur VITE_WALLETCONNECT_PROJECT_ID di .env untuk mengaktifkan WalletConnect. Gratis di cloud.reown.com."

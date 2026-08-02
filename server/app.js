@@ -29,7 +29,7 @@ import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from '
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
-import { fetchNfts, nftChains, nftConfigured } from './nft.js';
+import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import {
   addFcmToken,
@@ -495,6 +495,20 @@ const ORDER_ALERT = {
 app.get('/api/nft/chains', (_req, res) =>
   res.json({ configured: nftConfigured(), chains: nftChains() })
 );
+
+/*
+ * Why is the NFT key still rejected?
+ *
+ * `configured: true` above only proves the variable is SET, which is why
+ * replacing the key and still seeing NFT_KEY_REJECTED gave no way forward.
+ * This makes one real request to Alchemy and reports the status code plus a
+ * 4+4 character fingerprint of the key — enough to tell whether a redeploy
+ * actually picked up the new value, and never enough to use the key.
+ */
+app.get('/api/nft/diagnose', async (req, res) => {
+  const chainId = Number(req.query.chainId) || 1;
+  res.json(await nftDiagnose(chainId));
+});
 
 app.get('/api/nft/:chainId/:owner', (req, res) => {
   if (!nftConfigured()) return res.status(503).json({ error: 'NFT_NOT_CONFIGURED' });

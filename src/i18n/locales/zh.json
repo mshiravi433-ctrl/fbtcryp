@@ -109,9 +109,6 @@
     "unlockLocal": "解锁应用内钱包",
     "unlockLocalDesc": "输入密码以签名交易",
     "backupTitle": "备份你的助记词",
-    "backupWarning": "请把这 12 个词按顺序抄在纸上，离线保存。拥有这串词的人就永久拥有你的资产。一旦丢失，没有任何人能找回——我们不能，Telegram 也不能。永远不要把它输入任何网站或发送给任何人。",
-    "localRisk": "应用内钱包把加密后的私钥存在 Telegram WebView 里——没有安全隔区，也没有硬件隔离。放小额可以，但任何你会心疼的金额都应该放在 MetaMask/Trust（通过 WalletConnect）或硬件钱包里。",
-    "noProvider": "未检测到浏览器钱包。Telegram 内置浏览器没有钱包插件——请改用 WalletConnect 或应用内钱包。",
     "connectFailed": "连接失败或被拒绝。",
     "resetDesc": "把虚拟余额、持仓、计划和历史记录全部恢复到初始状态。",
     "noWcProject": "在 .env 中设置 VITE_WALLETCONNECT_PROJECT_ID 以启用 WalletConnect。可在 cloud.reown.com 免费获取。"

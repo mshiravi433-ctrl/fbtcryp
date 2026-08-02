@@ -46,6 +46,78 @@ const HOSTS = {
 export const nftChains = () => Object.keys(HOSTS).map(Number);
 export const nftConfigured = () => Boolean(ALCHEMY_KEY);
 
+/**
+ * Ask Alchemy whether the configured key actually works.
+ *
+ * ─── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ * `nftConfigured()` only proves the variable is SET. When the key was replaced
+ * and NFTs still failed, there was no way to tell which of these was true:
+ *
+ *   • the new value never reached the running server (no redeploy)
+ *   • the value reached it but is malformed (quotes, whitespace, truncated)
+ *   • the key is genuine but the account/network is not enabled
+ *
+ * All three produce the identical NFT_KEY_REJECTED, so the fix is guesswork.
+ * This makes one real request and reports the upstream status code plus a
+ * FINGERPRINT of the key — never the key itself, which sits in the URL path
+ * and must never be echoed to a caller.
+ *
+ * The fingerprint is what makes "did my redeploy take effect?" answerable: if
+ * it does not change after you save a new value, the server is still running
+ * the old one.
+ */
+export async function nftDiagnose(chainId = 1) {
+  if (!ALCHEMY_KEY) return { configured: false, reason: 'NOT_SET' };
+
+  const host = HOSTS[Number(chainId)];
+  if (!host) return { configured: true, reason: 'CHAIN_NOT_SUPPORTED' };
+
+  /*
+   * Shape checks first — these catch the copy/paste mistakes without spending
+   * a request, and they are the most common cause after a manual edit.
+   */
+  const raw = process.env.ALCHEMY_API_KEY || '';
+  const shape = {
+    length: ALCHEMY_KEY.length,
+    // A pasted value that still carries quotes or spaces is a real and
+    // invisible failure: Vercel stores exactly what you typed.
+    hasWhitespace: raw !== raw.trim(),
+    hasQuotes: /^["']|["']$/.test(raw),
+    looksLikeUrl: /^https?:\/\//i.test(ALCHEMY_KEY),
+    // First and last 4 characters only. Enough to tell two keys apart,
+    // useless to anyone who wants to use it.
+    fingerprint:
+      ALCHEMY_KEY.length >= 8
+        ? `${ALCHEMY_KEY.slice(0, 4)}…${ALCHEMY_KEY.slice(-4)}`
+        : '(too short)'
+  };
+
+  // A probe address with known NFTs; any valid address works for auth.
+  const probe = '0x0000000000000000000000000000000000000001';
+  const url =
+    `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner` +
+    `?owner=${probe}&pageSize=1`;
+
+  try {
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    return {
+      configured: true,
+      ok: res.ok,
+      status: res.status,
+      reason: res.ok
+        ? 'OK'
+        : res.status === 401 || res.status === 403
+          ? 'KEY_REJECTED'
+          : res.status === 429
+            ? 'RATE_LIMITED'
+            : 'UPSTREAM_ERROR',
+      shape
+    };
+  } catch (err) {
+    return { configured: true, ok: false, reason: 'UNREACHABLE', shape };
+  }
+}
+
 /** Unicode ranges that let text render right-to-left or hide characters. */
 const BIDI = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
 

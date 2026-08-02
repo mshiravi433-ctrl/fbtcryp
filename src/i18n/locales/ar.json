@@ -316,7 +316,7 @@
     "connecting": "جارٍ الربط…",
     "disconnect": "قطع الاتصال",
     "wrongNetwork": "شبكة خاطئة",
-    "noProvider": "لم يتم العثور على محفظة. متصفح تيليجرام الداخلي لا يوفر محفظة — أضف TON Connect أو WalletConnect v2 للإنتاج (راجع WalletContext.jsx).",
+    "noProvider": "لم يتم العثور على محفظة. هذا المتصفح لا يحتوي على إضافة محفظة — على الهاتف، افتح التطبيق من داخل متصفح محفظتك، أو اتصل عبر WalletConnect.",
     "connectFailed": "فشل الاتصال أو تم رفضه.",
     "custodyNotice": "حفظ ذاتي. مفاتيحك تبقى في محفظتك — لا نحتفظ بأصولك ولا يمكننا تجميدها أو عكس معاملة. استخدم «استلام» للحصول على عنوانك. لن نراسلك أولاً ولن نطلب منك إرسال عملات إلى أي عنوان.",
     "activity": "النشاط الأخير",
@@ -336,10 +336,10 @@
     "importLocalDesc": "Restore an existing 12/24-word wallet",
     "unlockLocal": "Unlock in-app wallet",
     "unlockLocalDesc": "Enter your password to sign transactions",
-    "localRisk": "The in-app wallet stores an encrypted key inside a Telegram WebView — no secure enclave, no hardware isolation. It is fine for small amounts, but anything you would be upset to lose belongs in MetaMask/Trust via WalletConnect, or on a hardware wallet.",
+    "localRisk": "تحتفظ المحفظة الداخلية بمفتاحها المشفّر داخل التطبيق نفسه — بلا Secure Enclave وبلا عزل عتادي. مناسبة للمبالغ الصغيرة، أما ما يؤلمك فقدانه فمكانه MetaMask أو Trust عبر WalletConnect، أو محفظة عتادية.",
     "noWcProject": "Set VITE_WALLETCONNECT_PROJECT_ID in your .env to enable WalletConnect. Get a free project ID at cloud.reown.com.",
     "backupTitle": "Back up your seed phrase",
-    "backupWarning": "Write these 12 words down on paper, in order, and store them offline. Anyone with this phrase owns your funds forever. Nobody — not us, not Telegram — can recover it if you lose it. Never type it into any website or send it to anyone.",
+    "backupWarning": "اكتب هذه الكلمات الـ12 على ورق بالترتيب واحفظها دون اتصال. من يملكها يملك أموالك للأبد. إذا فقدتها فلا أحد يستطيع استعادتها — لا نحن ولا غيرنا. لا تكتبها في أي موقع ولا ترسلها لأحد.",
     "savedIt": "I've written it down",
     "setPassword": "Set a password",
     "importTitle": "Import wallet",
@@ -406,7 +406,8 @@
     "partialValue": "بعض الرموز بلا سعر متاح، لذا المجموع غير كامل.",
     "gasCoin": "غاز",
     "noOnchainTokens": "لا توجد أرصدة رموز على هذه الشبكة.",
-    "balancesFailed": "تعذّرت قراءة الأرصدة. تحقق من اتصالك وأعد المحاولة."
+    "balancesFailed": "تعذّرت قراءة الأرصدة. تحقق من اتصالك وأعد المحاولة.",
+    "yourTokens": "رموزك"
   },
   "toast": {
     "insufficientBalance": "الرصيد غير كافٍ",

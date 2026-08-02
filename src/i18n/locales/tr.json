@@ -109,9 +109,6 @@
     "unlockLocal": "Uygulama cüzdanını aç",
     "unlockLocalDesc": "İşlemleri imzalamak için parolanızı girin",
     "backupTitle": "Kurtarma ifadenizi yedekleyin",
-    "backupWarning": "Bu 12 kelimeyi sırasıyla kâğıda yazın ve çevrimdışı saklayın. Bu ifadeye sahip olan kişi paranıza kalıcı olarak sahip olur. Kaybederseniz kimse geri getiremez — ne biz ne Telegram. Asla bir siteye yazmayın, kimseye göndermeyin.",
-    "localRisk": "Uygulama içi cüzdan, şifreli anahtarı bir Telegram WebView içinde saklar — güvenli bölge yok, donanım yalıtımı yok. Küçük tutarlar için uygundur; kaybetmeye üzüleceğiniz her tutar WalletConnect ile MetaMask/Trust'ta veya donanım cüzdanında olmalıdır.",
-    "noProvider": "Tarayıcıda cüzdan bulunamadı. Telegram'ın dahili tarayıcısında cüzdan yoktur — WalletConnect veya uygulama cüzdanını kullanın.",
     "connectFailed": "Bağlantı başarısız oldu veya reddedildi.",
     "resetDesc": "Sanal bakiyenizi, pozisyonlarınızı, planlarınızı ve geçmişinizi başlangıç durumuna döndürür.",
     "noWcProject": "WalletConnect için .env dosyanızda VITE_WALLETCONNECT_PROJECT_ID ayarlayın. cloud.reown.com adresinde ücretsiz."

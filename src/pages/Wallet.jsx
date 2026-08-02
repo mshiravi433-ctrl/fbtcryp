@@ -22,6 +22,7 @@ import { IconQr } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useWalletBalances } from '../hooks/useWalletBalances';
+import TokenIcon from '../lib/tokenIcon';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
 
@@ -230,20 +231,62 @@ export default function Wallet() {
               )}
             </div>
 
-            {/* ---------- per-token balances ---------- */}
+            {/*
+              ---------- PER-TOKEN HOLDINGS ----------
+
+              Asked for the token TYPE and AMOUNT under the total, not just a
+              total. The rows existed but read as a cramped two-column list:
+              ticker on the left, number on the right, no logo and no full
+              name. "USDT 400" tells you less than it looks like it does when
+              four rows are stacked.
+
+              Now each holding gets the same coin-row treatment as the market
+              screen — logo, symbol, full name, quantity, and fiat value —
+              because a wallet list and a market list answer the same question
+              and should not look like different apps.
+            */}
             {onchain.rows.length > 0 ? (
-              <div className="stack" style={{ gap: 7, marginTop: 4 }}>
+              <div className="stack" style={{ gap: 8, marginTop: 6 }}>
+                <div className="faint" style={{ fontSize: 11 }}>{t('wallet.yourTokens')}</div>
                 {onchain.rows.map((r) => (
-                  <div key={r.symbol} className="row-between">
-                    <span className="row" style={{ gap: 7 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{r.symbol}</span>
-                      {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+                  <div key={r.symbol} className="row-between" style={{ gap: 10 }}>
+                    <span className="row" style={{ gap: 9, minWidth: 0 }}>
+                      <TokenIcon
+                        token={{ symbol: r.symbol, address: r.address, native: r.native }}
+                        chainId={wallet.chainId}
+                        size={28}
+                      />
+                      <span style={{ minWidth: 0 }}>
+                        <div className="row" style={{ gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>{r.symbol}</span>
+                          {r.native && (
+                            <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>
+                          )}
+                        </div>
+                        {/* The full name disambiguates look-alike tickers. */}
+                        <div
+                          className="faint"
+                          style={{
+                            fontSize: 10.5,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {r.name}
+                        </div>
+                      </span>
                     </span>
-                    <span style={{ textAlign: 'end' }}>
-                      <div className="mono" style={{ fontSize: 12.5 }}>{fmtQty(r.amount)}</div>
-                      {r.value != null && (
-                        <div className="faint mono" style={{ fontSize: 10.5 }}>{fmtUsd(r.value)}</div>
-                      )}
+                    <span style={{ textAlign: 'end', flexShrink: 0 }}>
+                      <div className="mono" style={{ fontSize: 13 }}>{fmtQty(r.amount)}</div>
+                      <div className="faint mono" style={{ fontSize: 10.5 }}>
+                        {/*
+                          An unpriced token shows a dash rather than nothing.
+                          A blank space reads as a loading state that never
+                          finishes; "—" says we looked and there is no price.
+                        */}
+                        {r.value != null ? fmtUsd(r.value) : '—'}
+                      </div>
                     </span>
                   </div>
                 ))}

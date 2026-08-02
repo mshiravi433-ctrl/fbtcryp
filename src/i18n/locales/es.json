@@ -109,9 +109,6 @@
     "unlockLocal": "Desbloquear cartera de la app",
     "unlockLocalDesc": "Introduce tu contraseña para firmar transacciones",
     "backupTitle": "Guarda tu frase semilla",
-    "backupWarning": "Escribe estas 12 palabras en papel, en orden, y guárdalas sin conexión. Quien tenga esta frase es dueño de tus fondos para siempre. Si la pierdes, nadie puede recuperarla: ni nosotros, ni Telegram. Nunca la escribas en ninguna web ni se la envíes a nadie.",
-    "localRisk": "La cartera integrada guarda una clave cifrada dentro de un WebView de Telegram: sin enclave seguro ni aislamiento por hardware. Está bien para cantidades pequeñas, pero cualquier cantidad que te dolería perder debe estar en MetaMask/Trust vía WalletConnect, o en una cartera hardware.",
-    "noProvider": "No se detectó ninguna cartera del navegador. El navegador interno de Telegram no tiene una: usa WalletConnect o la cartera de la app.",
     "connectFailed": "La conexión falló o fue rechazada.",
     "resetDesc": "Restablece tu saldo virtual, posiciones, planes e historial al estado inicial.",
     "noWcProject": "Configura VITE_WALLETCONNECT_PROJECT_ID en tu .env para habilitar WalletConnect. Es gratis en cloud.reown.com."

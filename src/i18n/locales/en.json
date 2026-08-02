@@ -316,7 +316,7 @@
     "connecting": "Connecting…",
     "disconnect": "Disconnect",
     "wrongNetwork": "Wrong network",
-    "noProvider": "No injected wallet found. Telegram's in-app browser has no wallet provider — add TON Connect or WalletConnect v2 for production (see WalletContext.jsx).",
+    "noProvider": "No wallet detected. This browser has no wallet extension — on a phone, open the app from inside your wallet's own browser, or connect with WalletConnect.",
     "connectFailed": "Connection failed or was rejected.",
     "custodyNotice": "Self-custody. Your keys stay in your own wallet — Fanous Bazaar Pishgam never holds your assets, cannot freeze them and cannot reverse a transaction. Use Receive to get your own address. We will never message you first or ask you to send crypto to an address: anyone doing so is impersonating us.",
     "activity": "Recent activity",
@@ -336,10 +336,10 @@
     "importLocalDesc": "Restore an existing 12/24-word wallet",
     "unlockLocal": "Unlock in-app wallet",
     "unlockLocalDesc": "Enter your password to sign transactions",
-    "localRisk": "The in-app wallet stores an encrypted key inside a Telegram WebView — no secure enclave, no hardware isolation. It is fine for small amounts, but anything you would be upset to lose belongs in MetaMask/Trust via WalletConnect, or on a hardware wallet.",
+    "localRisk": "The in-app wallet keeps its encrypted key inside the app itself — there is no Secure Enclave and no hardware isolation. Fine for small amounts, but anything you would mind losing belongs in MetaMask or Trust via WalletConnect, or on a hardware wallet.",
     "noWcProject": "Set VITE_WALLETCONNECT_PROJECT_ID in your .env to enable WalletConnect. Get a free project ID at cloud.reown.com.",
     "backupTitle": "Back up your seed phrase",
-    "backupWarning": "Write these 12 words down on paper, in order, and store them offline. Anyone with this phrase owns your funds forever. Nobody — not us, not Telegram — can recover it if you lose it. Never type it into any website or send it to anyone.",
+    "backupWarning": "Write these 12 words on paper, in order, and keep them offline. Anyone who has them owns your funds permanently. If you lose them nobody can recover them — not us, not anyone. Never type them into any website and never send them to anyone.",
     "savedIt": "I've written it down",
     "setPassword": "Set a password",
     "importTitle": "Import wallet",
@@ -406,7 +406,8 @@
     "partialValue": "Some tokens have no price feed, so the total is partial.",
     "gasCoin": "gas",
     "noOnchainTokens": "No token balances on this network.",
-    "balancesFailed": "Could not read balances. Check your connection and try Refresh."
+    "balancesFailed": "Could not read balances. Check your connection and try Refresh.",
+    "yourTokens": "Your tokens"
   },
   "toast": {
     "insufficientBalance": "Not enough balance",

@@ -109,9 +109,6 @@
     "unlockLocal": "Déverrouiller le portefeuille",
     "unlockLocalDesc": "Saisissez votre mot de passe pour signer",
     "backupTitle": "Sauvegardez votre phrase de récupération",
-    "backupWarning": "Notez ces 12 mots sur papier, dans l'ordre, et conservez-les hors ligne. Quiconque possède cette phrase possède vos fonds, définitivement. Si vous la perdez, personne ne peut la récupérer — ni nous, ni Telegram. Ne la saisissez jamais sur un site et ne l'envoyez à personne.",
-    "localRisk": "Le portefeuille intégré stocke une clé chiffrée dans une WebView Telegram : ni enclave sécurisée, ni isolation matérielle. Acceptable pour de petits montants, mais tout ce que vous seriez triste de perdre doit aller sur MetaMask/Trust via WalletConnect, ou un portefeuille matériel.",
-    "noProvider": "Aucun portefeuille détecté dans le navigateur. Le navigateur intégré de Telegram n'en a pas — utilisez WalletConnect ou le portefeuille de l'app.",
     "connectFailed": "Connexion échouée ou refusée.",
     "resetDesc": "Remet votre solde virtuel, vos positions, vos plans et votre historique à l'état initial.",
     "noWcProject": "Définissez VITE_WALLETCONNECT_PROJECT_ID dans votre .env pour activer WalletConnect. Gratuit sur cloud.reown.com."
