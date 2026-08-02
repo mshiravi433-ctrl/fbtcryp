@@ -1846,7 +1846,7 @@
     "title": "Solana wallet",
     "notConnected": "Not connected",
     "detected": "{{name}} detected. Connect to swap on Solana.",
-    "noWallet": "No Solana wallet found. Install Phantom or Solflare, then reopen this page. Your EVM wallet (MetaMask, Trust) cannot sign Solana transactions — they are different networks.",
+    "noWallet": "No Solana wallet found. Install Phantom or Solflare and open this page again — on a phone, use the browser inside the wallet app. Your EVM wallet (MetaMask, Trust) cannot sign Solana transactions; they are different networks, so you need both. Keep your EVM wallet connected — it does not interfere.",
     "router": "Route",
     "importTitle": "Swap any Solana token",
     "importBody": "Most memecoins are not on any list. Paste the token's mint address and it becomes swappable straight away.",
@@ -1873,6 +1873,11 @@
       "NO_TOKEN_ACCOUNT": "Your wallet has no account for this token yet. A small amount of SOL is needed to create one.",
       "NO_ROUTE": "No route found for this pair.",
       "ORDER_FAILED": "The aggregator could not build this swap."
-    }
+    },
+    "twoWalletsTitle": "Two wallets, side by side",
+    "twoWalletsBody": "EVM and Solana are separate networks with separate wallet standards, so the app keeps a separate connection for each. They do not conflict and you do not have to disconnect one to use the other — MetaMask or Trust stays connected for BNB, Ethereum and the rest, while Phantom or Solflare handles Solana. Both can be connected at the same time.",
+    "evmSide": "EVM wallet (Swap tab)",
+    "solSide": "Solana wallet (this tab)",
+    "noNeedToDisconnect": "Nothing to disconnect. Connecting here does not touch your EVM wallet, and disconnecting here leaves it untouched too."
   }
 }

@@ -27,7 +27,7 @@ import {
   solanaWalletAvailable,
   solanaWalletName
 } from '../lib/solanaWallet';
-import { shortAddress } from '../context/WalletContext';
+import { shortAddress, useWallet } from '../context/WalletContext';
 
 /**
  * SOLANA SWAP
@@ -59,6 +59,18 @@ export default function SolanaSwap() {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   useHideBalances();
+
+  /*
+   * The EVM wallet, read ONLY to show its state side by side.
+   *
+   * The owner asked how to disconnect the main wallet before connecting
+   * Solana, assuming the two conflict. They do not, and the panel below
+   * proves it visually rather than asking anyone to take my word for it:
+   * MetaMask lives on `window.ethereum`, Phantom on `window.phantom.solana`.
+   * Different objects, different namespaces, no shared state — verified with
+   * both injected at once.
+   */
+  const evm = useWallet();
 
   const [address, setAddress] = useState(() => solanaAddress());
   const [connecting, setConnecting] = useState(false);
@@ -277,6 +289,51 @@ export default function SolanaSwap() {
             {t('solana.detected', { name: solanaWalletName() })}
           </p>
         )}
+      </motion.section>
+
+      {/*
+        ---------- HOW THE TWO WALLETS RELATE ----------
+
+        Asked directly: "how do I disconnect the main wallet before connecting
+        Solana — you can't have two connected at once."
+
+        You can. MetaMask/Trust inject `window.ethereum`; Phantom/Solflare
+        inject `window.phantom.solana`. Separate objects, separate namespaces,
+        no shared state — confirmed with both present simultaneously.
+
+        Rather than assert that in a paragraph nobody reads, both connections
+        are shown side by side with their live state. Seeing two green dots at
+        once answers the question permanently.
+      */}
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('solana.twoWalletsTitle')}</p>
+        <p className="muted" style={{ fontSize: 12.3, marginBottom: 11, lineHeight: 1.8 }}>
+          {t('solana.twoWalletsBody')}
+        </p>
+
+        <div className="stack" style={{ gap: 9 }}>
+          <div className="row-between">
+            <span className="row" style={{ gap: 7 }}>
+              <span className="dot" style={{ background: evm.address ? 'var(--up)' : 'var(--text-3)' }} />
+              <span style={{ fontSize: 12.5 }}>{t('solana.evmSide')}</span>
+            </span>
+            <span className="mono faint" style={{ fontSize: 11.5 }}>
+              {evm.address ? shortAddress(evm.address) : t('solana.notConnected')}
+            </span>
+          </div>
+
+          <div className="row-between">
+            <span className="row" style={{ gap: 7 }}>
+              <span className="dot" style={{ background: address ? 'var(--up)' : 'var(--text-3)' }} />
+              <span style={{ fontSize: 12.5 }}>{t('solana.solSide')}</span>
+            </span>
+            <span className="mono faint" style={{ fontSize: 11.5 }}>
+              {address ? shortAddress(address) : t('solana.notConnected')}
+            </span>
+          </div>
+        </div>
+
+        <p className="notice" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
       </motion.section>
 
       {/* ----------------------------- ticket ---------------------------- */}

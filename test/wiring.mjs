@@ -1519,5 +1519,63 @@ export default function run() {
     t('a Solana payout address is configured', /solana: env\('VITE_PAYOUT_SOLANA'\) \|\| '[1-9A-HJ-NP-Za-km-z]{32,44}'/.test(payout));
   }
 
+  /* ---- 18. the two wallet connections must stay independent -------------- */
+  /*
+   * Asked directly: "how do I disconnect the main wallet before connecting
+   * Solana — you can't have two connected at once."
+   *
+   * You can, and that is load-bearing. MetaMask/Trust inject
+   * `window.ethereum`; Phantom/Solflare inject `window.phantom.solana`.
+   * Different objects, different namespaces, no shared state.
+   *
+   * If either side ever reached into the other's namespace, connecting one
+   * could silently clobber the other — and the user would discover it by
+   * signing a transaction with the wrong wallet. So the separation is
+   * asserted rather than trusted:
+   *
+   *   - the Solana wallet module must never touch window.ethereum
+   *   - the EVM context must never touch window.solana / window.phantom
+   *   - the Solana screen may READ the EVM address (it shows both states side
+   *     by side) but must not mutate it
+   */
+  {
+    const solWallet = read('src/lib/solanaWallet.js');
+    const evmCtx = read('src/context/WalletContext.jsx');
+    const solPage = read('src/pages/SolanaSwap.jsx');
+
+    const strip = (src) =>
+      src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+    t(
+      'the Solana wallet never touches window.ethereum',
+      !/window\.ethereum/.test(strip(solWallet))
+    );
+    t(
+      'the EVM context never touches the Solana namespace',
+      !/window\.(solana|phantom)/.test(strip(evmCtx))
+    );
+
+    /*
+     * The screen shows both connection states so the answer is visible rather
+     * than merely written down. It must read the EVM side, and only read it.
+     */
+    const page = strip(solPage);
+    t('the Solana screen surfaces the EVM connection state', /useWallet\(\)/.test(page));
+    t(
+      'the Solana screen does not mutate the EVM wallet',
+      !/evm\.(connect|disconnect|switchChain|lock)\s*\(/.test(page)
+    );
+
+    // And the copy must actually say they coexist, or the panel is decoration.
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const body = String(en?.solana?.twoWalletsBody ?? '');
+    t('the copy states both can be connected at once', /same time|both/i.test(body));
+    t('the copy exists in Persian too',
+      String(JSON.parse(read('src/i18n/locales/fa.json'))?.solana?.twoWalletsBody ?? '').length > 40);
+  }
+
   return rows;
 }
