@@ -10,6 +10,14 @@ import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
+import {
+  REFERRAL_SHARE,
+  captureReferral,
+  clearReferral,
+  isValidRefCode,
+  referredBy,
+  referrerShare
+} from '../src/lib/referral.js';
 import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import {
   REFERRAL_FEE_MAX_BPS,
@@ -1213,7 +1221,16 @@ export default function run() {
     const app = publicAppUrl();
     t(`the app url is public, not localhost (${app})`, !/localhost/.test(app));
     t('the app url is https', app.startsWith('https://'));
-    t('the app url targets the Solana route', app.includes('/#/solana'));
+    /*
+     * The default is the bare origin, and the CALLER names the route. It
+     * briefly defaulted to '/#/solana' while the wallet deeplink was the only
+     * user; the referral invite then inherited that default and every shared
+     * link would have dropped friends on the Solana screen instead of the
+     * home page. Both paths are asserted, so neither can silently swap.
+     */
+    t('the default is the bare origin', !app.includes('#'));
+    t('a caller can request the Solana route', publicAppUrl('/#/solana').endsWith('/#/solana'));
+    t('the deeplink still targets Solana', decodeURIComponent(link).includes('#/solana'));
   }
 
   /* ------- Solana: mobile must never hit the "install it" dead end -------- */
@@ -1285,6 +1302,96 @@ export default function run() {
       const notice = String(loc?.solana?.feeNotice ?? '');
       t(`${code}: the fee notice does not expose the aggregator's cut`, !/20\s*%|٢٠|۲۰٪/.test(notice));
     }
+  }
+
+  /* ------------------------------ referrals ------------------------------- */
+  /*
+   * Requested with an explicit condition: only if it does not introduce bugs.
+   *
+   * That condition ruled out the obvious design. Our 0.70% is collected by
+   * KyberSwap's router inside the user's own transaction and paid to ONE
+   * feeReceiver address; the aggregator supports no second recipient.
+   * Splitting on-chain would mean routing every swap through a payable
+   * fee-splitting contract of our own — unaudited money-handling code, where a
+   * bug is stolen funds rather than a broken screen. Not worth a 0.01 share.
+   *
+   * So this records ATTRIBUTION and the settlement is manual. The accounting
+   * still has to be exactly right, and the ways it can be gamed are the ways
+   * affiliate programmes are always gamed, so they are asserted.
+   */
+  {
+    // localStorage shim so these run standalone as well as under the runner.
+    if (typeof globalThis.localStorage === 'undefined') {
+      const mem = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: (k) => mem.delete(k)
+      };
+    }
+
+    /* ---- code validation ---- */
+    t('a normal code is valid', isValidRefCode('FBTAB12'));
+    t('a too-short code is refused', !isValidRefCode('abc'));
+    t('a code with punctuation is refused', !isValidRefCode('abc<script>'));
+    t('a null code is refused', !isValidRefCode(null));
+
+    /* ---- capture ---- */
+    clearReferral();
+    t('a valid code is captured', captureReferral('?ref=FRIEND01') === 'FRIEND01');
+    t('the captured code is remembered', referredBy() === 'FRIEND01');
+
+    /*
+     * FIRST TOUCH WINS. Without this, anyone could send an existing user their
+     * own link and take credit for a relationship they had no part in — the
+     * standard way these programmes get farmed.
+     */
+    t('a second link does not overwrite the first', captureReferral('?ref=OTHER99') === 'FRIEND01');
+    t('the original referrer is kept', referredBy() === 'FRIEND01');
+
+    clearReferral();
+    t('an invalid code is not captured', captureReferral('?ref=x') === null);
+    t('no referral is recorded from junk', referredBy() === null);
+    t('a missing parameter is fine', captureReferral('?utm_source=x') === null);
+    t('an empty query is fine', captureReferral('') === null);
+
+    /*
+     * SELF-REFERRAL. Opening your own invite link must not credit you, or
+     * every fee you generate owes you a rebate.
+     */
+    clearReferral();
+    localStorage.setItem('fbt-swap-v1', JSON.stringify({ state: { refCode: 'MYOWN01' } }));
+    t('self-referral is refused', captureReferral('?ref=MYOWN01') === null);
+    t('nothing is recorded for a self-referral', referredBy() === null);
+    // ...but a genuine referral still works with the same store present.
+    t('a real referral still works', captureReferral('?ref=REALFRIEND') === 'REALFRIEND');
+    localStorage.removeItem('fbt-swap-v1');
+    clearReferral();
+
+    /*
+     * EXPIRY. A click from years ago must stop earning — that is neither what
+     * the referrer contributed nor something defensible if questioned.
+     */
+    captureReferral('?ref=OLDFRIEND');
+    t('a fresh referral is active', referredBy() === 'OLDFRIEND');
+    localStorage.setItem('fbt-referred-at', String(Date.now() - 200 * 86_400_000));
+    t('an expired referral stops counting', referredBy() === null);
+    // The code is still stored, so first-touch still blocks a re-capture.
+    t('an expired referral cannot be replaced', captureReferral('?ref=NEWFRIEND') === 'OLDFRIEND');
+    clearReferral();
+
+    /* ---- the share ---- */
+    t('the share is 1% of our fee', REFERRAL_SHARE === 0.01);
+    t('a $7 fee yields 7 cents', Math.abs(referrerShare(7) - 0.07) < 1e-9);
+    t('a zero fee yields nothing', referrerShare(0) === 0);
+    t('a negative fee yields nothing', referrerShare(-5) === 0);
+    t('junk yields nothing', referrerShare('abc') === 0);
+    /*
+     * The share comes out of OUR fee, never on top of it. A referred user must
+     * never pay more than anyone else, so the result can never exceed the fee.
+     */
+    t('the share never exceeds the fee', referrerShare(7) < 7);
+    t('a share above 100% is refused', referrerShare(7, 1.5) === 0);
   }
 
   return rows;

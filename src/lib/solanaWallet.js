@@ -104,19 +104,9 @@ export function solflareBrowseLink(url) {
   return `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}`;
 }
 
-/**
- * The public URL of this app, for the deeplinks above.
- *
- * `window.location` is wrong inside the APK: Capacitor serves from
- * https://localhost, and sending the wallet to localhost would open the
- * wallet's browser on nothing. The configured public origin is used instead.
- */
-export function publicAppUrl(path = '/#/solana') {
-  const base =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_URL) ||
-    'https://www.lawpoetics.ir';
-  return `${String(base).replace(/\/+$/, '')}${path}`;
-}
+// publicAppUrl moved to lib/nativeShell.js — it is needed by the referral
+// invite too, and importing this module for it would pull in the Solana stack.
+export { publicAppUrl } from './nativeShell';
 
 /**
  * Find an injected Solana provider.

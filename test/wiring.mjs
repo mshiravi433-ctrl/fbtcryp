@@ -1910,5 +1910,141 @@ export default function run() {
     t('the install prompt is mounted', /<InstallPrompt\s*\/>/.test(read('src/App.jsx')));
   }
 
+  /* ---- 24. the swap result must tell the user what happened -------------- */
+  /*
+   * ASKED DIRECTLY: check that the screen after a successful swap is right,
+   * and after a failed one too.
+   *
+   * It was not. Success was a green tick and the word "success"; failure was a
+   * red cross and an error code. After waiting a minute for a confirmation
+   * neither answered the question the user actually has.
+   *
+   * Success now shows a receipt: amount paid, amount received, network. The
+   * phone also chimes at that moment (notifyTrade), so this is what someone
+   * sees when they pick the phone back up — it has to stand on its own.
+   *
+   * Failure is the more dangerous one, because the only question is "did it
+   * take my money?" and the two failure modes differ:
+   *
+   *   error  — never reached the chain. Nothing moved, no gas spent.
+   *   failed — mined and reverted. Tokens are safe, but the gas is GONE.
+   *
+   * Telling a reverted transaction "nothing happened" would be false, so the
+   * two must not share one message.
+   *
+   * The smoke test mounts Swap but never reaches these branches, so the
+   * structure is asserted here.
+   */
+  {
+    const swap = read('src/pages/Swap.jsx');
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const code = strip(swap);
+
+    // The result state has to CARRY the numbers, or the receipt cannot exist.
+    t('the success state records what was paid', /paid:\s*amount/.test(code));
+    t('the success state records what was received', /got:\s*fresh\.amountOut/.test(code));
+    t(
+      'the receipt uses the executed re-quote, not the stale one',
+      /got:\s*fresh\.amountOut/.test(code) && !/got:\s*quote\.amountOut/.test(code)
+    );
+
+    // And render them.
+    t('the success screen shows the amount paid', /txState\.paidSymbol/.test(code));
+    t('the success screen shows the amount received', /txState\.gotSymbol/.test(code));
+    t('the success screen names the network', /txState\.chainName/.test(code));
+
+    /*
+     * Both failure messages must exist and be DIFFERENT keys. A single shared
+     * message is the bug: it would either tell a reverted swap no gas was
+     * spent, or tell a rejected one it lost gas it never spent.
+     */
+    t('a reverted swap has its own message', /swap\.failedOnChain/.test(code));
+    t('a never-sent swap has its own message', /swap\.failedNothingSent/.test(code));
+    t(
+      'the two failure messages are chosen by stage',
+      /txState\.stage === 'failed'[\s\S]{0,120}failedOnChain/.test(code)
+    );
+
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    // The reverted case must admit the gas is gone; the other must not.
+    t('the reverted message mentions the gas cost', /gas/i.test(en?.swap?.failedOnChain ?? ''));
+    t(
+      'the never-sent message says no fee was charged',
+      /no network fee|no fee/i.test(en?.swap?.failedNothingSent ?? '')
+    );
+    // Neither may claim funds were lost — in both cases the tokens are safe.
+    for (const k of ['failedOnChain', 'failedNothingSent']) {
+      t(
+        `${k} reassures that the tokens are safe`,
+        /still in your wallet|never taken|no tokens left/i.test(en?.swap?.[k] ?? '')
+      );
+    }
+
+    /*
+     * The success chime fires from notifyTrade. If that were removed the
+     * receipt would only be seen by someone still watching the screen.
+     */
+    t('a successful swap notifies the user', /notifyTrade\(/.test(code));
+
+    /* ---- the Buy screen's active tab must be visible ---- */
+    /*
+     * `.segmented button.active` only sets the text colour to BLACK. The
+     * coloured pill behind it comes from SegIndicator. Buy copied the markup
+     * without it, so the selected tab was black text on a dark panel —
+     * invisible in dark theme.
+     */
+    const buy = read('src/pages/Buy.jsx');
+    t('the Buy tabs render an active indicator', /<SegIndicator/.test(buy));
+
+    // And Buy must be reachable from the wallet, where the question is asked.
+    t(
+      'the wallet links to Buy & sell',
+      /navigate\('\/buy'\)/.test(strip(read('src/pages/Wallet.jsx')))
+    );
+  }
+
+  /* ---- 25. the invite link must point somewhere real --------------------- */
+  /*
+   * REAL BUG found while building the referral system: the invite URL was
+   *
+   *   https://t.me/your_bot_username?start=CODE
+   *
+   * A literal placeholder. Every invite anyone ever shared pointed at a
+   * Telegram bot that has never existed, so the referral feature could not
+   * have worked once — and the friend received a dead link with our name on
+   * it, which costs more than the referral was worth.
+   *
+   * It now points at the site with ?ref=, built from the configured origin
+   * rather than window.location: inside the APK that is https://localhost and
+   * the invite would send people to their own phone.
+   */
+  {
+    const earn = read('src/pages/Earn.jsx');
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const code = strip(earn);
+
+    t('the invite link has no placeholder host', !/your_bot_username/.test(code));
+    t('the invite link is built from the public origin', /publicAppUrl\(/.test(code));
+    t('the invite link carries a ref parameter', /\?ref=/.test(code));
+    t('the invite code is url-encoded', /encodeURIComponent\(refCode\)/.test(code));
+
+    // The capture side must run, or codes are shared and never recorded.
+    t('referrals are captured at boot', /captureReferral\(\)/.test(strip(read('src/App.jsx'))));
+
+    /*
+     * The referral must NOT try to split the fee on-chain. The aggregator
+     * pays one feeReceiver; a second recipient would require routing every
+     * swap through our own payable contract, where a bug is stolen funds.
+     * Attribution is tracked and settled manually instead.
+     */
+    // Comments stripped: the module DOCUMENTS why it does not split on-chain,
+    // and matching that prose would fail for explaining itself.
+    const ref = strip(read('src/lib/referral.js'));
+    t('the referral module does not touch the fee receiver', !/feeRecipientFor|feeReceiver/.test(ref));
+    t('the referral share is documented as a share of OUR fee', /REFERRAL_SHARE/.test(ref));
+  }
+
   return rows;
 }

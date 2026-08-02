@@ -209,6 +209,24 @@ export default function Wallet() {
             </div>
 
             {/*
+              Buy & sell, directly under Receive/Send.
+
+              This is where someone looks after seeing an empty balance — the
+              question "how do I get some" is asked from this exact spot, and
+              the answer was buried three taps deep in the More menu. Full
+              width rather than a third column: Receive and Send act on the
+              address above them, while this one leaves for a different screen,
+              so it reads better as its own row than as a sibling.
+            */}
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ width: '100%' }}
+              onClick={() => navigate('/buy')}
+            >
+              {t('nav.buy')}
+            </button>
+
+            {/*
               ---------- TOTAL VALUE ----------
               The number people open a wallet to see. It used to not exist:
               the screen showed one bare quantity ("0.4183") and left the

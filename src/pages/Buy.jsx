@@ -7,6 +7,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap, IconQr } from '../components/Icons';
+import SegIndicator from '../components/SegIndicator';
 
 /**
  * BUY & SELL — getting fiat in and out.
@@ -120,6 +121,15 @@ export default function Buy() {
             }}
             style={{ isolation: 'isolate' }}
           >
+            {/*
+              THE MISSING PILL. `.segmented button.active` only sets the text
+              colour to black — the coloured background behind it comes from
+              SegIndicator, which this screen never rendered. So the active tab
+              was black text on a dark panel: invisible in dark theme, and
+              barely there in light. Every other segmented control in the app
+              has this; copying the markup without it was the bug.
+            */}
+            {tab === k && <SegIndicator id="buytab" />}
             {t(`buy.tab.${k}`)}
           </button>
         ))}

@@ -508,7 +508,12 @@
     "gasBody": "Gas is always paid in the native coin of the network you are on, from the same wallet — it is not only BNB. To swap on a chain you need a little of the coin listed below.",
     "gasNote": "Gas goes to the blockchain validators, not to us, and is separate from the {{fee}}% platform fee. If you hold no native coin on a chain, switch to one where you do.",
     "needGas": "This transaction needs {{coin}} on {{chain}} for gas and your balance is short. Top up a little {{coin}}, or switch to a chain whose native coin you already hold.",
-    "flip": "Swap the two tokens"
+    "flip": "Swap the two tokens",
+    "successSettled": "Settled on-chain and confirmed.",
+    "successWhere": "The tokens are in your wallet now. Your balance may take a few seconds to refresh — the transaction is already final either way.",
+    "failedOnChain": "The transaction was mined but reverted, so the swap did not happen. Your tokens were never taken and are still in your wallet. The network fee (gas) was spent and cannot be refunded — that goes to the validators, not to us.",
+    "failedNothingSent": "Nothing was sent. No tokens left your wallet and no network fee was charged. You can safely try again.",
+    "network": "Network"
   },
   "onboarding": {
     "skip": "Skip",

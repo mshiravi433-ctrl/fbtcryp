@@ -15,3 +15,26 @@
 export function isNativeShell() {
   return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
 }
+
+/**
+ * The public URL of this app.
+ *
+ * `window.location` is wrong inside the APK: Capacitor serves from
+ * https://localhost, so any link built from it — a wallet deeplink, a referral
+ * invite — would point at the user's own phone. The configured origin is used
+ * instead.
+ *
+ * Lives here rather than in a feature module so that importing it does not
+ * drag an unrelated dependency along with it.
+ *
+ * The default is the bare origin. It briefly defaulted to '/#/solana' while
+ * only the wallet deeplink used it; the referral invite then inherited that
+ * and every shared link would have dropped friends on the Solana screen.
+ * Callers name the route they want.
+ */
+export function publicAppUrl(path = '/') {
+  const base =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_URL) ||
+    'https://www.lawpoetics.ir';
+  return `${String(base).replace(/\/+$/, '')}${path}`;
+}

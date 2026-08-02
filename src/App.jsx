@@ -20,6 +20,7 @@ import { languageIsUnset } from './i18n';
 import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
+import { captureReferral } from './lib/referral';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -214,6 +215,14 @@ export default function App() {
     initTheme();
     initServiceWorker();
     prefetchLikelyRoutes();
+    /*
+     * Record `?ref=` before anything can navigate away.
+     *
+     * HashRouter rewrites the URL as soon as it mounts, and the query string
+     * sits BEFORE the hash — so reading it late means reading nothing. First
+     * touch wins and the value is persisted; see lib/referral.js.
+     */
+    captureReferral();
   }, []);
 
   /*

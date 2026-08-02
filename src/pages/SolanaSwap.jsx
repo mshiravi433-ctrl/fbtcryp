@@ -321,14 +321,14 @@ export default function SolanaSwap() {
                 <button
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1 }}
-                  onClick={() => openExternal(phantomBrowseLink(publicAppUrl()))}
+                  onClick={() => openExternal(phantomBrowseLink(publicAppUrl('/#/solana')))}
                 >
                   {t('solana.openPhantom')}
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
                   style={{ flex: 1 }}
-                  onClick={() => openExternal(solflareBrowseLink(publicAppUrl()))}
+                  onClick={() => openExternal(solflareBrowseLink(publicAppUrl('/#/solana')))}
                 >
                   {t('solana.openSolflare')}
                 </button>

@@ -413,7 +413,27 @@ export default function Swap() {
 
       const receipt = await tx.wait();
       const ok = receipt.status === 1;
-      setTxState({ stage: ok ? 'success' : 'failed', hash: tx.hash });
+      /*
+       * Carry the RECEIPT DETAILS into the result state.
+       *
+       * The success screen used to be a green tick and one word. After a swap
+       * that takes a minute to confirm, that answers none of the questions the
+       * user actually has — what did I send, what did I get, on which network,
+       * and where can I verify it. People re-checked their wallet to find out,
+       * and a couple resubmitted because they could not tell it had worked.
+       *
+       * `fresh` is the re-quote that was actually executed, not the older one
+       * shown before signing, so these are the real numbers.
+       */
+      setTxState({
+        stage: ok ? 'success' : 'failed',
+        hash: tx.hash,
+        paid: amount,
+        paidSymbol: fromToken.symbol,
+        got: fresh.amountOut,
+        gotSymbol: toToken.symbol,
+        chainName: cfg?.name ?? null
+      });
 
       // Ring + vibrate the moment the trade settles. A swap can take a minute
       // to confirm and people put the phone down — a silent success is a
@@ -1026,20 +1046,91 @@ export default function Swap() {
               </>
             )}
 
+            {/*
+              A RECEIPT, NOT A TICK.
+
+              This was a green checkmark and the word "success". After waiting
+              a minute for a confirmation, that answers none of the questions
+              the user has: what left my wallet, what arrived, on which chain.
+              Some people re-opened their wallet to check; a couple resubmitted
+              because they could not tell it had worked.
+
+              The phone also chimes at this moment (notifyTrade below), so this
+              is what someone sees when they pick it back up. It has to be
+              self-explanatory on its own.
+            */}
             {txState.stage === 'success' && (
               <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
                 <div style={{ fontSize: 40 }}>✅</div>
-                <div style={{ fontWeight: 700, margin: '8px 0' }}>{t('swap.success')}</div>
+                <div style={{ fontWeight: 800, fontSize: 16, margin: '8px 0 2px' }}>
+                  {t('swap.success')}
+                </div>
+                <p className="faint" style={{ fontSize: 12 }}>{t('swap.successSettled')}</p>
+
+                {txState.paid != null && (
+                  <div className="card card-tight stack" style={{ gap: 8, marginTop: 12, textAlign: 'start' }}>
+                    <div className="row-between">
+                      <span className="faint">{t('swap.youPay')}</span>
+                      <span className="mono" style={{ fontSize: 13 }}>
+                        {fmtQty(Number(txState.paid))} {txState.paidSymbol}
+                      </span>
+                    </div>
+                    <div className="row-between">
+                      <span className="faint">{t('swap.youReceive')}</span>
+                      <span className="mono up" style={{ fontSize: 13, fontWeight: 700 }}>
+                        {fmtQty(Number(txState.got))} {txState.gotSymbol}
+                      </span>
+                    </div>
+                    {txState.chainName && (
+                      <div className="row-between">
+                        <span className="faint">{t('swap.network')}</span>
+                        <span style={{ fontSize: 12.5 }}>{txState.chainName}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/*
+                  The balance takes a moment to re-read from the chain, so say
+                  where the coins went rather than leaving the user to guess
+                  why the wallet has not updated yet.
+                */}
+                <p className="faint" style={{ fontSize: 11.5, marginTop: 10, lineHeight: 1.7 }}>
+                  {t('swap.successWhere')}
+                </p>
               </motion.div>
             )}
 
+            {/*
+              FAILURE MUST ANSWER "DID IT TAKE MY MONEY?"
+
+              That is the only question anyone has here, and the screen did not
+              answer it. The two failure modes are genuinely different and the
+              distinction matters:
+
+                'error'  — the transaction never reached the chain (rejected in
+                           the wallet, quote expired, not enough gas to send).
+                           Nothing moved. No gas was spent.
+                'failed' — it WAS mined and reverted on-chain. The tokens are
+                           still yours, but the gas is gone. Saying "nothing
+                           happened" here would be a lie.
+            */}
             {(txState.stage === 'error' || txState.stage === 'failed') && (
               <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
                 <div style={{ fontSize: 40 }}>❌</div>
-                <div style={{ fontWeight: 700, margin: '8px 0' }} className="down">
+                <div style={{ fontWeight: 800, fontSize: 15, margin: '8px 0 2px' }} className="down">
                   {t(`swap.err.${txState.error ?? 'TX_FAILED'}`)}
                 </div>
-                {txState.detail && <p className="faint mono" style={{ fontSize: 10 }}>{txState.detail}</p>}
+
+                <p className="notice" style={{ marginTop: 10, textAlign: 'start' }}>
+                  {txState.stage === 'failed'
+                    ? t('swap.failedOnChain')
+                    : t('swap.failedNothingSent')}
+                </p>
+
+                {txState.detail && (
+                  <p className="faint mono" style={{ fontSize: 10, marginTop: 8 }}>{txState.detail}</p>
+                )}
               </motion.div>
             )}
 
