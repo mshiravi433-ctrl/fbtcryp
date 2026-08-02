@@ -401,7 +401,12 @@
       "FAILED": "Could not write the file. Check storage permission."
     },
     "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not Fanous Bazaar Pishgam, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue.",
-    "practiceNotice": "Practice account — virtual NX credits with no cash value. Nothing here touches real funds, and none of it can be withdrawn. Your real wallet is on the Overview tab."
+    "practiceNotice": "Practice account — virtual NX credits with no cash value. Nothing here touches real funds, and none of it can be withdrawn. Your real wallet is on the Overview tab.",
+    "onchainValue": "Wallet value",
+    "partialValue": "Some tokens have no price feed, so the total is partial.",
+    "gasCoin": "gas",
+    "noOnchainTokens": "No token balances on this network.",
+    "balancesFailed": "Could not read balances. Check your connection and try Refresh."
   },
   "toast": {
     "insufficientBalance": "Not enough balance",

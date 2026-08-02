@@ -9,6 +9,7 @@ import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
+import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
@@ -1070,6 +1071,78 @@ export default function run() {
     t('base58-illegal characters are rejected',
       !isSolanaAddress('0OIl000000000000000000000000000000'));
     t('an empty string is rejected', !isSolanaAddress(''));
+  }
+
+  /* --------------- wallet: real holdings, priced in fiat ------------------ */
+  /*
+   * The wallet screen used to show ONE number — the native coin, as a bare
+   * quantity. Someone holding 400 USDT and 0.01 BNB saw "0.01" and nothing
+   * else, and there was no fiat total anywhere, which is the single question
+   * people open a wallet to answer.
+   *
+   * Every rule below costs real money if it is wrong, and none of them are
+   * visible from outside the hook, so the pure transform is asserted directly.
+   */
+  {
+    const list = [
+      { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },
+      { symbol: 'USDT', name: 'Tether', address: '0x1', decimals: 6, coingeckoId: 'tether' },
+      { symbol: 'USDC', name: 'USD Coin', address: '0x2', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'MEME', name: 'Meme', address: '0x3', decimals: 18 } // no price feed
+    ];
+    const prices = { binancecoin: 612.5, tether: 1, 'usd-coin': 1 };
+
+    const held = {
+      BNB: { formatted: 0.4183 },
+      USDT: { formatted: 400 },
+      USDC: { formatted: 0.0000004 }, // dust
+      MEME: { formatted: 1_000_000 }  // real holding, unpriceable
+    };
+
+    const out = buildHoldings(list, held, prices);
+    const syms = out.map((r) => r.symbol);
+
+    t('a priced token is listed', syms.includes('USDT'));
+    t('the native coin is listed', syms.includes('BNB'));
+    t('sub-cent dust is hidden', !syms.includes('USDC'));
+    /*
+     * A memecoin with no price feed must still appear. Hiding a real holding
+     * because we cannot value it would tell the user they own nothing.
+     */
+    t('an unpriced holding is still shown', syms.includes('MEME'));
+    t('unpriced holdings sort last', syms[syms.length - 1] === 'MEME');
+    t('the largest value sorts first', syms[0] === 'USDT');
+
+    const total = out.reduce((sum, r) => sum + (r.value ?? 0), 0);
+    t(`the fiat total adds up (${total.toFixed(2)})`, Math.abs(total - (400 + 0.4183 * 612.5)) < 0.01);
+    t('an unpriced row contributes nothing to the total',
+      out.find((r) => r.symbol === 'MEME')?.value === null);
+
+    /*
+     * THE COLD-START BUG, caught while writing this.
+     *
+     * An earlier version filtered inside the fetch, before prices had loaded.
+     * With an empty priceMap every token looks unpriced, falls through to the
+     * quantity rule, and 0.4183 BNB survives — but a token with a small
+     * quantity would be dropped as dust and never return, because the
+     * re-pricing step only revalues rows that were kept.
+     *
+     * Filtering now happens on every render against the CURRENT prices, so an
+     * empty map must never lose a real balance.
+     */
+    const cold = buildHoldings(list, held, {});
+    const coldSyms = cold.map((r) => r.symbol);
+    t('nothing is lost before prices arrive', coldSyms.includes('BNB') && coldSyms.includes('USDT'));
+    t('a real holding survives an empty price map', coldSyms.includes('MEME'));
+    t('the same rows reappear once prices load',
+      buildHoldings(list, held, prices).some((r) => r.symbol === 'USDT'));
+
+    /* ---- degenerate inputs must not throw ---- */
+    t('an empty token list yields nothing', buildHoldings([], {}, {}).length === 0);
+    t('a null list is safe', buildHoldings(null, null, null).length === 0);
+    t('a wallet with no balances yields nothing', buildHoldings(list, {}, prices).length === 0);
+    t('a zero balance is not listed',
+      !buildHoldings(list, { BNB: { formatted: 0 } }, prices).some((r) => r.symbol === 'BNB'));
   }
 
   return rows;

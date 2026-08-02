@@ -7,7 +7,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sheet from '../components/Sheet';
 import { usePriceMap } from '../hooks/useMarket';
-import { fmtNum, fmtPct, fmtPrice, fmtQty, fmtDateTime } from '../lib/format';
+import { fmtNum, fmtPct, fmtPrice, fmtQty, fmtUsd, fmtDateTime } from '../lib/format';
 import { useAppStore, valuePortfolio, START_BALANCE_CONST } from '../store/useAppStore';
 import { shortAddress, useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -21,6 +21,7 @@ import { explorerAddr } from '../lib/chains';
 import { IconQr } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
+import { useWalletBalances } from '../hooks/useWalletBalances';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
 
@@ -34,6 +35,12 @@ export default function Wallet() {
   const wallet = useWallet();
 
   const { priceMap } = usePriceMap(60);
+  /*
+   * Real on-chain holdings, priced. Before this the screen showed only the
+   * native coin as a bare quantity — a user holding 400 USDT saw nothing about
+   * it, and there was no fiat total anywhere.
+   */
+  const onchain = useWalletBalances(wallet);
   const balance = useAppStore((s) => s.balance);
   const positions = useAppStore((s) => s.positions);
   const investments = useAppStore((s) => s.investments);
@@ -200,16 +207,68 @@ export default function Wallet() {
               </button>
             </div>
 
-            {wallet.nativeBalance != null && (
-              <div className="row-between">
-                <span className="faint">{wallet.chain?.native?.symbol ?? 'BNB'}</span>
-                <span className="mono" style={{ fontSize: 12.5 }}>{fmtQty(wallet.nativeBalance)}</span>
+            {/*
+              ---------- TOTAL VALUE ----------
+              The number people open a wallet to see. It used to not exist:
+              the screen showed one bare quantity ("0.4183") and left the
+              user to price it themselves.
+            */}
+            <div style={{ marginTop: 4 }}>
+              <div className="faint">{t('wallet.onchainValue')}</div>
+              <div className="stat-value">
+                {onchain.loading && !onchain.rows.length ? '…' : fmtUsd(onchain.total)}
               </div>
+              {/*
+                Honest about coverage. A holding we cannot price is still
+                listed below, so silently leaving it out of the total would
+                under-report someone's money without telling them.
+              */}
+              {onchain.partial && (
+                <div className="faint" style={{ fontSize: 11, marginTop: 3 }}>
+                  {t('wallet.partialValue')}
+                </div>
+              )}
+            </div>
+
+            {/* ---------- per-token balances ---------- */}
+            {onchain.rows.length > 0 ? (
+              <div className="stack" style={{ gap: 7, marginTop: 4 }}>
+                {onchain.rows.map((r) => (
+                  <div key={r.symbol} className="row-between">
+                    <span className="row" style={{ gap: 7 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{r.symbol}</span>
+                      {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+                    </span>
+                    <span style={{ textAlign: 'end' }}>
+                      <div className="mono" style={{ fontSize: 12.5 }}>{fmtQty(r.amount)}</div>
+                      {r.value != null && (
+                        <div className="faint mono" style={{ fontSize: 10.5 }}>{fmtUsd(r.value)}</div>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              !onchain.loading && (
+                <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>
+                  {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
+                </p>
+              )
             )}
 
             <div className="row" style={{ gap: 8 }}>
-              <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => wallet.refreshBalance?.()}>
-                {t('common.refresh')}
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  // Both, or the token list silently goes stale after a swap
+                  // while the header total refreshes — two numbers on one
+                  // screen disagreeing about the same wallet.
+                  wallet.refreshBalance?.();
+                  onchain.refresh();
+                }}
+              >
+                {onchain.loading ? '…' : t('common.refresh')}
               </button>
               {wallet.mode === 'local' && !wallet.locked && (
                 <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.lock}>
