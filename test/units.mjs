@@ -10,6 +10,7 @@ import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
+import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
@@ -1143,6 +1144,73 @@ export default function run() {
     t('a wallet with no balances yields nothing', buildHoldings(list, {}, prices).length === 0);
     t('a zero balance is not listed',
       !buildHoldings(list, { BNB: { formatted: 0 } }, prices).some((r) => r.symbol === 'BNB'));
+  }
+
+  /* ----------- Solana on mobile: the wallet-browser deeplink -------------- */
+  /*
+   * REAL GAP: inside the APK the Solana Connect button was permanently
+   * disabled, showing "no wallet found" to users who may well have Phantom
+   * installed.
+   *
+   * The cause is structural, not a bug: Phantom injects window.solana from a
+   * browser EXTENSION, and extensions do not exist on mobile — not in a
+   * Capacitor WebView and not in Chrome for Android either. So the provider
+   * can never appear there, and no amount of retrying helps.
+   *
+   * The fix is Phantom's own recommendation: hand the page to the wallet's
+   * in-app browser, where the provider IS injected. That makes this deeplink
+   * the ONLY route to Solana from the APK, so its exact shape is pinned here.
+   */
+  {
+    /*
+     * Verified against the example in Phantom's published spec, character for
+     * character. Both params are required and both must be URL-encoded; a
+     * malformed link fails by silently opening the wallet on nothing, which
+     * is indistinguishable from the wallet being broken.
+     */
+    const officialExample =
+      'https://phantom.app/ul/browse/https%3A%2F%2Fmagiceden.io%2Fitem-details%2FED8Psf2Zk2HyVGAimSQpFHVDFRGDAkPjQhkfAqbN5h7d?ref=https%3A%2F%2Fmagiceden.io';
+    t(
+      "the link matches Phantom's own documented example",
+      phantomBrowseLink(
+        'https://magiceden.io/item-details/ED8Psf2Zk2HyVGAimSQpFHVDFRGDAkPjQhkfAqbN5h7d',
+        'https://magiceden.io'
+      ) === officialExample
+    );
+
+    const link = phantomBrowseLink('https://www.lawpoetics.ir/#/solana');
+    t('the deeplink points at phantom.app', new URL(link).host === 'phantom.app');
+    t('it uses the universal-link path', link.includes('/ul/browse/'));
+    t('it carries the required ref parameter', new URL(link).searchParams.has('ref'));
+
+    /*
+     * The hash must survive encoding. HashRouter puts the route after '#', so
+     * an unencoded '#' would truncate the URL and drop the user on the market
+     * screen instead of the Solana one — a plausible mistake that still
+     * "works" enough to look fine in a screenshot.
+     */
+    t('the route survives encoding', decodeURIComponent(link).includes('#/solana'));
+    t(
+      'the hash is encoded rather than literal',
+      link.includes('%23') && !link.slice('https://phantom.app/ul/browse/'.length).includes('#')
+    );
+
+    // Only https may be handed to a wallet.
+    t('plain http is refused', phantomBrowseLink('http://example.com') === null);
+    t('a null url is refused', phantomBrowseLink(null) === null);
+    t('junk is refused', phantomBrowseLink('not a url') === null);
+
+    t('Solflare gets its own host', new URL(solflareBrowseLink('https://x.io')).host === 'solflare.com');
+
+    /*
+     * publicAppUrl must never be localhost. Capacitor serves the APK from
+     * https://localhost, so using window.location here would send the wallet's
+     * browser to the phone itself and load nothing at all.
+     */
+    const app = publicAppUrl();
+    t(`the app url is public, not localhost (${app})`, !/localhost/.test(app));
+    t('the app url is https', app.startsWith('https://'));
+    t('the app url targets the Solana route', app.includes('/#/solana'));
   }
 
   return rows;

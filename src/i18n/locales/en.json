@@ -1878,6 +1878,10 @@
     "twoWalletsBody": "EVM and Solana are separate networks with separate wallet standards, so the app keeps a separate connection for each. They do not conflict and you do not have to disconnect one to use the other — MetaMask or Trust stays connected for BNB, Ethereum and the rest, while Phantom or Solflare handles Solana. Both can be connected at the same time.",
     "evmSide": "EVM wallet (Swap tab)",
     "solSide": "Solana wallet (this tab)",
-    "noNeedToDisconnect": "Nothing to disconnect. Connecting here does not touch your EVM wallet, and disconnecting here leaves it untouched too."
+    "noNeedToDisconnect": "Nothing to disconnect. Connecting here does not touch your EVM wallet, and disconnecting here leaves it untouched too.",
+    "openInWallet": "On a phone, a Solana wallet can only connect from inside the wallet's own browser. Browser extensions do not exist on mobile, so this page has to be opened there.",
+    "openPhantom": "Open in Phantom",
+    "openSolflare": "Open in Solflare",
+    "openInWalletHint": "The button opens the wallet app and loads this same page inside it. Connect there, then swap as normal. Nothing is lost — it is the same site and the same account."
   }
 }

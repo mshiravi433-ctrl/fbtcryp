@@ -13,6 +13,84 @@
  * reasoning that keeps eleven locale files out of the entry chunk.
  */
 
+
+/* -------------------------------------------------------------------------- */
+/* MOBILE: opening the dapp inside the wallet's own browser                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * True when we are inside the packaged Android app.
+ *
+ * Mirrors isNativeApp() in lib/notify.js rather than importing it, because
+ * that module pulls in the whole push-notification surface for one boolean.
+ */
+const isNativeShell = () =>
+  typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+
+/**
+ * Can this environment ever have an injected Solana provider?
+ *
+ * ─── THE GAP THIS EXPOSES ───────────────────────────────────────────────────
+ * Phantom and Solflare inject `window.solana` from a BROWSER EXTENSION. A
+ * Capacitor WebView has no extensions, and neither does an ordinary mobile
+ * browser — extensions do not exist on mobile at all. So inside our APK the
+ * provider is permanently null and the Connect button was permanently
+ * disabled, with a message telling the user to install a wallet they may
+ * already have installed.
+ *
+ * That is the whole reason the EVM side uses WalletConnect on mobile. Solana
+ * has no equivalent that works from a WebView:
+ *
+ *   • Mobile Wallet Adapter is Android-native (Kotlin) and is only wired up
+ *     automatically in Chrome for Android. It is not available to a Capacitor
+ *     WebView without a native plugin, and the only community Capacitor
+ *     plugin for it is explicitly "not ready for production use".
+ *   • Phantom's deeplink API can sign, but every call round-trips through the
+ *     wallet app and back, which reloads the page and wipes React state — the
+ *     library that wraps it warns about exactly this.
+ *
+ * The honest, working answer is the one Phantom itself recommends: send the
+ * user into the wallet's own in-app browser, where the provider IS injected
+ * and everything behaves like a desktop extension.
+ */
+export const canInjectSolana = () => !isNativeShell();
+
+/**
+ * Build a Phantom "browse" deeplink that reopens a page inside Phantom.
+ *
+ * Format is from Phantom's published spec; both parameters are required and
+ * both must be URL-encoded:
+ *
+ *   https://phantom.app/ul/browse/<url>?ref=<ref>
+ *
+ * Note these links cannot be pasted into a browser address bar — they must be
+ * tapped or opened by an app, which is why the UI renders it as a button.
+ */
+export function phantomBrowseLink(url, ref = url) {
+  if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
+  return `https://phantom.app/ul/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(ref)}`;
+}
+
+/** The same idea for Solflare, which uses its own host. */
+export function solflareBrowseLink(url) {
+  if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
+  return `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}`;
+}
+
+/**
+ * The public URL of this app, for the deeplinks above.
+ *
+ * `window.location` is wrong inside the APK: Capacitor serves from
+ * https://localhost, and sending the wallet to localhost would open the
+ * wallet's browser on nothing. The configured public origin is used instead.
+ */
+export function publicAppUrl(path = '/#/solana') {
+  const base =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_URL) ||
+    'https://www.lawpoetics.ir';
+  return `${String(base).replace(/\/+$/, '')}${path}`;
+}
+
 /**
  * Find an injected Solana provider.
  *

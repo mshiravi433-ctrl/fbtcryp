@@ -20,12 +20,16 @@ import {
   toBaseUnits
 } from '../lib/solana';
 import {
+  canInjectSolana,
   connectSolana,
   disconnectSolana,
   signSolanaTransaction,
   solanaAddress,
   solanaWalletAvailable,
-  solanaWalletName
+  solanaWalletName,
+  phantomBrowseLink,
+  publicAppUrl,
+  solflareBrowseLink
 } from '../lib/solanaWallet';
 import { shortAddress, useWallet } from '../context/WalletContext';
 
@@ -95,6 +99,26 @@ export default function SolanaSwap() {
 
   const tokens = useMemo(() => [...BASE_TOKENS, ...extraTokens], [extraTokens]);
   const hasWallet = solanaWalletAvailable();
+  /*
+   * Whether an injected provider is even POSSIBLE here. False in the APK and
+   * in ordinary mobile browsers, where extensions do not exist — so "no wallet
+   * found" would be misleading rather than informative.
+   */
+  const canInject = canInjectSolana();
+
+  /*
+   * Must leave our own WebView.
+   *
+   * lib/browser.js openUrl() prefers the in-app browser plugin, which would
+   * render the Phantom deeplink INSIDE our app — the one place it cannot work,
+   * since the whole point is to hand the page to another application. A plain
+   * window.open lets Android resolve the universal link to the wallet.
+   */
+  const openExternal = (url) => {
+    if (!url) return;
+    haptic?.('light');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   /*
    * Guards a stale quote overwriting a newer one. Two rapid amount changes
@@ -274,10 +298,50 @@ export default function SolanaSwap() {
           )}
         </div>
 
+        {/*
+          ---------- NO INJECTED PROVIDER ----------
+
+          Two different situations that used to share one dead-end message.
+
+          In the APK (and in any ordinary mobile browser) there can NEVER be an
+          injected provider: Phantom injects window.solana from a browser
+          EXTENSION, and extensions do not exist on mobile. Telling that user to
+          "install Phantom" is wrong — they may already have it — and the
+          disabled Connect button gave them nowhere to go.
+
+          Phantom's own recommendation is to hand the page to the wallet's
+          in-app browser, where the provider IS injected. So instead of an
+          error, this offers the button that actually gets them there.
+        */}
         {!hasWallet && (
-          <p className="notice notice-danger" style={{ marginTop: 11 }}>
-            {t('solana.noWallet')}
-          </p>
+          canInject ? (
+            <p className="notice notice-danger" style={{ marginTop: 11 }}>
+              {t('solana.noWallet')}
+            </p>
+          ) : (
+            <div style={{ marginTop: 11 }}>
+              <p className="notice">{t('solana.openInWallet')}</p>
+              <div className="row" style={{ gap: 8, marginTop: 10 }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ flex: 1 }}
+                  onClick={() => openExternal(phantomBrowseLink(publicAppUrl()))}
+                >
+                  {t('solana.openPhantom')}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1 }}
+                  onClick={() => openExternal(solflareBrowseLink(publicAppUrl()))}
+                >
+                  {t('solana.openSolflare')}
+                </button>
+              </div>
+              <p className="faint" style={{ fontSize: 11, marginTop: 9, lineHeight: 1.7 }}>
+                {t('solana.openInWalletHint')}
+              </p>
+            </div>
+          )
         )}
         {walletErr && (
           <p className="notice notice-danger" style={{ marginTop: 11 }}>
