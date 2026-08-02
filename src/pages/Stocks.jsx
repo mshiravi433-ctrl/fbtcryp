@@ -8,6 +8,7 @@ import { useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { IconExternal, IconShield } from '../components/Icons';
+import SegIndicator from '../components/SegIndicator';
 
 /**
  * Tokenized stocks (RWA — real world assets).
@@ -62,7 +63,7 @@ export default function Stocks() {
       <div className="segmented">
         {['rwa', 'equity'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
-            {tab === k && <motion.span layoutId="stk" className="seg-indicator" />}
+            {tab === k && <SegIndicator id="stk" />}
             {t(`stocks.tab.${k}`)}
           </button>
         ))}

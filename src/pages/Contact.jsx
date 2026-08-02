@@ -58,7 +58,23 @@ const SOCIALS = [
     handle: 'fbtswap@gmail.com'
   }
 ];
-const ADDRESS_FA = 'اصفهان، خمینی‌شهر، بلوار شهید بهشتی، جنب شهرداری منطقه ۴';
+/*
+ * REAL BUG: the office address rendered in PERSIAN on every language, because
+ * it was a hardcoded `ADDRESS_FA` constant instead of a translation lookup.
+ * An English or Arabic reader saw a line of Persian script in the middle of
+ * an otherwise translated page.
+ *
+ * `about.addressValue` already existed and was already translated for en, fa
+ * and ar — the string was sitting in the locale files, unused. The other nine
+ * languages fall back to English, which is the correct behaviour here: an
+ * address is a place, and the English transliteration is readable everywhere,
+ * whereas a machine translation of a street name is actively harmful to
+ * someone trying to find the building.
+ *
+ * The map query stays in Persian deliberately and is NOT translated: it is
+ * sent to Google Maps, which resolves this location far more reliably from
+ * the local-language name than from a transliteration.
+ */
 const MAPS_URL = `https://www.google.com/maps/search/${encodeURIComponent('خمینی شهر بلوار شهید بهشتی شهرداری منطقه 4')}`;
 
 function SocialIcon({ id }) {
@@ -155,9 +171,9 @@ export default function Contact() {
           <span className="info-row-icon"><IconMapPin width={18} height={18} /></span>
           <div style={{ flex: 1 }}>
             <div className="faint">{t('about.address')}</div>
-            <div style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.75 }}>{ADDRESS_FA}</div>
+            <div style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.75 }}>{t('about.addressValue')}</div>
             <div className="row" style={{ gap: 8, marginTop: 9 }}>
-              <button className="tag" onClick={() => copy(ADDRESS_FA, 'addressCopied')}>
+              <button className="tag" onClick={() => copy(t('about.addressValue'), 'addressCopied')}>
                 {t('common.copy')}
               </button>
               <button className="tag" onClick={() => openLink(MAPS_URL)}>

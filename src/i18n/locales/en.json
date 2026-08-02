@@ -380,7 +380,8 @@
     "tab": {
       "overview": "Overview",
       "liquidity": "Liquidity",
-      "history": "History"
+      "history": "History",
+      "practice": "Practice"
     },
     "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
     "viewPools": "View pools",
@@ -398,7 +399,8 @@
       "NO_VAULT": "No in-app wallet to back up.",
       "FAILED": "Could not write the file. Check storage permission."
     },
-    "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not Fanous Bazaar Pishgam, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue."
+    "lossWarning": "If you lose this phone, wipe it, or uninstall the app, this wallet and everything in it is GONE — permanently. Nobody can recover it: not Fanous Bazaar Pishgam, not Google, not anyone. Your 12 words on paper are the only way back. Write them down before you continue.",
+    "practiceNotice": "Practice account — virtual NX credits with no cash value. Nothing here touches real funds, and none of it can be withdrawn. Your real wallet is on the Overview tab."
   },
   "toast": {
     "insufficientBalance": "Not enough balance",

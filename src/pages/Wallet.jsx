@@ -19,10 +19,15 @@ import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletB
 import AdBanner from '../components/AdBanner';
 import { explorerAddr } from '../lib/chains';
 import { IconQr } from '../components/Icons';
+import SegIndicator from '../components/SegIndicator';
+import { useHideBalances } from '../hooks/useHideBalances';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
 
 export default function Wallet() {
+  // Subscribe so the figures re-render the moment the switch moves;
+  // the masking itself lives in the formatters.
+  useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user, haptic } = useTelegram();
@@ -73,15 +78,32 @@ export default function Wallet() {
   return (
     <PageTransition>
       <div className="segmented">
-        {['overview', 'liquidity', 'history'].map((k) => (
+        {['overview', 'liquidity', 'practice'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
-            {tab === k && <motion.span layoutId="wtab" className="seg-indicator" />}
+            {tab === k && <SegIndicator id="wtab" />}
             {t(`wallet.tab.${k}`)}
           </button>
         ))}
       </div>
 
-      {/* ---------- profile ---------- */}
+      {/*
+        ---------- PRACTICE ACCOUNT (virtual NX) ----------
+
+        This card used to render on EVERY tab, directly above the real
+        on-chain wallet. Two different kinds of money — play credits and
+        actual funds — sat stacked on one screen with similar styling, and the
+        virtual one came first.
+
+        Reported by the owner: users cannot tell them apart, and on a
+        non-custodial exchange that confusion is expensive. Practice now lives
+        behind its own tab with its own history, so the Overview tab shows
+        real funds and nothing else.
+      */}
+      {tab === 'practice' && (
+      <>
+      <div className="notice" style={{ marginBottom: 12 }}>
+        {t('wallet.practiceNotice')}
+      </div>
       <motion.section className="card card-rgb card-glow-magenta" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
         <div className="row-between">
@@ -112,17 +134,21 @@ export default function Wallet() {
           </div>
         </div>
       </motion.section>
+      </>
+      )}
 
       {/*
-        THE REAL WALLET COMES FIRST.
-        
-        This section used to sit BELOW the virtual NX balance, the allocation
-        pie and the paper-trading history — so on a non-custodial exchange the
-        first numbers a user saw were play money, and their actual on-chain
-        wallet was several screens down.
-        
-        Order is a claim about what matters. The real one leads.
+        THE REAL WALLET.
+
+        This used to sit BELOW the virtual NX balance, the allocation pie and
+        the paper-trading history — so on a non-custodial exchange the first
+        numbers a user saw were play money. It was moved above them, and the
+        practice account has now moved out of this tab entirely.
+
+        Order is a claim about what matters. Overview is real funds only.
       */}
+      {tab !== 'practice' && (
+      <>
       {/* ---------- on-chain wallet (non-custodial) ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.onchain')}</p>
@@ -238,6 +264,8 @@ export default function Wallet() {
 
         <p className="notice" style={{ marginTop: 12 }}>{t('wallet.custodyNotice')}</p>
       </motion.section>
+      </>
+      )}
 
       {tab === 'liquidity' && (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -249,7 +277,7 @@ export default function Wallet() {
         </motion.section>
       )}
 
-      {tab === 'history' && (
+      {tab === 'practice' && (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.tab.history')}</p>
           {orders.length === 0 ? (
@@ -275,9 +303,16 @@ export default function Wallet() {
         </motion.section>
       )}
 
-      {tab === 'overview' && <>
+      {/*
+        Everything from here to the closing fragment is VIRTUAL money — the
+        allocation pie, the NX cash/positions/staked tiles, the paper holdings
+        and the paper-trading stats. It was rendered under `overview`, i.e.
+        directly below the real on-chain wallet, which is exactly the mix-up
+        this restructure removes.
+      */}
+      {tab === 'practice' && <>
       <AdBanner slot="farm" compact />
-      {/* ---------- allocation ---------- */}
+      {/* ---------- allocation (virtual) ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('wallet.allocation')}</p>
         <div className="row" style={{ gap: 14 }}>
@@ -390,8 +425,8 @@ export default function Wallet() {
       </>}
 
 
-      {/* ---------- recent activity ---------- */}
-      {orders.length > 0 && (
+      {/* ---------- recent activity (virtual trades) ---------- */}
+      {tab === 'practice' && orders.length > 0 && (
         <section>
           <p className="section-label">{t('wallet.activity')}</p>
           <div className="card card-tight" style={{ marginTop: 8 }}>

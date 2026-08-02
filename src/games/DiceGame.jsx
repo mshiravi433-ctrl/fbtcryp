@@ -5,6 +5,7 @@ import { HOUSE_EDGE, rollDice } from '../lib/fairness';
 import { fmtNum } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
+import SegIndicator from '../components/SegIndicator';
 
 export default function DiceGame({ fair }) {
   const { t } = useTranslation();
@@ -113,7 +114,7 @@ export default function DiceGame({ fair }) {
             style={{ isolation: 'isolate' }}
           >
             {over === o.k && (
-              <motion.span layoutId="dice-ind" className="seg-indicator" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+              <SegIndicator id="dice-ind" />
             )}
             {o.label}
           </button>

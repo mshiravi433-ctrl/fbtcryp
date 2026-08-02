@@ -37,13 +37,65 @@ export function setDisplaySymbol(symbol) {
   activeSymbol = symbol || '$';
 }
 
+/*
+ * HIDE BALANCES.
+ *
+ * REAL BUG, and the same shape as the currency selector above: the Settings
+ * toggle wrote `hideBalances`, Settings read it back to draw its own switch,
+ * and NOTHING ELSE EVER LOOKED. Every balance, portfolio total and holding
+ * stayed on screen. A user who flipped it before handing someone their phone
+ * was told their figures were hidden when they were not — a privacy control
+ * that lies is worse than no control, because it is relied upon.
+ *
+ * Masking lives here, at the formatter, for the same reason the currency
+ * symbol does: these helpers are called from ~40 places, and a screen where
+ * SOME numbers are masked leaks exactly the ones that were missed.
+ *
+ * ─── WHAT IS AND IS NOT MASKED ──────────────────────────────────────────────
+ * Masked: money — fmtUsd, fmtCompact, fmtQty. These are "how much you have".
+ *
+ * NOT masked: fmtPrice and fmtPct. A market price is public information and
+ * says nothing about the holder, and hiding percentages would make the charts
+ * and the market list unreadable while protecting nothing. Hiding public data
+ * would also train the user to switch the feature off.
+ */
+let hideAmounts = false;
+const MASK = '•••';
+
+export function setHideBalances(on) {
+  hideAmounts = Boolean(on);
+}
+
+export function balancesHidden() {
+  return hideAmounts;
+}
+
+/*
+ * ─── WHY THERE IS A HOOK AS WELL AS A FLAG ──────────────────────────────────
+ * Setting the module-level flag changes what fmtUsd RETURNS, but it does not
+ * make React re-render anything. Wallet, Header and Market call the formatters
+ * without subscribing to the settings store at all, so flipping the toggle
+ * would have left the visible figures untouched until the user navigated away
+ * and back.
+ *
+ * That is the same "looks wired, is not" failure the toggle already had, just
+ * one layer deeper — and it is the version that is easy to ship because it
+ * works when you test it by switching screens.
+ *
+ * `useHideBalances()` subscribes to the store so any screen showing money
+ * re-renders the instant the switch moves. Screens call it for the
+ * subscription; the formatters still read the flag.
+ */
+
 export function fmtUsd(v, opts = {}) {
   if (v == null || Number.isNaN(v)) return '—';
+  if (hideAmounts) return MASK;
   return `${activeSymbol}${fmtPrice(v, opts)}`;
 }
 
 export function fmtCompact(v) {
   if (v == null || Number.isNaN(v)) return '—';
+  if (hideAmounts) return MASK;
   const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
   if (abs >= 1e12) return `${sign}${activeSymbol}${(abs / 1e12).toFixed(2)}T`;
@@ -65,6 +117,10 @@ export function fmtPct(v, digits = 2) {
 
 export function fmtQty(v) {
   if (v == null || Number.isNaN(v)) return '—';
+  // A token quantity is a holding, so it is covered by the same promise the
+  // fiat total makes. Leaving "12.4 BNB" visible next to a masked fiat value
+  // would defeat the point.
+  if (hideAmounts) return MASK;
   const abs = Math.abs(v);
   if (abs >= 1000) return nf({ maximumFractionDigits: 2 }).format(v);
   if (abs >= 1) return nf({ maximumFractionDigits: 4 }).format(v);

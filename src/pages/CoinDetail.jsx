@@ -9,6 +9,7 @@ import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
+import SegIndicator from '../components/SegIndicator';
 
 const RANGES = [
   { key: '1D', days: 1 },
@@ -186,7 +187,7 @@ export default function CoinDetail() {
               style={{ isolation: 'isolate' }}
             >
               {range.key === r.key && (
-                <motion.span layoutId="range-ind" className="seg-indicator" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+                <SegIndicator id="range-ind" />
               )}
               {r.key}
             </button>

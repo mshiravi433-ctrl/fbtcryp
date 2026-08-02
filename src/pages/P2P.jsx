@@ -8,6 +8,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import SendSheet from '../components/SendSheet';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap } from '../components/Icons';
+import SegIndicator from '../components/SegIndicator';
 
 /**
  * Peer-to-peer trading.
@@ -69,7 +70,7 @@ export default function P2P() {
       <div className="segmented">
         {['otc', 'fiat'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
-            {tab === k && <motion.span layoutId="p2ptab" className="seg-indicator" />}
+            {tab === k && <SegIndicator id="p2ptab" />}
             {t(`p2p.tab.${k}`)}
           </button>
         ))}

@@ -9,6 +9,7 @@ import { useMarkets } from '../hooks/useMarket';
 import { fmtNum, fmtPct, fmtPrice } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
+import SegIndicator from '../components/SegIndicator';
 
 /**
  * UP / DOWN market prediction rounds.
@@ -145,7 +146,7 @@ export default function Predict() {
         {DURATIONS.map((d) => (
           <button key={d.key} className={duration.key === d.key ? 'active' : ''} onClick={() => setDuration(d)} style={{ isolation: 'isolate' }}>
             {duration.key === d.key && (
-              <motion.span layoutId="dur-ind" className="seg-indicator" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+              <SegIndicator id="dur-ind" />
             )}
             {d.key}
           </button>

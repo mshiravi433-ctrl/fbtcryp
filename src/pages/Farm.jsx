@@ -9,6 +9,7 @@ import { fmtCompact } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { IconExternal, IconPools, IconShield } from '../components/Icons';
+import { useHideBalances } from '../hooks/useHideBalances';
 
 /**
  * Yield farming / liquidity pools.
@@ -64,6 +65,9 @@ const FARMS = [
 ];
 
 export default function Farm() {
+  // Subscribe so the figures re-render the moment the switch moves;
+  // the masking itself lives in the formatters.
+  useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();

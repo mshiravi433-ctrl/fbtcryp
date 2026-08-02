@@ -11,6 +11,7 @@ import { analyze, marketSentiment, projectRange } from '../lib/ai';
 import { fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
+import SegIndicator from '../components/SegIndicator';
 
 const HORIZONS = [
   { days: 1, key: '1D' },
@@ -506,7 +507,7 @@ export default function Signals() {
                   onClick={() => setHorizon(h)}
                   style={{ isolation: 'isolate', padding: '6px 11px' }}
                 >
-                  {horizon.key === h.key && <motion.span layoutId="hz" className="seg-indicator" />}
+                  {horizon.key === h.key && <SegIndicator id="hz" />}
                   {h.key}
                 </button>
               ))}

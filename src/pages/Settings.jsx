@@ -379,7 +379,7 @@ export default function Settings() {
             label={t('settings.accent')}
             right={
               <div className="row" style={{ gap: 6 }}>
-                {['rgb', 'cyan', 'magenta', 'mint'].map((a) => (
+                {['rgb', 'pastel', 'cyan', 'magenta', 'mint'].map((a) => (
                   <button
                     key={a}
                     onClick={() => {
@@ -396,11 +396,13 @@ export default function Settings() {
                       background:
                         a === 'rgb'
                           ? 'conic-gradient(#00e5ff,#7c4dff,#ff2d95,#00ff9d,#00e5ff)'
-                          : a === 'cyan'
-                            ? 'linear-gradient(135deg,#00e5ff,#0091ea)'
-                            : a === 'magenta'
-                              ? 'linear-gradient(135deg,#ff2d95,#d500f9)'
-                              : 'linear-gradient(135deg,#00ff9d,#00e5ff)'
+                          : a === 'pastel'
+                            ? 'conic-gradient(#7fd8e8,#b3a4f5,#f5a3c7,#8fe3c2,#7fd8e8)'
+                            : a === 'cyan'
+                              ? 'linear-gradient(135deg,#00e5ff,#0091ea)'
+                              : a === 'magenta'
+                                ? 'linear-gradient(135deg,#ff2d95,#d500f9)'
+                                : 'linear-gradient(135deg,#00ff9d,#00e5ff)'
                     }}
                   />
                 ))}

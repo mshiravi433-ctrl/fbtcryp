@@ -18,6 +18,7 @@ import { GAMES_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
 import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
+import { clearAway, watchAutoLock } from './lib/autoLock';
 
 const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
@@ -208,6 +209,35 @@ export default function App() {
     prefetchLikelyRoutes();
   }, []);
 
+  /*
+   * AUTO-LOCK ON RETURN.
+   *
+   * REAL BUG: "قفل خودکار مثلا بزاری روی یک دقیقه اپ بسته نمیشه" — setting
+   * auto-lock to one minute did nothing. `autoLockMinutes` was written by
+   * Settings, read back by Settings to draw its own label, and consulted by
+   * nothing else. The app locked only on a cold start (the useState above), so
+   * leaving it for an hour and coming back left it open.
+   *
+   * The timing rule lives in lib/autoLock.js and is measured against the wall
+   * clock rather than a timer, because Android freezes timers in a
+   * backgrounded WebView and can kill the process outright.
+   *
+   * Gated on a lock method actually existing. Auto-lock with neither biometrics
+   * nor 2FA configured would produce a lock screen with no way through it —
+   * which is precisely the lockout bug that had to be fixed in AppLock before.
+   */
+  useEffect(() => {
+    const canLock = () => {
+      const st = useSettingsStore.getState();
+      return Boolean(st.biometricEnabled || (st.twoFactorEnabled && st.twoFactorSecret));
+    };
+    return watchAutoLock({
+      isEnabled: canLock,
+      getMinutes: () => useSettingsStore.getState().autoLockMinutes,
+      onLock: () => setLocked(true)
+    });
+  }, []);
+
   // Background housekeeping, once per app open:
   //   • refresh the news cache when it is older than 24h
   //   • fire at most one promotional notification per 24h (the cap lives in
@@ -240,7 +270,16 @@ export default function App() {
    * phone can read, which would defeat the point of the lock.
    */
   if (locked) {
-    screen = <AppLock onUnlock={() => setLocked(false)} />;
+    screen = (
+      <AppLock
+        onUnlock={() => {
+          // Drop the away-marker too, or the very next resume would measure
+          // from the old timestamp and lock again immediately.
+          clearAway();
+          setLocked(false);
+        }}
+      />
+    );
   } else if (showSplash) {
     screen = <Splash onStart={() => setShowSplash(false)} />;
   } else if (showWelcome) {

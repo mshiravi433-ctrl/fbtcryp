@@ -10,11 +10,16 @@ import { useMarkets } from '../hooks/useMarket';
 import { fmtNum, fmtPct, fmtPrice, fmtQty, fmtTime } from '../lib/format';
 import { useAppStore, valuePortfolio } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
+import SegIndicator from '../components/SegIndicator';
+import { useHideBalances } from '../hooks/useHideBalances';
 
 const FEE = 0.001; // 0.1% simulated taker fee
 const PERCENTS = [25, 50, 75, 100];
 
 export default function Trade() {
+  // Subscribe so the figures re-render the moment the switch moves;
+  // the masking itself lives in the formatters.
+  useHideBalances();
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const navigate = useNavigate();
@@ -139,16 +144,14 @@ export default function Trade() {
               style={{ isolation: 'isolate' }}
             >
               {side === s && (
-                <motion.span
-                  layoutId="side-ind"
-                  className="seg-indicator"
+                <SegIndicator
+                  id="side-ind"
                   style={{
                     background:
                       s === 'buy'
                         ? 'linear-gradient(90deg,#00ff9d,#00e5ff)'
                         : 'linear-gradient(90deg,#ff3b6b,#ff2d95)'
                   }}
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                 />
               )}
               {t(`trade.${s}`)}

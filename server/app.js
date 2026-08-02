@@ -80,6 +80,50 @@ setInterval(() => {
   for (const [k, v] of hits) if (now > v.reset) hits.delete(k);
 }, WINDOW_MS).unref?.();
 
+/* --------------------------- AI: a tighter budget ------------------------- */
+/*
+ * The limit above is sized for cached market data, where a request costs a
+ * map lookup. The AI routes are a different economy: each one spends real
+ * upstream quota that is shared by every user of the app, and the Developers
+ * page publishes these paths openly.
+ *
+ * At 120/min a single script could exhaust the daily model quota in minutes
+ * and take the feature down for everyone — not by attacking anything, just by
+ * looping the documented example. Cheap-to-serve and expensive-to-serve
+ * endpoints should not share a budget.
+ *
+ * 10/min per caller is far above what the UI generates (the client answers
+ * common questions from its local FAQ and only escalates when unsure) and far
+ * below what a loop costs.
+ */
+const aiHits = new Map();
+const AI_MAX_PER_WINDOW = Number(process.env.AI_RATE_LIMIT || 10);
+
+app.use('/api/ai', (req, res, next) => {
+  // Reading status must never be throttled: the client polls it to decide
+  // whether to show the feature at all, and a 429 there looks like an outage.
+  if (req.method === 'GET') return next();
+
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = aiHits.get(key);
+  if (!rec || now > rec.reset) {
+    aiHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > AI_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'AI_RATE_LIMITED' });
+  }
+  return next();
+});
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of aiHits) if (now > v.reset) aiHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 /* -------------------------------- helpers -------------------------------- */
 
 function serve(res, ttlMs) {

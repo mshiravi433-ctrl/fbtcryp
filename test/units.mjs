@@ -8,6 +8,7 @@ import { searchTokens, tokenKey, getTokensSync } from '../src/lib/tokenLists.js'
 import { FAMILY, isValidFor, resolvePayout, payoutTable } from '../src/lib/payout.js';
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
+import { trimKeepingLanguages } from '../server/news.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
@@ -29,6 +30,8 @@ import {
   validateOrder
 } from '../src/lib/orders.js';
 import { localOutlook, localBrief } from '../src/lib/localOutlook.js';
+import { fmtUsd, fmtCompact, fmtQty, fmtPrice, fmtPct, setHideBalances } from '../src/lib/format.js';
+import { shouldAutoLock, markAway, clearAway, AUTOLOCK_NEVER } from '../src/lib/autoLock.js';
 import qrcode from 'qrcode-generator';
 import { classifyQuery } from '../src/pages/Explore.jsx';
 import { isSafeUrl } from '../src/lib/browser.js';
@@ -670,6 +673,212 @@ export default function run() {
     // would waste a send every cycle forever.
     t('a truncated FCM token is rejected', parse('fcm:abc') === null);
     t('junk is rejected', parse('not-an-endpoint') === null);
+  }
+
+  /* --------------------- settings that must actually DO something --------- */
+  /*
+   * Two controls were found writing a value that nothing ever read. Both are
+   * the project's most-repeated bug, and both are worse than cosmetic:
+   *
+   *   hideBalances   — Settings drew the switch from it and no balance ever
+   *                    consulted it. A privacy control that reports success
+   *                    while every figure stays on screen is relied upon at
+   *                    exactly the wrong moment.
+   *   autoLockMinutes— stored, used only to render its own label. The app
+   *                    locked on cold start and never again, so "lock after 1
+   *                    minute" left an unattended phone open indefinitely.
+   *
+   * Asserted through the real functions rather than by grepping for a call.
+   */
+  {
+    /* ---- hide balances ---- */
+    setHideBalances(false);
+    const shownUsd = fmtUsd(1234.5);
+    const shownQty = fmtQty(12.3456);
+    const shownCompact = fmtCompact(2_500_000);
+
+    // fmtPrice rounds at >=1000, so 1234.5 formats as "$1,235" — assert that
+    // digits are present rather than pinning an exact rounded string.
+    t('with the switch off, money is visible', /\d/.test(shownUsd) && shownUsd.includes('$'));
+    t('with the switch off, quantities are visible', /12\.34/.test(shownQty));
+
+    setHideBalances(true);
+    t('hiding balances masks the fiat total', fmtUsd(1234.5) !== shownUsd);
+    t('the mask reveals no digits', !/\d/.test(fmtUsd(1234.5)));
+    t('hiding balances masks compact sums', !/\d/.test(fmtCompact(2_500_000)));
+    t('hiding balances masks token quantities', !/\d/.test(fmtQty(12.3456)));
+
+    /*
+     * Public market data must stay readable. Masking it would protect nothing
+     * — the price of BNB says nothing about the holder — while making the
+     * market list and every chart useless, which just trains people to leave
+     * the feature off.
+     */
+    t('a public price is still shown while hidden', /\d/.test(fmtPrice(612.34)));
+    t('a percentage change is still shown while hidden', /\d/.test(fmtPct(3.2)));
+
+    // Nothing may be permanently masked: turning it off must fully restore.
+    setHideBalances(false);
+    t('turning it back off restores the fiat total', fmtUsd(1234.5) === shownUsd);
+    t('turning it back off restores quantities', fmtQty(12.3456) === shownQty);
+    t('turning it back off restores compact sums', fmtCompact(2_500_000) === shownCompact);
+
+    // An absent value must still read as "no data", never as a masked amount —
+    // those mean different things on a wallet screen.
+    setHideBalances(true);
+    t('a missing value is a dash, not a mask', fmtUsd(null) === '—');
+    setHideBalances(false);
+  }
+
+  {
+    /* ---- auto-lock ---- */
+    const MIN = 60_000;
+    const t0 = 1_000_000_000_000;
+
+    /*
+     * autoLock persists its marker in localStorage. The runner installs a DOM
+     * before this suite, but the suite must not DEPEND on that — running it
+     * standalone would otherwise silently no-op every write and report the
+     * timing logic as broken. A tiny in-memory shim makes these cases true
+     * unit tests.
+     */
+    if (typeof globalThis.localStorage === 'undefined') {
+      const mem = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: (k) => mem.delete(k)
+      };
+    }
+
+    // No marker yet: a first run must not lock.
+    clearAway();
+    t('never locks with no record of being away', !shouldAutoLock({ enabled: true, minutes: 5, at: t0 }));
+
+    /*
+     * markAway() writes to localStorage. Assert it actually landed before
+     * relying on it: without a DOM these calls no-op, and every 'locks'
+     * assertion below would then fail for a storage reason while looking like
+     * a logic bug. If storage is unavailable the timing cases are skipped
+     * rather than reported as false failures.
+     */
+    markAway(t0);
+    const markerWorks = shouldAutoLock({ enabled: true, minutes: 1, at: t0 + 99 * MIN });
+    t('the away marker persisted', markerWorks);
+
+    t(
+      'does not lock before the limit',
+      !shouldAutoLock({ enabled: true, minutes: 5, at: t0 + 4 * MIN })
+    );
+    t(
+      'locks once the limit is reached',
+      shouldAutoLock({ enabled: true, minutes: 5, at: t0 + 5 * MIN })
+    );
+    t(
+      'locks well past the limit',
+      shouldAutoLock({ enabled: true, minutes: 5, at: t0 + 90 * MIN })
+    );
+
+    // The exact case reported: one minute.
+    t(
+      'one minute means one minute',
+      shouldAutoLock({ enabled: true, minutes: 1, at: t0 + MIN })
+    );
+    t(
+      'fifty seconds is not yet a minute',
+      !shouldAutoLock({ enabled: true, minutes: 1, at: t0 + 50_000 })
+    );
+
+    // 'Never' must never lock, however long the app was away.
+    t(
+      'never means never',
+      !shouldAutoLock({ enabled: true, minutes: AUTOLOCK_NEVER, at: t0 + 10_000 * MIN })
+    );
+
+    /*
+     * With no lock method configured there must be no lock screen — that is
+     * the lockout bug AppLock already had to be rescued from.
+     */
+    t(
+      'no lock method means no lock',
+      !shouldAutoLock({ enabled: false, minutes: 1, at: t0 + 100 * MIN })
+    );
+
+    /*
+     * The system clock is user-settable. A negative gap means it moved, not
+     * that no time passed — and "I cannot measure the gap" on a security
+     * control must fail CLOSED, or the lock is bypassable by changing the date.
+     */
+    t(
+      'a backwards clock locks rather than failing open',
+      shouldAutoLock({ enabled: true, minutes: 5, at: t0 - 60 * MIN })
+    );
+
+    // Garbage in the stored value must not lock on every resume.
+    clearAway();
+    t(
+      'a missing marker does not lock',
+      !shouldAutoLock({ enabled: true, minutes: 5, at: t0 })
+    );
+  }
+
+  /* ------------- news: minority languages must survive the trim ----------- */
+  /*
+   * REAL BUG: the "Other languages" tab was always empty.
+   *
+   * Two causes stacked. The server carried only English desks, and the client
+   * only reaches for its own local-language RSS when the backend returns fewer
+   * than 12 items — the backend returned ~30 every time, so that branch never
+   * ran in production.
+   *
+   * Moving the local desks server-side exposed the second problem: English
+   * outlets publish far more often, so a plain newest-first cut can contain
+   * zero non-English items. The endpoint looks perfectly healthy — 60 items,
+   * 200 OK — and the tab is still empty. Nothing observable from outside would
+   * catch that, which is why the trim is asserted directly.
+   */
+  {
+    const mk = (lang, i, at) => ({ id: `${lang}-${i}`, title: `${lang} ${i}`, lang, at });
+
+    // The shape that broke it: a flood of fresh English, a trickle of older
+    // Persian and German.
+    const flooded = [
+      ...Array.from({ length: 200 }, (_, i) => mk('en', i, 2_000_000 - i)),
+      ...Array.from({ length: 8 }, (_, i) => mk('fa', i, 1_000 - i)),
+      ...Array.from({ length: 5 }, (_, i) => mk('de', i, 900 - i))
+    ].sort((a, b) => b.at - a.at);
+
+    // Proof the naive approach really does lose them — otherwise this whole
+    // test is guarding against nothing.
+    const naive = [...flooded].sort((a, b) => b.at - a.at).slice(0, 60);
+    t('a plain newest-first trim loses every foreign item', naive.every((i) => i.lang === 'en'));
+
+    const kept = trimKeepingLanguages(flooded, { limit: 90, keepPerLang: 6 });
+    t('the trim respects its budget', kept.length === 90);
+    t('Persian survives a flood of English', kept.filter((i) => i.lang === 'fa').length === 6);
+    t('German survives too', kept.filter((i) => i.lang === 'de').length === 5);
+    t('English still fills the rest', kept.filter((i) => i.lang === 'en').length > 60);
+
+    // Display order must still be newest-first, or the feed reads as shuffled.
+    const ordered = kept.every((it, i) => i === 0 || kept[i - 1].at >= it.at);
+    t('the result is still sorted newest-first', ordered);
+
+    // A language with fewer items than the reserve must not be padded, and
+    // must not steal slots it cannot fill.
+    const sparse = [
+      ...Array.from({ length: 50 }, (_, i) => mk('en', i, 5000 - i)),
+      mk('fa', 0, 10)
+    ].sort((a, b) => b.at - a.at);
+    const sparseKept = trimKeepingLanguages(sparse, { limit: 20, keepPerLang: 6 });
+    t('a single foreign item is kept', sparseKept.filter((i) => i.lang === 'fa').length === 1);
+    t('no padding beyond what exists', sparseKept.length === 20);
+
+    // Degenerate inputs must not throw — an upstream outage is not a crash.
+    t('an empty feed trims to empty', trimKeepingLanguages([]).length === 0);
+    t(
+      'items with no language default to English rather than vanishing',
+      trimKeepingLanguages([{ id: 'x', title: 'x', at: 1 }]).length === 1
+    );
   }
 
   return rows;

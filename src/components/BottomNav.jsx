@@ -11,6 +11,7 @@ import {
   AnimatedWallet,
   useStill
 } from './AnimatedIcon';
+import SegIndicator from './SegIndicator';
 
 /**
  * Bottom navigation.
@@ -81,8 +82,8 @@ export default function BottomNav() {
                 `activeGlow`, which can only ever match one of them.
               */}
               {activeGlow === item.to && (
-                <motion.span
-                  layoutId="nav-glow"
+                <SegIndicator
+                  id="nav-glow"
                   className="nav-glow"
                   transition={{ type: 'spring', stiffness: 460, damping: 34 }}
                 />
@@ -134,8 +135,8 @@ export default function BottomNav() {
           }}
         >
           {activeGlow === '__more' && (
-            <motion.span
-              layoutId="nav-glow"
+            <SegIndicator
+              id="nav-glow"
               className="nav-glow"
               transition={{ type: 'spring', stiffness: 460, damping: 34 }}
             />

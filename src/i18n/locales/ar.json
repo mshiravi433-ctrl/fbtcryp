@@ -380,7 +380,8 @@
     "tab": {
       "overview": "Overview",
       "liquidity": "Liquidity",
-      "history": "History"
+      "history": "History",
+      "practice": "تجريبي"
     },
     "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
     "viewPools": "View pools",
@@ -398,7 +399,8 @@
       "NO_VAULT": "No in-app wallet to back up.",
       "FAILED": "Could not write the file. Check storage permission."
     },
-    "lossWarning": "إذا فقدت هذا الهاتف أو مسحته أو حذفت التطبيق، فستفقد هذه المحفظة وكل ما فيها نهائياً. لا أحد يستطيع استعادتها. كلماتك الاثنتا عشرة على الورق هي الطريق الوحيد."
+    "lossWarning": "إذا فقدت هذا الهاتف أو مسحته أو حذفت التطبيق، فستفقد هذه المحفظة وكل ما فيها نهائياً. لا أحد يستطيع استعادتها. كلماتك الاثنتا عشرة على الورق هي الطريق الوحيد.",
+    "practiceNotice": "حساب تجريبي — رصيد NX افتراضي بلا قيمة نقدية. لا شيء هنا يمسّ أموالك الحقيقية ولا يمكن سحبه. محفظتك الحقيقية في تبويب النظرة العامة."
   },
   "toast": {
     "insufficientBalance": "الرصيد غير كافٍ",

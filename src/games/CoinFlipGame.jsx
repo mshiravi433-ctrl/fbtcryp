@@ -5,6 +5,7 @@ import { HOUSE_EDGE, rollFloat } from '../lib/fairness';
 import { fmtNum } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
+import SegIndicator from '../components/SegIndicator';
 
 /** Coin flip. Payout 1.94x on a 50% chance = the same 3% edge as the others. */
 const PAYOUT = 2 * (1 - HOUSE_EDGE);
@@ -109,7 +110,7 @@ export default function CoinFlipGame({ fair }) {
       <div className="segmented">
         {['heads', 'tails'].map((sd) => (
           <button key={sd} className={side === sd ? 'active' : ''} onClick={() => setSide(sd)} disabled={flipping} style={{ isolation: 'isolate' }}>
-            {side === sd && <motion.span layoutId="cf-ind" className="seg-indicator" />}
+            {side === sd && <SegIndicator id="cf-ind" />}
             {sd === 'heads' ? '🦅' : '🌙'} {t(`game.coinflip.${sd}`)}
           </button>
         ))}

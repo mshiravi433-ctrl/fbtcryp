@@ -13,6 +13,7 @@ import CoinFlipGame from '../games/CoinFlipGame';
 import { useFairSession } from '../hooks/useFairSession';
 import { fmtNum } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
+import SegIndicator from '../components/SegIndicator';
 
 const GAMES = [
   { id: 'crash', emoji: '🚀', color: 'var(--rgb-1)' },
@@ -66,7 +67,7 @@ export default function Play() {
         {GAMES.map((g) => (
           <button key={g.id} className={tab === g.id ? 'active' : ''} onClick={() => setTab(g.id)} style={{ isolation: 'isolate' }}>
             {tab === g.id && (
-              <motion.span layoutId="game-ind" className="seg-indicator" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />
+              <SegIndicator id="game-ind" />
             )}
             {g.emoji} {t(`game.${g.id}.name`)}
           </button>

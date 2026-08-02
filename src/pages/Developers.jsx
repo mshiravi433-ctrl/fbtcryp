@@ -19,8 +19,19 @@ const ENDPOINTS = [
   { m: 'GET', p: '/api/chart/:id?days=7', d: 'chart' },
   { m: 'GET', p: '/api/trending', d: 'trending' },
   { m: 'GET', p: '/api/dex/bsc', d: 'dexPools' },
-  { m: 'POST', p: '/api/ai/outlook', d: 'aiOutlook' },
-  { m: 'POST', p: '/api/ai/faq', d: 'aiFaq' }
+  { m: 'POST', p: '/api/ai/outlook', d: 'aiOutlook' }
+  /*
+   * `/api/ai/faq` was listed here and does not exist — it was removed from the
+   * server along with the Help chat box, and this page kept advertising it.
+   * Publishing an endpoint that 404s sends integrators to open a bug against
+   * us for our own stale documentation, which is exactly the kind of avoidable
+   * inbound this page should not generate.
+   *
+   * The remaining AI routes are rate-limited separately from the cached market
+   * data (see the /api/ai budget in server/app.js): they spend shared upstream
+   * quota, so the documented example must not be loopable into an outage for
+   * everyone else.
+   */
 ];
 
 export default function Developers() {

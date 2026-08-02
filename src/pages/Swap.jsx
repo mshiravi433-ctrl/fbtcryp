@@ -33,6 +33,7 @@ import { fmtQty } from '../lib/format';
 import { NATIVE_GAS_FLOOR, formatUnitsExact } from '../lib/swap';
 import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
 import { PAYOUT_DIRECTORY } from '../lib/payout';
+import { useHideBalances } from '../hooks/useHideBalances';
 
 /**
  * Real on-chain swap screen.
@@ -55,6 +56,9 @@ import { PAYOUT_DIRECTORY } from '../lib/payout';
  * have them and stays silent where we don't, rather than blocking on it.
  */
 export default function Swap() {
+  // Subscribe so the figures re-render the moment the switch moves;
+  // the masking itself lives in the formatters.
+  useHideBalances();
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const wallet = useWallet();
@@ -755,10 +759,27 @@ export default function Swap() {
           <span className="icon-btn" style={{ pointerEvents: 'none' }}>
             <AnimatedSearch active={Boolean(pickerQuery)} still={still} width={16} height={16} />
           </span>
+          {/*
+            NO autoFocus HERE — it was the second half of the "token picker
+            flashes twice" bug.
+
+            Focusing an input the instant the dialog mounts makes Android raise
+            the soft keyboard immediately. The activity is adjustResize (the
+            platform default, and what Capacitor relies on), so the WebView
+            viewport shrinks by roughly 40% WHILE the dialog's open spring is
+            still running. The sheet lays out at full height, then re-lays out
+            at keyboard height mid-animation: two distinct paints, which is
+            exactly the "flashes like a fluorescent tube starting up" the user
+            described.
+
+            The list is immediately usable without focus, and the six curated
+            pairs at the top are one tap away — which is what most people
+            actually use. Anyone who wants to search taps the field, and then
+            the keyboard appears against a dialog that has already settled.
+          */}
           <input
             type="text"
             value={pickerQuery}
-            autoFocus
             onChange={(e) => {
               setPickerQuery(e.target.value);
               setImportError(null);

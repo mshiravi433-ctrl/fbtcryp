@@ -56,11 +56,50 @@ function buildPayload() {
 }
 
 /**
+ * Where the backup is written on Android.
+ *
+ * ─── WHY NOT Directory.Documents ────────────────────────────────────────────
+ * REAL BUG: exporting the wallet failed on every modern phone with
+ * «نوشتن فایل ممکن نشد. دسترسی حافظه را بررسی کن».
+ *
+ * Capacitor maps Directory.Documents to
+ * `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)` —
+ * PUBLIC shared storage. Two things then collide:
+ *
+ *   1. The plugin's own permission gate short-circuits on Android 11+:
+ *          SDK_INT >= R || getPermissionState(PUBLIC_STORAGE) == GRANTED
+ *      so it never even asks. It assumes Scoped Storage will handle it.
+ *   2. Under Scoped Storage an app cannot freely write into public Documents
+ *      without MANAGE_EXTERNAL_STORAGE or MediaStore. The write throws.
+ *
+ * Result: a permission error the user can do nothing about. Granting storage
+ * access would not have helped, and the app never had those permissions
+ * declared anyway — the manifest even states "nothing is written to shared
+ * storage", which stopped being true when this feature was added.
+ *
+ * Directory.External maps to `getExternalFilesDir(null)`: app-private external
+ * storage. It needs NO permission on any API level, it is covered by the
+ * existing `<external-path>` FileProvider rule so the share sheet still works,
+ * and it is reachable from a file manager.
+ *
+ * It is also the right place on the merits. This file is an encrypted vault;
+ * dropping it into public Documents puts it in the path of cloud backup, photo
+ * sync and every app with storage access. App-private plus an explicit share
+ * is the safer default — the user decides where a copy goes.
+ *
+ * Trade-off, stated honestly: Android deletes this directory when the app is
+ * uninstalled. That is exactly why the UI must push the user to SHARE the file
+ * somewhere durable rather than leave it in place, and why the written seed
+ * phrase stays the primary backup.
+ */
+const BACKUP_DIR_HINT = 'Android/data/ir.fbt.swap/files';
+
+/**
  * Save the backup to the device.
  *
- * On Android we write into the app's Documents directory, which is visible in
- * the Files app but not world-readable, then offer a share sheet so the user
- * can move it somewhere durable. On web we trigger a normal download.
+ * On Android we write into the app's own external files directory, then offer
+ * a share sheet so the user can move it somewhere durable. On web we trigger a
+ * normal download.
  *
  * Returns a description of where the file landed.
  */
@@ -73,23 +112,26 @@ export async function exportWallet() {
     await Filesystem.writeFile({
       path: BACKUP_FILENAME,
       data: json,
-      directory: Directory.Documents,
+      directory: Directory.External,
       encoding: Encoding.UTF8,
       recursive: true
     });
 
     const { uri } = await Filesystem.getUri({
-      directory: Directory.Documents,
+      directory: Directory.External,
       path: BACKUP_FILENAME
     });
 
     return {
       ok: true,
       native: true,
-      path: `Documents/${BACKUP_FILENAME}`,
+      path: `${BACKUP_DIR_HINT}/${BACKUP_FILENAME}`,
       uri,
       // Where a user will actually find it in the Files app
-      hint: 'Files → Documents'
+      hint: BACKUP_DIR_HINT,
+      // The file is removed if the app is uninstalled, so sharing it out is
+      // not optional advice — the UI surfaces this.
+      ephemeral: true
     };
   }
 
@@ -114,15 +156,18 @@ export async function shareWalletBackup() {
   const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
   const { Share } = await import('@capacitor/share');
 
+  // Same directory as exportWallet(), for the same reason — see the comment
+  // on BACKUP_DIR_HINT. This path used to be Directory.Documents too, so the
+  // share button failed with the identical permission error.
   await Filesystem.writeFile({
     path: BACKUP_FILENAME,
     data: buildPayload(),
-    directory: Directory.Documents,
+    directory: Directory.External,
     encoding: Encoding.UTF8,
     recursive: true
   });
 
-  const { uri } = await Filesystem.getUri({ directory: Directory.Documents, path: BACKUP_FILENAME });
+  const { uri } = await Filesystem.getUri({ directory: Directory.External, path: BACKUP_FILENAME });
 
   await Share.share({
     title: 'FBT Swap wallet backup (encrypted)',

@@ -31,6 +31,7 @@ import {
 } from '../lib/orders';
 import { showLocalNotification } from '../lib/notify';
 import { IconChevronLeft, IconClock, IconTrend } from '../components/Icons';
+import { useHideBalances } from '../hooks/useHideBalances';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -45,6 +46,9 @@ import { IconChevronLeft, IconClock, IconTrend } from '../components/Icons';
  * decided to make but would have forgotten.
  */
 export default function Orders() {
+  // Subscribe so the figures re-render the moment the switch moves;
+  // the masking itself lives in the formatters.
+  useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();

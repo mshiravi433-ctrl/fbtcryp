@@ -583,8 +583,16 @@ export default function run() {
      * Order matters as much as presence: a lock rendered after onboarding or
      * the router would leave real content mounted underneath it.
      */
-    const lockIdx = app.indexOf('screen = <AppLock');
-    const welcomeIdx = app.indexOf('screen = <Welcome');
+    /*
+     * Matched on the assignment, not on `screen = <AppLock` as a single
+     * literal: adding a prop pushed the JSX onto its own line and this check
+     * silently stopped finding it. A brittle string match that reports success
+     * because it matched nothing is worse than no check.
+     */
+    const lockIdx = app.search(/screen = \(?\s*<AppLock/);
+    const welcomeIdx = app.search(/screen = \(?\s*<Welcome/);
+    t('the lock gate assignment was found', lockIdx > 0);
+    t('the welcome screen assignment was found', welcomeIdx > 0);
     t(
       'the lock is checked before any content screen',
       lockIdx > 0 && welcomeIdx > 0 && lockIdx < welcomeIdx
@@ -1013,10 +1021,34 @@ export default function run() {
      */
     const wallet = read('src/pages/Wallet.jsx');
     const onchainIdx = wallet.indexOf('on-chain wallet (non-custodial)');
-    const allocIdx = wallet.indexOf('---------- allocation ----------');
+    const allocIdx = wallet.search(/-+ allocation/);
+    t('both wallet sections were found', onchainIdx > 0 && allocIdx > 0);
     t(
       'the real wallet is rendered before the virtual allocation',
       onchainIdx > 0 && allocIdx > 0 && onchainIdx < allocIdx
+    );
+
+    /*
+     * Stronger than ordering, and what the owner actually asked for: the play
+     * money is no longer on the same tab as the real wallet at all. Users were
+     * confusing the two, which on a non-custodial exchange is expensive.
+     *
+     * Asserted structurally — the virtual sections must be gated on the
+     * practice tab, and the real wallet must not be.
+     */
+    t('there is a dedicated practice tab', /'practice'/.test(wallet));
+    t(
+      'the virtual allocation is gated behind the practice tab',
+      /tab === 'practice' && <>/.test(wallet)
+    );
+    t(
+      'the real wallet is hidden on the practice tab',
+      /tab !== 'practice' && \(/.test(wallet)
+    );
+    // The tab strip must actually offer it, or the section is unreachable.
+    t(
+      'the practice tab is reachable from the tab strip',
+      /\['overview', 'liquidity', 'practice'\]/.test(wallet)
     );
   }
 
@@ -1361,6 +1393,62 @@ export default function run() {
     t(
       `every locked dependency matches its own tarball${mismatched.length ? ` — ${mismatched.slice(0, 2).join('; ')}` : ''}`,
       mismatched.length === 0
+    );
+  }
+
+  /* ---- 16. the developer page must not advertise dead endpoints ---------- */
+  /*
+   * REAL BUG: the Developers page listed `POST /api/ai/faq`, which had been
+   * removed from the server along with the Help chat box. A published endpoint
+   * that 404s sends integrators to file a bug against us for our own stale
+   * documentation — avoidable inbound, which is precisely what the owner asked
+   * this page not to generate.
+   *
+   * Every path advertised there must have a matching route. Express params are
+   * normalised, so a documented `/api/dex/bsc` is satisfied by a registered
+   * `/api/dex/:network`.
+   */
+  {
+    const dev = read('src/pages/Developers.jsx');
+    const server = read('server/app.js');
+
+    // Collect the registered routes once: app.get('/x'), app.post('/y').
+    const toMatcher = (routePath) => {
+      // Escape regex metacharacters FIRST, then turn :params into a wildcard.
+      // Doing it the other way round escaped the wildcard we had just written.
+      const escaped = routePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`^${escaped.replace(/:[A-Za-z_]+/g, '[^/]+')}$`);
+    };
+    const registered = [...server.matchAll(/app\.(get|post)\('([^']+)'/g)].map(([, m, p]) => ({
+      method: m.toUpperCase(),
+      re: toMatcher(p)
+    }));
+
+    const advertised = [...dev.matchAll(/\{ m: '(GET|POST)', p: '([^']+)'/g)];
+    t('the developer page lists at least one endpoint', advertised.length > 0);
+
+    const dead = [];
+    for (const [, method, raw] of advertised) {
+      const path = raw.split('?')[0];
+      if (!registered.some((r) => r.method === method && r.re.test(path))) {
+        dead.push(`${method} ${path}`);
+      }
+    }
+    t(
+      `every advertised endpoint exists on the server${dead.length ? ` — ${dead.join(', ')}` : ''}`,
+      dead.length === 0
+    );
+
+    /*
+     * The AI routes spend shared upstream quota, unlike the cached market
+     * routes. They must not sit on the same generous budget, or the example
+     * printed on this very page can be looped into an outage for everyone.
+     */
+    t('AI endpoints have their own rate limit', /app\.use\('\/api\/ai'/.test(server));
+    t('the AI budget is tighter than the general one', /AI_RATE_LIMIT/.test(server));
+    t(
+      'reading AI status is never throttled',
+      /req\.method === 'GET'\) return next\(\)/.test(server)
     );
   }
 

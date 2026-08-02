@@ -11,6 +11,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { POINT_VALUES, tierFor, nextTier, tierProgress } from '../lib/ranks';
 import { IconChevronRight, IconExternal, IconPools, IconShield, IconSwap, IconTrend } from '../components/Icons';
+import SegIndicator from '../components/SegIndicator';
 
 /**
  * Earn.
@@ -136,7 +137,7 @@ export default function Earn() {
       <div className="segmented">
         {['real', 'points'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
-            {tab === k && <motion.span layoutId="earntab" className="seg-indicator" />}
+            {tab === k && <SegIndicator id="earntab" />}
             {t(`earn.tab.${k}`)}
           </button>
         ))}

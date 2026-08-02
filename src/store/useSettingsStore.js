@@ -9,7 +9,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { currencyOf } from '../lib/currency';
-import { setDisplaySymbol } from '../lib/format';
+import { setDisplaySymbol, setHideBalances } from '../lib/format';
 
 export const useSettingsStore = create(
   persist(
@@ -187,20 +187,43 @@ export function applyTheme(theme) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
 }
 
+/*
+ * ─── ACCENT PALETTES ────────────────────────────────────────────────────────
+ * `pastel` was added on request: the same hue family as the default, softened.
+ *
+ * It is an EXTRA option rather than a replacement, and that is deliberate.
+ * Measured against white, the pastel tones land at 1.5-2.2:1 — WCAG AA wants
+ * 4.5:1 for text — so making them the default would have quietly broken every
+ * place the accent is used as a text or icon colour in light theme (16 rules
+ * in index.css). The light theme therefore remaps them to darker `--ink-*`
+ * counterparts of the same hue, all measured at 5.4-6.6:1 against white.
+ *
+ * On dark they need no help: 9.5-14:1 against black.
+ */
 const ACCENTS = {
   rgb: ['#00e5ff', '#7c4dff', '#ff2d95'],
   cyan: ['#00e5ff', '#0091ea', '#00b8d4'],
   magenta: ['#ff2d95', '#d500f9', '#ff6d00'],
-  mint: ['#00ff9d', '#00e5ff', '#64dd17']
+  mint: ['#00ff9d', '#00e5ff', '#64dd17'],
+  pastel: ['#7fd8e8', '#b3a4f5', '#f5a3c7']
 };
 
 export function applyAccent(accent) {
   if (typeof document === 'undefined') return;
-  const [a, b, c] = ACCENTS[accent] ?? ACCENTS.rgb;
+  const key = ACCENTS[accent] ? accent : 'rgb';
+  const [a, b, c] = ACCENTS[key];
   const root = document.documentElement;
   root.style.setProperty('--rgb-1', a);
   root.style.setProperty('--rgb-2', b);
   root.style.setProperty('--rgb-3', c);
+  /*
+   * Let CSS know which palette is active. The light theme needs it to swap in
+   * the readable --ink-* variants: a pastel used as TEXT on white measures
+   * ~2:1, which is unreadable, while the same pastel as a BACKGROUND behind
+   * black text is fine. Only CSS knows which role each usage plays, so the
+   * decision belongs there rather than here.
+   */
+  root.setAttribute('data-accent', key);
 }
 
 /** Call once at boot. */
@@ -235,6 +258,18 @@ export function applyCurrency(code) {
   setDisplaySymbol(currencyOf(code).symbol);
 }
 
+/*
+ * Push `hideBalances` into the formatter.
+ *
+ * The toggle used to write the flag and stop there — Settings drew its own
+ * switch from it and no balance on any screen ever consulted it, so the
+ * feature did nothing at all. Masking now happens inside fmtUsd/fmtCompact/
+ * fmtQty, and this is what tells them.
+ */
+export function applyHideBalances(on) {
+  setHideBalances(on);
+}
+
 export function applyNativeFlag() {
   if (typeof document === 'undefined') return;
   const native = Boolean(window.Capacitor?.isNativePlatform?.());
@@ -247,9 +282,11 @@ export function initTheme() {
   applyAccent(accent);
   applyCompact(compactMode);
   applyCurrency(useSettingsStore.getState().currency);
+  applyHideBalances(useSettingsStore.getState().hideBalances);
   applyNativeFlag();
   // Re-apply whenever the user changes it, so prices update without a reload.
   useSettingsStore.subscribe((st) => applyCurrency(st.currency));
+  useSettingsStore.subscribe((st) => applyHideBalances(st.hideBalances));
   useSettingsStore.subscribe((st) => applyCompact(st.compactMode));
 
   if (typeof window !== 'undefined' && window.matchMedia) {
