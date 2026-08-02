@@ -117,9 +117,14 @@ export async function nftDiagnose(chainId = 1) {
     spamFilterEncoded: `?owner=${probe}&excludeFilters%5B%5D=SPAM&pageSize=1`,
     // Exactly what fetchNfts() now sends, so a green result here means the
     // real path works and anything else is a genuine, reproducible failure.
+    /*
+     * Must mirror fetchNfts() EXACTLY, or this reports on a request nobody
+     * makes — the mistake that sent the last investigation the wrong way.
+     * excludeFilters is deliberately absent here for the same reason it is
+     * absent there: it needs a paid plan and 400s on ours.
+     */
     production: (() => {
       const q = new URLSearchParams({ owner: probe, withMetadata: 'true', pageSize: '50' });
-      q.append('excludeFilters[]', 'SPAM');
       return `?${q}`;
     })()
   };
@@ -211,9 +216,10 @@ async function req(url, timeout = 12000) {
 /**
  * Fetch the NFTs owned by `owner` on `chainId`.
  *
- * `spam` filtering is requested from the indexer, which is a genuine help but
- * not a guarantee — the client still labels unverified items rather than
- * implying anything here has been vetted by us.
+ * NOTE: spam filtering is NOT requested — `excludeFilters` requires a paid
+ * Alchemy plan and fails the whole request on the free tier. The client
+ * already labels every item as unverified rather than implying anything here
+ * has been vetted by us, so nothing depended on it.
  */
 export async function fetchNfts(chainId, owner, { limit = 50 } = {}) {
   if (!ALCHEMY_KEY) throw new Error('NFT_NOT_CONFIGURED');
@@ -240,7 +246,29 @@ export async function fetchNfts(chainId, owner, { limit = 50 } = {}) {
     withMetadata: 'true',
     pageSize: String(Math.min(100, limit))
   });
-  qs.append('excludeFilters[]', 'SPAM');
+
+  /*
+   * ─── excludeFilters[]=SPAM IS A PAID FEATURE ────────────────────────────
+   * This was the real cause of every NFT failure, and it was never the API
+   * key. Alchemy answers the request with:
+   *
+   *   "The following query parameters: [excludeFilters] can only be used
+   *    with a payg or higher plan."
+   *
+   * On the free plan that is a 400/403 — the same status a revoked key
+   * produces, which is why it was misdiagnosed as a key problem for so long
+   * and why replacing the key kept changing nothing.
+   *
+   * Sending it only on a paid plan would mean shipping a request we know
+   * fails for our own account, so it is gone. The cost is that the indexer no
+   * longer pre-filters spam NFTs for us — acceptable, because we never relied
+   * on it: the client already labels every item as unverified rather than
+   * implying anything here was vetted. Airdropped junk may now appear in the
+   * list, which is a cosmetic problem, not a broken screen.
+   *
+   * If the account is ever upgraded, add it back with `qs.append` and it will
+   * work — /api/nft/diagnose tests exactly that parameter and will say so.
+   */
 
   const url = `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?${qs}`;
 

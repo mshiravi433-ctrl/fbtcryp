@@ -1773,5 +1773,67 @@ export default function run() {
     t('holdings show the quantity', /fmtQty\(r\.amount\)/.test(w));
   }
 
+  /* ---- 22. the NFT call must not use paid-plan parameters ---------------- */
+  /*
+   * REAL BUG, and it cost several rounds of chasing the wrong thing.
+   *
+   * Every NFT request failed with what looked like a rejected API key. The key
+   * was replaced twice and nothing changed, because the key was never the
+   * problem. Alchemy was answering:
+   *
+   *   "The following query parameters: [excludeFilters] can only be used with
+   *    a payg or higher plan."
+   *
+   * On the free tier that is a 400/403 — the SAME status a revoked key
+   * returns, which is why it was misdiagnosed. The parameter is gone.
+   *
+   * Two invariants now hold it in place:
+   *   1. no known paid-plan parameter appears in the real request
+   *   2. the diagnostic's `production` probe matches the real request, or it
+   *      reports on a call nobody makes — which is what made the first
+   *      diagnostic answer "200 OK" while the feature was down.
+   */
+  {
+    const nft = read('server/nft.js');
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const code = strip(nft);
+
+    // fetchNfts builds its query with URLSearchParams; find that block.
+    const fetchFn = /export async function fetchNfts[\s\S]*?\n\}/.exec(code)?.[0] ?? '';
+    t('fetchNfts was found', fetchFn.length > 0);
+
+    /*
+     * excludeFilters is the one that bit us. spamConfidenceLevel and
+     * orderBy are the other documented paid-tier parameters on this endpoint,
+     * listed so the next person does not have to rediscover the category.
+     */
+    for (const param of ['excludeFilters', 'spamConfidenceLevel', 'orderBy']) {
+      t(
+        `the real NFT request does not send ${param} (paid plan only)`,
+        !new RegExp(param).test(fetchFn)
+      );
+    }
+
+    // Brackets must never be concatenated raw into a query string.
+    t(
+      'the NFT query is built with URLSearchParams, not string concatenation',
+      /new URLSearchParams\(/.test(fetchFn)
+    );
+
+    /*
+     * The diagnostic must probe the SAME shape the app sends. A probe that
+     * omits the failing parameter produces a confident all-clear for a broken
+     * feature.
+     */
+    const diag = /export async function nftDiagnose[\s\S]*?\n\}/.exec(code)?.[0] ?? '';
+    const prod = /production:\s*\(\(\)[\s\S]*?\}\)\(\)/.exec(diag)?.[0] ?? '';
+    t('the diagnostic defines a production probe', prod.length > 0);
+    t(
+      'the production probe does not add parameters the app omits',
+      !/excludeFilters/.test(prod)
+    );
+  }
+
   return rows;
 }
