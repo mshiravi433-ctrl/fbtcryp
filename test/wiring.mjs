@@ -1452,5 +1452,58 @@ export default function run() {
     );
   }
 
+  /* ---- 17. Solana: receive-only, and the UI must say so ----------------- */
+  /*
+   * The Settings screen offers a "Solana cluster" selector and a Solana RPC
+   * field, and its subtitle read "For Solana features". There are no Solana
+   * features: the swap engine is EVM-only (getQuote takes a numeric chainId
+   * and indexes EVM_CHAINS), there is no @solana/web3.js or Jupiter client in
+   * package.json, and nothing outside Settings.jsx reads solanaCluster or
+   * solanaRpc at all.
+   *
+   * Solana IS real for one thing — it is a payout family with a configured
+   * receiving address, so a user can send SOL to the operator. That is worth
+   * keeping. Advertising it as a swap network is not: a user who selects a
+   * cluster and then looks for Solana in the swap screen has been told
+   * something untrue about where their money can go.
+   *
+   * This check fails if a Solana swap is ever claimed without the code to back
+   * it, or if a real Solana engine is added and the copy is not updated.
+   */
+  {
+    const pkg = JSON.parse(read('package.json'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const hasSolanaEngine = Object.keys(deps).some((d) => /@solana\/|@jup-ag\//.test(d));
+
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const sub = String(en?.settings?.solanaSub ?? '');
+
+    if (!hasSolanaEngine) {
+      // No engine: the copy must not promise swaps, and must say what it IS for.
+      t(
+        `the Solana setting does not promise features that do not exist — "${sub}"`,
+        !/for solana features/i.test(sub)
+      );
+      t(
+        'the Solana setting states swaps are EVM-only',
+        /evm-only|evm only/i.test(sub)
+      );
+      // And the swap engine really must still be EVM-only, or the copy is now
+      // the thing that is wrong.
+      const swap = read('src/lib/swap.js');
+      t('the swap engine is still EVM-only', !/@solana\//.test(swap));
+    } else {
+      // An engine exists: the copy must no longer say EVM-only.
+      t('Solana copy was updated when the engine landed', !/evm-only|evm only/i.test(sub));
+    }
+
+    /*
+     * Whatever the swap story, the payout address must be present and belong
+     * to the Solana family — this is where real revenue lands.
+     */
+    const payout = read('src/lib/payout.js');
+    t('a Solana payout address is configured', /solana: env\('VITE_PAYOUT_SOLANA'\) \|\| '[1-9A-HJ-NP-Za-km-z]{32,44}'/.test(payout));
+  }
+
   return rows;
 }

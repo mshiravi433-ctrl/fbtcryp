@@ -610,7 +610,7 @@
     "evmNetwork": "EVM network",
     "evmNetworkSub": "Chain used for swaps",
     "solana": "Solana cluster",
-    "solanaSub": "For Solana features",
+    "solanaSub": "Used for receiving on Solana. Swaps are EVM-only for now.",
     "customRpc": "Custom RPC",
     "customRpcSub": "Use your own node",
     "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",

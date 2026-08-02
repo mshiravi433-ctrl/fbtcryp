@@ -5,7 +5,7 @@
  * money goes.
  */
 import { searchTokens, tokenKey, getTokensSync } from '../src/lib/tokenLists.js';
-import { FAMILY, isValidFor, resolvePayout, payoutTable } from '../src/lib/payout.js';
+import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from '../src/lib/payout.js';
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
@@ -111,6 +111,72 @@ export default function run() {
 
   const sol = resolvePayout(null, FAMILY.SOLANA);
   t('Solana resolves within its own family', sol && isValidFor(FAMILY.SOLANA, sol.address));
+
+  /*
+   * ─── PAYOUT ADDRESSES ARE CHECKED BY BYTE LENGTH, NOT JUST BY REGEX ───────
+   * `isValidFor` uses /^[1-9A-HJ-NP-Za-km-z]{32,44}$/, which every base58
+   * string of roughly the right size satisfies — including one with a
+   * transposed or dropped character. A real Solana address is an ed25519
+   * public key: it must base58-decode to EXACTLY 32 bytes.
+   *
+   * This matters more than a usual input check. These are the addresses our
+   * own revenue is paid to, and a payout sent to a mistyped address that
+   * happens to look well-formed is gone permanently — no one holds the key.
+   * The character-class regex cannot catch that; the decode can.
+   */
+  {
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    const b58decode = (str) => {
+      const bytes = [0];
+      for (const ch of str) {
+        const val = ALPHABET.indexOf(ch);
+        if (val < 0) return null;
+        let carry = val;
+        for (let i = 0; i < bytes.length; i += 1) {
+          const x = bytes[i] * 58 + carry;
+          bytes[i] = x & 0xff;
+          carry = x >> 8;
+        }
+        while (carry) {
+          bytes.push(carry & 0xff);
+          carry >>= 8;
+        }
+      }
+      // Leading '1's are leading zero bytes.
+      for (const ch of str) {
+        if (ch !== '1') break;
+        bytes.push(0);
+      }
+      return bytes.length;
+    };
+
+    const solAddr = PAYOUT_ADDRESSES.solana;
+    t('the Solana payout address is configured', Boolean(solAddr));
+    t(
+      `the Solana payout address decodes to 32 bytes (got ${b58decode(solAddr)})`,
+      b58decode(solAddr) === 32
+    );
+
+    /*
+     * The regex must be SHOWN to be insufficient, or this whole block guards
+     * nothing. Note that dropping a single trailing character still decodes to
+     * 32 bytes (base58 is not byte-aligned), so the demonstration uses a
+     * two-character truncation — 42 chars, which the 32-44 regex happily
+     * accepts while the key is now 31 bytes and unusable.
+     */
+    const truncated = solAddr.slice(0, 42);
+    t('a truncated address still passes the loose regex', isValidFor(FAMILY.SOLANA, truncated));
+    t(
+      `...but fails the byte-length check (${b58decode(truncated)} bytes)`,
+      b58decode(truncated) !== 32
+    );
+
+    // Tron addresses are 25 bytes (21 payload + 4 checksum) after base58.
+    t(
+      `the Tron payout address decodes to 25 bytes (got ${b58decode(PAYOUT_ADDRESSES.tron)})`,
+      b58decode(PAYOUT_ADDRESSES.tron) === 25
+    );
+  }
 
   const table = payoutTable();
   t('every directory row resolves to an address', table.every((r) => r.address));
