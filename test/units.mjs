@@ -50,6 +50,9 @@ import { classifyQuery } from '../src/pages/Explore.jsx';
 import { isSafeUrl } from '../src/lib/browser.js';
 import { clean as nftClean, safeImage } from '../server/nft.js';
 import coverage from '../src/i18n/coverage.json';
+import enLocale from '../src/i18n/locales/en.json';
+import faLocale from '../src/i18n/locales/fa.json';
+import arLocale from '../src/i18n/locales/ar.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 
 export default function run() {
@@ -1211,6 +1214,77 @@ export default function run() {
     t(`the app url is public, not localhost (${app})`, !/localhost/.test(app));
     t('the app url is https', app.startsWith('https://'));
     t('the app url targets the Solana route', app.includes('/#/solana'));
+  }
+
+  /* ------- Solana: mobile must never hit the "install it" dead end -------- */
+  /*
+   * REAL BUG, reported from a device: «نه میشه وصل نه مرورگر داریم».
+   *
+   * canInjectSolana() was `!isNativeShell()`, so it only excluded the APK.
+   * Every MOBILE BROWSER — Chrome on Android, Safari on iOS — reported true
+   * and got the "install a wallet and open this page in its browser" message
+   * with no button to do that. The copy told the user to perform a step the UI
+   * was hiding from them.
+   *
+   * Browser extensions do not exist on any mobile browser. On a phone with no
+   * provider the answer is ALWAYS "open this in the wallet app". On desktop an
+   * extension really is possible, so "install it" is correct there and must
+   * survive.
+   *
+   * Asserted against real user-agent strings rather than the helper's own
+   * shape, because the failure was a missing case, not a wrong expression —
+   * only feeding it the environments users actually have can catch that.
+   */
+  {
+    const decide = (win) => {
+      // Mirrors canInjectSolana(); the module reads a global `window`, which
+      // this suite cannot swap per-case.
+      if (!win) return false;
+      if (win.Capacitor?.isNativePlatform?.()) return false;
+      const ua = String(win.navigator?.userAgent ?? '');
+      if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return false;
+      return true;
+    };
+    const ua = (s) => ({ navigator: { userAgent: s } });
+
+    const mobiles = {
+      'Chrome on Android': 'Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+      'Safari on iPhone': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari',
+      'Safari on iPad': 'Mozilla/5.0 (iPad; CPU OS 17_5) AppleWebKit/605.1.15 Mobile/15E148 Safari',
+      'Firefox on Android': 'Mozilla/5.0 (Android 14; Mobile; rv:121.0) Gecko/121.0 Firefox/121.0'
+    };
+    for (const [name, s] of Object.entries(mobiles)) {
+      t(`${name} is offered the wallet button, not an install prompt`, decide(ua(s)) === false);
+    }
+
+    t('the packaged app is offered the wallet button',
+      decide({ Capacitor: { isNativePlatform: () => true } }) === false);
+
+    /*
+     * Desktop must NOT regress into showing wallet-browser buttons: a Phantom
+     * extension is genuinely installable there, and deeplinking a desktop user
+     * into a phone app would be nonsense.
+     */
+    const desktops = {
+      'Chrome on Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      'Safari on macOS': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17 Safari'
+    };
+    for (const [name, s] of Object.entries(desktops)) {
+      t(`${name} still gets the extension prompt`, decide(ua(s)) === true);
+    }
+
+    /*
+     * The operator-only warning must stay out of the customer's face. It said
+     * "fee collection is not configured" in red at the bottom of the swap
+     * screen — nothing a user can act on, and it made the app look half-built.
+     * The signal lives at /api/solana/status instead.
+     */
+    for (const [code, loc] of Object.entries({ en: enLocale, fa: faLocale, ar: arLocale })) {
+      t(`${code}: the fee-not-configured string is gone`, loc?.solana?.feeNotConfigured === undefined);
+      // ...and the customer-facing fee line must not leak our revenue split.
+      const notice = String(loc?.solana?.feeNotice ?? '');
+      t(`${code}: the fee notice does not expose the aggregator's cut`, !/20\s*%|٢٠|۲۰٪/.test(notice));
+    }
   }
 
   return rows;

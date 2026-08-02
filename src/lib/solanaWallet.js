@@ -53,7 +53,34 @@ const isNativeShell = () =>
  * user into the wallet's own in-app browser, where the provider IS injected
  * and everything behaves like a desktop extension.
  */
-export const canInjectSolana = () => !isNativeShell();
+export const canInjectSolana = () => {
+  if (typeof window === 'undefined') return false;
+  // The packaged app has no extensions, ever.
+  if (isNativeShell()) return false;
+
+  /*
+   * REAL BUG this replaces: the check was `!isNativeShell()` alone, so any
+   * MOBILE BROWSER reported true. Chrome on Android and Safari on iOS then got
+   * the "install a wallet and open this page in its browser" message with no
+   * button to actually do that — a dead end that told the user to perform a
+   * step the UI was hiding from them. Reported as
+   * «نه میشه وصل نه مرورگر داریم».
+   *
+   * Browser extensions do not exist on ANY mobile browser. The only place a
+   * Solana provider can be injected on a phone is inside a wallet's own
+   * in-app browser — and there the provider is already present, so
+   * `solanaWalletAvailable()` is true and this branch is never reached.
+   *
+   * Therefore: if we are on a phone and there is no provider, the answer is
+   * always "open this in the wallet app", never "install something".
+   */
+  const ua = String(window.navigator?.userAgent ?? '');
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  if (isMobile) return false;
+
+  // Desktop: an extension is genuinely possible, so "install it" is correct.
+  return true;
+};
 
 /**
  * Build a Phantom "browse" deeplink that reopens a page inside Phantom.

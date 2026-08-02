@@ -1852,8 +1852,7 @@
     "importBody": "Most memecoins are not on any list. Paste the token's mint address and it becomes swappable straight away.",
     "mintPlaceholder": "Paste a mint address",
     "importedToken": "Imported token",
-    "feeNotice": "Platform fee {{fee}}% on Solana, taken by the Jupiter aggregator inside the same transaction. Jupiter keeps 20% of it, so {{net}}% reaches us. Shown before you sign, never after.",
-    "feeNotConfigured": "Fee collection is not configured yet: swaps work normally, but no platform fee is being collected on Solana.",
+    "feeNotice": "Platform fee {{fee}}% on Solana, taken by the aggregator inside the same transaction. Shown before you sign, never after.",
     "err": {
       "NO_WALLET": "No Solana wallet is installed.",
       "REJECTED": "You cancelled the request in your wallet.",
@@ -1879,9 +1878,9 @@
     "evmSide": "EVM wallet (Swap tab)",
     "solSide": "Solana wallet (this tab)",
     "noNeedToDisconnect": "Nothing to disconnect. Connecting here does not touch your EVM wallet, and disconnecting here leaves it untouched too.",
-    "openInWallet": "On a phone, a Solana wallet can only connect from inside the wallet's own browser. Browser extensions do not exist on mobile, so this page has to be opened there.",
+    "openInWallet": "On a phone, a Solana wallet connects only from inside the wallet's own browser — browser extensions do not exist on mobile. Tap a button below and this page reopens there.",
     "openPhantom": "Open in Phantom",
     "openSolflare": "Open in Solflare",
-    "openInWalletHint": "The button opens the wallet app and loads this same page inside it. Connect there, then swap as normal. Nothing is lost — it is the same site and the same account."
+    "openInWalletHint": "It is the same site and the same account; nothing is lost. If the wallet app is not installed, the button will offer to install it first."
   }
 }

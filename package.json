@@ -1,7 +1,7 @@
 {
   "name": "fbt-swap",
   "private": true,
-  "version": "1.9.3",
+  "version": "1.9.4",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node --watch server/index.js\"",

@@ -1577,5 +1577,38 @@ export default function run() {
       String(JSON.parse(read('src/i18n/locales/fa.json'))?.solana?.twoWalletsBody ?? '').length > 40);
   }
 
+  /* ---- 19. the mobile check must exist in the source, not just the test -- */
+  /*
+   * The unit test for this mirrors canInjectSolana()'s logic, because the
+   * module reads a global `window` the suite cannot swap per-case. A mirror
+   * can drift: the test would keep passing against its own copy while the real
+   * function regressed to the version that sent every mobile browser into a
+   * dead end.
+   *
+   * So the source is checked for the two things that matter.
+   */
+  {
+    const src = read('src/lib/solanaWallet.js');
+    const fn = /export const canInjectSolana = \(\) => \{[\s\S]*?\n\};/.exec(src)?.[0] ?? '';
+    t('canInjectSolana was found in the source', fn.length > 0);
+    t('it still excludes the packaged app', /isNativeShell\(\)/.test(fn));
+    t(
+      'it also excludes mobile browsers, where extensions cannot exist',
+      /iPhone|Android/.test(fn) && /userAgent/.test(fn)
+    );
+
+    /*
+     * And the operator-only warning must not creep back into the screen. It
+     * rendered in red for every customer while a comment claimed it was "only
+     * shown to us".
+     */
+    const page = read('src/pages/SolanaSwap.jsx');
+    const code = page
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    t('the fee-not-configured warning is not rendered', !/feeNotConfigured/.test(code));
+    t('the screen does not show our revenue split', !/netFeeBps/.test(code));
+  }
+
   return rows;
 }

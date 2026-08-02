@@ -13,10 +13,8 @@ import {
   fromBaseUnits,
   getSolanaOrder,
   isSolanaAddress,
-  netFeeBps,
   orderErrorKey,
   referralFeeBps,
-  solanaFeeReady,
   toBaseUnits
 } from '../lib/solana';
 import {
@@ -273,8 +271,6 @@ export default function SolanaSwap() {
     ? fromBaseUnits(order.outAmount, toToken.decimals)
     : null;
 
-  const feeReady = solanaFeeReady();
-
   return (
     <PageTransition>
       {/* ---------------------------- wallet ---------------------------- */}
@@ -524,22 +520,35 @@ export default function SolanaSwap() {
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         <p className="notice">{t('swap.nonCustodialNotice')}</p>
         <p className="notice" style={{ marginTop: 9 }}>
-          {t('solana.feeNotice', {
-            fee: referralFeeBps() / 100,
-            net: (netFeeBps() / 100).toFixed(3)
-          })}
+          {/*
+            The rate the USER pays, and nothing else.
+
+            This used to also spell out "Jupiter keeps 20%, so 0.56% reaches
+            us" — true, and none of a customer's business. What they need
+            before signing is what comes out of their swap; how we split it
+            afterwards is our accounting. netFeeBps() still exists for our own
+            reporting.
+          */}
+          {t('solana.feeNotice', { fee: referralFeeBps() / 100 })}
         </p>
         {/*
-          The honest signal. Without a referral token account Jupiter still
-          serves every swap and our fee is silently zero — an unconfigured
-          integration is indistinguishable from a working one, so it is stated
-          rather than hidden. Only shown to us, not framed as a user problem.
+          THE FEE-NOT-CONFIGURED WARNING USED TO RENDER HERE. It is gone.
+
+          The comment that sat here claimed it was "only shown to us". That was
+          simply false — it rendered for every visitor, in red, at the bottom of
+          the swap screen. A customer reading "fee collection is not configured"
+          learns nothing they can act on and sees an app that looks half-built.
+          Reported, correctly, as «به مشتری مربوط نیست».
+
+          The signal itself still matters, because Jupiter serves swaps normally
+          with no referral account and pays us nothing — an unconfigured
+          integration is indistinguishable from a working one. So it moved to
+          where an operator looks and a customer does not:
+
+              GET /api/solana/status  ->  { "feeReady": false }
+
+          Documented in docs/SOLANA-STEPS-FA.md as the way to verify setup.
         */}
-        {!feeReady && (
-          <p className="notice notice-danger" style={{ marginTop: 9 }}>
-            {t('solana.feeNotConfigured')}
-          </p>
-        )}
       </motion.section>
     </PageTransition>
   );
