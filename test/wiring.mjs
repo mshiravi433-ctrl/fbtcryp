@@ -1309,5 +1309,60 @@ export default function run() {
     t('the fixed bottom nav is widened with it', /\.bottom-nav/.test(desktopBlock));
   }
 
+  /* ---- 15. the lockfile must stay installable --------------------------- */
+  /*
+   * REAL BUG, and entirely self-inflicted: bumping the app version with
+   *
+   *     sed -i 's/"version": "1.7.0"/"version": "1.7.1"/' package-lock.json
+   *
+   * also rewrote two DEPENDENCY versions that happened to be 1.7.0 —
+   * @scure/bip32 and a nested @noble/hashes. Their declared version no longer
+   * matched the tarball in `resolved`, so `npm ci` aborted with
+   *
+   *     lock file's @noble/hashes@1.7.1 does not satisfy @noble/hashes@1.7.0
+   *
+   * and the APK build died 36 seconds in, before Gradle. Both are the crypto
+   * libraries used for wallet key derivation, so a version that silently
+   * disagrees with its own tarball is worse than a broken build.
+   *
+   * Nothing caught it: `npm test` uses the already-installed node_modules and
+   * never validates the lockfile, so the whole suite stayed green while the
+   * project was uninstallable from scratch.
+   *
+   * The invariant: inside `packages`, only the root entry ("") may carry the
+   * application's own version. Every other entry describes a dependency, and
+   * its version must agree with the filename in `resolved`.
+   */
+  {
+    const lock = JSON.parse(read('package-lock.json'));
+    const pkg = JSON.parse(read('package.json'));
+
+    t(
+      `the lockfile records the app version (${lock.version} vs package.json ${pkg.version})`,
+      lock.version === pkg.version && lock.packages?.['']?.version === pkg.version
+    );
+
+    /*
+     * `resolved` ends in <name>-<version>.tgz. When the two disagree, npm ci
+     * refuses to install — which is exactly the failure above, detected here
+     * without needing a network or an install.
+     */
+    const mismatched = [];
+    for (const [key, entry] of Object.entries(lock.packages ?? {})) {
+      if (!key || !entry?.version || !entry?.resolved) continue;
+      const tarball = String(entry.resolved).split('/').pop() ?? '';
+      if (!tarball.endsWith('.tgz')) continue;
+      // Strip the trailing -<version>.tgz and compare.
+      const inName = tarball.slice(0, -4).match(/-(\d[^-]*(?:-[^-]+)*)$/)?.[1];
+      if (inName && inName !== entry.version) {
+        mismatched.push(`${key} declares ${entry.version} but resolves ${inName}`);
+      }
+    }
+    t(
+      `every locked dependency matches its own tarball${mismatched.length ? ` — ${mismatched.slice(0, 2).join('; ')}` : ''}`,
+      mismatched.length === 0
+    );
+  }
+
   return rows;
 }
