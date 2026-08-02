@@ -92,30 +92,72 @@ export async function nftDiagnose(chainId = 1) {
         : '(too short)'
   };
 
-  // A probe address with known NFTs; any valid address works for auth.
+  /*
+   * ─── WHY THIS PROBES SEVERAL QUERY SHAPES ───────────────────────────────
+   * The first version of this sent only `?owner=&pageSize=1` and reported
+   * status 200 while the real NFT call kept failing with KEY_REJECTED. That
+   * proved the key and the account are fine and moved the suspicion to the
+   * PARAMETERS the real call adds — which the diagnostic was not sending, so
+   * it could not see the failure at all.
+   *
+   * A diagnostic that exercises a different request than the broken one is
+   * worse than none: it produces a confident all-clear for a system that is
+   * still down. Each variant below is now tested separately so the response
+   * names the parameter at fault instead of the caller having to guess.
+   */
   const probe = '0x0000000000000000000000000000000000000001';
-  const url =
-    `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner` +
-    `?owner=${probe}&pageSize=1`;
+  const base = `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner`;
 
-  try {
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    return {
-      configured: true,
-      ok: res.ok,
-      status: res.status,
-      reason: res.ok
-        ? 'OK'
-        : res.status === 401 || res.status === 403
-          ? 'KEY_REJECTED'
-          : res.status === 429
-            ? 'RATE_LIMITED'
-            : 'UPSTREAM_ERROR',
-      shape
-    };
-  } catch (err) {
-    return { configured: true, ok: false, reason: 'UNREACHABLE', shape };
+  const variants = {
+    minimal: `?owner=${probe}&pageSize=1`,
+    withMetadata: `?owner=${probe}&withMetadata=true&pageSize=1`,
+    // Raw brackets, the old shape — kept so the response shows whether THIS
+    // is what Alchemy rejects.
+    spamFilterRaw: `?owner=${probe}&excludeFilters[]=SPAM&pageSize=1`,
+    spamFilterEncoded: `?owner=${probe}&excludeFilters%5B%5D=SPAM&pageSize=1`,
+    // Exactly what fetchNfts() now sends, so a green result here means the
+    // real path works and anything else is a genuine, reproducible failure.
+    production: (() => {
+      const q = new URLSearchParams({ owner: probe, withMetadata: 'true', pageSize: '50' });
+      q.append('excludeFilters[]', 'SPAM');
+      return `?${q}`;
+    })()
+  };
+
+  const results = {};
+  for (const [name, qs] of Object.entries(variants)) {
+    try {
+      const res = await fetch(`${base}${qs}`, { headers: { accept: 'application/json' } });
+      let detail = null;
+      if (!res.ok) {
+        // Upstream error text can name the offending parameter. It is
+        // truncated and never contains the key, which lives in the path.
+        detail = (await res.text()).slice(0, 160).replace(/\s+/g, ' ');
+      }
+      results[name] = { status: res.status, ok: res.ok, ...(detail ? { detail } : {}) };
+    } catch {
+      results[name] = { status: 0, ok: false, detail: 'UNREACHABLE' };
+    }
   }
+
+  const prod = results.production;
+  return {
+    configured: true,
+    ok: Boolean(prod?.ok),
+    status: prod?.status ?? 0,
+    reason: prod?.ok
+      ? 'OK'
+      : prod?.status === 401 || prod?.status === 403
+        ? 'KEY_REJECTED'
+        : prod?.status === 429
+          ? 'RATE_LIMITED'
+          : prod?.status === 400
+            ? 'BAD_REQUEST'
+            : 'UPSTREAM_ERROR',
+    // Which parameter breaks it, if any.
+    variants: results,
+    shape
+  };
 }
 
 /** Unicode ranges that let text render right-to-left or hide characters. */
@@ -179,9 +221,28 @@ export async function fetchNfts(chainId, owner, { limit = 50 } = {}) {
   if (!host) throw new Error('CHAIN_NOT_SUPPORTED');
   if (!/^0x[a-fA-F0-9]{40}$/.test(String(owner))) throw new Error('BAD_ADDRESS');
 
-  const url =
-    `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner` +
-    `?owner=${owner}&withMetadata=true&excludeFilters[]=SPAM&pageSize=${Math.min(100, limit)}`;
+  /*
+   * Built with URLSearchParams rather than string concatenation.
+   *
+   * The previous version interpolated `excludeFilters[]=SPAM` directly. Square
+   * brackets are not valid unencoded in a query string, and whether a gateway
+   * accepts them or rejects the whole request with a 4xx is not something to
+   * leave to chance — especially when the resulting error is indistinguishable
+   * from a bad API key, which is exactly the confusion this cost.
+   *
+   * URLSearchParams percent-encodes them correctly, and also removes the
+   * possibility of an address ever injecting a parameter of its own (the
+   * address is already regex-validated above, but two checks on a URL that
+   * carries our API key is the right number).
+   */
+  const qs = new URLSearchParams({
+    owner: String(owner),
+    withMetadata: 'true',
+    pageSize: String(Math.min(100, limit))
+  });
+  qs.append('excludeFilters[]', 'SPAM');
+
+  const url = `https://${host}.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?${qs}`;
 
   /*
    * TRANSLATE UPSTREAM FAILURES INTO SOMETHING ACTIONABLE.
