@@ -24,6 +24,7 @@ import Discover from '../src/pages/Discover.jsx';
 import Nft from '../src/pages/Nft.jsx';
 import Orders from '../src/pages/Orders.jsx';
 import SolanaSwap from '../src/pages/SolanaSwap.jsx';
+import Buy from '../src/pages/Buy.jsx';
 import Predict from '../src/pages/Predict.jsx';
 import Market from '../src/pages/Market.jsx';
 import Wallet from '../src/pages/Wallet.jsx';
@@ -121,6 +122,8 @@ export async function run(container) {
    * out P2P and Settings before.
    */
   await mount('SolanaSwap (no wallet)', <SolanaSwap />);
+  // Buy renders with no wallet connected — the state every new user is in.
+  await mount('Buy (no wallet)', <Buy />);
   await mount('Predict', <Predict />);
   await mount('Market', <Market />);
   await mount('Wallet', <Wallet />);

@@ -8,6 +8,7 @@ import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Toasts from './components/Toasts';
+import InstallPrompt from './components/InstallPrompt';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
@@ -56,6 +57,7 @@ const Orders = lazy(() => import('./pages/Orders'));
 // Lazy on purpose: pulls @solana/web3.js, which is 19 MB installed and is
 // only needed by users who actually open the Solana screen.
 const SolanaSwap = lazy(() => import('./pages/SolanaSwap'));
+const Buy = lazy(() => import('./pages/Buy'));
 
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
@@ -163,6 +165,7 @@ function AnimatedRoutes() {
           <Route path="/nft" element={<Nft />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/solana" element={<SolanaSwap />} />
+          <Route path="/buy" element={<Buy />} />
           <Route path="*" element={<Market />} />
         </Routes>
       </AnimatePresence>
@@ -310,6 +313,12 @@ export default function App() {
         <RgbBackground />
         {screen}
         <Toasts />
+        {/*
+          Outside `screen` on purpose: the install offer must survive route
+          changes, and it must not appear over the splash, onboarding or the
+          lock screen — all of which replace `screen` entirely.
+        */}
+        <InstallPrompt />
       </WalletProvider>
     </TelegramProvider>
   );

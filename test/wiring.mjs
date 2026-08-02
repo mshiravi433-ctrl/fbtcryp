@@ -170,6 +170,25 @@ export default function run() {
      */
     const claim =
       /(this app|the app|we|fbt[a-z ]*)\s*(takes?|charges?|has)\s*no\s*fee|این اپ[^.]{0,40}هیچ کارمزدی نمی|ما[^.]{0,30}کارمزدی نمی‌گیریم/i;
+
+    /*
+     * A SCOPED denial is not the lie this check exists to catch.
+     *
+     * The bug was "this app takes no fee" printed directly above "Platform fee
+     * 0.5%" — an unqualified claim contradicted on the same screen. But the
+     * Buy screen genuinely takes nothing: we are not party to those
+     * transactions at all, there is no deposit address, and saying so is the
+     * honest answer to a question users otherwise assume has a hidden answer.
+     *
+     * A string qualifies as scoped only if it BOTH limits itself to this page
+     * AND still points at where the real fee applies. That second half is what
+     * keeps this from becoming a loophole: a bare "we take no fee here" would
+     * still fail.
+     */
+    const scoped = (v) =>
+      /on this page|here|این صفحه|اینجا/i.test(v) &&
+      /swap|سواپ|0\.7|۰٫۷/i.test(v);
+
     const offenders = [];
 
     for (const f of readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'))) {
@@ -177,7 +196,7 @@ export default function run() {
       const scan = (obj, path = '') => {
         for (const [k, v] of Object.entries(obj)) {
           if (typeof v === 'string') {
-            if (claim.test(v)) offenders.push(`${f}:${path}${k}`);
+            if (claim.test(v) && !scoped(v)) offenders.push(`${f}:${path}${k}`);
           } else if (v && typeof v === 'object') scan(v, `${path}${k}.`);
         }
       };
@@ -1833,6 +1852,62 @@ export default function run() {
       'the production probe does not add parameters the app omits',
       !/excludeFilters/.test(prod)
     );
+  }
+
+  /* ---- 23. the PWA must be installable, and must offer it ---------------- */
+  /*
+   * REPORTED: "the PWA / desktop app does not appear."
+   *
+   * Everything a browser requires was already correct and verified live — the
+   * manifest is served with name, 192 and 512 icons, a maskable icon,
+   * display:standalone and a start_url, and the service worker registers over
+   * https on a real domain.
+   *
+   * The missing piece is not a manifest field, which is why it was easy to
+   * miss: Chrome fires `beforeinstallprompt` and expects the PAGE to keep the
+   * event and call prompt() from a user gesture. Nothing listened, so the
+   * event fired into nothing and the only remaining route was the browser's
+   * own menu — a small address-bar icon most people never notice.
+   *
+   * Both halves are asserted: the manifest stays valid, and the app keeps
+   * handling the event.
+   */
+  {
+    const m = JSON.parse(read('public/manifest.webmanifest'));
+
+    t('the manifest has a name', typeof m.name === 'string' && m.name.length > 0);
+    t('the manifest has a start_url', typeof m.start_url === 'string');
+    t('display is standalone-capable', /standalone|fullscreen|minimal-ui/.test(m.display));
+
+    const sizes = (m.icons ?? []).map((i) => i.sizes);
+    // Chrome requires BOTH a 192 and a 512 icon; one alone silently disqualifies.
+    t('there is a 192px icon', sizes.includes('192x192'));
+    t('there is a 512px icon', sizes.includes('512x512'));
+    // Without a maskable icon Android renders the app in a white circle.
+    t(
+      'there is a maskable icon',
+      (m.icons ?? []).some((i) => String(i.purpose ?? '').includes('maskable'))
+    );
+
+    // A service worker with a fetch handler is required for installability.
+    const sw = read('public/sw.js');
+    t('the service worker handles fetch', /addEventListener\('fetch'/.test(sw));
+    t('the service worker is registered', /serviceWorker\.register/.test(read('src/lib/notify.js')));
+
+    /*
+     * The half that was missing. Without this the install offer is invisible
+     * to almost everyone.
+     */
+    const prompt = read('src/components/InstallPrompt.jsx');
+    t('the app listens for beforeinstallprompt', /beforeinstallprompt/.test(prompt));
+    t('it prevents the default mini-infobar', /preventDefault\(\)/.test(prompt));
+    t('it calls prompt() from a handler', /\.prompt\(\)/.test(prompt));
+    t('it hides itself once installed', /appinstalled/.test(prompt));
+    // Already-installed users must not be nagged to install again.
+    t('it detects standalone mode', /display-mode: standalone/.test(prompt));
+
+    // And it has to actually be mounted, or none of the above runs.
+    t('the install prompt is mounted', /<InstallPrompt\s*\/>/.test(read('src/App.jsx')));
   }
 
   return rows;

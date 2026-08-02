@@ -4117,3 +4117,32 @@ input, select, textarea { font-size: 16px !important; }
     max-width: 760px;
   }
 }
+
+/* ==========================================================================
+   INSTALL PROMPT
+   --------------------------------------------------------------------------
+   Sits above the bottom nav rather than over it: covering the navigation to
+   advertise an install is the kind of thing that gets an app closed.
+   ========================================================================== */
+
+.install-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);
+  z-index: 150;
+  width: min(520px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 16px;
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.75);
+}
+
+:root[data-theme='light'] .install-bar {
+  background: #ffffff;
+  box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.26);
+}

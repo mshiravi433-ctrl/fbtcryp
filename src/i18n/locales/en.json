@@ -33,7 +33,8 @@
     "discover": "Discover",
     "nft": "My NFTs",
     "orders": "Auto Orders",
-    "solana": "Solana swap"
+    "solana": "Solana swap",
+    "buy": "Buy & sell"
   },
   "common": {
     "balance": "Balance",
@@ -1877,5 +1878,62 @@
     "openPhantom": "Open in Phantom",
     "openSolflare": "Open in Solflare",
     "openInWalletHint": "It is the same site and the same account; nothing is lost. If the wallet app is not installed, the button will offer to install it first."
+  },
+  "buy": {
+    "title": "Buy & sell",
+    "tab": {
+      "buy": "Buy crypto",
+      "sell": "Sell crypto"
+    },
+    "noFee": "We charge nothing on this page. FBT is not part of these transactions — no fee, no commission, no referral cut. Our 0.70% applies only to swaps inside the app, and it is shown before you sign.",
+    "buy": {
+      "heading": "Turning money into crypto",
+      "body": "FBT does not sell crypto and never holds your money — there is no deposit address here and never will be. What this page does is point you at the routes that work, so the coins arrive directly in a wallet only you control. Card on-ramps like MoonPay and Transak are not listed because they refuse this region; listing buttons that always fail would waste your time.",
+      "routesTitle": "Ways that work"
+    },
+    "sell": {
+      "heading": "Turning crypto back into money",
+      "body": "Same principle in reverse. You send crypto from your own wallet to a buyer or a desk, and they pay you. FBT never takes custody at any point, which is why we cannot reverse a transfer or recover one sent to the wrong place. Check the address and the network twice before you send.",
+      "routesTitle": "Ways that work"
+    },
+    "route": {
+      "p2p": {
+        "name": "Person to person (P2P)",
+        "buy": "Buy from another person through a desk that holds the crypto in escrow until you have paid.",
+        "sell": "Sell to another person with the same escrow protection. Usually the best rate."
+      },
+      "exchange": {
+        "name": "A global exchange",
+        "buy": "Large exchanges run their own P2P markets with dispute teams. You deal with them directly.",
+        "sell": "Sell through the same market. Withdraw to your bank the way that exchange allows."
+      },
+      "receive": {
+        "name": "Receive from someone you know",
+        "buy": "The simplest route: show your address and have them send. No third party, no fee, no rate.",
+        "sell": "Send directly to their address. Confirm the network first — a wrong network loses the funds."
+      },
+      "swap": {
+        "name": "Already hold crypto?",
+        "buy": "Then skip the fiat step. Swap what you have for what you want, right here.",
+        "sell": "Convert to a stablecoin first, then cash out. Often smoother than selling a volatile coin."
+      }
+    },
+    "yourAddress": "Coins arrive here",
+    "addressHint": "This is your own address on {{chain}}. Anyone sending you crypto must use this exact address AND this network. A wrong network means the funds are gone — nobody can recover them.",
+    "openWallet": "Open wallet",
+    "connectFirst": "Connect a wallet first, so you have an address for the coins to arrive at.",
+    "safetyTitle": "Before you send anything",
+    "warn": {
+      "network": "The network must match. The same address exists on BNB Chain, Ethereum and Polygon; sending on the wrong one is permanent.",
+      "reversal": "Bank transfers can be reversed by the sender for weeks afterwards. Crypto transfers cannot. Never release crypto before the money has truly settled.",
+      "escrow": "Only trade where an escrow holds the crypto. If someone asks you to move the deal off-platform, that is the scam.",
+      "rate": "Compare the rate against the market price on the Market tab. A rate far better than everyone else's is bait."
+    },
+    "notAdvice": "Nothing here is financial advice, and we do not endorse any desk or counterparty. You are dealing with third parties at your own risk. Crypto transactions are irreversible."
+  },
+  "install": {
+    "title": "Install FBT Swap",
+    "body": "Add it to your device — opens like an app, works offline.",
+    "action": "Install"
   }
 }
