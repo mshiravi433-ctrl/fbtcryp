@@ -2046,5 +2046,214 @@ export default function run() {
     t('the referral share is documented as a share of OUR fee', /REFERRAL_SHARE/.test(ref));
   }
 
+  /* ---- 26. every segmented control must render a selection indicator ----- */
+  /*
+   * REPORTED BY THE OWNER: «بعضی از دکمه‌هاش وقتی فعالند رنگش تغییر نمی‌کند
+   * مثلا قیمت افت می‌کند یا بالا می‌رود» — on the automatic-orders screen the
+   * direction buttons showed no change when selected.
+   *
+   * `.segmented button.active` sets `color: #000` and nothing else. The
+   * coloured pill behind it is a SEPARATE component, <SegIndicator>, which
+   * each screen has to render itself. Two screens forgot: Buy (fixed last
+   * session) and Orders (fixed now). The result is black text on a near-black
+   * panel — LESS visible than the unselected state, so the control reads as
+   * dead.
+   *
+   * This is the "wired to nothing" bug class again, in CSS form: the class is
+   * applied, the state changes, and the thing that would make it visible is
+   * simply absent. Finding it one screen at a time is why it keeps recurring,
+   * so this check sweeps every file that renders a `.segmented` control.
+   *
+   * The CSS now also carries a flat fallback background and a ✓ pseudo-element
+   * so a future omission degrades to "less pretty" instead of "invisible" —
+   * but the indicator is still the intended design, and its absence is still
+   * a bug worth failing the build for.
+   */
+  {
+    const offenders = [];
+    for (const f of files) {
+      const src = read(f);
+      if (!/className="segmented/.test(src)) continue;
+      if (!/<SegIndicator/.test(src)) offenders.push(f);
+    }
+    t(
+      `every .segmented control renders an indicator${offenders.length ? ` — missing in ${offenders.join(', ')}` : ''}`,
+      offenders.length === 0
+    );
+
+    /*
+     * And the CSS safety net must stay. If someone "tidies away" the fallback
+     * background because it looks redundant next to the pill, the next screen
+     * that forgets SegIndicator is invisible again with nothing to catch it.
+     */
+    const css = read('src/index.css');
+    const activeRule = css.slice(css.indexOf('.segmented button.active {'));
+    t(
+      'the active segment has a background fallback, not just a text colour',
+      /\.segmented button\.active \{[^}]*background:/.test(activeRule.slice(0, 300))
+    );
+    t(
+      'the active segment is marked with a tick, so colour is not the only cue',
+      /\.segmented button\.active::before \{[^}]*content: '✓'/.test(css)
+    );
+  }
+
+  /* ---- 27. sharing must not be Telegram-only ----------------------------- */
+  /*
+   * REAL BUG: the ONLY share implementation in the app built a
+   * `https://t.me/share/url?...` link and opened it. Consequences:
+   *
+   *   • Iranian networks mostly do not resolve t.me at all, so the tab hung.
+   *   • A user without Telegram installed landed on an install-Telegram page.
+   *   • Users on WhatsApp / iMessage / X / SMS had no route whatsoever.
+   *
+   * Sharing is the only zero-cost growth channel this project has, and every
+   * failed tap is a user who tried to bring us another user and could not.
+   *
+   * `lib/share.js` now tries the Capacitor sheet, then the Web Share API
+   * (which is what makes Safari on iPhone work), then Telegram only when the
+   * page is genuinely running inside Telegram, then an in-app list.
+   */
+  {
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const share = strip(read('src/lib/share.js'));
+
+    t('the share module uses the Web Share API', /navigator\.share\(/.test(share));
+    t('the share module uses the native Capacitor sheet', /@capacitor\/share/.test(share));
+    t('the share module offers non-Telegram destinations', /wa\.me|mailto:|sms:/.test(share));
+    t(
+      'Telegram is used only when actually inside Telegram',
+      /inTelegram\(\)/.test(share) && /Telegram\?\.WebApp\?\.initData/.test(share)
+    );
+    /*
+     * A dismissed OS sheet is a user decision, not a failure. Without this the
+     * fallback list pops open the instant someone closes the native sheet,
+     * which is the behaviour people describe as "it keeps nagging".
+     */
+    t('a dismissed share sheet is distinguished from a failure', /DISMISSED/.test(share));
+
+    // And the invite button must go through it rather than the old Telegram
+    // helper, or none of the above reaches a user.
+    const earn = strip(read('src/pages/Earn.jsx'));
+    t('the invite button uses the universal share', /useShare\(\)/.test(earn));
+    t('the invite button no longer uses the Telegram-only helper', !/share\?\.\(/.test(earn));
+    // Copy always works even when every network link is blocked.
+    t('the invite can also be copied', /copyText\(inviteUrl\)/.test(earn));
+  }
+
+  /* ---- 28. iOS must be a supported platform, not an afterthought --------- */
+  /*
+   * There is no iOS build of this app and there cannot be one without an Apple
+   * Developer account, which is not purchasable from Iran. So for an iPhone
+   * user the home-screen PWA is the ONLY way to keep FBT Swap — which makes
+   * these tags load-bearing, not polish.
+   *
+   * Safari ignores the web app manifest almost entirely: without
+   * `apple-mobile-web-app-capable` the "installed" app opens in a normal
+   * Safari tab with the address bar, and without `apple-mobile-web-app-title`
+   * the icon is captioned with the 60-character SEO <title>.
+   *
+   * Safari also NEVER fires `beforeinstallprompt` — Apple has not implemented
+   * it — so the install banner rendered nothing at all on iOS. The component
+   * now shows the Share → Add to Home Screen instruction instead.
+   */
+  {
+    const html = read('index.html');
+    t('iOS standalone mode is declared', /apple-mobile-web-app-capable/.test(html));
+    t('the iOS home-screen caption is set', /apple-mobile-web-app-title/.test(html));
+    t('the viewport covers the notch', /viewport-fit=cover/.test(html));
+
+    const plat = read('src/lib/platform.js');
+    /*
+     * iPadOS 13+ reports a Macintosh user-agent. Every naive /iPad/ test
+     * therefore classifies an iPad as a desktop — and would have shown iPad
+     * users desktop-only advice. maxTouchPoints is the reliable tell.
+     */
+    t('iPadOS is detected despite its desktop user-agent', /maxTouchPoints/.test(plat));
+    t('only real Safari is told to use Add to Home Screen', /CriOS|FxiOS/.test(plat));
+
+    const prompt = read('src/components/InstallPrompt.jsx');
+    t('the install prompt has an iOS path', /isIOSSafari\(\)/.test(prompt));
+    t('the iOS path shows an instruction, not a dead button', /install\.iosBody/.test(prompt));
+  }
+
+  /* ---- 29. the layout must cover tablets, not just phone and desktop ----- */
+  /*
+   * REAL GAP: the shell was 520px wide with breakpoints at 900px and 1400px.
+   * An iPad in portrait is 768–834px — below 900 — so every tablet got the
+   * phone layout: a 520px strip of content with the fixed bottom nav stretched
+   * across the full 820px beneath it. The nav and the content it belonged to
+   * were visibly different widths, which is the most recognisable form of
+   * "this site is not responsive".
+   */
+  {
+    const css = read('src/index.css');
+    t('there is a tablet breakpoint', /min-width:\s*600px\)\s*and\s*\(max-width:\s*899px/.test(css));
+    t('there is a small-phone breakpoint', /max-width:\s*360px/.test(css));
+    t('landscape phones are handled', /orientation:\s*landscape/.test(css));
+
+    /*
+     * Hover effects must be gated on the CAPABILITY, not the screen size: a
+     * tapped card on a phone otherwise stays stuck in its hover state until
+     * the user taps elsewhere, and looks selected when it is not.
+     */
+    t('hover effects are disabled on touch devices', /@media \(hover: none\)/.test(css));
+
+    /*
+     * Images from third-party hosts (token logos, NFT art) have no size we
+     * control. One oversized one used to be able to push the page sideways.
+     */
+    t('images cannot overflow their container', /img,\s*\n\s*svg,[\s\S]{0,80}max-width: 100%/.test(css));
+
+    /*
+     * `overflow-x: hidden` on <html> would make it a scroll container, and a
+     * scroll container between a sticky element and the viewport silently
+     * disables the stickiness — the header would scroll away. `clip` cuts the
+     * overflow without creating that container.
+     */
+    t(
+      'horizontal overflow is clipped without breaking the sticky header',
+      /overflow-x: clip/.test(css) && !/html, body \{ overflow-x: hidden/.test(css)
+    );
+  }
+
+  /* ---- 30. every order error code must have a message -------------------- */
+  /*
+   * REAL BUG found while auditing the automatic-orders screen: entering a
+   * trailing distance outside the allowed band returns 'BAD_TRAIL', and
+   * `notify('orderErr.BAD_TRAIL')` had no matching key. Toasts.jsx falls back
+   * to `defaultValue: item.key`, so the user was shown the literal string
+   *
+   *     orderErr.BAD_TRAIL
+   *
+   * …as the explanation for why their order was refused. It looked like a
+   * crash, and there was no way to work out what was actually wrong.
+   *
+   * The message DID exist under `orders.err.BAD_TRAIL` — written, translated,
+   * and read by nothing. That is the same "wired to nothing" class this audit
+   * keeps catching, so the dead copy was deleted rather than left to drift out
+   * of sync with the live one.
+   *
+   * Rather than pin this one code, derive the list from the source: any future
+   * validation code fails the build until it has a message.
+   */
+  {
+    const src = read('src/lib/orders.js');
+    // Codes are the string literals returned by validateOrder/addOrder.
+    const codes = new Set(
+      [...src.matchAll(/return '([A-Z][A-Z_]+)'/g)].map((m) => m[1])
+    );
+    // TOO_MANY comes from addOrder's `{ error: 'TOO_MANY' }` shape.
+    for (const m of src.matchAll(/error:\s*'([A-Z][A-Z_]+)'/g)) codes.add(m[1]);
+
+    const missing = [...codes].filter((c) => !(`orderErr.${c}` in en.toast));
+    t(
+      `every order error code has a message${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
+      missing.length === 0
+    );
+    t('there are order error codes to check', codes.size >= 10);
+  }
+
   return rows;
 }

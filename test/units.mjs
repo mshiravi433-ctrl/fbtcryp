@@ -19,6 +19,7 @@ import {
   referrerShare
 } from '../src/lib/referral.js';
 import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
+import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
@@ -1392,6 +1393,66 @@ export default function run() {
      */
     t('the share never exceeds the fee', referrerShare(7) < 7);
     t('a share above 100% is refused', referrerShare(7, 1.5) === 0);
+  }
+
+  /* ----------------------- sharing beyond Telegram ---------------------- */
+  /*
+   * The old share path built ONE url — t.me/share/url — and nothing else. In
+   * Iran t.me does not resolve on most networks, so the tap did nothing; and a
+   * user whose friends are on WhatsApp had no route at all. Sharing is the
+   * only free growth channel this project has, so each destination is checked
+   * as a real link rather than trusted to look right.
+   */
+  {
+    const url = 'https://www.lawpoetics.ir/?ref=ALI1234';
+    const text = 'join me';
+    const targets = shareTargets(url, text);
+    const by = Object.fromEntries(targets.map((x) => [x.id, x]));
+
+    t('there are several destinations, not just one', targets.length >= 5);
+    t('WhatsApp is offered', Boolean(by.whatsapp));
+    t('SMS is offered — it needs no account and no app', Boolean(by.sms));
+    t('email is offered', Boolean(by.email));
+
+    /*
+     * Every destination must survive a URL that contains a query string. The
+     * invite link ALWAYS has `?ref=` in it, so an unencoded url would be cut
+     * at the first `&` the receiving site sees — the referral code, the one
+     * part that has to arrive, is the part that would be lost.
+     */
+    for (const x of targets) {
+      const encodedSomewhere =
+        x.href.includes(encodeURIComponent(url)) ||
+        x.href.includes(encodeURIComponent(`${text}\n${url}`));
+      t(`${x.id} url-encodes the link`, encodedSomewhere);
+    }
+
+    /*
+     * Custom schemes (whatsapp://, tg://) throw an OS error dialog when the
+     * app is absent; the https forms fall back to the web version instead.
+     * SMS is the one exception — it has no web equivalent.
+     */
+    const schemeOk = targets.every(
+      (x) => /^https:\/\//.test(x.href) || /^(mailto|sms):/.test(x.href)
+    );
+    t('no destination uses a custom app scheme', schemeOk);
+
+    /*
+     * iOS drops the SMS body unless the query begins `?&`. One character, and
+     * without it the message opens empty and the user has to retype the link.
+     */
+    t('the SMS link uses the iOS-compatible ?& form', by.sms.href.startsWith('sms:?&body='));
+
+    // Telegram stays available — it is just no longer the only option.
+    t(
+      'the Telegram link is still well-formed',
+      telegramShareUrl(url, text) ===
+        `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+    );
+    t('the Telegram link tolerates no text', telegramShareUrl(url).endsWith('&text='));
+
+    // A link with no message must still be shareable.
+    t('an empty message still produces links', shareTargets(url).every((x) => x.href.length > 10));
   }
 
   return rows;

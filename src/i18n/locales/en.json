@@ -439,7 +439,8 @@
     "orderErr.BAD_INTERVAL": "Choose how often",
     "orderErr.BAD_RUNS": "Choose between 1 and 365 times",
     "orderErr.TOO_MANY": "You already have 50 active orders",
-    "orderErr.BAD_PRICE_OF": "Choose which token the price refers to"
+    "orderErr.BAD_PRICE_OF": "Choose which token the price refers to",
+    "orderErr.BAD_TRAIL": "Choose a distance between 0.5% and 50%."
   },
   "swap": {
     "title": "Swap",
@@ -1772,10 +1773,10 @@
     "filterAll": "All",
     "filterActive": "Active",
     "filterDone": "Done",
-    "err": {
-      "BAD_TRAIL": "Choose a trail between 0.5% and 50%."
-    },
-    "trailScope": "Trailing stops are tracked while the app is open. Target-price orders are also watched on our server, so those still reach you when it is closed."
+    "trailScope": "Trailing stops are tracked while the app is open. Target-price orders are also watched on our server, so those still reach you when it is closed.",
+    "liveOn": "Watching",
+    "liveOff": "Paused",
+    "liveReady": "Ready"
   },
   "lock": {
     "title": "Locked",
@@ -1939,6 +1940,12 @@
   "install": {
     "title": "Install FBT Swap",
     "body": "Add it to your device — opens like an app, works offline.",
-    "action": "Install"
+    "action": "Install",
+    "iosBody": "To install: tap the Share button in Safari, then choose “Add to Home Screen”."
+  },
+  "share": {
+    "title": "Share",
+    "copy": "Copy link",
+    "via": "Share via"
   }
 }

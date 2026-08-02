@@ -611,7 +611,67 @@ select option { background: #0a0c12; }
   cursor: pointer;
   z-index: 1;
 }
-.segmented button.active { color: #000; }
+/* ---------------------------------------------------------------------------
+   THE SELECTED SEGMENT
+   ---------------------------------------------------------------------------
+   Reported: «بعضی از دکمه‌هاش وقتی فعالند رنگش تغییر نمی‌کند» — on the
+   automatic-orders screen, choosing "price falls to" / "price rises to" did
+   not visibly change anything.
+
+   Cause: this rule used to be `color: #000` and nothing else. The coloured
+   pill is a SEPARATE element (SegIndicator) that each screen has to render,
+   and two screens forgot to. Black text on a near-black panel is not just
+   subtle — it is LESS legible than the unselected state, so the control read
+   as broken.
+
+   Three independent fixes, because a selection indicator must not depend on
+   any single one of them:
+
+   1. A flat fallback background. The pill is `z-index: -1` INSIDE the button's
+      own stacking context, and per the paint order a negative-z-index child
+      draws on top of its parent's background — so where the pill exists this
+      is completely hidden, and where it is missing the label stays readable.
+      A safety net that costs nothing when it is not needed.
+
+   2. A ✓ before the label. Colour is not available to everyone: a gradient
+      pill means nothing to a user with a colour-vision deficiency, or on a
+      washed-out screen in sunlight. A tick is unambiguous without colour.
+      Added once here rather than per screen so all 14 controls gain it.
+
+   3. `aria-pressed` at the call sites, so a screen reader announces it too.
+
+   Wiring check #26 now fails the build if any `.segmented` control ships
+   without an indicator, so this cannot regress one screen at a time.
+   --------------------------------------------------------------------------- */
+.segmented button.active {
+  color: #000;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+/*
+ * Dense controls opt out. Five range buttons (1D/7D/30D/90D/1Y) on a 320px
+ * screen have about 55px each; a tick plus its margin eats a quarter of that
+ * and the labels start wrapping. `:has()` counts the buttons in CSS so no
+ * screen has to remember to pass a flag — and where `:has()` is unsupported
+ * the tick simply stays, which is the safe direction to fail in.
+ */
+.segmented:has(button:nth-child(4)) button.active::before { content: none; }
+
+.segmented button.active::before {
+  content: '✓';
+  font-size: 11px;
+  font-weight: 800;
+  margin-inline-end: 5px;
+  /* Baseline nudge: the tick glyph sits high in most fonts and looks detached
+     from the label without it. */
+  vertical-align: 1px;
+}
+
+/* Light theme: the panel behind an UNSELECTED segment is already near-white,
+   so a white fallback would erase the distinction entirely. */
+:root[data-theme='light'] .segmented button.active {
+  background: rgba(15, 23, 42, 0.14);
+}
 
 .seg-indicator {
   position: absolute;
@@ -1338,6 +1398,9 @@ select option { background: #0a0c12; }
   --ink-amber: #9d6e00;
   --ink-orange: #c55400;
   --ink-purple: #c800ea;
+  /* Muted-but-legible grey for inactive states. 4.6:1 on white — an "off"
+     label still has to be readable, or it is just missing. */
+  --ink-dim: #667085;
 }
 
 /* Dark theme: the "ink" tokens are just the neon colours themselves. */
@@ -1349,6 +1412,7 @@ select option { background: #0a0c12; }
   --ink-amber: var(--rgb-5);
   --ink-orange: #ff6d00;
   --ink-purple: #d500f9;
+  --ink-dim: #9aa3b2;
 }
 
 /* ==========================================================================
@@ -3580,11 +3644,92 @@ input, select, textarea { font-size: 16px !important; }
   background: color-mix(in srgb, var(--ink-amber, var(--ink-cyan)) 14%, transparent);
 }
 
+/*
+ * ─── TWO REAL BUGS IN THREE LINES, FOUND WHILE AUDITING THIS SCREEN ─────────
+ *
+ * 1. `--ink-dim` IS NOT DEFINED ANYWHERE. Not in :root, not in the light
+ *    theme, not in the pastel accent. Both declarations below therefore
+ *    resolved to nothing and the paused badge inherited its parent's colour,
+ *    i.e. looked identical to an active one — which is precisely the state
+ *    that must be distinguishable, because a paused order is NOT watching the
+ *    market and a user who thinks it is will miss their price.
+ *
+ *    Two other rules (.ord-status and one in the wallet) already wrote it as
+ *    `var(--ink-dim, #9aa3b2)` with a fallback, which is how it went unnoticed
+ *    for so long: the ones with a fallback looked fine, so nobody checked the
+ *    ones without. Defining the token properly fixes all four at once.
+ *
+ * 2. The dimming rule keyed off `.ord-paused`, a class that appears ONLY on
+ *    the status badge inside `.ord-row` — and that badge is rendered only for
+ *    orders whose status is NOT 'active' and NOT 'paused' (see the JSX). A
+ *    paused row shows pause/resume buttons instead, so the class was never in
+ *    the tree and `:has()` never matched. The row is now marked directly.
+ */
 .ord-paused { color: var(--ink-dim); background: color-mix(in srgb, var(--ink-dim) 14%, transparent); }
 
 /* A paused order stays legible but visibly inactive, so it is never mistaken
    for one that is still watching the market. */
-.ord-row:has(.ord-paused) { opacity: 0.72; }
+.ord-row[data-paused='true'] { opacity: 0.72; }
+
+/* ---------------------------------------------------------------------------
+   IS THIS ORDER WATCHING?  — the state badge on every active/paused row.
+
+   The pause/resume button used to be the only thing that said so, which meant
+   reading a button label to learn a row's state. A paused order that looks
+   live is the failure mode that costs a user the price they were waiting for,
+   so the answer now sits in the row header where the eye lands first.
+
+   Dot AND word, never dot alone: about 1 in 12 men cannot separate the green
+   from the grey, and the whole point is that this must not be missable.
+   --------------------------------------------------------------------------- */
+.ord-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-start: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ord-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.ord-live-on {
+  color: var(--ink-mint);
+  background: color-mix(in srgb, var(--ink-mint) 14%, transparent);
+}
+
+/* Ready is not just "on" — it is the one row the user must act on, so it
+   pulses. Watching is a steady state and must NOT compete with it. */
+.ord-live-ready {
+  color: var(--ink-mint);
+  background: color-mix(in srgb, var(--ink-mint) 22%, transparent);
+}
+.ord-live-ready .ord-live-dot { animation: ord-pulse 1.6s ease-in-out infinite; }
+
+@keyframes ord-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.72); }
+}
+
+.ord-live-off {
+  color: var(--ink-dim);
+  background: color-mix(in srgb, var(--ink-dim) 14%, transparent);
+}
+
+/* The pulse is the only motion on this screen; honour the OS setting. */
+@media (prefers-reduced-motion: reduce) {
+  .ord-live-ready .ord-live-dot { animation: none; }
+}
 
 .ord-pipeline {
   display: flex;
@@ -4146,3 +4291,175 @@ input, select, textarea { font-size: 16px !important; }
   background: #ffffff;
   box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.26);
 }
+
+/* ==========================================================================
+   SHARE SHEET
+   --------------------------------------------------------------------------
+   The fallback list, shown only when the operating system declined to handle
+   the share itself (desktop browsers, mostly). On a phone the OS sheet appears
+   instead and none of this is ever seen.
+   ========================================================================== */
+
+.share-url {
+  font-size: 11.5px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.1);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  /* A URL must break anywhere or a long referral code overflows the sheet. */
+  word-break: break-all;
+}
+
+.share-grid {
+  display: grid;
+  /* auto-fit, not a fixed count: three across on a phone, six on a desktop
+     dialog, with no second media query to keep in sync. */
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.share-target {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px; /* the accessibility minimum, and these are tap targets */
+  padding: 10px 8px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.share-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* A ring so a white dot (X) stays visible on the light theme. */
+  box-shadow: 0 0 0 1px rgba(127, 127, 127, 0.35);
+}
+
+/* ==========================================================================
+   RESPONSIVE — PHONE / TABLET / DESKTOP
+   --------------------------------------------------------------------------
+   Requested: «رسپانسیو باشد، سایت هم برای موبایل هم تبلت هم کامپیوتر».
+
+   The shell was a single 520px column with two width bumps bolted on at 900px
+   and 1400px. Two things were wrong with that:
+
+     1. THE TABLET GAP. An iPad in portrait is 768–834px CSS pixels — BELOW the
+        900px breakpoint. So every tablet got the phone layout: a 520px strip
+        with ~130px of dead space either side, and the fixed bottom nav
+        stretched the full 820px while the content did not, so the nav and the
+        content it belonged to were visibly different widths. That is the
+        single most common "this site is not responsive" complaint and it hit
+        the most likely tablet on the market.
+
+     2. TOUCH ASSUMPTIONS ON DESKTOP. `:hover` effects fire on touch devices as
+        a sticky state that only clears on the next tap somewhere else, so a
+        tapped card stays lit. Gating them behind `(hover: hover)` is the fix,
+        and it also means a mouse gets richer feedback than a finger.
+
+   Deliberately NOT a multi-column desktop redesign. Two layouts means two sets
+   of bugs and two sets of screenshots, and the users are overwhelmingly on
+   phones. This makes one column scale honestly across all three form factors.
+   ========================================================================== */
+
+/* ---- Small phones (iPhone SE, 320–360px) --------------------------------- */
+@media (max-width: 360px) {
+  .page { padding-inline: 12px; }
+  /* Three-up grids become two-up: three cards in 320px leaves ~90px each,
+     which truncates every label. */
+  .grid-3 { grid-template-columns: 1fr 1fr; }
+  :root { --nav-h: 82px; }
+}
+
+/* ---- Tablet portrait: iPad 768/810/834, Android 800 ---------------------- */
+@media (min-width: 600px) and (max-width: 899px) {
+  .app-shell,
+  .bottom-nav,
+  .top-bar {
+    max-width: 600px;
+    margin-inline: auto;
+  }
+
+  /* The nav is position:fixed, so without inset-inline + margin it spans the
+     whole viewport and floats detached from the column above it. */
+  .bottom-nav {
+    inset-inline: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  /* More room means more columns, not bigger cards: a 300px-wide market row
+     is harder to scan than two 300px rows side by side. */
+  .disc-grid,
+  .eco-grid { grid-template-columns: repeat(2, 1fr); }
+  .nft-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ---- Tablet landscape and small laptops ---------------------------------- */
+@media (min-width: 900px) and (max-width: 1399px) {
+  .nft-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---- Hover is a capability, not a screen size ----------------------------
+   `@media (hover: hover) and (pointer: fine)` is true for a mouse or trackpad
+   and false for a finger — which is what these effects actually depend on.
+   Without it, tapping a card on a phone leaves it stuck in its hover state
+   until the user taps elsewhere, and it looks selected when it is not. */
+@media (hover: none) {
+  .card:hover,
+  .coin-row:hover,
+  .tag:hover,
+  .share-target:hover,
+  .wallet-option:hover {
+    transform: none;
+    filter: none;
+  }
+}
+
+/* ---- Landscape phone -----------------------------------------------------
+   A phone on its side has ~350px of height. Full-height sheets and the tall
+   bottom nav swallow the entire screen, leaving no room for content. */
+@media (max-height: 480px) and (orientation: landscape) {
+  :root { --nav-h: 62px; }
+  .sheet { max-height: 92dvh; }
+  .sheet-body { max-height: 74dvh; overflow-y: auto; }
+}
+
+/* ---- Images must never overflow their container --------------------------
+   A single oversized token logo or NFT thumbnail from a third-party URL used
+   to be able to push the whole page sideways, producing horizontal scroll on
+   a screen that has none of its own. Content-driven overflow is invisible in
+   development (our test images are all small) and obvious on a real phone. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Except where the aspect ratio is set explicitly by the component — resetting
+   height there would collapse a fixed-size avatar to zero. */
+.coin-logo img,
+.tok-icon img,
+.nft-thumb img,
+.eco-logo img {
+  height: 100%;
+}
+
+/* Belt and braces against sideways scroll from any single wide child.
+   `clip`, NOT `hidden`: `overflow: hidden` turns the element into a scroll
+   CONTAINER, and a scroll container between a `position: sticky` element and
+   the viewport silently kills the stickiness — the header would start
+   scrolling away. `clip` cuts the overflow without creating that container.
+   Where `clip` is unsupported the declaration is simply ignored, which leaves
+   the old behaviour rather than breaking the header. */
+body { overflow-x: clip; }

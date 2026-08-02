@@ -12,6 +12,9 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { POINT_VALUES, tierFor, nextTier, tierProgress } from '../lib/ranks';
 import { IconChevronRight, IconExternal, IconPools, IconShield, IconSwap, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
+import ShareSheet from '../components/ShareSheet';
+import { useShare } from '../hooks/useShare';
+import { copyText } from '../lib/share';
 import { publicAppUrl } from '../lib/nativeShell';
 
 /**
@@ -78,7 +81,21 @@ const YIELD = [
 export default function Earn() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, share, user, tg } = useTelegram();
+  const { haptic, user, tg } = useTelegram();
+
+  /*
+   * REAL BUG: this screen used `share` from TelegramContext, which built a
+   * t.me/share/url link and nothing else. On a phone without Telegram — and
+   * on most Iranian networks, where t.me does not resolve at all — the button
+   * opened a tab that never loaded. Sharing is the only free growth channel
+   * we have, so a share button that silently fails is the most expensive bug
+   * in the app.
+   *
+   * useShare goes through the OS share sheet first (Capacitor in the APK,
+   * navigator.share in Safari iOS / Chrome Android) and only falls back to our
+   * own list of destinations when there is genuinely nothing native.
+   */
+  const [share, shareSheet] = useShare();
 
   const points = useAppStore((s) => s.points);
   const streak = useAppStore((s) => s.streak);
@@ -323,16 +340,33 @@ export default function Earn() {
               <span className="pill pill-neutral">{referrals}</span>
             </div>
 
-            <button
-              className="btn btn-ghost"
-              style={{ marginTop: 10 }}
-              onClick={() => {
-                share?.(inviteUrl, t('earn.shareText'));
-                awardPoints('shareApp', POINT_VALUES.shareApp);
-              }}
-            >
-              {t('earn.shareInvite')}
-            </button>
+            <div className="row" style={{ gap: 8, marginTop: 10 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  share({ url: inviteUrl, text: t('earn.shareText') });
+                  awardPoints('shareApp', POINT_VALUES.shareApp);
+                }}
+              >
+                {t('earn.shareInvite')}
+              </button>
+              {/*
+                Copy sits beside share, not behind it. The share sheet can be
+                refused by the browser or dismissed by accident; the clipboard
+                never fails, and half the people who send an invite are pasting
+                it into a group they already have open.
+              */}
+              <button
+                className="btn btn-ghost"
+                onClick={async () => {
+                  const ok = await copyText(inviteUrl);
+                  useAppStore.getState().notify(ok ? 'linkCopied' : 'copyFailed', ok ? 'success' : 'error');
+                }}
+              >
+                {t('common.copy')}
+              </button>
+            </div>
           </motion.section>
 
           <AdBanner slot="referral" compact />
@@ -352,7 +386,7 @@ export default function Earn() {
                     onClick={() => {
                       if (done) return;
                       if (q.id === 'inviteFriend') {
-                        share?.(inviteUrl, t('earn.shareText'));
+                        share({ url: inviteUrl, text: t('earn.shareText') });
                         completeQuest(q.id);
                         awardPoints('referral', q.pts);
                       } else if (q.to) {
@@ -377,6 +411,9 @@ export default function Earn() {
           <p className="notice">{t('earn.pointsNotice')}</p>
         </>
       )}
+
+      {/* Only ever visible when the OS refused to handle the share itself. */}
+      <ShareSheet {...shareSheet} />
     </PageTransition>
   );
 }

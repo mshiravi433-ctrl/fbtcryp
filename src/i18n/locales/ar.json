@@ -439,7 +439,8 @@
     "orderErr.BAD_INTERVAL": "اختر التكرار",
     "orderErr.BAD_RUNS": "اختر بين ١ و ٣٦٥",
     "orderErr.TOO_MANY": "لديك ٥٠ أمراً نشطاً",
-    "orderErr.BAD_PRICE_OF": "اختر الرمز الذي يشير إليه السعر"
+    "orderErr.BAD_PRICE_OF": "اختر الرمز الذي يشير إليه السعر",
+    "orderErr.BAD_TRAIL": "اختر مسافة بين ٠٫٥٪ و ٥٠٪."
   },
   "swap": {
     "title": "مبادلة",
@@ -1701,7 +1702,10 @@
     "watch": "راقب سعر",
     "priceOfFrom": "{{sym}} (ما تبيعه)",
     "priceOfTo": "{{sym}} (ما تشتريه)",
-    "willSwap": "عند التفعيل سيكون التبادل {{from}} ← {{to}}."
+    "willSwap": "عند التفعيل سيكون التبادل {{from}} ← {{to}}.",
+    "liveOn": "قيد المراقبة",
+    "liveOff": "متوقف",
+    "liveReady": "جاهز"
   },
   "solana": {
     "twoWalletsTitle": "محفظتان جنباً إلى جنب",
@@ -1719,6 +1723,12 @@
   "install": {
     "title": "ثبّت FBT Swap",
     "body": "أضفه إلى جهازك — يفتح كتطبيق ويعمل دون اتصال.",
-    "action": "تثبيت"
+    "action": "تثبيت",
+    "iosBody": "للتثبيت: اضغط زر المشاركة في سافاري ثم اختر «Add to Home Screen»."
+  },
+  "share": {
+    "title": "مشاركة",
+    "copy": "نسخ الرابط",
+    "via": "مشاركة عبر"
   }
 }

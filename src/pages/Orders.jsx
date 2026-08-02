@@ -31,6 +31,7 @@ import {
 } from '../lib/orders';
 import { showLocalNotification } from '../lib/notify';
 import { IconChevronLeft, IconClock, IconTrend } from '../components/Icons';
+import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
 
 /**
@@ -263,12 +264,42 @@ export default function Orders() {
         : null;
 
     return (
-      <motion.div className={`ord-row ${isReady ? 'ord-ready' : ''}`} variants={riseIn}>
+      <motion.div
+        className={`ord-row ${isReady ? 'ord-ready' : ''}`}
+        data-paused={o.status === 'paused' ? 'true' : undefined}
+        variants={riseIn}
+      >
         <div className="ord-head">
           <span className={`ord-kind ord-${o.type}`}>{t(`orders.type.${o.type}`)}</span>
           <span className="ord-pair mono">
             {o.amountIn} {o.fromToken.symbol} → {o.toToken.symbol}
           </span>
+
+          {/*
+            IS THIS ORDER ACTUALLY WATCHING?  Requested: «فعال بودن کادم را
+            نشان بده با تیک سبز یا چیزی شبیه آن».
+
+            Before this, an active order and a paused one looked the same from
+            across the row: the pause/resume BUTTON changed its label, but the
+            row itself carried no state. You had to read the button to work out
+            whether the market was being watched — and a paused order that
+            looks live is the failure mode that costs a user their price.
+
+            A dot plus a word, not a dot alone: colour is not available to
+            everyone, and «فعال» is unambiguous where a green circle is not.
+          */}
+          {(o.status === 'active' || o.status === 'paused') && (
+            <span
+              className={`ord-live ${isReady ? 'ord-live-ready' : o.status === 'active' ? 'ord-live-on' : 'ord-live-off'}`}
+            >
+              <span className="ord-live-dot" />
+              {isReady
+                ? t('orders.liveReady')
+                : o.status === 'active'
+                  ? t('orders.liveOn')
+                  : t('orders.liveOff')}
+            </span>
+          )}
         </div>
 
         {o.type === 'trailing' ? (
@@ -306,8 +337,33 @@ export default function Orders() {
               })}
             </span>
             {Number.isFinite(rate) ? (
-              <span className={`mono ${pct >= 0 ? 'up' : 'down'}`}>
-                {t('orders.now')} {fmtQty(rate)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
+              /*
+               * THE COLOUR HERE WAS BACKWARDS HALF THE TIME.
+               *
+               * It was `pct >= 0 ? 'up' : 'down'` — green when the market sits
+               * above the target, red when below. That is right for a "sell
+               * when it rises" order and exactly WRONG for "buy when it
+               * falls": the price dropping towards a buy target is the good
+               * news, and it was painted red.
+               *
+               * Green now means "moving the way you asked for", which is the
+               * only reading that is correct for both directions.
+               *
+               * `pct` can also be null on an order stored before targetRate
+               * was validated, and `null.toFixed` throws — one legacy row
+               * would white-screen the whole list.
+               */
+              <span
+                className={`mono ${
+                  !Number.isFinite(pct)
+                    ? ''
+                    : (o.direction === 'above') === pct >= 0
+                      ? 'up'
+                      : 'down'
+                }`}
+              >
+                {t('orders.now')} {fmtQty(rate)}
+                {Number.isFinite(pct) && ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)`}
               </span>
             ) : (
               <span className="faint mono">{t('orders.noPrice')}</span>
@@ -561,9 +617,42 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
               </select>
             </label>
 
+            {/*
+              ─── REAL BUG, REPORTED ────────────────────────────────────────
+              «بعضی از دکمه‌هاش وقتی فعالند رنگش تغییر نمی‌کند، مثلاً قیمت افت
+              می‌کند یا بالا می‌رود».
+
+              `.segmented button.active` sets ONE thing: `color: #000`. The
+              coloured pill behind it is a separate element, SegIndicator, and
+              this control never rendered it. So selecting "price falls to"
+              turned the label black — on a near-black panel. The selection was
+              not merely hard to see, it was LESS visible than the unselected
+              state, which is why it read as "the button does nothing".
+
+              This is the same defect that was found on the Buy tabs. It is
+              dangerous here in a way it was not there: getting the direction
+              backwards means the alert fires at the opposite of the intended
+              price. Wiring check #26 now asserts every `.segmented` control in
+              the app renders an indicator, so this class of bug cannot come
+              back one screen at a time.
+
+              The tick is belt and braces, and it is added once in CSS
+              (`.segmented button.active::before`) rather than per screen, so
+              every segmented control in the app gains it together. A gradient
+              alone reads as decoration to some people — and to anyone with a
+              colour-vision deficiency; an explicit ✓ plus `aria-pressed` says
+              "chosen" with no colour required at all.
+            */}
             <div className="segmented">
               {['below', 'above'].map((d) => (
-                <button key={d} className={direction === d ? 'active' : ''} onClick={() => setDirection(d)}>
+                <button
+                  key={d}
+                  className={direction === d ? 'active' : ''}
+                  onClick={() => setDirection(d)}
+                  aria-pressed={direction === d}
+                  style={{ isolation: 'isolate' }}
+                >
+                  {direction === d && <SegIndicator id="ord-dir" />}
                   {t(`orders.dir.${d}`)}
                 </button>
               ))}
@@ -610,7 +699,14 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
             */}
             <div className="segmented">
               {['5', '10', '15', '20'].map((v) => (
-                <button key={v} className={trailPct === v ? 'active' : ''} onClick={() => setTrailPct(v)}>
+                <button
+                  key={v}
+                  className={trailPct === v ? 'active' : ''}
+                  onClick={() => setTrailPct(v)}
+                  aria-pressed={trailPct === v}
+                  style={{ isolation: 'isolate' }}
+                >
+                  {trailPct === v && <SegIndicator id="ord-trail" />}
                   {v}%
                 </button>
               ))}

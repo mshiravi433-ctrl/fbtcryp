@@ -1,5 +1,125 @@
 # Changelog
 
+## 1.13.0 — versionCode 34
+
+### The selection that was invisible
+
+Reported: on **Automatic Orders**, choosing "price falls to" or "price rises
+to" appeared to change nothing.
+
+`.segmented button.active` sets exactly one property: `color: #000`. The
+coloured pill behind it is a *separate* component, `<SegIndicator>`, and each
+screen has to render it. Orders never did — so a selected button was black text
+on a near-black panel: **less** visible than the unselected state. The class was
+being applied correctly the whole time, which is why nothing caught it.
+
+Three independent fixes, because a selection indicator must not depend on any
+one of them:
+
+1. The missing indicator is now rendered.
+2. `.segmented button.active` carries a flat background as a fallback, so a
+   future omission degrades to "less pretty" rather than "invisible".
+3. A **✓** before the label and `aria-pressed` on the button. Colour is not
+   available to everyone.
+
+**Wiring check #26** now fails the build if any `.segmented` control in the app
+ships without an indicator, and a render test asserts the pill is really in the
+DOM and moves when you tap — a check on the CSS class alone would have passed
+while the bug was live.
+
+### Is this order actually watching?
+
+Every active or paused order now carries a state badge in its header:
+**در حال پایش** / **آماده** / **متوقف**, with a dot that pulses only for a
+ready one. Before this the pause/resume *button label* was the only clue, so
+you had to read a button to learn a row's state — and a paused order that looks
+live is the failure that costs a user the price they were waiting for.
+
+### Three more bugs on the same screen
+
+- **`--ink-dim` was never defined.** Not in `:root`, not in the light theme.
+  The "paused" badge therefore had no colour of its own and looked identical to
+  an active one. Two other rules already wrote `var(--ink-dim, #9aa3b2)` with a
+  fallback, which is how it went unnoticed.
+- **Paused rows were never dimmed.** The rule keyed off `.ord-paused`, a class
+  that only appears on a badge which is rendered *exclusively* for orders that
+  are neither active nor paused. It could never match.
+- **The percentage was the wrong colour half the time.** It painted green when
+  the price was above target — correct for "sell when it rises", exactly
+  backwards for "buy when it falls", where a falling price is the good news.
+  It also crashed on a legacy order with no target (`null.toFixed`).
+- **`BAD_TRAIL` had no message.** An out-of-range trailing distance showed the
+  literal string `orderErr.BAD_TRAIL` as the explanation. The text existed
+  under `orders.err.BAD_TRAIL` — written, translated, read by nothing. Wiring
+  check #30 now derives the code list from the source, so any future error code
+  fails the build until it has a message.
+
+### Sharing works outside Telegram
+
+The **only** share implementation in the app built a `t.me/share/url` link and
+opened it. On most Iranian networks t.me does not resolve, so the tap did
+nothing; without Telegram installed you landed on an install-Telegram page; and
+anyone whose friends use WhatsApp, iMessage, X or SMS had no route at all.
+
+Sharing is the only zero-cost growth channel this project has, so every failed
+tap was a user who tried to bring us another user and could not.
+
+`lib/share.js` now walks a ladder: the **Capacitor share sheet** inside the
+APK → the **Web Share API** (this is what makes Safari on iPhone work) →
+Telegram, but only when genuinely running inside Telegram → an in-app list of
+WhatsApp / Telegram / X / LinkedIn / email / SMS. Copy sits beside share and
+never fails. A dismissed OS sheet is treated as a decision, not an error, so
+nothing pops up behind it.
+
+### iPhone and iPad are supported platforms now
+
+There is no iOS build of this app and there cannot be one without an Apple
+Developer account, so the home-screen PWA is the **only** way an iPhone user can
+keep FBT Swap.
+
+- Safari ignores the web manifest almost entirely. Without
+  `apple-mobile-web-app-capable` the "installed" app opened in a normal Safari
+  tab with the address bar; without `apple-mobile-web-app-title` the icon was
+  captioned with the 60-character SEO `<title>`. Both are set.
+- Safari **never** fires `beforeinstallprompt` — Apple has not implemented it —
+  so the install banner rendered nothing at all on iOS. It now shows the
+  Share → Add to Home Screen instruction, and only in real Safari: Chrome and
+  Firefox on iOS cannot add to the home screen, so telling their users to look
+  for the option would send them hunting for a menu item that does not exist.
+- **iPadOS 13+ reports a Macintosh user-agent**, so every naive `/iPad/` test
+  classifies an iPad as a desktop. `maxTouchPoints` is the reliable tell.
+- `format-detection: telephone=no` stops Safari turning wallet addresses and
+  token amounts into blue "call" links.
+
+### Responsive: phone, tablet, desktop
+
+The shell was 520px wide with breakpoints at 900px and 1400px. **An iPad in
+portrait is 768–834px — below 900** — so every tablet got the phone layout: a
+520px strip of content with the fixed bottom nav stretched across the full
+820px beneath it. The nav and the content it belonged to were visibly different
+widths.
+
+- New breakpoints at **≤360px** (small phones: three-up grids become two-up),
+  **600–899px** (tablet portrait) and **landscape phone** (a phone on its side
+  has ~350px of height; full-height sheets swallowed the screen).
+- Hover effects are gated on `@media (hover: none)` — the *capability*, not the
+  screen size. A tapped card used to stay stuck in its hover state until you
+  tapped elsewhere, and looked selected when it was not.
+- Third-party images (token logos, NFT art) can no longer overflow and push the
+  page sideways.
+- Horizontal overflow uses `overflow-x: clip`, **not** `hidden`: `hidden` turns
+  the element into a scroll container, and a scroll container between a sticky
+  element and the viewport silently kills the stickiness — the header would
+  have scrolled away.
+
+### The maskable icon was being cropped
+
+One square image was declared for both `purpose: "any"` and
+`purpose: "maskable"`. A launcher crops a maskable icon to its own shape and
+only the middle 80% is guaranteed to survive, so on Android the outer neon ring
+— the entire recognisable part of the logo — was sliced off. There is now a
+separate `icon-maskable-512.png` with the art inside the safe zone.
+
 ## 1.5.2 — versionCode 16
 
 ### Fake money removed from the chrome

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isNativeShell } from '../lib/nativeShell';
+import { isIOSSafari, isStandalone } from '../lib/platform';
 
 /**
  * "Install this app" — the piece that was missing.
@@ -21,6 +22,23 @@ import { isNativeShell } from '../lib/nativeShell';
  * address bar that is easy to miss entirely.
  *
  * So this is not a new feature so much as the missing half of one.
+ *
+ * ─── AND WHY iOS NEEDED A SECOND PATH ───────────────────────────────────────
+ * Safari on iPhone and iPad NEVER fires `beforeinstallprompt`. Apple has never
+ * implemented it and there is no equivalent — `prompt()` does not exist, and a
+ * site cannot trigger installation at all. The only route is the user tapping
+ * Share → "Add to Home Screen" themselves.
+ *
+ * So on iOS this component previously rendered nothing, forever. An iPhone
+ * user had no way to learn the app was installable. Since there is no APK for
+ * them either, the home-screen PWA is the ONLY way an iPhone user can keep
+ * this app — which makes a missing hint on iOS more costly than on Android,
+ * not less.
+ *
+ * The iOS branch therefore shows the instruction instead of a button, and only
+ * in real Safari: Chrome and Firefox on iOS cannot add to the home screen at
+ * all, so telling their users to look for the option would send them hunting
+ * for a menu item that does not exist.
  *
  * ─── WHAT THIS DELIBERATELY DOES NOT DO ─────────────────────────────────────
  * It does not nag. The banner appears only when the browser has already
@@ -79,12 +97,16 @@ export default function InstallPrompt() {
    * `display-mode: standalone` covers Chrome/Edge/Android; `navigator.standalone`
    * is the iOS Safari equivalent, which does not support the media query.
    */
-  const alreadyInstalled =
-    typeof window !== 'undefined' &&
-    (window.matchMedia?.('(display-mode: standalone)')?.matches ||
-      window.navigator?.standalone === true);
+  const alreadyInstalled = isStandalone();
 
-  if (hidden || alreadyInstalled || !deferred) return null;
+  if (hidden || alreadyInstalled || isNativeShell()) return null;
+
+  /*
+   * iOS: no event to wait for, so the offer is shown on its own terms.
+   * Gated on real Safari — see the note at the top of the file.
+   */
+  const iosHint = !deferred && isIOSSafari();
+  if (!deferred && !iosHint) return null;
 
   const install = async () => {
     try {
@@ -111,9 +133,18 @@ export default function InstallPrompt() {
     <div className="install-bar">
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 13 }}>{t('install.title')}</div>
-        <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>{t('install.body')}</div>
+        <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>
+          {iosHint ? t('install.iosBody') : t('install.body')}
+        </div>
       </div>
-      <button className="btn btn-primary btn-sm" onClick={install}>{t('install.action')}</button>
+      {/*
+        No button on iOS. There is nothing for it to call — Safari exposes no
+        install API — and a button that does nothing is worse than a sentence
+        that explains the two taps.
+      */}
+      {!iosHint && (
+        <button className="btn btn-primary btn-sm" onClick={install}>{t('install.action')}</button>
+      )}
       <button className="icon-btn" onClick={dismiss} aria-label={t('common.close')}>✕</button>
     </div>
   );

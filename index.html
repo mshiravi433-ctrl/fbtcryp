@@ -6,6 +6,41 @@
     <meta name="theme-color" content="#f4f5fa" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
+      ═══════════════════════════════════════════════════════════════════════
+      iOS / iPadOS
+
+      Safari ignores most of the web app manifest. `display: standalone`,
+      `theme_color` and `name` are all read from these Apple-specific tags
+      instead — with none of them present, adding the site to an iPhone home
+      screen produced a plain Safari bookmark: it opened in a normal tab, with
+      the address bar visible, using the page <title> (a 60-character SEO
+      string) as the icon caption.
+
+      That matters more here than it looks. There is no iOS build of this app
+      and there never will be without an Apple Developer account (99 USD/yr,
+      not purchasable from Iran) — so the home-screen PWA is the ONLY way an
+      iPhone user can keep FBT Swap. Getting it wrong loses every iOS user.
+
+        • apple-mobile-web-app-capable — launches without Safari chrome.
+        • status-bar-style=black-translucent — the page draws UNDER the status
+          bar, which is why the layout must respect env(safe-area-inset-top);
+          it does (see .top-bar in index.css) and viewport-fit=cover above
+          makes those insets non-zero.
+        • apple-mobile-web-app-title — the short caption under the icon.
+          Without it iOS uses <title>, which would be truncated mid-sentence.
+      ═══════════════════════════════════════════════════════════════════════
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FBT Swap" />
+    <!-- Stops iOS auto-linking every number that looks like a phone number.
+         Wallet addresses and token amounts are full of digit runs, and Safari
+         turning "0.00203928" into a blue tappable "call" link is a real thing
+         that happens on financial pages. -->
+    <meta name="format-detection" content="telephone=no" />
     <!--
       Web app manifest. Missing entirely until now, which had two effects:
       the site could not be installed to a home screen at all, and wallets

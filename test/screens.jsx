@@ -348,6 +348,79 @@ export async function run(container) {
     host.remove();
   }
 
+  /* ------------- automatic orders: does a selection LOOK selected? ------- */
+  /*
+   * REPORTED: «بعضی از دکمه‌هاش وقتی فعالند رنگش تغییر نمی‌کند مثلا قیمت افت
+   * می‌کند یا بالا می‌رود» — tapping "price falls to" / "price rises to"
+   * appeared to do nothing.
+   *
+   * The class WAS being applied, which is why every existing test passed. What
+   * was missing is the element that makes `.active` visible: `.segmented
+   * button.active` only sets `color: #000`, and the coloured pill behind it is
+   * a separate <SegIndicator> this screen never rendered. Black text on a
+   * near-black panel is LESS visible than the unselected state.
+   *
+   * So asserting `classList.contains('active')` would have passed while the
+   * bug was live. This asserts the INDICATOR, in the DOM, moving between the
+   * two buttons on click — the thing the user actually sees.
+   */
+  {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(<Wrap><Orders /></Wrap>);
+    });
+
+    // Open the limit-order sheet. Buttons are matched by class, not by label,
+    // so this survives a copy change in any of the twelve languages.
+    const newLimit = host.querySelector('.ord-new-limit');
+    out.push(['the limit-order button exists', Boolean(newLimit)]);
+    await act(async () => newLimit?.click());
+
+    // The sheet portals to document.body, so query there rather than in host.
+    const seg = [...document.querySelectorAll('.segmented')];
+    out.push([`the order form has segmented controls (${seg.length})`, seg.length >= 1]);
+
+    const dirBtns = seg[0] ? [...seg[0].querySelectorAll('button')] : [];
+    out.push(['the direction control has two options', dirBtns.length === 2]);
+
+    if (dirBtns.length === 2) {
+      const activeIdx = () => dirBtns.findIndex((b) => b.classList.contains('active'));
+      const indicatorIdx = () =>
+        dirBtns.findIndex((b) => b.querySelector('.seg-indicator'));
+
+      out.push(['one direction starts selected', activeIdx() >= 0]);
+      /*
+       * THE ACTUAL BUG. Before the fix this was -1: the class was set and the
+       * indicator did not exist anywhere in the control.
+       */
+      out.push(['the selected direction renders a visible indicator', indicatorIdx() >= 0]);
+      out.push(['the indicator is on the selected button', indicatorIdx() === activeIdx()]);
+
+      // A screen reader must be told too — colour is not available to everyone.
+      out.push([
+        'the selected direction is announced to assistive tech',
+        dirBtns[activeIdx()]?.getAttribute('aria-pressed') === 'true'
+      ]);
+
+      // And it must MOVE. A pill that is painted on the first option and never
+      // updates would pass every check above.
+      const other = 1 - activeIdx();
+      await act(async () => dirBtns[other].click());
+      out.push(['selecting the other direction moves the selection', activeIdx() === other]);
+      out.push(['…and the indicator follows it', indicatorIdx() === other]);
+      out.push([
+        '…and aria-pressed follows it too',
+        dirBtns[other].getAttribute('aria-pressed') === 'true' &&
+          dirBtns[1 - other].getAttribute('aria-pressed') === 'false'
+      ]);
+    }
+
+    await act(async () => root.unmount());
+    host.remove();
+  }
+
   setLanguage('fa');
   console.error = realError;
   if (errors.length) out.push([`no console errors (${errors.slice(0, 2).join(' | ').slice(0, 200)})`, false]);
