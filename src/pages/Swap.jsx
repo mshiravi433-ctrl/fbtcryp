@@ -34,6 +34,7 @@ import { NATIVE_GAS_FLOOR, formatUnitsExact } from '../lib/swap';
 import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
 import { PAYOUT_DIRECTORY } from '../lib/payout';
 import { useHideBalances } from '../hooks/useHideBalances';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 /**
  * Real on-chain swap screen.
@@ -74,7 +75,24 @@ export default function Swap() {
   const [fromToken, setFromToken] = useState(() => curated[0]);
   const [toToken, setToToken] = useState(() => curated[1] ?? curated[0]);
   const [amount, setAmount] = useState('');
-  const [slippage, setSlippage] = useState(DEFAULT_SLIPPAGE);
+  /*
+   * Seeded from the user's setting, not from the module default.
+   *
+   * REAL BUG: Settings had a "default slippage" picker offering 0.1 / 0.5 / 1
+   * / 3 %. It wrote the value, redrew its own label from it, and NOTHING ELSE
+   * EVER READ IT — this line hardcoded DEFAULT_SLIPPAGE. Someone who set 3%
+   * for thin memecoin pairs got 0.5% on every swap and watched them revert;
+   * someone who set 0.1% for safety was quoted 0.5% and could lose more than
+   * they agreed to. Same dead-control family as the auto-lock and
+   * hide-balances toggles.
+   *
+   * Read once as the initial value rather than subscribed: this is the
+   * STARTING point, and the per-swap control below must stay free to override
+   * it without Settings yanking it back.
+   */
+  const [slippage, setSlippage] = useState(
+    () => useSettingsStore.getState().defaultSlippage ?? DEFAULT_SLIPPAGE
+  );
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
 
@@ -713,7 +731,24 @@ export default function Swap() {
           disabled={!canSwap}
           onClick={() => {
             if (!wallet.isConnected) return setConnectOpen(true);
+            /*
+             * Expert mode skips the review sheet.
+             *
+             * REAL BUG: the toggle promised "Skip confirmation screens and
+             * allow high slippage" and `expertMode` was read by nothing — the
+             * review sheet always appeared. A user who turned it on got the
+             * same flow and reasonably concluded the setting was decoration.
+             *
+             * The sheet still OPENS in expert mode; it just goes straight into
+             * the transaction instead of waiting for a second tap. The wallet's
+             * own signature prompt is still there and is not ours to skip —
+             * that is the confirmation that actually protects the funds.
+             */
             setReviewing(true);
+            if (useSettingsStore.getState().expertMode) {
+              runSwap();
+              return;
+            }
           }}
         >
           {!wallet.isConnected ? t('wallet.connect') : quoting ? t('swap.quoting') : t('swap.review')}

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
 import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 /**
  * NON-CUSTODIAL WALLET LAYER
@@ -43,7 +44,31 @@ export function WalletProvider({ children }) {
   const getReadProvider = useCallback(async (targetChain = DEFAULT_CHAIN) => {
     const { JsonRpcProvider, FallbackProvider } = await loadEthers();
     const cfg = EVM_CHAINS[targetChain];
-    const providers = cfg.rpc.map((url, i) => ({
+
+    /*
+     * The user's own node comes FIRST, if they set one.
+     *
+     * REAL BUG: Settings has a "custom RPC" field with a warning about only
+     * using endpoints you trust. It stored the URL, redrew its own label from
+     * it, and nothing ever connected to it — every read went to the built-in
+     * public endpoints regardless. Someone who switched to their own node for
+     * privacy or reliability got neither, while the UI told them they had.
+     *
+     * Placed ahead of the defaults rather than replacing them: a private node
+     * that goes down would otherwise take the whole app with it, and
+     * FallbackProvider already fails over on a stall.
+     *
+     * https only. An http endpoint would be blocked by the WebView's
+     * usesCleartextTraffic=false anyway, and downgrading a wallet's RPC to
+     * plaintext is worth refusing outright rather than failing obscurely.
+     */
+    const custom = useSettingsStore.getState().customEvmRpc;
+    const rpcList =
+      typeof custom === 'string' && /^https:\/\//.test(custom.trim())
+        ? [custom.trim(), ...cfg.rpc]
+        : cfg.rpc;
+
+    const providers = rpcList.map((url, i) => ({
       provider: new JsonRpcProvider(url, targetChain, { staticNetwork: true }),
       priority: i + 1,
       stallTimeout: 2500,

@@ -1610,5 +1610,118 @@ export default function run() {
     t('the screen does not show our revenue split', !/netFeeBps/.test(code));
   }
 
+  /* ---- 20. no setting may be wired to nothing ---------------------------- */
+  /*
+   * THE MOST-REPEATED BUG IN THIS PROJECT, now checked instead of rediscovered.
+   *
+   * Found dead so far: the currency selector, the biometric toggle, auto-lock,
+   * hide-balances, default slippage, custom RPC, expert mode, testnet mode and
+   * "confirm every transaction". Each stored a value, redrew its own label
+   * from it, and was read by nothing else — so the control looked alive and
+   * changed nothing.
+   *
+   * Two of those were dangerous rather than merely useless: testnet mode told
+   * users their funds were not real while every swap stayed on mainnet, and
+   * default slippage let someone believe they had capped their loss at 0.1%
+   * while 0.5% was sent.
+   *
+   * The invariant: a persisted preference must be consumed somewhere OUTSIDE
+   * the screen that sets it. Reading it back only to render your own switch
+   * proves nothing.
+   */
+  {
+    const store = read('src/store/useSettingsStore.js');
+    const settingsPage = read('src/pages/Settings.jsx');
+
+    const strip = (src) =>
+      src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+    /*
+     * Consumers = every source file except the store itself and the Settings
+     * screen. Comments are stripped first: this suite has repeatedly "passed"
+     * by matching its own explanatory prose.
+     */
+    const consumers = walk('src')
+      .filter((f) => !f.endsWith('useSettingsStore.js') && !f.endsWith('Settings.jsx'))
+      .map((f) => strip(read(f)))
+      .join('\n');
+
+    /*
+     * Preferences that must do something. Deliberately not every key in the
+     * store — onboarding flags and sync bookkeeping are consumed by the store
+     * itself, which is legitimate.
+     */
+    const mustBeUsed = [
+      'theme',
+      'accent',
+      'reduceMotion',
+      'compactMode',
+      'currency',
+      'hideBalances',
+      'biometricEnabled',
+      'autoLockMinutes',
+      'defaultSlippage',
+      'expertMode',
+      'customEvmRpc'
+    ];
+
+    /*
+     * A preference counts as live if EITHER some other file reads it, OR the
+     * store pushes it into the DOM itself through an apply*() call.
+     *
+     * theme, accent and compactMode are the second kind: nothing imports them,
+     * because `applyTheme()` writes a data attribute and CSS does the rest.
+     * Flagging those would be a false positive, and a check that cries wolf on
+     * working code gets ignored the next time it is right.
+     */
+    const storeCode = strip(store);
+    const css = read('src/index.css');
+
+    /*
+     * Matching on an apply*() NAME was too brittle — compactMode is applied by
+     * applyCompact(), not applyCompactMode(), so the rule reported a live
+     * setting as dead. Follow the data attribute instead: the store writes
+     * `data-<x>` and CSS must actually select on it. That proves the setting
+     * reaches the screen rather than proving a function exists.
+     */
+    const appliedInStore = (key) => {
+      const attrs = [...storeCode.matchAll(/setAttribute\('(data-[a-z-]+)'/g)].map((m) => m[1]);
+      const lower = key.toLowerCase();
+      return attrs.some(
+        (attr) => lower.startsWith(attr.replace('data-', '')) && css.includes(`[${attr}=`)
+      );
+    };
+
+    const dead = mustBeUsed.filter((key) => {
+      if (!new RegExp(`\\b${key}\\b`).test(store)) return false; // not a setting at all
+      if (appliedInStore(key)) return false;
+      return !new RegExp(`\\b${key}\\b`).test(consumers);
+    });
+
+    t(
+      `every stored preference is read somewhere outside Settings${dead.length ? ` — dead: ${dead.join(', ')}` : ''}`,
+      dead.length === 0
+    );
+
+    /*
+     * testnetMode specifically must not come back as a switch. Its copy told
+     * users their money was not real. If it is ever rebuilt it needs actual
+     * testnet RPCs and routers, not a boolean.
+     */
+    t(
+      'the testnet switch is not rendered',
+      !/settings\.testnet['"]/.test(strip(settingsPage))
+    );
+
+    // And expert mode must reach the swap flow, not just exist.
+    t(
+      'expert mode is consulted before the review step',
+      /expertMode/.test(strip(read('src/pages/Swap.jsx')))
+    );
+  }
+
   return rows;
 }

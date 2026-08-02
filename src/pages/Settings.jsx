@@ -517,12 +517,15 @@ export default function Settings() {
               </select>
             }
           />
-          <Row
-            icon={IconKey}
-            label={t('settings.txConfirm')}
-            sub={t('settings.txConfirmSub')}
-            right={<Switch on={s.txConfirmations} onChange={() => s.toggle('txConfirmations')} />}
-          />
+          {/*
+            "Confirm every transaction" was removed rather than wired.
+
+            It was dead — txConfirmations was read nowhere — and it is also the
+            exact inverse of Expert mode, which now really does control whether
+            the review step is skipped. Keeping both would be two switches
+            fighting over one behaviour, and the losing one would look broken.
+            One control, and it works.
+          */}
         </div>
         {bioErr && <p className="notice notice-danger" style={{ marginTop: 8 }}>{t(`settings.bioErr.${bioErr}`)}</p>}
         <p className="notice" style={{ marginTop: 10 }}>{t('settings.securityScope')}</p>
@@ -532,20 +535,41 @@ export default function Settings() {
       <motion.section variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.networks')}</p>
         <div className="set-group">
-          <Row
-            icon={IconGlobe}
-            label={t('settings.testnet')}
-            sub={s.testnetMode ? t('settings.testnetOn') : t('settings.testnetOff')}
-            right={<Switch on={s.testnetMode} onChange={() => s.toggle('testnetMode')} />}
-          />
+          {/*
+            THE TESTNET TOGGLE WAS REMOVED, NOT FIXED.
+
+            It rendered "Using test networks — funds are not real" while
+            `testnetMode` was read by nothing: every quote, every signature and
+            every swap stayed on mainnet with real money. A switch that tells
+            someone their funds are fake, while they are not, is the most
+            dangerous control this app could ship.
+
+            Building it properly means testnet RPCs, testnet router addresses
+            and testnet token lists for seven chains — real work, and worth
+            doing only if someone asks. Until then, showing nothing is honest
+            and showing the switch is not.
+          */}
           <Row
             icon={IconKey}
             label={t('settings.evmNetwork')}
             sub={t('settings.evmNetworkSub')}
             right={
               <select
-                value={s.evmChainId}
-                onChange={(e) => s.setEvmChain(e.target.value)}
+                value={wallet.chainId ?? s.evmChainId}
+                /*
+                 * Switches the LIVE chain, not just a stored number.
+                 *
+                 * This used to only call setEvmChain(), and nothing read
+                 * evmChainId — the Swap screen takes its chain from
+                 * wallet.chainId. So picking "Ethereum" here changed a value
+                 * in storage and left every swap on BNB Chain.
+                 */
+                onChange={async (e) => {
+                  const id = Number(e.target.value);
+                  s.setEvmChain(id);
+                  haptic?.('select');
+                  await wallet.switchChain?.(id);
+                }}
                 style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
               >
                 <option value={56}>BSC</option>
@@ -578,7 +602,6 @@ export default function Settings() {
             onClick={() => setRpcSheet(true)}
           />
         </div>
-        {s.testnetMode && <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('settings.testnetWarn')}</p>}
       </motion.section>
 
       {/* ---------------- sync ---------------- */}
