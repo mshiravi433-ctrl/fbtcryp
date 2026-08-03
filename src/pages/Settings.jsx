@@ -47,6 +47,7 @@ import {
   setNotifySettings,
   vibrate
 } from '../lib/notify';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
 import {
   IconBell,
   IconChevronRight,
@@ -629,7 +630,7 @@ export default function Settings() {
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.company')}</p>
         <div className="set-group">
           <Row icon={IconInfo} label={t('about.title')} onClick={() => navigate('/about')} />
-          <Row icon={IconMail} label={t('contact.title')} sub="fbtswap@gmail.com" onClick={() => navigate('/contact')} />
+          <Row icon={IconMail} label={t('contact.title')} sub={SUPPORT_EMAIL} onClick={() => navigate('/contact')} />
           {/*
             Support goes to email, not Telegram - the owner's choice, and the
             more durable channel: an email address does not depend on an app
@@ -641,7 +642,7 @@ export default function Settings() {
             sub={t('settings.supportSub')}
             onClick={() => {
               haptic?.('light');
-              window.location.href = 'mailto:fbtswap@gmail.com';
+              window.location.href = SUPPORT_MAILTO;
             }}
           />
           <Row icon={IconDoc} label={t('settings.terms')} onClick={() => navigate('/legal/terms')} />

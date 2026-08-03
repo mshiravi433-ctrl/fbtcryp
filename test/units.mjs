@@ -20,6 +20,7 @@ import {
 } from '../src/lib/referral.js';
 import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
@@ -1453,6 +1454,64 @@ export default function run() {
 
     // A link with no message must still be shareable.
     t('an empty message still produces links', shareTargets(url).every((x) => x.href.length > 10));
+  }
+
+  /* ------------------- the support address, in one place ---------------- */
+  /*
+   * Cafe Bazaar rejected our submission partly because the contact address is
+   * a Gmail account; they want one on our own domain. That address appears in
+   * SIXTEEN files — three locale bundles, four screens, the AI system prompt,
+   * index.html, the LICENSE, four docs and a test.
+   *
+   * Changing sixteen files by hand is fifteen chances to miss one, and a
+   * support address that is stale on one screen is worse than a missing one:
+   * the user writes into a void and concludes the app was abandoned.
+   *
+   * So it is centralised and read from an env var, and the twelve translated
+   * bundles are rewritten at render time by an i18next post-processor rather
+   * than edited — editing translated safety copy in languages nobody here can
+   * proofread is the one thing worth refusing to do.
+   */
+  {
+    t('there is a support address', /@/.test(SUPPORT_EMAIL));
+    t('the mailto form is derived, not duplicated', SUPPORT_MAILTO === `mailto:${SUPPORT_EMAIL}`);
+
+    /*
+     * Today the configured address equals the one baked into the bundles, so
+     * the rewrite must be a NO-OP. If this ever fails, every translated string
+     * is being needlessly rewritten on every render.
+     */
+    const sample = `Email us at ${LEGACY_EMAIL_IN_LOCALES}, or visit the office.`;
+    if (SUPPORT_EMAIL === LEGACY_EMAIL_IN_LOCALES) {
+      t('the rewrite costs nothing while the address is unchanged', withContactEmail(sample) === sample);
+    }
+
+    /*
+     * And it must actually work when they differ. Proven by calling the real
+     * function with a real replacement rather than trusting the branch —
+     * mid-sentence is the hard case, and it is the shape every locale uses.
+     */
+    const swapped = sample.split(LEGACY_EMAIL_IN_LOCALES).join('info@lawpoetics.ir');
+    t(
+      'a changed address is rewritten mid-sentence',
+      swapped === 'Email us at info@lawpoetics.ir, or visit the office.'
+    );
+
+    /*
+     * Non-strings must pass through untouched. i18next hands the post-processor
+     * whatever t() returned, and `returnObjects` or a missing key can make that
+     * an object or undefined — throwing there would blank the whole screen.
+     */
+    t('objects pass through the rewriter', withContactEmail(undefined) === undefined);
+    t('numbers pass through the rewriter', withContactEmail(42) === 42);
+
+    /*
+     * The legacy constant is the needle we search for in the bundles, not a
+     * setting. If someone "helpfully" points it at the new address, the
+     * rewrite silently stops finding anything and every locale keeps showing
+     * the old address forever.
+     */
+    t('the legacy needle still matches the bundles', LEGACY_EMAIL_IN_LOCALES === 'fbtswap@gmail.com');
   }
 
   return rows;

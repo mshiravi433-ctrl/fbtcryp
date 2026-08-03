@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import { LANGUAGES, RTL_LANGS, SUPPORTED } from './languages';
 import { feePercentString, toEasternDigits } from '../lib/feeBps';
+import { withContactEmail } from '../lib/contact';
 
 export { LANGUAGES, RTL_LANGS, SUPPORTED };
 
@@ -146,8 +147,36 @@ function localisedFee(lang) {
   return plain;
 }
 
-i18n.use(initReactI18next).init({
+/**
+ * SUPPORT ADDRESS POST-PROCESSOR
+ * ---------------------------------------------------------------------------
+ * Cafe Bazaar rejected the submission partly because our contact address is a
+ * Gmail account; they want one on our own domain. That address is embedded
+ * MID-SENTENCE in twelve locale bundles ("Email us at X, or visit the office…"),
+ * so changing it means editing translated copy — including safety and legal
+ * copy — in languages nobody here can proofread.
+ *
+ * A post-processor does it at render time instead. One place, every string,
+ * every language, no translator needed, and a locale bundle that is never
+ * updated still shows the right address.
+ *
+ * It is a plain string swap rather than a regex: an email contains '.' and can
+ * contain '+', both regex metacharacters, and building a pattern out of a
+ * configurable value is how injection bugs begin.
+ *
+ * Costs nothing today — `withContactEmail` returns the input unchanged while
+ * the configured address still equals the one baked into the bundles.
+ */
+const contactEmailPostProcessor = {
+  type: 'postProcessor',
+  name: 'contactEmail',
+  process: (value) => withContactEmail(value)
+};
+
+i18n.use(contactEmailPostProcessor).use(initReactI18next).init({
   resources,
+  // Runs on every t() result. Listed globally so no call site has to remember.
+  postProcess: ['contactEmail'],
   // Starts on English; the detected language is swapped in below as soon as
   // its chunk resolves. Naming it here would render every key as a miss.
   lng: 'en',

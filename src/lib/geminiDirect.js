@@ -26,6 +26,7 @@
  */
 
 import { feePercentString } from './feeBps';
+import { SUPPORT_EMAIL } from './contact';
 
 const KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || '';
 const MODEL =
@@ -189,13 +190,13 @@ const KB = `FBT Swap facts — answer only from these plus general crypto knowle
 - Swaps route via the KyberSwap aggregator across all DEXes on the chain.
 - Wallets: WalletConnect, browser wallets, or an in-app wallet with the seed AES-GCM encrypted on-device.
 - Lose your seed phrase and nobody, including FBT, can recover your funds.
-- Swap, Farm and P2P use real money. Only the Games use virtual points with no value.
+- Swap, Farm and P2P use real money. Points and rank are a usage score with no cash value and cannot be withdrawn.
 - Company: Fanos Bazaar Pishgam (FBT Iran), Khomeyni Shahr, Isfahan.
-- Support: email fbtswap@gmail.com (the only official contact channel).
+- Support: email ${SUPPORT_EMAIL} (the only official contact channel).
 - Not a bank or broker; gives no financial advice.
 
 RULES:
-- If you don't know, say so and point to Telegram support.
+- If you don't know, say so and point the user to the support email above.
 - Never invent features, fees or guarantees.
 - If the user mentions their seed phrase, warn them never to share it.
 - Under 130 words.`;

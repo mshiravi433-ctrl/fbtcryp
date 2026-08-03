@@ -36,6 +36,13 @@ jobs:
           # because both look correct in isolation.
           VITE_FEE_BPS: ${{ vars.VITE_FEE_BPS }}
           VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          # The support address. Cafe Bazaar requires one on our own domain
+          # rather than a Gmail account, so this will change - and if it is
+          # not listed here, the WEBSITE would show the new address while the
+          # APK kept showing the old one. A support address that is wrong on
+          # one platform is worse than a missing one: the user writes into a
+          # void and concludes the app is abandoned.
+          VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}
           VITE_FEE_RECIPIENT: ${{ vars.VITE_FEE_RECIPIENT }}
           # Solana referral account. Without it the APK still swaps on Solana
           # and collects NO fee — Jupiter ignores a referralFee with no

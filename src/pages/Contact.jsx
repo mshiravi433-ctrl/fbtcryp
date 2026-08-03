@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
 import {
   IconBuilding,
   IconInstagram,
@@ -53,9 +54,9 @@ const SOCIALS = [
   },
   {
     id: 'email',
-    url: 'mailto:fbtswap@gmail.com',
+    url: SUPPORT_MAILTO,
     grad: 'linear-gradient(135deg,var(--rgb-5),var(--rgb-6))',
-    handle: 'fbtswap@gmail.com'
+    handle: SUPPORT_EMAIL
   }
 ];
 /*
