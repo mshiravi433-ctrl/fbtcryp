@@ -340,10 +340,19 @@ export default function Earn() {
               <span className="pill pill-neutral">{referrals}</span>
             </div>
 
-            <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            {/*
+              `.btn-row`, not `.row` + `flex: 1`.
+
+              `.btn` carries `width: 100%`, which becomes the flex-basis of any
+              child that does not override it. So Copy (no flex declaration)
+              had a basis of the whole row while Share had a basis of 0 — the
+              bases overflowed, free space went negative, and `flex-grow` had
+              nothing to hand out. The button asking to expand was the one that
+              collapsed. See the .btn-row block in index.css.
+            */}
+            <div className="btn-row" style={{ marginTop: 10 }}>
               <button
                 className="btn btn-primary"
-                style={{ flex: 1 }}
                 onClick={() => {
                   share({ url: inviteUrl, text: t('earn.shareText') });
                   awardPoints('shareApp', POINT_VALUES.shareApp);
@@ -358,7 +367,7 @@ export default function Earn() {
                 it into a group they already have open.
               */}
               <button
-                className="btn btn-ghost"
+                className="btn btn-ghost btn-row-minor"
                 onClick={async () => {
                   const ok = await copyText(inviteUrl);
                   useAppStore.getState().notify(ok ? 'linkCopied' : 'copyFailed', ok ? 'success' : 'error');

@@ -2255,5 +2255,198 @@ export default function run() {
     t('there are order error codes to check', codes.size >= 10);
   }
 
+  /* ---- 31. a button row must not mix flex:1 with a bare .btn ------------- */
+  /*
+   * REPORTED: «دکمه اشتراک‌گذاری و کپی متناسب نیست و دکمه اشتراک‌گذاری خیلی
+   * کوچک و جمع شده است» — the Share button was a sliver next to Copy.
+   *
+   * `.btn` sets `width: 100%`. For a flex item, `flex-basis: auto` RESOLVES TO
+   * that width — so a button with no flex declaration has a basis of the whole
+   * row and `flex-grow: 0`, while its neighbour with `flex: 1` has a basis of
+   * 0. The bases already exceed the container, so free space is negative and
+   * `flex-grow` has nothing to distribute: the item that asked to expand stays
+   * at 0 and collapses to min-content.
+   *
+   * The button that says "take the space" is the one that gets squeezed. That
+   * is a trap rather than a typo, and the twelve locales make it worse — a
+   * label that fits in English may not in Persian or German.
+   *
+   * `.btn-row` sets `flex: 1 1 0` on every child, so the split is even no
+   * matter what the labels say. This check fails any row that mixes the two
+   * styles, which is the only combination that misbehaves. (Rows where NEITHER
+   * button declares flex are fine: equal bases shrink equally.)
+   */
+  {
+    /*
+     * FINDING THE BLOCK PROPERLY.
+     *
+     * The first version of this check matched `{0,900}` characters up to the
+     * next `</div>`. The invite row is 1126 characters long — comments and
+     * handlers make these blocks big — so it fell outside the window and the
+     * check reported PASS while the bug was live. Verified by sabotage: the
+     * broken markup was restored and this still went green.
+     *
+     * That is the brittle-literal trap this suite has been caught by before:
+     * a check that silently stops matching keeps "passing" forever. So the
+     * extent of the row is now found by BALANCING the div tags instead of
+     * guessing a length. No cap, nothing to outgrow.
+     */
+    const rowBlocks = (src) => {
+      const out = [];
+      for (const m of src.matchAll(/<div className="row"[^>]*>/g)) {
+        let depth = 1;
+        let i = m.index + m[0].length;
+        const tag = /<div\b|<\/div>/g;
+        tag.lastIndex = i;
+        let hit;
+        while (depth > 0 && (hit = tag.exec(src))) {
+          depth += hit[0] === '</div>' ? -1 : 1;
+        }
+        // Unbalanced (JSX inside a ternary, etc.) — skip rather than guess.
+        if (depth !== 0) continue;
+        out.push({ body: src.slice(i, tag.lastIndex - 6), index: m.index });
+      }
+      return out;
+    };
+
+    const offenders = [];
+    for (const f of files) {
+      if (!/\.jsx$/.test(f)) continue;
+      const src = read(f);
+      for (const block of rowBlocks(src)) {
+        const btns = [...block.body.matchAll(/(className="btn[^"]*")([^>]*?)>/g)];
+        if (btns.length < 2) continue;
+
+        /*
+         * ONLY FULL-WIDTH BUTTONS ARE AFFECTED.
+         *
+         * The whole mechanism is `.btn { width: 100% }` becoming the
+         * flex-basis. `.btn-sm` overrides that with `width: auto`, so its
+         * basis is its own content — bases stay small, free space stays
+         * positive, and `flex-grow` works exactly as written.
+         *
+         * The first version of this check flagged the Orders action row, which
+         * mixes `flex: 1` with bare `.btn-sm` buttons and is CORRECT: the
+         * primary "swap now" is meant to take the space while pause/cancel
+         * stay at their natural size. Failing that would have pushed me to
+         * "fix" working markup, so the check now tests the actual cause rather
+         * than the surface pattern.
+         */
+        const fullWidth = btns.filter((m) => !/\bbtn-sm\b/.test(m[1]));
+        if (fullWidth.length < 2) continue;
+
+        const flexed = fullWidth.map((m) => /flex:\s*1/.test(m[2]));
+        // Mixed is the broken case.
+        if (flexed.some(Boolean) && !flexed.every(Boolean)) {
+          offenders.push(`${f}:${src.slice(0, block.index).split('\n').length}`);
+        }
+      }
+    }
+    t(
+      `no button row mixes flex:1 with a full-width .btn${offenders.length ? ` — ${offenders.join(', ')}` : ''}`,
+      offenders.length === 0
+    );
+
+    // And the class that makes equal-width the default must exist and neutralise
+    // the width:100% that causes all of this.
+    const css = read('src/index.css');
+    const row = css.slice(css.indexOf('.btn-row > .btn {'), css.indexOf('.btn-row > .btn {') + 400);
+    t('there is a .btn-row helper', css.includes('.btn-row {'));
+    t('.btn-row zeroes the flex-basis so width:100% stops mattering', /flex:\s*1 1 0/.test(row));
+    t('.btn-row overrides the inherited full width', /width:\s*auto/.test(row));
+    t('the invite row uses it', /className="btn-row"/.test(read('src/pages/Earn.jsx')));
+  }
+
+  /* ---- 32. the QR scanner must not restart on every parent render -------- */
+  /*
+   * REPORTED: «گاهی تصویر طوسی نشون میده» — the camera preview intermittently
+   * showed a flat grey rectangle.
+   *
+   * The camera effect listed `onClose` and `onResult` in its dependency array,
+   * and BOTH call sites pass inline arrow functions — a new identity on every
+   * render. Its cleanup calls `stop()`, which sets `video.srcObject = null`
+   * and stops the track, so the camera was torn down and reopened on every
+   * parent re-render. A <video> with no source paints its background: grey.
+   *
+   * WHY IT WAS INTERMITTENT: WalletContext refreshes the balance on a 30s
+   * interval, and each refresh re-renders every consumer including SendSheet.
+   * Scan quickly and you never saw it; hesitate and the camera died under you.
+   * On some Android devices the reopen fails outright because the previous
+   * track has not released yet — the "it never comes back" version.
+   *
+   * Scanning is the safety feature that stops people hand-typing a 42-char
+   * address they cannot verify, so a scanner people stop trusting costs real
+   * money.
+   */
+  {
+    const src = read('src/components/QrScanner.jsx');
+    const strip = (x) =>
+      x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const code = strip(src);
+
+    // The dependency array must be `open` alone.
+    const dep = /\}, \[([^\]]*)\]\);/g;
+    const arrays = [...code.matchAll(dep)].map((m) => m[1].trim());
+    t(
+      'the camera effect depends on `open` only',
+      arrays.includes('open') && !arrays.some((a) => /onClose|onResult/.test(a))
+    );
+    // …because the callbacks are read through refs instead.
+    t('the callbacks are held in refs', /onResultRef\.current/.test(code) && /onCloseRef\.current/.test(code));
+
+    /*
+     * Second half: even a legitimate cold start takes a second or two, and an
+     * unexplained grey box during it is indistinguishable from a failure.
+     */
+    t('there is a visible starting state', /setPhase\('starting'\)/.test(code));
+    t('the preview waits for real pixels, not just play()', /readyState/.test(code));
+    t('the placeholder covers the empty video', /qr-warming/.test(code));
+    t('the starting state has a message', hasKey(en, 'scan.starting'));
+    /*
+     * The reticle must be hidden until the camera is live: brackets floating
+     * over a blank box imply a running camera when there is none.
+     */
+    t("the reticle waits for the camera", /phase === 'live' && <div className="qr-reticle"/.test(code));
+  }
+
+  /* ---- 33. the quoted Solana fee must match the charged one -------------- */
+  /*
+   * REAL DISCREPANCY: the Solana screen unconditionally announced a 0.70%
+   * platform fee, but the fee is only REQUESTED when a Jupiter referral
+   * account is configured — and it deliberately is not (setting one up costs
+   * SOL, and with no users there is nothing to collect). So every visitor was
+   * told they would pay 0.70% while paying nothing.
+   *
+   * Overstating a fee is the safer direction to be wrong in, but "the fee I
+   * was quoted is not the fee I paid" is precisely the discrepancy that makes
+   * someone distrust a swap they cannot reverse.
+   *
+   * The rule: the SAME flag that decides whether to request the fee must
+   * decide whether to announce it, so the two cannot drift apart again.
+   */
+  {
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const page = strip(read('src/pages/SolanaSwap.jsx'));
+    const lib = strip(read('src/lib/solana.js'));
+
+    t(
+      'the fee notice is gated on the same readiness flag as the fee itself',
+      /solanaFeeReady\(\)/.test(page) && /if \(solanaFeeReady\(\)\)/.test(lib)
+    );
+    t('there is honest copy for the no-fee case', hasKey(en, 'solana.feeNoneNotice'));
+    t('the no-fee copy is actually used', /solana\.feeNoneNotice/.test(page));
+    /*
+     * And the server must behave the same way. It reads its own env var rather
+     * than trusting the client, so a mismatch there would charge a fee the UI
+     * never mentioned — the dangerous direction.
+     */
+    const server = strip(read('server/solana.js'));
+    t(
+      'the server also skips the fee without a referral account',
+      /BASE58\.test\(ref\)/.test(server)
+    );
+  }
+
   return rows;
 }

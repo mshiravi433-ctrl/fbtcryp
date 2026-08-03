@@ -205,6 +205,24 @@ console.log('\n▸ probing notifications with no web Notification API…');
   report('native notifications', await runNative());
 }
 
+/*
+ * QR CAMERA LIFECYCLE.
+ *
+ * Wiring check #32 proves the dependency array was written correctly. It
+ * cannot prove the camera stays alive across a re-render — that is a runtime
+ * property. This drives the real component with an instrumented getUserMedia
+ * and counts opens and stops.
+ */
+console.log('\n▸ checking the QR camera survives re-renders…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.qr.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runQr } = await import('./.out/qr/qr-camera-probe.js');
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  report('qr camera', await runQr(host));
+}
+
 console.log('\n▸ checking lazy locale loading…');
 {
   npx(['vite', 'build', '-c', 'test/vite.i18n.mjs', '--logLevel', 'error']);

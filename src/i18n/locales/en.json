@@ -1554,7 +1554,8 @@
       "NO_CAMERA": "No camera was found on this device. Paste the address instead.",
       "NOT_AN_ADDRESS": "That QR code is not a wallet address. Scan the code shown by the wallet or exchange you are sending to.",
       "FAILED": "The camera could not be started. Close the sheet and try again, or paste the address."
-    }
+    },
+    "starting": "Starting the camera…"
   },
   "send": {
     "title": "Send crypto",
@@ -1883,7 +1884,8 @@
     "openInWallet": "On a phone, a Solana wallet connects only from inside the wallet's own browser — browser extensions do not exist on mobile. Tap a button below and this page reopens there.",
     "openPhantom": "Open in Phantom",
     "openSolflare": "Open in Solflare",
-    "openInWalletHint": "It is the same site and the same account; nothing is lost. If the wallet app is not installed, the button will offer to install it first."
+    "openInWalletHint": "It is the same site and the same account; nothing is lost. If the wallet app is not installed, the button will offer to install it first.",
+    "feeNoneNotice": "No platform fee on Solana swaps right now — you pay only the Solana network fee and whatever the route costs. If that changes, the exact rate will be shown here before you sign."
   },
   "buy": {
     "title": "Buy & sell",

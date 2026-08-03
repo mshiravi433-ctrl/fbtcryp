@@ -15,6 +15,7 @@ import {
   isSolanaAddress,
   orderErrorKey,
   referralFeeBps,
+  solanaFeeReady,
   toBaseUnits
 } from '../lib/solana';
 import {
@@ -529,7 +530,27 @@ export default function SolanaSwap() {
             afterwards is our accounting. netFeeBps() still exists for our own
             reporting.
           */}
-          {t('solana.feeNotice', { fee: referralFeeBps() / 100 })}
+          {/*
+            ─── SAY WHAT IS ACTUALLY CHARGED ──────────────────────────────────
+            This unconditionally announced a 0.70% platform fee. But the fee is
+            only requested when a Jupiter referral account is configured (see
+            `solanaFeeReady()`), and it is deliberately NOT configured yet —
+            setting one up costs SOL the wallet does not have, and with no
+            users there is nothing to collect anyway.
+
+            So the screen was telling every visitor they would be charged
+            0.70% while charging them nothing. Overstating a fee is the safer
+            direction to be wrong in, but it is still wrong, and "the fee I was
+            quoted is not the fee I paid" is exactly the discrepancy that makes
+            someone distrust a swap they cannot reverse.
+
+            When the referral account is set, this switches back on its own —
+            the same flag that decides whether to REQUEST the fee decides
+            whether to ANNOUNCE it, so the two can never disagree again.
+          */}
+          {solanaFeeReady()
+            ? t('solana.feeNotice', { fee: referralFeeBps() / 100 })
+            : t('solana.feeNoneNotice')}
         </p>
         {/*
           THE FEE-NOT-CONFIGURED WARNING USED TO RENDER HERE. It is gone.

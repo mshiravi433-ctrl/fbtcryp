@@ -531,6 +531,69 @@ body {
 .btn-success { background: linear-gradient(90deg, #00ff9d, #00e5ff); color: #00110a; }
 .btn-sm { padding: 9px 14px; width: auto; font-size: 12.5px; border-radius: 11px; }
 
+/* ---------------------------------------------------------------------------
+   BUTTON ROWS  —  .btn-row
+
+   Reported: «دکمه اشتراک‌گذاری و کپی متناسب نیست و دکمه اشتراک‌گذاری خیلی
+   کوچک و جمع شده است».
+
+   ─── WHY THE ONE WITH flex:1 WAS THE SMALL ONE ───────────────────────────
+   `.btn` sets `width: 100%`. For a flex item, `flex-basis: auto` resolves to
+   the item's `width` — so a button with no flex declaration has a basis of
+   **the full row width**, and `flex-grow: 0`.
+
+   Put two of them side by side:
+
+     Share   flex: 1        → basis   0px, grow 1
+     Copy    (no flex)      → basis 340px, grow 0
+
+   The bases already add up to more than the container, so free space is
+   NEGATIVE — there is nothing for `flex-grow` to distribute. Share stays at
+   its 0 basis and collapses to min-content (its longest word), while Copy
+   keeps almost the entire row. The button that asked to expand is the one
+   that got squeezed, which is why it looked "خیلی کوچک و جمع شده".
+
+   This is a trap, not a typo: `flex: 1` reads like "take the space" and does
+   the opposite here. Six other rows in the app avoid it only because someone
+   remembered to write `flex: 1` on BOTH children.
+
+   `.btn-row` makes equal width the default. `flex-basis: 0` on every child
+   removes `width: 100%` from the calculation entirely, so the split is even
+   regardless of how long the labels are in any of the twelve languages —
+   which matters, because "اشتراک" and "Share" and "Compartir" are very
+   different widths.
+   --------------------------------------------------------------------------- */
+.btn-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch; /* equal HEIGHT too — a taller neighbour looks misaligned */
+}
+
+.btn-row > .btn {
+  flex: 1 1 0;
+  width: auto;
+  /* Without this a long label in Persian or German overflows the button
+     instead of shrinking it. */
+  min-width: 0;
+  /* Labels are short; wrapping one onto two lines is what made the squeezed
+     button look broken rather than merely narrow. */
+  white-space: nowrap;
+}
+
+/*
+ * A secondary action can be given `.btn-row-minor` to take less room without
+ * collapsing — two thirds of its neighbour, never less than a tap target.
+ */
+.btn-row > .btn-row-minor { flex: 0 1 auto; min-width: 96px; }
+
+/* Very narrow phones: two 14px-padded buttons plus a gap do not fit on a
+   320px screen once a language has a long word, so stack them. Full width
+   each is better than two cramped ones. */
+@media (max-width: 340px) {
+  .btn-row { flex-direction: column; }
+  .btn-row > .btn { white-space: normal; }
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -2878,6 +2941,58 @@ input, select, textarea { font-size: 16px !important; }
      harder to detect. */
   object-fit: cover;
   display: block;
+}
+
+/* ---------------------------------------------------------------------------
+   "THE PICTURE IS SOMETIMES GREY"
+
+   A <video> element with no frames yet paints its own background. Combined
+   with a scanning reticle drawn on top, that flat rectangle is impossible to
+   tell apart from a camera that has failed.
+
+   The real fault was the camera being torn down and restarted on every parent
+   re-render (see the long note in QrScanner.jsx — WalletContext polls the
+   balance every 30s, and each poll re-rendered the sheet). That is fixed. This
+   is the second half: even a legitimate cold start takes a second or two, and
+   that second must say "starting", not show an unexplained grey box.
+   --------------------------------------------------------------------------- */
+.qr-warming {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  /* Slightly lighter than the frame's #000 so it reads as a deliberate
+     surface rather than a dead element. */
+  background: #0a0c12;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 0 24px;
+}
+
+.qr-spin {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--rgb-1), var(--rgb-2), var(--rgb-3), var(--rgb-1));
+  animation: qr-spin 1s linear infinite;
+  position: relative;
+}
+.qr-spin::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #0a0c12;
+}
+
+@keyframes qr-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .qr-spin { animation: none; }
 }
 
 /*

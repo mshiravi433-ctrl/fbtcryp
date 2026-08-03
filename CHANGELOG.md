@@ -1,5 +1,92 @@
 # Changelog
 
+## 1.13.1 — versionCode 35
+
+### The QR scanner's grey picture — found, and it was not the camera
+
+Reported: «گاهی تصویر طوسی نشون میده».
+
+The camera effect listed `onClose` and `onResult` in its dependency array, and
+**both call sites pass inline arrow functions**:
+
+```jsx
+<QrScanner onClose={() => setScanOpen(false)} onResult={(p) => …} />
+```
+
+A new arrow function is a new identity on every render. So the effect re-ran on
+every parent re-render — and its cleanup calls `stop()`, which sets
+`video.srcObject = null` and stops the camera track. A `<video>` with no source
+paints its own background: **grey**.
+
+**Why it was intermittent, which is what made it hard to pin down:**
+WalletContext refreshes the balance on a `setInterval(…, 30000)`, and every
+refresh re-renders each consumer — SendSheet included. So the camera was torn
+down and rebuilt roughly **every 30 seconds**. Scan quickly and you never saw
+it; hesitate over the code and the camera died under you. On some Android
+devices the reopen fails outright because the previous track has not released
+yet — that is the "sometimes it never comes back" version of the same fault.
+
+The callbacks now live in refs and the effect depends on `open` alone, so the
+camera starts once and stops once.
+
+A new probe suite drives the real component with an instrumented
+`getUserMedia` and counts hardware opens. With the old dependency array it
+measures **6 opens and 5 stops** across five re-renders; it now measures **1
+and 0**. A static check on the dependency array could not have proved this —
+it proves the array was *written* correctly, not that the camera survives.
+
+Second half of the fix: even a legitimate cold start takes a second or two, and
+an unexplained grey box during it is indistinguishable from a failure. There is
+now a spinner and «در حال روشن کردن دوربین…» until the first real frame
+arrives (`readyState >= 2` — `play()` resolves before any pixels exist), and
+the reticle stays hidden until then, because brackets over a blank box imply a
+running camera when there is none.
+
+### The Share button that collapsed next to Copy
+
+Reported: «دکمه اشتراک‌گذاری و کپی متناسب نیست و دکمه اشتراک‌گذاری خیلی کوچک و
+جمع شده است».
+
+`.btn` sets `width: 100%`. For a flex item, **`flex-basis: auto` resolves to
+that width** — so a button with no flex declaration has a basis of the entire
+row and `flex-grow: 0`, while its neighbour with `flex: 1` has a basis of `0`:
+
+```
+Share   flex: 1     → basis   0px, grow 1
+Copy    (no flex)   → basis 340px, grow 0
+```
+
+The bases already exceed the container, so free space is **negative** and
+`flex-grow` has nothing to distribute. Share stays at 0 and collapses to its
+longest word; Copy keeps almost the whole row. **The button that asked to
+expand is the one that got squeezed.**
+
+New `.btn-row` helper sets `flex: 1 1 0` and `width: auto` on every child, so
+the split is even regardless of label length — which matters across twelve
+languages, where "Share", "اشتراک" and "Compartir" are very different widths.
+Below 340px they stack instead of cramming.
+
+Wiring check #31 fails any row that mixes the two styles. Its **first version
+was itself buggy** — it capped the search at 900 characters and the invite row
+is 1126, so it reported PASS while the bug was live. It now balances the `div`
+tags instead of guessing a length, and correctly ignores `.btn-sm` rows
+(`.btn-sm` sets `width: auto`, so the trap does not apply — the Orders action
+row mixes the two styles *correctly*).
+
+### Solana: the fee we quoted was not the fee we charged
+
+The Solana screen unconditionally announced a **0.70% platform fee**. But the
+fee is only requested when a Jupiter referral account is configured, and it is
+deliberately not — setting one up costs SOL, and with no users there is nothing
+to collect. So every visitor was told they would pay 0.70% while paying
+**nothing**.
+
+Overstating a fee is the safer direction to be wrong in, but "the fee I was
+quoted is not the fee I paid" is exactly the discrepancy that makes someone
+distrust a swap they cannot reverse. The notice is now gated on the *same*
+flag that decides whether to request the fee, so the two cannot drift apart.
+When a referral account is set, the 0.70% copy returns on its own.
+
 ## 1.13.0 — versionCode 34
 
 ### The selection that was invisible

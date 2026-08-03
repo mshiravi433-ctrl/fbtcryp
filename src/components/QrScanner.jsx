@@ -91,6 +91,57 @@ export default function QrScanner({ open, onClose, onResult }) {
   const streamRef = useRef(null);
   const rafRef = useRef(0);
   const [error, setError] = useState(null);
+  /*
+   * 'idle' → 'starting' (permission prompt / camera warm-up) → 'live'.
+   *
+   * Without this the <video> is on screen from the first frame with nothing in
+   * it, which paints as a flat grey rectangle. On a fast phone that is 200ms
+   * and nobody notices; on a cold camera it is two or three seconds of a grey
+   * box with no explanation, which is indistinguishable from a broken scanner.
+   */
+  const [phase, setPhase] = useState('idle');
+
+  /*
+   * ─── THE GREY-CAMERA BUG ──────────────────────────────────────────────────
+   * Reported: «گاهی تصویر طوسی نشون میده».
+   *
+   * The effect below listed `onClose` and `onResult` in its dependency array,
+   * and BOTH call sites pass inline arrow functions:
+   *
+   *     <QrScanner onClose={() => setScanOpen(false)}
+   *                onResult={(parsed) => { … }} />
+   *
+   * A new arrow function is a new object identity on every render. So the
+   * effect re-ran on EVERY parent re-render — and its cleanup calls `stop()`,
+   * which sets `video.srcObject = null` and stops the camera track. The camera
+   * was then reopened from scratch, and during that gap the <video> element
+   * has no source and paints its background: a grey rectangle.
+   *
+   * WHY IT WAS INTERMITTENT — the part that makes this hard to reproduce.
+   * WalletContext polls the balance on a `setInterval(…, 30000)`, and each
+   * poll sets state that re-renders every consumer, SendSheet included. So the
+   * scanner was being torn down and rebuilt roughly every 30 seconds, plus
+   * whenever anything else in the tree changed. If you scanned quickly you
+   * never saw it. If you fumbled with the code for a moment, the camera died
+   * under you.
+   *
+   * Restarting a camera is also not instant — getUserMedia re-negotiates with
+   * the hardware — so each cycle was a visible half-second of grey, and on
+   * some Android devices the second getUserMedia fails outright because the
+   * first track has not fully released yet. That is the "sometimes it just
+   * never comes back" version of the same fault.
+   *
+   * FIX: the callbacks go in refs. The effect now depends only on `open`, so
+   * the camera starts once when the sheet opens and stops once when it closes.
+   * A ref is the correct tool here precisely because we want the LATEST
+   * callback without treating it as a reason to restart the hardware.
+   */
+  const onCloseRef = useRef(onClose);
+  const onResultRef = useRef(onResult);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onResultRef.current = onResult;
+  });
 
   /** Release the camera. Safe to call repeatedly. */
   const stop = useCallback(() => {
@@ -105,9 +156,12 @@ export default function QrScanner({ open, onClose, onResult }) {
     if (!open) return undefined;
 
     let cancelled = false;
+    setError(null);
+    setPhase('starting');
 
     if (!scannerSupported()) {
       setError('UNSUPPORTED');
+      setPhase('idle');
       return undefined;
     }
 
@@ -129,6 +183,26 @@ export default function QrScanner({ open, onClose, onResult }) {
         video.setAttribute('playsinline', 'true');
         video.muted = true;
         await video.play();
+
+        /*
+         * Wait for real pixels before declaring the camera live.
+         *
+         * `play()` resolves as soon as playback is *scheduled*, not when a
+         * frame exists — `videoWidth` is still 0 at that point. Hiding the
+         * placeholder here would swap one grey box for another. readyState 2
+         * (HAVE_CURRENT_DATA) is the first moment there is something to show.
+         */
+        if (video.readyState >= 2) {
+          if (!cancelled) setPhase('live');
+        } else {
+          video.addEventListener(
+            'loadeddata',
+            () => {
+              if (!cancelled) setPhase('live');
+            },
+            { once: true }
+          );
+        }
 
         /*
          * Native detector when the platform has one, jsQR otherwise. Chrome on
@@ -173,8 +247,8 @@ export default function QrScanner({ open, onClose, onResult }) {
               const parsed = parseScanned(value);
               if (parsed) {
                 stop();
-                onResult?.(parsed, value);
-                onClose?.();
+                onResultRef.current?.(parsed, value);
+                onCloseRef.current?.();
                 return;
               }
               // Scanned something real, but not an address. Say so instead of
@@ -198,9 +272,18 @@ export default function QrScanner({ open, onClose, onResult }) {
 
     return () => {
       cancelled = true;
+      setPhase('idle');
       stop();
     };
-  }, [open, onClose, onResult, stop]);
+    /*
+     * DEPENDENCIES: `open` only. `stop` is a useCallback with an empty dep
+     * array so it is already stable, and the two callbacks are read through
+     * refs above — see the long note at the top of this component for why
+     * including them was the bug rather than the correctness fix it looks
+     * like.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Belt and braces: also release on unmount, however that happens.
   useEffect(() => stop, [stop]);
@@ -215,9 +298,27 @@ export default function QrScanner({ open, onClose, onResult }) {
         </div>
       ) : (
         <>
-          <div className="qr-frame">
+          <div className="qr-frame" data-phase={phase}>
             <video ref={videoRef} className="qr-video" playsInline muted />
-            <div className="qr-reticle" aria-hidden="true" />
+
+            {/*
+              THE GREY RECTANGLE, EXPLAINED.
+              A <video> with no frames yet paints its own background, and a
+              flat grey box with a scanning reticle on it looks exactly like a
+              broken camera. Until the first frame arrives this covers it with
+              a spinner and a sentence, so the wait reads as "starting" rather
+              than "failed" — the same reason the app boot screen exists.
+            */}
+            {phase !== 'live' && (
+              <div className="qr-warming">
+                <span className="qr-spin" aria-hidden="true" />
+                <span>{t('scan.starting')}</span>
+              </div>
+            )}
+
+            {/* Hidden until there is a picture to aim: brackets floating over
+                a blank box imply the camera is running when it is not. */}
+            {phase === 'live' && <div className="qr-reticle" aria-hidden="true" />}
           </div>
           <p className="faint" style={{ textAlign: 'center', marginTop: 10, lineHeight: 1.7 }}>
             {t('scan.hint')}
