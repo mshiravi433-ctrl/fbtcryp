@@ -21,6 +21,7 @@ import {
 import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
+import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
 import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
@@ -64,6 +65,7 @@ import enLocale from '../src/i18n/locales/en.json';
 import faLocale from '../src/i18n/locales/fa.json';
 import arLocale from '../src/i18n/locales/ar.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
+import { readFileSync } from 'node:fs';
 
 export default function run() {
   const rows = [];
@@ -1512,6 +1514,132 @@ export default function run() {
      * the old address forever.
      */
     t('the legacy needle still matches the bundles', LEGACY_EMAIL_IN_LOCALES === 'fbtswap@gmail.com');
+  }
+
+  /* --------------------- the Telegram channel poster -------------------- */
+  /*
+   * Free growth channel: X killed its free API tier in February 2026 and now
+   * charges $0.20 for a post containing a URL - every post we would send has
+   * our link in it. The Telegram Bot API is still free, so this is the one
+   * place automation genuinely costs nothing.
+   *
+   * The dangerous part is the AI commentary. A wrong price in a crypto channel
+   * destroys the trust we are trying to build, so the model is given the
+   * figures and asked for prose only, and anything it returns containing a
+   * number we did not supply is thrown away.
+   */
+  {
+    const g = { mcap: 3.42e12, mcapChange: -1.87, btcDominance: 54.312 };
+    const coins = [
+      { symbol: 'SOL', price: 182.4, change24h: 7.31 },
+      { symbol: 'BTC', price: 96432.1, change24h: -2.14 }
+    ];
+
+    /* ---- the anti-hallucination guard ---- */
+    const allowed = allowedNumbers({
+      mcapChange: -1.87,
+      btcDominance: 54.312,
+      coins: [{ symbol: 'SOL', price: 182.4, change24h: 7.31 }]
+    });
+
+    t(
+      'a sentence with no numbers is accepted',
+      !hasInventedNumber('Broad market softness with dominance holding steady.', allowed)
+    );
+    t(
+      'a sentence quoting a supplied figure is accepted',
+      !hasInventedNumber('Market cap fell 1.87% over the day.', allowed)
+    );
+    /*
+     * THE ONE THAT MATTERS. An invented price target is the single worst thing
+     * this feature could publish - it is both false and reads as advice.
+     */
+    t(
+      'an invented price target is rejected',
+      hasInventedNumber('Bitcoin is heading to $150000 next week.', allowed)
+    );
+    t(
+      'an invented statistic is rejected',
+      hasInventedNumber('Volumes rose 42% across major venues.', allowed)
+    );
+
+    /* ---- the post itself ---- */
+    const post = buildPost({
+      global: g,
+      coins,
+      comment: 'Dominance holding steady.',
+      appUrl: 'https://www.lawpoetics.ir'
+    });
+
+    t('the post carries the real market cap', post.includes('$3.42T'));
+    t('the post carries a real coin price', post.includes('$182.40'));
+    t('the post links to the app', post.includes('https://www.lawpoetics.ir'));
+    /*
+     * Non-negotiable. This channel exists to funnel people into a financial
+     * app; a market update with a link and no disclaimer is exactly what draws
+     * regulatory attention in our market.
+     */
+    t('the post says it is not advice', /not financial advice/i.test(post));
+    t('the post fits Telegram message limit', post.length < 4096);
+
+    /*
+     * Coin names and symbols come from a third-party API. An unescaped '&' or
+     * '<' makes Telegram reject the whole sendMessage with a 400 and the post
+     * silently never appears - a failure mode that looks like "the bot is
+     * broken" with nothing in the logs to explain it.
+     */
+    t('ampersands are escaped for Telegram HTML', esc('A&B') === 'A&amp;B');
+    t('angle brackets are escaped', esc('<b>x</b>') === '&lt;b&gt;x&lt;/b&gt;');
+    const hostile = buildPost({
+      global: g,
+      coins: [{ symbol: 'A&B<script>', price: 1, change24h: 0 }],
+      comment: null,
+      appUrl: 'https://x.test'
+    });
+    t('a hostile symbol cannot inject markup', !hostile.includes('<script>'));
+
+    /* A missing AI comment must not leave a dangling empty line or break. */
+    const plain = buildPost({ global: g, coins, comment: null, appUrl: 'https://x.test' });
+    t('the post works with no AI commentary', plain.includes('$3.42T') && !plain.includes('undefined'));
+
+    /* Absent data must render as a dash, never as "NaN" or "$0.00" - a
+       confident zero next to a real coin is worse than an obvious gap. */
+    const broken = buildPost({
+      global: { mcap: null, mcapChange: null, btcDominance: null },
+      coins: [{ symbol: 'X', price: null, change24h: null }],
+      comment: null,
+      appUrl: 'https://x.test'
+    });
+    t('missing figures render as a dash, not NaN', !/NaN/.test(broken));
+  }
+
+  /* ------------- the bot must not claim real trades are fake ------------ */
+  /*
+   * REAL BUG: /start told every new user "Everything runs on virtual NX
+   * credits." True when the app was only paper trading; false for a long time
+   * since - Swap moves real funds on eight networks.
+   *
+   * Telling someone their first trade is play money, immediately before
+   * handing them a button that opens a real exchange, is the most dangerous
+   * sentence in the product. Somebody could reasonably have believed they were
+   * practising with an irreversible on-chain transaction.
+   */
+  {
+    const bot = readFileSync('server/bot.js', 'utf8');
+    const strip = (src) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const code = strip(bot);
+
+    t('the bot no longer claims everything is virtual credits', !/virtual NX credits/.test(code));
+    t('the bot warns that swaps move real funds', /real funds/i.test(code));
+    t('the bot warns transactions are irreversible', /cannot be reversed/i.test(code));
+    // The scam-defence line is the part that was always right; keep it.
+    t('the bot still refuses deposits', /never takes deposits/i.test(code));
+    /*
+     * The arcade is compiled out of release builds, so advertising
+     * "provably-fair mini-games" points at a feature the user cannot find.
+     */
+    t('the bot does not advertise the removed arcade', !/mini-games/i.test(code));
   }
 
   return rows;

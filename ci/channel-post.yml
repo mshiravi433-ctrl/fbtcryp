@@ -1,0 +1,93 @@
+# ============================================================================
+# TELEGRAM CHANNEL AUTO-POSTER
+#
+# ⚠️  THIS FILE MUST BE COPIED BY HAND to .github/workflows/channel-post.yml
+#     GitHub blocks the agent token from writing anything under
+#     .github/workflows/, so it lives here and you paste it.
+#
+# WHY GITHUB ACTIONS AND NOT A SERVER
+# GitHub Actions minutes are UNLIMITED and free on public repositories, and
+# this repo is public. Each run takes well under a minute. So the whole thing
+# costs nothing, forever, with no server to keep alive.
+#
+# THREE THINGS ABOUT SCHEDULED WORKFLOWS THAT CATCH PEOPLE OUT
+#
+#  1. Times are UTC, always. Iran is UTC+3:30, so the three times below land
+#     at roughly 12:30, 17:30 and 22:30 Tehran time — morning-ish, after work,
+#     and evening. Adjust the UTC numbers, not a timezone field.
+#
+#  2. GitHub delays scheduled runs under load, commonly by 5-30 minutes, and
+#     the top of the hour is the most congested minute on the platform. The
+#     minutes below are deliberately odd (:07, :23, :41) to avoid the crush.
+#     A market post being 20 minutes late does not matter.
+#
+#  3. GitHub DISABLES scheduled workflows in a repo with no commits for 60
+#     days. If posting stops, that is the first thing to check — push any
+#     commit, or re-enable it in the Actions tab.
+#
+# The schedule only starts working once this file is on the DEFAULT branch
+# (main). A workflow on a feature branch never fires on schedule.
+# ============================================================================
+
+name: Telegram channel post
+
+on:
+  schedule:
+    # ~12:30 Tehran
+    - cron: '7 9 * * *'
+    # ~17:30 Tehran
+    - cron: '23 14 * * *'
+    # ~22:30 Tehran
+    - cron: '41 19 * * *'
+
+  # Always pair a schedule with a manual trigger. It gives you a "Run workflow"
+  # button to test with, and running it manually once is what makes GitHub's
+  # scheduler start honouring the cron on a new workflow.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print the post instead of sending it'
+        type: boolean
+        default: false
+
+# Two runs posting at once would double-post. If a run is somehow still going
+# when the next fires, skip the new one rather than queue it - a stale market
+# update is worse than a missing one.
+concurrency:
+  group: channel-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    # The whole job is a few HTTP calls. If it hangs past this, something is
+    # wrong and a stuck job would burn minutes for six hours by default.
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No `npm ci`. The script imports only server/providers.js, which uses
+      # built-in fetch and nothing from node_modules. Skipping the install
+      # turns a ~40-second job into a ~10-second one.
+
+      - name: Post to the channel
+        run: |
+          node scripts/channel-post.mjs \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          # SECRETS - never `vars`. A bot token in `vars` is readable by anyone
+          # who can see the repo, and this repo is public. Anyone holding the
+          # token can post anything to the channel under our name.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+          # Not secret: the channel handle is public by definition, and the
+          # site URL is on every page.
+          TELEGRAM_CHANNEL_ID: ${{ vars.TELEGRAM_CHANNEL_ID }}
+          WEBAPP_URL: ${{ vars.VITE_PUBLIC_URL }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}

@@ -33,11 +33,27 @@ export async function startBot({ token, webAppUrl }) {
   bot.start(async (ctx) => {
     const name = ctx.from?.first_name ?? 'trader';
     const referral = ctx.startPayload ? `\n🎟 Referral code: <code>${ctx.startPayload}</code>` : '';
+    /*
+     * ─── A FALSE SAFETY CLAIM, NOW REMOVED ────────────────────────────────
+     * This used to say "Everything runs on virtual NX credits." That was true
+     * when the app was only paper trading. It has not been true for a long
+     * time: Swap moves real funds on eight networks, and the mini-games it
+     * referred to are compiled out of release builds entirely.
+     *
+     * Telling someone their first trade is play money, immediately before
+     * handing them a button that opens a real exchange, is the most dangerous
+     * sentence in the whole product. Somebody could reasonably have believed
+     * they were practising.
+     *
+     * What IS still true is the part that matters and is kept: the bot takes
+     * no deposits and never asks anyone to send crypto anywhere. That is the
+     * scam-defence line, and it should be the last thing they read.
+     */
     await ctx.replyWithHTML(
       `<b>FBT Swap</b>\n\n` +
         `Hey ${name} 👋\n` +
-        `Live market data, paper trading, yield plans, provably-fair mini-games and daily rewards — all inside Telegram.${referral}\n\n` +
-        `<i>Everything runs on virtual NX credits. This bot never takes deposits and will never ask you to send crypto anywhere.</i>\n\n` +
+        `Live market data and a non-custodial swap across eight networks — you hold your own keys, and you sign every trade yourself.${referral}\n\n` +
+        `<i>⚠️ Swaps move real funds and on-chain transactions cannot be reversed. This bot never takes deposits, never holds your keys, and will never ask you to send crypto anywhere.</i>\n\n` +
         `Commands: /price /top /global /trending /help`,
       launchKeyboard
     );
