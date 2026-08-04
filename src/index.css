@@ -3551,46 +3551,54 @@ input, select, textarea { font-size: 16px !important; }
    ========================================================================== */
 
 /* ===========================================================================
-   THE WALLET HERO  —  .wal-hero
+   THE WALLET PANEL  —  .wal-hero
 
-   Requested twice: a distinct, memorable treatment «مثل wallet connect».
-   The first attempt kept it a `.card` with a blurred wash behind it, and the
-   verdict was that it still did not feel special. It didn't — a card with a
-   gradient behind it is still a card, and every other surface in the app is
-   one too.
+   Reported: the buttons were the wrong size and the whole screen looked
+   broken. Wanted: something genuinely distinctive, built with SVG, fast, and
+   without bugs.
 
-   ─── WHAT MAKES A SURFACE FEEL LIKE ITS OWN THING ─────────────────────────
-   Three properties, none of them "more colour":
+   ─── THE BUG THAT BROKE THE LAYOUT ────────────────────────────────────────
+   The element carried BOTH `.card` and `.wal-hero`. `.card` sets
+   `padding: 15px`; `.wal-hero` set 18px. The divider under the balance used
+   `margin: -18px` to reach the panel edges — so whichever rule won the
+   cascade, the hairline overhung or fell short by 3px on each side, and the
+   Buy button underneath was sized by an inline `width: 100%` on a `.btn-sm`
+   whose own rule says `width: auto`.
 
-     1. IT IS NOT SHAPED LIKE ITS NEIGHBOURS. Deeper corners and a darker
-        base than any card, so the eye reads it as a different KIND of
-        object rather than a more decorated example of the same one.
+   Three different sources of truth for one panel's geometry. Now there is
+   ONE: `--wal-pad`, declared here and used by every child that needs to know
+   the panel's inset. Nothing can disagree with it because nothing else states
+   it.
 
-     2. THE LIGHT COMES FROM SOMEWHERE. A single soft source at the top-left
-        with a matching rim highlight along the top edge. That pairing —
-        glow plus lit edge — is what makes a flat rectangle look like a
-        physical panel; the wash alone just looked like a coloured smudge.
+   ─── WHAT MAKES IT DISTINCTIVE ────────────────────────────────────────────
+   Not more colour. Four structural things:
 
-     3. IT HAS A HORIZON. A hairline across the full width, under the
-        balance, separating "what you have" from "what you can do". It is
-        one pixel and it does more for the structure than the gradient does.
+     1. A DIFFERENT SHAPE from every other surface — 28px corners against the
+        16px of a card, so the eye reads a different kind of object.
+     2. LIGHT WITH A SOURCE: a glow at the top-left AND a lit rim along the
+        top edge. That pairing is what makes a flat rectangle look like a
+        physical panel; a wash on its own is just a smudge.
+     3. A PERSPECTIVE MESH in SVG receding to a vanishing point — depth that
+        a CSS gradient cannot produce, because parallel lines read as a floor
+        tile and converging ones read as a plane.
+     4. A HORIZON: one hairline separating what you HAVE from what you can DO.
 
    ─── COST ─────────────────────────────────────────────────────────────────
-   Two gradients and a border, painted once. No backdrop-filter — the panel
-   is opaque, so blurring what is behind it is work nobody can see. No
-   looping animation: the only motion is the 7px connection dot, because a
-   balance that shimmers is a balance that is hard to read.
+   Two gradients, one border and ~14 SVG lines, all painted once. No
+   backdrop-filter (the panel is opaque, so blurring what is behind it is work
+   nobody can see) and no looping animation except the 7px connection dot,
+   which conveys state rather than decorating.
    =========================================================================== */
 
 .wal-hero {
+  /* The single source of truth for this panel's inset. */
+  --wal-pad: 18px;
+
   position: relative;
   overflow: hidden;
-  padding: 20px 18px 16px;
-  /* Deeper than --radius-lg (22px). Being a different shape from every card
-     is what makes it read as a different kind of object. */
+  padding: 20px var(--wal-pad) 16px;
+  /* Deeper than any card, so it reads as its own kind of surface. */
   border-radius: 28px;
-  /* Darker than a card, so it sits UNDER the content rather than floating
-     with it — a panel the numbers rest on. */
   background:
     radial-gradient(120% 90% at 8% -10%, color-mix(in srgb, var(--rgb-2) 26%, transparent), transparent 60%),
     radial-gradient(90% 70% at 92% 0%, color-mix(in srgb, var(--rgb-1) 18%, transparent), transparent 62%),
@@ -3607,11 +3615,8 @@ input, select, textarea { font-size: 16px !important; }
   box-shadow: 0 18px 40px -26px rgba(15, 23, 42, 0.35);
 }
 
-/*
- * The lit top edge. Paired with the glow above, this is what turns a
- * rectangle into a panel — light falling on a surface has to catch its
- * nearest edge, and without this the gradient reads as a smudge behind glass.
- */
+/* The lit top edge. Light falling on a surface catches its nearest edge;
+   without this the glow above reads as a smudge behind glass. */
 .wal-hero::before {
   content: '';
   position: absolute;
@@ -3623,8 +3628,21 @@ input, select, textarea { font-size: 16px !important; }
   pointer-events: none;
 }
 
-/* Kept as an element so the blur applies only to the wash and never to the
-   text sitting above it. */
+/* The perspective mesh. Sits at the BOTTOM of the panel, under the actions,
+   so it never competes with the balance for legibility. */
+.wal-mesh {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 150px;
+  color: var(--rgb-1);
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+:root[data-theme='light'] .wal-mesh { opacity: 0.1; color: var(--ink-violet); }
+
+/* Blur applies only to the wash, never to the text above it. */
 .wal-hero-aurora {
   position: absolute;
   inset: -50% -25% auto -25%;
@@ -3637,10 +3655,10 @@ input, select, textarea { font-size: 16px !important; }
 
 :root[data-theme='light'] .wal-hero-aurora { opacity: 0.3; }
 
-.wal-hero > *:not(.wal-hero-aurora) { position: relative; z-index: 1; }
+.wal-hero > *:not(.wal-hero-aurora):not(.wal-mesh) { position: relative; z-index: 1; }
 
-/* The address chip. A bordered pill, so the address reads as a discrete
-   object you could copy rather than a stray string. */
+/* The address, as a discrete object you could copy rather than a stray
+   string. */
 .wal-chip {
   display: inline-flex;
   align-items: center;
@@ -3654,18 +3672,12 @@ input, select, textarea { font-size: 16px !important; }
 
 :root[data-theme='light'] .wal-chip { background: rgba(15, 23, 42, 0.05); }
 
-.wal-chip-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
+.wal-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
 /*
- * A live wallet gets a slow pulse — the ONE looping animation here, and it is
- * 7px wide. It says "connected" at a glance, which is the single piece of
- * state a wallet screen must always convey. A locked wallet does not pulse,
- * so the absence is information too.
+ * The one looping animation on this screen, and it is 7px wide. "Connected"
+ * is the single piece of state a wallet must always convey. A locked wallet
+ * does not pulse, so the absence is information too.
  */
 .wal-chip-dot.is-live { animation: wal-pulse 2.4s ease-in-out infinite; }
 
@@ -3679,54 +3691,73 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 /*
- * THE HORIZON. A hairline across the full panel width under the balance,
- * separating what you HAVE from what you can DO. One pixel, and it does more
- * for the structure than any amount of colour — without it the balance and
- * the buttons read as one undifferentiated stack.
+ * THE HORIZON — separates what you HAVE from what you can DO.
  *
- * Negative margins take it to the panel's edges, past its padding.
+ * The negative margin is `--wal-pad`, not a literal, which is what stopped
+ * the 3px overhang. Change the padding and the divider follows.
  */
 .wal-hero-value {
-  margin: 10px -18px 2px;
-  padding: 0 18px 14px;
+  margin: 12px calc(var(--wal-pad) * -1) 4px;
+  padding: 0 var(--wal-pad) 15px;
   border-bottom: 1px solid var(--line);
 }
 
-/* The reason the screen exists, so it is the largest thing on it.
-   `tabular-nums` stops the digits jittering sideways as the value refreshes —
-   without it a 3 becoming a 1 visibly shifts everything to its right. */
 .wal-hero-total {
   font-size: clamp(30px, 8.5vw, 40px);
   line-height: 1.1;
+  /* Stops digits shifting sideways as the value refreshes — without it a 3
+     becoming a 1 visibly moves everything to its right. */
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.025em;
   margin-top: 2px;
 }
 
-/* The disconnected state. Same panel, so the page does not change shape at
-   the moment someone commits their wallet — the worst possible time for a
-   layout to jump. */
+/* ---- Buy & sell -----------------------------------------------------------
+   A real class rather than `.btn.btn-sm` plus an inline `width: 100%`.
+   `.btn-sm` sets `width: auto`, so the inline override was fighting the
+   stylesheet — which is exactly why this button looked the wrong size. */
+.wal-buy {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 2px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12.8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.16s, border-color 0.16s, background 0.16s;
+}
+
+/* Dashed, deliberately: Receive and Send act on the wallet in front of you,
+   while this one LEAVES for another screen. A different border style says
+   "different kind of action" without adding another colour. */
+.wal-buy:active {
+  background: rgba(127, 127, 127, 0.1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wal-buy:hover {
+    color: var(--text-1);
+    border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+  }
+}
+
+/* ---- the disconnected state ----------------------------------------------
+   Same panel, so the page does not change shape at the moment someone
+   commits their wallet — the worst possible time for a layout to jump. */
 .wal-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 12px 4px 4px;
+  padding: 14px 4px 4px;
 }
 
-.wal-empty-mark {
-  width: 56px;
-  height: 56px;
-  border-radius: 19px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 13px;
-  color: var(--rgb-1);
-  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, transparent);
-}
-
-:root[data-theme='light'] .wal-empty-mark { color: var(--ink-cyan); }
+.wal-empty svg { margin-bottom: 14px; }
 
 .wal-empty .btn { width: 100%; }
 
@@ -4543,8 +4574,12 @@ input, select, textarea { font-size: 16px !important; }
     radial-gradient(46% 36% at 50% 86%, rgba(255, 45, 149, 0.16), transparent 74%);
 }
 
+/* Content sits above the galaxy. `position: relative` alone would work by
+   paint order, but an explicit z-index means a future change to the backdrop
+   cannot bury the Start button — which would make the app look frozen. */
 .splash-center {
   position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4598,7 +4633,9 @@ input, select, textarea { font-size: 16px !important; }
   color: var(--text-2);
 }
 
+/* Same reason as .splash-center — the footer holds the Start button. */
 .splash-foot {
+  z-index: 2;
   position: relative;
   width: 100%;
   max-width: 22rem;
@@ -5074,3 +5111,160 @@ body { overflow-x: clip; }
 .hist-notable .hist-dot { background: var(--ink-cyan); }
 .hist-caution .hist-dot { background: var(--ink-amber); }
 .hist-notable { color: var(--text-1); }
+
+/* Tutorial video buttons. Two side by side (Persian / English) rather than
+   one, because YouTube does not load on most Iranian networks — see the note
+   in Docs.jsx about why the Persian option is listed first. */
+.doc-videos {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.doc-video {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doc-video:active { background: rgba(127, 127, 127, 0.12); }
+
+@media (hover: hover) and (pointer: fine) {
+  .doc-video:hover { color: var(--text-1); border-color: var(--line-strong); }
+}
+
+/* ==========================================================================
+   GALAXY BACKDROP  —  the scene behind the Start screen
+
+   Drawn, not filmed. See GalaxyBackdrop.jsx for why a video file was the
+   wrong answer: it would have tripled the APK for a screen shown once, and
+   would still be buffering on a slow connection at the exact moment a new
+   user is deciding whether this app works.
+
+   ─── THE PERFORMANCE RULE ────────────────────────────────────────────────
+   Individual stars NEVER move. Moving sixty elements is layout work every
+   frame and it is what makes a phone warm.
+
+   Only two things animate:
+     • `opacity` on each star (compositor-only, no layout, no paint)
+     • `transform` on the two star PLANES (also compositor-only)
+
+   So the browser animates two moving elements, not sixty.
+   ========================================================================== */
+
+.galaxy {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Behind .splash-glow (which has no z-index) but above the flat page. */
+  z-index: 0;
+}
+
+.galaxy-neb {
+  position: absolute;
+  /* Overhangs so the drift never reveals an edge of the nebula. */
+  inset: -12%;
+  width: 124%;
+  height: 124%;
+  opacity: 0.85;
+}
+
+/* The nebula breathes very slowly — 40s, so it is felt rather than watched.
+   A faster cycle turns a background into a distraction. */
+.galaxy-neb { animation: neb-drift 40s ease-in-out infinite alternate; }
+
+@keyframes neb-drift {
+  from { transform: scale(1) translate3d(0, 0, 0); }
+  to   { transform: scale(1.08) translate3d(-2%, 1.5%, 0); }
+}
+
+.galaxy-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+/* Two speeds. The DIFFERENCE between them is the parallax — one layer alone
+   would just be a sliding picture. */
+.galaxy-far  { animation: star-drift-far 90s linear infinite; }
+.galaxy-near { animation: star-drift-near 55s linear infinite; }
+
+@keyframes star-drift-far {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-3%, 2%, 0); }
+}
+@keyframes star-drift-near {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(5%, -3%, 0); }
+}
+
+.galaxy-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  opacity: var(--dim, 0.5);
+  animation-name: star-twinkle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+/* The near plane is brighter and slightly tinted, which is the other half of
+   the depth cue — distant stars are dimmer and cooler. */
+.galaxy-star-bright {
+  background: #dff3ff;
+  box-shadow: 0 0 4px rgba(160, 220, 255, 0.7);
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: var(--dim, 0.5); }
+  50%      { opacity: 1; }
+}
+
+.galaxy-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, transparent 35%, rgba(0, 0, 0, 0.82) 88%);
+}
+
+/*
+ * Reduced motion, and the light theme.
+ *
+ * With motion reduced the scene stays — it still looks like a galaxy — but
+ * nothing moves at all. Removing the visuals as well would punish the setting
+ * rather than respect it.
+ */
+.galaxy.is-still .galaxy-neb,
+.galaxy.is-still .galaxy-layer,
+.galaxy.is-still .galaxy-star {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-neb,
+  .galaxy-layer,
+  .galaxy-star { animation: none; }
+}
+
+/* On the light theme a starfield is wrong — white stars on a white page are
+   invisible and the vignette would be a grey smear. The nebula stays as a
+   soft wash and the stars go. */
+:root[data-theme='light'] .galaxy-layer { display: none; }
+:root[data-theme='light'] .galaxy-neb { opacity: 0.4; }
+:root[data-theme='light'] .galaxy-vignette {
+  background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(244, 245, 250, 0.9) 92%);
+}

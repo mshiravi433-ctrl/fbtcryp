@@ -21,15 +21,70 @@ import {
  * we produced, and are labelled as third-party so nobody assumes we vetted
  * every word.
  */
+/*
+ * ─── TWO VIDEO SOURCES, AND WHY ─────────────────────────────────────────────
+ * Every tutorial link used to be a YOUTUBE SEARCH. Two problems with that,
+ * and the first one is fatal for most of our users:
+ *
+ *   1. YouTube is blocked in Iran. A tutorial button that opens a page which
+ *      never loads is worse than no button — the user concludes the app is
+ *      broken, not that their network is.
+ *
+ *   2. A search URL is not a tutorial. It hands someone a results page and
+ *      hopes the top hit is good, in a category full of referral-farming
+ *      channels. We cannot vet a search result that has not happened yet.
+ *
+ * So each section now carries BOTH: an Aparat search (Iran's own video
+ * platform, reachable without a VPN, and Persian-language) and the YouTube
+ * one for everyone else. The UI offers whichever is likely to work, labelled
+ * by language so nobody taps into a video they cannot understand.
+ *
+ * Still searches rather than fixed video IDs, and that is deliberate: a
+ * pinned video can be deleted, monetised or edited into something we would
+ * not endorse, and we would never know. A search stays useful.
+ */
+const aparat = (q) => `https://www.aparat.com/result/${encodeURIComponent(q)}`;
+const youtube = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+
 const SECTIONS = [
-  { id: 'why', Icon: IconTrend, steps: 5, video: null },
-  { id: 'strategy', Icon: IconPools, steps: 5, video: null },
-  { id: 'start', Icon: IconWallet, steps: 4, video: 'https://www.youtube.com/results?search_query=how+to+use+metamask+beginner' },
-  { id: 'swap', Icon: IconSwap, steps: 5, video: 'https://www.youtube.com/results?search_query=how+to+swap+tokens+dex+beginner' },
-  { id: 'farm', Icon: IconPools, steps: 4, video: 'https://www.youtube.com/results?search_query=liquidity+pool+impermanent+loss+explained' },
-  { id: 'signals', Icon: IconActivity, steps: 3, video: 'https://www.youtube.com/results?search_query=rsi+macd+explained+beginners' },
-  { id: 'trade', Icon: IconTrend, steps: 3, video: null },
-  { id: 'security', Icon: IconShield, steps: 5, video: 'https://www.youtube.com/results?search_query=crypto+wallet+security+seed+phrase' }
+  { id: 'why', Icon: IconTrend, steps: 5 },
+  { id: 'strategy', Icon: IconPools, steps: 5 },
+  {
+    id: 'start',
+    Icon: IconWallet,
+    steps: 4,
+    fa: aparat('آموزش نصب کیف پول متامسک'),
+    en: youtube('how to use metamask beginner')
+  },
+  {
+    id: 'swap',
+    Icon: IconSwap,
+    steps: 5,
+    fa: aparat('آموزش صرافی غیرمتمرکز پنکیک سواپ'),
+    en: youtube('how to swap tokens dex beginner')
+  },
+  {
+    id: 'farm',
+    Icon: IconPools,
+    steps: 4,
+    fa: aparat('آموزش استخر نقدینگی و ضرر ناپایدار'),
+    en: youtube('liquidity pool impermanent loss explained')
+  },
+  {
+    id: 'signals',
+    Icon: IconActivity,
+    steps: 3,
+    fa: aparat('آموزش اندیکاتور RSI و MACD'),
+    en: youtube('rsi macd explained beginners')
+  },
+  { id: 'trade', Icon: IconTrend, steps: 3 },
+  {
+    id: 'security',
+    Icon: IconShield,
+    steps: 5,
+    fa: aparat('امنیت کیف پول ارز دیجیتال عبارت بازیابی'),
+    en: youtube('crypto wallet security seed phrase')
+  }
 ];
 
 export default function Docs() {
@@ -56,7 +111,7 @@ export default function Docs() {
       <p className="muted">{t('docs.intro')}</p>
 
       <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
-        {SECTIONS.map(({ id, Icon, steps, video }) => {
+        {SECTIONS.map(({ id, Icon, steps, fa, en }) => {
           const isOpen = openId === id;
           return (
             <motion.div key={id} className={`card ${isOpen ? 'card-rgb' : ''}`} variants={riseIn} layout>
@@ -120,12 +175,27 @@ export default function Docs() {
                         <strong>{t('docs.pitfall')}:</strong> {t(`docs.${id}.pitfall`)}
                       </p>
 
-                      {video && (
-                        <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 10 }} onClick={() => open(video)}>
-                          <span style={{ display: 'inline-flex', gap: 7, alignItems: 'center', justifyContent: 'center' }}>
-                            <IconExternal width={14} height={14} /> {t('docs.watchVideo')}
-                          </span>
-                        </button>
+                      {(fa || en) && (
+                        <div className="doc-videos">
+                          {/*
+                            Persian first. Most of this app's users are in
+                            Iran, where YouTube does not load at all — putting
+                            the reachable option second would mean most people
+                            tap the broken one first.
+                          */}
+                          {fa && (
+                            <button className="doc-video" onClick={() => open(fa)}>
+                              <IconExternal width={13} height={13} />
+                              {t('docs.watchFa')}
+                            </button>
+                          )}
+                          {en && (
+                            <button className="doc-video" onClick={() => open(en)}>
+                              <IconExternal width={13} height={13} />
+                              {t('docs.watchEn')}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </motion.div>

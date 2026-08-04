@@ -20,6 +20,7 @@ import AdBanner from '../components/AdBanner';
 import { explorerAddr } from '../lib/chains';
 import { IconQr } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
+import { IconReceive, IconSend, WalletEmptyMark, WalletMesh } from '../components/WalletArt';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useWalletBalances } from '../hooks/useWalletBalances';
 import TokenIcon from '../lib/tokenIcon';
@@ -173,8 +174,17 @@ export default function Wallet() {
         aurora wash and a soft rim) and everything inside is the same markup
         as before, so nothing about the logic or the data flow changed.
       */}
-      <motion.section className="card wal-hero" variants={riseIn} initial="hidden" animate="show">
+      {/*
+        NOT `.card`. It used to carry both classes, and `.card` sets
+        `padding: 15px` while `.wal-hero` sets 18px — with the hairline
+        divider using `margin: -18px` to reach the panel edges. Whichever
+        rule won, the divider overhung or fell short by 3px on each side and
+        the whole panel looked misaligned. A surface that owns its own
+        padding cannot disagree with itself.
+      */}
+      <motion.section className="wal-hero" variants={riseIn} initial="hidden" animate="show">
         <div className="wal-hero-aurora" aria-hidden="true" />
+        <WalletMesh />
 
         {wallet.address ? (
           <div className="stack" style={{ gap: 9, position: 'relative' }}>
@@ -227,7 +237,7 @@ export default function Wallet() {
             <div className="wal-actions">
               <button className="wal-action wal-recv" onClick={() => setReceiveOpen(true)}>
                 <span className="wal-action-icon" aria-hidden="true">
-                  <IconQr width={18} height={18} />
+                  <IconReceive />
                 </span>
                 <span className="wal-action-label">{t('receive.title')}</span>
               </button>
@@ -240,10 +250,7 @@ export default function Wallet() {
                 disabled={wallet.locked}
               >
                 <span className="wal-action-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 19V5M5 12l7-7 7 7" />
-                  </svg>
+                  <IconSend />
                 </span>
                 <span className="wal-action-label">{t('send.title')}</span>
               </button>
@@ -259,11 +266,7 @@ export default function Wallet() {
               address above them, while this one leaves for a different screen,
               so it reads better as its own row than as a sibling.
             */}
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ width: '100%' }}
-              onClick={() => navigate('/buy')}
-            >
+            <button className="wal-buy" onClick={() => navigate('/buy')}>
               {t('nav.buy')}
             </button>
 
@@ -430,14 +433,7 @@ export default function Wallet() {
             for, and are you going to hold my keys.
           */
           <div className="wal-empty" style={{ position: 'relative' }}>
-            <span className="wal-empty-mark" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H18a2 2 0 0 1 2 2v1" />
-                <path d="M3 8.5V17a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-2.5" />
-                <path d="M21 10.5v4h-4a2 2 0 0 1 0-4Z" />
-              </svg>
-            </span>
+            <WalletEmptyMark />
             <div style={{ fontWeight: 700, fontSize: 15 }}>{t('wallet.emptyTitle')}</div>
             <p className="muted" style={{ fontSize: 12.4, lineHeight: 1.8, margin: '6px 0 0' }}>
               {t('wallet.emptyBody')}

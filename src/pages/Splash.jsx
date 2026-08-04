@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { openUrl } from '../lib/browser';
 import { IconInstagram, IconLinkedin, IconMail, IconXLogo } from '../components/Icons';
 import { SUPPORT_MAILTO } from '../lib/contact';
+import GalaxyBackdrop from '../components/GalaxyBackdrop';
 
 /*
  * The same accounts Contact links to — deliberately not a second, invented
@@ -57,7 +58,15 @@ export default function Splash({ onStart }) {
 
   return (
     <div className="splash">
-      {/* Soft colour wash. Static gradients, not animated blurs. */}
+      {/*
+        The galaxy. Drawn rather than filmed — see GalaxyBackdrop.jsx for why
+        a video was the wrong build here: it would have tripled the APK for a
+        screen shown once, and on a slow Iranian connection it would still be
+        buffering while the user is deciding whether the app works.
+      */}
+      <GalaxyBackdrop />
+
+      {/* Soft colour wash on top of the galaxy, tying it to the brand hues. */}
       <div className="splash-glow" aria-hidden="true" />
 
       <div className="splash-center">

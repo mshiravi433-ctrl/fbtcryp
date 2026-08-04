@@ -1,7 +1,7 @@
 {
   "name": "fbt-swap",
   "private": true,
-  "version": "1.16.0",
+  "version": "1.17.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node --watch server/index.js\"",
@@ -17,7 +17,8 @@
     "android:sync": "npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "build:full": "VITE_ENABLE_SPECULATION=true VITE_ENABLE_GAMES=true vite build && node scripts/gen-landing.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

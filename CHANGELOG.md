@@ -1,5 +1,79 @@
 # Changelog
 
+## 1.17.0 — versionCode 43
+
+### The wallet panel was broken by three sources of truth
+
+Reported: the buttons were the wrong size and the screen looked wrong. It was,
+and the cause was measurable rather than aesthetic:
+
+- The panel carried **both** `.card` and `.wal-hero`. `.card` sets
+  `padding: 15px`, `.wal-hero` set `18px`, and the divider under the balance
+  used `margin: -18px` to reach the edges — so whichever won the cascade, the
+  hairline **overhung or fell short by 3px on each side**.
+- The Buy button was `.btn.btn-sm` with an inline `width: 100%`, while
+  `.btn-sm` itself declares `width: auto`. An inline style fighting the
+  stylesheet is exactly why it looked mis-sized.
+
+There is now **one** source of truth, `--wal-pad`, and every child derives
+from it. A test fails the build if the `.card` class or a literal `-18px`
+comes back.
+
+### And it is properly distinctive now
+
+Built with SVG, as asked:
+
+- **A perspective mesh** receding to a vanishing point. A CSS gradient cannot
+  do this — parallel lines read as a floor tile, converging ones read as a
+  plane.
+- **Custom Receive / Send icons** drawn at this panel's weight. The shared
+  nav set is stroked for 21px and looks coarse at 20px inside a filled tile.
+- **An empty-state mark**: a wallet with a card lifting out, which says
+  "nothing in here yet" before anyone reads a word.
+- 28px corners against a card's 16px, a lit top rim, and a horizon line
+  separating what you *have* from what you can *do*.
+
+Nothing animates except the 7px connection dot. A balance behind moving
+decoration is a balance that is hard to read.
+
+### Everything removed is back — in a second build
+
+`npm run build:full` and `ci/build-full.sh` produce an APK with prediction,
+perpetuals, invest and the arcade all included.
+
+The default build still leaves them out, because that vocabulary is what
+APKPure rejected. **Do not upload the full build to a store** — the script
+says so in a banner, and a test asserts the warning is there.
+
+### Tutorials that actually open in Iran
+
+Every tutorial link was a **YouTube search**, and YouTube does not load on
+most Iranian networks. The button opened a page that never appeared, which
+reads as a broken app rather than a blocked site.
+
+Each section now offers **Aparat (Persian)** first and YouTube second, labelled
+by language. Still searches rather than pinned videos: a pinned video can be
+deleted or edited into something we would not endorse, and we would never know.
+
+### A galaxy behind the Start screen
+
+Drawn, not filmed — and the reasoning matters:
+
+| A video file | This |
+|---|---|
+| 2–5 MB, on a 7.5 MB app | a few kB |
+| still buffering on a slow connection, on the **first** screen | renders on frame one |
+| iOS blocks autoplay in Low Power Mode | always plays |
+| stock footage needs a licence | ours |
+
+An SVG nebula with real cloud structure from `feTurbulence`, plus two parallax
+star planes. **Individual stars never move** — only `opacity` on each star and
+`transform` on the two planes, both compositor-only, so the browser animates
+two elements rather than sixty. Positions come from a seeded PRNG so a
+re-render cannot reshuffle the sky.
+
+Reduced motion keeps the scene and stops the movement.
+
 ## 1.16.0 — versionCode 42
 
 ### APKPure rejected us. Here is exactly why, and what changed

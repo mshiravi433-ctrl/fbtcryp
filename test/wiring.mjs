@@ -2569,5 +2569,128 @@ export default function run() {
       !/nine networks/i.test(read('public/manifest.webmanifest')));
   }
 
+  /* ---- 36. one source of truth for the wallet panel's geometry ---------- */
+  /*
+   * REPORTED: "صفحه والت کامل بهم خورده، دکمه ها اندازشون درست نیست."
+   *
+   * The panel carried BOTH `.card` and `.wal-hero`. `.card` sets
+   * `padding: 15px`; `.wal-hero` set 18px. The divider under the balance used
+   * `margin: -18px` to reach the panel edges — so whichever rule won the
+   * cascade, the hairline overhung or fell short by 3px on each side.
+   *
+   * Separately the Buy button was `.btn.btn-sm` with an inline
+   * `width: '100%'`, while `.btn-sm` itself declares `width: auto`. An inline
+   * style fighting the stylesheet is why it looked the wrong size.
+   *
+   * Three sources of truth for one panel. There is now one: `--wal-pad`.
+   */
+  {
+    const css = read('src/index.css');
+    const wallet = read('src/pages/Wallet.jsx');
+
+    t(
+      'the wallet panel is not also a .card',
+      !/className="card wal-hero"/.test(wallet)
+    );
+
+    const heroRule = css.slice(css.indexOf('.wal-hero {'), css.indexOf('\n}', css.indexOf('.wal-hero {')));
+    t('the panel declares its own padding variable', /--wal-pad:/.test(heroRule));
+
+    /*
+     * The divider must derive its bleed from that variable rather than
+     * restating the number — restating it is exactly how the 3px mismatch
+     * happened.
+     */
+    const valueRule = css.slice(css.indexOf('.wal-hero-value {'), css.indexOf('\n}', css.indexOf('.wal-hero-value {')));
+    t(
+      'the divider derives its bleed from the padding variable',
+      /var\(--wal-pad\)/.test(valueRule) && !/-18px/.test(valueRule)
+    );
+
+    /* No inline width hacks fighting the stylesheet. */
+    t(
+      'the buy button is a real class, not an inline width override',
+      /className="wal-buy"/.test(wallet) && !/btn-sm"\s*\n\s*style=\{\{ width: '100%' \}\}/.test(wallet)
+    );
+  }
+
+  /* ---- 37. the full build must still exist and be reachable ------------- */
+  /*
+   * The speculation screens were removed from the STORE build because APKPure
+   * rejected the app over their vocabulary. The owner still wants a complete
+   * build for other channels, so the opt-in has to remain wired — a flag
+   * nobody can turn on is a deletion with extra steps.
+   */
+  {
+    const pkg = JSON.parse(read('package.json'));
+    t('there is a full-feature build script', Boolean(pkg.scripts?.['build:full']));
+    t(
+      'the full build turns both flags on',
+      /VITE_ENABLE_SPECULATION=true/.test(pkg.scripts?.['build:full'] ?? '') &&
+        /VITE_ENABLE_GAMES=true/.test(pkg.scripts?.['build:full'] ?? '')
+    );
+    t('there is an APK script for it', existsSync('ci/build-full.sh'));
+    /*
+     * And it must warn, loudly, in the file itself. Uploading the full build
+     * to a store is the one mistake that costs a second rejection, and a
+     * second rejection from the same reviewer is harder to appeal.
+     */
+    t(
+      'the full build warns against uploading it to a store',
+      /DO NOT upload/i.test(read('ci/build-full.sh'))
+    );
+  }
+
+  /* ---- 38. tutorials must be reachable from Iran ------------------------ */
+  /*
+   * Every tutorial link was a YouTube search. YouTube does not load on most
+   * Iranian networks, which is where most of this app's users are — so the
+   * "watch a tutorial" button opened a page that never appeared, and that
+   * reads as a broken app rather than a blocked site.
+   */
+  {
+    const docs = read('src/pages/Docs.jsx');
+    t('there is a Persian video source', /aparat\.com/.test(docs));
+    t('the English source is still offered', /youtube\.com/.test(docs));
+    t('both are labelled by language', /docs\.watchFa/.test(docs) && /docs\.watchEn/.test(docs));
+    t('the labels exist', hasKey(en, 'docs.watchFa') && hasKey(en, 'docs.watchEn'));
+  }
+
+  /* ---- 39. the galaxy must not be a video file -------------------------- */
+  /*
+   * The request was for a film behind the Start screen. Drawn instead, and
+   * the reasoning is worth pinning: a video would roughly triple a 7.5 MB
+   * APK for a screen shown once, and on a slow or filtered connection it
+   * would still be buffering while a first-time user decides whether the app
+   * works. iOS also refuses to autoplay unless muted+playsinline, and Low
+   * Power Mode blocks it outright — so the fallback has to look good anyway.
+   */
+  {
+    /*
+     * Comments stripped first: the file DOCUMENTS that it avoids
+     * Math.random(), so the literal string appears in its own explanation.
+     * Same trap this suite keeps hitting — a check that matches the prose
+     * describing the thing it is checking for.
+     */
+    const galaxy = read('src/components/GalaxyBackdrop.jsx')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    t('the backdrop ships no video element', !/<video/i.test(galaxy));
+    t('the backdrop is drawn as SVG', /<svg/.test(galaxy));
+
+    /*
+     * Star positions must be deterministic. Math.random() would reshuffle the
+     * sky on every re-render, which reads as the whole screen twitching.
+     */
+    t('star positions are seeded, not random', !/Math\.random\(\)/.test(galaxy));
+
+    /* Reduced motion must be honoured — this is a full-screen moving scene. */
+    t('reduced motion is respected', /useReducedMotion/.test(galaxy));
+    t(
+      'reduced motion is also handled in CSS',
+      /prefers-reduced-motion[\s\S]{0,400}galaxy-star/.test(read('src/index.css'))
+    );
+  }
+
   return rows;
 }

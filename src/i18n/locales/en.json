@@ -975,7 +975,7 @@
     "intro": "Short guides for each screen. If you're new to crypto, start at the top.",
     "pitfall": "⚠️ Watch out",
     "watchVideo": "Watch a tutorial",
-    "videoNote": "Video links open YouTube searches from independent educators. We didn't make them and don't control their content.",
+    "videoNote": "Video links open a search on Aparat or YouTube. These are made by independent educators — we did not produce them and do not control their content. YouTube does not load on most Iranian networks, so the Persian option is listed first.",
     "start": {
       "title": "Getting started",
       "sub": "Wallet setup and first steps",
@@ -1049,7 +1049,9 @@
       "step4": "Invite friends. Referrals are the fastest way up the leaderboard, and each new trader deepens the pools everyone uses.",
       "step5": "Keep gas money on each chain you use. Running out mid-transaction wastes the fee you already paid.",
       "pitfall": "Chasing the highest APR you can find is how most people lose money in DeFi. A steady 8% you understand beats a 900% pool whose token you can't sell."
-    }
+    },
+    "watchFa": "Video (Persian)",
+    "watchEn": "Video (English)"
   },
   "audit": {
     "title": "Security & audits",
