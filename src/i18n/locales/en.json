@@ -1667,7 +1667,10 @@
       "bnbchain": "BNB Chain",
       "ethereum": "Ethereum.org",
       "l2beat": "L2BEAT"
-    }
+    },
+    "trending": "Trending now",
+    "searchPlaceholder": "Search these sites",
+    "noMatch": "Nothing here matches “{{q}}”. Try another word, or clear the search to see every site."
   },
   "nft": {
     "title": "My NFTs",

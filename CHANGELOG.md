@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.14.0 — versionCode 36
+
+### The centre button now separates from the menu
+
+Reported: «این بزرگه داخل منو ادغام شده جالب نیست» — the raised button looked
+merged into the bar rather than resting in it.
+
+It was a child of the bar, sitting on top of it with a ring painted in the
+bar's own colour. That ring can never match: the bar is semi-transparent with
+a backdrop blur, so an opaque patch over it reads as a lighter disc.
+
+There is now a **real hollow**. A radial-gradient `mask` removes pixels from
+the middle of the bar's top edge, so the page shows through and the droplet
+floats in genuine empty space. Because it is a mask rather than a cover, the
+blur, the border and the shadow all follow the new outline for free.
+
+That forced a structural change worth knowing about: **a CSS mask clips every
+descendant**, so a button inside the bar would have been sliced in half by the
+very notch meant to frame it. The droplet is now a *sibling* of the bar,
+positioned to the same centre line, with a zero-content spacer holding the gap
+so the four tabs still space themselves evenly. A DOM test asserts it stays
+outside the bar, because moving it back in would look subtly wrong rather than
+throw.
+
+Also smaller — 48px, down from 56. The old one filled the bar's height, which
+is what made it read as part of the bar; at 48px inside a 64px hollow there is
+8px of clear air all the way round, and that visible gap is what says
+"separate".
+
+### Wallet: a hero instead of a list of cards
+
+Requested: a distinct treatment «مثل wallet connect».
+
+Stripped of branding, that look is three things — one tall surface instead of
+stacked cards, a soft colour wash *behind* the content rather than on it, and a
+single bright pair of actions with nothing competing.
+
+**The reordering is most of the design.** The old card led with a section
+label, then a small address row, then the buttons, and the balance came
+*fourth*. The number people open a wallet to see now leads.
+
+- A blurred aurora sits in its own layer, so the blur never touches the text.
+- The address became a bordered chip — it reads as an object you could copy
+  rather than a stray string.
+- A live wallet's status dot pulses slowly. It is the only looping animation
+  on the screen and it is 7px wide; a locked wallet does not pulse, so the
+  absence is information too.
+- The balance uses `tabular-nums`, so digits stop jittering sideways as the
+  value refreshes.
+
+### Discover: live, and searchable
+
+It was sixteen static links, so there was no reason to open it twice.
+
+- **Trending now** — a live strip of the top movers. It reuses `getTrending`,
+  which Market already polls and the server already caches for 120 seconds, so
+  on a device that has visited Market this costs **zero** extra requests. It
+  polls every 5 minutes, not 30 seconds: trending coins do not turn over in
+  half a minute.
+- **Search** over the curated list, with a proper empty state — an unexplained
+  blank screen reads as broken rather than as a filter with no results.
+
+Search deliberately **cannot** navigate to a typed address. A free-typing URL
+field inside a wallet is a phishing delivery mechanism, and adding one would
+undo the single most valuable property of this screen.
+
 ## 1.13.1 — versionCode 35
 
 ### The QR scanner's grey picture — found, and it was not the camera

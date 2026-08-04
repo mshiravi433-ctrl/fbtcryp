@@ -158,15 +158,33 @@ export default function Wallet() {
       {tab !== 'practice' && (
       <>
       {/* ---------- on-chain wallet (non-custodial) ---------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.onchain')}</p>
+      {/*
+        ─── THE WALLET HERO ──────────────────────────────────────────────────
+        Requested: a distinct, beautiful treatment «مثل wallet connect».
+
+        What that look actually is, structurally: ONE surface that leads with
+        the balance, with the address and network as quiet metadata above it
+        and the actions as the only bright thing below. The old card had the
+        section label first, then a small address row, then the actions, then
+        the number — so the least important element was at the top and the
+        most important was fourth.
+
+        The reordering is the design. `.wal-hero` supplies the depth (an
+        aurora wash and a soft rim) and everything inside is the same markup
+        as before, so nothing about the logic or the data flow changed.
+      */}
+      <motion.section className="card wal-hero" variants={riseIn} initial="hidden" animate="show">
+        <div className="wal-hero-aurora" aria-hidden="true" />
 
         {wallet.address ? (
-          <div className="stack" style={{ gap: 9 }}>
+          <div className="stack" style={{ gap: 9, position: 'relative' }}>
             <div className="row-between">
-              <span className="row" style={{ gap: 7 }}>
-                <span className="dot" style={{ background: wallet.locked ? 'var(--rgb-5)' : 'var(--up)' }} />
-                <span className="mono" style={{ fontSize: 12.5 }}>{shortAddress(wallet.address)}</span>
+              <span className="wal-chip">
+                <span
+                  className={`wal-chip-dot ${wallet.locked ? '' : 'is-live'}`}
+                  style={{ background: wallet.locked ? 'var(--rgb-5)' : 'var(--up)' }}
+                />
+                <span className="mono">{shortAddress(wallet.address)}</span>
               </span>
               <span className="row" style={{ gap: 6 }}>
                 <span className="pill pill-rgb">{wallet.chain?.short ?? 'BSC'}</span>
@@ -174,6 +192,29 @@ export default function Wallet() {
                   {wallet.locked ? '🔒' : t(`wallet.mode.${wallet.mode}`)}
                 </span>
               </span>
+            </div>
+
+            {/*
+              ---------- TOTAL VALUE ----------
+              The number people open a wallet to see. It used to sit BELOW the
+              action buttons, which put the reason for the visit fourth on the
+              screen. It now leads.
+            */}
+            <div className="wal-hero-value">
+              <div className="faint">{t('wallet.onchainValue')}</div>
+              <div className="stat-value wal-hero-total">
+                {onchain.loading && !onchain.rows.length ? '…' : fmtUsd(onchain.total)}
+              </div>
+              {/*
+                Honest about coverage. A holding we cannot price is still
+                listed below, so silently leaving it out of the total would
+                under-report someone's money without telling them.
+              */}
+              {onchain.partial && (
+                <div className="faint" style={{ fontSize: 11, marginTop: 3 }}>
+                  {t('wallet.partialValue')}
+                </div>
+              )}
             </div>
 
             {/*
@@ -232,22 +273,6 @@ export default function Wallet() {
               the screen showed one bare quantity ("0.4183") and left the
               user to price it themselves.
             */}
-            <div style={{ marginTop: 4 }}>
-              <div className="faint">{t('wallet.onchainValue')}</div>
-              <div className="stat-value">
-                {onchain.loading && !onchain.rows.length ? '…' : fmtUsd(onchain.total)}
-              </div>
-              {/*
-                Honest about coverage. A holding we cannot price is still
-                listed below, so silently leaving it out of the total would
-                under-report someone's money without telling them.
-              */}
-              {onchain.partial && (
-                <div className="faint" style={{ fontSize: 11, marginTop: 3 }}>
-                  {t('wallet.partialValue')}
-                </div>
-              )}
-            </div>
 
             {/*
               ---------- PER-TOKEN HOLDINGS ----------

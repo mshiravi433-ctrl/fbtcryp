@@ -177,29 +177,21 @@ export default function BottomNav() {
           );
 
           /*
-           * ─── THE RAISED CENTRE BUTTON ──────────────────────────────────
-           * Emitted BETWEEN the second and third tab rather than being an
-           * item in ITEMS, because it has to break out of the bar's height
-           * to sit proud of it — an element inside the flex row cannot
-           * overlap its parent's top edge, which is the entire visual idea.
+           * ─── THE GAP THE DROPLET SITS IN ───────────────────────────────
+           * A zero-content spacer, not the button. The button itself is a
+           * SIBLING of the bar (rendered below), because the bar is masked
+           * to cut a notch out of itself — and a mask clips every descendant,
+           * so a button inside the bar would be sliced in half by the very
+           * notch meant to frame it.
            *
-           * It is a React fragment carrying two children, so the flex row
-           * still sees exactly five slots and the spacing stays even.
+           * This spacer reserves the horizontal room so the four tabs space
+           * themselves evenly around the hole instead of sliding under it.
            */
           if (idx !== 1) return tab;
           return (
             <Fragment key={item.to}>
               {tab}
-              <CentreAction
-                active={pathname === CENTRE.to}
-                still={still}
-                label={t(CENTRE.key)}
-                onClick={() => {
-                  haptic?.('medium');
-                  setPulse((n) => n + 1);
-                  navigate(CENTRE.to);
-                }}
-              />
+              <span className="nav-notch-gap" aria-hidden="true" />
             </Fragment>
           );
         })}
@@ -231,6 +223,26 @@ export default function BottomNav() {
           <span>{t('nav.more')}</span>
         </motion.button>
       </nav>
+
+      {/*
+        OUTSIDE the <nav>, deliberately.
+
+        The bar carries a `mask` that punches a circular notch out of its own
+        top edge. A mask clips the element AND everything inside it, so a
+        button rendered as a child would be cut by the notch it is supposed
+        to sit in. As a sibling it floats free, casts its own shadow into the
+        hollow, and reads as a separate droplet — which is the whole point.
+      */}
+      <CentreAction
+        active={pathname === CENTRE.to}
+        still={still}
+        label={t(CENTRE.key)}
+        onClick={() => {
+          haptic?.('medium');
+          setPulse((n) => n + 1);
+          navigate(CENTRE.to);
+        }}
+      />
 
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
     </>

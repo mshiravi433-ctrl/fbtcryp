@@ -1667,7 +1667,10 @@
       "bnbchain": "BNB Chain",
       "ethereum": "Ethereum.org",
       "l2beat": "L2BEAT"
-    }
+    },
+    "trending": "داغ‌ترین‌ها",
+    "searchPlaceholder": "جستجو بین این سایت‌ها",
+    "noMatch": "چیزی با «{{q}}» پیدا نشد. کلمهٔ دیگری را امتحان کن، یا جستجو را پاک کن تا همه را ببینی."
   },
   "nft": {
     "title": "NFTهای من",

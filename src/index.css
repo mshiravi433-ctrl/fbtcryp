@@ -850,86 +850,130 @@ select option { background: #0a0c12; }
     0 18px 46px -14px rgba(0, 0, 0, 0.85),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   animation: nav-float 12s ease-in-out infinite;
+
+  /* ── THE NOTCH ───────────────────────────────────────────────────────────
+     Reported: the centre button «داخل منو ادغام شده» — it looked merged into
+     the bar rather than separate from it.
+
+     The fix is a real hollow. A radial-gradient mask makes the middle of the
+     top edge transparent, so the bar is genuinely cut away and the droplet
+     floats in the gap with the page visible behind it.
+
+     Why a mask and not a pseudo-element: a ::before circle painted in the
+     bar's own colour would have to match the background exactly, and the bar
+     is semi-transparent with a backdrop blur — an opaque patch over it is
+     immediately visible as a lighter disc. Masking removes the pixels
+     instead of covering them, so the blur, the border and the shadow all
+     follow the new outline for free.
+
+     `transparent 0 32px` then a 1.5px feather to opaque: the feather stops
+     the cut edge looking jagged on a non-retina screen without softening it
+     enough to read as a smudge.
+
+     COST: a mask is a compositor operation on an element that is already
+     composited (it is position:fixed with a backdrop-filter). It does not
+     re-run on scroll and adds no per-frame work — verified by keeping the
+     bar's existing float animation, which is a transform and stays on the
+     compositor thread. */
+  --notch-r: 32px;
+  -webkit-mask-image: radial-gradient(
+    circle var(--notch-r) at 50% 0,
+    transparent 0 var(--notch-r),
+    #000 calc(var(--notch-r) + 1.5px)
+  );
+  mask-image: radial-gradient(
+    circle var(--notch-r) at 50% 0,
+    transparent 0 var(--notch-r),
+    #000 calc(var(--notch-r) + 1.5px)
+  );
+}
+
+/* The spacer that keeps the four tabs clear of the hollow. Width is the
+   notch diameter minus the overlap the curve already gives back at the
+   tabs' vertical centre — measured, not guessed: at y=24px the circle is
+   only ~42px wide, so reserving the full 64px would leave a visible gap. */
+.nav-notch-gap {
+  flex: 0 0 auto;
+  width: 46px;
+  pointer-events: none;
 }
 
 /* ===========================================================================
-   THE RAISED CENTRE BUTTON  —  .nav-centre
+   THE DROPLET  —  .nav-centre
 
-   Requested: «۴ تا ایکون باشه و بین دوتاش با css جذاب یک ایکون بیشتر قرار
-   بگیرد قشنگتر شود البته کند نشود سایت» — four tabs with a fifth, prettier
-   control between them, without slowing the site down.
+   Reported: «این بزرگه داخل منو ادغام شده جالب نیست» — the button looked
+   merged into the bar. Wanted: a droplet that separates FROM the bar, with a
+   hollow cut into the middle, smaller and more minimal.
 
-   ─── HOW IT SITS PROUD OF THE BAR ────────────────────────────────────────
-   `margin-top: -22px` lifts it above the bar's top edge while it stays a
-   normal flex child, so the four tabs still space themselves evenly. The
-   alternative — absolute positioning — would take it out of flow and force
-   the tabs to be manually re-spaced around a gap, which breaks the moment a
-   translation makes a label wider.
+   ─── WHY IT IS NOT A CHILD OF THE BAR ─────────────────────────────────────
+   The bar masks a circular notch out of its own top edge. A mask clips every
+   descendant too, so a button inside the bar would be sliced in half by the
+   very hollow meant to frame it. It is therefore a SIBLING, positioned to
+   the same centre line.
 
-   ─── WHY THIS COSTS NOTHING IN PERFORMANCE ───────────────────────────────
-   The explicit requirement was that it must not slow the app down, so:
+   ─── SIZE ─────────────────────────────────────────────────────────────────
+   48px, down from 56. The previous one filled the bar's height, which is
+   what made it read as part of the bar rather than an object resting in it.
+   At 48 inside a 64px hollow there is 8px of clear air all the way around —
+   that visible gap is what says "separate".
 
-     • NO looping animation. The bar already floats on a 12s cycle; a second
-       permanent animation on the most saturated element competes with the
-       live prices for attention and keeps the compositor awake.
-     • NO backdrop-filter. It is the single most expensive common CSS
-       property and this element is opaque anyway, so it would blur pixels
-       nobody can see.
-     • The teardrop is a border-radius, not an SVG with a filter.
-     • It animates on PRESS only, via transform — a compositor-only property
-       that never triggers layout or paint.
+   ─── COST ─────────────────────────────────────────────────────────────────
+   Still no looping animation, still no backdrop-filter, still a
+   border-radius rather than an SVG. `position: fixed` puts it on its own
+   compositor layer, so its press transform never touches the bar's layout.
    =========================================================================== */
 
 .nav-centre {
-  position: relative;
-  flex: 0 0 auto;
-  width: 56px;
-  height: 56px;
-  /* Lifts it out of the bar. The bar has 9px of padding, so this leaves the
-     button's lower third still inside — it reads as emerging from the bar
-     rather than floating unattached above it. */
-  margin-top: -22px;
-  margin-inline: 2px;
+  position: fixed;
+  left: 50%;
+  /* Sits ON the bar's centre line. The bar's own bottom offset plus enough
+     lift that the droplet's lower edge clears the hollow's rim. */
+  bottom: calc(46px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: 48px;
+  height: 48px;
   border: none;
   background: none;
   padding: 0;
   cursor: pointer;
   display: grid;
   place-items: center;
-  /* Above the bar's own ::before hairline. */
-  z-index: 1;
+  /* Above the bar (40) so the droplet is never clipped by it. */
+  z-index: 41;
   -webkit-tap-highlight-color: transparent;
 }
 
 /*
- * The droplet itself.
+ * The teardrop.
  *
- * Three round corners and one tightened corner is what makes a teardrop
- * rather than a circle. The tight corner points down-left, towards the bar,
- * so the shape reads as hanging from the row.
+ * Three round corners and one tightened corner. The tight corner points
+ * down, towards the hollow, so the shape reads as a drop about to fall into
+ * the bar rather than a circle that happens to be there.
+ *
+ * `border-radius: 50% 50% 12px 50%` — the third value is the bottom-RIGHT
+ * corner in physical order, and rotating the element 45° puts that corner at
+ * the bottom. Rotating is cheaper than describing an asymmetric shape and it
+ * keeps the tap target square.
  */
 .nav-centre-drop {
   position: absolute;
   inset: 0;
-  border-radius: 50% 50% 50% 14px;
-  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2) 55%, var(--rgb-3));
-  /* A ring in the bar's own colour so the button appears to punch through it
-     rather than overlap it. */
-  box-shadow:
-    0 0 0 4px rgba(10, 11, 18, 0.82),
-    0 10px 26px -8px rgba(124, 77, 255, 0.7);
-  /* Only the transform is animated, and only on press. */
-  transition: box-shadow 0.2s ease;
+  border-radius: 50% 50% 10px 50%;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2) 52%, var(--rgb-3));
+  /* No ring in the bar's colour any more — there is a real hole behind it,
+     so the only shadow needed is the one it casts INTO that hole. That
+     shadow is what sells the separation. */
+  box-shadow: 0 6px 18px -4px rgba(124, 77, 255, 0.55);
+  transition: box-shadow 0.22s ease;
 }
 
 :root[data-theme='light'] .nav-centre-drop {
-  box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.92),
-    0 10px 26px -10px rgba(124, 77, 255, 0.5);
+  box-shadow: 0 6px 18px -6px rgba(124, 77, 255, 0.45);
 }
 
-/* The glyph rides above the gradient. Black on a neon fill is the same
-   contrast rule the primary button already uses. */
+/* The glyph must NOT inherit the droplet's 45° rotation, so it is a sibling
+   of the shape rather than a child of it. */
 .nav-centre-glyph {
   position: relative;
   display: grid;
@@ -937,24 +981,32 @@ select option { background: #0a0c12; }
   color: #000;
 }
 
-/* A subtle lift when this IS the current route, so the button participates in
-   the navigation state instead of looking permanently "on". */
+/* Brighter halo when this is the current route — state, not decoration. */
 .nav-centre.active .nav-centre-drop {
-  box-shadow:
-    0 0 0 4px rgba(10, 11, 18, 0.82),
-    0 12px 30px -6px rgba(0, 229, 255, 0.85);
+  box-shadow: 0 8px 22px -3px rgba(0, 229, 255, 0.8);
 }
 
-/* Small phones: the bar is tighter, so shrink rather than let the button
-   squeeze the four tabs into their labels. */
+/* Small phones: shrink the droplet AND the hollow together, or the hollow
+   swallows the button and the separation reads as a mistake. */
 @media (max-width: 360px) {
-  .nav-centre { width: 48px; height: 48px; margin-top: -18px; }
+  .bottom-nav { --notch-r: 27px; }
+  .nav-notch-gap { width: 40px; }
+  .nav-centre {
+    width: 42px;
+    height: 42px;
+    bottom: calc(42px + env(safe-area-inset-bottom));
+  }
 }
 
-/* Landscape phones have ~350px of height and the nav is already reduced;
-   a button breaking out of it would sit near the top of the viewport. */
+/* Landscape phones: the bar is already compressed. */
 @media (max-height: 480px) and (orientation: landscape) {
-  .nav-centre { width: 44px; height: 44px; margin-top: -12px; }
+  .bottom-nav { --notch-r: 24px; }
+  .nav-notch-gap { width: 36px; }
+  .nav-centre {
+    width: 38px;
+    height: 38px;
+    bottom: calc(36px + env(safe-area-inset-bottom));
+  }
 }
 
 :root[data-theme='light'] .bottom-nav {
@@ -3442,6 +3494,116 @@ input, select, textarea { font-size: 16px !important; }
    where the deposit button was.
    ========================================================================== */
 
+/* ===========================================================================
+   THE WALLET HERO  —  .wal-hero
+
+   Requested: a distinct, beautiful treatment «مثل wallet connect را ببین خیلی
+   قشنگه» — but without introducing bugs.
+
+   ─── WHAT THAT LOOK ACTUALLY IS ───────────────────────────────────────────
+   Stripped of branding, the WalletConnect aesthetic is three things:
+
+     1. ONE tall surface instead of several stacked cards.
+     2. A soft coloured wash that sits BEHIND the content, not on it, so text
+        contrast never depends on where the gradient happens to be bright.
+     3. A single bright pair of actions and nothing else competing.
+
+   The reordering in the JSX does most of the work. This adds the depth.
+
+   ─── WHY THE WASH IS A SEPARATE ELEMENT ───────────────────────────────────
+   `.wal-hero-aurora` is its own absolutely-positioned div rather than a
+   background on the card. Two reasons, both practical:
+
+     • A background-image on the card would sit under the card's own
+       translucent background and be muddied by it.
+     • Keeping it separate means `filter: blur()` applies ONLY to the wash.
+       Blurring the card itself would blur the text.
+
+   ─── COST ─────────────────────────────────────────────────────────────────
+   The wash is two radial gradients on one element, painted once. It does not
+   animate — a permanently moving gradient behind a balance is the kind of
+   thing that looks impressive for a day and then makes the number hard to
+   read. `will-change` is deliberately NOT set: this layer never changes, so
+   promoting it would cost memory for nothing.
+   =========================================================================== */
+
+.wal-hero {
+  position: relative;
+  overflow: hidden;
+  /* Slightly deeper than a normal card so the hero reads as the primary
+     surface on the screen rather than the first of several equals. */
+  padding: 18px 16px 16px;
+  border-radius: var(--radius-lg);
+}
+
+.wal-hero-aurora {
+  position: absolute;
+  /* Overhangs the card so the blur has room to fall off; without the
+     negative inset the gradient would be visibly cut at the rounded corner. */
+  inset: -40% -20% auto -20%;
+  height: 190px;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 70% at 22% 30%, color-mix(in srgb, var(--rgb-1) 40%, transparent), transparent 70%),
+    radial-gradient(55% 65% at 82% 18%, color-mix(in srgb, var(--rgb-2) 42%, transparent), transparent 72%);
+  filter: blur(26px);
+  opacity: 0.65;
+}
+
+:root[data-theme='light'] .wal-hero-aurora { opacity: 0.4; }
+
+/* Content must sit above the wash. Set once here rather than on each child. */
+.wal-hero > *:not(.wal-hero-aurora) { position: relative; z-index: 1; }
+
+/* The address chip. A bordered pill rather than bare text, so the address
+   reads as a discrete object you could copy rather than a stray string. */
+.wal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 127, 0.1);
+  font-size: 12.5px;
+}
+
+.wal-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/*
+ * A live wallet gets a slow pulse. This is the ONE looping animation on the
+ * screen and it is 7px wide — it says "connected" at a glance, which is the
+ * single piece of state a wallet screen must always convey. A locked wallet
+ * does not pulse, so the absence is also information.
+ */
+.wal-chip-dot.is-live { animation: wal-pulse 2.4s ease-in-out infinite; }
+
+@keyframes wal-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 55%, transparent); }
+  70% { box-shadow: 0 0 0 5px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wal-chip-dot.is-live { animation: none; }
+}
+
+.wal-hero-value { margin: 6px 0 2px; }
+
+/* The balance is the reason the screen exists, so it is the largest thing on
+   it. `tabular-nums` stops the digits jittering as the value refreshes —
+   without it a 3 becoming a 1 visibly shifts everything to its right. */
+.wal-hero-total {
+  font-size: clamp(28px, 8vw, 38px);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
 .wal-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3520,6 +3682,44 @@ input, select, textarea { font-size: 16px !important; }
 
 .disc-grid { display: grid; grid-template-columns: 1fr; gap: 7px; }
 @media (min-width: 420px) { .disc-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Search over the curated list. Deliberately NOT an address bar — see the
+   header of Discover.jsx for why a free-typing URL field inside a wallet is
+   a phishing delivery mechanism. */
+.disc-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-3);
+}
+
+.disc-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text-1);
+  padding: 12px 0;
+  font-family: inherit;
+  outline: none;
+}
+
+.disc-search-clear {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px;
+  /* 44px is the accessibility minimum for a tap target, and a clear button
+     that is hard to hit is worse than no clear button. */
+  min-width: 32px;
+  min-height: 32px;
+}
 
 .disc-card {
   display: flex;

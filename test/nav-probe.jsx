@@ -24,17 +24,38 @@ export async function run(container) {
   await act(async () => {
     root.render(<TelegramProvider><HashRouter><BottomNav /></HashRouter></TelegramProvider>);
   });
+  const bar = container.querySelector('.bottom-nav');
   const tabs = container.querySelectorAll('.nav-item');
   const centre = container.querySelector('.nav-centre');
   const drop = container.querySelector('.nav-centre-drop');
+  const gap = container.querySelector('.nav-notch-gap');
+
   t(`there are 4 tabs (got ${tabs.length})`, tabs.length === 4);
-  t('the centre button exists', Boolean(centre));
-  t('the droplet element exists', Boolean(drop));
-  t('the centre button is accessible', Boolean(centre?.getAttribute('aria-label')));
-  // position: must be the 3rd child so it sits between tab2 and tab3
-  const kids = [...container.querySelector('.bottom-nav').children];
-  t(`the centre sits in the middle (index ${kids.indexOf(centre)} of ${kids.length})`,
-    kids.indexOf(centre) === 2 && kids.length === 5);
+  t('the droplet button exists', Boolean(centre));
+  t('the teardrop shape exists', Boolean(drop));
+  t('the droplet is accessible', Boolean(centre?.getAttribute('aria-label')));
+
+  /*
+   * THE STRUCTURAL RULE THIS SCREEN DEPENDS ON.
+   *
+   * The bar masks a circular notch out of its own top edge, and a CSS mask
+   * clips every descendant. So a droplet rendered INSIDE the bar would be
+   * sliced in half by the very hollow meant to frame it — the exact "merged
+   * into the menu" look that was reported.
+   *
+   * It must therefore be a sibling. This is easy to undo by accident while
+   * tidying JSX, and the result would look subtly wrong rather than throw,
+   * so it is asserted rather than trusted.
+   */
+  t('the droplet is NOT inside the masked bar', Boolean(centre) && !bar.contains(centre));
+
+  /*
+   * A zero-content spacer holds the horizontal room so the four tabs space
+   * themselves around the hollow instead of sliding underneath it.
+   */
+  const kids = [...bar.children];
+  t(`the notch gap sits between tab 2 and 3 (index ${kids.indexOf(gap)} of ${kids.length})`,
+    kids.indexOf(gap) === 2 && kids.length === 5);
   await act(async () => root.unmount());
   return rows;
 }

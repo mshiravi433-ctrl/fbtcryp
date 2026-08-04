@@ -1625,7 +1625,10 @@
       "bnbchain": "BNB Chain",
       "ethereum": "Ethereum.org",
       "l2beat": "L2BEAT"
-    }
+    },
+    "trending": "الأكثر رواجاً",
+    "searchPlaceholder": "ابحث في هذه المواقع",
+    "noMatch": "لا يوجد ما يطابق «{{q}}». جرّب كلمة أخرى أو امسح البحث لعرض كل المواقع."
   },
   "nft": {
     "title": "NFT الخاصة بي",

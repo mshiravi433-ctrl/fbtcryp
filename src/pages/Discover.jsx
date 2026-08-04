@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
-import { IconChevronLeft, IconExternal } from '../components/Icons';
+import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
+import { usePoll } from '../hooks/useMarket';
+import { getTrending } from '../lib/api';
 
 /**
  * DISCOVER — curated links, opened in the system browser.
@@ -95,8 +97,42 @@ export default function Discover() {
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [cat, setCat] = useState('all');
+  const [q, setQ] = useState('');
 
-  const groups = useMemo(() => (cat === 'all' ? LINKS : LINKS.filter((g) => g.cat === cat)), [cat]);
+  /*
+   * ─── LIVE TRENDING ────────────────────────────────────────────────────────
+   * Discover was a static list of sixteen links and nothing else, so there
+   * was no reason to open it twice. A live strip gives the screen something
+   * that changes.
+   *
+   * Reuses `getTrending`, which the Market screen already polls and the
+   * server already caches for 120s — so on a device that has visited Market
+   * this costs ZERO extra requests, and at worst it is one cached call.
+   * A 5-minute interval rather than the default 30s: trending coins do not
+   * turn over in half a minute, and this screen is not the one people watch.
+   */
+  const { data: trending } = usePoll(getTrending, [], 300000);
+
+  /*
+   * Search filters the curated list only. It deliberately does NOT accept a
+   * URL — see the header: a free-typing address bar inside a wallet is a
+   * phishing delivery mechanism, and adding one here would undo the single
+   * most important property of this screen.
+   */
+  const groups = useMemo(() => {
+    const base = cat === 'all' ? LINKS : LINKS.filter((g) => g.cat === cat);
+    const needle = q.trim().toLowerCase();
+    if (!needle) return base;
+    return base
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((it) => {
+          const name = t(`discover.site.${it.id}`).toLowerCase();
+          return name.includes(needle) || it.url.toLowerCase().includes(needle);
+        })
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [cat, q, t]);
 
   const go = async (item) => {
     haptic?.('light');
@@ -122,6 +158,56 @@ export default function Discover() {
       </motion.div>
 
       <p className="muted">{t('discover.subtitle')}</p>
+
+      {/*
+        ─── LIVE TRENDING ──────────────────────────────────────────────────
+        Tapping a coin goes to OUR coin page, not out to a website. That is
+        deliberate: this screen's job is to be useful without sending people
+        away, and an internal route carries no phishing risk at all.
+      */}
+      {Array.isArray(trending) && trending.length > 0 && (
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <p className="section-label" style={{ marginBottom: 8 }}>{t('discover.trending')}</p>
+          <div className="tag-scroll">
+            {trending.slice(0, 10).map((c) => (
+              <button
+                key={c.id}
+                className="tag tag-token"
+                onClick={() => {
+                  haptic?.('light');
+                  navigate(`/coin/${c.id}`);
+                }}
+              >
+                {c.image && <img src={c.image} alt="" width={16} height={16} style={{ borderRadius: '50%' }} loading="lazy" />}
+                {c.symbol}
+              </button>
+            ))}
+          </div>
+        </motion.section>
+      )}
+
+      {/*
+        Search over the CURATED list only. It cannot navigate to a typed
+        address — see the file header for why a free-typing address bar in a
+        wallet app is a phishing vector.
+      */}
+      <label className="disc-search">
+        <IconSearch width={15} height={15} />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t('discover.searchPlaceholder')}
+          inputMode="search"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        {q && (
+          <button type="button" className="disc-search-clear" onClick={() => setQ('')} aria-label={t('common.close')}>
+            ✕
+          </button>
+        )}
+      </label>
 
       <div className="tag-scroll">
         {CATEGORIES.map((c) => (
@@ -160,6 +246,16 @@ export default function Discover() {
           </div>
         </motion.section>
       ))}
+
+      {/* A search that matches nothing must say so. An empty screen reads as
+          a broken page rather than a filter with no results. */}
+      {groups.length === 0 && (
+        <motion.div className="card" variants={riseIn} initial="hidden" animate="show">
+          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.8 }}>
+            {t('discover.noMatch', { q: q.trim() })}
+          </p>
+        </motion.div>
+      )}
 
       <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
         {t('discover.safety')}
