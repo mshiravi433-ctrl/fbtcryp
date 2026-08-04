@@ -269,6 +269,20 @@ console.log('\n▸ timing the multi-aggregator quote race…');
   report('quote race', await runRace());
 }
 
+/*
+ * The wallet panel. Its geometry broke twice from class-cascade conflicts, so
+ * the structure is now asserted rather than assumed.
+ */
+console.log('\n▸ checking the wallet panel…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.wallet.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runWallet } = await import('./.out/wallet/wallet-probe.js');
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  report('wallet panel', await runWallet(host));
+}
+
 console.log('\n▸ checking the bottom nav layout…');
 {
   npx(['vite', 'build', '-c', 'test/vite.nav.mjs', '--logLevel', 'error']);

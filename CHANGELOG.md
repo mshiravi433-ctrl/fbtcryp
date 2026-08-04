@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.17.1 — versionCode 44
+
+### The full build existed but nothing ever built it
+
+This is why "امکانات کم شده" was still true after the last release.
+
+`ci/build-full.sh` was added, and it worked — but **CI only ever ran
+`ci/build-apk.sh`**. So the only APK that reached GitHub Releases was the store
+build, with prediction, perpetuals, invest and the arcade stripped out. A build
+variant nothing executes is a deletion with extra steps.
+
+`ci/build-both.sh` now produces both in one run:
+
+| File | For |
+|---|---|
+| `app-release.apk` / `.aab` | app stores — no speculation screens |
+| `FBT-Swap-full.apk` | GitHub Releases, direct download — **everything** |
+
+The full build runs **first** and is renamed immediately, so the stable
+`app-release.apk` name is left holding the store artifact. Reversed, an
+automated upload grabbing that filename would send the full build to a store
+and earn a second rejection.
+
+The flags are exported inside a **subshell**, so they cannot leak into the
+store build — a leak would silently produce two identical full builds, one of
+them labelled as the store one. Verified.
+
+⚠️ **One line to change** — in `.github/workflows/channel-post.yml`'s sibling
+`build-apk.yml`, replace `bash ci/build-apk.sh` with `bash ci/build-both.sh`.
+The upload globs are already `out/*.apk`, so they pick up both files with no
+other edit.
+
+### The wallet fixes were real — the APK was older than them
+
+The panel work shipped in 1.17.0. A DOM probe now asserts the structure on
+every test run, because the failure was a *cascade* outcome: `.card` and
+`.wal-hero` each set a different padding while the divider hard-coded `-18px`,
+so both rules were individually reasonable and only their combination was
+wrong. Reading the CSS would not have caught it.
+
+Verified in the DOM: the hero is no longer also a `.card`, the SVG mesh and
+empty-state mark render, and there are **zero** inline `width: 100%` overrides
+fighting the stylesheet.
+
 ## 1.17.0 — versionCode 43
 
 ### The wallet panel was broken by three sources of truth
