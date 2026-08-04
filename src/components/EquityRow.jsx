@@ -113,6 +113,14 @@ export default function EquityRow({ asset, amountUsd, onBuy }) {
         </div>
       )}
 
+      {/*
+        SpaceX is private: no exchange listing, no public quote to check this
+        price against. That is simultaneously the reason it is interesting —
+        this access does not exist through any broker — and a real extra risk,
+        so it is stated on the row rather than smoothed over.
+      */}
+      {asset.privateCompany && <p className="eq-toobig">{t('stocks.privateCompany')}</p>}
+
       {/* Only rendered when the chosen size is actually a problem. */}
       {!verdict.ok && verdict.reason === 'tooBig' && (
         <p className="eq-toobig">

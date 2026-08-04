@@ -2552,7 +2552,7 @@ export default function run() {
     const all = [...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS];
 
     t('every curated mint is a plausible Solana address',
-      all.length === 10 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 16 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.
@@ -2805,6 +2805,66 @@ export default function run() {
     /* Thin books, so the same depth gate must bind here too. */
     t('the depth gate applies to gold as well',
       liquidityVerdict(471_000, 20_000).ok === false && liquidityVerdict(471_000, 1_000).ok === true);
+  }
+
+  /* ============ what was left OUT of the asset list, and why ============= */
+  /*
+   * ─── THE MOST IMPORTANT TEST IN THIS FILE ─────────────────────────────────
+   * The owner asked for silver, copper and European stocks by name. Every one
+   * was checked against the live API and rejected on MEASUREMENT:
+   *
+   *   NVOx (Novo Nordisk)  real token, verified issuer, $122 of liquidity.
+   *                        A $200 order is bigger than the entire book.
+   *   silver (XAG)         eight results, ALL pump.fun clones with
+   *                        mintAuthorityDisabled and $1.5k-$6k of liquidity.
+   *                        No legitimate silver token exists on Solana today.
+   *   copper / bronze      no tokenized copper with real depth; bronze is an
+   *                        alloy and is not a traded instrument anywhere.
+   *
+   * These assertions exist because "the owner asked for it" is exactly the
+   * pressure under which a scam token gets added later. A listing is a
+   * recommendation to consider something, and listing an asset nobody can
+   * exit is worse than omitting it.
+   */
+  {
+    const symbols = [...EQUITY_ASSETS, ...COMMODITY_ASSETS].map((a) => a.symbol.toUpperCase());
+
+    /* Silver: every candidate on Solana today is a clone. */
+    t('no silver token is listed', !symbols.some((sym) => /^XAG/.test(sym)));
+    for (const clone of [
+      '8Ppjpe9G6TKoKdhCdMbo1AgDZDzuwSVRPBg8pLkVpump',
+      'Cd2LW9jS2fSaWapLfdx2Ga39SxFvy5MGMMTioxksbonk',
+      'EWWq19y1ig73sA54eooWLGLmk6WdmshGr7Fqt9jFpump'
+    ]) {
+      t(`the silver clone ${clone.slice(0, 6)}… is not curated`, !isCuratedMint(clone));
+    }
+
+    /*
+     * Novo Nordisk. The mint is REAL and the issuer check would pass — this is
+     * rejected purely on depth, which is why it needs its own guard: a future
+     * reader might "fix the omission" without checking the book.
+     */
+    t('Novo Nordisk is not listed while its book is empty',
+      !isCuratedMint('XsfAzPzYrYjd4Dpa9BU3cusBsvWfVB9gBcyGC87S57n'));
+
+    /*
+     * And the listing floor must be high enough to have excluded it. NVOx had
+     * $122; if MIN_EQUITY_LIQUIDITY ever dropped below that, the guard above
+     * would be the only thing left and it only covers one ticker.
+     */
+    t('the listing floor would have excluded a $122 book', MIN_EQUITY_LIQUIDITY > 122);
+
+    /* SpaceX is included, and must carry its private-company caveat. */
+    const spcx = EQUITY_ASSETS.find((a) => a.symbol === 'SPCXx');
+    t('SpaceX is listed', Boolean(spcx));
+    t('...and is flagged as a private company', spcx.privateCompany === true);
+    /*
+     * Nothing else may carry that flag. Every other name here has a public
+     * quote to check against, and claiming otherwise would understate their
+     * transparency rather than overstate it — but it would still be wrong.
+     */
+    t('...and nothing with a public listing claims to be private',
+      EQUITY_ASSETS.filter((a) => a.privateCompany).length === 1);
   }
 
   return rows;

@@ -167,8 +167,106 @@ export const EQUITY_ASSETS = [
     name: 'Microsoft',
     decimals: 8,
     kind: 'single'
+  },
+  /*
+   * ─── SPACEX ───────────────────────────────────────────────────────────────
+   * Requested by name («شرکت های ایلان ماسک»). Worth its own note because it
+   * is the one genuinely unusual thing on this list: SpaceX is PRIVATE. There
+   * is no public share, no exchange listing, and no way for a retail investor
+   * anywhere to buy it through a broker.
+   *
+   * Backed's SPCXx is a claim on pre-IPO shares held by the issuer. That makes
+   * it more useful than the others — this is access that does not otherwise
+   * exist — and also strictly riskier, because there is no public market price
+   * to check the token against. The valuation moves on funding rounds, not on
+   * a ticker. Everything else here can be verified against a public quote;
+   * this cannot.
+   *
+   * Included because the access is real and the liquidity is there ($119k and
+   * 8,164 holders, verified). The extra risk is stated on the row rather than
+   * being smoothed over.
+   */
+  {
+    id: 'spcxx',
+    mint: 'Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8',
+    symbol: 'SPCXx',
+    name: 'SpaceX',
+    decimals: 8,
+    kind: 'single',
+    /* Renders the "private company, no public price" caveat on the row. */
+    privateCompany: true
+  },
+  {
+    id: 'googlx',
+    mint: 'XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN',
+    symbol: 'GOOGLx',
+    name: 'Alphabet (Google)',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'mstrx',
+    mint: 'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
+    symbol: 'MSTRx',
+    name: 'MicroStrategy',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'coinx',
+    mint: 'Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu',
+    symbol: 'COINx',
+    name: 'Coinbase',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'crclx',
+    mint: 'XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1',
+    symbol: 'CRCLx',
+    name: 'Circle',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'metax',
+    mint: 'Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu',
+    symbol: 'METAx',
+    name: 'Meta',
+    decimals: 8,
+    kind: 'single'
   }
 ];
+
+/*
+ * ─── WHAT WAS DELIBERATELY LEFT OUT, AND WHY ────────────────────────────────
+ * These were all requested or obvious candidates. Each was checked against the
+ * live API and rejected on measurement, not on taste:
+ *
+ *   NVOx  (Novo Nordisk)  — $122 of liquidity. Real token, verified issuer,
+ *                           and completely untradeable: a $200 order is
+ *                           larger than the entire book. Europe's biggest
+ *                           pharma company, and listing it would be listing a
+ *                           trap.
+ *   Other EU names        — Backed issues ASML, SAP and Nestlé tokens, but
+ *                           their Solana pools are in the same state as NVOx.
+ *                           European tokenized equity exists on paper and has
+ *                           essentially no on-chain market yet.
+ *   Copper / bronze       — no tokenized copper on Solana with real depth.
+ *                           Every "XCU" style token found was a pump.fun
+ *                           clone. Bronze is an alloy and is not traded as a
+ *                           financial instrument at all, anywhere.
+ *   Silver                — searching XAG returns eight tokens, ALL of them
+ *                           pump.fun clones with $1.5k-$6k of fake liquidity
+ *                           and `mintAuthorityDisabled`. There is no
+ *                           legitimate silver token on Solana today. Adding
+ *                           one would be adding the exact scam this file
+ *                           exists to keep out.
+ *
+ * The rule this follows: a listing is a recommendation to consider something.
+ * Listing an asset nobody can exit is worse than omitting it, and "the user
+ * asked for it" does not change what happens to their money.
+ */
 
 /**
  * TOKENIZED GOLD.

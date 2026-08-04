@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.22.0 — versionCode 50
+
+### The Buy screen no longer complains about MoonPay
+
+Removed the sentence naming the on-ramps that refuse this region. Naming
+providers who rejected us is a complaint, not information: the reader learns
+nothing they can act on, and it makes a first impression sound defensive. The
+screen now just lists the routes that work.
+
+### Six more companies, including SpaceX
+
+Verified against the live API before listing: SPCXx (SpaceX), GOOGLx
+(Alphabet), MSTRx (MicroStrategy), COINx (Coinbase), CRCLx (Circle), METAx
+(Meta). Sixteen curated assets now.
+
+**SpaceX is the interesting one.** It is a *private* company — no exchange
+listing, no broker anywhere sells it, no public quote. The token is a claim on
+pre-IPO shares held by the issuer, which makes it access that genuinely does
+not otherwise exist, and also strictly riskier than the rest: everything else
+here can be checked against a live market price and this cannot. The row says
+so.
+
+### What was left out, and why it matters more than what went in
+
+Silver, copper and European stocks were all requested by name. Each was checked
+against the live API and rejected on **measurement**:
+
+| Asked for | What the API actually returns |
+|---|---|
+| Silver (XAG) | Eight results, **all** pump.fun clones with `mintAuthorityDisabled` and $1.5k–$6k of fake liquidity. No legitimate silver token exists on Solana. |
+| Novo Nordisk | Real token, verified issuer, **$122 of liquidity**. A $200 order is larger than the entire book. |
+| ASML / SAP / Nestlé | Same state as Novo Nordisk. European tokenized equity exists on paper with essentially no on-chain market. |
+| Copper | Nothing with real depth. Every "XCU" candidate was a clone. |
+| Bronze | An alloy. Not traded as a financial instrument anywhere, by anyone. |
+
+These omissions are now **enforced by tests**, including one that asserts the
+listing floor is high enough to have excluded Novo Nordisk's $122 book. That
+guard exists because "the owner asked for it" is precisely the pressure under
+which a scam token gets added six months from now.
+
+A listing is a recommendation to consider something. Listing an asset nobody
+can exit is worse than omitting it.
+
+### On the futures engine
+
+Not built, and it would be dishonest to ship a version of it. A real perpetuals
+venue needs an oracle, a margin engine, a liquidation keeper and an insurance
+fund. Jupiter Perps exists and works, but its integrator revenue runs through
+the same referral programme our spot fee does — which is still unconfigured, so
+wiring perps in today would add leverage to the product and earn exactly
+nothing.
+
+The speculation screens (`/perp`) already explain funding, liquidation and
+leverage honestly, and remain the right shape until the referral account is set
+up.
+
+### Tests
+
+1285 checks, up from 1276. Ten sabotages verified, including adding the real
+Novo Nordisk token, adding a real silver clone, and dropping the listing floor
+below $122 — all three caught.
+
 ## 1.21.0 — versionCode 49
 
 ### Two bugs on the tokenized-equity screen

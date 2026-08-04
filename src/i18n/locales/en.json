@@ -924,7 +924,8 @@
     "wouldGet": "{{amount}} would buy about",
     "gold": "Gold",
     "goldIntro": "Each token is one troy ounce of real gold in a vault. No dealer premium, no storage to arrange, and you can buy a fraction of an ounce. The same issuer freeze risk above applies to these too — gold is not exempt from it.",
-    "kindCommodity": "Physical gold"
+    "kindCommodity": "Physical gold",
+    "privateCompany": "SpaceX is a private company — there is no stock exchange listing and no public price to check this against. That is exactly why this access is unusual, and also why it carries more risk than the others: the value moves on funding rounds, not on a live market."
   },
   "help": {
     "title": "Help & support",
@@ -1921,7 +1922,7 @@
     "noFee": "We charge nothing on this page. FBT is not part of these transactions — no fee, no commission, no referral cut. Our 0.70% applies only to swaps inside the app, and it is shown before you sign.",
     "buy": {
       "heading": "Turning money into crypto",
-      "body": "FBT does not sell crypto and never holds your money — there is no deposit address here and never will be. What this page does is point you at the routes that work, so the coins arrive directly in a wallet only you control. Card on-ramps like MoonPay and Transak are not listed because they refuse this region; listing buttons that always fail would waste your time.",
+      "body": "FBT does not sell crypto and never holds your money — there is no deposit address here and never will be. What this page does is point you at the routes that work, so the coins arrive directly in a wallet only you control.",
       "routesTitle": "Ways that work"
     },
     "sell": {
