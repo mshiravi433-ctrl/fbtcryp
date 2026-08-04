@@ -875,7 +875,7 @@ select option { background: #0a0c12; }
      re-run on scroll and adds no per-frame work — verified by keeping the
      bar's existing float animation, which is a transform and stays on the
      compositor thread. */
-  --notch-r: 32px;
+  --notch-r: 29px;
   -webkit-mask-image: radial-gradient(
     circle var(--notch-r) at 50% 0,
     transparent 0 var(--notch-r),
@@ -894,118 +894,132 @@ select option { background: #0a0c12; }
    only ~42px wide, so reserving the full 64px would leave a visible gap. */
 .nav-notch-gap {
   flex: 0 0 auto;
-  width: 46px;
+  width: 42px;
   pointer-events: none;
 }
 
 /* ===========================================================================
    THE DROPLET  —  .nav-centre
 
-   Reported: «این بزرگه داخل منو ادغام شده جالب نیست» — the button looked
-   merged into the bar. Wanted: a droplet that separates FROM the bar, with a
-   hollow cut into the middle, smaller and more minimal.
+   Reference the owner sent: a "CSS magic menu" indicator. What makes that
+   one minimal, compared to what was here before:
 
-   ─── WHY IT IS NOT A CHILD OF THE BAR ─────────────────────────────────────
-   The bar masks a circular notch out of its own top edge. A mask clips every
-   descendant too, so a button inside the bar would be sliced in half by the
-   very hollow meant to frame it. It is therefore a SIBLING, positioned to
-   the same centre line.
+     • ONE flat colour. No gradient. A gradient on a 48px circle is detail
+       nobody can resolve at that size — it just makes the shape look heavy.
+     • A plain CIRCLE, not a teardrop with a rotated corner. The reference
+       reads as "a drop about to fall into the sea" purely from being round
+       and sitting above the surface. The pointed corner was me over-drawing
+       the metaphor.
+     • NO coloured glow. The reference has a soft neutral shadow underneath
+       and nothing else. A neon halo is the single heaviest thing that was
+       on this element.
+     • Smaller: 44px. Big enough for the 44px accessibility minimum, small
+       enough to read as an accent rather than a control panel.
 
-   ─── SIZE ─────────────────────────────────────────────────────────────────
-   48px, down from 56. The previous one filled the bar's height, which is
-   what made it read as part of the bar rather than an object resting in it.
-   At 48 inside a 64px hollow there is 8px of clear air all the way around —
-   that visible gap is what says "separate".
+   ─── WHY IT IS STILL A SIBLING OF THE BAR ─────────────────────────────────
+   The bar masks a circular notch out of its own top edge, and a CSS mask
+   clips every descendant — a button inside the bar would be sliced in half
+   by the very hollow meant to frame it.
 
    ─── COST ─────────────────────────────────────────────────────────────────
-   Still no looping animation, still no backdrop-filter, still a
-   border-radius rather than an SVG. `position: fixed` puts it on its own
-   compositor layer, so its press transform never touches the bar's layout.
+   Flat colour, one shadow, no filter, no backdrop-filter, no looping
+   animation. `position: fixed` gives it its own compositor layer, so the
+   press transform never touches the bar's layout.
    =========================================================================== */
 
 .nav-centre {
   position: fixed;
   left: 50%;
-  /* Sits ON the bar's centre line. The bar's own bottom offset plus enough
-     lift that the droplet's lower edge clears the hollow's rim. */
-  bottom: calc(46px + env(safe-area-inset-bottom));
+  /*
+     ─── THE ALIGNMENT, DERIVED NOT GUESSED ──────────────────────────────
+     The notch is cut at the bar's TOP EDGE, which sits at:
+        14px (bar offset) + 64px (9 padding + 46 item + 9 padding) = 78px
+     For the drop to sit centred in that hollow its own centre must be at
+     78px too, so its bottom offset is 78 - 44/2 = 56px.
+
+     The first attempt used 48px, which put the centre at 70 — eight pixels
+     BELOW the notch centre, so the drop sank into the bar instead of
+     resting in the hollow. That is exactly the "merged into the menu" look
+     that was reported, reintroduced by arithmetic rather than by styling.
+  */
+  bottom: calc(56px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border: none;
   background: none;
   padding: 0;
   cursor: pointer;
   display: grid;
   place-items: center;
-  /* Above the bar (40) so the droplet is never clipped by it. */
+  /* Above the bar (40) so it is never clipped by it. */
   z-index: 41;
   -webkit-tap-highlight-color: transparent;
 }
 
 /*
- * The teardrop.
+ * A plain circle in one flat accent colour.
  *
- * Three round corners and one tightened corner. The tight corner points
- * down, towards the hollow, so the shape reads as a drop about to fall into
- * the bar rather than a circle that happens to be there.
- *
- * `border-radius: 50% 50% 12px 50%` — the third value is the bottom-RIGHT
- * corner in physical order, and rotating the element 45° puts that corner at
- * the bottom. Rotating is cheaper than describing an asymmetric shape and it
- * keeps the tap target square.
+ * The shadow is NEUTRAL (black), not tinted. A coloured shadow reads as a
+ * glow — the thing that made the old button look inflated. A black shadow
+ * reads as depth, which is what "resting above the surface" needs.
  */
 .nav-centre-drop {
   position: absolute;
   inset: 0;
-  border-radius: 50% 50% 10px 50%;
-  transform: rotate(45deg);
-  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2) 52%, var(--rgb-3));
-  /* No ring in the bar's colour any more — there is a real hole behind it,
-     so the only shadow needed is the one it casts INTO that hole. That
-     shadow is what sells the separation. */
-  box-shadow: 0 6px 18px -4px rgba(124, 77, 255, 0.55);
-  transition: box-shadow 0.22s ease;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.55);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease;
 }
 
 :root[data-theme='light'] .nav-centre-drop {
-  box-shadow: 0 6px 18px -6px rgba(124, 77, 255, 0.45);
+  box-shadow: 0 4px 12px -3px rgba(15, 23, 42, 0.28);
 }
 
-/* The glyph must NOT inherit the droplet's 45° rotation, so it is a sibling
-   of the shape rather than a child of it. */
 .nav-centre-glyph {
   position: relative;
   display: grid;
   place-items: center;
-  color: #000;
+  /* Dark ink on the accent fill — the same contrast rule the primary button
+     already follows. */
+  color: #06070c;
 }
 
-/* Brighter halo when this is the current route — state, not decoration. */
+/*
+ * Current route: the drop settles a little lower, as if about to touch the
+ * surface. A position change rather than a brightness change, because the
+ * flat fill has nowhere brighter to go without becoming a glow again.
+ */
 .nav-centre.active .nav-centre-drop {
-  box-shadow: 0 8px 22px -3px rgba(0, 229, 255, 0.8);
+  transform: translateY(2px);
+  background: var(--rgb-4);
 }
 
-/* Small phones: shrink the droplet AND the hollow together, or the hollow
+/* Small phones: shrink the drop AND the hollow together, or the hollow
    swallows the button and the separation reads as a mistake. */
 @media (max-width: 360px) {
-  .bottom-nav { --notch-r: 27px; }
-  .nav-notch-gap { width: 40px; }
+  .bottom-nav { --notch-r: 25px; }
+  .nav-notch-gap { width: 38px; }
   .nav-centre {
-    width: 42px;
-    height: 42px;
-    bottom: calc(42px + env(safe-area-inset-bottom));
+    width: 40px;
+    height: 40px;
+    /* Same derivation: 78 - 40/2 = 58. */
+    bottom: calc(58px + env(safe-area-inset-bottom));
   }
 }
 
 /* Landscape phones: the bar is already compressed. */
 @media (max-height: 480px) and (orientation: landscape) {
-  .bottom-nav { --notch-r: 24px; }
-  .nav-notch-gap { width: 36px; }
+  .bottom-nav { --notch-r: 23px; }
+  .nav-notch-gap { width: 34px; }
   .nav-centre {
-    width: 38px;
-    height: 38px;
-    bottom: calc(36px + env(safe-area-inset-bottom));
+    width: 36px;
+    height: 36px;
+    /* Landscape shrinks --nav-h to 62, so the bar top edge is lower:
+       14 + (9 + 46 + 9) still holds because .nav-item keeps its min-height;
+       the drop centre lands at 78 again. 78 - 36/2 = 60. */
+    bottom: calc(60px + env(safe-area-inset-bottom));
   }
 }
 

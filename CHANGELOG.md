@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.14.1 — versionCode 37
+
+### The centre button is minimal now
+
+The reference image made the gap obvious. Four things were making it heavy:
+
+| | before | now |
+|---|---|---|
+| Fill | 3-stop neon gradient | one flat colour |
+| Shape | teardrop, rotated 45° | plain circle |
+| Shadow | coloured glow | neutral black |
+| Size | 48px | **44px** |
+
+A gradient on a 44px circle is detail nobody can resolve — it only makes the
+shape look inflated. The coloured glow was the single heaviest thing on the
+element. And the pointed corner was over-drawing the metaphor: the reference
+reads as "a drop about to fall" purely from being round and sitting above the
+surface.
+
+The active state now *sinks* two pixels and changes hue instead of glowing
+brighter, because a flat fill has nowhere brighter to go without becoming a
+glow again.
+
+### …and it was eight pixels out of place
+
+Found while re-measuring: the drop's centre sat at 70px while the notch's
+centre is at 78px, so it was **sinking into the bar** rather than resting in
+the hollow — the same "merged into the menu" look that was reported, but
+reintroduced by arithmetic rather than styling. It looked entirely plausible
+in the CSS.
+
+The relationship is now derived and asserted at all three breakpoints:
+
+```
+bottom + diameter/2  ===  barOffset + barHeight
+56     + 44/2        ===  14        + 64        = 78 ✓
+```
+
+The test fails with the old value, so this cannot drift again.
+
+### The glyph matches where it goes
+
+The first pass put a home icon on a button that navigates to Buy & sell. It is
+now a filled plus — and filled rather than stroked because a 2px stroke on a
+saturated 44px circle reads as faint.
+
 ## 1.14.0 — versionCode 36
 
 ### The centre button now separates from the menu

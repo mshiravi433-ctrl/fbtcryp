@@ -74,11 +74,27 @@ function CentreAction({ active, still, label, onClick }) {
     >
       <span className="nav-centre-drop" aria-hidden="true" />
       <span className="nav-centre-glyph" aria-hidden="true">
-        {/* A plain glyph, not an animated icon: at this size and saturation
-            a moving path reads as noise rather than detail. */}
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 5v14M5 12h14" />
+        {/*
+          A FILLED glyph, not a stroked one.
+
+          The reference the owner sent uses solid icons inside the indicator,
+          and there is a reason beyond taste: on a 44px circle of flat colour,
+          a 2px stroke is a thin light line on a saturated field and reads as
+          faint. A filled shape holds its weight at that size.
+
+          Also 18px rather than 20: the smaller the glyph relative to the
+          circle, the more the circle reads as a deliberate accent rather
+          than a button that happens to have an icon in it.
+        */}
+        {/*
+          The glyph must match the DESTINATION. This button goes to Buy &
+          sell, so it is a filled plus — the universal "add funds" mark. A
+          home icon here (my first attempt) would have been a control whose
+          picture and behaviour disagreed, which is the same class of bug as
+          a mislabelled button.
+        */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M13.4 3.6a1.4 1.4 0 0 0-2.8 0v7h-7a1.4 1.4 0 0 0 0 2.8h7v7a1.4 1.4 0 0 0 2.8 0v-7h7a1.4 1.4 0 0 0 0-2.8h-7Z" />
         </svg>
       </span>
     </motion.button>
