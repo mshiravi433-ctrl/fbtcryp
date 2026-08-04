@@ -116,6 +116,17 @@ export default defineConfig({
   server: {
     host: true, // so a tunnel (ngrok/cloudflared) can reach the dev server
     port: 5173,
+    /*
+     * Vite 5 rejects Host headers it does not recognise, which is the right
+     * default (it prevents DNS-rebinding against a dev server) but breaks
+     * every tunnelling setup: ngrok, cloudflared and hosted preview sandboxes
+     * all serve the dev server under a hostname Vite has never seen, and the
+     * failure is an opaque 403 rather than anything that names the cause.
+     *
+     * DEV SERVER ONLY. `vite preview` and the production build ignore this
+     * entirely, and nothing here is reachable from a deployed site.
+     */
+    allowedHosts: ['.e2b.app', '.ngrok-free.app', '.ngrok.io', '.trycloudflare.com', 'localhost'],
     proxy: {
       // keep API keys server-side even in dev
       '/api': {

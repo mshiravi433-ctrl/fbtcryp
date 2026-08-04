@@ -34,6 +34,8 @@ import ExploreHub from '../src/pages/ExploreHub.jsx';
 import Learn from '../src/pages/Learn.jsx';
 import Rewards from '../src/pages/Rewards.jsx';
 import Signals from '../src/pages/Signals.jsx';
+import Farm from '../src/pages/Farm.jsx';
+import CoinDetail from '../src/pages/CoinDetail.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -143,6 +145,23 @@ export async function run(container) {
   await mount('Learn (tabs)', <Learn />);
   await mount('Rewards (tabs)', <Rewards />);
   await mount('Signals', <Signals />);
+
+  /*
+   * Farm and CoinDetail both mount the new verdict / live-yield code, and both
+   * are mounted here in the state that actually breaks things: NO network.
+   *
+   * Farm deliberately has no offline fallback list (a stale APY sends someone
+   * to a pool that no longer pays what the screen said), so with every host
+   * black-holed it must render its "rates unavailable" notice rather than
+   * throw on `data.pools` of undefined. That null path is the one a real user
+   * on a bad Iranian connection hits first.
+   *
+   * CoinDetail renders with no :id param, which is what a malformed deep link
+   * produces. The verdict panel must decline to render rather than call
+   * `analyze()` on nothing.
+   */
+  await mount('Farm (no network)', <Farm />);
+  await mount('CoinDetail (no id)', <CoinDetail />);
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the
