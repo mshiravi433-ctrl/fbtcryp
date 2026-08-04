@@ -25,6 +25,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
+import { fetchYields } from './yields.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -336,6 +337,28 @@ app.post('/api/ai/brief', async (req, res) => {
 app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)
 );
+
+/**
+ * LIVE YIELDS — the Farm screen's data.
+ *
+ * ─── WHY THIS IS A SERVER ROUTE AND NOT A CLIENT FETCH ──────────────────────
+ * The upstream (`yields.llama.fi/pools`) is free and keyless, which is the
+ * only reason this feature is possible at all — but it returns EVERY pool
+ * DefiLlama tracks, over 20,000 of them and several megabytes. Sending that to
+ * a phone on an Iranian mobile connection to render eight rows would be
+ * indefensible.
+ *
+ * Filtered here down to a few dozen rows. See server/yields.js for the safety
+ * rules; the short version is that an unfiltered yield list sorted by APY is
+ * a list sorted by scam.
+ *
+ * ─── ONE HOUR, NOT ONE MINUTE ───────────────────────────────────────────────
+ * These are variable rates that move on the scale of days. A shorter TTL would
+ * multiply our upstream traffic against a free service we depend on, for a
+ * number that would look identical. Being a good citizen of a free API is also
+ * how it stays free.
+ */
+app.get('/api/yields', (_req, res) => serve(res, 3_600_000)(fetchYields, 'yields'));
 
 /* --------------------------------- Solana --------------------------------- */
 /*

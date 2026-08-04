@@ -9,6 +9,8 @@ import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
+import { isEligible, normalizePool, riskBand } from '../server/yields.js';
+import { pairTokens, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import {
   REFERRAL_SHARE,
@@ -2300,6 +2302,175 @@ export default function run() {
      */
     t('a layer with no data reports weight 0, not score 0',
       tiny.short.layers.macro.weight === 0);
+  }
+
+  /* ======================== yield safety filter ========================== */
+  /*
+   * ─── WHY THIS FILTER IS THE WHOLE FEATURE ─────────────────────────────────
+   * An unfiltered yield list sorted by APY is, quite literally, a list sorted
+   * by scam. Anyone can deploy a pool advertising 90,000% paid in a token that
+   * cannot be sold, and it will sit at the top of any yield ranking on earth.
+   *
+   * The Farm screen used to show four hard-coded pools with hand-written APR
+   * ranges written months earlier. Replacing that with LIVE data is only an
+   * improvement if the filter holds — live unfiltered data would be strictly
+   * worse than stale honest data. So every rule gets a test with a fixture
+   * built to violate exactly that rule and nothing else.
+   */
+  {
+    /* A pool that passes everything, used as the base for each violation. */
+    const good = {
+      pool: 'p1',
+      chain: 'Ethereum',
+      project: 'aave-v3',
+      symbol: 'USDC',
+      tvlUsd: 500_000_000,
+      apy: 5,
+      apyBase: 5,
+      apyReward: 0,
+      apyMean30d: 5,
+      stablecoin: true,
+      ilRisk: 'no',
+      exposure: 'single',
+      outlier: false
+    };
+    t('a large, audited, real-yield pool passes', isEligible(good));
+
+    /*
+     * THE SCAM CASE. This is the row the whole file exists to reject: an
+     * enormous APY paid entirely in emissions. Note it also carries a
+     * plausible TVL, because a fixture that fails on three rules at once does
+     * not prove which rule is doing the work.
+     */
+    t('a 90,000% emissions pool is rejected',
+      !isEligible({ ...good, project: 'scamswap', apy: 90000, apyBase: 0, apyReward: 90000 }));
+    /* ...and specifically NOT only because of the unknown protocol. */
+    t('...even if it claims to be a known protocol',
+      !isEligible({ ...good, apy: 90000, apyBase: 0, apyReward: 90000 }));
+
+    t('an unknown protocol is rejected even when it looks perfect',
+      !isEligible({ ...good, project: 'brand-new-defi' }));
+    t('a chain the app cannot reach is rejected',
+      !isEligible({ ...good, chain: 'Fantom' }));
+    t('a pool below the TVL floor is rejected',
+      !isEligible({ ...good, tvlUsd: 900_000 }));
+    t('DefiLlama\u2019s own outlier flag is respected',
+      !isEligible({ ...good, outlier: true }));
+    t('a dust yield is not worth a row',
+      !isEligible({ ...good, apy: 0.008, apyBase: 0.008 }));
+
+    /*
+     * ─── THE APY CEILING, ISOLATED ─────────────────────────────────────────
+     * This fixture exists because the 90,000% test above did NOT prove the
+     * ceiling worked: that pool was rejected by the emissions rule, and
+     * raising MAX_APY to a billion changed nothing. I only found that by
+     * removing the ceiling and watching every test still pass.
+     *
+     * So this one claims 300% and books ALL of it as apyBase — real revenue —
+     * which slips past every other rule. It is the shape a sophisticated fake
+     * takes, and the ceiling is the only thing that stops it.
+     *
+     * The reasoning behind the ceiling: sustainable yield is paid out of real
+     * revenue (borrowing interest, swap fees, staking rewards), and real
+     * revenue does not produce 300% a year. Anything claiming to is either
+     * mismeasured or lying.
+     */
+    t('a 300% yield claiming to be all real revenue is still rejected',
+      !isEligible({ ...good, apy: 300, apyBase: 300, apyReward: 0 }));
+    t('...while a high-but-plausible 45% is allowed through',
+      isEligible({ ...good, apy: 45, apyBase: 45, apyReward: 0 }));
+
+    /*
+     * The emissions-share rule. 80% emissions fails, 50% passes. Both fixtures
+     * sit at an ordinary APY so the ONLY difference between them is the split
+     * — otherwise this would be re-testing the APY ceiling.
+     */
+    t('a pool that is 80% emissions is rejected',
+      !isEligible({ ...good, apy: 20, apyBase: 4, apyReward: 16 }));
+    t('...but a normally-incentivised pool is kept',
+      isEligible({ ...good, apy: 20, apyBase: 10, apyReward: 10 }));
+
+    /* ---- risk banding is about the POSITION, never about the yield ------- */
+    /*
+     * Banding by APY would be circular: "high yield is high risk" tells the
+     * user only what they already inferred from the big number. These bands
+     * describe what can actually go wrong with the position.
+     */
+    t('a stablecoin single-asset pool bands low', riskBand(good) === 'low');
+    t('a volatile pair bands high',
+      riskBand({ ...good, symbol: 'CAKE-BNB', stablecoin: false, ilRisk: 'yes', exposure: 'multi' }) === 'high');
+    t('...regardless of how small its yield is',
+      riskBand({ ...good, apy: 1, symbol: 'CAKE-BNB', stablecoin: false, ilRisk: 'yes', exposure: 'multi' }) === 'high');
+    t('a high-yield stable single-asset pool still bands low',
+      riskBand({ ...good, apy: 55 }) === 'low');
+
+    /* ---- normalisation --------------------------------------------------- */
+    const n = normalizePool({ ...good, apy: 12.34567, apyBase: 6.11111, apyReward: 6.23456 });
+    t('APY is rounded to one decimal', n.apy === 12.3);
+    /*
+     * The upstream carries five decimals. Rendering "12.34567%" implies a
+     * precision that a variable rate recomputed hourly does not have.
+     */
+    t('...and so is the split', n.apyBase === 6.1 && n.apyReward === 6.2);
+    /*
+     * DefiLlama publishes a machine-learning prediction per pool. Forwarding
+     * it would be laundering someone else's forecast through our UI, and this
+     * app's whole position is that a number the user cannot interrogate is
+     * worthless.
+     */
+    t('the upstream ML prediction is never forwarded',
+      n.predictions === undefined && n.predictedClass === undefined);
+
+    /* ---- the real/emissions split --------------------------------------- */
+    t('an all-revenue pool is 100% real', realShare({ apy: 5, apyBase: 5 }) === 1);
+    t('a mostly-emissions pool reports a small real share',
+      Math.abs(realShare({ apy: 20, apyBase: 4 }) - 0.2) < 0.001);
+    /*
+     * An unknown split must NOT render as "100% real" — that is the flattering
+     * default and it is the one that misleads.
+     */
+    t('an unknown split is null, never 100%', realShare({ apy: 20 }) === null);
+
+    /* ---- today vs the 30-day average ------------------------------------ */
+    const spike = rateIsUnusual({ apy: 40, apyMean30d: 6 });
+    t('a pool spiking far above its average is flagged', spike?.direction === 'above');
+    t('...with the multiple stated', spike.ratio === 6.7);
+    t('a pool at its normal rate is not flagged',
+      rateIsUnusual({ apy: 6.2, apyMean30d: 6 }) === null);
+    t('a pool well below its average is flagged too',
+      rateIsUnusual({ apy: 2, apyMean30d: 12 })?.direction === 'below');
+    t('no average means no claim', rateIsUnusual({ apy: 6 }) === null);
+
+    /* ---- pair detection, which is what the swap handoff needs ----------- */
+    t('an LP pair yields both tokens',
+      JSON.stringify(pairTokens({ symbol: 'CAKE-BNB', exposure: 'multi' })) === '["CAKE","BNB"]');
+    t('a single-asset pool has no pair to buy',
+      pairTokens({ symbol: 'STETH', exposure: 'single' }).length === 0);
+    /*
+     * Guard against manufacturing a swap the user does not need: a
+     * single-asset pool whose SYMBOL happens to contain a hyphen must still
+     * produce no pair, or the UI would offer to buy two halves of one token.
+     */
+    t('a hyphenated single-asset symbol still has no pair',
+      pairTokens({ symbol: 'WBTC-WRAPPED', exposure: 'single' }).length === 0);
+
+    /* ---- the calculator -------------------------------------------------- */
+    const proj = projectEarnings({ apy: 12, apyBase: 6 }, 1000);
+    t('a percentage is turned into money', Math.abs(proj.year - 120) < 0.01);
+    /*
+     * APY is ALREADY the compounded figure. Compounding it again would
+     * overstate the result — an easy mistake that always errs in the
+     * flattering direction, which is why it is asserted rather than assumed.
+     */
+    t('...without compounding an already-compounded rate', proj.year === 120);
+    t('the monthly figure is the yearly one divided by twelve',
+      Math.abs(proj.month - 10) < 0.01);
+    /*
+     * And the projection is split too, so "$120 a year" is immediately
+     * qualified by how much of it is real revenue.
+     */
+    t('the projection says how much of it is real', Math.abs(proj.fromRealYield - 60) < 0.01);
+    t('a zero deposit projects nothing', projectEarnings({ apy: 12 }, 0) === null);
   }
 
   return rows;

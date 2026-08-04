@@ -1,5 +1,161 @@
 # Changelog
 
+## 1.19.0 — versionCode 47
+
+### The arcade is gone from every build
+
+It used to be a build flag: off for the store APK, on for the website and the
+direct-download APK. That was the wrong shape.
+
+A gambling-styled screen sitting one tap from a screen that moves real money
+damages the product wherever it appears, and the website is what Google indexes
+and what a first-time user judges. It also earned nothing — every round ran on
+virtual NX credits — so it was a permanent rejection risk and a permanent
+maintenance cost with no upside on either side of the trade.
+
+Deleted: `src/games/`, `src/pages/Play.jsx`, `src/lib/fairness.js`,
+`src/hooks/useFairSession.js`, the whole `game.*` locale namespace in all twelve
+languages, `nav.play`, the `firstGame` quest, and `VITE_ENABLE_GAMES` from
+`package.json`, `vite.config.js`, `ci/build-full.sh` and `ci/build-both.sh`.
+
+There is no flag to turn it back on. A flag would just be the same problem
+waiting for someone to set an environment variable.
+
+The build test was rewritten to match. Asserting "the default build excludes
+the arcade" would pass forever while someone re-added a Play route, so it now
+asserts the files are gone, that neither build emits an arcade chunk, and that
+the **full** build ships none of the arcade vocabulary either — the locale JSON
+is inlined by Rollup, which is exactly how "removed" screens kept shipping
+their words last time.
+
+This also surfaced a live bug: `Predict.jsx` was borrowing `game.stake` from
+the arcade namespace. Deleting the namespace turned that label into the raw
+string `game.stake` on screen, in the build where Predict is enabled — the
+website. Caught by the i18n probe.
+
+### The signal engine now looks past the chart
+
+Everything the app computed before this read **one price series in isolation**.
+RSI, MACD, Bollinger and the moving averages are all arithmetic transforms of
+the same numbers, which is why they agree with each other and why "indicator
+agreement" was a worthless measure of confidence: they agree loudest when they
+are all wrong together.
+
+Four independent layers now, and they are allowed to disagree:
+
+| Layer | Source | Answers |
+|---|---|---|
+| Technical | `lib/ai.js` | what the chart is doing today |
+| Historical | `lib/backtest.js` | how often this setup has actually paid, on this asset |
+| Structural | `lib/history.js` | levels, drawdown, range position |
+| Macro | `lib/macro.js` | market regime, beta to Bitcoin, cycle position |
+
+**The macro layer is the new capability.** An altcoin does not move on its own
+chart; the dominant term is what Bitcoin is doing and whether money is rotating
+into or out of everything else. It measures the market regime (`riskOn` /
+`btcLed` / `rotationOut` / `riskOff`), this asset's beta to Bitcoin with an R²
+gate so a beta fitted to noise is never printed, and how far it is from its
+all-time high.
+
+`rotationOut` is the case that matters: a falling market with money moving into
+Bitcoin is when altcoins are sold first and hardest, and **no chart of theirs
+shows it coming**.
+
+**Two horizons, computed differently rather than scaled.** Most "1D / 7D / 30D"
+toggles are one number with three labels, which is a lie by presentation. The
+monthly view drops the oscillators entirely — RSI is noise over a month — and
+lets regime and cycle position dominate. Whether the two horizons agree is then
+stated in a sentence, because nobody can derive "weak this week, constructive
+over a month" by comparing two gauges.
+
+Every output is a translation key plus numbers, never a sentence, so no claim
+can be machine-translated into something we did not say. Stances are
+deliberately non-directive — `tailwind` / `mildUp` / `unclear` / `mildDown` /
+`headwind` — and **`unclear` is the default that requires evidence to move away
+from**. A signal engine whose honest answer is usually "we don't know" is worth
+more than one that always has an opinion, because the user learns which of the
+two to act on.
+
+#### Two real bugs, found by measuring rather than reading
+
+Both surfaced from printing the numbers for a deliberately conflicted fixture.
+
+1. **The disagreement override never fired.** It compared the standard
+   deviation across layers to a threshold of 65. A +95 chart inside a
+   rotation-out market — the single most dangerous configuration in the engine,
+   and precisely what the macro layer was built to catch — produces a spread of
+   59, so it came out as "slightly in its favour". Standard deviation is a poor
+   detector here because it is scale-dependent. Replaced with a direct
+   sign-conflict test between layers that clear both a weight bar and a
+   magnitude bar.
+
+2. **The confidence ceiling was dead code.** The formula's base was 72, so the
+   product could never reach the clamp of 75 and the "ceiling" was a comment
+   rather than a constraint — a promise the code was not keeping, it just
+   happened to be true. The base is now 96 so the clamp actually binds, and the
+   ceilings are exported and imported by both the UI and the tests instead of
+   being copied.
+
+### Farm shows live yields instead of figures from months ago
+
+The screen was four hard-coded pools with hand-written APR ranges like
+"15–40%". The ranges were honest about being ranges and completely disconnected
+from what those pools actually paid. A yield figure that never moves is not a
+yield figure, and a range that wide cannot be wrong — which is worse than being
+wrong.
+
+Live rates now, from DefiLlama through our own backend. The upstream is free
+and needs no key, which is the only reason this is possible; it also returns
+every pool DefiLlama tracks, 20,000+ of them and several megabytes, so the
+server filters it to a few dozen rows and caches for an hour. One upstream
+request per hour serves everybody.
+
+**The filter is the entire feature.** An unfiltered yield list sorted by APY is
+a list sorted by scam: anyone can deploy a pool advertising 90,000% paid in a
+token that cannot be sold, and it will top any yield ranking on earth. Pools
+must be on a protocol allow-list, on a chain the app supports, hold at least
+$10m, pay between 0.5% and 60%, not be flagged as an outlier upstream, and be
+no more than 70% token emissions.
+
+Three things this shows that other yield screens do not:
+
+- **The real/emissions split**, on every row. `apyBase` is interest and fees
+  actually paid; `apyReward` is governance tokens minted and handed out. A
+  "24%" that is 22% emissions is a countdown, not an income, and the combined
+  headline gives you no way to tell.
+- **Today versus the 30-day average.** A pool at 40% today with a 6% average is
+  not a 40% pool.
+- **How many pools were rejected.** "40 of 312 tracked" makes the filtering
+  visible rather than implicit.
+
+Ranking is *not* by APY — that would put the riskiest surviving row on top and
+undo every filter above it. It is by yield weighted by how much of it is real
+and by pool size, so a 12% all-revenue pool with a billion in deposits outranks
+a 20% mostly-emissions pool with $12m.
+
+**On revenue, honestly:** we take nothing from anyone's yield and the screen
+says so — skimming it would require custody, which this app does not have and
+will not take. The revenue is upstream of the deposit: you cannot enter a
+CAKE-BNB pool without holding both tokens, and most people arriving here hold
+neither. The "get the tokens" button routes that swap through our own screen at
+the standard 0.7%. Single-asset pools get no such button, because there is
+nothing to pair up and adding one would be manufacturing a swap the user does
+not need.
+
+### Tests
+
+1189 checks, up from 1060 + 308. Every new check was verified by sabotage, and
+five of them failed that verification on the first attempt and were rewritten:
+
+- `confidence <= 75` passed on a fixture that scored 30, and passed with the
+  clamp deleted. It now sweeps 400 synthetic markets and requires that
+  something *reaches* the ceiling as well as that nothing exceeds it.
+- The 90,000%-APY fixture was rejected by the emissions rule, not the ceiling —
+  raising `MAX_APY` to a billion changed nothing. A separate fixture now claims
+  300% and books all of it as real revenue, which only the ceiling stops.
+- `/getYields/` matched the import line, so replacing the *call* with
+  `Promise.resolve(null)` left a dead screen looking wired.
+
 ## 1.18.0 — versionCode 46
 
 ### The website is now the full version

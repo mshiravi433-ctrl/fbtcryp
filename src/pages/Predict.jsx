@@ -154,7 +154,14 @@ export default function Predict({ embedded = false }) {
       </div>
 
       <div>
-        <label className="field-label">{t('game.stake')}</label>
+        {/*
+          This used to read `game.stake`, borrowed from the arcade namespace.
+          When the arcade was deleted the key went with it and this label
+          silently became the raw string "game.stake" on screen — in a build
+          where this screen IS enabled, i.e. the website. Caught by the i18n
+          probe, which is exactly the class of breakage it exists for.
+        */}
+        <label className="field-label">{t('predict.stake')}</label>
         <input type="number" value={stake} min="1" onChange={(e) => setStake(e.target.value)} />
         <div className="row" style={{ gap: 6, marginTop: 8 }}>
           {[10, 50, 100, 500].map((v) => (

@@ -5714,3 +5714,145 @@ body { overflow-x: clip; }
   .verd-card-head { flex-direction: column; gap: 4px; }
   .verd-stance { max-width: 100%; text-align: start; }
 }
+
+
+/* ==========================================================================
+   FARM  —  .farm-*
+
+   Live yields. The design problem here is that the most eye-catching number
+   on a yield screen is the one you should trust least, so the layout works
+   against the headline rather than for it: the APY is present and legible but
+   the split bar and the "unusual rate" line sit directly underneath it, in
+   reading order, before the user reaches an action button.
+   ========================================================================== */
+
+.farm-pool {
+  padding: 13px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  /* Long pool symbols ("WSTETH-WETH") must wrap inside the card, not widen
+     it. Without this the whole page gains a horizontal scrollbar. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.farm-pool-sym {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.farm-apy {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  /*
+     Deliberately NOT green.
+
+     Colouring the yield green makes it a recommendation, and the entire point
+     of this screen is that a big yield is a question rather than an answer.
+     The risk pill below it carries the colour instead, which is where colour
+     actually belongs.
+  */
+  color: var(--text-1);
+}
+
+/* --- the real/emissions split ------------------------------------------- */
+
+.farm-split {
+  height: 5px;
+  border-radius: 999px;
+  /* The track IS the emissions portion — one element instead of two, so the
+     two segments can never disagree about their widths. */
+  background: rgba(127, 127, 127, 0.22);
+  overflow: hidden;
+}
+
+.farm-split-real {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ink-cyan);
+}
+
+.farm-split-legend {
+  font-size: 10.8px;
+  line-height: 1.65;
+  margin-top: 5px;
+}
+
+/* --- today vs normal ----------------------------------------------------- */
+
+.farm-unusual {
+  margin: 9px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 11.6px;
+  line-height: 1.7;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+}
+
+/* A rate far ABOVE its own average is the warning case, not the good news
+   case — it is almost always a short incentive burst. */
+.farm-unusual-above {
+  border-color: color-mix(in srgb, var(--ink-amber) 45%, transparent);
+}
+
+.farm-calc {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.farm-calc-num {
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.farm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.farm-btn {
+  /* `flex: 1 1 0` rather than `flex: 1`: the latter leaves flex-basis at auto,
+     so the button with the longer label gets a wider share. Equal halves is
+     what this needs. */
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12.3px;
+  padding-inline: 10px;
+}
+
+.farm-amounts {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.farm-filtered {
+  font-size: 11.3px;
+  line-height: 1.75;
+  margin: 0 0 10px;
+}
+
+/* Small phones: two buttons side by side leaves neither readable. */
+@media (max-width: 360px) {
+  .farm-actions { flex-direction: column; }
+}

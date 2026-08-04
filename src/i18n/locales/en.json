@@ -173,7 +173,8 @@
     "down": "DOWN",
     "payout": "Payout on a correct call",
     "openRounds": "Open rounds",
-    "results": "Results"
+    "results": "Results",
+    "stake": "Stake"
   },
   "earn": {
     "title": "Earn",
@@ -770,19 +771,44 @@
   },
   "farm": {
     "title": "Farm",
-    "subtitle": "Earn yield by providing liquidity.",
+    "subtitle": "Live yields from across DeFi, filtered down to pools large enough and old enough to be worth your time.",
     "whatTitle": "How farming works",
-    "whatBody": "You deposit two tokens into a liquidity pool and receive LP tokens representing your share. Traders swapping through that pool pay fees, which accrue to you. Staking the LP tokens in a farm adds a second reward stream on top.",
-    "defiTvl": "Estimated DeFi TVL",
+    "whatBody": "You deposit into a pool and earn a share of what it makes. Lending pools pay you interest from borrowers. Trading pools pay you a cut of every swap. Staking pays you for helping secure a network. All of it is paid by somebody doing something real — which is exactly why a pool advertising 900% a year is not paying you out of revenue.",
     "ilTitle": "Impermanent loss — read before depositing",
     "ilBody": "If the two tokens change price relative to each other, you end up with more of the one that fell and less of the one that rose. You can finish worse off than if you had simply held them, even after collecting fees. The wider the price gap moves, the worse it gets. Stablecoin pairs barely suffer from this; volatile pairs suffer a lot.",
     "pools": "Popular pools",
-    "lpPair": "LP pair · two tokens",
-    "singleStake": "Single-token staking · no impermanent loss",
-    "aprNote": "APR figures are indicative ranges, not promises. Real yield changes constantly with trading volume, emissions and how much liquidity is in the pool. Always check the live rate before depositing.",
-    "custodyNotice": "These farms are operated by PancakeSwap, not by Fanous Bazaar Pishgam. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
+    "aprNote": "Every figure here is today's live rate, refreshed hourly from DefiLlama. Rates are variable and change constantly with borrowing demand, trading volume and how much money is already in the pool. Nothing on this screen is a promise and nothing here is guaranteed.",
+    "custodyNotice": "These pools are run by their own protocols, not by Fanous Bazaar Pishgam. You deposit directly from your own wallet into their contracts — we never touch your funds and we take no cut of your yield. If you use our swap to get the tokens first, that swap pays our normal {{fee}}% fee and nothing else does.",
     "rewardsLink": "App rewards & quests",
-    "rewardsLinkSub": "Daily streak, XP and referrals"
+    "rewardsLinkSub": "Daily streak, XP and referrals",
+    "apy": "per year",
+    "tvl": "Size",
+    "ilShort": "Pair risk",
+    "stableShort": "Stablecoin",
+    "openPool": "See the pool",
+    "getTokens": "Get {{a}} + {{b}}",
+    "year": "yr",
+    "wouldEarn": "{{amount}} would earn about",
+    "ifIDeposit": "If I deposit",
+    "splitLine": "{{real}}% from real revenue · {{emissions}}% from token rewards",
+    "filteredNote": "Showing {{shown}} pools out of {{considered}} tracked. The rest were removed for being too small, too new, paying mostly in freshly-minted tokens, or run by a protocol we do not know well enough.",
+    "unavailable": "Live rates could not be loaded right now. We are deliberately not showing you saved figures instead — an out-of-date yield is how people end up depositing into a pool that no longer pays what the screen said.",
+    "noneInBand": "No pools in this risk band right now.",
+    "risk": {
+      "low": "Lower risk",
+      "medium": "Medium risk",
+      "high": "Higher risk"
+    },
+    "filter": {
+      "all": "All",
+      "low": "Lower risk",
+      "medium": "Medium",
+      "high": "Higher"
+    },
+    "unusual": {
+      "above": "Today's rate is {{ratio}}× its 30-day average of {{mean}}%. Spikes like this usually come from a short incentive burst and are gone within days.",
+      "below": "Today's rate is well below its 30-day average of {{mean}}%. Either activity has dropped or an incentive programme just ended."
+    }
   },
   "signals": {
     "title": "AI Signals",

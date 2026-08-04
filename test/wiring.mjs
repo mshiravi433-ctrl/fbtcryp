@@ -2753,7 +2753,13 @@ export default function run() {
      * Caught by sabotage: deleting the real rules left this green.
      */
     const css = read('src/index.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row)-/;
+    /*
+     * `verd-` and `farm-` were added when the verdict panel and the live-yield
+     * Farm screen landed. Both introduced whole new class families, which is
+     * exactly the moment this check earns its keep: the recurring bug in this
+     * codebase is a class that is referenced and styles nothing.
+     */
+    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row|verd|farm)-/;
 
     const used = new Set();
     for (const f of files) {
@@ -2797,6 +2803,83 @@ export default function run() {
     );
     // A vacuous pass would be worse than a failure.
     t(`there were classes to check (${used.size})`, used.size > 20);
+  }
+
+  /* ---- 41. the verdict engine and the live-yield feed are really wired -- */
+  /*
+   * ─── THE BUG CLASS THIS GUARDS ────────────────────────────────────────────
+   * Roughly eighteen bugs in this repo have been the same shape: something
+   * that exists, is referenced, and connects to nothing. A signal engine
+   * nobody renders and a server route nobody calls are the two most expensive
+   * versions of that, because both look complete in a diff.
+   */
+  {
+    /* ---- the verdict engine reaches a screen ---- */
+    t('the verdict engine exists', existsSync('src/lib/verdict.js'));
+    t('the macro layer exists', existsSync('src/lib/macro.js'));
+    t('there is a panel to render it', existsSync('src/components/VerdictPanel.jsx'));
+
+    const panel = read('src/components/VerdictPanel.jsx');
+    t('the panel actually calls the engine', /from '\.\.\/lib\/verdict'/.test(panel));
+
+    const signals = read('src/pages/Signals.jsx');
+    const detail = read('src/pages/CoinDetail.jsx');
+    t('the Signals screen mounts the panel', /<VerdictPanel/.test(signals));
+    t('the coin screen mounts it too', /<VerdictPanel/.test(detail));
+
+    /*
+     * The macro layer is the whole reason this engine is better than the old
+     * one, and it is useless without a BTC series to compare against. A screen
+     * that mounts the panel but passes no `btcSeries` gets a verdict with the
+     * macro layer silently weighted to zero — working code, dead feature, and
+     * invisible in review.
+     */
+    for (const [name, src] of [['Signals', signals], ['CoinDetail', detail]]) {
+      t(`${name} passes a bitcoin series to the macro layer`, /btcSeries=\{/.test(src));
+      t(`${name} fetches one`, /useChart\('bitcoin'/.test(src));
+      t(`${name} passes global stats too`, /global=\{/.test(src));
+    }
+
+    /*
+     * The ceilings must be IMPORTED, never re-typed. A copied constant in the
+     * UI drifts from the engine silently and then the bar is drawn against a
+     * number that is no longer the real limit.
+     */
+    t('the panel imports the confidence ceilings rather than copying them',
+      /CONFIDENCE_CEILING/.test(panel) && /from '\.\.\/lib\/verdict'/.test(panel));
+    t('...and does not hard-code 75 anywhere', !/\b75\b/.test(panel.replace(/\/\*[\s\S]*?\*\//g, '')));
+
+    /* ---- the yield feed is served, fetched and rendered ---- */
+    t('the yield filter exists', existsSync('server/yields.js'));
+    const appSrc = read('server/app.js');
+    t('the API exposes it', /\/api\/yields/.test(appSrc));
+    t('...backed by the real fetcher', /fetchYields/.test(appSrc));
+
+    const farm = read('src/pages/Farm.jsx');
+    /*
+     * `/getYields/` alone was not enough: replacing the CALL with
+     * `Promise.resolve(null)` left the import line intact and the check
+     * green — a dead screen that still looked wired. Verified by sabotage.
+     * So the invocation itself must be present.
+     */
+    t('Farm reads live yields', /getYields\s*\(/.test(farm));
+    t('...and imports it from the yields module', /from '\.\.\/lib\/yields'/.test(farm));
+    /*
+     * The old screen was four hard-coded pools with hand-written APR ranges.
+     * If that constant ever comes back the screen has silently regressed to
+     * showing figures that were true months ago.
+     */
+    t('Farm no longer hard-codes a pool list', !/const FARMS\s*=/.test(farm));
+    t('...and no longer hard-codes an APR range', !/aprRange/.test(farm));
+
+    /*
+     * The two disclosures that make this screen honest. The first is the
+     * number every yield aggregator hides; the second is the only revenue
+     * path on the page and it must be stated.
+     */
+    t('Farm shows the real-vs-emissions split', /realShare/.test(farm));
+    t('Farm states that we take no cut of yield',
+      /take no cut of your yield/i.test(read('src/i18n/locales/en.json')));
   }
 
   return rows;
