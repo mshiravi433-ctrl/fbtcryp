@@ -20,7 +20,7 @@ jobs:
       # reach the process through an explicit `env:` block. Without this the
       # build silently falls back to a debug APK even when all four secrets
       # are set, which looks like the keystore "not working".
-      - run: bash ci/build-apk.sh
+      - run: bash ci/build-both.sh
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
