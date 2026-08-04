@@ -69,6 +69,18 @@ const Orders = lazy(() => import('./pages/Orders'));
 const SolanaSwap = lazy(() => import('./pages/SolanaSwap'));
 const Buy = lazy(() => import('./pages/Buy'));
 
+/*
+ * ─── MERGED HUBS ────────────────────────────────────────────────────────────
+ * Four screens that host existing pages as tabs. The originals are untouched
+ * and still routable, so a saved link or a deep link keeps working; these
+ * just give related screens one entry point instead of scattering them
+ * through the More menu.
+ */
+const Lab = SPECULATION_ENABLED ? lazy(() => import('./pages/Lab')) : () => null;
+const ExploreHub = lazy(() => import('./pages/ExploreHub'));
+const Learn = lazy(() => import('./pages/Learn'));
+const Rewards = lazy(() => import('./pages/Rewards'));
+
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
  *
@@ -174,6 +186,13 @@ function AnimatedRoutes() {
           <Route path="/discover" element={<Discover />} />
           <Route path="/nft" element={<Nft />} />
           <Route path="/orders" element={<Orders />} />
+
+          {/* Merged hubs. The individual routes below still exist so old
+              links do not break. */}
+          {SPECULATION_ENABLED && <Route path="/lab" element={<Lab />} />}
+          <Route path="/explore-hub" element={<ExploreHub />} />
+          <Route path="/learn" element={<Learn />} />
+          <Route path="/rewards" element={<Rewards />} />
           <Route path="/solana" element={<SolanaSwap />} />
           <Route path="/buy" element={<Buy />} />
           <Route path="*" element={<Market />} />

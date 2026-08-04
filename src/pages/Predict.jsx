@@ -28,7 +28,7 @@ const DURATIONS = [
 
 const PAYOUT_X = 1.9;
 
-export default function Predict() {
+export default function Predict({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
@@ -96,7 +96,7 @@ export default function Predict() {
   };
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
         <button className="icon-btn" onClick={() => navigate(-1)}>‹</button>
         <div style={{ textAlign: 'center' }}>

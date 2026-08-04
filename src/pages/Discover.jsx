@@ -92,7 +92,7 @@ const LINKS = [
 
 const CATEGORIES = ['all', ...LINKS.map((g) => g.cat)];
 
-export default function Discover() {
+export default function Discover({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
@@ -149,13 +149,17 @@ export default function Discover() {
   };
 
   return (
-    <PageTransition>
-      <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-          <IconChevronLeft width={18} height={18} />
-        </button>
-        <h1 className="h1" style={{ fontSize: 19 }}>{t('discover.title')}</h1>
-      </motion.div>
+    <PageTransition embedded={embedded}>
+      {/* Suppressed when hosted in a tabbed page — the shell already draws a
+          back button and a title, and two of each is clutter. */}
+      {!embedded && (
+        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
+          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+            <IconChevronLeft width={18} height={18} />
+          </button>
+          <h1 className="h1" style={{ fontSize: 19 }}>{t('discover.title')}</h1>
+        </motion.div>
+      )}
 
       <p className="muted">{t('discover.subtitle')}</p>
 

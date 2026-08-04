@@ -25,7 +25,7 @@ function progressOf(inv) {
   return Math.min(100, ((Date.now() - inv.startedAt) / total) * 100);
 }
 
-export default function Invest() {
+export default function Invest({ embedded = false }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
 
@@ -62,7 +62,7 @@ export default function Invest() {
   };
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <h1 className="h1">{t('invest.title')}</h1>
         <p className="muted">{t('invest.subtitle')}</p>

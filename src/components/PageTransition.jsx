@@ -34,7 +34,25 @@ import { motion } from 'framer-motion';
  * finished leaving, so the exit duration is dead time added to every single
  * navigation before anything new can even start loading.
  */
-export default function PageTransition({ children, className = 'page' }) {
+export default function PageTransition({ children, className = 'page', embedded = false }) {
+  /*
+   * ─── EMBEDDED: NO WRAPPER AT ALL ──────────────────────────────────────────
+   * When a page is hosted inside TabbedPage it must NOT create a second
+   * motion wrapper. Two reasons, and the first is a real bug this app already
+   * had once:
+   *
+   *   1. `motion` writes a `transform`, and a transformed ancestor becomes
+   *      the containing block for every `position: fixed` descendant. Nesting
+   *      two of them is what made sheets centre against the page box instead
+   *      of the viewport.
+   *   2. Two enter animations on the same content play at once, so the inner
+   *      one fades in over an already-fading parent and the result reads as a
+   *      stutter.
+   *
+   * A plain fragment: the host has already animated the whole screen.
+   */
+  if (embedded) return <>{children}</>;
+
   return (
     <motion.main
       className={className}

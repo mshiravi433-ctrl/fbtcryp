@@ -78,7 +78,7 @@ const GROUPS = [
       ...(SPECULATION_ENABLED
         ? [
             { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
-            { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' }
+            { to: '/lab', key: 'lab.title', Icon: IconActivity, hue: 'var(--rgb-8)' }
           ]
         : []),
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
@@ -94,10 +94,11 @@ const GROUPS = [
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
       ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' }] : []),
-      { to: '/earn', key: 'nav.earn', Icon: IconGlobe, hue: 'var(--rgb-7)' },
-      { to: '/leaderboard', key: 'nav.leaderboard', Icon: IconTrophy, hue: 'var(--rgb-5)' },
+      /* Points and ranking are one screen now — a score is only meaningful
+         next to the standing it produces. */
+      { to: '/rewards', key: 'rewards.title', Icon: IconTrophy, hue: 'var(--rgb-5)' },
       ...(SPECULATION_ENABLED
-        ? [{ to: '/invest', key: 'nav.invest', Icon: IconTrend, hue: 'var(--rgb-6)' }]
+        ? []
         : [])
     ]
   },
@@ -105,8 +106,7 @@ const GROUPS = [
     id: 'more',
     items: [
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
-      { to: '/explore', key: 'nav.explore', Icon: IconSearch, hue: 'var(--rgb-4)' },
-      { to: '/discover', key: 'nav.discover', Icon: IconGlobe, hue: 'var(--rgb-2)' },
+      { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /*
         Auto Orders is NOT listed here: it is the raised centre button in the
         bottom nav, which is the most prominent control on the screen. A menu
@@ -115,8 +115,7 @@ const GROUPS = [
         duplicates what is already on screen.
       */
       { to: '/nft', key: 'nav.nft', Icon: IconSparkle, hue: 'var(--rgb-3)' },
-      { to: '/help', key: 'nav.help', Icon: IconInfo, hue: 'var(--rgb-9)' },
-      { to: '/docs', key: 'nav.docs', Icon: IconDoc, hue: 'var(--rgb-1)' },
+      { to: '/learn', key: 'learn.title', Icon: IconInfo, hue: 'var(--rgb-9)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
       { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },
       { to: '/ecosystem', key: 'nav.ecosystem', Icon: IconGlobe, hue: 'var(--rgb-3)' },

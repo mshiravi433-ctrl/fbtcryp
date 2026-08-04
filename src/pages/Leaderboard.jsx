@@ -64,7 +64,7 @@ function Podium({ row, place }) {
   );
 }
 
-export default function Leaderboard() {
+export default function Leaderboard({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -111,13 +111,17 @@ export default function Leaderboard() {
   const progress = tierProgress(points);
 
   return (
-    <PageTransition>
-      <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-          <IconChevronLeft width={18} height={18} />
-        </button>
-        <h1 className="h1" style={{ fontSize: 19 }}>{t('rank.title')}</h1>
-      </motion.div>
+    <PageTransition embedded={embedded}>
+      {/* Suppressed when hosted in a tabbed page — the shell already draws a
+          back button and a title, and two of each is clutter. */}
+      {!embedded && (
+        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
+          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+            <IconChevronLeft width={18} height={18} />
+          </button>
+          <h1 className="h1" style={{ fontSize: 19 }}>{t('rank.title')}</h1>
+        </motion.div>
+      )}
 
       {/* ---------------- your rank ---------------- */}
       <motion.section

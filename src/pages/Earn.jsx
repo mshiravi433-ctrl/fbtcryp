@@ -78,7 +78,7 @@ const YIELD = [
   }
 ];
 
-export default function Earn() {
+export default function Earn({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic, user, tg } = useTelegram();
@@ -157,7 +157,7 @@ export default function Earn() {
   ];
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <h1 className="h1">{t('earn.title')}</h1>
         <p className="muted">{t('earn.subtitle')}</p>

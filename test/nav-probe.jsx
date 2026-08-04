@@ -112,9 +112,23 @@ export async function run(container) {
    * and kept reporting success after the real ones changed, which is a test
    * that has quietly stopped testing anything.
    */
+  /*
+   * Find the media block that actually contains `.nav-centre`.
+   *
+   * The first version took the FIRST `@media (max-width: 360px)` in the file.
+   * That worked until another one was added earlier in the stylesheet (the
+   * `.seg-lg` tab sizing), at which point the probe parsed the wrong block,
+   * every number came back NaN, and the comparisons failed with
+   * "centre NaN". Searching by media query alone is not specific enough when
+   * the same breakpoint is used more than once — which is normal.
+   */
   const block = (mediaQuery) => {
-    const at = css.indexOf(mediaQuery);
-    return at < 0 ? '' : css.slice(at, at + 600);
+    let at = -1;
+    while ((at = css.indexOf(mediaQuery, at + 1)) !== -1) {
+      const chunk = css.slice(at, at + 900);
+      if (chunk.includes('.nav-centre')) return chunk;
+    }
+    return '';
   };
   const pick = (src, re) => {
     const m = src.match(re);

@@ -30,6 +30,9 @@ import Market from '../src/pages/Market.jsx';
 import Wallet from '../src/pages/Wallet.jsx';
 import Settings from '../src/pages/Settings.jsx';
 import Earn from '../src/pages/Earn.jsx';
+import ExploreHub from '../src/pages/ExploreHub.jsx';
+import Learn from '../src/pages/Learn.jsx';
+import Rewards from '../src/pages/Rewards.jsx';
 import Signals from '../src/pages/Signals.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
@@ -129,6 +132,16 @@ export async function run(container) {
   await mount('Wallet', <Wallet />);
   await mount('Settings', <Settings />);
   await mount('Earn', <Earn />);
+
+  /*
+   * The merged hubs. Each mounts a real page inside a tab shell, so a broken
+   * `embedded` prop or a double PageTransition shows up here rather than in
+   * someone's hands. Lab is omitted: it hosts the speculation screens, which
+   * are compiled out of the default build.
+   */
+  await mount('ExploreHub (tabs)', <ExploreHub />);
+  await mount('Learn (tabs)', <Learn />);
+  await mount('Rewards (tabs)', <Rewards />);
   await mount('Signals', <Signals />);
 
   /*

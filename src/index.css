@@ -736,6 +736,46 @@ select option { background: #0a0c12; }
   background: rgba(15, 23, 42, 0.14);
 }
 
+/* ---------------------------------------------------------------------------
+   .seg-lg — a segmented control used as a PAGE's primary navigation.
+
+   Reported: "اندازه تب ها در صفحات خوب باشه."
+
+   The base `.segmented` is 12px text in 9px of padding. That was drawn for a
+   three-way filter sitting inside a card, and at that size it reads as a
+   footnote when it is the main thing steering the screen — the tap target
+   also lands under the 44px accessibility minimum.
+
+   Bigger type, real height, and room for an icon beside the label.
+   --------------------------------------------------------------------------- */
+.seg-lg {
+  margin: 4px 0 2px;
+  padding: 4px;
+  border-radius: 15px;
+}
+
+.seg-lg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  /* 44px is the Apple/Android minimum for something a finger has to hit. */
+  min-height: 44px;
+  padding: 11px 8px;
+  font-size: 13px;
+  border-radius: 12px;
+}
+
+/* The icon inherits the label's colour, so it dims and brightens with the
+   selection instead of needing its own active rule. */
+.seg-lg button svg { flex-shrink: 0; }
+
+/* Narrow phones with a long translation: let the label shrink rather than
+   overflow the pill. */
+@media (max-width: 360px) {
+  .seg-lg button { font-size: 12px; gap: 5px; padding: 10px 5px; }
+}
+
 .seg-indicator {
   position: absolute;
   inset: 0;

@@ -87,7 +87,7 @@ const SECTIONS = [
   }
 ];
 
-export default function Docs() {
+export default function Docs({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
@@ -100,13 +100,17 @@ export default function Docs() {
   };
 
   return (
-    <PageTransition>
-      <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-          <IconChevronLeft width={18} height={18} />
-        </button>
-        <h1 className="h1" style={{ fontSize: 19 }}>{t('docs.title')}</h1>
-      </motion.div>
+    <PageTransition embedded={embedded}>
+      {/* Suppressed when hosted in a tabbed page — the shell already draws a
+          back button and a title, and two of each is clutter. */}
+      {!embedded && (
+        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
+          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+            <IconChevronLeft width={18} height={18} />
+          </button>
+          <h1 className="h1" style={{ fontSize: 19 }}>{t('docs.title')}</h1>
+        </motion.div>
+      )}
 
       <p className="muted">{t('docs.intro')}</p>
 

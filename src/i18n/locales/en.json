@@ -1970,5 +1970,17 @@
     "baseRate": "Over this window, {{up}} of {{samples}} days were followed by a higher price 7 days later ({{pct}}%). A description of the sample, not a forecast.",
     "thin": "Not enough history yet to say anything useful about this chart.",
     "notAdvice": "History is not a forecast. A level that held four times can break on the fifth."
+  },
+  "lab": {
+    "title": "Lab"
+  },
+  "exploreHub": {
+    "title": "Explore"
+  },
+  "learn": {
+    "title": "Learn"
+  },
+  "rewards": {
+    "title": "Points & Ranking"
   }
 }

@@ -96,8 +96,31 @@ export default function run() {
   t('a meaningful number of nav targets were checked', targets.size > 20);
 
   /* ------------------------- 3. unreachable pages ------------------------ */
+  /*
+   * ─── DELIBERATELY UNLINKED, NOT DEAD ────────────────────────────────────
+   * These pages are now reached through a tabbed hub (/lab, /explore-hub,
+   * /learn, /rewards) rather than their own menu entry. The standalone routes
+   * are KEPT so that anything already pointing at them still resolves — a
+   * bookmark, a link in a support message, a deep link in an old build.
+   *
+   * They are not orphans in the sense this check is for: that check exists to
+   * catch a page nobody can ever open, which is dead code that still ships
+   * and still needs its translations maintained. A route with no menu entry
+   * but a live URL is a different thing.
+   *
+   * If a hub is ever deleted, remove its members from this list too — then
+   * they become genuinely unreachable and the check will say so.
+   */
+  const reachableViaHub = new Set([
+    '/predict', '/invest',      // -> /lab
+    '/explore', '/discover',    // -> /explore-hub
+    '/help', '/docs',           // -> /learn
+    '/earn', '/leaderboard'     // -> /rewards
+  ]);
+
   const orphans = routes.filter(
-    (r) => !r.includes(':') && r !== '/' && r !== '*' && !targets.has(r)
+    (r) =>
+      !r.includes(':') && r !== '/' && r !== '*' && !targets.has(r) && !reachableViaHub.has(r)
   );
   t(
     `no route is unreachable${orphans.length ? ` — orphaned: ${orphans.join(', ')}` : ''}`,
