@@ -13,37 +13,29 @@
  */
 
 /**
- * The arcade is OFF by default.
+ * THE ARCADE IS GONE — NOT FLAGGED OFF, DELETED.
+ * ---------------------------------------------------------------------------
+ * It used to be a build flag (`GAMES_ENABLED` / `VITE_ENABLE_GAMES`), off for
+ * store builds and on for the website and the direct-download APK. That was
+ * the wrong shape for two reasons and the owner was right to call it:
  *
- * Google Play and the Iranian stores (Bazaar, Myket) all restrict
- * gambling-styled content, and Crash/Dice/Mines read as gambling to a
- * reviewer even though the points have no cash value. It is the single most
- * likely reason a crypto app gets rejected.
+ *   1. A gambling-styled arcade next to a real, non-custodial swap screen
+ *      damages the product wherever it appears. The website is what Google
+ *      indexes and what a first-time user judges; "Crash / Dice / Mines" sat
+ *      one tap from a screen that moves real money.
+ *   2. It earned nothing. Every round ran on virtual NX credits, so it could
+ *      never produce revenue, while being a permanent rejection risk and a
+ *      permanent maintenance cost.
  *
- * Defaulting to OFF rather than requiring VITE_DISABLE_GAMES=true is
- * deliberate: a release build that forgets to set an env var should fail
- * SAFE. The previous default meant one missing CI variable shipped the arcade
- * to the store, and you would only find out from a rejection email days
- * later.
+ * So `src/games/`, `src/pages/Play.jsx`, `src/lib/fairness.js`,
+ * `src/hooks/useFairSession.js` and the whole `game.*` locale namespace are
+ * removed from the repository. There is no flag to turn them back on — a flag
+ * would just be the same problem waiting for someone to set an env var.
  *
- * This removes the routes ENTIRELY — the lazy chunks are never emitted, so
- * the code is not in the APK at all for someone to find by unzipping it.
- * Set VITE_ENABLE_GAMES=true to build a variant that includes them.
+ * SPECULATION_ENABLED below is a DIFFERENT case and deliberately still a flag:
+ * those screens are educational simulations of instruments that exist, and
+ * the owner wants them on the website.
  */
-/*
- * `__GAMES_ENABLED__` is replaced with a literal `true` or `false` by Vite's
- * `define` (see vite.config.js). It must be a literal rather than an
- * `import.meta.env` lookup, otherwise Rollup cannot prove the lazy import in
- * App.jsx is unreachable and ships the game chunks anyway.
- *
- * The `typeof` guard keeps this working under the test harness and any
- * bundler that doesn't apply our define.
- */
-export const GAMES_ENABLED =
-  typeof __GAMES_ENABLED__ !== 'undefined'
-    ? __GAMES_ENABLED__
-    : import.meta.env?.VITE_ENABLE_GAMES === 'true';
-
 
 /**
  * SPECULATION SCREENS — off by default, for the same reason the arcade is.
@@ -74,7 +66,7 @@ export const GAMES_ENABLED =
  * produce a single unit of revenue — while being the specific reason the app
  * cannot be distributed. That is a bad trade in every direction.
  *
- * OFF by default, exactly like GAMES_ENABLED, so a release build that forgets
+ * OFF by default, so a release build that forgets
  * an env var fails SAFE. The routes and their chunks are removed entirely,
  * not hidden — someone unzipping the APK finds no trace of them.
  */

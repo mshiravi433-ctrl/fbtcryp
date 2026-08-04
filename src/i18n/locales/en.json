@@ -3,7 +3,6 @@
     "market": "Market",
     "trade": "Trade",
     "invest": "Invest",
-    "play": "Games",
     "earn": "Earn",
     "wallet": "Wallet",
     "swap": "Swap",
@@ -165,64 +164,6 @@
       }
     }
   },
-  "game": {
-    "title": "Arcade",
-    "subtitle": "Provably fair mini-games on virtual credits.",
-    "riskNotice": "These are gambling-style games played with virtual NX credits only. Never connect real funds to them: real-money betting needs a gambling licence, age/KYC checks and an audited RNG. Games are designed to lose money over time — the house edge is 3%.",
-    "stake": "Stake",
-    "rolling": "Rolling…",
-    "spinning": "Spinning…",
-    "totalWagered": "Total wagered",
-    "fairness": "Provably fair",
-    "fairnessExplain": "Each round is derived from a server seed (committed in advance as a hash), your client seed and a nonce. After you rotate the seed you can re-hash the revealed server seed and confirm it matches the commitment.",
-    "serverSeedHash": "Server seed hash (commitment)",
-    "clientSeed": "Your client seed",
-    "nonce": "Nonce",
-    "applySeed": "Apply seed",
-    "revealRotate": "Reveal & rotate seed",
-    "revealedSeed": "Revealed server seed",
-    "verifyHint": "SHA-256 of this seed must equal the previous commitment. It covered {{rounds}} round(s).",
-    "fairnessLimitation": "Honest limitation: the seed is generated in your own browser here, so it proves the UI didn't change the result mid-round — it is not equivalent to a licensed operator's independently audited RNG.",
-    "crash": {
-      "name": "Crash",
-      "launch": "Launch",
-      "cashOut": "Cash out",
-      "autoCashout": "Auto cash-out (×)",
-      "busted": "Crashed at {{x}}×"
-    },
-    "dice": {
-      "name": "Dice",
-      "roll": "Roll",
-      "under": "Under {{n}}",
-      "over": "Over {{n}}",
-      "target": "Target",
-      "chance": "Win chance",
-      "multiplier": "Payout",
-      "profit": "Profit"
-    },
-    "wheel": {
-      "name": "Wheel",
-      "spin": "Spin",
-      "segments": "8 segments · 0× to 3× · 3% house edge"
-    },
-    "mines": {
-      "name": "Mines",
-      "start": "Start round",
-      "cashOut": "Cash out",
-      "count": "Number of mines",
-      "multiplier": "Multiplier",
-      "cashValue": "Cash value",
-      "next": "Next tile",
-      "boom": "Hit a mine — lost {{n}}"
-    },
-    "coinflip": {
-      "name": "Coin flip",
-      "flip": "Flip",
-      "flipping": "Flipping…",
-      "heads": "Heads",
-      "tails": "Tails"
-    }
-  },
   "predict": {
     "title": "Price prediction",
     "teaser": "Call the next candle — up or down",
@@ -251,7 +192,6 @@
     "quest": {
       "firstTrade": "Place your first trade",
       "firstStake": "Open an investment plan",
-      "firstGame": "Play a round in the arcade",
       "firstPredict": "Make a price prediction",
       "addFavorite": "Star a coin",
       "inviteFriend": "Invite a friend",
@@ -2009,5 +1949,112 @@
   },
   "rewards": {
     "title": "Points & Ranking"
+  },
+  "verdict": {
+    "title": "The full picture",
+    "subtitle": "Four independent readings — the chart, this asset's own track record, its structure, and the market it lives in. They are allowed to disagree, and when they do we say so.",
+    "short": "Next week",
+    "long": "Next month",
+    "shortSub": "About {{d}} days",
+    "longSub": "About {{d}} days",
+    "confidence": "Confidence",
+    "why": "Why",
+    "readItLikeThis": "Read it like this",
+    "layers": "Where this comes from",
+    "layerName": {
+      "technical": "The chart today",
+      "historical": "Its own track record",
+      "structural": "Price structure",
+      "macro": "The wider market"
+    },
+    "layerNoData": "not enough data",
+    "layerWeight": "{{pct}}% of this read",
+    "stance": {
+      "tailwind": "Conditions favour it",
+      "mildUp": "Slightly in its favour",
+      "unclear": "Not clear",
+      "mildDown": "Slightly against it",
+      "headwind": "Conditions work against it"
+    },
+    "stanceExplain": {
+      "tailwind": "Every layer we can measure currently leans the same way, upward. That is not a promise — it means the conditions that have historically preceded gains are present right now.",
+      "mildUp": "The balance leans up, but weakly. A single piece of news is enough to erase an edge this small.",
+      "unclear": "The honest answer. Either the readings contradict each other or there is not enough history to say anything. Most of the time, for most assets, this is the correct answer — and it is the one that saves money.",
+      "mildDown": "The balance leans down, but weakly. Not a reason to panic; a reason not to add.",
+      "headwind": "Every layer we can measure currently leans the same way, downward. Assets do rise in these conditions — they just do it less often."
+    },
+    "agree": {
+      "aligned": "Both horizons point the same way. That is the strongest form this read ever takes.",
+      "conflict": "The week and the month disagree. Usually this means a short-term move is running against the bigger picture — the sort of thing that reverses.",
+      "partial": "One horizon has an opinion and the other does not. Treat the unclear one as unclear, not as agreement."
+    },
+    "reason": {
+      "regime": {
+        "riskOn": "Money is flowing into the market as a whole and spreading beyond Bitcoin. Historically that is when everything else gets its turn.",
+        "btcLed": "The market is rising but Bitcoin is taking most of it. Altcoins often lag badly in this phase.",
+        "rotationOut": "The market is falling and money is moving into Bitcoin. This is the phase where altcoins are sold first and hardest — no chart of theirs shows it coming.",
+        "riskOff": "Money is leaving the market broadly, Bitcoin included. Almost everything falls together in this phase, regardless of how good its own chart looks."
+      },
+      "beta": {
+        "high": "This asset historically moves about {{beta}}× as hard as Bitcoin. A 10% Bitcoin day has meant roughly {{tenPct}}% here, in both directions. ({{r2}}% of its movement is explained by Bitcoin.)",
+        "normal": "This asset moves roughly in line with Bitcoin ({{beta}}×).",
+        "low": "This asset has moved less than Bitcoin ({{beta}}×) — it has been the quieter side of the market."
+      },
+      "cycle": {
+        "atHigh": "Trading at or near its all-time high.",
+        "nearHigh": "{{drop}}% below its all-time high — still in the upper part of its history.",
+        "midCycle": "{{drop}}% below its all-time high. It would need to rise about {{recoveryX}}× to get back there.",
+        "deepDrawdown": "{{drop}}% below its all-time high. Getting back would take a {{recoveryX}}× rise — deep drawdowns take years to undo, when they are undone at all.",
+        "farFromHigh": "{{drop}}% below its all-time high. A {{recoveryX}}× rise just to break even. Most assets this far down never return."
+      },
+      "edgePositive": "When this setup appeared on this asset before, price was higher {{horizon}} days later {{rate}}% of the time, against {{base}}% for any random day — an edge of {{edge}} points across {{samples}} occurrences.",
+      "edgeNegative": "When this setup appeared on this asset before, it did WORSE than doing nothing: {{rate}}% versus a {{base}}% base rate, an edge of {{edge}} points across {{samples}} occurrences. The chart looks one way; the record says otherwise.",
+      "edgeNone": "This setup has no measurable edge on this asset: {{rate}}% versus a {{base}}% base rate across {{samples}} occurrences. Essentially a coin flip.",
+      "thinBacktest": "This setup has only appeared {{samples}} times in the available history. That is an anecdote, not a hit rate, so it is not counted.",
+      "nearRangeTop": "Price is at {{pct}}% of its recent range — near the top.",
+      "nearRangeBottom": "Price is at {{pct}}% of its recent range — near the bottom.",
+      "deepFallInWindow": "The worst fall inside this window was {{pct}}%. Whatever the direction, that is the size of move this asset is capable of.",
+      "trendStructureUp": "The 20-period average is above the 50 — the trend structure is intact.",
+      "trendStructureDown": "The 20-period average is below the 50 — the trend structure is broken.",
+      "layersDisagree": "The readings contradict each other strongly. That is why the confidence is low: this is genuine uncertainty, not a hidden opinion.",
+      "noData": "There is not enough price history for this asset to say anything at all.",
+      "ind": {
+        "rsi": {
+          "up": "RSI is stretched to the downside — the strongest single reading on the chart right now.",
+          "down": "RSI is stretched to the upside — the strongest single reading on the chart right now."
+        },
+        "macd": {
+          "up": "MACD momentum has turned positive.",
+          "down": "MACD momentum has turned negative."
+        },
+        "bollinger": {
+          "up": "Price is pressed against the lower Bollinger band.",
+          "down": "Price is pressed against the upper Bollinger band."
+        },
+        "ma20": {
+          "up": "Price is {{value}}% above its 20-period average.",
+          "down": "Price is {{value}}% below its 20-period average."
+        },
+        "cross": {
+          "up": "The 20-period average has crossed above the 50.",
+          "down": "The 20-period average has crossed below the 50."
+        },
+        "momentum": {
+          "up": "Recent momentum is positive ({{value}}%).",
+          "down": "Recent momentum is negative ({{value}}%)."
+        }
+      }
+    },
+    "plain": {
+      "title": "In plain words",
+      "tailwind": "Right now the wind is behind this one. That is not the same as it going up — it means that in the past, when things looked like this, going up happened more often than not.",
+      "mildUp": "Slightly favourable, and only slightly. Not enough to build a plan on.",
+      "unclear": "We genuinely do not know. Anyone who tells you they do, about this asset today, is guessing with confidence.",
+      "mildDown": "Slightly unfavourable. A reason to be patient rather than a reason to sell.",
+      "headwind": "The wind is against this one. It can still rise — it has just done so less often from here."
+    },
+    "notPrediction": "This is not a prediction and there is no price target anywhere in it. Every number above is measured from what already happened: this asset's own history, its relationship with Bitcoin, and the state of the market. The future is allowed to ignore all of it. Never put in money you cannot afford to lose.",
+    "noModel": "No language model wrote any of this. Every sentence is assembled from a number that was actually computed on your device, which is why it can never invent a fact, a level or a headline.",
+    "notEnough": "Not enough history for a full read on this asset yet."
   }
 }

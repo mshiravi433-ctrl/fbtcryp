@@ -101,35 +101,84 @@ report('screen smoke (all 12 languages)', await runScreens(document.getElementBy
 
 /* --------------------------- 5. store-safe build -------------------------- */
 /*
- * The arcade flag is a STORE COMPLIANCE control, not a UI toggle: Google Play
- * and the Iranian stores reject gambling-styled content, and "route hidden but
- * code still in the APK" does not satisfy that — a reviewer can unzip it.
+ * Two separate guarantees are checked here, and they are not the same thing:
  *
- * This caught a real bug: reading the flag from import.meta.env left Rollup
- * unable to prove the lazy import was dead, so a 22KB Play chunk shipped even
- * with games disabled. Asserting on the emitted files is the only check that
- * would have noticed.
+ *   A. THE ARCADE IS GONE FROM EVERY BUILD. It used to be a flag
+ *      (VITE_ENABLE_GAMES) that store builds left off and the website turned
+ *      on. It is now deleted from the repository, so the correct assertion is
+ *      no longer "the default build excludes it" — it is "no build can
+ *      include it, because there is nothing to include". A flag check would
+ *      pass forever while someone re-added a Play route.
+ *
+ *   B. THE SPECULATION SCREENS ARE STILL A WORKING FLAG. Off for stores, on
+ *      for the website. A flag nobody can turn on is a deletion with extra
+ *      steps, so the opt-in is asserted to really emit its chunks.
+ *
+ * Asserting on the EMITTED FILENAMES rather than on the source is what caught
+ * the original bug: reading the flag from import.meta.env left Rollup unable
+ * to prove the lazy import was dead, so a 22KB Play chunk shipped even with
+ * games "disabled".
  */
-console.log('\n▸ verifying the default build excludes the arcade…');
+console.log('\n▸ verifying the arcade is absent and the speculation flag works…');
 {
   const { readdirSync, rmSync, existsSync, readFileSync } = await import('node:fs');
   const rows = [];
   const gameChunk = /^(Play|Crash|Dice|Mines|Wheel|CoinFlip)/i;
+  const specChunk = /^(Predict|Perp|Invest)/i;
+
+  /* ---- A. deleted, not flagged ---- */
+  for (const gone of [
+    'src/pages/Play.jsx',
+    'src/games',
+    'src/lib/fairness.js',
+    'src/hooks/useFairSession.js'
+  ]) {
+    rows.push([`${gone} is deleted from the repo`, !existsSync(gone)]);
+  }
 
   rmSync('dist', { recursive: true, force: true });
   npx(['vite', 'build', '--logLevel', 'error']);
   const defaultAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
-  rows.push(['default build emits no arcade chunk', !defaultAssets.some((f) => gameChunk.test(f))]);
-  rows.push(['default build still produced a bundle', defaultAssets.length > 5]);
+  rows.push(['store build emits no arcade chunk', !defaultAssets.some((f) => gameChunk.test(f))]);
+  rows.push(['store build emits no speculation chunk', !defaultAssets.some((f) => specChunk.test(f))]);
+  rows.push(['store build still produced a bundle', defaultAssets.length > 5]);
 
-  // And the opt-in must still work, or the flag is just broken rather than safe.
+  /* ---- B. the speculation opt-in still works, and still has no games ---- */
   rmSync('dist', { recursive: true, force: true });
   execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, VITE_ENABLE_GAMES: 'true' }
+    env: { ...process.env, VITE_ENABLE_SPECULATION: 'true' }
   });
-  const optInAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
-  rows.push(['VITE_ENABLE_GAMES=true does emit the arcade', optInAssets.some((f) => gameChunk.test(f))]);
+  const fullAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
+  rows.push([
+    'VITE_ENABLE_SPECULATION=true does emit those screens',
+    fullAssets.some((f) => specChunk.test(f))
+  ]);
+  /*
+   * The point the owner made: the website build is the one a first-time user
+   * and Google both see. Whatever else it turns on, it must never bring the
+   * arcade back.
+   */
+  rows.push(['the full build STILL has no arcade chunk', !fullAssets.some((f) => gameChunk.test(f))]);
+
+  /*
+   * And the arcade VOCABULARY must be gone from the full build too, not just
+   * its chunks — the locale JSON is inlined by Rollup, which is exactly how
+   * "removed" screens kept shipping their words last time.
+   */
+  {
+    const text = fullAssets
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => readFileSync(`dist/assets/${f}`, 'utf8'))
+      .join('\n');
+    const arcadeWords = ['gambling-style', 'house edge', 'Provably fair', 'قمار'];
+    const found = arcadeWords.filter((w) => text.includes(w));
+    rows.push([
+      `the full build ships no arcade vocabulary${found.length ? ` — found: ${found.join(', ')}` : ''}`,
+      found.length === 0
+    ]);
+    rows.push(['there was actually a full bundle to scan', text.length > 100000]);
+  }
 
   // Leave the tree in the store-safe state.
   rmSync('dist', { recursive: true, force: true });

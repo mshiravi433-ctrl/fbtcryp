@@ -34,7 +34,6 @@ export default {
   'nav.developers': { zh: '开发者', hi: 'डेवलपर', es: 'Desarrolladores', fr: 'Développeurs', ru: 'Разработчикам', tr: 'Geliştiriciler', ur: 'ڈویلپرز', id: 'Pengembang', pt: 'Programadores' },
   'nav.ecosystem': { zh: '生态', hi: 'इकोसिस्टम', es: 'Ecosistema', fr: 'Écosystème', ru: 'Экосистема', tr: 'Ekosistem', ur: 'ایکو سسٹم', id: 'Ekosistem', pt: 'Ecossistema' },
   'nav.business': { zh: '商务', hi: 'व्यवसाय', es: 'Negocios', fr: 'Entreprise', ru: 'Бизнес', tr: 'Kurumsal', ur: 'کاروبار', id: 'Bisnis', pt: 'Negócios' },
-  'nav.play': { zh: '游戏', hi: 'गेम्स', es: 'Juegos', fr: 'Jeux', ru: 'Игры', tr: 'Oyunlar', ur: 'گیمز', id: 'Gim', pt: 'Jogos' },
   'nav.group.markets': { zh: '市场', hi: 'बाज़ार', es: 'Mercados', fr: 'Marchés', ru: 'Рынки', tr: 'Piyasalar', ur: 'مارکیٹس', id: 'Pasar', pt: 'Mercados' },
   'nav.group.earn': { zh: '赚取', hi: 'कमाएँ', es: 'Ganar', fr: 'Gagner', ru: 'Заработок', tr: 'Kazan', ur: 'کمائیں', id: 'Dapatkan', pt: 'Ganhar' },
   'nav.group.more': { zh: '更多', hi: 'और', es: 'Más', fr: 'Plus', ru: 'Ещё', tr: 'Daha', ur: 'مزید', id: 'Lainnya', pt: 'Mais' },

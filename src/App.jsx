@@ -15,7 +15,7 @@ import Guide from './pages/Guide';
 import Splash from './pages/Splash';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
-import { GAMES_ENABLED, SPECULATION_ENABLED } from './lib/features';
+import { SPECULATION_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
 import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
@@ -36,10 +36,6 @@ const Swap = lazy(() => import('./pages/Swap'));
  * the import is unreachable and emit no chunk at all.
  */
 const Invest = SPECULATION_ENABLED ? lazy(() => import('./pages/Invest')) : () => null;
-// Conditional so the chunk isn't emitted at all in a store-safe build —
-// an unreachable route still leaves the code inside the APK for a reviewer
-// (or anyone) to find by unzipping it.
-const Play = GAMES_ENABLED ? lazy(() => import('./pages/Play')) : () => null;
 const Predict = SPECULATION_ENABLED ? lazy(() => import('./pages/Predict')) : () => null;
 const Earn = lazy(() => import('./pages/Earn'));
 const Wallet = lazy(() => import('./pages/Wallet'));
@@ -161,7 +157,6 @@ function AnimatedRoutes() {
           <Route path="/trade" element={<Trade />} />
           <Route path="/swap" element={<Swap />} />
           {SPECULATION_ENABLED && <Route path="/invest" element={<Invest />} />}
-          {GAMES_ENABLED && <Route path="/play" element={<Play />} />}
           {SPECULATION_ENABLED && <Route path="/predict" element={<Predict />} />}
           <Route path="/earn" element={<Earn />} />
           <Route path="/wallet" element={<Wallet />} />

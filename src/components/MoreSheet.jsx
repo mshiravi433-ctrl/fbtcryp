@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
-import { GAMES_ENABLED, SPECULATION_ENABLED } from '../lib/features';
+import { SPECULATION_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
 import {
   IconActivity,
@@ -93,7 +93,6 @@ const GROUPS = [
     id: 'earn',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
-      ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' }] : []),
       /* Points and ranking are one screen now — a score is only meaningful
          next to the standing it produces. */
       { to: '/rewards', key: 'rewards.title', Icon: IconTrophy, hue: 'var(--rgb-5)' },

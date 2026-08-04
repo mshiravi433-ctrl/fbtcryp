@@ -5461,3 +5461,256 @@ body { overflow-x: clip; }
   border-bottom: 1px solid var(--line);
 }
 .perp-liq tr:last-child td { border-bottom: none; }
+
+
+/* ==========================================================================
+   THE VERDICT PANEL  —  .verd-*
+
+   The readable half of lib/verdict.js: two horizons side by side, each led by
+   a sentence rather than a number.
+
+   ─── WHY `unclear` IS NOT STYLED AS AN ERROR ──────────────────────────────
+   "Not clear" is the correct answer most of the time, and lib/verdict.js is
+   built so that it takes real evidence to move away from it. If it were
+   rendered in grey-on-grey with a warning icon, users would read it as "the
+   app failed" and go looking for a screen that gives them a direction — which
+   is precisely the behaviour that loses money. So it gets the same weight,
+   the same size and the same confidence bar as every other stance. Only the
+   accent hue differs.
+
+   ─── WHY THE ACCENT IS A 3px EDGE AND NOT A FILL ──────────────────────────
+   A green-filled card is a recommendation. A green edge is a label. The
+   difference sounds cosmetic and is not: this panel must be readable as
+   measurement, and a card the colour of a buy button is not.
+   ========================================================================== */
+
+.verd-panel {
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.verd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.verd-sub {
+  font-size: 11.5px;
+  line-height: 1.75;
+  margin: 3px 0 12px;
+}
+
+/*
+   Two columns on anything with room, one on a phone.
+
+   `minmax(0, 1fr)` rather than `1fr`: a grid track's default minimum is
+   `auto`, so a long unbreakable string (a price, a ticker) would push the
+   column wider than its share and overflow the card horizontally. This is the
+   same fix applied elsewhere in this stylesheet for the same reason.
+*/
+.verd-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 600px) {
+  .verd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.verd-card {
+  padding: 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  /* The accent lives on one edge only — see the note above. */
+  border-inline-start: 3px solid var(--verd-accent, var(--text-3));
+  background: var(--bg-panel);
+  min-width: 0;
+}
+
+.verd-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.verd-card-when {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.verd-card-sub { font-size: 11px; }
+
+.verd-stance {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--verd-accent, var(--text-3));
+  text-align: end;
+  /* Two-word stances must wrap inside the card rather than squeezing the
+     heading beside them. */
+  max-width: 48%;
+  line-height: 1.45;
+}
+
+.verd-plain {
+  font-size: 12.6px;
+  line-height: 1.8;
+  color: var(--text-1);
+  margin: 0 0 10px;
+}
+
+.verd-conf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.verd-conf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* The bar takes the leftover space; the label keeps its natural width. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.verd-conf-track {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.18);
+  overflow: hidden;
+}
+
+.verd-conf-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--verd-accent, var(--text-3));
+}
+
+.verd-conf-num {
+  font-size: 11.5px;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.verd-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.verd-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+/* A span rather than ::marker — older Android WebViews ignore ::marker, and
+   this list must colour per item. Same approach as .hist-dot. */
+.verd-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 7px;
+  background: var(--text-3);
+}
+
+.verd-notable .verd-dot { background: var(--ink-cyan); }
+.verd-caution .verd-dot { background: var(--ink-amber); }
+.verd-notable { color: var(--text-1); }
+
+/*
+   The agreement line. This is the sentence a user cannot derive by looking at
+   the two cards, so it gets its own emphasis rather than being buried in the
+   body copy.
+*/
+.verd-agree {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 11px;
+  font-size: 12.3px;
+  line-height: 1.8;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 127, 0.06);
+  color: var(--text-1);
+}
+
+.verd-agree-conflict { border-color: color-mix(in srgb, var(--ink-amber) 45%, transparent); }
+.verd-agree-aligned { border-color: color-mix(in srgb, var(--ink-cyan) 45%, transparent); }
+
+.verd-explain {
+  font-size: 12.2px;
+  line-height: 1.85;
+  margin: 10px 0 0;
+}
+
+.verd-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.3px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  /* 44px is the minimum reliable touch target; padding alone leaves this at
+     roughly 38px on a small phone. */
+  min-height: 44px;
+  text-align: start;
+}
+
+.verd-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 2px 0;
+}
+
+.verd-layer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.verd-layer-name { color: var(--text-2); }
+.verd-layer-weight { font-size: 11.5px; flex-shrink: 0; }
+
+.verd-nomodel {
+  font-size: 10.5px;
+  line-height: 1.8;
+  margin: 10px 2px 0;
+}
+
+.verd-disclaimer { margin-top: 12px; }
+
+/* Small phones: the stance label and the heading fight for the same row. */
+@media (max-width: 360px) {
+  .verd-card-head { flex-direction: column; gap: 4px; }
+  .verd-stance { max-width: 100%; text-align: start; }
+}

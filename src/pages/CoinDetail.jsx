@@ -5,12 +5,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
+import VerdictPanel from '../components/VerdictPanel';
+import { analyze } from '../lib/ai';
 
 const RANGES = [
   { key: '1D', days: 1 },
@@ -55,6 +57,17 @@ export default function CoinDetail() {
   const { data: coins } = useMarkets(60);
   const { data: fetched, loading: coinLoading } = useCoin(id);
   const { data: series, loading } = useChart(id, range.days);
+  /*
+   * Bitcoin over the SAME range, plus the global stats, for the verdict
+   * panel's macro layer. Both series have to come from one endpoint with one
+   * `days` value or their daily returns cannot be paired, which is why this
+   * follows `range` rather than using a fixed window.
+   *
+   * On the bitcoin page this is the identical request the line above already
+   * made, so the poll cache answers it without touching the network.
+   */
+  const { data: btcSeries } = useChart('bitcoin', range.days);
+  const { data: global } = useGlobalStats();
 
   const favorites = useAppStore((s) => s.favorites);
   const toggleFavorite = useAppStore((s) => s.toggleFavorite);
@@ -68,6 +81,20 @@ export default function CoinDetail() {
   );
 
   const chartData = series ?? [];
+
+  /*
+   * The technical read, computed here rather than inside VerdictPanel.
+   *
+   * `analyze()` needs at least 30 valid points and returns null below that,
+   * which is the signal to render nothing at all — a coin listed last week
+   * genuinely has nothing to say and a panel full of "unknown" would be worse
+   * than no panel. Keeping the call here means that decision is visible at
+   * the call site instead of buried in the component.
+   */
+  const analysis = useMemo(
+    () => analyze(chartData.map((d) => d.p), coin ?? {}),
+    [chartData, coin]
+  );
   const first = chartData[0]?.p ?? 0;
   const last = chartData[chartData.length - 1]?.p ?? 0;
   const rangeChange = first ? ((last - first) / first) * 100 : 0;
@@ -215,6 +242,25 @@ export default function CoinDetail() {
         `series` is the chart data already on screen — no extra request, and
         the panel follows whichever range the user picked.
       */}
+      {/*
+        The verdict first, then the raw history behind it. That order matters:
+        the verdict is the readable answer and the history panel is the
+        evidence, and a reader who stops after the first panel should already
+        have the correct impression rather than a list of measurements they
+        have to synthesise themselves.
+      */}
+      {analysis && (
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <VerdictPanel
+            analysis={analysis}
+            series={(series ?? []).map((d) => d.p)}
+            btcSeries={(btcSeries ?? []).map((d) => d.p)}
+            coin={coin}
+            global={global}
+          />
+        </motion.div>
+      )}
+
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <HistoryPanel
           series={(series ?? []).map((d) => d.p)}

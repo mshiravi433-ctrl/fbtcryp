@@ -368,14 +368,12 @@ export default function run() {
     }
 
     /*
-     * Not every variable belongs in CI. VITE_ENABLE_GAMES must stay unset so
-     * the arcade is compiled out of store builds, and the Gemini keys are
-     * dev-only overrides for a path the server owns in production.
+     * Not every variable belongs in CI. The Gemini keys are dev-only
+     * overrides for a path the server owns in production.
      */
     const intentionallyUnset = new Set([
-      'VITE_ENABLE_GAMES',
       /*
-       * Must stay UNSET, exactly like the arcade flag. Prediction, perpetuals
+       * Must stay UNSET for store builds. Prediction, perpetuals
        * and invest are what got the app rejected by APKPure for "illegal
        * sensitive words"; setting this in CI would put them back in the store
        * build. Fails safe: a release that forgets an env var ships WITHOUT
@@ -2648,9 +2646,22 @@ export default function run() {
     const pkg = JSON.parse(read('package.json'));
     t('there is a full-feature build script', Boolean(pkg.scripts?.['build:full']));
     t(
-      'the full build turns both flags on',
-      /VITE_ENABLE_SPECULATION=true/.test(pkg.scripts?.['build:full'] ?? '') &&
-        /VITE_ENABLE_GAMES=true/.test(pkg.scripts?.['build:full'] ?? '')
+      'the full build turns the speculation flag on',
+      /VITE_ENABLE_SPECULATION=true/.test(pkg.scripts?.['build:full'] ?? '')
+    );
+    /*
+     * ...and must NOT resurrect the arcade. The games were deleted from the
+     * repository because a gambling-styled screen next to a real swap screen
+     * hurts the product on the website too, not only in a store review. A
+     * stray VITE_ENABLE_GAMES here would be a silent attempt to bring back
+     * code that no longer exists — and the day someone re-adds the pages,
+     * this is what stops the flag reappearing with them.
+     */
+    t(
+      'no build script re-enables an arcade',
+      !/VITE_ENABLE_GAMES/.test(JSON.stringify(pkg.scripts ?? {})) &&
+        !/VITE_ENABLE_GAMES/.test(read('ci/build-full.sh')) &&
+        !/VITE_ENABLE_GAMES/.test(read('ci/build-both.sh'))
     );
     t('there is an APK script for it', existsSync('ci/build-full.sh'));
     /*

@@ -3,7 +3,6 @@
     "market": "السوق",
     "trade": "تداول",
     "invest": "Invest",
-    "play": "Games",
     "earn": "اربح",
     "wallet": "المحفظة",
     "swap": "مبادلة",
@@ -165,64 +164,6 @@
       }
     }
   },
-  "game": {
-    "title": "الألعاب",
-    "subtitle": "ألعاب قابلة لإثبات النزاهة برصيد افتراضي.",
-    "riskNotice": "هذه ألعاب بنمط المراهنة برصيد NX افتراضي فقط. لا تربطها بأموال حقيقية أبداً: المراهنة بأموال حقيقية تتطلب ترخيص قمار والتحقق من العمر والهوية ومولد أرقام عشوائية مدقق. هذه الألعاب خاسرة على المدى الطويل — نسبة البيت ٣٪.",
-    "stake": "قيمة الرهان",
-    "rolling": "جارٍ الرمي…",
-    "spinning": "جارٍ الدوران…",
-    "totalWagered": "إجمالي المراهنات",
-    "fairness": "إثبات النزاهة",
-    "fairnessExplain": "تُشتق كل جولة من بذرة الخادم (المعلن هاشها مسبقاً) وبذرتك ورقم الجولة. بعد تدوير البذرة يمكنك إعادة حسابها والتأكد من مطابقتها للالتزام الأصلي.",
-    "serverSeedHash": "هاش بذرة الخادم",
-    "clientSeed": "بذرتك",
-    "nonce": "رقم الجولة",
-    "applySeed": "تطبيق البذرة",
-    "revealRotate": "كشف وتدوير البذرة",
-    "revealedSeed": "بذرة الخادم المكشوفة",
-    "verifyHint": "يجب أن يطابق هاش SHA-256 لهذه البذرة الالتزام السابق. غطّت {{rounds}} جولة.",
-    "fairnessLimitation": "تنويه صادق: تُولَّد البذرة داخل متصفحك هنا، فهي تثبت فقط أن النتيجة لم تتغير أثناء الجولة — وليست بديلاً عن مولد عشوائي مدقق لدى مشغل مرخّص.",
-    "crash": {
-      "name": "كراش",
-      "launch": "إطلاق",
-      "cashOut": "سحب",
-      "autoCashout": "سحب تلقائي (×)",
-      "busted": "انهار عند {{x}}×"
-    },
-    "dice": {
-      "name": "نرد",
-      "roll": "ارمِ",
-      "under": "أقل من {{n}}",
-      "over": "أكثر من {{n}}",
-      "target": "الهدف",
-      "chance": "فرصة الفوز",
-      "multiplier": "المضاعف",
-      "profit": "الربح"
-    },
-    "wheel": {
-      "name": "العجلة",
-      "spin": "أدر",
-      "segments": "٨ أقسام · من ٠× إلى ٣× · نسبة البيت ٣٪"
-    },
-    "mines": {
-      "name": "Mines",
-      "start": "Start round",
-      "cashOut": "Cash out",
-      "count": "Number of mines",
-      "multiplier": "Multiplier",
-      "cashValue": "Cash value",
-      "next": "Next tile",
-      "boom": "Hit a mine — lost {{n}}"
-    },
-    "coinflip": {
-      "name": "Coin flip",
-      "flip": "Flip",
-      "flipping": "Flipping…",
-      "heads": "Heads",
-      "tails": "Tails"
-    }
-  },
   "predict": {
     "title": "توقع السعر",
     "teaser": "توقع اتجاه الشمعة القادمة",
@@ -251,7 +192,6 @@
     "quest": {
       "firstTrade": "نفّذ أول صفقة",
       "firstStake": "افتح خطة استثمار",
-      "firstGame": "العب جولة",
       "firstPredict": "سجّل توقع سعر",
       "addFavorite": "أضف عملة للمفضلة",
       "inviteFriend": "Invite a friend",

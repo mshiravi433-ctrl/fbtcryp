@@ -24,6 +24,8 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmai
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
 import { comparable, improvementBps, isUsableQuote, pickBestQuote } from '../src/lib/bestQuote.js';
 import { bpsToPercent, openOceanSupports } from '../src/lib/openocean.js';
+import { betaToBtc, cyclePosition, macroContext, marketRegime } from '../src/lib/macro.js';
+import { CONFIDENCE_CEILING, verdict } from '../src/lib/verdict.js';
 import {
   baseRate,
   findLevels,
@@ -1648,8 +1650,9 @@ export default function run() {
     // The scam-defence line is the part that was always right; keep it.
     t('the bot still refuses deposits', /never takes deposits/i.test(code));
     /*
-     * The arcade is compiled out of release builds, so advertising
-     * "provably-fair mini-games" points at a feature the user cannot find.
+     * The arcade was deleted from the repository, so advertising
+     * "provably-fair mini-games" points at a feature that does not exist in
+     * any build — website included.
      */
     t('the bot does not advertise the removed arcade', !/mini-games/i.test(code));
   }
@@ -1962,6 +1965,341 @@ export default function run() {
     t('analyze exposes the backtest behind its confidence', a.backtest !== undefined);
     t('analyze still reports agreement separately', typeof a.agreement === 'number');
     t('confidence never claims certainty', a.confidence <= 75);
+  }
+
+  /* ==================== macro + verdict engine ========================== */
+  /*
+   * ─── WHAT THESE PROTECT ───────────────────────────────────────────────────
+   * The brief was «قویترین سیگنال‌دهی ... که هر کسی با هر سوادی بفهمه چخبره» —
+   * the strongest signal we can honestly produce, readable by anyone.
+   *
+   * "Strongest" is the dangerous half of that sentence. The easy way to make a
+   * signal engine look strong is to make it confident, and everything below
+   * exists to stop exactly that: the engine must stay quiet when it does not
+   * know, must never emit a sentence (only keys + numbers, so nothing can be
+   * mistranslated into a claim), and must never produce a number that reads
+   * like certainty.
+   */
+  {
+    /* Deterministic synthetic series — a seeded walk, never Math.random(),
+       so a failure is reproducible rather than a flake to re-run. */
+    const mulberry32 = (a) => () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let x = Math.imul(a ^ (a >>> 15), 1 | a);
+      x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+    const walk = (n, seed, drift = 0, vol = 0.02, start = 100) => {
+      const r = mulberry32(seed);
+      const out = [start];
+      for (let i = 1; i < n; i += 1) out.push(out[i - 1] * (1 + drift + (r() - 0.5) * vol * 2));
+      return out;
+    };
+
+    /* ---------------------------- beta ---------------------------------- */
+    const btc = walk(180, 7);
+    // Built to move exactly 2× BTC, bar for bar. Beta must recover that.
+    const levered = [100];
+    for (let i = 1; i < btc.length; i += 1) {
+      levered.push(levered[i - 1] * (1 + 2 * (btc[i] / btc[i - 1] - 1)));
+    }
+    const b = betaToBtc(levered, btc);
+    t('beta recovers a known 2x relationship', b && Math.abs(b.beta - 2) < 0.15);
+    /*
+     * R² is the guard against the classic abuse of beta. A beta of 2.0 fitted
+     * to noise is meaningless, and macroContext refuses to report one below
+     * 0.2 — so a perfectly-derived series must land near 1.0 or that gate is
+     * measuring the wrong thing.
+     */
+    t('...and reports that BTC explains all of it', b.r2 > 0.95);
+
+    /* An unrelated series must NOT produce a confident beta. */
+    const unrelated = walk(180, 99);
+    const bu = betaToBtc(unrelated, btc);
+    t('an unrelated series gets a low r-squared', bu && bu.r2 < 0.3);
+    /*
+     * ...and the low r-squared must actually GATE the output, not merely be
+     * reported. This is the abuse the number exists to prevent: a beta of
+     * -0.1 fitted to noise, printed as "this asset moves 0.1x Bitcoin", is a
+     * precise-sounding falsehood. Asserting on `betaToBtc` alone did not
+     * catch removing the gate — I checked by deleting it, and nothing failed.
+     */
+    t('a noise-fitted beta is not surfaced as a fact',
+      !macroContext({
+        coin: { id: 'x', symbol: 'X', athChange: -30 },
+        series: unrelated,
+        btcSeries: btc,
+        global: { mcapChange: 1, btcDominance: 52 }
+      }).facts.some((f) => f.id.startsWith('beta.')));
+    /* The gate must not swallow a genuine relationship. */
+    t('a well-explained beta IS surfaced',
+      macroContext({
+        coin: { id: 'y', symbol: 'Y', athChange: -30 },
+        series: levered,
+        btcSeries: btc,
+        global: { mcapChange: 1, btcDominance: 52 }
+      }).facts.some((f) => f.id === 'beta.high'));
+
+    t('beta refuses a series too short to fit', betaToBtc([1, 2, 3], btc) === null);
+
+    /* ---------------------------- regime -------------------------------- */
+    const rising = walk(60, 3, 0.004, 0.01);
+    const falling = walk(60, 4, -0.004, 0.01);
+
+    const rotOut = marketRegime({
+      global: { mcapChange: -2, btcDominance: 58, btcDominanceChange: 0.4 },
+      btcSeries: falling
+    });
+    t('a falling market with BTC dominance rising is rotationOut', rotOut?.regime === 'rotationOut');
+    /*
+     * This is the regime the whole macro layer exists for: the one where an
+     * altcoin's own chart looks fine and it gets sold anyway. If this ever
+     * stops being detected the layer is decoration.
+     */
+    t('...and it is flagged as caution, not neutral',
+      macroContext({
+        coin: { id: 'x', athChange: -40 },
+        series: walk(120, 11),
+        btcSeries: falling,
+        global: { mcapChange: -2, btcDominance: 58, btcDominanceChange: 0.4 }
+      }).facts.some((f) => f.id === 'regime.rotationOut' && f.kind === 'caution'));
+
+    const riskOn = marketRegime({
+      global: { mcapChange: 2, btcDominance: 48, btcDominanceChange: -0.5 },
+      btcSeries: rising
+    });
+    t('a rising market with dominance falling is riskOn', riskOn?.regime === 'riskOn');
+
+    t('regime refuses to guess without dominance',
+      marketRegime({ global: { mcapChange: 2 }, btcSeries: rising }) === null);
+    /*
+     * `certain` distinguishes a dominance drift we READ from one we INFERRED.
+     * Collapsing the two would let the UI assert a rotation it cannot see.
+     */
+    t('an inferred dominance drift is marked uncertain',
+      marketRegime({ global: { mcapChange: 5, btcDominance: 50 }, btcSeries: walk(60, 5, 0, 0.001) })?.certain === false);
+
+    /* ---------------------------- cycle --------------------------------- */
+    t('a coin at its high is banded atHigh', cyclePosition({ athChange: -2 })?.band === 'atHigh');
+    const deep = cyclePosition({ athChange: -90 });
+    t('a 90% drawdown is banded farFromHigh', deep?.band === 'farFromHigh');
+    /*
+     * The recovery multiple is the honest restatement of a drawdown: "down
+     * 90%" is abstract, "needs 10x to break even" is the same fact and is
+     * understood instantly. 100/(100-90) = 10.
+     */
+    t('...and states the 10x needed to break even', deep.values.recoveryX === 10);
+
+    /* -------------------- bitcoin is not compared to itself -------------- */
+    /*
+     * Beta of BTC to BTC is 1.0 with r2 1.0 — arithmetically true, useless to
+     * print, and on the single most-viewed asset in the app.
+     */
+    const btcMacro = macroContext({
+      coin: { id: 'bitcoin', symbol: 'BTC', athChange: -20 },
+      series: btc,
+      btcSeries: btc,
+      global: { mcapChange: 1, btcDominance: 55 }
+    });
+    t('bitcoin is not told it moves 1x bitcoin', btcMacro.beta === null);
+    t('...nor is a beta fact rendered for it',
+      !btcMacro.facts.some((f) => f.id.startsWith('beta.')));
+    t('...but the regime still applies to it', btcMacro.regime !== null);
+    /* The symbol path matters too — a deep link can arrive without the id. */
+    t('the check works from the symbol alone',
+      macroContext({ coin: { symbol: 'BTC' }, series: btc, btcSeries: btc, global: { mcapChange: 1, btcDominance: 55 } }).beta === null);
+    /* And it must not swallow every asset — WBTC aside, others still get one. */
+    t('a normal asset still gets its beta',
+      macroContext({ coin: { id: 'ether', symbol: 'ETH' }, series: levered, btcSeries: btc, global: { mcapChange: 1, btcDominance: 55 } }).beta !== null);
+
+    /* ---------------------------- verdict -------------------------------- */
+    const series = walk(200, 21, 0.002, 0.03);
+    const analysis = analyze(series, { change24h: 1, change7d: 3, id: 'x', symbol: 'X' });
+    const v = verdict({
+      analysis,
+      series,
+      btcSeries: btc,
+      coin: { id: 'x', symbol: 'X', athChange: -35, volume: 1e6 },
+      global: { mcapChange: 1, btcDominance: 52 }
+    });
+
+    t('the verdict produces both horizons', Boolean(v?.short && v?.long));
+    t('the two horizons cover different spans', v.short.days !== v.long.days);
+
+    /*
+     * ─── THE CEILINGS, AND WHY THIS TEST IS SHAPED LIKE THIS ────────────────
+     * These are not tuning constants. They are the promise that this app will
+     * never show a number that reads like certainty about a volatile asset.
+     *
+     * Asserting `confidence <= 75` on one arbitrary fixture is worthless and
+     * was the first version of this test: that fixture scored 30, so the
+     * assertion passed with the clamp deleted entirely. I removed the clamp
+     * to check, and nothing failed. Worse, the clamp was ALSO dead code —
+     * the formula's natural maximum was 72, so the cap could never bind and
+     * the "ceiling" was a comment rather than a constraint.
+     *
+     * So this sweeps a wide space of synthetic markets, requires that
+     * something actually REACHES the ceiling (proving the clamp binds), and
+     * requires that nothing exceeds it (proving it holds). The constants are
+     * imported, never copied — a duplicated constant in a test goes stale
+     * silently and then guards nothing.
+     */
+    {
+      let maxShort = 0;
+      let maxLong = 0;
+      let over = 0;
+      for (let seed = 1; seed < 40; seed += 1) {
+        for (const drift of [0.004, 0.002, 0, -0.002, -0.004]) {
+          const s2 = walk(300, seed, drift, 0.02);
+          const b2 = walk(300, seed + 500, drift, 0.02);
+          const a2 = analyze(s2, { change24h: drift * 100, change7d: drift * 400 });
+          if (!a2) continue;
+          for (const g of [
+            { mcapChange: 2, btcDominance: 48, btcDominanceChange: -0.5 },
+            { mcapChange: -2, btcDominance: 58, btcDominanceChange: 0.4 }
+          ]) {
+            const r = verdict({
+              analysis: a2,
+              series: s2,
+              btcSeries: b2,
+              coin: { id: 'x', symbol: 'X', athChange: -10, volume: 1e6 },
+              global: g
+            });
+            maxShort = Math.max(maxShort, r.short.confidence);
+            maxLong = Math.max(maxLong, r.long.confidence);
+            if (r.short.confidence > CONFIDENCE_CEILING.short) over += 1;
+            if (r.long.confidence > CONFIDENCE_CEILING.long) over += 1;
+          }
+        }
+      }
+      t('no market in the sweep exceeds the confidence ceiling', over === 0);
+      /*
+       * The clamp must BIND, not merely exist. If the highest confidence the
+       * engine can produce is well under the cap, the cap is decoration and
+       * would keep passing after someone raised the real limit.
+       */
+      t('the monthly ceiling is actually reached, so the cap is real',
+        maxLong === CONFIDENCE_CEILING.long);
+      t('the sweep produced meaningful confidence at all', maxShort > 20);
+    }
+
+    /*
+     * NOTHING HERE MAY BE A SENTENCE. Every reason is a translation key plus
+     * numbers, which is what makes it impossible for this engine to state a
+     * claim we did not write in a language we cannot read.
+     */
+    const allReasons = [...v.short.reasons, ...v.long.reasons];
+    t('every reason is a key, never prose',
+      allReasons.length > 0 && allReasons.every((r) => typeof r.id === 'string' && !/\s/.test(r.id)));
+    t('every reason carries a values object',
+      allReasons.every((r) => r.values && typeof r.values === 'object'));
+    t('reason kinds stay in the neutral vocabulary',
+      allReasons.every((r) => ['neutral', 'caution', 'notable'].includes(r.kind)));
+
+    /*
+     * The stance vocabulary must never contain an instruction. "buy" /
+     * "sell" / "bullish" appearing here would turn a measurement into
+     * financial advice, which is both the legal line and the honesty line.
+     */
+    const STANCES = ['tailwind', 'mildUp', 'unclear', 'mildDown', 'headwind'];
+    t('stances come from the non-directive vocabulary',
+      STANCES.includes(v.short.stance) && STANCES.includes(v.long.stance));
+
+    /* ---- the disagreement override ---- */
+    /*
+     * When independent layers point opposite ways the honest answer is "we
+     * don't know", NOT the average. Averaging +80 and -80 to 0 and calling it
+     * neutral is a different statement from "two strong readings contradict
+     * each other", and only the second is true.
+     */
+    const conflicted = verdict({
+      analysis: { ...analysis, score: 95, label: 'strongBuy' },
+      series,
+      btcSeries: falling,
+      coin: { id: 'x', symbol: 'X', athChange: -92 },
+      global: { mcapChange: -4, btcDominance: 60, btcDominanceChange: 0.8 }
+    });
+    /*
+     * This exact fixture is why the detector was rewritten. Under the original
+     * standard-deviation test it scored a spread of 59 against a threshold of
+     * 65 — so the single most dangerous configuration in the engine, a +95
+     * chart inside a market rotating out of this whole category, came out as
+     * "slightly in its favour". The sign-conflict test catches it.
+     *
+     * `!== 'tailwind'` is too weak to assert on its own (mildUp would pass
+     * it), so all three consequences are checked.
+     */
+    t('a strong chart inside a rotation-out market is reported as unclear',
+      conflicted.short.stance === 'unclear');
+    t('...and the conflict is flagged explicitly', conflicted.short.conflicted === true);
+    t('...and it says so in the reasons',
+      conflicted.short.reasons.some((r) => r.id === 'layersDisagree'));
+    t('...and confidence is forced down', conflicted.short.confidence <= 30);
+    /*
+     * The other half: agreement must NOT be reported as conflict, or the
+     * override is just a way of never answering.
+     */
+    t('an agreeing read is not flagged as conflicted', v.long.conflicted === false);
+
+    /*
+     * ─── THE WEIGHT BAR ON CONFLICT DETECTION ───────────────────────────────
+     * A layer must carry real evidence before its disagreement can veto the
+     * whole read. Without that bar, a layer holding almost nothing could
+     * force "unclear" onto a well-supported answer — and the engine would
+     * then answer "we don't know" to nearly everything, which is a different
+     * flavour of useless rather than a fix.
+     *
+     * This fixture is chosen because it sits exactly on the boundary: the
+     * technical layer scores -42 but carries only 0.35 weight (below the 0.4
+     * bar) while macro scores +30 at full weight. Opposite signs, but one of
+     * them is not backed by enough evidence to count, so the correct answer
+     * is NOT conflicted. Setting CONFLICT_MIN_WEIGHT to 0 flips this.
+     */
+    {
+      const s3 = walk(250, 2, 0, 0.03);
+      const a3 = analyze(s3, { change24h: 0, change7d: 0 });
+      const r3 = verdict({
+        analysis: a3,
+        series: s3,
+        btcSeries: btc,
+        coin: { id: 'x', symbol: 'X', athChange: -30, volume: 1e6 },
+        global: { mcapChange: 2, btcDominance: 48, btcDominanceChange: -0.5 }
+      });
+      const tech = r3.long.layers.technical;
+      // Assert the fixture really is the boundary case, or the test below is
+      // checking something else entirely and would pass for the wrong reason.
+      t('the boundary fixture has a low-weight layer opposing macro',
+        tech.weight > 0 && tech.weight < 0.4 && tech.score < -25 && r3.long.layers.macro.score > 25);
+      t('...and a low-weight layer alone cannot force unclear',
+        r3.long.conflicted === false);
+    }
+
+    /* ---- too little data ---- */
+    const tiny = verdict({ analysis: null, series: [1, 2, 3], btcSeries: btc, coin: {}, global: null });
+    t('a coin with three data points gets no opinion', tiny.short.stance === 'unclear');
+    t('...and zero confidence rather than a small one', tiny.short.confidence === 0);
+    t('...and says so as a reason', tiny.short.reasons.some((r) => r.id === 'noData'));
+    t('an empty series returns nothing at all', verdict({ series: [] }) === null);
+
+    /* ---- horizon agreement ---- */
+    t('agreement is one of three named states',
+      ['aligned', 'conflict', 'partial'].includes(v.agree));
+
+    /*
+     * The layers must be inspectable. A confidence figure whose inputs cannot
+     * be seen is just a bigger assertion, and the panel shows these weights
+     * to the user precisely so the number is checkable.
+     */
+    for (const k of ['technical', 'historical', 'structural', 'macro']) {
+      t(`the ${k} layer is exposed with a weight`, typeof v.short.layers[k]?.weight === 'number');
+    }
+    /*
+     * Weight-zero means NO EVIDENCE, and must be distinguishable from
+     * score-zero which means "evidence, pointing nowhere". Conflating them is
+     * how an uninformed read ends up looking confidently neutral.
+     */
+    t('a layer with no data reports weight 0, not score 0',
+      tiny.short.layers.macro.weight === 0);
   }
 
   return rows;

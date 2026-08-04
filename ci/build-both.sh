@@ -5,15 +5,15 @@
 # ─── THE GAP THIS CLOSES ─────────────────────────────────────────────────────
 # The full-feature build existed (ci/build-full.sh) but NOTHING RAN IT. CI only
 # ever executed ci/build-apk.sh, so the only APK ever published to GitHub
-# Releases was the store build — the one with prediction, perpetuals, invest
-# and the arcade stripped out.
+# Releases was the store build — the one with prediction, perpetuals and
+# invest stripped out.
 #
 # Which means the owner's report was still true after the "fix": every APK you
 # could actually download had fewer features than before. A build variant that
 # is never built is a deletion with extra steps.
 #
 # ─── WHAT THIS PRODUCES ──────────────────────────────────────────────────────
-#   out/app-release.apk       store build — no speculation screens, no arcade
+#   out/app-release.apk       store build — no speculation screens
 #   out/app-release.aab       same, for Google Play
 #   out/FBT-Swap-full.apk     everything included
 #
@@ -33,7 +33,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  1/2  FULL build — every screen, for GitHub Releases           ║"
+echo "║  1/2  FULL build — incl. speculation, for GitHub Releases      ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 
 # Subshell, so these exports cannot leak into the store build below. That leak
@@ -41,7 +41,6 @@ echo "╚═══════════════════════�
 # the store artifact — the worst possible outcome and an invisible one.
 (
   export VITE_ENABLE_SPECULATION=true
-  export VITE_ENABLE_GAMES=true
   bash "$HERE/build-apk.sh"
 )
 

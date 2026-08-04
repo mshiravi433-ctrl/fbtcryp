@@ -29,17 +29,15 @@ import react from '@vitejs/plugin-react';
  */
 function stripDisabledLocaleCopy() {
   const speculation = process.env.VITE_ENABLE_SPECULATION === 'true';
-  const games = process.env.VITE_ENABLE_GAMES === 'true';
+
+  /*
+   * The arcade is no longer a flag — the code and its locale namespace were
+   * deleted outright (see src/lib/features.js). Nothing to strip for it.
+   */
 
   /* Top-level namespaces to drop, and the nav labels that point at them. */
-  const drop = [
-    ...(speculation ? [] : ['predict', 'perp', 'invest']),
-    ...(games ? [] : ['game'])
-  ];
-  const navDrop = [
-    ...(speculation ? [] : ['predict', 'perp', 'invest']),
-    ...(games ? [] : ['play'])
-  ];
+  const drop = speculation ? [] : ['predict', 'perp', 'invest'];
+  const navDrop = speculation ? [] : ['predict', 'perp', 'invest'];
 
   return {
     name: 'strip-disabled-locale-copy',
@@ -72,7 +70,6 @@ function stripDisabledLocaleCopy() {
       if (data.earn?.quest) {
         data.earn = { ...data.earn, quest: { ...data.earn.quest } };
         if (!speculation) delete data.earn.quest.firstPredict;
-        if (!games) delete data.earn.quest.firstGame;
       }
 
       return { code: JSON.stringify(data), map: null };
@@ -84,22 +81,19 @@ export default defineConfig({
   plugins: [react(), stripDisabledLocaleCopy()],
 
   /**
-   * Compile the arcade flag to a literal.
+   * Build-time literals.
    *
-   * The flag used to be read via `import.meta.env.VITE_ENABLE_GAMES` inside a
-   * ternary. Vite substitutes that at build time, but the substituted value is
-   * a STRING comparison, and Rollup would not treeshake the
-   * `lazy(() => import('./pages/Play'))` branch — so a 22KB Play chunk plus
-   * every game shipped in the bundle even with the flag off. The whole point
-   * of the flag is that a store reviewer cannot find the code by unzipping the
-   * APK, and "unreachable route, code still present" does not achieve that.
+   * These must be bare `true`/`false`, not `import.meta.env` lookups. Vite
+   * substitutes those too, but the result is a STRING comparison and Rollup
+   * cannot then prove a `lazy(() => import(...))` branch is dead — which is
+   * how a 22KB chunk once shipped inside a build that was supposed to exclude
+   * it. A literal lets Rollup drop the dynamic import entirely, verified by
+   * asserting on the emitted filenames in test/run.mjs.
    *
-   * Defining it as a bare `true`/`false` literal lets Rollup prove the branch
-   * is dead and drop the dynamic import entirely. Verified by checking that no
-   * Play chunk is emitted.
+   * There is no arcade flag any more: the games were deleted from the
+   * repository rather than gated, so there is no branch left to prove dead.
    */
   define: {
-    __GAMES_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_GAMES === 'true'),
     /*
      * Prediction / perpetuals / invest. Off unless explicitly enabled — see
      * the long note in src/lib/features.js: these are what got the app

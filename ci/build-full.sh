@@ -2,8 +2,11 @@
 # =============================================================================
 # THE FULL-FEATURE BUILD
 #
-# Produces an APK with EVERY screen included: prediction, perpetuals, invest
-# and the arcade, on top of everything in the normal build.
+# Produces an APK with the speculation screens included: prediction,
+# perpetuals and invest, on top of everything in the normal build.
+#
+# The arcade is NOT here and cannot be: those games were deleted from the
+# repository, not flagged off. See src/lib/features.js.
 #
 # ─── WHY THERE ARE TWO BUILDS AT ALL ─────────────────────────────────────────
 # APKPure rejected ir.fbt.swap with "Not involve illegal sensitive words." The
@@ -28,16 +31,15 @@
 set -euo pipefail
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  FULL BUILD - includes prediction, perps, invest and arcade    ║"
+echo "║  FULL BUILD - includes prediction, perps and invest            ║"
 echo "║  DO NOT upload this to an app store. It will be rejected.      ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo
 
-# These two variables are the entire difference between the builds. They are
-# read by vite.config.js, which compiles them to literals so Rollup can either
-# keep or drop the routes AND their locale copy.
+# This variable is the entire difference between the builds. It is read by
+# vite.config.js, which compiles it to a literal so Rollup can either keep or
+# drop the routes AND their locale copy.
 export VITE_ENABLE_SPECULATION=true
-export VITE_ENABLE_GAMES=true
 
 # A distinct versionName so a support request can be traced to the right
 # artifact. Someone reporting "the prediction screen crashed" against a store

@@ -12,6 +12,7 @@ import { fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
 import SegIndicator from '../components/SegIndicator';
+import VerdictPanel from '../components/VerdictPanel';
 
 const HORIZONS = [
   { days: 1, key: '1D' },
@@ -132,12 +133,31 @@ export default function Signals() {
   const [aiError, setAiError] = useState(null);
 
   const { data: chart } = useChart(coinId, 30);
+  /*
+   * Bitcoin's own chart, over the SAME window, for the macro layer.
+   *
+   * This is what lets the app say something no single-asset indicator can:
+   * how hard this token moves when Bitcoin moves, and whether money is
+   * currently rotating INTO Bitcoin (the phase where a healthy-looking
+   * altcoin chart breaks anyway). Both series must come from the same
+   * endpoint with the same `days` or the returns cannot be paired.
+   *
+   * When the selected coin IS bitcoin this is the same request, so the
+   * poll cache in useMarket serves it without a second network call.
+   */
+  const { data: btcChart } = useChart('bitcoin', 30);
   const coin = useMemo(() => (coins ?? []).find((c) => c.id === coinId), [coins, coinId]);
 
-  const analysis = useMemo(() => {
-    const prices = chart?.length ? chart.map((p) => p.p) : coin?.sparkline;
-    return prices ? analyze(prices, coin ?? {}) : null;
-  }, [chart, coin]);
+  const priceSeries = useMemo(
+    () => (chart?.length ? chart.map((p) => p.p) : (coin?.sparkline ?? [])),
+    [chart, coin]
+  );
+  const btcSeries = useMemo(() => (btcChart ?? []).map((p) => p.p), [btcChart]);
+
+  const analysis = useMemo(
+    () => (priceSeries.length ? analyze(priceSeries, coin ?? {}) : null),
+    [priceSeries, coin]
+  );
 
   const projection = useMemo(
     () => (analysis ? projectRange(analysis, horizon.days) : null),
@@ -342,6 +362,30 @@ export default function Signals() {
           )}
         </AnimatePresence>
       </motion.section>
+
+      {/*
+        ─── THE FULL PICTURE ──────────────────────────────────────────────
+        Placed directly under the gauge and ABOVE the indicator narration on
+        purpose. The gauge is a number; this is the answer. Someone who reads
+        only the first line of this panel and then leaves has understood the
+        situation, which is the whole brief: «هر کسی با هر سوادی بفهمه چخبره».
+
+        It is the only thing on the screen that looks past the asset's own
+        chart — at Bitcoin, at where money is rotating, at how far this token
+        already is from its high — so it belongs above everything that does
+        not.
+      */}
+      {analysis && !scanning && (
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <VerdictPanel
+            analysis={analysis}
+            series={priceSeries}
+            btcSeries={btcSeries}
+            coin={coin}
+            global={global}
+          />
+        </motion.div>
+      )}
 
       {/* ---------- AI outlook ---------- */}
       {(
