@@ -875,7 +875,7 @@ select option { background: #0a0c12; }
      re-run on scroll and adds no per-frame work — verified by keeping the
      bar's existing float animation, which is a transform and stays on the
      compositor thread. */
-  --notch-r: 29px;
+  --notch-r: 31px;
   -webkit-mask-image: radial-gradient(
     circle var(--notch-r) at 50% 0,
     transparent 0 var(--notch-r),
@@ -894,7 +894,7 @@ select option { background: #0a0c12; }
    only ~42px wide, so reserving the full 64px would leave a visible gap. */
 .nav-notch-gap {
   flex: 0 0 auto;
-  width: 42px;
+  width: 44px;
   pointer-events: none;
 }
 
@@ -986,11 +986,22 @@ select option { background: #0a0c12; }
    */
   background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
   /*
-   * Neutral shadow, deliberately. A coloured glow is what made the earlier
-   * version look inflated; black reads as depth, which is what "resting
-   * above the surface" needs.
+   * ─── WHY THE SHADOW IS TIGHT ──────────────────────────────────────────
+   * Reported: «توپ به کف چسبیده» — the ball looked stuck to the floor.
+   *
+   * There WAS a gap: the drop's bottom sits at 57px and the notch floor at
+   * 49px, so eight clear pixels. The shadow was hiding them. At
+   * `0 4px 12px -2px` it fell 4px downward and blurred 12, which spanned the
+   * whole gap and visually welded the drop to the rim.
+   *
+   * Now `0 2px 6px -1px`: half the drop, half the spread. The shadow still
+   * grounds the shape but stays under it instead of bridging to the bar.
+   * Combined with lifting the drop 3px, the gap is both real and visible.
+   *
+   * Neutral black, not a coloured glow — a glow is what made an earlier
+   * version look inflated.
    */
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.5);
   transition: box-shadow 0.2s ease, filter 0.2s ease;
   /* NOTE: `transform` is intentionally absent from the transition. Framer
      owns this element's transform for the press animation, and a CSS
@@ -998,7 +1009,7 @@ select option { background: #0a0c12; }
 }
 
 :root[data-theme='light'] .nav-centre-drop {
-  box-shadow: 0 4px 12px -3px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.24);
 }
 
 .nav-centre-glyph {
@@ -1024,14 +1035,14 @@ select option { background: #0a0c12; }
  */
 .nav-centre.active .nav-centre-drop {
   filter: saturate(1.25) brightness(1.08);
-  box-shadow: 0 5px 16px -2px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 3px 8px -1px rgba(0, 0, 0, 0.55);
 }
 
 /* Small phones: shrink the drop AND the hollow together, or the hollow
    swallows the button and the separation reads as a mistake. */
 @media (max-width: 360px) {
-  .bottom-nav { --notch-r: 25px; }
-  .nav-notch-gap { width: 38px; }
+  .bottom-nav { --notch-r: 27px; }
+  .nav-notch-gap { width: 40px; }
   .nav-centre {
     width: 40px;
     height: 40px;
@@ -1042,8 +1053,8 @@ select option { background: #0a0c12; }
 
 /* Landscape phones: the bar is already compressed. */
 @media (max-height: 480px) and (orientation: landscape) {
-  .bottom-nav { --notch-r: 23px; }
-  .nav-notch-gap { width: 34px; }
+  .bottom-nav { --notch-r: 25px; }
+  .nav-notch-gap { width: 36px; }
   .nav-centre {
     width: 36px;
     height: 36px;
@@ -3647,6 +3658,78 @@ input, select, textarea { font-size: 16px !important; }
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/* The disconnected state. Same hero surface as the connected one, so the
+   page does not change shape on connect — a layout that jumps at the moment
+   someone commits their wallet is the worst possible time for it. */
+.wal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 10px 4px 2px;
+}
+
+.wal-empty-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+  color: var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, transparent);
+}
+
+:root[data-theme='light'] .wal-empty-mark { color: var(--ink-cyan); }
+
+.wal-empty .btn { width: 100%; }
+
+/* Housekeeping controls: refresh, lock, disconnect. Deliberately quieter
+   than everything above them — they are not why anyone opened this screen,
+   and one of them is destructive. */
+.wal-utils {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.wal-util {
+  flex: 1;
+  min-height: 34px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.16s, background 0.16s;
+}
+
+.wal-util:active { background: rgba(127, 127, 127, 0.12); }
+
+@media (hover: hover) and (pointer: fine) {
+  .wal-util:hover { color: var(--text-1); background: rgba(127, 127, 127, 0.1); }
+}
+
+/* Destructive, so it is tinted — but not alarming. A red button on a wallet
+   screen makes people uneasy about the whole page, not just that control. */
+.wal-util-danger { color: color-mix(in srgb, var(--down) 78%, var(--text-3)); }
+
+@media (hover: hover) and (pointer: fine) {
+  .wal-util-danger:hover {
+    color: var(--down);
+    background: color-mix(in srgb, var(--down) 10%, transparent);
+  }
 }
 
 .wal-actions {

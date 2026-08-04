@@ -342,10 +342,21 @@ export default function Wallet() {
               )
             )}
 
-            <div className="row" style={{ gap: 8 }}>
+            {/*
+              ─── UTILITIES, SET APART FROM THE MONEY ──────────────────────
+              Refresh / Lock / Disconnect were four same-weight ghost buttons
+              in a row directly under the holdings, so "disconnect" carried
+              exactly as much visual weight as "refresh". They are
+              housekeeping, not the reason anyone opened this screen, and one
+              of them is destructive.
+
+              A hairline and a quieter row separates them from the balance
+              above without hiding them. Unlock stays primary when the wallet
+              is locked, because then it IS the only thing worth doing.
+            */}
+            <div className="wal-utils">
               <button
-                className="btn btn-ghost btn-sm"
-                style={{ flex: 1 }}
+                className="wal-util"
                 onClick={() => {
                   // Both, or the token list silently goes stale after a swap
                   // while the header total refreshes — two numbers on one
@@ -357,7 +368,7 @@ export default function Wallet() {
                 {onchain.loading ? '…' : t('common.refresh')}
               </button>
               {wallet.mode === 'local' && !wallet.locked && (
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.lock}>
+                <button className="wal-util" onClick={wallet.lock}>
                   {t('wallet.lock')}
                 </button>
               )}
@@ -366,7 +377,10 @@ export default function Wallet() {
                   {t('wallet.unlock')}
                 </button>
               ) : (
-                <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={wallet.disconnect}>
+                /* Destructive, so it is the only one tinted — but still
+                   quiet, because an alarming Disconnect button on a wallet
+                   screen makes people nervous about the whole page. */
+                <button className="wal-util wal-util-danger" onClick={wallet.disconnect}>
                   {t('wallet.disconnect')}
                 </button>
               )}
@@ -402,9 +416,41 @@ export default function Wallet() {
             )}
           </div>
         ) : (
-          <button className="btn btn-primary" onClick={() => setConnectOpen(true)}>
-            {t('wallet.connect')}
-          </button>
+          /*
+            ─── THE DISCONNECTED STATE ─────────────────────────────────────
+            This was a single bare button on an otherwise empty card, which
+            is the FIRST thing a new user sees on the wallet tab — the screen
+            that has to earn enough trust for them to connect a wallet that
+            holds real money. An unadorned button says nothing about what
+            happens next or who is asking.
+
+            It now uses the same hero surface as the connected state, so the
+            page does not visibly change shape on connect, and it answers the
+            two questions someone actually has before tapping: what is this
+            for, and are you going to hold my keys.
+          */
+          <div className="wal-empty" style={{ position: 'relative' }}>
+            <span className="wal-empty-mark" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H18a2 2 0 0 1 2 2v1" />
+                <path d="M3 8.5V17a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-2.5" />
+                <path d="M21 10.5v4h-4a2 2 0 0 1 0-4Z" />
+              </svg>
+            </span>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>{t('wallet.emptyTitle')}</div>
+            <p className="muted" style={{ fontSize: 12.4, lineHeight: 1.8, margin: '6px 0 0' }}>
+              {t('wallet.emptyBody')}
+            </p>
+            <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setConnectOpen(true)}>
+              {t('wallet.connect')}
+            </button>
+            {/* The reassurance belongs HERE, next to the decision, not in a
+                notice below the fold that nobody scrolls to. */}
+            <p className="faint" style={{ fontSize: 11, marginTop: 10, lineHeight: 1.7 }}>
+              {t('wallet.emptyReassure')}
+            </p>
+          </div>
         )}
 
         <p className="notice" style={{ marginTop: 12 }}>{t('wallet.custodyNotice')}</p>

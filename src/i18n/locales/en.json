@@ -408,7 +408,10 @@
     "gasCoin": "gas",
     "noOnchainTokens": "No token balances on this network.",
     "balancesFailed": "Could not read balances. Check your connection and try Refresh.",
-    "yourTokens": "Your tokens"
+    "yourTokens": "Your tokens",
+    "emptyTitle": "No wallet connected",
+    "emptyBody": "Connect a wallet you already own to see your balances and swap. There is no signup, no email and no identity check.",
+    "emptyReassure": "We never receive your recovery phrase or private key. Every transaction is signed by your own wallet."
   },
   "toast": {
     "insufficientBalance": "Not enough balance",

@@ -80,32 +80,7 @@ export async function run(container) {
    * the drop or there is no visible ring of air and the separation is lost.
    */
   const css = readFileSync('src/index.css', 'utf8');
-  const BAR_TOP_EDGE = 78; // 14px bar offset + 64px bar box (9 + 46 + 9)
 
-  const num = (re) => {
-    const m = css.match(re);
-    return m ? Number(m[1]) : NaN;
-  };
-
-  const sizes = [
-    { name: 'default', d: num(/\.nav-centre \{[\s\S]*?width: (\d+)px/), b: num(/\.nav-centre \{[\s\S]*?bottom: calc\((\d+)px/), r: num(/--notch-r: (\d+)px/) },
-    { name: 'small phone', d: 40, b: 58, r: 25 },
-    { name: 'landscape', d: 36, b: 60, r: 23 }
-  ];
-
-  for (const s of sizes) {
-    const centre = s.b + s.d / 2;
-    t(`${s.name}: the drop is centred in the hollow (centre ${centre}, edge ${BAR_TOP_EDGE})`,
-      centre === BAR_TOP_EDGE);
-    const air = (s.r * 2 - s.d) / 2;
-    t(`${s.name}: there is a visible ring of air (${air}px)`, air >= 4);
-  }
-
-  /*
-   * MINIMAL, per the reference the owner sent: one flat colour, no gradient,
-   * and no coloured glow. A gradient on a 44px circle is detail nobody can
-   * resolve; a neon halo is what made the previous version look inflated.
-   */
   /*
    * Slice a CSS rule to its ACTUAL closing brace.
    *
@@ -123,6 +98,74 @@ export async function run(container) {
     return close < 0 ? '' : css.slice(at, close + 2);
   };
 
+  const BAR_TOP_EDGE = 78; // 14px bar offset + 64px bar box (9 + 46 + 9)
+
+  const num = (re) => {
+    const m = css.match(re);
+    return m ? Number(m[1]) : NaN;
+  };
+
+  /*
+   * Read every breakpoint OUT OF the stylesheet rather than restating the
+   * numbers here. A duplicated constant in a test is a second place to
+   * forget: the first version hardcoded the small-phone and landscape values
+   * and kept reporting success after the real ones changed, which is a test
+   * that has quietly stopped testing anything.
+   */
+  const block = (mediaQuery) => {
+    const at = css.indexOf(mediaQuery);
+    return at < 0 ? '' : css.slice(at, at + 600);
+  };
+  const pick = (src, re) => {
+    const m = src.match(re);
+    return m ? Number(m[1]) : NaN;
+  };
+
+  const defaults = rule('.nav-centre {');
+  const smallBlk = block('@media (max-width: 360px)');
+  const landBlk = block('@media (max-height: 480px) and (orientation: landscape)');
+
+  const sizes = [
+    {
+      name: 'default',
+      d: pick(defaults, /width: (\d+)px/),
+      b: pick(defaults, /bottom: calc\((\d+)px/),
+      r: num(/--notch-r: (\d+)px/)
+    },
+    {
+      name: 'small phone',
+      d: pick(smallBlk, /\.nav-centre \{[\s\S]*?width: (\d+)px/),
+      b: pick(smallBlk, /bottom: calc\((\d+)px/),
+      r: pick(smallBlk, /--notch-r: (\d+)px/)
+    },
+    {
+      name: 'landscape',
+      d: pick(landBlk, /\.nav-centre \{[\s\S]*?width: (\d+)px/),
+      b: pick(landBlk, /bottom: calc\((\d+)px/),
+      r: pick(landBlk, /--notch-r: (\d+)px/)
+    }
+  ];
+
+  /* If a regex stops matching the numbers become NaN and every comparison
+     below silently passes as false — assert they were found at all. */
+  for (const z of sizes) {
+    t(`${z.name}: the stylesheet values were found`,
+      Number.isFinite(z.d) && Number.isFinite(z.b) && Number.isFinite(z.r));
+  }
+
+  for (const s of sizes) {
+    const centre = s.b + s.d / 2;
+    t(`${s.name}: the drop is centred in the hollow (centre ${centre}, edge ${BAR_TOP_EDGE})`,
+      centre === BAR_TOP_EDGE);
+    const air = (s.r * 2 - s.d) / 2;
+    t(`${s.name}: there is a visible ring of air (${air}px)`, air >= 4);
+  }
+
+  /*
+   * MINIMAL, per the reference the owner sent: one flat colour, no gradient,
+   * and no coloured glow. A gradient on a 44px circle is detail nobody can
+   * resolve; a neon halo is what made the previous version look inflated.
+   */
   const dropRule = rule('.nav-centre-drop {');
   t('the drop is a plain circle', /border-radius: 50%;/.test(dropRule));
   /*
@@ -137,8 +180,24 @@ export async function run(container) {
    * A coloured glow is what made the earlier version look inflated. Black
    * reads as depth instead.
    */
-  t('the drop casts a neutral shadow, not a coloured glow',
-    /box-shadow: 0 4px 12px -2px rgba\(0, 0, 0/.test(dropRule));
+  /*
+   * ─── WHY THE SHADOW IS CHECKED FOR TIGHTNESS ───────────────────────────
+   * Reported: «توپ به کف چسبیده» — the drop looked stuck to the floor.
+   *
+   * There WAS a gap; the shadow was hiding it. At `0 4px 12px` it fell four
+   * pixels downward and blurred twelve, which spanned the whole clearance
+   * and visually welded the drop to the rim.
+   *
+   * So two properties matter and both are asserted: the shadow must be
+   * NEUTRAL (a coloured one reads as a glow and inflates the shape), and it
+   * must be TIGHT — a large downward offset or blur bridges the gap again,
+   * however correct the geometry is.
+   */
+  const shadow = dropRule.match(/box-shadow: 0 (\d+)px (\d+)px/);
+  t('the drop has a shadow', Boolean(shadow));
+  t('the shadow is neutral, not a coloured glow', /box-shadow:[^;]*rgba\(0, 0, 0/.test(dropRule));
+  t(`the shadow does not bridge the gap (offset ${shadow?.[1]}px, blur ${shadow?.[2]}px)`,
+    Boolean(shadow) && Number(shadow[1]) <= 2 && Number(shadow[2]) <= 8);
 
   /*
    * ─── THE TRANSFORM CONFLICT THAT MADE IT JUMP ───────────────────────────

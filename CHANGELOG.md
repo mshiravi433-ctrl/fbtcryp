@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.14.3 — versionCode 39
+
+### The drop looked stuck to the floor
+
+Reported: «توپ به کف چسبیده، یکم فاصله بگیره».
+
+Measuring first was worth it, because the geometry was already right: the
+drop's bottom sat at 57px and the notch floor at 49px — eight clear pixels.
+**The shadow was hiding them.** At `0 4px 12px` it fell four pixels downward
+and blurred twelve, which spanned the entire gap and visually welded the drop
+to the rim.
+
+Two changes: the shadow is now `0 2px 6px` — half the drop, half the spread,
+so it grounds the shape without bridging to the bar — and the hollow is 2px
+wider at every breakpoint, taking the clearance to 10px. The drop stays
+centred on the notch centre, so the ring of air is even all the way round.
+
+### A test that had stopped testing
+
+While fixing the above, the geometry test reported success on values it was
+no longer reading — it had the small-phone and landscape numbers **hardcoded**
+from an earlier version. It now parses every breakpoint out of the stylesheet
+and fails loudly if a regex stops matching, rather than comparing against
+`NaN` and passing.
+
+The shadow check was hardcoded too, asserting exact pixels. It now asserts the
+two properties that actually matter: the shadow must be neutral (a coloured
+one reads as a glow) and tight (offset ≤ 2, blur ≤ 8), so any future value
+that bridges the gap fails regardless of the exact numbers.
+
+### Wallet: the disconnected state
+
+The first thing a new user sees on this tab was **a single bare button on an
+empty card** — on the screen that has to earn enough trust for someone to
+connect a wallet holding real money.
+
+It now uses the same hero surface as the connected state, so the page does not
+change shape at the moment of connecting, and it answers the two questions
+people actually have before tapping: what is this for, and are you going to
+hold my keys. The reassurance sits next to the button rather than in a notice
+below the fold.
+
+### Wallet: housekeeping separated from money
+
+Refresh, Lock and Disconnect were four same-weight ghost buttons directly
+under the holdings, so **"disconnect" carried exactly as much visual weight as
+"refresh"** — and one of them is destructive.
+
+They are now a quieter row behind a hairline. Disconnect is tinted because it
+is destructive, but not alarming: a red button on a wallet screen makes people
+uneasy about the whole page, not just that control. Unlock stays primary when
+the wallet is locked, because then it is the only thing worth doing.
+
 ## 1.14.2 — versionCode 38
 
 ### The centre button jumped right when tapped
