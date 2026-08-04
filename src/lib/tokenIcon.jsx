@@ -66,8 +66,34 @@ export function iconCandidates(token, chainId) {
   if (!token) return [];
   const out = [];
 
-  const supplied = String(token.logoURI ?? '').trim();
-  if (supplied.startsWith('https://')) out.push(supplied);
+  /*
+   * `icon` as well as `logoURI`.
+   *
+   * Jupiter's token API calls the field `icon`, while EVM token lists call it
+   * `logoURI`. The curated Solana assets carry the former, so reading only
+   * `logoURI` meant every tokenized equity and staking token fell through to
+   * the monogram — the exact bug this module was written to kill, reappearing
+   * because a second data source spells the field differently.
+   */
+  for (const key of ['logoURI', 'icon']) {
+    const supplied = String(token[key] ?? '').trim();
+    if (supplied.startsWith('https://') && !out.includes(supplied)) out.push(supplied);
+  }
+
+  /*
+   * NO EXTRA SOURCE FOR SOLANA MINTS, DELIBERATELY.
+   *
+   * The EVM path can add TrustWallet and CoinGecko because both are keyed by
+   * contract address, so a clone cannot borrow the real token's artwork. The
+   * equivalent Solana CDNs I could find are either symbol-keyed — which is
+   * exactly how a fake AAPLx would inherit Apple's logo — or unverifiable from
+   * here.
+   *
+   * So a Solana token gets the issuer's own `icon` and then the monogram. A
+   * missing picture is a cosmetic problem; a fake token wearing the real one's
+   * face is a financial one, and this app has already documented that trade-off
+   * once for EVM symbols. Same answer here.
+   */
 
   if (token.native || !token.address) {
     const n = NATIVE_LOGO[Number(chainId)];

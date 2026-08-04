@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 /**
  * The unit suite imports app modules that use extensionless specifiers
@@ -7,6 +8,8 @@ import { defineConfig } from 'vite';
  * real module graph rather than a hand-maintained copy of it.
  */
 export default defineConfig({
+  /* tokenIcon.jsx is a .jsx module, so the unit bundle needs the React plugin. */
+  plugins: [react()],
   define: { 'process.env.NODE_ENV': '"development"' },
   build: {
     ssr: 'test/units.mjs',

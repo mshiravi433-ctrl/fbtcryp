@@ -24,7 +24,7 @@
  * check a clone cannot pass, because passing it requires the issuer's key.
  */
 
-import { EQUITY_ASSETS, LST_ASSETS, XSTOCK_FREEZE_AUTHORITY, XSTOCK_MINT_AUTHORITY } from '../src/lib/solanaAssets.js';
+import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS, XSTOCK_FREEZE_AUTHORITY, XSTOCK_MINT_AUTHORITY } from '../src/lib/solanaAssets.js';
 
 const JUP_TOKENS = 'https://lite-api.jup.ag/tokens/v2/search';
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
@@ -50,11 +50,24 @@ async function fetchJson(url) {
  * Exported so the tests can drive it with synthetic records — including the
  * real shape of a real fake, which is the case that matters.
  */
-export function issuerMatches(live, asset, isEquity) {
+export function issuerMatches(live, asset, kind) {
   if (!live || !asset) return false;
   if (live.id !== asset.mint) return false;
 
-  if (isEquity) {
+  /*
+   * Commodities carry their own per-asset authorities: Paxos and Tether are
+   * different companies, so there is no shared issuer key to match against.
+   * The property being checked is the same one — a clone cannot hold the
+   * issuer's key, and "PAX Gold Punk" cannot forge Paxos's mint authority.
+   */
+  if (kind === 'commodity') {
+    if (!asset.mintAuthority || !asset.freezeAuthority) return false;
+    if (live.mintAuthority !== asset.mintAuthority) return false;
+    if (live.freezeAuthority !== asset.freezeAuthority) return false;
+    return true;
+  }
+
+  if (kind === 'equity') {
     /*
      * The check the clones cannot pass. Every fake xStock carries
      * `mintAuthorityDisabled: true` — they minted a fixed supply and threw the
@@ -92,8 +105,13 @@ function shape(live, asset, kind) {
     liquidity: Math.round(Number(live.liquidity) || 0),
     holders: Number(live.holderCount) || 0,
     change24h: Number(live.stats24h?.priceChange) || 0,
-    /* Present only for equities; the UI keys its freeze warning off this. */
-    freezeAuthority: kind === 'equity' ? live.freezeAuthority ?? null : null,
+    /*
+     * Present for equities AND commodities; the UI keys its freeze warning off
+     * this. Gold carries exactly the same risk — Tether has frozen over $5bn
+     * across roughly 10,000 wallets under this same authority.
+     */
+    freezeAuthority: kind === 'lst' ? null : live.freezeAuthority ?? null,
+    ...(asset.unit ? { unit: asset.unit } : {}),
     ...(asset.llamaProject ? { llamaProject: asset.llamaProject, llamaSymbol: asset.llamaSymbol } : {}),
     ...(asset.protocolFeePct != null ? { protocolFeePct: asset.protocolFeePct } : {}),
     ...(asset.capturesMev != null ? { capturesMev: asset.capturesMev } : {})
@@ -112,7 +130,8 @@ function shape(live, asset, kind) {
 export async function fetchSolanaAssets() {
   const jobs = [
     ...LST_ASSETS.map((a) => ({ asset: a, kind: 'lst' })),
-    ...EQUITY_ASSETS.map((a) => ({ asset: a, kind: 'equity' }))
+    ...EQUITY_ASSETS.map((a) => ({ asset: a, kind: 'equity' })),
+    ...COMMODITY_ASSETS.map((a) => ({ asset: a, kind: 'commodity' }))
   ];
 
   const rows = await Promise.all(
@@ -121,7 +140,7 @@ export async function fetchSolanaAssets() {
         const list = await fetchJson(`${JUP_TOKENS}?query=${encodeURIComponent(asset.mint)}`);
         const live = Array.isArray(list) ? list.find((r) => r.id === asset.mint) : null;
         if (!live) return { asset, kind, ok: false, why: 'notFound' };
-        if (!issuerMatches(live, asset, kind === 'equity')) {
+        if (!issuerMatches(live, asset, kind)) {
           return { asset, kind, ok: false, why: 'issuerMismatch' };
         }
         return { asset, kind, ok: true, row: shape(live, asset, kind) };
@@ -137,6 +156,7 @@ export async function fetchSolanaAssets() {
   return {
     lst: good.filter((r) => r.kind === 'lst').map((r) => r.row),
     equities: good.filter((r) => r.kind === 'equity').map((r) => r.row),
+    commodities: good.filter((r) => r.kind === 'commodity').map((r) => r.row),
     /*
      * Reported so a silent failure is visible. If an address goes stale or an
      * issuer rotates its authority, the row vanishes from the UI — and this

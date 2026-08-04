@@ -2963,5 +2963,58 @@ export default function run() {
     t('...and only accepts curated mints', /findAsset\(to\)/.test(swap));
   }
 
+  /* ---- 43. amount selectors are visible from what they change ----------- */
+  /*
+   * ─── THE BUG ──────────────────────────────────────────────────────────────
+   * Farm's amount selector sat INSIDE the pools section, several hundred
+   * pixels below the staking rows that already read `amount` to compute their
+   * projection. So the staking numbers were driven by a control the user could
+   * not see until they had scrolled past them. Reported as "میزان سود روی ۱۰۰
+   * ۱۰۰۰ و ۱۰۰۰۰ را نمیزنه" — which is what a control that changes nothing
+   * visible looks like from the outside.
+   *
+   * A control must appear above everything that depends on it. Position is not
+   * a detail here: it is the difference between a feature and a dead button.
+   */
+  {
+    const farm = read('src/pages/Farm.jsx');
+    const selectorAt = farm.indexOf('farm-amounts');
+    const stakingAt = farm.indexOf("farm.stakingTitle");
+    const poolsAt = farm.indexOf("farm.pools'");
+
+    t('Farm has an amount selector', selectorAt > -1);
+    t('...it appears before the staking rows it drives',
+      selectorAt > -1 && stakingAt > -1 && selectorAt < stakingAt);
+    t('...and before the pool rows it also drives',
+      selectorAt > -1 && poolsAt > -1 && selectorAt < poolsAt);
+    /* Exactly one, or two copies drift out of sync. */
+    t('there is only one amount selector on Farm',
+      farm.split('farm-amounts').length - 1 === 1);
+
+    const stocks = read('src/pages/Stocks.jsx');
+    const stkSel = stocks.indexOf('farm-amounts');
+    const stkRows = stocks.indexOf('<EquityRow');
+    t('Stocks selector appears before its rows too',
+      stkSel > -1 && stkRows > -1 && stkSel < stkRows);
+
+    /*
+     * And the selected amount must actually PRODUCE a number on screen.
+     * Feeding it only into the disabled-state of a button is what made it look
+     * broken: the gate worked, but nothing visible changed.
+     */
+    t('the equity row states what the amount buys', /stocks\.wouldGet/.test(read('src/components/EquityRow.jsx')));
+    t('the staking row states what the amount earns', /farm\.wouldEarn/.test(farm));
+
+    /*
+     * No bare <img> for token artwork on these screens. A raw tag has no
+     * onError, so a dead CDN leaves an empty circle that reads as broken —
+     * the exact bug documented at the top of lib/tokenIcon.jsx.
+     */
+    for (const [name, src] of [['Farm', farm], ['EquityRow', read('src/components/EquityRow.jsx')]]) {
+      t(`${name} uses TokenIcon rather than a bare img`,
+        /<TokenIcon/.test(src) && !/<img\s+src=\{asset\.icon\}/.test(src));
+    }
+  }
+
   return rows;
 }

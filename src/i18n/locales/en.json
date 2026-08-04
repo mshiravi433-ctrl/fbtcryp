@@ -920,7 +920,11 @@
     "unavailable": "Live prices could not be loaded. We are deliberately not showing saved figures instead: a stale equity price can be a whole weekend old, and a cached row would not have been re-checked against the issuer.",
     "noneTradeable": "No tokenized equity currently has enough on-chain depth to trade safely.",
     "verifyNote": "Every token here is checked against Backed Finance's own issuing key each time this screen loads, and only the exact verified mint addresses are ever offered. This matters more than it sounds: searching for \"AAPLx\" on Solana returns seven different tokens, six of which are imitations with the same name and logo. If a token ever fails that check it disappears from this list rather than being shown with a warning.",
-    "notShares": "These are not shares. You are not on the company's shareholder register, you have no voting rights, and your claim is against the issuer rather than the company. Dividends, where they apply, are handled by the issuer. Fanous Bazaar Pishgam does not issue, hold or custody any of this — you buy directly from your own wallet, and our only earning is the standard {{fee}}% swap fee."
+    "notShares": "These are not shares. You are not on the company's shareholder register, you have no voting rights, and your claim is against the issuer rather than the company. Dividends, where they apply, are handled by the issuer. Fanous Bazaar Pishgam does not issue, hold or custody any of this — you buy directly from your own wallet, and our only earning is the standard {{fee}}% swap fee.",
+    "wouldGet": "{{amount}} would buy about",
+    "gold": "Gold",
+    "goldIntro": "Each token is one troy ounce of real gold in a vault. No dealer premium, no storage to arrange, and you can buy a fraction of an ounce. The same issuer freeze risk above applies to these too — gold is not exempt from it.",
+    "kindCommodity": "Physical gold"
   },
   "help": {
     "title": "Help & support",

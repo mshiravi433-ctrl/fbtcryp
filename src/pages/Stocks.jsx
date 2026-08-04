@@ -105,6 +105,19 @@ export default function Stocks() {
     [assets]
   );
 
+  /*
+   * Gold, under the same depth floor.
+   *
+   * Its own section rather than mixed into the equity list: gold is not a
+   * company. No earnings, no dividend, no shareholder register — and someone
+   * buying it is usually doing something different from someone buying Tesla.
+   * Listing them together would blur a distinction worth keeping.
+   */
+  const commodities = useMemo(
+    () => (assets?.commodities ?? []).filter((a) => a.liquidity >= MIN_EQUITY_LIQUIDITY),
+    [assets]
+  );
+
   const open = (url) => {
     haptic?.('light');
     if (tg?.openLink) tg.openLink(url);
@@ -240,6 +253,36 @@ export default function Stocks() {
 
             <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('stocks.verifyNote')}</p>
           </section>
+
+          {/*
+            ─── GOLD ──────────────────────────────────────────────────────
+            Below the equities but under the SAME freeze warning, which is why
+            it lives inside this tab rather than getting one of its own: the
+            issuer risk is identical and splitting it out would mean either
+            repeating the warning or, worse, not repeating it.
+
+            Both tokens are backed one-for-one by a real ounce in a vault.
+            PAXG is listed first because Paxos holds a New York trust charter
+            and is OCC-regulated, which is the strongest pedigree available
+            here — not because it has more liquidity.
+          */}
+          {commodities.length > 0 && (
+            <section>
+              <p className="section-label">{t('stocks.gold')}</p>
+              <p className="farm-filtered faint">{t('stocks.goldIntro')}</p>
+              <motion.div
+                className="stack"
+                style={{ gap: 10, marginTop: 8 }}
+                variants={stagger}
+                initial="hidden"
+                animate="show"
+              >
+                {commodities.map((a) => (
+                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} />
+                ))}
+              </motion.div>
+            </section>
+          )}
 
           <p className="notice">{t('stocks.notShares')}</p>
         </>

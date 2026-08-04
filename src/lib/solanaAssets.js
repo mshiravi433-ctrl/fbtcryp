@@ -170,8 +170,71 @@ export const EQUITY_ASSETS = [
   }
 ];
 
+/**
+ * TOKENIZED GOLD.
+ *
+ * ─── WHY GOLD BELONGS HERE AND WHY IT IS A SEPARATE CATEGORY ────────────────
+ * Requested directly: «خرید طلا و چیزهای با ارزش دیگر». It is also the asset
+ * with the clearest reason to exist for this audience — gold is the default
+ * store of value for anyone whose currency is unstable, and a token buys a
+ * fraction of an ounce with no vault, no dealer premium and no border.
+ *
+ * It is NOT an equity and must not be presented as one: no company, no
+ * earnings, no dividend. Held in a vault, and the token is a claim on the
+ * metal.
+ *
+ * ─── THE SAME FREEZE RISK APPLIES ───────────────────────────────────────────
+ * Both issuers hold a freeze authority — verified live, not assumed:
+ *
+ *   PAXG  freezeAuthority 2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk
+ *   XAUt0 freezeAuthority 9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy
+ *
+ * Tether is the issuer behind XAUt0 and has frozen over $5bn across roughly
+ * 10,000 wallets. So gold carries the same warning as the equities and is
+ * rendered under the same banner.
+ *
+ * ─── AND THE SAME CLONE PROBLEM ─────────────────────────────────────────────
+ * Searching `PAXG` returns eight tokens: the real one ($471k liquidity) plus
+ * "PAX Gold Punk", "Oro Tempis", "PAX Gold On SOLANA" and a Wormhole-bridged
+ * version with $308 of liquidity whose price is 37% wrong. Same defence:
+ * verified mints only, checked against the issuer authority on every fetch.
+ *
+ * ─── LIQUIDITY IS THIN AND THE UI MUST SAY SO ───────────────────────────────
+ * PAXG $471k, XAUt0 $268k — an order of magnitude below SPYx. The same depth
+ * gate applies, which on these books means the honest maximum is a few
+ * thousand dollars.
+ */
+export const COMMODITY_ASSETS = [
+  {
+    id: 'paxg',
+    mint: '5GgRAEmv8ZxF2PR5hY72Qs5x1bnQ6UK2RbTPoqJ3wSwW',
+    symbol: 'PAXG',
+    name: 'Gold (Paxos)',
+    decimals: 6,
+    /*
+     * Backed one-for-one by a London Good Delivery bar in a Brink's vault.
+     * Paxos operates under a New York State trust charter and is regulated by
+     * the OCC, which is the strongest regulatory pedigree of any gold token —
+     * and the reason it is listed first.
+     */
+    mintAuthority: 'Ertp4yV6mJiQP5TyBaEkvza9fhh1pWo4CWtM6CdKmzfk',
+    freezeAuthority: '2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk',
+    unit: 'ounce'
+  },
+  {
+    id: 'xaut0',
+    mint: 'AymATz4TCL9sWNEEV9Kvyz45CHVhDZ6kUgjTJPzLpU9P',
+    symbol: 'XAUt0',
+    name: 'Gold (Tether)',
+    decimals: 6,
+    mintAuthority: '9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy',
+    freezeAuthority: '9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy',
+    unit: 'ounce'
+  }
+];
+
 /** Every curated mint, for the "is this address one of ours" check. */
-const ALL = [...LST_ASSETS, ...EQUITY_ASSETS];
+const ALL = [...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS];
 const BY_MINT = new Map(ALL.map((a) => [a.mint, a]));
 
 export const findAsset = (mint) => BY_MINT.get(String(mint ?? '').trim()) ?? null;
@@ -205,6 +268,17 @@ export function assertIssuer(live, asset) {
   if (EQUITY_ASSETS.includes(asset)) {
     if (live.mintAuthority !== XSTOCK_MINT_AUTHORITY) return false;
     if (live.freezeAuthority !== XSTOCK_FREEZE_AUTHORITY) return false;
+  }
+
+  /*
+   * Commodities carry their OWN authorities rather than a shared issuer one,
+   * because Paxos and Tether are different companies. The check is otherwise
+   * identical: a clone cannot hold the issuer's key, and "PAX Gold Punk"
+   * cannot forge Paxos's mint authority.
+   */
+  if (COMMODITY_ASSETS.includes(asset)) {
+    if (live.mintAuthority !== asset.mintAuthority) return false;
+    if (live.freezeAuthority !== asset.freezeAuthority) return false;
   }
 
   /*

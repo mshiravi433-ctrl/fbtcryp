@@ -12,6 +12,7 @@ import { trimKeepingLanguages } from '../server/news.js';
 import { isEligible, normalizePool, riskBand } from '../server/yields.js';
 import { issuerMatches } from '../server/solanaAssets.js';
 import {
+  COMMODITY_ASSETS,
   EQUITY_ASSETS,
   LST_ASSETS,
   MAX_POOL_SHARE,
@@ -22,6 +23,7 @@ import {
   liquidityVerdict
 } from '../src/lib/solanaAssets.js';
 import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
+import { iconCandidates } from '../src/lib/tokenIcon.jsx';
 import { pairTokens, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import {
@@ -2547,10 +2549,10 @@ export default function run() {
    */
   {
     const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-    const all = [...LST_ASSETS, ...EQUITY_ASSETS];
+    const all = [...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS];
 
     t('every curated mint is a plausible Solana address',
-      all.length === 8 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 10 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.
@@ -2577,8 +2579,8 @@ export default function run() {
       audit: { isSus: true, mintAuthorityDisabled: true }
     };
 
-    t('the genuine Apple xStock is accepted', issuerMatches(realAapl, aapl, true));
-    t('the real-world clone is rejected', !issuerMatches(cloneAapl, aapl, true));
+    t('the genuine Apple xStock is accepted', issuerMatches(realAapl, aapl, 'equity'));
+    t('the real-world clone is rejected', !issuerMatches(cloneAapl, aapl, 'equity'));
     /*
      * The nastiest case: a record that reports the RIGHT mint and claims to be
      * verified, but whose mint authority is somebody else's. Only the
@@ -2588,18 +2590,18 @@ export default function run() {
       !issuerMatches(
         { ...realAapl, mintAuthority: 'HvsaoHJiadS1rEHkMRqdV3NMus55z4xqNs33ZCHVBoTS' },
         aapl,
-        true
+        'equity'
       ));
     t('a tampered freeze authority is rejected',
-      !issuerMatches({ ...realAapl, freezeAuthority: 'S7vYFFWH6BjJyEsdrPQpqpYTqLTrPRK6KW3VwsJuRaS' }, aapl, true));
+      !issuerMatches({ ...realAapl, freezeAuthority: 'S7vYFFWH6BjJyEsdrPQpqpYTqLTrPRK6KW3VwsJuRaS' }, aapl, 'equity'));
     /* A record for a DIFFERENT mint must never satisfy this asset. */
     t('a record for another mint is rejected',
-      !issuerMatches({ ...realAapl, id: LST_ASSETS[0].mint }, aapl, true));
+      !issuerMatches({ ...realAapl, id: LST_ASSETS[0].mint }, aapl, 'equity'));
 
     /* LSTs use the weaker check, and it must still reject the unverified. */
     const msol = LST_ASSETS.find((a) => a.symbol === 'mSOL');
-    t('a verified LST is accepted', issuerMatches({ id: msol.mint, isVerified: true }, msol, false));
-    t('an unverified LST is rejected', !issuerMatches({ id: msol.mint, isVerified: false }, msol, false));
+    t('a verified LST is accepted', issuerMatches({ id: msol.mint, isVerified: true }, msol, 'lst'));
+    t('an unverified LST is rejected', !issuerMatches({ id: msol.mint, isVerified: false }, msol, 'lst'));
 
     /* ---- the curated-mint gate on the ?to= handoff ---- */
     /*
@@ -2679,6 +2681,130 @@ export default function run() {
     t('an unknown rate projects nothing, not zero', projectStake(null, 1000) === null);
     t('...and neither does an empty string or a NaN',
       projectStake('', 1000) === null && projectStake(undefined, 1000) === null && projectStake('abc', 1000) === null);
+  }
+
+  /* ==================== token icons for Solana assets ==================== */
+  /*
+   * ─── THE BUG THIS LOCKS DOWN ──────────────────────────────────────────────
+   * Every tokenized equity and staking token rendered a blank circle. Reported
+   * as "عکس پروفایل نمیاد".
+   *
+   * Two causes, both worth a test:
+   *   1. `iconCandidates` only read `logoURI`. Jupiter's API spells the field
+   *      `icon`, so the curated Solana assets always fell through to the
+   *      monogram — the exact failure lib/tokenIcon.jsx was written to kill,
+   *      reappearing because a second data source names the field differently.
+   *   2. EquityRow and Farm rendered a bare <img> with no onError, so a failed
+   *      CDN left an empty circle rather than degrading to the monogram.
+   */
+  {
+    const aapl = {
+      mint: 'XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp',
+      symbol: 'AAPLx',
+      icon: 'https://xstocks-metadata.backed.fi/logos/tokens/AAPLx.png'
+    };
+    t('a Jupiter `icon` field is used', iconCandidates(aapl)[0] === aapl.icon);
+    t('an EVM `logoURI` still works',
+      iconCandidates({ symbol: 'X', logoURI: 'https://example.com/x.png' })[0] === 'https://example.com/x.png');
+    /* Both spellings on one token must not produce a duplicate attempt. */
+    t('the same URL under both names is not tried twice',
+      iconCandidates({ symbol: 'X', icon: 'https://a/x.png', logoURI: 'https://a/x.png' }).length === 1);
+
+    /*
+     * A token with no artwork must yield an EMPTY list, which is what makes
+     * TokenIcon fall through to its monogram. Returning a broken URL here
+     * would render the empty circle this whole fix removes.
+     */
+    t('no artwork means no candidates, so the monogram renders',
+      iconCandidates({ symbol: 'XYZ', mint: aapl.mint }).length === 0);
+
+    /*
+     * These are injected straight into an <img src>. A token list is
+     * user-influenced data, so anything that is not https must never reach
+     * the DOM.
+     */
+    t('http is refused', iconCandidates({ symbol: 'X', icon: 'http://evil/x.png' }).length === 0);
+    t('javascript: is refused', iconCandidates({ symbol: 'X', icon: 'javascript:alert(1)' }).length === 0);
+    t('data: is refused', iconCandidates({ symbol: 'X', icon: 'data:image/svg+xml,<svg/>' }).length === 0);
+
+    /*
+     * ─── NO SYMBOL-KEYED ICON SOURCE FOR SOLANA ─────────────────────────────
+     * The EVM path may add TrustWallet and CoinGecko because both are keyed by
+     * CONTRACT ADDRESS, which a clone cannot occupy. Every Solana icon CDN
+     * available here is symbol-keyed — which is precisely how a fake AAPLx
+     * would inherit Apple's logo, and a fake wearing the real token's face is
+     * the most effective phishing there is.
+     *
+     * So a Solana token gets the issuer's own icon and then the monogram, and
+     * this asserts nobody "helpfully" adds a symbol-keyed fallback later.
+     */
+    t('a Solana mint alone never invents an icon URL',
+      iconCandidates({ symbol: 'AAPLx', mint: aapl.mint }).length === 0);
+  }
+
+  /* ============================ tokenized gold =========================== */
+  /*
+   * Requested: «خرید طلا و چیزهای با ارزش دیگر». Gold is the asset with the
+   * clearest reason to exist for this audience — the default store of value
+   * where the local currency is unstable — and a token buys a fraction of an
+   * ounce with no dealer premium and no border.
+   *
+   * It carries the SAME two dangers as the equities, so it gets the same
+   * defences and the same tests.
+   */
+  {
+    t('gold is listed', COMMODITY_ASSETS.length === 2);
+    t('...with both major issuers',
+      COMMODITY_ASSETS.map((a) => a.symbol).sort().join(',') === 'PAXG,XAUt0');
+    /*
+     * Unlike the equities there is no single shared issuer key: Paxos and
+     * Tether are different companies. Each asset therefore carries its own
+     * authorities, and a missing one must fail closed rather than skip the
+     * check.
+     */
+    t('each gold token carries its own issuer authorities',
+      COMMODITY_ASSETS.every((a) => a.mintAuthority && a.freezeAuthority));
+
+    const paxg = COMMODITY_ASSETS.find((a) => a.symbol === 'PAXG');
+    const realPaxg = {
+      id: paxg.mint,
+      mintAuthority: paxg.mintAuthority,
+      freezeAuthority: paxg.freezeAuthority,
+      isVerified: true
+    };
+    t('the genuine PAX Gold is accepted', issuerMatches(realPaxg, paxg, 'commodity'));
+    t('a wrong mint authority is rejected',
+      !issuerMatches({ ...realPaxg, mintAuthority: 'HvsaoHJiadS1rEHkMRqdV3NMus55z4xqNs33ZCHVBoTS' }, paxg, 'commodity'));
+    /*
+     * The Wormhole-bridged PAXG is real in the sense that it exists, and is
+     * still wrong to list: $308 of liquidity and a price 37% away from spot.
+     * Verbatim from the live API.
+     */
+    t('the thin Wormhole variant is rejected',
+      !issuerMatches({ id: 'C6oFsE8nXRDThzrMEQ5SxaNFGKoyyfWDDVPw37JKvPTe', mintAuthority: 'BCD75RNBHrJJpW4dXVagL5mPjzRLnVZq4YirJdjEYMV7' }, paxg, 'commodity'));
+    /* An asset with no declared authority must never pass by omission. */
+    t('a commodity with no declared authority fails closed',
+      !issuerMatches(realPaxg, { mint: paxg.mint }, 'commodity'));
+
+    /* The clone list for gold is as bad as for the equities. */
+    for (const fake of [
+      '3dDHidrJFVqArN9PwKoLva2pYsDqVYEQzd8pgy8zpump',
+      '8rhchrEwGmVqFMfFd1QTwogUjhD7nrv9ciUKN3eMpump',
+      '4f383vyKkSfPnEMjw8TRwv7LFQyxt89CV91brHVfpump'
+    ]) {
+      t(`the gold clone ${fake.slice(0, 6)}… is not curated`, !isCuratedMint(fake));
+    }
+
+    /*
+     * Gold is not an equity and the row must not label it "single company".
+     * `unit` is what the UI branches on, so it has to be present.
+     */
+    t('gold declares its unit so it can be labelled correctly',
+      COMMODITY_ASSETS.every((a) => a.unit === 'ounce'));
+
+    /* Thin books, so the same depth gate must bind here too. */
+    t('the depth gate applies to gold as well',
+      liquidityVerdict(471_000, 20_000).ok === false && liquidityVerdict(471_000, 1_000).ok === true);
   }
 
   return rows;

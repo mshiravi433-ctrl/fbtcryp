@@ -9,6 +9,7 @@ import { fmtCompact, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { IconExternal, IconPools, IconShield, IconSwap } from '../components/Icons';
+import TokenIcon from '../lib/tokenIcon';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { RISK_BANDS, getYields, pairTokens, projectEarnings, rateIsUnusual, realShare } from '../lib/yields';
 import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
@@ -314,6 +315,34 @@ export default function Farm() {
         real yield product this app can offer without taking custody of
         anything.
       */}
+      {/*
+        ─── THE AMOUNT SELECTOR LIVES HERE, ABOVE BOTH SECTIONS ────────────
+        It used to sit inside the pools section further down the page, while
+        the staking rows above it already read `amount` to compute their
+        projection. So the staking numbers were driven by a control the user
+        could not see until they had scrolled past them — the owner reported
+        it as "it doesn't say how much", which is what a control that changes
+        nothing visible looks like.
+
+        One selector, above everything that depends on it. A control must be
+        visible from whatever it changes.
+      */}
+      <div className="farm-amounts">
+        <span className="faint">{t('farm.ifIDeposit')}</span>
+        <div className="row" style={{ gap: 6 }}>
+          {AMOUNTS.map((a) => (
+            <button
+              key={a}
+              type="button"
+              className={`tag ${amount === a ? 'active' : ''}`}
+              onClick={() => setAmount(a)}
+            >
+              {fmtUsd(a)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {stakingRows.length > 0 && (
         <section>
           <p className="section-label">{t('farm.stakingTitle')}</p>
@@ -326,9 +355,10 @@ export default function Farm() {
                 <motion.div key={asset.id} className="farm-pool" variants={riseIn}>
                   <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
                     <div className="row" style={{ gap: 10, minWidth: 0 }}>
-                      <div className="coin-logo">
-                        {asset.icon ? <img src={asset.icon} alt="" /> : asset.symbol.slice(0, 3)}
-                      </div>
+                      {/* TokenIcon, not a bare <img>: a raw tag with no
+                          onError leaves an empty circle when the CDN fails,
+                          which reads as broken. See lib/tokenIcon.jsx. */}
+                      <TokenIcon token={asset} size={34} />
                       <div style={{ minWidth: 0 }}>
                         <div className="farm-pool-sym">{asset.symbol}</div>
                         <div className="set-row-sub">{asset.name}</div>
@@ -416,23 +446,6 @@ export default function Farm() {
               {t(`farm.filter.${k}`)}
             </button>
           ))}
-        </div>
-
-        {/* The calculator amount. A percentage is not money until it is. */}
-        <div className="farm-amounts">
-          <span className="faint">{t('farm.ifIDeposit')}</span>
-          <div className="row" style={{ gap: 6 }}>
-            {AMOUNTS.map((a) => (
-              <button
-                key={a}
-                type="button"
-                className={`tag ${amount === a ? 'active' : ''}`}
-                onClick={() => setAmount(a)}
-              >
-                {fmtUsd(a)}
-              </button>
-            ))}
-          </div>
         </div>
 
         {loading && (

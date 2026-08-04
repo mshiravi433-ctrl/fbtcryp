@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.21.0 — versionCode 49
+
+### Two bugs on the tokenized-equity screen
+
+**Profile pictures were blank.** `iconCandidates` only read `logoURI`, but
+Jupiter's API spells the field `icon` — so every equity and staking token fell
+straight through to the monogram. Both screens also rendered a bare `<img>`
+with no `onError`, which leaves an *empty circle* when a CDN fails: worse than
+the monogram, because it reads as broken rather than as a placeholder. That is
+the exact failure documented at the top of `lib/tokenIcon.jsx`, reappearing
+because a second data source names the field differently.
+
+No symbol-keyed Solana icon CDN was added, deliberately. The EVM path can use
+TrustWallet and CoinGecko because both are keyed by contract address; every
+Solana equivalent available is keyed by symbol, which is precisely how a fake
+AAPLx would inherit Apple's logo. A missing picture is cosmetic; a fake token
+wearing the real one's face is financial.
+
+**The $100 / $1,000 / $10,000 buttons showed nothing.** Two separate causes:
+
+- On Farm the selector sat *inside* the pools section, several hundred pixels
+  below the staking rows that already read `amount`. The control was driving
+  numbers the user could not see without scrolling past them. It now sits above
+  everything that depends on it.
+- On Stocks the amount fed *only* the depth gate, so changing it silently
+  toggled a button's enabled state and displayed no figure at all. Each row now
+  states what the amount buys — the quantity, not a projected return, because
+  inventing an expected return for Apple stock would be a forecast and this
+  codebase does not emit those.
+
+Wiring check 43 now asserts selector-before-content ordering on both screens,
+so this cannot come back silently.
+
+### Gold
+
+Requested directly. Two tokens, each backed one-for-one by a troy ounce in a
+vault: PAXG (Paxos, New York trust charter, OCC-regulated — listed first for
+that reason, not for liquidity) and XAUt0 (Tether). Verified with a live quote:
+`USDC → PAXG` returns `platformFee { feeBps: 70 }`.
+
+Its own section rather than mixed into the equities, because gold is not a
+company — no earnings, no dividend, no shareholder register — but inside the
+same tab, under the same freeze warning. Splitting it into its own tab would
+mean either repeating that warning or, worse, not repeating it.
+
+The clone problem is identical: searching `PAXG` returns eight tokens including
+"PAX Gold Punk", "Oro Tempis" and a Wormhole-bridged version with $308 of
+liquidity trading 37% away from spot. Same defence — verified mints only,
+issuer authority re-checked on every fetch. Commodities carry their *own*
+authorities rather than a shared one, since Paxos and Tether are different
+companies, and a missing authority fails closed.
+
+Liquidity is thin (PAXG $471k, XAUt0 $268k — an order of magnitude below SPYx),
+so the existing depth gate binds much sooner here. That is correct and visible
+on the row.
+
+### Tests
+
+1276 checks, up from 1264. Changing `issuerMatches` from a boolean third
+argument to a kind string broke two existing equity tests — which is what they
+are for, and they were updated rather than the signature being worked around.
+Eleven sabotages verified across icons, selector placement and the gold issuer
+check.
+
 ## 1.20.0 — versionCode 48
 
 ### Tokenized equities and liquid staking
