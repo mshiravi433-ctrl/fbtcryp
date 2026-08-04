@@ -46,6 +46,7 @@ import {
 } from '../src/lib/solana.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
+import { backtest, confidenceFrom, signalAt } from '../src/lib/backtest.js';
 import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
 import {
@@ -1882,6 +1883,85 @@ export default function run() {
       t(`garbage input yields no facts, not a crash (${JSON.stringify(bad)})`,
         Array.isArray(historyFacts(bad)) && historyFacts(bad).length === 0);
     }
+  }
+
+  /* ------------------- confidence measured, not assumed ------------------ */
+  /*
+   * The old confidence came from INDICATOR AGREEMENT. That was a bad number:
+   * every indicator is a different arithmetic transform of the same price
+   * series, so they are correlated by construction and agree loudest exactly
+   * when they are all wrong together. It reported "how similar are my
+   * formulas" as "how sure am I" — confidently wrong, about money.
+   *
+   * It now comes from replaying the signal over the coin's own history.
+   */
+  {
+    const trend = Array.from({ length: 200 }, (_, i) => 100 + i * 0.5 + Math.sin(i / 7) * 6);
+    const bt = backtest(trend);
+
+    t('a backtest runs on enough history', bt !== null);
+    t('it reports how many signals it found', bt.samples > 0);
+    /*
+     * THE NUMBER THAT MATTERS. A 60% hit rate is worthless if the coin rose
+     * on 62% of all days — the rule did worse than doing nothing. Most tools
+     * hide this comparison.
+     */
+    t('it compares against doing nothing', typeof bt.baseRate === 'number');
+    t('it reports an edge over the base rate', typeof bt.edge === 'number');
+    t('a rising market has a high base rate', bt.baseRate > 60);
+
+    /* Too little history must yield NOTHING rather than a number built on
+       four observations. */
+    t('a short series is refused', backtest(Array.from({ length: 40 }, (_, i) => 100 + i)) === null);
+    t('garbage is refused', backtest(null) === null && backtest([]) === null);
+
+    /* ---- the rule itself ---- */
+    /*
+     * It must require the trend to agree, or it buys every dip of a collapse.
+     * A pure downtrend drives RSI low, but ma20 < ma50, so no buy may fire.
+     */
+    const crash = Array.from({ length: 120 }, (_, i) => 200 - i * 1.2);
+    let buysInCrash = 0;
+    for (let i = 50; i < crash.length - 1; i += 1) if (signalAt(crash, i) === 'buy') buysInCrash += 1;
+    t(`the rule does not buy a collapse (${buysInCrash} buys)`, buysInCrash === 0);
+
+    /* Not enough bars to compute the slow average = no signal, not a guess. */
+    t('no signal before the indicators are warm', signalAt(trend, 10) === null);
+
+    /* ---- confidence ---- */
+    /*
+     * THE CEILING IS THE POINT. No chart rule on a volatile asset deserves a
+     * figure that reads like certainty, and a "94% confident" badge on a
+     * crypto app is a lie with a decimal point on it.
+     */
+    const strong = { buy: { total: 60, hits: 45, rate: 75, edge: 25 }, sell: {}, samples: 60 };
+    t('confidence is capped below certainty', confidenceFrom(strong, 'buy', 100) <= 75);
+
+    /*
+     * No evidence must cap the number hard. Perfect agreement with no
+     * backtest is still a guess, and the old formula would have returned ~80.
+     */
+    t('no backtest caps confidence at 40', confidenceFrom(null, 'buy', 100) <= 40);
+    t('...and it is still a real number', confidenceFrom(null, 'buy', 100) >= 5);
+
+    /*
+     * A rule that historically did WORSE than doing nothing must reduce
+     * confidence, not merely fail to raise it.
+     */
+    const bad = { buy: { total: 50, hits: 15, rate: 30, edge: -25 }, sell: {}, samples: 50 };
+    t('negative edge produces low confidence', confidenceFrom(bad, 'buy', 90) < 30);
+    t('negative edge scores below a good edge',
+      confidenceFrom(bad, 'buy', 90) < confidenceFrom(strong, 'buy', 90));
+
+    /* A handful of occurrences is an anecdote, not a hit rate. */
+    const thin = { buy: { total: 3, hits: 3, rate: 100, edge: 50 }, sell: {}, samples: 3 };
+    t('a tiny sample is not trusted', confidenceFrom(thin, 'buy', 90) <= 40);
+
+    /* ---- end to end ---- */
+    const a = analyze(trend, { change24h: 1, change7d: 4 });
+    t('analyze exposes the backtest behind its confidence', a.backtest !== undefined);
+    t('analyze still reports agreement separately', typeof a.agreement === 'number');
+    t('confidence never claims certainty', a.confidence <= 75);
   }
 
   return rows;

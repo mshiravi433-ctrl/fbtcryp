@@ -1,5 +1,74 @@
 # Changelog
 
+## 1.18.0 — versionCode 46
+
+### The website is now the full version
+
+`vercel.json` builds with `build:full`, so lawpoetics.ir carries every feature.
+Only the app-store APK strips the speculation screens, because that is the
+only place a content filter applies.
+
+### Four screens became tabbed hubs
+
+| Hub | Contains |
+|---|---|
+| **Lab** | prediction + invest |
+| **Explore** | explorer + discover |
+| **Learn** | help + docs |
+| **Points & Ranking** | earn + leaderboard |
+
+"Lab" is named that on purpose: both tabs run on virtual credits, and a
+container name does the honest work that a disclaimer three paragraphs into
+each screen cannot.
+
+Built as one reusable shell rather than five rewrites — splicing pages into
+each other risks a hook order or a dropped effect for a change that is purely
+navigational. The originals are untouched and still routable, so bookmarks
+keep working.
+
+Only the active tab mounts. Rendering both and hiding one would run both
+screens' polling at once, doubling API traffic for a tab nobody is looking at.
+
+The tab lives in `?tab=`, so Android's back button steps between tabs, links
+can target one, and a crash-reload returns where you were.
+
+### Tab sizing
+
+New `.seg-lg`. The base control is 12px text in 9px of padding — drawn for a
+filter inside a card. As a page's primary navigation it read as a footnote and
+the tap target was under the 44px minimum.
+
+### Signals: confidence is now measured, not assumed
+
+The old confidence came from **indicator agreement**. That was a bad number,
+and worth explaining: every indicator here is a different arithmetic transform
+of the *same* price series, so they are correlated by construction — in a
+strong downtrend they all shout "oversold" in unison, agree perfectly, and are
+wrong together. It reported "how similar are my formulas" as "how sure am I".
+
+`lib/backtest.js` replays the signal over the coin's own history and counts.
+Three rules make it honest:
+
+- **No look-ahead.** Each historical signal uses only the bars that existed at
+  that moment.
+- **Compared against doing nothing.** A 60% hit rate is worthless if the coin
+  rose on 62% of all days. `edge` is hit rate minus base rate, it is often
+  negative, and it is shown.
+- **Small samples are refused**, not rounded into a percentage.
+
+The ceiling dropped from 88 to **75**. No chart rule on a volatile asset
+deserves a figure that reads like certainty. With no history to measure,
+confidence is capped at 40 — without evidence we are guessing, and the number
+should say so.
+
+### Perpetuals, properly explained
+
+The page was honest about what we do not run, but taught nothing — and it
+sends people to venues where real money is at stake. It now explains what a
+perpetual is, what funding costs, what liquidation means, and what 100x
+actually does, plus a table of how far price must move against you to
+liquidate at each leverage. 50× is **2%**.
+
 ## 1.17.2 — versionCode 45
 
 ### I deleted the wallet button styles and did not notice

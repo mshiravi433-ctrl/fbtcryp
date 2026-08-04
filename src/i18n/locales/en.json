@@ -799,7 +799,34 @@
     },
     "thirdPartyNotice": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
     "tryPredict": "Prefer something simpler?",
-    "tryPredictSub": "Try up/down prediction on virtual credits"
+    "tryPredictSub": "Try up/down prediction on virtual credits",
+    "learnTitle": "How perpetuals work",
+    "learn": {
+      "what": {
+        "q": "What is a perpetual?",
+        "a": "A contract that tracks an asset’s price without ever expiring. You never own the coin — you hold a position that gains or loses as the price moves, and you can bet on it falling as easily as rising."
+      },
+      "funding": {
+        "q": "What is funding?",
+        "a": "Because the contract never expires, something has to keep its price tied to the real one. Every few hours, whichever side is crowded pays the other. Hold a popular long position for a week and funding alone can cost more than the move you were waiting for."
+      },
+      "liquidation": {
+        "q": "What does liquidation mean?",
+        "a": "Your position is backed by collateral. When losses eat that collateral, the venue closes the position and the collateral is gone — you do not get a margin call and a chance to top up. The table below shows how small that move is."
+      },
+      "leverage": {
+        "q": "What does 100x really mean?",
+        "a": "It multiplies both directions equally. At 100x a 1% move in your favour doubles your money and a 1% move against you leaves nothing. Crypto routinely moves 1% in minutes, so at high leverage the question is not whether you are right about direction but whether you are right before noise stops you out."
+      },
+      "costs": {
+        "q": "What does it cost to hold?",
+        "a": "Three things, all continuous: the trading fee when you open and close, funding every few hours, and the spread. A position held for weeks can bleed away even if the price ends exactly where it started."
+      }
+    },
+    "liqTitle": "How far price must move to liquidate you",
+    "liqLeverage": "Leverage",
+    "liqMove": "Move against you",
+    "liqNote": "Approximate — the exact figure depends on the venue’s maintenance margin and fees, and is always slightly worse than shown here."
   },
   "farm": {
     "title": "Farm",

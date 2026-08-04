@@ -137,6 +137,63 @@ export default function Perp() {
         </div>
       </motion.section>
 
+      {/*
+        ─── HOW PERPETUALS ACTUALLY WORK ──────────────────────────────────
+        Requested: «فیوچرز را خیلی بهتر و بیشتر بنویس».
+
+        The page was honest about what we do NOT run, but it taught nothing.
+        Someone arriving here does not know what funding is, what liquidation
+        price means, or why 100x is a way to lose everything on a 1% move —
+        and they are about to be sent to a venue where all three apply with
+        real money.
+
+        Explaining it BEFORE the venue list is deliberate. After the list is
+        after the decision.
+      */}
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('perp.learnTitle')}</p>
+        <div className="stack" style={{ gap: 12 }}>
+          {['what', 'funding', 'liquidation', 'leverage', 'costs'].map((k) => (
+            <div key={k}>
+              <div style={{ fontWeight: 700, fontSize: 12.8, marginBottom: 3 }}>
+                {t(`perp.learn.${k}.q`)}
+              </div>
+              <p className="muted" style={{ fontSize: 12.2, lineHeight: 1.8, margin: 0 }}>
+                {t(`perp.learn.${k}.a`)}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/*
+          The liquidation table. An abstract warning about leverage does not
+          land; a column showing that 50x liquidates on a 2% move does.
+        */}
+        <p className="section-label" style={{ margin: '14px 0 8px' }}>{t('perp.liqTitle')}</p>
+        <table className="perp-liq">
+          <thead>
+            <tr>
+              <th>{t('perp.liqLeverage')}</th>
+              <th>{t('perp.liqMove')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[2, 5, 10, 25, 50, 100].map((x) => (
+              <tr key={x}>
+                <td className="mono">{x}×</td>
+                {/* 100/x, the actual arithmetic — not a rounded illustration. */}
+                <td className="mono" style={{ color: x >= 25 ? 'var(--down)' : 'var(--text-2)' }}>
+                  {(100 / x).toFixed(x >= 50 ? 1 : 0)}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7 }}>
+          {t('perp.liqNote')}
+        </p>
+      </motion.section>
+
       {/* ---------- venues ---------- */}
       <section>
         <p className="section-label">{t('perp.venues')}</p>

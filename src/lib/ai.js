@@ -11,10 +11,19 @@
  *
  * It is NOT a price oracle and cannot see the future. Markets are close to a
  * random walk at short horizons and no indicator set predicts them reliably.
- * Every output carries a confidence figure derived from how much the
- * indicators agree — when they disagree, confidence drops and the UI says so
- * instead of inventing certainty.
+ *
+ * ─── CONFIDENCE IS MEASURED, NOT ASSUMED ────────────────────────────────────
+ * It used to come from how much the indicators AGREED with each other. That
+ * was a bad number: every indicator here is a different arithmetic transform
+ * of the same price series, so they are correlated by construction and agree
+ * loudest exactly when they are all wrong together.
+ *
+ * It now comes from lib/backtest.js, which replays the signal over the coin's
+ * own history with no look-ahead, counts how often it was right, and compares
+ * that to doing nothing. See that file for why the ceiling is 75.
  */
+
+import { backtest, confidenceFrom } from './backtest';
 
 /* -------------------------------------------------------------------------- */
 /* Indicators                                                                 */
@@ -225,16 +234,26 @@ export function analyze(prices, coin = {}) {
   const mean = signals.reduce((a, s) => a + s.score, 0) / signals.length;
   const spread = Math.sqrt(signals.reduce((a, s) => a + (s.score - mean) ** 2, 0) / signals.length);
   const agreement = clamp(100 - spread, 0, 100);
-  const volPenalty = vol ? clamp(vol / 4, 0, 35) : 0;
-  const confidence = clamp(agreement * 0.75 + Math.abs(raw) * 0.25 - volPenalty, 5, 88);
 
   const label =
     raw > 40 ? 'strongBuy' : raw > 12 ? 'buy' : raw < -40 ? 'strongSell' : raw < -12 ? 'sell' : 'neutral';
+
+  /*
+   * Measured confidence. `agreement` survives only as a weak tiebreak for
+   * coins with too little history to backtest, and is capped at 40 in that
+   * case — without evidence we are guessing, and the number must say so.
+   */
+  const bt = backtest(values, 7);
+  const confidence = confidenceFrom(bt, label, agreement);
 
   return {
     score: Math.round(raw),
     label,
     confidence: Math.round(confidence),
+    /* The evidence behind the number. A confidence figure you cannot inspect
+       is just a bigger assertion. */
+    backtest: bt,
+    agreement: Math.round(agreement),
     price,
     indicators: {
       rsi: r,
