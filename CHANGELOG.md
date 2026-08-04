@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.15.1 — versionCode 41
+
+### We were advertising a chain that does not exist
+
+The `<title>` said **"9 Chains"** and the description listed **Tron**. We
+support seven EVM chains plus Solana — eight — and there is no Tron swap route
+at all; `chains.js` mentions Tron only to warn that sending an EVM address to
+it burns the funds.
+
+This mattered more than a typo, because **that text was what Google had
+indexed**. The one thing search engines knew about us was partly false, and
+anyone arriving to swap on Tron would have found nothing and left. An
+advertised capability that does not exist is also exactly what a store
+reviewer checks.
+
+A test now derives the real chain count from the source, so the claim cannot
+drift again.
+
+### The site had exactly one indexable page
+
+Measured, not guessed: `site:lawpoetics.ir` on Google returns **one** result,
+while the app has **33 routes**.
+
+That is arithmetic. Every route is behind a hash (`/#/swap`), and nothing
+after the `#` is ever sent to the server — so a crawler receives the identical
+document for every screen. The sitemap honestly listed one URL, because
+inventing hash entries would just resolve to the same page.
+
+Meanwhile `watches: 0`. Zero real users. Search is the only arrival channel
+that costs nothing and keeps working while nobody is watching it, so one
+indexable page was the most expensive fact about this project.
+
+There are now three real static pages, generated at build time:
+
+- `/non-custodial-crypto-swap`
+- `/crypto-price-alerts-and-dca`
+- `/crypto-market-history-analysis`
+
+Each is genuine prose about a feature that actually works, loads with **zero
+external requests**, and links into the app with a normal anchor.
+
+**Why not SSR:** a rendering server costs money every month. These are plain
+files on hosting that already costs nothing.
+
+**Why this is not cloaking:** a crawler and a person are served the same file.
+There is no user-agent branching anywhere — a test asserts that — and no
+meta-refresh, because an instant redirect turns a landing page into a doorway
+page that Google penalises.
+
+Three pages, not thirty. A handful about things people search for beats many
+thin ones, which search engines count against the whole domain.
+
 ## 1.15.0 — versionCode 40
 
 ### The history engine

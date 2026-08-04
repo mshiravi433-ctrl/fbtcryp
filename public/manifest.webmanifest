@@ -1,7 +1,7 @@
 {
   "name": "FBT Swap",
   "short_name": "FBT Swap",
-  "description": "Non-custodial crypto swaps across nine networks. You hold the keys.",
+  "description": "Non-custodial crypto swaps across eight networks. You hold the keys.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
