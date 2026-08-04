@@ -106,11 +106,74 @@ export async function run(container) {
    * and no coloured glow. A gradient on a 44px circle is detail nobody can
    * resolve; a neon halo is what made the previous version look inflated.
    */
-  const dropRule = css.slice(css.indexOf('.nav-centre-drop {'), css.indexOf('.nav-centre-drop {') + 420);
-  t('the drop is a flat colour, not a gradient', !/gradient/.test(dropRule));
+  /*
+   * Slice a CSS rule to its ACTUAL closing brace.
+   *
+   * The first version of these checks took a fixed number of characters
+   * after the selector, and the long explanatory comments inside these rules
+   * pushed the declarations outside that window — so a correct stylesheet
+   * reported a failure. Same brittle-window trap that bit the button-row
+   * check earlier: guess a length and it silently stops matching. Find the
+   * brace instead; there is nothing to outgrow.
+   */
+  const rule = (selector) => {
+    const at = css.indexOf(selector);
+    if (at < 0) return '';
+    const close = css.indexOf('\n}', at);
+    return close < 0 ? '' : css.slice(at, close + 2);
+  };
+
+  const dropRule = rule('.nav-centre-drop {');
   t('the drop is a plain circle', /border-radius: 50%;/.test(dropRule));
+  /*
+   * Requested: RGB like the rest of the app. But the reason a gradient was
+   * removed before still holds — a busy ramp on a 42px circle is noise. So
+   * it must be the app palette in its calmest form: exactly TWO stops.
+   * Three or more and it is detail nobody can resolve at this size.
+   */
+  t('the drop uses the app RGB palette', /--rgb-1/.test(dropRule) && /--rgb-2/.test(dropRule));
+  t('...but only two stops, so it stays calm at 42px', !/--rgb-3/.test(dropRule));
+  /*
+   * A coloured glow is what made the earlier version look inflated. Black
+   * reads as depth instead.
+   */
   t('the drop casts a neutral shadow, not a coloured glow',
     /box-shadow: 0 4px 12px -2px rgba\(0, 0, 0/.test(dropRule));
+
+  /*
+   * ─── THE TRANSFORM CONFLICT THAT MADE IT JUMP ───────────────────────────
+   * Reported: «دکمه پس از زدن به سمت راست میرود» — after tapping, the button
+   * moved right and stayed there.
+   *
+   * The button is centred with `transform: translateX(-50%)`. Framer Motion
+   * does not add to an existing transform, it writes the whole property. So
+   * `whileTap={{ scale }}` on the BUTTON replaced the centring with
+   * `scale(...)`, shoving it 21px right — and Framer kept owning the
+   * property afterwards, so it never came back.
+   *
+   * The rule: nothing in JS or CSS may animate the transform of the element
+   * that carries the centring. The press scales the inner `.nav-centre-drop`
+   * instead, which has no centring of its own.
+   */
+  const jsx = readFileSync('src/components/BottomNav.jsx', 'utf8');
+  const centreFn = jsx.slice(jsx.indexOf('function CentreAction'), jsx.indexOf('export default function BottomNav'));
+  t('the press does not animate the centred button itself',
+    !/whileTap=\{still \? undefined : \{/.test(centreFn));
+  t('the press scales the inner drop instead', /variants=\{\{ rest:/.test(centreFn));
+
+  const centreRule = rule('.nav-centre {');
+  t('the button keeps its CSS centring', /transform: translateX\(-50%\)/.test(centreRule));
+  /*
+   * The active state must not use a transform either — it would be wiped by
+   * the first tap and never reapplied, which is the same bug wearing a
+   * different hat.
+   */
+  const activeRule = rule('.nav-centre.active .nav-centre-drop {');
+  t('the active state does not fight Framer for the transform', !/transform:/.test(activeRule));
+
+  /* The glyph must match where the button actually goes. A home icon on a
+     Buy button was already caught once; now it points at Automatic Orders. */
+  t('the centre button goes to automatic orders', /to: '\/orders'/.test(jsx));
 
   await act(async () => root.unmount());
   return rows;

@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.14.2 — versionCode 38
+
+### The centre button jumped right when tapped
+
+Reported: «دکمه پس از زدن به سمت راست میرود، نمیخواد همونجا بمونه».
+
+The button is centred with `transform: translateX(-50%)`. **Framer Motion does
+not add to an existing transform — it writes the whole property.** So the
+instant a tap began, `transform` became `scale(0.88)` and the `-50%` was gone,
+shoving the button 21px to the right. Framer kept owning the property
+afterwards, so it never came back.
+
+The press now scales the inner `.nav-centre-drop`, which has no centring of
+its own, so Framer can own *its* transform completely. Nothing in JS touches
+the button's transform again.
+
+The active state had the same latent bug — it used `transform: translateY(2px)`,
+which the first tap would have wiped permanently. It is a brightness change
+now.
+
+Both are guarded by tests that fail against the old code.
+
+### Everything else that was asked
+
+- **RGB, like the rest of the app.** A single flat colour looked foreign next
+  to the RGB spectrum every other accent uses. It is a two-stop
+  `--rgb-1 → --rgb-2` ramp — the app palette in its calmest form. Two stops,
+  not three: a busy ramp on a 42px circle is detail nobody can resolve, which
+  is why the gradient came off in the first place. A test pins it at two.
+- **Goes to Auto Orders**, not Buy & sell.
+- **New icon** — two crossing arrows, the standard "scheduled / recurring"
+  mark and the same family as the swap icon already in the bar. Stroked and
+  17px rather than filled and 18: on a small circle a light outline reads as
+  more delicate.
+- **42px**, down from 44. Two pixels lighter without dropping below the
+  comfortable-tap threshold.
+
+### A test that was lying
+
+While adding the checks above, one reported a failure on a correct
+stylesheet: it sliced a fixed number of characters after the selector, and the
+long comments inside these rules pushed the declarations outside the window.
+Same brittle-window trap as the button-row check earlier. It now finds the
+rule's real closing brace, so there is nothing to outgrow.
+
 ## 1.14.1 — versionCode 37
 
 ### The centre button is minimal now

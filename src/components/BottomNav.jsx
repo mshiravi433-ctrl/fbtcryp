@@ -45,7 +45,7 @@ const ITEMS = [
  * and it is the one route that earns nothing until they reach it — so it gets
  * the most prominent control on the screen.
  */
-const CENTRE = { to: '/buy', key: 'nav.buy' };
+const CENTRE = { to: '/orders', key: 'nav.orders' };
 
 /**
  * The droplet.
@@ -69,32 +69,55 @@ function CentreAction({ active, still, label, onClick }) {
       className={`nav-centre ${active ? 'active' : ''}`}
       onClick={onClick}
       aria-label={label}
-      whileTap={still ? undefined : { scale: 0.88 }}
-      transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+      /*
+       * ─── THE "IT JUMPS RIGHT WHEN TAPPED" BUG ──────────────────────────
+       * This used to be `whileTap={{ scale: 0.88 }}` on the button itself.
+       *
+       * The button is centred with `transform: translateX(-50%)` in CSS.
+       * Framer Motion does not ADD to an existing transform — it writes the
+       * whole property from the values it is animating. So the moment the
+       * tap began, `transform` became `scale(0.88)` and the `-50%` vanished,
+       * shoving the button 22px (half its width) to the right. It never came
+       * back because Framer keeps owning the property afterwards.
+       *
+       * The fix is to scale the CHILD instead. `.nav-centre-drop` has no
+       * centring transform of its own, so Framer can own its transform
+       * completely without destroying anything. The button's own
+       * `translateX(-50%)` is never touched by JS again.
+       */
+      whileTap={still ? undefined : 'pressed'}
+      initial={false}
+      animate="rest"
     >
-      <span className="nav-centre-drop" aria-hidden="true" />
+      <motion.span
+        className="nav-centre-drop"
+        aria-hidden="true"
+        variants={{ rest: { scale: 1 }, pressed: { scale: 0.9 } }}
+        transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+      />
       <span className="nav-centre-glyph" aria-hidden="true">
         {/*
-          A FILLED glyph, not a stroked one.
+          Two thin arrows crossing — the universal "scheduled / recurring"
+          mark, and the same visual family as the swap icon already in the
+          bar. It points at Automatic Orders, which is where this button now
+          goes.
 
-          The reference the owner sent uses solid icons inside the indicator,
-          and there is a reason beyond taste: on a 44px circle of flat colour,
-          a 2px stroke is a thin light line on a saturated field and reads as
-          faint. A filled shape holds its weight at that size.
-
-          Also 18px rather than 20: the smaller the glyph relative to the
-          circle, the more the circle reads as a deliberate accent rather
-          than a button that happens to have an icon in it.
+          STROKED, not filled, and only 17px. The previous filled plus was
+          heavier than the reference: on a small flat circle a light outline
+          reads as more delicate, which is the whole request. `round` caps
+          keep it soft rather than technical.
         */}
-        {/*
-          The glyph must match the DESTINATION. This button goes to Buy &
-          sell, so it is a filled plus — the universal "add funds" mark. A
-          home icon here (my first attempt) would have been a control whose
-          picture and behaviour disagreed, which is the same class of bug as
-          a mislabelled button.
-        */}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M13.4 3.6a1.4 1.4 0 0 0-2.8 0v7h-7a1.4 1.4 0 0 0 0 2.8h7v7a1.4 1.4 0 0 0 2.8 0v-7h7a1.4 1.4 0 0 0 0-2.8h-7Z" />
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 8h13l-3.2-3.2M20 16H7l3.2 3.2" />
         </svg>
       </span>
     </motion.button>

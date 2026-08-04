@@ -942,10 +942,13 @@ select option { background: #0a0c12; }
      resting in the hollow. That is exactly the "merged into the menu" look
      that was reported, reintroduced by arithmetic rather than by styling.
   */
-  bottom: calc(56px + env(safe-area-inset-bottom));
+  /* 42px: still above the 40px comfortable-tap threshold, two pixels
+     lighter than before. Below ~40 the button becomes fiddly to hit, which
+     is a worse problem than looking slightly large. */
+  bottom: calc(57px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border: none;
   background: none;
   padding: 0;
@@ -968,9 +971,30 @@ select option { background: #0a0c12; }
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: var(--rgb-1);
+  /*
+   * ─── RGB, LIKE THE REST OF THE APP ────────────────────────────────────
+   * Requested: «رنگش rgb باشه مثل بقیه اپ».
+   *
+   * One flat accent read as foreign next to the RGB spectrum every other
+   * accent in this app uses — the primary button, the segment pill, the
+   * brand mark are all multi-stop.
+   *
+   * The reason a gradient was removed last round still holds though: a busy
+   * 3-stop ramp on a 44px circle is noise. So this is the SAME palette in
+   * its calmest possible form — two neighbouring stops on one diagonal.
+   * It belongs to the family without becoming detail nobody can resolve.
+   */
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  /*
+   * Neutral shadow, deliberately. A coloured glow is what made the earlier
+   * version look inflated; black reads as depth, which is what "resting
+   * above the surface" needs.
+   */
   box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.55);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease;
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
+  /* NOTE: `transform` is intentionally absent from the transition. Framer
+     owns this element's transform for the press animation, and a CSS
+     transition on the same property fights it and makes the press mushy. */
 }
 
 :root[data-theme='light'] .nav-centre-drop {
@@ -982,8 +1006,9 @@ select option { background: #0a0c12; }
   display: grid;
   place-items: center;
   /* Dark ink on the accent fill — the same contrast rule the primary button
-     already follows. */
-  color: #06070c;
+     already follows. Near-black rather than pure, so the stroke reads as
+     soft rather than stamped. */
+  color: #05060b;
 }
 
 /*
@@ -991,9 +1016,15 @@ select option { background: #0a0c12; }
  * surface. A position change rather than a brightness change, because the
  * flat fill has nowhere brighter to go without becoming a glow again.
  */
+/*
+ * Current route. Brightness, NOT a transform — Framer owns this element's
+ * transform for the press animation, and a CSS `transform` here would be
+ * overwritten the first time it is tapped and then never reapplied.
+ * That is the same class of conflict that made the button jump right.
+ */
 .nav-centre.active .nav-centre-drop {
-  transform: translateY(2px);
-  background: var(--rgb-4);
+  filter: saturate(1.25) brightness(1.08);
+  box-shadow: 0 5px 16px -2px rgba(0, 0, 0, 0.6);
 }
 
 /* Small phones: shrink the drop AND the hollow together, or the hollow
