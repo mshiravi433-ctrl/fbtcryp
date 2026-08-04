@@ -2759,7 +2759,7 @@ export default function run() {
      * exactly the moment this check earns its keep: the recurring bug in this
      * codebase is a class that is referenced and styles nothing.
      */
-    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row|verd|farm)-/;
+    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row|verd|farm|eq|stk)-/;
 
     const used = new Set();
     for (const f of files) {
@@ -2880,6 +2880,87 @@ export default function run() {
     t('Farm shows the real-vs-emissions split', /realShare/.test(farm));
     t('Farm states that we take no cut of yield',
       /take no cut of your yield/i.test(read('src/i18n/locales/en.json')));
+  }
+
+  /* ---- 42. tokenized equities and liquid staking are really wired ------- */
+  /*
+   * ─── WHY THIS SECTION IS MOSTLY ABOUT SAFETY, NOT PLUMBING ────────────────
+   * The plumbing here is ordinary. What is not ordinary is that this screen
+   * offers assets whose impersonations are one search away: querying Jupiter
+   * for "AAPLx" returns seven tokens, six of them clones. Every check below
+   * guards a property that, if it silently regressed, would send a user's
+   * money to a stranger.
+   */
+  {
+    t('the curated asset list exists', existsSync('src/lib/solanaAssets.js'));
+    t('the server verifier exists', existsSync('server/solanaAssets.js'));
+
+    const appSrc = read('server/app.js');
+    t('the API exposes the verified asset list', /\/api\/solana\/assets/.test(appSrc));
+    t('...backed by the real fetcher', /fetchSolanaAssets/.test(appSrc));
+
+    const stocks = read('src/pages/Stocks.jsx');
+    const farm = read('src/pages/Farm.jsx');
+    const swap = read('src/pages/SolanaSwap.jsx');
+    const assets = read('src/lib/solanaAssets.js');
+
+    /* ---- the equities screen ---- */
+    t('Stocks fetches the verified list', /getSolanaAssets\s*\(/.test(stocks));
+    t('Stocks renders equity rows', /<EquityRow/.test(stocks));
+    /*
+     * The old copy said "why you can't buy Apple stock here". That is now
+     * false, and a screen that contradicts itself is worse than one that says
+     * nothing — the same class of error as the old "9 Chains" claim.
+     */
+    t('the obsolete "you cannot buy stock here" copy is gone',
+      !/honestTitle/.test(stocks) && !/stocks\.honestBody/.test(read('src/i18n/locales/en.json')));
+
+    /*
+     * The freeze warning must render ABOVE the buy list. Placement is the
+     * whole point: a risk notice below the thing it warns about is the
+     * pattern that produced the APKPure rejection.
+     */
+    {
+      const warnAt = stocks.indexOf('stocks.freezeTitle');
+      const listAt = stocks.indexOf('<EquityRow');
+      t('the freeze warning exists', warnAt > -1);
+      t('...and it renders before the buy list', warnAt > -1 && listAt > -1 && warnAt < listAt);
+    }
+
+    /* ---- the safety gates are actually applied, not merely defined ---- */
+    t('the depth gate is applied to each row', /liquidityVerdict\s*\(/.test(read('src/components/EquityRow.jsx')));
+    t('the buy button is disabled when the order is too big',
+      /disabled=\{!verdict\.ok\}/.test(read('src/components/EquityRow.jsx')));
+    t('Stocks applies the listing floor', /MIN_EQUITY_LIQUIDITY/.test(stocks));
+
+    /*
+     * The issuer authority is the one check a clone cannot pass. If this
+     * constant ever stops being compared, the whole defence is decoration.
+     */
+    t('the issuer authority is defined', /XSTOCK_MINT_AUTHORITY\s*=/.test(assets));
+    t('...and the server compares against it',
+      /live\.mintAuthority !== XSTOCK_MINT_AUTHORITY/.test(read('server/solanaAssets.js')));
+
+    /* ---- liquid staking ---- */
+    t('Farm fetches the staking tokens', /getSolanaAssets\s*\(/.test(farm));
+    t('Farm joins the live yield rather than hard-coding one', /yieldForLst\s*\(/.test(farm));
+    t('Farm offers a stake action', /farm\.stakeNow/.test(farm));
+
+    /* ---- the handoff ---- */
+    /*
+     * Both screens hand off by MINT, never by symbol. A symbol is exactly what
+     * the clones copy, so resolving one on arrival would reintroduce the
+     * impersonation risk the whole asset list exists to remove.
+     */
+    for (const [name, src] of [['Stocks', stocks], ['Farm', farm]]) {
+      t(`${name} hands off using the mint address`, /\/solana\?to=\$\{encodeURIComponent\(asset\.mint\)\}/.test(src));
+    }
+    t('SolanaSwap reads the handoff param', /searchParams\.get\('to'\)/.test(swap));
+    /*
+     * ...and restricts it to the curated list. Without this, sharing a
+     * ?to=<scam mint> link is a one-tap phishing vector.
+     */
+    t('...and only accepts curated mints', /findAsset\(to\)/.test(swap));
   }
 
   return rows;

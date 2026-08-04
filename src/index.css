@@ -5856,3 +5856,85 @@ body { overflow-x: clip; }
 @media (max-width: 360px) {
   .farm-actions { flex-direction: column; }
 }
+
+
+/* ==========================================================================
+   TOKENIZED EQUITIES  —  .eq-*  and  .stk-warn
+
+   Same restraint as the Farm rows: the price is legible but never coloured
+   like a call to action, and the depth figure sits next to it because these
+   markets are thin in a way the share price cannot show. SPYx has $2.8m of
+   depth and AAPLx has $80k — a difference of thirty-five times, invisible from
+   a $309 price tag.
+   ========================================================================== */
+
+/*
+   The freeze warning.
+
+   It renders above the list, and the border is what stops it reading as
+   another card in the stack. This is the one block on the screen that must be
+   read before the buttons below it, so it is allowed to be louder than
+   anything else here.
+*/
+.stk-warn {
+  border-width: 1px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--down) 55%, transparent);
+}
+
+.eq-row {
+  padding: 13px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.eq-name {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.eq-price {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  /* Not green. A price is a fact, not a recommendation — same reasoning as
+     .farm-apy. */
+  color: var(--text-1);
+}
+
+/*
+   Shown only when the selected size is genuinely too large for the book.
+   Amber rather than red: the trade is not forbidden, the SIZE is wrong, and
+   the copy names a size that would work.
+*/
+.eq-toobig {
+  margin: 9px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 11.6px;
+  line-height: 1.75;
+  color: var(--text-2);
+  border: 1px solid color-mix(in srgb, var(--ink-amber) 45%, transparent);
+}
+
+.eq-buy {
+  width: 100%;
+  margin-top: 11px;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12.6px;
+}
+
+/* A disabled buy button must LOOK unavailable, not just ignore taps. Without
+   this the depth gate is invisible and reads as a broken button. */
+.eq-buy:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

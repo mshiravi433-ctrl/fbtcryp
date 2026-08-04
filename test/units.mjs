@@ -10,6 +10,18 @@ import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
 import { isEligible, normalizePool, riskBand } from '../server/yields.js';
+import { issuerMatches } from '../server/solanaAssets.js';
+import {
+  EQUITY_ASSETS,
+  LST_ASSETS,
+  MAX_POOL_SHARE,
+  XSTOCK_FREEZE_AUTHORITY,
+  XSTOCK_MINT_AUTHORITY,
+  findAsset,
+  isCuratedMint,
+  liquidityVerdict
+} from '../src/lib/solanaAssets.js';
+import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
 import { pairTokens, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import {
@@ -2516,6 +2528,157 @@ export default function run() {
     const perCall = (Date.now() - started) / 20;
 
     t(`a year of daily bars verdicts in well under 40ms (${perCall.toFixed(1)}ms)`, perCall < 40);
+  }
+
+  /* ============ curated Solana assets: LSTs and tokenized equities ======== */
+  /*
+   * ─── THE THREAT THIS GUARDS AGAINST ───────────────────────────────────────
+   * Querying Jupiter for "AAPLx" returns SEVEN tokens. One is real. The rest
+   * are pump.fun clones with the same name, the same symbol, and in two cases
+   * the same logo scraped from Google. Measured from the live API:
+   *
+   *   real  XsbEhLAtcf6...  liquidity $79,912   mintAuthority = Backed
+   *   fake  GQfQ2avnmJB...  liquidity $3.44     mintAuthorityDisabled
+   *
+   * A user who searches "Apple" and taps the first result loses their money.
+   * There is no ranking that fixes this, because the fakes copy whatever
+   * signal you rank on. The only defence is a verified mint list plus an
+   * issuer-authority check, and these tests exist to keep both honest.
+   */
+  {
+    const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    const all = [...LST_ASSETS, ...EQUITY_ASSETS];
+
+    t('every curated mint is a plausible Solana address',
+      all.length === 8 && all.every((a) => BASE58.test(a.mint)));
+    /*
+     * Duplicates would mean one asset silently shadowing another in the
+     * mint->asset map, and the shadowed one would become unreachable.
+     */
+    t('no mint appears twice', new Set(all.map((a) => a.mint)).size === all.length);
+    t('every curated asset carries decimals', all.every((a) => Number.isInteger(a.decimals)));
+
+    /* ---- the issuer check, against REAL data ---- */
+    /*
+     * These two records are copied verbatim from the live Jupiter API rather
+     * than invented, because an invented "fake" would be fake in whatever way
+     * happened to make the test pass. The real clone is the specimen.
+     */
+    const aapl = EQUITY_ASSETS.find((a) => a.symbol === 'AAPLx');
+    const realAapl = {
+      id: 'XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp',
+      mintAuthority: XSTOCK_MINT_AUTHORITY,
+      freezeAuthority: XSTOCK_FREEZE_AUTHORITY,
+      isVerified: true
+    };
+    const cloneAapl = {
+      id: 'GQfQ2avnmJBMttz2D5nyDkQAY9rWLHGvDVq8BMRpxWh4',
+      isVerified: false,
+      audit: { isSus: true, mintAuthorityDisabled: true }
+    };
+
+    t('the genuine Apple xStock is accepted', issuerMatches(realAapl, aapl, true));
+    t('the real-world clone is rejected', !issuerMatches(cloneAapl, aapl, true));
+    /*
+     * The nastiest case: a record that reports the RIGHT mint and claims to be
+     * verified, but whose mint authority is somebody else's. Only the
+     * authority check catches this one.
+     */
+    t('a right-mint wrong-authority record is rejected',
+      !issuerMatches(
+        { ...realAapl, mintAuthority: 'HvsaoHJiadS1rEHkMRqdV3NMus55z4xqNs33ZCHVBoTS' },
+        aapl,
+        true
+      ));
+    t('a tampered freeze authority is rejected',
+      !issuerMatches({ ...realAapl, freezeAuthority: 'S7vYFFWH6BjJyEsdrPQpqpYTqLTrPRK6KW3VwsJuRaS' }, aapl, true));
+    /* A record for a DIFFERENT mint must never satisfy this asset. */
+    t('a record for another mint is rejected',
+      !issuerMatches({ ...realAapl, id: LST_ASSETS[0].mint }, aapl, true));
+
+    /* LSTs use the weaker check, and it must still reject the unverified. */
+    const msol = LST_ASSETS.find((a) => a.symbol === 'mSOL');
+    t('a verified LST is accepted', issuerMatches({ id: msol.mint, isVerified: true }, msol, false));
+    t('an unverified LST is rejected', !issuerMatches({ id: msol.mint, isVerified: false }, msol, false));
+
+    /* ---- the curated-mint gate on the ?to= handoff ---- */
+    /*
+     * SolanaSwap resolves ?to=<mint> through findAsset. If that accepted any
+     * address, a crafted link would be a one-tap phishing vector: share
+     * ?to=<scam mint> and the victim lands on a pre-filled swap screen.
+     */
+    t('a curated mint resolves', findAsset(aapl.mint)?.symbol === 'AAPLx');
+    t('an arbitrary mint does NOT resolve',
+      findAsset('GQfQ2avnmJBMttz2D5nyDkQAY9rWLHGvDVq8BMRpxWh4') === null);
+    t('garbage does not resolve', findAsset('not-an-address') === null && findAsset(null) === null);
+    t('isCuratedMint agrees with findAsset',
+      isCuratedMint(aapl.mint) && !isCuratedMint('GQfQ2avnmJBMttz2D5nyDkQAY9rWLHGvDVq8BMRpxWh4'));
+
+    /* ---- the depth gate ---- */
+    /*
+     * AAPLx really does have ~$80k of liquidity. A $5,000 order is 6.25% of
+     * the entire book and moves the price against the user by several times
+     * our own fee. Quoting it anyway is the behaviour of a venue that does not
+     * care what happens next.
+     */
+    const tooBig = liquidityVerdict(80_000, 5_000);
+    t('an order worth 6% of the book is refused', tooBig.ok === false && tooBig.reason === 'tooBig');
+    /*
+     * ...and it must name a size that WOULD work. A refusal with no number is
+     * a dead end; 2% of $80k is $1,600.
+     */
+    t('...and it names the largest workable size', tooBig.maxUsd === 1600);
+    t('a small order against the same book passes', liquidityVerdict(80_000, 500).ok === true);
+    /* A deep book must not be gated — otherwise the rule blocks everything. */
+    t('the same order against a deep book passes', liquidityVerdict(2_800_000, 5_000).ok === true);
+    /* Unknown liquidity fails CLOSED. */
+    t('unknown liquidity is refused, not assumed fine',
+      liquidityVerdict(null, 1000).ok === false && liquidityVerdict(0, 1000).ok === false);
+    t('the pool-share ceiling is a real fraction', MAX_POOL_SHARE > 0 && MAX_POOL_SHARE < 0.1);
+
+    /* The listing floor is a separate, stricter question from the trade gate. */
+    t('there is a minimum depth to be listed at all', MIN_EQUITY_LIQUIDITY >= 10_000);
+
+    /* ---- the live-yield join ---- */
+    /*
+     * Yields must be JOINED from the live feed, never hard-coded. The old Farm
+     * screen's "15-40%" ranges were wrong for months and nobody noticed; an
+     * asset with no matching pool must therefore show NOTHING rather than a
+     * stale number.
+     */
+    const jito = LST_ASSETS.find((a) => a.symbol === 'jitoSOL');
+    const feed = [
+      { project: 'jito-liquid-staking', symbol: 'JITOSOL', apy: 7.4, apyMean30d: 7.1, tvlUsd: 738_165_090 },
+      { project: 'marinade-liquid-staking', symbol: 'MSOL', apy: 6.4, apyMean30d: 5.7, tvlUsd: 175_467_838 }
+    ];
+    t('a staking token picks up its live yield', yieldForLst(jito, feed)?.apy === 7.4);
+    t('an absent pool yields null, never a guess', yieldForLst(jito, []) === null);
+    /*
+     * Matching on project alone would cross-contaminate: two pools from the
+     * same protocol with different symbols must not be confused.
+     */
+    t('the join requires the symbol to match too',
+      yieldForLst(jito, [{ project: 'jito-liquid-staking', symbol: 'SOMETHING-ELSE', apy: 99 }]) === null);
+    t('an asset with no llama mapping yields null', yieldForLst({ symbol: 'X' }, feed) === null);
+
+    /* ---- the staking projection ---- */
+    const stake = projectStake(7.4, 1000);
+    t('a staking rate becomes money', Math.abs(stake.year - 74) < 0.01);
+    /*
+     * APY is already compounded. Compounding it again overstates the return,
+     * and the error always flatters — which is exactly why it is asserted.
+     */
+    t('...without double-compounding', stake.year === 74);
+    t('a zero stake projects nothing', projectStake(7.4, 0) === null);
+    /*
+     * `Number(null)` is 0, not NaN, so a naive `Number.isFinite` guard accepts
+     * it and projects a confident "$0 a year" for a yield we simply do not
+     * know. Zero is a CLAIM about the rate; null is the absence of one. This
+     * test caught exactly that bug in the first version.
+     */
+    t('an unknown rate projects nothing, not zero', projectStake(null, 1000) === null);
+    t('...and neither does an empty string or a NaN',
+      projectStake('', 1000) === null && projectStake(undefined, 1000) === null && projectStake('abc', 1000) === null);
   }
 
   return rows;

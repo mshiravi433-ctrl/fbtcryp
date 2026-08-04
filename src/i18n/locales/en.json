@@ -808,7 +808,14 @@
     "unusual": {
       "above": "Today's rate is {{ratio}}× its 30-day average of {{mean}}%. Spikes like this usually come from a short incentive burst and are gone within days.",
       "below": "Today's rate is well below its 30-day average of {{mean}}%. Either activity has dropped or an incentive programme just ended."
-    }
+    },
+    "stakingTitle": "Staking — the simplest yield here",
+    "stakingIntro": "Swap into one of these and you are staking. There is no deposit to make, nothing to lock, and no impermanent loss — the token's value against SOL grows every few days, and swapping back out is how you stop. You keep it in your own wallet the whole time.",
+    "noIl": "No impermanent loss",
+    "mevBoost": "Includes MEV rewards",
+    "protocolFee": "{{pct}}% protocol fee",
+    "stakeNow": "Get {{sym}}",
+    "stakingNote": "Yields are variable and come from network rewards, so they move with validator performance and network activity. The protocol fee shown is already deducted from the rate above it. Swapping back to SOL is usually instant through the same screen, but the price you get depends on pool depth at that moment — this is not a savings account and there is no guaranteed exit price."
   },
   "signals": {
     "title": "AI Signals",
@@ -869,7 +876,7 @@
   },
   "stocks": {
     "title": "Stocks",
-    "subtitle": "Tokenized real-world assets.",
+    "subtitle": "Real shares and index funds, held 1:1 by a regulated custodian and traded as tokens.",
     "tab": {
       "rwa": "RWA tokens",
       "equity": "Tokenized equity"
@@ -879,8 +886,6 @@
     "rwaTokens": "RWA sector tokens",
     "rwaNote": "These are the tokens of protocols building tokenization infrastructure. They are not shares in those companies and they do not track equity prices.",
     "noTokens": "No RWA tokens in the current market data",
-    "honestTitle": "Why you can't buy Apple stock here",
-    "honestBody": "Our preference has always been to offer this globally rather than inside one local market. A token representing Apple stock is a security in every jurisdiction: issuing one requires a licensed issuer holding the real shares in custody, a prospectus, and a broker-dealer licence to distribute. That is an international legal build-out, not a software feature — so until that global structure is in place, instead of claiming something we do not have, we connect you directly to issuers who already hold those licences today.",
     "issuers": "Licensed issuers",
     "issuer": {
       "backed": {
@@ -900,7 +905,22 @@
       }
     },
     "kycNotice": "These issuers require identity verification and may not accept users from every country. Fanous Bazaar Pishgam has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
-    "riskNotice": "Tokenized assets carry both market risk and issuer risk — if the issuer fails or is shut down, the token may not be redeemable for the underlying asset. Verify who holds the collateral before buying."
+    "riskNotice": "Tokenized assets carry market risk, issuer risk and freeze risk together. If the issuer fails, is shut down, or decides not to serve you, the token may not be redeemable for the underlying asset. Never put in money you cannot afford to lose.",
+    "realTitle": "What these actually are",
+    "realBody": "Each token is backed one-for-one by a real share held with a regulated custodian in Switzerland, issued by Backed Finance under the Swiss DLT Act. They trade 24/7 with no broker and no bank account. The price follows the real share.",
+    "freezeTitle": "Read this before you buy",
+    "freezeBody": "The issuer can freeze these tokens. That is not a theoretical clause — it is a live authority written into the token itself, and issuers use it: Tether has frozen over $5 billion across roughly 10,000 wallets under the same kind of power. Backed does not offer xStocks in the United States, United Kingdom, Canada, Australia or the EU, and it can act against a wallet it decides it should not be serving. If that happens to you, the tokens stay in your wallet but stop moving, and we cannot reverse it. This is the fundamental difference between a tokenized share and a share held at a broker: you own the exposure, not the protection.",
+    "available": "Available to buy",
+    "ifIBuy": "If I buy",
+    "kindIndex": "Index fund",
+    "kindSingle": "Single company",
+    "depth": "Market depth",
+    "buyWith": "Buy {{sym}}",
+    "tooBig": "That order is {{pct}}% of this market's entire depth — you would move the price against yourself by far more than any fee. The largest sensible size here is about {{max}}.",
+    "unavailable": "Live prices could not be loaded. We are deliberately not showing saved figures instead: a stale equity price can be a whole weekend old, and a cached row would not have been re-checked against the issuer.",
+    "noneTradeable": "No tokenized equity currently has enough on-chain depth to trade safely.",
+    "verifyNote": "Every token here is checked against Backed Finance's own issuing key each time this screen loads, and only the exact verified mint addresses are ever offered. This matters more than it sounds: searching for \"AAPLx\" on Solana returns seven different tokens, six of which are imitations with the same name and logo. If a token ever fails that check it disappears from this list rather than being shown with a warning.",
+    "notShares": "These are not shares. You are not on the company's shareholder register, you have no voting rights, and your claim is against the issuer rather than the company. Dividends, where they apply, are handled by the issuer. Fanous Bazaar Pishgam does not issue, hold or custody any of this — you buy directly from your own wallet, and our only earning is the standard {{fee}}% swap fee."
   },
   "help": {
     "title": "Help & support",

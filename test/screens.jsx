@@ -36,6 +36,7 @@ import Rewards from '../src/pages/Rewards.jsx';
 import Signals from '../src/pages/Signals.jsx';
 import Farm from '../src/pages/Farm.jsx';
 import CoinDetail from '../src/pages/CoinDetail.jsx';
+import Stocks from '../src/pages/Stocks.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -162,6 +163,14 @@ export async function run(container) {
    */
   await mount('Farm (no network)', <Farm />);
   await mount('CoinDetail (no id)', <CoinDetail />);
+  /*
+   * Stocks under a dead network. It deliberately has no cached fallback (a
+   * stale equity price can be a whole weekend old, and a cached row would not
+   * have been re-checked against the issuer), so with every host black-holed
+   * it must render its "prices unavailable" notice rather than throw on
+   * `assets.equities` of undefined.
+   */
+  await mount('Stocks (no network)', <Stocks />);
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the

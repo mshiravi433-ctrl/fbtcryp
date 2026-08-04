@@ -1,5 +1,102 @@
 # Changelog
 
+## 1.20.0 — versionCode 48
+
+### Tokenized equities and liquid staking
+
+Two new ways to earn, both routed through the existing Solana swap so nothing
+new touches custody.
+
+**Liquid staking.** Swapping into jitoSOL or mSOL *is* staking — no deposit, no
+lock-up, no impermanent loss. The token's rate against SOL grows every epoch and
+swapping back out is how you stop. It is the only real yield this app can offer
+without holding anyone's funds, and unlike the pool rows below it the user stays
+inside the app instead of being sent to DefiLlama and lost.
+
+Yields are **joined live** from the DefiLlama feed the Farm screen already
+fetches, matched on both project and symbol. Hard-coding `apy: 7.5` would be
+wrong within a week and nobody would notice — exactly the bug the old
+"15–40%" ranges had. An asset with no matching pool shows no yield at all
+rather than a stale one.
+
+**Tokenized equities.** SPYx, QQQx, NVDAx, TSLAx, AAPLx and MSFTx — real shares
+held 1:1 by a regulated Swiss custodian, issued by Backed Finance. Verified with
+a live quote before any of this was built: `USDC → AAPLx` returns
+`platformFee { feeBps: 70 }`.
+
+This also corrects a false claim. The screen previously said "why you can't buy
+Apple stock here" and linked out to three issuers. That stopped being true and
+the copy is gone — a screen contradicting its own capability is the same class
+of error as the old "9 Chains" claim.
+
+#### The safety work, which is most of this release
+
+Searching Jupiter for `AAPLx` returns **seven tokens**. One is real. The others
+are pump.fun clones with the same name, the same symbol, and in two cases the
+same logo scraped from Google:
+
+| | mint | liquidity |
+|---|---|---|
+| real | `XsbEhLAtcf6…RLJzJp` | $79,912 |
+| clone | `GQfQ2avnmJB…pxWh4` | $3.44 |
+| clone | `2qAq8FC9B2y…pnnKA` | $0 |
+
+There is no ranking that fixes this — the fakes copy whatever signal you rank
+on. So:
+
+- **A hard-coded mint list, never a search.** Every address verified against
+  the live API before commit. This caught one of my own errors: the QQQx mint I
+  first wrote shared a 20-character prefix with the real one and resolved to
+  nothing.
+- **Issuer verification on every fetch.** The server re-checks each mint's
+  authority against Backed's own key. A clone cannot pass this because passing
+  it requires the issuer's private key. Fails **closed** — a mismatch removes
+  the row rather than showing it with a warning.
+- **Handoffs carry the mint, never the symbol**, and `?to=` only accepts
+  curated mints. Otherwise sharing a `?to=<scam mint>` link would be a one-tap
+  phishing vector.
+- **A depth gate.** SPYx has $2.8m of liquidity; AAPLx has $80k. A $2,000 order
+  is nothing against one and 2.5% of the entire book on the other — thirty-five
+  times the price impact, invisible from a $309 share price. Orders above 2% of
+  pool depth are refused, and the message names the largest size that would
+  work.
+
+**The freeze warning renders above the buy list, not below it.** The issuer
+holds a live freeze authority over these tokens, and issuers use it — Tether has
+frozen over $5bn across ~10,000 wallets under the same kind of power. A risk
+notice placed below the thing it warns about is the pattern that produced the
+APKPure rejection.
+
+### Correcting something I got wrong last session
+
+I said the Solana fee was one config change away because Jupiter had dropped the
+referral requirement. **That was wrong.** I had tested `/swap/v1/quote` and
+generalised to `/swap/v2/order`, which this app actually uses. The current docs
+for that endpoint are explicit:
+
+> "Use the Jupiter Referral Program to earn fees on `/order` swaps. This
+> requires setting up referral accounts before you can collect fees."
+
+The existing `referralAccount` + `referralFee` parameters in `src/lib/solana.js`
+are correct, and the trap documented at the top of that file is real: without an
+initialised `referralTokenAccount` the swap succeeds and our fee is silently
+zero. Fixing it needs on-chain setup with the owner's own key — it cannot be
+done from here.
+
+### A bug the new tests caught
+
+`projectStake(null, 1000)` returned `{ year: 0 }` instead of `null`, because
+`Number(null)` is `0` rather than `NaN` and slipped straight past
+`Number.isFinite`. An unknown yield would have projected a confident "$0 a
+year". Zero is a claim about the rate; null is the absence of one.
+
+### Tests
+
+1247 checks, up from 1194. Every new check verified by sabotage — eight
+deliberate breakages of the safety layer, all caught. The clone fixtures are
+copied verbatim from the live API rather than invented, because an invented fake
+is fake in whatever way happens to make the test pass.
+
 ## 1.19.0 — versionCode 47
 
 ### The arcade is gone from every build

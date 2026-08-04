@@ -11,6 +11,7 @@ import { useWallet } from '../context/WalletContext';
 import { IconExternal, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { RISK_BANDS, getYields, pairTokens, projectEarnings, rateIsUnusual, realShare } from '../lib/yields';
+import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
 
 /**
  * FARM — live yields, filtered for safety.
@@ -181,6 +182,15 @@ export default function Farm() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  /*
+   * Liquid staking tokens, fetched alongside the pool list.
+   *
+   * A failure here must NOT take out the pools below — they are independent
+   * features that happen to share a screen, and one dead upstream should cost
+   * one section, not the page. Hence the separate state and the swallowed
+   * rejection.
+   */
+  const [lst, setLst] = useState([]);
   const [risk, setRisk] = useState('all');
   const [amount, setAmount] = useState(AMOUNTS[1]);
   const [showIl, setShowIl] = useState(false);
@@ -192,6 +202,18 @@ export default function Farm() {
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(e))
       .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    getSolanaAssets()
+      .then((d) => alive && setLst(d.lst ?? []))
+      .catch(() => {
+        /* Section simply does not render. See the note on the state above. */
+      });
     return () => {
       alive = false;
     };
@@ -217,6 +239,19 @@ export default function Farm() {
     const all = data?.pools ?? [];
     return risk === 'all' ? all : all.filter((p) => p.risk === risk);
   }, [data, risk]);
+
+  /*
+   * Join the live APY from the DefiLlama feed onto each staking token.
+   *
+   * Deliberately a join and not a constant. Writing `apy: 7.5` into the asset
+   * list would be wrong within a week and nobody would notice — which is
+   * precisely the bug the old hard-coded "15-40%" ranges had. A token with no
+   * matching pool shows no yield rather than a stale one.
+   */
+  const stakingRows = useMemo(
+    () => lst.map((a) => ({ asset: a, live: yieldForLst(a, data?.pools ?? []) })),
+    [lst, data]
+  );
 
   return (
     <PageTransition>
@@ -265,6 +300,89 @@ export default function Farm() {
           </p>
         </motion.div>
       </motion.button>
+
+      {/*
+        ─── LIQUID STAKING ────────────────────────────────────────────────
+        Placed ABOVE the pool list on purpose. This is the only yield on this
+        screen a beginner can take without meeting impermanent loss, and the
+        only one that stays inside the app — the pool rows below all end in
+        "open this somewhere else".
+
+        Buying jitoSOL IS staking. No separate deposit, no lock-up, no new
+        contract to approve: the token's exchange rate against SOL grows every
+        epoch and swapping back out is how you unstake. That makes it the one
+        real yield product this app can offer without taking custody of
+        anything.
+      */}
+      {stakingRows.length > 0 && (
+        <section>
+          <p className="section-label">{t('farm.stakingTitle')}</p>
+          <p className="farm-filtered faint">{t('farm.stakingIntro')}</p>
+
+          <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+            {stakingRows.map(({ asset, live }) => {
+              const projection = live ? projectStake(live.apy, amount) : null;
+              return (
+                <motion.div key={asset.id} className="farm-pool" variants={riseIn}>
+                  <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+                    <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                      <div className="coin-logo">
+                        {asset.icon ? <img src={asset.icon} alt="" /> : asset.symbol.slice(0, 3)}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="farm-pool-sym">{asset.symbol}</div>
+                        <div className="set-row-sub">{asset.name}</div>
+                      </div>
+                    </div>
+                    {/* No yield shown at all when the feed has no match — a
+                        missing number beats a stale one. */}
+                    {live && (
+                      <div style={{ textAlign: 'end', flexShrink: 0 }}>
+                        <div className="farm-apy mono">{live.apy}%</div>
+                        <div className="faint" style={{ fontSize: 10.5 }}>{t('farm.apy')}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    <span className="pill pill-neutral">{t('farm.noIl')}</span>
+                    {asset.capturesMev && <span className="pill pill-rgb">{t('farm.mevBoost')}</span>}
+                    {asset.protocolFeePct != null && (
+                      <span className="pill pill-neutral">
+                        {t('farm.protocolFee', { pct: asset.protocolFeePct })}
+                      </span>
+                    )}
+                  </div>
+
+                  {projection && (
+                    <div className="farm-calc">
+                      <span className="faint">{t('farm.wouldEarn', { amount: fmtUsd(amount) })}</span>
+                      <span className="mono farm-calc-num">
+                        {fmtUsd(projection.year)}<span className="faint">/{t('farm.year')}</span>
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="farm-actions">
+                    <button
+                      className="btn btn-ghost farm-btn"
+                      onClick={() => {
+                        haptic?.('select');
+                        navigate(`/solana?to=${encodeURIComponent(asset.mint)}`);
+                      }}
+                    >
+                      <IconSwap width={15} height={15} />
+                      {t('farm.stakeNow', { sym: asset.symbol })}
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+
+          <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.stakingNote')}</p>
+        </section>
+      )}
 
       {/* ---------- pools ---------- */}
       <section>

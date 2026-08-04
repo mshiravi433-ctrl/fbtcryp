@@ -26,6 +26,7 @@ import {
 import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
+import { fetchSolanaAssets } from './solanaAssets.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -359,6 +360,23 @@ app.get('/api/dex/:network', (req, res) =>
  * how it stays free.
  */
 app.get('/api/yields', (_req, res) => serve(res, 3_600_000)(fetchYields, 'yields'));
+
+/**
+ * LIVE DATA FOR THE CURATED SOLANA ASSETS — liquid staking + tokenized equities.
+ *
+ * The mint list is hard-coded (src/lib/solanaAssets.js) because searching for
+ * these by name is actively dangerous: querying Jupiter for "AAPLx" returns
+ * seven tokens, one real and six pump.fun clones carrying the same name, the
+ * same symbol and in two cases the same scraped logo. This route fetches BY
+ * MINT ADDRESS and re-checks the issuer authority on every refresh, so a stale
+ * or mistyped address makes a row disappear rather than offering a stranger's
+ * token under Apple's name.
+ *
+ * Five minutes rather than the hour used for /api/yields: these carry a live
+ * PRICE, and a quote screen showing an hour-old equity price would be
+ * misleading in a way an hour-old APY is not.
+ */
+app.get('/api/solana/assets', (_req, res) => serve(res, 300_000)(fetchSolanaAssets, 'solana-assets'));
 
 /* --------------------------------- Solana --------------------------------- */
 /*

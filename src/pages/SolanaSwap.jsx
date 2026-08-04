@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -31,6 +32,7 @@ import {
   solflareBrowseLink
 } from '../lib/solanaWallet';
 import { shortAddress, useWallet } from '../context/WalletContext';
+import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
 
 /**
  * SOLANA SWAP
@@ -53,7 +55,22 @@ import { shortAddress, useWallet } from '../context/WalletContext';
 const BASE_TOKENS = [
   { mint: SOL_MINT, symbol: 'SOL', name: 'Solana', decimals: 9 },
   { mint: USDC_MINT, symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-  { mint: USDT_MINT, symbol: 'USDT', name: 'Tether USD', decimals: 6 }
+  { mint: USDT_MINT, symbol: 'USDT', name: 'Tether USD', decimals: 6 },
+  /*
+   * The curated liquid-staking tokens and tokenized equities.
+   *
+   * These are spread in from lib/solanaAssets.js rather than retyped, because
+   * a second copy of a mint address is a second chance to transpose a base58
+   * character — and one of the six equity addresses WAS wrong on first write,
+   * caught only by querying the API. One list, verified once.
+   *
+   * They belong in the dropdown as well as on their own screens: someone who
+   * arrives here from Stocks with ?to= set should be able to see what they are
+   * swapping into, and someone who already knows what jitoSOL is should not
+   * have to go via another page to buy it.
+   */
+  ...LST_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
+  ...EQUITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals }))
 ];
 
 const DEBOUNCE_MS = 450;
@@ -82,6 +99,36 @@ export default function SolanaSwap() {
   const [fromToken, setFromToken] = useState(BASE_TOKENS[0]);
   const [toToken, setToToken] = useState(BASE_TOKENS[1]);
   const [amount, setAmount] = useState('');
+
+  /*
+   * ?to=<mint> handoff from the Stocks and Farm screens.
+   *
+   * The MINT travels, never the symbol. That is the whole safety property:
+   * a symbol like "AAPLx" is exactly what the six clone tokens copy, so
+   * resolving one here would reintroduce the impersonation risk that
+   * lib/solanaAssets.js exists to remove. An address is unambiguous.
+   *
+   * `findAsset` restricts this to the curated list, so a crafted link cannot
+   * use this route to preselect an arbitrary token — someone sharing a
+   * ?to=<scam mint> URL would otherwise have a one-tap phishing vector.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const to = searchParams.get('to');
+    if (!to) return;
+    const asset = findAsset(to);
+    if (asset) {
+      setToToken(BASE_TOKENS.find((tk) => tk.mint === asset.mint) ?? BASE_TOKENS[1]);
+      /* Buying an equity or an LST means paying with a stablecoin, not SOL. */
+      setFromToken(BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0]);
+    }
+    /* Consume the param either way, so a refresh does not re-apply it and
+       fight the user's own selection. `replace` keeps it out of history. */
+    const next = new URLSearchParams(searchParams);
+    next.delete('to');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [order, setOrder] = useState(null);
   const [quoting, setQuoting] = useState(false);
