@@ -43,3 +43,42 @@ export const GAMES_ENABLED =
   typeof __GAMES_ENABLED__ !== 'undefined'
     ? __GAMES_ENABLED__
     : import.meta.env?.VITE_ENABLE_GAMES === 'true';
+
+
+/**
+ * SPECULATION SCREENS — off by default, for the same reason the arcade is.
+ *
+ * ─── WHY THIS FLAG EXISTS ───────────────────────────────────────────────────
+ * APKPure rejected the app: "Not involve illegal sensitive words."
+ *
+ * That is the standard wording for a content filter, and the app was giving
+ * it plenty to find. It shipped a screen literally titled "Price prediction"
+ * whose subtitle was "Call the next candle — up or down" (that is a binary
+ * option, banned for retail traders in the UK and EU and illegal in Iran), a
+ * "Perpetuals" screen advertising leveraged futures, and an "Invest" screen
+ * offering "fixed-term yield plans".
+ *
+ * Every one of those is simulated and each carries an honest risk notice
+ * saying so. That does not help: a reviewer, and certainly an automated
+ * filter, reads the words on the screen. "Prediction", "leverage",
+ * "perpetual futures" and "yield plan" are exactly the vocabulary that a
+ * crypto content filter is built to catch, and the disclaimer three
+ * paragraphs down does not change the classification.
+ *
+ * ─── WHY REMOVE RATHER THAN RE-WORD ─────────────────────────────────────────
+ * Re-wording would be dishonest in the other direction: the screens really do
+ * simulate binary options and leveraged futures, so any name that got them
+ * past a filter would be a name that misdescribes them.
+ *
+ * They also earn nothing. Every one runs on virtual credits, so they cannot
+ * produce a single unit of revenue — while being the specific reason the app
+ * cannot be distributed. That is a bad trade in every direction.
+ *
+ * OFF by default, exactly like GAMES_ENABLED, so a release build that forgets
+ * an env var fails SAFE. The routes and their chunks are removed entirely,
+ * not hidden — someone unzipping the APK finds no trace of them.
+ */
+export const SPECULATION_ENABLED =
+  typeof __SPECULATION_ENABLED__ !== 'undefined'
+    ? __SPECULATION_ENABLED__
+    : import.meta.env?.VITE_ENABLE_SPECULATION === 'true';

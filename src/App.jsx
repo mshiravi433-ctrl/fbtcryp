@@ -15,7 +15,7 @@ import Guide from './pages/Guide';
 import Splash from './pages/Splash';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
-import { GAMES_ENABLED } from './lib/features';
+import { GAMES_ENABLED, SPECULATION_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
 import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
@@ -26,19 +26,28 @@ const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Trade = lazy(() => import('./pages/Trade'));
 const Swap = lazy(() => import('./pages/Swap'));
-const Invest = lazy(() => import('./pages/Invest'));
+/*
+ * Prediction, perpetuals and invest are gated behind SPECULATION_ENABLED and
+ * default to OFF — see the long note in lib/features.js. Short version:
+ * APKPure rejected the app for "illegal sensitive words", these three screens
+ * are the vocabulary a crypto filter is built to catch ("prediction",
+ * "leverage", "yield plan"), and every one of them runs on virtual credits so
+ * they earn nothing. Gating on a build-time literal is what lets Rollup prove
+ * the import is unreachable and emit no chunk at all.
+ */
+const Invest = SPECULATION_ENABLED ? lazy(() => import('./pages/Invest')) : () => null;
 // Conditional so the chunk isn't emitted at all in a store-safe build —
 // an unreachable route still leaves the code inside the APK for a reviewer
 // (or anyone) to find by unzipping it.
 const Play = GAMES_ENABLED ? lazy(() => import('./pages/Play')) : () => null;
-const Predict = lazy(() => import('./pages/Predict'));
+const Predict = SPECULATION_ENABLED ? lazy(() => import('./pages/Predict')) : () => null;
 const Earn = lazy(() => import('./pages/Earn'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const Settings = lazy(() => import('./pages/Settings'));
 const About = lazy(() => import('./pages/About'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Legal = lazy(() => import('./pages/Legal'));
-const Perp = lazy(() => import('./pages/Perp'));
+const Perp = SPECULATION_ENABLED ? lazy(() => import('./pages/Perp')) : () => null;
 const Farm = lazy(() => import('./pages/Farm'));
 const Signals = lazy(() => import('./pages/Signals'));
 const Stocks = lazy(() => import('./pages/Stocks'));
@@ -139,16 +148,16 @@ function AnimatedRoutes() {
           <Route path="/coin/:id" element={<CoinDetail />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/swap" element={<Swap />} />
-          <Route path="/invest" element={<Invest />} />
+          {SPECULATION_ENABLED && <Route path="/invest" element={<Invest />} />}
           {GAMES_ENABLED && <Route path="/play" element={<Play />} />}
-          <Route path="/predict" element={<Predict />} />
+          {SPECULATION_ENABLED && <Route path="/predict" element={<Predict />} />}
           <Route path="/earn" element={<Earn />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/legal/:doc" element={<Legal />} />
-          <Route path="/perp" element={<Perp />} />
+          {SPECULATION_ENABLED && <Route path="/perp" element={<Perp />} />}
           <Route path="/farm" element={<Farm />} />
           <Route path="/signals" element={<Signals />} />
           <Route path="/stocks" element={<Stocks />} />

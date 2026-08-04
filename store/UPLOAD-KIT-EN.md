@@ -111,10 +111,10 @@ Never tick an age band below 18 for a finance app.
 > offline operation.
 
 ```
-FBT Swap is a non-custodial crypto exchange for Android. You connect a wallet
-you already own, you swap, and your assets never leave your control. There is
-no account, no email, no identity check, and no company wallet holding your
-money.
+FBT Swap is a non-custodial wallet interface for Android. You connect a wallet
+you already own, you exchange one token for another through public smart
+contracts, and your assets never leave your control. There is no account, no
+email, no identity check, and no company wallet holding your money.
 
 WHAT IT DOES
 
@@ -131,6 +131,8 @@ WHAT IT DOES
 • Live market data: prices, 24-hour change, charts and coin detail pages.
 • Technical indicators (RSI, MACD, Bollinger Bands, moving averages,
   volatility) computed on your device from public price data.
+• Chart history: how often a price level has held, the largest fall in the
+  period, and how today's volume compares with normal.
 • Crypto news, refreshed daily from public feeds.
 • A step-by-step guide written for people who have never used a wallet.
 • 12 languages including Persian, Arabic and Urdu, with full right-to-left
@@ -139,11 +141,14 @@ WHAT IT DOES
 
 HOW THE SWAP WORKS
 
-FBT Swap does not run an order book and holds no liquidity. It asks a public
-aggregator for the best route across the decentralised exchanges on the
-network you chose, shows you the quote, the price impact and the fee, then
-hands the transaction to your wallet. You are the one who signs it. The swap
-settles on-chain, directly between your wallet and the protocol.
+FBT Swap does not run an order book and holds no liquidity of its own. It
+compares routes from public aggregators across the decentralised protocols on
+the network you chose, shows you the quote, the price impact and the fee, then
+hands the transaction to your wallet. You are the one who signs it. The
+exchange settles on-chain, directly between your wallet and the protocol.
+
+There is no leverage, no derivatives, no prediction market and no game of
+chance anywhere in this app.
 
 FEES, STATED PLAINLY
 
@@ -172,9 +177,9 @@ RISK
 
 Crypto assets are volatile and on-chain transactions are irreversible. You can
 lose money, including all of it. Nothing in this app is financial advice, and
-the indicator readouts are arithmetic on past prices, not a prediction. Trade
-only what you can afford to lose, and check the rules that apply where you
-live.
+the indicator readouts are arithmetic on past prices — they describe what has
+already happened and forecast nothing. Use only what you can afford to lose,
+and check the rules that apply where you live.
 
 Built by Fanous Bazaar Pishgam, Isfahan, Iran.
 ```
@@ -224,6 +229,37 @@ is a rejection reason on both APKPure ("low-quality images") and Uptodown.
    5. **Settings** — with language and theme visible.
 4. Upload them **raw**. A normal 1080×2400 phone screenshot is already valid.
    No frames, no crops, no marketing text overlaid.
+
+---
+
+## 5b. ⚠️ If a store rejects you for "sensitive words"
+
+APKPure rejected `ir.fbt.swap` once with *"Not involve illegal sensitive
+words."* That is the standard wording for an automated content filter, and the
+app was giving it plenty to find:
+
+| What it saw | Where |
+|---|---|
+| "Price prediction" · "Call the next candle — up or down" | a whole screen — that is a **binary option** |
+| "Perpetuals" · "Leveraged futures" · leverage up to 100x | a whole screen |
+| "Invest" · "fixed-term yield plans" | a whole screen |
+| "gambling-style games", "house edge" | arcade copy |
+
+Every one was simulated and carried an honest risk notice. **That does not
+help.** A filter reads the words on the screen, not the disclaimer three
+paragraphs below them.
+
+**Fixed in v1.16.0.** Those screens are now compiled out of release builds,
+and — this is the part that is easy to get wrong — their *text* is stripped
+from every locale bundle too. Removing a route does not remove the strings: the
+locale JSON is a static import, so the words stay in the JavaScript unless they
+are stripped at build time. Verified on the built output across all twelve
+languages.
+
+**When you resubmit:** use the description in section 3 as written. It says
+"wallet interface", not "exchange", and it states plainly that there is no
+leverage, no derivatives, no prediction market and no game of chance. All of
+that is now true of the artifact you are uploading.
 
 ---
 

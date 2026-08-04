@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
-import { GAMES_ENABLED } from '../lib/features';
+import { GAMES_ENABLED, SPECULATION_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
 import {
   IconActivity,
@@ -69,9 +69,19 @@ const GROUPS = [
     id: 'markets',
     items: [
       { to: '/', key: 'nav.market', Icon: IconMarket, hue: 'var(--rgb-1)' },
-      { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
+      /*
+        Perp and Predict only exist when SPECULATION_ENABLED is set at build
+        time; their routes are absent otherwise, so leaving the links here
+        would send a tap to the catch-all — a menu item that appears to do
+        nothing. See lib/features.js for why they are off by default.
+      */
+      ...(SPECULATION_ENABLED
+        ? [
+            { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
+            { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' }
+          ]
+        : []),
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
-      { to: '/predict', key: 'nav.predict', Icon: IconActivity, hue: 'var(--rgb-8)' },
       { to: '/buy', key: 'nav.buy', Icon: IconSwap, hue: 'var(--rgb-4)' },
       { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' },
       // Solana lives on its own screen, not as a tab inside Swap: it uses a
@@ -86,7 +96,9 @@ const GROUPS = [
       ...(GAMES_ENABLED ? [{ to: '/play', key: 'nav.play', Icon: IconActivity, hue: 'var(--rgb-2)' }] : []),
       { to: '/earn', key: 'nav.earn', Icon: IconGlobe, hue: 'var(--rgb-7)' },
       { to: '/leaderboard', key: 'nav.leaderboard', Icon: IconTrophy, hue: 'var(--rgb-5)' },
-      { to: '/invest', key: 'nav.invest', Icon: IconTrend, hue: 'var(--rgb-6)' }
+      ...(SPECULATION_ENABLED
+        ? [{ to: '/invest', key: 'nav.invest', Icon: IconTrend, hue: 'var(--rgb-6)' }]
+        : [])
     ]
   },
   {
@@ -95,7 +107,13 @@ const GROUPS = [
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore', key: 'nav.explore', Icon: IconSearch, hue: 'var(--rgb-4)' },
       { to: '/discover', key: 'nav.discover', Icon: IconGlobe, hue: 'var(--rgb-2)' },
-      { to: '/orders', key: 'nav.orders', Icon: IconClock, hue: 'var(--rgb-1)' },
+      /*
+        Auto Orders is NOT listed here: it is the raised centre button in the
+        bottom nav, which is the most prominent control on the screen. A menu
+        entry for it would be the same destination reachable two ways, and a
+        "More" list is worth reading only in proportion to how little of it
+        duplicates what is already on screen.
+      */
       { to: '/nft', key: 'nav.nft', Icon: IconSparkle, hue: 'var(--rgb-3)' },
       { to: '/help', key: 'nav.help', Icon: IconInfo, hue: 'var(--rgb-9)' },
       { to: '/docs', key: 'nav.docs', Icon: IconDoc, hue: 'var(--rgb-1)' },

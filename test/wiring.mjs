@@ -351,6 +351,14 @@ export default function run() {
      */
     const intentionallyUnset = new Set([
       'VITE_ENABLE_GAMES',
+      /*
+       * Must stay UNSET, exactly like the arcade flag. Prediction, perpetuals
+       * and invest are what got the app rejected by APKPure for "illegal
+       * sensitive words"; setting this in CI would put them back in the store
+       * build. Fails safe: a release that forgets an env var ships WITHOUT
+       * them.
+       */
+      'VITE_ENABLE_SPECULATION',
       'VITE_GEMINI_API_KEY',
       'VITE_GEMINI_MODEL',
       'VITE_FEE_ROUTER_ADDRESS'

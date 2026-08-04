@@ -1,5 +1,74 @@
 # Changelog
 
+## 1.16.0 — versionCode 42
+
+### APKPure rejected us. Here is exactly why, and what changed
+
+> *"Not involve illegal sensitive words."*
+
+That is the standard wording for an automated content filter, and the app was
+giving it plenty to find:
+
+| What the filter saw | Where |
+|---|---|
+| "Price prediction" · "Call the next candle — up or down" | an entire screen — that is a **binary option** |
+| "Perpetuals" · "Leveraged futures" · 100x leverage | an entire screen |
+| "Invest" · "fixed-term yield plans" | an entire screen |
+| "gambling-style games" · "house edge" | arcade copy |
+
+Every one of those was simulated and carried an honest risk notice saying so.
+**That does not help.** A reviewer — and certainly an automated filter — reads
+the words on the screen, not the disclaimer three paragraphs below them.
+
+They were also earning **nothing**: every one runs on virtual credits, so they
+could not produce a single unit of revenue while being the specific reason the
+app could not be distributed. Bad trade in every direction.
+
+Prediction, perpetuals and invest are now behind `SPECULATION_ENABLED`, off by
+default, exactly like the arcade. A release build that forgets an env var fails
+**safe**.
+
+### Removing the screens was not enough
+
+This is the part that would have caused a second rejection.
+
+The routes were gated and **zero** Predict/Perp/Invest chunks were emitted —
+that part worked first time. But the **words were still in the bundle**,
+because locale files are *static imports*: Rollup inlines the whole JSON long
+before any runtime code could delete a key. I tried the runtime filter first
+and measured that it changed nothing.
+
+A content filter scans strings, not routes. The keys are now stripped from the
+JSON at **build** time, before bundling. Verified on the built output in all
+twelve languages — including one Persian quest string
+(«یک پیش‌بینی قیمت ثبت کن») that survived after everything else looked clean,
+and was only found by grepping the compiled bundle.
+
+A test now greps the built output for that vocabulary and fails the build if
+any of it returns. Disabling the stripper makes it report all ten terms.
+
+### The wallet, properly this time
+
+The last attempt kept it a `.card` with a wash behind it, and the verdict was
+that it still did not feel special. Correct — a card with a gradient behind it
+is still a card, and every other surface in the app is one too.
+
+Three changes, none of them "more colour":
+
+- **A different shape.** 28px corners and a darker base than any card, so the
+  eye reads it as a different *kind* of object.
+- **Light with a source.** A glow at the top-left *plus* a lit rim along the
+  top edge. That pairing is what makes a flat rectangle look like a physical
+  panel; the wash alone was just a coloured smudge.
+- **A horizon.** A hairline across the full width under the balance,
+  separating what you *have* from what you can *do*. One pixel, and it does
+  more for the structure than the gradient does.
+
+### Auto Orders removed from the More menu
+
+It is the raised centre button in the bottom nav. A menu entry for the same
+destination makes the list worth reading less.
+
 ## 1.15.1 — versionCode 41
 
 ### We were advertising a chain that does not exist

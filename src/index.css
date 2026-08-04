@@ -3553,76 +3553,106 @@ input, select, textarea { font-size: 16px !important; }
 /* ===========================================================================
    THE WALLET HERO  —  .wal-hero
 
-   Requested: a distinct, beautiful treatment «مثل wallet connect را ببین خیلی
-   قشنگه» — but without introducing bugs.
+   Requested twice: a distinct, memorable treatment «مثل wallet connect».
+   The first attempt kept it a `.card` with a blurred wash behind it, and the
+   verdict was that it still did not feel special. It didn't — a card with a
+   gradient behind it is still a card, and every other surface in the app is
+   one too.
 
-   ─── WHAT THAT LOOK ACTUALLY IS ───────────────────────────────────────────
-   Stripped of branding, the WalletConnect aesthetic is three things:
+   ─── WHAT MAKES A SURFACE FEEL LIKE ITS OWN THING ─────────────────────────
+   Three properties, none of them "more colour":
 
-     1. ONE tall surface instead of several stacked cards.
-     2. A soft coloured wash that sits BEHIND the content, not on it, so text
-        contrast never depends on where the gradient happens to be bright.
-     3. A single bright pair of actions and nothing else competing.
+     1. IT IS NOT SHAPED LIKE ITS NEIGHBOURS. Deeper corners and a darker
+        base than any card, so the eye reads it as a different KIND of
+        object rather than a more decorated example of the same one.
 
-   The reordering in the JSX does most of the work. This adds the depth.
+     2. THE LIGHT COMES FROM SOMEWHERE. A single soft source at the top-left
+        with a matching rim highlight along the top edge. That pairing —
+        glow plus lit edge — is what makes a flat rectangle look like a
+        physical panel; the wash alone just looked like a coloured smudge.
 
-   ─── WHY THE WASH IS A SEPARATE ELEMENT ───────────────────────────────────
-   `.wal-hero-aurora` is its own absolutely-positioned div rather than a
-   background on the card. Two reasons, both practical:
-
-     • A background-image on the card would sit under the card's own
-       translucent background and be muddied by it.
-     • Keeping it separate means `filter: blur()` applies ONLY to the wash.
-       Blurring the card itself would blur the text.
+     3. IT HAS A HORIZON. A hairline across the full width, under the
+        balance, separating "what you have" from "what you can do". It is
+        one pixel and it does more for the structure than the gradient does.
 
    ─── COST ─────────────────────────────────────────────────────────────────
-   The wash is two radial gradients on one element, painted once. It does not
-   animate — a permanently moving gradient behind a balance is the kind of
-   thing that looks impressive for a day and then makes the number hard to
-   read. `will-change` is deliberately NOT set: this layer never changes, so
-   promoting it would cost memory for nothing.
+   Two gradients and a border, painted once. No backdrop-filter — the panel
+   is opaque, so blurring what is behind it is work nobody can see. No
+   looping animation: the only motion is the 7px connection dot, because a
+   balance that shimmers is a balance that is hard to read.
    =========================================================================== */
 
 .wal-hero {
   position: relative;
   overflow: hidden;
-  /* Slightly deeper than a normal card so the hero reads as the primary
-     surface on the screen rather than the first of several equals. */
-  padding: 18px 16px 16px;
-  border-radius: var(--radius-lg);
+  padding: 20px 18px 16px;
+  /* Deeper than --radius-lg (22px). Being a different shape from every card
+     is what makes it read as a different kind of object. */
+  border-radius: 28px;
+  /* Darker than a card, so it sits UNDER the content rather than floating
+     with it — a panel the numbers rest on. */
+  background:
+    radial-gradient(120% 90% at 8% -10%, color-mix(in srgb, var(--rgb-2) 26%, transparent), transparent 60%),
+    radial-gradient(90% 70% at 92% 0%, color-mix(in srgb, var(--rgb-1) 18%, transparent), transparent 62%),
+    linear-gradient(170deg, #10131f, #08090f 58%);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 44px -26px rgba(0, 0, 0, 0.9);
 }
 
+:root[data-theme='light'] .wal-hero {
+  background:
+    radial-gradient(120% 90% at 8% -10%, color-mix(in srgb, var(--rgb-2) 14%, transparent), transparent 60%),
+    radial-gradient(90% 70% at 92% 0%, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 62%),
+    linear-gradient(170deg, #ffffff, #f4f6fc 60%);
+  box-shadow: 0 18px 40px -26px rgba(15, 23, 42, 0.35);
+}
+
+/*
+ * The lit top edge. Paired with the glow above, this is what turns a
+ * rectangle into a panel — light falling on a surface has to catch its
+ * nearest edge, and without this the gradient reads as a smudge behind glass.
+ */
+.wal-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--rgb-1) 55%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* Kept as an element so the blur applies only to the wash and never to the
+   text sitting above it. */
 .wal-hero-aurora {
   position: absolute;
-  /* Overhangs the card so the blur has room to fall off; without the
-     negative inset the gradient would be visibly cut at the rounded corner. */
-  inset: -40% -20% auto -20%;
-  height: 190px;
+  inset: -50% -25% auto -25%;
+  height: 200px;
   pointer-events: none;
-  background:
-    radial-gradient(60% 70% at 22% 30%, color-mix(in srgb, var(--rgb-1) 40%, transparent), transparent 70%),
-    radial-gradient(55% 65% at 82% 18%, color-mix(in srgb, var(--rgb-2) 42%, transparent), transparent 72%);
-  filter: blur(26px);
-  opacity: 0.65;
+  background: radial-gradient(60% 70% at 25% 35%, color-mix(in srgb, var(--rgb-1) 30%, transparent), transparent 70%);
+  filter: blur(34px);
+  opacity: 0.55;
 }
 
-:root[data-theme='light'] .wal-hero-aurora { opacity: 0.4; }
+:root[data-theme='light'] .wal-hero-aurora { opacity: 0.3; }
 
-/* Content must sit above the wash. Set once here rather than on each child. */
 .wal-hero > *:not(.wal-hero-aurora) { position: relative; z-index: 1; }
 
-/* The address chip. A bordered pill rather than bare text, so the address
-   reads as a discrete object you could copy rather than a stray string. */
+/* The address chip. A bordered pill, so the address reads as a discrete
+   object you could copy rather than a stray string. */
 .wal-chip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(127, 127, 127, 0.1);
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.06);
   font-size: 12.5px;
 }
+
+:root[data-theme='light'] .wal-chip { background: rgba(15, 23, 42, 0.05); }
 
 .wal-chip-dot {
   width: 7px;
@@ -3632,10 +3662,10 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 /*
- * A live wallet gets a slow pulse. This is the ONE looping animation on the
- * screen and it is 7px wide — it says "connected" at a glance, which is the
- * single piece of state a wallet screen must always convey. A locked wallet
- * does not pulse, so the absence is also information.
+ * A live wallet gets a slow pulse — the ONE looping animation here, and it is
+ * 7px wide. It says "connected" at a glance, which is the single piece of
+ * state a wallet screen must always convey. A locked wallet does not pulse,
+ * so the absence is information too.
  */
 .wal-chip-dot.is-live { animation: wal-pulse 2.4s ease-in-out infinite; }
 
@@ -3648,36 +3678,49 @@ input, select, textarea { font-size: 16px !important; }
   .wal-chip-dot.is-live { animation: none; }
 }
 
-.wal-hero-value { margin: 6px 0 2px; }
-
-/* The balance is the reason the screen exists, so it is the largest thing on
-   it. `tabular-nums` stops the digits jittering as the value refreshes —
-   without it a 3 becoming a 1 visibly shifts everything to its right. */
-.wal-hero-total {
-  font-size: clamp(28px, 8vw, 38px);
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+/*
+ * THE HORIZON. A hairline across the full panel width under the balance,
+ * separating what you HAVE from what you can DO. One pixel, and it does more
+ * for the structure than any amount of colour — without it the balance and
+ * the buttons read as one undifferentiated stack.
+ *
+ * Negative margins take it to the panel's edges, past its padding.
+ */
+.wal-hero-value {
+  margin: 10px -18px 2px;
+  padding: 0 18px 14px;
+  border-bottom: 1px solid var(--line);
 }
 
-/* The disconnected state. Same hero surface as the connected one, so the
-   page does not change shape on connect — a layout that jumps at the moment
-   someone commits their wallet is the worst possible time for it. */
+/* The reason the screen exists, so it is the largest thing on it.
+   `tabular-nums` stops the digits jittering sideways as the value refreshes —
+   without it a 3 becoming a 1 visibly shifts everything to its right. */
+.wal-hero-total {
+  font-size: clamp(30px, 8.5vw, 40px);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  margin-top: 2px;
+}
+
+/* The disconnected state. Same panel, so the page does not change shape at
+   the moment someone commits their wallet — the worst possible time for a
+   layout to jump. */
 .wal-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 10px 4px 2px;
+  padding: 12px 4px 4px;
 }
 
 .wal-empty-mark {
-  width: 54px;
-  height: 54px;
-  border-radius: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 19px;
   display: grid;
   place-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 13px;
   color: var(--rgb-1);
   background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, transparent);
@@ -3686,51 +3729,6 @@ input, select, textarea { font-size: 16px !important; }
 :root[data-theme='light'] .wal-empty-mark { color: var(--ink-cyan); }
 
 .wal-empty .btn { width: 100%; }
-
-/* Housekeeping controls: refresh, lock, disconnect. Deliberately quieter
-   than everything above them — they are not why anyone opened this screen,
-   and one of them is destructive. */
-.wal-utils {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.wal-util {
-  flex: 1;
-  min-height: 34px;
-  padding: 7px 8px;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  background: none;
-  color: var(--text-3);
-  font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.16s, background 0.16s;
-}
-
-.wal-util:active { background: rgba(127, 127, 127, 0.12); }
-
-@media (hover: hover) and (pointer: fine) {
-  .wal-util:hover { color: var(--text-1); background: rgba(127, 127, 127, 0.1); }
-}
-
-/* Destructive, so it is tinted — but not alarming. A red button on a wallet
-   screen makes people uneasy about the whole page, not just that control. */
-.wal-util-danger { color: color-mix(in srgb, var(--down) 78%, var(--text-3)); }
-
-@media (hover: hover) and (pointer: fine) {
-  .wal-util-danger:hover {
-    color: var(--down);
-    background: color-mix(in srgb, var(--down) 10%, transparent);
-  }
-}
 
 .wal-actions {
   display: grid;

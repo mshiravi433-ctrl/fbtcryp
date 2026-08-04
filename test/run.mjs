@@ -112,7 +112,7 @@ report('screen smoke (all 12 languages)', await runScreens(document.getElementBy
  */
 console.log('\n▸ verifying the default build excludes the arcade…');
 {
-  const { readdirSync, rmSync, existsSync } = await import('node:fs');
+  const { readdirSync, rmSync, existsSync, readFileSync } = await import('node:fs');
   const rows = [];
   const gameChunk = /^(Play|Crash|Dice|Mines|Wheel|CoinFlip)/i;
 
@@ -134,6 +134,47 @@ console.log('\n▸ verifying the default build excludes the arcade…');
   // Leave the tree in the store-safe state.
   rmSync('dist', { recursive: true, force: true });
   npx(['vite', 'build', '--logLevel', 'error']);
+
+  /*
+   * ─── THE VOCABULARY A CONTENT FILTER ACTUALLY SEES ────────────────────────
+   * APKPure rejected ir.fbt.swap with "Not involve illegal sensitive words."
+   *
+   * Removing the ROUTES was not enough, and finding that out the slow way is
+   * the reason this check exists. The speculation screens were gated and no
+   * Predict/Perp/Invest chunk was emitted — but the WORDS were still in the
+   * bundle, because the locale files are static imports and Rollup inlines
+   * the whole JSON. A runtime `delete` cannot touch them.
+   *
+   * A filter scans strings, not call graphs. So this greps the BUILT OUTPUT,
+   * in every language, for the vocabulary that gets a crypto app rejected.
+   * Checking the source would miss exactly the case that bit us.
+   */
+  {
+    const banned = [
+      // English
+      'Price prediction', 'Call the next candle', 'Perpetuals',
+      'Leveraged futures', 'fixed-term yield', 'gambling-style', 'house edge',
+      // Persian and Arabic equivalents — a filter reads these too, and the
+      // Persian chunk was the last one still dirty after everything else
+      // looked clean.
+      'پیش‌بینی قیمت', 'قمار', 'اهرم', 'المضاربة'
+    ];
+
+    const assetDir = 'dist/assets';
+    const files = existsSync(assetDir) ? readdirSync(assetDir) : [];
+    const text = files
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => readFileSync(`${assetDir}/${f}`, 'utf8'))
+      .join('\n');
+
+    const found = banned.filter((w) => text.includes(w));
+    rows.push([
+      `the store build ships none of the flagged vocabulary${found.length ? ` — found: ${found.join(', ')}` : ''}`,
+      found.length === 0
+    ]);
+    // If the bundle were empty this would pass vacuously.
+    rows.push(['there was actually a bundle to scan', text.length > 100000]);
+  }
 
   report('store-safe build', rows);
 }
