@@ -33,6 +33,8 @@ import { showLocalNotification } from '../lib/notify';
 import { IconChevronLeft, IconClock, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
+import { useChart } from '../hooks/useMarket';
+import HistoryPanel from '../components/HistoryPanel';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -556,6 +558,29 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
   const toToken = tokens.find((x) => x.symbol === toSym);
 
   /*
+   * ─── HISTORY FOR THE TOKEN BEING WATCHED ──────────────────────────────
+   * Requested: «سابقه روی این نمودار چی بوده و گذشته به ما چی میگه».
+   *
+   * This is the screen where that question is actually being asked. Someone
+   * typing a target price wants to know whether the market has been there
+   * before and what happened — and until now this form showed only the
+   * current rate, so a target was set against a single number with no
+   * context at all.
+   *
+   * Keyed to `priceOf`, so it follows whichever side of the pair the user
+   * chose to watch rather than always showing the FROM token. Ninety days
+   * because that is long enough for a level to have been tested more than
+   * once and short enough to still describe the current regime.
+   *
+   * `useChart` polls the shared cache the Market screen already fills, so on
+   * a device that has browsed coins this is usually free. It only runs while
+   * the sheet is open — `id` is null otherwise, and the hook resolves to an
+   * empty array without a request.
+   */
+  const watchedId = (priceOf === 'to' ? toToken : fromToken)?.coingeckoId ?? null;
+  const { data: watchedSeries } = useChart(kind ? watchedId : null, 90);
+
+  /*
    * The rate shown next to the input must be in the SAME unit the user is
    * typing, or the live number and the target number are not comparable and
    * the hint actively misleads.
@@ -671,6 +696,10 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
                 {t('orders.currentRate')} 1 {baseSym} = <span className="mono">{fmtQty(liveRate)}</span> {quoteSym}
               </p>
             )}
+
+            {/* What this price has done before. Renders nothing when the
+                token has too little history to say anything honest. */}
+            <HistoryPanel series={(watchedSeries ?? []).map((d) => d.p)} days={90} compact />
 
             <p className="faint" style={{ lineHeight: 1.7 }}>
               {t('orders.willSwap', { from: fromSym, to: toSym })}

@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.15.0 — versionCode 40
+
+### The history engine
+
+Requested: «سابقه روی این نمودار چی بوده و گذشته به ما چی میگه» — what has
+happened on this chart before, and what does the past tell us.
+
+The app already had `analyze()`: RSI, MACD, a moving average, one nearest
+support and resistance. Every one of those is a **snapshot**. None can answer
+*"has this level held before, and how often"* — which is the question a person
+actually asks before setting a limit order at a price.
+
+`lib/history.js` measures repeated behaviour across the whole series:
+
+- **Levels the market keeps returning to**, with a touch count. Bands are a
+  percentage of price, not a fixed amount — 1% of BTC and 1% of a sub-cent
+  token are wildly different numbers, and a fixed step would give one coin
+  three bands and another three thousand.
+- **How each level behaved**: `held 3 of 4 tests`, counted, never a
+  probability.
+- **Worst fall in the window** — the number people most under-estimate before
+  committing to a schedule of recurring buys.
+- **Volume against this coin's own normal**, using the **median**. One listing
+  pump can drag a mean so high that every later day looks quiet by comparison,
+  which is exactly backwards.
+- **A base rate**: "58 of 90 days were followed by a higher price 7 days
+  later". Withheld below 30 samples, because a percentage from a dozen
+  observations invites someone to treat noise as an edge.
+
+### Nothing in it predicts anything
+
+Every value is a count, a frequency or a distance measured from data that
+already happened. *"This level was tested 4 times and held 3"* is a fact.
+*"This level will hold"* is a forecast, and a forecast dressed as analysis is
+how someone loses money believing they were told something reliable.
+
+The `kind` field on each fact is `neutral | caution | notable` — for colour
+only. It deliberately has no bullish/bearish value: the moment the module
+emits "bullish", it has started forecasting. A test asserts that.
+
+There is no green and red on the panel for the same reason. Colouring "price
+held support 3 of 4 times" green would turn a measurement into a
+recommendation.
+
+### The one that mattered most
+
+A price that *sits* at a level for twenty bars is **one** event, not twenty
+tests. Counting each bar would turn a single sideways drift into a fabricated
+pattern. Verified by sabotage: removing that guard makes the test report
+`got 10` instead of `1`.
+
+Two other sabotages were checked — swapping the median for a mean, and showing
+a thin base rate — and both fail their tests.
+
+### Where it appears
+
+- **Coin detail**, between the metrics and the buy/sell buttons: the last
+  thing read before a decision. Uses the chart already on screen, so no extra
+  request, and follows whichever range is selected.
+- **Automatic orders**, inside the limit-order form. This is where the
+  question is really being asked — someone typing a target price was
+  previously shown only the current rate, with no context at all. It follows
+  whichever side of the pair they chose to watch.
+
+When a coin has too little history, the panel renders **nothing** rather than
+a spinner implying data that will never come, or filler.
+
 ## 1.14.3 — versionCode 39
 
 ### The drop looked stuck to the floor

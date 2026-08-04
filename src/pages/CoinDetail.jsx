@@ -10,6 +10,7 @@ import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
+import HistoryPanel from '../components/HistoryPanel';
 
 const RANGES = [
   { key: '1D', days: 1 },
@@ -203,6 +204,23 @@ export default function CoinDetail() {
         <Metric label={t('coin.change7d')} value={fmtPct(coin?.change7d ?? 0)} tone={(coin?.change7d ?? 0) >= 0 ? 'up' : 'down'} />
         <Metric label={t('coin.supply')} value={fmtNum(coin?.supply ?? 0)} />
         <Metric label={t('coin.fromAth')} value={fmtPct(coin?.athChange ?? 0)} tone="down" />
+      </motion.div>
+
+      {/*
+        ─── WHAT THE PAST SAYS ────────────────────────────────────────────
+        Placed BELOW the metrics and ABOVE the buy/sell buttons on purpose:
+        it is the last thing read before a decision, which is where a
+        drawdown figure or a "this level broke 3 of 4 times" belongs.
+
+        `series` is the chart data already on screen — no extra request, and
+        the panel follows whichever range the user picked.
+      */}
+      <motion.div variants={riseIn} initial="hidden" animate="show">
+        <HistoryPanel
+          series={(series ?? []).map((d) => d.p)}
+          days={range.days}
+          volume={coin?.volume}
+        />
       </motion.div>
 
       <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">

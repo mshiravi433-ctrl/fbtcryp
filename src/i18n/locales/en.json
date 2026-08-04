@@ -1955,5 +1955,18 @@
     "title": "Share",
     "copy": "Copy link",
     "via": "Share via"
+  },
+  "history": {
+    "title": "What the past says",
+    "subtitle": "Measured from the last {{days}} days of price. These are facts about what already happened — not predictions.",
+    "levelSupport": "{{price}} has acted as support {{touches}} times in {{days}} days. Price held above it on {{held}} of the last {{tested}} tests.",
+    "levelResistance": "{{price}} has capped {{touches}} rallies in {{days}} days. Price failed to break it on {{tested}} tests, holding below on {{held}}.",
+    "rangePosition": "Trading at {{pct}}% of its {{days}}-day range (low {{low}}, high {{high}}).",
+    "maxDrawdown": "The worst fall in this window was {{pct}}%. A recurring buy would have sat through it.",
+    "volumeHigh": "Volume today is {{times}}× its recent normal.",
+    "volumeLow": "Volume today is well below normal — moves on thin volume reverse more often.",
+    "baseRate": "Over this window, {{up}} of {{samples}} days were followed by a higher price 7 days later ({{pct}}%). A description of the sample, not a forecast.",
+    "thin": "Not enough history yet to say anything useful about this chart.",
+    "notAdvice": "History is not a forecast. A level that held four times can break on the fifth."
   }
 }

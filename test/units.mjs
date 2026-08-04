@@ -25,6 +25,15 @@ import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/ch
 import { comparable, improvementBps, isUsableQuote, pickBestQuote } from '../src/lib/bestQuote.js';
 import { bpsToPercent, openOceanSupports } from '../src/lib/openocean.js';
 import {
+  baseRate,
+  findLevels,
+  historyFacts,
+  levelRecord,
+  maxDrawdown,
+  rangePosition,
+  relativeToNormal
+} from '../src/lib/history.js';
+import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
   executeSucceeded,
@@ -1753,6 +1762,126 @@ export default function run() {
     t('BNB Chain is supported', openOceanSupports(56));
     t('Ethereum is supported', openOceanSupports(1));
     t('an unknown chain is not', !openOceanSupports(999999));
+  }
+
+  /* ---------------------- what the past actually says -------------------- */
+  /*
+   * The history engine answers «گذشته به ما چی میگه» with MEASUREMENTS, never
+   * forecasts. Every number it returns describes data that already happened.
+   *
+   * That distinction is the whole point, and it is what these tests protect:
+   * a module that quietly starts emitting a probability, or that inflates one
+   * sideways drift into "twenty tests", turns an honest tool into a machine
+   * for manufacturing false confidence about money.
+   */
+  {
+    /* ---- levels the market returns to ---- */
+    // Touches 100 three times, bouncing away each time.
+    const triple = [
+      80, 85, 90, 95, 100, 99, 96, 92, 88, 90, 94, 98, 100, 99, 95,
+      90, 86, 88, 92, 96, 100, 98, 94, 90, 87, 89, 93, 97
+    ];
+    const lv = findLevels(triple);
+    t('a repeatedly-touched price is found as one level', lv.length === 1);
+    t('...at the right price', Math.abs(lv[0].price - 100) < 0.5);
+    t('...with every touch counted', lv[0].touches === 3);
+    t('...and classified by what it acted as', lv[0].kind === 'resistance');
+
+    /*
+     * Bands are a PERCENTAGE of price, not a fixed amount. A fixed step would
+     * give BTC three bands and a sub-cent token three thousand.
+     */
+    const cheap = triple.map((p) => p / 100000);
+    t('the same shape is found on a sub-cent token', findLevels(cheap).length === 1);
+
+    // A single wiggle is not a level.
+    t('one touch is not a level', findLevels([1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5]).length === 0);
+
+    /* ---- how a level behaved ---- */
+    /*
+     * THE ONE THAT MATTERS MOST. A price that sits AT a level for twenty bars
+     * is one event, not twenty tests. Counting each bar would turn a single
+     * drift into a fabricated pattern — the exact dishonesty this module
+     * exists to avoid.
+     */
+    const flat = [120, 110, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 110, 120, 130];
+    const flatRec = levelRecord(flat, { price: 100, kind: 'support' });
+    t(`sitting at a level counts as ONE test (got ${flatRec.tested})`, flatRec.tested === 1);
+
+    // Two bounces then a break.
+    const mixed = [130, 120, 101, 115, 125, 130, 120, 100, 118, 128, 130, 118, 100, 95, 88, 80, 75];
+    const rec = levelRecord(mixed, { price: 100, kind: 'support' });
+    t(`held is counted (${rec.held} of ${rec.tested})`, rec.tested === 3 && rec.held === 2);
+    t('breaks are the remainder', rec.broke === 1);
+
+    /*
+     * With no bars after the touch there is no outcome to judge. Guessing one
+     * would invent history.
+     */
+    t('an unjudgeable touch is not counted', levelRecord([130, 120, 100], { price: 100, kind: 'support' }).tested === 0);
+
+    /* ---- drawdown ---- */
+    t('the worst fall is measured peak to trough', Math.abs(maxDrawdown([100, 110, 120, 60, 80]) - 50) < 0.01);
+    /* The peak must not reset on a later high — the worst fall is the worst
+       fall in the whole window, not the most recent one. */
+    t('a later rally does not erase an earlier crash',
+      Math.abs(maxDrawdown([100, 200, 100, 150, 300]) - 50) < 0.01);
+    t('a monotonic rise has no drawdown', maxDrawdown([1, 2, 3, 4, 5]) === 0);
+
+    /* ---- relative to this coin's own normal ---- */
+    /*
+     * MEDIAN, not mean. One listing pump can drag a mean so high that every
+     * later day looks quiet by comparison, which is exactly backwards.
+     */
+    const spiky = [100, 100, 100, 100, 100, 100, 100, 10000];
+    const rel = relativeToNormal(200, spiky);
+    t('a single spike does not poison the baseline', rel.median === 100 && rel.ratio === 2);
+    t('a normal day is not flagged as unusual', relativeToNormal(105, [100, 100, 100, 100, 100, 100]).unusual === false);
+    t('a quiet day is flagged too', relativeToNormal(20, [100, 100, 100, 100, 100, 100]).unusual === true);
+    t('too little history yields nothing', relativeToNormal(100, [100, 100]) === null);
+
+    /* ---- base rate ---- */
+    const rising = Array.from({ length: 60 }, (_, i) => 100 + i);
+    const br = baseRate(rising, 7);
+    t('a monotonic rise is 100% of the sample', br.pct === 100);
+    t('the sample size is reported, not just the percentage', br.samples === 53);
+    t('too short a series yields no base rate', baseRate([1, 2, 3], 7) === null);
+
+    /* ---- range position ---- */
+    const rp = rangePosition([50, 100, 75]);
+    t('the range position is measured', Math.abs(rp.pct - 50) < 0.01);
+    t('a flat line has no range', rangePosition([5, 5, 5]) === null);
+
+    /* ---- the summary ---- */
+    const facts = historyFacts(triple, { days: 90 });
+    t('facts are produced from a real series', facts.length > 0);
+    /*
+     * Facts must be KEYS plus numbers, never finished sentences — a module
+     * that formats its own strings cannot be translated, and this app ships
+     * in twelve languages.
+     */
+    t('every fact is a translation key with values',
+      facts.every((f) => typeof f.id === 'string' && f.values && typeof f.values === 'object'));
+    /*
+     * `kind` is for colour only. If it ever gains a 'bullish' or 'sell'
+     * value, this module has started forecasting.
+     */
+    t('no fact carries a buy or sell verdict',
+      facts.every((f) => ['neutral', 'caution', 'notable'].includes(f.kind)));
+
+    /*
+     * A base rate from a dozen observations invites someone to treat noise as
+     * an edge, so it is withheld below 30 samples.
+     */
+    const shortSeries = Array.from({ length: 25 }, (_, i) => 100 + (i % 3));
+    t('a thin base rate is withheld rather than shown',
+      !historyFacts(shortSeries, { days: 25 }).some((f) => f.id === 'baseRate'));
+
+    /* ---- it must never throw ---- */
+    for (const bad of [null, undefined, [], [NaN, NaN], ['a', 'b'], [0, 0, 0], [-1, -2]]) {
+      t(`garbage input yields no facts, not a crash (${JSON.stringify(bad)})`,
+        Array.isArray(historyFacts(bad)) && historyFacts(bad).length === 0);
+    }
   }
 
   return rows;

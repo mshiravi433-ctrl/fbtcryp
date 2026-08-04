@@ -5011,3 +5011,68 @@ canvas {
    Where `clip` is unsupported the declaration is simply ignored, which leaves
    the old behaviour rather than breaking the header. */
 body { overflow-x: clip; }
+
+
+/* ==========================================================================
+   WHAT THE PAST SAYS  —  .hist-panel
+
+   The readable half of lib/history.js. Every line is a measurement from data
+   that already happened; nothing here forecasts, and the styling is chosen to
+   support that rather than undercut it.
+
+   ─── WHY THERE IS NO GREEN/RED ────────────────────────────────────────────
+   The obvious treatment is bullish-green and bearish-red. It is wrong here.
+   Colouring "price held support 3 of 4 times" green turns a measurement into
+   a recommendation, and the whole value of this panel is that it does not
+   make recommendations. The three tones are NOTABLE (worth reading),
+   CAUTION (a number people under-estimate, like max drawdown) and NEUTRAL.
+   None of them mean buy or sell.
+   ========================================================================== */
+
+.hist-panel {
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.hist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.hist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12.4px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+/* A dot rather than a bullet glyph: a list-style marker cannot be coloured
+   per item without ::marker, which older WebViews ignore. */
+.hist-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* Optical alignment with the first line of text, not the top of the box. */
+  margin-top: 7px;
+  background: var(--text-3);
+}
+
+.hist-notable .hist-dot { background: var(--ink-cyan); }
+.hist-caution .hist-dot { background: var(--ink-amber); }
+.hist-notable { color: var(--text-1); }
