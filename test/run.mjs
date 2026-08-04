@@ -273,6 +273,21 @@ console.log('\n▸ timing the multi-aggregator quote race…');
  * The wallet panel. Its geometry broke twice from class-cascade conflicts, so
  * the structure is now asserted rather than assumed.
  */
+/*
+ * The Start screen's backdrop. Its sizing broke in a way that only shows on a
+ * real viewport, so the probe asserts what jsdom CAN see: the elements exist,
+ * and the twinkle is desynchronised per star.
+ */
+console.log('\n▸ checking the start screen backdrop…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.splash.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runSplash } = await import('./.out/splash/splash-probe.js');
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  report('start screen', await runSplash(host));
+}
+
 console.log('\n▸ checking the wallet panel…');
 {
   npx(['vite', 'build', '-c', 'test/vite.wallet.mjs', '--logLevel', 'error']);

@@ -2692,5 +2692,78 @@ export default function run() {
     );
   }
 
+  /* ---- 40. every styled class must actually have styles ----------------- */
+  /*
+   * REAL BUG, reported twice: "دکمه های بروزرسانی و قطع و وصل اندازه ها
+   * نامتقارن و کوچک، رنگ طوسی زشت."
+   *
+   * The cause was not a design choice. Rewriting a block of index.css dropped
+   * `.wal-utils` and `.wal-util` while Wallet.jsx kept using them, so three
+   * buttons rendered COMPLETELY UNSTYLED — browser-default size, default
+   * grey, no spacing. Confirmed against git history: the rules existed two
+   * commits earlier.
+   *
+   * Nothing caught it. The build passed, every render test passed, the class
+   * names were spelled correctly — the styles simply were not there. That is
+   * the same "wired to nothing" family this audit exists for, in CSS form.
+   *
+   * So: every `wal-*`, `hist-*`, `galaxy-*`, `doc-*` and `nav-*` class used
+   * in JSX must exist in the stylesheet. Scoped to our own prefixes rather
+   * than every class, because generic utilities are composed dynamically and
+   * would produce false positives.
+   */
+  {
+    /*
+     * Comments stripped, or this check passes on its own documentation — the
+     * note above literally names `.wal-utils`, which was enough to satisfy it.
+     * Caught by sabotage: deleting the real rules left this green.
+     */
+    const css = read('src/index.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row)-/;
+
+    const used = new Set();
+    for (const f of files) {
+      if (!/\.jsx$/.test(f)) continue;
+      const src = read(f);
+      // Only static className strings; template literals are matched for
+      // their literal segments, which is where these names appear.
+      for (const m of src.matchAll(/className=["'`]([^"'`{}]+)["'`]/g)) {
+        for (const cls of m[1].split(/\s+/)) {
+          if (owned.test(cls)) used.add(cls);
+        }
+      }
+    }
+
+    /*
+     * The selector must END at a class boundary. A plain `includes('.wal-util')`
+     * is satisfied by `.wal-utils` — so deleting `.wal-utils` while keeping
+     * `.wal-util` (or vice versa) would pass. Caught by sabotage: removing the
+     * real rule left this check green.
+     */
+    /*
+     * Must be a real DECLARATION, not any mention.
+     *
+     * Two ways the naive version passed while the styles were gone:
+     *   • `.wal-util:hover` kept matching after the base rule was deleted, so
+     *     a class with only a hover state looked styled.
+     *   • the class name appeared inside a comment.
+     *
+     * So: the selector must be followed by a `{` — optionally after other
+     * selectors in a list — and pseudo-class-only rules do not count.
+     */
+    const declared = (cls) => {
+      const esc = cls.replace(/-/g, '\\-');
+      // `.cls` then optional whitespace/commas/other selectors, then `{`
+      return new RegExp(`\\.${esc}(?![\\w-])[^{:]*\\{`).test(css);
+    };
+    const missing = [...used].filter((cls) => !declared(cls));
+    t(
+      `every project class used in JSX has styles${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
+      missing.length === 0
+    );
+    // A vacuous pass would be worse than a failure.
+    t(`there were classes to check (${used.size})`, used.size > 20);
+  }
+
   return rows;
 }

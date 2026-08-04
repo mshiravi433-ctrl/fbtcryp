@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.17.2 — versionCode 45
+
+### I deleted the wallet button styles and did not notice
+
+Reported: the refresh / lock / disconnect buttons were uneven, too small and
+an ugly grey.
+
+All true, and it was not a design choice. Rewriting a block of `index.css` two
+commits ago dropped `.wal-utils` and `.wal-util` entirely while `Wallet.jsx`
+kept using them — so those three buttons rendered **completely unstyled**:
+browser-default size, browser-default grey, no spacing. Confirmed against git
+history rather than guessed: the rules existed in `e269e7c` and were gone in
+`f65a24e`.
+
+Nothing caught it. The build passed, every render test passed, the class names
+were spelled correctly — the styles simply were not there.
+
+Restored and sized properly: **40px** min-height, `flex: 1 1 0` so all three
+are exactly equal regardless of label width (Persian «بروزرسانی» is far wider
+than «قفل», which is what made them uneven), and `--text-2` instead of the
+faint caption grey.
+
+**A new audit now fails the build if any project class used in JSX has no
+styles.** It immediately found a second one I had missed —
+`.wal-action-label`, the Send/Receive caption.
+
+That check took three attempts to get right, and each failure is worth
+recording: it passed on its own comment (the note names `.wal-utils`), it was
+satisfied by `.wal-util:hover` surviving after the base rule was deleted, and
+`includes('.wal-util')` was satisfied by `.wal-utils`. It now strips comments
+and requires a real declaration block.
+
+### The Start screen background was half missing
+
+`.galaxy-neb` had **both** `inset: -12%` and `width/height: 124%`. Those fight:
+`inset` already stretches the box to 124%, so the explicit width made it
+resolve from the left edge and stop at 112% — off-centre, and no longer the
+shape of the screen.
+
+That is what made it look cut in half. The SVG uses a **square** viewBox with
+`preserveAspectRatio="slice"`, so on a 9:19.5 phone a box of the wrong aspect
+shows a narrow vertical band of the artwork instead of the middle of it.
+
+`inset` alone now. The star planes also got an `-8%` overhang, because they
+drift up to 5% and were pulling an empty edge into view at the end of each
+cycle.
+
+### …and why it may have looked frozen
+
+A global rule sets `animation-duration: 0.001ms` under
+`prefers-reduced-motion` — and **Android's battery saver forces that setting
+on**. A star's brightness is carried by its twinkle keyframes, so with the
+animation killed the dimmest stars sat at `opacity: 0.25` and effectively
+vanished.
+
+The stars now pin to `opacity: 0.7` when motion is reduced: the scene stays
+visible, nothing moves.
+
 ## 1.17.1 — versionCode 44
 
 ### The full build existed but nothing ever built it

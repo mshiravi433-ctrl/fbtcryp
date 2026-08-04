@@ -3746,6 +3746,94 @@ input, select, textarea { font-size: 16px !important; }
   }
 }
 
+/* ---- housekeeping row: refresh / lock / disconnect ------------------------
+   ─── A STYLE BLOCK I DELETED BY ACCIDENT ─────────────────────────────────
+   Reported: "دکمه های بروزرسانی و قطع و وصل اندازه ها نامتقارن و کوچک، رنگ
+   طوسی زشت."
+
+   All true, and the cause was not a design choice — I rewrote this section of
+   the stylesheet two commits ago and dropped `.wal-utils` / `.wal-util`
+   entirely while the JSX kept using them. The buttons were rendering
+   COMPLETELY UNSTYLED: browser-default size, browser-default grey, no
+   spacing. Verified against git history rather than guessed.
+
+   Restored, and sized properly this time:
+     • 40px min-height — a real tap target, up from the 34px of the version
+       that was lost.
+     • `flex: 1 1 0` so all three are EXACTLY equal regardless of label
+       length, which is what "نامتقارن" was about: Persian "بروزرسانی" is much
+       wider than "قفل", and auto-width made them visibly uneven.
+     • Readable ink instead of --text-3, which is the faint grey meant for
+       captions, not for controls.
+   -------------------------------------------------------------------------- */
+.wal-utils {
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.wal-util {
+  /* Equal thirds. `1 1 0` rather than `1` so the basis is zero and the label
+     cannot influence the width — the whole point of the fix. */
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.045);
+  /* --text-2, not --text-3. The faint grey is for captions; a control the
+     user is meant to press has to look pressable. */
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.16s, background 0.16s, border-color 0.16s;
+}
+
+:root[data-theme='light'] .wal-util { background: rgba(15, 23, 42, 0.04); }
+
+.wal-util:active {
+  background: rgba(127, 127, 127, 0.16);
+  color: var(--text-1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wal-util:hover {
+    color: var(--text-1);
+    border-color: var(--line-strong);
+  }
+}
+
+/* Destructive, so it is tinted — but deliberately not alarming. A red button
+   on a wallet screen makes people uneasy about the whole page rather than
+   just that control. */
+.wal-util-danger { color: color-mix(in srgb, var(--down) 75%, var(--text-2)); }
+
+@media (hover: hover) and (pointer: fine) {
+  .wal-util-danger:hover {
+    color: var(--down);
+    border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  }
+}
+
+/* Very narrow screens: three 40px buttons plus gaps do not fit once a
+   translation is long, so wrap rather than crush them. */
+@media (max-width: 340px) {
+  .wal-utils { flex-wrap: wrap; }
+  .wal-util { flex: 1 1 calc(50% - 4px); }
+}
+
 /* ---- the disconnected state ----------------------------------------------
    Same panel, so the page does not change shape at the moment someone
    commits their wallet — the worst possible time for a layout to jump. */
@@ -3790,6 +3878,16 @@ input, select, textarea { font-size: 16px !important; }
 .wal-action:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* The Send / Receive caption. Missing entirely until the class audit found
+   it — the label inherited the button's 12.5px/700 and looked heavier than
+   the icon above it, which is backwards: the icon carries the meaning. */
+.wal-action-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .wal-action-icon {
@@ -5175,12 +5273,24 @@ body { overflow-x: clip; }
   z-index: 0;
 }
 
+/*
+ * ─── THE "BACKGROUND IS ONLY HALF THERE" BUG ──────────────────────────────
+ * This was `inset: -12%` AND `width/height: 124%` at the same time. Those
+ * fight: `inset` already stretches the box to 124% of the parent, so adding
+ * an explicit width made the element resolve from the left edge only and
+ * stop at 112% — off-centre, and no longer the shape of the screen.
+ *
+ * That matters because the SVG uses `preserveAspectRatio="slice"` on a
+ * SQUARE viewBox. On a 9:19.5 phone, slicing a square into a box whose
+ * aspect ratio is wrong shows a narrow vertical band of the artwork instead
+ * of the middle of it — which is exactly "نصفش نیست".
+ *
+ * `inset` alone. One property, no conflict, always centred.
+ */
 .galaxy-neb {
   position: absolute;
   /* Overhangs so the drift never reveals an edge of the nebula. */
   inset: -12%;
-  width: 124%;
-  height: 124%;
   opacity: 0.85;
 }
 
@@ -5193,9 +5303,14 @@ body { overflow-x: clip; }
   to   { transform: scale(1.08) translate3d(-2%, 1.5%, 0); }
 }
 
+/*
+ * The star planes DRIFT by up to 5%, so a layer sized exactly to the screen
+ * would pull a hard empty edge into view at the end of each cycle. Overhang
+ * by more than the largest translation.
+ */
 .galaxy-layer {
   position: absolute;
-  inset: 0;
+  inset: -8%;
   will-change: transform;
 }
 
@@ -5244,14 +5359,31 @@ body { overflow-x: clip; }
 /*
  * Reduced motion, and the light theme.
  *
- * With motion reduced the scene stays — it still looks like a galaxy — but
- * nothing moves at all. Removing the visuals as well would punish the setting
- * rather than respect it.
+ * With motion reduced the scene STAYS — it still looks like a galaxy — but
+ * nothing moves. Removing the visuals as well would punish the setting rather
+ * than respect it.
+ *
+ * ─── WHY THE STARS GET AN EXPLICIT OPACITY HERE ───────────────────────────
+ * A global rule at the top of this file sets `animation-duration: 0.001ms`
+ * on EVERYTHING under `prefers-reduced-motion`. That is right for a spinner,
+ * but a star's brightness is carried by its twinkle keyframes — kill the
+ * animation and the star is left at whatever `--dim` says, which for the
+ * dimmest ones is 0.25 and effectively invisible.
+ *
+ * Android's battery saver forces `prefers-reduced-motion`, so on a phone
+ * that is low on charge the sky would simply fade out. Pinning the opacity
+ * keeps the scene visible without moving anything.
  */
 .galaxy.is-still .galaxy-neb,
 .galaxy.is-still .galaxy-layer,
 .galaxy.is-still .galaxy-star {
   animation: none;
+}
+
+.galaxy.is-still .galaxy-star { opacity: 0.7; }
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-star { opacity: 0.7; }
 }
 
 @media (prefers-reduced-motion: reduce) {
