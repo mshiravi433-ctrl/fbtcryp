@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -26,11 +26,64 @@ import SegIndicator from './SegIndicator';
  * competes with the live prices, which are the thing that should be pulling
  * the eye.
  */
+/**
+ * FOUR tabs, two either side of the raised centre button.
+ *
+ * The centre action is NOT in this list. It is a separate element rendered
+ * between index 1 and 2 so it can break out of the bar's own height — a
+ * button that sits inside the row cannot overlap its top edge, which is the
+ * whole visual point.
+ */
 const ITEMS = [
   { to: '/swap', key: 'nav.swap', Icon: AnimatedSwap },
   { to: '/signals', key: 'nav.signals', Icon: AnimatedActivity },
   { to: '/wallet', key: 'nav.wallet', Icon: AnimatedWallet }
 ];
+
+/**
+ * The centre action. Buy is the single thing we most want a new user to do,
+ * and it is the one route that earns nothing until they reach it — so it gets
+ * the most prominent control on the screen.
+ */
+const CENTRE = { to: '/buy', key: 'nav.buy' };
+
+/**
+ * The droplet.
+ *
+ * ─── WHY THE SHAPE IS A BORDER-RADIUS AND NOT AN SVG ────────────────────────
+ * A teardrop is three round corners and one sharp-ish one, which
+ * `border-radius: 50% 50% 50% 12px` expresses exactly. Doing it in CSS means
+ * it inherits the gradient, the glow and the press animation for free, and
+ * costs zero bytes of SVG. An `<svg>` path would need its own fill, its own
+ * filter for the glow, and would not round the tap target.
+ *
+ * ─── WHY IT DOES NOT LOOP ───────────────────────────────────────────────────
+ * The bar already has a 12s float. A second permanent animation on the most
+ * saturated element on screen is what makes an interface feel busy rather
+ * than alive — and it competes with the live prices, which are the thing that
+ * should be pulling the eye. It animates on PRESS only.
+ */
+function CentreAction({ active, still, label, onClick }) {
+  return (
+    <motion.button
+      className={`nav-centre ${active ? 'active' : ''}`}
+      onClick={onClick}
+      aria-label={label}
+      whileTap={still ? undefined : { scale: 0.88 }}
+      transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+    >
+      <span className="nav-centre-drop" aria-hidden="true" />
+      <span className="nav-centre-glyph" aria-hidden="true">
+        {/* A plain glyph, not an animated icon: at this size and saturation
+            a moving path reads as noise rather than detail. */}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </span>
+    </motion.button>
+  );
+}
 
 export default function BottomNav() {
   const { t } = useTranslation();
@@ -58,9 +111,9 @@ export default function BottomNav() {
   return (
     <>
       <nav className="bottom-nav">
-        {ITEMS.map((item) => {
+        {ITEMS.map((item, idx) => {
           const active = pathname === item.to;
-          return (
+          const tab = (
             <motion.button
               key={item.to}
               className={`nav-item ${active ? 'active' : ''}`}
@@ -121,6 +174,33 @@ export default function BottomNav() {
                 {t(item.key)}
               </motion.span>
             </motion.button>
+          );
+
+          /*
+           * ─── THE RAISED CENTRE BUTTON ──────────────────────────────────
+           * Emitted BETWEEN the second and third tab rather than being an
+           * item in ITEMS, because it has to break out of the bar's height
+           * to sit proud of it — an element inside the flex row cannot
+           * overlap its parent's top edge, which is the entire visual idea.
+           *
+           * It is a React fragment carrying two children, so the flex row
+           * still sees exactly five slots and the spacing stays even.
+           */
+          if (idx !== 1) return tab;
+          return (
+            <Fragment key={item.to}>
+              {tab}
+              <CentreAction
+                active={pathname === CENTRE.to}
+                still={still}
+                label={t(CENTRE.key)}
+                onClick={() => {
+                  haptic?.('medium');
+                  setPulse((n) => n + 1);
+                  navigate(CENTRE.to);
+                }}
+              />
+            </Fragment>
           );
         })}
 

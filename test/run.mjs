@@ -213,6 +213,31 @@ console.log('\n▸ probing notifications with no web Notification API…');
  * property. This drives the real component with an instrumented getUserMedia
  * and counts opens and stops.
  */
+/*
+ * The bottom nav's geometry. The raised centre button must sit BETWEEN the
+ * second and third tab; a refactor that moves it out of the map would leave
+ * it rendering correctly at the wrong end of the row.
+ */
+/*
+ * Multi-aggregator quoting must not be slower than single-aggregator quoting.
+ * Measured, not assumed — see the probe's header.
+ */
+console.log('\n▸ timing the multi-aggregator quote race…');
+{
+  const { default: runRace } = await import('./quote-race-probe.mjs');
+  report('quote race', await runRace());
+}
+
+console.log('\n▸ checking the bottom nav layout…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.nav.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runNav } = await import('./.out/nav/nav-probe.js');
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  report('bottom nav', await runNav(host));
+}
+
 console.log('\n▸ checking the QR camera survives re-renders…');
 {
   npx(['vite', 'build', '-c', 'test/vite.qr.mjs', '--logLevel', 'error']);

@@ -22,6 +22,8 @@ import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
+import { comparable, improvementBps, isUsableQuote, pickBestQuote } from '../src/lib/bestQuote.js';
+import { bpsToPercent, openOceanSupports } from '../src/lib/openocean.js';
 import {
   REFERRAL_FEE_MAX_BPS,
   REFERRAL_FEE_MIN_BPS,
@@ -1640,6 +1642,117 @@ export default function run() {
      * "provably-fair mini-games" points at a feature the user cannot find.
      */
     t('the bot does not advertise the removed arcade', !/mini-games/i.test(code));
+  }
+
+  /* ------------------- best-price across two aggregators ---------------- */
+  /*
+   * We now ask KyberSwap AND OpenOcean and use the better answer. Two things
+   * make that safe, and both are load-bearing:
+   *
+   *  1. Only an EXECUTABLE quote may win. OpenOcean is quoted but never
+   *     executed, so a better price we cannot sign must not become the
+   *     transaction - showing one number and signing another is the worst
+   *     possible bug on a swap screen.
+   *
+   *  2. A slow or failing second source must cost nothing. Sources run
+   *     concurrently, so total latency is max(), not sum().
+   */
+  {
+    const q = (out, opts = {}) => ({
+      amountOutWei: BigInt(out),
+      feeBps: opts.feeBps ?? 70,
+      slippage: opts.slippage ?? 0.5,
+      source: opts.source ?? 'kyber',
+      ...(opts.executable === undefined ? {} : { executable: opts.executable })
+    });
+
+    /* ---- what counts as a quote at all ---- */
+    t('a real quote is usable', isUsableQuote(q(100)));
+    t('an error object is not a quote', !isUsableQuote({ error: 'NO_ROUTE' }));
+    t('a zero-output quote is not usable', !isUsableQuote(q(0)));
+    t('null is not a quote', !isUsableQuote(null));
+
+    /* ---- like-for-like ---- */
+    /*
+     * An aggregator that ignored our fee parameter reports a bigger output
+     * for the obvious reason: it is not taking our 0.70%. Ranking on that
+     * would make the fee-free path always win, which is precisely the mistake
+     * getQuote already refuses to make.
+     */
+    t('quotes with the same fee and slippage are comparable', comparable(q(100), q(110)));
+    t('a fee mismatch blocks comparison', !comparable(q(100), q(110, { feeBps: 0 })));
+    t('a slippage mismatch blocks comparison', !comparable(q(100), q(110, { slippage: 1 })));
+
+    /* ---- the ranking ---- */
+    let r = pickBestQuote([q(100), q(150)]);
+    t('the better executable quote wins', r.best.amountOutWei === 150n);
+    t('the comparison reports how many routes it checked', r.checked === 2);
+
+    /*
+     * THE ONE THAT MATTERS MOST. A non-executable quote is better - and must
+     * still lose, because we cannot sign it.
+     */
+    r = pickBestQuote([q(100), q(120, { executable: false, source: 'oo' })]);
+    t('a better NON-executable quote does not win', r.best.amountOutWei === 100n);
+    t('...and the executable one is what we would sign', r.best.source === 'kyber');
+    /* But we report the gap rather than pretending we found the best price. */
+    t('...and the shortfall is reported honestly', r.beatenBy === 2000);
+
+    /*
+     * The legacy KyberSwap quote predates the `executable` flag entirely.
+     * Defaulting an unflagged quote to "cannot execute" would break swapping
+     * outright, so the rule is opt-OUT.
+     */
+    t('a quote with no executable flag can still win', pickBestQuote([q(100)]).best.amountOutWei === 100n);
+
+    /* Nothing signable at all must be null, not an unsignable object. */
+    r = pickBestQuote([q(120, { executable: false })]);
+    t('quote-only results yield no executable best', r.best === null);
+    t('...but they are still counted as checked', r.checked === 1);
+
+    t('no quotes yields no best', pickBestQuote([]).best === null);
+
+    /* ---- the improvement maths ---- */
+    t('a 10% better quote is 1000 bps', improvementBps(q(100), q(110)) === 1000);
+    t('an equal quote is 0 bps', improvementBps(q(100), q(100)) === 0);
+    /*
+     * Precision: an 18-decimal amount exceeds Number.MAX_SAFE_INTEGER, so the
+     * ratio must be computed in BigInt. Converting first would silently round
+     * and could report a real improvement as zero.
+     */
+    const big = 10n ** 18n;
+    t(
+      'the maths survives 18-decimal amounts',
+      improvementBps({ ...q(1), amountOutWei: big }, { ...q(1), amountOutWei: big + big / 100n }) === 100
+    );
+
+    /*
+     * Concurrency and failure behaviour are asynchronous, and this suite is
+     * synchronous by design. They are exercised in test/quote-race-probe.mjs
+     * instead - see the note there about why the timing assertion has to be
+     * measured rather than reasoned about.
+     */
+  }
+
+  /* ----------------------- the OpenOcean adapter ------------------------ */
+  {
+    /*
+     * OpenOcean expresses referrerFee as a PERCENT while we hold basis
+     * points. Getting this wrong by 100x would either quote a 70% fee (every
+     * quote rejected) or a 0.007% one (we compare against a fee we cannot
+     * charge). Cheap to test, expensive to discover in production.
+     */
+    t('70 bps converts to 0.7 percent', bpsToPercent(70) === 0.7);
+    t('100 bps converts to 1 percent', bpsToPercent(100) === 1);
+    t('0 bps converts to 0', bpsToPercent(0) === 0);
+
+    /*
+     * Only chains we can also EXECUTE on. A quote for a chain we cannot swap
+     * on is a better price we are unable to honour.
+     */
+    t('BNB Chain is supported', openOceanSupports(56));
+    t('Ethereum is supported', openOceanSupports(1));
+    t('an unknown chain is not', !openOceanSupports(999999));
   }
 
   return rows;

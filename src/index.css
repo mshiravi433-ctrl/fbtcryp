@@ -852,6 +852,111 @@ select option { background: #0a0c12; }
   animation: nav-float 12s ease-in-out infinite;
 }
 
+/* ===========================================================================
+   THE RAISED CENTRE BUTTON  —  .nav-centre
+
+   Requested: «۴ تا ایکون باشه و بین دوتاش با css جذاب یک ایکون بیشتر قرار
+   بگیرد قشنگتر شود البته کند نشود سایت» — four tabs with a fifth, prettier
+   control between them, without slowing the site down.
+
+   ─── HOW IT SITS PROUD OF THE BAR ────────────────────────────────────────
+   `margin-top: -22px` lifts it above the bar's top edge while it stays a
+   normal flex child, so the four tabs still space themselves evenly. The
+   alternative — absolute positioning — would take it out of flow and force
+   the tabs to be manually re-spaced around a gap, which breaks the moment a
+   translation makes a label wider.
+
+   ─── WHY THIS COSTS NOTHING IN PERFORMANCE ───────────────────────────────
+   The explicit requirement was that it must not slow the app down, so:
+
+     • NO looping animation. The bar already floats on a 12s cycle; a second
+       permanent animation on the most saturated element competes with the
+       live prices for attention and keeps the compositor awake.
+     • NO backdrop-filter. It is the single most expensive common CSS
+       property and this element is opaque anyway, so it would blur pixels
+       nobody can see.
+     • The teardrop is a border-radius, not an SVG with a filter.
+     • It animates on PRESS only, via transform — a compositor-only property
+       that never triggers layout or paint.
+   =========================================================================== */
+
+.nav-centre {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  /* Lifts it out of the bar. The bar has 9px of padding, so this leaves the
+     button's lower third still inside — it reads as emerging from the bar
+     rather than floating unattached above it. */
+  margin-top: -22px;
+  margin-inline: 2px;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  /* Above the bar's own ::before hairline. */
+  z-index: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * The droplet itself.
+ *
+ * Three round corners and one tightened corner is what makes a teardrop
+ * rather than a circle. The tight corner points down-left, towards the bar,
+ * so the shape reads as hanging from the row.
+ */
+.nav-centre-drop {
+  position: absolute;
+  inset: 0;
+  border-radius: 50% 50% 50% 14px;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2) 55%, var(--rgb-3));
+  /* A ring in the bar's own colour so the button appears to punch through it
+     rather than overlap it. */
+  box-shadow:
+    0 0 0 4px rgba(10, 11, 18, 0.82),
+    0 10px 26px -8px rgba(124, 77, 255, 0.7);
+  /* Only the transform is animated, and only on press. */
+  transition: box-shadow 0.2s ease;
+}
+
+:root[data-theme='light'] .nav-centre-drop {
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.92),
+    0 10px 26px -10px rgba(124, 77, 255, 0.5);
+}
+
+/* The glyph rides above the gradient. Black on a neon fill is the same
+   contrast rule the primary button already uses. */
+.nav-centre-glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: #000;
+}
+
+/* A subtle lift when this IS the current route, so the button participates in
+   the navigation state instead of looking permanently "on". */
+.nav-centre.active .nav-centre-drop {
+  box-shadow:
+    0 0 0 4px rgba(10, 11, 18, 0.82),
+    0 12px 30px -6px rgba(0, 229, 255, 0.85);
+}
+
+/* Small phones: the bar is tighter, so shrink rather than let the button
+   squeeze the four tabs into their labels. */
+@media (max-width: 360px) {
+  .nav-centre { width: 48px; height: 48px; margin-top: -18px; }
+}
+
+/* Landscape phones have ~350px of height and the nav is already reduced;
+   a button breaking out of it would sit near the top of the viewport. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .nav-centre { width: 44px; height: 44px; margin-top: -12px; }
+}
+
 :root[data-theme='light'] .bottom-nav {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 16px 40px -14px rgba(16, 20, 40, 0.3);

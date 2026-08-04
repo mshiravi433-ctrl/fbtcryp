@@ -33,6 +33,8 @@ import {
   executeAggregatorSwap,
   getAggregatorQuote
 } from './aggregator';
+import { getOpenOceanQuote, openOceanSupports } from './openocean';
+import { quoteAllSources } from './bestQuote';
 
 const loadEthers = () => import('ethers');
 
@@ -125,17 +127,50 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
   // collects our fee on-chain, with no contract of our own to deploy.
   if (aggregatorFeeEnabled(chainId) && aggregatorSupports(chainId)) {
     try {
-      return await getAggregatorQuote({
+      const feeReceiver = feeRecipientFor(chainId);
+      const common = {
         chainId,
         fromToken,
         toToken,
         amountIn,
         slippage,
         feeBps: FEE_BPS,
-        feeReceiver: feeRecipientFor(chainId),
+        feeReceiver,
         parseUnits,
         formatUnits
-      });
+      };
+
+      /*
+       * ─── ASK EVERY AGGREGATOR AT ONCE ────────────────────────────────────
+       * Not one after the other. `quoteAllSources` starts them together, so
+       * the wall-clock cost is the SLOWEST source rather than the sum — and
+       * OpenOcean runs on a 3s leash against KyberSwap's 15s, so in the worst
+       * case this is exactly as fast as quoting KyberSwap alone.
+       *
+       * A source that fails or times out is simply absent from the
+       * comparison; it never turns a good quote into an error. And only an
+       * EXECUTABLE quote is allowed to win, so a better price we cannot
+       * actually sign can never become the transaction — see lib/bestQuote.js.
+       */
+      const sources = [() => getAggregatorQuote(common)];
+      if (openOceanSupports(chainId)) {
+        sources.push(() => getOpenOceanQuote(common));
+      }
+
+      const { best, checked, beatenBy } = await quoteAllSources(sources);
+
+      // Every source failed. Fall through to the same error handling the
+      // single-source path always used.
+      if (!best) throw new Error('NO_ROUTE');
+
+      /*
+       * `routesChecked` drives the "compared N routes" line in the UI, and
+       * `beatenBy` is how much a quote-only source led by. Both are reported
+       * rather than hidden: claiming to have found the best price while
+       * quietly knowing another venue was better is the kind of thing that
+       * destroys trust the one time a user checks.
+       */
+      return { ...best, routesChecked: checked, beatenBy };
     } catch (err) {
       // COMMERCIAL RULE: this product must never execute a swap that skips the
       // platform fee. If the aggregator can't quote, we surface the error
