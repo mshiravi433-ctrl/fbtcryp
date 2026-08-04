@@ -2473,5 +2473,50 @@ export default function run() {
     t('a zero deposit projects nothing', projectEarnings({ apy: 12 }, 0) === null);
   }
 
+  /* ========================= the engine stays cheap ====================== */
+  /*
+   * ─── WHY A TIMING TEST, WHICH IS NORMALLY A BAD IDEA ──────────────────────
+   * The brief included «سرعت پایین نیاد و باگ ندی به اپ» — do not slow the app
+   * down. That is a real risk here and not a theoretical one: the verdict
+   * engine runs a full no-look-ahead backtest at TWO horizons, and a backtest
+   * is a loop over every bar recomputing indicators. It is the most expensive
+   * thing this app does per asset, and it runs on a mid-range Android phone.
+   *
+   * Timing assertions are usually flaky rubbish, so this one is shaped to be
+   * safe: the budget is ~50x the measured cost, so it can only fail on a
+   * genuine algorithmic regression (an accidental O(n^2), a backtest moved
+   * inside a render loop) rather than on a slow CI box. Measured here at
+   * 0.75ms for a year of daily bars; the budget is 40ms.
+   */
+  {
+    const perfSeries = [100];
+    const rnd = (() => {
+      let a = 12345;
+      return () => {
+        a = (a * 1103515245 + 12345) & 0x7fffffff;
+        return a / 0x7fffffff;
+      };
+    })();
+    for (let i = 1; i < 365; i += 1) perfSeries.push(perfSeries[i - 1] * (1 + (rnd() - 0.5) * 0.04));
+    const perfBtc = perfSeries.map((v, i) => v * (1 + Math.sin(i / 7) * 0.01));
+    const perfAnalysis = analyze(perfSeries, { change24h: 1, change7d: 2 });
+
+    const args = {
+      analysis: perfAnalysis,
+      series: perfSeries,
+      btcSeries: perfBtc,
+      coin: { id: 'x', symbol: 'X', athChange: -30, volume: 1e6 },
+      global: { mcapChange: 1, btcDominance: 52 }
+    };
+    // Warm the JIT, or the first call's compile time is what gets measured.
+    for (let i = 0; i < 5; i += 1) verdict(args);
+
+    const started = Date.now();
+    for (let i = 0; i < 20; i += 1) verdict(args);
+    const perCall = (Date.now() - started) / 20;
+
+    t(`a year of daily bars verdicts in well under 40ms (${perCall.toFixed(1)}ms)`, perCall < 40);
+  }
+
   return rows;
 }
