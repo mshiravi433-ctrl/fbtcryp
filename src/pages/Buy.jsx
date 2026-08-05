@@ -32,12 +32,21 @@ import SegIndicator from '../components/SegIndicator';
  * funds, we do not run an escrow, and pretending otherwise would be the one
  * unrecoverable mistake on a money screen.
  *
- * ─── WE TAKE NOTHING HERE ───────────────────────────────────────────────────
- * No fee, no referral, no commission. Not modesty: we are not part of the
- * transaction at all. Saying so plainly matters because a fee we do not charge
- * is the kind of thing users assume is hidden somewhere, and that suspicion
- * costs more than the fee would have earned. Our 0.70% is on swaps, disclosed
- * on the swap screen, and nowhere else.
+ * ─── WE DO EARN HERE NOW, AND THE SCREEN SAYS SO WHERE IT MATTERS ───────────
+ * This comment used to read "we take nothing here". That was true when the
+ * screen was only a directory of routes. It stopped being true when the fiat
+ * panel went live: purchases made through it carry a partner commission on
+ * our account.
+ *
+ * The disclosure moved with the fact. Rather than a policy banner at the
+ * bottom of the page — which is read by nobody — the fiat panel itemises
+ * ChangeNOW's own service-fee breakdown right beside the amount, before
+ * anything is committed. That is the figure the user is actually charged, and
+ * our cut is already inside it.
+ *
+ * The three routes below still earn us nothing and are still here, because a
+ * user with no crypto and no card needs an answer more than we need a cut of
+ * every screen.
  */
 
 /**
@@ -156,14 +165,21 @@ export default function Buy() {
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
         <p className="section-label" style={{ marginBottom: 8 }}>{t(`buy.${tab}.heading`)}</p>
-        <p className="muted" style={{ fontSize: 12.6, lineHeight: 1.85 }}>{t(`buy.${tab}.body`)}</p>
+        <p className="prose-sm">{t(`buy.${tab}.body`)}</p>
 
         {/*
-          The fee statement. Stated on both tabs because the question "what do
-          they take" is asked on both, and an unanswered version of it is
-          assumed to have a bad answer.
+          ─── THE OLD "WE TAKE NOTHING" NOTICE IS GONE, AND HAD TO GO ──────
+          It read, verbatim: "we charge no fee on this page … no commission,
+          no referral share." That stopped being true the moment the fiat
+          panel above started earning a partner commission. Leaving it would
+          have been the app's only outright false statement, on a money
+          screen, which is the worst possible place for one.
+
+          It is not replaced by a different banner. The fiat panel itemises
+          ChangeNOW's own service fees inline, at the moment the amount is
+          entered — a figure next to the number it applies to is read; a
+          policy statement in a box below is not.
         */}
-        <p className="notice" style={{ marginTop: 12 }}>{t('buy.noFee')}</p>
       </motion.section>
 
       {/* ------------------------------ routes ------------------------------ */}
@@ -208,7 +224,7 @@ export default function Buy() {
               <div className="mono" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>
                 {wallet.address}
               </div>
-              <p className="faint" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.75 }}>
+              <p className="prose-sm" style={{ marginTop: 8 }}>
                 {t('buy.addressHint', { chain: wallet.chain?.name ?? 'BNB Smart Chain' })}
               </p>
               <button
@@ -221,7 +237,7 @@ export default function Buy() {
             </>
           ) : (
             <>
-              <p className="muted" style={{ fontSize: 12.4 }}>{t('buy.connectFirst')}</p>
+              <p className="prose-sm">{t('buy.connectFirst')}</p>
               <button
                 className="btn btn-primary"
                 style={{ marginTop: 10 }}
@@ -240,11 +256,14 @@ export default function Buy() {
           <span style={{ color: 'var(--rgb-5)' }}><IconShield width={17} height={17} /></span>
           <p className="section-label" style={{ margin: 0 }}>{t('buy.safetyTitle')}</p>
         </div>
-        <ul className="stack" style={{ gap: 9, margin: 0, paddingInlineStart: 18 }}>
+        {/*
+          `.prose-list` rather than four `.muted` list items. At 12.4px with
+          no gap between them the four warnings ran together and read as one
+          paragraph, which meant the user saw one warning instead of four.
+        */}
+        <ul className="prose-list">
           {WARNINGS.map((w) => (
-            <li key={w} style={{ fontSize: 12.4, lineHeight: 1.8 }} className="muted">
-              {t(`buy.warn.${w}`)}
-            </li>
+            <li key={w}>{t(`buy.warn.${w}`)}</li>
           ))}
         </ul>
         <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('buy.notAdvice')}</p>

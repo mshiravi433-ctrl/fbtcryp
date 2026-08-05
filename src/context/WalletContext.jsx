@@ -181,7 +181,7 @@ export function WalletProvider({ children }) {
        */
       const publicUrl =
         import.meta.env?.VITE_PUBLIC_URL?.replace(/\/$/, '') ||
-        (isLocal ? 'https://www.lawpoetics.ir' : runtimeOrigin);
+        (isLocal ? 'https://fbtswap.ir' : runtimeOrigin);
 
       const wc = await EthereumProvider.init({
         projectId,

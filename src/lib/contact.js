@@ -6,7 +6,7 @@
  * ─── WHY THIS MODULE EXISTS ─────────────────────────────────────────────────
  * Cafe Bazaar rejected our submission partly because the contact address is a
  * Gmail account. They want an address on our own domain — that is their cheap
- * proof we actually control `lawpoetics.ir`.
+ * proof we actually control `fbtswap.ir`.
  *
  * When the swap happens, `fbtswap@gmail.com` appears in SIXTEEN files: three
  * locale bundles, four screens, the AI system prompt, index.html's structured

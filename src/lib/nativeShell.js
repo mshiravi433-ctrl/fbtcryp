@@ -35,6 +35,13 @@ export function isNativeShell() {
 export function publicAppUrl(path = '/') {
   const base =
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_URL) ||
-    'https://www.lawpoetics.ir';
+    /*
+     * The canonical home moved from www.lawpoetics.ir to fbtswap.ir, and this
+     * default matters more than most: it is what a referral invite and a
+     * share link resolve to inside the APK, where window.location is
+     * https://localhost. Left stale, every invite the app has ever generated
+     * would keep pointing at the old host.
+     */
+    'https://fbtswap.ir';
   return `${String(base).replace(/\/+$/, '')}${path}`;
 }

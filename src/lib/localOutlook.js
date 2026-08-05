@@ -33,200 +33,287 @@ import { projectRange } from './ai';
 /* phrase tables                                                              */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * ─── WHY THIS TABLE WAS REWRITTEN ───────────────────────────────────────────
+ * The owner's report, verbatim: «گرامر سیگنال خیلی بده و انگار داره یک ربات
+ * مینویسه نه انسان» — the signals read like a machine wrote them. He is right,
+ * and the causes were specific rather than stylistic. Each one is fixed here
+ * and named so it does not come back:
+ *
+ * 1. SENTENCES WERE GLUED, NOT COMPOSED. `summaryStrong` interpolated `{lead}`
+ *    mid-paragraph with a bare space. Whatever the lead sentence happened to
+ *    be got dropped between two unrelated clauses, so the paragraph had no
+ *    connective tissue: fact, fact, fact. Human writing joins clauses. The
+ *    templates now open with the lead and use real connectives around it.
+ *
+ * 2. THE PERSIAN WAS A WORD-FOR-WORD TRACING OF THE ENGLISH. "which is why
+ *    confidence sits at X%" became «و به همین دلیل اطمینان روی X٪ است» — the
+ *    verb «روی … است» is not how Persian states a measured value; «X٪ است» is.
+ *    Several more of the same kind: «خواندن‌های متناقض» is a literal calque of
+ *    "mixed readings" and means nothing in Persian; it is now «وقتی
+ *    اندیکاتورها هم‌جهت نیستند».
+ *
+ * 3. A NUMBER WAS PRINTED WHERE A WORD BELONGS. "{n} of {total} indicators
+ *    point the same way" is fine at 5-of-7 and absurd at 1-of-7 ("1 of 7
+ *    indicators point"). English needed the verb agreed; Persian needed the
+ *    plural marker dropped. Both now go through `plural()`.
+ *
+ * 4. DOLLAR SIGNS INSIDE RTL TEXT. `${lvl}` rendered as "$150.12" inside a
+ *    Persian sentence, and the bidi algorithm pushed the "$" to the wrong end
+ *    of the number on some renderers. Persian and Arabic now use the currency
+ *    word after the figure, which is also how a Persian speaker says it.
+ *
+ * 5. ARABIC HAD BEEN TRUNCATED. Several Arabic strings were a half-length
+ *    paraphrase of the English — `risks.news` lost the entire second clause
+ *    explaining WHAT is invisible to the analysis. A shorter warning is a
+ *    weaker warning.
+ *
+ * None of this is machine-translated. Safety and financial copy is the one
+ * category where an approximate translation is a liability.
+ */
+
 const T = {
   en: {
     bias: { bullish: 'leaning up', bearish: 'leaning down', neutral: 'no clear direction' },
     headline: {
-      bullish: '{sym}: indicators lean bullish, {conf}% agreement',
-      bearish: '{sym}: indicators lean bearish, {conf}% agreement',
-      neutral: '{sym}: indicators disagree, no clear signal'
+      bullish: '{sym} is leaning bullish — {conf}% of the indicators agree',
+      bearish: '{sym} is leaning bearish — {conf}% of the indicators agree',
+      neutral: '{sym} has no clear signal — the indicators disagree'
     },
+    /*
+     * The lead sentence comes FIRST and the rest follows from it, rather than
+     * the lead being wedged into the middle of a paragraph about something
+     * else. That single change is most of what made this read like a person.
+     */
     summaryStrong:
-      '{n} of {total} indicators point the same way, which is why confidence sits at {conf}%. {lead} Realised volatility is {vol}% annualised, so a {days}-day move of roughly {band}% either way is normal for this asset — that is the range, not a target.',
+      '{lead} {agree}, which is where the {conf}% figure comes from. Volatility is running at {vol}% annualised, so over {days} days a move of roughly {band}% in either direction would be unremarkable for this asset — that is a range, not a target.',
     summaryWeak:
-      'The indicators contradict each other, which is why confidence is only {conf}%. {lead} At {vol}% annualised volatility a {days}-day swing of about {band}% either way is ordinary here. Mixed readings are a reason to wait, not a reason to pick a side.',
+      '{lead} But the indicators are pulling against each other, which is why confidence is only {conf}%. Volatility is {vol}% annualised, so a {days}-day swing of around {band}% either way is ordinary here. When the readings disagree, the useful answer is usually to wait rather than to pick a side.',
     lead: {
-      rsiLow: 'RSI at {rsi} is in oversold territory, which often precedes a bounce but can stay low in a real downtrend.',
-      rsiHigh: 'RSI at {rsi} is overbought, which often precedes a pullback but can persist through a strong rally.',
-      rsiMid: 'RSI at {rsi} is mid-range and not saying much on its own.',
-      trendUp: 'Price is above its 20-period average and MACD momentum is positive.',
-      trendDown: 'Price is below its 20-period average and MACD momentum is negative.',
-      flat: 'Price is hovering around its 20-period average.'
+      rsiLow:
+        'RSI has fallen to {rsi}, which is oversold territory — often the run-up to a bounce, though in a genuine downtrend it can sit there for weeks.',
+      rsiHigh:
+        'RSI is up at {rsi}, which is overbought — often the run-up to a pullback, though a strong rally can hold it there for a long time.',
+      rsiMid: 'RSI is at {rsi}, mid-range, and is not saying much on its own.',
+      trendUp: 'Price is holding above its 20-period average with MACD momentum positive.',
+      trendDown: 'Price has slipped below its 20-period average and MACD momentum is negative.',
+      flat: 'Price is drifting around its 20-period average without committing either way.'
     },
     drivers: {
-      rsiOversold: 'RSI {rsi} — oversold',
-      rsiOverbought: 'RSI {rsi} — overbought',
-      macdUp: 'MACD histogram positive — upward momentum building',
-      macdDown: 'MACD histogram negative — downward momentum building',
+      rsiOversold: 'RSI at {rsi} — oversold',
+      rsiOverbought: 'RSI at {rsi} — overbought',
+      macdUp: 'MACD histogram has turned positive — upward momentum is building',
+      macdDown: 'MACD histogram has turned negative — downward momentum is building',
       aboveMa: 'Trading {pct}% above the 20-period average',
       belowMa: 'Trading {pct}% below the 20-period average',
-      goldenCross: '20-period average above the 50 — trend structure is up',
-      deathCross: '20-period average below the 50 — trend structure is down',
-      momentumUp: '7-day momentum {pct}%',
-      momentumDown: '7-day momentum {pct}%',
-      bbLow: 'Near the lower Bollinger band',
-      bbHigh: 'Near the upper Bollinger band',
-      nearSupport: 'Close to support at ${lvl}',
-      nearResistance: 'Close to resistance at ${lvl}'
+      goldenCross: 'The 20-period average has crossed above the 50 — trend structure is up',
+      deathCross: 'The 20-period average has crossed below the 50 — trend structure is down',
+      momentumUp: 'Up {pct}% over the past 7 days',
+      momentumDown: 'Down {pct}% over the past 7 days',
+      bbLow: 'Sitting near the lower Bollinger band',
+      bbHigh: 'Sitting near the upper Bollinger band',
+      nearSupport: 'Close to support at {lvl}',
+      nearResistance: 'Close to resistance at {lvl}'
     },
     risks: {
-      volatile: 'Volatility is {vol}% annualised — stops placed tight will be hit by noise alone.',
-      conflict: 'The indicators disagree with each other, so any single reading here is weak evidence.',
-      overbought: 'Already overbought: entering here means buying after the move, not before it.',
-      oversold: 'Oversold can stay oversold. Nothing in these numbers marks a bottom.',
-      thin: 'Under 30 days of price history — every indicator below is computed on a short sample.',
-      news: 'No news feed is connected, so this reads price only. A listing, hack or regulatory headline is invisible to it.',
-      resistance: 'Resistance at ${lvl} sits just above; that is where rallies have stalled recently.',
-      support: 'Support at ${lvl} sits just below; a break through it usually accelerates.'
+      volatile:
+        'Volatility is {vol}% annualised. A stop placed tightly will be taken out by ordinary noise, before the move it was meant to protect against ever happens.',
+      conflict:
+        'The indicators contradict one another here, so no single reading below carries much weight on its own.',
+      overbought:
+        'It is already overbought. Entering now means buying after the move rather than ahead of it.',
+      oversold:
+        'Oversold can stay oversold for a long time. Nothing in these numbers marks a bottom.',
+      thin:
+        'There is less than 30 days of price history, so every indicator below is computed on a short sample and should be read loosely.',
+      news:
+        'No news feed is connected, so this reads price and nothing else. A listing, an exploit or a regulatory headline is completely invisible to it.',
+      resistance:
+        'Resistance sits just above at {lvl} — that is where recent rallies have stalled.',
+      support:
+        'Support sits just below at {lvl}, and a break through it usually accelerates the move.'
     },
     invalidation: {
-      bullish: 'A close below ${lvl} would break the structure this read is based on.',
-      bearish: 'A close above ${lvl} would break the structure this read is based on.',
-      neutral: 'A decisive close outside ${low}–${high} would resolve the current indecision.'
+      bullish: 'A close below {lvl} would break the structure this read rests on.',
+      bearish: 'A close above {lvl} would break the structure this read rests on.',
+      neutral: 'A decisive close outside {low} to {high} would settle the current indecision.'
     },
     briefHeadline: {
-      bullish: 'Market broadly higher — {up} of {total} majors up',
-      bearish: 'Market broadly lower — {down} of {total} majors down',
-      neutral: 'Mixed session — no clear market direction'
+      bullish: 'Market broadly higher — {up} of the {total} majors are up',
+      bearish: 'Market broadly lower — {down} of the {total} majors are down',
+      neutral: 'A mixed session, with no clear market direction'
     },
     briefSummary:
-      'Total market cap is {mcapChange}% over 24h with BTC dominance at {btcDom}%. {breadth} {domNote}',
-    breadthUp: '{up} of the top {total} are up on the day, so the move is broad rather than one or two names.',
-    breadthDown: '{down} of the top {total} are down on the day, so this is broad selling rather than an isolated move.',
-    breadthMixed: 'Gainers and losers are roughly balanced, which is what an indecisive tape looks like.',
-    domUp: 'Rising BTC dominance in a falling market usually means money rotating out of altcoins first.',
-    domDown: 'Falling BTC dominance usually means risk appetite is rotating into altcoins.',
-    domFlat: 'Dominance is steady, so capital is not rotating strongly either way.'
+      'Total market cap has moved {mcapChange}% over the past 24 hours, with Bitcoin dominance at {btcDom}%. {breadth} {domNote}',
+    breadthUp:
+      '{up} of the top {total} are up on the day, so this is a broad move rather than one or two names carrying the index.',
+    breadthDown:
+      '{down} of the top {total} are down on the day, so this is broad selling rather than an isolated fall.',
+    breadthMixed:
+      'Gainers and losers are close to evenly split, which is what an undecided tape looks like.',
+    domUp:
+      'Bitcoin dominance rising while the market falls usually means money is leaving altcoins first.',
+    domDown:
+      'Falling Bitcoin dominance usually means risk appetite is rotating into altcoins.',
+    domFlat: 'Dominance is steady, so capital is not rotating strongly in either direction.'
   },
 
   fa: {
     bias: { bullish: 'متمایل به صعود', bearish: 'متمایل به نزول', neutral: 'بدون جهت مشخص' },
     headline: {
-      bullish: '{sym}: اندیکاتورها متمایل به صعودند، {conf}٪ هم‌جهت',
-      bearish: '{sym}: اندیکاتورها متمایل به نزولند، {conf}٪ هم‌جهت',
-      neutral: '{sym}: اندیکاتورها با هم اختلاف دارند، سیگنال روشنی نیست'
+      bullish: '{sym} متمایل به صعود است — {conf}٪ اندیکاتورها هم‌نظرند',
+      bearish: '{sym} متمایل به نزول است — {conf}٪ اندیکاتورها هم‌نظرند',
+      neutral: '{sym} سیگنال روشنی ندارد — اندیکاتورها با هم اختلاف دارند'
     },
     summaryStrong:
-      '{n} اندیکاتور از {total} تا یک جهت را نشان می‌دهند و به همین دلیل اطمینان روی {conf}٪ است. {lead} نوسان محقق‌شده {vol}٪ سالانه است، پس حرکت حدود {band}٪ به هر طرف در {days} روز برای این دارایی عادی است — این یک بازه است نه یک هدف قیمتی.',
+      '{lead} {agree} و عدد {conf}٪ دقیقاً از همین‌جا می‌آید. نوسان سالانه {vol}٪ است، یعنی در {days} روز حرکتی حدود {band}٪ به هر طرف برای این دارایی چیز عجیبی نیست — این یک بازه است، نه هدف قیمتی.',
     summaryWeak:
-      'اندیکاتورها یکدیگر را نقض می‌کنند و به همین دلیل اطمینان فقط {conf}٪ است. {lead} با نوسان {vol}٪ سالانه، نوسان حدود {band}٪ به هر طرف در {days} روز اینجا معمولی است. خواندن‌های متناقض دلیلی برای صبر کردن است، نه برای انتخاب یک سمت.',
+      '{lead} اما اندیکاتورها خلاف هم را نشان می‌دهند و اطمینان به همین دلیل فقط {conf}٪ است. نوسان سالانه {vol}٪ است، پس نوسان حدود {band}٪ به هر طرف در {days} روز اینجا عادی است. وقتی اندیکاتورها هم‌جهت نیستند، جواب مفید معمولاً صبر کردن است نه انتخاب یک سمت.',
     lead: {
-      rsiLow: 'RSI روی {rsi} در محدوده اشباع فروش است؛ معمولاً پیش از برگشت دیده می‌شود اما در یک روند نزولی واقعی می‌تواند مدت‌ها پایین بماند.',
-      rsiHigh: 'RSI روی {rsi} در اشباع خرید است؛ معمولاً پیش از اصلاح دیده می‌شود اما در یک رالی قوی می‌تواند ادامه پیدا کند.',
-      rsiMid: 'RSI روی {rsi} در میانه است و به‌تنهایی حرف خاصی نمی‌زند.',
-      trendUp: 'قیمت بالای میانگین ۲۰ دوره‌ای است و مومنتوم MACD مثبت است.',
-      trendDown: 'قیمت زیر میانگین ۲۰ دوره‌ای است و مومنتوم MACD منفی است.',
-      flat: 'قیمت حول میانگین ۲۰ دوره‌ای در نوسان است.'
+      rsiLow:
+        'RSI تا {rsi} پایین آمده که محدوده اشباع فروش است — معمولاً مقدمه یک برگشت، هرچند در یک روند نزولی واقعی می‌تواند هفته‌ها همان‌جا بماند.',
+      rsiHigh:
+        'RSI روی {rsi} بالا رفته که اشباع خرید است — معمولاً مقدمه یک اصلاح، هرچند یک رالی قوی می‌تواند مدت‌ها نگهش دارد.',
+      rsiMid: 'RSI روی {rsi} و در میانه است و به‌تنهایی حرف خاصی نمی‌زند.',
+      trendUp: 'قیمت بالای میانگین ۲۰ دوره‌ای ایستاده و مومنتوم MACD مثبت است.',
+      trendDown: 'قیمت زیر میانگین ۲۰ دوره‌ای رفته و مومنتوم MACD منفی است.',
+      flat: 'قیمت حول میانگین ۲۰ دوره‌ای می‌چرخد بدون اینکه سمتی را انتخاب کند.'
     },
     drivers: {
-      rsiOversold: 'RSI {rsi} — اشباع فروش',
-      rsiOverbought: 'RSI {rsi} — اشباع خرید',
-      macdUp: 'هیستوگرام MACD مثبت — مومنتوم صعودی در حال شکل‌گیری',
-      macdDown: 'هیستوگرام MACD منفی — مومنتوم نزولی در حال شکل‌گیری',
-      aboveMa: 'معامله {pct}٪ بالاتر از میانگین ۲۰ دوره‌ای',
-      belowMa: 'معامله {pct}٪ پایین‌تر از میانگین ۲۰ دوره‌ای',
-      goldenCross: 'میانگین ۲۰ بالای ۵۰ — ساختار روند صعودی است',
-      deathCross: 'میانگین ۲۰ زیر ۵۰ — ساختار روند نزولی است',
-      momentumUp: 'مومنتوم ۷ روزه {pct}٪',
-      momentumDown: 'مومنتوم ۷ روزه {pct}٪',
-      bbLow: 'نزدیک باند پایینی بولینگر',
-      bbHigh: 'نزدیک باند بالایی بولینگر',
-      nearSupport: 'نزدیک حمایت در ${lvl}',
-      nearResistance: 'نزدیک مقاومت در ${lvl}'
+      rsiOversold: 'RSI روی {rsi} — اشباع فروش',
+      rsiOverbought: 'RSI روی {rsi} — اشباع خرید',
+      macdUp: 'هیستوگرام MACD مثبت شده — مومنتوم صعودی در حال شکل‌گیری است',
+      macdDown: 'هیستوگرام MACD منفی شده — مومنتوم نزولی در حال شکل‌گیری است',
+      aboveMa: '{pct}٪ بالاتر از میانگین ۲۰ دوره‌ای معامله می‌شود',
+      belowMa: '{pct}٪ پایین‌تر از میانگین ۲۰ دوره‌ای معامله می‌شود',
+      goldenCross: 'میانگین ۲۰ از بالای میانگین ۵۰ رد شده — ساختار روند صعودی است',
+      deathCross: 'میانگین ۲۰ از زیر میانگین ۵۰ رد شده — ساختار روند نزولی است',
+      momentumUp: 'در ۷ روز گذشته {pct}٪ بالا رفته',
+      momentumDown: 'در ۷ روز گذشته {pct}٪ پایین آمده',
+      bbLow: 'نزدیک باند پایینی بولینگر ایستاده',
+      bbHigh: 'نزدیک باند بالایی بولینگر ایستاده',
+      nearSupport: 'نزدیک حمایت {lvl}',
+      nearResistance: 'نزدیک مقاومت {lvl}'
     },
     risks: {
-      volatile: 'نوسان {vol}٪ سالانه است — حد ضررهای تنگ فقط با نویز بازار فعال می‌شوند.',
-      conflict: 'اندیکاتورها با هم اختلاف دارند، پس هر خواندن منفرد اینجا شاهد ضعیفی است.',
-      overbought: 'همین حالا در اشباع خرید است: ورود اینجا یعنی خرید بعد از حرکت، نه قبل از آن.',
-      oversold: 'اشباع فروش می‌تواند ادامه پیدا کند. هیچ‌چیز در این اعداد کف را مشخص نمی‌کند.',
-      thin: 'کمتر از ۳۰ روز تاریخچه قیمت — همه اندیکاتورهای زیر روی نمونه کوتاهی محاسبه شده‌اند.',
-      news: 'هیچ منبع خبری متصل نیست، پس این تحلیل فقط قیمت را می‌خواند. لیست شدن، هک یا خبر قانون‌گذاری برایش نامرئی است.',
-      resistance: 'مقاومت ${lvl} درست بالای قیمت است؛ اخیراً رالی‌ها همان‌جا متوقف شده‌اند.',
-      support: 'حمایت ${lvl} درست زیر قیمت است؛ شکستنش معمولاً حرکت را تندتر می‌کند.'
+      volatile:
+        'نوسان سالانه {vol}٪ است. حد ضرری که تنگ گذاشته شود با نویز عادی بازار فعال می‌شود، قبل از اینکه اصلاً حرکتی که برایش گذاشته شده اتفاق بیفتد.',
+      conflict:
+        'اندیکاتورها اینجا خلاف هم را می‌گویند، پس هیچ‌کدام از خواندن‌های پایین به‌تنهایی وزن زیادی ندارد.',
+      overbought:
+        'همین حالا در اشباع خرید است. ورود در این نقطه یعنی خرید بعد از حرکت، نه پیش از آن.',
+      oversold:
+        'اشباع فروش می‌تواند مدت‌ها ادامه پیدا کند. هیچ‌چیز در این اعداد کف را مشخص نمی‌کند.',
+      thin:
+        'کمتر از ۳۰ روز تاریخچه قیمت وجود دارد، پس همه اندیکاتورهای پایین روی نمونه کوتاهی حساب شده‌اند و باید با احتیاط خوانده شوند.',
+      news:
+        'هیچ منبع خبری متصل نیست، پس این تحلیل فقط قیمت را می‌خواند و بس. لیست شدن در یک صرافی، هک شدن یا یک خبر قانون‌گذاری کاملاً برایش نامرئی است.',
+      resistance:
+        'مقاومت {lvl} درست بالای قیمت است — همان‌جایی که رالی‌های اخیر متوقف شده‌اند.',
+      support:
+        'حمایت {lvl} درست زیر قیمت است و شکستنش معمولاً حرکت را تندتر می‌کند.'
     },
     invalidation: {
-      bullish: 'بسته شدن زیر ${lvl} ساختاری که این تحلیل بر آن بنا شده را می‌شکند.',
-      bearish: 'بسته شدن بالای ${lvl} ساختاری که این تحلیل بر آن بنا شده را می‌شکند.',
-      neutral: 'یک بسته شدن قاطع بیرون از ${low}–${high} بلاتکلیفی فعلی را حل می‌کند.'
+      bullish: 'بسته شدن زیر {lvl} ساختاری را که این تحلیل روی آن بنا شده می‌شکند.',
+      bearish: 'بسته شدن بالای {lvl} ساختاری را که این تحلیل روی آن بنا شده می‌شکند.',
+      neutral: 'یک بسته شدن قاطع بیرون از {low} تا {high} بلاتکلیفی فعلی را حل می‌کند.'
     },
     briefHeadline: {
-      bullish: 'بازار عمدتاً صعودی — {up} از {total} ارز بزرگ مثبت',
-      bearish: 'بازار عمدتاً نزولی — {down} از {total} ارز بزرگ منفی',
-      neutral: 'بازار مختلط — جهت مشخصی ندارد'
+      bullish: 'بازار عمدتاً صعودی — {up} تا از {total} ارز بزرگ مثبت‌اند',
+      bearish: 'بازار عمدتاً نزولی — {down} تا از {total} ارز بزرگ منفی‌اند',
+      neutral: 'بازار مختلط است و جهت مشخصی ندارد'
     },
     briefSummary:
-      'ارزش کل بازار در ۲۴ ساعت {mcapChange}٪ تغییر کرده و سلطه بیت‌کوین روی {btcDom}٪ است. {breadth} {domNote}',
-    breadthUp: '{up} از {total} ارز برتر امروز مثبت‌اند، پس حرکت فراگیر است نه محدود به یکی دو اسم.',
-    breadthDown: '{down} از {total} ارز برتر امروز منفی‌اند، پس این فروش فراگیر است نه یک حرکت جداافتاده.',
-    breadthMixed: 'تعداد مثبت‌ها و منفی‌ها تقریباً برابر است؛ تصویر یک بازار بلاتکلیف دقیقاً همین است.',
-    domUp: 'افزایش سلطه بیت‌کوین در بازار نزولی معمولاً یعنی پول اول از آلت‌کوین‌ها خارج می‌شود.',
-    domDown: 'کاهش سلطه بیت‌کوین معمولاً یعنی ریسک‌پذیری به سمت آلت‌کوین‌ها می‌چرخد.',
+      'ارزش کل بازار در ۲۴ ساعت گذشته {mcapChange}٪ جابه‌جا شده و سلطه بیت‌کوین {btcDom}٪ است. {breadth} {domNote}',
+    breadthUp:
+      '{up} تا از {total} ارز برتر امروز مثبت‌اند، پس حرکت فراگیر است و یکی دو اسم شاخص را بالا نکشیده‌اند.',
+    breadthDown:
+      '{down} تا از {total} ارز برتر امروز منفی‌اند، پس این فروش فراگیر است نه یک ریزش جداافتاده.',
+    breadthMixed:
+      'تعداد مثبت‌ها و منفی‌ها تقریباً برابر است؛ تصویر یک بازار بلاتکلیف دقیقاً همین است.',
+    domUp:
+      'بالا رفتن سلطه بیت‌کوین در بازاری که می‌ریزد معمولاً یعنی پول اول از آلت‌کوین‌ها بیرون می‌رود.',
+    domDown: 'پایین آمدن سلطه بیت‌کوین معمولاً یعنی ریسک‌پذیری به سمت آلت‌کوین‌ها می‌چرخد.',
     domFlat: 'سلطه ثابت است، پس سرمایه به هیچ سمتی چرخش قوی ندارد.'
   },
 
   ar: {
     bias: { bullish: 'يميل للصعود', bearish: 'يميل للهبوط', neutral: 'بلا اتجاه واضح' },
     headline: {
-      bullish: '{sym}: المؤشرات تميل للصعود، توافق {conf}٪',
-      bearish: '{sym}: المؤشرات تميل للهبوط، توافق {conf}٪',
-      neutral: '{sym}: المؤشرات متضاربة، لا إشارة واضحة'
+      bullish: '{sym} يميل للصعود — {conf}٪ من المؤشرات متفقة',
+      bearish: '{sym} يميل للهبوط — {conf}٪ من المؤشرات متفقة',
+      neutral: '{sym} بلا إشارة واضحة — المؤشرات متضاربة'
     },
     summaryStrong:
-      '{n} من {total} مؤشرات تشير للاتجاه نفسه، ولذلك الثقة عند {conf}٪. {lead} التذبذب المحقق {vol}٪ سنوياً، فحركة نحو {band}٪ في أي اتجاه خلال {days} أيام أمر طبيعي — هذا نطاق وليس هدفاً.',
+      '{lead} و{agree}، ومن هنا جاء رقم {conf}٪. التذبذب السنوي {vol}٪، أي أن حركة بنحو {band}٪ في أي اتجاه خلال {days} أيام ليست أمراً غريباً على هذا الأصل — هذا نطاق وليس هدفاً.',
     summaryWeak:
-      'المؤشرات تتناقض، ولذلك الثقة {conf}٪ فقط. {lead} عند تذبذب {vol}٪ سنوياً تُعد حركة {band}٪ خلال {days} أيام عادية. التضارب سبب للانتظار لا لاختيار جانب.',
+      '{lead} لكن المؤشرات تشد في اتجاهات متعاكسة، ولهذا الثقة {conf}٪ فقط. التذبذب السنوي {vol}٪، فحركة نحو {band}٪ في أي اتجاه خلال {days} أيام أمر عادي هنا. وحين تتضارب القراءات يكون الجواب المفيد عادةً هو الانتظار لا اختيار جانب.',
     lead: {
-      rsiLow: 'مؤشر RSI عند {rsi} في منطقة التشبع البيعي، وقد يستمر منخفضاً في اتجاه هابط حقيقي.',
-      rsiHigh: 'مؤشر RSI عند {rsi} في التشبع الشرائي، وقد يستمر خلال موجة صعود قوية.',
-      rsiMid: 'مؤشر RSI عند {rsi} في المنتصف ولا يقول الكثير وحده.',
-      trendUp: 'السعر فوق متوسط ٢٠ فترة وزخم MACD موجب.',
-      trendDown: 'السعر تحت متوسط ٢٠ فترة وزخم MACD سالب.',
-      flat: 'السعر يتذبذب حول متوسط ٢٠ فترة.'
+      rsiLow:
+        'انخفض مؤشر RSI إلى {rsi}، وهي منطقة تشبع بيعي — غالباً ما تسبق ارتداداً، لكنه في اتجاه هابط حقيقي قد يبقى هناك أسابيع.',
+      rsiHigh:
+        'ارتفع مؤشر RSI إلى {rsi}، وهو تشبع شرائي — غالباً ما يسبق تصحيحاً، لكن موجة صعود قوية قد تبقيه هناك طويلاً.',
+      rsiMid: 'مؤشر RSI عند {rsi} في المنتصف، ولا يقول الكثير بمفرده.',
+      trendUp: 'السعر ثابت فوق متوسط ٢٠ فترة وزخم MACD موجب.',
+      trendDown: 'انزلق السعر تحت متوسط ٢٠ فترة وزخم MACD سالب.',
+      flat: 'السعر يتحرك حول متوسط ٢٠ فترة دون أن يحسم اتجاهه.'
     },
     drivers: {
-      rsiOversold: 'RSI {rsi} — تشبع بيعي',
-      rsiOverbought: 'RSI {rsi} — تشبع شرائي',
-      macdUp: 'هيستوغرام MACD موجب — زخم صاعد',
-      macdDown: 'هيستوغرام MACD سالب — زخم هابط',
-      aboveMa: 'يتداول {pct}٪ فوق متوسط ٢٠ فترة',
-      belowMa: 'يتداول {pct}٪ تحت متوسط ٢٠ فترة',
-      goldenCross: 'متوسط ٢٠ فوق ٥٠ — بنية الاتجاه صاعدة',
-      deathCross: 'متوسط ٢٠ تحت ٥٠ — بنية الاتجاه هابطة',
-      momentumUp: 'زخم ٧ أيام {pct}٪',
-      momentumDown: 'زخم ٧ أيام {pct}٪',
-      bbLow: 'قرب نطاق بولينجر السفلي',
-      bbHigh: 'قرب نطاق بولينجر العلوي',
-      nearSupport: 'قرب الدعم عند ${lvl}',
-      nearResistance: 'قرب المقاومة عند ${lvl}'
+      rsiOversold: 'RSI عند {rsi} — تشبع بيعي',
+      rsiOverbought: 'RSI عند {rsi} — تشبع شرائي',
+      macdUp: 'هيستوغرام MACD تحوّل إلى الموجب — زخم صاعد يتكوّن',
+      macdDown: 'هيستوغرام MACD تحوّل إلى السالب — زخم هابط يتكوّن',
+      aboveMa: 'يتداول أعلى بـ {pct}٪ من متوسط ٢٠ فترة',
+      belowMa: 'يتداول أدنى بـ {pct}٪ من متوسط ٢٠ فترة',
+      goldenCross: 'متوسط ٢٠ عبر فوق متوسط ٥٠ — بنية الاتجاه صاعدة',
+      deathCross: 'متوسط ٢٠ عبر تحت متوسط ٥٠ — بنية الاتجاه هابطة',
+      momentumUp: 'ارتفع {pct}٪ خلال الأيام السبعة الماضية',
+      momentumDown: 'انخفض {pct}٪ خلال الأيام السبعة الماضية',
+      bbLow: 'قريب من نطاق بولينجر السفلي',
+      bbHigh: 'قريب من نطاق بولينجر العلوي',
+      nearSupport: 'قريب من الدعم عند {lvl}',
+      nearResistance: 'قريب من المقاومة عند {lvl}'
     },
     risks: {
-      volatile: 'التذبذب {vol}٪ سنوياً — وقف الخسارة الضيق سيُضرب بالضجيج وحده.',
-      conflict: 'المؤشرات متضاربة، فأي قراءة منفردة هنا دليل ضعيف.',
-      overbought: 'في التشبع الشرائي أصلاً: الدخول هنا شراء بعد الحركة لا قبلها.',
-      oversold: 'التشبع البيعي قد يستمر. لا شيء هنا يحدد القاع.',
-      thin: 'أقل من ٣٠ يوماً من التاريخ السعري — كل المؤشرات محسوبة على عينة قصيرة.',
-      news: 'لا يوجد مصدر أخبار متصل، فالتحليل يقرأ السعر فقط.',
-      resistance: 'المقاومة عند ${lvl} فوق السعر مباشرة.',
-      support: 'الدعم عند ${lvl} تحت السعر مباشرة؛ كسره يسرّع الحركة عادة.'
+      volatile:
+        'التذبذب السنوي {vol}٪. وقف الخسارة الضيق سيُضرب بضجيج السوق العادي قبل أن تحدث أصلاً الحركة التي وُضع من أجلها.',
+      conflict:
+        'المؤشرات تتناقض هنا، فلا قراءة منفردة مما يلي تحمل وزناً كبيراً بمفردها.',
+      overbought:
+        'هو في التشبع الشرائي أصلاً. الدخول الآن يعني الشراء بعد الحركة لا قبلها.',
+      oversold:
+        'التشبع البيعي قد يستمر طويلاً. لا شيء في هذه الأرقام يحدد القاع.',
+      thin:
+        'تاريخ السعر أقل من ٣٠ يوماً، فكل المؤشرات أدناه محسوبة على عينة قصيرة وينبغي قراءتها بتحفظ.',
+      news:
+        'لا يوجد مصدر أخبار متصل، فالتحليل يقرأ السعر ولا شيء غيره. الإدراج في منصة أو اختراق أو خبر تنظيمي كلها غير مرئية له تماماً.',
+      resistance:
+        'المقاومة عند {lvl} فوق السعر مباشرة — وهناك توقفت الموجات الصاعدة الأخيرة.',
+      support:
+        'الدعم عند {lvl} تحت السعر مباشرة، وكسره يسرّع الحركة عادةً.'
     },
     invalidation: {
-      bullish: 'إغلاق تحت ${lvl} يكسر البنية التي تقوم عليها هذه القراءة.',
-      bearish: 'إغلاق فوق ${lvl} يكسر البنية التي تقوم عليها هذه القراءة.',
-      neutral: 'إغلاق حاسم خارج ${low}–${high} يحسم التردد الحالي.'
+      bullish: 'إغلاق تحت {lvl} يكسر البنية التي تقوم عليها هذه القراءة.',
+      bearish: 'إغلاق فوق {lvl} يكسر البنية التي تقوم عليها هذه القراءة.',
+      neutral: 'إغلاق حاسم خارج {low} إلى {high} يحسم التردد الحالي.'
     },
     briefHeadline: {
-      bullish: 'السوق مرتفع عموماً — {up} من {total}',
-      bearish: 'السوق منخفض عموماً — {down} من {total}',
-      neutral: 'جلسة مختلطة — لا اتجاه واضح'
+      bullish: 'السوق مرتفع عموماً — {up} من {total} من العملات الكبرى مرتفعة',
+      bearish: 'السوق منخفض عموماً — {down} من {total} من العملات الكبرى منخفضة',
+      neutral: 'جلسة مختلطة بلا اتجاه واضح'
     },
     briefSummary:
-      'القيمة السوقية الإجمالية {mcapChange}٪ خلال ٢٤ ساعة وهيمنة البيتكوين {btcDom}٪. {breadth} {domNote}',
-    breadthUp: '{up} من أصل {total} مرتفعة اليوم، فالحركة واسعة.',
-    breadthDown: '{down} من أصل {total} منخفضة اليوم، فالبيع واسع.',
-    breadthMixed: 'الرابحون والخاسرون متوازنون تقريباً.',
-    domUp: 'ارتفاع هيمنة البيتكوين في سوق هابط يعني عادة خروج المال من العملات البديلة أولاً.',
-    domDown: 'انخفاض الهيمنة يعني عادة تحول الإقبال نحو العملات البديلة.',
-    domFlat: 'الهيمنة مستقرة، فلا دوران قوي لرأس المال.'
+      'تحركت القيمة السوقية الإجمالية {mcapChange}٪ خلال ٢٤ ساعة، وهيمنة البيتكوين {btcDom}٪. {breadth} {domNote}',
+    breadthUp:
+      '{up} من أصل {total} من الأكبر مرتفعة اليوم، فالحركة واسعة ولم يرفع المؤشرَ اسم أو اسمان.',
+    breadthDown:
+      '{down} من أصل {total} من الأكبر منخفضة اليوم، فالبيع واسع لا هبوط معزول.',
+    breadthMixed:
+      'الرابحون والخاسرون متقاربون تقريباً، وهذه صورة سوق متردد.',
+    domUp:
+      'ارتفاع هيمنة البيتكوين مع هبوط السوق يعني عادةً أن المال يغادر العملات البديلة أولاً.',
+    domDown: 'انخفاض هيمنة البيتكوين يعني عادةً تحوّل الإقبال نحو العملات البديلة.',
+    domFlat: 'الهيمنة مستقرة، فلا دوران قوي لرأس المال في أي اتجاه.'
   }
 };
 
@@ -244,11 +331,16 @@ const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 function localiseDigits(text, lang) {
   const set = lang === 'fa' ? FA_DIGITS : lang === 'ar' ? AR_DIGITS : null;
   if (!set) return text;
-  // Currency figures stay Latin: an address or a dollar amount is copied and
-  // compared far more often than it is read aloud, and Persian-Indic digits
-  // inside a "$165.06" break that.
-  return String(text).replace(/(\$[\d.,]+)|(\d)/g, (m, money, digit) =>
-    money ?? set[Number(digit)]
+  /*
+   * Price figures stay in Latin digits because they are compared and copied
+   * far more than they are read aloud — but the currency MARKER around them
+   * is localised by `money()` before we get here, so there is no longer a
+   * bare "$" for the bidi algorithm to strand on the wrong side of the
+   * number. That stranding was one of the things that made the Persian read
+   * as machine output.
+   */
+  return String(text).replace(/(\d+[\d.,]*\s?(?:دلار|دولار))|(\d)/g, (m, priced, digit) =>
+    priced ?? set[Number(digit)]
   );
 }
 
@@ -258,14 +350,115 @@ function fill(template, vars = {}) {
 }
 
 const num = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : '—');
-const money = (v) =>
-  !Number.isFinite(v)
-    ? '—'
-    : v >= 1000
+
+/**
+ * A price level, written the way each language writes one.
+ *
+ * ─── WHY THIS IS NOT JUST `'$' + n` ─────────────────────────────────────────
+ * It was, and inside an RTL paragraph the result was wrong twice over.
+ *
+ * First, direction. "$150.12" dropped into Persian prose puts a
+ * left-to-right currency symbol at a bidirectional boundary; the Unicode bidi
+ * algorithm resolves that differently depending on what precedes it, so the
+ * same figure could render as "$150.12" in one sentence and "150.12$" in the
+ * next. Inconsistent within a single screen is what makes text look broken
+ * even to a reader who cannot say why.
+ *
+ * Second, idiom. A Persian speaker says «۱۵۰ دلار», not «$۱۵۰» — the unit
+ * follows the number as a word. Writing it the other way is a tell that the
+ * sentence was translated rather than written.
+ *
+ * So the symbol becomes a trailing word in fa/ar and stays a leading symbol
+ * in en. The templates carry a bare `{lvl}` and this decides the form.
+ */
+function money(v, lang = 'en') {
+  if (!Number.isFinite(v)) return '—';
+  const n =
+    v >= 1000
       ? v.toLocaleString('en-US', { maximumFractionDigits: 0 })
       : v >= 1
         ? v.toFixed(2)
         : v.toFixed(6);
+  if (lang === 'fa') return `${n} دلار`;
+  if (lang === 'ar') return `${n} دولار`;
+  return `$${n}`;
+}
+
+/**
+ * The "how many indicators agree" clause, built as a whole rather than
+ * interpolated as a bare number.
+ *
+ * ─── THE BUG THIS FIXES ─────────────────────────────────────────────────────
+ * The English template was "{n} of {total} indicators point the same way".
+ * At 5-of-7 that is correct. At 1-of-7 it printed
+ *
+ *     "1 of 7 indicators point the same way"
+ *
+ * — a plain subject-verb disagreement, and precisely the kind of error that
+ * makes a reader conclude a machine wrote the sentence, because one did. The
+ * same template also printed "0 of 7", which is grammatical but reads as an
+ * error rather than as information.
+ *
+ * Building the clause here means the verb can agree, and the zero case can
+ * say something useful instead of quoting a bare nought.
+ *
+ * Persian is a no-op for agreement — «۱ تا از ۷ اندیکاتور» is correct at
+ * every count — but the zero case still deserves words rather than a digit,
+ * so it is handled in both.
+ */
+function agreementClause(n, total, lang) {
+  if (lang === 'fa') {
+    if (n === 0) return 'هیچ‌کدام از اندیکاتورها هم‌جهت نیستند';
+    /*
+     * Persian DOES need agreement here, contrary to the first pass at this.
+     * With a count of one the verb is singular — «۱ اندیکاتور … نشان می‌دهد»
+     * — and the plural «نشان می‌دهند» after «۱ تا» is wrong in the same way
+     * "1 indicators point" is wrong in English. The «تا» classifier is also
+     * dropped for one, because «۱ تا اندیکاتور» is spoken register and this
+     * is written analysis.
+     */
+    if (n === 1) return `از ${total} اندیکاتور فقط یکی همین جهت را نشان می‌دهد`;
+    return `از ${total} اندیکاتور، ${n} تا یک جهت را نشان می‌دهند`;
+  }
+  if (lang === 'ar') {
+    if (n === 0) return 'لا مؤشر واحد يتفق مع البقية';
+    /*
+     * Arabic number agreement, which is not optional and was wrong.
+     * After 3–10 the counted noun takes the plural genitive — «٧ مؤشرات»,
+     * not «٧ مؤشراً». The accusative singular «مؤشراً» is correct only from
+     * 11 upward. With one, the noun is singular and the verb follows it.
+     */
+    if (n === 1) return `من أصل ${total} مؤشرات هناك واحد فقط يشير إلى الاتجاه نفسه`;
+    const counted = total >= 3 && total <= 10 ? 'مؤشرات' : 'مؤشراً';
+    return `من أصل ${total} ${counted} هناك ${n} تشير إلى الاتجاه نفسه`;
+  }
+  if (n === 0) return 'none of the indicators agree with each other';
+  if (n === 1) return `just 1 of the ${total} indicators points the same way`;
+  return `${n} of the ${total} indicators point the same way`;
+}
+
+/**
+ * Capitalise a clause that has been placed at the start of a sentence.
+ *
+ * ─── WHY THIS IS NEEDED AND WHY IT IS LANGUAGE-GATED ────────────────────────
+ * The summary is "{lead} {agree}, which is…". The lead ends with a full stop,
+ * so `{agree}` begins a new sentence and rendered as
+ *
+ *     "…MACD momentum positive. none of the indicators agree…"
+ *
+ * A lowercase letter after a full stop is the most visible possible sign that
+ * text was assembled by machine rather than written.
+ *
+ * Persian and Arabic have no letter case at all, so applying this blindly
+ * would be a no-op there in the best case and a mangled first grapheme in the
+ * worst — Arabic-script letters change shape by position, and touching the
+ * first one risks breaking the join. Hence the explicit gate rather than a
+ * `toUpperCase()` that "does nothing anyway".
+ */
+function startSentence(clause, lang) {
+  if (lang !== 'en' || typeof clause !== 'string' || !clause) return clause;
+  return clause[0].toUpperCase() + clause.slice(1);
+}
 
 /* -------------------------------------------------------------------------- */
 /* per-asset outlook                                                          */
@@ -317,6 +510,12 @@ export function localOutlook({ analysis, coin = {}, lang = 'en', days = 7 }) {
 
   const summaryTemplate = confidence >= 45 ? p.summaryStrong : p.summaryWeak;
   const summary = fill(summaryTemplate, {
+    /*
+     * A whole clause, not a bare count. See `agreementClause` — interpolating
+     * the number alone produced "1 of 7 indicators point", which is a
+     * grammar error and the single clearest tell that a machine wrote it.
+     */
+    agree: startSentence(agreementClause(agreeing, sigs.length, lang), lang),
     n: agreeing,
     total: sigs.length,
     conf: Math.round(confidence),
@@ -360,10 +559,10 @@ export function localOutlook({ analysis, coin = {}, lang = 'en', days = 7 }) {
 
   // Proximity to a level is real, actionable context the score does not carry.
   if (drivers.length < 3 && ind.support != null && price && price / ind.support - 1 < 0.03) {
-    drivers.push(fill(p.drivers.nearSupport, { lvl: money(ind.support) }));
+    drivers.push(fill(p.drivers.nearSupport, { lvl: money(ind.support, lang) }));
   }
   if (drivers.length < 3 && ind.resistance != null && price && ind.resistance / price - 1 < 0.03) {
-    drivers.push(fill(p.drivers.nearResistance, { lvl: money(ind.resistance) }));
+    drivers.push(fill(p.drivers.nearResistance, { lvl: money(ind.resistance, lang) }));
   }
 
   /* -------------------------------- risks ------------------------------- */
@@ -374,7 +573,7 @@ export function localOutlook({ analysis, coin = {}, lang = 'en', days = 7 }) {
   if (bias === 'bullish' && rsiVal != null && rsiVal > 68) risks.push(p.risks.overbought);
   if (bias === 'bearish' && rsiVal != null && rsiVal < 32) risks.push(p.risks.oversold);
   if (risks.length < 3 && ind.resistance != null && price && ind.resistance / price - 1 < 0.05) {
-    risks.push(fill(p.risks.resistance, { lvl: money(ind.resistance) }));
+    risks.push(fill(p.risks.resistance, { lvl: money(ind.resistance, lang) }));
   }
   if (risks.length < 3) risks.push(p.risks.news);
 
@@ -382,16 +581,16 @@ export function localOutlook({ analysis, coin = {}, lang = 'en', days = 7 }) {
   let invalidation;
   if (bias === 'bullish') {
     invalidation = fill(p.invalidation.bullish, {
-      lvl: money(ind.support ?? (ma20 != null ? ma20 : price * 0.95))
+      lvl: money(ind.support ?? (ma20 != null ? ma20 : price * 0.95), lang)
     });
   } else if (bias === 'bearish') {
     invalidation = fill(p.invalidation.bearish, {
-      lvl: money(ind.resistance ?? (ma20 != null ? ma20 : price * 1.05))
+      lvl: money(ind.resistance ?? (ma20 != null ? ma20 : price * 1.05), lang)
     });
   } else {
     invalidation = fill(p.invalidation.neutral, {
-      low: money(ind.support ?? price * 0.95),
-      high: money(ind.resistance ?? price * 1.05)
+      low: money(ind.support ?? price * 0.95, lang),
+      high: money(ind.resistance ?? price * 1.05, lang)
     });
   }
 

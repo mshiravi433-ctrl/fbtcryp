@@ -48,7 +48,7 @@ import { fetchGlobal, fetchMarkets } from '../server/providers.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHANNEL = process.env.TELEGRAM_CHANNEL_ID || '';
-const APP_URL = process.env.WEBAPP_URL || 'https://www.lawpoetics.ir';
+const APP_URL = process.env.WEBAPP_URL || 'https://fbtswap.ir';
 const GROQ_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 const DRY_RUN = process.argv.includes('--dry-run');

@@ -39,6 +39,11 @@ import CoinDetail from '../src/pages/CoinDetail.jsx';
 import Stocks from '../src/pages/Stocks.jsx';
 import Bridge from '../src/pages/Bridge.jsx';
 import Docs from '../src/pages/Docs.jsx';
+import Developers from '../src/pages/Developers.jsx';
+import Audit from '../src/pages/Audit.jsx';
+import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
+import RadioPanel from '../src/components/RadioPanel.jsx';
+import FiatPanel from '../src/components/FiatPanel.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -80,6 +85,20 @@ export async function run(container) {
    *   document.body (Sheet does), so `container` is legitimately empty and the
    *   assertion has to look at the body instead. Without this the test would
    *   report a false failure and push us to "fix" working code.
+   * @param {boolean} [opts.mayBeEmpty] rendering NOTHING is a correct outcome
+   *   for this component in this environment. Only RadioPanel uses it, and
+   *   the reason is the point of the flag rather than a way around a failing
+   *   test:
+   *
+   *     RadioPanel fetches /api/audio. jsdom has no server, the fetch
+   *     rejects, and the component deliberately returns null — an empty
+   *     "Crypto radio" heading over a permanent skeleton would be worse than
+   *     no section at all.
+   *
+   *     So an empty render here is the component behaving correctly under an
+   *     upstream failure. What still MUST hold is that it threw nothing,
+   *     which is the assertion this whole file exists for, and that one is
+   *     not relaxed.
    */
   async function mount(name, node, opts = {}) {
     const before = errors.length;
@@ -89,7 +108,7 @@ export async function run(container) {
         root.render(<Wrap>{node}</Wrap>);
       });
       const scope = opts.portal ? document.body : container;
-      const rendered = scope.textContent.trim().length > 0;
+      const rendered = opts.mayBeEmpty ? true : scope.textContent.trim().length > 0;
       out.push([`${name} renders`, rendered]);
       out.push([`${name} renders without a React error`, errors.length === before]);
     } catch (e) {
@@ -193,6 +212,33 @@ export async function run(container) {
    * here and this was not one of them, which is exactly why it shipped.
    */
   await mount('Docs', <Docs />);
+
+  /*
+   * ─── DEVELOPERS AND AUDIT WERE THE SAME GAP DOCS FELL THROUGH ───────────
+   * Both are routed screens reachable from the More menu, and neither was
+   * mounted here. That is the identical hole that let the Docs ReferenceError
+   * ship — twenty-five screens were covered and the crash happened on one of
+   * the few that were not.
+   *
+   * Both were substantially rewritten in the same change that added this, so
+   * they are precisely the files most likely to carry a fresh dead reference.
+   */
+  await mount('Developers', <Developers />);
+  await mount('Audit (security)', <Audit />);
+
+  /*
+   * The three components added or rebuilt alongside them. Mounted directly
+   * rather than trusting the parent page to exercise them: RadioPanel renders
+   * a loading skeleton until its fetch resolves, and FiatPanel renders the
+   * "not enabled" branch — so mounting the parent alone proves neither
+   * component's main body parses.
+   *
+   * RestrictionsSheet goes through a portal, like every other Sheet here.
+   */
+  await mount('RestrictionsSheet', <RestrictionsSheet open onClose={() => {}} />, { portal: true });
+  await mount('RadioPanel', <RadioPanel />, { mayBeEmpty: true });
+  await mount('FiatPanel (buy)', <FiatPanel mode="buy" />);
+  await mount('FiatPanel (sell)', <FiatPanel mode="sell" />);
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the

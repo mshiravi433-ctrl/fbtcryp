@@ -248,10 +248,26 @@
       "liquidStake": {
         "title": "Liquid staking",
         "body": "Stake ETH and keep a tradable receipt token"
+      },
+      "aaveSupply": {
+        "title": "Lend on Aave",
+        "body": "The largest lending market in DeFi. Supply an asset, earn what borrowers pay"
+      },
+      "morphoLend": {
+        "title": "Lend on Morpho",
+        "body": "Isolated markets, so one bad asset cannot affect the pool your money is in"
+      },
+      "solStake": {
+        "title": "Stake Solana",
+        "body": "Stake SOL and hold a token you can still trade or use elsewhere"
+      },
+      "thorSavers": {
+        "title": "Native Bitcoin yield",
+        "body": "Deposit real BTC — not a wrapped IOU — and earn from swap fees"
       }
     },
     "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
-    "realRisk": "Yield is never free money. Pools can lose value through impermanent loss, lending markets can suffer bad debt, and any smart contract can be exploited. Start small and only use protocols you've read about.",
+    "realRisk": "Yield is never free money. Pools can lose value to impermanent loss, lending markets can take bad debt, staking can be slashed, and any smart contract can be exploited. The higher-risk entries here can also be paused by the protocol itself, leaving you unable to withdraw for a while. Start small and only use protocols you have read about.",
     "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all."
   },
   "wallet": {
@@ -1126,10 +1142,67 @@
     "watchEn": "Search on YouTube"
   },
   "audit": {
-    "title": "Security & audits",
-    "intro": "What has been independently audited, and what hasn't. We'd rather tell you plainly than imply more safety than exists.",
-    "nonCustodial": "We hold nothing",
-    "nonCustodialBody": "FBT Swap has no deposit address and cannot move your funds. Even if our servers were fully compromised, an attacker could not touch assets in your wallet.",
+    "title": "Security",
+    "intro": "What protects you, exactly how far each protection reaches, and what is not audited. Overstating any of this would make you less careful, which would cost you more than the reassurance is worth.",
+    "nonCustodial": "We hold nothing, and cannot",
+    "nonCustodialBody": "FBT Swap has no deposit address. There is no account with a balance, no wallet we control on your behalf, and no button anywhere in our systems that moves your funds. Every transaction is signed on your device by your own wallet. This is the foundation everything else on this page rests on.",
+    "howProtected": "What protects you",
+    "prot": {
+      "keys": {
+        "title": "Your recovery phrase never leaves your device",
+        "body": "The 12-word phrase is generated on your phone using the operating system's own cryptographic random source, and it is never transmitted anywhere. Our servers have never seen one and are not built to receive one.",
+        "limit": "Which means we cannot recover it for you. If you lose the phrase and your device, the funds are gone permanently — not withheld, gone. Write it on paper."
+      },
+      "encryption": {
+        "title": "Encrypted at rest with your password",
+        "body": "The phrase is stored encrypted with AES-GCM, using a key stretched from your password by PBKDF2 with 310,000 iterations of SHA-256 — the OWASP-recommended figure. Someone who copies the stored file without your password gets ciphertext.",
+        "limit": "The strength is your password's strength. 310,000 iterations makes each guess slow; it does not make a six-character password safe."
+      },
+      "server": {
+        "title": "A server breach cannot take your funds",
+        "body": "Our backend proxies market data, caches prices and forwards quotes. It holds no keys, no balances and no ability to sign anything. If it were fully compromised tomorrow, an attacker would gain a price cache.",
+        "limit": "They could serve a wrong quote. Always check the amount your wallet shows you before signing — your wallet's number is the one that is binding, not ours."
+      },
+      "lock": {
+        "title": "App lock and biometrics",
+        "body": "A PIN, TOTP two-factor or your device's fingerprint or face unlock can gate the app, and it auto-locks after inactivity. This genuinely protects you from someone who picks up your unlocked phone.",
+        "limit": "It gates this app's interface, nothing more. Anyone holding your recovery phrase can restore the wallet in any other app and spend from it, and our lock is irrelevant to them."
+      },
+      "privacy": {
+        "title": "What we can see about you",
+        "body": "No account, no email, no phone number, no identity check. The server sees the requests you make and the IP they come from, the same as any website. Your wallet address is sent when you ask for its balance, and it is not stored against a profile.",
+        "limit": "The blockchain itself is public. Anyone who learns your address can read its entire history forever, from us or from anywhere else. That is a property of public blockchains, not of this app."
+      },
+      "network": {
+        "title": "Where the app talks to",
+        "body": "Fonts, icons and all app code are served from our own origin, so the app renders identically with no third-party requests. Price data, swap quotes and blockchain calls go to named providers over HTTPS only.",
+        "limit": "External links — a P2P desk, a payment page, a podcast — open in a browser tab where the real domain stays visible, deliberately. Check that domain before typing anything into it."
+      }
+    },
+    "threats": "How people actually lose crypto",
+    "threatsIntro": "In order of how often it happens. None of these are exotic attacks on cryptography — every one is somebody being persuaded to do something.",
+    "threat": {
+      "phrase": {
+        "title": "Giving away the recovery phrase",
+        "body": "This is the overwhelming majority of losses. Nobody legitimate ever needs your 12 words: not support, not a giveaway, not a \"wallet validation\" page, not us. Anyone who asks is stealing from you, and there is no exception to that rule."
+      },
+      "approvals": {
+        "title": "Signing an unlimited token approval",
+        "body": "A malicious site asks you to approve a token and requests unlimited spending. Nothing happens that day. Weeks later the contract drains everything of that token. Approve only the amount you are trading, and revoke old approvals you no longer use."
+      },
+      "fakeApps": {
+        "title": "A convincing fake of this app",
+        "body": "Copies of wallet apps appear constantly on unofficial stores and in search ads. They look identical and send your phrase to somebody else. Install only from a link on our own site, and check the domain in the address bar before you download."
+      },
+      "address": {
+        "title": "Sending to the wrong address or network",
+        "body": "The same address string can exist on several networks, and a transfer sent on the wrong one is usually unrecoverable. Scan a QR code rather than typing, and if the amount is large, send a small test first."
+      },
+      "support": {
+        "title": "Somebody pretending to be support",
+        "body": "Fake helpers appear within minutes of any public complaint about a wallet. Real support never messages first, never asks for a phrase or a password, and never asks you to move funds to a \"safe\" address. Ours is one email address, listed on the Contact page."
+      }
+    },
     "audited": "Audited third-party contracts",
     "notAudited": "Not audited",
     "item": {
@@ -1147,40 +1220,92 @@
       }
     },
     "ours": "Our own contract",
-    "ourContractBody": "FeeRouter.sol is an optional contract for collecting the fee without a third party. It has been tested in a local EVM but has NOT had a professional audit. It is not used by default — the aggregator path is. Do not route significant volume through it until it is audited.",
+    "ourContractBody": "FeeRouter.sol is an optional contract for collecting the fee without a third party. It has been tested in a local EVM but has NOT had a professional audit. It is not used by default — the audited aggregator path is. Do not route significant volume through it until it is audited.",
     "readSource": "Request a code review",
+    "sourceNote": "The contract source is kept private, because the repository also holds the app signing key — publishing it would let anyone ship a convincing fake of this app. Read access is granted to auditors and technical partners through the Contact page, and the on-chain address below lets anyone verify the fee without any access at all.",
     "feeTransparency": "Fee transparency",
     "feeRate": "Platform fee",
     "feeWallet": "Fee wallet",
     "network": "Network",
     "viewOnChain": "View on BscScan",
-    "bounty": "Found a security issue? Email us at fbtswap@gmail.com before disclosing it publicly. We'll respond within 48 hours.",
-    "sourceNote": "The contract source is kept private. Read access is granted to auditors and technical partners via the Contact page. The on-chain contract address is listed on this page and anyone can inspect the fee transactions on BscScan."
+    "disclosure": "Responsible disclosure",
+    "bounty": "Found a security issue? Email fbtswap@gmail.com before disclosing it publicly, and you will get a reply within 48 hours. We have no cash bounty programme and will not pretend otherwise — what we can offer is a fast fix, public credit if you want it, and a straight answer if we disagree with your assessment."
   },
   "dev": {
     "title": "Developers",
-    "intro": "This app is open source. Read the code, self-host it, or build on the public API.",
-    "openSource": "Source code — private",
-    "openSourceSub": "This project’s repository is private and not published publicly",
-    "api": "Public API",
-    "apiIntro": "Read-only market endpoints, no key required. Rate limited per IP.",
-    "ep": {
-      "globalStats": "Total market cap, volume and dominance",
-      "markets": "Ranked coin list with sparklines",
-      "chart": "Price history for one asset",
-      "trending": "Currently trending coins",
-      "dexPools": "Hot DEX pools on a network",
-      "aiOutlook": "AI analysis for one asset",
-      "aiFaq": "AI answer about the app"
+    "intro": "A read-only market API, no key and no signup. Everything below is a real registered route on this server, checked rather than remembered — the previous version of this page advertised an endpoint that had been deleted, which is the one mistake documentation must not make.",
+    "quickstart": "Your first request",
+    "quickstartBody": "No key, no account, no header beyond accept. Paste this and it works right now.",
+    "rules": "What you need to know first",
+    "fact": {
+      "base": {
+        "k": "Base URL",
+        "v": "{{base}}/api — the same origin the app itself uses. There is no separate developer host, so if the app is up, the API is up."
+      },
+      "auth": {
+        "k": "Authentication",
+        "v": "None on any endpoint listed here. They are all public read-only data. If a request of ours ever asks you for a key, it is not ours."
+      },
+      "limit": {
+        "k": "Rate limit",
+        "v": "120 requests per minute per IP across /api, and a separate, much tighter 10 per minute on the AI routes because each of those spends shared upstream quota. Over the limit you get HTTP 429 with a retry-after header in seconds — read it rather than guessing a backoff."
+      },
+      "errors": {
+        "k": "Errors",
+        "v": "Always JSON, never an HTML error page, always shaped {\"error\":\"CODE\"}. Upstream failures come back as 502 UPSTREAM_FAILED rather than a 200 with empty data, so you can tell \"nothing happened\" apart from \"nothing exists\"."
+      },
+      "cors": {
+        "k": "CORS",
+        "v": "Open by default, so you can call this straight from a browser with no proxy of your own."
+      },
+      "caching": {
+        "k": "Caching",
+        "v": "Responses are cached server-side: market data for seconds, news and radio for 30 minutes, coin-id lookups for an hour. Polling faster than that spends your rate limit to receive the identical bytes."
+      }
     },
-    "example": "Example",
-    "selfHost": "Self-hosting",
-    "selfHostBody": "The repository is private. If you need access for a technical review or a partnership, request it from the Contact page and read access can be granted.",
+    "group": {
+      "market": "Market data",
+      "chain": "On-chain and DeFi",
+      "content": "News and audio",
+      "status": "Status and capability"
+    },
+    "api": "Endpoints",
+    "apiIntro": "Tap a group to expand it. The copy button gives you the full URL, ready to run.",
+    "ep": {
+      "globalStats": "Total market cap, 24h volume and BTC dominance",
+      "markets": "Ranked coin list with sparkline data",
+      "coin": "Full detail for one asset",
+      "chart": "Price history for one asset",
+      "ohlc": "Open/high/low/close candles, for candlestick charts",
+      "prices": "Fast price-only lookup, up to 50 ids at once",
+      "trending": "Currently trending coins",
+      "search": "Search coins by name or symbol",
+      "category": "Coins within one category",
+      "dexPools": "Active DEX pools on a network",
+      "yields": "Live yield opportunities across DeFi protocols",
+      "perp": "Perpetual funding rates, normalised to a yearly rate per venue",
+      "coinId": "Resolve a token contract address to its market id",
+      "nftChains": "Which chains NFT lookup supports",
+      "solanaAssets": "Curated Solana token list with verified mint addresses",
+      "news": "Aggregated headlines from 13 desks in 7 languages",
+      "audio": "Latest episodes from crypto news podcasts, with direct audio URLs",
+      "health": "Is the server alive",
+      "aiStatus": "Whether an AI model is configured",
+      "bridgeStatus": "Whether cross-chain bridging is configured",
+      "fiatStatus": "Whether buying with money is switched on",
+      "solanaStatus": "Solana routing and fee configuration",
+      "gaslessStatus": "Whether gasless swaps are available"
+    },
+    "fairUse": "Fair use, stated plainly",
+    "fairUseBody": "This data costs us upstream quota that is shared by every user of the app. Cache what you fetch, poll no faster than the cache tiers above, and identify your client in the user-agent so we can talk to you rather than block you. There is no commercial tier and no paid plan — if you need more than the limit allows, self-host, which is free and takes three commands.",
+    "selfHost": "Running your own copy",
+    "selfHostBody": "Every endpoint on this page runs from one Express server with no database. Clone, install, and it works against the free public tiers of its upstream providers.",
+    "selfHostKeys": "It runs with an empty .env. Keys only unlock extras: a CoinGecko key raises the market-data rate limit, an AI key enables the analysis routes, and the fiat, bridge and Solana fee settings stay off until you set your own. Nothing is required to get market data working.",
+    "sourcePrivate": "Why the source is not public",
+    "sourcePrivateSub": "Request access for a review or a partnership",
     "keysTitle": "About API keys",
-    "keysBody": "AI endpoints need OPENROUTER_API_KEY and JINA_API_KEY set server-side. Never put them in VITE_ variables — those are compiled into the browser bundle and would be harvested within hours.",
-    "rateLimit": "Please keep requests reasonable. Sustained heavy polling will be rate limited; if you need higher throughput, self-host your own instance.",
-    "sourcePrivate": "Why isn’t the source public?",
-    "sourcePrivateBody": "The repository is private. The app signing key, release configuration and fee infrastructure live in it, and making that public would let anyone ship a fake \"FBT Swap\" that looks identical to the real one and drains users’ wallets. For technical review or partnership, get in touch via the Contact page."
+    "keysBody": "If you self-host, keys go in server-side environment variables only. Never in a VITE_ variable — those are compiled into the browser bundle and into the Android APK, where anyone can read them out in minutes. The one exception is a genuinely public identifier such as a referral code.",
+    "noSla": "There is no uptime guarantee and no support contract on this API. It is the same backend the app uses, offered as-is. If your product cannot tolerate it going down, run your own copy."
   },
   "eco": {
     "title": "Ecosystem",
@@ -1394,9 +1519,7 @@
       "s3": "Scan their QR code instead of typing. If you must type or paste, compare the first four and last four characters against the original before continuing.",
       "s4": "Send a small test amount first when the sum is large. Losing a dollar to a mistake is a lesson; losing the whole amount is not recoverable.",
       "s5": "Send the rest, then give them the transaction link so they can verify it on-chain themselves."
-    },
-    "blocksIran": "Blocks Iran",
-    "deskWarning": "All three of these exchanges list Iran as fully blocked under OFAC sanctions. If you are in Iran they will most likely refuse your account — and an account that is frozen after you have deposited is far worse than one that never opened. They are listed because converting rial to crypto is the one thing this app does not do, so you deserve to know the options exist. Check whether you can actually use one before you send any money."
+    }
   },
   "rank": {
     "title": "Ranking",
@@ -1996,7 +2119,6 @@
       "buy": "Buy crypto",
       "sell": "Sell crypto"
     },
-    "noFee": "We charge nothing on this page. FBT is not part of these transactions — no fee, no commission, no referral cut. Our 0.70% applies only to swaps inside the app on the EVM networks, and it is shown before you sign. Solana swaps carry no platform fee at all right now.",
     "buy": {
       "heading": "Turning money into crypto",
       "body": "FBT does not sell crypto and never holds your money — there is no deposit address here and never will be. What this page does is point you at the routes that work, so the coins arrive directly in a wallet only you control.",
@@ -2245,24 +2367,93 @@
   "fiat": {
     "title": "Buy crypto with money",
     "sellTitle": "Sell crypto for money",
-    "intro": "Pay by card or bank transfer and receive crypto in your own wallet. Handled by ChangeNOW's licensed payment partner — we do not touch the money and never hold it.",
-    "sellIntro": "Send crypto and receive money to your card or bank account. Handled by ChangeNOW's licensed payment partner.",
+    "intro": "Pay by card or bank transfer and receive crypto straight into your own wallet. The payment is handled by ChangeNOW's licensed partner — we never touch the money and never hold it.",
+    "sellIntro": "Send crypto and receive money to your card or bank account. The payment is handled by ChangeNOW's licensed partner.",
     "youPay": "You pay",
     "youGet": "You get",
     "youSell": "You sell",
     "youReceive": "You receive",
     "amount": "Amount in {{unit}}",
-    "estimated": "Estimated",
-    "minimum": "Minimum",
-    "ourFee": "Our fee",
-    "feeNote": "Our {{pct}}% is already included in the figure above — there is nothing added afterwards. This is the one place we charge on top of a partner's service, because unlike swapping, buying with money is something we cannot do ourselves.",
-    "notEnabled": "Buying with money is not switched on yet. ChangeNOW enable this per partner after a compliance review, so it is a step on their side rather than a setting we control. Until then, the P2P desks below and receiving crypto directly are the routes that work.",
-    "cardNotice": "An Iranian bank card cannot complete this. Visa, Mastercard and Amex have been cut off from Iran's banking system since 2012 — that is the card networks, not a setting anyone can change. This works with a card or bank account issued outside Iran.",
+    "estimated": "You receive, estimated",
+    "range": "Accepted range: {{min}} to {{max}}",
+    "belowMin": "Below the minimum for this pair. The smallest accepted amount is {{min}}.",
+    "aboveMax": "Above the maximum for this pair. The largest accepted amount is {{max}}.",
+    "serviceFee": "Service fee",
+    "networkFee": "Network fee",
+    "feeNote": "This is ChangeNOW's own fee breakdown, shown exactly as they charge it. Our share as a partner is already inside those lines — we add nothing on top afterwards. Buying with money is the one thing we cannot do ourselves, which is why there is a partner here at all.",
+    "payoutAddress": "Send the crypto to this address ({{chain}})",
+    "payoutAccount": "Receive the money at this account",
+    "useMyWallet": "Use my connected wallet address",
+    "emailOptional": "Email (optional — for updates if the order stalls)",
+    "startBuy": "Continue to payment",
+    "startSell": "Continue to payout",
+    "placing": "Opening checkout…",
+    "checkoutNote": "Payment happens on the provider’s own secure page, not inside this app. Check the address above one more time before you continue — crypto sent to a wrong address cannot be recovered by anyone.",
+    "orderCreated": "Your order is open. If the payment page closed, reopen it here.",
+    "reopenCheckout": "Reopen the payment page",
+    "notEnabled": "Buying with money is not switched on yet. ChangeNOW enable this per partner after a compliance review, so it is a step on their side rather than a setting we control. Until then, the P2P desks and receiving crypto directly are the routes that work.",
+    "cardNotice": "An Iranian bank card cannot complete this. Visa, Mastercard and Amex have been cut off from Iran’s banking system since 2012 — that is the card networks themselves, not a setting anyone can change. It works with a card or bank account issued outside Iran.",
     "err": {
       "NOT_A_FIAT_PAIR": "This screen only buys and sells for money. To trade one coin for another, use the app's own swap — it is ours and it is cheaper.",
       "BAD_AMOUNT": "Enter an amount first.",
+      "BAD_ADDRESS": "That does not look like a valid address. Paste it again, and make sure it belongs to the network shown above.",
       "FIAT_NOT_ENABLED": "Buying with money is not switched on for this app yet.",
-      "QUOTE_FAILED": "Could not get a price right now. We do not show a saved one — an out-of-date rate on a real money purchase is how people end up receiving far less than they expected."
+      "QUOTE_FAILED": "Could not get a price right now. We will not show a saved one — an out-of-date rate on a real money purchase is how people end up receiving far less than they expected.",
+      "RANGE_FAILED": "Could not load the limits for this pair.",
+      "ORDER_FAILED": "The provider could not start this order. Nothing has been charged. Check the amount and address, then try again.",
+      "NO_CHECKOUT_URL": "The order was created but no payment page came back. Nothing has been charged. Please try again."
     }
+  },
+  "restrict": {
+    "open": "Eligibility",
+    "title": "Where this works",
+    "intro": "We have users across the world, and the rules differ by country — not because of anything we decide, but because the exchanges and payment providers we link to publish their own lists. Here is what each of them actually allows, so you can tell before you sign up anywhere.",
+    "status": {
+      "ok": "Works",
+      "partial": "Some rails",
+      "blocked": "Blocked"
+    },
+    "region": {
+      "eu": {
+        "name": "European Union",
+        "note": "Card and SEPA bank transfer both work. EUR purchases start at about €16.50, which is the lowest minimum of any currency here."
+      },
+      "uk": {
+        "name": "United Kingdom",
+        "note": "Card payments in GBP work. Some crypto exchanges apply extra FCA-driven checks on first use, so expect an identity step."
+      },
+      "turkey": {
+        "name": "Türkiye",
+        "note": "TRY card payments work, and all three P2P desks list Turkish lira. Minimums are higher in lira terms — around ₺906 — simply because of the exchange rate."
+      },
+      "uae": {
+        "name": "United Arab Emirates",
+        "note": "AED card payments work. Minimum around 70 AED."
+      },
+      "global": {
+        "name": "Most other countries",
+        "note": "Usually fine with a card issued locally. The payment provider decides at checkout based on where the card was issued, not on where you happen to be sitting."
+      },
+      "us": {
+        "name": "United States",
+        "note": "ChangeNOW’s own terms exclude US residents from their service. The P2P desks also restrict or bar US users. This is their rule, not ours."
+      },
+      "iran": {
+        "name": "Iran",
+        "note": "Binance, OKX and Bybit all publish Iran as fully blocked under OFAC sanctions, and ChangeNOW’s terms exclude sanctioned jurisdictions. Signing up by giving another country as your residence risks the account being frozen after you have deposited — which is materially worse than never opening one. The swap, the wallet and everything else in this app work normally and need no account anywhere."
+      }
+    },
+    "cards": "One thing no provider can waive: Visa, Mastercard and Amex have been disconnected from Iran’s banking system at the network level since 2012. An Iranian bank card cannot authorise a foreign crypto purchase. That is the payment networks themselves, not a company policy.",
+    "ourPosition": "None of this applies to the parts of FBT Swap that are ours. The swap, the wallet, market data, charts and orders are non-custodial and need no account, no identity check and no permission from anyone. These restrictions only concern the third parties we link out to.",
+    "sourceNote": "Taken from each provider’s own published terms and country lists, checked rather than assumed. If one of them changes its policy, this page is wrong until we update it — check the provider before you rely on it."
+  },
+  "radio": {
+    "title": "Crypto radio",
+    "intro": "The day's crypto news, spoken. Streamed straight from each show's own feed and updated as they publish — tap play and it keeps going with the screen off.",
+    "play": "Play",
+    "pause": "Pause",
+    "partial": "{{ok}} of {{total}} stations are reachable right now. The others are not down permanently — their hosting is having a bad moment.",
+    "openShow": "Open on {{name}}",
+    "credit": "These are independent shows. We link to their own audio and credit every one; nothing is rehosted, re-edited or stripped of its advertising. Opinions in them are the hosts', not ours, and none of it is financial advice."
   }
 }

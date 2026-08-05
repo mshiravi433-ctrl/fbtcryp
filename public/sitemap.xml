@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Routes are hash-based (/#/swap), which crawlers do NOT index as separate
-  pages - everything after the # is never sent to the server. So this lists
-  the one real URL rather than inventing entries that would 404 on inspection
-  and make the sitemap look broken to a reviewer.
+  FALLBACK ONLY. The real sitemap is written at build time by
+  scripts/gen-landing.mjs, which lists the generated landing pages too and
+  overwrites this file inside dist/.
+
+  This copy exists so that a build which somehow skips the generator still
+  serves a valid sitemap rather than a 404 — a 404 on the URL named in
+  robots.txt makes Search Console report the whole property as misconfigured.
+
+  Routes inside the app are hash-based (/#/swap) and a crawler never sees
+  anything after the '#', so only real server-rendered URLs belong here.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://www.lawpoetics.ir/</loc>
+    <loc>https://fbtswap.ir/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>

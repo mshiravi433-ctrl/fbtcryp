@@ -1,9 +1,9 @@
 /**
  * FIAT BUY & SELL — client side.
  * ---------------------------------------------------------------------------
- * Thin. The partner key, our commission rate and the pair validation all live
- * in `server/fiat.js`, because they decide where revenue goes and must never
- * be settable from a browser.
+ * Thin. The partner key, the commission arrangement and the pair validation
+ * all live in `server/fiat.js`, because they decide where revenue goes and
+ * must never be settable from a browser.
  *
  * ─── THIS FILE MUST NEVER LEARN TO SWAP ─────────────────────────────────────
  * The previous ChangeNOW integration quoted crypto-to-crypto and was deleted
@@ -25,6 +25,10 @@ const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AP
  * OFAC's Iran program (reviewed January 2026) shows no change. Listing it
  * would create a button that fails for every single user who taps it — the
  * dead-button problem the Buy screen was rebuilt to remove.
+ *
+ * Mirrors `FIAT_CURRENCIES` in server/fiat.js. A wiring check asserts the two
+ * lists agree, because a code present here and absent there produces a picker
+ * option whose every request 400s.
  */
 export const FIAT_MONEY = [
   { code: 'usd', symbol: '$', name: 'US Dollar' },
@@ -34,18 +38,48 @@ export const FIAT_MONEY = [
   { code: 'aed', symbol: 'AED', name: 'UAE Dirham' }
 ];
 
-/** Crypto our own app can then do something useful with. */
+/**
+ * Crypto our own app can then do something useful with.
+ *
+ * `id` carries the network (`usdt-trx`, `usdt-bsc`) because on the fiat API an
+ * asset is a currency-and-network pair, not a fused ticker. Two entries can
+ * share a symbol — USDT exists on TRON and on BNB Chain — and they are
+ * different destinations with different addresses. `chain` exists purely so
+ * the picker can show which one, since "USDT" twice in a dropdown is a way to
+ * lose somebody's money.
+ */
 export const FIAT_ASSETS = [
-  { ticker: 'btc', symbol: 'BTC', name: 'Bitcoin' },
-  { ticker: 'eth', symbol: 'ETH', name: 'Ethereum' },
-  { ticker: 'usdttrc20', symbol: 'USDT', name: 'Tether (TRON)' },
-  { ticker: 'usdtbsc', symbol: 'USDT', name: 'Tether (BNB Chain)' },
-  { ticker: 'usdcbsc', symbol: 'USDC', name: 'USD Coin (BNB Chain)' },
-  { ticker: 'bnbbsc', symbol: 'BNB', name: 'BNB' },
-  { ticker: 'sol', symbol: 'SOL', name: 'Solana' }
+  { id: 'btc', symbol: 'BTC', name: 'Bitcoin', chain: 'Bitcoin' },
+  { id: 'eth', symbol: 'ETH', name: 'Ethereum', chain: 'Ethereum' },
+  { id: 'usdt-trx', symbol: 'USDT', name: 'Tether', chain: 'TRON' },
+  { id: 'usdt-bsc', symbol: 'USDT', name: 'Tether', chain: 'BNB Chain' },
+  { id: 'usdc-bsc', symbol: 'USDC', name: 'USD Coin', chain: 'BNB Chain' },
+  { id: 'bnb-bsc', symbol: 'BNB', name: 'BNB', chain: 'BNB Chain' },
+  { id: 'sol', symbol: 'SOL', name: 'Solana', chain: 'Solana' }
 ];
 
 let cachedStatus = null;
+
+async function getJson(path, { timeout = 15000, ...init } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      signal: ctrl.signal,
+      headers: { accept: 'application/json', ...(init.headers ?? {}) }
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = new Error(body?.error || `HTTP ${res.status}`);
+      err.code = body?.error;
+      throw err;
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Is fiat actually live?
@@ -55,21 +89,22 @@ let cachedStatus = null;
  * `{enabled:false}` at the call site rather than throwing, because the panel
  * must degrade to an explanation instead of a blank screen.
  */
-export async function getFiatStatus({ timeout = 10000 } = {}) {
+export async function getFiatStatus() {
   if (cachedStatus) return cachedStatus;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const res = await fetch(`${API_BASE}/fiat/status`, {
-      signal: ctrl.signal,
-      headers: { accept: 'application/json' }
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    cachedStatus = await res.json();
-    return cachedStatus;
-  } finally {
-    clearTimeout(timer);
-  }
+  cachedStatus = await getJson('/fiat/status', { timeout: 10000 });
+  return cachedStatus;
+}
+
+/**
+ * The accepted amount range for a pair.
+ *
+ * Worth its own call because it is keyless upstream: it answers even while
+ * our fiat access is still pending, so the form can state a real minimum
+ * instead of letting somebody type an amount that will be rejected.
+ */
+export function getFiatRange({ from, to }) {
+  const qs = new URLSearchParams({ from, to });
+  return getJson(`/fiat/range?${qs}`);
 }
 
 /**
@@ -80,25 +115,32 @@ export async function getFiatStatus({ timeout = 10000 } = {}) {
  * message from `QUOTE_FAILED`, which is a transient upstream problem. A single
  * generic error would make the first look like a bug in our app.
  */
-export async function getFiatQuote({ from, to, amount, timeout = 20000 } = {}) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const qs = new URLSearchParams({ from, to, amount: String(amount) });
-    const res = await fetch(`${API_BASE}/fiat/quote?${qs}`, {
-      signal: ctrl.signal,
-      headers: { accept: 'application/json' }
-    });
-    const body = await res.json();
-    if (!res.ok) {
-      const err = new Error(body?.error || `HTTP ${res.status}`);
-      err.code = body?.error;
-      throw err;
-    }
-    return body;
-  } finally {
-    clearTimeout(timer);
-  }
+export function getFiatQuote({ from, to, amount }) {
+  const qs = new URLSearchParams({ from, to, amount: String(amount) });
+  return getJson(`/fiat/quote?${qs}`, { timeout: 20000 });
+}
+
+/**
+ * Start the purchase. Returns a hosted checkout URL.
+ *
+ * ─── THIS IS THE CALL THAT EARNS ────────────────────────────────────────────
+ * Commission is paid on completed transactions, not on quotes. Until this
+ * existed the whole integration could display prices and never make a cent —
+ * the same "wired to nothing" shape shipped twice before on the bridge and
+ * the gasless swap.
+ *
+ * The 60s timeout is not laziness: creating an order provisions a checkout
+ * session at a payment institution and is genuinely slower than a quote.
+ * Aborting early would leave an order created upstream that our user never
+ * sees a link to.
+ */
+export function createFiatOrder({ from, to, amount, address, extraId, email }) {
+  return getJson('/fiat/order', {
+    method: 'POST',
+    timeout: 60000,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ from, to, amount, address, extraId, email })
+  });
 }
 
 /** Reset, for tests. */

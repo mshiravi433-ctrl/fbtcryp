@@ -24,7 +24,6 @@ import {
   IconTrophy,
   IconX,
   IconSearch,
-  IconSparkle,
   IconClock
 } from './Icons';
 
@@ -116,7 +115,16 @@ const GROUPS = [
         "More" list is worth reading only in proportion to how little of it
         duplicates what is already on screen.
       */
-      { to: '/nft', key: 'nav.nft', Icon: IconSparkle, hue: 'var(--rgb-3)' },
+      /*
+        NFTs are NOT listed here. The collection lives inside the real-wallet
+        tab, where it belongs — an NFT is a thing you hold, so it sits with
+        the rest of what you hold rather than as a separate destination.
+
+        The `/nft` route still exists and still works, so an old bookmark or
+        a shared link resolves. What is removed is the duplicate doorway: a
+        "More" list earns its length only in proportion to how little of it
+        repeats what the user can already reach.
+      */
       { to: '/learn', key: 'learn.title', Icon: IconInfo, hue: 'var(--rgb-9)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
       { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },

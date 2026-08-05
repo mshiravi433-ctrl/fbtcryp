@@ -75,6 +75,98 @@ const YIELD = [
     risk: 'medium',
     color: 'var(--rgb-8)',
     url: 'https://lido.fi'
+  },
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ADDED AFTER A DEEP SEARCH FOR REAL, USABLE YIELD.
+   * ═════════════════════════════════════════════════════════════════════════
+   * The owner asked for more genuine ways to earn here. These four were the
+   * survivors of a much longer list, and what got the others cut matters as
+   * much as what got these in:
+   *
+   *   REJECTED — anything requiring an account. Nexo, YouHodler, CoinRabbit
+   *   and every other CeFi yield desk was excluded, not on quality grounds
+   *   but because they exclude us: CoinRabbit's terms name the "Islamic
+   *   Republic of Iran" in their restricted list verbatim, alongside the US,
+   *   UK, Canada and Hong Kong. Listing a platform that will refuse most of
+   *   our readers is the dead-button problem again.
+   *
+   *   REJECTED — anything paying in a protocol's own inflationary token and
+   *   quoting that emission as "APR". A 300% APR paid in a token with no
+   *   buyers is not 300%, and printing the number would make everything else
+   *   on this screen less believable.
+   *
+   *   KEPT — permissionless, non-custodial, no account, real revenue
+   *   underneath. Each one below is a protocol the user interacts with from
+   *   their own wallet, exactly like the five above.
+   */
+  {
+    /*
+     * Aave. The largest lending market in DeFi and the obvious omission from
+     * the original list, which pointed only at Venus on BNB Chain.
+     *
+     * `risk: medium` and not `low` despite the size: supply yield is real
+     * revenue from borrower interest, but a lending pool can take bad debt in
+     * a fast liquidation cascade, and that has happened to major protocols
+     * more than once.
+     */
+    id: 'aaveSupply',
+    Icon: IconShield,
+    apr: '3–8%',
+    risk: 'medium',
+    color: 'var(--rgb-3)',
+    url: 'https://app.aave.com'
+  },
+  {
+    /*
+     * Morpho. Included because it is structurally different rather than as a
+     * second name on the same list: markets are isolated, so a bad asset
+     * cannot contaminate the pool your money is in. That is a genuinely
+     * different risk shape, and the reason a user might choose it over Aave.
+     */
+    id: 'morphoLend',
+    Icon: IconShield,
+    apr: '4–9%',
+    risk: 'medium',
+    color: 'var(--rgb-1)',
+    url: 'https://app.morpho.org'
+  },
+  {
+    /*
+     * Solana liquid staking. The app already has a whole Solana screen and
+     * lists SOL everywhere, but every yield route here was EVM-only — a
+     * Solana holder had nothing to do.
+     *
+     * Jito rather than a wrapper: it is the largest by a distance and the
+     * stake is redeemable for SOL directly, so there is no third-party
+     * redemption queue between the user and their asset.
+     */
+    id: 'solStake',
+    Icon: IconTrend,
+    apr: '6–8%',
+    risk: 'low',
+    color: 'var(--rgb-2)',
+    url: 'https://www.jito.network/staking/'
+  },
+  {
+    /*
+     * Native-BTC yield, which is the one thing none of the routes above can
+     * offer. THORChain's savers take real Bitcoin — not a wrapped IOU — and
+     * pay from swap fees.
+     *
+     * `risk: high`, stated plainly and higher than anything else on this
+     * screen. Savers carry impermanent loss against the pool, the protocol
+     * has paused savers before, and yield depends entirely on swap volume
+     * that can fall to nothing. It is listed because native BTC yield with
+     * no custodian genuinely has no substitute, not because it is safe.
+     */
+    id: 'thorSavers',
+    Icon: IconPools,
+    apr: '2–7%',
+    risk: 'high',
+    color: 'var(--rgb-5)',
+    url: 'https://app.thorswap.finance/earn'
   }
 ];
 
@@ -178,7 +270,7 @@ export default function Earn({ embedded = false }) {
           <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show">
             <div className="aurora" />
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('earn.realTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('earn.realBody')}</p>
+            <p className="prose-sm">{t('earn.realBody')}</p>
           </motion.section>
 
           <section>
@@ -223,7 +315,7 @@ export default function Earn({ embedded = false }) {
                 </motion.button>
               ))}
             </motion.div>
-            <p className="faint" style={{ marginTop: 10, lineHeight: 1.7 }}>{t('earn.aprNote')}</p>
+            <p className="prose-sm" style={{ marginTop: 10 }}>{t('earn.aprNote')}</p>
           </section>
 
           <AdBanner slot="farm" />

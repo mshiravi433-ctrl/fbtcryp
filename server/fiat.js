@@ -23,27 +23,57 @@
  * the easy mistake is to "just add" a crypto pair later and quietly re-create
  * the thing that was deleted.
  *
- * ─── OUR COMMISSION IS REAL HERE ────────────────────────────────────────────
- * Unlike the swap integration — where the fee was set to zero to avoid a
- * seizable balance — this one is meant to earn. The owner spoke to ChangeNOW
- * and confirmed the arrangement. `FIAT_FEE_PERCENT` is the rate, read from
- * the environment so it can be changed without a redeploy, clamped hard so a
- * misplaced digit cannot take 25% of somebody's purchase.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ─── WHAT WAS BROKEN BEFORE, AND WHY IT COULD NEVER HAVE WORKED ─────────────
  *
- * ─── AND WHY IT IS OFF UNTIL THEY SWITCH IT ON ──────────────────────────────
- * From ChangeNOW's own partner FAQ, verbatim:
+ * The first version of this file called
  *
- *   "Fiat buy and sell functionality is available upon request. For these
- *    operations, ChangeNOW works with Guardarian... The setup depends on your
- *    integration model, target regions, payment methods, and compliance
- *    requirements, so the exact flow is discussed individually with the
- *    ChangeNOW team before launch."
+ *     GET /v2/exchange/estimated-amount?fromCurrency=usd&toCurrency=btc...
  *
- * Fiat is NOT part of the standard API key. It is enabled per-partner by
- * their team after a compliance conversation. So `fiatEnabled()` is a
- * separate switch from `fiatConfigured()`: having a key does not mean fiat
- * works, and reporting otherwise would produce a screen that looks live and
- * fails on every request.
+ * That is the CRYPTO SWAP endpoint. It has no idea what a fiat currency is.
+ * With a live key set in Vercel the route returned `QUOTE_FAILED` on every
+ * single request, which is exactly what the owner saw: an API key that was
+ * correctly installed, a status endpoint reporting `enabled:true`, and a
+ * screen that could not produce one number.
+ *
+ * ChangeNOW's fiat product is a SEPARATE family of endpoints with a separate
+ * naming convention (snake_case, not camelCase) and a separate auth header:
+ *
+ *     GET  /v2/fiat-status                                 health, keyless
+ *     GET  /v2/fiat-currencies/fiat                        fiat list
+ *     GET  /v2/fiat-currencies/crypto                      crypto list
+ *     GET  /v2/fiat-market-info/min-max-range/{from}_{to}  limits, keyless
+ *     GET  /v2/fiat-estimate?from_currency=…               quote, KEY REQUIRED
+ *     POST /v2/fiat-transaction                            order, KEY REQUIRED
+ *
+ * Verified live from this machine while writing it — `min-max-range/usd_btc`
+ * answers `{"from":"USD","to":"BTC","min":"19.04…","max":"28859.09…"}`, and
+ * `fiat-estimate` without a key answers `{"code":"INVALID_TOKEN"}` rather than
+ * the swap endpoint's bare `Unauthorized`. Two different services.
+ *
+ * The header is `x-api-key` for the fiat family. The swap family uses
+ * `x-changenow-api-key`. Sending the wrong one authenticates nothing, and
+ * this is the second reason the old code could not have worked even if the
+ * path had been right. Both are sent, because they are both ours and the
+ * upstream ignores the one it does not recognise.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ─── HOW WE ACTUALLY GET PAID, WHICH IS NOT WHAT THE OLD CODE CLAIMED ───────
+ *
+ * The old file read `CHANGENOW_FIAT_FEE`, defaulted it to 1, and displayed
+ * "our fee: 1%" on screen. Nothing anywhere deducted that 1%. It was a label
+ * with no mechanism behind it — we would have shown users a fee we never
+ * charged, and earned nothing from it.
+ *
+ * The real mechanism: the commission is a property of the PARTNER ACCOUNT,
+ * not of the request. Every call carrying our API key is attributed to our
+ * account, ChangeNOW applies the partner rate agreed on the dashboard, and
+ * the amount lands in the `service_fees` array of the estimate. We do not add
+ * a percentage; we are already inside their number.
+ *
+ * That is why `fiatQuote` returns their `service_fees` verbatim instead of
+ * inventing a figure. It is the true, itemised cost, and it is the one the
+ * user will actually be charged.
  */
 
 const CN_BASE = 'https://api.changenow.io/v2';
@@ -70,45 +100,21 @@ export const fiatConfigured = () => Boolean(apiKey());
  * every fiat call. Without this flag the screen would render, look ready, and
  * fail for every user — the "wired to nothing" failure this project has
  * already shipped twice.
- *
- * The owner sets `CHANGENOW_FIAT_ENABLED=true` only after their team confirms
- * it, and `/api/fiat/status` reports the truth either way.
  */
 export const fiatEnabled = () =>
   Boolean(apiKey()) && process.env.CHANGENOW_FIAT_ENABLED === 'true';
 
 /**
- * Our commission on fiat purchases, in percent.
+ * Fiat currencies we offer, with the deposit rail each one settles on.
  *
- * ─── CLAMPED, NOT TRUSTED ───────────────────────────────────────────────────
- * Read from the environment so the rate can be tuned without a deploy, but
- * hard-limited to 0–5%. A typo of `25` meaning "0.25" would otherwise take a
- * quarter of somebody's money, and on a fiat purchase that is a real bank
- * transaction that cannot be reversed. Out-of-range values fall back to the
- * default rather than clamping silently, so a mistake is visible in the logs
- * instead of quietly becoming 5%.
- */
-const FIAT_FEE_DEFAULT = 1;
-const FIAT_FEE_MAX = 5;
-
-export function fiatFeePercent() {
-  const raw = process.env.CHANGENOW_FIAT_FEE;
-  if (raw == null || raw === '') return FIAT_FEE_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > FIAT_FEE_MAX) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[fiat] CHANGENOW_FIAT_FEE="${raw}" is invalid (want 0-${FIAT_FEE_MAX}); using ${FIAT_FEE_DEFAULT}`
-    );
-    return FIAT_FEE_DEFAULT;
-  }
-  return n;
-}
-
-/**
- * Fiat currencies we offer.
+ * ─── WHY THE RAIL IS PART OF THE RECORD ─────────────────────────────────────
+ * ChangeNOW price fiat per payment method, and the limits differ sharply: EUR
+ * over SEPA starts at €16.50, USD over card at $19.05, TRY over card at
+ * ₺906. Quoting one and charging the other produces a "minimum not met"
+ * rejection AFTER the user has entered their card details, which is the worst
+ * possible place to discover it.
  *
- * ─── WHY THE RIAL IS NOT HERE, AND CANNOT BE ────────────────────────────────
+ * ─── AND WHY THE RIAL IS NOT HERE, AND CANNOT BE ────────────────────────────
  * IRR is absent because no international payment processor settles it. Visa,
  * Mastercard and Amex have been severed from Iran's banking system at the
  * network level since 2012 and OFAC's Iran program (reviewed January 2026)
@@ -117,35 +123,48 @@ export function fiatFeePercent() {
  *
  * Listing IRR would produce a button that fails for every user who taps it,
  * which is exactly the class of dead button the Buy screen was rebuilt to
- * remove. The screen says this plainly instead of pretending.
+ * remove. The Restrictions sheet says this plainly instead of pretending.
  */
 export const FIAT_CURRENCIES = [
-  { code: 'usd', symbol: '$', name: 'US Dollar' },
-  { code: 'eur', symbol: '€', name: 'Euro' },
-  { code: 'gbp', symbol: '£', name: 'British Pound' },
-  { code: 'try', symbol: '₺', name: 'Turkish Lira' },
-  { code: 'aed', symbol: 'AED', name: 'UAE Dirham' }
+  { code: 'usd', symbol: '$', name: 'US Dollar', deposit: 'VISA_MC1' },
+  { code: 'eur', symbol: '€', name: 'Euro', deposit: 'SEPA_1' },
+  { code: 'gbp', symbol: '£', name: 'British Pound', deposit: 'VISA_MC1' },
+  { code: 'try', symbol: '₺', name: 'Turkish Lira', deposit: 'VISA_MC1' },
+  { code: 'aed', symbol: 'AED', name: 'UAE Dirham', deposit: 'VISA_MC1' }
 ];
 
 /**
- * Crypto the user can buy or sell, keyed by ChangeNOW's ticker.
+ * Crypto the user can buy or sell, keyed by ChangeNOW's fiat-side ticker AND
+ * network.
+ *
+ * ─── THE NETWORK IS NOT OPTIONAL AND THIS IS THE SUBTLE PART ────────────────
+ * The fiat API identifies an asset as a `(currency, network)` PAIR, not as
+ * one fused ticker. The swap API's `usdttrc20` style does not exist here: it
+ * is `to_currency=USDT` with `to_network=TRX`. Sending `usdttrc20` gets a
+ * currency-not-found error, and sending `USDT` with no network is ambiguous
+ * across TRON, BSC and Ethereum — three different chains, three different
+ * addresses, and a payout to the wrong one is unrecoverable.
+ *
+ * `id` is our own stable handle so the UI never has to join two fields.
+ * Verified live: `min-max-range/usd_usdt-trx`, `usd_usdt-bsc`, `usd_usdc-bsc`,
+ * `usd_bnb-bsc`, `usd_sol-sol`, `usd_btc-btc`, `usd_eth-eth` all answer.
  *
  * Small on purpose. These are the assets our own app can then do something
  * useful with — the point of the on-ramp is to get somebody INTO the app with
  * something swappable, not to be a shop window for a thousand tokens.
  */
 export const FIAT_CRYPTO = [
-  { ticker: 'btc', symbol: 'BTC', name: 'Bitcoin' },
-  { ticker: 'eth', symbol: 'ETH', name: 'Ethereum' },
-  { ticker: 'usdttrc20', symbol: 'USDT', name: 'Tether (TRON)' },
-  { ticker: 'usdtbsc', symbol: 'USDT', name: 'Tether (BNB Chain)' },
-  { ticker: 'usdcbsc', symbol: 'USDC', name: 'USD Coin (BNB Chain)' },
-  { ticker: 'bnbbsc', symbol: 'BNB', name: 'BNB' },
-  { ticker: 'sol', symbol: 'SOL', name: 'Solana' }
+  { id: 'btc', ticker: 'BTC', network: 'BTC', symbol: 'BTC', name: 'Bitcoin' },
+  { id: 'eth', ticker: 'ETH', network: 'ETH', symbol: 'ETH', name: 'Ethereum' },
+  { id: 'usdt-trx', ticker: 'USDT', network: 'TRX', symbol: 'USDT', name: 'Tether (TRON)' },
+  { id: 'usdt-bsc', ticker: 'USDT', network: 'BSC', symbol: 'USDT', name: 'Tether (BNB Chain)' },
+  { id: 'usdc-bsc', ticker: 'USDC', network: 'BSC', symbol: 'USDC', name: 'USD Coin (BNB Chain)' },
+  { id: 'bnb-bsc', ticker: 'BNB', network: 'BSC', symbol: 'BNB', name: 'BNB' },
+  { id: 'sol', ticker: 'SOL', network: 'SOL', symbol: 'SOL', name: 'Solana' }
 ];
 
-const FIATS = new Set(FIAT_CURRENCIES.map((c) => c.code));
-const CRYPTOS = new Set(FIAT_CRYPTO.map((c) => c.ticker));
+const FIATS = new Map(FIAT_CURRENCIES.map((c) => [c.code, c]));
+const CRYPTOS = new Map(FIAT_CRYPTO.map((c) => [c.id, c]));
 
 /**
  * Exactly one side must be fiat. This is the guard that keeps the module
@@ -156,39 +175,119 @@ const CRYPTOS = new Set(FIAT_CRYPTO.map((c) => c.ticker));
  * silently become the crypto-swap integration that was deleted for competing
  * with our own product. The check is cheap; the mistake is expensive and easy
  * to make by "just adding one pair".
+ *
+ * Returns the resolved legs too, so no caller has to look them up a second
+ * time and risk resolving one side differently from the other.
  */
 export function assertFiatLeg(from, to) {
-  const fromFiat = FIATS.has(from);
-  const toFiat = FIATS.has(to);
-  const fromCrypto = CRYPTOS.has(from);
-  const toCrypto = CRYPTOS.has(to);
+  const fromFiat = FIATS.get(from);
+  const toFiat = FIATS.get(to);
+  const fromCrypto = CRYPTOS.get(from);
+  const toCrypto = CRYPTOS.get(to);
 
   /* Buy: fiat → crypto. Sell: crypto → fiat. Nothing else. */
-  if (fromFiat && toCrypto) return 'buy';
-  if (fromCrypto && toFiat) return 'sell';
+  if (fromFiat && toCrypto) {
+    return { direction: 'buy', money: fromFiat, asset: toCrypto };
+  }
+  if (fromCrypto && toFiat) {
+    return { direction: 'sell', money: toFiat, asset: fromCrypto };
+  }
   return null;
 }
 
-async function cnFetch(path) {
+/**
+ * Build the `{from}_{to}` path segment the min-max endpoint wants.
+ *
+ * Fiat legs are bare (`usd`); crypto legs carry the network (`usdt-trx`).
+ * Verified against the live endpoint in both directions — `usd_usdt-trx` and
+ * `usdt-trx_usd` each return a range.
+ */
+function rangePair({ direction, money, asset }) {
+  return direction === 'buy'
+    ? `${money.code}_${asset.id}`
+    : `${asset.id}_${money.code}`;
+}
+
+async function cnFetch(path, { method = 'GET', body = null } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     const headers = { accept: 'application/json' };
     const k = apiKey();
-    if (k) headers['x-changenow-api-key'] = k;
-
-    const res = await fetch(`${CN_BASE}${path}`, { headers, signal: ctrl.signal });
-    const text = await res.text();
-    let body = null;
-    try {
-      body = text ? JSON.parse(text) : null;
-    } catch {
-      body = { error: text.slice(0, 200) };
+    if (k) {
+      /*
+       * Both spellings, on purpose. The fiat family reads `x-api-key`; the
+       * swap family reads `x-changenow-api-key`. Sending only the second is
+       * how the previous version authenticated nothing. Sending both is
+       * harmless — an upstream ignores a header it does not know — and
+       * removes an entire class of silent-401 bug.
+       */
+      headers['x-api-key'] = k;
+      headers['x-changenow-api-key'] = k;
     }
-    return { ok: res.ok, status: res.status, body };
+    if (body) headers['content-type'] = 'application/json';
+
+    const res = await fetch(`${CN_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal
+    });
+    const text = await res.text();
+    let parsed = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = { message: text.slice(0, 200) };
+    }
+    return { ok: res.ok, status: res.status, body: parsed };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** A number, or null. Never 0-as-a-fallback — see the note in fiatQuote. */
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * GET /api/fiat/range — the accepted amounts for this pair.
+ *
+ * Its own route because it is KEYLESS upstream and can therefore answer even
+ * before the owner's fiat access is switched on. That matters: it lets the
+ * screen show real limits instead of an empty form, so a user who cannot yet
+ * buy still learns what the minimum will be.
+ */
+export async function fiatRange({ from, to }) {
+  const f = String(from || '').trim().toLowerCase();
+  const t = String(to || '').trim().toLowerCase();
+
+  const leg = assertFiatLeg(f, t);
+  if (!leg) return { ok: false, status: 400, body: { error: 'NOT_A_FIAT_PAIR' } };
+
+  const qs = new URLSearchParams({
+    deposit_type: leg.direction === 'buy' ? leg.money.deposit : 'CRYPTO_THROUGH_CN',
+    payout_type: leg.direction === 'buy' ? 'CRYPTO_THROUGH_CN' : leg.money.deposit
+  });
+
+  const res = await cnFetch(`/fiat-market-info/min-max-range/${rangePair(leg)}?${qs}`);
+  if (!res.ok) {
+    return { ok: false, status: res.status, body: { error: 'RANGE_FAILED' } };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      direction: leg.direction,
+      from: f,
+      to: t,
+      min: num(res.body?.min),
+      max: num(res.body?.max)
+    }
+  };
 }
 
 /**
@@ -203,8 +302,8 @@ export async function fiatQuote({ from, to, amount }) {
   const f = String(from || '').trim().toLowerCase();
   const t = String(to || '').trim().toLowerCase();
 
-  const direction = assertFiatLeg(f, t);
-  if (!direction) return { ok: false, status: 400, body: { error: 'NOT_A_FIAT_PAIR' } };
+  const leg = assertFiatLeg(f, t);
+  if (!leg) return { ok: false, status: 400, body: { error: 'NOT_A_FIAT_PAIR' } };
 
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) {
@@ -220,21 +319,73 @@ export async function fiatQuote({ from, to, amount }) {
     return { ok: false, status: 503, body: { error: 'FIAT_NOT_ENABLED' } };
   }
 
+  const { direction, money, asset } = leg;
+
+  /*
+   * snake_case, and the network on its own parameter. This is the fiat API's
+   * convention; the camelCase `fromCurrency` of the swap API is a different
+   * service and was the original bug.
+   */
   const qs = new URLSearchParams({
-    fromCurrency: f,
-    toCurrency: t,
-    fromAmount: String(amt),
-    flow: 'standard',
-    type: 'direct'
+    from_currency: direction === 'buy' ? money.code : asset.ticker,
+    from_network: direction === 'buy' ? '' : asset.network,
+    from_amount: String(amt),
+    to_currency: direction === 'buy' ? asset.ticker : money.code,
+    to_network: direction === 'buy' ? asset.network : '',
+    deposit_type: direction === 'buy' ? money.deposit : 'CRYPTO_THROUGH_CN',
+    payout_type: direction === 'buy' ? 'CRYPTO_THROUGH_CN' : money.deposit
   });
 
-  const res = await cnFetch(`/exchange/estimated-amount?${qs}`);
+  const res = await cnFetch(`/fiat-estimate?${qs}`);
   if (!res.ok) {
-    return { ok: false, status: res.status, body: { error: 'QUOTE_FAILED', detail: res.body?.message ?? null } };
+    return {
+      ok: false,
+      status: res.status,
+      body: { error: 'QUOTE_FAILED', detail: res.body?.message ?? null }
+    };
   }
 
-  const estimated = Number(res.body?.toAmount);
-  const fee = fiatFeePercent();
+  /*
+   * Their field names, read defensively. The documented estimate carries
+   * `estimated_exchange_rate`, `converted_amount`, `service_fees` and
+   * `network_fee`; some deployments answer with the camelCase
+   * `estimate_breakdown` shape used by the transaction endpoint. Reading both
+   * costs one `??` and removes a whole failure mode.
+   */
+  const b = res.body || {};
+  const breakdown = b.estimate_breakdown || {};
+
+  const out = num(b.to_amount) ?? num(b.toAmount) ?? num(breakdown.toAmount);
+  const rate = num(b.estimated_exchange_rate) ?? num(breakdown.estimatedExchangeRate);
+
+  /*
+   * The service fees, ITEMISED AND VERBATIM.
+   *
+   * This is where our commission actually lives. ChangeNOW apply the partner
+   * rate attached to the API key and report it here; we do not add a
+   * percentage of our own on top, and the previous version's invented
+   * "ourFeePercent: 1" was a label with no mechanism behind it.
+   *
+   * Passing their own breakdown through means the number on our screen is the
+   * number the user is charged. A fee that turns out to be different from the
+   * one displayed is the kind that makes someone distrust every other figure
+   * in the app.
+   */
+  const rawFees = Array.isArray(b.service_fees)
+    ? b.service_fees
+    : Array.isArray(breakdown.serviceFees)
+      ? breakdown.serviceFees
+      : [];
+
+  const fees = rawFees
+    .map((x) => ({
+      name: typeof x?.name === 'string' ? x.name : null,
+      amount: num(x?.amount),
+      currency: typeof x?.currency === 'string' ? x.currency : null
+    }))
+    .filter((x) => x.amount != null);
+
+  const networkFeeSrc = b.network_fee || breakdown.networkFee || null;
 
   return {
     ok: true,
@@ -244,15 +395,118 @@ export async function fiatQuote({ from, to, amount }) {
       from: f,
       to: t,
       amount: amt,
-      estimatedAmount: Number.isFinite(estimated) ? estimated : null,
-      /*
-       * Our cut, stated as a number rather than buried in the rate. A fee the
-       * user discovers afterwards is the kind that makes them distrust every
-       * other figure on the screen — the same rule the swap screen follows.
-       */
-      ourFeePercent: fee,
-      /* Their own minimum, when the API reports one. */
-      minAmount: Number.isFinite(Number(res.body?.minAmount)) ? Number(res.body.minAmount) : null
+      estimatedAmount: out,
+      rate,
+      serviceFees: fees,
+      networkFee: networkFeeSrc
+        ? { amount: num(networkFeeSrc.amount), currency: networkFeeSrc.currency ?? null }
+        : null
+    }
+  };
+}
+
+/**
+ * POST /api/fiat/order — actually start the purchase.
+ *
+ * ─── WHY THIS ROUTE HAD TO EXIST FOR ANY OF THIS TO EARN ────────────────────
+ * A quote is attributed to nobody. Commission is paid on completed
+ * TRANSACTIONS, and a transaction only exists once something POSTs
+ * `/v2/fiat-transaction` with our API key. The previous version had no such
+ * call anywhere: it could quote (in principle) and could never earn a cent.
+ * That is the same "wired to nothing" shape as the bridge and the gasless
+ * integration before it.
+ *
+ * ─── WE STILL NEVER TOUCH THE MONEY ─────────────────────────────────────────
+ * The response carries `redirect_url` — a hosted checkout at the licensed
+ * payment institution. The user pays there, on their domain, under their
+ * licence. We never see a card number, never hold a balance, and the crypto
+ * is delivered straight to the address the user gave us. The non-custodial
+ * property is unchanged; we are an introducer, and that is precisely why we
+ * are allowed to be paid for it.
+ *
+ * A missing `redirect_url` is treated as failure rather than success-with-no-
+ * link. A created order the user cannot reach is money they think they have
+ * committed and have not.
+ */
+export async function fiatOrder({ from, to, amount, address, extraId, email }) {
+  const f = String(from || '').trim().toLowerCase();
+  const t = String(to || '').trim().toLowerCase();
+
+  const leg = assertFiatLeg(f, t);
+  if (!leg) return { ok: false, status: 400, body: { error: 'NOT_A_FIAT_PAIR' } };
+
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    return { ok: false, status: 400, body: { error: 'BAD_AMOUNT' } };
+  }
+
+  /*
+   * The payout address is checked for PRESENCE and shape here and nothing
+   * more. We deliberately do not "clean" it — trimming whitespace is safe,
+   * but any transformation beyond that risks silently mutating a destination
+   * address, and a payout to a mutated address is unrecoverable.
+   */
+  const addr = String(address || '').trim();
+  if (addr.length < 16 || addr.length > 128 || /\s/.test(addr)) {
+    return { ok: false, status: 400, body: { error: 'BAD_ADDRESS' } };
+  }
+
+  if (!fiatEnabled()) {
+    return { ok: false, status: 503, body: { error: 'FIAT_NOT_ENABLED' } };
+  }
+
+  const { direction, money, asset } = leg;
+
+  const payload = {
+    from_amount: amt,
+    from_currency: direction === 'buy' ? money.code.toUpperCase() : asset.ticker,
+    from_network: direction === 'buy' ? null : asset.network,
+    to_currency: direction === 'buy' ? asset.ticker : money.code.toUpperCase(),
+    to_network: direction === 'buy' ? asset.network : null,
+    payout_address: addr,
+    payout_extra_id: extraId ? String(extraId).trim().slice(0, 64) : '',
+    deposit_type: direction === 'buy' ? money.deposit : 'CRYPTO_THROUGH_CN',
+    payout_type: direction === 'buy' ? 'CRYPTO_THROUGH_CN' : money.deposit
+  };
+
+  /*
+   * Optional and only when the user typed one. The upstream uses it to email
+   * them if the order stalls, which on a fiat purchase is genuinely useful —
+   * but it is personal data, so it is never invented, defaulted or inferred.
+   */
+  const mail = String(email || '').trim();
+  if (mail && mail.includes('@') && mail.length <= 120) {
+    payload.customer = { contact_info: { email: mail } };
+  }
+
+  const res = await cnFetch('/fiat-transaction', { method: 'POST', body: payload });
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      body: { error: 'ORDER_FAILED', detail: res.body?.message ?? null }
+    };
+  }
+
+  const redirect = res.body?.redirect_url;
+  if (typeof redirect !== 'string' || !redirect.startsWith('https://')) {
+    /*
+     * Created upstream but unreachable for the user. Reported as a failure,
+     * not as a half-success, because a screen that says "order placed" with
+     * nowhere to pay is worse than one that says it could not start.
+     */
+    return { ok: false, status: 502, body: { error: 'NO_CHECKOUT_URL' } };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      id: res.body?.id ?? null,
+      status: res.body?.status ?? null,
+      redirectUrl: redirect,
+      expectedFromAmount: num(res.body?.expected_from_amount),
+      expectedToAmount: num(res.body?.expected_to_amount)
     }
   };
 }
@@ -267,10 +521,16 @@ export function fiatStatus() {
      * until the owner confirms they have switched it on.
      */
     enabled: fiatEnabled(),
-    ourFeePercent: fiatFeePercent(),
     /* Stated so the UI can never imply we route crypto-to-crypto here. */
     fiatOnly: true,
     currencies: FIAT_CURRENCIES.length,
-    assets: FIAT_CRYPTO.length
+    assets: FIAT_CRYPTO.length,
+    /*
+     * Deliberately absent: any "ourFeePercent". Our commission is a property
+     * of the partner account and arrives inside ChangeNOW's own
+     * `service_fees`. Reporting a separate number here is what produced a
+     * displayed fee that nothing charged.
+     */
+    feeModel: 'partner-rate'
   };
 }

@@ -7,6 +7,7 @@ import AdBanner from '../components/AdBanner';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import SendSheet from '../components/SendSheet';
+import RestrictionsSheet from '../components/RestrictionsSheet';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 
@@ -34,15 +35,31 @@ import SegIndicator from '../components/SegIndicator';
  */
 
 /*
- * `blocksIran` is verified from each exchange's own published country list,
- * not assumed: all three name Iran under OFAC sanctions. Marked per-desk
- * rather than as one blanket sentence so the flag stays honest if one of them
- * ever changes policy.
+ * ─── WHY THE PER-ROW "BLOCKS IRAN" PILL IS GONE ─────────────────────────────
+ * Every row carried a red "Blocks Iran" badge and the section carried a red
+ * OFAC warning above it. The owner's objection is a product point, not a
+ * cosmetic one:
+ *
+ *     «ما از همه جهان مشتری داریم نه فقط ایران»
+ *
+ * A user in Ankara or Dubai opened a screen built to help them trade and was
+ * met with three red badges about a sanctions regime that does not apply to
+ * them. That trains everyone — including the person the warning was written
+ * for — to scroll past red.
+ *
+ * The facts are unchanged and are NOT deleted: all three publish Iran as a
+ * fully blocked jurisdiction, and somebody who deposits and is then frozen is
+ * materially worse off than somebody who never signed up. It all moved into
+ * RestrictionsSheet, one tap away, as a per-country table where a Turkish
+ * user reads "TRY works" and an Iranian user still reads the warning.
+ *
+ * `fiat` stays per-desk because it is the useful, non-alarming fact: which
+ * currencies each desk actually settles.
  */
 const DESKS = [
-  { id: 'binance', url: 'https://p2p.binance.com', color: '#f0b90b', fiat: 'IRR, USD, EUR', blocksIran: true },
-  { id: 'okx', url: 'https://www.okx.com/p2p-markets', color: '#00e5ff', fiat: 'USD, EUR', blocksIran: true },
-  { id: 'bybit', url: 'https://www.bybit.com/fiat/trade/otc', color: '#ffb300', fiat: 'USD, EUR', blocksIran: true }
+  { id: 'binance', url: 'https://p2p.binance.com', color: '#f0b90b', fiat: 'USD, EUR, TRY, AED' },
+  { id: 'okx', url: 'https://www.okx.com/p2p-markets', color: '#00e5ff', fiat: 'USD, EUR, TRY' },
+  { id: 'bybit', url: 'https://www.bybit.com/fiat/trade/otc', color: '#ffb300', fiat: 'USD, EUR, TRY' }
 ];
 
 const SCAMS = ['reversal', 'thirdParty', 'offPlatform', 'overpay'];
@@ -55,6 +72,7 @@ export default function P2P() {
 
   const [tab, setTab] = useState('otc');
   const [sendOpen, setSendOpen] = useState(false);
+  const [restrictOpen, setRestrictOpen] = useState(false);
 
   const open = (url) => {
     haptic?.('light');
@@ -71,7 +89,7 @@ export default function P2P() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('p2p.title')}</h1>
       </motion.div>
 
-      <p className="muted">{t('p2p.subtitle')}</p>
+      <p className="prose-sm">{t('p2p.subtitle')}</p>
 
       <div className="segmented">
         {['otc', 'fiat'].map((k) => (
@@ -92,7 +110,7 @@ export default function P2P() {
               </span>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t('p2p.otcTitle')}</div>
-                <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{t('p2p.otcBody')}</p>
+                <p className="prose-sm">{t('p2p.otcBody')}</p>
               </div>
             </div>
           </motion.section>
@@ -123,7 +141,7 @@ export default function P2P() {
               </>
             ) : (
               <>
-                <p className="muted" style={{ fontSize: 12.3 }}>{t('p2p.connectFirst')}</p>
+                <p className="prose-sm">{t('p2p.connectFirst')}</p>
                 <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => navigate('/wallet')}>
                   {t('wallet.connect')}
                 </button>
@@ -145,28 +163,39 @@ export default function P2P() {
               </span>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t('p2p.honestTitle')}</div>
-                <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{t('p2p.honestBody')}</p>
+                <p className="prose-sm">{t('p2p.honestBody')}</p>
               </div>
             </div>
           </motion.section>
 
           <section>
-            <p className="section-label">{t('p2p.desks')}</p>
-            <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+            <div className="row-between" style={{ gap: 10 }}>
+              <p className="section-label" style={{ flex: 1 }}>{t('p2p.desks')}</p>
               {/*
-                ─── THESE DESKS BAR IRAN, AND THE USER MUST BE TOLD ────────
-                Binance, OKX and Bybit all list Iran as fully blocked under
-                OFAC. The desks stay because converting rial to crypto is the
-                one thing this app genuinely does not do, so removing them
-                would leave a real need with no answer at all.
+                ─── ELIGIBILITY, ONE TAP AWAY AND NOT SHOUTED ──────────────
+                This link replaces three red "Blocks Iran" badges and a red
+                OFAC banner. Same facts, better placement: a user in Turkey
+                or the UAE is not warned about a rule that does not apply to
+                them, and a user in Iran still gets the full explanation the
+                moment they look for it.
 
-                But sending somebody to sign up somewhere they will be
-                refused — or worse, have an account frozen after depositing —
-                is not help. The warning goes ON each row, not in a footnote,
-                because that is where the decision is made.
+                Neutral styling on purpose. Red is reserved for the things
+                that will cost this particular user money — an irreversible
+                transfer, a wrong network — and spending it on a rule most
+                readers are unaffected by is what makes red stop working.
               */}
-              <p className="notice notice-danger" style={{ marginBottom: 10 }}>{t('p2p.deskWarning')}</p>
-
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ flexShrink: 0 }}
+                onClick={() => {
+                  haptic?.('light');
+                  setRestrictOpen(true);
+                }}
+              >
+                {t('restrict.open')}
+              </button>
+            </div>
+            <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
               {DESKS.map((d) => (
                 <motion.button
                   key={d.id}
@@ -183,7 +212,6 @@ export default function P2P() {
                     <span className="set-row-sub">{t(`p2p.desk.${d.id}.desc`)}</span>
                     <span className="row" style={{ gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                       <span className="pill pill-neutral">{d.fiat}</span>
-                      {d.blocksIran && <span className="pill pill-down">{t('p2p.blocksIran')}</span>}
                     </span>
                   </span>
                   <IconExternal width={16} height={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
@@ -210,7 +238,7 @@ export default function P2P() {
                     </span>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 12.6 }}>{t(`p2p.scam.${k}.title`)}</div>
-                      <p className="muted" style={{ fontSize: 11.8, margin: '3px 0 0' }}>{t(`p2p.scam.${k}.body`)}</p>
+                      <p className="prose-sm" style={{ marginTop: 3 }}>{t(`p2p.scam.${k}.body`)}</p>
                     </div>
                   </div>
                 </motion.div>
@@ -219,6 +247,13 @@ export default function P2P() {
           </section>
 
           <p className="notice notice-danger">{t('p2p.notice')}</p>
+
+          {/*
+            Rendered here, inside the tab that links out. Mounting it at the
+            page root would keep a portal alive on the OTC tab where nothing
+            can open it.
+          */}
+          <RestrictionsSheet open={restrictOpen} onClose={() => setRestrictOpen(false)} />
         </>
       )}
     </PageTransition>

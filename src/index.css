@@ -6125,3 +6125,116 @@ body { overflow-x: clip; }
      .farm-apy and .eq-price. */
   color: var(--text-1);
 }
+
+/* ==========================================================================
+   READABLE PROSE
+   --------------------------------------------------------------------------
+   THE PROBLEM THESE FIX.
+
+   Warnings and explanations across the app were rendered with `.muted` and
+   inline `fontSize: 12.2` — the same treatment as a caption under a number.
+   That is a real readability failure in Persian, and for three reasons that
+   compound:
+
+     1. SIZE. Persian script carries meaning in marks that sit above and below
+        the baseline (ی vs ب vs ث). At 12px on a phone those marks are one or
+        two pixels and start to merge. Latin degrades gracefully at that size;
+        Arabic-script text does not.
+
+     2. LINE HEIGHT. Vazirmatn's ascenders and descenders are tall, so 1.65
+        packs consecutive lines close enough that the descenders of one line
+        touch the marks of the next. Persian needs roughly 1.9 where Latin is
+        comfortable at 1.5.
+
+     3. LINE LENGTH. Full-width paragraphs on a wide phone run past 90
+        characters. The eye loses its place on the return sweep, and that is
+        worse in RTL because the return travel is the direction most readers
+        do less of.
+
+   Safety copy is exactly the text most likely to be skipped, and it is the
+   text where skipping costs money. So it gets its own class rather than
+   another inline style.
+
+   `text-wrap: pretty` prevents a single word being left alone on the last
+   line, which in a two-line warning makes the whole block look like a layout
+   bug. Browsers without support ignore it.
+   ========================================================================== */
+
+.prose {
+  font-size: 13.6px;
+  line-height: 1.95;
+  color: var(--text-2);
+  margin: 0;
+  max-width: 68ch;
+  text-wrap: pretty;
+  /* Persian numerals inherit from the paragraph; keep digits tabular so a
+     figure quoted mid-sentence does not jitter between renders. */
+  font-variant-numeric: proportional-nums;
+}
+
+.prose-sm {
+  font-size: 12.8px;
+  line-height: 1.9;
+  color: var(--text-2);
+  margin: 0;
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+.prose + .prose,
+.prose-sm + .prose-sm { margin-top: 10px; }
+
+/*
+ * Warnings, raised to the same treatment.
+ *
+ * `.notice` was 11.5px/1.7 — the smallest text in the app was the text that
+ * mattered most. A safety warning nobody reads is decoration.
+ */
+.notice { font-size: 12.6px; line-height: 1.9; max-width: 68ch; text-wrap: pretty; }
+
+/*
+ * Lists inside explanations. `.muted` on an <li> gave no spacing between
+ * items, so four warnings read as one paragraph and the user saw one warning.
+ */
+.prose-list {
+  margin: 0;
+  padding-inline-start: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12.9px;
+  line-height: 1.9;
+  color: var(--text-2);
+  max-width: 68ch;
+}
+.prose-list li::marker { color: var(--rgb-1); }
+:root[data-theme='light'] .prose-list li::marker { color: var(--ink-cyan); }
+
+/*
+ * Light theme reads at a smaller apparent weight on white, because dark text
+ * on light loses the halation that makes light-on-dark look bolder. A nudge
+ * of weight restores parity rather than making it heavier than the dark theme.
+ */
+:root[data-theme='light'] .prose,
+:root[data-theme='light'] .prose-sm,
+:root[data-theme='light'] .prose-list { font-weight: 450; }
+
+/* ==========================================================================
+   RESTRICTIONS SHEET — the country/eligibility disclosure
+   --------------------------------------------------------------------------
+   Rows are a table, not free text. An eligibility claim is a fact with a
+   source, and laying it out as a grid is what stops it drifting into a
+   paragraph of hedging.
+   ========================================================================== */
+
+.restrict-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.restrict-row:last-child { border-bottom: 0; }
+.restrict-row-name { font-weight: 700; font-size: 13px; }
+.restrict-row-note { grid-column: 1 / -1; font-size: 12.2px; line-height: 1.85; color: var(--text-2); }

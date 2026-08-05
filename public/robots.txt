@@ -1,8 +1,15 @@
-# FBT Swap — https://www.lawpoetics.ir
+# FBT Swap — https://fbtswap.ir
 #
 # There was no robots.txt at all before this. That is not neutral: crawlers
 # treat a missing file as "crawl everything", including the API, which wastes
 # our rate limit on requests no search engine can use.
+#
+# ─── THE DOMAIN CHANGED, AND THIS FILE HAD TO CHANGE WITH IT ────────────────
+# The site used to answer on www.lawpoetics.ir — a name with no relationship
+# to the product. A sitemap directive pointing at the old host would have
+# submitted URLs on a domain that no longer canonicalises here, and Google
+# discards a sitemap whose URLs are outside the property it was submitted
+# under. The whole submission would have silently done nothing.
 
 User-agent: *
 Allow: /
@@ -11,4 +18,15 @@ Allow: /
 # crawl of it is a wasted upstream call against our CoinGecko quota.
 Disallow: /api/
 
-Sitemap: https://www.lawpoetics.ir/sitemap.xml
+# ─── THE AI CRAWLERS ARE ALLOWED, DELIBERATELY ──────────────────────────────
+# GPTBot, ClaudeBot, PerplexityBot and Google-Extended are not blocked, and
+# that is a decision rather than an oversight.
+#
+# Blocking them protects content worth stealing. Ours is a description of a
+# free product that we want quoted as widely as possible: when somebody asks
+# an assistant "which crypto swap works without KYC", being in the answer is
+# the single cheapest distribution channel that exists for a project with no
+# advertising budget. There is nothing on these pages we would rather keep
+# private than have repeated.
+
+Sitemap: https://fbtswap.ir/sitemap.xml

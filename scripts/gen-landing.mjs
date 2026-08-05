@@ -52,7 +52,29 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SITE = process.env.VITE_PUBLIC_URL || 'https://www.lawpoetics.ir';
+/*
+ * ─── THE CANONICAL HOME IS NOW fbtswap.ir ───────────────────────────────────
+ * The site ran on `www.lawpoetics.ir`, a domain whose name has nothing to do
+ * with the product. That is not merely untidy — for search it is actively
+ * expensive:
+ *
+ *   • EXACT-MATCH SIGNAL. Somebody searching "FBT Swap" sees a result on
+ *     "lawpoetics.ir" and has no reason to believe it is the same thing. The
+ *     click-through rate on a mismatched domain is measurably worse, and
+ *     click-through feeds back into ranking.
+ *   • TRUST. On a money app, a domain that does not match the brand is the
+ *     single most common shape of a phishing clone. We were training our own
+ *     users to ignore the one check that protects them.
+ *   • BRAND SEARCH. Every mention of the app anywhere sends people to a name
+ *     they then cannot find.
+ *
+ * `fbtswap.ir` matches the app name, the APK id (`ir.fbt.swap`) and the X
+ * handle. Overridable by env so a preview deploy does not claim to be
+ * production — a canonical tag pointing at production from a staging build
+ * tells Google to index production instead of the page it is looking at,
+ * which is how preview URLs quietly vanish from the index.
+ */
+const SITE = (process.env.VITE_PUBLIC_URL || 'https://fbtswap.ir').replace(/\/+$/, '');
 const OUT = 'dist';
 
 /**
@@ -67,6 +89,7 @@ const OUT = 'dist';
 const PAGES = [
   {
     slug: 'non-custodial-crypto-swap',
+    lang: 'en',
     route: '/#/swap',
     title: 'Non-Custodial Crypto Swap — Keep Your Own Keys | FBT Swap',
     description:
@@ -104,6 +127,7 @@ const PAGES = [
   },
   {
     slug: 'crypto-price-alerts-and-dca',
+    lang: 'en',
     route: '/#/orders',
     title: 'Crypto Price Alerts and Recurring Buys | FBT Swap',
     description:
@@ -123,6 +147,7 @@ const PAGES = [
   },
   {
     slug: 'crypto-market-history-analysis',
+    lang: 'en',
     route: '/#/signals',
     title: 'Crypto Chart History — What the Past Actually Says | FBT Swap',
     description:
@@ -139,8 +164,81 @@ const PAGES = [
       ['Volume', 'Compared to this coin’s own median, not an absolute figure'],
       ['Forecasts', 'None. Every figure describes data that already happened']
     ]
+  },
+
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * THE PERSIAN PAGE — the highest-value single page on this list.
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * ─── WHY IT WAS MISSING AND WHY THAT COST US ────────────────────────────
+   * The app is Persian-first. The interface defaults to Persian, the owner is
+   * in Isfahan, and the domain is now a `.ir`. Every crawlable page we had
+   * was in English.
+   *
+   * That is a straightforward mismatch of supply and demand. The English
+   * queries these pages target — "non-custodial crypto swap", "crypto price
+   * alerts" — are among the most contested phrases on the web, competing
+   * with Uniswap, MetaMask and Trust Wallet, all of whom have a decade of
+   * domain authority. We will not rank for them for years.
+   *
+   * The Persian equivalents («صرافی غیرمتمرکز», «سواپ ارز دیجیتال بدون
+   * احراز هویت») have a fraction of the competition and a far higher
+   * proportion of searchers who would actually use this app. It is the one
+   * place where being small is not a disadvantage.
+   *
+   * ─── WHY IT IS NOT A TRANSLATION OF THE ENGLISH PAGE ────────────────────
+   * A translated page ranks badly and deserves to: it answers the questions
+   * an English speaker asks. A Persian speaker searching for this arrives
+   * with different questions — can I use it without ID, does it work without
+   * a foreign bank card, is my money held by anyone — and the copy answers
+   * those instead. It is written, not translated.
+   *
+   * ─── AND WHY IT DOES NOT OVERSELL ───────────────────────────────────────
+   * It does not claim the fiat on-ramp works from Iran, because it does not:
+   * the card networks are disconnected at network level. Claiming otherwise
+   * would rank us for a query we cannot satisfy, and a visitor who bounces
+   * immediately is a ranking signal against the whole domain — as well as
+   * being a lie.
+   */
+  {
+    slug: 'صرافی-غیرمتمرکز',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/swap',
+    title: 'صرافی غیرمتمرکز و سواپ ارز دیجیتال بدون احراز هویت | اف‌بی‌تی سواپ',
+    description:
+      'سواپ ارز دیجیتال روی هشت شبکه، از کیف پول خودت. بدون ثبت‌نام، بدون احراز هویت و بدون اینکه دارایی‌ات دست کسی بیفتد. کلیدها پیش خودت می‌مانند.',
+    h1: 'سواپ ارز دیجیتال، بدون اینکه کلیدهایت را به کسی بدهی',
+    body: [
+      'اف‌بی‌تی سواپ یک رابط صرافی غیرمتمرکز است. کیف پولی را که خودت داری وصل می‌کنی، معامله می‌کنی، و دارایی‌ات هیچ‌وقت از کنترل تو خارج نمی‌شود. حسابی برای ساختن نیست، ایمیلی برای دادن نیست و احراز هویتی برای گذراندن نیست.',
+      'این برنامه دفتر سفارش ندارد و نقدینگی خودش را هم نگه نمی‌دارد. از تجمیع‌کننده‌های عمومی می‌پرسد بهترین مسیر روی شبکه‌ای که انتخاب کرده‌ای کدام است، قیمت و اثر قیمتی و کارمزد را نشانت می‌دهد، و بعد تراکنش را به کیف پول خودت می‌سپارد. امضا با توست و معامله مستقیم روی زنجیره بین کیف پول تو و پروتکل تسویه می‌شود.',
+      'چون هیچ‌کس اینجا کلید تو را ندارد، نتیجه‌اش هم همان است که انتظار داری: ما نمی‌توانیم تراکنشی را برگردانیم، دارایی‌ای را مسدود کنیم، یا عبارت بازیابی گم‌شده‌ای را پس بدهیم. هیچ‌کس نمی‌تواند. این هزینه‌ی غیرامانی بودن است و پیش از هر معامله روی همان صفحه نوشته شده.',
+      'برای استفاده از سواپ، کیف پول، نمودارها و هشدارهای قیمت به هیچ حسابی در هیچ‌جا نیاز نداری و هیچ محدودیت کشوری هم اعمال نمی‌شود — این‌ها روی خودِ بلاکچین اجرا می‌شوند. تنها بخشی که محدودیت دارد خرید با پول نقد است، چون آن یکی از طریق یک شریک پرداخت دارای مجوز انجام می‌شود و شبکه‌های کارت بین‌المللی از سال ۲۰۱۲ به سیستم بانکی ایران متصل نیستند. این را همان‌جا صریح نوشته‌ایم تا کسی وقتش را تلف نکند.'
+    ],
+    facts: [
+      ['شبکه‌ها', 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، سولانا'],
+      ['کارمزد پلتفرم', '۰٫۷۰٪ روی شبکه‌های EVM، پیش از امضا روی صفحه نمایش داده می‌شود. روی سواپ سولانا فعلاً کارمزد پلتفرم نداریم'],
+      ['امانت‌داری', 'هیچ. کلیدها داخل کیف پول خودت می‌مانند'],
+      ['ثبت‌نام', 'لازم نیست'],
+      ['احراز هویت', 'برای سواپ، کیف پول و هشدارها لازم نیست']
+    ],
+    ctaLabel: 'باز کردن برنامه',
+    glanceLabel: 'یک نگاه کلی',
+    riskText:
+      'ارزهای دیجیتال پرنوسان‌اند و تراکنش روی زنجیره برگشت‌ناپذیر است. ممکن است پول از دست بدهی، حتی همه‌اش را. هیچ‌چیز اینجا توصیه مالی نیست.'
   }
 ];
+
+/**
+ * Pages that are the SAME CONTENT in different languages.
+ *
+ * Kept as an explicit list rather than inferred, because an incorrect
+ * hreflang pairing is worse than none: it tells Google two unrelated pages
+ * are translations of each other, and it will then serve the wrong one to
+ * half the audience.
+ */
+const ALTERNATES = [['non-custodial-crypto-swap', '\u0635\u0631\u0627\u0641\u06cc-\u063a\u06cc\u0631\u0645\u062a\u0645\u0631\u06a9\u0632']];
 
 /** Escape anything that goes into HTML text or an attribute. */
 const esc = (s) =>
@@ -151,8 +249,45 @@ const esc = (s) =>
     .replace(/"/g, '&quot;');
 
 function render(page) {
-  const url = `${SITE}/${page.slug}`;
+  /*
+   * The Persian slug contains Arabic-script characters, which are legal in a
+   * URL path but MUST be percent-encoded before they go into `<link
+   * rel="canonical">` or a sitemap. An unencoded non-ASCII character makes a
+   * sitemap invalid per the spec, and an invalid sitemap is rejected whole —
+   * taking the English pages down with it.
+   *
+   * `encodeURIComponent` and not `encodeURI`: the latter leaves `/` alone,
+   * which is right for a whole path and wrong for a single segment.
+   */
+  const url = `${SITE}/${encodeURIComponent(page.slug)}`;
   const appUrl = `${SITE}${page.route}`;
+  const lang = page.lang || 'en';
+  const dir = page.dir || 'ltr';
+
+  /*
+   * hreflang, and specifically the RECIPROCAL pair.
+   *
+   * Google ignores an hreflang annotation unless each page in the set points
+   * at every other one INCLUDING itself. A one-way link is silently dropped,
+   * which is the usual reason people conclude "hreflang does not work".
+   *
+   * Only same-topic pages are paired. The Persian page and the English swap
+   * page are the same subject in two languages, so they are alternates. The
+   * alerts and history pages have no Persian counterpart and are therefore
+   * NOT annotated — claiming an alternate that does not exist is worse than
+   * claiming none.
+   */
+  const altGroup = ALTERNATES.find((g) => g.includes(page.slug));
+  const hreflang = altGroup
+    ? altGroup
+        .map((slug) => {
+          const other = PAGES.find((x) => x.slug === slug);
+          return `<link rel="alternate" hreflang="${other.lang || 'en'}" href="${esc(
+            `${SITE}/${encodeURIComponent(slug)}`
+          )}">`;
+        })
+        .join('\n')
+    : '';
 
   /*
    * The redirect is a <link rel="canonical"> plus a normal link, NOT a
@@ -164,13 +299,14 @@ function render(page) {
    * on its own or it should not exist.
    */
   return `<!doctype html>
-<html lang="en">
+<html lang="${esc(lang)}" dir="${esc(dir)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(page.title)}</title>
 <meta name="description" content="${esc(page.description)}">
 <link rel="canonical" href="${esc(url)}">
+${hreflang}
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#06070c">
 <link rel="icon" type="image/png" href="/favicon.png">
@@ -188,6 +324,12 @@ function render(page) {
 <meta name="twitter:description" content="${esc(page.description)}">
 <meta name="twitter:image" content="${esc(SITE)}/icon-512.png">
 
+${
+  dir === 'rtl'
+    ? `<link rel="preload" href="/fonts/Vazirmatn-var.woff2" as="font" type="font/woff2" crossorigin>
+<style>@font-face{font-family:'Vazirmatn';src:url('/fonts/Vazirmatn-var.woff2') format('woff2-variations');font-weight:100 900;font-display:swap}</style>`
+    : ''
+}
 <style>
   /* Inlined, because a landing page that waits on a stylesheet is a landing
      page people leave. It is small enough that a second request would cost
@@ -198,7 +340,20 @@ function render(page) {
     margin: 0;
     background: #06070c;
     color: #e8ecf6;
-    font: 16px/1.75 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /*
+     * The Persian page needs Vazirmatn, which the app already self-hosts.
+     * Falling back to system-ui renders Persian in whatever the device has —
+     * on many Android builds that is Noto Naskh, whose line height is wrong
+     * enough that the RTL paragraphs overlap. Named FIRST so it wins, and
+     * the Latin stack stays behind it so the English pages are unaffected.
+     *
+     * No @font-face here on purpose: the font is preloaded below only when
+     * the page is actually Persian, so English visitors do not download a
+     * 70 KB Arabic-script font they will never render a glyph from.
+     */
+    font: 16px/${dir === 'rtl' ? '1.95' : '1.75'} ${
+      dir === 'rtl' ? "'Vazirmatn', " : ''
+    }system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     padding: 32px 20px 64px;
   }
   main { max-width: 680px; margin: 0 auto; }
@@ -237,24 +392,29 @@ function render(page) {
 
   ${page.body.map((p) => `<p>${esc(p)}</p>`).join('\n  ')}
 
-  <a class="cta" href="${esc(appUrl)}">Open the app</a>
+  <a class="cta" href="${esc(appUrl)}">${esc(page.ctaLabel || 'Open the app')}</a>
 
-  <h2>At a glance</h2>
+  <h2>${esc(page.glanceLabel || 'At a glance')}</h2>
   <table>
     <tbody>
       ${page.facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('\n      ')}
     </tbody>
   </table>
 
-  <p class="risk">
-    Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money,
-    including all of it. Nothing here is financial advice.
-  </p>
+  <p class="risk">${esc(
+    page.riskText ||
+      'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
+  )}</p>
 
   <footer>
     <p>
-      ${PAGES.filter((p) => p.slug !== page.slug)
-        .map((p) => `<a href="/${esc(p.slug)}">${esc(p.h1)}</a>`)
+      ${/*
+         Same-language siblings only. A Persian page footer full of English
+         links sends the reader somewhere they cannot read, and gives the
+         crawler a mixed-language cluster that muddies which page belongs to
+         which audience.
+      */ ''}${PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
+        .map((p) => `<a href="/${encodeURIComponent(p.slug)}">${esc(p.h1)}</a>`)
         .join(' &middot; ')}
     </p>
     <p>
@@ -294,7 +454,7 @@ function main() {
     `  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
     ...PAGES.map(
       (p) =>
-        `  <url>\n    <loc>${SITE}/${p.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`
+        `  <url>\n    <loc>${SITE}/${encodeURIComponent(p.slug)}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`
     )
   ];
 

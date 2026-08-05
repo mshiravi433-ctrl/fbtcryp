@@ -85,7 +85,9 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
-import { FIAT_CRYPTO, FIAT_CURRENCIES, assertFiatLeg, fiatEnabled, fiatFeePercent, fiatStatus } from '../server/fiat.js';
+import { FIAT_CRYPTO, FIAT_CURRENCIES, assertFiatLeg, fiatEnabled, fiatStatus } from '../server/fiat.js';
+import { STATIONS, parseAudioFeed } from '../server/audio.js';
+import { fmtDuration } from '../src/lib/audio.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
   MIN_SAMPLES,
@@ -3769,12 +3771,53 @@ export default function run() {
      * If a crypto-to-crypto pair ever validates here, the deleted feature has
      * been re-created by accident.
      */
-    t('buying is fiat to crypto', assertFiatLeg('usd', 'btc') === 'buy');
-    t('selling is crypto to fiat', assertFiatLeg('btc', 'usd') === 'sell');
+    /*
+     * `assertFiatLeg` now returns the RESOLVED LEGS, not a bare string. That
+     * is not cosmetic: the quote and the order both need the money's payment
+     * rail and the asset's network, and having each caller look them up again
+     * is how one side of a pair ends up resolved differently from the other.
+     */
+    t('buying is fiat to crypto', assertFiatLeg('usd', 'btc')?.direction === 'buy');
+    t('selling is crypto to fiat', assertFiatLeg('btc', 'usd')?.direction === 'sell');
     t('a crypto-to-crypto pair is REFUSED', assertFiatLeg('btc', 'eth') === null);
-    t('...in either direction', assertFiatLeg('eth', 'usdtbsc') === null);
+    t('...in either direction', assertFiatLeg('eth', 'usdt-bsc') === null);
     t('fiat to fiat is refused', assertFiatLeg('usd', 'eur') === null);
     t('an unknown ticker is refused', assertFiatLeg('scam', 'usd') === null);
+
+    /*
+     * ─── THE OLD SWAP-STYLE TICKERS MUST NOT RESOLVE ────────────────────────
+     * The first version used `usdttrc20`, the fused ticker the crypto-swap
+     * API uses. The FIAT API does not know it: an asset there is a
+     * (currency, network) pair, so it is `USDT` + `TRX`. Sending the fused
+     * form produced a currency-not-found error on every request.
+     *
+     * Pinned as a literal so the old spelling cannot quietly come back with a
+     * fallback that "helpfully" accepts both — accepting both is how you end
+     * up with two code paths and only one of them tested.
+     */
+    t('the fused swap-style ticker no longer resolves', assertFiatLeg('usd', 'usdttrc20') === null);
+
+    /*
+     * ─── THE NETWORK MUST SURVIVE RESOLUTION ────────────────────────────────
+     * USDT exists on TRON and on BNB Chain, and they are different payout
+     * addresses on different chains. If both resolved to the same network the
+     * user's coins would go somewhere their wallet cannot reach, and nothing
+     * could bring them back. Pinned to literals, not just "they differ".
+     */
+    const trc = assertFiatLeg('usd', 'usdt-trx');
+    const bsc = assertFiatLeg('usd', 'usdt-bsc');
+    t('USDT on TRON resolves to the TRX network', trc?.asset.ticker === 'USDT' && trc?.asset.network === 'TRX');
+    t('USDT on BNB Chain resolves to the BSC network', bsc?.asset.ticker === 'USDT' && bsc?.asset.network === 'BSC');
+
+    /*
+     * ─── THE PAYMENT RAIL IS CARRIED, AND EUR IS NOT ON CARDS ───────────────
+     * Their limits differ per rail: EUR over SEPA starts at €16.50, USD over
+     * card at $19.05. Quoting one rail and charging another produces a
+     * "minimum not met" rejection after the card details are entered, which
+     * is the worst possible moment to discover it.
+     */
+    t('EUR settles over SEPA', assertFiatLeg('eur', 'btc')?.money.deposit === 'SEPA_1');
+    t('USD settles over card', assertFiatLeg('usd', 'btc')?.money.deposit === 'VISA_MC1');
 
     /*
      * ─── THE RIAL IS ABSENT ON PURPOSE ──────────────────────────────────────
@@ -3787,31 +3830,29 @@ export default function run() {
     t('the fiat list is not empty', FIAT_CURRENCIES.length > 0);
     t('the asset list is not empty', FIAT_CRYPTO.length > 0);
 
-    /* ---- our commission ---- */
-    const saved = process.env.CHANGENOW_FIAT_FEE;
-
-    delete process.env.CHANGENOW_FIAT_FEE;
-    t('the default fiat fee is 1%', fiatFeePercent() === 1);
-
-    process.env.CHANGENOW_FIAT_FEE = '2.5';
-    t('a legitimate rate is honoured', fiatFeePercent() === 2.5);
+    /* Every fiat entry must carry a rail, or `fiatQuote` builds a request
+       with an empty deposit_type and the upstream picks one for us. */
+    t('every currency declares its payment rail',
+      FIAT_CURRENCIES.every((c) => typeof c.deposit === 'string' && c.deposit.length > 2));
+    /* Same for the asset side: a missing network is an ambiguous payout. */
+    t('every asset declares a network',
+      FIAT_CRYPTO.every((a) => typeof a.network === 'string' && a.network.length >= 3));
 
     /*
-     * A typo of `25` meaning 0.25 would take a quarter of a real, irreversible
-     * bank payment. Rejected outright rather than clamped, so the mistake
-     * shows up in the logs instead of quietly becoming the maximum.
+     * ─── OUR COMMISSION IS NOT A NUMBER WE INVENT ───────────────────────────
+     * The first version read CHANGENOW_FIAT_FEE, defaulted it to 1, and
+     * displayed "our fee: 1%" — while nothing anywhere deducted it. It was a
+     * label with no mechanism: users would have been shown a fee we never
+     * charged, and we would have earned nothing from it.
+     *
+     * The real commission is a property of the partner account, applied by
+     * ChangeNOW to any request carrying our key and reported inside their own
+     * `service_fees`. So the status must NOT publish a percentage of our own,
+     * because publishing one recreates exactly the fiction that was removed.
      */
-    process.env.CHANGENOW_FIAT_FEE = '25';
-    t('a misplaced digit cannot take 25%', fiatFeePercent() === 1);
-
-    process.env.CHANGENOW_FIAT_FEE = '-3';
-    t('a negative rate falls back to the default', fiatFeePercent() === 1);
-
-    process.env.CHANGENOW_FIAT_FEE = 'abc';
-    t('garbage falls back to the default', fiatFeePercent() === 1);
-
-    if (saved == null) delete process.env.CHANGENOW_FIAT_FEE;
-    else process.env.CHANGENOW_FIAT_FEE = saved;
+    t('the status publishes no invented fee percentage',
+      fiatStatus().ourFeePercent === undefined);
+    t('...and names the model instead', fiatStatus().feeModel === 'partner-rate');
 
     /*
      * ─── A KEY ALONE DOES NOT MEAN FIAT WORKS ───────────────────────────────
@@ -3840,6 +3881,104 @@ export default function run() {
     /* The status must announce that this is fiat-only, so no UI can imply
        otherwise. */
     t('the status reports fiat-only', fiatStatus().fiatOnly === true);
+  }
+
+  /* ==================== crypto radio — audio, not video =================== */
+  {
+    /*
+     * ─── THE ENCLOSURE RULE IS THE WHOLE CORRECTNESS PROPERTY ───────────────
+     * A play button that plays nothing is the dead-button failure this
+     * project keeps having to fix — the Aparat "video" links, the bridge that
+     * was wired to nothing, the P2P button that only changed the URL.
+     *
+     * The parser's job is therefore not to list episodes, it is to DROP every
+     * item that cannot actually be played. Each rejected case below is a real
+     * shape found in the wild while writing this, not an invented one.
+     */
+    const st = { id: 'test', name: 'Test FM', lang: 'en' };
+
+    const good = parseAudioFeed(
+      `<rss><channel><item>
+        <title>Real episode</title>
+        <pubDate>Tue, 04 Aug 2026 23:56:00 -0000</pubDate>
+        <enclosure url="https://cdn.example.com/a.mp3" type="audio/mpeg"/>
+        <itunes:duration>1:02:03</itunes:duration>
+        <link>https://example.com/1</link>
+      </item></channel></rss>`,
+      st
+    );
+    t('a well-formed episode is kept', good.length === 1);
+    t('...with its audio URL intact', good[0]?.audioUrl === 'https://cdn.example.com/a.mp3');
+    /* 1:02:03 is 3723 seconds. Pinned as a literal — a generic "is a number"
+       check passes for a parser that returns the wrong number. */
+    t('...and H:MM:SS parses to seconds', good[0]?.durationSec === 3723);
+    t('...and it carries the station name for attribution', good[0]?.stationName === 'Test FM');
+
+    /* No enclosure at all: a text-only or video-only entry. */
+    t('an item with no enclosure is dropped',
+      parseAudioFeed('<rss><channel><item><title>No audio</title></item></channel></rss>', st).length === 0);
+
+    /*
+     * A cover image attached as the enclosure. This is the nastiest case:
+     * without the mime check the player receives a JPEG, sits silently at
+     * 0:00 and raises no error, which is more confusing than a failure.
+     */
+    t('an image enclosure is dropped',
+      parseAudioFeed(
+        `<rss><channel><item><title>Cover</title>
+          <enclosure url="https://cdn.example.com/cover.jpg" type="image/jpeg"/>
+        </item></channel></rss>`,
+        st
+      ).length === 0);
+
+    /* Plain http would be blocked as mixed content by every modern browser. */
+    t('an insecure http enclosure is dropped',
+      parseAudioFeed(
+        `<rss><channel><item><title>Insecure</title>
+          <enclosure url="http://cdn.example.com/b.mp3" type="audio/mpeg"/>
+        </item></channel></rss>`,
+        st
+      ).length === 0);
+
+    /* Bare seconds is the other duration format these feeds use. */
+    t('a bare-seconds duration parses too',
+      parseAudioFeed(
+        `<rss><channel><item><title>Secs</title>
+          <enclosure url="https://cdn.example.com/c.mp3" type="audio/mpeg"/>
+          <itunes:duration>3723</itunes:duration>
+        </item></channel></rss>`,
+        st
+      )[0]?.durationSec === 3723);
+
+    /*
+     * ─── MISSING DURATION MUST BE NULL, NEVER ZERO ──────────────────────────
+     * `Number(undefined)` is NaN and `Number(null)` is 0 — and 0 is finite,
+     * so a careless guard turns "unknown length" into a confident "0:00" next
+     * to a play button, which reads as a broken file rather than as absent
+     * metadata. This project has been bitten by the Number(null) === 0 trap
+     * before.
+     */
+    t('a missing duration is null, not zero',
+      parseAudioFeed(
+        `<rss><channel><item><title>No dur</title>
+          <enclosure url="https://cdn.example.com/d.mp3" type="audio/mpeg"/>
+        </item></channel></rss>`,
+        st
+      )[0]?.durationSec === null);
+
+    t('an unknown duration formats to null rather than 0:00', fmtDuration(null) === null);
+    t('...and zero seconds does too', fmtDuration(0) === null);
+    t('under an hour omits the hour field', fmtDuration(125) === '2:05');
+    t('over an hour includes it, zero-padded', fmtDuration(3723) === '1:02:03');
+
+    /*
+     * Every station must declare a feed we could actually fetch. A relative
+     * path or an http URL here ships a station that can never load.
+     */
+    t('every station has an https feed',
+      STATIONS.length > 0 && STATIONS.every((x) => /^https:\/\//.test(x.feed)));
+    t('every station names itself for attribution',
+      STATIONS.every((x) => typeof x.name === 'string' && x.name.length > 1));
   }
 
   return rows;

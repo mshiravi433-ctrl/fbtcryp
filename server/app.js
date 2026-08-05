@@ -26,12 +26,13 @@ import {
   fetchTrending,
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
+import { fetchAudio } from './audio.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchPerpMarkets } from './perp.js';
 import { resolveIds } from './coinIndex.js';
-import { fiatQuote, fiatStatus } from './fiat.js';
+import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -229,6 +230,21 @@ app.get('/api/search', (req, res) => {
  * decides how long to keep it, the server only decides how often to refetch.
  */
 app.get('/api/news', (_req, res) => serve(res, 1_800_000)(fetchNews, 'news'));
+
+/*
+ * CRYPTO RADIO — spoken news from real podcast feeds.
+ *
+ * Cached for 30 minutes, same as headlines and for the same reason: these
+ * shows publish once a day at most, so re-fetching four RSS documents per
+ * visitor would spend our request budget to learn nothing new.
+ *
+ * Audio and not video. See server/audio.js for the whole argument, but the
+ * short version is that youtube.com does not resolve on most Iranian
+ * networks, so an embedded live stream would render as a permanently grey box
+ * for the primary audience. Podcast MP3s are ordinary HTTPS files from CDNs
+ * that are reachable, need no SDK, and keep playing with the screen off.
+ */
+app.get('/api/audio', (_req, res) => serve(res, 1_800_000)(fetchAudio, 'audio'));
 
 app.get('/api/prices', (req, res) => {
   const ids = String(req.query.ids || '')
@@ -547,9 +563,43 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
  */
 app.get('/api/fiat/status', (_req, res) => res.json(fiatStatus()));
 
+/*
+ * Limits. Keyless upstream, so it answers even before ChangeNOW switch our
+ * fiat access on — which is the point: a user who cannot yet buy still gets
+ * to see the real minimum instead of an empty form.
+ */
+app.get('/api/fiat/range', async (req, res) => {
+  try {
+    const { ok, status, body } = await fiatRange(req.query);
+    return res.status(ok ? 200 : status).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
 app.get('/api/fiat/quote', async (req, res) => {
   try {
     const { ok, status, body } = await fiatQuote(req.query);
+    return res.status(ok ? 200 : status).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/*
+ * The call that actually earns.
+ *
+ * Commission is attributed to completed TRANSACTIONS, not to quotes. Without
+ * this route the integration could price a purchase and never make a cent —
+ * the "wired to nothing" failure already shipped twice on this project.
+ *
+ * POST because it creates something upstream and must never be reachable by
+ * following a link: a GET that provisions a payment session can be triggered
+ * by a crawler, a prefetch, or an <img> tag on somebody else's page.
+ */
+app.post('/api/fiat/order', async (req, res) => {
+  try {
+    const { ok, status, body } = await fiatOrder(req.body ?? {});
     return res.status(ok ? 200 : status).json(body);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });

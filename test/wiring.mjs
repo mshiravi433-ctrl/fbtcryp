@@ -3499,10 +3499,25 @@ export default function run() {
         bad.length === 0);
     }
 
-    /* The specific string that was wrong, pinned in both languages. */
-    t('the Buy screen fee note is chain-qualified in English',
-      /EVM/.test(en.buy.noFee) && /Solana/.test(en.buy.noFee));
-    t('...and in Persian', /EVM/.test(fa.buy.noFee) && /سولانا/.test(fa.buy.noFee));
+    /*
+     * ─── `buy.noFee` IS GONE, AND ITS ABSENCE IS NOW THE ASSERTION ──────────
+     * It read "we charge nothing on this page … no fee, no commission, no
+     * referral cut". That was true while the Buy screen was only a directory
+     * of routes. It stopped being true the moment the fiat panel above it
+     * started earning a partner commission on purchases.
+     *
+     * A false statement about money, on a money screen, is the worst thing
+     * this app could ship — so the string was deleted rather than softened.
+     * The check flips accordingly: it now fails if anyone reinstates it,
+     * because reinstating it means reinstating the lie.
+     *
+     * Disclosure did not disappear with it. The fiat panel itemises
+     * ChangeNOW's own service-fee breakdown beside the amount, at the moment
+     * it is entered, which is where a fee is actually read.
+     */
+    t('the retired "we take nothing" claim is not back in English', !hasKey(en, 'buy.noFee'));
+    t('...nor in Persian', !hasKey(fa, 'buy.noFee'));
+    t('...and the Buy screen no longer renders it', !/buy\.noFee/.test(read('src/pages/Buy.jsx')));
   }
 
   /* ---- 51. the perp screen is website-only, and that is deliberate ------ */
@@ -3996,16 +4011,51 @@ export default function run() {
      * frozen after depositing — is not help. The desks may stay, but only
      * while the warning does, so both are asserted together.
      */
+    /*
+     * ─── THE WARNING MOVED; IT DID NOT DISAPPEAR ────────────────────────────
+     * It used to be a permanent red banner plus a red "Blocks Iran" badge on
+     * all three rows. The owner's objection is a product point, not a
+     * cosmetic one: «ما از همه جهان مشتری داریم نه فقط ایران». A user in
+     * Ankara or Dubai met three red badges about a rule that does not apply
+     * to them, which trains everybody — including the person it was written
+     * for — to scroll past red.
+     *
+     * So the facts moved into RestrictionsSheet, one neutral tap away, as a
+     * per-country table. The pairing this check enforces is unchanged in
+     * substance: the desks may stay only while the disclosure exists and
+     * remains reachable. Reachability is the part that is easy to lose, so
+     * it is asserted as a CHAIN — sheet file exists, P2P imports it, P2P
+     * renders it, P2P has a control that opens it, and the copy still names
+     * OFAC and Iran.
+     */
     const p2p = read('src/pages/P2P.jsx');
-    t('the P2P desks carry a jurisdiction warning', /p2p\.deskWarning/.test(p2p));
-    t('...and each blocked desk is flagged individually', /blocksIran/.test(p2p));
+    t('the restrictions sheet exists', existsSync('src/components/RestrictionsSheet.jsx'));
+    t('...the P2P screen imports it', /import RestrictionsSheet/.test(p2p));
+    t('...renders it', /<RestrictionsSheet/.test(p2p));
+    t('...and offers a control that opens it',
+      /setRestrictOpen\(true\)/.test(p2p) && /restrict\.open/.test(p2p));
     {
       const en = JSON.parse(read('src/i18n/locales/en.json'));
       const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      const sheet = read('src/components/RestrictionsSheet.jsx');
+      /* Strip comments before matching. The explanatory notes above mention
+         Iran and OFAC themselves, so an un-stripped check would pass on its
+         own documentation — a trap this suite has fallen into three times. */
+      const sheetCode = code(sheet);
+      t('...the sheet still covers the blocked jurisdiction',
+        /iran/i.test(sheetCode));
       t('...in both languages',
-        hasKey(en, 'p2p.deskWarning') && hasKey(fa, 'p2p.deskWarning') &&
-        hasKey(en, 'p2p.blocksIran') && hasKey(fa, 'p2p.blocksIran'));
-      t('...and the warning names the sanctions reason', /OFAC/.test(en.p2p.deskWarning));
+        hasKey(en, 'restrict.region.iran.note') && hasKey(fa, 'restrict.region.iran.note'));
+      t('...and the copy names the sanctions reason', /OFAC/.test(en.restrict.region.iran.note));
+      /*
+       * The reason the move is an improvement, asserted rather than assumed:
+       * the sheet must ALSO tell the many users for whom this works that it
+       * works. A table listing only the blocked case is the old banner with
+       * extra steps.
+       */
+      t('...and it states where this DOES work, not only where it does not',
+        hasKey(en, 'restrict.region.turkey.note') && hasKey(en, 'restrict.region.uae.note') &&
+        hasKey(en, 'restrict.region.eu.note'));
     }
 
     const buy = code(read('src/pages/Buy.jsx'));
@@ -4066,9 +4116,24 @@ export default function run() {
     t('...and the panel explains it instead of showing a dead form',
       /fiat\.notEnabled/.test(panel));
 
-    /* Our fee is disclosed on screen, not buried in the rate. */
-    t('our commission is shown to the user', /fiat\.ourFee/.test(panel));
-    t('...and explained', /fiat\.feeNote/.test(panel));
+    /*
+     * ─── THE DISPLAYED FEE MUST BE THE CHARGED FEE ──────────────────────────
+     * The first version read CHANGENOW_FIAT_FEE, defaulted it to 1, and
+     * printed "our fee: 1%" — while nothing anywhere deducted it. A label
+     * with no mechanism behind it: users shown a fee we never charged, and us
+     * earning nothing from it.
+     *
+     * The real commission is a property of the partner account, applied by
+     * ChangeNOW to any request carrying our key and reported inside their own
+     * `service_fees` array. So the panel must render THEIR itemised
+     * breakdown, and must not render an invented percentage of ours.
+     */
+    t('the panel shows their itemised service fees', /serviceFees/.test(panel));
+    t('...and the network fee alongside it', /networkFee/.test(panel));
+    t('...and explains whose fee it is', /fiat\.feeNote/.test(panel));
+    t('the invented "our fee" percentage is not back', !/fiat\.ourFee/.test(panel));
+    t('...and the server publishes no percentage of its own',
+      !/ourFeePercent/.test(srvCode) && /feeModel/.test(srvCode));
 
     /*
      * The card-network reality must be stated. An Iranian bank card cannot
@@ -4091,6 +4156,259 @@ export default function run() {
       (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
     t('...and all are translated into Persian',
       [...new Set(keys)].every((k) => hasKey(fa, k)));
+  }
+
+  /* ---- 60. fiat: the call that actually earns must reach the API -------- */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE BUG THIS CHECK WOULD HAVE CAUGHT, AND DID NOT EXIST TO CATCH.
+     * ═══════════════════════════════════════════════════════════════════════
+     * The first fiat integration passed every check in section 59 — module
+     * present, route registered, panel rendered, key server-side, pair guard
+     * enforced — and could not have earned a single cent, for two reasons
+     * neither of which those checks looked at:
+     *
+     *   1. IT CALLED THE WRONG API. `/v2/exchange/estimated-amount` is the
+     *      CRYPTO SWAP endpoint; it does not know what a fiat currency is.
+     *      With a live key installed every request returned QUOTE_FAILED,
+     *      which is exactly what the owner saw. The fiat family is a separate
+     *      set of snake_case routes: /v2/fiat-estimate, /v2/fiat-transaction,
+     *      /v2/fiat-market-info/…, authenticated with `x-api-key` rather than
+     *      `x-changenow-api-key`.
+     *
+     *   2. IT NEVER CREATED A TRANSACTION. Commission is attributed to
+     *      completed orders, never to quotes. There was no POST anywhere in
+     *      the integration, so even a working quote would have earned nothing
+     *      — the same "wired to nothing" shape already shipped twice, on the
+     *      bridge and on the gasless swap.
+     *
+     * So this section asserts the REVENUE CHAIN specifically, endpoint by
+     * endpoint, rather than the presence of files.
+     */
+    const srv = read('server/fiat.js');
+    const srvCode = srv.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const app = read('server/app.js');
+    const lib = read('src/lib/fiat.js');
+    const panel = read('src/components/FiatPanel.jsx');
+
+    /* ---- the right API family ---- */
+    t('the quote calls the FIAT estimate endpoint', /\/fiat-estimate/.test(srvCode));
+    t('...and not the crypto-swap one that never worked',
+      !/exchange\/estimated-amount/.test(srvCode));
+    t('the limits call the fiat market-info endpoint',
+      /fiat-market-info\/min-max-range/.test(srvCode));
+    /*
+     * The header the fiat family reads. Sending only `x-changenow-api-key`
+     * authenticates nothing there, which is the second reason the first
+     * version could not have worked even with the right path.
+     */
+    t('the fiat auth header is sent', /'x-api-key'/.test(srvCode));
+
+    /* ---- snake_case, because the fiat API does not accept camelCase ---- */
+    t('the quote uses the fiat API parameter names',
+      /from_currency/.test(srvCode) && /to_currency/.test(srvCode) && /from_amount/.test(srvCode));
+    t('...including the network, which decides where the coins land',
+      /to_network/.test(srvCode) && /from_network/.test(srvCode));
+
+    /* ---- THE CHAIN THAT EARNS, end to end ---- */
+    t('the server can create a transaction', /export async function fiatOrder/.test(srvCode));
+    t('...by POSTing to the fiat transaction endpoint',
+      /\/fiat-transaction/.test(srvCode) && /method: 'POST'/.test(srvCode));
+    t('...the app registers the order route',
+      /app\.post\('\/api\/fiat\/order'/.test(app));
+    t('...and that route CALLS the module, not a stub',
+      /await fiatOrder\(/.test(app));
+    t('...the client library can reach it',
+      /export function createFiatOrder/.test(lib) && /'\/fiat\/order'/.test(lib));
+    t('...the panel imports it', /createFiatOrder/.test(panel));
+    t('...and actually submits', /await createFiatOrder\(/.test(panel));
+    /*
+     * A created order the user cannot pay for is money they believe they have
+     * committed and have not. The checkout URL must be opened AND kept on
+     * screen, because a Custom Tab dismissed by accident otherwise strands
+     * them with no way back.
+     */
+    t('...then opens the hosted checkout', /openUrl\(res\.redirectUrl\)/.test(panel));
+    t('...and keeps a way back to it', /reopenCheckout/.test(panel));
+    t('a missing checkout URL is treated as failure, not success',
+      /NO_CHECKOUT_URL/.test(srvCode));
+
+    /* The address is required before the order button does anything. A POST
+       with an empty payout address is an order whose coins go nowhere. */
+    t('an order without a payout address is refused', /BAD_ADDRESS/.test(srvCode));
+    t('...and the button stays disabled until one is entered',
+      /address\.trim\(\)\.length >= 16/.test(panel));
+
+    /* The limits route, wired the same way and for the same reason. */
+    t('the range route is registered', /app\.get\('\/api\/fiat\/range'/.test(app));
+    t('...calls the module', /await fiatRange\(/.test(app));
+    t('...and the panel uses it', /getFiatRange/.test(panel));
+  }
+
+  /* ---- 61. crypto radio: every station must be able to play ------------- */
+  {
+    /*
+     * ─── WHY THIS IS AUDIO AND NOT THE VIDEO THAT WAS ASKED FOR ─────────────
+     * The request was for "radio and television" on the news page. Video
+     * means an embedded YouTube player, and youtube.com does not resolve on
+     * most Iranian networks — the largest element on the news screen would be
+     * a permanently grey box for the primary audience. That is the same
+     * dead-button failure that got the Aparat "video" links removed when they
+     * turned out to be searches returning nothing.
+     *
+     * The check below enforces the consequence: no iframe, no embed, no
+     * third-party player script anywhere in this feature.
+     */
+    const srv = read('server/audio.js');
+    const srvCode = srv.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const app = read('server/app.js');
+    const lib = read('src/lib/audio.js');
+    const panel = read('src/components/RadioPanel.jsx');
+    const panelCode = panel.replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const news = read('src/pages/News.jsx');
+    const docs = read('src/pages/Docs.jsx');
+
+    /* The full chain, module → route → route calls it → lib → component. */
+    t('the audio module exists', existsSync('server/audio.js'));
+    t('...the app registers a route', /app\.get\('\/api\/audio'/.test(app));
+    t('...and that route CALLS the fetcher', /fetchAudio/.test(app));
+    /*
+     * Matched against the template literal the lib actually builds
+     * (`${API_BASE}/audio`), not a quoted path string. The first version of
+     * this check looked for `'/audio'` and failed on working code — a check
+     * that fails on correct code teaches people to weaken checks.
+     */
+    t('...the client library reaches it', /\/audio`/.test(lib));
+    t('...the panel imports it', /getAudio/.test(panel));
+    t('...the news page renders it', /<RadioPanel/.test(news));
+    t('...and so does the education page', /<RadioPanel/.test(docs));
+
+    /*
+     * NO EMBEDS. The whole reason this is audio.
+     * Comments are stripped first — the explanation above names YouTube and
+     * iframes, and an un-stripped check would fail on its own documentation.
+     * That exact trap has caught this suite three times.
+     */
+    t('the radio embeds no third-party video player',
+      !/<iframe/i.test(panelCode) && !/youtube/i.test(panelCode));
+    t('...and neither does the module', !/youtube|iframe/i.test(srvCode));
+
+    /*
+     * An episode with no playable file must never reach the UI. A play button
+     * that plays nothing is precisely what this feature exists to avoid.
+     */
+    t('the parser requires a real audio enclosure', /<enclosure/.test(srvCode));
+    /*
+     * Pinned to the ACTUAL guard, anchored, rather than to the substring
+     * "audio/" — which appears in a dozen innocent places and would pass for
+     * a module that does no mime check at all. A generic match that succeeds
+     * for both the right and the wrong implementation is not a test.
+     */
+    t('...and rejects a non-audio mime type', /!\/\^audio\\\/\/i\.test\(mime\)/.test(srvCode));
+    t('...and refuses insecure URLs', /\^https/.test(srvCode));
+
+    /* One shared player. Per-row <audio> elements let a user start four
+       episodes at once with no obvious way to stop them. */
+    t('there is a single shared player', /new Audio\(\)/.test(panelCode));
+    t('...that does not preload megabytes nobody asked for',
+      /preload = 'none'/.test(panelCode));
+    t('...and clears its state when a file fails',
+      /'error'/.test(panelCode) && /setPlayingId\(null\)/.test(panelCode));
+
+    /* Attribution is not optional: these are other people's shows. */
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const ar = JSON.parse(read('src/i18n/locales/ar.json'));
+    t('every episode is credited to its show', /stationName/.test(panelCode));
+    t('...and the section says nothing is rehosted', hasKey(en, 'radio.credit'));
+    t('...in all three written languages',
+      hasKey(fa, 'radio.credit') && hasKey(ar, 'radio.credit'));
+
+    const keys = [...panel.matchAll(/t\('(radio\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));
+    t(`every radio.* key resolves (${new Set(keys).size} checked)` +
+      (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
+    t('...and all are translated',
+      [...new Set(keys)].every((k) => hasKey(fa, k) && hasKey(ar, k)));
+  }
+
+  /* ---- 62. the domain move must be complete ----------------------------- */
+  {
+    /*
+     * ─── A HALF-MOVED DOMAIN IS WORSE THAN NOT MOVING ───────────────────────
+     * The site moved from www.lawpoetics.ir to fbtswap.ir. Every place the
+     * old host survives is a specific, silent failure rather than an
+     * inconsistency:
+     *
+     *   • A canonical tag on the old host tells Google to index a domain we
+     *     are no longer promoting, and the new one never ranks.
+     *   • robots.txt naming a sitemap outside the submitted property makes
+     *     Search Console discard the whole submission.
+     *   • `publicAppUrl` is what every referral invite and share link
+     *     resolves to inside the APK, where window.location is
+     *     https://localhost. Stale, and every invite ever generated points at
+     *     the wrong place.
+     *
+     * Comments are stripped before matching, because the notes explaining the
+     * move necessarily mention the old name.
+     */
+    const strip2 = (src) => src
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/#.*$/gm, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const files = [
+      'index.html',
+      'public/robots.txt',
+      'public/sitemap.xml',
+      'src/lib/nativeShell.js',
+      'src/context/WalletContext.jsx',
+      'scripts/gen-landing.mjs'
+    ];
+    const stale = files.filter((f) => /lawpoetics/i.test(strip2(read(f))));
+    t(`no file still points at the old domain${stale.length ? ` — ${stale.join(', ')}` : ''}`,
+      stale.length === 0);
+
+    const html = read('index.html');
+    t('the canonical tag names the new domain',
+      /<link rel="canonical" href="https:\/\/fbtswap\.ir\/"/.test(html));
+    t('robots.txt points the sitemap at the new domain',
+      /Sitemap: https:\/\/fbtswap\.ir\/sitemap\.xml/.test(read('public/robots.txt')));
+    t('share and invite links resolve to the new domain',
+      /fbtswap\.ir/.test(read('src/lib/nativeShell.js')));
+
+    /*
+     * ─── THE PERSIAN LANDING PAGE ───────────────────────────────────────────
+     * The app is Persian-first on a .ir domain and every crawlable page was
+     * in English, competing for phrases owned by Uniswap and MetaMask. The
+     * Persian equivalents have a fraction of the competition and far more of
+     * the people who would actually use this.
+     */
+    const gen = read('scripts/gen-landing.mjs');
+    t('a Persian landing page is generated', /lang: 'fa'/.test(gen));
+    t('...marked right-to-left', /dir: 'rtl'/.test(gen));
+    t('...with the Persian font, not the system fallback', /Vazirmatn/.test(gen));
+
+    /*
+     * hreflang is ignored by Google unless the annotation is RECIPROCAL —
+     * every page in the set points at every other INCLUDING itself. A one-way
+     * link is silently dropped, which is the usual reason people conclude
+     * hreflang does not work.
+     */
+    t('...and paired with its English twin by hreflang',
+      /ALTERNATES/.test(gen) && /rel="alternate" hreflang=/.test(gen));
+
+    /*
+     * A non-ASCII slug MUST be percent-encoded in the sitemap. An unencoded
+     * character makes the sitemap invalid per spec, and an invalid sitemap is
+     * rejected whole — taking the English pages down with it.
+     */
+    t('non-ASCII slugs are percent-encoded for the sitemap',
+      /encodeURIComponent\(p\.slug\)/.test(gen));
   }
 
   return rows;

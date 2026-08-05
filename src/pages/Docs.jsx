@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import RadioPanel from '../components/RadioPanel';
 import { useTelegram } from '../context/TelegramContext';
 import {
   IconChevronLeft, IconChevronRight, IconExternal, IconSwap,
@@ -106,7 +107,7 @@ export default function Docs({ embedded = false }) {
         </motion.div>
       )}
 
-      <p className="muted">{t('docs.intro')}</p>
+      <p className="prose-sm">{t('docs.intro')}</p>
 
       <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
         {SECTIONS.map(({ id, Icon, steps, en }) => {
@@ -165,7 +166,7 @@ export default function Docs({ embedded = false }) {
                           >
                             {i + 1}
                           </span>
-                          <span className="muted" style={{ fontSize: 12.3 }}>{t(`docs.${id}.step${i + 1}`)}</span>
+                          <span className="prose-sm">{t(`docs.${id}.step${i + 1}`)}</span>
                         </motion.div>
                       ))}
 
@@ -236,7 +237,30 @@ export default function Docs({ embedded = false }) {
         })}
       </motion.div>
 
-      <p className="faint" style={{ lineHeight: 1.7 }}>{t('docs.videoNote')}</p>
+      <p className="prose-sm" style={{ marginTop: 10 }}>{t('docs.videoNote')}</p>
+
+      {/*
+        ─── LISTEN, RATHER THAN WATCH ──────────────────────────────────────
+        Asked for as "internet TV or radio related to our work" on the
+        education page. What is here is radio, and the missing half is a
+        decision rather than an omission:
+
+        A video embed means YouTube, and youtube.com does not resolve on most
+        Iranian networks. The largest element on the learning page would be a
+        grey box for the audience this app is built for — the same dead-button
+        failure the written guides above replaced when they stopped being
+        Aparat searches that returned nothing.
+
+        Podcast audio is plain MP3 over HTTPS from reachable CDNs. It needs no
+        embed, no SDK and no third-party script, it survives a slow
+        connection, and it keeps playing with the screen off — which is how
+        somebody actually learns while commuting.
+
+        The same component as the news screen, so there is one place to fix
+        if a feed moves. Placed AFTER the written guides: this is what you put
+        on when you have finished reading, not instead of reading.
+      */}
+      <RadioPanel />
 
       {/*
         The disclaimer belongs in the docs, not only buried in Settings: it is

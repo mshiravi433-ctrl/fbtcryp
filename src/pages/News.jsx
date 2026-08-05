@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
+import RadioPanel from '../components/RadioPanel';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { getNews } from '../lib/news';
@@ -138,7 +139,7 @@ export default function News() {
           </button>
           <div>
             <h1 className="h1" style={{ fontSize: 19 }}>{t('news.title')}</h1>
-            <p className="muted" style={{ margin: 0 }}>{t('news.subtitle')}</p>
+            <p className="prose-sm">{t('news.subtitle')}</p>
           </div>
         </div>
         <button
@@ -227,7 +228,7 @@ export default function News() {
               </div>
               <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.6 }}>{n.title}</div>
               {n.summary && (
-                <p className="muted" style={{ fontSize: 12, marginTop: 5, lineHeight: 1.75 }}>{n.summary}</p>
+                <p className="prose-sm" style={{ marginTop: 5 }}>{n.summary}</p>
               )}
               {n.url && (
                 <div className="row" style={{ gap: 5, marginTop: 8, color: 'var(--rgb-1)', fontSize: 11.5 }}>
@@ -239,6 +240,16 @@ export default function News() {
           ))}
         </motion.div>
       )}
+
+      {/*
+        ─── RADIO, BELOW THE HEADLINES AND NOT ABOVE THEM ──────────────────
+        Placement is a decision, not a leftover. Someone opening the news
+        screen wants to know what happened; audio is the thing you choose
+        after you have skimmed, not before. Putting a player at the top would
+        push the actual news below the fold to promote a feature nobody came
+        for.
+      */}
+      <RadioPanel />
 
       <AdBanner slot="signals" />
 
