@@ -3200,5 +3200,57 @@ export default function run() {
     t('...and points at the bridge screen instead', /Bridge screen/.test(faq));
   }
 
+  /* ---- 47. gasless swaps: key server-side, fee not caller-settable ------ */
+  {
+    t('the gasless module exists', existsSync('server/gasless.js'));
+    const gl = read('server/gasless.js');
+    const appSrc = read('server/app.js');
+
+    t('the API exposes a gasless quote', /\/api\/gasless\/quote/.test(appSrc));
+    t('...and a submit relay', /\/api\/gasless\/submit/.test(appSrc));
+    /*
+     * Status matters because this feature is OFF without a key. The UI has to
+     * be able to tell "not available here" from "broken", and only one of
+     * those is worth showing anyone.
+     */
+    t('...and a status route', /\/api\/gasless\/status/.test(appSrc));
+
+    /* Same rule as every other key in this repo, asserted not remembered. */
+    t('the 0x key is server-side only',
+      /process\.env\.ZEROX_API_KEY/.test(gl) && !/VITE_ZEROX/.test(gl));
+
+    /*
+     * The fee parameters decide where our revenue goes. In the forwarded
+     * allow-list, anyone could redirect the commission by editing a query
+     * string — identical boundary to bridge.js and solana.js.
+     */
+    {
+      const idx = gl.indexOf('const ALLOWED = [');
+      const list = gl.slice(idx, gl.indexOf('];', idx));
+      t('the caller cannot supply the fee recipient', !/swapFeeRecipient/.test(list));
+      t('the caller cannot supply the fee amount', !/swapFeeBps/.test(list));
+      t('...but the server does set them',
+        /params\.set\('swapFeeRecipient'/.test(gl) && /params\.set\('swapFeeBps'/.test(gl));
+    }
+
+    /*
+     * Fails closed with a NAMED error rather than passing a raw 401 through.
+     * A 401 in the client would look like a bug; GASLESS_NOT_CONFIGURED is
+     * actionable.
+     */
+    t('a missing key produces a clear, named error', /GASLESS_NOT_CONFIGURED/.test(gl));
+
+    /*
+     * Native coin is meaningless here by definition — if the user had native
+     * coin they would not need gasless. Rejecting it in our code produces a
+     * useful message instead of a confusing upstream one.
+     */
+    t('non-ERC20 tokens are rejected', /BAD_TOKEN/.test(gl));
+
+    const env = read('.env.example');
+    t('the gasless vars are documented', /ZEROX_FEE_BPS/.test(env));
+    t('...and the example never carries a real key', /ZEROX_API_KEY=\s*$/m.test(env));
+  }
+
   return rows;
 }

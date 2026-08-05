@@ -29,6 +29,7 @@ import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
+import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -375,6 +376,48 @@ app.get('/api/bridge/status', async (_req, res) => {
 app.get('/api/bridge/quote', async (req, res) => {
   try {
     const { ok, status, body } = await bridgeQuote(req.query);
+    return res.status(ok ? 200 : status || 502).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/* -------------------------------- gasless --------------------------------- */
+/*
+ * Swaps for users with no native coin. See server/gasless.js — the short
+ * version is that someone holding USDT and no BNB can currently do nothing at
+ * all in this app, and that is the most common dead end in crypto.
+ *
+ * Proxied so the 0x key stays server-side and so the fee parameters cannot be
+ * supplied by a caller.
+ */
+
+app.get('/api/gasless/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=300');
+  res.json(gaslessStatus());
+});
+
+app.get('/api/gasless/price', async (req, res) => {
+  try {
+    const { ok, status, body } = await gaslessPrice(req.query);
+    return res.status(ok ? 200 : status || 502).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+app.get('/api/gasless/quote', async (req, res) => {
+  try {
+    const { ok, status, body } = await gaslessQuote(req.query);
+    return res.status(ok ? 200 : status || 502).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+app.post('/api/gasless/submit', async (req, res) => {
+  try {
+    const { ok, status, body } = await gaslessSubmit(req.body);
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });

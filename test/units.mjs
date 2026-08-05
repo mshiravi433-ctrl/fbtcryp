@@ -12,6 +12,7 @@ import { trimKeepingLanguages } from '../server/news.js';
 import { isEligible, normalizePool, riskBand } from '../server/yields.js';
 import { issuerMatches } from '../server/solanaAssets.js';
 import { bridgeFee, integratorId } from '../server/bridge.js';
+import { feeBps as gaslessFeeBps, feeRecipient as gaslessRecipient, gaslessConfigured } from '../server/gasless.js';
 import {
   COMMODITY_ASSETS,
   EQUITY_ASSETS,
@@ -2953,6 +2954,70 @@ export default function run() {
      */
     t('the bridge fee is lower than the same-chain swap fee',
       bridgeFee() * 10000 < 70);
+  }
+
+  /* ============================ gasless swaps ============================ */
+  /*
+   * ─── WHY THIS FEATURE EXISTS ──────────────────────────────────────────────
+   * A user holding USDT on BNB Chain but no BNB can do NOTHING in this app.
+   * Every EVM action needs the native coin for gas, and buying that coin is
+   * itself a transaction requiring gas. It is the most common dead end in
+   * crypto and it hits exactly the people this app is for: someone who was
+   * sent stablecoins and has never held BNB.
+   */
+  {
+    const saved = { key: process.env.ZEROX_API_KEY, bps: process.env.ZEROX_FEE_BPS };
+
+    /*
+     * Must fail CLOSED. 0x requires a key even on the free plan, and without
+     * one every request 401s. Reporting "not available" beats offering a
+     * button that always breaks.
+     */
+    delete process.env.ZEROX_API_KEY;
+    t('gasless is off when no key is configured', gaslessConfigured() === false);
+
+    process.env.ZEROX_API_KEY = 'test-key';
+    t('...and on when one is', gaslessConfigured() === true);
+
+    process.env.ZEROX_API_KEY = saved.key ?? '';
+    if (!saved.key) delete process.env.ZEROX_API_KEY;
+
+    /* ---- the fee ---- */
+    /*
+     * Matches the normal swap fee. To the user this IS a swap, and charging a
+     * different rate for the same action depending on which code path served
+     * it would be arbitrary and impossible to explain.
+     */
+    delete process.env.ZEROX_FEE_BPS;
+    delete process.env.FEE_BPS;
+    t('the gasless fee matches the standard swap fee', gaslessFeeBps() === 70);
+
+    /*
+     * 0x accepts up to 1000 bps (10%). A misplaced digit turning 70 into 700
+     * would take 7% of somebody's trade, so the clamp is 100.
+     */
+    process.env.ZEROX_FEE_BPS = '700';
+    t('a misplaced digit cannot take 7%', gaslessFeeBps() === 70);
+
+    process.env.ZEROX_FEE_BPS = '-5';
+    t('a negative fee falls back to the default', gaslessFeeBps() === 70);
+
+    process.env.ZEROX_FEE_BPS = 'abc';
+    t('garbage falls back to the default', gaslessFeeBps() === 70);
+
+    /* The clamp must not be a constant in disguise. */
+    process.env.ZEROX_FEE_BPS = '50';
+    t('a legitimate 50 bps IS honoured', gaslessFeeBps() === 50);
+
+    process.env.ZEROX_FEE_BPS = saved.bps ?? '';
+    if (!saved.bps) delete process.env.ZEROX_FEE_BPS;
+
+    /*
+     * One wallet for every EVM fee in the app. A second address would mean a
+     * second private key to guard and a second balance to remember to check.
+     */
+    t('gasless fees go to the same EVM wallet as everything else',
+      gaslessRecipient().toLowerCase() === PAYOUT_ADDRESSES.evm.toLowerCase());
   }
 
   return rows;
