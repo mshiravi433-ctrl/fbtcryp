@@ -3252,5 +3252,172 @@ export default function run() {
     t('...and the example never carries a real key', /ZEROX_API_KEY=\s*$/m.test(env));
   }
 
+  /* ---- 48. perp funding: the panel must actually be reachable ---------- */
+  /*
+   * ─── THE BUG THIS EXISTS TO PREVENT, WHICH WE HAVE SHIPPED TWICE ────────
+   * The bridge shipped a working, fee-collecting server integration with no
+   * screen. Gasless shipped four working routes with no screen. Both "worked"
+   * and both earned exactly zero, because no human being could reach them.
+   *
+   * Check #46 was written after the bridge and still only asserted the server
+   * side existed. So this one asserts the whole chain, end to end: module →
+   * route → client lib → component → rendered on a page → that page has a
+   * route → that route has a nav entry.
+   */
+  {
+    t('the perp data module exists', existsSync('server/perp.js'));
+    t('the client lib exists', existsSync('src/lib/perp.js'));
+    t('the panel component exists', existsSync('src/components/FundingPanel.jsx'));
+
+    const srv = read('server/perp.js');
+    const appSrc = read('server/app.js');
+    const lib = read('src/lib/perp.js');
+    const panel = read('src/components/FundingPanel.jsx');
+    const page = read('src/pages/Perp.jsx');
+    const appJsx = read('src/App.jsx');
+
+    /* server: imported AND routed. Either alone is dead code. */
+    t('the server imports the module', /from '\.\/perp\.js'/.test(appSrc));
+    t('...and exposes it as a route', /\/api\/perp\/markets/.test(appSrc));
+    /*
+     * The route must CALL the fetcher, not merely mention it. A previous bug
+     * in this repo passed a similar check because the import line matched the
+     * function name while the call had been replaced — leaving a dead screen
+     * that looked wired. Requiring `name(` is what distinguishes them.
+     */
+    t('...and the route calls the fetcher', /fetchPerpMarkets\b/.test(appSrc.split('/api/perp/markets')[1] ?? ''));
+
+    /* client: the lib must hit the route we actually published. */
+    t('the client fetches the published path', /perp\/markets/.test(lib));
+
+    /* component: must call the client lib, not re-implement a fetch. */
+    t('the panel calls the client lib', /getPerpMarkets\s*\(/.test(panel));
+
+    /*
+     * THE STEP THAT WAS MISSING BOTH PREVIOUS TIMES: a component that nothing
+     * renders is identical to no component.
+     */
+    t('the page imports the panel', /import FundingPanel from/.test(page));
+    t('...and actually renders it', /<FundingPanel\s*\/>/.test(page));
+
+    /* And the page itself has to be reachable. */
+    t('the perp page has a route', /path="\/perp"/.test(appJsx));
+    t('...and a navigation entry', /'\/perp'/.test(read('src/components/MoreSheet.jsx')));
+
+    /*
+     * ─── THE HONESTY CLAIM ON THE SCREEN MUST STAY TRUE ────────────────────
+     * The panel tells the user we earn nothing from any venue listed, and
+     * that this is why the ranking can be trusted. If a referral link or
+     * affiliate id were ever added to server/perp.js without that copy
+     * changing, the screen would be claiming impartiality it no longer has.
+     */
+    t('no affiliate or referral parameter has crept into the venue data',
+      !/ref=|referral|affiliate|builder/i.test(srv));
+
+    /*
+     * ─── NO GUESSED INTERVALS ──────────────────────────────────────────────
+     * The single correctness property of this feature. Annualising a funding
+     * rate without knowing its settlement interval yields a confidently wrong
+     * cost, so an unlisted venue must be DROPPED rather than defaulted.
+     */
+    t('an unknown interval drops the venue rather than assuming one',
+      /if \(!hours\) return null/.test(srv));
+    t('...and there is no fallback interval anywhere',
+      !/FUNDING_INTERVAL_HOURS\[[^\]]+\]\s*(\?\?|\|\|)/.test(srv));
+
+    /*
+     * No offline snapshot, deliberately — a stale funding rate can tell
+     * somebody a position pays them while it is costing them.
+     */
+    t('the client keeps no stale fallback',
+      !/offlineData|mockData|FALLBACK_/.test(lib));
+
+    /* Every key the panel renders must exist in en.json, or it prints raw. */
+    {
+      const en = JSON.parse(read('src/i18n/locales/en.json'));
+      const keys = [...panel.matchAll(/t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+      const missing = keys.filter((k) => !hasKey(en, k));
+      t(`every funding-panel key resolves (${keys.length} checked)`, missing.length === 0);
+      /* The dynamic ones are built by template and cannot be matched above. */
+      for (const k of ['perp.custody.onchain', 'perp.custody.centralized',
+                       'perp.crowd.longs', 'perp.crowd.balanced',
+                       'perp.side.long', 'perp.side.short']) {
+        t(`the templated key ${k} exists`, hasKey(en, k));
+      }
+      /* Persian is the owner's language and the primary audience. */
+      const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      t('the panel is fully translated into Persian',
+        keys.every((k) => hasKey(fa, k)) && hasKey(fa, 'perp.custody.onchain'));
+    }
+  }
+
+  /* ---- 49. the Solana fee is zero, and every surface agrees ------------ */
+  /*
+   * ─── WHY THIS IS A TEST AND NOT A COMMENT ───────────────────────────────
+   * The Solana fee is deliberately OFF: collecting it needs a Jupiter referral
+   * account created on-chain, which costs SOL the owner has not spent yet.
+   * That is a supported state — swaps work, we earn nothing.
+   *
+   * The danger is not the zero. It is a surface that says 0.70% while the
+   * code charges nothing. Overstating a fee is the safer direction to be
+   * wrong in and it is still "the fee I was quoted is not the fee I paid",
+   * which is what makes someone distrust an irreversible swap.
+   *
+   * The app already switches its own notice on `solanaFeeReady()`. The
+   * LANDING PAGE did not — it advertised a flat 0.70% to search engines on a
+   * page that lists Solana as supported.
+   */
+  {
+    const landing = read('scripts/gen-landing.mjs');
+    const solLib = read('src/lib/solana.js');
+    const solSrv = read('server/solana.js');
+
+    /* Strip comments first: these checks must not match their own rationale. */
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    t('the landing page no longer quotes a flat platform fee',
+      !/\['Platform fee', '0\.70% of the input/.test(code(landing)));
+    t('...and says plainly that Solana is not charged',
+      /No platform fee on Solana/.test(landing));
+
+    /*
+     * The request-side guard. Jupiter does NOT error on a referralFee sent
+     * without a usable account — it silently ignores it — so an unguarded
+     * call would look configured in the logs while earning zero. Both the
+     * client and the server must gate on the account existing.
+     */
+    t('the client only requests a fee when the referral account exists',
+      /if \(solanaFeeReady\(\)\)/.test(code(solLib)));
+    t('the server only attaches a fee when its account is set',
+      /if \(BASE58\.test\(ref\)\)/.test(code(solSrv)));
+
+    /*
+     * The disclosure must be driven by the SAME flag that decides whether to
+     * charge, so the two can never disagree again.
+     */
+    const solPage = code(read('src/pages/SolanaSwap.jsx'));
+    t('the screen picks its fee notice from that same flag',
+      /solanaFeeReady\(\)\s*\?/.test(solPage));
+    t('...and has a no-fee notice to fall back on',
+      /solana\.feeNoneNotice/.test(solPage));
+
+    /* Both notices must exist in English and Persian or the screen prints a key. */
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    t('the no-fee notice is translated',
+      hasKey(en, 'solana.feeNoneNotice') && hasKey(fa, 'solana.feeNoneNotice'));
+
+    /*
+     * The referral account must NOT be hard-coded. It does not exist yet, and
+     * a plausible-looking constant here would make solanaFeeReady() return
+     * true, switch the UI to "we charge 0.70%", and send Jupiter an account
+     * that cannot receive — charging users for a fee that lands nowhere.
+     */
+    t('no referral account is hard-coded while it does not exist',
+      /VITE_JUP_REFERRAL_ACCOUNT\) \|\| ''/.test(solLib));
+    t('...and the server default is empty too',
+      /JUP_REFERRAL_ACCOUNT \|\| ''/.test(solSrv));
+  }
+
   return rows;
 }

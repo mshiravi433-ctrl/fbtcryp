@@ -28,6 +28,7 @@ import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
+import { fetchPerpMarkets } from './perp.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -466,6 +467,27 @@ app.get('/api/yields', (_req, res) => serve(res, 3_600_000)(fetchYields, 'yields
  * misleading in a way an hour-old APY is not.
  */
 app.get('/api/solana/assets', (_req, res) => serve(res, 300_000)(fetchSolanaAssets, 'solana-assets'));
+
+/**
+ * PERPETUAL FUNDING RATES — the Perp screen's data.
+ *
+ * ─── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ * The Perp screen showed a spot price and three links. The one number that
+ * decides whether a leveraged position is expensive to HOLD — funding — was
+ * described in prose and never shown, even though it differs by several
+ * percent a year between venues for the identical trade.
+ *
+ * ─── FIVE MINUTES ───────────────────────────────────────────────────────────
+ * Shorter than /api/yields (an hour) because funding moves intraday and can
+ * flip sign within a session; longer than the market feed (30s) because it is
+ * settled at most hourly, so a fresher figure would be the same figure at
+ * twelve times the upstream cost against a free service.
+ *
+ * See server/perp.js for the rule that shapes the whole module: a venue whose
+ * settlement interval we have not verified is DROPPED, because annualising a
+ * rate without its interval produces a confident wrong number.
+ */
+app.get('/api/perp/markets', (_req, res) => serve(res, 300_000)(fetchPerpMarkets, 'perp-markets'));
 
 /* --------------------------------- Solana --------------------------------- */
 /*

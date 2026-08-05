@@ -8,6 +8,7 @@ import AnimatedNumber from '../components/AnimatedNumber';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
+import FundingPanel from '../components/FundingPanel';
 import { IconExternal, IconShield } from '../components/Icons';
 
 /**
@@ -123,6 +124,19 @@ export default function Perp() {
           <p className="faint" style={{ marginTop: 8 }}>{t('perp.indexNote')}</p>
         </motion.section>
       ) : null}
+
+      {/*
+        ─── THE COST OF HOLDING, BEFORE ANYTHING ELSE ──────────────────────
+        Placed directly under the price and ABOVE the explanation, the venue
+        list and the risk essay, because it is the only thing on this screen
+        that a trader cannot get elsewhere in one glance: the same position
+        costs several percent a year more at one venue than another, and no
+        interface lines them up.
+
+        Above the venue buttons on purpose. A cost comparison shown after the
+        user has already tapped through to a venue is a receipt, not a choice.
+      */}
+      <FundingPanel />
 
       {/* ---------- why we don't run the engine ---------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">

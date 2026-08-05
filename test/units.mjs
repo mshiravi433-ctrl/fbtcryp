@@ -64,6 +64,16 @@ import {
   referralFeeBps,
   toBaseUnits
 } from '../src/lib/solana.js';
+import {
+  FUNDING_INTERVAL_HOURS,
+  VENUE_CUSTODY,
+  TRACKED_ASSETS,
+  annualiseFunding,
+  crowding,
+  groupByAsset,
+  normalizeTicker
+} from '../server/perp.js';
+import { bestVenue, fundingCost, liquidationMove } from '../src/lib/perp.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { backtest, confidenceFrom, signalAt } from '../src/lib/backtest.js';
@@ -3018,6 +3028,194 @@ export default function run() {
      */
     t('gasless fees go to the same EVM wallet as everything else',
       gaslessRecipient().toLowerCase() === PAYOUT_ADDRESSES.evm.toLowerCase());
+  }
+
+  /* ===================== perpetual funding rates ========================= */
+  /*
+   * ─── WHAT THIS GUARDS ─────────────────────────────────────────────────────
+   * The funding panel makes ONE claim that can be quietly, confidently wrong:
+   * the annualised cost of holding a position. Every failure below produces a
+   * plausible number rather than an error, which is why each is pinned.
+   */
+  {
+    /* ---- the interval table is the whole safety property ---- */
+    /*
+     * A funding rate without its settlement interval is meaningless. The SAME
+     * printed 0.01% is 10.95%/yr on an 8-hour venue and 87.6%/yr on an hourly
+     * one. If a venue were listed with a guessed interval, the screen would
+     * state an eightfold-wrong holding cost with full confidence.
+     */
+    t('every venue with an interval also has a custody label',
+      Object.keys(FUNDING_INTERVAL_HOURS).every((v) => VENUE_CUSTODY[v]));
+    t('...and no custody label exists for an unlisted venue',
+      Object.keys(VENUE_CUSTODY).every((v) => FUNDING_INTERVAL_HOURS[v]));
+    t('every interval is a positive number of hours',
+      Object.values(FUNDING_INTERVAL_HOURS).every((h) => Number.isFinite(h) && h > 0));
+
+    /*
+     * ─── THE EXACT COINGECKO VENUE STRING ──────────────────────────────────
+     * Pinned as literals, because a wrong key does not error — the venue just
+     * never appears, and the screen looks like that exchange has no markets
+     * rather than like our table has a typo. Exactly how the LI.FI integrator
+     * id cost us revenue silently.
+     *
+     * I first wrote `dYdX Perpetual`, which is a REAL CoinGecko venue — the
+     * dead Ethereum L1 exchange. The live v4 appchain is `dYdX Chain`.
+     * `GET /derivatives/exchanges/list` settled it. A generic "is it a
+     * non-empty string" check passes for both, so only the literal has value.
+     */
+    t('the dYdX key is the live appchain, not the dead L1',
+      FUNDING_INTERVAL_HOURS['dYdX Chain'] === 1 &&
+      FUNDING_INTERVAL_HOURS['dYdX Perpetual'] === undefined);
+    t('Hyperliquid is hourly', FUNDING_INTERVAL_HOURS['Hyperliquid (Futures)'] === 1);
+    t('Binance is eight-hourly', FUNDING_INTERVAL_HOURS['Binance (Futures)'] === 8);
+    /* The on-chain venues must be labelled as such — it is the one property
+       this app is built on and the reason to prefer them. */
+    t('the on-chain venues are labelled on-chain',
+      VENUE_CUSTODY['Hyperliquid (Futures)'] === 'onchain' &&
+      VENUE_CUSTODY['dYdX Chain'] === 'onchain');
+    t('...and the custodial ones are labelled custodial',
+      VENUE_CUSTODY['Binance (Futures)'] === 'centralized');
+
+    /* ---- annualisation ---- */
+    /*
+     * The arithmetic that the entire panel rests on. 0.01% per 8h is 10.95%
+     * a year (1095 intervals); the same print hourly is 87.6% (8760).
+     * Verified against the numbers rather than the formula.
+     */
+    t('an 8-hour rate annualises over 1095 intervals',
+      Math.abs(annualiseFunding(0.01, 8) - 10.95) < 1e-9);
+    t('the same rate hourly is eight times the cost',
+      Math.abs(annualiseFunding(0.01, 1) - 87.6) < 1e-9);
+    t('a negative rate stays negative', annualiseFunding(-0.01, 8) < 0);
+    /*
+     * Null, never zero. "We do not know the rate" and "holding is free" are
+     * opposite statements, and collapsing them would make the cheapest-venue
+     * row point at whichever venue failed to report.
+     */
+    t('an unknown rate is null, not zero', annualiseFunding(undefined, 8) === null);
+    t('a zero-hour interval cannot divide', annualiseFunding(0.01, 0) === null);
+
+    /* ---- crowding label ---- */
+    /*
+     * The neutral band is not zero. Venues build a ~0.01%/8h interest
+     * component into the formula, so a calm market sits around +10%/yr. A
+     * threshold at zero would report "longs are crowded" on essentially every
+     * market every day, which is the same as reporting nothing.
+     */
+    t('a calm, slightly-positive market is not called crowded',
+      crowding(10.95) === 'balanced');
+    t('a genuinely crowded long side is flagged', crowding(60) === 'longs');
+    t('a crowded short side is flagged', crowding(-30) === 'shorts');
+    t('an unknown rate has no crowding label', crowding(null) === null);
+
+    /* ---- ticker normalisation: every rejection matters ---- */
+    const now = Date.UTC(2026, 0, 1);
+    const good = {
+      market: 'Binance (Futures)',
+      symbol: 'BTCUSDT',
+      index_id: 'BTC',
+      contract_type: 'perpetual',
+      price: '64000',
+      funding_rate: 0.01,
+      open_interest: 7_000_000_000,
+      volume_24h: 8_000_000_000,
+      price_percentage_change_24h: 1.2,
+      last_traded_at: now / 1000,
+      expired_at: null
+    };
+    const ok = normalizeTicker(good, now);
+    t('a healthy ticker survives', ok != null && ok.symbol === 'BTC');
+    t('...and carries its interval so the UI can show its work',
+      ok.intervalHours === 8 && Math.abs(ok.fundingApr - 10.95) < 1e-9);
+
+    t('a venue with no verified interval is dropped',
+      normalizeTicker({ ...good, market: 'MEXC (Futures)' }, now) === null);
+    t('a non-perpetual contract is dropped',
+      normalizeTicker({ ...good, contract_type: 'futures' }, now) === null);
+    t('an expired contract is dropped',
+      normalizeTicker({ ...good, expired_at: '2025-01-01' }, now) === null);
+    t('an untracked asset is dropped',
+      normalizeTicker({ ...good, index_id: 'PEPE' }, now) === null);
+    /*
+     * CoinGecko keeps returning rows for pairs that stopped trading, with the
+     * last price frozen. Rendering one beside a live venue invites a
+     * comparison between a real number and a fossil.
+     */
+    t('a stale ticker is dropped',
+      normalizeTicker({ ...good, last_traded_at: now / 1000 - 60 * 60 * 6 }, now) === null);
+    t('a thin market is dropped', normalizeTicker({ ...good, open_interest: 5000 }, now) === null);
+    /* A missing rate must not become zero — the row still renders, as "—". */
+    const noRate = normalizeTicker({ ...good, funding_rate: null }, now);
+    t('a ticker with no funding rate survives but reports null',
+      noRate != null && noRate.fundingApr === null);
+
+    /* ---- grouping and the weighted average ---- */
+    /*
+     * The average is weighted by open interest. An unweighted mean lets a thin
+     * venue with an extreme print outvote the venue where the money actually
+     * is — and the thin one is exactly where a stale or manipulated rate
+     * appears.
+     */
+    const big = normalizeTicker({ ...good, open_interest: 7_000_000_000, funding_rate: 0.01 }, now);
+    const small = normalizeTicker(
+      { ...good, market: 'Hyperliquid (Futures)', open_interest: 2_000_000, funding_rate: 1 },
+      now
+    );
+    const [btc] = groupByAsset([big, small]);
+    t('the group keeps both venues', btc.venues.length === 2);
+    t('...sorted with the deepest market first',
+      btc.venues[0].venue === 'Binance (Futures)');
+    /*
+     * Unweighted this would be (10.95 + 8760) / 2 ≈ 4385. Weighted by the
+     * $7bn vs $2m of open interest it stays near the deep venue's rate. The
+     * assertion is deliberately far from the unweighted value so it cannot
+     * pass by accident.
+     */
+    t('the average is weighted by open interest, not a plain mean',
+      btc.avgFundingApr < 15 && btc.avgFundingApr > 10.95);
+    t('the spread between venues is reported',
+      Math.abs(btc.fundingSpread - (8760 - 10.95)) < 1e-6);
+
+    /* ---- the cheapest venue depends on direction ---- */
+    /*
+     * Positive funding is paid BY longs, so a long wants the LOWEST rate and a
+     * short wants the highest. These are opposite venues, and getting it
+     * backwards would invert the one number the panel exists to give.
+     */
+    t('a long is sent to the cheapest venue', bestVenue(btc, 'long').fundingApr < 15);
+    t('a short is sent to the opposite one', bestVenue(btc, 'short').fundingApr > 1000);
+    t('no rates means no recommendation', bestVenue({ venues: [] }, 'long') === null);
+
+    /* ---- the cost calculator ---- */
+    /*
+     * Funding is charged on NOTIONAL, not on collateral. $500 at 10x pays
+     * funding on $5,000, and that multiplication is the part people get
+     * wrong. 20%/yr on $5,000 for 30 days = $82.19.
+     */
+    const c = fundingCost({ collateralUsd: 500, leverage: 10, aprPct: 20, days: 30 });
+    t('funding is charged on the position, not the collateral', c.notional === 5000);
+    t('the monthly cost is computed from the notional',
+      Math.abs(c.cost - (5000 * 0.2 * 30) / 365) < 1e-9);
+    /*
+     * The number that lands: leverage multiplies the holding cost exactly as
+     * fast as the gain. 20%/yr at 10x is 200%/yr of the money you put in.
+     */
+    t('...and is expressed against what the user actually put in',
+      Math.abs(c.pctOfCollateral - (c.cost / 500) * 100) < 1e-9);
+    t('a short being PAID funding is not clamped to zero',
+      fundingCost({ collateralUsd: 500, leverage: 10, aprPct: -20, days: 30 }).cost < 0);
+    t('a zero collateral has no cost',
+      fundingCost({ collateralUsd: 0, leverage: 10, aprPct: 20 }) === null);
+
+    /* ---- liquidation arithmetic, shared with the existing table ---- */
+    t('100x liquidates on a 1% move', liquidationMove(100) === 1);
+    t('2x liquidates on a 50% move', liquidationMove(2) === 50);
+    t('zero leverage is not a position', liquidationMove(0) === null);
+
+    /* The asset list must be non-empty or the screen renders nothing. */
+    t('the tracked asset list is populated',
+      Array.isArray(TRACKED_ASSETS) && TRACKED_ASSETS.includes('BTC'));
   }
 
   return rows;

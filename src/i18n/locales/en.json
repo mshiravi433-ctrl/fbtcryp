@@ -777,7 +777,36 @@
     "liqTitle": "How far price must move to liquidate you",
     "liqLeverage": "Leverage",
     "liqMove": "Move against you",
-    "liqNote": "Approximate — the exact figure depends on the venue’s maintenance margin and fees, and is always slightly worse than shown here."
+    "liqNote": "Approximate — the exact figure depends on the venue’s maintenance margin and fees, and is always slightly worse than shown here.",
+    "fundingTitle": "What it costs to hold, by venue",
+    "fundingIntro": "Funding is the fee perpetual traders pay each other every few hours to keep the contract tied to the spot price. It is charged whether your trade is winning or losing, and the same position costs a different amount at every venue. Rates below are live and annualised so they can be compared.",
+    "fundVenue": "Venue",
+    "fundApr": "Per year",
+    "fundOi": "Open interest",
+    "fundEvery": "settles every {{hours}}h",
+    "fundSpread": "The gap between the cheapest and dearest venue for {{symbol}} is {{spread}} percentage points a year, on an identical position.",
+    "fundingUnavailable": "Live funding rates are unavailable right now. We do not show a saved copy here: funding flips sign within a day, and a stale rate could tell you a position pays you when it is costing you.",
+    "fundingNotice": "We earn nothing from any venue on this page — no referral, no revenue share. That is why the ranking can be trusted: nothing on it was bought. Rates change constantly; check the venue before you open a position.",
+    "fundingCount": "{{used}} live markets from {{considered}} tracked. Venues whose settlement interval we have not verified are excluded, because annualising a rate without knowing its interval produces a confident wrong number.",
+    "custody": {
+      "centralized": "Custodial — they hold your funds",
+      "onchain": "On-chain — you keep your keys",
+      "unknown": "Custody unverified"
+    },
+    "crowd": {
+      "longs": "Longs are crowded on {{symbol}} — buyers are paying sellers about {{apr}} a year to keep their positions open.",
+      "shorts": "Shorts are crowded on {{symbol}} — sellers are paying buyers, currently about {{apr}} a year.",
+      "balanced": "{{symbol}} funding is near neutral at about {{apr}} a year — neither side is paying much to hold."
+    },
+    "costTitle": "What holding it would cost you",
+    "side": {
+      "long": "Long (betting up)",
+      "short": "Short (betting down)"
+    },
+    "costNotional": "Position size",
+    "costMonth": "Funding for 30 days at {{venue}}",
+    "costExplain": "That is {{pct}}% of the money you put in, for one month, before the price moves at all. Leverage multiplies this cost exactly as fast as it multiplies a gain — at {{lev}}× you pay funding on {{lev}}× your collateral.",
+    "costNoRate": "No venue is reporting a funding rate for this market right now, so the holding cost cannot be calculated."
   },
   "farm": {
     "title": "Farm",

@@ -79,7 +79,25 @@ const PAGES = [
     ],
     facts: [
       ['Networks', 'BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Solana'],
-      ['Platform fee', '0.70% of the input, shown on screen before you sign'],
+      /*
+       * ─── THIS SAID A FLAT 0.70% AND THAT WAS NOT TRUE ─────────────────────
+       * The fee is 0.70% on the EVM chains, where KyberSwap's router takes it
+       * inside the same transaction. On Solana it is currently ZERO: Jupiter
+       * only pays an integrator fee into a referral account created on-chain,
+       * that account does not exist yet, and `/api/solana/status` reports
+       * `feeReady: false`.
+       *
+       * So this line was quoting a fee to search engines that Solana users are
+       * not charged, on a page that lists Solana as a supported network.
+       * Overstating a fee is the safer direction to be wrong in and it is
+       * still wrong — and the specific wrongness here, "the fee I was quoted
+       * is not the fee I paid", is what makes someone distrust every other
+       * number on an irreversible swap.
+       *
+       * When the referral account exists this line changes with it. Do not
+       * edit it back to a single figure before then.
+       */
+      ['Platform fee', '0.70% on EVM networks, shown on screen before you sign. No platform fee on Solana swaps right now'],
       ['Custody', 'None. Your keys stay in your wallet'],
       ['Signup', 'Not required']
     ]
