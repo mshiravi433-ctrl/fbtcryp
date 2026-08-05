@@ -63,6 +63,39 @@ const apiKey = () => process.env.CHANGENOW_API_KEY || '';
 export const changenowConfigured = () => Boolean(apiKey());
 
 /**
+ * OUR COMMISSION RATE ON CHANGENOW. ZERO, AND THAT IS THE POINT.
+ *
+ * ─── WHY WE GIVE UP THE 0.4% ────────────────────────────────────────────────
+ * The owner's condition, after speaking to their support, was exactly right:
+ * build it with a warning, but **no money of ours may sit with them**.
+ *
+ * That condition cannot be met by taking the commission, and the arithmetic
+ * is why. Their affiliate balance has a MINIMUM WITHDRAWAL — their own pages
+ * quote it inconsistently as "approximately $100", "about $100 in crypto",
+ * 0.002 BTC and 0.01 BTC depending on which page you read. Every one of those
+ * is far above zero, and there is no per-swap payout setting.
+ *
+ * At 0.4%, reaching even the smallest of those thresholds needs roughly
+ * $25,000 of user volume. So a balance would NECESSARILY sit in their account
+ * for months — in the owner's name, from a jurisdiction their §11.1 excludes,
+ * under a §11.4 that lets them seize it. "Nothing stays with them" and "take
+ * the commission" are mutually exclusive here.
+ *
+ * So the fee is zero. Nothing accrues, so there is nothing to seize, and the
+ * user gets a better rate than going to ChangeNOW directly.
+ *
+ * ─── WHERE THE REVENUE ACTUALLY COMES FROM ──────────────────────────────────
+ * This screen exists to move someone from a chain we cannot touch onto one we
+ * can. Once their USDT lands on BNB Chain, every swap they make is ours at
+ * 0.70% — on-chain, in their own wallet, where nobody can freeze it. We earn
+ * from the second step, not the first, and the second step is the safe one.
+ *
+ * Changing this to a non-zero value re-creates the seizable balance. Do not,
+ * unless the withdrawal threshold has genuinely gone to zero.
+ */
+export const OUR_FEE_PERCENT = 0;
+
+/**
  * Coins we offer, and only these.
  *
  * ─── AN ALLOW-LIST, FOR THE SAME REASON AS EVERYWHERE ELSE ──────────────────
@@ -213,6 +246,14 @@ export function crosschainStatus() {
     /* Quotes work with no key at all; this only reports whether one is set. */
     keySet: changenowConfigured(),
     quoteOnly: true,
+    /*
+     * Reported so the UI can state it and a test can assert it. Zero means no
+     * balance ever accrues in a ChangeNOW account, which is the owner's
+     * explicit condition — see OUR_FEE_PERCENT for why taking the 0.4% would
+     * break it.
+     */
+    ourFeePercent: OUR_FEE_PERCENT,
+    noBalanceHeld: OUR_FEE_PERCENT === 0,
     coins: NATIVE_COINS.length,
     destinations: DESTINATIONS.length
   };

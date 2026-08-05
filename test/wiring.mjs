@@ -3991,6 +3991,41 @@ export default function run() {
     t('...and the Persian says the same', /ضبط|OFAC/.test(fa.coins.jurisdictionNotice));
     t('the screen renders that warning', /coins\.jurisdictionNotice/.test(page));
 
+    /*
+     * ─── THE WARNING IS A GATE, NOT A PARAGRAPH ─────────────────────────────
+     * The owner confirmed with ChangeNOW support that Iranian users are
+     * workable WITH A WARNING. A warning nobody reads is not a warning, and
+     * this one covers something irreversible: §11.4 permits seizure in
+     * restricted jurisdictions and a crypto transfer cannot be recalled.
+     *
+     * So the outbound button must stay disabled until an explicit tick, and
+     * the tick must reset when the trade changes — an acknowledgement carried
+     * over from a different pair or amount is not an acknowledgement of this
+     * one.
+     */
+    t('the outbound button is gated on an explicit acknowledgement',
+      /disabled=\{quote\.belowMinimum === true \|\| !acknowledged\}/.test(page));
+    t('...and the tick resets when the trade changes',
+      /setAcknowledged\(false\); \}, \[from, to, amount\]/.test(page));
+    t('...and it is a real checkbox, reachable by keyboard',
+      /type="checkbox"/.test(page) && /coins\.ackLabel/.test(page));
+
+    /*
+     * ChangeNOW's Affiliate Terms §2.5 require that our customers agree to
+     * THEIR terms, and §2.6 forbids removing that agreement. Our own warning
+     * sits alongside it and must never replace it.
+     */
+    t('their own terms are linked, as their §2.5 requires',
+      /changenow\.io\/terms-of-use/.test(page) && /coins\.readTerms/.test(page));
+
+    /*
+     * Zero fee is the owner's condition. If a later change takes the 0.4%, a
+     * seizable balance starts accruing again.
+     */
+    t('the screen states that we take nothing', /coins\.noFeeBody/.test(page));
+    t('...and the server enforces a zero rate',
+      /export const OUR_FEE_PERCENT = 0;/.test(srv));
+
     /* Every key the screen renders must resolve, or it prints a raw key. */
     const keys = [...page.matchAll(/t\('(coins\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
     const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));

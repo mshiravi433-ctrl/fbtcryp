@@ -2265,6 +2265,10 @@
       "BAD_PAIR": "That pair is not available here.",
       "BAD_AMOUNT": "Enter an amount first.",
       "QUOTE_FAILED": "Could not get a price right now. We do not show a saved one — an out-of-date exchange rate is how people end up receiving far less than they expected."
-    }
+    },
+    "ackLabel": "I understand this exchange happens on ChangeNOW, not in this app — that they may refuse or, in restricted countries, seize funds under their terms, and that a crypto transfer cannot be reversed once sent.",
+    "readTerms": "Read ChangeNOW's terms",
+    "noFeeTitle": "We take nothing from this",
+    "noFeeBody": "Our commission on ChangeNOW is set to zero, on purpose. Their affiliate balance can only be withdrawn after it reaches roughly $100–$600, so any commission we took would sit in their account for months — in a country their own terms exclude, under a clause that lets them seize it. Zero means nothing accumulates there and nothing can be taken. You also get a slightly better rate than going to them directly. We earn from the swap you make afterwards inside the app, on-chain, where nobody can freeze it."
   }
 }

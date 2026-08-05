@@ -81,6 +81,20 @@ export default function Coins() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
+  /*
+   * ─── AN EXPLICIT TICK, NOT A PARAGRAPH ────────────────────────────────────
+   * The owner spoke to ChangeNOW support and confirmed Iranian users are
+   * workable *with a warning*. A warning nobody reads is not a warning, and
+   * this one covers something irreversible: §11.4 of their terms lets them
+   * seize funds from users in restricted jurisdictions, and a crypto transfer
+   * cannot be recalled once sent.
+   *
+   * So the continue button stays disabled until the box is ticked. It resets
+   * whenever the pair or amount changes, because an acknowledgement carried
+   * over from a different trade is not an acknowledgement of this one.
+   */
+  const [acknowledged, setAcknowledged] = useState(false);
+
   const timer = useRef(null);
   /* Guards a slow earlier quote from overwriting a newer one — two rapid
      edits resolve out of order often enough on mobile to matter. */
@@ -116,6 +130,9 @@ export default function Coins() {
     timer.current = setTimeout(fetchQuote, DEBOUNCE_MS);
     return () => clearTimeout(timer.current);
   }, [fetchQuote]);
+
+  /* A tick belongs to one specific trade. Changing any leg voids it. */
+  useEffect(() => { setAcknowledged(false); }, [from, to, amount]);
 
   const openExchange = () => {
     haptic?.('light');
@@ -207,11 +224,25 @@ export default function Coins() {
               <p className="notice" style={{ marginTop: 10 }}>{quote.warning}</p>
             )}
 
+            {/*
+              The acknowledgement, immediately above the button it unlocks —
+              not at the bottom of the screen where it would be read after the
+              decision rather than before it.
+            */}
+            <label className="cn-ack">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+              />
+              <span>{t('coins.ackLabel')}</span>
+            </label>
+
             <button
               className="btn btn-primary"
               style={{ marginTop: 12 }}
               onClick={openExchange}
-              disabled={quote.belowMinimum === true}
+              disabled={quote.belowMinimum === true || !acknowledged}
             >
               <span style={{ display: 'inline-flex', gap: 7, alignItems: 'center', justifyContent: 'center' }}>
                 <IconExternal width={15} height={15} />
@@ -226,6 +257,18 @@ export default function Coins() {
             {t(`coins.err.${err}`, { defaultValue: t('coins.err.QUOTE_FAILED') })}
           </p>
         )}
+      </motion.section>
+
+      {/*
+        Our fee is zero here and the user is told why — it is the reason this
+        integration is safe to offer at all. See OUR_FEE_PERCENT in
+        server/crosschain.js.
+      */}
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 6 }}>{t('coins.noFeeTitle')}</p>
+        <p className="muted" style={{ fontSize: 12.2, margin: 0, lineHeight: 1.85 }}>
+          {t('coins.noFeeBody')}
+        </p>
       </motion.section>
 
       {/*
@@ -249,6 +292,27 @@ export default function Coins() {
       </motion.section>
 
       <p className="notice">{t('coins.jurisdictionNotice')}</p>
+
+      {/*
+        ─── LINKING THEIR TERMS IS A CONTRACTUAL OBLIGATION, NOT POLITENESS ──
+        ChangeNOW's Affiliate Terms §2.5: by using their tools we "represent
+        and warrant that your Customers shall agree with ChangeNOW's terms",
+        and §2.6 forbids removing that agreement from the integration. Our own
+        warning sits alongside it and never replaces it.
+      */}
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={() => {
+          const url = 'https://changenow.io/terms-of-use';
+          if (tg?.openLink) tg.openLink(url);
+          else window.open(url, '_blank', 'noopener,noreferrer');
+        }}
+      >
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
+          <IconExternal width={13} height={13} />
+          {t('coins.readTerms')}
+        </span>
+      </button>
     </PageTransition>
   );
 }

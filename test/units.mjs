@@ -85,7 +85,7 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
-import { DESTINATIONS, NATIVE_COINS, changenowConfigured, crosschainStatus, isAllowedPair } from '../server/crosschain.js';
+import { DESTINATIONS, NATIVE_COINS, OUR_FEE_PERCENT, changenowConfigured, crosschainStatus, isAllowedPair } from '../server/crosschain.js';
 import { exchangeUrl } from '../src/lib/crosschain.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
@@ -3772,6 +3772,25 @@ export default function run() {
      * later change cannot quietly turn it into a money-handling integration.
      */
     t('the integration reports itself as quote-only', crosschainStatus().quoteOnly === true);
+
+    /*
+     * ─── ZERO FEE IS THE OWNER'S CONDITION, ENFORCED ────────────────────────
+     * He agreed to ship this with a warning but was explicit that no money of
+     * ours may sit with ChangeNOW. That cannot be satisfied while taking the
+     * 0.4%: their affiliate balance has a MINIMUM WITHDRAWAL, quoted on their
+     * own pages as anywhere from "approximately $100" to 0.01 BTC, with no
+     * per-swap payout option. At 0.4% even the lowest of those needs roughly
+     * $25,000 of user volume, so a balance would necessarily sit in their
+     * account for months — in a jurisdiction their §11.1 excludes, under a
+     * §11.4 that permits seizure.
+     *
+     * Zero means nothing accrues, so there is nothing to seize. Raising it
+     * re-creates exactly the risk the owner ruled out, which is why this is a
+     * test and not a comment.
+     */
+    t('our commission on ChangeNOW is zero', OUR_FEE_PERCENT === 0);
+    t('...and the status reports no balance is held',
+      crosschainStatus().noBalanceHeld === true && crosschainStatus().ourFeePercent === 0);
     /* No key is configured, and quotes must work anyway — the endpoints we
        use are public. A key only raises rate limits. */
     t('no key is required for it to function', changenowConfigured() === false);
