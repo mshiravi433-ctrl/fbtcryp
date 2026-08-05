@@ -44,6 +44,7 @@ import Audit from '../src/pages/Audit.jsx';
 import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
 import RadioPanel from '../src/components/RadioPanel.jsx';
 import FiatPanel from '../src/components/FiatPanel.jsx';
+import VaultCard from '../src/components/VaultCard.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -239,6 +240,13 @@ export async function run(container) {
   await mount('RadioPanel', <RadioPanel />, { mayBeEmpty: true });
   await mount('FiatPanel (buy)', <FiatPanel mode="buy" />);
   await mount('FiatPanel (sell)', <FiatPanel mode="sell" />);
+
+  /*
+   * VaultCard with NO vault configured — the default, and the state every
+   * user is in until one is deployed. Rendering nothing is the correct
+   * outcome, so `mayBeEmpty`; what must hold is that it throws nothing.
+   */
+  await mount('VaultCard (no vault configured)', <VaultCard />, { mayBeEmpty: true });
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the

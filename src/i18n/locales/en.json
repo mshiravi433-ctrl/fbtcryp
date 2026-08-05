@@ -2463,5 +2463,15 @@
     "updateTitle": "A new version just shipped",
     "updateBody": "This tab was still running the previous build, so part of the page could not load. Reloading picks up the new version — it takes a second.",
     "goHome": "Back to market"
+  },
+  "vault": {
+    "title": "FBT Lending Vault",
+    "body": "Deposit a stablecoin and it is lent to over-collateralised borrowers on Morpho. You keep the yield, you can withdraw at any time, and we never hold your funds — the vault is a smart contract you can read.",
+    "feePill": "{{pct}}% of yield",
+    "nonCustodial": "Non-custodial",
+    "risk": "We decide which lending markets this vault uses, and that is a real risk you are taking on us. Lending markets can take bad debt and smart contracts can be exploited. Our fee is a share of the yield only — if the vault earns nothing, we earn nothing.",
+    "open": "Open the vault",
+    "verify": "Verify on-chain",
+    "venueNote": "Deposits and withdrawals happen on Morpho’s own audited interface, not inside this app, so you never depend on us being online to reach your money."
   }
 }

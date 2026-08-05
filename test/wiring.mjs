@@ -4410,6 +4410,98 @@ export default function run() {
       [...new Set(keys)].every((k) => hasKey(fa, k) && hasKey(ar, k)));
   }
 
+  /* ---- 63. our own vault: dormant by default, wired when it is real ----- */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * BUILT NOW, SWITCHED ON LATER — WITHOUT ADVERTISING A PRODUCT THAT IS
+     * NOT THERE.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «بعنوان یک اپشن بعدا که اعتماد سازی بیشتر شد ... اما از الان باشد»
+     *
+     * Two opposite failures to prevent at once, which is why this section
+     * checks both directions:
+     *
+     *   • Ship the surface with no vault behind it, and a user is pointed
+     *     toward depositing real money into an address that is empty or
+     *     wrong. Unrecoverable, and the worst outcome this app can produce.
+     *
+     *   • Ship the vault with no surface, and it earns nothing — the exact
+     *     "wired to nothing" shape already shipped on the bridge, the gasless
+     *     swap and the fiat integration.
+     *
+     * So: the full chain must exist, AND the default state must render
+     * nothing.
+     */
+    const lib = read('src/lib/vault.js');
+    const libCode = lib.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const card = read('src/components/VaultCard.jsx');
+    const earn = read('src/pages/Earn.jsx');
+
+    /* The chain: module -> component -> page imports it -> page RENDERS it. */
+    t('the vault module exists', existsSync('src/lib/vault.js'));
+    t('...the card component exists', existsSync('src/components/VaultCard.jsx'));
+    t('...the card reads the config', /vaultConfig/.test(card));
+    t('...the Earn page imports the card', /import VaultCard/.test(earn));
+    t('...and actually renders it', /<VaultCard/.test(earn));
+
+    /*
+     * THE SAFETY PROPERTY. `vaultConfig` must return null — never a partial
+     * object — when the address is missing or malformed, and the card must
+     * return null on that. Checked in the source because the built default
+     * has no address configured, so a runtime check would pass trivially.
+     */
+    t('a malformed address yields no config', /isValidVaultAddress/.test(libCode));
+    t('...an unknown chain yields no config too', /VAULT_CHAINS\[VAULT_CHAIN\]/.test(libCode));
+    t('...and the card renders nothing without one', /if \(!vault\) return null/.test(card));
+
+    /*
+     * The address is public by design and correctly VITE_-prefixed, exactly
+     * like the GMX referral code. What must NEVER appear is a private key or
+     * a seed anywhere near this module.
+     */
+    t('the vault address is a public identifier', /VITE_FBT_VAULT_ADDRESS/.test(libCode));
+    t('...and no secret is read here',
+      !/PRIVATE_KEY|MNEMONIC|SEED_PHRASE/i.test(libCode));
+
+    /*
+     * ─── DISCLOSURE IS NOT OPTIONAL ─────────────────────────────────────────
+     * We take a cut of the yield and we choose which markets the money enters.
+     * Both facts must be on the card itself, before the button — a fee found
+     * after depositing is the kind that makes someone distrust every other
+     * number in the app.
+     */
+    t('the fee is disclosed on the card', /vault\.feePill/.test(card));
+    t('...and the risk we introduce is stated', /vault\.risk/.test(card));
+    t('...before the deposit button, not after',
+      card.indexOf('vault.risk') < card.indexOf('vault.open'));
+
+    /*
+     * The user must be able to verify the contract independently. A vault
+     * they can only take on faith defeats the point of non-custody.
+     */
+    t('the contract is verifiable on an explorer', /explorerUrl/.test(libCode));
+    t('...and the card offers that link', /vault\.verify/.test(card));
+
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const ar = JSON.parse(read('src/i18n/locales/ar.json'));
+    const keys = [...card.matchAll(/t\('(vault\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));
+    t(`every vault.* key resolves (${new Set(keys).size} checked)` +
+      (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
+    t('...and all are translated',
+      [...new Set(keys)].every((k) => hasKey(fa, k) && hasKey(ar, k)));
+    /*
+     * The risk sentence must survive translation. Softening it in one language
+     * would leave Persian or Arabic readers with a sales pitch where English
+     * readers get a warning.
+     */
+    t('the risk copy names bad debt in every language',
+      /bad debt/i.test(en.vault.risk) && /بدهی بد/.test(fa.vault.risk) &&
+      /ديون/.test(ar.vault.risk));
+  }
+
   /* ---- 62a. repeat visits must not re-download the whole app ------------ */
   {
     /*

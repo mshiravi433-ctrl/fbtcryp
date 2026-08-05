@@ -87,6 +87,7 @@ import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenue
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
 import { FIAT_CRYPTO, FIAT_CURRENCIES, assertFiatLeg, fiatEnabled, fiatStatus } from '../server/fiat.js';
 import { STATIONS, parseAudioFeed } from '../server/audio.js';
+import { VAULT_CHAINS, isValidVaultAddress, vaultConfig, vaultFeePercent, vaultIsLive } from '../src/lib/vault.js';
 import { fmtDuration } from '../src/lib/audio.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
@@ -3979,6 +3980,81 @@ export default function run() {
       STATIONS.length > 0 && STATIONS.every((x) => /^https:\/\//.test(x.feed)));
     t('every station names itself for attribution',
       STATIONS.every((x) => typeof x.name === 'string' && x.name.length > 1));
+  }
+
+  /* ================= our own lending vault — off until real ============== */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE PROPERTY THAT MATTERS: IT MUST BE INVISIBLE UNTIL IT IS REAL.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Requested as a feature to have ready NOW and switch on later:
+     *   «بعنوان یک اپشن بعدا ... اما از الان باشد بهتر است»
+     *
+     * That is the right instinct and it is also the exact shape of the bug
+     * this repo has shipped three times — the bridge, the gasless swap and
+     * the fiat integration all existed, tested and working, while earning
+     * nothing because no user could reach them, or advertising something
+     * that was not configured.
+     *
+     * For a VAULT the failure is worse than earning nothing. A card offering
+     * a vault that does not exist sends someone toward depositing real money
+     * into an address that is empty or wrong, and "an address the user cannot
+     * withdraw from" is the only genuinely unrecoverable outcome this app can
+     * produce.
+     *
+     * So: no address, or a malformed one, or an unknown chain ⇒ null, and the
+     * component renders nothing.
+     */
+    t('with nothing configured the vault is not live', vaultIsLive() === false);
+    t('...and the config is null, not a half-filled object', vaultConfig() === null);
+
+    /*
+     * Address validation, pinned to real failure shapes rather than one happy
+     * case. Each of these has a plausible origin: a truncated copy-paste, a
+     * missing prefix, an ENS name typed instead of an address, a Solana
+     * address pasted into an EVM field.
+     */
+    t('a well-formed address validates',
+      isValidVaultAddress('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
+    t('a truncated address is refused', !isValidVaultAddress('0xaf5CE154cEfd22Da5BD1D0a5'));
+    t('an address without 0x is refused',
+      !isValidVaultAddress('af5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
+    t('an ENS name is refused', !isValidVaultAddress('fbtswap.eth'));
+    t('a Solana address is refused',
+      !isValidVaultAddress('B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4'));
+    t('an empty string is refused', !isValidVaultAddress(''));
+    t('a non-string is refused', !isValidVaultAddress(null) && !isValidVaultAddress(42));
+
+    /*
+     * ─── THE FEE CLAMP ──────────────────────────────────────────────────────
+     * Morpho's contract permits up to 50%. We clamp the DISPLAYED figure to
+     * 20, well under it, because nobody credible charges near half — the
+     * largest curators run 3% to 15% — and a misplaced digit that appeared to
+     * take half of somebody's yield would end the product's reputation in a
+     * day. Out-of-range falls back to the default rather than clamping
+     * silently, so a mistake is visible instead of quietly becoming the
+     * maximum.
+     */
+    t('the default performance fee is the market-standard 10%', vaultFeePercent() === 10);
+
+    /*
+     * Every chain offered must be one where Morpho Blue is actually deployed.
+     * An address on a chain with no Morpho would be a deposit into nothing.
+     * Pinned as literals: Base, Ethereum, BNB Chain and Arbitrum all appear
+     * in Morpho's own published address list.
+     */
+    t('Base is offered', Boolean(VAULT_CHAINS[8453]));
+    t('Ethereum is offered', Boolean(VAULT_CHAINS[1]));
+    t('BNB Chain is offered — our main chain', Boolean(VAULT_CHAINS[56]));
+    t('Arbitrum is offered', Boolean(VAULT_CHAINS[42161]));
+    t('every vault chain has an explorer to verify against',
+      Object.values(VAULT_CHAINS).every((c) => /^https:\/\//.test(c.explorer)));
+    /*
+     * Solana has no Morpho deployment. Listing it would be a deposit sent
+     * somewhere with no vault at the other end.
+     */
+    t('a chain without Morpho is not offered', !VAULT_CHAINS[101]);
   }
 
   return rows;

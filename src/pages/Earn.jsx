@@ -13,6 +13,7 @@ import { POINT_VALUES, tierFor, nextTier, tierProgress } from '../lib/ranks';
 import { IconChevronRight, IconExternal, IconPools, IconShield, IconSwap, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import ShareSheet from '../components/ShareSheet';
+import VaultCard from '../components/VaultCard';
 import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
 import { publicAppUrl } from '../lib/nativeShell';
@@ -272,6 +273,21 @@ export default function Earn({ embedded = false }) {
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('earn.realTitle')}</div>
             <p className="prose-sm">{t('earn.realBody')}</p>
           </motion.section>
+
+          {/*
+            ─── OUR OWN VAULT, WHEN IT EXISTS ───────────────────────────────
+            Renders NOTHING until a real vault address and chain are
+            configured — see lib/vault.js. Shipping the surface before the
+            product exists is the "wired to nothing" failure this repo has
+            already had three times (bridge, gasless, fiat), and a card
+            advertising a vault nobody can deposit into is worse than no card.
+
+            Placed above the other routes because it is the only entry on this
+            screen that is ours. Every row below sends the user to somebody
+            else's protocol and earns us nothing, and the user is entitled to
+            know which is which.
+          */}
+          <VaultCard />
 
           <section>
             <p className="section-label">{t('earn.opportunities')}</p>
