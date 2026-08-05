@@ -931,7 +931,11 @@ select option { background: #0a0c12; }
 /* The spacer that keeps the four tabs clear of the hollow. Width is the
    notch diameter minus the overlap the curve already gives back at the
    tabs' vertical centre — measured, not guessed: at y=24px the circle is
-   only ~42px wide, so reserving the full 64px would leave a visible gap. */
+   only ~42px wide, so reserving the full 64px would leave a visible gap.
+
+   Unchanged by the circle growing to 56px: this reserves space against the
+   NOTCH, which is still 62px across, not against the button. Widening it
+   would push the four tabs apart for no reason. */
 .nav-notch-gap {
   flex: 0 0 auto;
   width: 44px;
@@ -982,13 +986,34 @@ select option { background: #0a0c12; }
      resting in the hollow. That is exactly the "merged into the menu" look
      that was reported, reintroduced by arithmetic rather than by styling.
   */
-  /* 42px: still above the 40px comfortable-tap threshold, two pixels
-     lighter than before. Below ~40 the button becomes fiddly to hit, which
-     is a worse problem than looking slightly large. */
-  bottom: calc(57px + env(safe-area-inset-bottom));
+  /*
+     ─── THE CIRCLE MUST FILL THE HOLLOW, NOT FLOAT INSIDE IT ─────────────
+     Reported: «دایره وسط منو پایین صفحه به اندازه همون حفره باشد ... و حفره
+     را پر کند» — make the circle the size of the hollow and fill it.
+
+     The arithmetic was the whole problem, and it is worth writing down:
+
+        notch radius   31px  ->  hollow diameter 62px
+        circle                            42px
+        gap, every side                   10px
+
+     Ten pixels of empty bar visible all the way around, which reads as a
+     small button sitting in an oversized hole rather than one element.
+
+     Now 56px: it fills the 62px hollow with a 3px ring of clearance left.
+     That ring is deliberate and must not go to zero — the mask's cut edge
+     is feathered over 1.5px, so a circle flush to 62 would have its own
+     antialiased edge overlapping the feather and the seam would shimmer as
+     the bar animates.
+
+     Bottom offset re-derived, not adjusted by feel. The bar's top edge is
+     at 14 (offset) + 64 (9 + 46 + 9) = 78px, and the notch is cut at that
+     edge, so the circle's centre must also sit at 78:  78 - 56/2 = 50.
+  */
+  bottom: calc(50px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  width: 42px;
-  height: 42px;
+  width: 56px;
+  height: 56px;
   border: none;
   background: none;
   padding: 0;
@@ -1041,7 +1066,13 @@ select option { background: #0a0c12; }
    * Neutral black, not a coloured glow — a glow is what made an earlier
    * version look inflated.
    */
-  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.5);
+  /*
+   * Tighter again now that the circle fills the hollow. With only 3px of
+   * clearance a shadow that spreads 6px would spill onto the bar's rim on
+   * every side and re-create the welded look — the shadow has to stay
+   * inside the gap it is describing.
+   */
+  box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.55);
   transition: box-shadow 0.2s ease, filter 0.2s ease;
   /* NOTE: `transform` is intentionally absent from the transition. Framer
      owns this element's transform for the press animation, and a CSS
@@ -1049,7 +1080,7 @@ select option { background: #0a0c12; }
 }
 
 :root[data-theme='light'] .nav-centre-drop {
-  box-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 1px 4px -2px rgba(15, 23, 42, 0.28);
 }
 
 .nav-centre-glyph {
@@ -1075,7 +1106,7 @@ select option { background: #0a0c12; }
  */
 .nav-centre.active .nav-centre-drop {
   filter: saturate(1.25) brightness(1.08);
-  box-shadow: 0 3px 8px -1px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.6);
 }
 
 /* Small phones: shrink the drop AND the hollow together, or the hollow
@@ -1084,10 +1115,11 @@ select option { background: #0a0c12; }
   .bottom-nav { --notch-r: 27px; }
   .nav-notch-gap { width: 40px; }
   .nav-centre {
-    width: 40px;
-    height: 40px;
-    /* Same derivation: 78 - 40/2 = 58. */
-    bottom: calc(58px + env(safe-area-inset-bottom));
+    /* Hollow is 54px here; 48 fills it with the same 3px ring. */
+    width: 48px;
+    height: 48px;
+    /* Same derivation: 78 - 48/2 = 54. */
+    bottom: calc(54px + env(safe-area-inset-bottom));
   }
 }
 
@@ -1096,12 +1128,13 @@ select option { background: #0a0c12; }
   .bottom-nav { --notch-r: 25px; }
   .nav-notch-gap { width: 36px; }
   .nav-centre {
-    width: 36px;
-    height: 36px;
+    /* Hollow is 50px; 44 fills it and stays above the 44px tap minimum. */
+    width: 44px;
+    height: 44px;
     /* Landscape shrinks --nav-h to 62, so the bar top edge is lower:
        14 + (9 + 46 + 9) still holds because .nav-item keeps its min-height;
-       the drop centre lands at 78 again. 78 - 36/2 = 60. */
-    bottom: calc(60px + env(safe-area-inset-bottom));
+       the drop centre lands at 78 again. 78 - 44/2 = 56. */
+    bottom: calc(56px + env(safe-area-inset-bottom));
   }
 }
 
@@ -6238,3 +6271,97 @@ body { overflow-x: clip; }
 .restrict-row:last-child { border-bottom: 0; }
 .restrict-row-name { font-weight: 700; font-size: 13px; }
 .restrict-row-note { grid-column: 1 / -1; font-size: 12.2px; line-height: 1.85; color: var(--text-2); }
+
+/* ==========================================================================
+   INFOBOX — collapsible warnings and explanations
+   --------------------------------------------------------------------------
+   Replaces stacks of always-open `.notice` blocks. Wallet had 8, SolanaSwap
+   8, Stocks 5, Signals 4 — on a phone that is a column of amber boxes the
+   user scrolls past to reach what they came for, which is exactly how safety
+   copy stops being read.
+
+   Styled DELIBERATELY QUIETER than `.notice`. A collapsed box should read as
+   a heading you may open, not as an alarm. `.notice` keeps its full amber
+   treatment and stays reserved for the things that are about to cost money on
+   this tap — which is what makes it mean something again.
+   ========================================================================== */
+
+.infobox {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.028);
+  overflow: hidden;
+}
+
+.infobox + .infobox { margin-top: 8px; }
+
+.infobox-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tone as a 7px dot. At this size a warning glyph is noise, and these screens
+   were already too busy — colour alone carries it. */
+.infobox-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--rgb-1);
+}
+.infobox-warn   .infobox-dot { background: var(--rgb-5); }
+.infobox-danger .infobox-dot { background: var(--down); }
+
+.infobox-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.9px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.infobox-chev { color: var(--text-3); display: grid; place-items: center; flex-shrink: 0; }
+
+/* The left border only appears once open. Collapsed, the tone dot is enough;
+   a permanent coloured edge on eight stacked boxes is the visual noise this
+   component exists to remove. */
+.infobox.is-open { border-color: var(--line-strong); }
+.infobox-warn.is-open   { border-inline-start: 2px solid rgba(255, 179, 0, 0.5); }
+.infobox-danger.is-open { border-inline-start: 2px solid rgba(255, 59, 107, 0.5); }
+.infobox-info.is-open   { border-inline-start: 2px solid rgba(0, 229, 255, 0.4); }
+
+.infobox-body {
+  padding: 0 13px 13px;
+  font-size: 12.7px;
+  line-height: 1.9;
+  color: var(--text-2);
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+.infobox-body p { margin: 0 0 9px; }
+.infobox-body p:last-child { margin-bottom: 0; }
+
+.infobox-body ul {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.infobox-body li::marker { color: var(--text-3); }
+
+:root[data-theme='light'] .infobox {
+  background: rgba(15, 23, 42, 0.022);
+}
+:root[data-theme='light'] .infobox-body { font-weight: 450; }

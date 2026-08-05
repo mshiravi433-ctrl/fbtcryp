@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#f4f5fa" />
+    <meta name="theme-color" content="#000000" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
@@ -207,25 +207,30 @@
 
       /*
        * Boot screen colours must match the DEFAULT theme in
-       * useSettingsStore.js, which is light. If these disagree, a fresh
-       * install renders a black screen for the few hundred ms before React
-       * mounts and then snaps to light — which reads as a rendering fault.
+       * useSettingsStore.js, which is DARK. If these disagree, a fresh
+       * install renders a white screen for the few hundred ms before React
+       * mounts and then snaps to black — which reads as a rendering fault.
        *
-       * A returning user who chose dark still gets one light frame here; the
+       * A returning user who chose light still gets one dark frame here; the
        * inline script below reads their saved choice and fixes it before
        * paint, so in practice only genuinely-new installs see this.
        */
-      html, body { background: #f4f5fa; margin: 0; }
+      html, body { background: #000; margin: 0; }
       #boot {
         position: fixed;
         inset: 0;
         display: grid;
         place-items: center;
-        background: var(--boot-bg, #f4f5fa);
+        background: var(--boot-bg, #000);
         z-index: 999;
         transition: opacity 0.4s ease;
         font-family: 'Vazirmatn', system-ui, sans-serif;
-        color: var(--boot-fg, #0b1220);
+        /* Default is LIGHT ink because the boot canvas now defaults to black.
+           This fallback and --boot-bg's must always be an opposing pair —
+           setting one without the other produces black text on black, which
+           is a blank screen with a spinner and no way to read the failure
+           message underneath it. */
+        color: var(--boot-fg, #ffffff);
         padding: 24px;
         text-align: center;
       }
@@ -242,7 +247,7 @@
         position: absolute;
         inset: 5px;
         border-radius: 50%;
-        background: var(--boot-bg, #f4f5fa);
+        background: var(--boot-bg, #000);
       }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
 
@@ -281,15 +286,20 @@
       /*
        * PRE-PAINT THEME RESOLUTION
        *
-       * The default theme is light (useSettingsStore.js). A returning user who
-       * chose dark would otherwise get one light frame before React hydrates
-       * and switches — a visible flash on every launch.
+       * The default theme is now DARK (useSettingsStore.js). A returning user
+       * who chose LIGHT would otherwise get one dark frame before React
+       * hydrates and switches — a visible flash on every launch.
        *
-       * This reads the persisted zustand blob and sets the boot colours before
-       * the first paint. It is deliberately tiny, synchronous and wrapped in
+       * This is the exact mirror of what it did before the default flipped.
+       * Getting the direction wrong here does not break anything, it just
+       * makes every launch flash, which is the kind of fault people report as
+       * "the app feels broken" without being able to say why.
+       *
+       * It reads the persisted zustand blob and sets the boot colours before
+       * the first paint. Deliberately tiny, synchronous and wrapped in
        * try/catch: it runs before anything else, so it must not be able to
-       * break the app. If it throws or storage is unavailable we simply keep
-       * the light default.
+       * break the app. If it throws or storage is unavailable we keep the
+       * dark default, which is now also what a brand-new install wants.
        */
       (function () {
         try {
@@ -298,16 +308,21 @@
           if (theme === 'auto') {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
-          if (theme === 'dark') {
-            document.documentElement.setAttribute('data-theme', 'dark');
-            document.documentElement.style.setProperty('--boot-bg', '#000');
-            document.documentElement.style.setProperty('--boot-fg', '#fff');
-            document.documentElement.style.background = '#000';
+          /*
+           * Only an EXPLICIT light choice overrides. `null` means a fresh
+           * install with nothing saved, and that must stay dark — treating
+           * "no preference" as light is what would make new users flash.
+           */
+          if (theme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.documentElement.style.setProperty('--boot-bg', '#f4f5fa');
+            document.documentElement.style.setProperty('--boot-fg', '#0f172a');
+            document.documentElement.style.background = '#f4f5fa';
             var m = document.querySelector('meta[name="theme-color"]');
-            if (m) m.setAttribute('content', '#000000');
+            if (m) m.setAttribute('content', '#f4f5fa');
           }
         } catch (e) {
-          /* keep the light default */
+          /* keep the dark default */
         }
       })();
     </script>

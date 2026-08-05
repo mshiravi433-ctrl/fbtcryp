@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sheet from '../components/Sheet';
 import { usePriceMap } from '../hooks/useMarket';
@@ -467,7 +468,19 @@ export default function Wallet() {
           </div>
         )}
 
-        <p className="notice" style={{ marginTop: 12 }}>{t('wallet.custodyNotice')}</p>
+        {/*
+          Reported: «در صفحه والت جمله شروع میشه با خود حضانتی» — the wallet
+          screen opens into a paragraph beginning "self-custodial…".
+
+          It is the single most important fact about this app and also the one
+          least useful in amber, because it is true on every screen and never
+          urgent. As a `.notice` it sat between the user and their balances
+          looking like an alarm. Folded, the title still states it and the
+          detail is one tap away.
+        */}
+        <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
+          <p>{t('wallet.custodyNotice')}</p>
+        </InfoBox>
       </motion.section>
       </>
       )}

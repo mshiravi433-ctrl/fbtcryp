@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import RadioPanel from '../components/RadioPanel';
 import { useTelegram } from '../context/TelegramContext';
 import {
   IconChevronLeft, IconChevronRight, IconExternal, IconSwap,
@@ -240,27 +239,21 @@ export default function Docs({ embedded = false }) {
       <p className="prose-sm" style={{ marginTop: 10 }}>{t('docs.videoNote')}</p>
 
       {/*
-        ─── LISTEN, RATHER THAN WATCH ──────────────────────────────────────
-        Asked for as "internet TV or radio related to our work" on the
-        education page. What is here is radio, and the missing half is a
-        decision rather than an omission:
+        ─── THE RADIO MOVED TO THE NEWS SCREEN ─────────────────────────────
+        Requested: «در مستندات رادیو کریپتو را پاک کن و بزار داخل اخبار».
 
-        A video embed means YouTube, and youtube.com does not resolve on most
-        Iranian networks. The largest element on the learning page would be a
-        grey box for the audience this app is built for — the same dead-button
-        failure the written guides above replaced when they stopped being
-        Aparat searches that returned nothing.
+        It was on both pages, which was the mistake: the same four feeds
+        rendered twice, so a reader met the identical episode list in the
+        learning section and again under the headlines. Duplication is not
+        extra value, it is the app repeating itself.
 
-        Podcast audio is plain MP3 over HTTPS from reachable CDNs. It needs no
-        embed, no SDK and no third-party script, it survives a slow
-        connection, and it keeps playing with the screen off — which is how
-        somebody actually learns while commuting.
+        News is the right home — it is the same content type as the headlines
+        above it, and it now has its own tab there rather than sitting at the
+        bottom of a scroll.
 
-        The same component as the news screen, so there is one place to fix
-        if a feed moves. Placed AFTER the written guides: this is what you put
-        on when you have finished reading, not instead of reading.
+        Nothing was lost from this page: the written guides above are ours,
+        always load, and were never dependent on the audio.
       */}
-      <RadioPanel />
 
       {/*
         The disclaimer belongs in the docs, not only buried in Settings: it is

@@ -268,7 +268,8 @@
     },
     "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
     "realRisk": "Yield is never free money. Pools can lose value to impermanent loss, lending markets can take bad debt, staking can be slashed, and any smart contract can be exploited. The higher-risk entries here can also be paused by the protocol itself, leaving you unable to withdraw for a while. Start small and only use protocols you have read about.",
-    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all."
+    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all.",
+    "riskTitle": "What can go wrong here"
   },
   "wallet": {
     "guest": "Guest",
@@ -388,7 +389,8 @@
     "emptyTitle": "No wallet connected",
     "emptyBody": "Connect a wallet you already own to see your balances and swap. There is no signup, no email and no identity check.",
     "emptyReassure": "We never receive your recovery phrase or private key. Every transaction is signed by your own wallet.",
-    "holdingsMore": "Your other holdings"
+    "holdingsMore": "Your other holdings",
+    "custodyTitle": "Who controls this wallet?"
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -838,7 +840,15 @@
     "costMonth": "Funding for 30 days at {{venue}}",
     "costExplain": "That is {{pct}}% of the money you put in, for one month, before the price moves at all. Leverage multiplies this cost exactly as fast as it multiplies a gain — at {{lev}}× you pay funding on {{lev}}× your collateral.",
     "costNoRate": "No venue is reporting a funding rate for this market right now, so the holding cost cannot be calculated.",
-    "thirdPartyNoticeEarning": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, and cannot help recover losses. We do receive a share of the trading fee from GMX when you use our link — and you receive a 5% fee discount for the same reason, so the link costs you less than going direct. Verify every URL yourself — perp venues are a common phishing target."
+    "thirdPartyNoticeEarning": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, and cannot help recover losses. We do receive a share of the trading fee from GMX when you use our link — and you receive a 5% fee discount for the same reason, so the link costs you less than going direct. Verify every URL yourself — perp venues are a common phishing target.",
+    "how": {
+      "title": "How do perpetual futures work?",
+      "p1": "A perpetual future is a contract that tracks an asset’s price without ever expiring. You are not buying the coin — you are taking a position on where its price goes, and you can do that in either direction.",
+      "p2": "Leverage means the exchange lends you exposure. At 10x, $100 of your own money controls $1,000 of position. A 10% move in your favour doubles your money; a 10% move against you erases it entirely. That second sentence is the one that matters and it is why most accounts using high leverage end at zero.",
+      "p3": "Because the contract never expires, a \"funding rate\" keeps its price tied to the real market. Every few hours, whichever side is crowded pays the other. Hold a position long enough and funding alone can cost more than the price move you were right about.",
+      "p4": "Liquidation is automatic. If the market moves far enough against you, the position closes and the money is gone — there is no margin call and nobody to appeal to."
+    },
+    "venuesTitle": "Who runs these markets?"
   },
   "farm": {
     "title": "Farm",
@@ -886,7 +896,8 @@
     "mevBoost": "Includes MEV rewards",
     "protocolFee": "{{pct}}% protocol fee",
     "stakeNow": "Get {{sym}}",
-    "stakingNote": "Yields are variable and come from network rewards, so they move with validator performance and network activity. The protocol fee shown is already deducted from the rate above it. Swapping back to SOL is usually instant through the same screen, but the price you get depends on pool depth at that moment — this is not a savings account and there is no guaranteed exit price."
+    "stakingNote": "Yields are variable and come from network rewards, so they move with validator performance and network activity. The protocol fee shown is already deducted from the rate above it. Swapping back to SOL is usually instant through the same screen, but the price you get depends on pool depth at that moment — this is not a savings account and there is no guaranteed exit price.",
+    "custodyTitle": "Who holds the funds?"
   },
   "signals": {
     "title": "AI Signals",
@@ -996,7 +1007,14 @@
     "gold": "Gold",
     "goldIntro": "Each token is one troy ounce of real gold in a vault. No dealer premium, no storage to arrange, and you can buy a fraction of an ounce. The same issuer freeze risk above applies to these too — gold is not exempt from it.",
     "kindCommodity": "Physical gold",
-    "privateCompany": "SpaceX is a private company — there is no stock exchange listing and no public price to check this against. That is exactly why this access is unusual, and also why it carries more risk than the others: the value moves on funding rounds, not on a live market."
+    "privateCompany": "SpaceX is a private company — there is no stock exchange listing and no public price to check this against. That is exactly why this access is unusual, and also why it carries more risk than the others: the value moves on funding rounds, not on a live market.",
+    "beforeBuy": {
+      "title": "Read this before you buy",
+      "p1": "These are tokens issued by a company that claims to hold the real share. You own the token. You do not own the share, and your claim is on that issuer rather than on the company whose name is on it.",
+      "p2": "No shareholder rights come with them: no vote, and dividends only if the issuer chooses to pass them on. If the issuer fails, the token is worth whatever the market thinks their promise is worth.",
+      "p3": "Liquidity is thin compared with a real exchange. A large order can move the price against you sharply, and there may be no buyer at all when you want out."
+    },
+    "kycTitle": "Do I need identity verification?"
   },
   "help": {
     "title": "Help & support",
@@ -1430,7 +1448,8 @@
         "body": "Embed our market data or swap routing in your own product."
       }
     },
-    "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead."
+    "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead.",
+    "website": "Website"
   },
   "ads": {
     "swap": {
@@ -1653,8 +1672,8 @@
     "closing": "You are set — welcome in"
   },
   "news": {
-    "title": "Crypto news",
-    "subtitle": "Refreshed every 24 hours",
+    "title": "Latest in crypto",
+    "subtitle": "Headlines from 13 desks, and the day’s news read aloud.",
     "refresh": "Refresh",
     "loading": "Loading…",
     "updated": "Updated {{ago}} ago",
@@ -1675,6 +1694,10 @@
       "bitcoin": "Bitcoin",
       "ethereum": "Ethereum",
       "defi": "DeFi"
+    },
+    "tab": {
+      "read": "Headlines",
+      "listen": "Radio"
     }
   },
   "notify": {
@@ -2111,7 +2134,8 @@
     "openPhantom": "Open in Phantom",
     "openSolflare": "Open in Solflare",
     "openInWalletHint": "It is the same site and the same account; nothing is lost. If the wallet app is not installed, the button will offer to install it first.",
-    "feeNoneNotice": "No platform fee on Solana swaps right now — you pay only the Solana network fee and whatever the route costs. If that changes, the exact rate will be shown here before you sign."
+    "feeNoneNotice": "No platform fee on Solana swaps right now — you pay only the Solana network fee and whatever the route costs. If that changes, the exact rate will be shown here before you sign.",
+    "aboutTitle": "Custody and fees on this swap"
   },
   "buy": {
     "title": "Buy & sell",
@@ -2198,10 +2222,10 @@
   "verdict": {
     "title": "The full picture",
     "subtitle": "Four independent readings — the chart, this asset's own track record, its structure, and the market it lives in. They are allowed to disagree, and when they do we say so.",
-    "short": "Next week",
-    "long": "Next month",
-    "shortSub": "About {{d}} days",
-    "longSub": "About {{d}} days",
+    "short": "Weekly view",
+    "long": "Monthly view",
+    "shortSub": "about {{d}} days",
+    "longSub": "about {{d}} days",
     "confidence": "Confidence",
     "why": "Why",
     "readItLikeThis": "Read it like this",
@@ -2215,11 +2239,11 @@
     "layerNoData": "not enough data",
     "layerWeight": "{{pct}}% of this read",
     "stance": {
-      "tailwind": "Conditions favour it",
-      "mildUp": "Slightly in its favour",
-      "unclear": "Not clear",
-      "mildDown": "Slightly against it",
-      "headwind": "Conditions work against it"
+      "tailwind": "All readings aligned, upward",
+      "mildUp": "Leaning up, weakly",
+      "unclear": "No clear signal",
+      "mildDown": "Leaning down, weakly",
+      "headwind": "All readings aligned, downward"
     },
     "stanceExplain": {
       "tailwind": "Every layer we can measure currently leans the same way, upward. That is not a promise — it means the conditions that have historically preceded gains are present right now.",
@@ -2292,11 +2316,11 @@
     },
     "plain": {
       "title": "In plain words",
-      "tailwind": "Right now the wind is behind this one. That is not the same as it going up — it means that in the past, when things looked like this, going up happened more often than not.",
-      "mildUp": "Slightly favourable, and only slightly. Not enough to build a plan on.",
-      "unclear": "We genuinely do not know. Anyone who tells you they do, about this asset today, is guessing with confidence.",
-      "mildDown": "Slightly unfavourable. A reason to be patient rather than a reason to sell.",
-      "headwind": "The wind is against this one. It can still rise — it has just done so less often from here."
+      "tailwind": "All four readings currently point the same way. That is a description of present conditions, not a forecast: historically, when this combination has appeared, the following period was more often up than down. Often is not always.",
+      "mildUp": "The balance leans slightly positive. The margin is small enough that a single piece of news would erase it, so it is not something to build a position around on its own.",
+      "unclear": "There is no clear signal here, and that is the accurate answer rather than a missing one. The readings contradict each other or there is too little history to measure. This is the most common outcome for most assets on most days.",
+      "mildDown": "The balance leans slightly negative. That is an argument for waiting rather than for selling — a small edge in either direction is not a reason to act.",
+      "headwind": "All four readings currently point the same way, downward. Assets still rise in these conditions; historically they have simply done so less often from this starting point."
     },
     "notPrediction": "This is not a prediction and there is no price target anywhere in it. Every number above is measured from what already happened: this asset's own history, its relationship with Bitcoin, and the state of the market. The future is allowed to ignore all of it. Never put in money you cannot afford to lose.",
     "noModel": "No language model wrote any of this. Every sentence is assembled from a number that was actually computed on your device, which is why it can never invent a fact, a level or a headline.",

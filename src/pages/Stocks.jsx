@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
 import { useMarkets } from '../hooks/useMarket';
@@ -284,7 +285,22 @@ export default function Stocks() {
             </section>
           )}
 
-          <p className="notice">{t('stocks.notShares')}</p>
+          {/*
+            Requested by name: «قبل از خرید این را بخوان» and «این ها سهم
+            نیستند». Both are the same question — what am I actually buying —
+            so they are one box rather than two stacked notices.
+
+            `defaultOpen` because this one is genuinely load-bearing: someone
+            who believes a tokenised share is a share has misunderstood what
+            they own, and unlike the other explainers on this page that
+            misunderstanding survives until it costs them.
+          */}
+          <InfoBox title={t('stocks.beforeBuy.title')} tone="warn" defaultOpen id="stocks-before">
+            <p>{t('stocks.notShares')}</p>
+            <p>{t('stocks.beforeBuy.p1')}</p>
+            <p>{t('stocks.beforeBuy.p2')}</p>
+            <p>{t('stocks.beforeBuy.p3')}</p>
+          </InfoBox>
         </>
       ) : (
         <>
@@ -361,7 +377,9 @@ export default function Stocks() {
             </motion.div>
           </section>
 
-          <p className="notice">{t('stocks.kycNotice')}</p>
+          <InfoBox title={t('stocks.kycTitle')} tone="info" id="stocks-kyc">
+            <p>{t('stocks.kycNotice')}</p>
+          </InfoBox>
         </>
       )}
 

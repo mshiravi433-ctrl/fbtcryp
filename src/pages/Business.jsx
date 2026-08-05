@@ -2,7 +2,17 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import { IconChevronLeft, IconBuilding, IconTrend, IconPools, IconKey } from '../components/Icons';
+import { IconChevronLeft, IconBuilding, IconTrend, IconPools, IconKey, IconGlobe, IconExternal } from '../components/Icons';
+import { openUrl } from '../lib/browser';
+import { publicAppUrl } from '../lib/nativeShell';
+
+/*
+ * Resolved the same way share links are, rather than hard-coded. Inside the
+ * APK `window.location` is https://localhost, so a literal would be wrong in
+ * exactly the build where a partner is most likely to be shown the page.
+ * `publicAppUrl('')` returns the configured public origin.
+ */
+const SITE_URL = publicAppUrl('');
 
 const OFFERS = [
   { id: 'listing', Icon: IconTrend },
@@ -73,6 +83,40 @@ export default function Business() {
             <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{t('about.companyFull')}</div>
           </div>
         </div>
+
+        {/*
+          ─── THE OFFICIAL DOMAIN, ON THE PAGE PARTNERS READ ─────────────────
+          Requested: «اگر خوبه ادرس سایت را در بیزینس اضافه کن».
+
+          It is more than a nicety here. This is the page a token issuer or an
+          exchange opens before deciding whether we are real, and a business
+          page with no address is the shape of a page nobody maintains.
+
+          It also serves an anti-phishing purpose that matters for a money
+          app: a partner who knows the one canonical domain can recognise a
+          clone. Printed as text rather than only as a link, so it can be read
+          and compared rather than merely clicked.
+        */}
+        <button
+          className="info-row"
+          onClick={() => openUrl(SITE_URL)}
+          style={{
+            width: '100%', background: 'none', border: 0, padding: 0,
+            marginTop: 12, cursor: 'pointer', color: 'inherit', textAlign: 'start'
+          }}
+        >
+          <span className="info-row-icon"><IconGlobe width={17} height={17} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="faint">{t('biz.website')}</div>
+            <div
+              className="mono"
+              style={{ fontWeight: 600, fontSize: 12.5, marginTop: 2, direction: 'ltr' }}
+            >
+              {SITE_URL.replace(/^https:\/\//, '')}
+            </div>
+          </div>
+          <IconExternal width={15} height={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        </button>
       </motion.section>
 
       <p className="notice">{t('biz.notice')}</p>

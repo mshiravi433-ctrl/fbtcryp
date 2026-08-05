@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useMarkets } from '../hooks/useMarket';
@@ -101,7 +102,27 @@ export default function Perp() {
         <p className="muted">{t('perp.subtitle')}</p>
       </motion.div>
 
+      {/*
+        ─── THE RISK NOTICE STAYS VISIBLE; THE EXPLAINER FOLDS ───────────────
+        Two different jobs, so two different treatments.
+
+        `perp.riskNotice` is what leverage will do to this user's money, and
+        it stays a plain inline `.notice`. Anything describing what the button
+        is about to do must never be one tap away.
+
+        "How futures work" is education — asked for explicitly («فیوچرز چطور
+        کار میکند در صفحه فیوجرز») — and it belongs in a box the reader opens
+        when they want it. Printed inline it would push the actual market data
+        below the fold to teach something most visitors already know.
+      */}
       <p className="notice notice-danger">{t('perp.riskNotice')}</p>
+
+      <InfoBox title={t('perp.how.title')} tone="info" id="perp-how">
+        <p>{t('perp.how.p1')}</p>
+        <p>{t('perp.how.p2')}</p>
+        <p>{t('perp.how.p3')}</p>
+        <p>{t('perp.how.p4')}</p>
+      </InfoBox>
 
       {/* ---------- live index price ---------- */}
       <div className="tag-scroll">
@@ -269,11 +290,13 @@ export default function Perp() {
         The same flag that decides whether to ATTACH a referral code decides
         which sentence is shown, so they cannot disagree.
       */}
-      <p className="notice">
-        {anyVenueEarns(VENUES.map((v) => v.id))
-          ? t('perp.thirdPartyNoticeEarning')
-          : t('perp.thirdPartyNotice')}
-      </p>
+      <InfoBox title={t('perp.venuesTitle')} tone="warn" id="perp-venues">
+        <p>
+          {anyVenueEarns(VENUES.map((v) => v.id))
+            ? t('perp.thirdPartyNoticeEarning')
+            : t('perp.thirdPartyNotice')}
+        </p>
+      </InfoBox>
 
       <motion.button
         className="card card-rgb"

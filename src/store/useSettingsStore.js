@@ -15,10 +15,27 @@ export const useSettingsStore = create(
   persist(
     (set, get) => ({
       /* ---------------- appearance ---------------- */
-      // Light is the default. Changing this also means index.html's boot
-      // screen must be light, or a new install flashes black before React
-      // mounts — see the comment there.
-      theme: 'light', // 'light' | 'dark' | 'auto'
+      /*
+       * ─── DARK IS THE DEFAULT ────────────────────────────────────────────
+       * Requested: «تم مشکی هم تم دیفالت باشد».
+       *
+       * It is also the right default for this product rather than only a
+       * preference. The whole visual system — the RGB accent spectrum, the
+       * animated backdrop, the neon up/down colours, the card sheen — was
+       * designed against a black canvas. Light theme is a careful adaptation
+       * of it; dark is the original.
+       *
+       * ─── THIS VALUE IS COUPLED TO index.html ────────────────────────────
+       * The boot overlay paints before React exists, so its colours are
+       * hard-coded in the HTML. If the two disagree, every fresh install
+       * shows one frame of the wrong colour and then snaps — which reads as
+       * a rendering fault rather than a theme.
+       *
+       * Both were changed together: index.html now boots dark and its
+       * pre-paint script overrides to LIGHT for a user who chose it, which is
+       * the exact mirror of what it did before.
+       */
+      theme: 'dark', // 'light' | 'dark' | 'auto'
       accent: 'rgb', // 'rgb' | 'cyan' | 'magenta' | 'mint'
       reduceMotion: false,
       compactMode: false,

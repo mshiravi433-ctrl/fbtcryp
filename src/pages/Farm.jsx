@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
 import SegIndicator from '../components/SegIndicator';
 import { fmtCompact, fmtUsd } from '../lib/format';
@@ -493,7 +494,9 @@ export default function Farm() {
 
       <AdBanner slot="swap" />
 
-      <p className="notice">{t('farm.custodyNotice')}</p>
+      <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody">
+        <p>{t('farm.custodyNotice')}</p>
+      </InfoBox>
 
       {!wallet.isConnected && (
         <button className="btn btn-ghost" onClick={() => navigate('/wallet')}>

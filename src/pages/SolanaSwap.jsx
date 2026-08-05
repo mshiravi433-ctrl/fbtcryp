@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import { useTelegram } from '../context/TelegramContext';
 import { useHideBalances } from '../hooks/useHideBalances';
 import {
@@ -441,7 +442,13 @@ export default function SolanaSwap() {
           </div>
         </div>
 
-        <p className="notice" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
+        {/*
+          Was a third amber box, immediately under the two wallet rows the
+          owner also flagged. It is reassurance, not a warning — nothing about
+          it is urgent and nothing is at risk — so it drops to plain prose and
+          stops competing with the notices that do matter.
+        */}
+        <p className="prose-sm" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
       </motion.section>
 
       {/* ----------------------------- ticket ---------------------------- */}
@@ -565,9 +572,23 @@ export default function SolanaSwap() {
       </motion.section>
 
       {/* ------------------------------ notices ------------------------------ */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="notice">{t('swap.nonCustodialNotice')}</p>
-        <p className="notice" style={{ marginTop: 9 }}>
+      {/*
+        ─── TWO AMBER BOXES STACKED AT THE BOTTOM ──────────────────────────
+        Reported: «در صفحه سواپ سولنا پایین صفحه دو هشدار هست و دو کیف پول،
+        کنار هم» — two warnings sitting together at the foot of the page.
+
+        Both were `.notice`, both amber, one directly under the other, and
+        neither is urgent: one restates that we are non-custodial (true on
+        every screen in the app) and the other quotes the fee rate. Stacked
+        in warning colours they read as two alarms about a swap that is
+        perfectly normal, which is how a user learns to ignore amber.
+
+        Folded into one box. The fee is still one tap away and still exact —
+        it is simply no longer shouting alongside a policy statement.
+      */}
+      <InfoBox title={t('solana.aboutTitle')} tone="info" id="solana-about">
+        <p>{t('swap.nonCustodialNotice')}</p>
+        <p>
           {/*
             The rate the USER pays, and nothing else.
 
@@ -617,7 +638,7 @@ export default function SolanaSwap() {
 
           Documented in docs/SOLANA-STEPS-FA.md as the way to verify setup.
         */}
-      </motion.section>
+      </InfoBox>
     </PageTransition>
   );
 }

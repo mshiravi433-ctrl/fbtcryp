@@ -76,8 +76,26 @@ export async function run(container) {
    * "merged into the menu" look that was reported, reintroduced by
    * arithmetic rather than by styling, and it looked plausible in the CSS.
    *
-   * Every breakpoint must satisfy it, and the hollow must stay wider than
-   * the drop or there is no visible ring of air and the separation is lost.
+   * Every breakpoint must satisfy it.
+   *
+   * ─── THE DESIGN INTENT CHANGED, SO THIS TEST CHANGED ────────────────────
+   * It used to require a ring of at least 4px, because the button was meant
+   * to FLOAT in the hollow like a drop above water. The owner has since asked
+   * for the opposite:
+   *
+   *     «دایره وسط منو پایین صفحه به اندازه همون حفره باشد ... و حفره را
+   *      پر کند»
+   *
+   * — the circle should be the size of the hollow and fill it. At 62px hollow
+   * against a 42px circle there were ten pixels of empty bar visible all the
+   * way round, which reads as a small button in an oversized hole rather than
+   * one element.
+   *
+   * So the assertion is inverted: the ring must now be SMALL. It must not be
+   * zero either — the mask's cut edge is feathered over 1.5px, and a circle
+   * flush to the hollow would have its own antialiased edge overlapping that
+   * feather and the seam would shimmer as the bar animates. 1 to 5px is the
+   * band where it reads as filled and still renders cleanly.
    */
   const css = readFileSync('src/index.css', 'utf8');
 
@@ -172,7 +190,16 @@ export async function run(container) {
     t(`${s.name}: the drop is centred in the hollow (centre ${centre}, edge ${BAR_TOP_EDGE})`,
       centre === BAR_TOP_EDGE);
     const air = (s.r * 2 - s.d) / 2;
-    t(`${s.name}: there is a visible ring of air (${air}px)`, air >= 4);
+    t(`${s.name}: the circle fills the hollow (hollow ${s.r * 2}px, circle ${s.d}px, ring ${air}px)`,
+      air > 0 && air <= 5);
+    /*
+     * The tap target survives the resize. Filling the hollow made the button
+     * bigger, not smaller, so this should never fail — it is here because a
+     * future tweak to --notch-r would shrink the circle with it, and a
+     * sub-44px control is a real accessibility regression that would
+     * otherwise ship silently.
+     */
+    t(`${s.name}: the tap target is still comfortable (${s.d}px)`, s.d >= 44);
   }
 
   /*

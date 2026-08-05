@@ -4359,7 +4359,39 @@ export default function run() {
     t('...the client library reaches it', /\/audio`/.test(lib));
     t('...the panel imports it', /getAudio/.test(panel));
     t('...the news page renders it', /<RadioPanel/.test(news));
-    t('...and so does the education page', /<RadioPanel/.test(docs));
+
+    /*
+     * ─── AND THE EDUCATION PAGE MUST NOT ────────────────────────────────────
+     * It used to render the same component too, which meant the identical
+     * four feeds appeared under the headlines AND at the bottom of the
+     * learning guides. Reported: «در مستندات رادیو کریپتو را پاک کن و بزار
+     * داخل اخبار».
+     *
+     * Duplication is not extra reach, it is the app repeating itself — and it
+     * doubles the upstream fetches for one set of episodes. This assertion is
+     * inverted deliberately so putting it back fails the suite.
+     */
+    t('...and the education page no longer duplicates it', !/<RadioPanel/.test(docs));
+
+    /*
+     * On News it must be a TAB, not a section at the foot of the page. It was
+     * previously below the headline list, the ad slot and the disclaimer —
+     * several screens of scrolling on a phone, which in practice means nobody
+     * reached it. A feature nobody reaches is the same as a feature nobody
+     * has.
+     */
+    t('...reachable as a tab rather than buried below the fold',
+      /news\.tab\.\$\{k\}/.test(news) && /tab === 'listen'/.test(news));
+    /* The tab labels must exist, or the strip renders raw keys. Locales are
+       read here rather than reusing `en`/`fa`, which are declared further
+       down this block. */
+    {
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      t('...and both tab labels are translated',
+        hasKey(enL, 'news.tab.read') && hasKey(enL, 'news.tab.listen') &&
+        hasKey(faL, 'news.tab.read') && hasKey(faL, 'news.tab.listen'));
+    }
 
     /*
      * NO EMBEDS. The whole reason this is audio.
@@ -4408,6 +4440,178 @@ export default function run() {
       (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
     t('...and all are translated',
       [...new Set(keys)].every((k) => hasKey(fa, k) && hasKey(ar, k)));
+  }
+
+  /* ---- 64. collapsible warnings, dark default, nav geometry, IndexNow --- */
+  {
+    const enL = JSON.parse(read('src/i18n/locales/en.json'));
+    const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * WARNINGS IN COLLAPSIBLE BOXES.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «کلا هشدارها بهم نریخته باشد و داخل یک جعبه باز شونده باشد بهتر است»
+     *
+     * Counted before the change: Wallet 8 `.notice` blocks, SolanaSwap 8,
+     * Stocks 5, Signals 4. A column of amber boxes is how safety copy stops
+     * being read — when every third block is a warning, none of them is.
+     *
+     * The rule enforced here is the one that keeps this safe: `.notice` stays
+     * for anything about to cost money on THIS tap; InfoBox takes the
+     * explanations and the policy restatements.
+     */
+    t('the collapsible box exists', existsSync('src/components/InfoBox.jsx'));
+
+    const perp = read('src/pages/Perp.jsx');
+    t('the futures explainer is in a box', /InfoBox/.test(perp) && /perp\.how\.title/.test(perp));
+    /*
+     * The leverage risk notice must NOT be folded. It describes what the
+     * button does to the user's money, which is exactly the category that
+     * stays inline.
+     */
+    t('...but the leverage risk stays inline',
+      /className="notice notice-danger">\{t\('perp\.riskNotice'\)\}/.test(perp));
+
+    const stocks = read('src/pages/Stocks.jsx');
+    t('the stocks explainer is in a box', /stocks\.beforeBuy\.title/.test(stocks));
+    /*
+     * Open by default, unlike the others. Someone who believes a tokenised
+     * share IS a share has misunderstood what they own, and that
+     * misunderstanding survives until it costs them.
+     */
+    t('...and opens by default, because the misunderstanding is costly',
+      /stocks-before[\s\S]{0,40}defaultOpen|defaultOpen[\s\S]{0,40}stocks-before/.test(stocks));
+    t('...and it still says these are not shares', /stocks\.notShares/.test(stocks));
+
+    /* The three screens the owner named by location. */
+    t('the wallet custody line is folded', /wallet\.custodyTitle/.test(read('src/pages/Wallet.jsx')));
+    t('the earn risk block is folded', /earn\.riskTitle/.test(read('src/pages/Earn.jsx')));
+    const sol = read('src/pages/SolanaSwap.jsx');
+    t('the two stacked solana notices became one box', /solana\.aboutTitle/.test(sol));
+
+    const boxKeys = ['perp.how.title', 'perp.venuesTitle', 'stocks.beforeBuy.title',
+      'stocks.kycTitle', 'wallet.custodyTitle', 'farm.custodyTitle', 'earn.riskTitle',
+      'solana.aboutTitle'];
+    const missingBox = boxKeys.filter((k) => !hasKey(enL, k) || !hasKey(faL, k));
+    t(`every box title is translated${missingBox.length ? ` — missing: ${missingBox.join(', ')}` : ''}`,
+      missingBox.length === 0);
+
+    /*
+     * ─── DARK IS THE DEFAULT, AND THE BOOT SCREEN MUST AGREE ────────────────
+     * «تم مشکی هم تم دیفالت باشد»
+     *
+     * These two values are coupled. The boot overlay paints before React
+     * exists, so if the store says dark and the HTML says light, every fresh
+     * install shows one white frame and snaps to black — which reads as a
+     * rendering fault rather than a theme. Asserted together for that reason.
+     */
+    const store = read('src/store/useSettingsStore.js')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    t('the default theme is dark', /theme: 'dark'/.test(store));
+
+    const html = read('index.html');
+    t('...the boot canvas is dark too', /html, body \{ background: #000;/.test(html));
+    t('...the theme-color meta matches', /content="#000000"/.test(html));
+    /*
+     * The pre-paint script must override for an EXPLICIT light choice only.
+     * Treating `null` (a fresh install) as light is what would make new users
+     * flash — the exact bug this mirrors, in the other direction.
+     */
+    t('...and only an explicit light choice overrides it',
+      /theme === 'light'/.test(html) && !/if \(theme === 'dark'\) \{\s*document/.test(html));
+
+    /*
+     * ─── THE CENTRE BUTTON MUST FILL THE NOTCH ──────────────────────────────
+     * «دایره وسط منو ... به اندازه همون حفره باشد ... و حفره را پر کند»
+     *
+     * The hollow is 2 × --notch-r. The circle must nearly fill it, leaving a
+     * small ring — flush to the edge would overlap the mask's 1.5px feather
+     * and shimmer as the bar animates.
+     *
+     * Was 62px hollow against a 42px circle: ten pixels of empty bar visible
+     * all the way round, which reads as a small button in an oversized hole.
+     */
+    const css = read('src/index.css');
+    const notchR = Number(/--notch-r:\s*(\d+)px/.exec(css)?.[1]);
+    const dropW = Number(/\.nav-centre \{[\s\S]*?width:\s*(\d+)px/.exec(css)?.[1]);
+    const ring = (notchR * 2 - dropW) / 2;
+    t(`the centre button fills the notch (hollow ${notchR * 2}px, circle ${dropW}px, ring ${ring}px)`,
+      Number.isFinite(ring) && ring > 0 && ring <= 5);
+    /*
+     * And it must be CENTRED in it. The notch is cut at the bar's top edge,
+     * 14 + 64 = 78px up, so the circle's centre must also sit at 78:
+     * bottom = 78 - diameter/2. Getting this wrong sinks the button into the
+     * bar, which is the "merged into the menu" look reported before.
+     */
+    const bottom = Number(/\.nav-centre \{[\s\S]*?bottom:\s*calc\((\d+)px/.exec(css)?.[1]);
+    t(`...and is centred in it (bottom ${bottom}px puts its centre at ${bottom + dropW / 2})`,
+      bottom + dropW / 2 === 78);
+    t('...and keeps a comfortable tap target', dropW >= 44);
+
+    /*
+     * ─── INDEXNOW: TELLING SEARCH ENGINES THE NEW DOMAIN EXISTS ─────────────
+     * «سایت جدید را وارد موتور جستجو کن»
+     *
+     * Ownership is proven by hosting a key file at the site root. If the
+     * constant in the script and the filename in public/ ever disagree, every
+     * submission silently 403s — so they are asserted to match rather than
+     * assumed.
+     */
+    const sub = read('scripts/submit-indexnow.mjs');
+    const key = /const KEY = '([a-f0-9]{32})'/.exec(sub)?.[1];
+    t('the IndexNow submitter exists', Boolean(key));
+    t('...and the key file is published at the site root',
+      Boolean(key) && existsSync(`public/${key}.txt`));
+    /*
+     * `read()` throws when the file is absent, which would abort the whole
+     * suite instead of failing one check — so the existence test has to gate
+     * the content test. A check that crashes the runner tells you far less
+     * than one that fails.
+     */
+    t('...containing exactly the key',
+      Boolean(key) && existsSync(`public/${key}.txt`) &&
+      read(`public/${key}.txt`).trim() === key);
+    t('...for the new domain, not the old one',
+      /fbtswap\.ir/.test(sub) && !/lawpoetics/.test(sub));
+
+    /*
+     * The submitted list must match the pages actually generated. A landing
+     * page added to gen-landing.mjs and forgotten here is a page no engine is
+     * ever told about.
+     */
+    const gen = read('scripts/gen-landing.mjs');
+    const genSlugs = [...gen.matchAll(/slug: '([^']+)'/g)].map((m) => m[1]);
+    const subSlugs = [...sub.matchAll(/^\s*'([^']+)'/gm)].map((m) => m[1]).filter(Boolean);
+    const unsubmitted = genSlugs.filter((g) => !subSlugs.includes(g));
+    t(`every generated landing page is submitted${unsubmitted.length ? ` — missing: ${unsubmitted.join(', ')}` : ''}`,
+      unsubmitted.length === 0);
+
+    /*
+     * ─── THE VERDICT COPY MUST NOT SOUND LIKE WEATHER ───────────────────────
+     * «مثلا یعنی چی باد میوزد جالب نیست لحن رسمی و کاربلد داشته باشد»
+     *
+     * "The wind is behind this one" replaced a measurable statement with a
+     * metaphor that has no units, translated as a literal calque into
+     * Persian, and read as marketing rather than analysis.
+     */
+    t('the wind metaphor is gone from English',
+      !/wind is (behind|against)/i.test(JSON.stringify(enL.verdict)));
+    t('...and from Persian', !/باد پشت سر|باد روبه/.test(JSON.stringify(faL.verdict)));
+    /* And what replaced it must be concrete, not merely different. */
+    t('...replaced by something measurable',
+      /four readings/i.test(enL.verdict.plain.tailwind) &&
+      /چهار خوانش/.test(faL.verdict.plain.tailwind));
+    /* The two horizons the owner asked to see named. */
+    t('the weekly and monthly views are labelled',
+      /Weekly/.test(enL.verdict.short) && /هفتگی/.test(faL.verdict.short) &&
+      /Monthly/.test(enL.verdict.long) && /ماهانه/.test(faL.verdict.long));
+
+    /* The business page carries the canonical domain — partners read it, and
+       knowing the one real domain is how a clone gets recognised. */
+    const biz = read('src/pages/Business.jsx');
+    t('the business page shows the website', /biz\.website/.test(biz));
+    t('...resolved rather than hard-coded', /publicAppUrl/.test(biz));
   }
 
   /* ---- 63. our own vault: dormant by default, wired when it is real ----- */

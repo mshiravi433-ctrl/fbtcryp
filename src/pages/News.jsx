@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
+import SegIndicator from '../components/SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { getNews } from '../lib/news';
@@ -62,6 +63,19 @@ export default function News() {
   const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState('all');
   const [query, setQuery] = useState('');
+  /*
+   * ─── TWO TABS: HEADLINES AND RADIO ──────────────────────────────────────
+   * Requested: «دو تب اخبار و رادیو بزار داخل صفحه اخبار».
+   *
+   * The radio was previously a section at the FOOT of this page, below the
+   * headline list, the ad slot and the disclaimer. On a phone that is several
+   * screens of scrolling, so in practice it did not exist — a feature nobody
+   * reaches is the same as a feature nobody has.
+   *
+   * A tab makes it one tap and, more usefully, makes it discoverable: the
+   * label is visible before any scrolling happens.
+   */
+  const [tab, setTab] = useState('read');
   const [notifyOn, setNotifyOn] = useState(() => getNotifySettings().news);
   // Bumped on each toggle so the bell re-rings, confirming the tap.
   const [ring, setRing] = useState(0);
@@ -152,6 +166,36 @@ export default function News() {
         </button>
       </motion.div>
 
+      <div className="segmented">
+        {['read', 'listen'].map((k) => (
+          <button
+            key={k}
+            className={tab === k ? 'active' : ''}
+            onClick={() => setTab(k)}
+            style={{ isolation: 'isolate' }}
+          >
+            {tab === k && <SegIndicator id="newstab" />}
+            {t(`news.tab.${k}`)}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'listen' ? (
+        /*
+          ─── RADIO, NOT TELEVISION, AND THE REASON IS UNCHANGED ───────────
+          Asked again for TV. It is still not buildable honestly: a video tab
+          means an embedded YouTube player, and youtube.com does not resolve
+          on most Iranian networks — the whole tab would be a grey box for the
+          audience this app is built for. That is the dead-button failure the
+          Aparat links were removed for.
+
+          Podcast audio is plain MP3 over HTTPS from reachable CDNs, needs no
+          iframe or SDK, survives a slow connection, and keeps playing with
+          the screen off. It is the honest version of the same request.
+        */
+        <RadioPanel />
+      ) : (
+        <>
       <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">
         <span className="faint">
           {feed.at ? t('news.updated', { ago: timeAgo(feed.at, i18n.language) }) : t('news.loading')}
@@ -241,19 +285,11 @@ export default function News() {
         </motion.div>
       )}
 
-      {/*
-        ─── RADIO, BELOW THE HEADLINES AND NOT ABOVE THEM ──────────────────
-        Placement is a decision, not a leftover. Someone opening the news
-        screen wants to know what happened; audio is the thing you choose
-        after you have skimmed, not before. Putting a player at the top would
-        push the actual news below the fold to promote a feature nobody came
-        for.
-      */}
-      <RadioPanel />
-
       <AdBanner slot="signals" />
+        </>
+      )}
 
-      <p className="notice">{t('news.disclaimer')}</p>
+      <p className="prose-sm" style={{ marginTop: 12 }}>{t('news.disclaimer')}</p>
     </PageTransition>
   );
 }

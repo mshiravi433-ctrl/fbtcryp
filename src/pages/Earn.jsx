@@ -14,6 +14,7 @@ import { IconChevronRight, IconExternal, IconPools, IconShield, IconSwap, IconTr
 import SegIndicator from '../components/SegIndicator';
 import ShareSheet from '../components/ShareSheet';
 import VaultCard from '../components/VaultCard';
+import InfoBox from '../components/InfoBox';
 import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
 import { publicAppUrl } from '../lib/nativeShell';
@@ -331,12 +332,25 @@ export default function Earn({ embedded = false }) {
                 </motion.button>
               ))}
             </motion.div>
-            <p className="prose-sm" style={{ marginTop: 10 }}>{t('earn.aprNote')}</p>
           </section>
 
           <AdBanner slot="farm" />
 
-          <p className="notice notice-danger">{t('earn.realRisk')}</p>
+          {/*
+            Reported: «در صفحه سود واقعی پایین صفحه هشدار هست».
+
+            Kept as `danger` tone but folded: this list now carries a HIGH-risk
+            entry (THORChain savers), so the warning still has to be prominent
+            — but a red wall at the foot of a list of opportunities was being
+            scrolled past, which is the opposite of prominent.
+
+            The title alone carries the point, and the detail opens for anyone
+            about to act on it.
+          */}
+          <InfoBox title={t('earn.riskTitle')} tone="danger" id="earn-risk">
+            <p>{t('earn.realRisk')}</p>
+            <p>{t('earn.aprNote')}</p>
+          </InfoBox>
         </>
       ) : (
         /* ============================== POINTS ============================== */

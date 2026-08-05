@@ -249,7 +249,8 @@
     },
     "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
     "realRisk": "العائد ليس مالاً مجانياً أبداً. قد تخسر البرك قيمتها بالخسارة غير الدائمة، وقد تتحمل أسواق الإقراض ديوناً معدومة، وقد يُقتطع من الستيكينغ، وأي عقد ذكي قابل للاستغلال. كما يمكن للبروتوكول نفسه إيقاف الخيارات الأعلى خطورة هنا، فلا تستطيع السحب لفترة. ابدأ صغيراً ولا تستخدم إلا بروتوكولات قرأت عنها.",
-    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all."
+    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all.",
+    "riskTitle": "ما الذي قد يسوء هنا"
   },
   "wallet": {
     "guest": "زائر",
@@ -367,7 +368,8 @@
     "yourTokens": "رموزك",
     "emptyTitle": "لا توجد محفظة متصلة",
     "emptyBody": "اربط محفظة تملكها بالفعل لعرض أرصدتك والمبادلة. لا تسجيل ولا بريد إلكتروني ولا تحقق من الهوية.",
-    "emptyReassure": "لا نستلم أبداً عبارة الاسترداد أو المفتاح الخاص. كل معاملة توقّعها محفظتك بنفسها."
+    "emptyReassure": "لا نستلم أبداً عبارة الاسترداد أو المفتاح الخاص. كل معاملة توقّعها محفظتك بنفسها.",
+    "custodyTitle": "من يتحكم بهذه المحفظة؟"
   },
   "toast": {
     "insufficientBalance": "الرصيد غير كافٍ",
@@ -782,7 +784,15 @@
     "liqTitle": "كم يجب أن يتحرك السعر ضدك للتصفية",
     "liqLeverage": "الرافعة",
     "liqMove": "الحركة ضدك",
-    "liqNote": "تقريبي — الرقم الدقيق يعتمد على هامش الصيانة والرسوم لدى المنصة، وهو دائماً أسوأ قليلاً مما هو معروض."
+    "liqNote": "تقريبي — الرقم الدقيق يعتمد على هامش الصيانة والرسوم لدى المنصة، وهو دائماً أسوأ قليلاً مما هو معروض.",
+    "how": {
+      "title": "كيف تعمل العقود الآجلة الدائمة؟",
+      "p1": "العقد الآجل الدائم عقد يتتبّع سعر أصل دون أن ينتهي أبداً. أنت لا تشتري العملة — بل تتخذ مركزاً على اتجاه سعرها، ويمكنك ذلك في الاتجاهين.",
+      "p2": "الرافعة تعني أن المنصة تقرضك انكشافاً. عند 10x يتحكم مئة دولار من مالك في مركز بألف دولار. حركة 10٪ لصالحك تضاعف مالك؛ وحركة 10٪ ضدك تمحوه بالكامل. الجملة الثانية هي المهمة، وهي سبب انتهاء معظم الحسابات عالية الرافعة إلى الصفر.",
+      "p3": "ولأن العقد لا ينتهي، يوجد «معدل تمويل» يبقي سعره ملتصقاً بالسوق الحقيقي. كل بضع ساعات يدفع الجانب المزدحم للجانب الآخر. واحتفاظك بالمركز مدة كافية قد يكلّفك في التمويل وحده أكثر من الحركة التي أصبت في توقعها.",
+      "p4": "التصفية تلقائية. إذا تحرك السوق ضدك بما يكفي يُغلق المركز ويذهب المال — لا نداء هامش ولا جهة تستأنف لديها."
+    },
+    "venuesTitle": "من يدير هذه الأسواق؟"
   },
   "farm": {
     "title": "المزرعة",
@@ -795,7 +805,8 @@
     "aprNote": "APR figures are indicative ranges, not promises. Real yield changes constantly with trading volume, emissions and how much liquidity is in the pool. Always check the live rate before depositing.",
     "custodyNotice": "These farms are operated by PancakeSwap, not by فانوس بازار بيشغام. You deposit directly from your own wallet into their audited contracts — we never touch your funds and take no cut of your yield.",
     "rewardsLink": "App rewards & quests",
-    "rewardsLinkSub": "Daily streak, XP and referrals"
+    "rewardsLinkSub": "Daily streak, XP and referrals",
+    "custodyTitle": "من يحتفظ بالأموال؟"
   },
   "signals": {
     "title": "إشارات ذكية",
@@ -887,7 +898,14 @@
       }
     },
     "kycNotice": "These issuers require identity verification and may not accept users from every country. فانوس بازار بيشغام has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
-    "riskNotice": "Tokenized assets carry both market risk and issuer risk — if the issuer fails or is shut down, the token may not be redeemable for the underlying asset. Verify who holds the collateral before buying."
+    "riskNotice": "Tokenized assets carry both market risk and issuer risk — if the issuer fails or is shut down, the token may not be redeemable for the underlying asset. Verify who holds the collateral before buying.",
+    "beforeBuy": {
+      "title": "اقرأ هذا قبل الشراء",
+      "p1": "هذه رموز تصدرها شركة تزعم أنها تحتفظ بالسهم الحقيقي. أنت تملك الرمز. لا تملك السهم، ومطالبتك على ذلك المُصدِر لا على الشركة التي يحمل الرمز اسمها.",
+      "p2": "لا تأتي معها أي حقوق مساهمة: لا تصويت، والأرباح الموزعة فقط إن اختار المُصدِر تمريرها. وإن أفلس المُصدِر فقيمة الرمز هي ما يراه السوق في وعده.",
+      "p3": "السيولة ضعيفة مقارنة ببورصة حقيقية. أمر كبير قد يحرّك السعر ضدك بحدة، وقد لا تجد مشترياً أصلاً حين تريد الخروج."
+    },
+    "kycTitle": "هل أحتاج إلى التحقق من الهوية؟"
   },
   "help": {
     "title": "Help & support",
@@ -1280,7 +1298,8 @@
         "body": "Embed our market data or swap routing in your own product."
       }
     },
-    "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead."
+    "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead.",
+    "website": "الموقع"
   },
   "ads": {
     "swap": {
@@ -1503,8 +1522,8 @@
     "closing": "أنت جاهز — أهلاً بك"
   },
   "news": {
-    "title": "أخبار العملات الرقمية",
-    "subtitle": "يُحدَّث كل ٢٤ ساعة",
+    "title": "أحدث ما في الكريبتو",
+    "subtitle": "عناوين من 13 منصة إخبارية، وأخبار اليوم مسموعة.",
     "refresh": "تحديث",
     "loading": "جارٍ التحميل…",
     "updated": "آخر تحديث قبل {{ago}}",
@@ -1525,6 +1544,10 @@
       "bitcoin": "بيتكوين",
       "ethereum": "إيثريوم",
       "defi": "ديفاي"
+    },
+    "tab": {
+      "read": "العناوين",
+      "listen": "الراديو"
     }
   },
   "notify": {
@@ -1817,7 +1840,8 @@
     "openSolflare": "افتح في Solflare",
     "openInWalletHint": "إنه الموقع نفسه والحساب نفسه؛ لا شيء يُفقد.",
     "feeNotice": "رسوم المنصة {{fee}}٪ على سولانا، تُخصم داخل المعاملة نفسها وتُعرض قبل التوقيع.",
-    "feeNoneNotice": "لا توجد رسوم منصة على مبادلات سولانا حالياً — تدفع فقط رسوم شبكة سولانا وتكلفة المسار. إذا تغيّر ذلك، سيظهر السعر الدقيق هنا قبل التوقيع."
+    "feeNoneNotice": "لا توجد رسوم منصة على مبادلات سولانا حالياً — تدفع فقط رسوم شبكة سولانا وتكلفة المسار. إذا تغيّر ذلك، سيظهر السعر الدقيق هنا قبل التوقيع.",
+    "aboutTitle": "الحفظ والرسوم في هذه المبادلة"
   },
   "install": {
     "title": "ثبّت FBT Swap",
