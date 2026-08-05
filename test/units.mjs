@@ -3164,6 +3164,32 @@ export default function run() {
     );
     const [btc] = groupByAsset([big, small]);
     t('the group keeps both venues', btc.venues.length === 2);
+
+    /*
+     * ─── ONE ROW PER VENUE, EVEN THOUGH A VENUE LISTS MANY CONTRACTS ───────
+     * Found by reading the LIVE response after deploying, not by reasoning
+     * about it. Binance returns BTCUSDT, BTCUSDC and BTCUSD_PERP as separate
+     * tickers with separate funding rates spanning 4.6%-8.4%/yr; fifteen rows
+     * came back for BTC. Rendered raw the table listed "Binance (Futures)"
+     * three times with three different numbers, and "the cheapest venue is
+     * Binance" was meaningless when Binance was also among the dearest.
+     *
+     * The deepest contract per venue wins — open interest is where the
+     * positions actually are. Selecting the CHEAPEST instead would flatter
+     * every venue that lists a thin inverse contract nobody trades, which is
+     * the specific way this could have been wrong and still looked right.
+     */
+    const deep = normalizeTicker(
+      { ...good, symbol: 'BTCUSDT', open_interest: 7_000_000_000, funding_rate: 0.004 }, now
+    );
+    const thin = normalizeTicker(
+      { ...good, symbol: 'BTCUSD_PERP', open_interest: 1_100_000_000, funding_rate: 0.0077 }, now
+    );
+    const [dedup] = groupByAsset([deep, thin, small]);
+    t('a venue listing several contracts appears once',
+      dedup.venues.filter((v) => v.venue === 'Binance (Futures)').length === 1);
+    t('...and it is the deepest contract that is kept',
+      dedup.venues.find((v) => v.venue === 'Binance (Futures)').pair === 'BTCUSDT');
     t('...sorted with the deepest market first',
       btc.venues[0].venue === 'Binance (Futures)');
     /*

@@ -268,7 +268,32 @@ export function normalizeTicker(row, now = Date.now()) {
 export function groupByAsset(tickers) {
   const bySymbol = new Map();
 
+  /*
+   * ─── ONE ROW PER VENUE, NOT ONE PER CONTRACT ────────────────────────────
+   * Found by reading the LIVE response, not by reasoning: a venue lists the
+   * same asset several times. Binance alone returns BTCUSDT, BTCUSDC and
+   * BTCUSD_PERP — different margin collateral, different funding rates,
+   * spanning 4.6% to 8.4% a year. Fifteen rows came back for BTC.
+   *
+   * Rendered raw, the table showed "Binance (Futures)" three times with three
+   * different numbers and no way to tell them apart, and "the cheapest venue
+   * is Binance" became meaningless when Binance was simultaneously the
+   * cheapest and among the dearest.
+   *
+   * So we keep the DEEPEST contract per venue. Open interest is the right
+   * tiebreak rather than volume: it is where the positions actually are, and
+   * it reliably selects the USDT-margined perp that a retail user opening a
+   * position on that venue will actually get. Picking the cheapest instead
+   * would flatter every venue with a thin inverse contract nobody trades.
+   */
+  const deepest = new Map();
   for (const t of tickers) {
+    const key = `${t.symbol}|${t.venue}`;
+    const prev = deepest.get(key);
+    if (!prev || t.openInterestUsd > prev.openInterestUsd) deepest.set(key, t);
+  }
+
+  for (const t of deepest.values()) {
     if (!bySymbol.has(t.symbol)) bySymbol.set(t.symbol, []);
     bySymbol.get(t.symbol).push(t);
   }
