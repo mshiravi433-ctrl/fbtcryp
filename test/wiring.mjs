@@ -4756,6 +4756,82 @@ export default function run() {
      */
     const vj = JSON.parse(read('vercel.json'));
     const headers = vj.headers ?? [];
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * vercel.json MUST CONTAIN NO UNKNOWN KEYS — INCLUDING "//" COMMENTS.
+     * ═══════════════════════════════════════════════════════════════════════
+     * This check exists because its absence cost SEVEN CONSECUTIVE FAILED
+     * DEPLOYMENTS and roughly two hours of work that never reached the site.
+     *
+     * When the cache headers were added I annotated each rule the way
+     * everything else in this repo is annotated. JSON has no comments, so I
+     * used the common `"//": "..."` trick — which works in package.json and
+     * in most tooling.
+     *
+     * It does not work here. Vercel's published schema, named in this file's
+     * own $schema line, declares `additionalProperties: false`. Any key
+     * outside the documented set makes the file invalid, and the build fails
+     * before it starts.
+     *
+     * ─── WHY NOTHING ELSE CAUGHT IT ─────────────────────────────────────────
+     * Both existing safety layers were blind to it:
+     *
+     *   • 1914 tests — none of them read vercel.json as a schema
+     *   • `vite build` — never reads vercel.json at all
+     *
+     * So every local signal was green: build passed, tests passed, push
+     * succeeded, main fast-forwarded. Only the live site disagreed, and I
+     * spent twenty minutes attributing that to CDN propagation and even
+     * built a workaround, which also did not deploy, for the same reason.
+     *
+     * The lesson is narrow and worth keeping: if the toolchain cannot see a
+     * class of error, that error will happen again. Hence this check.
+     */
+    const ALLOWED_TOP = new Set([
+      '$schema', 'buildCommand', 'outputDirectory', 'framework', 'devCommand',
+      'installCommand', 'ignoreCommand', 'rewrites', 'redirects', 'headers',
+      'cleanUrls', 'trailingSlash', 'functions', 'crons', 'regions', 'images',
+      'public', 'git', 'github'
+    ]);
+    const strayTop = Object.keys(vj).filter((k) => !ALLOWED_TOP.has(k));
+    t(`vercel.json has no unknown top-level keys${strayTop.length ? ` — ${strayTop.join(', ')}` : ''}`,
+      strayTop.length === 0);
+
+    /*
+     * The rule objects, where the actual mistake was. A header rule accepts
+     * exactly `source`, `headers` and optionally `has`/`missing`. Anything
+     * else — a "//" comment above all — invalidates the whole file.
+     */
+    const strayRule = [];
+    for (const h of headers) {
+      for (const k of Object.keys(h)) {
+        if (!['source', 'headers', 'has', 'missing'].includes(k)) {
+          strayRule.push(`${h.source ?? '?'}:${k}`);
+        }
+      }
+      for (const kv of h.headers ?? []) {
+        for (const k of Object.keys(kv)) {
+          if (!['key', 'value'].includes(k)) strayRule.push(`${h.source ?? '?'}:header:${k}`);
+        }
+      }
+    }
+    t(`no header rule carries an unknown key${strayRule.length ? ` — ${strayRule.join(', ')}` : ''}`,
+      strayRule.length === 0);
+
+    /* Same for rewrites, which are the other place a comment would look
+       natural and would break the deploy identically. */
+    const strayRw = (vj.rewrites ?? []).flatMap((r) =>
+      Object.keys(r).filter((k) => !['source', 'destination', 'has', 'missing'].includes(k))
+    );
+    t(`no rewrite carries an unknown key${strayRw.length ? ` — ${strayRw.join(', ')}` : ''}`,
+      strayRw.length === 0);
+
+    /*
+     * And the documentation of the rule, so the next person meets the reason
+     * before they meet the failure.
+     */
+    t('the no-comments rule is written down', existsSync('docs/VERCEL-JSON-RULES.md'));
     const forSource = (re) => headers.find((h) => re.test(h.source));
 
     const assets = forSource(/assets/);
