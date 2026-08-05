@@ -99,6 +99,23 @@ installDom();
 const { run: runScreens } = await import('./.out/screens/screens.js');
 report('screen smoke (all 12 languages)', await runScreens(document.getElementById('r')));
 
+/* --------------------- 4b. coin detail under real data -------------------- */
+/*
+ * The screen suite mounts `<CoinDetail />` with NO id, which takes the
+ * not-found branch and exercises almost nothing — analyze(), VerdictPanel,
+ * HistoryPanel and CandleChart are all skipped.
+ *
+ * That gap is why «بعضی اوقات ... کرش میکنه» could be reported while the suite
+ * stayed green. This mounts the page against sixteen real response shapes in
+ * both chart modes, and asserts the route boundary recovers from the actual
+ * cause: a lazy chunk that fails to load after a deploy.
+ */
+console.log('\n▸ building coin-detail data suite…');
+npx(['vite', 'build', '-c', 'test/vite.coindetail.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runCoinDetail } = await import('./.out/coindetail/coindetail-probe.js');
+report('coin detail (real data shapes · chunk recovery)', await runCoinDetail(document.getElementById('r')));
+
 /* --------------------------- 5. store-safe build -------------------------- */
 /*
  * Two separate guarantees are checked here, and they are not the same thing:

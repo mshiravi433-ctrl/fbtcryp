@@ -2456,5 +2456,12 @@
     "partial": "{{ok}} of {{total}} stations are reachable right now. The others are not down permanently — their hosting is having a bad moment.",
     "openShow": "Open on {{name}}",
     "credit": "These are independent shows. We link to their own audio and credit every one; nothing is rehosted, re-edited or stripped of its advertising. Opinions in them are the hosts', not ours, and none of it is financial advice."
+  },
+  "crash": {
+    "title": "This screen ran into a problem",
+    "body": "The rest of the app is fine, and your funds are untouched — FBT never holds them, so nothing here can affect your wallet. Try again, or go back to the market.",
+    "updateTitle": "A new version just shipped",
+    "updateBody": "This tab was still running the previous build, so part of the page could not load. Reloading picks up the new version — it takes a second.",
+    "goHome": "Back to market"
   }
 }

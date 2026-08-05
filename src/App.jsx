@@ -9,6 +9,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
+import RouteBoundary from './components/RouteBoundary';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
@@ -149,53 +150,76 @@ function prefetchLikelyRoutes() {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const { t } = useTranslation();
   return (
-    <Suspense fallback={<Loader />}>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Market />} />
-          <Route path="/coin/:id" element={<CoinDetail />} />
-          <Route path="/trade" element={<Trade />} />
-          <Route path="/swap" element={<Swap />} />
-          <Route path="/bridge" element={<Bridge />} />
-          {SPECULATION_ENABLED && <Route path="/invest" element={<Invest />} />}
-          {SPECULATION_ENABLED && <Route path="/predict" element={<Predict />} />}
-          <Route path="/earn" element={<Earn />} />
-          <Route path="/wallet" element={<Wallet />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/legal/:doc" element={<Legal />} />
-          {SPECULATION_ENABLED && <Route path="/perp" element={<Perp />} />}
-          <Route path="/farm" element={<Farm />} />
-          <Route path="/signals" element={<Signals />} />
-          <Route path="/stocks" element={<Stocks />} />
-          <Route path="/help" element={<Help />} />
-          <Route path="/docs" element={<Docs />} />
-          <Route path="/audit" element={<Audit />} />
-          <Route path="/developers" element={<Developers />} />
-          <Route path="/ecosystem" element={<Ecosystem />} />
-          <Route path="/business" element={<Business />} />
-          <Route path="/p2p" element={<P2P />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/news" element={<News />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/discover" element={<Discover />} />
-          <Route path="/nft" element={<Nft />} />
-          <Route path="/orders" element={<Orders />} />
+    /*
+     * ─── THE BOUNDARY GOES OUTSIDE SUSPENSE, AND THAT ORDER MATTERS ────────
+     * `<Suspense>` handles a lazy import that is PENDING. It does nothing at
+     * all for one that REJECTS — a failed dynamic import throws during
+     * render, straight past Suspense, up to BootBoundary, which replaces the
+     * whole app with the "unexpected error" screen. That is the crash being
+     * reported when tapping "view chart":
+     *
+     *     «بعضی اوقات ... میزنم روش سایت کرش میکنه و میزنه مشکلی پیش اومده»
+     *
+     * It is intermittent because it is a NETWORK failure, not a code one:
+     * every route is a separate chunk fetched on first open, and that fetch
+     * 404s whenever a deploy has renamed the chunks under a tab that is still
+     * running the previous build. See RouteBoundary for the full analysis and
+     * why a single guarded reload is the exact recovery.
+     *
+     * Keyed on pathname so navigating away from a broken screen clears the
+     * error rather than leaving the user stuck on it — without the key, React
+     * keeps a boundary in its error state for the rest of the session.
+     */
+    <RouteBoundary key={location.pathname} t={t}>
+      <Suspense fallback={<Loader />}>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<Market />} />
+            <Route path="/coin/:id" element={<CoinDetail />} />
+            <Route path="/trade" element={<Trade />} />
+            <Route path="/swap" element={<Swap />} />
+            <Route path="/bridge" element={<Bridge />} />
+            {SPECULATION_ENABLED && <Route path="/invest" element={<Invest />} />}
+            {SPECULATION_ENABLED && <Route path="/predict" element={<Predict />} />}
+            <Route path="/earn" element={<Earn />} />
+            <Route path="/wallet" element={<Wallet />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/legal/:doc" element={<Legal />} />
+            {SPECULATION_ENABLED && <Route path="/perp" element={<Perp />} />}
+            <Route path="/farm" element={<Farm />} />
+            <Route path="/signals" element={<Signals />} />
+            <Route path="/stocks" element={<Stocks />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/docs" element={<Docs />} />
+            <Route path="/audit" element={<Audit />} />
+            <Route path="/developers" element={<Developers />} />
+            <Route path="/ecosystem" element={<Ecosystem />} />
+            <Route path="/business" element={<Business />} />
+            <Route path="/p2p" element={<P2P />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/news" element={<News />} />
+            <Route path="/explore" element={<Explore />} />
+            <Route path="/discover" element={<Discover />} />
+            <Route path="/nft" element={<Nft />} />
+            <Route path="/orders" element={<Orders />} />
 
-          {/* Merged hubs. The individual routes below still exist so old
-              links do not break. */}
-          {SPECULATION_ENABLED && <Route path="/lab" element={<Lab />} />}
-          <Route path="/explore-hub" element={<ExploreHub />} />
-          <Route path="/learn" element={<Learn />} />
-          <Route path="/rewards" element={<Rewards />} />
-          <Route path="/solana" element={<SolanaSwap />} />
-          <Route path="/buy" element={<Buy />} />
-          <Route path="*" element={<Market />} />
-        </Routes>
-      </AnimatePresence>
-    </Suspense>
+            {/* Merged hubs. The individual routes below still exist so old
+                links do not break. */}
+            {SPECULATION_ENABLED && <Route path="/lab" element={<Lab />} />}
+            <Route path="/explore-hub" element={<ExploreHub />} />
+            <Route path="/learn" element={<Learn />} />
+            <Route path="/rewards" element={<Rewards />} />
+            <Route path="/solana" element={<SolanaSwap />} />
+            <Route path="/buy" element={<Buy />} />
+            <Route path="*" element={<Market />} />
+          </Routes>
+        </AnimatePresence>
+      </Suspense>
+    </RouteBoundary>
   );
 }
 

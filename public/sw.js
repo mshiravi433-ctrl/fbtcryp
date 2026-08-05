@@ -8,7 +8,19 @@
  * and even that is network-first so a deploy takes effect immediately.
  */
 
-const SHELL = 'fbt-shell-v1';
+/*
+ * ─── THE VERSION SUFFIX IS LOAD-BEARING ─────────────────────────────────────
+ * Bumped v1 -> v2 so the `activate` handler below deletes the old cache. A
+ * v1 cache can be holding an index.html from a previous deploy, and that HTML
+ * names chunk files (CoinDetail-<hash>.js) the server no longer has. Serving
+ * it produces a 404 on the dynamic import, which throws past <Suspense> and
+ * lands the user on the crash screen -- reported as «بعضی اوقات ... کرش
+ * میکنه». Renaming the cache is what evicts that stale HTML from devices
+ * already carrying it.
+ *
+ * Bump this whenever the shell caching strategy changes.
+ */
+const SHELL = 'fbt-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -33,11 +45,24 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
   if (request.mode !== 'navigate') return;
 
+  /*
+   * ─── ONLY A SUCCESSFUL RESPONSE MAY BE CACHED ───────────────────────────
+   * This used to cache `res` unconditionally. A 404, a 502 or a captive
+   * portal's login page would therefore be stored as the app shell and served
+   * on every subsequent offline load -- turning one bad moment into a
+   * permanently broken install.
+   *
+   * `res.ok` alone is not enough either: a redirect to a Wi-Fi login page is
+   * a 200 with `type: 'opaqueredirect'` or a different URL, and caching that
+   * as index.html is exactly how a captive portal bricks a PWA.
+   */
   event.respondWith(
     fetch(request)
       .then((res) => {
-        const copy = res.clone();
-        caches.open(SHELL).then((c) => c.put(request, copy)).catch(() => {});
+        if (res && res.ok && res.type === 'basic' && !res.redirected) {
+          const copy = res.clone();
+          caches.open(SHELL).then((c) => c.put(request, copy)).catch(() => {});
+        }
         return res;
       })
       .catch(() => caches.match(request).then((r) => r ?? caches.match('/index.html')))
