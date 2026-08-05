@@ -5,6 +5,7 @@ import { riseIn } from './PageTransition';
 import { fmtQty } from '../lib/format';
 import { useWallet } from '../context/WalletContext';
 import { openUrl } from '../lib/browser';
+import RestrictionsSheet from './RestrictionsSheet';
 import {
   FIAT_ASSETS,
   FIAT_MONEY,
@@ -68,6 +69,7 @@ export default function FiatPanel({ mode = 'buy' }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
+  const [restrictOpen, setRestrictOpen] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [orderErr, setOrderErr] = useState(null);
   const [order, setOrder] = useState(null);
@@ -416,12 +418,52 @@ export default function FiatPanel({ mode = 'buy' }) {
       )}
 
       {/*
-        The card-network reality, stated where the decision is made rather
-        than in a footnote. An Iranian bank card cannot authorise this — that
-        is a property of Visa and Mastercard being severed from Iran's banking
-        system, not a setting anyone can change.
+        ─── THIS WAS A COUNTRY-SPECIFIC WARNING SHOWN TO THE WHOLE WORLD ─────
+        It used to render `fiat.cardNotice` unconditionally: a paragraph about
+        Iranian bank cards and 2012 sanctions, on the Buy screen, for every
+        user on earth. A buyer in Berlin with a German card read three lines
+        explaining why a card they do not hold will not work.
+
+        The owner named the problem twice, and it is a product point rather
+        than a cosmetic one:
+
+            «ما از همه جهان مشتری داریم نه فقط ایران»
+            «محدودیت روی اپ و سایت نزار»
+
+        Two separate harms, and the second is the one that costs money:
+
+          1. To the 95% it does not concern, it is noise — and worse, it is
+             noise in a WARNING box. Spending the warning colour on a rule
+             most readers are unaffected by is exactly how a reader learns to
+             skip warning boxes, including the one that would have saved
+             them.
+
+          2. To a first-time visitor it reads as a statement about what this
+             APP is, not about what the card networks are. An app whose
+             checkout leads with a sanctions paragraph looks restricted. We
+             are not restricted — nothing in FBT Swap is geofenced, there is
+             no IP check anywhere in this repository, and the swap, wallet,
+             charts and orders work for anyone with a wallet.
+
+        What replaces it is a neutral, universally-true line: the purchase is
+        settled by a licensed payment partner who decides at checkout based on
+        where the card was issued. That is accurate for every reader.
+
+        The Iran detail is NOT deleted — deleting it would send somebody to
+        enter card details that cannot be authorised, which is a worse
+        outcome than reading an irrelevant paragraph. It moved into the
+        Restrictions sheet, one neutral tap away, next to the rows that say
+        EUR, GBP, TRY and AED all work.
       */}
-      <p className="notice" style={{ marginTop: 12 }}>{t('fiat.cardNotice')}</p>
+      <p className="prose-sm" style={{ marginTop: 12 }}>{t('fiat.settlementNote')}</p>
+      <button
+        className="btn btn-ghost btn-sm"
+        style={{ width: '100%', marginTop: 8 }}
+        onClick={() => setRestrictOpen(true)}
+      >
+        {t('restrict.open')}
+      </button>
+      <RestrictionsSheet open={restrictOpen} onClose={() => setRestrictOpen(false)} />
     </motion.section>
   );
 }

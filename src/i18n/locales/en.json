@@ -2392,7 +2392,6 @@
     "orderCreated": "Your order is open. If the payment page closed, reopen it here.",
     "reopenCheckout": "Reopen the payment page",
     "notEnabled": "Buying with money is not switched on yet. ChangeNOW enable this per partner after a compliance review, so it is a step on their side rather than a setting we control. Until then, the P2P desks and receiving crypto directly are the routes that work.",
-    "cardNotice": "An Iranian bank card cannot complete this. Visa, Mastercard and Amex have been cut off from Iran’s banking system since 2012 — that is the card networks themselves, not a setting anyone can change. It works with a card or bank account issued outside Iran.",
     "err": {
       "NOT_A_FIAT_PAIR": "This screen only buys and sells for money. To trade one coin for another, use the app's own swap — it is ours and it is cheaper.",
       "BAD_AMOUNT": "Enter an amount first.",
@@ -2402,12 +2401,13 @@
       "RANGE_FAILED": "Could not load the limits for this pair.",
       "ORDER_FAILED": "The provider could not start this order. Nothing has been charged. Check the amount and address, then try again.",
       "NO_CHECKOUT_URL": "The order was created but no payment page came back. Nothing has been charged. Please try again."
-    }
+    },
+    "settlementNote": "The purchase is settled by a licensed payment partner, who decides at checkout based on the country your card or bank account was issued in — not where you are. Availability and limits differ by currency."
   },
   "restrict": {
     "open": "Eligibility",
     "title": "Where this works",
-    "intro": "We have users across the world, and the rules differ by country — not because of anything we decide, but because the exchanges and payment providers we link to publish their own lists. Here is what each of them actually allows, so you can tell before you sign up anywhere.",
+    "intro": "Nothing we built is restricted. The swap, the wallet, market data, charts and orders are non-custodial: no account, no identity check, no country blocked, and no permission needed from anyone — including us. This page is only about the third parties we link out to, because the exchanges and payment providers publish their own country lists and we would rather you knew before you signed up anywhere.",
     "status": {
       "ok": "Works",
       "partial": "Some rails",

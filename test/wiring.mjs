@@ -4136,16 +4136,70 @@ export default function run() {
       !/ourFeePercent/.test(srvCode) && /feeModel/.test(srvCode));
 
     /*
-     * The card-network reality must be stated. An Iranian bank card cannot
-     * complete this and no setting changes that, so implying otherwise would
-     * recreate the dead buttons the Buy screen was rebuilt to remove.
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE BUY SCREEN MUST NOT LEAD WITH A COUNTRY-SPECIFIC WARNING.
+     * ═══════════════════════════════════════════════════════════════════════
+     * The panel used to render `fiat.cardNotice` unconditionally — three
+     * lines about Iranian bank cards and 2012 sanctions, shown to every user
+     * on earth. A buyer in Berlin holding a German card read an explanation
+     * of why a card they do not have will not work.
+     *
+     * The owner's instruction, twice:
+     *     «ما از همه جهان مشتری داریم نه فقط ایران»
+     *     «محدودیت روی اپ و سایت نزار»
+     *
+     * Two harms, and the second costs money. To most readers it is noise
+     * inside a WARNING box, which teaches them to skip warning boxes. And to
+     * a first-time visitor it reads as a claim about what this APP is — an
+     * app whose checkout opens with a sanctions paragraph looks gated, when
+     * in fact nothing here is gated at all.
+     *
+     * So the checks invert. What the panel must show is a country-NEUTRAL,
+     * universally-true settlement note; what it must NOT show is the
+     * jurisdiction paragraph.
      */
-    t('the card limitation is stated on screen', /fiat\.cardNotice/.test(panel));
+    t('the settlement note is country-neutral', /fiat\.settlementNote/.test(panel));
+    t('the Iran-specific card paragraph is NOT on the buy screen',
+      !/fiat\.cardNotice/.test(code(panel)));
 
     const en = JSON.parse(read('src/i18n/locales/en.json'));
     const fa = JSON.parse(read('src/i18n/locales/fa.json'));
-    t('the card notice names the real cause', /Visa|Mastercard/.test(en.fiat.cardNotice));
-    t('...and exists in Persian', hasKey(fa, 'fiat.cardNotice'));
+    const ar = JSON.parse(read('src/i18n/locales/ar.json'));
+
+    /* Neutral means neutral: no country may be named in the note itself. */
+    t('...and names no country',
+      !/Iran|ایران|إيران/i.test(en.fiat.settlementNote + fa.fiat.settlementNote + ar.fiat.settlementNote));
+    /* It must still say something USEFUL, not just be inoffensive: the rule
+       is that the CARD's country of issue decides, and that is true for
+       every reader. */
+    t('...but still states the actual rule',
+      /issued/i.test(en.fiat.settlementNote));
+
+    /*
+     * ─── REMOVED, NOT DELETED: THE FACT STILL HAS TO BE REACHABLE ───────────
+     * Dropping the Iran detail entirely would send somebody to enter card
+     * details that cannot be authorised — a worse outcome than reading an
+     * irrelevant paragraph. It lives in the Restrictions sheet, and the panel
+     * must offer a way to open it. Asserted as a chain, because a fact that
+     * exists in a component nobody can reach is the same as a deleted fact.
+     */
+    t('the panel offers the restrictions sheet', /<RestrictionsSheet/.test(panel));
+    t('...with a control that opens it', /setRestrictOpen\(true\)/.test(panel));
+    t('...and the sheet still carries the card-network fact',
+      /Visa|Mastercard/.test(en.restrict.cards));
+    t('...in all three written languages',
+      hasKey(fa, 'restrict.cards') && hasKey(ar, 'restrict.cards'));
+
+    /*
+     * ─── AND THE SHEET MUST LEAD WITH WHAT IS NOT RESTRICTED ────────────────
+     * A page titled "Restrictions" makes a reader assume the app restricts
+     * them. It does not: there is no geofence and no IP check anywhere in
+     * this repository. Letting that assumption stand is how a non-custodial
+     * product gets mistaken for a gated one, so the intro must say so.
+     */
+    t('the restrictions intro states the app itself is not restricted',
+      /non-custodial/i.test(en.restrict.intro) && /no country blocked/i.test(en.restrict.intro));
+    t('...in Persian too', /محدود نیست/.test(fa.restrict.intro));
     /* The error for a crypto pair must point at OUR swap, not a competitor. */
     t('a crypto pair is redirected to our own swap',
       /own swap/i.test(en.fiat.err.NOT_A_FIAT_PAIR));
@@ -4333,6 +4387,106 @@ export default function run() {
       (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
     t('...and all are translated',
       [...new Set(keys)].every((k) => hasKey(fa, k) && hasKey(ar, k)));
+  }
+
+  /* ---- 62b. no screen leads with a single-country restriction ----------- */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * A GENERAL RULE, NOT A PATCH FOR ONE STRING.
+     * ═══════════════════════════════════════════════════════════════════════
+     * `fiat.cardNotice` was rendered unconditionally on the Buy screen and
+     * told every user in the world about Iranian bank cards. Fixing that one
+     * string fixes one string; the same mistake is easy to make again the
+     * next time a jurisdiction rule needs stating somewhere.
+     *
+     *     «ما از همه جهان مشتری داریم نه فقط ایران»
+     *     «محدودیت روی اپ و سایت نزار»
+     *
+     * So the rule is enforced structurally: a country may be named in copy
+     * that a reader CHOSE to open (the Restrictions sheet), in legal and risk
+     * disclosures, in help answers someone searched for, and in a news
+     * category label. It may NOT appear in the always-visible body of a
+     * primary screen, where it is noise to almost everyone and makes the app
+     * itself look geofenced.
+     *
+     * The allow-list is explicit rather than a pattern, because "which
+     * screens may name a country" is a judgement that should be visible in
+     * the diff when someone changes it.
+     */
+    const PRIMARY_SCREENS = [
+      'src/pages/Swap.jsx',
+      'src/pages/Buy.jsx',
+      'src/pages/Market.jsx',
+      'src/pages/Wallet.jsx',
+      'src/pages/Orders.jsx',
+      'src/pages/Earn.jsx',
+      'src/pages/News.jsx',
+      'src/pages/Signals.jsx',
+      'src/pages/Bridge.jsx',
+      'src/pages/SolanaSwap.jsx',
+      'src/components/FiatPanel.jsx'
+    ];
+
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const get = (o, path) => path.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+
+    /*
+     * Comments are stripped before the keys are harvested. The notes above
+     * name Iran repeatedly, and an un-stripped scan would flag this file's
+     * own documentation — a trap this suite has fallen into three times now
+     * (SECRETS in venueReferral.js, Aparat in Docs.jsx).
+     */
+    /* Local, because the other `code` helpers in this file are block-scoped
+       to their own sections. Strips block comments, line comments and JSX
+       comment expressions. */
+    const strip3 = (src) => src
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const offenders = [];
+    for (const f of PRIMARY_SCREENS) {
+      if (!existsSync(f)) continue;
+      const src = strip3(read(f));
+      for (const m of src.matchAll(/t\('([a-zA-Z0-9_.]+)'/g)) {
+        const key = m[1];
+        for (const [lang, loc] of [['en', en], ['fa', fa]]) {
+          const v = get(loc, key);
+          if (typeof v !== 'string') continue;
+          if (/\bIran\b|ایران|إيران|OFAC/i.test(v)) offenders.push(`${f}:${key} (${lang})`);
+        }
+      }
+    }
+    t(`no primary screen names a single country in always-visible copy` +
+      (offenders.length ? ` — ${[...new Set(offenders)].join(', ')}` : ''),
+      offenders.length === 0);
+
+    /*
+     * The counterpart, and the reason the rule above is safe: the facts must
+     * still be somewhere a user can find them. Removing a real restriction to
+     * tidy a screen would send somebody to enter card details that cannot be
+     * authorised, which is worse than an irrelevant paragraph.
+     */
+    t('...but the facts are still reachable in the restrictions sheet',
+      hasKey(en, 'restrict.region.iran.note') && hasKey(en, 'restrict.cards'));
+    t('...and in the help answers, for anyone who searches',
+      /iranLegal/.test(read('src/lib/faqLocal.js')));
+
+    /*
+     * ─── AND NOTHING IN THE APP ACTUALLY BLOCKS ANYONE ──────────────────────
+     * The warnings were always about third parties, never about us. This
+     * pins that: no IP geolocation, no country allow-list, no region gate
+     * anywhere in our own code. If someone ever adds one, this fails.
+     */
+    const scan = ['server/app.js', 'server/fiat.js', 'src/App.jsx', 'src/lib/features.js']
+      .filter((f) => existsSync(f))
+      .map((f) => strip3(read(f)))
+      .join('\n');
+    t('the app geolocates nobody',
+      !/geoip|geolocat|cf-ipcountry|x-vercel-ip-country|countryCode\s*[!=]==/i.test(scan));
+    t('...and blocks no region', !/blockedCountries|allowedCountries|regionGate/i.test(scan));
   }
 
   /* ---- 62. the domain move must be complete ----------------------------- */
