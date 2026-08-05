@@ -5938,3 +5938,45 @@ body { overflow-x: clip; }
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+
+/* ==========================================================================
+   SWAP PERCENTAGE SHORTCUTS  —  .swap-portion*
+
+   Replaces the lone MAX button. MAX is the amount people are most hesitant to
+   commit, so a single MAX button is the least useful shortcut you can offer;
+   25/50/75 are the ones that actually get tapped.
+   ========================================================================== */
+
+.swap-portions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.swap-portion {
+  /* `1 1 0` not `1`: the latter leaves flex-basis at auto, so "MAX" would
+     claim more width than "25%". Four equal quarters is the point. */
+  flex: 1 1 0;
+  min-width: 0;
+  /* 34px is below the 44px touch guidance and deliberate: these sit directly
+     above a 48px input and a 52px action button, and a full-height row of
+     four here pushes the actual swap button below the fold on a small phone.
+     They are convenience shortcuts, not the primary control. */
+  min-height: 34px;
+  padding: 6px 4px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swap-portion:active {
+  transform: scale(0.96);
+  border-color: var(--rgb-1);
+  color: var(--text-1);
+}

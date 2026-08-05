@@ -3016,5 +3016,62 @@ export default function run() {
     }
   }
 
+  /* ---- 44. swap percentage shortcuts + market sectors ------------------- */
+  {
+    const swap = read('src/pages/Swap.jsx');
+
+    /*
+     * ─── THE PERCENTAGE SHORTCUTS ─────────────────────────────────────────
+     * Requested as the Trust Wallet pattern. The dangerous part is the maths:
+     * this fills an amount the user then signs, and an amount one wei above
+     * the balance reverts on transfer AFTER charging gas.
+     */
+    t('swap offers percentage shortcuts', /setPortion\s*\(/.test(swap));
+    t('...for 25/50/75/100', /\[25, 50, 75, 100\]/.test(swap));
+    /*
+     * BigInt, not floats. `raw * 25n / 100n` is exact and truncates; the float
+     * round-trip is what produces an unspendable amount. This is the same
+     * class of bug the MAX comment in that file already documents.
+     */
+    t('the portion maths stays in BigInt', /raw \* BigInt\(/.test(swap) && /\/ 100n/.test(swap));
+    /*
+     * 100% must still reserve gas on a native coin or it reverts, so it has
+     * to go down the existing MAX path rather than being 100/100 of raw.
+     */
+    t('100% still routes through the gas-reserve path',
+      /percent < 100/.test(swap) && /NATIVE_GAS_FLOOR/.test(swap));
+    t('MAX is kept as an alias rather than duplicated',
+      /const setMax = \(\) => setPortion\(100\)/.test(swap));
+
+    /* ---- market sectors ---- */
+    const api = read('src/lib/api.js');
+    const market = read('src/pages/Market.jsx');
+    const appSrc = read('server/app.js');
+
+    t('the category map exists', /MARKET_CATEGORIES/.test(api));
+    t('Market renders sector tabs', /market\.sector\./.test(market));
+    t('...and fetches them', /getCategory\s*\(/.test(market));
+    t('the API proxies categories', /\/api\/category\//.test(appSrc));
+
+    /*
+     * An open proxy to an upstream API is how our IP gets rate-limited by a
+     * stranger. The slug must be validated, not passed through.
+     */
+    t('the category slug is validated server-side',
+      /\^\[a-z0-9-\]\+\$/.test(appSrc) && /BAD_CATEGORY/.test(appSrc));
+
+    /*
+     * A sector must NOT fall back to the offline snapshot. That snapshot is
+     * the top coins by market cap, so a network failure would render Bitcoin
+     * under a "Gold" tab — worse than an honest empty state.
+     */
+    {
+      const idx = api.indexOf('export function getCategory');
+      const body = api.slice(idx, idx + 2000);
+      t('a failed sector fetch returns empty, not the offline list',
+        /fallback: \(\) => \[\]/.test(body) && !/offlineMarkets/.test(body));
+    }
+  }
+
   return rows;
 }

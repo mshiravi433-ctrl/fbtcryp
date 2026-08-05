@@ -78,7 +78,15 @@
       "volume": "Volume"
     },
     "searching": "Searching every coin…",
-    "moreResults": "More results from the full market"
+    "moreResults": "More results from the full market",
+    "sector": {
+      "gold": "Gold",
+      "meme": "Memecoins",
+      "rwa": "Real assets",
+      "ai": "AI",
+      "gaming": "Gaming"
+    },
+    "sectorEmpty": "Nothing to show for this sector right now."
   },
   "coin": {
     "notFound": "Coin not found",
@@ -458,7 +466,8 @@
     "successWhere": "The tokens are in your wallet now. Your balance may take a few seconds to refresh — the transaction is already final either way.",
     "failedOnChain": "The transaction was mined but reverted, so the swap did not happen. Your tokens were never taken and are still in your wallet. The network fee (gas) was spent and cannot be refunded — that goes to the validators, not to us.",
     "failedNothingSent": "Nothing was sent. No tokens left your wallet and no network fee was charged. You can safely try again.",
-    "network": "Network"
+    "network": "Network",
+    "max": "MAX"
   },
   "onboarding": {
     "skip": "Skip",

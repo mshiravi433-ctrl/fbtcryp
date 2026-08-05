@@ -338,13 +338,43 @@ export default function Swap() {
    * Working from the raw BigInt balance avoids float error entirely; the
    * float is only used for display.
    */
-  const setMax = () => {
+  /**
+   * Fill a PERCENTAGE of the balance. `setMax()` is `setPortion(100)`.
+   *
+   * ─── WHY 100% IS NOT "THE WHOLE BALANCE" ────────────────────────────────
+   * On a native coin the gas reserve still has to come off, or the swap
+   * reverts and burns the gas anyway. 100% therefore means "everything you
+   * can actually spend", which is the only definition that does not produce
+   * a failed transaction.
+   *
+   * The partial fractions deliberately do NOT subtract the reserve: 25% of a
+   * balance already leaves three quarters behind, far more than any gas cost.
+   * Subtracting it as well would quietly short-change the user.
+   *
+   * ─── WHY THE MATH STAYS IN BigInt ───────────────────────────────────────
+   * `raw * 25n / 100n` is exact. Doing it in floats and converting back is
+   * how you get an amount one wei above the balance on an 18-decimal token,
+   * which reverts on transfer having already charged gas. Integer division
+   * truncates, and truncating is the only safe direction here — the same
+   * reasoning as the toFixed bug documented below.
+   */
+  const setPortion = (percent) => {
     const entry = balances[tokenKey(fromToken)];
     const raw = entry?.raw;
     haptic?.('select');
 
     if (raw == null) {
       setAmount('');
+      return;
+    }
+
+    if (percent < 100) {
+      const part = (raw * BigInt(Math.round(percent))) / 100n;
+      if (part <= 0n) {
+        setAmount('');
+        return;
+      }
+      setAmount(formatUnitsExact(part, fromToken.decimals));
       return;
     }
 
@@ -370,6 +400,9 @@ export default function Swap() {
 
     setAmount(formatUnitsExact(usableWei, fromToken.decimals));
   };
+
+  /* Kept as a named alias so existing callers read clearly. */
+  const setMax = () => setPortion(100);
 
   const runSwap = async () => {
     const signer = wallet.getSigner?.();
@@ -597,13 +630,34 @@ export default function Swap() {
           <span className="field-label" style={{ margin: 0 }}>{t('swap.from')}</span>
           <span className="faint mono">
             {t('swap.balance')}: {fmtQty(fromBal)}
-            {wallet.isConnected && (
-              <button className="tag" style={{ marginInlineStart: 6, padding: '2px 8px' }} onClick={setMax}>
-                MAX
-              </button>
-            )}
           </span>
         </div>
+        {/*
+          ─── PERCENTAGE SHORTCUTS ──────────────────────────────────────────
+          Requested: the Trust Wallet pattern. It replaces the single MAX
+          button, which was the only shortcut and the least useful one — MAX
+          is the amount people are most hesitant to commit, so a lone MAX
+          button gets ignored and the field gets typed into by hand.
+
+          Rendered only when connected: with no wallet there is no balance to
+          take a percentage of, and four dead buttons on the first screen a
+          new user sees is worse than none.
+        */}
+        {wallet.isConnected && (
+          <div className="swap-portions">
+            {[25, 50, 75, 100].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                className="swap-portion"
+                onClick={() => setPortion(pct)}
+              >
+                {pct === 100 ? t('swap.max') : `${pct}%`}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="row" style={{ gap: 8 }}>
           <button className="tag" style={{ padding: '10px 12px' }} onClick={() => setPicker('from')}>
             {fromToken.symbol} ▾

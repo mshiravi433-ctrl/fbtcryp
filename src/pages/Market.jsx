@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -10,9 +10,26 @@ import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
+import { MARKET_CATEGORIES, getCategory } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
+
+/**
+ * SECTOR TABS — gold, memecoins, RWA, AI, gaming.
+ *
+ * ─── WHY THESE ARE NOT JUST MORE FILTERS ────────────────────────────────────
+ * Every existing filter re-sorts the same 250 rows already in memory. A sector
+ * cannot: there are only a handful of tokenized-gold tokens in existence and
+ * none is in the top 250 by market cap, so filtering the loaded page for
+ * "gold" would correctly return nothing. These fetch the whole universe for
+ * that category instead (see lib/api.js).
+ *
+ * Ordered by how likely someone is to want them. Gold first because it is the
+ * one a non-crypto person recognises, and the reason they might open a crypto
+ * app at all where the local currency is unstable.
+ */
+const SECTORS = Object.keys(MARKET_CATEGORIES);
 
 function StatTile({ label, value, sub, tone }) {
   return (
@@ -43,10 +60,53 @@ export default function Market() {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
 
+  /*
+   * Sector view. `null` means the ordinary market list.
+   *
+   * Held separately from `filter` rather than folded into it because the two
+   * are different operations — one re-sorts memory, the other issues a
+   * request — and a single piece of state would have to encode "am I loading"
+   * for half its values and not the others.
+   */
+  const [sector, setSector] = useState(null);
+  const [sectorCoins, setSectorCoins] = useState([]);
+  const [sectorLoading, setSectorLoading] = useState(false);
+
+  useEffect(() => {
+    if (!sector) {
+      setSectorCoins([]);
+      return undefined;
+    }
+    let alive = true;
+    setSectorLoading(true);
+    getCategory(sector)
+      .then((rows) => alive && setSectorCoins(rows ?? []))
+      .catch(() => alive && setSectorCoins([]))
+      .finally(() => alive && setSectorLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [sector]);
+
   // Anything not in the loaded page is found by querying the full universe.
   const { results: remoteHits, searching } = useCoinSearch(query);
 
   const list = useMemo(() => {
+    /*
+     * A sector replaces the list rather than filtering it. Search still
+     * applies on top, because "show me gold, containing 'pax'" is a
+     * reasonable thing to want; the sort filters do not, since they belong to
+     * the main list and are visually deselected while a sector is active.
+     */
+    if (sector) {
+      const rows = sectorCoins;
+      if (!query.trim()) return rows;
+      const q = query.trim().toLowerCase();
+      return rows.filter(
+        (c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+      );
+    }
+
     let out = coins ?? [];
     if (query.trim()) {
       const q = query.trim().toLowerCase();
@@ -64,7 +124,7 @@ export default function Market() {
       default:
         return out;
     }
-  }, [coins, filter, query, favorites]);
+  }, [coins, filter, query, favorites, sector, sectorCoins]);
 
   // Coins the search found that aren't in the loaded page. Shown separately so
   // it's obvious they came from a wider lookup, and tappable like any other.
@@ -207,8 +267,34 @@ export default function Market() {
 
         <div className="tag-scroll" style={{ marginBottom: 10 }}>
           {FILTERS.map((f) => (
-            <button key={f} className={`tag ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+            <button
+              key={f}
+              className={`tag ${!sector && filter === f ? 'active' : ''}`}
+              onClick={() => {
+                setSector(null);
+                setFilter(f);
+              }}
+            >
               {t(`market.filter.${f}`)}
+            </button>
+          ))}
+        </div>
+
+        {/*
+          Sector tabs on their own row.
+
+          Mixed into the row above they would look like more sorts of the same
+          list, which is exactly what they are not — tapping one issues a
+          request for a different set of coins entirely.
+        */}
+        <div className="tag-scroll" style={{ marginBottom: 10 }}>
+          {SECTORS.map((sec) => (
+            <button
+              key={sec}
+              className={`tag ${sector === sec ? 'active' : ''}`}
+              onClick={() => setSector(sector === sec ? null : sec)}
+            >
+              {t(`market.sector.${sec}`)}
             </button>
           ))}
         </div>

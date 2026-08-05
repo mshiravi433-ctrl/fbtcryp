@@ -16,6 +16,7 @@ import { blobConfigured, withPersistentCache } from './blobCache.js';
 import {
   fetchChart,
   fetchCoinDetail,
+  fetchCategory,
   fetchDexPools,
   fetchGlobal,
   fetchMarkets,
@@ -334,6 +335,25 @@ app.post('/api/ai/brief', async (req, res) => {
  * checked against what the code does, and impossible to hallucinate a fee or
  * a recovery path from. See the header of src/pages/Help.jsx.
  */
+
+/**
+ * SECTOR CATEGORY — gold, memecoins, RWA and friends.
+ *
+ * Proxied so the browser never talks to CoinGecko directly on this path and
+ * so one server-side cache serves every user. The slug is allow-listed
+ * against the client's own map rather than passed through: an open proxy to
+ * an upstream API is a way to get our IP rate-limited by a stranger.
+ */
+app.get('/api/category/:slug', (req, res) => {
+  const slug = String(req.params.slug || '').slice(0, 60);
+  if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: 'BAD_CATEGORY' });
+  const perPage = Math.min(100, Math.max(1, Number(req.query.per_page) || 50));
+  const vs = /^[a-z]{2,5}$/.test(String(req.query.vs || '')) ? String(req.query.vs) : 'usd';
+  return serve(res, 300_000)(
+    () => fetchCategory(slug, { perPage, vs }),
+    `cat:${slug}:${vs}:${perPage}`
+  );
+});
 
 app.get('/api/dex/:network', (req, res) =>
   serve(res, 60000)(() => fetchDexPools(req.params.network), `dex:${req.params.network}`)

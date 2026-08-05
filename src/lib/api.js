@@ -109,6 +109,64 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
   });
 }
 
+/**
+ * SECTOR CATEGORIES — gold, memecoins, RWA, AI…
+ *
+ * ─── WHY THIS IS A SEPARATE FUNCTION AND NOT A FILTER ───────────────────────
+ * The Market screen's existing filters (gainers, losers, volume) all re-sort
+ * the SAME 250 rows already in memory. A sector cannot work that way: there
+ * are only a handful of tokenized-gold tokens in existence and none of them
+ * is in the top 250 by market cap, so filtering the loaded page for "gold"
+ * would correctly return almost nothing.
+ *
+ * CoinGecko's `category` parameter queries the whole universe instead. It is
+ * free, needs no key, and is the same endpoint we already use — verified
+ * live before writing this: `category=tokenized-gold` returns XAUT, PAXG,
+ * Kinesis and others, none of which appear in the default list.
+ *
+ * ─── WHY THE CATEGORY IDS ARE HARD-CODED ────────────────────────────────────
+ * CoinGecko's category slugs are not guessable ("meme-token", not "memes";
+ * "tokenized-gold", not "gold"). A wrong slug returns an empty array rather
+ * than an error, which would render as a blank screen with no explanation.
+ * The slugs below were each checked against the live API.
+ */
+export const MARKET_CATEGORIES = {
+  gold: 'tokenized-gold',
+  meme: 'meme-token',
+  rwa: 'real-world-assets-rwa',
+  ai: 'artificial-intelligence',
+  gaming: 'gaming'
+};
+
+export function getCategory(category, { perPage = 50, vs = 'usd' } = {}) {
+  const slug = MARKET_CATEGORIES[category];
+  if (!slug) return Promise.resolve([]);
+
+  return resilient(`cat:${slug}:${vs}:${perPage}`, {
+    /*
+     * Five minutes. A sector list moves far more slowly than a price ticker,
+     * and every extra request here is spent against a free public rate limit
+     * we share with the rest of the app.
+     */
+    ttl: 300_000,
+    backend: () => fetchJson(`${API_BASE}/category/${slug}?per_page=${perPage}&vs=${vs}`),
+    direct: async () => {
+      const raw = await fetchJson(
+        `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
+          `&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=true` +
+          `&price_change_percentage=1h,24h,7d`
+      );
+      return raw.map(normalizeCoin);
+    },
+    /*
+     * Empty, not the offline snapshot. That snapshot is the top coins by
+     * market cap — showing Bitcoin under a "Gold" tab because the network was
+     * down would be worse than an honest empty state.
+     */
+    fallback: () => []
+  });
+}
+
 export function normalizeCoin(c = {}) {
   return {
     id: c.id,

@@ -232,3 +232,26 @@ export async function fetchSearch(query) {
     rank: c.market_cap_rank ?? 0
   }));
 }
+
+
+/**
+ * Coins in one CoinGecko sector.
+ *
+ * The slug is validated by the route before it reaches here; this function
+ * only builds the request. Kept next to the other market fetchers so the key
+ * handling (`cgUrl`) is shared rather than reimplemented.
+ */
+export async function fetchCategory(slug, { perPage = 50, vs = 'usd' } = {}) {
+  const raw = await req(
+    cgUrl('/coins/markets', {
+      vs_currency: vs,
+      category: slug,
+      order: 'market_cap_desc',
+      per_page: perPage,
+      page: 1,
+      sparkline: true,
+      price_change_percentage: '1h,24h,7d'
+    })
+  );
+  return Array.isArray(raw) ? raw.map(normalizeCoin) : [];
+}
