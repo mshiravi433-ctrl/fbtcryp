@@ -2888,6 +2888,26 @@ export default function run() {
     t('the default integrator is lower-case and legal',
       /^[a-z0-9_-]{1,23}$/.test(integratorId()));
 
+    /*
+     * ─── THE EXACT REGISTERED ID ───────────────────────────────────────────
+     * Pinned to the string that actually exists in the portal, verified
+     * against the live API:
+     *
+     *   GET /v1/integrators/fbt-swap → "Integrator not found"
+     *   GET /v1/integrators/fbtswap  → {"integratorId":"fbtswap", ...}
+     *
+     * I had proposed `fbt-swap`; the portal registered `fbtswap`. One
+     * character, and the failure is completely silent — LI.FI returns error
+     * 1011, our fallback re-requests without a fee, bridging keeps working
+     * and the revenue is zero forever.
+     *
+     * A generic "is it lower-case" check passes for both spellings, so it
+     * would never have caught this. Pinning the literal is the only version
+     * of this test that has any value.
+     */
+    t('the integrator id matches the one registered in the portal',
+      integratorId() === 'fbtswap');
+
     process.env.LIFI_INTEGRATOR = 'FBT Swap!!';
     t('a capitalised or spaced id is normalised, not sent as-is',
       /^[a-z0-9_-]+$/.test(integratorId()) && integratorId() === 'fbtswap');

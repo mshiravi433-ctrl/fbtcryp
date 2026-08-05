@@ -38,15 +38,27 @@ const LIFI_BASE = 'https://li.quest/v1';
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 20000);
 
 /**
- * Our integrator string, from the LI.FI portal.
+ * Our integrator string, as actually registered in the LI.FI portal.
  *
- * LI.FI constrains this: max 23 characters, lower case only, alphanumeric
- * plus `_` and `-`. A capital letter is rejected silently at the portal, so
- * the value is normalised here rather than trusted — a mismatch between what
- * was registered and what we send means zero revenue with no error.
+ * ─── IT IS `fbtswap`, NOT `fbt-swap` ────────────────────────────────────────
+ * I proposed `fbt-swap` in the setup guide and the portal registered
+ * `fbtswap` — the hyphen is gone. Confirmed against the live API rather than
+ * assumed:
+ *
+ *   GET /v1/integrators/fbt-swap → "Integrator not found"
+ *   GET /v1/integrators/fbtswap  → {"integratorId":"fbtswap","feeBalances":[]}
+ *
+ * This is exactly the silent failure this file was written to avoid. A quote
+ * with the wrong id does not error in any obvious way — LI.FI simply returns
+ * error 1011 and our fallback quietly re-requests without a fee, so bridging
+ * keeps working and the revenue is zero forever. One character.
+ *
+ * LI.FI also constrains the string: max 23 characters, lower case only,
+ * alphanumeric plus `_` and `-`. It is normalised below rather than trusted,
+ * because the portal rejects a capital letter without saying so.
  */
 export const integratorId = () =>
-  String(process.env.LIFI_INTEGRATOR || 'fbt-swap')
+  String(process.env.LIFI_INTEGRATOR || 'fbtswap')
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 23);
