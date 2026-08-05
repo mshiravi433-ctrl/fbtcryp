@@ -26,6 +26,7 @@ const Market = lazy(() => import('./pages/Market'));
 const CoinDetail = lazy(() => import('./pages/CoinDetail'));
 const Trade = lazy(() => import('./pages/Trade'));
 const Swap = lazy(() => import('./pages/Swap'));
+const Bridge = lazy(() => import('./pages/Bridge'));
 /*
  * Prediction, perpetuals and invest are gated behind SPECULATION_ENABLED and
  * default to OFF — see the long note in lib/features.js. Short version:
@@ -156,6 +157,7 @@ function AnimatedRoutes() {
           <Route path="/coin/:id" element={<CoinDetail />} />
           <Route path="/trade" element={<Trade />} />
           <Route path="/swap" element={<Swap />} />
+          <Route path="/bridge" element={<Bridge />} />
           {SPECULATION_ENABLED && <Route path="/invest" element={<Invest />} />}
           {SPECULATION_ENABLED && <Route path="/predict" element={<Predict />} />}
           <Route path="/earn" element={<Earn />} />

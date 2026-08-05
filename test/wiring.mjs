@@ -2759,7 +2759,7 @@ export default function run() {
      * exactly the moment this check earns its keep: the recurring bug in this
      * codebase is a class that is referenced and styles nothing.
      */
-    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row|verd|farm|eq|stk)-/;
+    const owned = /^(wal|hist|galaxy|doc|nav|ord|disc|share|btn-row|verd|farm|eq|stk|brg|swap-portion)-?/;
 
     const used = new Set();
     for (const f of files) {
@@ -3135,6 +3135,69 @@ export default function run() {
     const env = read('.env.example');
     t('the bridge vars are documented', /LIFI_INTEGRATOR/.test(env) && /LIFI_FEE/.test(env));
     t('...and the example never carries a real key', /LIFI_API_KEY=\s*$/m.test(env));
+  }
+
+  /* ---- 46. the bridge is REACHABLE, not just implemented ---------------- */
+  /*
+   * ─── WHY THIS SECTION EXISTS ──────────────────────────────────────────────
+   * The bridge API shipped one release before any screen could reach it. Fee
+   * collection was confirmed live — /api/bridge/status returned
+   * registered:true and our cut appeared in the quote's recipients array —
+   * and the revenue was still exactly zero, because there was no route, no
+   * nav entry and no page.
+   *
+   * That is the "wired to nothing" bug in its purest form, and section 41
+   * did not catch it because it only checked the SERVER side. A working,
+   * tested, revenue-generating integration nobody can open earns the same as
+   * one that was never built.
+   */
+  {
+    t('the bridge screen exists', existsSync('src/pages/Bridge.jsx'));
+    t('the bridge client lib exists', existsSync('src/lib/bridge.js'));
+
+    const app = read('src/App.jsx');
+    t('there is a route to it', /path="\/bridge"/.test(app));
+    t('...and the page is actually imported', /import\('\.\/pages\/Bridge'\)/.test(app));
+
+    /*
+     * A route with no link is only reachable by typing a URL, which no phone
+     * user does. The nav entry is what makes the difference between built and
+     * usable.
+     */
+    t('a user can navigate to it', /'\/bridge'/.test(read('src/components/MoreSheet.jsx')));
+
+    const page = read('src/pages/Bridge.jsx');
+    t('the screen requests quotes', /getBridgeQuote\s*\(/.test(page));
+    t('...and can send the transaction', /sendTransaction\s*\(/.test(page));
+
+    /*
+     * The wallet MUST be moved to the source chain before signing. Skipping
+     * it broadcasts to whatever network happened to be selected — the single
+     * most expensive mistake available on this screen and one the user cannot
+     * undo.
+     */
+    t('it switches to the source chain before signing',
+      /wallet\.chainId !== fromChain/.test(page) && /switchChain/.test(page));
+
+    /*
+     * Our fee has to be visible in the quote. A fee the user only discovers
+     * afterwards is the kind that makes them stop trusting every other number
+     * on the screen.
+     */
+    t('our own cut is itemised for the user', /bridge\.ourFee/.test(page));
+    t('...and the total cost is shown', /bridge\.totalCost/.test(page));
+
+    /*
+     * ─── THE FAQ MUST NOT CONTRADICT THE APP ────────────────────────────────
+     * It said "this app does not bridge between chains" in both languages,
+     * which was true when written and became false the moment this screen
+     * shipped. A help page that denies a feature the app has is the same
+     * class of error as the old "9 Chains" claim.
+     */
+    const faq = read('src/lib/faqLocal.js');
+    t('the FAQ no longer denies bridging',
+      !/does not bridge/.test(faq) && !/پل نمی‌زند/.test(faq));
+    t('...and points at the bridge screen instead', /Bridge screen/.test(faq));
   }
 
   return rows;

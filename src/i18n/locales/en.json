@@ -33,7 +33,8 @@
     "nft": "My NFTs",
     "orders": "Auto Orders",
     "solana": "Solana swap",
-    "buy": "Buy & sell"
+    "buy": "Buy & sell",
+    "bridge": "Bridge"
   },
   "common": {
     "balance": "Balance",
@@ -2116,5 +2117,36 @@
     "notPrediction": "This is not a prediction and there is no price target anywhere in it. Every number above is measured from what already happened: this asset's own history, its relationship with Bitcoin, and the state of the market. The future is allowed to ignore all of it. Never put in money you cannot afford to lose.",
     "noModel": "No language model wrote any of this. Every sentence is assembled from a number that was actually computed on your device, which is why it can never invent a fact, a level or a headline.",
     "notEnough": "Not enough history for a full read on this asset yet."
+  },
+  "bridge": {
+    "title": "Bridge",
+    "subtitle": "Move stablecoins between networks without leaving the app.",
+    "whatTitle": "What a bridge does",
+    "whatBody": "Your USDT on BNB Chain and USDT on Arbitrum are different tokens on different networks — you cannot send one to the other directly. A bridge locks the first and releases the second. We route through LI.FI, which compares every bridge and picks the cheapest, and your wallet signs it. We never hold your funds at any point.",
+    "from": "From",
+    "to": "To",
+    "flip": "Swap direction",
+    "quoting": "Finding the best route…",
+    "youReceive": "You receive",
+    "route": "Route",
+    "totalCost": "Total cost",
+    "ourFee": "Our fee (included)",
+    "eta": "Estimated time",
+    "send": "Bridge",
+    "sending": "Confirm in your wallet…",
+    "connectFirst": "Connect a wallet to get a quote.",
+    "sentTitle": "Sent",
+    "sentBody": "The transaction is on-chain. Bridges take anywhere from seconds to several minutes — the funds will appear on the destination network when the relayer completes it. You can close this screen.",
+    "track": "Track this transfer",
+    "riskTitle": "What can go wrong",
+    "riskBody": "A bridge is two transactions on two networks with a relayer in between. If the relayer is slow, funds can sit in transit for a while — this is normal and they are not lost. Keep a little of the destination network's gas coin so you can move the funds once they arrive. Bridges have also been the target of the largest hacks in crypto; only bridge what you are willing to have in transit.",
+    "disclaimer": "We are an interface. The transfer is executed by LI.FI and the underlying bridge, not by Fanous Bazaar Pishgam — we never take custody and cannot reverse, cancel or recover a transfer. Our {{fee}} share is shown in the quote before you sign.",
+    "err": {
+      "QUOTE_FAILED": "No route could be found for that amount right now. Try a different amount or network pair.",
+      "SAME_CHAIN": "Both sides are the same network — use the Swap screen instead.",
+      "UNSUPPORTED_CHAIN": "That network is not supported here yet.",
+      "BAD_AMOUNT": "Enter an amount.",
+      "BAD_ADDRESS": "Connect a wallet first."
+    }
   }
 }

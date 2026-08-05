@@ -37,6 +37,7 @@ import Signals from '../src/pages/Signals.jsx';
 import Farm from '../src/pages/Farm.jsx';
 import CoinDetail from '../src/pages/CoinDetail.jsx';
 import Stocks from '../src/pages/Stocks.jsx';
+import Bridge from '../src/pages/Bridge.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -171,6 +172,13 @@ export async function run(container) {
    * `assets.equities` of undefined.
    */
   await mount('Stocks (no network)', <Stocks />);
+  /*
+   * Bridge with no wallet connected — the state every visitor is in before
+   * they connect. It must render the "connect a wallet" notice and NOT try to
+   * quote, since quoting without an address produces a 400 from our own
+   * server.
+   */
+  await mount('Bridge (no wallet)', <Bridge />);
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the
