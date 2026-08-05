@@ -41,6 +41,7 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import { useChart } from '../hooks/useMarket';
 import HistoryPanel from '../components/HistoryPanel';
 import { adviseOrder } from '../lib/orderAdvisor';
+import AutopilotPanel from '../components/AutopilotPanel';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -585,6 +586,7 @@ export default function Orders() {
       <OrderSheet
         kind={sheet}
         onClose={() => setSheet(null)}
+        onSwitchKind={setSheet}
         onSubmit={submit}
         tokens={chainTokens}
         chainId={chain.id}
@@ -596,7 +598,7 @@ export default function Orders() {
 
 /* -------------------------------------------------------------------------- */
 
-function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
+function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, prices }) {
   const { t } = useTranslation();
   const [fromSym, setFromSym] = useState('');
   const [toSym, setToSym] = useState('');
@@ -663,6 +665,31 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
    * suggestion carries the counts behind it. An app that silently sets
    * somebody's stop-loss has placed a trade on their behalf.
    */
+  /**
+   * Load an Autopilot draft into the form fields.
+   *
+   * ─── IT FILLS, IT DOES NOT SUBMIT ─────────────────────────────────────────
+   * The draft lands in the same inputs the user would have typed, so the last
+   * action before an order exists is always theirs. It also means every value
+   * stays editable — someone who likes the levels but wants a different step
+   * count can change one field instead of starting over.
+   *
+   * `onSwitchKind` moves the sheet to the type the goal implies (protect is a
+   * trailing stop, the other two are ladders). Without that, applying a
+   * ladder draft while the limit form is open would fill fields nobody can
+   * see and look like the button did nothing.
+   */
+  const applyDraft = useCallback((draft) => {
+    if (!draft) return;
+    if (draft.priceOf) setPriceOf(draft.priceOf);
+    if (draft.direction) setDirection(draft.direction);
+    if (Number.isFinite(draft.trailPct)) setTrailPct(String(draft.trailPct));
+    if (Number.isFinite(draft.startRate)) setLadderStart(String(draft.startRate));
+    if (Number.isFinite(draft.endRate)) setLadderEnd(String(draft.endRate));
+    if (Number.isFinite(draft.steps)) setLadderSteps(String(draft.steps));
+    onSwitchKind?.(draft.type);
+  }, [onSwitchKind]);
+
   const advice = useMemo(
     () => adviseOrder((watchedSeries ?? []).map((d) => d.p)),
     [watchedSeries]
@@ -709,6 +736,27 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
           <input type="number" inputMode="decimal" value={amount}
                  onChange={(e) => setAmount(e.target.value)} placeholder="0.0" />
         </label>
+
+        {/*
+          ─── AUTOPILOT, ABOVE THE MANUAL FIELDS ────────────────────────────
+          Placed here on purpose: after the tokens and the amount (which it
+          needs) and BEFORE the type-specific inputs (which it fills in). A
+          suggestion offered after the user has already typed the numbers is
+          a correction, not a shortcut.
+
+          Only on the price-triggered forms. A DCA plan is a schedule, not a
+          price decision, so there is nothing here for Autopilot to measure.
+        */}
+        {kind !== 'dca' && (
+          <AutopilotPanel
+            series={(watchedSeries ?? []).map((d) => d.p)}
+            fromToken={fromToken}
+            toToken={toToken}
+            amountIn={amount}
+            chainId={chainId}
+            onApply={applyDraft}
+          />
+        )}
 
         {kind === 'limit' ? (
           <>

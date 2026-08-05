@@ -810,7 +810,8 @@
     "costNotional": "Position size",
     "costMonth": "Funding for 30 days at {{venue}}",
     "costExplain": "That is {{pct}}% of the money you put in, for one month, before the price moves at all. Leverage multiplies this cost exactly as fast as it multiplies a gain — at {{lev}}× you pay funding on {{lev}}× your collateral.",
-    "costNoRate": "No venue is reporting a funding rate for this market right now, so the holding cost cannot be calculated."
+    "costNoRate": "No venue is reporting a funding rate for this market right now, so the holding cost cannot be calculated.",
+    "thirdPartyNoticeEarning": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, and cannot help recover losses. We do receive a share of the trading fee from GMX when you use our link — and you receive a 5% fee discount for the same reason, so the link costs you less than going direct. Verify every URL yourself — perp venues are a common phishing target."
   },
   "farm": {
     "title": "Farm",
@@ -2202,5 +2203,36 @@
       "BAD_AMOUNT": "Enter an amount.",
       "BAD_ADDRESS": "Connect a wallet first."
     }
+  },
+  "autopilot": {
+    "title": "Autopilot",
+    "intro": "Tell it what you are trying to do and it builds the whole order from what this chart has actually done — the levels that keep holding, how much it moves on an ordinary day. You review it before anything is saved.",
+    "goal": {
+      "protect": {
+        "title": "Protect what I have",
+        "sub": "Follow the price up, sell only if it falls back"
+      },
+      "takeProfit": {
+        "title": "Take profit gradually",
+        "sub": "Sell in steps as it rises, instead of guessing the top"
+      },
+      "buyDip": {
+        "title": "Buy lower, in steps",
+        "sub": "Spread your entry down towards support"
+      }
+    },
+    "summary": {
+      "protect": "Follow {{from}} up and sell if it falls {{trailPct}}% from its high. An ordinary day moves {{typical}}%, so this rides normal noise — but the worst fall in this window was {{maxDd}}%, which this would not have survived.",
+      "takeProfit": "Sell in {{steps}} steps from {{start}} up to {{end}}. That upper level held {{held}} of {{tested}} tests, so it is where the market has repeatedly stopped rising.",
+      "buyDip": "Buy in {{steps}} steps from {{start}} down to {{end}}. That lower level held {{held}} of {{tested}} tests, so it is where the market has repeatedly stopped falling."
+    },
+    "refused": {
+      "NO_HISTORY": "Only {{samples}} days of price history for this pair — at least {{need}} are needed before any of this would mean anything, so nothing is suggested.",
+      "NO_LEVEL": "No price level here has been tested enough times to build a plan on. Picking numbers anyway would just be guessing dressed up as analysis.",
+      "NO_VOLATILITY": "This price has barely moved, so there is no honest distance to set a stop at. A number invented here would fire on the first real movement.",
+      "BAD_AMOUNT": "Enter an amount first."
+    },
+    "evidenceNote": "Measured from {{samples}} days of real prices. These are counts of what already happened, not a forecast — a level that held four times can break on the fifth.",
+    "review": "Review this order"
   }
 }

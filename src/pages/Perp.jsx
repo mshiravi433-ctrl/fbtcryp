@@ -10,6 +10,7 @@ import { fmtPct, fmtPrice } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import FundingPanel from '../components/FundingPanel';
 import { IconExternal, IconShield } from '../components/Icons';
+import { anyVenueEarns, withReferral } from '../lib/venueReferral';
 
 /**
  * Perpetual futures.
@@ -68,10 +69,29 @@ export default function Perp() {
   );
   const coin = perpCoins.find((c) => c.id === selected) ?? perpCoins[0];
 
-  const openVenue = (url) => {
+  /*
+   * ─── THESE LINKS USED TO EARN NOTHING ───────────────────────────────────
+   * We find the user, explain perpetuals honestly, compare funding across
+   * venues, and then hand them to GMX for free.
+   *
+   * GMX is the one venue on this page with a permissionless affiliate
+   * programme: their docs state plainly that anyone can create a Tier 1 code,
+   * with no volume requirement — unlike dYdX ($10k of personal volume) and
+   * Hyperliquid ($10k, or 100 USDC for a builder code), neither of which we
+   * can meet. Registering costs one Arbitrum transaction, about $0.02.
+   *
+   * `withReferral` returns the URL UNCHANGED until a code is configured, so
+   * this is safe to ship before the owner registers anything: today it is the
+   * same plain link it always was.
+   *
+   * And the referred trader gets 5% off their fees, so the link is better for
+   * them than the bare one — but they are told either way, below.
+   */
+  const openVenue = (venueId, url) => {
     haptic?.('light');
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
+    const target = withReferral(venueId, url);
+    if (tg?.openLink) tg.openLink(target);
+    else window.open(target, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -218,7 +238,7 @@ export default function Perp() {
               className="wallet-option"
               variants={riseIn}
               whileTap={{ scale: 0.985 }}
-              onClick={() => openVenue(v.url)}
+              onClick={() => openVenue(v.id, v.url)}
             >
               <span className="wallet-badge" style={{ color: v.color }}>
                 {t(`perp.venue.${v.id}.short`)}
@@ -239,7 +259,21 @@ export default function Perp() {
         </motion.div>
       </section>
 
-      <p className="notice">{t('perp.thirdPartyNotice')}</p>
+      {/*
+        ─── THE NOTICE HAS TO TRACK REALITY ──────────────────────────────────
+        `perp.thirdPartyNotice` says we "earn nothing from them". That is true
+        today and stops being true the moment a GMX code is registered.
+        Leaving it would turn an honesty notice into a false statement — the
+        exact failure already caught twice on this project (the FAQ that
+        denied bridging, and the landing page quoting a Solana fee).
+        The same flag that decides whether to ATTACH a referral code decides
+        which sentence is shown, so they cannot disagree.
+      */}
+      <p className="notice">
+        {anyVenueEarns(VENUES.map((v) => v.id))
+          ? t('perp.thirdPartyNoticeEarning')
+          : t('perp.thirdPartyNotice')}
+      </p>
 
       <motion.button
         className="card card-rgb"

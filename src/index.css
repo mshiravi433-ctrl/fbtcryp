@@ -4197,6 +4197,53 @@ input, select, textarea { font-size: 16px !important; }
 .ord-new-bracket { border-color: color-mix(in srgb, var(--rgb-4) 45%, transparent); color: var(--ink-mint); }
 .ord-new-ladder { border-color: color-mix(in srgb, var(--rgb-5) 45%, transparent); color: var(--ink-amber); }
 
+/* ==========================================================================
+   AUTOPILOT  —  .ap-*
+
+   Three goal buttons stacked, because they are sentences rather than labels
+   and a horizontal segmented control would truncate every one of them on a
+   narrow phone. The selected state is a filled edge plus a brighter title,
+   not colour alone: the same accessibility rule the segmented controls follow
+   after the "the button does nothing" report.
+   ========================================================================== */
+.ap-goal {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-2, var(--bg-panel));
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+}
+.ap-goal-on {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 8%, var(--bg-panel));
+}
+.ap-goal-title {
+  display: block;
+  font-weight: 700;
+  font-size: 13.2px;
+  color: var(--text-1);
+}
+.ap-goal-on .ap-goal-title { color: var(--ink-cyan); }
+.ap-goal-sub {
+  display: block;
+  font-size: 11.8px;
+  color: var(--text-3);
+  margin-top: 2px;
+  line-height: 1.6;
+}
+.ap-rungs {
+  margin-top: 9px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+}
+
 .ord-row {
   padding: 12px 13px;
   border-radius: 15px;

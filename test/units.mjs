@@ -82,6 +82,8 @@ import {
   ladderRungs
 } from '../src/lib/orders.js';
 import { evaluateWatch } from '../server/watch.js';
+import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
+import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
   MIN_SAMPLES,
@@ -3560,6 +3562,140 @@ export default function run() {
 
     t('junk input cannot crash the advisor',
       adviseOrder([NaN, 0, -5, null, undefined]).ready === false);
+  }
+
+  /* ========================= autopilot (one tap) ========================= */
+  {
+    const channel = [];
+    for (let i = 0; i < 180; i += 1) channel.push(100 + Math.sin(i / 6) * 8 + Math.sin(i / 23) * 3);
+    const ctx = {
+      series: channel,
+      fromToken: { symbol: 'BNB', coingeckoId: 'binancecoin' },
+      toToken: { symbol: 'USDT', coingeckoId: 'tether' },
+      amountIn: '100',
+      chainId: 56
+    };
+
+    /*
+     * ─── DIRECTION IS THE FIELD THAT COSTS MONEY WHEN WRONG ─────────────────
+     * An order set to the opposite of the intent fires at exactly the wrong
+     * price. The goal->mechanics mapping is a table precisely so it can be
+     * asserted directly rather than inferred from three code branches.
+     */
+    t('taking profit sells INTO strength', GOAL_SHAPE.takeProfit.direction === 'above');
+    t('buying the dip buys on WEAKNESS', GOAL_SHAPE.buyDip.direction === 'below');
+    t('protecting a position is a trailing stop', GOAL_SHAPE.protect.type === 'trailing');
+    /*
+     * All three price the coin the user holds, in the stable side — which is
+     * how people talk ("sell my BNB at 700"), not the reciprocal.
+     */
+    t('every goal prices the coin being held', GOALS.every((g) => GOAL_SHAPE[g].priceOf === 'from'));
+
+    /*
+     * Each goal must produce an order the ordinary validator accepts. A draft
+     * the form would reject is worse than no draft.
+     *
+     * NOTE THE SENTINEL: validateOrder returns `null` on success, not
+     * `undefined`. My first version of this asserted `=== undefined` and
+     * failed on three drafts that were perfectly valid — the test was wrong,
+     * not the code. Checked against the function rather than assumed the
+     * second time.
+     */
+    for (const goal of GOALS) {
+      const r = buildAutopilot({ goal, ...ctx });
+      t(`the ${goal} goal produces a valid order`,
+        Boolean(r.draft) && !r.refused && validateOrder(r.draft) === null);
+    }
+
+    const tp = buildAutopilot({ goal: 'takeProfit', ...ctx });
+    t('take-profit ladders upward', tp.draft.endRate > tp.draft.startRate);
+    const bd = buildAutopilot({ goal: 'buyDip', ...ctx });
+    t('buy-the-dip ladders downward', bd.draft.endRate < bd.draft.startRate);
+    /*
+     * Rungs must come back in FILL order for both. Numeric order would make
+     * rung 1 of a dip ladder the last one reached and it would look frozen.
+     */
+    const upRungs = ladderRungs(tp.draft);
+    const downRungs = ladderRungs(bd.draft);
+    t('take-profit rungs fill from the bottom up', upRungs[0] < upRungs[upRungs.length - 1]);
+    t('buy-dip rungs fill from the top down', downRungs[0] > downRungs[downRungs.length - 1]);
+
+    /*
+     * ─── ONE SHAPE OR THE OTHER, NEVER BOTH ─────────────────────────────────
+     * A draft carrying a warning flag is a draft somebody will place without
+     * reading the flag.
+     */
+    t('a result is never both a draft and a refusal',
+      GOALS.every((g) => {
+        const r = buildAutopilot({ goal: g, ...ctx });
+        return !(r.draft && r.refused);
+      }));
+
+    /* ---- refusing is the feature ---- */
+    t('thin history is refused, with the reason',
+      buildAutopilot({ ...ctx, goal: 'protect', series: channel.slice(0, 10) }).refused
+        === REFUSALS.NO_HISTORY);
+    t('...and reports how far short it was',
+      buildAutopilot({ ...ctx, goal: 'protect', series: channel.slice(0, 10) }).detail.samples === 10);
+    t('a zero amount is refused',
+      buildAutopilot({ ...ctx, goal: 'protect', amountIn: '0' }).refused === REFUSALS.BAD_AMOUNT);
+    /*
+     * A flat series has no volatility, so there is no honest trail distance.
+     * Inventing one would produce a stop that fires on the first real tick.
+     */
+    t('a motionless price is refused rather than guessed',
+      Boolean(buildAutopilot({ ...ctx, goal: 'protect', series: new Array(120).fill(100) }).refused));
+    t('an unknown goal is refused', Boolean(buildAutopilot({ ...ctx, goal: 'moon' }).refused));
+    t('junk history cannot crash it',
+      Boolean(buildAutopilot({ ...ctx, goal: 'protect', series: [NaN, 0, -1] }).refused));
+
+    /* The summary must be a translation key, never English from this module. */
+    const sum = summariseDraft(tp);
+    t('the summary returns a key, not a sentence', sum.key === 'autopilot.summary.takeProfit');
+    t('...and carries the evidence counts', Number.isFinite(sum.values.tested));
+    t('a refusal has no summary', summariseDraft({ refused: 'NO_LEVEL' }) === null);
+  }
+
+  /* ================= outbound referrals (non-swap revenue) =============== */
+  {
+    /*
+     * ─── SAFE BEFORE ANY CODE EXISTS ────────────────────────────────────────
+     * Nothing is registered yet, so every link must come back EXACTLY as it
+     * went in. A half-configured state that mangles a URL would break the way
+     * somebody reaches their money.
+     */
+    const gmxUrl = 'https://app.gmx.io/#/trade';
+    t('with no code the link is untouched', withReferral('gmx', gmxUrl) === gmxUrl);
+    t('...and the disclosure says we earn nothing', venueDisclosure('gmx') === 'none');
+    t('...so the page shows the honest notice', anyVenueEarns(['gmx', 'dydx', 'apx']) === false);
+
+    /*
+     * dYdX and Hyperliquid gate their programmes behind $10,000 of personal
+     * trading volume (and 100 USDC for a Hyperliquid builder code), which we
+     * cannot meet — so they must never receive a referral parameter that
+     * would do nothing but look like tracking.
+     */
+    t('dydx is marked as unavailable to us', VENUE_REFERRAL.dydx.earns === false);
+    t('...and gets no parameter', withReferral('dydx', 'https://dydx.trade') === 'https://dydx.trade');
+    t('an unknown venue is passed through', withReferral('nope', gmxUrl) === gmxUrl);
+
+    /*
+     * ─── THE CODE IS CASE-SENSITIVE AND MUST NOT BE NORMALISED ──────────────
+     * GMX codes are on-chain bytes32: `fbtswap` and `FBTSwap` are different
+     * codes and only one exists. Lower-casing here would point at a code
+     * nobody owns and earn zero forever with no error — exactly how the LI.FI
+     * integrator id failed.
+     */
+    t('a valid code shape is accepted', isValidGmxCode('fbtswap') && isValidGmxCode('FBT_Swap1'));
+    t('a code with a space is rejected', !isValidGmxCode('fbt swap'));
+    t('a code with punctuation is rejected', !isValidGmxCode('fbt-swap'));
+    t('an over-long code is rejected', !isValidGmxCode('a'.repeat(21)));
+    t('an empty code is rejected', !isValidGmxCode(''));
+
+    /* Every venue we link to must have a defined stance, or the UI would
+       render the wrong claim about one of them. */
+    t('every configured venue resolves to a disclosure state',
+      Object.keys(VENUE_REFERRAL).every((v) => ['earning', 'none'].includes(venueDisclosure(v))));
   }
 
   return rows;

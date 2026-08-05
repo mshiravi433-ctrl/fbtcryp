@@ -3686,5 +3686,127 @@ export default function run() {
     t('...and the client respects the same cap', /slice\(0, 25\)/.test(client));
   }
 
+  /* ---- 55. autopilot is reachable, fills the form, never submits ------- */
+  {
+    t('the autopilot engine exists', existsSync('src/lib/autopilot.js'));
+    t('the panel exists', existsSync('src/components/AutopilotPanel.jsx'));
+
+    const lib = read('src/lib/autopilot.js');
+    const panel = read('src/components/AutopilotPanel.jsx');
+    const page = read('src/pages/Orders.jsx');
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    /* The full chain, because a panel nothing renders is the bug this repo
+       has already shipped twice (bridge, gasless). */
+    t('the page imports the panel', /import AutopilotPanel from/.test(page));
+    t('...and actually renders it', /<AutopilotPanel/.test(page));
+    t('the panel calls the engine', /buildAutopilot\s*\(/.test(code(panel)));
+
+    /*
+     * ─── IT MUST FILL, NEVER SUBMIT ─────────────────────────────────────────
+     * The last action before an order exists has to be the user's. If the
+     * panel could call onSubmit/addOrder directly, the app would be placing
+     * trades on somebody's behalf.
+     */
+    t('the panel cannot create an order itself',
+      !/addOrder|createOrder|onSubmit/.test(code(panel)));
+    t('...it only hands a draft back', /onApply\?\.\(/.test(code(panel)));
+    t('the page applies the draft into the form fields',
+      /const applyDraft = useCallback/.test(code(page)));
+    /*
+     * Applying a ladder draft while the limit form is open would fill fields
+     * nobody can see and look like the button did nothing.
+     */
+    t('...and switches the sheet to the right order type',
+      /onSwitchKind\?\.\(draft\.type\)/.test(code(page)));
+
+    /*
+     * Autopilot is meaningless on DCA — that is a schedule, not a price
+     * decision, and there would be nothing to measure.
+     */
+    t('autopilot is hidden on the DCA form', /kind !== 'dca' &&/.test(page));
+
+    /* No English may originate in the engine; it returns keys. */
+    t('the engine returns translation keys, not sentences',
+      /autopilot\.summary\.\$\{/.test(code(lib)));
+
+    /* Every key the panel renders must resolve, in both languages. */
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const keys = [...panel.matchAll(/t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missEn = [...new Set(keys)].filter((k) => !hasKey(en, k));
+    t(`every autopilot key resolves (${new Set(keys).size} checked)` +
+      (missEn.length ? ` — missing: ${missEn.join(', ')}` : ''), missEn.length === 0);
+    /* The templated ones are built at runtime and cannot be matched above. */
+    for (const g of ['protect', 'takeProfit', 'buyDip']) {
+      t(`the ${g} goal is fully translated`,
+        hasKey(en, `autopilot.goal.${g}.title`) && hasKey(fa, `autopilot.goal.${g}.title`) &&
+        hasKey(en, `autopilot.summary.${g}`) && hasKey(fa, `autopilot.summary.${g}`));
+    }
+    for (const r of ['NO_HISTORY', 'NO_LEVEL', 'NO_VOLATILITY', 'BAD_AMOUNT']) {
+      t(`the ${r} refusal is explained in both languages`,
+        hasKey(en, `autopilot.refused.${r}`) && hasKey(fa, `autopilot.refused.${r}`));
+    }
+  }
+
+  /* ---- 56. outbound referral links, and the honesty notice ------------- */
+  {
+    const lib = read('src/lib/venueReferral.js');
+    const perp = read('src/pages/Perp.jsx');
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    t('the venue referral module exists', existsSync('src/lib/venueReferral.js'));
+    t('the perp screen routes links through it', /withReferral\(venueId, url\)/.test(code(perp)));
+    t('...and passes the venue id, not just the url', /openVenue\(v\.id, v\.url\)/.test(perp));
+
+    /*
+     * ─── THE NOTICE MUST TRACK REALITY ──────────────────────────────────────
+     * `perp.thirdPartyNotice` says we "earn nothing from them". The moment a
+     * GMX code is registered that becomes false, and an honesty notice that
+     * has quietly become a lie is the exact failure already caught twice here
+     * (the FAQ denying bridging; the landing page quoting a Solana fee).
+     * The same flag that attaches the code picks the sentence.
+     */
+    t('the notice switches when we start earning',
+      /anyVenueEarns\(/.test(code(perp)) && /thirdPartyNoticeEarning/.test(perp));
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    t('both notices exist in both languages',
+      hasKey(en, 'perp.thirdPartyNotice') && hasKey(en, 'perp.thirdPartyNoticeEarning') &&
+      hasKey(fa, 'perp.thirdPartyNotice') && hasKey(fa, 'perp.thirdPartyNoticeEarning'));
+    /* The earning version must disclose BOTH sides: our cut and their discount. */
+    t('the earning notice discloses our share',
+      /share of the trading fee/i.test(en.perp.thirdPartyNoticeEarning));
+    t('...and the discount the user gets', /5% fee discount/i.test(en.perp.thirdPartyNoticeEarning));
+
+    /*
+     * The code is case-sensitive on-chain. Normalising it would point at a
+     * code nobody owns and earn zero silently.
+     */
+    t('the code is validated, never lower-cased',
+      /\[A-Za-z0-9_\]/.test(lib) && !/GMX_CODE[^\n]*toLowerCase/.test(lib));
+    /*
+     * A referral code is public by design — it lives in a shared link. VITE_
+     * is correct here, and this asserts no SECRET crept in beside it.
+     */
+    /*
+     * Strip comments FIRST. The initial version matched the word "SECRETS" in
+     * this module's own explanation of why a public referral code is not one —
+     * a check failing on its own rationale, which is trap #1 in this file's
+     * header and one I have now hit again.
+     */
+    const libCode = code(lib);
+    t('only the public code is read from the client env',
+      /VITE_GMX_REF_CODE/.test(libCode) && !/API_KEY|SECRET|PRIVATE/i.test(libCode));
+
+    t('the setup guide exists for the owner', existsSync('docs/GMX-REFERRAL-FA.md'));
+    const doc = read('docs/GMX-REFERRAL-FA.md');
+    /* The guide must carry the real contract and the case-sensitivity warning,
+       since a wrong code earns zero with no error anywhere. */
+    t('...and names the real ReferralStorage contract',
+      /0xe6fab3F0c7199b0d34d7FbE83394fc0e0D06e99d/.test(doc));
+    t('...and warns that the code is case-sensitive', /حساس/.test(doc));
+  }
+
   return rows;
 }
