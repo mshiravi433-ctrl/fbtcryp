@@ -4576,6 +4576,30 @@ export default function run() {
       /fbtswap\.ir/.test(sub) && !/lawpoetics/.test(sub));
 
     /*
+     * ─── THE KEY IS ALSO SERVED BY THE API, AND HERE IS WHY ─────────────────
+     * Vercel's CDN kept returning 404 for the newly added
+     * public/<key>.txt long after the deploy that added it, while older
+     * static files served normally. A keyLocation that 404s means every
+     * submission is rejected 403 — silently, forever, with no error anywhere
+     * we would see it.
+     *
+     * Bing's docs allow a key file "in other locations within the same host"
+     * provided keyLocation names it. /api/* is a serverless function rather
+     * than a cached static asset, so it is live the moment the function
+     * deploys.
+     *
+     * All THREE copies must agree: the constant in the script, the constant
+     * in the server, and the static file. Any disagreement is an
+     * unrecoverable 403.
+     */
+    const appSrc = read('server/app.js');
+    const srvKey = /const INDEXNOW_KEY = '([a-f0-9]{32})'/.exec(appSrc)?.[1];
+    t('the API also serves the ownership key', Boolean(srvKey));
+    t('...and every copy of the key agrees', srvKey === key);
+    t('...and the submitter points keyLocation at the API route',
+      /api\/indexnow-key\//.test(sub));
+
+    /*
      * The submitted list must match the pages actually generated. A landing
      * page added to gen-landing.mjs and forgotten here is a page no engine is
      * ever told about.

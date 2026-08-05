@@ -73,7 +73,18 @@ const urlList = SLUGS.map((s) => (s ? `${ORIGIN}/${encodeURIComponent(s)}` : `${
 const body = {
   host: HOST,
   key: KEY,
-  keyLocation: `${ORIGIN}/${KEY}.txt`,
+  /*
+   * Served by the API rather than as a static file. Vercel's CDN kept
+   * returning 404 for the newly added public/<key>.txt while older static
+   * files served normally, and a keyLocation that 404s means every
+   * submission is rejected with 403.
+   *
+   * Bing's docs allow this explicitly: "Host one to many UTF-8 encoded text
+   * key files in other locations within the same host ... you must specify
+   * the key file location as keyLocation". The static copy stays in public/
+   * as a second proof for whenever the CDN catches up.
+   */
+  keyLocation: `${ORIGIN}/api/indexnow-key/${KEY}.txt`,
   urlList
 };
 

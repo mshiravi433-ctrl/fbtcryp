@@ -157,6 +157,41 @@ app.get('/api/health', (_req, res) =>
   res.json({ ok: true, uptime: process.uptime(), cache: cacheStats(), bot: Boolean(BOT_TOKEN) })
 );
 
+/*
+ * ─── INDEXNOW OWNERSHIP KEY, SERVED FROM THE API ────────────────────────────
+ * IndexNow proves domain ownership by fetching a key file and checking it
+ * contains the key. The obvious place is `public/<key>.txt` at the site root,
+ * and that file exists — but Vercel's CDN was still returning 404 for it long
+ * after the deploy that added it, while older static files served fine.
+ *
+ * Rather than guess at CDN propagation, this serves the same key from a route
+ * that provably works: /api/* is a serverless function, not a cached static
+ * asset, so it is live the moment the function deploys.
+ *
+ * That is explicitly allowed. From Bing's own documentation:
+ *
+ *   "Option 2: Host one to many UTF-8 encoded text key files in other
+ *    locations within the same host ... you must specify the key file
+ *    location as keyLocation URLs parameter value"
+ *
+ * So the submitter passes this URL as `keyLocation` and the static file
+ * remains as a belt-and-braces second copy for whenever the CDN catches up.
+ *
+ * The key is NOT a secret — publishing it at a public URL IS the ownership
+ * proof, which is why it is a literal here rather than an env var. Keeping it
+ * in the repository means one grep finds every copy, and a mismatch between
+ * them is the failure mode: the submission silently 403s forever.
+ */
+const INDEXNOW_KEY = 'b5187e6cbc36ff99eb5f2b97efcdfb6e';
+
+app.get(`/api/indexnow-key/${INDEXNOW_KEY}.txt`, (_req, res) => {
+  res.type('text/plain; charset=utf-8');
+  /* A day: long enough to be cheap, short enough that rotating the key
+     propagates without waiting on a CDN. */
+  res.set('cache-control', 'public, max-age=86400');
+  res.send(INDEXNOW_KEY);
+});
+
 app.get('/api/me', (req, res) =>
   res.json({ authenticated: Boolean(req.tgUser), user: req.tgUser ?? null, startParam: req.tgStartParam ?? null })
 );
