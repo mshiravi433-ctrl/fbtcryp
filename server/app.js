@@ -31,7 +31,6 @@ import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchPerpMarkets } from './perp.js';
 import { resolveIds } from './coinIndex.js';
-import { crosschainQuote, crosschainStatus } from './crosschain.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -538,23 +537,6 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
   }
 });
 
-/* ------------------------- native-coin quotes ---------------------------- */
-/*
- * Bitcoin, Litecoin, Dogecoin, XRP and friends — coins on their own chains,
- * which this app otherwise cannot touch at all. See server/crosschain.js for
- * why this is READ-ONLY: ChangeNOW's terms §11.4 allow them to seize funds
- * from restricted jurisdictions, so we quote and never route.
- */
-app.get('/api/crosschain/status', (_req, res) => res.json(crosschainStatus()));
-
-app.get('/api/crosschain/quote', async (req, res) => {
-  try {
-    const { ok, status, body } = await crosschainQuote(req.query);
-    return res.status(ok ? 200 : status).json(body);
-  } catch (err) {
-    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
-  }
-});
 
 /* --------------------------------- Solana --------------------------------- */
 /*

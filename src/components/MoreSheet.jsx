@@ -86,7 +86,6 @@ const GROUPS = [
       /* Cross-chain. Sits next to Swap because that is the question it
          answers: "my token is on the wrong network". */
       { to: '/bridge', key: 'nav.bridge', Icon: IconSwap, hue: 'var(--rgb-3)' },
-      { to: '/coins', key: 'nav.coins', Icon: IconGlobe, hue: 'var(--rgb-5)' },
       { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' },
       // Solana lives on its own screen, not as a tab inside Swap: it uses a
       // different aggregator, wallet and signing scheme, so nothing is shared.

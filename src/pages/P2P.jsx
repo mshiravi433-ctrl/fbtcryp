@@ -33,10 +33,16 @@ import SegIndicator from '../components/SegIndicator';
  * because there's no fiat leg.
  */
 
+/*
+ * `blocksIran` is verified from each exchange's own published country list,
+ * not assumed: all three name Iran under OFAC sanctions. Marked per-desk
+ * rather than as one blanket sentence so the flag stays honest if one of them
+ * ever changes policy.
+ */
 const DESKS = [
-  { id: 'binance', url: 'https://p2p.binance.com', color: '#f0b90b', fiat: 'IRR, USD, EUR' },
-  { id: 'okx', url: 'https://www.okx.com/p2p-markets', color: '#00e5ff', fiat: 'USD, EUR' },
-  { id: 'bybit', url: 'https://www.bybit.com/fiat/trade/otc', color: '#ffb300', fiat: 'USD, EUR' }
+  { id: 'binance', url: 'https://p2p.binance.com', color: '#f0b90b', fiat: 'IRR, USD, EUR', blocksIran: true },
+  { id: 'okx', url: 'https://www.okx.com/p2p-markets', color: '#00e5ff', fiat: 'USD, EUR', blocksIran: true },
+  { id: 'bybit', url: 'https://www.bybit.com/fiat/trade/otc', color: '#ffb300', fiat: 'USD, EUR', blocksIran: true }
 ];
 
 const SCAMS = ['reversal', 'thirdParty', 'offPlatform', 'overpay'];
@@ -147,6 +153,20 @@ export default function P2P() {
           <section>
             <p className="section-label">{t('p2p.desks')}</p>
             <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+              {/*
+                ─── THESE DESKS BAR IRAN, AND THE USER MUST BE TOLD ────────
+                Binance, OKX and Bybit all list Iran as fully blocked under
+                OFAC. The desks stay because converting rial to crypto is the
+                one thing this app genuinely does not do, so removing them
+                would leave a real need with no answer at all.
+
+                But sending somebody to sign up somewhere they will be
+                refused — or worse, have an account frozen after depositing —
+                is not help. The warning goes ON each row, not in a footnote,
+                because that is where the decision is made.
+              */}
+              <p className="notice notice-danger" style={{ marginBottom: 10 }}>{t('p2p.deskWarning')}</p>
+
               {DESKS.map((d) => (
                 <motion.button
                   key={d.id}
@@ -161,7 +181,10 @@ export default function P2P() {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontWeight: 700, fontSize: 13 }}>{t(`p2p.desk.${d.id}.name`)}</span>
                     <span className="set-row-sub">{t(`p2p.desk.${d.id}.desc`)}</span>
-                    <span className="pill pill-neutral" style={{ marginTop: 5 }}>{d.fiat}</span>
+                    <span className="row" style={{ gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                      <span className="pill pill-neutral">{d.fiat}</span>
+                      {d.blocksIran && <span className="pill pill-down">{t('p2p.blocksIran')}</span>}
+                    </span>
                   </span>
                   <IconExternal width={16} height={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                 </motion.button>

@@ -45,6 +45,19 @@ import SegIndicator from '../components/SegIndicator';
  * Deliberately NOT a list of card-payment on-ramps. Every mainstream provider
  * blocks the region, so listing them would recreate the dead buttons this
  * screen was deleted for.
+ *
+ * ─── AND NOT A LINK TO ANOTHER EXCHANGE, EITHER ─────────────────────────────
+ * This used to send people to p2p.binance.com. Removed on the owner's
+ * instruction, and he is right on the principle: «ما خودمون صرافی هستیم».
+ *
+ * We are an exchange. Putting a competitor's front door on our own buy screen
+ * hands over the one thing that is genuinely scarce — a user who already
+ * arrived, already trusts us, and is ready to spend money. Binance also bars
+ * Iran outright, so the link was sending most of our users somewhere they
+ * would be refused, which made it worse than useless.
+ *
+ * The internal P2P screen stays: it lists desks that run real escrow, and it
+ * keeps the user inside our app where the swap afterwards is ours at 0.70%.
  */
 const ROUTES = [
   {
@@ -53,13 +66,6 @@ const ROUTES = [
     to: '/p2p',
     color: 'var(--rgb-4)',
     Icon: IconSwap
-  },
-  {
-    id: 'exchange',
-    /* Global desks with a P2P layer. The user deals with them, not us. */
-    url: 'https://p2p.binance.com',
-    color: '#f0b90b',
-    Icon: IconExternal
   },
   {
     id: 'receive',

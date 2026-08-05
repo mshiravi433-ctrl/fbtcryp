@@ -85,8 +85,6 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
-import { DESTINATIONS, NATIVE_COINS, OUR_FEE_PERCENT, changenowConfigured, crosschainStatus, isAllowedPair } from '../server/crosschain.js';
-import { exchangeUrl } from '../src/lib/crosschain.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
   MIN_SAMPLES,
@@ -3757,86 +3755,6 @@ export default function run() {
     t('no URL is produced for an unswappable coin', swapUrlFor('cardano', 'buy') === null);
   }
 
-  /* ============ native coins (ChangeNOW) — quote only, by design ========= */
-  {
-    /*
-     * ─── WHY THIS INTEGRATION IS READ-ONLY ──────────────────────────────────
-     * Not a technical limit. ChangeNOW's Terms of Service (updated 2026-07-28)
-     * §11.1 exclude users in "United Nations Sanctions Lists and their
-     * equivalent" — OFAC is the standard equivalent and covers most of this
-     * app's users — and §11.4 states verbatim that they "may seize any funds
-     * from the Users in these jurisdictions and donate them to a charity".
-     *
-     * So we quote and hand off; we never create an exchange and never accrue
-     * a balance that clause could reach. These checks pin that decision so a
-     * later change cannot quietly turn it into a money-handling integration.
-     */
-    t('the integration reports itself as quote-only', crosschainStatus().quoteOnly === true);
-
-    /*
-     * ─── ZERO FEE IS THE OWNER'S CONDITION, ENFORCED ────────────────────────
-     * He agreed to ship this with a warning but was explicit that no money of
-     * ours may sit with ChangeNOW. That cannot be satisfied while taking the
-     * 0.4%: their affiliate balance has a MINIMUM WITHDRAWAL, quoted on their
-     * own pages as anywhere from "approximately $100" to 0.01 BTC, with no
-     * per-swap payout option. At 0.4% even the lowest of those needs roughly
-     * $25,000 of user volume, so a balance would necessarily sit in their
-     * account for months — in a jurisdiction their §11.1 excludes, under a
-     * §11.4 that permits seizure.
-     *
-     * Zero means nothing accrues, so there is nothing to seize. Raising it
-     * re-creates exactly the risk the owner ruled out, which is why this is a
-     * test and not a comment.
-     */
-    t('our commission on ChangeNOW is zero', OUR_FEE_PERCENT === 0);
-    t('...and the status reports no balance is held',
-      crosschainStatus().noBalanceHeld === true && crosschainStatus().ourFeePercent === 0);
-    /* No key is configured, and quotes must work anyway — the endpoints we
-       use are public. A key only raises rate limits. */
-    t('no key is required for it to function', changenowConfigured() === false);
-
-    /*
-     * The FROM side must always be a coin on its OWN chain. That is the
-     * entire purpose: reaching users whose coin this app cannot touch.
-     * Quoting EVM→EVM would route a swap we already do at 0.70% through a
-     * third party for nothing.
-     */
-    t('native coins are offered as the source', NATIVE_COINS.some((c) => c.ticker === 'btc'));
-    t('an EVM-to-EVM pair is refused', isAllowedPair('eth', 'usdtbsc') === false);
-    t('a native-to-EVM pair is allowed', isAllowedPair('btc', 'usdtbsc') === true);
-    t('the same coin on both sides is refused', isAllowedPair('btc', 'btc') === false);
-    t('an unknown ticker is refused', isAllowedPair('scam', 'usdtbsc') === false);
-
-    /*
-     * Destinations must be assets this app can actually use afterwards.
-     * Swapping BTC for ADA would leave the user exactly as stuck as before.
-     */
-    t('every destination is usable in this app',
-      DESTINATIONS.every((d) => /usdt|bnb|eth|sol/.test(d.ticker)));
-
-    /*
-     * ─── THE TICKERS ARE LOOKED UP, NOT GUESSED ─────────────────────────────
-     * The same asset on a different chain is a DIFFERENT ticker: `usdtbsc`
-     * and `usdterc20` are not interchangeable. A wrong one quotes the wrong
-     * network, and a user sending to a chain they cannot reach loses the
-     * money. Pinned as literals against a live /currencies response.
-     */
-    t('USDT on BNB Chain is usdtbsc',
-      DESTINATIONS.some((d) => d.ticker === 'usdtbsc' && d.chainId === 56));
-    t('USDT on Ethereum is usdterc20',
-      DESTINATIONS.some((d) => d.ticker === 'usdterc20' && d.chainId === 1));
-
-    /* ---- the outbound link ---- */
-    const url = exchangeUrl({ from: 'btc', to: 'usdtbsc', amount: '0.5' });
-    t('the exchange link carries the pair', /from=btc/.test(url) && /to=usdtbsc/.test(url));
-    t('...and the amount', /amount=0.5/.test(url));
-    /*
-     * No referral id is configured, so the link must be plain. Same rule as
-     * the GMX code: an unconfigured integration produces a working link, not
-     * a broken one.
-     */
-    t('no referral id is attached until one is configured', !/link_id=/.test(url));
-  }
 
   return rows;
 }

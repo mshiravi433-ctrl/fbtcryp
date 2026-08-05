@@ -3919,120 +3919,100 @@ export default function run() {
     t('...and warns the big exchanges block Iran', /OFAC|مسدود/.test(cex));
   }
 
-  /* ---- 58. native-coin screen: reachable, and never handles funds ------ */
-  {
-    t('the crosschain module exists', existsSync('server/crosschain.js'));
-    t('the client lib exists', existsSync('src/lib/crosschain.js'));
-    t('the screen exists', existsSync('src/pages/Coins.jsx'));
 
-    const srv = read('server/crosschain.js');
-    const lib = read('src/lib/crosschain.js');
-    const page = read('src/pages/Coins.jsx');
-    const appSrc = read('server/app.js');
-    const appJsx = read('src/App.jsx');
+  /* ---- 58. we are the exchange: no rival swap on our own screens ------- */
+  /*
+   * ─── THE PRINCIPLE, AS THE OWNER PUT IT ─────────────────────────────────
+   * «ما خودمون صرافی هستیم نیاز به سواپ کسی نداریم» — we are an exchange, we
+   * do not need anyone else's swap.
+   *
+   * He is right, and I had got this wrong. I built a screen that quoted
+   * ChangeNOW's swap and linked out to it, and the Buy screen linked to
+   * Binance P2P. Both hand over the scarcest thing we have: a user who has
+   * already arrived and already trusts us. Worse, both bar Iran, so most of
+   * our users were being sent somewhere they would be refused.
+   *
+   * This check exists because the mistake is easy to repeat — an outbound
+   * swap link always looks like "extra choice for the user" and is actually
+   * us paying a competitor for our own traffic.
+   *
+   * The GMX perp link is deliberately NOT covered: we do not run a perp
+   * engine, so it competes with nothing of ours, and it pays us.
+   */
+  {
+    /*
+     * P2P is deliberately NOT in this list. Those three desks convert rial to
+     * crypto, which is the one thing this app genuinely does not do — they
+     * compete with nothing of ours, so removing them would leave a real need
+     * with no answer. They are allowed to stay ONLY with the block warning
+     * asserted below.
+     */
+    const swapSurfaces = ['src/pages/Buy.jsx', 'src/pages/Swap.jsx'];
+    /* Comments stripped: these files EXPLAIN why the links were removed, and
+       a check that matched its own rationale would fail forever. Trap #1. */
     const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-    /* The full chain — a screen nothing routes to is the bug shipped twice. */
-    t('the server imports the module', /from '\.\/crosschain\.js'/.test(appSrc));
-    t('...and exposes a quote route', /\/api\/crosschain\/quote/.test(appSrc));
-    t('...and a status route', /\/api\/crosschain\/status/.test(appSrc));
-    t('the client calls the published path', /crosschain\/quote/.test(lib));
-    t('the page calls the client lib', /getCrosschainQuote\s*\(/.test(code(page)));
-    t('the page has a route', /path="\/coins"/.test(appJsx));
-    t('...and a navigation entry', /nav\.coins/.test(read('src/components/MoreSheet.jsx')));
+    /* Rival swap/exchange front doors that must never be linked from a screen
+       where we sell the same thing. */
+    const rivals = [
+      'changenow.io', 'changelly.com', 'simpleswap.io', 'p2p.binance.com',
+      'pancakeswap.finance/swap', '1inch.io', 'uniswap.org/swap'
+    ];
+
+    for (const f of swapSurfaces) {
+      if (!existsSync(f)) continue;
+      const src = code(read(f));
+      const found = rivals.filter((r) => src.includes(r));
+      t(`${f} links to no rival exchange${found.length ? ` — found: ${found.join(', ')}` : ''}`,
+        found.length === 0);
+    }
+
+    /* The ChangeNOW integration was removed outright, not flagged off. A flag
+       is the same problem waiting for someone to set an env var. */
+    t('the ChangeNOW module is gone', !existsSync('server/crosschain.js'));
+    t('...and its client lib', !existsSync('src/lib/crosschain.js'));
+    t('...and its screen', !existsSync('src/pages/Coins.jsx'));
+    t('...and its route', !/path="\/coins"/.test(read('src/App.jsx')));
+    t('...and its nav entry', !/nav\.coins/.test(read('src/components/MoreSheet.jsx')));
+    t('...and its server routes', !/crosschain/.test(read('server/app.js')));
 
     /*
-     * ─── THE SAFETY PROPERTY: WE NEVER CREATE AN EXCHANGE ───────────────────
-     * ChangeNOW's §11.4 lets them seize funds from users in restricted
-     * jurisdictions, and §11.1 puts most of this app's users there. So this
-     * integration must stay read-only. If someone adds a create-exchange
-     * call, the app starts handling money under terms that let a third party
-     * keep it — these checks are what stop that happening quietly.
+     * ─── BUY MUST NOT GROW CARD ON-RAMPS EITHER ─────────────────────────────
+     * Checked again this pass because the owner asked for card payments and
+     * the answer is genuinely no, at three independent layers:
+     *   1. ChangeNOW bars Iran (their §11.1, and their published country list)
+     *   2. their fiat partners bar it separately — Guardarian's own restricted
+     *      list names Iran; ChangeNOW does not process fiat itself
+     *   3. Visa/Mastercard/Amex are severed from Iran's banking system at the
+     *      network level and have been since 2012
+     * An Iranian bank card cannot authorise a foreign crypto purchase. No
+     * integration fixes that, so listing one would recreate the dead buttons
+     * this screen was rebuilt to remove.
      */
-    const srvCode = code(srv);
-    t('the server never creates an exchange',
-      !/create-transaction|\/transactions|POST/i.test(srvCode));
-    t('...and never handles a payout address',
-      !/payoutAddress|refundAddress|address:/i.test(srvCode));
-    t('the client never creates one either',
-      !/create-transaction|payoutAddress/i.test(code(lib)));
-
     /*
-     * The minimum must be fetched with every quote. Sending below it is how
-     * money is lost here: the deposit cannot be processed and their §6.16
-     * charges $50 to return it.
+     * ─── THE P2P EXCEPTION IS CONDITIONAL ───────────────────────────────────
+     * Binance, OKX and Bybit all publish Iran as fully blocked under OFAC.
+     * Sending somebody to sign up where they will be refused — or worse, be
+     * frozen after depositing — is not help. The desks may stay, but only
+     * while the warning does, so both are asserted together.
      */
-    t('every quote fetches the minimum', /min-amount\//.test(srvCode));
-    t('...and the screen warns when the amount is below it',
-      /belowMinimum/.test(page) && /coins\.belowMin/.test(page));
+    const p2p = read('src/pages/P2P.jsx');
+    t('the P2P desks carry a jurisdiction warning', /p2p\.deskWarning/.test(p2p));
+    t('...and each blocked desk is flagged individually', /blocksIran/.test(p2p));
+    {
+      const en = JSON.parse(read('src/i18n/locales/en.json'));
+      const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      t('...in both languages',
+        hasKey(en, 'p2p.deskWarning') && hasKey(fa, 'p2p.deskWarning') &&
+        hasKey(en, 'p2p.blocksIran') && hasKey(fa, 'p2p.blocksIran'));
+      t('...and the warning names the sanctions reason', /OFAC/.test(en.p2p.deskWarning));
+    }
 
-    /* An unpriceable pair must read as unknown, never as zero. */
-    t('an unpriceable quote is null, not zero',
-      /Number\.isFinite\(estimated\) \? estimated : null/.test(srvCode));
-
-    /*
-     * The API key is a real credential (it identifies the account), so unlike
-     * the public GMX referral code it must never be VITE_-prefixed.
-     */
-    t('the API key stays server-side',
-      /process\.env\.CHANGENOW_API_KEY/.test(srvCode) && !/VITE_CHANGENOW_API/.test(srv));
-
-    /*
-     * ─── THE JURISDICTION WARNING IS NOT OPTIONAL ───────────────────────────
-     * A user in a restricted country can have funds seized under §11.4. They
-     * must be told BEFORE sending, in their own language.
-     */
-    const en = JSON.parse(read('src/i18n/locales/en.json'));
-    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
-    t('the jurisdiction warning exists in both languages',
-      hasKey(en, 'coins.jurisdictionNotice') && hasKey(fa, 'coins.jurisdictionNotice'));
-    t('...and names the sanctions risk', /OFAC/.test(en.coins.jurisdictionNotice));
-    t('...and warns funds can be seized', /seize/i.test(en.coins.jurisdictionNotice));
-    t('...and the Persian says the same', /ضبط|OFAC/.test(fa.coins.jurisdictionNotice));
-    t('the screen renders that warning', /coins\.jurisdictionNotice/.test(page));
-
-    /*
-     * ─── THE WARNING IS A GATE, NOT A PARAGRAPH ─────────────────────────────
-     * The owner confirmed with ChangeNOW support that Iranian users are
-     * workable WITH A WARNING. A warning nobody reads is not a warning, and
-     * this one covers something irreversible: §11.4 permits seizure in
-     * restricted jurisdictions and a crypto transfer cannot be recalled.
-     *
-     * So the outbound button must stay disabled until an explicit tick, and
-     * the tick must reset when the trade changes — an acknowledgement carried
-     * over from a different pair or amount is not an acknowledgement of this
-     * one.
-     */
-    t('the outbound button is gated on an explicit acknowledgement',
-      /disabled=\{quote\.belowMinimum === true \|\| !acknowledged\}/.test(page));
-    t('...and the tick resets when the trade changes',
-      /setAcknowledged\(false\); \}, \[from, to, amount\]/.test(page));
-    t('...and it is a real checkbox, reachable by keyboard',
-      /type="checkbox"/.test(page) && /coins\.ackLabel/.test(page));
-
-    /*
-     * ChangeNOW's Affiliate Terms §2.5 require that our customers agree to
-     * THEIR terms, and §2.6 forbids removing that agreement. Our own warning
-     * sits alongside it and must never replace it.
-     */
-    t('their own terms are linked, as their §2.5 requires',
-      /changenow\.io\/terms-of-use/.test(page) && /coins\.readTerms/.test(page));
-
-    /*
-     * Zero fee is the owner's condition. If a later change takes the 0.4%, a
-     * seizable balance starts accruing again.
-     */
-    t('the screen states that we take nothing', /coins\.noFeeBody/.test(page));
-    t('...and the server enforces a zero rate',
-      /export const OUR_FEE_PERCENT = 0;/.test(srv));
-
-    /* Every key the screen renders must resolve, or it prints a raw key. */
-    const keys = [...page.matchAll(/t\('(coins\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
-    const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));
-    t(`every coins.* key resolves (${new Set(keys).size} checked)` +
-      (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
-    const missingFa = [...new Set(keys)].filter((k) => !hasKey(fa, k));
-    t('...and all are translated into Persian', missingFa.length === 0);
+    const buy = code(read('src/pages/Buy.jsx'));
+    const onramps = ['moonpay', 'transak', 'simplex', 'banxa', 'guardarian', 'ramp.network'];
+    const listed = onramps.filter((o) => buy.toLowerCase().includes(o));
+    t(`the buy screen lists no card on-ramp that blocks the region${listed.length ? ` — found: ${listed.join(', ')}` : ''}`,
+      listed.length === 0);
   }
 
   return rows;
