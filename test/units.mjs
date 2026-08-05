@@ -1110,7 +1110,8 @@ export default function run() {
 
     /* ---- address validation ---- */
     t('a real Solana address validates',
-      isSolanaAddress('9Z4wtiosH7JMXhKg8JpUPDCtB5ZyM8vzby14HwDidgVz'));
+      isSolanaAddress('B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4'));
+
     t('an EVM address is rejected',
       !isSolanaAddress('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
     // Base58 excludes 0, O, I and l precisely to stop look-alike typos.

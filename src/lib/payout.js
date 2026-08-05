@@ -51,15 +51,23 @@ const env = (k) => (typeof import.meta !== 'undefined' && import.meta.env?.[k]) 
 export const PAYOUT_ADDRESSES = {
   evm: env('VITE_PAYOUT_EVM') || '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6',
   /*
-   * Owner's Solana address, supplied 2026-08.
+   * Owner's Solana address. Updated 2026-08 to a self-custodial wallet.
    *
-   * Verified before committing rather than trusted: base58-decodes to exactly
-   * 32 bytes, which is what makes it a real ed25519 public key. A typo'd
-   * address usually still passes the loose 32-44 character regex below but
-   * decodes to the wrong length — and a payout to a non-existent address is
-   * unrecoverable, so the byte length is the check that matters.
+   * ─── WHY IT CHANGED ─────────────────────────────────────────────────────
+   * The previous address (9Z4wtios…) was replaced because collecting Jupiter
+   * referral fees requires SIGNING an on-chain transaction to create the
+   * referral account and its token accounts. That is only possible from a
+   * wallet whose seed phrase the owner holds. An address you can receive to
+   * but not sign from is fine for plain transfers and useless for this.
+   *
+   * ─── VERIFIED, NOT TRUSTED ──────────────────────────────────────────────
+   * Base58-decoded before committing: exactly 32 bytes, which is what makes
+   * it a real ed25519 public key. A transposed character usually still passes
+   * the loose 32-44 character regex below but decodes to the wrong length —
+   * and a payout to a non-existent address is unrecoverable, so the byte
+   * count is the check that actually matters.
    */
-  solana: env('VITE_PAYOUT_SOLANA') || '9Z4wtiosH7JMXhKg8JpUPDCtB5ZyM8vzby14HwDidgVz',
+  solana: env('VITE_PAYOUT_SOLANA') || 'B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4',
   tron: env('VITE_PAYOUT_TRON') || 'TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ'
 };
 
