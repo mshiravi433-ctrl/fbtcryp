@@ -5451,5 +5451,55 @@ export default function run() {
     }
   }
 
+  /* ---- 67. the quest list has icons and colour ------------------------- */
+  {
+    /*
+     *   «در صفحه فارم پایین صفحه دعوت دوستان بدون رنگ و ایکون هست»
+     *
+     * Every quest row drew the same grey `◆`. Six identical diamonds is not
+     * a list of six things — and the one that mattered most, "invite a
+     * friend", is the only row that brings a new user in. It was the least
+     * findable item on the screen.
+     */
+    const earn = read('src/pages/Earn.jsx');
+    const earnCode = earn
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /* Pinned to the GLYPH. A check for "Icon" would pass for a file that
+       merely imports one and still renders the diamond. */
+    t('the quest list no longer draws a bare diamond', !earnCode.includes('◆'));
+
+    /*
+     * Every quest, not most. A partial fix here is the worst outcome: the
+     * rows WITH icons make the ones without look broken rather than plain.
+     */
+    const quests = [...earnCode.matchAll(/\{ id: '([a-zA-Z0-9]+)', to:[^}]*\}/g)];
+    const withIcon = quests.filter((m) => /Icon:\s*Icon[A-Za-z]+/.test(m[0]));
+    const withTone = quests.filter((m) => /tone:\s*'var\(--rgb-\d\)'/.test(m[0]));
+    t(`every quest has an icon (${withIcon.length}/${quests.length})`,
+      quests.length >= 5 && withIcon.length === quests.length);
+    t(`every quest has a theme colour (${withTone.length}/${quests.length})`,
+      quests.length >= 5 && withTone.length === quests.length);
+
+    /* Colours must be TOKENS, so the light theme follows automatically. */
+    t('...and the colours are tokens, not hex values',
+      !/tone:\s*'#/.test(earnCode));
+
+    /* The invite row specifically — the reported one — must be distinct
+       from every other row rather than sharing a colour with one of them. */
+    const invite = quests.find((m) => m[1] === 'inviteFriend');
+    t('the invite quest exists', Boolean(invite));
+    if (invite) {
+      const tone = /tone:\s*'(var\(--rgb-\d\))'/.exec(invite[0])?.[1];
+      const others = quests
+        .filter((m) => m[1] !== 'inviteFriend')
+        .map((m) => /tone:\s*'(var\(--rgb-\d\))'/.exec(m[0])?.[1]);
+      t('...and its colour is used by no other quest',
+        Boolean(tone) && !others.includes(tone));
+    }
+  }
+
   return rows;
 }

@@ -10,7 +10,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { POINT_VALUES, tierFor, nextTier, tierProgress } from '../lib/ranks';
-import { IconChevronRight, IconExternal, IconPools, IconShield, IconSwap, IconTrend } from '../components/Icons';
+import { IconCheck, IconChevronRight, IconExternal, IconKey, IconPools, IconShield, IconSwap, IconTrend, IconUser, IconWallet } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import ShareSheet from '../components/ShareSheet';
 import VaultCard from '../components/VaultCard';
@@ -241,13 +241,38 @@ export default function Earn({ embedded = false }) {
     useAppStore.getState().notify('pointsEarned', 'success');
   };
 
+  /*
+   * ─── EVERY QUEST GETS ITS OWN ICON AND ITS OWN COLOUR ────────────────────
+   *   «در صفحه فارم پایین صفحه دعوت دوستان بدون رنگ و ایکون هست»
+   *
+   * Reported against the Farm screen because that is where this list is
+   * reached from, but the list lives here — Earn renders it, embedded.
+   *
+   * Every row drew the same grey `◆` glyph. Six identical diamonds in a
+   * column is not a list of six things, it is one thing repeated: the eye
+   * has nothing to anchor on, so "invite a friend" was indistinguishable
+   * from "enable 2FA" without reading both labels.
+   *
+   * That matters more for THIS row than for the others, because inviting a
+   * friend is the only quest that brings us a new user. It should be the
+   * most findable item on the screen and it was the least.
+   *
+   * The colours are the app's own RGB tokens, so they follow the theme
+   * rather than being a second palette that drifts out of sync — the same
+   * rule the audio player follows.
+   */
   const QUESTS = [
-    { id: 'connectWallet', to: '/wallet', pts: POINT_VALUES.connectWallet },
-    { id: 'firstSwap', to: '/swap', pts: POINT_VALUES.firstSwap },
-    { id: 'addLiquidity', to: '/farm', pts: POINT_VALUES.addLiquidity },
-    { id: 'backupWallet', to: '/wallet', pts: POINT_VALUES.backupWallet },
-    { id: 'enable2fa', to: '/settings', pts: POINT_VALUES.enable2fa },
-    { id: 'inviteFriend', to: null, pts: POINT_VALUES.referral }
+    { id: 'connectWallet', to: '/wallet', pts: POINT_VALUES.connectWallet, Icon: IconWallet, tone: 'var(--rgb-1)' },
+    { id: 'firstSwap', to: '/swap', pts: POINT_VALUES.firstSwap, Icon: IconSwap, tone: 'var(--rgb-2)' },
+    { id: 'addLiquidity', to: '/farm', pts: POINT_VALUES.addLiquidity, Icon: IconPools, tone: 'var(--rgb-4)' },
+    { id: 'backupWallet', to: '/wallet', pts: POINT_VALUES.backupWallet, Icon: IconKey, tone: 'var(--rgb-5)' },
+    { id: 'enable2fa', to: '/settings', pts: POINT_VALUES.enable2fa, Icon: IconShield, tone: 'var(--rgb-1)' },
+    /*
+     * Magenta, and it is the only magenta on the screen. The share button
+     * above uses the primary style; this row is the same action reached a
+     * different way, and it is the one that grows the app.
+     */
+    { id: 'inviteFriend', to: null, pts: POINT_VALUES.referral, Icon: IconUser, tone: 'var(--rgb-3)' }
   ];
 
   return (
@@ -525,7 +550,25 @@ export default function Earn({ embedded = false }) {
                       }
                     }}
                   >
-                    <div className="coin-logo" style={{ fontSize: 15 }}>{done ? '✓' : '◆'}</div>
+                    {/*
+                      Done becomes a tick in the quest's own colour rather
+                      than a grey one: fading the row to 55% opacity already
+                      says "finished", and draining the colour on top of that
+                      made completed quests look disabled — as though the
+                      points had been taken away rather than earned.
+                    */}
+                    <div
+                      className="coin-logo"
+                      style={{
+                        color: q.tone,
+                        borderColor: done ? undefined : q.tone,
+                        /* A wash, not a fill. At full saturation six of these
+                           in a column would out-shout the labels next to them. */
+                        background: done ? undefined : `color-mix(in srgb, ${q.tone} 12%, transparent)`
+                      }}
+                    >
+                      {done ? <IconCheck width={16} height={16} /> : <q.Icon width={16} height={16} />}
+                    </div>
                     <div className="coin-meta">
                       <div className="coin-sym" style={{ textTransform: 'none', fontSize: 12.5 }}>
                         {t(`earn.quest.${q.id}`)}
