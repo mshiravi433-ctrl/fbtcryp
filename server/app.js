@@ -28,6 +28,7 @@ import { telegramAuth } from './telegramAuth.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
+import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -353,6 +354,31 @@ app.get('/api/category/:slug', (req, res) => {
     () => fetchCategory(slug, { perPage, vs }),
     `cat:${slug}:${vs}:${perPage}`
   );
+});
+
+/* ------------------------------ cross-chain ------------------------------- */
+/*
+ * Bridging via LI.FI. Proxied so the API key never reaches the browser and so
+ * the fee parameters cannot be supplied by a caller — see server/bridge.js for
+ * why the allow-list is the security boundary rather than a preference.
+ */
+
+app.get('/api/bridge/status', async (_req, res) => {
+  try {
+    res.set('cache-control', 'public, max-age=300');
+    return res.json(await bridgeStatus());
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+app.get('/api/bridge/quote', async (req, res) => {
+  try {
+    const { ok, status, body } = await bridgeQuote(req.query);
+    return res.status(ok ? 200 : status || 502).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
 });
 
 app.get('/api/dex/:network', (req, res) =>

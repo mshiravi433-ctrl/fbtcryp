@@ -11,6 +11,7 @@ import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
 import { isEligible, normalizePool, riskBand } from '../server/yields.js';
 import { issuerMatches } from '../server/solanaAssets.js';
+import { bridgeFee, integratorId } from '../server/bridge.js';
 import {
   COMMODITY_ASSETS,
   EQUITY_ASSETS,
@@ -2866,6 +2867,72 @@ export default function run() {
      */
     t('...and nothing with a public listing claims to be private',
       EQUITY_ASSETS.filter((a) => a.privateCompany).length === 1);
+  }
+
+  /* ========================= cross-chain bridge ========================== */
+  /*
+   * ─── WHAT THIS GUARDS ─────────────────────────────────────────────────────
+   * Two config values decide where bridge revenue goes, and both fail
+   * silently when wrong: a mistyped integrator string collects nothing with
+   * no error, and a misread fee could take a fortune from a user.
+   */
+  {
+    /*
+     * LI.FI constrains the integrator string: max 23 chars, lower case only,
+     * alphanumeric plus _ and -. The portal rejects a capital letter, so a
+     * mismatch between what was registered and what we send means zero
+     * revenue and no error anywhere. Normalising is cheaper than debugging.
+     */
+    const saved = { id: process.env.LIFI_INTEGRATOR, fee: process.env.LIFI_FEE };
+
+    t('the default integrator is lower-case and legal',
+      /^[a-z0-9_-]{1,23}$/.test(integratorId()));
+
+    process.env.LIFI_INTEGRATOR = 'FBT Swap!!';
+    t('a capitalised or spaced id is normalised, not sent as-is',
+      /^[a-z0-9_-]+$/.test(integratorId()) && integratorId() === 'fbtswap');
+
+    process.env.LIFI_INTEGRATOR = 'a'.repeat(40);
+    t('an over-long id is truncated to 23', integratorId().length === 23);
+
+    process.env.LIFI_INTEGRATOR = saved.id ?? '';
+    if (!saved.id) delete process.env.LIFI_INTEGRATOR;
+
+    /* ---- the fee ---- */
+    /*
+     * LI.FI wants a DECIMAL FRACTION: 0.003 is 0.3%. The dangerous confusion
+     * is basis points — someone writing `LIFI_FEE=30` meaning "30 bps" would
+     * otherwise request 3000% of the trade. The clamp makes that impossible.
+     */
+    t('the default bridge fee is 0.3%', bridgeFee() === 0.003);
+
+    process.env.LIFI_FEE = '30';
+    t('a bps-style typo cannot take 3000%', bridgeFee() === 0.003);
+
+    process.env.LIFI_FEE = '0.5';
+    t('...and neither can 50%', bridgeFee() === 0.003);
+
+    process.env.LIFI_FEE = '-1';
+    t('a negative fee falls back to the default', bridgeFee() === 0.003);
+
+    process.env.LIFI_FEE = 'abc';
+    t('garbage falls back to the default', bridgeFee() === 0.003);
+
+    process.env.LIFI_FEE = '0.005';
+    t('a legitimate 0.5% IS honoured, so the clamp is not just a constant',
+      bridgeFee() === 0.005);
+
+    process.env.LIFI_FEE = saved.fee ?? '';
+    if (!saved.fee) delete process.env.LIFI_FEE;
+
+    /*
+     * Our bridge fee must stay BELOW the swap fee. LI.FI already takes 0.25%
+     * and the bridges charge their own on top; matching our 0.7% would put
+     * the user near 1% all-in and send them elsewhere. 0.3% of a trade that
+     * happens beats 0.7% of one that does not.
+     */
+    t('the bridge fee is lower than the same-chain swap fee',
+      bridgeFee() * 10000 < 70);
   }
 
   return rows;

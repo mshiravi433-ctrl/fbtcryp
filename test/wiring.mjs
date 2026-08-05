@@ -3073,5 +3073,69 @@ export default function run() {
     }
   }
 
+  /* ---- 45. the cross-chain bridge is wired and its key stays server-side - */
+  {
+    t('the bridge module exists', existsSync('server/bridge.js'));
+    const appSrc = read('server/app.js');
+    const bridge = read('server/bridge.js');
+
+    t('the API exposes a bridge quote', /\/api\/bridge\/quote/.test(appSrc));
+    /*
+     * A status route matters more here than usual. LI.FI bridging WORKS
+     * without the portal being set up — it just earns nothing, which looks
+     * identical to a working integration from outside. This is the only way
+     * to tell the two apart.
+     */
+    t('...and a status route that reports whether fees are live',
+      /\/api\/bridge\/status/.test(appSrc));
+
+    /*
+     * ─── THE KEY MUST NEVER BE VITE_ ────────────────────────────────────────
+     * Anything VITE_-prefixed is compiled into the browser bundle and the
+     * APK. A leaked LI.FI key is billed to us and can be exhausted by a
+     * stranger. This is the same rule that governs the Jupiter and Gemini
+     * keys, asserted rather than remembered.
+     */
+    t('the LI.FI key is read server-side only',
+      /process\.env\.LIFI_API_KEY/.test(bridge) && !/VITE_LIFI/.test(bridge));
+    t('...and no client file reaches for it',
+      !read('src/lib/api.js').includes('LIFI_API_KEY'));
+
+    /*
+     * `integrator` and `fee` decide where our revenue goes. If they were in
+     * the forwarded allow-list, anyone could redirect our commission to their
+     * own wallet by editing a query string — the same boundary as
+     * server/solana.js.
+     */
+    {
+      const idx = bridge.indexOf('const ALLOWED = [');
+      const list = bridge.slice(idx, bridge.indexOf('];', idx));
+      t('the caller cannot supply the integrator', !/integrator/.test(list));
+      t('the caller cannot supply the fee', !/'fee'/.test(list));
+      t('...but the server does set them', /params\.set\('integrator'/.test(bridge));
+    }
+
+    /*
+     * Same-chain must be refused. It belongs on the swap screen, which quotes
+     * two aggregators and charges our full 0.7% — routing it through a bridge
+     * would be a worse price AND a smaller fee.
+     */
+    t('same-chain requests are refused', /SAME_CHAIN/.test(bridge));
+    t('unsupported chains are refused', /UNSUPPORTED_CHAIN/.test(bridge));
+
+    /*
+     * The graceful degradation. LI.FI rejects the WHOLE request with code
+     * 1011 when the integrator is not yet configured; showing that to a user
+     * would blame them for our setup, so the fee-bearing quote is retried
+     * clean.
+     */
+    t('an unconfigured fee falls back to a working quote', /1011/.test(bridge));
+
+    /* Documented for whoever deploys it, without the key itself. */
+    const env = read('.env.example');
+    t('the bridge vars are documented', /LIFI_INTEGRATOR/.test(env) && /LIFI_FEE/.test(env));
+    t('...and the example never carries a real key', /LIFI_API_KEY=\s*$/m.test(env));
+  }
+
   return rows;
 }
