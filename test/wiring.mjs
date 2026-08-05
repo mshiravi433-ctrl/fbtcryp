@@ -4417,13 +4417,107 @@ export default function run() {
     t('...and rejects a non-audio mime type', /!\/\^audio\\\/\/i\.test\(mime\)/.test(srvCode));
     t('...and refuses insecure URLs', /\^https/.test(srvCode));
 
-    /* One shared player. Per-row <audio> elements let a user start four
-       episodes at once with no obvious way to stop them. */
-    t('there is a single shared player', /new Audio\(\)/.test(panelCode));
-    t('...that does not preload megabytes nobody asked for',
-      /preload = 'none'/.test(panelCode));
-    t('...and clears its state when a file fails',
-      /'error'/.test(panelCode) && /setPlayingId\(null\)/.test(panelCode));
+    /*
+     * ─── THE TRANSPORT — a real player, not a play button ─────────────────
+     *   «mp player نداره تا بشه کنترلش کرد میخام mp player بسیار زیبا و مدرن
+     *    باشد ... و در دو تم هم پویا باشد»
+     *
+     * The <audio> element and every control moved out of RadioPanel into
+     * `AudioPlayer.jsx`, so these checks follow it. The list component now
+     * only decides WHICH episode is selected.
+     */
+    const playerPath = 'src/components/AudioPlayer.jsx';
+    t('the radio has a real transport component', existsSync(playerPath));
+
+    if (existsSync(playerPath)) {
+      const player = read(playerPath);
+      /*
+       * Comments stripped before matching. The header of that file explains
+       * the design in prose that necessarily names `timeupdate`, `preload`
+       * and the seek bar — matching the explanation instead of the code is
+       * the single trap this suite has fallen into most often.
+       */
+      const playerCode = player.replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+
+      /* One shared element. Per-row <audio> lets a user start four episodes
+         at once with no obvious way to stop them. */
+      t('...built on a single shared <audio> element', /new Audio\(\)/.test(playerCode));
+      /*
+       * `metadata`, not `auto`. `auto` pulls the whole episode the moment a
+       * src is set — tens of megabytes on a metered connection for something
+       * the user may not play. `none` would be wrong too: it leaves the
+       * duration unknown, so the scrub bar has no scale.
+       */
+      t('...that preloads metadata only, never the whole file',
+        /preload = 'metadata'/.test(playerCode));
+
+      /* The controls the report actually asked for, each pinned to the
+         mechanism rather than to a label that could exist without it. */
+      t('...it can seek', /currentTime\s*=/.test(playerCode) && /type="range"/.test(playerCode));
+      t('...it shows elapsed and total time', /fmtDuration/.test(playerCode));
+      t('...it can change speed', /playbackRate/.test(playerCode));
+      t('...it can skip between episodes',
+        /onTrack\?\.\(next\)/.test(playerCode) && /onTrack\?\.\(prev\)/.test(playerCode));
+      t('...and it can be stopped from anywhere on the page',
+        /onClose/.test(playerCode) && /position: fixed/.test(read('src/index.css')));
+
+      /*
+       * Progress is driven by requestAnimationFrame, and the loop MUST be
+       * cancelled on pause and unmount. A leaked rAF loop over a paused
+       * element is a battery drain nobody can see.
+       */
+      t('...progress is animation-frame driven',
+        /requestAnimationFrame/.test(playerCode));
+      t('...and the loop is cancelled, not leaked',
+        (playerCode.match(/cancelAnimationFrame/g) ?? []).length >= 3);
+
+      /* A failed load must clear the playing state, or the row stays stuck
+         looking pressed over silence. */
+      t('...a failed load is reported rather than swallowed',
+        /setFailed\(true\)/.test(playerCode) && hasKey(JSON.parse(read('src/i18n/locales/en.json')), 'radio.failed'));
+
+      /*
+       * ─── BOTH THEMES ────────────────────────────────────────────────────
+       * Every colour must be a token. One hard-coded hex is a hole in the
+       * light theme that nobody notices until a user opens it, which is
+       * exactly what «در دو تم هم پویا باشد» is asking to prevent.
+       *
+       * Checked on the JSX, where a stray colour would live; the CSS block
+       * is allowed hex values inside rgba() shadows and tints, which are
+       * theme-specific by nature and are overridden explicitly below.
+       */
+      const hexInJsx = playerCode.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
+      t(`...the player hard-codes no colours${hexInJsx.length ? ` — found ${hexInJsx.join(', ')}` : ''}`,
+        hexInJsx.length === 0);
+
+      const css = read('src/index.css');
+      t('...it is styled', /\.ap-seek/.test(css) && /\.ap-play/.test(css));
+      t('...and the light theme is handled explicitly',
+        /:root\[data-theme='light'\] \.ap\b/.test(css));
+
+      /* Lock-screen controls. News radio is listened to with the screen off
+         by definition, so this is not a nicety. */
+      t('...and it drives the phone lock-screen controls',
+        /mediaSession/.test(playerCode) && /setActionHandler/.test(playerCode));
+    }
+
+    /*
+     * ─── SPEED ────────────────────────────────────────────────────────────
+     *   «سرعت اومدن زیاد شود»
+     *
+     * Two causes, two fixes, and both must hold or the tab is slow again:
+     *   1. the route was memory-cached only, so every Vercel cold start
+     *      re-fetched four RSS documents;
+     *   2. it waited for the SLOWEST feed with the shared 12-second timeout.
+     */
+    t('the audio route survives a cold start',
+      /withPersistentCache\(\s*'audio'/.test(app.replace(/\/\*[\s\S]*?\*\//g, '')));
+    t('...and one slow podcast host cannot hold the tab hostage',
+      /AUDIO_TIMEOUT_MS/.test(srvCode) && !/UPSTREAM_TIMEOUT_MS/.test(srvCode));
+    t('...while a dead station still leaves the dial playing',
+      /allSettled/.test(srvCode));
 
     /* Attribution is not optional: these are other people's shows. */
     const en = JSON.parse(read('src/i18n/locales/en.json'));
@@ -5107,6 +5201,254 @@ export default function run() {
      */
     t('non-ASCII slugs are percent-encoded for the sitemap',
       /encodeURIComponent\(p\.slug\)/.test(gen));
+  }
+
+  /* ---- 65. coin artwork: the right size, from one component ------------- */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY THE MARKET ICONS WERE SLOW.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «در قسمت بازار کویین ها ایکونشون نمیاد یا دیر و خیلی دیر میاد کنده»
+     *
+     * `normalizeCoin` stores CoinGecko's `image` verbatim, and that field is
+     * always the LARGE variant — a 250x250 PNG, 25-60 KB. The market screen
+     * renders 250 rows into 34px circles. So one visit asked for up to ~10 MB
+     * of artwork it then scaled down by 86%, over ~6 parallel connections,
+     * which is why they trickled in one at a time.
+     *
+     * These checks pin the fix at every layer, because a size rewrite applied
+     * in ten of eleven call sites is not a fix — it is a bug that now happens
+     * less often and is therefore harder to find.
+     */
+    /*
+     * Comments stripped before every match. This suite has been fooled FOUR
+     * separate times by a check that matched its own explanatory prose, so
+     * the stripper is declared first in the block and used unconditionally.
+     */
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    t('the coin-image sizer exists', existsSync('src/lib/coinImage.js'));
+    t('the shared coin avatar exists', existsSync('src/components/CoinLogo.jsx'));
+
+    if (existsSync('src/lib/coinImage.js') && existsSync('src/components/CoinLogo.jsx')) {
+      const sizer = code(read('src/lib/coinImage.js'));
+      const logo = read('src/components/CoinLogo.jsx')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+
+      /*
+       * Pinned to the literal path shape, not to the word "small". A check
+       * for /small/ would pass for a module that returns the URL untouched
+       * and merely mentions the word — the generic-match trap.
+       */
+      t('...it rewrites the CoinGecko size segment',
+        sizer.includes('(thumb|small|large)') && sizer.includes('coins\\/images\\/'));
+      t('...and leaves any other host alone',
+        /\^https:/.test(sizer));
+
+      /* The list default must be the SMALL variant. `large` here is the whole
+         bug; `thumb` at 25px would be visibly soft on a 3x screen. */
+      t("...and the list default is 'small'", /size = 'small'/.test(logo));
+
+      /* The attributes that stop 250 rows from reflowing 250 times. */
+      t('the avatar reserves its box before the bytes arrive',
+        /loading="lazy"/.test(logo));
+      t('...and never competes with the price data for connections',
+        /fetchpriority="low"/.test(logo));
+      t('...and leaks no browsing history to the image host',
+        /referrerPolicy="no-referrer"/.test(logo));
+
+      /*
+       * A dead URL must fall back to LETTERS, not to an empty circle. The old
+       * inline `{coin.image && <img>}` had no error handling at all, so a
+       * 404 left a blank tile that reads as broken.
+       */
+      t('...and a failed image degrades to a readable monogram',
+        /onError/.test(logo) && /coinHue/.test(logo));
+
+      /*
+       * ─── EVERY CALL SITE, OR THE FIX DOES NOT REACH THE SCREEN ──────────
+       * The old expression was copy-pasted into eleven places. Any survivor
+       * is a screen still pulling 250 KB images.
+       */
+      const screens = [
+        'src/components/CoinRow.jsx',
+        'src/pages/Market.jsx',
+        'src/pages/CoinDetail.jsx',
+        'src/pages/Trade.jsx',
+        'src/pages/Signals.jsx',
+        'src/pages/Stocks.jsx',
+        'src/pages/Predict.jsx',
+        'src/pages/Discover.jsx'
+      ];
+      const raw = screens.filter((f) => {
+        if (!existsSync(f)) return false;
+        const src = code(read(f));
+        /* `<img src={...image}` in any shape — the pattern being eliminated. */
+        return /<img[^>]*src=\{[^}]*\.image/.test(src);
+      });
+      t(`no screen still renders a raw coin <img>${raw.length ? ` — ${raw.join(', ')}` : ''}`,
+        raw.length === 0);
+
+      const notWired = screens.filter((f) => existsSync(f) && !/CoinLogo/.test(read(f)));
+      t(`every coin screen uses the shared avatar${notWired.length ? ` — missing in ${notWired.join(', ')}` : ''}`,
+        notWired.length === 0);
+
+      /*
+       * The connection to the image CDN must be warmed in the HTML, not after
+       * the bundle parses. Otherwise the first icon still waits on DNS + TLS.
+       */
+      t('...and the image host is preconnected from the document head',
+        /rel="preconnect" href="https:\/\/coin-images\.coingecko\.com"/.test(read('index.html')));
+    }
+  }
+
+  /* ---- 66. "this coin cannot be swapped" was mostly false ---------------- */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «بعضی از کویین ها مثل پنگوئن میگه نمیشه سواپ کرد»
+     * ═══════════════════════════════════════════════════════════════════════
+     * The coin page answered "can I trade this?" from the 46-entry curated
+     * EVM table in chains.js. That table stopped being the answer the moment
+     * the swap screen started loading thousands of tokens from public lists,
+     * and it was never the answer for Solana — an entire screen of this app
+     * that the coin page did not know existed.
+     *
+     * PENGU is the reported case: a Solana SPL token with deep Jupiter
+     * liquidity, turned away from a trade we can execute and earn on.
+     *
+     * This is the "wired to nothing" class of failure, so the chain is
+     * asserted end to end: module → route → route calls it → client lib →
+     * page imports it → page CALLS it → page renders the result → the
+     * destination screen can actually accept what the page hands it.
+     */
+    /*
+     * Comments stripped before every match. This suite has been fooled FOUR
+     * separate times by a check that matched its own explanatory prose, so
+     * the stripper is declared first in the block and used unconditionally.
+     */
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    t('the venue resolver exists', existsSync('server/coinVenue.js'));
+
+    if (existsSync('server/coinVenue.js')) {
+      const venueSrc = code(read('server/coinVenue.js'));
+      const appSrc = code(read('server/app.js'));
+
+      t('...the route is mounted', /['"`]\/api\/coin-venue\/:id['"`]/.test(appSrc));
+      t('...and the route calls the resolver', /resolveVenue\s*\(/.test(appSrc));
+      t('...and the module is imported', /from '\.\/coinVenue\.js'/.test(appSrc));
+
+      /*
+       * Solana must be resolved as well as EVM, or the PENGU case is still
+       * broken and the whole change is cosmetic.
+       */
+      t('...Solana is resolved, not just EVM', /SOLANA_SLUG/.test(venueSrc));
+      /*
+       * And it must be validated. An unvalidated mint becomes a `?toMint=`
+       * link the Solana screen cannot resolve — a broken picker instead of
+       * the honest "not here" the old code at least managed.
+       */
+      t('...and a malformed mint is rejected rather than forwarded',
+        /1-9A-HJ-NP-Za-km-z/.test(venueSrc));
+
+      /*
+       * Solana must NOT be in PLATFORM_SLUGS. Every consumer of that object
+       * does Number(key); a non-EVM entry gives NaN a chain and silently
+       * corrupts the ORDER-FORM resolver, which is a different feature.
+       */
+      t('...and Solana is kept out of the EVM chain-id map',
+        !/solana/i.test(code(read('server/coinIndex.js'))));
+    }
+
+    if (existsSync('src/lib/coinVenue.js')) {
+      const libSrc = code(read('src/lib/coinVenue.js'));
+      const detail = code(read('src/pages/CoinDetail.jsx'));
+
+      t('the client library calls the route', /coin-venue\//.test(libSrc));
+      /*
+       * A network failure must return null, and null must NOT be rendered as
+       * a refusal. Telling somebody their coin is untradeable because our own
+       * request timed out is the same false negative this whole section
+       * exists to remove.
+       */
+      t('...a failure is null, never a false "not tradeable"',
+        /catch\s*\{\s*return null;/.test(libSrc));
+      t('...and a failure is not cached',
+        libSrc.indexOf('memo.set') < libSrc.indexOf('catch {'));
+
+      t('the coin page asks', /getCoinVenue/.test(detail));
+      t('...and renders the result', /resolvedRoute/.test(detail));
+      /*
+       * The "not swappable" message must be gated on the answer having
+       * ARRIVED. Rendering it while the request is in flight is a refusal
+       * that flickers into a Buy button a second later — the user has
+       * already read it and moved on.
+       */
+      /*
+       * Pinned to the RENDER GATE, not to the identifier. `venueChecked`
+       * appears in the effect that sets it, so a bare /venueChecked/ passes
+       * for a page that computes the flag and then ignores it — the generic
+       * match that succeeds for both the right and the wrong implementation.
+       */
+      t('...and never says "not swappable" before the answer arrives',
+        /:\s*!venueChecked\s*\?/.test(detail) &&
+        detail.indexOf('!venueChecked') < detail.indexOf('coin.notSwappable'));
+
+      /*
+       * ─── THE DESTINATION HAS TO ACCEPT THE HANDOFF ──────────────────────
+       * This is precisely where this repo has shipped "wired to nothing"
+       * three times: a link that is generated but that the target screen
+       * ignores. Both receivers are checked.
+       */
+      const swap = code(read('src/pages/Swap.jsx'));
+      t('the EVM swap screen accepts a contract address',
+        /searchParams\.get\('toAddress'\)/.test(swap));
+      t('...and imports it when no list has it',
+        /importTokenByAddress/.test(swap));
+      /*
+       * `?to=` is a SYMBOL and must stay matched against the curated list
+       * only — a symbol from a URL selecting an arbitrary token is a one-tap
+       * phishing vector. The address path is separate precisely so that
+       * guarantee survives.
+       */
+      t('...while the symbol parameter stays restricted to curated tokens',
+        /const pick = \(sym\) => curated\.find/.test(swap));
+
+      const sol = code(read('src/pages/SolanaSwap.jsx'));
+      t('the Solana screen accepts a resolved mint',
+        /searchParams\.get\('toMint'\)/.test(sol));
+      t('...and validates it before selecting anything',
+        /isSolanaAddress\(mint\)/.test(sol));
+      t('...while ?to= stays restricted to the curated assets',
+        /findAsset\(to\)/.test(sol));
+
+      /* The copy has to exist in all three written languages or the page
+         renders a raw key where the reassurance should be. */
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      for (const k of ['coin.resolvedEvmNote', 'coin.resolvedSolanaNote']) {
+        t(`${k} is translated everywhere`,
+          hasKey(enL, k) && hasKey(faL, k) && hasKey(arL, k));
+      }
+      /*
+       * And it must SAY the token is unverified. A resolved token is not a
+       * curated one; presenting it with the same confidence would spend the
+       * trust the curated list was built to earn.
+       */
+      t('...and the resolved-token copy admits the token is not verified',
+        /not on our verified list/i.test(enL.coin.resolvedEvmNote));
+    }
   }
 
   return rows;

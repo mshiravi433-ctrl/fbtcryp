@@ -131,6 +131,63 @@ export default function SolanaSwap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+   * ─── ?toMint=<mint> — AN UNCURATED MINT, FROM A COIN PAGE ───────────────
+   * Separate from `?to=` above, and the separation is the safety design.
+   *
+   * `?to=` resolves against the CURATED asset list only. That restriction
+   * exists because those assets are tokenized equities and staking tokens
+   * where impersonation is both easy and lucrative — six fake AAPLx mints
+   * exist, one with $3.44 of liquidity and a scraped Apple logo. A crafted
+   * `?to=` link must never be able to preselect one.
+   *
+   * `?toMint=` is the opposite case and needs the opposite treatment. It
+   * comes from a coin page whose CoinGecko id resolved to this mint (see
+   * lib/coinVenue.js), which is how PENGU — a real Solana token with deep
+   * Jupiter liquidity — stops being told «نمیشه سواپ کرد». It is added
+   * through the SAME path as a hand-pasted mint, so it appears in the picker
+   * as a truncated address with no name and no verified badge, and the user
+   * sees exactly what they are trading.
+   *
+   * Decimals are read as 9 here, matching the paste path, and that is safe
+   * for the same stated reason: the quote is computed by Jupiter from the
+   * mint's real on-chain decimals, so a wrong guess only changes what the
+   * user TYPES, never what they receive. It is visible in the quote before
+   * anything is signed.
+   */
+  useEffect(() => {
+    const mint = searchParams.get('toMint');
+    if (!mint) return;
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('toMint');
+    next.delete('side');
+    setSearchParams(next, { replace: true });
+
+    if (!isSolanaAddress(mint)) return;
+
+    /* Already known — curated or previously imported. Just select it. */
+    const curatedHit = BASE_TOKENS.find((tk) => tk.mint === mint);
+    if (curatedHit) {
+      setToToken(curatedHit);
+      setFromToken(BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0]);
+      return;
+    }
+
+    const token = {
+      mint,
+      symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`,
+      name: '',
+      decimals: 9,
+      imported: true
+    };
+    setExtraTokens((prev) => (prev.some((tk) => tk.mint === mint) ? prev : [...prev, token]));
+    setToToken(token);
+    /* Paying with a stablecoin, not with SOL: the coin page sent a "buy". */
+    setFromToken(BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [order, setOrder] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteErr, setQuoteErr] = useState(null);

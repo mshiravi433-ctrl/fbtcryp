@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
 
@@ -202,7 +203,9 @@ export default function Ecosystem() {
         </motion.div>
       )}
 
-      <p className="notice">{t('eco.notice')}</p>
+      <InfoBox title={t('eco.noticeTitle')} tone="info" id="eco-notice">
+        <p>{t('eco.notice')}</p>
+      </InfoBox>
     </PageTransition>
   );
 }

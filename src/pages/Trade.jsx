@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import CoinLogo from '../components/CoinLogo';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import Sheet from '../components/Sheet';
@@ -165,7 +166,7 @@ export default function Trade() {
           onClick={() => setPickerOpen(true)}
           style={{ width: '100%', border: '1px solid var(--line)' }}
         >
-          <div className="coin-logo">{coin?.image ? <img src={coin.image} alt="" /> : coin?.symbol?.slice(0, 3)}</div>
+          <CoinLogo coin={coin} />
           <div className="coin-meta" style={{ textAlign: 'start' }}>
             <div className="coin-sym">{coin?.symbol ?? '—'}</div>
             <div className="coin-name">{coin?.name ?? ''}</div>
@@ -313,7 +314,7 @@ export default function Trade() {
                 haptic?.('select');
               }}
             >
-              <div className="coin-logo">{c.image ? <img src={c.image} alt="" /> : c.symbol.slice(0, 3)}</div>
+              <CoinLogo coin={c} />
               <div className="coin-meta">
                 <div className="coin-sym">{c.symbol}</div>
                 <div className="coin-name">{c.name}</div>

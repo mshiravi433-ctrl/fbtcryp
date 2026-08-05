@@ -57,7 +57,8 @@
     "language": "Language",
     "tryAgain": "Try again",
     "retry": "Try again",
-    "close": "Close"
+    "close": "Close",
+    "notAdviceTitle": "This is market data, not advice"
   },
   "market": {
     "totalMcap": "Total market cap",
@@ -102,6 +103,8 @@
     "notFoundHelp": "This coin was not in the loaded page and the direct lookup did not answer either. That usually means the data provider is rate-limiting right now — try again in a moment.",
     "realSwapNote": "Real swap on {{chain}}, using {{symbol}}. Your wallet signs it and the tokens are yours — this is not a simulation.",
     "notSwappable": "This coin cannot be swapped in the app yet. It trades on a network we do not support, or has no verified contract we would stake our name on. We will not open a swap on a token that merely shares its ticker.",
+    "resolvedEvmNote": "Real swap on {{chain}}, contract {{address}}. Your own wallet signs and the tokens are yours — this is not a simulation. This token is not on our verified list, so check the contract and the amount you receive on the swap screen before you confirm.",
+    "resolvedSolanaNote": "Real swap on Solana, mint {{address}}. Your own wallet signs and the tokens are yours — this is not a simulation. This token is not on our verified list, so check the mint and the amount you receive on the swap screen before you confirm.",
     "practiceInstead": "Practice with virtual credits instead",
     "open": "Open",
     "close": "Close",
@@ -192,7 +195,8 @@
     "payout": "Payout on a correct call",
     "openRounds": "Open rounds",
     "results": "Results",
-    "stake": "Stake"
+    "stake": "Stake",
+    "riskTitle": "Virtual credits only — and why real-money versions of this are banned"
   },
   "earn": {
     "title": "Earn",
@@ -501,7 +505,8 @@
     "failedOnChain": "The transaction was mined but reverted, so the swap did not happen. Your tokens were never taken and are still in your wallet. The network fee (gas) was spent and cannot be refunded — that goes to the validators, not to us.",
     "failedNothingSent": "Nothing was sent. No tokens left your wallet and no network fee was charged. You can safely try again.",
     "network": "Network",
-    "max": "MAX"
+    "max": "MAX",
+    "custodyTitle": "Who holds your money here, and how to not lose it"
   },
   "onboarding": {
     "skip": "Skip",
@@ -609,7 +614,9 @@
     "customRpc": "Custom RPC",
     "customRpcSub": "Use your own node",
     "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",
-    "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust."
+    "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust.",
+    "securityScopeTitle": "What a passcode here protects, and what it does not",
+    "rpcWarnTitle": "Why a custom RPC endpoint is a trust decision"
   },
   "about": {
     "title": "About us",
@@ -954,7 +961,8 @@
       "neutral": "Neutral"
     },
     "outlookLocal": "Indicator read",
-    "aiMetaLocal": "Generated on this device straight from the indicators (RSI, MACD, Bollinger, moving averages, volatility). No language model is involved — every sentence comes from a number that was actually computed."
+    "aiMetaLocal": "Generated on this device straight from the indicators (RSI, MACD, Bollinger, moving averages, volatility). No language model is involved — every sentence comes from a number that was actually computed.",
+    "disclaimerTitle": "What these indicators are — and what they cannot tell you"
   },
   "stocks": {
     "title": "Stocks",
@@ -1312,7 +1320,8 @@
       "bridgeStatus": "Whether cross-chain bridging is configured",
       "fiatStatus": "Whether buying with money is switched on",
       "solanaStatus": "Solana routing and fee configuration",
-      "gaslessStatus": "Whether gasless swaps are available"
+      "gaslessStatus": "Whether gasless swaps are available",
+      "coinVenue": "Which chains a coin can actually be traded on here, resolved from its own contract addresses"
     },
     "fairUse": "Fair use, stated plainly",
     "fairUseBody": "This data costs us upstream quota that is shared by every user of the app. Cache what you fetch, poll no faster than the cache tiers above, and identify your client in the user-agent so we can talk to you rather than block you. There is no commercial tier and no paid plan — if you need more than the limit allows, self-host, which is free and takes three commands.",
@@ -1422,7 +1431,8 @@
     },
     "notice": "These are independent projects. Fanous Bazaar Pishgam is not affiliated with them and earns nothing from these links.",
     "search": "Search the ecosystem",
-    "noResults": "Nothing matches “{{q}}”."
+    "noResults": "Nothing matches “{{q}}”.",
+    "noticeTitle": "Our relationship with these projects: none"
   },
   "biz": {
     "title": "Business",
@@ -1538,7 +1548,8 @@
       "s3": "Scan their QR code instead of typing. If you must type or paste, compare the first four and last four characters against the original before continuing.",
       "s4": "Send a small test amount first when the sum is large. Losing a dollar to a mistake is a lesson; losing the whole amount is not recoverable.",
       "s5": "Send the rest, then give them the transaction link so they can verify it on-chain themselves."
-    }
+    },
+    "noticeTitle": "We do not run these platforms and cannot recover your money"
   },
   "rank": {
     "title": "Ranking",
@@ -1895,7 +1906,8 @@
     },
     "trending": "Trending now",
     "searchPlaceholder": "Search these sites",
-    "noMatch": "Nothing here matches “{{q}}”. Try another word, or clear the search to see every site."
+    "noMatch": "Nothing here matches “{{q}}”. Try another word, or clear the search to see every site.",
+    "safetyTitle": "How lookalike-site scams work, and why we never ask you to type an address"
   },
   "nft": {
     "title": "My NFTs",
@@ -1920,7 +1932,8 @@
       "NFT_KEY_REJECTED": "Our NFT data provider rejected the request. This is on our side — the access key needs renewing. Everything else in the app is unaffected.",
       "NFT_RATE_LIMITED": "Too many requests to the NFT provider right now. Try again in a minute.",
       "NFT_UPSTREAM_DOWN": "The NFT data provider is down. Your NFTs are safe on-chain — this screen just cannot read them right now."
-    }
+    },
+    "safetyTitle": "Before you trust an NFT you were sent"
   },
   "orders": {
     "title": "Auto Orders",
@@ -2484,7 +2497,19 @@
     "pause": "Pause",
     "partial": "{{ok}} of {{total}} stations are reachable right now. The others are not down permanently — their hosting is having a bad moment.",
     "openShow": "Open on {{name}}",
-    "credit": "These are independent shows. We link to their own audio and credit every one; nothing is rehosted, re-edited or stripped of its advertising. Opinions in them are the hosts', not ours, and none of it is financial advice."
+    "credit": "These are independent shows. We link to their own audio and credit every one; nothing is rehosted, re-edited or stripped of its advertising. Opinions in them are the hosts', not ours, and none of it is financial advice.",
+    "aboutTitle": "What is this, and whose shows are these?",
+    "allStations": "All shows",
+    "emptyStation": "Nothing new from this show today.",
+    "stop": "Stop",
+    "previous": "Previous episode",
+    "next": "Next episode",
+    "back15": "Back 15 seconds",
+    "fwd15": "Forward 15 seconds",
+    "speed": "Playback speed",
+    "seek": "Seek within the episode",
+    "playerLabel": "Radio player",
+    "failed": "This episode would not play. The show's own server refused the file — it is not a problem with your connection or with the app. Try another episode."
   },
   "crash": {
     "title": "This screen ran into a problem",

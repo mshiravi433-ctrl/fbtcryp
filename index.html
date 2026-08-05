@@ -9,6 +9,29 @@
 
     <!--
       ═══════════════════════════════════════════════════════════════════════
+      COIN ARTWORK — open the connection before it is needed.
+
+      Every icon in the market list comes from coin-images.coingecko.com. The
+      browser cannot start ANY of them until it has done a DNS lookup, a TCP
+      handshake and a TLS negotiation with that host — on a slow mobile link
+      that is 300-600 ms before the first byte of the first icon, and it does
+      not begin until the React bundle has parsed and the list has rendered.
+
+      `preconnect` moves that setup to the moment the HTML is parsed, in
+      parallel with downloading the bundle, so by the time the list paints the
+      connection is already warm.
+
+      It is `preconnect` and NOT `preload`: preload would fetch a specific
+      file, and we do not know which coins the user will see. And an
+      unreachable host costs nothing here — a failed preconnect is silent and
+      never blocks the parser, unlike the synchronous <script> tags described
+      further down that caused the original "spins forever" bug.
+    -->
+    <link rel="preconnect" href="https://coin-images.coingecko.com" crossorigin />
+    <link rel="dns-prefetch" href="https://coin-images.coingecko.com" />
+
+    <!--
+      ═══════════════════════════════════════════════════════════════════════
       iOS / iPadOS
 
       Safari ignores most of the web app manifest. `display: standalone`,

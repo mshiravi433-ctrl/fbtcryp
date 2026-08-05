@@ -32,6 +32,7 @@ import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchPerpMarkets } from './perp.js';
 import { resolveIds } from './coinIndex.js';
+import { resolveVenue } from './coinVenue.js';
 import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
@@ -279,7 +280,39 @@ app.get('/api/news', (_req, res) => serve(res, 1_800_000)(fetchNews, 'news'));
  * for the primary audience. Podcast MP3s are ordinary HTTPS files from CDNs
  * that are reachable, need no SDK, and keep playing with the screen off.
  */
-app.get('/api/audio', (_req, res) => serve(res, 1_800_000)(fetchAudio, 'audio'));
+/*
+ * ─── WHY THIS ONE IS PERSISTENTLY CACHED AND /api/news IS NOT ─────────────
+ *   «در اخبار قسمت رادیو هم دیر میاد»
+ *
+ * The radio tab was slow, and the memory cache above is the reason it stayed
+ * slow no matter how long the TTL was. On Vercel every cold start begins with
+ * an EMPTY Map, so `serve()` re-fetched four RSS documents from four
+ * different podcast hosts — and because `fetchAudio` waits for all four, the
+ * response could not arrive until the SLOWEST of them did. Measured against
+ * the timeout that used to apply, that was up to 12 seconds of staring at a
+ * skeleton, on a feature whose content changes once a day.
+ *
+ * Blob storage survives cold starts, so the fetch happens roughly twice an
+ * hour for the whole site instead of once per visitor who got unlucky. It
+ * degrades to memory-only when the token is missing, which is exactly what
+ * happens in local development — the feature still works, it is just as slow
+ * as it used to be.
+ */
+app.get('/api/audio', async (_req, res) => {
+  try {
+    const { value, cached, tier } = await withPersistentCache(
+      'audio',
+      1_800_000,
+      fetchAudio,
+      memoryStore
+    );
+    res.set('cache-control', 'public, max-age=900');
+    if (cached) res.set('x-cache', tier.toUpperCase());
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
 
 app.get('/api/prices', (req, res) => {
   const ids = String(req.query.ids || '')
@@ -582,6 +615,28 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
     const out = await resolveIds(req.params.chainId, req.query.addresses);
     if (out.error) return res.status(400).json(out);
     /* An id mapping is near-permanent; let the browser hold it for an hour. */
+    res.set('cache-control', 'public, max-age=3600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/*
+ * GET /api/coin-venue/:id — "can we trade this coin, and where?"
+ *
+ * The coin page used to answer that from a 46-entry hand-written table and
+ * told the user "no" for everything else, including Solana tokens our own
+ * /solana screen trades happily. Reported as «بعضی از کویین ها مثل پنگوئن
+ * میگه نمیشه سواپ کرد». See server/coinVenue.js.
+ *
+ * Not wrapped in `serve()` for the same reason as /api/coin-id: the response
+ * depends on the path parameter, and that helper caches per fixed key.
+ */
+app.get('/api/coin-venue/:id', async (req, res) => {
+  try {
+    const out = await resolveVenue(req.params.id);
+    if (out.error) return res.status(400).json(out);
     res.set('cache-control', 'public, max-age=3600');
     return res.json(out);
   } catch (err) {

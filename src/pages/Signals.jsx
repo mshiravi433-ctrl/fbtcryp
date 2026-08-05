@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
+import CoinLogo from '../components/CoinLogo';
 import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
@@ -346,7 +348,7 @@ export default function Signals() {
             <motion.div key="gauge" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
               <div className="row-between" style={{ marginBottom: 6 }}>
                 <div className="row" style={{ gap: 9 }}>
-                  <div className="coin-logo">{coin?.image ? <img src={coin.image} alt="" /> : coin?.symbol?.slice(0, 3)}</div>
+                  <CoinLogo coin={coin} />
                   <div>
                     <div style={{ fontWeight: 700 }}>{coin?.symbol}</div>
                     <div className="faint mono">${fmtPrice(coin?.price)}</div>
@@ -613,7 +615,7 @@ export default function Signals() {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
               >
-                <div className="coin-logo">{c.image ? <img src={c.image} alt="" /> : c.symbol.slice(0, 3)}</div>
+                <CoinLogo coin={c} />
                 <div className="coin-meta">
                   <div className="coin-sym">{c.symbol}</div>
                   <div className="coin-name">{t(`signals.label.${a.label}`)} · {a.confidence}%</div>
@@ -630,7 +632,16 @@ export default function Signals() {
         </section>
       )}
 
-      <p className="notice notice-danger">{t('signals.disclaimer')}</p>
+      {/*
+        The disclaimer is a paragraph about what these indicators ARE and what
+        they cannot do. It is the last thing on a long page and, as a red
+        block, it was competing with the buy/sell buttons directly beneath it
+        — which is the exact inversion of what a warning is for. Collapsed
+        with an honest title, it gets read; expanded and ignored, it did not.
+      */}
+      <InfoBox title={t('signals.disclaimerTitle')} tone="warn" id="signals-disclaimer">
+        <p>{t('signals.disclaimer')}</p>
+      </InfoBox>
 
       <div className="row" style={{ gap: 10 }}>
         <button className="btn btn-primary" onClick={() => navigate(`/swap?coin=${coinId}`)}>

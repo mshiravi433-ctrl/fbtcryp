@@ -17,6 +17,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import Sheet from '../components/Sheet';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useWallet, shortAddress } from '../context/WalletContext';
@@ -529,7 +530,9 @@ export default function Settings() {
           */}
         </div>
         {bioErr && <p className="notice notice-danger" style={{ marginTop: 8 }}>{t(`settings.bioErr.${bioErr}`)}</p>}
-        <p className="notice" style={{ marginTop: 10 }}>{t('settings.securityScope')}</p>
+        <InfoBox title={t('settings.securityScopeTitle')} tone="warn" id="set-scope">
+          <p>{t('settings.securityScope')}</p>
+        </InfoBox>
       </motion.section>
 
       {/* ---------------- networks ---------------- */}
@@ -672,7 +675,9 @@ export default function Settings() {
           placeholder="https://api.mainnet-beta.solana.com"
           style={{ fontSize: 13 }}
         />
-        <p className="notice" style={{ marginTop: 11 }}>{t('settings.rpcWarn')}</p>
+        <InfoBox title={t('settings.rpcWarnTitle')} tone="warn" id="set-rpc">
+          <p>{t('settings.rpcWarn')}</p>
+        </InfoBox>
         <button
           className="btn btn-primary"
           style={{ marginTop: 11 }}

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import CoinLogo from '../components/CoinLogo';
 import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
@@ -332,7 +333,7 @@ export default function Stocks() {
                     variants={riseIn}
                     onClick={() => navigate(`/coin/${c.id}`)}
                   >
-                    <div className="coin-logo">{c.image ? <img src={c.image} alt="" /> : c.symbol.slice(0, 3)}</div>
+                    <CoinLogo coin={c} />
                     <div className="coin-meta">
                       <div className="coin-sym">{c.symbol}</div>
                       <div className="coin-name">{c.name} · {fmtCompact(c.mcap)}</div>

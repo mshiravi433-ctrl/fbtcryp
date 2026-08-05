@@ -41,7 +41,20 @@
  * source, republish nothing.
  */
 
-const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
+/**
+ * ─── A TIGHTER TIMEOUT THAN THE REST OF THE APP, ON PURPOSE ─────────────────
+ * This used to be the shared `UPSTREAM_TIMEOUT_MS` (12 s). Because
+ * `fetchAudio` waits on all four feeds, ONE slow podcast host held the entire
+ * radio tab hostage for twelve seconds — reported as «در اخبار قسمت رادیو هم
+ * دیر میاد».
+ *
+ * A podcast RSS document is 50-200 KB of static XML from a CDN. Six seconds
+ * is already several times what a healthy one needs, so a feed that misses it
+ * is not slow, it is broken — and `allSettled` already treats a broken feed as
+ * "this station contributes nothing today" and says so on screen. Waiting
+ * twice as long to reach the same conclusion helps nobody.
+ */
+const TIMEOUT = Number(process.env.AUDIO_TIMEOUT_MS || 6000);
 
 /**
  * The stations.

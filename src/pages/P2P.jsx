@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
@@ -246,7 +247,9 @@ export default function P2P() {
             </motion.div>
           </section>
 
-          <p className="notice notice-danger">{t('p2p.notice')}</p>
+          <InfoBox title={t('p2p.noticeTitle')} tone="danger" id="p2p-notice">
+            <p>{t('p2p.notice')}</p>
+          </InfoBox>
 
           {/*
             Rendered here, inside the tab that links out. Mounting it at the

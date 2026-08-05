@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import Sheet from '../components/Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -219,9 +220,9 @@ export default function Nft() {
             ))}
           </motion.div>
 
-          <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
-            {t('nft.safety')}
-          </motion.p>
+          <InfoBox title={t('nft.safetyTitle')} tone="warn" id="nft-safety">
+            <p>{t('nft.safety')}</p>
+          </InfoBox>
         </>
       )}
 

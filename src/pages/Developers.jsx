@@ -76,6 +76,7 @@ const GROUPS = [
       { m: 'GET', p: '/api/yields', d: 'yields' },
       { m: 'GET', p: '/api/perp/markets?symbol=BTC', d: 'perp' },
       { m: 'GET', p: '/api/coin-id/:chainId?addresses=0x…', d: 'coinId' },
+      { m: 'GET', p: '/api/coin-venue/:id', d: 'coinVenue' },
       { m: 'GET', p: '/api/nft/chains', d: 'nftChains' },
       { m: 'GET', p: '/api/solana/assets', d: 'solanaAssets' }
     ]

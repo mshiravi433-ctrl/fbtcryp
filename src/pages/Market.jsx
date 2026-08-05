@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import Ticker from '../components/Ticker';
 import CoinRow from '../components/CoinRow';
+import CoinLogo from '../components/CoinLogo';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
@@ -210,7 +211,7 @@ export default function Market() {
         >
           <div className="row-between">
             <div className="row">
-              <div className="coin-logo">{hero.image ? <img src={hero.image} alt="" /> : hero.symbol.slice(0, 3)}</div>
+              <CoinLogo coin={hero} />
               <div>
                 <div style={{ fontWeight: 700 }}>{hero.name}</div>
                 <div className="faint">{hero.symbol} / USD</div>
@@ -245,7 +246,13 @@ export default function Market() {
                 whileTap={{ scale: 0.94 }}
                 onClick={() => navigate(`/coin/${c.id}`)}
               >
-                {c.image && <img src={c.image} alt="" width={14} height={14} style={{ borderRadius: 4, marginInlineEnd: 5, verticalAlign: -2 }} />}
+                <CoinLogo
+                  coin={c}
+                  size="thumb"
+                  px={14}
+                  className="coin-chip"
+                  style={{ marginInlineEnd: 5, verticalAlign: -2 }}
+                />
                 {c.symbol}
               </motion.button>
             ))}
@@ -326,9 +333,7 @@ export default function Market() {
                     onClick={() => navigate(`/coin/${c.id}`)}
                     style={{ width: '100%', textAlign: 'start' }}
                   >
-                    <div className="coin-logo">
-                      {c.image ? <img src={c.image} alt="" /> : c.symbol.slice(0, 3)}
-                    </div>
+                    <CoinLogo coin={c} />
                     <div className="coin-meta">
                       <div className="coin-sym">{c.symbol}</div>
                       <div className="coin-name">{c.name}</div>

@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
+import CoinLogo from '../components/CoinLogo';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
@@ -182,7 +184,7 @@ export default function Discover({ embedded = false }) {
                   navigate(`/coin/${c.id}`);
                 }}
               >
-                {c.image && <img src={c.image} alt="" width={16} height={16} style={{ borderRadius: '50%' }} loading="lazy" />}
+                <CoinLogo coin={c} size="thumb" px={16} className="coin-chip coin-chip-round" />
                 {c.symbol}
               </button>
             ))}
@@ -261,9 +263,9 @@ export default function Discover({ embedded = false }) {
         </motion.div>
       )}
 
-      <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
-        {t('discover.safety')}
-      </motion.p>
+      <InfoBox title={t('discover.safetyTitle')} tone="warn" id="discover-safety">
+        <p>{t('discover.safety')}</p>
+      </InfoBox>
     </PageTransition>
   );
 }

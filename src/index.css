@@ -856,6 +856,25 @@ select option { background: #0a0c12; }
 }
 .coin-logo img { width: 100%; height: 100%; object-fit: cover; }
 
+/*
+   A tiny inline coin avatar for chips and pills (trending tags, Discover
+   rows). Same component as `.coin-logo`, different container: it sits INSIDE
+   a line of text, so it must not carry the raised background and border that
+   make a 34px list avatar read as a tile — at 14px those would be all you see.
+*/
+.coin-chip {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.coin-chip img { width: 100%; height: 100%; object-fit: cover; }
+.coin-chip-round { border-radius: 50%; }
+
 .coin-meta { min-width: 0; flex: 1; }
 .coin-sym { font-weight: 700; font-size: 13.5px; text-transform: uppercase; }
 .coin-name { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5258,6 +5277,7 @@ canvas {
 /* Except where the aspect ratio is set explicitly by the component — resetting
    height there would collapse a fixed-size avatar to zero. */
 .coin-logo img,
+.coin-chip img,
 .tok-icon img,
 .nft-thumb img,
 .eco-logo img {
@@ -6365,3 +6385,259 @@ body { overflow-x: clip; }
   background: rgba(15, 23, 42, 0.022);
 }
 :root[data-theme='light'] .infobox-body { font-weight: 450; }
+
+/* ==========================================================================
+   Radio player — the docked transport bar
+   --------------------------------------------------------------------------
+   Asked for as «mp player بسیار زیبا و مدرن ... و در دو تم هم پویا باشد».
+
+   EVERY colour is a token. That is the whole reason the light theme needs
+   only four overrides at the bottom of this block instead of a duplicate of
+   the whole component: the moment one hex value is hard-coded "for dark", the
+   light theme has a hole in it that nobody notices until a user opens it.
+
+   It sits ABOVE the bottom navigation, not over it. Covering the nav to play
+   a podcast would trade the app for the player.
+   ========================================================================== */
+
+.ap {
+  position: fixed;
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 28px);
+  max-width: 440px;
+  z-index: 60;
+
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  /* The blur is what makes it read as floating glass rather than an opaque
+     slab pasted over the page. `saturate` keeps the colour behind it alive —
+     a plain blur turns the market list grey. */
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+}
+
+/* --------------------------------- seek ---------------------------------- */
+/*
+   A native range input, restyled. The track is painted with a gradient whose
+   hard stop sits at --ap-pct, set inline from React — one custom property is
+   far cheaper than re-rendering a filled div sixty times a second, because
+   the browser can update it without touching layout.
+*/
+.ap-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 16px;               /* the TOUCH target */
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.ap-seek::-webkit-slider-runnable-track {
+  height: 3px;                /* the VISIBLE line */
+  border-radius: 0;
+  background: linear-gradient(
+    90deg,
+    var(--rgb-1) 0%,
+    var(--rgb-2) var(--ap-pct, 0%),
+    var(--line) var(--ap-pct, 0%),
+    var(--line) 100%
+  );
+}
+.ap-seek::-moz-range-track {
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--rgb-1) 0%,
+    var(--rgb-2) var(--ap-pct, 0%),
+    var(--line) var(--ap-pct, 0%),
+    var(--line) 100%
+  );
+}
+/*
+   The thumb is deliberately small and only grows on interaction. A permanent
+   14px dot on a 3px line looks like a bug at rest; appearing under the finger
+   is exactly when it is useful.
+*/
+.ap-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 9px;
+  height: 9px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  border: 0;
+  box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.28);
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+.ap-seek:active::-webkit-slider-thumb,
+.ap-seek:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 6px rgba(0, 229, 255, 0.18);
+}
+.ap-seek::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--rgb-1);
+}
+.ap-seek:disabled { cursor: default; opacity: 0.55; }
+
+/* --------------------------------- body ---------------------------------- */
+
+.ap-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px 10px;
+}
+
+.ap-play {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-sunken, rgba(255, 255, 255, 0.04));
+  color: var(--rgb-1);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.ap-play.is-playing {
+  color: var(--rgb-4);
+  border-color: var(--rgb-4);
+  background: rgba(0, 255, 157, 0.08);
+}
+.ap-play:active { transform: scale(0.94); }
+
+/* The buffering ring sits behind the glyph so the button stays pressable. */
+.ap-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: var(--rgb-1);
+  border-right-color: var(--rgb-2);
+  animation: ap-spin 0.85s linear infinite;
+}
+@keyframes ap-spin { to { transform: rotate(360deg); } }
+
+.ap-meta {
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.ap-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  /* One line. A three-line podcast title would double the height of a bar
+     that is pinned over the page. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ap-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.ap-station {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rgb-1);
+}
+.ap-time {
+  flex-shrink: 0;
+  /* Tabular figures: without them the elapsed time jitters sideways every
+     second as digit widths change, which is impossible to un-see. */
+  font-variant-numeric: tabular-nums;
+}
+
+.ap-btn {
+  flex-shrink: 0;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s;
+}
+.ap-btn:not(:disabled):active { color: var(--rgb-1); border-color: var(--rgb-1); }
+.ap-btn:disabled { opacity: 0.35; cursor: default; }
+.ap-btn-wide { min-width: 46px; }
+
+.ap-more { overflow: hidden; }
+.ap-more-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 11px 11px;
+}
+.ap-err {
+  margin: 0;
+  padding: 0 11px 11px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--down);
+}
+
+/*
+   LIGHT THEME.
+
+   Four overrides, and each is a genuine physical difference rather than a
+   restatement: a dark shadow under a light card is a smudge, and a glass
+   panel over a white page needs a WHITE tint, not a transparent one, or the
+   text behind it shows through the blur.
+*/
+:root[data-theme='light'] .ap {
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+}
+:root[data-theme='light'] .ap-play {
+  background: rgba(15, 23, 42, 0.035);
+}
+:root[data-theme='light'] .ap-play.is-playing {
+  background: rgba(0, 168, 104, 0.1);
+}
+:root[data-theme='light'] .ap-title { font-weight: 750; }
+
+/*
+   Reduced motion: keep the spinner (it carries information — "still
+   loading") but drop the slide-in and the thumb bounce, which are decoration.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .ap-seek::-webkit-slider-thumb { transition: none; }
+  .ap-seek:active::-webkit-slider-thumb { transform: none; }
+}

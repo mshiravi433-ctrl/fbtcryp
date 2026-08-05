@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
+import CoinLogo from '../components/CoinLogo';
 import Sparkline from '../components/Sparkline';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useMarkets } from '../hooks/useMarket';
@@ -106,7 +108,9 @@ export default function Predict({ embedded = false }) {
         <div style={{ width: 34 }} />
       </motion.div>
 
-      <p className="notice notice-danger">{t('predict.riskNotice')}</p>
+      <InfoBox title={t('predict.riskTitle')} tone="danger" id="predict-risk" defaultOpen>
+        <p>{t('predict.riskNotice')}</p>
+      </InfoBox>
 
       {/* ---------- asset strip ---------- */}
       <div className="tag-scroll">
@@ -122,7 +126,7 @@ export default function Predict({ embedded = false }) {
         <div className="sheen" />
         <div className="row-between">
           <div className="row" style={{ gap: 9 }}>
-            <div className="coin-logo">{coin?.image ? <img src={coin.image} alt="" /> : coin?.symbol?.slice(0, 3)}</div>
+            <CoinLogo coin={coin} />
             <div>
               <div style={{ fontWeight: 700 }}>{coin?.symbol}</div>
               <div className="faint">{coin?.name}</div>

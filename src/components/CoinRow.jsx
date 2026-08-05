@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { fmtPct, fmtPrice } from '../lib/format';
 import Sparkline from './Sparkline';
+import CoinLogo from './CoinLogo';
 import { riseIn } from './PageTransition';
 
 export default function CoinRow({ coin, onClick, showSpark = true, rank }) {
@@ -18,9 +19,7 @@ export default function CoinRow({ coin, onClick, showSpark = true, rank }) {
           {rank}
         </span>
       )}
-      <div className="coin-logo">
-        {coin.image ? <img src={coin.image} alt="" loading="lazy" /> : coin.symbol?.slice(0, 3)}
-      </div>
+      <CoinLogo coin={coin} />
 
       <div className="coin-meta">
         <div className="coin-sym">{coin.symbol}</div>

@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
+import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
+import { getCoinVenue, venueRoute } from '../lib/coinVenue';
 import CandleChart from '../components/CandleChart';
+import CoinLogo from '../components/CoinLogo';
 import { useOhlc } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
@@ -16,6 +20,17 @@ import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
 import VerdictPanel from '../components/VerdictPanel';
 import { analyze } from '../lib/ai';
+
+/**
+ * Chain names for the resolved-venue line.
+ *
+ * Read from `EVM_CHAINS` rather than typed out — a second copy of the chain
+ * names is a second thing to forget when a chain is added, and this file has
+ * no other reason to import the chain table.
+ */
+const CHAIN_LABEL = Object.fromEntries(
+  Object.entries(EVM_CHAINS).map(([id, c]) => [Number(id), c.name])
+);
 
 const RANGES = [
   { key: '1D', days: 1 },
@@ -75,6 +90,47 @@ export default function CoinDetail() {
 
   const coinGeckoId = id;
   const realSwap = useMemo(() => swapTargetFor(coinGeckoId), [coinGeckoId]);
+
+  /*
+   * ─── THE SECOND OPINION, FOR EVERY COIN THE TABLE NEVER HEARD OF ────────
+   *   «بعضی از کویین ها مثل پنگوئن میگه نمیشه سواپ کرد»
+   *
+   * `swapTargetFor` above is the curated answer: 46 hand-verified EVM tokens.
+   * It is the BEST answer when it hits, because it carries a checked contract
+   * and a counter-token. It is a terrible answer when it misses, because it
+   * misses for the majority of the market list — including every Solana
+   * token, and this app has a working Solana swap screen.
+   *
+   * So the miss is no longer the end of the conversation. We ask the server
+   * for the coin's real contract addresses (CoinGecko's own platform map) and
+   * offer whichever venue we can genuinely reach. Only asked when the curated
+   * lookup failed — a request nobody needs is a request nobody should pay
+   * for on a mobile connection.
+   */
+  const [venue, setVenue] = useState(null);
+  const [venueChecked, setVenueChecked] = useState(false);
+  useEffect(() => {
+    if (realSwap) {
+      setVenue(null);
+      setVenueChecked(true);
+      return undefined;
+    }
+    let alive = true;
+    setVenue(null);
+    setVenueChecked(false);
+    getCoinVenue(coinGeckoId)
+      .then((v) => {
+        if (!alive) return;
+        setVenue(v);
+        setVenueChecked(true);
+      })
+      .catch(() => alive && setVenueChecked(true));
+    return () => {
+      alive = false;
+    };
+  }, [coinGeckoId, realSwap]);
+
+  const resolvedRoute = useMemo(() => venueRoute(venue), [venue]);
   /*
    * Bitcoin over the SAME range, plus the global stats, for the verdict
    * panel's macro layer. Both series have to come from one endpoint with one
@@ -148,9 +204,7 @@ export default function CoinDetail() {
           ‹
         </button>
         <div className="row" style={{ gap: 9 }}>
-          <div className="coin-logo" style={{ width: 28, height: 28 }}>
-            {coin?.image ? <img src={coin.image} alt="" /> : coin?.symbol?.slice(0, 3)}
-          </div>
+          <CoinLogo coin={coin} px={28} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 14 }}>{coin?.name}</div>
             <div className="faint">
@@ -362,9 +416,57 @@ export default function CoinDetail() {
               {t('coin.realSwapNote', { chain: realSwap.chainName, symbol: realSwap.token.symbol })}
             </p>
           </>
+        ) : resolvedRoute ? (
+          /*
+            ─── RESOLVED, NOT CURATED ────────────────────────────────────────
+            No hand-verified entry, but the coin's own contract address came
+            back from CoinGecko's platform map and it is on a chain we trade.
+            This is the PENGU case: a real Solana token with deep liquidity
+            that the old 46-entry table called untradeable.
+
+            The copy is deliberately different from the curated case. A
+            curated token says "your wallet signs, this is not a simulation";
+            this one has to add that the token is not on our verified list and
+            that the amounts must be checked on the swap screen — which is
+            where the existing unverified-token warning fires. Same honesty
+            budget, spent on the thing that is actually uncertain here.
+          */
+          <>
+            <div className="row" style={{ gap: 10 }}>
+              <button className="btn btn-primary" onClick={() => navigate(resolvedRoute.href)}>
+                {t('trade.buy')}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => navigate(resolvedRoute.href.replace('side=buy', 'side=sell'))}
+              >
+                {t('trade.sell')}
+              </button>
+            </div>
+            <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
+              {t(
+                resolvedRoute.kind === 'solana'
+                  ? 'coin.resolvedSolanaNote'
+                  : 'coin.resolvedEvmNote',
+                {
+                  chain: resolvedRoute.chainId ? CHAIN_LABEL[resolvedRoute.chainId] ?? resolvedRoute.chainId : 'Solana',
+                  address: `${resolvedRoute.address.slice(0, 6)}…${resolvedRoute.address.slice(-4)}`
+                }
+              )}
+            </p>
+          </>
+        ) : !venueChecked ? (
+          /*
+            Still asking. Showing "not tradeable" during the request would be
+            a false refusal that flickers into a Buy button a second later —
+            worse than a brief placeholder, because the user has already
+            read it and moved on.
+          */
+          <div className="skel" style={{ height: 44 }} />
         ) : (
           /*
-            No curated contract. Saying "not available" is the honest outcome:
+            Genuinely nowhere we can reach: no curated entry, and no contract
+            on any chain this app trades. Saying so is the honest outcome —
             opening the swap screen on an arbitrary token that merely shares a
             ticker would put someone one tap from buying a fake.
           */
@@ -376,7 +478,9 @@ export default function CoinDetail() {
         </button>
       </motion.div>
 
-      <p className="notice">{t('common.notAdvice')}</p>
+      <InfoBox title={t('common.notAdviceTitle')} tone="warn" id="coin-notadvice">
+        <p>{t('common.notAdvice')}</p>
+      </InfoBox>
     </PageTransition>
   );
 }

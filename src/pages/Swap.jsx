@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
@@ -131,6 +132,95 @@ export default function Swap() {
 
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams, curated]);
+
+  /*
+   * ─── PRE-FILL BY CONTRACT ADDRESS, FROM A COIN PAGE ─────────────────────
+   * `?chain=56&toAddress=0x…`
+   *
+   * The coin page used to say "cannot be swapped here" for anything outside
+   * the 46-entry curated table — reported as «بعضی از کویین ها مثل پنگوئن
+   * میگه نمیشه سواپ کرد». It now resolves the coin's real contract (see
+   * lib/coinVenue.js) and hands it over HERE.
+   *
+   * ─── WHY IT IS A SEPARATE PARAMETER FROM `?to=` ─────────────────────────
+   * `?to=` is a SYMBOL and is matched against the curated list only, on
+   * purpose: a symbol from a URL must never select an arbitrary token,
+   * because dozens of contracts share a ticker and scam tokens copy real ones
+   * deliberately. That guarantee must survive.
+   *
+   * An ADDRESS carries no such ambiguity — it names exactly one contract — so
+   * it gets its own parameter and its own path: look it up in the loaded
+   * lists, and if it is not there, import it by reading `symbol`/`decimals`
+   * off-chain. The imported token is flagged `verified: false`, so the swap
+   * screen's existing unverified-token warning fires exactly as it would for
+   * a hand-pasted address. The user is told; they are not turned away.
+   */
+  const addressPrefill = useRef(false);
+  useEffect(() => {
+    if (addressPrefill.current) return;
+    const wanted = searchParams.get('toAddress');
+    if (!wanted || !/^0x[a-fA-F0-9]{40}$/.test(wanted)) return;
+
+    const wantedChain = Number(searchParams.get('chain'));
+    /*
+     * The address belongs to ONE chain. Applying it while the wallet is on a
+     * different chain would select a contract that does not exist there — at
+     * best a failed quote, at worst a different token at the same address.
+     * So we wait until the chain matches instead of guessing.
+     */
+    if (EVM_CHAINS[wantedChain] && wantedChain !== chainId) {
+      wallet.switchChain?.(wantedChain).catch(() => {});
+      return;
+    }
+
+    addressPrefill.current = true;
+
+    let alive = true;
+    (async () => {
+      const inList = (getTokensSync(chainId) ?? []).find(
+        (tk) => tk.address && tk.address.toLowerCase() === wanted.toLowerCase()
+      );
+      if (inList) {
+        if (alive) setToToken(inList);
+      } else {
+        try {
+          const provider = await wallet.getReadProvider(chainId);
+          const tk = await importTokenByAddress(provider, chainId, wanted);
+          if (!alive) return;
+          setTokens(getTokensSync(chainId));
+          setToToken(tk);
+        } catch {
+          /*
+           * Import failed — a dead RPC, or an address that is not an ERC-20 on
+           * this chain. Leave the form on its defaults rather than half-set:
+           * a `to` field showing a token we could not read is worse than one
+           * the user picks themselves.
+           */
+        }
+      }
+      if (!alive) return;
+      /*
+       * Pay with the stablecoin, not with the token being bought. Without
+       * this the form opens with the same token on both sides, which the
+       * quote engine rejects as SAME_TOKEN and reads as a broken link.
+       */
+      const list = TOKENS[chainId] ?? [];
+      const stable =
+        list.find((x) => x.symbol === 'USDT') ?? list.find((x) => x.symbol === 'USDC');
+      if (stable && stable.address?.toLowerCase() !== wanted.toLowerCase()) setFromToken(stable);
+
+      const next = new URLSearchParams(searchParams);
+      next.delete('toAddress');
+      next.delete('chain');
+      next.delete('side');
+      setSearchParams(next, { replace: true });
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, chainId]);
   const [balances, setBalances] = useState({});
   const [impact, setImpact] = useState(null);
   const [gasCost, setGasCost] = useState(null);
@@ -561,7 +651,25 @@ export default function Swap() {
         </motion.button>
       </motion.div>
 
-      <p className="notice">{t('swap.nonCustodialNotice')}</p>
+      {/*
+        ─── THE POLICY EXPLANATION COLLAPSES; THE PER-TAP WARNINGS DO NOT ────
+        Asked for: «همه هشدارها و نظرات را در هر صفحه بزار تو باکس باز شونده
+        تا صفحه شلوغ بنظر نرسد».
+
+        This block is three sentences of "how custody works here". True,
+        important, and read once. It sat directly between the heading and the
+        swap form, so on a phone the form itself began below the fold.
+
+        Everything further down this file stays an inline `.notice` on
+        purpose, and the line is not arbitrary: high price impact, insufficient
+        balance, a quote error, a >3% slippage setting and the review sheet all
+        describe what THIS TAP is about to do with real money. Those must not
+        be one tap away from being read.
+      */}
+      <InfoBox title={t('swap.custodyTitle')} tone="info" id="swap-custody">
+        <p>{t('swap.nonCustodialNotice')}</p>
+        <p>{t('swap.verifyContracts')}</p>
+      </InfoBox>
 
       {/* connection status */}
       <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">
