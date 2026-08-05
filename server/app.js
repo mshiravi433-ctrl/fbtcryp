@@ -29,6 +29,7 @@ import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchPerpMarkets } from './perp.js';
+import { resolveIds } from './coinIndex.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -488,6 +489,35 @@ app.get('/api/solana/assets', (_req, res) => serve(res, 300_000)(fetchSolanaAsse
  * rate without its interval produces a confident wrong number.
  */
 app.get('/api/perp/markets', (_req, res) => serve(res, 300_000)(fetchPerpMarkets, 'perp-markets'));
+
+/**
+ * CONTRACT ADDRESS → COINGECKO ID, for the automatic-order screen.
+ *
+ * ─── WHY THIS ROUTE EXISTS ──────────────────────────────────────────────────
+ * An automatic order needs a PRICE FEED, not just a token. The order screen
+ * was therefore limited to the 36 hand-curated entries in `chains.js` that
+ * carry a `coingeckoId`, while the swap screen already offers thousands.
+ *
+ * This resolves the id for any token the user picks. See server/coinIndex.js
+ * for why the upstream (the whole CoinGecko coin list, ~20 MB) can never be
+ * fetched by a phone, and why an unresolvable address returns null rather than
+ * a guess — an order watching the wrong coin's price is worse than no order.
+ *
+ * Not wrapped in `serve()`: the response depends on the query, and that helper
+ * caches per key. coinIndex.js does its own six-hour caching of the expensive
+ * part, so each call here is a Map lookup.
+ */
+app.get('/api/coin-id/:chainId', async (req, res) => {
+  try {
+    const out = await resolveIds(req.params.chainId, req.query.addresses);
+    if (out.error) return res.status(400).json(out);
+    /* An id mapping is near-permanent; let the browser hold it for an hour. */
+    res.set('cache-control', 'public, max-age=3600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
 
 /* --------------------------------- Solana --------------------------------- */
 /*

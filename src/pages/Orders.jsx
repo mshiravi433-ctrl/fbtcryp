@@ -12,8 +12,11 @@ import { EVM_CHAINS, FEE_BPS, TOKENS } from '../lib/chains';
 import { fmtQty } from '../lib/format';
 import {
   DCA_INTERVALS,
+  LADDER_MAX_STEPS,
+  LADDER_MIN_STEPS,
   TRAIL_MAX_PCT,
   TRAIL_MIN_PCT,
+  WATCHED_TYPES,
   addOrder,
   advanceOrder,
   createOrder,
@@ -24,17 +27,20 @@ import {
   pauseOrder,
   removeOrder,
   resumeOrder,
+  ladderPortion,
+  ladderRungs,
   saveOrders,
   shouldNotify,
   syncWatches,
   updateOrder
 } from '../lib/orders';
 import { showLocalNotification } from '../lib/notify';
-import { IconChevronLeft, IconClock, IconTrend } from '../components/Icons';
+import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useChart } from '../hooks/useMarket';
 import HistoryPanel from '../components/HistoryPanel';
+import { adviseOrder } from '../lib/orderAdvisor';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -138,14 +144,34 @@ export default function Orders() {
   /*
    * Keep the server's watch list in step with the local one.
    *
-   * Keyed on the active limit orders only — re-sending on every render, or on
-   * a DCA counter tick, would be a request per price poll for no benefit.
+   * ─── THIS KEY IS THE SECOND HALF OF THE TRAILING-STOP BUG ─────────────────
+   * `syncWatches` used to send only limit orders; it now sends every
+   * price-triggered type. But this key decides WHEN that sync re-runs, and it
+   * also filtered `type === 'limit'` — so with the sync fixed and this left
+   * alone, creating a trailing stop or a bracket would not change the key and
+   * the new order would never be mirrored until some unrelated limit order
+   * happened to change.
+   *
+   * Two independent filters expressing the same intent, and fixing one without
+   * the other leaves the feature just as broken while looking repaired.
+   *
+   * DCA stays out on purpose: it is time-based, never sent, and including it
+   * would fire a pointless request on every run counter tick.
    */
   const watchKey = useMemo(
     () =>
       orders
-        .filter((o) => o.status === 'active' && o.type === 'limit')
-        .map((o) => `${o.id}:${o.targetRate}:${o.direction}:${o.priceOf ?? 'from'}`)
+        .filter((o) => o.status === 'active' && WATCHED_TYPES.has(o.type))
+        .map((o) => {
+          /* Everything the server evaluates on, so an edit re-syncs and a
+             re-render does not. */
+          const parts = [o.id, o.type, o.priceOf ?? 'from'];
+          if (o.type === 'limit') parts.push(o.targetRate, o.direction);
+          if (o.type === 'trailing') parts.push(o.trailPct);
+          if (o.type === 'bracket') parts.push(o.takeProfitRate, o.stopLossRate);
+          if (o.type === 'ladder') parts.push(o.rungsFilled, o.steps, o.startRate, o.endRate, o.direction);
+          return parts.join(':');
+        })
         .join('|'),
     [orders]
   );
@@ -304,7 +330,35 @@ export default function Orders() {
           )}
         </div>
 
-        {o.type === 'trailing' ? (
+        {o.type === 'bracket' ? (
+          <div className="ord-meta">
+            {/* Both exits on one row: the whole point of a bracket is that
+                they are a pair, and splitting them would hide that. */}
+            <span className="faint">
+              {t('orders.bracketRow', {
+                tp: fmtQty(o.takeProfitRate),
+                sl: fmtQty(o.stopLossRate),
+                quote: o.priceOf === 'to' ? o.fromToken.symbol : o.toToken.symbol
+              })}
+            </span>
+            {Number.isFinite(rate) && (
+              <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>
+            )}
+          </div>
+        ) : o.type === 'ladder' ? (
+          <div className="ord-meta">
+            <span className="faint">
+              {t('orders.ladderRow', {
+                done: o.rungsFilled ?? 0,
+                total: o.steps,
+                next: fmtQty(ladderRungs(o)[o.rungsFilled ?? 0] ?? 0)
+              })}
+            </span>
+            {Number.isFinite(rate) && (
+              <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>
+            )}
+          </div>
+        ) : o.type === 'trailing' ? (
           <div className="ord-meta">
             <span className="faint">
               {t('orders.trailPct')} {o.trailPct}%
@@ -451,6 +505,14 @@ export default function Orders() {
           <IconTrend width={17} height={17} />
           {t('orders.newTrailing')}
         </button>
+        <button className="ord-new ord-new-bracket" onClick={() => setSheet('bracket')}>
+          <IconShield width={17} height={17} />
+          {t('orders.newBracket')}
+        </button>
+        <button className="ord-new ord-new-ladder" onClick={() => setSheet('ladder')}>
+          <IconPools width={17} height={17} />
+          {t('orders.newLadder')}
+        </button>
         <button className="ord-new ord-new-dca" onClick={() => setSheet('dca')}>
           <IconClock width={17} height={17} />
           {t('orders.newDca')}
@@ -545,6 +607,12 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
   const [interval, setInterval] = useState('weekly');
   const [runs, setRuns] = useState('4');
   const [trailPct, setTrailPct] = useState('10');
+  /* Bracket (OCO) and ladder inputs. */
+  const [takeProfit, setTakeProfit] = useState('');
+  const [stopLoss, setStopLoss] = useState('');
+  const [ladderStart, setLadderStart] = useState('');
+  const [ladderEnd, setLadderEnd] = useState('');
+  const [ladderSteps, setLadderSteps] = useState('4');
 
   useEffect(() => {
     if (!kind || !tokens.length) return;
@@ -579,6 +647,26 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
    */
   const watchedId = (priceOf === 'to' ? toToken : fromToken)?.coingeckoId ?? null;
   const { data: watchedSeries } = useChart(kind ? watchedId : null, 90);
+
+  /*
+   * ─── THE SUGGESTION LAYER ───────────────────────────────────────────────
+   * The app already measured this chart properly — which levels repeat, how
+   * often each HELD versus BROKE, the typical daily move — and none of it
+   * reached this form. A user faced an empty price box and had to invent a
+   * number, which in practice means a round figure near the current price
+   * chosen for no reason at all.
+   *
+   * `adviseOrder` reads the SAME series the panel below renders, so the
+   * suggestion and the evidence on screen can never describe different data.
+   *
+   * Nothing is auto-applied. It fills a button the user presses, and every
+   * suggestion carries the counts behind it. An app that silently sets
+   * somebody's stop-loss has placed a trade on their behalf.
+   */
+  const advice = useMemo(
+    () => adviseOrder((watchedSeries ?? []).map((d) => d.p)),
+    [watchedSeries]
+  );
 
   /*
    * The rate shown next to the input must be in the SAME unit the user is
@@ -705,6 +793,185 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
               {t('orders.willSwap', { from: fromSym, to: toSym })}
             </p>
           </>
+        ) : kind === 'bracket' ? (
+          <>
+            {/*
+              BRACKET / OCO — take-profit and stop-loss as ONE order.
+              The trap this replaces is setting them as two separate limit
+              orders: both stay live, so a volatile day can fill BOTH and the
+              user sells the same position twice. `advanceOrder` closes the
+              whole bracket when either side fires.
+            */}
+            <label className="ord-field">
+              <span className="faint">{t('orders.watch')}</span>
+              <select value={priceOf} onChange={(e) => setPriceOf(e.target.value)}>
+                <option value="from">{t('orders.priceOfFrom', { sym: fromSym })}</option>
+                <option value="to">{t('orders.priceOfTo', { sym: toSym })}</option>
+              </select>
+            </label>
+
+            <label className="ord-field">
+              <span className="faint">{t('orders.takeProfit', { base: baseSym, quote: quoteSym })}</span>
+              <input type="number" inputMode="decimal" value={takeProfit}
+                     onChange={(e) => setTakeProfit(e.target.value)} placeholder="0.0" />
+            </label>
+            <label className="ord-field">
+              <span className="faint">{t('orders.stopLoss', { base: baseSym, quote: quoteSym })}</span>
+              <input type="number" inputMode="decimal" value={stopLoss}
+                     onChange={(e) => setStopLoss(e.target.value)} placeholder="0.0" />
+            </label>
+
+            {liveRate != null && (
+              <p className="faint">
+                {t('orders.currentRate')} 1 {baseSym} = <span className="mono">{fmtQty(liveRate)}</span> {quoteSym}
+              </p>
+            )}
+
+            {/* The suggestion, with the counts that produced it. */}
+            {advice.bracket && (
+              <div className="card" style={{ padding: 11 }}>
+                <p className="section-label" style={{ marginBottom: 6 }}>{t('orders.suggestTitle')}</p>
+                <p className="muted" style={{ fontSize: 12.2, margin: '0 0 8px', lineHeight: 1.8 }}>
+                  {t('orders.suggestBracket', {
+                    tp: fmtQty(advice.bracket.takeProfit),
+                    sl: fmtQty(advice.bracket.stopLoss),
+                    rTouches: advice.bracket.evidence.resistanceTouches,
+                    rHeld: advice.bracket.evidence.resistanceHeld,
+                    rTested: advice.bracket.evidence.resistanceTested,
+                    sHeld: advice.bracket.evidence.supportHeld,
+                    sTested: advice.bracket.evidence.supportTested,
+                    ratio: advice.bracket.ratio.toFixed(1)
+                  })}
+                </p>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setTakeProfit(String(advice.bracket.takeProfit));
+                    setStopLoss(String(advice.bracket.stopLoss));
+                  }}
+                >
+                  {t('orders.useSuggestion')}
+                </button>
+              </div>
+            )}
+            {!advice.ready && (
+              <p className="faint">{t('orders.notEnoughHistory', { n: advice.samples, need: advice.minSamples })}</p>
+            )}
+
+            <HistoryPanel series={(watchedSeries ?? []).map((d) => d.p)} days={90} compact />
+            <p className="faint" style={{ lineHeight: 1.7 }}>{t('orders.bracketNote')}</p>
+          </>
+        ) : kind === 'ladder' ? (
+          <>
+            {/*
+              LADDER — scale out (or in) across a price range instead of
+              guessing one exit. Only the NEXT unfilled rung is ever evaluated,
+              so one big jump cannot fire a burst of notifications for a
+              position that can only be sold once per signature.
+            */}
+            <label className="ord-field">
+              <span className="faint">{t('orders.watch')}</span>
+              <select value={priceOf} onChange={(e) => setPriceOf(e.target.value)}>
+                <option value="from">{t('orders.priceOfFrom', { sym: fromSym })}</option>
+                <option value="to">{t('orders.priceOfTo', { sym: toSym })}</option>
+              </select>
+            </label>
+
+            <div className="segmented">
+              {['below', 'above'].map((d) => (
+                <button
+                  key={d}
+                  className={direction === d ? 'active' : ''}
+                  onClick={() => setDirection(d)}
+                  aria-pressed={direction === d}
+                  style={{ isolation: 'isolate' }}
+                >
+                  {direction === d && <SegIndicator id="ord-ladder-dir" />}
+                  {t(`orders.dir.${d}`)}
+                </button>
+              ))}
+            </div>
+
+            <div className="row" style={{ gap: 8 }}>
+              <label className="ord-field">
+                <span className="faint">{t('orders.ladderStart')}</span>
+                <input type="number" inputMode="decimal" value={ladderStart}
+                       onChange={(e) => setLadderStart(e.target.value)} placeholder="0.0" />
+              </label>
+              <label className="ord-field">
+                <span className="faint">{t('orders.ladderEnd')}</span>
+                <input type="number" inputMode="decimal" value={ladderEnd}
+                       onChange={(e) => setLadderEnd(e.target.value)} placeholder="0.0" />
+              </label>
+            </div>
+
+            <label className="ord-field">
+              <span className="faint">{t('orders.ladderSteps')}</span>
+              <input type="number" inputMode="numeric" value={ladderSteps}
+                     onChange={(e) => setLadderSteps(e.target.value)}
+                     min={LADDER_MIN_STEPS} max={LADDER_MAX_STEPS} />
+            </label>
+
+            {/*
+              The actual rungs, priced out. A range plus a step count is
+              abstract; four concrete prices with the amount beside each is the
+              thing the user is agreeing to, and it makes an inverted range
+              obvious before the order is created rather than after.
+            */}
+            {(() => {
+              const preview = {
+                steps: Number(ladderSteps),
+                startRate: Number(ladderStart),
+                endRate: Number(ladderEnd),
+                direction,
+                amountIn: amount
+              };
+              const rungs = ladderRungs(preview);
+              if (!rungs.length || !(Number(amount) > 0)) return null;
+              return (
+                <div className="card" style={{ padding: 11 }}>
+                  <p className="section-label" style={{ marginBottom: 6 }}>{t('orders.ladderPreview')}</p>
+                  {rungs.map((r, i) => (
+                    <div className="row-between" key={r}>
+                      <span className="faint">{t('orders.rungN', { n: i + 1 })}</span>
+                      <span className="mono" style={{ fontSize: 12 }}>
+                        {fmtQty(ladderPortion(preview, i))} {fromSym} @ {fmtQty(r)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {advice.ladder && (
+              <div className="card" style={{ padding: 11 }}>
+                <p className="section-label" style={{ marginBottom: 6 }}>{t('orders.suggestTitle')}</p>
+                <p className="muted" style={{ fontSize: 12.2, margin: '0 0 8px', lineHeight: 1.8 }}>
+                  {t('orders.suggestLadder', {
+                    start: fmtQty(advice.ladder.startRate),
+                    end: fmtQty(advice.ladder.endRate),
+                    steps: advice.ladder.steps,
+                    held: advice.ladder.evidence.resistanceHeld,
+                    tested: advice.ladder.evidence.resistanceTested
+                  })}
+                </p>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setLadderStart(String(advice.ladder.startRate));
+                    setLadderEnd(String(advice.ladder.endRate));
+                    setLadderSteps(String(advice.ladder.steps));
+                    setDirection(advice.ladder.direction);
+                  }}
+                >
+                  {t('orders.useSuggestion')}
+                </button>
+              </div>
+            )}
+
+            <HistoryPanel series={(watchedSeries ?? []).map((d) => d.p)} days={90} compact />
+            <p className="faint" style={{ lineHeight: 1.7 }}>{t('orders.ladderNote')}</p>
+          </>
         ) : kind === 'trailing' ? (
           <>
             {/*
@@ -813,7 +1080,12 @@ function OrderSheet({ kind, onClose, onSubmit, tokens, chainId, prices }) {
               priceOf,
               interval,
               totalRuns: Number(runs),
-              trailPct: Number(trailPct)
+              trailPct: Number(trailPct),
+              takeProfitRate: Number(takeProfit),
+              stopLossRate: Number(stopLoss),
+              startRate: Number(ladderStart),
+              endRate: Number(ladderEnd),
+              steps: Number(ladderSteps)
             })
           }
         >

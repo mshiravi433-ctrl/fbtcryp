@@ -393,7 +393,11 @@
     "orderErr.BAD_RUNS": "Choose between 1 and 365 times",
     "orderErr.TOO_MANY": "You already have 50 active orders",
     "orderErr.BAD_PRICE_OF": "Choose which token the price refers to",
-    "orderErr.BAD_TRAIL": "Choose a distance between 0.5% and 50%."
+    "orderErr.BAD_TRAIL": "Choose a distance between 0.5% and 50%.",
+    "orderErr.BAD_STOP": "Enter a stop-loss price",
+    "orderErr.BRACKET_INVERTED": "Take-profit must be above the stop-loss, or both would trigger instantly",
+    "orderErr.BAD_STEPS": "Pick between 2 and 8 steps",
+    "orderErr.LADDER_FLAT": "The first and last price must differ, otherwise every step is the same order"
   },
   "swap": {
     "title": "Swap",
@@ -1767,7 +1771,9 @@
     "new": {
       "limit": "New limit order",
       "dca": "New DCA plan",
-      "trailing": "New trailing stop"
+      "trailing": "New trailing stop",
+      "bracket": "New take-profit + stop-loss",
+      "ladder": "New step order"
     },
     "manualNotice": "These are alerts, not automatic trades. This app never holds your keys, so nothing can swap on your behalf — when a target is hit we notify you and the swap is one tap away, already filled in. If your phone is off, the order waits.",
     "readyNow": "Ready now",
@@ -1842,7 +1848,26 @@
     "trailScope": "Trailing stops are tracked while the app is open. Target-price orders are also watched on our server, so those still reach you when it is closed.",
     "liveOn": "Watching",
     "liveOff": "Paused",
-    "liveReady": "Ready"
+    "liveReady": "Ready",
+    "newBracket": "Take-profit + stop-loss",
+    "newLadder": "Sell in steps",
+    "takeProfit": "Take profit when 1 {{base}} reaches ({{quote}})",
+    "stopLoss": "Stop loss when 1 {{base}} falls to ({{quote}})",
+    "bracketNote": "One order, two exits. Whichever price is reached first closes the whole order and the other side is cancelled. Setting these as two separate limit orders is the mistake this replaces — both would stay live, and a volatile day can fill both.",
+    "ladderStart": "First price",
+    "ladderEnd": "Last price",
+    "ladderSteps": "Number of steps",
+    "ladderPreview": "Your steps",
+    "rungN": "Step {{n}}",
+    "ladderNote": "Your amount is split evenly across the steps, and you are alerted for one step at a time as each price is reached. Nobody picks the exact top — this is how you take profit gradually instead of guessing once.",
+    "suggestTitle": "Suggested from this chart",
+    "useSuggestion": "Use these numbers",
+    "suggestBracket": "Take profit at {{tp}}, stop loss at {{sl}}. That resistance was touched {{rTouches}} times and held {{rHeld}} of {{rTested}} tests; the support below held {{sHeld}} of {{sTested}}. Reward is about {{ratio}}× the risk. These are measurements of what already happened, not a forecast.",
+    "suggestLadder": "Spread {{steps}} steps from {{start}} to {{end}} — that upper level held {{held}} of {{tested}} tests, so rungs above it would likely never fill. A measurement, not a forecast.",
+    "notEnoughHistory": "Only {{n}} days of price history here — at least {{need}} are needed before any suggestion would mean anything, so none is offered.",
+    "typeUnorderable": "No price feed is available for this token, so an automatic order on it could never be checked. Pick another token, or swap it manually.",
+    "bracketRow": "Take profit {{tp}} · Stop loss {{sl}} {{quote}}",
+    "ladderRow": "{{done}} of {{total}} steps done · next at {{next}}"
   },
   "lock": {
     "title": "Locked",

@@ -4188,6 +4188,14 @@ input, select, textarea { font-size: 16px !important; }
 .ord-new:active { transform: scale(0.985); }
 .ord-new-limit { border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent); color: var(--ink-cyan); }
 .ord-new-dca { border-color: color-mix(in srgb, var(--rgb-2) 45%, transparent); color: var(--ink-violet); }
+/*
+ * Bracket and ladder get their own hues for the same reason the others do:
+ * these five buttons sit side by side and the colour is the fastest way to
+ * tell them apart before reading. Mint for the protective order (take-profit
+ * + stop-loss), amber for the staged one.
+ */
+.ord-new-bracket { border-color: color-mix(in srgb, var(--rgb-4) 45%, transparent); color: var(--ink-mint); }
+.ord-new-ladder { border-color: color-mix(in srgb, var(--rgb-5) 45%, transparent); color: var(--ink-amber); }
 
 .ord-row {
   padding: 12px 13px;

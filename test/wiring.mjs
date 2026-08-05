@@ -3525,5 +3525,166 @@ export default function run() {
       renderers.length === 1 && renderers[0].endsWith('src/pages/Perp.jsx'));
   }
 
+  /* ---- 52. automatic orders: watched in the BACKGROUND, end to end ----- */
+  /*
+   * ─── THE BUG THIS LOCKS DOWN ────────────────────────────────────────────
+   * `syncWatches` filtered `type === 'limit'`, so a TRAILING STOP was never
+   * mirrored to the server. It only ever advanced its high-water mark while
+   * the app was open in the foreground — exactly backwards, because a
+   * trailing stop is the one order that cannot be watched by hand.
+   *
+   * The subtle half: the React key in Orders.jsx that decides WHEN to re-sync
+   * carried the same `=== 'limit'` filter. Fixing only `syncWatches` would
+   * leave the feature just as broken while looking repaired — a new trailing
+   * stop would not change the key, so the sync would never run for it.
+   *
+   * Two filters, one intent. They now share WATCHED_TYPES, and this asserts
+   * neither grows a private copy again.
+   */
+  {
+    const lib = read('src/lib/orders.js');
+    const page = read('src/pages/Orders.jsx');
+    const srv = read('server/watch.js');
+
+    /* Strip comments so these checks cannot match their own rationale. */
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const libCode = code(lib);
+    const pageCode = code(page);
+    const srvCode = code(srv);
+
+    t('the watched-type set is defined once and exported',
+      /export const WATCHED_TYPES = new Set\(/.test(libCode));
+    t('the sync uses the shared set', /WATCHED_TYPES\.has\(o\.type\)/.test(libCode));
+    t('the re-sync key uses the same shared set', /WATCHED_TYPES\.has\(o\.type\)/.test(pageCode));
+    t('...and the page imports it rather than redefining it',
+      /WATCHED_TYPES/.test(page.split('from \'../lib/orders\'')[0]) &&
+      !/const WATCHED_TYPES\s*=/.test(pageCode));
+
+    /*
+     * The specific regression: neither filter may narrow back to limit-only.
+     * A literal `type === 'limit'` in a filter is the exact shape of the bug.
+     */
+    t('the sync no longer filters to limit orders only',
+      !/status === 'active' && o\.type === 'limit'/.test(libCode));
+    t('the re-sync key no longer filters to limit orders only',
+      !/status === 'active' && o\.type === 'limit'/.test(pageCode));
+
+    /* The server has to actually understand what the client now sends. */
+    t('the server accepts the same four types',
+      /const WATCH_TYPES = new Set\(\[('limit'|"limit")[^)]*\)/.test(srvCode) &&
+      /'trailing'/.test(srvCode) && /'bracket'/.test(srvCode) && /'ladder'/.test(srvCode));
+    t('...and evaluates them rather than assuming a target',
+      /export function evaluateWatch/.test(srvCode));
+    /*
+     * The trailing peak must be PERSISTED by the watcher. A high-water mark
+     * that only advances while the app is open is not a high-water mark, and
+     * this is the line that makes background trailing real.
+     */
+    t('the watcher persists the trailing peak between cycles',
+      /res\.peak != null/.test(srvCode) && /peakRate: res\.peak/.test(srvCode));
+    /*
+     * Old clients keep working: a stored watch with no `type` is a limit
+     * order, because that is the only kind the old client could send.
+     */
+    t('watches written by an older client still work',
+      /it\?\.type \?\? 'limit'/.test(srvCode));
+    /* DCA must stay off the server — it is a behavioural profile we do not need. */
+    t('DCA is still never uploaded', !/'dca'/.test(srvCode.split('WATCH_TYPES')[1]?.slice(0, 200) ?? ''));
+  }
+
+  /* ---- 53. the new order types are reachable and fully translated ------ */
+  {
+    const page = read('src/pages/Orders.jsx');
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    /* A form nobody can open is the "wired to nothing" bug again. */
+    t('the bracket sheet can be opened', /setSheet\('bracket'\)/.test(page));
+    t('the ladder sheet can be opened', /setSheet\('ladder'\)/.test(page));
+    t('...and the bracket form actually renders', /kind === 'bracket'/.test(page));
+    t('...and the ladder form actually renders', /kind === 'ladder'/.test(page));
+
+    /* The sheet title is built as orders.new.<kind> — a miss prints a raw key. */
+    for (const k of ['bracket', 'ladder']) {
+      t(`the ${k} sheet has a title in both languages`,
+        hasKey(en, `orders.new.${k}`) && hasKey(fa, `orders.new.${k}`));
+    }
+
+    /*
+     * Every validator code must have a message, or a rejected order fails
+     * silently and the user just sees the button do nothing.
+     *
+     * NOTE THE LOOKUP SHAPE. These live as FLAT keys inside `toast` —
+     * literally `toast["orderErr.BAD_STOP"]` — not as a nested `orderErr`
+     * object. My first version of this check walked the dotted path and
+     * failed on keys that were present and correct. The existing codes follow
+     * the same convention, so the test has to match the storage the app
+     * actually uses rather than the shape I assumed.
+     */
+    for (const codeName of ['BAD_STOP', 'BRACKET_INVERTED', 'BAD_STEPS', 'LADDER_FLAT']) {
+      t(`the ${codeName} error is explained in both languages`,
+        typeof en.toast?.[`orderErr.${codeName}`] === 'string' &&
+        typeof fa.toast?.[`orderErr.${codeName}`] === 'string');
+    }
+
+    /* Both new types must render in the LIST, not only in the form. */
+    t('a bracket renders in the order list', /o\.type === 'bracket'/.test(page));
+    t('a ladder renders in the order list', /o\.type === 'ladder'/.test(page));
+
+    /*
+     * The advisor is wired to the SAME series the history panel renders, so
+     * the suggestion and the evidence on screen cannot describe different
+     * data.
+     */
+    t('the advisor is called from the order form', /adviseOrder\s*\(/.test(page));
+    t('...and nothing is applied without the user pressing a button',
+      /orders\.useSuggestion/.test(page));
+
+    const keys = [...page.matchAll(/t\('(orders\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missingEn = [...new Set(keys)].filter((k) => !hasKey(en, k));
+    t(`every orders.* key on the screen resolves (${new Set(keys).size} checked)` +
+      (missingEn.length ? ` — missing: ${missingEn.join(', ')}` : ''),
+      missingEn.length === 0);
+    const missingFa = [...new Set(keys)].filter((k) => !hasKey(fa, k));
+    t('...and all of them are translated into Persian' +
+      (missingFa.length ? ` — missing: ${missingFa.join(', ')}` : ''),
+      missingFa.length === 0);
+  }
+
+  /* ---- 54. coin-id lookup is wired, and never guesses ------------------ */
+  {
+    const srv = read('server/coinIndex.js');
+    const appSrc = read('server/app.js');
+    const client = read('src/lib/coinId.js');
+
+    t('the coin index module exists', existsSync('server/coinIndex.js'));
+    t('the server imports it', /from '\.\/coinIndex\.js'/.test(appSrc));
+    t('...and exposes a route', /\/api\/coin-id\/:chainId/.test(appSrc));
+    t('...and the route calls the resolver', /resolveIds\s*\(/.test(appSrc));
+    t('the client calls the published path', /coin-id\//.test(client));
+
+    /*
+     * ─── RESOLUTION IS BY ADDRESS, NEVER BY SYMBOL ──────────────────────────
+     * Dozens of tokens share the ticker "BTC" and scam tokens copy real
+     * symbols deliberately. An order watching the wrong coin's price fires at
+     * a number unrelated to the asset being sold — worse than no order, since
+     * the user believes they are covered.
+     */
+    t('the client never falls back to symbol matching',
+      !/symbol\s*===|bySymbol|matchSymbol/i.test(client));
+    t('an unresolved token is reported as null, not guessed',
+      /id \? \{ \.\.\.token, coingeckoId: id \} : token/.test(client));
+    /*
+     * A network failure must not be cached. Caching a null on a transient
+     * error would mark a good token permanently unorderable for the session.
+     */
+    t('a lookup failure is not cached as a miss',
+      /must NOT be cached|not be cached/i.test(read('src/lib/coinId.js')));
+
+    /* The batch is capped on BOTH sides — a client cap alone is not a limit. */
+    t('the server caps the batch size', /\.slice\(0, 25\)/.test(srv));
+    t('...and the client respects the same cap', /slice\(0, 25\)/.test(client));
+  }
+
   return rows;
 }

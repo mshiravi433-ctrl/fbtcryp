@@ -43,6 +43,10 @@ const COOLDOWN = 6 * 3600000;
 /** Watches expire, so an abandoned device does not get polled forever. */
 const MAX_AGE = 45 * 86400000;
 
+/** The order types this watcher can evaluate. DCA is time-based and stays on
+ *  the device, which also keeps the user's schedule off our servers. */
+const WATCH_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder']);
+
 const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 64;
 const isSym = (v) => typeof v === 'string' && /^[A-Za-z0-9._-]{1,16}$/.test(v);
 const isCgId = (v) => typeof v === 'string' && /^[a-z0-9-]{1,64}$/.test(v);
@@ -88,21 +92,66 @@ export async function putWatches(endpoint, items, lang = 'fa') {
     if (!isId(it?.id) || !isSym(it?.fromSym) || !isSym(it?.toSym)) continue;
     if (!isCgId(it?.fromId) || !isCgId(it?.toId)) continue;
 
-    const target = Number(it.targetRate);
-    if (!Number.isFinite(target) || target <= 0) continue;
-    if (it.direction !== 'above' && it.direction !== 'below') continue;
+    /*
+     * ─── FOUR WATCHABLE TYPES, NOT ONE ──────────────────────────────────────
+     * This accepted only price-target rows, which is why trailing stops were
+     * never watched while the app was closed — the one order type that cannot
+     * be watched by hand.
+     *
+     * `type` defaults to 'limit' so watches written by an older client keep
+     * working after this deploys. A stored row with no type is a limit order,
+     * because that is the only kind the old client could send.
+     */
+    const type = it?.type ?? 'limit';
+    if (!WATCH_TYPES.has(type)) continue;
 
-    clean.push({
+    const row = {
       id: it.id,
+      type,
       fromSym: it.fromSym,
       toSym: it.toSym,
       fromId: it.fromId,
       toId: it.toId,
-      targetRate: target,
-      direction: it.direction,
       priceOf: it.priceOf === 'to' ? 'to' : 'from',
       lastNotifiedAt: 0
-    });
+    };
+
+    if (type === 'limit' || type === 'ladder') {
+      const target = Number(it.targetRate);
+      if (!Number.isFinite(target) || target <= 0) continue;
+      if (it.direction !== 'above' && it.direction !== 'below') continue;
+      row.targetRate = target;
+      row.direction = it.direction;
+      if (type === 'ladder') {
+        /* Purely cosmetic, for the "rung 2 of 4" line in the notification. */
+        const rung = Number(it.rung);
+        const ofRungs = Number(it.ofRungs);
+        if (Number.isInteger(rung) && rung > 0) row.rung = rung;
+        if (Number.isInteger(ofRungs) && ofRungs > 0) row.ofRungs = ofRungs;
+      }
+    } else if (type === 'trailing') {
+      const pct = Number(it.trailPct);
+      /*
+       * Same band the client enforces. Re-checked rather than trusted: a
+       * request can be crafted by hand, and a 0% trail would fire on every
+       * tick while a 100% one can never fire at all.
+       */
+      if (!Number.isFinite(pct) || pct < 0.5 || pct > 50) continue;
+      row.trailPct = pct;
+      const peak = Number(it.peakRate);
+      row.peakRate = Number.isFinite(peak) && peak > 0 ? peak : null;
+    } else {
+      const tp = Number(it.takeProfitRate);
+      const sl = Number(it.stopLossRate);
+      if (!Number.isFinite(tp) || tp <= 0) continue;
+      if (!Number.isFinite(sl) || sl <= 0) continue;
+      /* Inverted bracket triggers instantly on both sides — reject it. */
+      if (tp <= sl) continue;
+      row.takeProfitRate = tp;
+      row.stopLossRate = sl;
+    }
+
+    clean.push(row);
   }
 
   const all = await readWatches();
@@ -128,6 +177,46 @@ export async function clearWatches(endpoint) {
   const next = all.filter((w) => w.endpoint !== endpoint);
   await storeSet(WATCH_KEY, next);
   return { removed: all.length - next.length };
+}
+
+/**
+ * Decide whether one watch has triggered.
+ *
+ * Mirrors `evaluateOrder` in src/lib/orders.js deliberately — the same
+ * conditions have to mean the same thing on both sides, or the app and the
+ * push notification disagree about whether an order is ready and the user
+ * stops trusting both.
+ *
+ * Returns `{hit, at, side?, peak?}`. `peak` is returned rather than mutated so
+ * the caller decides what to persist, the same shape the client uses.
+ */
+export function evaluateWatch(w, rate) {
+  if (!Number.isFinite(rate) || rate <= 0) return { hit: false };
+  const type = w?.type ?? 'limit';
+
+  if (type === 'trailing') {
+    const prevPeak = Number.isFinite(w.peakRate) && w.peakRate > 0 ? w.peakRate : null;
+    /* The peak only ever rises — a feed hiccup must not drag the stop down. */
+    const peak = prevPeak === null ? rate : Math.max(prevPeak, rate);
+    const stopAt = peak * (1 - w.trailPct / 100);
+    /* Never fire on the tick that establishes the peak: there is no drawdown
+       yet, by definition. */
+    const hit = prevPeak !== null && rate <= stopAt;
+    return { hit, at: stopAt, peak };
+  }
+
+  if (type === 'bracket') {
+    /* Take-profit first, for the same reason as the client: when one tick
+       satisfies both, the profitable side is the one that favours the user,
+       and a deterministic choice keeps every device in agreement. */
+    if (rate >= w.takeProfitRate) return { hit: true, at: w.takeProfitRate, side: 'takeProfit' };
+    if (rate <= w.stopLossRate) return { hit: true, at: w.stopLossRate, side: 'stopLoss' };
+    return { hit: false };
+  }
+
+  /* limit and ladder share the plain target comparison. */
+  const hit = w.direction === 'above' ? rate >= w.targetRate : rate <= w.targetRate;
+  return { hit, at: w.targetRate };
 }
 
 /**
@@ -172,10 +261,20 @@ export async function runWatchCycle(send, now = Date.now()) {
     // Same convention as the client: rate is "1 from = ? to", inverted when
     // the user priced the target in the TO token.
     const rate = w.priceOf === 'to' ? b / a : a / b;
-    const hit = w.direction === 'above' ? rate >= w.targetRate : rate <= w.targetRate;
 
-    if (!hit || now - (w.lastNotifiedAt || 0) < COOLDOWN) {
-      updated.push(w);
+    const res = evaluateWatch(w, rate);
+
+    /*
+     * The trailing peak is persisted even when nothing fires. That IS the
+     * feature: a high-water mark that only advances while the app is open is
+     * not a high-water mark, which is why trailing stops were broken in the
+     * background before this.
+     */
+    let carried = w;
+    if (res.peak != null && res.peak !== w.peakRate) carried = { ...w, peakRate: res.peak };
+
+    if (!res.hit || now - (w.lastNotifiedAt || 0) < COOLDOWN) {
+      updated.push(carried);
       continue;
     }
 
@@ -187,7 +286,18 @@ export async function runWatchCycle(send, now = Date.now()) {
         // and should not appear to.
         base: w.priceOf === 'to' ? w.toSym : w.fromSym,
         quote: w.priceOf === 'to' ? w.fromSym : w.toSym,
-        rate: w.targetRate,
+        /*
+         * The price that actually triggered, which is not always a stored
+         * target: a trailing stop fires at peak*(1-trail) and a bracket at
+         * whichever of two levels was crossed.
+         */
+        rate: res.at,
+        type: w.type ?? 'limit',
+        /* `takeProfit` vs `stopLoss` — opposite news, and the notification
+           must not present them identically. */
+        side: res.side ?? null,
+        rung: w.rung ?? null,
+        ofRungs: w.ofRungs ?? null,
         id: w.id
       });
     } catch {
@@ -197,7 +307,11 @@ export async function runWatchCycle(send, now = Date.now()) {
     if (ok) sent += 1;
     // Only start the cooldown on a successful send, otherwise a transient
     // push failure silences the alert for six hours.
-    updated.push(ok ? { ...w, lastNotifiedAt: now } : w);
+    //
+    // Built from `carried`, not `w`, so an advanced trailing peak is kept even
+    // on the tick that fires. Rebuilding from `w` would discard it and let the
+    // stop drift back down to a stale high-water mark.
+    updated.push(ok ? { ...carried, lastNotifiedAt: now } : carried);
   }
 
   if (updated.length !== all.length || triggered > 0) {

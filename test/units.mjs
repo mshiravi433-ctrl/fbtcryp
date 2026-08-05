@@ -74,6 +74,25 @@ import {
   normalizeTicker
 } from '../server/perp.js';
 import { bestVenue, fundingCost, liquidationMove } from '../src/lib/perp.js';
+import {
+  LADDER_MAX_STEPS,
+  LADDER_MIN_STEPS,
+  WATCHED_TYPES,
+  ladderPortion,
+  ladderRungs
+} from '../src/lib/orders.js';
+import { evaluateWatch } from '../server/watch.js';
+import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
+import {
+  MIN_SAMPLES,
+  MIN_TESTS,
+  adviseOrder,
+  anchorLevels,
+  suggestBracket,
+  suggestLadder,
+  suggestTrail,
+  typicalMovePct
+} from '../src/lib/orderAdvisor.js';
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { backtest, confidenceFrom, signalAt } from '../src/lib/backtest.js';
@@ -3242,6 +3261,305 @@ export default function run() {
     /* The asset list must be non-empty or the screen renders nothing. */
     t('the tracked asset list is populated',
       Array.isArray(TRACKED_ASSETS) && TRACKED_ASSETS.includes('BTC'));
+  }
+
+  /* ============== automatic orders: bracket, ladder, advisor ============= */
+  {
+    const mkTok = (symbol, coingeckoId) => ({ symbol, coingeckoId });
+    const baseInput = {
+      chainId: 56,
+      fromToken: mkTok('BNB', 'binancecoin'),
+      toToken: mkTok('USDT', 'tether'),
+      amountIn: '100'
+    };
+
+    /* ---- BRACKET (one-cancels-the-other) ---- */
+    const { order: br } = createOrder({
+      ...baseInput, type: 'bracket', takeProfitRate: 800, stopLossRate: 600
+    });
+    t('a bracket can be created', Boolean(br) && br.type === 'bracket');
+    t('inside the band it waits', evaluateOrder(br, 700).ready === false);
+    t('the take-profit side fires above', evaluateOrder(br, 801).reason === 'TAKE_PROFIT');
+    t('the stop-loss side fires below', evaluateOrder(br, 599).reason === 'STOP_LOSS');
+    /*
+     * WHICH side fired has to be reported. "Your order is ready" is nearly
+     * useless when one outcome is a profit and the other is a loss, and the
+     * notification text is chosen from this field.
+     */
+    t('...and it reports which side, not just that it fired',
+      evaluateOrder(br, 801).side === 'takeProfit' && evaluateOrder(br, 599).side === 'stopLoss');
+    /*
+     * A bracket is ONE order. Leaving it active after the stop fires would let
+     * the take-profit trigger later on a position the user has already exited
+     * — selling twice. That is the entire reason this type exists rather than
+     * two limit orders.
+     */
+    t('either side closes the whole bracket', advanceOrder(br).status === 'filled');
+    /*
+     * Inverted, both conditions are already true at creation, so it would fire
+     * instantly at whatever the market happens to be — the exact opposite of
+     * protecting a position.
+     */
+    t('an inverted bracket is rejected',
+      validateOrder({ ...baseInput, type: 'bracket', takeProfitRate: 600, stopLossRate: 800 })
+        === 'BRACKET_INVERTED');
+    t('a bracket with no stop is rejected',
+      validateOrder({ ...baseInput, type: 'bracket', takeProfitRate: 800 }) === 'BAD_STOP');
+    /* Unknown price must never read as "condition met" — same rule as limit. */
+    t('a missing price does not fire a bracket', evaluateOrder(br, null).reason === 'NO_PRICE');
+
+    /* ---- LADDER ---- */
+    const { order: ld } = createOrder({
+      ...baseInput, type: 'ladder', steps: 4, startRate: 700, endRate: 800, direction: 'above'
+    });
+    const rungs = ladderRungs(ld);
+    /*
+     * INCLUSIVE OF BOTH ENDS. A 4-step ladder from 700 to 800 must include
+     * 800 — that is usually the price the user cared most about, and an
+     * exclusive range silently never fills it.
+     */
+    t('the ladder includes both the first and last price',
+      rungs.length === 4 && rungs[0] === 700 && rungs[3] === 800);
+    t('...evenly spaced between them', Math.abs(rungs[1] - 733.3333333) < 1e-4);
+
+    t('the first rung waits below its price', evaluateOrder(ld, 699).ready === false);
+    t('...and fires at it', evaluateOrder(ld, 700).reason === 'RUNG_HIT');
+
+    const ld2 = advanceOrder(ld);
+    t('a ladder stays active after one rung', ld2.status === 'active' && ld2.rungsFilled === 1);
+    /*
+     * Only the NEXT unfilled rung is evaluated. Checking all of them would let
+     * one jump report several ready at once and bury the user in alerts for a
+     * position they can only sell once per signature.
+     */
+    t('only the next rung is evaluated', Math.abs(evaluateOrder(ld2, 9999).target - 733.3333) < 0.01);
+    /*
+     * The cooldown must reset per rung, or a fast move through two rungs
+     * silences the second for six hours and the user believes the rest of the
+     * ladder is still waiting when it has already been passed.
+     */
+    t('the notify cooldown clears between rungs', ld2.lastNotifiedAt === 0);
+
+    let walk = ld2;
+    for (let i = 0; i < 3; i += 1) walk = advanceOrder(walk);
+    t('the ladder completes on the final rung',
+      walk.status === 'filled' && walk.rungsFilled === 4);
+
+    /*
+     * The parts must sum EXACTLY to the amount entered. Rounding each rung
+     * independently is how a ladder trades 99.99 of 100 and strands dust.
+     */
+    const parts = [0, 1, 2, 3].map((i) => ladderPortion(ld, i));
+    t('the rung amounts sum exactly to the order amount',
+      parts.reduce((a, b) => a + b, 0) === 100);
+
+    /*
+     * FILL ORDER IS NOT NUMERIC ORDER. A buy-the-dip ladder fills from the
+     * highest price downward; sorting numerically would make rung 1 the last
+     * one reached and the ladder would look frozen.
+     */
+    const { order: ldDown } = createOrder({
+      ...baseInput, type: 'ladder', steps: 3, startRate: 700, endRate: 600, direction: 'below'
+    });
+    t('a buy-the-dip ladder fills from the highest price first',
+      ladderRungs(ldDown)[0] === 700 && ladderRungs(ldDown)[2] === 600);
+
+    t('a flat ladder is rejected',
+      validateOrder({ ...baseInput, type: 'ladder', steps: 3, startRate: 700, endRate: 700, direction: 'above' })
+        === 'LADDER_FLAT');
+    t('too many steps are rejected',
+      validateOrder({ ...baseInput, type: 'ladder', steps: LADDER_MAX_STEPS + 1, startRate: 700, endRate: 800, direction: 'above' })
+        === 'BAD_STEPS');
+    t('too few steps are rejected',
+      validateOrder({ ...baseInput, type: 'ladder', steps: LADDER_MIN_STEPS - 1, startRate: 700, endRate: 800, direction: 'above' })
+        === 'BAD_STEPS');
+
+    /*
+     * ─── A PAUSE MUST NOT RE-SELL FILLED RUNGS ──────────────────────────────
+     * The one mistake in this file that would cost real money rather than a
+     * missed alert.
+     */
+    t('pausing and resuming keeps the filled rungs',
+      resumeOrder(pauseOrder({ ...ld2, status: 'active' })).rungsFilled === 1);
+
+    /* ---- THE SERVER MUST AGREE WITH THE CLIENT ---- */
+    /*
+     * These conditions are evaluated twice — on the device and in the
+     * background watcher. If they disagree, the push notification and the app
+     * tell the user different things about the same order, and both stop being
+     * believable.
+     */
+    const wBr = { type: 'bracket', takeProfitRate: 800, stopLossRate: 600, priceOf: 'from' };
+    t('server and client agree on take-profit',
+      evaluateWatch(wBr, 801).side === evaluateOrder(br, 801).side);
+    t('server and client agree on stop-loss',
+      evaluateWatch(wBr, 599).side === evaluateOrder(br, 599).side);
+    t('server and client agree on waiting',
+      evaluateWatch(wBr, 700).hit === evaluateOrder(br, 700).ready);
+
+    const wTrail = { type: 'trailing', trailPct: 10, peakRate: null };
+    const first = evaluateWatch(wTrail, 100);
+    /* No drawdown exists on the tick that establishes the peak, by definition. */
+    t('a trailing stop never fires on its first observation',
+      first.hit === false && first.peak === 100);
+    t('...fires once price falls the trail distance',
+      evaluateWatch({ ...wTrail, peakRate: 100 }, 89).hit === true);
+    t('...and holds inside the trail',
+      evaluateWatch({ ...wTrail, peakRate: 100 }, 95).hit === false);
+    /*
+     * The peak only ever RISES. A feed hiccup returning a low value must not
+     * drag the stop down with it, or the order drifts and never triggers.
+     */
+    t('the peak never follows a dip downward',
+      evaluateWatch({ ...wTrail, peakRate: 100 }, 80).peak === 100);
+    /* Unknown price does nothing at all, on the server too. */
+    t('the server does not fire on a missing price', evaluateWatch(wTrail, null).hit === false);
+
+    /*
+     * ─── THE WATCH LIST MUST COVER EVERY PRICE-TRIGGERED TYPE ───────────────
+     * `syncWatches` filtered `type === 'limit'`, so a TRAILING STOP was never
+     * mirrored to the server and only worked while the app was in the
+     * foreground — precisely backwards, because a trailing stop is the one
+     * order nobody can watch by hand.
+     */
+    t('trailing stops are watched in the background', WATCHED_TYPES.has('trailing'));
+    t('brackets are watched too', WATCHED_TYPES.has('bracket'));
+    t('ladders are watched too', WATCHED_TYPES.has('ladder'));
+    t('limit orders still are', WATCHED_TYPES.has('limit'));
+    /*
+     * DCA stays OFF the server deliberately: it is time-based, the device
+     * already knows the schedule, and uploading it would hand over a
+     * behavioural profile for no functional gain.
+     */
+    t('DCA is deliberately not uploaded', !WATCHED_TYPES.has('dca'));
+  }
+
+  /* ==================== coin-id index (more coins) ======================= */
+  {
+    /*
+     * ─── THESE SLUGS ARE LOOKED UP, NOT GUESSED ─────────────────────────────
+     * CoinGecko's platform keys do not match the chain names, and a wrong one
+     * fails SILENTLY — every token on that chain simply looks unsupported, and
+     * the feature stays as small as it was. Same silent-failure class as the
+     * LI.FI integrator id and the dYdX venue key, so the literals are pinned.
+     */
+    t('BNB Chain is binance-smart-chain', PLATFORM_SLUGS[56] === 'binance-smart-chain');
+    t('Optimism is optimistic-ethereum', PLATFORM_SLUGS[10] === 'optimistic-ethereum');
+    t('Arbitrum is arbitrum-one', PLATFORM_SLUGS[42161] === 'arbitrum-one');
+    t('Polygon is polygon-pos', PLATFORM_SLUGS[137] === 'polygon-pos');
+
+    /* Real rows, copied verbatim from a live /coins/list response. */
+    const rows = [
+      { id: '1inch', platforms: {
+        ethereum: '0x111111111117dc0aa78b770fa6a738034120c302',
+        'binance-smart-chain': '0x111111111117dc0aa78b770fa6a738034120c302',
+        'arbitrum-one': '0x6314c31a7a1652ce482cffe247e9cb7c3f4bb9af' } },
+      { id: '0x', platforms: { ethereum: '0xE41d2489571d322189246DaFA5ebDe1F4699F498' } },
+      { id: '000-capital', platforms: { solana: 'CVU6QRwpHz94UGyPFFehm1G1sFYRH7xDk9UhZ9RApump' } },
+      { id: 'no-platform', platforms: {} }
+    ];
+    const { byChain, coins } = buildIndex(rows);
+    t('every row is counted', coins === 4);
+    t('a token resolves on BNB Chain',
+      byChain.get(56).get('0x111111111117dc0aa78b770fa6a738034120c302') === '1inch');
+    /*
+     * Token lists disagree wildly about checksum casing. A case-sensitive
+     * comparison would miss most addresses while appearing to work for
+     * whichever list happened to match.
+     */
+    t('a checksummed address still resolves',
+      byChain.get(1).get('0xE41d2489571d322189246DaFA5ebDe1F4699F498'.toLowerCase()) === '0x');
+    t('an unknown address resolves to nothing',
+      byChain.get(56).get('0x0000000000000000000000000000000000000001') === undefined);
+    /* Solana is not an EVM chain here; its base58 mint must not leak in. */
+    t('a non-EVM platform is ignored',
+      ![...byChain.values()].some((m) => [...m.values()].includes('000-capital')));
+  }
+
+  /* ================== the order advisor (AI suggestions) ================= */
+  {
+    /* A channel that really does oscillate, so levels genuinely repeat. */
+    const channel = [];
+    for (let i = 0; i < 180; i += 1) channel.push(100 + Math.sin(i / 6) * 8 + Math.sin(i / 23) * 3);
+
+    const advice = adviseOrder(channel);
+    t('the advisor reports ready on a full series', advice.ready === true);
+    t('...and says how many samples it used', advice.samples === 180);
+
+    /*
+     * ─── THE MEDIAN, NOT THE MEAN ───────────────────────────────────────────
+     * Crypto series are full of single-day outliers, and both the mean and the
+     * standard deviation are dragged upward by one bad afternoon — producing a
+     * stop so wide it protects nothing. Proven by injecting an outlier: the
+     * median barely moves.
+     */
+    const spiked = [...channel];
+    spiked[90] = spiked[90] * 3;
+    const before = typicalMovePct(channel);
+    const after = typicalMovePct(spiked);
+    t('one huge outlier barely moves the typical-move figure',
+      Math.abs(after - before) / before < 0.15);
+
+    const br = suggestBracket(channel);
+    if (br) {
+      t('the suggested stop sits below the current price', br.stopLoss < advice.price);
+      t('the suggested take-profit sits above it', br.takeProfit > advice.price);
+      /*
+       * A stop resting exactly ON a known support is the most common way to be
+       * wicked out and then watch the level hold. It must sit beneath it.
+       */
+      t('the stop is placed BENEATH the support, not on it',
+        br.stopLoss < anchorLevels(channel).below.price);
+      /*
+       * Never propose risking more than the reward. Suggesting an 8-for-3
+       * trade because the arithmetic produced it would be the module doing
+       * harm politely.
+       */
+      t('it never suggests risking more than the reward', br.ratio >= 1);
+      t('...and carries the counts behind it, not just a number',
+        br.evidence.supportTested >= MIN_TESTS && br.evidence.resistanceTested >= MIN_TESTS);
+    }
+
+    const tr = suggestTrail(channel);
+    t('a trail suggestion stays inside the validator band',
+      tr && tr.pct >= TRAIL_MIN_PCT && tr.pct <= TRAIL_MAX_PCT);
+    /*
+     * The worst drawdown is the honest counterweight: a 9% trail would have
+     * been stopped out by a 34% fall, and the user deserves that beside the
+     * suggestion.
+     */
+    t('...and reports the worst drawdown beside it',
+      Number.isFinite(tr.evidence.maxDrawdownPct));
+
+    const lad = suggestLadder(channel);
+    if (lad) {
+      t('a ladder suggestion is within the allowed step range',
+        lad.steps >= LADDER_MIN_STEPS && lad.steps <= LADDER_MAX_STEPS);
+      t('...and ends at a level with a real record', lad.endRate > lad.startRate);
+    }
+
+    /*
+     * ─── REFUSING IS THE FEATURE ────────────────────────────────────────────
+     * Thin history produces confident-looking nonsense. Two touches is a
+     * coincidence with a sample size.
+     */
+    const thin = adviseOrder(channel.slice(0, 12));
+    t('the advisor refuses on thin history',
+      thin.ready === false && thin.bracket === null && thin.trailing === null);
+    t('...and states the threshold it needs', thin.minSamples === MIN_SAMPLES);
+
+    /*
+     * A FLAT series has zero volatility. Deriving "use the tightest possible
+     * stop" from no movement is a suggestion with nothing behind it — and on
+     * the tightest setting, so it fires on the first real tick. A dead or
+     * brand-new feed looks exactly like this.
+     */
+    t('zero volatility yields no trail suggestion',
+      suggestTrail(new Array(120).fill(100)) === null);
+    t('...and no bracket', suggestBracket(new Array(120).fill(100)) === null);
+
+    t('junk input cannot crash the advisor',
+      adviseOrder([NaN, 0, -5, null, undefined]).ready === false);
   }
 
   return rows;
