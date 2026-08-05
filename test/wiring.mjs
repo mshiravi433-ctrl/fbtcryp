@@ -4600,6 +4600,24 @@ export default function run() {
       /api\/indexnow-key\//.test(sub));
 
     /*
+     * ─── IT MUST RUN AUTOMATICALLY, NOT WHEN SOMEONE REMEMBERS ──────────────
+     * Chained onto build:full, which is what Vercel runs. A manual step after
+     * every deploy is a step that stops happening by the third deploy — and
+     * the owner works from a phone and cannot run node scripts at all, so
+     * "run it by hand" was never a real plan.
+     */
+    const pkg = JSON.parse(read('package.json'));
+    t('the submitter runs on every production build',
+      /submit-indexnow/.test(pkg.scripts['build:full'] ?? ''));
+
+    /*
+     * And it must never be able to fail one. An SEO nicety blocking a working
+     * release would be a far worse bug than the pages going unannounced, so
+     * every failure path in the script exits 0.
+     */
+    t('...and can never fail the build', !/process\.exit\(1\)/.test(sub));
+
+    /*
      * The submitted list must match the pages actually generated. A landing
      * page added to gen-landing.mjs and forgotten here is a page no engine is
      * ever told about.

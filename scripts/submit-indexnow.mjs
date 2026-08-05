@@ -31,7 +31,18 @@
  * else — no hash routes, which resolve to the same document and would look
  * like padding.
  *
- * Run manually after a deploy that changes a landing page:
+ * ─── IT RUNS ON EVERY PRODUCTION BUILD ──────────────────────────────────────
+ * Chained onto `build:full`, which is what Vercel runs. Doing it by hand was
+ * the original plan and it was wrong twice over: the owner works from a phone
+ * and cannot run node scripts, and a step someone has to remember after every
+ * deploy is a step that stops happening by the third deploy.
+ *
+ * Safe to run on every build because the URL list is a small fixed set of
+ * real pages, and because this script can never fail a deploy — every failure
+ * path below exits 0. An SEO nicety must not be able to block a working
+ * release.
+ *
+ * Can still be run by hand:
  *     node scripts/submit-indexnow.mjs
  */
 
