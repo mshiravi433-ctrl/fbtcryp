@@ -2355,7 +2355,12 @@
       "UNSUPPORTED_CHAIN": "That network is not supported here yet.",
       "BAD_AMOUNT": "Enter an amount.",
       "BAD_ADDRESS": "Connect a wallet first."
-    }
+    },
+    "optionsTitle": "Bridge options",
+    "slippageNote": "Slippage tolerance is {{pct}}%, taken from your Settings so it matches the swap screen. Raise it only if quotes keep failing — a bridge takes minutes and cannot be cheaply retried, so a loose tolerance costs more here than it does on a swap.",
+    "toAddressLabel": "Send to a different address (optional)",
+    "toAddressNote": "Leave this empty and the funds arrive at the same address they left from, which is what you want unless you are bridging to an exchange deposit address. Check it character by character: a bridge cannot be reversed and nobody can recover funds sent to the wrong place.",
+    "badToAddress": "That is not a valid address. Clear the field to send to your own wallet, or paste a full 0x address."
   },
   "autopilot": {
     "title": "Autopilot",

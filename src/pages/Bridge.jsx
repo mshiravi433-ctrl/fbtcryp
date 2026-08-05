@@ -14,6 +14,8 @@ import {
   tokensFor
 } from '../lib/bridge';
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
+import InfoBox from '../components/InfoBox';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 /**
  * CROSS-CHAIN BRIDGE.
@@ -82,6 +84,38 @@ export default function Bridge() {
 
   const timerRef = useRef(null);
 
+  /*
+   * ─── THE OPTIONS THE SWAP SCREEN HAS AND THIS ONE DID NOT ───────────────
+   * Asked for: «اپشن های موجود که الان هست را در صفحه پل بیار».
+   *
+   * Two were genuinely missing, and one of them was a silent bug:
+   *
+   * 1. SLIPPAGE. `server/bridge.js` has always accepted `slippage` in its
+   *    allow-list, and this screen never sent one — so every bridge quote
+   *    used LI.FI's default while the user's own setting, which the swap
+   *    screen respects, was ignored. Someone who set 0.1% for safety was
+   *    getting something else here and had no way to know.
+   *
+   * 2. A DESTINATION ADDRESS. Bridging to an exchange deposit address or to a
+   *    different wallet is one of the main reasons people bridge at all, and
+   *    LI.FI supports `toAddress`. Without it the funds could only ever land
+   *    on the same address they left from.
+   *
+   * Deliberately NOT copied from the swap screen: expert mode. There it
+   * unlocks high-slippage swaps you can retry cheaply. A bridge takes minutes
+   * and cannot be retried without paying gas twice, so "let me set 40%
+   * slippage" is a foot-gun with a much longer fuse.
+   */
+  const slippage = useSettingsStore((st) => st.defaultSlippage);
+
+  /*
+   * Empty means "same address as the sender", which is both the safe default
+   * and what the screen did before. Only a deliberately entered value
+   * changes the destination.
+   */
+  const [toAddress, setToAddress] = useState('');
+  const toAddressValid = toAddress === '' || /^0x[a-fA-F0-9]{40}$/.test(toAddress.trim());
+
   const fetchQuote = useCallback(async () => {
     setQuoteErr(null);
     setTxErr(null);
@@ -104,7 +138,17 @@ export default function Bridge() {
         fromToken: fromToken.address,
         toToken: toToken.address,
         fromAddress: wallet.address,
-        fromAmount: raw
+        fromAmount: raw,
+        /*
+         * LI.FI wants a fraction (0.005), the setting is a percentage (0.5).
+         * Getting this wrong by 100x would either fail every quote or accept
+         * catastrophic slippage, so the conversion is explicit here rather
+         * than assumed to match.
+         */
+        slippage: Number(slippage) / 100,
+        /* Omitted entirely when blank — an empty string would be forwarded
+           as a literal and rejected. */
+        ...(toAddress.trim() && toAddressValid ? { toAddress: toAddress.trim() } : {})
       });
       setQuote(q);
     } catch (e) {
@@ -113,7 +157,8 @@ export default function Bridge() {
     } finally {
       setQuoting(false);
     }
-  }, [wallet.isConnected, wallet.address, fromChain, toChain, fromToken, toToken, amount]);
+  }, [wallet.isConnected, wallet.address, fromChain, toChain, fromToken, toToken, amount,
+      slippage, toAddress, toAddressValid]);
 
   useEffect(() => {
     clearTimeout(timerRef.current);
@@ -266,6 +311,50 @@ export default function Bridge() {
         </div>
 
         {quoting && <p className="faint" style={{ marginTop: 10 }}>{t('bridge.quoting')}</p>}
+
+        {/*
+          ─── THE OPTIONS, FOLDED ────────────────────────────────────────────
+          Collapsed because the correct answer for almost everyone is the
+          default: send to your own address, at the slippage you already set
+          once in Settings. Expanding it is for the minority bridging to an
+          exchange deposit address, and putting that in front of everybody
+          would add two fields to the main path for a case most users never
+          have.
+        */}
+        <div style={{ marginTop: 12 }}>
+          <InfoBox title={t('bridge.optionsTitle')} tone="info" id="bridge-options">
+            <p>{t('bridge.slippageNote', { pct: slippage })}</p>
+
+            <label className="ord-field" style={{ marginTop: 4 }}>
+              <span className="faint">{t('bridge.toAddressLabel')}</span>
+              <input
+                type="text"
+                value={toAddress}
+                onChange={(e) => setToAddress(e.target.value)}
+                placeholder={wallet.address ?? '0x…'}
+                spellCheck={false}
+                autoCapitalize="none"
+                autoCorrect="off"
+                style={{
+                  direction: 'ltr', textAlign: 'left',
+                  fontFamily: 'var(--font-mono)', fontSize: 12
+                }}
+              />
+            </label>
+
+            {/*
+              An invalid address must block the quote rather than be silently
+              dropped — a bridge that quietly sent to a different destination
+              than the one typed would be unrecoverable.
+            */}
+            {!toAddressValid && (
+              <p className="notice notice-danger" style={{ marginTop: 9 }}>
+                {t('bridge.badToAddress')}
+              </p>
+            )}
+            <p style={{ marginTop: 9 }}>{t('bridge.toAddressNote')}</p>
+          </InfoBox>
+        </div>
 
         {quoteErr && !quoting && (
           <p className="notice notice-danger" style={{ marginTop: 10 }}>
