@@ -54,7 +54,7 @@ export default function Wallet() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('real');
   const [connectOpen, setConnectOpen] = useState(false);
   const [seedSheet, setSeedSheet] = useState(false);
   const [seedPw, setSeedPw] = useState('');
@@ -86,8 +86,26 @@ export default function Wallet() {
 
   return (
     <PageTransition>
+      {/*
+        ─── TWO TABS, NOT THREE ──────────────────────────────────────────────
+        Requested: «صفحه والت دو تب باشد والت واقعی و والت ازمایشی» — the
+        wallet should be two tabs, real and practice.
+
+        That is the right split and the old one was not. `overview |
+        liquidity | practice` mixed two different questions: WHOSE money is
+        this (real vs play), and WHAT KIND of holding is it (tokens vs pools).
+        Liquidity was a third tab containing a single button to another
+        screen, while NFTs — which are real holdings of this same wallet —
+        lived on a separate route entirely and could only be reached through
+        the More menu.
+
+        Now the top-level choice answers only the first question, which is the
+        one that matters on a non-custodial app: real money or play money.
+        Pools and NFTs are both real holdings, so they belong inside the real
+        wallet.
+      */}
       <div className="segmented">
-        {['overview', 'liquidity', 'practice'].map((k) => (
+        {['real', 'practice'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
             {tab === k && <SegIndicator id="wtab" />}
             {t(`wallet.tab.${k}`)}
@@ -454,13 +472,24 @@ export default function Wallet() {
       </>
       )}
 
-      {tab === 'liquidity' && (
+      {/*
+        Pools and NFTs, inside the real wallet where they belong. Both are
+        holdings of the same connected address, so putting them behind
+        separate top-level destinations made the wallet look emptier than it
+        is and hid two reasons to connect one.
+      */}
+      {tab === 'real' && (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.tab.liquidity')}</p>
-          <p className="muted" style={{ fontSize: 12.3 }}>{t('wallet.liquidityBody')}</p>
-          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => navigate('/farm')}>
-            {t('wallet.viewPools')}
-          </button>
+          <p className="section-label" style={{ marginBottom: 10 }}>{t('wallet.holdingsMore')}</p>
+          <p className="muted" style={{ fontSize: 12.3, margin: '0 0 12px' }}>{t('wallet.liquidityBody')}</p>
+          <div className="row" style={{ gap: 9 }}>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/farm')}>
+              {t('wallet.viewPools')}
+            </button>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/nft')}>
+              {t('nav.nft')}
+            </button>
+          </div>
         </motion.section>
       )}
 

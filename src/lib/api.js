@@ -307,6 +307,29 @@ export function getTrending() {
   });
 }
 
+/**
+ * OHLC candles.
+ *
+ * Deliberately NO offline fallback, unlike getChart. The bundled snapshot
+ * holds closing prices only, so a fabricated candle would have to invent its
+ * high and low — and those two numbers are the entire reason someone switched
+ * to the candle view. Inventing them would be making up the data the user
+ * came for. When it cannot load, the UI says so.
+ */
+export function getOhlc(id, days = 30, vs = 'usd') {
+  return resilient(`ohlc:${id}:${days}`, {
+    ttl: 60000,
+    backend: () => fetchJson(`${API_BASE}/ohlc/${id}?days=${days}&vs=${vs}`),
+    direct: async () => {
+      const raw = await fetchJson(`${PUBLIC_CG}/coins/${id}/ohlc?vs_currency=${vs}&days=${days}`);
+      return (Array.isArray(raw) ? raw : [])
+        .map(([t, o, h, l, c]) => ({ t, o, h, l, c }))
+        .filter((d) => [d.t, d.o, d.h, d.l, d.c].every(Number.isFinite) && d.h >= d.l);
+    },
+    fallback: () => []
+  });
+}
+
 export function getChart(id, days = 1, vs = 'usd') {
   return resilient(`chart:${id}:${days}`, {
     ttl: 60000,

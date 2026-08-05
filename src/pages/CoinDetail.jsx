@@ -6,6 +6,9 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
+import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
+import CandleChart from '../components/CandleChart';
+import { useOhlc } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
@@ -57,6 +60,21 @@ export default function CoinDetail() {
   const { data: coins } = useMarkets(60);
   const { data: fetched, loading: coinLoading } = useCoin(id);
   const { data: series, loading } = useChart(id, range.days);
+
+  /*
+   * Is there a REAL, curated contract behind this coin?
+   *
+   * The route param IS the CoinGecko id (`/coin/:id`), which is exactly the
+   * key `swapTargetFor` matches on — no translation needed, and deliberately
+   * no symbol fallback: dozens of tokens share a ticker and a symbol match
+   * here would put someone one tap from buying an impostor.
+   */
+  /* Line by default: easier to read, and most visitors are not traders. */
+  const [chartMode, setChartMode] = useState('line');
+  const { data: ohlc, loading: ohlcLoading } = useOhlc(chartMode === 'candle' ? id : null, range.days);
+
+  const coinGeckoId = id;
+  const realSwap = useMemo(() => swapTargetFor(coinGeckoId), [coinGeckoId]);
   /*
    * Bitcoin over the SAME range, plus the global stats, for the verdict
    * panel's macro layer. Both series have to come from one endpoint with one
@@ -173,6 +191,48 @@ export default function CoinDetail() {
           </div>
         </div>
 
+        {/*
+          ─── LINE OR CANDLES ────────────────────────────────────────────────
+          The page only ever had a line, which is a closing price per point.
+          A line literally cannot show the high and the low: a day that opened
+          at 100, spiked to 130 and closed at 101 draws as flat. That intraday
+          range is most of what a trader reads a chart for, so candles are not
+          decoration here — they carry information the line discards.
+
+          Line stays the default because it is easier to read at a glance and
+          most visitors are not traders.
+        */}
+        <div className="segmented" style={{ marginBottom: 10 }}>
+          {['line', 'candle'].map((m) => (
+            <button
+              key={m}
+              className={chartMode === m ? 'active' : ''}
+              onClick={() => setChartMode(m)}
+              aria-pressed={chartMode === m}
+              style={{ isolation: 'isolate' }}
+            >
+              {chartMode === m && <SegIndicator id="coin-chartmode" />}
+              {t(m === 'line' ? 'coin.chartLine' : 'coin.chartCandle')}
+            </button>
+          ))}
+        </div>
+
+        {chartMode === 'candle' ? (
+          ohlcLoading ? (
+            <div className="skel" style={{ height: 190 }} />
+          ) : ohlc?.length ? (
+            <>
+              <CandleChart data={ohlc} height={190} />
+              <p className="faint" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}>
+                {t('coin.candleNote')}
+              </p>
+            </>
+          ) : (
+            /* No OHLC for this coin. Say so rather than silently showing the
+               line under a tab labelled "Candles". */
+            <p className="notice">{t('coin.noCandles')}</p>
+          )
+        ) : (
         <div className="chart-wrap" style={{ height: 190 }}>
           {loading ? (
             <div className="skel" style={{ height: '100%' }} />
@@ -202,6 +262,7 @@ export default function CoinDetail() {
             </ResponsiveContainer>
           )}
         </div>
+        )}
 
         <div className="segmented" style={{ marginTop: 10 }}>
           {RANGES.map((r) => (
@@ -269,12 +330,49 @@ export default function CoinDetail() {
         />
       </motion.div>
 
-      <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-        <button className="btn btn-primary" onClick={() => navigate(`/trade?coin=${id}&side=buy`)}>
-          {t('trade.buy')}
-        </button>
-        <button className="btn btn-ghost" onClick={() => navigate(`/trade?coin=${id}&side=sell`)}>
-          {t('trade.sell')}
+      {/*
+        ─── THESE BUTTONS USED TO OPEN THE SIMULATOR ─────────────────────────
+        Both went to `/trade`, which trades virtual credits. Someone tapping
+        "Buy" on the Bitcoin page, in a wallet-connected app, reasonably
+        believes they are buying Bitcoin. They were not — they were opening a
+        practice screen, and would walk away thinking they held a position
+        they did not hold. That is the worst class of bug this app can have.
+
+        Now they go to the REAL swap with the pair pre-filled, but only when a
+        curated contract actually exists for the coin. Most CoinGecko coins
+        are not swappable here (wrong chain, or no verified contract), and for
+        those the honest answer is to say so — see `swapTargetFor`. Falling
+        back to the simulator is exactly what created this bug.
+
+        The practice screen is still one tap away, clearly labelled, for
+        anyone who wants to rehearse first.
+      */}
+      <motion.div className="stack" style={{ gap: 9 }} variants={riseIn} initial="hidden" animate="show">
+        {realSwap ? (
+          <>
+            <div className="row" style={{ gap: 10 }}>
+              <button className="btn btn-primary" onClick={() => navigate(swapUrlFor(coinGeckoId, 'buy'))}>
+                {t('trade.buy')}
+              </button>
+              <button className="btn btn-ghost" onClick={() => navigate(swapUrlFor(coinGeckoId, 'sell'))}>
+                {t('trade.sell')}
+              </button>
+            </div>
+            <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
+              {t('coin.realSwapNote', { chain: realSwap.chainName, symbol: realSwap.token.symbol })}
+            </p>
+          </>
+        ) : (
+          /*
+            No curated contract. Saying "not available" is the honest outcome:
+            opening the swap screen on an arbitrary token that merely shares a
+            ticker would put someone one tap from buying a fake.
+          */
+          <p className="notice">{t('coin.notSwappable')}</p>
+        )}
+
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/trade?coin=${id}&side=buy`)}>
+          {t('coin.practiceInstead')}
         </button>
       </motion.div>
 

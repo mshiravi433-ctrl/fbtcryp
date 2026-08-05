@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getChart, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
+import { getChart,
+  getOhlc, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { vsOf } from '../lib/currency';
 
@@ -69,6 +70,12 @@ export const useMarkets = (perPage = 50) => {
   return usePoll(() => getMarkets({ perPage, vs }), [perPage, vs], 30000);
 };
 export const useTrending = () => usePoll(() => getTrending(), [], 120000);
+/**
+ * Candles. `id` is null unless the candle tab is actually open, so switching
+ * to it is what triggers the request — the line view costs nothing extra.
+ */
+export const useOhlc = (id, days) =>
+  usePoll(() => (id ? getOhlc(id, days) : Promise.resolve([])), [id, days], 60000);
 export const useChart = (id, days) => usePoll(() => (id ? getChart(id, days) : Promise.resolve([])), [id, days], 60000);
 
 /**

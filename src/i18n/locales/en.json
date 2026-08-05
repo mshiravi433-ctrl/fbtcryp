@@ -99,7 +99,16 @@
     "change7d": "7d change",
     "supply": "Circulating supply",
     "fromAth": "From ATH",
-    "notFoundHelp": "This coin was not in the loaded page and the direct lookup did not answer either. That usually means the data provider is rate-limiting right now — try again in a moment."
+    "notFoundHelp": "This coin was not in the loaded page and the direct lookup did not answer either. That usually means the data provider is rate-limiting right now — try again in a moment.",
+    "realSwapNote": "Real swap on {{chain}}, using {{symbol}}. Your wallet signs it and the tokens are yours — this is not a simulation.",
+    "notSwappable": "This coin cannot be swapped in the app yet. It trades on a network we do not support, or has no verified contract we would stake our name on. We will not open a swap on a token that merely shares its ticker.",
+    "practiceInstead": "Practice with virtual credits instead",
+    "open": "Open",
+    "close": "Close",
+    "chartLine": "Line",
+    "chartCandle": "Candles",
+    "candleNote": "Each candle is one period: the body is open→close, the thin line is the low and high. Green means it closed higher than it opened. The line chart cannot show the high and low — that range is most of what a candle is for.",
+    "noCandles": "Candles are not available for this coin right now. We do not draw them from closing prices — the high and the low would be invented, and those are the two numbers a candle exists to show."
   },
   "trade": {
     "title": "Trade",
@@ -333,7 +342,8 @@
       "overview": "Overview",
       "liquidity": "Liquidity",
       "history": "History",
-      "practice": "Practice"
+      "practice": "Practice wallet",
+      "real": "Real wallet"
     },
     "liquidityBody": "Your liquidity positions live in the pools you deposit into. Open the Farm screen to view PancakeSwap pools and manage positions from your own wallet.",
     "viewPools": "View pools",
@@ -361,7 +371,8 @@
     "yourTokens": "Your tokens",
     "emptyTitle": "No wallet connected",
     "emptyBody": "Connect a wallet you already own to see your balances and swap. There is no signup, no email and no identity check.",
-    "emptyReassure": "We never receive your recovery phrase or private key. Every transaction is signed by your own wallet."
+    "emptyReassure": "We never receive your recovery phrase or private key. Every transaction is signed by your own wallet.",
+    "holdingsMore": "Your other holdings"
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -1037,7 +1048,7 @@
     "intro": "Short guides for each screen. If you're new to crypto, start at the top.",
     "pitfall": "⚠️ Watch out",
     "watchVideo": "Watch a tutorial",
-    "videoNote": "Video links open a search on Aparat or YouTube. These are made by independent educators — we did not produce them and do not control their content. YouTube does not load on most Iranian networks, so the Persian option is listed first.",
+    "videoNote": "The video button opens a YouTube search, not a specific video — those are made by other people and we cannot vouch for them. The written guide above is ours and is complete on its own.",
     "start": {
       "title": "Getting started",
       "sub": "Wallet setup and first steps",
@@ -1112,8 +1123,7 @@
       "step5": "Keep gas money on each chain you use. Running out mid-transaction wastes the fee you already paid.",
       "pitfall": "Chasing the highest APR you can find is how most people lose money in DeFi. A steady 8% you understand beats a 900% pool whose token you can't sell."
     },
-    "watchFa": "Video (Persian)",
-    "watchEn": "Video (English)"
+    "watchEn": "Search on YouTube"
   },
   "audit": {
     "title": "Security & audits",

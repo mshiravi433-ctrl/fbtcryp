@@ -20,6 +20,7 @@ import {
   fetchDexPools,
   fetchGlobal,
   fetchMarkets,
+  fetchOhlc,
   fetchSearch,
   fetchSimplePrices,
   fetchTrending,
@@ -173,6 +174,23 @@ app.get('/api/chart/:id', (req, res) => {
   const days = Math.min(365, Math.max(1, Number(req.query.days) || 1));
   const vs = String(req.query.vs || 'usd').toLowerCase();
   return serve(res, 60000)(() => fetchChart(req.params.id, days, vs), `chart:${req.params.id}:${days}:${vs}`);
+});
+
+/**
+ * CANDLES for the coin page.
+ *
+ * Separate from /api/chart because the upstream is a different endpoint with
+ * different data: /market_chart gives closes only, /ohlc gives the four
+ * numbers a candle needs. The high and low are exactly what a line chart
+ * cannot express, which is why this exists at all.
+ *
+ * Same 60s TTL as the line chart — they are read side by side and a shorter
+ * TTL here would just double our upstream traffic for two views of one truth.
+ */
+app.get('/api/ohlc/:id', (req, res) => {
+  const days = Number(req.query.days) || 30;
+  const vs = String(req.query.vs || 'usd').slice(0, 8);
+  return serve(res, 60000)(() => fetchOhlc(req.params.id, days, vs), `ohlc:${req.params.id}:${days}:${vs}`);
 });
 
 app.get('/api/coin/:id', (req, res) =>

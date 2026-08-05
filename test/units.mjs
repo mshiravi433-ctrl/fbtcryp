@@ -84,6 +84,7 @@ import {
 import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
+import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
   MIN_SAMPLES,
@@ -3696,6 +3697,62 @@ export default function run() {
        render the wrong claim about one of them. */
     t('every configured venue resolves to a disclosure state',
       Object.keys(VENUE_REFERRAL).every((v) => ['earning', 'none'].includes(venueDisclosure(v))));
+  }
+
+  /* ============ coin page: real buy/sell, not the simulator ============= */
+  {
+    /*
+     * ─── THE BUG THIS LOCKS DOWN ────────────────────────────────────────────
+     * Every coin page had Buy/Sell buttons that opened `/trade` — the PRACTICE
+     * screen trading virtual credits. Someone tapping Buy on the Bitcoin page,
+     * in a wallet-connected app, believes they are buying Bitcoin. They were
+     * opening a simulator, and would walk away thinking they held a position
+     * they did not hold.
+     */
+    const bnb = swapTargetFor('binancecoin');
+    t('a curated coin resolves to a real contract', bnb !== null);
+    /*
+     * BNB Chain is preferred when a coin exists on several: it is the app's
+     * default and the cheapest of the seven, so a user should not be sent to
+     * Ethereum to pay gas for the same trade.
+     */
+    t('...on the cheapest supported chain', bnb.chainId === 56);
+
+    /*
+     * ─── REFUSING IS THE SAFETY PROPERTY ────────────────────────────────────
+     * Most CoinGecko coins are not swappable here. Cardano has no contract on
+     * any chain we support. Returning null makes the UI say so; the dangerous
+     * alternative is opening a swap on a token that merely shares a ticker,
+     * which is exactly how someone buys a fake.
+     */
+    t('a coin on an unsupported chain refuses', swapTargetFor('cardano') === null);
+    t('...and isSwappable agrees', isSwappable('cardano') === false && isSwappable('bitcoin') === true);
+    t('junk input refuses', swapTargetFor('') === null && swapTargetFor(null) === null);
+
+    /*
+     * BUY and SELL must be opposite. `from` is what LEAVES the wallet, so
+     * buying spends the stablecoin and selling spends the coin. Backwards,
+     * this would preload the exact opposite trade — the same class of mistake
+     * the order form's `direction` field guards against.
+     */
+    const buy = swapUrlFor('binancecoin', 'buy');
+    const sell = swapUrlFor('binancecoin', 'sell');
+    t('buying spends the stable side', /from=USDT&to=BNB/.test(buy));
+    t('selling spends the coin', /from=BNB&to=USDT/.test(sell));
+    t('...so the two are never the same', buy !== sell);
+    t('the chain travels with the pair', /chain=56/.test(buy));
+
+    /*
+     * Buying the stablecoin itself would pair USDT with USDT, which the swap
+     * screen rejects as SAME_TOKEN — a dead button. It must fall back to the
+     * native coin instead.
+     */
+    const buyStable = swapUrlFor('tether', 'buy');
+    t('a stablecoin is never paired with itself', !/from=USDT&to=USDT/.test(buyStable));
+    t('...it falls back to the native coin', /from=BNB/.test(buyStable));
+
+    /* An unswappable coin has no URL at all, so the UI cannot navigate. */
+    t('no URL is produced for an unswappable coin', swapUrlFor('cardano', 'buy') === null);
   }
 
   return rows;

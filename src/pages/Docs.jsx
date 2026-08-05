@@ -43,7 +43,6 @@ import {
  * pinned video can be deleted, monetised or edited into something we would
  * not endorse, and we would never know. A search stays useful.
  */
-const aparat = (q) => `https://www.aparat.com/result/${encodeURIComponent(q)}`;
 const youtube = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
 
 const SECTIONS = [
@@ -53,28 +52,24 @@ const SECTIONS = [
     id: 'start',
     Icon: IconWallet,
     steps: 4,
-    fa: aparat('آموزش نصب کیف پول متامسک'),
     en: youtube('how to use metamask beginner')
   },
   {
     id: 'swap',
     Icon: IconSwap,
     steps: 5,
-    fa: aparat('آموزش صرافی غیرمتمرکز پنکیک سواپ'),
     en: youtube('how to swap tokens dex beginner')
   },
   {
     id: 'farm',
     Icon: IconPools,
     steps: 4,
-    fa: aparat('آموزش استخر نقدینگی و ضرر ناپایدار'),
     en: youtube('liquidity pool impermanent loss explained')
   },
   {
     id: 'signals',
     Icon: IconActivity,
     steps: 3,
-    fa: aparat('آموزش اندیکاتور RSI و MACD'),
     en: youtube('rsi macd explained beginners')
   },
   { id: 'trade', Icon: IconTrend, steps: 3 },
@@ -82,7 +77,6 @@ const SECTIONS = [
     id: 'security',
     Icon: IconShield,
     steps: 5,
-    fa: aparat('امنیت کیف پول ارز دیجیتال عبارت بازیابی'),
     en: youtube('crypto wallet security seed phrase')
   }
 ];
@@ -115,7 +109,7 @@ export default function Docs({ embedded = false }) {
       <p className="muted">{t('docs.intro')}</p>
 
       <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
-        {SECTIONS.map(({ id, Icon, steps, fa, en }) => {
+        {SECTIONS.map(({ id, Icon, steps, en }) => {
           const isOpen = openId === id;
           return (
             <motion.div key={id} className={`card ${isOpen ? 'card-rgb' : ''}`} variants={riseIn} layout>
@@ -187,12 +181,30 @@ export default function Docs({ embedded = false }) {
                             the reachable option second would mean most people
                             tap the broken one first.
                           */}
-                          {fa && (
-                            <button className="doc-video" onClick={() => open(fa)}>
-                              <IconExternal width={13} height={13} />
-                              {t('docs.watchFa')}
-                            </button>
-                          )}
+                          {/*
+                            ─── THE PERSIAN VIDEO BUTTON IS GONE ────────────
+                            Reported: «فیلم های فارسی حذف بشه نمیارع» — the
+                            Persian videos do not come up.
+
+                            That was accurate, and the cause was structural
+                            rather than a bad link. This never pointed at a
+                            specific video; it ran an Aparat SEARCH for a
+                            phrase like «آموزش نصب کیف پول متامسک». Whether
+                            anything relevant came back depended on Aparat's
+                            index that day, so the button promised a lesson
+                            and often delivered an empty or irrelevant page.
+
+                            A button that works sometimes is worse than no
+                            button: the user blames the app and stops trusting
+                            the other links too. The written guide above is
+                            ours, always loads, and is complete — so the
+                            honest move is to let it stand alone rather than
+                            decorate it with a coin-flip.
+
+                            English is kept because a YouTube search for a
+                            technical phrase does reliably return results —
+                            though it is now labelled as a search, not a video.
+                          */}
                           {en && (
                             <button className="doc-video" onClick={() => open(en)}>
                               <IconExternal width={13} height={13} />

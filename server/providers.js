@@ -142,6 +142,41 @@ export async function fetchChart(id, days = 1, vs = 'usd') {
   return (raw.prices || []).map(([t, p]) => ({ t, p }));
 }
 
+/**
+ * OHLC CANDLES.
+ *
+ * ─── WHY THIS IS A SEPARATE CALL FROM fetchChart ────────────────────────────
+ * `/market_chart` returns CLOSING prices only — a single number per point.
+ * That is all a line chart needs and it is why the coin page has only ever
+ * had a line.
+ *
+ * A candle needs four numbers per bar (open, high, low, close), and the high
+ * and the low are the two the line literally cannot show: a day that opened
+ * at 100, spiked to 130, and closed back at 101 is a flat line and a very
+ * loud candle. That intraday range is most of what a trader reads a chart
+ * for, so it cannot be derived — it has to be fetched.
+ *
+ * `/coins/{id}/ohlc` is free, keyless, and returns exactly that.
+ *
+ * ─── CoinGecko PICKS THE CANDLE WIDTH, WE DO NOT ────────────────────────────
+ * The granularity is decided by `days` and is not a parameter: 1-2 days gives
+ * 30-minute candles, 3-30 days gives 4-hourly, beyond that daily. Worth
+ * stating because a caller asking for 90 days and expecting hourly bars would
+ * get four-day-old-looking data and assume the feed was broken.
+ */
+export async function fetchOhlc(id, days = 30, vs = 'usd') {
+  const raw = await req(cgUrl(`/coins/${encodeURIComponent(id)}/ohlc`, { vs_currency: vs, days: String(days) }));
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(([t, o, h, l, c]) => ({ t, o, h, l, c }))
+    /*
+     * Drop malformed bars rather than rendering them. A candle with a high
+     * below its low draws inverted and looks like a rendering bug; silently
+     * omitting one bad bar from 180 is invisible and honest.
+     */
+    .filter((d) => [d.t, d.o, d.h, d.l, d.c].every(Number.isFinite) && d.h >= d.l);
+}
+
 export async function fetchSimplePrices(ids = [], vs = 'usd') {
   if (!ids.length) return {};
   return req(cgUrl('/simple/price', { ids: ids.join(','), vs_currencies: vs, include_24hr_change: 'true' }));

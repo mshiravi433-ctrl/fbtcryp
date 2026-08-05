@@ -1093,10 +1093,18 @@ export default function run() {
       'the real wallet is hidden on the practice tab',
       /tab !== 'practice' && \(/.test(wallet)
     );
-    // The tab strip must actually offer it, or the section is unreachable.
+    /*
+     * The tab strip must actually offer it, or the section is unreachable.
+     *
+     * The literal changed when the wallet went from three tabs to two:
+     * `overview | liquidity | practice` mixed two questions (whose money —
+     * real or play; and what kind of holding — tokens or pools). It is now
+     * `real | practice`, which asks only the question that matters on a
+     * non-custodial app, with pools and NFTs inside the real wallet.
+     */
     t(
       'the practice tab is reachable from the tab strip',
-      /\['overview', 'liquidity', 'practice'\]/.test(wallet)
+      /\['real', 'practice'\]/.test(wallet)
     );
   }
 
@@ -2684,10 +2692,26 @@ export default function run() {
    */
   {
     const docs = read('src/pages/Docs.jsx');
-    t('there is a Persian video source', /aparat\.com/.test(docs));
+    /*
+     * ─── THE PERSIAN VIDEO BUTTON WAS REMOVED, DELIBERATELY ─────────────────
+     * This block used to assert an Aparat source existed. That assertion was
+     * correct when written and is now wrong, so it is inverted rather than
+     * deleted — the reasoning has to survive.
+     *
+     * The button never pointed at a video. It ran an Aparat SEARCH for a
+     * phrase, so whether anything relevant came back depended on Aparat's
+     * index that day. Reported by the owner as «فیلم های فارسی حذف بشه
+     * نمیارع» — the Persian videos do not come up. A button that works
+     * sometimes is worse than no button: the user blames the app and stops
+     * trusting the links that do work.
+     *
+     * English stays because a YouTube search for a technical phrase does
+     * reliably return results — and it is now labelled as a search.
+     */
+    t('the Aparat search is gone', !/aparat\.com/.test(docs));
     t('the English source is still offered', /youtube\.com/.test(docs));
-    t('both are labelled by language', /docs\.watchFa/.test(docs) && /docs\.watchEn/.test(docs));
-    t('the labels exist', hasKey(en, 'docs.watchFa') && hasKey(en, 'docs.watchEn'));
+    t('...and is labelled as a search, not a video', hasKey(en, 'docs.watchEn'));
+    t('the Persian label is gone with it', !hasKey(en, 'docs.watchFa'));
   }
 
   /* ---- 39. the galaxy must not be a video file -------------------------- */
@@ -3806,6 +3830,93 @@ export default function run() {
     t('...and names the real ReferralStorage contract',
       /0xe6fab3F0c7199b0d34d7FbE83394fc0e0D06e99d/.test(doc));
     t('...and warns that the code is case-sensitive', /حساس/.test(doc));
+  }
+
+  /* ---- 57. coin page buys for REAL, and the wallet is two tabs --------- */
+  {
+    const coin = read('src/pages/CoinDetail.jsx');
+    const wallet = read('src/pages/Wallet.jsx');
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const coinCode = code(coin);
+
+    /*
+     * ─── THE PRIMARY BUTTONS MUST NOT OPEN THE SIMULATOR ────────────────────
+     * The regression is specific: a Buy button whose handler navigates to
+     * `/trade`. The practice screen is still reachable, but only from a
+     * clearly-labelled secondary button.
+     */
+    t('buy routes to the real swap', /swapUrlFor\(coinGeckoId, 'buy'\)/.test(coinCode));
+    t('sell routes to the real swap', /swapUrlFor\(coinGeckoId, 'sell'\)/.test(coinCode));
+    t('...and the practice screen is a clearly-labelled fallback',
+      /coin\.practiceInstead/.test(coin));
+    /*
+     * Exactly ONE /trade navigation may remain — the labelled practice button.
+     * Two would mean a primary button still points at the simulator.
+     */
+    t('only one route to the simulator remains',
+      (coinCode.match(/navigate\(`\/trade\?/g) ?? []).length === 1);
+    /* An unswappable coin must be told, not silently sent somewhere. */
+    t('an unswappable coin shows an explanation', /coin\.notSwappable/.test(coin));
+
+    /* ---- candles ---- */
+    t('the candle component exists', existsSync('src/components/CandleChart.jsx'));
+    t('the coin page can switch to candles', /chartMode === 'candle'/.test(coinCode));
+    t('...and renders the component', /<CandleChart/.test(coin));
+    t('the OHLC route exists', /\/api\/ohlc\/:id/.test(read('server/app.js')));
+    t('...and calls the fetcher', /fetchOhlc\s*\(/.test(read('server/app.js')));
+    /*
+     * NO offline fallback for candles. The bundled snapshot holds closes only,
+     * so a fabricated candle would have to invent its high and low — the two
+     * numbers the user switched to candles to see.
+     */
+    t('candles never fall back to invented data',
+      /fallback: \(\) => \[\]/.test(read('src/lib/api.js')));
+
+    /* ---- wallet: two tabs, real and practice ---- */
+    t('the wallet has exactly two tabs', /\['real', 'practice'\]/.test(wallet));
+    t('...named real and practice in both languages',
+      hasKey(JSON.parse(read('src/i18n/locales/en.json')), 'wallet.tab.real') &&
+      hasKey(JSON.parse(read('src/i18n/locales/fa.json')), 'wallet.tab.real'));
+    /* Pools and NFTs are real holdings and belong inside the real wallet. */
+    t('pools are reachable from the real wallet', /navigate\('\/farm'\)/.test(wallet));
+    t('NFTs are reachable from the real wallet', /navigate\('\/nft'\)/.test(wallet));
+    /* The old three-tab state must be gone, or a stale tab renders nothing. */
+    t('no stale overview tab remains', !/tab === 'overview'/.test(wallet));
+
+    /* ---- the Persian video search is gone ---- */
+    const docs = read('src/pages/Docs.jsx');
+    /*
+     * These never pointed at a video. They ran an Aparat SEARCH, so whether
+     * anything relevant came back depended on Aparat's index that day — the
+     * button promised a lesson and often delivered nothing. Reported as
+     * «فیلم های فارسی حذف بشه نمیارع».
+     */
+    /*
+     * Comments stripped first. My initial version matched the word "Aparat"
+     * inside the very comment in Docs.jsx explaining why the Aparat button
+     * was removed — a check failing on its own rationale. That is trap #1 in
+     * this file's header and the third time I have hit it, so: any check that
+     * asserts the ABSENCE of a word must run against code, never prose.
+     */
+    t('the Aparat search helper is gone', !/aparat/i.test(code(docs)));
+    t('...and its label is gone from both locales',
+      !hasKey(JSON.parse(read('src/i18n/locales/en.json')), 'docs.watchFa') &&
+      !hasKey(JSON.parse(read('src/i18n/locales/fa.json')), 'docs.watchFa'));
+    /* The written guide is ours and must still be there — it is the thing
+       that actually teaches, and it always loads. */
+    t('the written guide remains', /docs\.\$\{id\}\.title|docs\.\$\{/.test(docs) || /SECTIONS\.map/.test(docs));
+
+    /* ---- the honest CEX/DEX answer is written down ---- */
+    t('the CEX/DEX analysis exists', existsSync('docs/CEX-DEX-FA.md'));
+    const cex = read('docs/CEX-DEX-FA.md');
+    /*
+     * The doc must carry the two facts that decide the answer: the real
+     * capital requirement, and that the big CEX affiliate programmes are
+     * closed to Iran — signing up would mean lying about residence and
+     * getting the balance frozen.
+     */
+    t('...and states the real MiCA capital requirement', /۱۲۵٬۰۰۰|125,000|125000/.test(cex));
+    t('...and warns the big exchanges block Iran', /OFAC|مسدود/.test(cex));
   }
 
   return rows;
