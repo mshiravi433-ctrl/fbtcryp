@@ -3419,5 +3419,111 @@ export default function run() {
       /JUP_REFERRAL_ACCOUNT \|\| ''/.test(solSrv));
   }
 
+  /* ---- 50. no surface may quote a flat fee we do not charge ------------ */
+  /*
+   * ─── THE SAME BUG, FOUND A SECOND TIME, ON A WORSE SCREEN ───────────────
+   * Last pass I fixed the landing page for advertising a flat "0.70%" while
+   * Solana is charged nothing. I treated that as the one instance. It was not.
+   *
+   * `buy.noFee` said "Our 0.70% applies only to swaps inside the app" — and
+   * that sentence is INSIDE the app, on a screen APK users reach, in a
+   * paragraph whose entire purpose is to be precise about what we charge.
+   * Being imprecise about a fee in the disclosure about fees is worse than
+   * being imprecise anywhere else.
+   *
+   * So this is now a rule with a test behind it rather than a thing I
+   * remember to check: any user-facing string that names the 0.70% rate must
+   * also say which chains it applies to, for as long as the two differ.
+   *
+   * When the Jupiter referral account exists and Solana is charged too, this
+   * check should be DELETED, not worked around — at that point one number is
+   * the truth again.
+   */
+  {
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    /* Walk every string in a locale, remembering its dotted path. */
+    const strings = (obj, prefix = '') => {
+      const out = [];
+      for (const [k, v] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${k}` : k;
+        if (typeof v === 'string') out.push([path, v]);
+        else if (v && typeof v === 'object') out.push(...strings(v, path));
+      }
+      return out;
+    };
+
+    /*
+     * Matches the rate in either digit system. Persian copy uses Eastern
+     * digits and an Arabic decimal separator (۰٫۷), so an ASCII-only check
+     * would silently pass every Persian string — which is the language the
+     * primary audience actually reads. I hit exactly that while editing.
+     */
+    const quotesRate = (v) => /0\.70?\s*%/.test(v) || /۰\s*٫\s*۷\s*٪/.test(v);
+    /* Qualified means it names the chain scope, in that language. */
+    const qualified = (v) =>
+      /EVM/i.test(v) || /Solana/i.test(v) || /سولانا/.test(v);
+
+    for (const [lang, loc] of [['en', en], ['fa', fa]]) {
+      const bad = strings(loc)
+        .filter(([, v]) => quotesRate(v))
+        .filter(([, v]) => !qualified(v))
+        .map(([k]) => k);
+      t(`${lang}: every 0.70% claim names the chains it applies to` +
+        (bad.length ? ` — unqualified: ${bad.join(', ')}` : ''),
+        bad.length === 0);
+    }
+
+    /* The specific string that was wrong, pinned in both languages. */
+    t('the Buy screen fee note is chain-qualified in English',
+      /EVM/.test(en.buy.noFee) && /Solana/.test(en.buy.noFee));
+    t('...and in Persian', /EVM/.test(fa.buy.noFee) && /سولانا/.test(fa.buy.noFee));
+  }
+
+  /* ---- 51. the perp screen is website-only, and that is deliberate ------ */
+  /*
+   * ─── WHY THE FUNDING PANEL IS NOT IN THE APK ────────────────────────────
+   * `/perp` is gated behind SPECULATION_ENABLED, which is OFF by default and
+   * only set by `build:full` (what Vercel runs). `npm run build` — which
+   * `android:sync` and therefore the APK use — strips the route, the chunk
+   * and the whole `perp` locale namespace.
+   *
+   * That is CORRECT and must stay. APKPure rejected the app verbatim for
+   * "Not involve illegal sensitive words", and a screen titled "Perpetuals"
+   * advertising leverage is exactly the vocabulary that filter catches.
+   * Shipping the funding panel inside the APK would trade a feature nobody
+   * has asked for against the app being distributable at all.
+   *
+   * This test exists so that the gating is a decision on record rather than
+   * something a later change quietly reverses. It also prevents the opposite
+   * error: adding the panel to a screen that IS in the APK, which would drag
+   * the same vocabulary in through the back door.
+   */
+  {
+    const appJsx = read('src/App.jsx');
+    const pkg = JSON.parse(read('package.json'));
+
+    t('the perp route stays behind the speculation flag',
+      /SPECULATION_ENABLED && <Route path="\/perp"/.test(appJsx));
+    t('...and the plain build (used by the APK) does not enable it',
+      !/VITE_ENABLE_SPECULATION/.test(pkg.scripts.build));
+    t('...while the website build does',
+      /VITE_ENABLE_SPECULATION=true/.test(pkg.scripts['build:full']));
+    t('...and the APK is built from the plain build',
+      /npm run build\b/.test(pkg.scripts['android:sync']));
+
+    /*
+     * The panel must live ONLY on the gated screen. If it were rendered from
+     * any always-shipped page, the leverage vocabulary would reach the APK
+     * regardless of the flag.
+     */
+    const renderers = walk('src')
+      .filter((f) => /<FundingPanel/.test(read(f)))
+      .map((f) => f.replace(/\\/g, '/'));
+    t(`only the gated perp page renders the funding panel (${renderers.length})`,
+      renderers.length === 1 && renderers[0].endsWith('src/pages/Perp.jsx'));
+  }
+
   return rows;
 }

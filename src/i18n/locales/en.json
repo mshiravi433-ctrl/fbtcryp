@@ -1958,7 +1958,7 @@
       "buy": "Buy crypto",
       "sell": "Sell crypto"
     },
-    "noFee": "We charge nothing on this page. FBT is not part of these transactions — no fee, no commission, no referral cut. Our 0.70% applies only to swaps inside the app, and it is shown before you sign.",
+    "noFee": "We charge nothing on this page. FBT is not part of these transactions — no fee, no commission, no referral cut. Our 0.70% applies only to swaps inside the app on the EVM networks, and it is shown before you sign. Solana swaps carry no platform fee at all right now.",
     "buy": {
       "heading": "Turning money into crypto",
       "body": "FBT does not sell crypto and never holds your money — there is no deposit address here and never will be. What this page does is point you at the routes that work, so the coins arrive directly in a wallet only you control.",
