@@ -31,6 +31,7 @@ import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchPerpMarkets } from './perp.js';
 import { resolveIds } from './coinIndex.js';
+import { fiatQuote, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -532,6 +533,24 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
     /* An id mapping is near-permanent; let the browser hold it for an hour. */
     res.set('cache-control', 'public, max-age=3600');
     return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/* ---------------------------- fiat buy & sell ----------------------------- */
+/*
+ * Money in, crypto out — and crypto out, money in. NOT crypto-to-crypto:
+ * that is our own product and routing it to a partner would be handing over
+ * a customer we already have. See server/fiat.js, where `assertFiatLeg`
+ * makes a crypto-to-crypto pair impossible to request.
+ */
+app.get('/api/fiat/status', (_req, res) => res.json(fiatStatus()));
+
+app.get('/api/fiat/quote', async (req, res) => {
+  try {
+    const { ok, status, body } = await fiatQuote(req.query);
+    return res.status(ok ? 200 : status).json(body);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }

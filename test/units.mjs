@@ -85,6 +85,7 @@ import { evaluateWatch } from '../server/watch.js';
 import { GOALS, GOAL_SHAPE, REFUSALS, buildAutopilot, summariseDraft } from '../src/lib/autopilot.js';
 import { VENUE_REFERRAL, isValidGmxCode, venueDisclosure, withReferral, anyVenueEarns } from '../src/lib/venueReferral.js';
 import { isSwappable, swapTargetFor, swapUrlFor } from '../src/lib/coinToSwap.js';
+import { FIAT_CRYPTO, FIAT_CURRENCIES, assertFiatLeg, fiatEnabled, fiatFeePercent, fiatStatus } from '../server/fiat.js';
 import { buildIndex, PLATFORM_SLUGS } from '../server/coinIndex.js';
 import {
   MIN_SAMPLES,
@@ -3755,6 +3756,91 @@ export default function run() {
     t('no URL is produced for an unswappable coin', swapUrlFor('cardano', 'buy') === null);
   }
 
+
+  /* ================= fiat buy & sell — never a swap ====================== */
+  {
+    /*
+     * ─── THE GUARD THAT KEEPS THIS FROM BECOMING A SWAP ─────────────────────
+     * The previous ChangeNOW integration quoted crypto-to-crypto and was
+     * deleted for competing with our own product: «ما خودمون صرافی هستیم».
+     * Fiat is allowed back only because we genuinely cannot do it ourselves.
+     *
+     * `assertFiatLeg` is what makes that structural rather than a promise.
+     * If a crypto-to-crypto pair ever validates here, the deleted feature has
+     * been re-created by accident.
+     */
+    t('buying is fiat to crypto', assertFiatLeg('usd', 'btc') === 'buy');
+    t('selling is crypto to fiat', assertFiatLeg('btc', 'usd') === 'sell');
+    t('a crypto-to-crypto pair is REFUSED', assertFiatLeg('btc', 'eth') === null);
+    t('...in either direction', assertFiatLeg('eth', 'usdtbsc') === null);
+    t('fiat to fiat is refused', assertFiatLeg('usd', 'eur') === null);
+    t('an unknown ticker is refused', assertFiatLeg('scam', 'usd') === null);
+
+    /*
+     * ─── THE RIAL IS ABSENT ON PURPOSE ──────────────────────────────────────
+     * No international processor settles IRR — Visa, Mastercard and Amex have
+     * been severed from Iran's banking system since 2012. Listing it would
+     * produce a button that fails for every user who taps it.
+     */
+    t('IRR is not offered, because no processor settles it',
+      !FIAT_CURRENCIES.some((c) => c.code === 'irr'));
+    t('the fiat list is not empty', FIAT_CURRENCIES.length > 0);
+    t('the asset list is not empty', FIAT_CRYPTO.length > 0);
+
+    /* ---- our commission ---- */
+    const saved = process.env.CHANGENOW_FIAT_FEE;
+
+    delete process.env.CHANGENOW_FIAT_FEE;
+    t('the default fiat fee is 1%', fiatFeePercent() === 1);
+
+    process.env.CHANGENOW_FIAT_FEE = '2.5';
+    t('a legitimate rate is honoured', fiatFeePercent() === 2.5);
+
+    /*
+     * A typo of `25` meaning 0.25 would take a quarter of a real, irreversible
+     * bank payment. Rejected outright rather than clamped, so the mistake
+     * shows up in the logs instead of quietly becoming the maximum.
+     */
+    process.env.CHANGENOW_FIAT_FEE = '25';
+    t('a misplaced digit cannot take 25%', fiatFeePercent() === 1);
+
+    process.env.CHANGENOW_FIAT_FEE = '-3';
+    t('a negative rate falls back to the default', fiatFeePercent() === 1);
+
+    process.env.CHANGENOW_FIAT_FEE = 'abc';
+    t('garbage falls back to the default', fiatFeePercent() === 1);
+
+    if (saved == null) delete process.env.CHANGENOW_FIAT_FEE;
+    else process.env.CHANGENOW_FIAT_FEE = saved;
+
+    /*
+     * ─── A KEY ALONE DOES NOT MEAN FIAT WORKS ───────────────────────────────
+     * ChangeNOW enable fiat per-partner after a compliance review, so a valid
+     * key with fiat off errors on every call. Two separate switches keep the
+     * UI honest instead of rendering a form that always fails.
+     */
+    const savedKey = process.env.CHANGENOW_API_KEY;
+    const savedOn = process.env.CHANGENOW_FIAT_ENABLED;
+
+    process.env.CHANGENOW_API_KEY = 'test-key';
+    delete process.env.CHANGENOW_FIAT_ENABLED;
+    t('a key without the fiat switch is not enabled', fiatEnabled() === false);
+
+    process.env.CHANGENOW_FIAT_ENABLED = 'true';
+    t('...and with it, it is', fiatEnabled() === true);
+
+    delete process.env.CHANGENOW_API_KEY;
+    t('the switch alone is not enough either', fiatEnabled() === false);
+
+    if (savedKey == null) delete process.env.CHANGENOW_API_KEY;
+    else process.env.CHANGENOW_API_KEY = savedKey;
+    if (savedOn == null) delete process.env.CHANGENOW_FIAT_ENABLED;
+    else process.env.CHANGENOW_FIAT_ENABLED = savedOn;
+
+    /* The status must announce that this is fiat-only, so no UI can imply
+       otherwise. */
+    t('the status reports fiat-only', fiatStatus().fiatOnly === true);
+  }
 
   return rows;
 }

@@ -2241,5 +2241,28 @@
     },
     "evidenceNote": "Measured from {{samples}} days of real prices. These are counts of what already happened, not a forecast — a level that held four times can break on the fifth.",
     "review": "Review this order"
+  },
+  "fiat": {
+    "title": "Buy crypto with money",
+    "sellTitle": "Sell crypto for money",
+    "intro": "Pay by card or bank transfer and receive crypto in your own wallet. Handled by ChangeNOW's licensed payment partner — we do not touch the money and never hold it.",
+    "sellIntro": "Send crypto and receive money to your card or bank account. Handled by ChangeNOW's licensed payment partner.",
+    "youPay": "You pay",
+    "youGet": "You get",
+    "youSell": "You sell",
+    "youReceive": "You receive",
+    "amount": "Amount in {{unit}}",
+    "estimated": "Estimated",
+    "minimum": "Minimum",
+    "ourFee": "Our fee",
+    "feeNote": "Our {{pct}}% is already included in the figure above — there is nothing added afterwards. This is the one place we charge on top of a partner's service, because unlike swapping, buying with money is something we cannot do ourselves.",
+    "notEnabled": "Buying with money is not switched on yet. ChangeNOW enable this per partner after a compliance review, so it is a step on their side rather than a setting we control. Until then, the P2P desks below and receiving crypto directly are the routes that work.",
+    "cardNotice": "An Iranian bank card cannot complete this. Visa, Mastercard and Amex have been cut off from Iran's banking system since 2012 — that is the card networks, not a setting anyone can change. This works with a card or bank account issued outside Iran.",
+    "err": {
+      "NOT_A_FIAT_PAIR": "This screen only buys and sells for money. To trade one coin for another, use the app's own swap — it is ours and it is cheaper.",
+      "BAD_AMOUNT": "Enter an amount first.",
+      "FIAT_NOT_ENABLED": "Buying with money is not switched on for this app yet.",
+      "QUOTE_FAILED": "Could not get a price right now. We do not show a saved one — an out-of-date rate on a real money purchase is how people end up receiving far less than they expected."
+    }
   }
 }

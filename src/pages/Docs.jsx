@@ -173,7 +173,21 @@ export default function Docs({ embedded = false }) {
                         <strong>{t('docs.pitfall')}:</strong> {t(`docs.${id}.pitfall`)}
                       </p>
 
-                      {(fa || en) && (
+                      {/*
+                        ─── THIS LINE CRASHED THE PAGE ────────────────────
+                        It read `{(fa || en) && (`. When the Persian video
+                        button was removed I deleted `fa` from the map
+                        destructuring but left this reference behind, so the
+                        component threw a ReferenceError on render and the
+                        whole Docs screen went blank. Reported as «در مستندات
+                        وقتی میریم صفحه کرش میزنه».
+
+                        The build did not catch it: `fa` is a valid free
+                        identifier at parse time and only fails when the line
+                        actually runs. Wiring check #59 now renders this
+                        screen so a dead reference cannot ship again.
+                      */}
+                      {en && (
                         <div className="doc-videos">
                           {/*
                             Persian first. Most of this app's users are in

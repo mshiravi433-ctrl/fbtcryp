@@ -4015,5 +4015,83 @@ export default function run() {
       listed.length === 0);
   }
 
+  /* ---- 59. fiat on-ramp: earns for us, and can never become a swap ----- */
+  {
+    t('the fiat module exists', existsSync('server/fiat.js'));
+    t('the client lib exists', existsSync('src/lib/fiat.js'));
+    t('the panel exists', existsSync('src/components/FiatPanel.jsx'));
+
+    const srv = read('server/fiat.js');
+    const lib = read('src/lib/fiat.js');
+    const panel = read('src/components/FiatPanel.jsx');
+    const appSrc = read('server/app.js');
+    const buy = read('src/pages/Buy.jsx');
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const srvCode = code(srv);
+
+    /* The full chain — a panel nothing renders is the bug shipped twice. */
+    t('the server imports it', /from '\.\/fiat\.js'/.test(appSrc));
+    t('...and exposes a quote route', /\/api\/fiat\/quote/.test(appSrc));
+    t('...and a status route', /\/api\/fiat\/status/.test(appSrc));
+    t('the client calls the published path', /fiat\/quote/.test(lib));
+    t('the panel calls the client lib', /getFiatQuote\s*\(/.test(code(panel)));
+    t('the Buy screen renders the panel', /<FiatPanel/.test(buy));
+    t('...keyed to the buy/sell tab the user chose', /<FiatPanel mode=\{tab\}/.test(buy));
+
+    /*
+     * ─── THE LINE THAT KEEPS THIS FROM BECOMING A RIVAL SWAP ────────────────
+     * The owner's instruction was exact: fiat yes, swap no, because we run our
+     * own swap. `assertFiatLeg` enforces it in code rather than in a comment,
+     * so "just adding one crypto pair" later is impossible without deleting
+     * this guard — and this test.
+     */
+    t('the server enforces exactly one fiat leg', /export function assertFiatLeg/.test(srvCode));
+    t('...and refuses anything else', /return null;/.test(srvCode));
+
+    /*
+     * The key is a real credential — it authenticates the account and carries
+     * our commission settings. Unlike the public GMX referral code it must
+     * never be VITE_-prefixed.
+     */
+    t('the API key stays server-side',
+      /process\.env\.CHANGENOW_API_KEY/.test(srvCode) && !/VITE_CHANGENOW/.test(srv));
+
+    /*
+     * Two separate switches. ChangeNOW grant fiat per-partner after a
+     * compliance review, so a key with fiat off fails every call. Reporting
+     * "ready" on the key alone would render a form that never works.
+     */
+    t('a key alone does not claim fiat is live',
+      /CHANGENOW_FIAT_ENABLED/.test(srvCode) && /fiatEnabled/.test(srvCode));
+    t('...and the panel explains it instead of showing a dead form',
+      /fiat\.notEnabled/.test(panel));
+
+    /* Our fee is disclosed on screen, not buried in the rate. */
+    t('our commission is shown to the user', /fiat\.ourFee/.test(panel));
+    t('...and explained', /fiat\.feeNote/.test(panel));
+
+    /*
+     * The card-network reality must be stated. An Iranian bank card cannot
+     * complete this and no setting changes that, so implying otherwise would
+     * recreate the dead buttons the Buy screen was rebuilt to remove.
+     */
+    t('the card limitation is stated on screen', /fiat\.cardNotice/.test(panel));
+
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    t('the card notice names the real cause', /Visa|Mastercard/.test(en.fiat.cardNotice));
+    t('...and exists in Persian', hasKey(fa, 'fiat.cardNotice'));
+    /* The error for a crypto pair must point at OUR swap, not a competitor. */
+    t('a crypto pair is redirected to our own swap',
+      /own swap/i.test(en.fiat.err.NOT_A_FIAT_PAIR));
+
+    const keys = [...panel.matchAll(/t\('(fiat\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));
+    t(`every fiat.* key resolves (${new Set(keys).size} checked)` +
+      (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
+    t('...and all are translated into Persian',
+      [...new Set(keys)].every((k) => hasKey(fa, k)));
+  }
+
   return rows;
 }

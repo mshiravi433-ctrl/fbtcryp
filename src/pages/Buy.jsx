@@ -7,6 +7,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap, IconQr } from '../components/Icons';
+import FiatPanel from '../components/FiatPanel';
 import SegIndicator from '../components/SegIndicator';
 
 /**
@@ -140,6 +141,16 @@ export default function Buy() {
           </button>
         ))}
       </div>
+
+      {/*
+        ─── BUYING WITH MONEY, WHERE IT BELONGS ────────────────────────────
+        On the buy/sell screen, keyed to the tab the user already chose. The
+        crypto-to-crypto swap deliberately does NOT appear here: that is our
+        own product at 0.70%, and routing it to a partner would hand over a
+        customer we already have. `server/fiat.js` makes a crypto-to-crypto
+        pair impossible to even request.
+      */}
+      <FiatPanel mode={tab} />
 
       {/* ------------------------------ intro ------------------------------ */}
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">

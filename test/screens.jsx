@@ -38,6 +38,7 @@ import Farm from '../src/pages/Farm.jsx';
 import CoinDetail from '../src/pages/CoinDetail.jsx';
 import Stocks from '../src/pages/Stocks.jsx';
 import Bridge from '../src/pages/Bridge.jsx';
+import Docs from '../src/pages/Docs.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -179,6 +180,19 @@ export async function run(container) {
    * server.
    */
   await mount('Bridge (no wallet)', <Bridge />);
+
+  /*
+   * ─── DOCS SHIPPED BROKEN BECAUSE IT WAS NEVER MOUNTED HERE ──────────────
+   * When the Persian video button was removed, `fa` was deleted from the map
+   * destructuring but one `{(fa || en) && ...}` reference was left behind.
+   * That is a ReferenceError at render time and it blanked the entire Docs
+   * screen. Reported by the owner: «در مستندات وقتی میریم صفحه کرش میزنه».
+   *
+   * The build could not catch it — `fa` is a valid free identifier at parse
+   * time and only throws when the line runs. Twenty-four screens were mounted
+   * here and this was not one of them, which is exactly why it shipped.
+   */
+  await mount('Docs', <Docs />);
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the
