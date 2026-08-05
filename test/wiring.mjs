@@ -4410,6 +4410,115 @@ export default function run() {
       [...new Set(keys)].every((k) => hasKey(fa, k) && hasKey(ar, k)));
   }
 
+  /* ---- 62a. repeat visits must not re-download the whole app ------------ */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE SLOWNESS THE OWNER REPORTED, AND WHAT ACTUALLY CAUSED IT.
+     * ═══════════════════════════════════════════════════════════════════════
+     *     «سرعت لود سایت خیلی کم شده و طول میکشه بیاد»
+     *
+     * Measured rather than guessed. First paint pulls roughly 770 KB
+     * uncompressed: a 242 KB entry bundle, React at 150 KB, framer-motion at
+     * 132 KB, the 109 KB Persian variable font, 86 KB of CSS and 51 KB of
+     * i18n runtime. That is the unavoidable cost of the FIRST visit.
+     *
+     * It was also the cost of every visit after it. `express.static` was
+     * configured with a flat `maxAge: '1h'` and vercel.json set no headers at
+     * all, so a user returning the next day re-downloaded all of it. On a
+     * congested Iranian mobile connection that is most of the wait, and it is
+     * pure waste: those files had not changed.
+     *
+     * The fix depends on a property of the filenames, which is why it is safe
+     * and why it must be checked rather than assumed. Vite writes a content
+     * hash into every asset name, so the URL changes whenever the bytes
+     * change and a stale file can never be served.
+     */
+    const vj = JSON.parse(read('vercel.json'));
+    const headers = vj.headers ?? [];
+    const forSource = (re) => headers.find((h) => re.test(h.source));
+
+    const assets = forSource(/assets/);
+    t('vercel caches hashed assets', Boolean(assets));
+    t('...for a long time, and immutably',
+      /max-age=31536000/.test(assets?.headers?.[0]?.value ?? '') &&
+      /immutable/.test(assets?.headers?.[0]?.value ?? ''));
+
+    const fonts = forSource(/fonts/);
+    t('...and the fonts too', /max-age=31536000/.test(fonts?.headers?.[0]?.value ?? ''));
+
+    /*
+     * The counterpart, and the one that makes the year safe. index.html names
+     * the current hashed URLs; caching it pins a returning visitor to the
+     * PREVIOUS deploy's JavaScript while its assets sit in cache for a year.
+     * That is how somebody stays on a broken build for hours after the fix
+     * ships -- strictly worse than a slow load.
+     */
+    const root = headers.find((h) => h.source === '/');
+    t('index.html is revalidated every time',
+      /max-age=0/.test(root?.headers?.[0]?.value ?? '') &&
+      /must-revalidate/.test(root?.headers?.[0]?.value ?? ''));
+
+    /*
+     * The service worker, for the same reason and more urgently: a cached
+     * sw.js keeps serving its own cached shell long after index.html moved on.
+     */
+    const sw = headers.find((h) => h.source === '/sw.js');
+    t('...and so is the service worker', /max-age=0/.test(sw?.headers?.[0]?.value ?? ''));
+
+    /*
+     * The Express path must agree. Vercel serves /assets from its edge and
+     * never reaches server/app.js, but the APK bundles this server and so
+     * does anyone self-hosting. Two hosts disagreeing about cache lifetime is
+     * a bug that only appears on one of them, which is the hardest kind to
+     * find.
+     */
+    /*
+     * Comments stripped FIRST. The note above explaining the fix quotes the
+     * old `maxAge: '1h'` verbatim, so an un-stripped check fails on its own
+     * documentation. That is the fourth time this suite has hit that exact
+     * trap (SECRETS in venueReferral.js, Aparat in Docs.jsx, audio/ in
+     * server/audio.js) -- strip before matching, always.
+     */
+    const srv = read('server/app.js')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    t('the Express static handler agrees with the edge',
+      /max-age=31536000, immutable/.test(srv));
+    t('...and never caches index.html either',
+      /max-age=0, must-revalidate/.test(srv));
+    t('the old flat one-hour rule is gone', !/maxAge: '1h'/.test(srv));
+
+    /*
+     * ─── AND THE FIRST VISIT MUST NOT GROW UNNOTICED ────────────────────────
+     * Caching fixes repeat visits; it does nothing for the first one. This
+     * guards the entry payload against quietly gaining a heavy dependency --
+     * the usual way a fast app becomes a slow one is one eager import at a
+     * time, each defensible on its own.
+     *
+     * Only meaningful after a build, so it is skipped when dist is absent
+     * rather than failing and teaching people to ignore it.
+     */
+    if (existsSync('dist/index.html')) {
+      const html = read('dist/index.html');
+      const refs = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+      let bytes = 0;
+      for (const r of refs) {
+        const f = `dist${r}`;
+        if (existsSync(f)) bytes += read(f).length;
+      }
+      const kb = Math.round(bytes / 1024);
+      /*
+       * 1100 KB, against roughly 660 KB of JS+CSS measured today. Deliberately
+       * loose: this is a ratchet against a step change (someone making a
+       * wallet SDK or a chart library eager), not a budget to micro-manage.
+       * A limit set too tight gets raised on every failure until it means
+       * nothing.
+       */
+      t(`the first-paint bundle stays under 1100 KB (currently ${kb} KB)`, kb < 1100);
+    }
+  }
+
   /* ---- 62b. no screen leads with a single-country restriction ----------- */
   {
     /*

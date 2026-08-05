@@ -1086,12 +1086,75 @@ async function sendDailyFcm() {
 /* ----------------------------- static frontend ---------------------------- */
 
 const distDir = path.join(__dirname, '..', 'dist');
-app.use(express.static(distDir, { maxAge: '1h', index: false }));
+
+/*
+ * ─── WHY THE CACHE LIFETIME DEPENDS ON THE FILENAME ─────────────────────────
+ * This was a flat `maxAge: '1h'` for everything, and it was the main reason
+ * the site felt slow on a second visit: a returning user re-downloaded the
+ * entire ~770 KB first-paint payload — the entry bundle, React, framer-motion,
+ * the stylesheet and the 109 KB Persian font — every hour, forever.
+ *
+ * Reported directly: «سرعت لود سایت خیلی کم شده و طول میکشه بیاد».
+ *
+ * The fix is not one number, because these files have genuinely different
+ * lifetimes:
+ *
+ *   /assets/*  — Vite writes a CONTENT HASH into every filename
+ *                (index-y4UH__tA.js). The URL changes whenever the bytes
+ *                change, so a stale file can never be served: a new build
+ *                produces new URLs and the old ones are never requested
+ *                again. A year plus `immutable` is exactly correct here, and
+ *                `immutable` additionally stops the browser sending a
+ *                revalidation request at all.
+ *
+ *   /fonts/*   — not hashed, but replaced by editing index.html to point
+ *                elsewhere rather than by swapping bytes under the same name.
+ *
+ *   index.html — MUST be revalidated every time. It is the one file naming
+ *                the current hashed asset URLs, so caching it pins a
+ *                returning visitor to the previous deploy's JavaScript. That
+ *                is how somebody stays on an old build for hours after a fix
+ *                ships, which is worse than a slow load. Handled by the SPA
+ *                fallback below, and `index: false` here makes sure this
+ *                middleware never serves it.
+ *
+ * Vercel serves /assets and /fonts from its edge using the headers in
+ * vercel.json and never reaches this code. This matters for the APK, which
+ * bundles the server, and for anyone self-hosting — the two paths must agree
+ * or the app behaves differently depending on where it runs.
+ */
+app.use(
+  express.static(distDir, {
+    index: false,
+    setHeaders(res, filePath) {
+      if (/[\\/](assets|fonts)[\\/]/.test(filePath)) {
+        res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+        return;
+      }
+      /*
+       * Icons and the manifest are unhashed AND do get replaced in place when
+       * the branding changes, so a year would strand a stale icon on a home
+       * screen with no way to force a refresh. A week is effectively free on
+       * repeat visits and still lets a fix propagate.
+       */
+      res.setHeader('cache-control', 'public, max-age=604800');
+    }
+  })
+);
 
 // SPA fallback. Written as bare middleware because Express 5's router no
 // longer accepts a plain '*' path pattern.
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'NOT_FOUND' });
+  /*
+   * Never cached, and this is the counterpart to the year-long asset cache
+   * above rather than an inconsistency with it. index.html is the only file
+   * that names the current hashed asset URLs; caching it would pin a
+   * returning visitor to the previous deploy's JavaScript while the assets it
+   * points at are cached for a year. The revalidation costs a few hundred
+   * bytes and usually answers 304.
+   */
+  res.setHeader('cache-control', 'public, max-age=0, must-revalidate');
   return res.sendFile(path.join(distDir, 'index.html'), (err) => {
     if (err) res.status(404).json({ error: 'NOT_BUILT', hint: 'run `npm run build` first' });
   });

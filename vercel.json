@@ -9,6 +9,43 @@
       "destination": "/api/index"
     }
   ],
+  "headers": [
+    {
+      "//": "BUILD ARTEFACTS — cached for a year, and it is safe. Vite writes a content hash into every filename (index-y4UH__tA.js), so the URL changes whenever the bytes change. A stale file can therefore never be served: a new deploy produces new URLs and the old ones are simply never requested again. This is the exact case `immutable` exists for. Before this, /assets/* fell through to the Express static handler's maxAge:'1h', so a visitor returning the next day re-downloaded the whole 660 KB entry payload — every time. On a slow or congested connection that is most of the wait the owner reported.",
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "//": "FONTS — same reasoning, but the filenames are NOT hashed (Vazirmatn-var.woff2). A year is still right because a variable font is replaced by editing index.html to point somewhere else, not by swapping the bytes under the same name. At ~70 KB for the Persian font this is the single biggest repeat-visit saving after the JS.",
+      "source": "/fonts/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "//": "ICONS AND MANIFEST — a week, not a year. These are unhashed and DO get replaced in place when the branding changes, so a year would leave a stale icon on home screens with no way to force a refresh. A week is long enough that they are effectively free on repeat visits and short enough that a fix propagates.",
+      "source": "/(favicon.png|icon-192.png|icon-512.png|icon-maskable-512.png|apple-touch-icon.png|manifest.webmanifest)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800" }
+      ]
+    },
+    {
+      "//": "index.html — MUST NOT be cached. It is the one file that names the current hashed asset URLs, so caching it pins a returning visitor to the previous deploy's JS. That is how a user ends up on an old build for hours after a fix ships, which is worse than a slow load. must-revalidate makes the browser check every time; the check is a few hundred bytes and usually answers 304.",
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "//": "The service worker, for the same reason and more urgently. A cached sw.js keeps serving its own cached app shell, so a stale one can pin a user to an old build indefinitely — long after index.html has moved on.",
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ],
   "functions": {
     "api/index.js": {
       "maxDuration": 60
