@@ -34,7 +34,8 @@
     "orders": "Auto Orders",
     "solana": "Solana swap",
     "buy": "Buy & sell",
-    "bridge": "Bridge"
+    "bridge": "Bridge",
+    "coins": "Bitcoin & coins"
   },
   "common": {
     "balance": "Balance",
@@ -2244,5 +2245,26 @@
     },
     "evidenceNote": "Measured from {{samples}} days of real prices. These are counts of what already happened, not a forecast — a level that held four times can break on the fifth.",
     "review": "Review this order"
+  },
+  "coins": {
+    "title": "Bitcoin & other coins",
+    "intro": "Coins that live on their own network — Bitcoin, Litecoin, XRP and others. The app's swap screen only handles EVM and Solana tokens, so this is how you turn a coin from outside that world into one you can actually use here.",
+    "youSend": "You send",
+    "youGet": "You get",
+    "amount": "Amount in {{symbol}}",
+    "estimated": "You would receive",
+    "minimum": "Minimum to send",
+    "eta": "Usually takes",
+    "minutes": "minutes",
+    "belowMin": "Below the minimum. Send at least {{min}} {{symbol}} — a smaller deposit cannot be processed, and getting it back costs a $50 fee.",
+    "continue": "Continue on ChangeNOW",
+    "honestTitle": "We show the price. We never touch the coin.",
+    "honestBody": "This is a quote, not a swap. We ask ChangeNOW what you would get and show you the number — the exchange itself happens on their site, in your name, with their checks running before anything moves. We do not hold your coin at any point, we cannot reverse the transfer, and we cannot recover it. That is also why we send you to them rather than building the swap into this screen.",
+    "jurisdictionNotice": "ChangeNOW is an independent company and its terms exclude several countries, including anywhere on an OFAC-equivalent sanctions list. Their terms also allow them to refuse service based on your IP address and, in restricted jurisdictions, to seize funds. Read their terms and check that you can use the service before you send anything. If in doubt, use the app's own swap or bridge instead — those are on-chain and nobody can freeze them.",
+    "err": {
+      "BAD_PAIR": "That pair is not available here.",
+      "BAD_AMOUNT": "Enter an amount first.",
+      "QUOTE_FAILED": "Could not get a price right now. We do not show a saved one — an out-of-date exchange rate is how people end up receiving far less than they expected."
+    }
   }
 }

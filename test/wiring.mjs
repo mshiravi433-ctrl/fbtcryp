@@ -3919,5 +3919,86 @@ export default function run() {
     t('...and warns the big exchanges block Iran', /OFAC|مسدود/.test(cex));
   }
 
+  /* ---- 58. native-coin screen: reachable, and never handles funds ------ */
+  {
+    t('the crosschain module exists', existsSync('server/crosschain.js'));
+    t('the client lib exists', existsSync('src/lib/crosschain.js'));
+    t('the screen exists', existsSync('src/pages/Coins.jsx'));
+
+    const srv = read('server/crosschain.js');
+    const lib = read('src/lib/crosschain.js');
+    const page = read('src/pages/Coins.jsx');
+    const appSrc = read('server/app.js');
+    const appJsx = read('src/App.jsx');
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    /* The full chain — a screen nothing routes to is the bug shipped twice. */
+    t('the server imports the module', /from '\.\/crosschain\.js'/.test(appSrc));
+    t('...and exposes a quote route', /\/api\/crosschain\/quote/.test(appSrc));
+    t('...and a status route', /\/api\/crosschain\/status/.test(appSrc));
+    t('the client calls the published path', /crosschain\/quote/.test(lib));
+    t('the page calls the client lib', /getCrosschainQuote\s*\(/.test(code(page)));
+    t('the page has a route', /path="\/coins"/.test(appJsx));
+    t('...and a navigation entry', /nav\.coins/.test(read('src/components/MoreSheet.jsx')));
+
+    /*
+     * ─── THE SAFETY PROPERTY: WE NEVER CREATE AN EXCHANGE ───────────────────
+     * ChangeNOW's §11.4 lets them seize funds from users in restricted
+     * jurisdictions, and §11.1 puts most of this app's users there. So this
+     * integration must stay read-only. If someone adds a create-exchange
+     * call, the app starts handling money under terms that let a third party
+     * keep it — these checks are what stop that happening quietly.
+     */
+    const srvCode = code(srv);
+    t('the server never creates an exchange',
+      !/create-transaction|\/transactions|POST/i.test(srvCode));
+    t('...and never handles a payout address',
+      !/payoutAddress|refundAddress|address:/i.test(srvCode));
+    t('the client never creates one either',
+      !/create-transaction|payoutAddress/i.test(code(lib)));
+
+    /*
+     * The minimum must be fetched with every quote. Sending below it is how
+     * money is lost here: the deposit cannot be processed and their §6.16
+     * charges $50 to return it.
+     */
+    t('every quote fetches the minimum', /min-amount\//.test(srvCode));
+    t('...and the screen warns when the amount is below it',
+      /belowMinimum/.test(page) && /coins\.belowMin/.test(page));
+
+    /* An unpriceable pair must read as unknown, never as zero. */
+    t('an unpriceable quote is null, not zero',
+      /Number\.isFinite\(estimated\) \? estimated : null/.test(srvCode));
+
+    /*
+     * The API key is a real credential (it identifies the account), so unlike
+     * the public GMX referral code it must never be VITE_-prefixed.
+     */
+    t('the API key stays server-side',
+      /process\.env\.CHANGENOW_API_KEY/.test(srvCode) && !/VITE_CHANGENOW_API/.test(srv));
+
+    /*
+     * ─── THE JURISDICTION WARNING IS NOT OPTIONAL ───────────────────────────
+     * A user in a restricted country can have funds seized under §11.4. They
+     * must be told BEFORE sending, in their own language.
+     */
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    t('the jurisdiction warning exists in both languages',
+      hasKey(en, 'coins.jurisdictionNotice') && hasKey(fa, 'coins.jurisdictionNotice'));
+    t('...and names the sanctions risk', /OFAC/.test(en.coins.jurisdictionNotice));
+    t('...and warns funds can be seized', /seize/i.test(en.coins.jurisdictionNotice));
+    t('...and the Persian says the same', /ضبط|OFAC/.test(fa.coins.jurisdictionNotice));
+    t('the screen renders that warning', /coins\.jurisdictionNotice/.test(page));
+
+    /* Every key the screen renders must resolve, or it prints a raw key. */
+    const keys = [...page.matchAll(/t\('(coins\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+    const missing = [...new Set(keys)].filter((k) => !hasKey(en, k));
+    t(`every coins.* key resolves (${new Set(keys).size} checked)` +
+      (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
+    const missingFa = [...new Set(keys)].filter((k) => !hasKey(fa, k));
+    t('...and all are translated into Persian', missingFa.length === 0);
+  }
+
   return rows;
 }

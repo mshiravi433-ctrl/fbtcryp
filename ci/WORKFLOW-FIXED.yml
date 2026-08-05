@@ -53,6 +53,12 @@ jobs:
           # account, so an unconfigured build is indistinguishable from a
           # working one until you check the balance.
           VITE_JUP_REFERRAL_ACCOUNT: ${{ vars.VITE_JUP_REFERRAL_ACCOUNT }}
+          # Public affiliate identifiers, not secrets: both are meant to be
+          # embedded in shared links. They are here because Vite inlines
+          # VITE_ vars at BUILD time — set only in Vercel, the website would
+          # earn and the APK would not, and nobody would notice for months.
+          VITE_GMX_REF_CODE: ${{ vars.VITE_GMX_REF_CODE }}
+          VITE_CHANGENOW_LINK_ID: ${{ vars.VITE_CHANGENOW_LINK_ID }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
