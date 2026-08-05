@@ -2400,7 +2400,8 @@
       "QUOTE_FAILED": "Could not get a price right now. We will not show a saved one — an out-of-date rate on a real money purchase is how people end up receiving far less than they expected.",
       "RANGE_FAILED": "Could not load the limits for this pair.",
       "ORDER_FAILED": "The provider could not start this order. Nothing has been charged. Check the amount and address, then try again.",
-      "NO_CHECKOUT_URL": "The order was created but no payment page came back. Nothing has been charged. Please try again."
+      "NO_CHECKOUT_URL": "The order was created but no payment page came back. Nothing has been charged. Please try again.",
+      "FIAT_KEY_NOT_ENROLLED": "Your ChangeNOW key works, but fiat is not enrolled on it yet. ChangeNOW switch buying-with-money on per partner after a compliance review, so this is a step on their side — no setting here can fix it. Ask their support to enable fiat on your partner account."
     },
     "settlementNote": "The purchase is settled by a licensed payment partner, who decides at checkout based on the country your card or bank account was issued in — not where you are. Availability and limits differ by currency."
   },

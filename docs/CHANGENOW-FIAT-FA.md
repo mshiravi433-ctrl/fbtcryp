@@ -59,6 +59,40 @@ API را درست گذاشتی. مشکل از تو نبود، از کد من ب�
 
 ---
 
+## ✅ تست شد روی سایت زنده — و جواب دقیق گرفتم
+
+بعد از دیپلوی، همان درخواست را روی fbtswap.ir زدم:
+
+```
+GET /api/fiat/quote?from=usd&to=usdt-bsc&amount=200
+```
+
+جواب چنج‌نو:
+
+```json
+{"error":"QUOTE_FAILED","detail":"token not found for passed api-key"}
+```
+
+**این خبر خوبی است.** قبلاً `detail` خالی بود (`null`) چون به اندپوینت اشتباه می‌زدیم و اصلاً پیام معناداری برنمی‌گشت. حالا به اندپوینت درست می‌زنیم و **خودشان دارند دقیقاً می‌گویند مشکل کجاست**.
+
+### معنی این پیام
+
+کلیدت **خراب نیست**. همان کلید روی API سواپ کار می‌کند. پیام می‌گوید کلید **روی سمت فیات ثبت‌نام نشده**.
+
+یعنی دقیقاً همان چیزی که در مستندات خودشان نوشته:
+
+> "Fiat buy and sell functionality is available upon request."
+
+فیات را برای هر شریک، **جداگانه** و بعد از یک بررسی انطباق روشن می‌کنند. داشتن کلید کافی نیست.
+
+### چه کردم
+
+این پیام را از حالت خطای عمومی جدا کردم. قبلاً همه‌چیز `QUOTE_FAILED` می‌شد، یعنی «یه چیزی خراب شد» — و تو می‌رفتی در Vercel دنبال یک غلط تایپی که اصلاً وجود ندارد.
+
+حالا کد جدایی دارد (`FIAT_KEY_NOT_ENROLLED`) و روی صفحه به کاربر و به تو می‌گوید تنها کاری که درستش می‌کند چیست.
+
+---
+
 ## کاری که هنوز باید بکنی
 
 ### ۱. متغیرها را در Vercel چک کن
@@ -72,17 +106,32 @@ CHANGENOW_FIAT_ENABLED = true
 
 متغیر سومی که قبلاً گفته بودم، **`CHANGENOW_FIAT_FEE`، دیگر لازم نیست**. می‌توانی پاکش کنی. آن همان عدد ساختگی بود.
 
-### ۲. از پشتیبانی چنج‌نو بپرس فیات روی حسابت فعال است یا نه
+### ۲. ⚠️ این مهم‌ترین کار است — به پشتیبانی چنج‌نو ایمیل بزن
 
-این را از مستندات خودشان نقل می‌کنم:
+سرورشان الان صریحاً می‌گوید `token not found for passed api-key` روی مسیر فیات. تنها راه حلش این است که خودشان فیات را روی حسابت ثبت کنند.
 
-> "Fiat buy and sell functionality is available upon request... the exact flow is discussed individually with the ChangeNOW team before launch."
+این متن را عیناً به `partners@changenow.io` بفرست:
 
-یعنی داشتن کلید کافی نیست. فیات را برای هر شریک، بعد از یک بررسی انطباق، جداگانه روشن می‌کنند. اگر روشن نکرده باشند، صفحه به‌جای فرم خراب، توضیح می‌دهد که هنوز فعال نشده.
+> Hello,
+>
+> My API key is active and works against the swap API, but every call to the
+> fiat endpoints returns:
+>
+>     GET /v2/fiat-estimate  ->  "token not found for passed api-key"
+>
+> Please enroll my partner account for fiat (buy and sell). My integration
+> calls `/v2/fiat-estimate` and `POST /v2/fiat-transaction`.
+>
+> Could you also confirm:
+>   1. which deposit_type values are enabled for my account
+>     (SEPA_1, VISA_MC1, ...)
+>   2. my partner commission rate on fiat transactions
+>
+> Thank you.
 
-بهشان بنویس:
+**کلید را داخل ایمیل ننویس.** خودشان از روی حسابت پیدا می‌کنند. اگر خواستند، از داشبورد خودت بگو کدام حساب است.
 
-> Hello, I would like to confirm whether fiat (buy/sell) is enabled on my partner account. My integration calls `/v2/fiat-estimate` and `/v2/fiat-transaction`. Please confirm the enabled deposit types and my partner commission rate.
+نکته دوم که در همان ایمیل پرسیده شده مهم است: **نرخ کمیسیون ما**. چون دیگر عدد ساختگی نمی‌سازیم، هرچه آن‌ها روی حسابت تنظیم کنند همان چیزی است که درمی‌آید. اگر نرخ پیش‌فرض پایین بود، همان‌جا بگو بالاترش ببرند.
 
 ### ۳. بعد از فعال شدن، یک بار تست کن
 

@@ -4183,6 +4183,27 @@ export default function run() {
      * must offer a way to open it. Asserted as a chain, because a fact that
      * exists in a component nobody can reach is the same as a deleted fact.
      */
+    /*
+     * ─── THE ONE UPSTREAM ERROR THAT NEEDS ITS OWN NAME ─────────────────────
+     * Measured against the live deployment with the real key installed:
+     * /api/fiat/quote returns "token not found for passed api-key". That is
+     * NOT a broken key — the same key works on the swap API. It means fiat is
+     * not enrolled on the partner account, which ChangeNOW grant separately
+     * after a compliance review.
+     *
+     * Folded into the generic QUOTE_FAILED it reads as "something broke" and
+     * sends the owner hunting Vercel for a typo that does not exist. Named,
+     * it states the only action that can fix it.
+     */
+    t('an unenrolled fiat key is reported distinctly',
+      /FIAT_KEY_NOT_ENROLLED/.test(srvCode));
+    t('...and matched on the upstream message, not just a status code',
+      /token not found/i.test(srvCode));
+    t('...with copy that names the fix in all three languages',
+      hasKey(en, 'fiat.err.FIAT_KEY_NOT_ENROLLED') &&
+      hasKey(fa, 'fiat.err.FIAT_KEY_NOT_ENROLLED') &&
+      hasKey(ar, 'fiat.err.FIAT_KEY_NOT_ENROLLED'));
+
     t('the panel offers the restrictions sheet', /<RestrictionsSheet/.test(panel));
     t('...with a control that opens it', /setRestrictOpen\(true\)/.test(panel));
     t('...and the sheet still carries the card-network fact',

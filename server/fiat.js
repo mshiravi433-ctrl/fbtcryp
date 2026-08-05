@@ -338,6 +338,32 @@ export async function fiatQuote({ from, to, amount }) {
 
   const res = await cnFetch(`/fiat-estimate?${qs}`);
   if (!res.ok) {
+    /*
+     * ─── ONE UPSTREAM MESSAGE DESERVES ITS OWN ERROR CODE ───────────────────
+     * Verified against the live deployment with the owner's real key set:
+     *
+     *     GET /api/fiat/quote?from=usd&to=usdt-bsc&amount=200
+     *     -> {"error":"QUOTE_FAILED","detail":"token not found for passed api-key"}
+     *
+     * That message is very specific and it is NOT a broken key. The same key
+     * authenticates fine against the swap API; it simply is not registered
+     * on the fiat side, because ChangeNOW grant fiat per-partner after a
+     * compliance review. Their partner FAQ, verbatim: "Fiat buy and sell
+     * functionality is available upon request."
+     *
+     * Collapsing it into the generic QUOTE_FAILED tells the owner "something
+     * went wrong" and sends him hunting through Vercel for a typo that does
+     * not exist. Naming it tells him the exact next action — ask their
+     * support to enable fiat — which is the only thing that can fix it.
+     *
+     * Matched on the message text rather than the status code because the
+     * upstream returns the same 400 for a genuinely malformed request, and
+     * those two need opposite responses from the reader.
+     */
+    const msg = String(res.body?.message ?? '');
+    if (/token not found|api-key/i.test(msg)) {
+      return { ok: false, status: 503, body: { error: 'FIAT_KEY_NOT_ENROLLED', detail: msg } };
+    }
     return {
       ok: false,
       status: res.status,
