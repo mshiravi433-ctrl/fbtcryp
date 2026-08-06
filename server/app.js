@@ -40,6 +40,7 @@ import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
+import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
@@ -820,6 +821,29 @@ app.get('/api/solana/oo/quote', async (req, res) => {
 
 app.get('/api/solana/oo/swap', async (req, res) => {
   const r = await oceanSwap(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * Cross-chain swaps, and the only route in the app that reaches TRON.
+ *
+ * The fee fields are attached in server/crosschain.js and are absent from
+ * anything a caller can set, for the same reason as every other fee path:
+ * exposed, they would let a stranger redirect our revenue.
+ *
+ * /probe is read-only and exists because the 0x key lives in Vercel and
+ * cannot be exercised from a laptop. It answers whether Tron genuinely works
+ * on OUR key rather than whether the documentation says it should.
+ */
+app.get('/api/xchain/status', (_req, res) => res.json(crossChainStatus()));
+
+app.get('/api/xchain/probe', async (_req, res) => {
+  const r = await crossChainProbe();
+  return res.status(r.status).json(r.body);
+});
+
+app.get('/api/xchain/quotes', async (req, res) => {
+  const r = await crossChainQuotes(req.query);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 

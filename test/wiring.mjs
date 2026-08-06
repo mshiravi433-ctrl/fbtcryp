@@ -4025,12 +4025,25 @@ export default function run() {
 
     /* The ChangeNOW integration was removed outright, not flagged off. A flag
        is the same problem waiting for someone to set an env var. */
+    /*
+     * NOTE ON THE FILENAME: this guards the removed CHANGENOW integration,
+     * which happened to live at server/crosschain.js. "crosschain" is a
+     * generic word and a legitimate, unrelated cross-chain module would
+     * collide with it — that is exactly what happened when the 0x/Tron route
+     * was added, so that one is named server/xchain.js instead.
+     *
+     * The check therefore asserts the absence of CHANGENOW itself as well as
+     * the old path, so it keeps guarding the thing it was written for rather
+     * than reserving a common noun forever.
+     */
     t('the ChangeNOW module is gone', !existsSync('server/crosschain.js'));
+    t('...and no server module CODE references ChangeNOW',
+      !/changenow/i.test(code(read('server/app.js'))));
     t('...and its client lib', !existsSync('src/lib/crosschain.js'));
     t('...and its screen', !existsSync('src/pages/Coins.jsx'));
     t('...and its route', !/path="\/coins"/.test(read('src/App.jsx')));
     t('...and its nav entry', !/nav\.coins/.test(read('src/components/MoreSheet.jsx')));
-    t('...and its server routes', !/crosschain/.test(read('server/app.js')));
+    t('...and its server routes', !/\/api\/crosschain/.test(read('server/app.js')));
 
     /*
      * ─── BUY MUST NOT GROW CARD ON-RAMPS EITHER ─────────────────────────────
@@ -6671,6 +6684,87 @@ export default function run() {
      */
     t('the fee notice follows the quote, so it cannot understate the charge',
       /order\?\.feeBps/.test(pageCode) && !/solanaFeeReady\(\)\n?\s*\?/.test(pageCode));
+  }
+
+  /* ---- 76. cross-chain / Tron, and the fee that must cross families ----- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const srv = existsSync('server/xchain.js') ? read('server/xchain.js') : '';
+    t('server/xchain.js exists', Boolean(srv));
+    const c = code(srv);
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE FAMILY RULE, WHICH IS THE WHOLE REASON TRON IS DELICATE.
+     * ═══════════════════════════════════════════════════════════════════════
+     * 0x: "feeRecipient addresses must be valid for the origin chain's address
+     * format." A Tron-origin swap paying an EVM address is not a smaller
+     * mistake than paying nobody — it is money sent where no key exists.
+     */
+    t('the fee address is chosen per origin chain, not fixed',
+      /export function feeRecipientFor\(/.test(c));
+    t('...and a Tron origin gets the Tron payout address',
+      /TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ/.test(c));
+    t('...and an EVM origin gets the EVM one',
+      /0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6/.test(c));
+    t('...with both validated against their own address shape',
+      /\^T\[1-9A-HJ-NP-Za-km-z\]\{33\}\$/.test(c) && /\^0x\[a-fA-F0-9\]\{40\}\$/.test(c));
+
+    /*
+     * Bridging into an address of the WRONG family is an irreversible burn.
+     * 0x defaults destinationAddress to the origin address, which across a
+     * family boundary is exactly that burn, so it must be refused.
+     */
+    t('a cross-family swap refuses to proceed without a destination address',
+      /DESTINATION_ADDRESS_REQUIRED/.test(c));
+
+    /* Fee params are ours alone — never readable off the query string. */
+    t('feeRecipient and feeBps are set server-side',
+      /params\.set\('feeRecipient',/.test(c) && /params\.set\('feeBps',/.test(c));
+    t('...and are clamped so a typo cannot take someone whole transfer',
+      /Math\.min\(100, Math\.max\(0,/.test(c));
+
+    /* The echo check, same rule as the Solana and EVM paths. */
+    t('a requested fee that did not arrive is surfaced, not assumed',
+      /feeApplied/.test(c) && /integratorFees/.test(c));
+
+    /*
+     * The probe. Documentation is not measurement — the key lives in Vercel,
+     * so the only way to learn whether Tron works on OUR key is to ask from
+     * inside our own server.
+     */
+    t('a read-only probe exists to test Tron from inside the server',
+      /export async function crossChainProbe/.test(c));
+    t('...and it distinguishes "product not enabled" from "no route"',
+      /accessDenied/.test(c) && /tronRouteFound/.test(c));
+    t('...and it signs nothing, only requesting a quote',
+      !/sendRawTransaction|signTransaction/.test(c));
+
+    /* Routes exist AND call the module. */
+    const app = code(read('server/app.js'));
+    t('app.js imports the cross-chain module',
+      /from '\.\/xchain\.js'/.test(app));
+    for (const [route, fn] of [
+      ['/api/xchain/status', 'crossChainStatus'],
+      ['/api/xchain/probe', 'crossChainProbe'],
+      ['/api/xchain/quotes', 'crossChainQuotes']
+    ]) {
+      t(`${route} is mounted and calls ${fn}()`,
+        new RegExp(`'${route.replace(/\//g, '\\/')}'`).test(app) &&
+        new RegExp(`${fn}\\(`).test(app));
+    }
+
+    /*
+     * The bridge rate is 30 bps, not the 70 bps swap rate. A bridge already
+     * carries the provider's own cost; charging our full swap fee on top
+     * makes us the expensive option on the easiest trade to price-compare.
+     */
+    t('the cross-chain fee is the 30 bps bridge rate, not the 70 bps swap rate',
+      /CROSSCHAIN_FEE_BPS \?\? 30/.test(c));
   }
 
   return rows;
