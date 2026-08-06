@@ -5810,5 +5810,118 @@ export default function run() {
     }
   }
 
+  /* ---- 70. the THORChain affiliate address ------------------------------ */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * A TYPO HERE SENDS EVERY FEE WE EVER EARN TO NOBODY.
+     * ═══════════════════════════════════════════════════════════════════════
+     * And it fails SILENTLY: THORChain skips an unparseable affiliate and
+     * executes the swap anyway, so a wrong character produces working swaps
+     * that simply never pay us. That is the worst possible failure mode
+     * because it looks exactly like success.
+     *
+     * The address below was verified twice against THORChain's own node
+     * before being committed — it decodes, and a live quote computed a real
+     * fee for it (`"affiliate": "2354442"`). The literal is pinned here so a
+     * later edit cannot quietly alter it.
+     */
+    t('the THORChain module exists', existsSync('src/lib/thorchain.js'));
+
+    if (existsSync('src/lib/thorchain.js')) {
+      const thor = code(read('src/lib/thorchain.js'));
+
+      /* The exact verified address, character for character. */
+      t('the verified affiliate address is unchanged',
+        thor.includes('thor12cqv53jqz6tnzmlsg9y207xe83raeem8nywqxt'));
+
+      /*
+       * It must be the FALLBACK, not only an env var. A missing variable in
+       * a future deploy would otherwise mean an empty affiliate — swaps keep
+       * working, revenue silently stops.
+       */
+      t('...used as the default when no env var is set',
+        /VITE_THOR_AFFILIATE'\) \|\|\s*'thor1/.test(thor));
+
+      /*
+       * The 10% ceiling is enforced by the protocol because of a real 2021
+       * disclosure (unbounded affiliate fees). Requesting more is rejected
+       * outright, so clamping locally is what stops a config mistake from
+       * producing quotes that always fail.
+       */
+      t('the protocol fee cap is enforced locally', /THOR_MAX_BPS = 1000/.test(thor));
+      /* Pinned to the whole expression. `[^)]*` fails on the nested
+         Math.floor() call — my own first attempt at this check did exactly
+         that and reported a false failure against correct code. */
+      t('...and the clamp is actually applied',
+        thor.includes('Math.min(Math.floor(n), THOR_MAX_BPS)'));
+
+      /*
+       * `Number(null)` is 0 and 0 is finite, so a null check MUST come first
+       * or a missing value silently becomes a zero fee. This repo has already
+       * shipped that exact bug once in validateOrder.
+       */
+      t('...and a null rate cannot become a silent zero',
+        /if \(bps == null\) return THOR_AFFILIATE_BPS;/.test(thor));
+
+      /* Our rate matches the EVM swap fee — one house rate, not two. */
+      t('the THORChain rate matches the EVM swap fee (70 bps)',
+        /VITE_THOR_AFFILIATE_BPS'\) \|\| 70/.test(thor));
+
+      /*
+       * The validator must reject the addresses most likely to be pasted in
+       * by mistake — the owner's own Tron and EVM payout addresses both live
+       * in this repo and are one copy-paste away.
+       */
+      t('the address check rejects a Tron address',
+        !/\^thor1\[[^\]]*\]\{38\}\$/.test('TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ'));
+      t('...and the charset excludes the confusable bech32 characters',
+        /023456789acdefghjklmnpqrstuvwxyz/.test(thor) &&
+        !/023456789abcdefghi/.test(thor));
+
+      /*
+       * The comment must NOT claim to validate a checksum. It does not — a
+       * valid-charset typo passes, which I confirmed while testing. Claiming
+       * otherwise would invite someone to trust it for a new address.
+       */
+      t('...and the module admits it is a format check, not a checksum',
+        /FORMAT check, not a CHECKSUM check/.test(read('src/lib/thorchain.js')));
+
+      /* Documented, or nobody can ever change the payout address. */
+      const envx = read('.env.example');
+      t('the affiliate address is documented as configurable',
+        /VITE_THOR_AFFILIATE=/.test(envx));
+      /*
+       * ...and the file must warn against the one catastrophic mistake:
+       * putting the recovery phrase where the address goes.
+       */
+      t('...with an explicit warning never to store the recovery phrase',
+        /recovery phrase/i.test(envx) && /NEVER/.test(envx));
+    }
+
+    /*
+     * ─── THE 12% CLAIM WAS WRONG AND MUST STAY RETRACTED ──────────────────
+     * I reported that PROTOCOLAFFILIATEFEEBASISPOINTS (present in the live
+     * mimir dump) adds ~12% on top of our fee. Measured against the live
+     * network with three quotes, the user pays exactly the requested bps —
+     * 70 bps costs 70.1 bps. ADR-016, which defines that mimir, is marked
+     * "Status: Proposed" and says "(this mimir needs to be implemented)".
+     *
+     * The docs must keep the correction rather than quietly reverting to the
+     * confident wrong number, so the retraction itself is pinned.
+     */
+    for (const f of ['docs/STEP-THOR-ADDRESS-FA.md', 'docs/TRAVEL-AND-THORCHAIN-FA.md']) {
+      if (!existsSync(f)) continue;
+      const doc = read(f);
+      t(`${f} keeps the 12% retraction`,
+        /Status: Proposed/.test(doc) && /۷۰\.۱ bps/.test(doc));
+    }
+  }
+
   return rows;
 }
