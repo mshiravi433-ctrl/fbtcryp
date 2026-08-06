@@ -8,6 +8,7 @@ import AdBanner from '../components/AdBanner';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import SendSheet from '../components/SendSheet';
+import TapToPay from '../components/TapToPay';
 import RestrictionsSheet from '../components/RestrictionsSheet';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
@@ -150,6 +151,22 @@ export default function P2P() {
             )}
             <p className="notice" style={{ marginTop: 11 }}>{t('p2p.otcNotice')}</p>
           </motion.section>
+
+          {/*
+            TAP TO PAY — the in-person half of peer-to-peer.
+
+            The desks above are for meeting a stranger over the internet. This
+            is for the person standing in front of you, which is how most P2P
+            in Iran actually happens and which nothing in this app served.
+
+            The tap exchanges an ADDRESS, never a signature: see
+            lib/tapToPay.js for why phone-to-phone NFC transfers are not a
+            thing we chose not to build (Android removed the API in 14) and
+            why proximity must never be able to move money on its own.
+          */}
+          <motion.div variants={riseIn} initial="hidden" animate="show">
+            <TapToPay onAddress={() => setSendOpen(true)} />
+          </motion.div>
 
           <AdBanner slot="swap" />
 

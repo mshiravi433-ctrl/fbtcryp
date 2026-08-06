@@ -719,6 +719,26 @@ export default function Swap() {
         <p>{t('swap.verifyContracts')}</p>
       </InfoBox>
 
+      {/*
+        ─── THE ISSUER-FREEZE WARNING, SHOWN ONLY WHEN IT APPLIES ─────────────
+        Tokenised gold is the one real-world-asset category with open DEX
+        liquidity, so PAXG and XAUt are listed. But they are NOT like the other
+        tokens on this screen in one specific way: the issuer can freeze a
+        balance, and Paxos's contract can also BURN one.
+
+        That is a real risk for our users rather than boilerplate. It is shown
+        inline — not folded into the collapsible box above — because someone
+        buying "gold" reasonably assumes they will own it outright, and this
+        contradicts the assumption. It renders only when a gold token is
+        actually selected, so it stays a fact about this trade instead of
+        another permanent warning people learn to scroll past.
+      */}
+      {(fromToken?.rwa || toToken?.rwa) && (
+        <p className="notice" style={{ marginTop: 11 }}>
+          {t('swap.rwaFreezeNotice')}
+        </p>
+      )}
+
       {/* connection status */}
       <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">
         {wallet.isConnected ? (

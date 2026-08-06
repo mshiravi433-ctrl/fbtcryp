@@ -111,7 +111,9 @@
     "chartLine": "Line",
     "chartCandle": "Candles",
     "candleNote": "Each candle is one period: the body is open→close, the thin line is the low and high. Green means it closed higher than it opened. The line chart cannot show the high and low — that range is most of what a candle is for.",
-    "noCandles": "Candles are not available for this coin right now. We do not draw them from closing prices — the high and the low would be invented, and those are the two numbers a candle exists to show."
+    "noCandles": "Candles are not available for this coin right now. We do not draw them from closing prices — the high and the low would be invented, and those are the two numbers a candle exists to show.",
+    "tempUnavailable": "Taking longer than usual",
+    "tempUnavailableHelp": "The price service is busy right now, so this coin's data has not arrived yet. It is almost always back within a few seconds — we are retrying automatically."
   },
   "trade": {
     "title": "Trade",
@@ -511,7 +513,8 @@
     "chainTab": {
       "evm": "EVM chains",
       "solana": "Solana"
-    }
+    },
+    "rwaFreezeNotice": "PAXG and XAUt are claims on gold held by a company, not bearer assets. Paxos and Tether can each freeze a balance to comply with a legal order, and Paxos’s contract can also burn one. That has not happened to ordinary holders, but it is a real difference from ETH or BTC and you should know it before buying."
   },
   "onboarding": {
     "skip": "Skip",
@@ -2594,6 +2597,35 @@
       "SAME_ASSET": "Choose two different assets.",
       "BAD_AMOUNT": "Enter an amount greater than zero.",
       "MEMO_TOO_LONG": "This pair cannot carry the instruction on the sending chain. Try sending from a different chain."
+    }
+  },
+  "tap": {
+    "title": "Tap to pay, in person",
+    "intro": "Standing next to someone? Swap addresses by tapping phones or showing a code instead of typing 42 characters. You still confirm every transfer in your own wallet — nothing can be sent by proximity alone.",
+    "iReceive": "I am receiving",
+    "iPay": "I am paying",
+    "showThis": "Show this to the other phone",
+    "receiveHelp": "The other person scans or taps this to fill in your address. It is a public receiving address — sharing it is safe.",
+    "connectFirst": "Connect your wallet first so we know which address to show.",
+    "startScan": "Tap the other phone",
+    "holdNear": "Hold the phones together…",
+    "orPaste": "Or paste their address",
+    "gotAddress": "Got it — paying {{addr}}",
+    "nothingSentYet": "Nothing has been sent yet. The address is filled in; your wallet will ask you to confirm the amount and destination before anything moves.",
+    "reason": {
+      "IOS_UNSUPPORTED": "iPhone does not let websites use NFC — Apple has never added it. Use the code instead; it works exactly the same.",
+      "DESKTOP_UNSUPPORTED": "NFC needs a phone. On a computer, use the code instead.",
+      "BROWSER_UNSUPPORTED": "This browser does not support NFC. Chrome on Android does — or just use the code, which always works.",
+      "NO_WINDOW": "NFC is unavailable here. Use the code instead."
+    },
+    "err": {
+      "NFC_DENIED": "NFC permission was refused. Allow it in your browser settings, or use the code instead.",
+      "NFC_TIMEOUT": "No tag detected. Try holding the phones back-to-back, upper half against upper half.",
+      "NO_ADDRESS_ON_TAG": "That tag did not contain a wallet address.",
+      "NFC_READ_FAILED": "Could not read the tag. Try again.",
+      "NFC_SCAN_FAILED": "NFC could not start. Use the code instead.",
+      "BAD_ADDRESS": "That is not a valid wallet address. Check it character by character — a transfer to a wrong address cannot be undone.",
+      "CANCELLED": "Cancelled."
     }
   }
 }

@@ -37,11 +37,66 @@ async function fetchJson(url, { timeout = 12000 } = {}) {
   }
 }
 
+/**
+ * How long an EMPTY fallback result is allowed to be cached.
+ *
+ * ─── THE BUG THIS NUMBER FIXES ──────────────────────────────────────────────
+ *   «وقتی وارد بازار نمیشوی و روی یک کوین میزنی کرش میخوره ... اما بار دوم
+ *    خوب میشه»
+ *
+ * Open a coin WITHOUT visiting the market list first — error screen. Tap again
+ * — fine. That "second time works" shape is the diagnosis, and it is a
+ * different bug from the chunk-loading one in lib/lazyRetry.js. The page
+ * loads perfectly here; it is the DATA that is missing.
+ *
+ * The sequence, all of it inside this function:
+ *
+ *   1. A cold open fires several requests at once — coin, chart, btc chart,
+ *      global, markets. CoinGecko's free tier rate-limits that burst, so
+ *      `backend` and `direct` both throw for the coin.
+ *   2. `fallback()` runs. For getCoin that is a lookup in a 50-coin offline
+ *      snapshot, and any coin outside those 50 — PENGU, and most of the
+ *      market list — is genuinely absent, so it returns **null**.
+ *   3. That null is written into `memo` and served for the full 30s TTL.
+ *      A now-healthy backend is never consulted.
+ *   4. CoinDetail sees `coin === null` with nothing loading and renders
+ *      "ارز پیدا نشد" with Back and Refresh buttons — the screen reported.
+ *
+ * Step 3 is the actual defect. Caching a SUCCESS for 30s is the point of this
+ * function; caching "we found nothing" for 30s is caching a failure and
+ * calling it data.
+ *
+ * ─── WHY IT WORKS THE SECOND TIME ───────────────────────────────────────────
+ * Two independent reasons, which is why it feels so reliable:
+ *   • by the second tap the burst has passed and the rate limit has reset;
+ *   • and if the user went via the market list, `coins` is populated so
+ *     CoinDetail's `find()` supplies the row without needing this call.
+ * Hence "when you don't enter Market first" — that is precisely the path with
+ * no second source of the same data.
+ *
+ * Four seconds is long enough to still absorb a genuine burst of duplicate
+ * calls for the same key, and short enough that a user retrying by hand
+ * always gets a real request.
+ */
+const EMPTY_TTL_MS = 4000;
+
 /** Try the backend, then the public API, then the offline snapshot. */
 async function resilient(key, { backend, direct, fallback, ttl = 30000 }) {
   const cached = memo.get(key);
-  if (cached && Date.now() - cached.at < ttl) return cached.data;
+  if (cached) {
+    /*
+     * An empty answer expires far sooner than a real one.
+     *
+     * `empty` is recorded at write time rather than re-derived here: by the
+     * time we read it back, `[]` and `null` are indistinguishable from a
+     * legitimately empty successful response, and treating a real empty list
+     * as a failure would re-request it forever.
+     */
+    const maxAge = cached.empty ? Math.min(EMPTY_TTL_MS, ttl) : ttl;
+    if (Date.now() - cached.at < maxAge) return cached.data;
+  }
 
+  let lastError = null;
   for (const attempt of [backend, direct]) {
     if (!attempt) continue;
     try {
@@ -50,14 +105,43 @@ async function resilient(key, { backend, direct, fallback, ttl = 30000 }) {
         memo.set(key, { at: Date.now(), data });
         return data;
       }
-    } catch {
-      /* fall through to the next source */
+    } catch (err) {
+      /*
+       * Remembered, not swallowed. A caller that gets `null` cannot tell
+       * "this coin does not exist" from "both sources were rate-limited",
+       * and those two deserve completely different screens.
+       */
+      lastError = err;
     }
   }
 
   const data = fallback();
-  memo.set(key, { at: Date.now(), data, stale: true });
+  /*
+   * `stale` says the value came from the offline snapshot. `empty` says the
+   * snapshot had nothing to give — the case that used to pin a null in place
+   * for 30 seconds while the network recovered without us.
+   */
+  const empty = data == null || (Array.isArray(data) && data.length === 0);
+  memo.set(key, { at: Date.now(), data, stale: true, empty, error: lastError });
   return data;
+}
+
+/**
+ * Did the last attempt for this key fail because of the NETWORK, rather than
+ * because the thing genuinely does not exist?
+ *
+ * Lets a screen say "try again in a moment" instead of "this coin does not
+ * exist", which are opposite messages and only one of them is ever true.
+ * Reads the cache rather than changing what `resilient` returns, so no caller
+ * has to be updated to benefit.
+ */
+export function lastFetchFailed(key) {
+  return Boolean(memo.get(key)?.error);
+}
+
+/** Forget one key so the next call is guaranteed to hit the network. */
+export function invalidate(key) {
+  memo.delete(key);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -207,9 +291,16 @@ export function normalizeCoin(c = {}) {
  * public CoinGecko `/coins/markets?ids=`, then the single-coin endpoint, then
  * the offline snapshot. Only a coin that exists nowhere returns null.
  */
+/**
+ * The memo key for one coin, exported so a screen can ask `lastFetchFailed()`
+ * about it. Derived in one place because a hand-built key that drifts from
+ * this one would silently always answer false.
+ */
+export const coinKey = (id, vs = 'usd') => `coin:${id}:${vs}`;
+
 export function getCoin(id, vs = 'usd') {
   if (!id) return Promise.resolve(null);
-  return resilient(`coin:${id}:${vs}`, {
+  return resilient(coinKey(id, vs), {
     ttl: 30000,
     backend: () => fetchJson(`${API_BASE}/coin/${encodeURIComponent(id)}`),
     direct: async () => {

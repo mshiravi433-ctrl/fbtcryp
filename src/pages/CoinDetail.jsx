@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -20,6 +20,7 @@ import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
 import VerdictPanel from '../components/VerdictPanel';
 import { analyze } from '../lib/ai';
+import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
 
 /**
  * Chain names for the resolved-venue line.
@@ -73,7 +74,7 @@ export default function CoinDetail() {
   // list — that lookup is what produced "coin not found" for anything outside
   // the top 60 by market cap, which looked like a broken API but never was.
   const { data: coins } = useMarkets(60);
-  const { data: fetched, loading: coinLoading } = useCoin(id);
+  const { data: fetched, loading: coinLoading, refresh: refreshCoin } = useCoin(id);
   const { data: series, loading } = useChart(id, range.days);
 
   /*
@@ -130,6 +131,36 @@ export default function CoinDetail() {
     };
   }, [coinGeckoId, realSwap]);
 
+  /*
+   * ─── RECOVER WITHOUT MAKING THE USER TAP ANYTHING ─────────────────────────
+   * The reported bug: open a coin without visiting Market first, get an error,
+   * tap again, it works. The second tap succeeds because the cold-open request
+   * burst has passed and CoinGecko's rate limit has reset.
+   *
+   * If a plain retry a moment later is all it takes, the app should do it
+   * rather than showing an error screen and waiting to be asked. One attempt,
+   * only when the failure was the NETWORK — a coin that truly does not exist
+   * must not be re-requested in a loop.
+   *
+   * `invalidate` is required before retrying: without it the retry reads the
+   * cached empty entry and returns instantly, doing nothing at all.
+   */
+  const retriedRef = useRef(false);
+  useEffect(() => {
+    retriedRef.current = false;
+  }, [id]);
+
+  useEffect(() => {
+    if (coinLoading || fetched || retriedRef.current) return undefined;
+    if (!lastFetchFailed(coinKey(id))) return undefined;
+    retriedRef.current = true;
+    const timer = setTimeout(() => {
+      invalidate(coinKey(id));
+      refreshCoin();
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [id, fetched, coinLoading, refreshCoin]);
+
   const resolvedRoute = useMemo(() => venueRoute(venue), [venue]);
   /*
    * Bitcoin over the SAME range, plus the global stats, for the verdict
@@ -176,19 +207,46 @@ export default function CoinDetail() {
   const color = up ? '#00ff9d' : '#ff3b6b';
 
   if (!coin && !loading && !coinLoading) {
+    /*
+     * ─── TWO DIFFERENT FAILURES THAT LOOKED IDENTICAL ─────────────────────
+     * `coin === null` used to always print "this coin does not exist". But
+     * the far more common cause is that both data sources were rate-limited
+     * during the cold-open burst and the offline snapshot (50 coins) simply
+     * had nothing for this id — see the EMPTY_TTL_MS note in lib/api.js.
+     *
+     * Telling someone a coin does not exist when the real answer is "our
+     * data provider was busy for two seconds" is not a wording nitpick: it
+     * sends them away from a page that would work if they waited.
+     */
+    const networkFailed = lastFetchFailed(coinKey(id));
     return (
       <PageTransition>
         <div className="empty">
-          <span className="empty-icon">🪙</span>
-          {t('coin.notFound')}
+          <span className="empty-icon">{networkFailed ? '📡' : '🪙'}</span>
+          {networkFailed ? t('coin.tempUnavailable') : t('coin.notFound')}
           <p className="muted" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.8 }}>
-            {t('coin.notFoundHelp')}
+            {networkFailed ? t('coin.tempUnavailableHelp') : t('coin.notFoundHelp')}
           </p>
           <div className="row" style={{ gap: 10, marginTop: 14 }}>
             <button className="btn btn-ghost" onClick={() => navigate('/')}>
               {t('common.back')}
             </button>
-            <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            {/*
+              Retry in place, not window.location.reload().
+
+              A full reload throws away the whole app — every other cached
+              request, the scroll position, the market list — to re-fetch one
+              coin. `invalidate` drops just this key so the poll's own refresh
+              is guaranteed to hit the network, and the user stays where
+              they are.
+            */}
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                invalidate(coinKey(id));
+                refreshCoin();
+              }}
+            >
               {t('common.refresh')}
             </button>
           </div>

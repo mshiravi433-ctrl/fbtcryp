@@ -6807,5 +6807,154 @@ export default function run() {
       /CROSSCHAIN_FEE_BPS \?\? 30/.test(c));
   }
 
+  /* ---- 77. coin-page crash, RWA gold, tap-to-pay ------------------------ */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. THE COIN PAGE CRASH — A SECOND, DIFFERENT CAUSE.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «وقتی وارد بازار نمیشوی و روی یک کوین میزنی کرش میخوره ... بار دوم
+     *    خوب میشه»
+     *
+     * lib/lazyRetry.js fixed the CHUNK failing to load. This is a different
+     * bug with the same symptom: the page loads fine, the DATA is missing.
+     *
+     * resilient() cached the offline fallback for the full 30s TTL. For a coin
+     * outside the 50-entry offline snapshot that fallback is `null`, so one
+     * rate-limited burst pinned "not found" in place while the network
+     * recovered unnoticed. Opening via Market masked it, because the markets
+     * list supplied the row from a second source — exactly matching "when you
+     * DON'T go into Market first".
+     */
+    const api = code(read('src/lib/api.js'));
+    t('an empty fallback is cached far more briefly than a real answer',
+      /EMPTY_TTL_MS/.test(api) && /cached\.empty \? Math\.min\(EMPTY_TTL_MS, ttl\) : ttl/.test(api));
+    /*
+     * `empty` must be recorded at WRITE time. Re-deriving it on read cannot
+     * distinguish a failure from a legitimately empty successful response.
+     */
+    t('...and emptiness is recorded when written, not guessed when read',
+      /empty = data == null \|\| \(Array\.isArray\(data\) && data\.length === 0\)/.test(api));
+    t('...and a network failure is remembered rather than swallowed',
+      /lastError/.test(api) && /export function lastFetchFailed/.test(api));
+
+    const coin = read('src/pages/CoinDetail.jsx');
+    const coinCode = code(coin);
+    /*
+     * "This coin does not exist" and "the provider was busy" are opposite
+     * messages. Only one can be true, and showing the wrong one sends the
+     * user away from a page that would have worked.
+     */
+    t('the coin page tells a rate limit apart from a missing coin',
+      /lastFetchFailed\(coinKey\(id\)\)/.test(coinCode));
+    t('...with separate copy for each, in both languages', (() => {
+      const en = JSON.parse(read('src/i18n/locales/en.json'));
+      const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      return hasKey(en, 'coin.tempUnavailable') && hasKey(fa, 'coin.tempUnavailable') &&
+             hasKey(en, 'coin.tempUnavailableHelp') && hasKey(fa, 'coin.tempUnavailableHelp');
+    })());
+    /* Recover without being asked — the second tap already proves it works. */
+    t('...and it retries itself once instead of showing an error screen',
+      /retriedRef/.test(coinCode) && /invalidate\(coinKey\(id\)\)/.test(coinCode));
+    /*
+     * invalidate() before refresh is load-bearing: without it the retry reads
+     * the cached empty entry and returns instantly, doing nothing.
+     */
+    t('...and drops the cached empty entry first, or the retry is a no-op',
+      /export function invalidate/.test(api));
+    /* Retrying one coin must not reload the entire app. */
+    t('...and the refresh button no longer reloads the whole page',
+      !/window\.location\.reload/.test(coinCode));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. RWA — ONLY THE ONE CATEGORY WE CAN ACTUALLY SELL.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Most RWAs are permissioned: BUIDL transfers only between Securitize-
+     * approved addresses, OUSG uses a KYC registry. A buy button on those is a
+     * button whose transfer reverts. Gold is the exception, and both tokens
+     * were quoted live and echoed our 70 bps back before being listed.
+     */
+    const chains = read('src/lib/chains.js');
+    t('tokenised gold is listed with verified mainnet addresses',
+      /0x45804880De22913dAFE09f4980848ECE6EcbAf78/.test(chains) &&
+      /0x68749665FF8D2d112Fa859AA293F07A622782F38/.test(chains));
+    t('...and XAUt carries 6 decimals, not the usual 18',
+      /XAUt[\s\S]{0,200}?decimals: 6/.test(chains));
+    t('...and they are flagged as RWA so the disclosure can find them',
+      /rwa: 'gold'/.test(chains));
+    /* No permissioned token may be listed — its transfer would simply revert. */
+    t('...and no KYC-gated RWA is listed, whose transfers would revert',
+      !/BUIDL|OUSG|BENJI/.test(code(chains)));
+
+    const swap = read('src/pages/Swap.jsx');
+    t('the swap screen warns that gold tokens can be frozen by their issuer',
+      /rwaFreezeNotice/.test(code(swap)));
+    t('...only when a gold token is actually selected',
+      /\(fromToken\?\.rwa \|\| toToken\?\.rwa\)/.test(code(swap)));
+    t('...and says so in both languages', (() => {
+      const en = JSON.parse(read('src/i18n/locales/en.json'));
+      const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      return hasKey(en, 'swap.rwaFreezeNotice') && hasKey(fa, 'swap.rwaFreezeNotice');
+    })());
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3. TAP TO PAY — PROXIMITY MOVES AN ADDRESS, NEVER MONEY.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Phone-to-phone NFC does not exist any more: Android Beam was removed in
+     * Android 14, and Web NFC reads passive tags only. So the tap fills in a
+     * destination and the wallet still authorises the transfer.
+     *
+     * That is a SECURITY boundary, not a platform limitation to be worked
+     * around: a payment triggered by proximity alone is a robbery mechanism.
+     */
+    const tapLib = existsSync('src/lib/tapToPay.js') ? read('src/lib/tapToPay.js') : '';
+    t('src/lib/tapToPay.js exists', Boolean(tapLib));
+    const tapCode = code(tapLib);
+    t('nothing in the tap path signs or sends a transaction',
+      !/signTransaction|sendTransaction|eth_sendTransaction/.test(tapCode));
+    t('the pay link uses EIP-681, which other wallets already understand',
+      /ethereum:\$\{address\}/.test(tapCode));
+    /* A single read, then stop: a second tag must not silently swap the payee. */
+    t('the scan stops after the first valid read',
+      /if \(done\) return;/.test(tapCode) && /ctrl\.abort\(\)/.test(tapCode));
+    /* "Unsupported" is useless to an iPhone user who cannot fix it. */
+    t('an unsupported browser is explained by REASON, not just refused',
+      /IOS_UNSUPPORTED/.test(tapCode) && /DESKTOP_UNSUPPORTED/.test(tapCode));
+
+    const tapUi = existsSync('src/components/TapToPay.jsx') ? read('src/components/TapToPay.jsx') : '';
+    t('the TapToPay component exists', Boolean(tapUi));
+    t('...and P2P actually renders it',
+      /<TapToPay/.test(code(read('src/pages/P2P.jsx'))));
+    t('...and it stops the NFC radio when unmounted',
+      /abortRef\.current\?\.abort\(\)/.test(code(tapUi)));
+    t('...and states plainly that nothing has been sent yet',
+      /nothingSentYet/.test(code(tapUi)));
+
+    /*
+     * The revenue half. `recipient` delivers a SWAP straight to the other
+     * person, so our normal 0.70% applies to real work. Verified live:
+     * integratorFee 70000 on a 10 USDC sell with recipient set.
+     */
+    const gasless = code(read('server/gasless.js'));
+    t('recipient is forwarded so a swap can be delivered to the other person',
+      /'recipient'/.test(gasless));
+    t('...and is validated, since a typo here is an unrecoverable transfer',
+      /BAD_RECIPIENT/.test(gasless));
+    /* The fee fields must STILL be server-side only. */
+    t('...but the fee fields are still not caller-settable',
+      !/'swapFeeRecipient'|'swapFeeBps'/.test(
+        /const ALLOWED = \[[^\]]*\]/.exec(gasless)?.[0] ?? ''));
+    /* Same token = no swap = no fee. Charging one would be taking money for nothing. */
+    t('a same-token transfer is not charged a swap fee',
+      /mode: 'transfer', earns: false, feeBps: 0/.test(tapCode));
+  }
+
   return rows;
 }

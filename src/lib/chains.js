@@ -195,7 +195,33 @@ export const TOKENS = {
     { symbol: 'DAI', name: 'Dai', address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18, coingeckoId: 'dai' },
     { symbol: 'WBTC', name: 'Wrapped Bitcoin', address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8, coingeckoId: 'bitcoin' },
     { symbol: 'LINK', name: 'Chainlink', address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', decimals: 18, coingeckoId: 'chainlink' },
-    { symbol: 'UNI', name: 'Uniswap', address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', decimals: 18, coingeckoId: 'uniswap' }
+    { symbol: 'UNI', name: 'Uniswap', address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', decimals: 18, coingeckoId: 'uniswap' },
+    /*
+     * ─── TOKENIZED GOLD: THE ONLY RWA CATEGORY WE CAN ACTUALLY SELL ─────────
+     * Most real-world-asset tokens are PERMISSIONED. BUIDL only transfers
+     * between addresses pre-approved by Securitize; OUSG uses a KYC registry;
+     * BENJI runs through a transfer agent. Listing any of those would put a
+     * buy button on a token the buyer's transfer would revert on.
+     *
+     * Gold is the exception: PAXG and XAUt are ordinary ERC-20s with real DEX
+     * liquidity. Both were quoted live against USDT on Ethereum before being
+     * added here, and both echoed our 70 bps fee back:
+     *
+     *   PAXG  1000 USDT -> 0.2339 PAXG   extraFee feeReceiver 0xaf5c...24d6 ✓
+     *   XAUt  1000 USDT -> 0.2346 XAUt   extraFee feeReceiver 0xaf5c...24d6 ✓
+     *
+     * ⚠️ BOTH CAN BE FROZEN BY THEIR ISSUER. Paxos ships an
+     * AssetProtectionRole that can freeze AND burn a balance; Tether has
+     * frozen XAUt addresses before. That is a genuine risk for our users and
+     * is disclosed on the screen — it is not a reason to hide the tokens,
+     * because the same is true of USDT and USDC which we already list, but it
+     * IS a reason never to describe them as "digital gold you own outright".
+     *
+     * `rwa: true` drives that disclosure. A token flagged here must render the
+     * issuer-freeze warning.
+     */
+    { symbol: 'PAXG', name: 'PAX Gold', address: '0x45804880De22913dAFE09f4980848ECE6EcbAf78', decimals: 18, coingeckoId: 'pax-gold', rwa: 'gold' },
+    { symbol: 'XAUt', name: 'Tether Gold', address: '0x68749665FF8D2d112Fa859AA293F07A622782F38', decimals: 6, coingeckoId: 'tether-gold', rwa: 'gold' }
   ],
   137: [
     { symbol: 'POL', name: 'Polygon', address: null, decimals: 18, native: true, coingeckoId: 'matic-network' },

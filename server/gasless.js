@@ -96,7 +96,23 @@ async function zeroxFetch(path) {
  * editing a query string — identical boundary to server/bridge.js and
  * server/solana.js.
  */
-const ALLOWED = ['chainId', 'sellToken', 'buyToken', 'sellAmount', 'taker', 'slippageBps'];
+/*
+ * `recipient` IS forwarded, and it is not a fee field.
+ *
+ * It names who RECEIVES the bought token; the fee fields name who receives our
+ * commission, and those stay server-side. Letting a caller set the recipient
+ * is the entire point of tap-to-pay: the payer signs, and the money lands in
+ * the other person's wallet in the same transaction.
+ *
+ * It is safe to accept because the recipient can only ever be the payer's own
+ * choice of destination — the taker still authorises and funds the trade, so a
+ * hostile value harms nobody but whoever supplied it. Validated as an EVM
+ * address below all the same, since a malformed one wastes an upstream call.
+ *
+ * 0x rejects `recipient` on wrap/unwrap (ETH <-> WETH), so it is dropped for
+ * those pairs rather than passed through to a guaranteed error.
+ */
+const ALLOWED = ['chainId', 'sellToken', 'buyToken', 'sellAmount', 'taker', 'slippageBps', 'recipient'];
 
 /** Chains where 0x Gasless is available AND we already support the chain. */
 const SUPPORTED = new Set([1, 10, 56, 137, 8453, 42161, 43114]);
@@ -137,6 +153,16 @@ async function gaslessCall(path, query) {
   const chainId = Number(params.get('chainId'));
   if (!SUPPORTED.has(chainId)) {
     return { ok: false, status: 400, body: { error: 'UNSUPPORTED_CHAIN' } };
+  }
+
+  /*
+   * A recipient that is not a real address is rejected here rather than
+   * upstream. This is the tap-to-pay destination: a typo means the payment
+   * lands somewhere unrecoverable, and an on-chain transfer cannot be undone.
+   */
+  const recipient = params.get('recipient');
+  if (recipient && !/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
+    return { ok: false, status: 400, body: { error: 'BAD_RECIPIENT' } };
   }
 
   const amount = params.get('sellAmount');
