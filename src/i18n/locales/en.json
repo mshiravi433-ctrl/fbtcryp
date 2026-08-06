@@ -1781,7 +1781,12 @@
     },
     "modeServer": "Push active",
     "modeLocal": "Device only",
-    "dailySubLocal": "At most one a day. In this build it appears the next time you open the app rather than arriving on your phone by itself, because no server-side push is configured."
+    "dailySubLocal": "At most one a day. In this build it appears the next time you open the app rather than arriving on your phone by itself, because no server-side push is configured.",
+    "price": {
+      "title": "{{symbol}} moved",
+      "up": "{{symbol}} is up {{pct}}% since you last checked — now ${{price}}",
+      "down": "{{symbol}} is down {{pct}}% since you last checked — now ${{price}}"
+    }
   },
   "welcome": {
     "title": "Choose your language",

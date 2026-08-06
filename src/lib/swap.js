@@ -34,6 +34,7 @@ import {
   getAggregatorQuote
 } from './aggregator';
 import { getOpenOceanQuote, openOceanSupports } from './openocean';
+import { getVeloraQuote, veloraSupports } from './velora';
 import { quoteAllSources } from './bestQuote';
 
 const loadEthers = () => import('ethers');
@@ -155,6 +156,17 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
       const sources = [() => getAggregatorQuote(common)];
       if (openOceanSupports(chainId)) {
         sources.push(() => getOpenOceanQuote(common));
+      }
+      /*
+       * Velora (formerly ParaSwap) — a third opinion, added after testing
+       * every aggregator on the shortlist. It is the only other one that
+       * needs NO API KEY and still pays a partner fee, verified live:
+       * partnerFeeBps=70 came back as partnerFee 0.7 straight to our own
+       * address via isDirectFeeTransfer. Same 3s leash as OpenOcean, so it
+       * cannot slow the quote down.
+       */
+      if (veloraSupports(chainId)) {
+        sources.push(() => getVeloraQuote(common));
       }
 
       const { best, checked, beatenBy } = await quoteAllSources(sources);

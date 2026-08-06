@@ -13,6 +13,7 @@ import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { MARKET_CATEGORIES, getCategory } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
+import { runPriceAlerts } from '../lib/priceAlerts';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
 
@@ -57,6 +58,36 @@ export default function Market() {
   // it wasn't there.
   const { data: coins, loading } = useMarkets(250);
   const { data: trending } = useTrending();
+
+  /*
+   * ─── FAVOURITE-COIN PRICE ALERTS ────────────────────────────────────────
+   * `priceAlerts` was a switch in Settings with NO consumer anywhere: the
+   * user could turn it on, the app remembered it, and nothing ever compared
+   * a price. See lib/priceAlerts.js.
+   *
+   * Hooked here rather than in App.jsx on purpose — this screen already
+   * polls 250 coins every 30s, so the check costs no extra request. A second
+   * poller running app-wide would double the market traffic to power a
+   * feature that is off for anyone who has not starred a coin.
+   *
+   * The wording is built here because it has to be translated; the library
+   * decides WHETHER to alert and never what it says.
+   */
+  useEffect(() => {
+    if (!coins?.length || !favorites?.length) return;
+    runPriceAlerts({
+      favorites,
+      coins,
+      format: (a) => ({
+        title: t('notify.price.title', { symbol: a.symbol }),
+        body: t(a.changePct >= 0 ? 'notify.price.up' : 'notify.price.down', {
+          symbol: a.symbol,
+          pct: Math.abs(a.changePct).toFixed(1),
+          price: a.price
+        })
+      })
+    });
+  }, [coins, favorites, t]);
 
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');

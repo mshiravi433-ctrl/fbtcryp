@@ -7404,5 +7404,103 @@ export default function run() {
       /select option \{[\s\S]{0,120}color: #e8ecf4/.test(css));
   }
 
+  /* ---- 81. price alerts, and Velora as a third keyless source ----------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. FAVOURITE-COIN PRICE ALERTS DID NOT EXIST.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Asked to confirm notifications work for news, favourite price moves and
+     * automatic orders. Audited each by counting consumers OUTSIDE notify.js:
+     *
+     *   news        9 consumers  -> works
+     *   tradeAlerts 2 consumers  -> works
+     *   priceAlerts 0 consumers  -> DID NOT EXIST
+     *
+     * The switch was in Settings, the app remembered it, and nothing anywhere
+     * ever compared a price. Same "wired to nothing" shape as the dead Solana
+     * RPC setting, except this one silently promises to warn about money.
+     */
+    const pa = existsSync('src/lib/priceAlerts.js') ? read('src/lib/priceAlerts.js') : '';
+    t('src/lib/priceAlerts.js exists', Boolean(pa));
+    const paCode = code(pa);
+    t('the priceAlerts switch is finally read by something',
+      /settings\?\.priceAlerts/.test(paCode));
+    /* A first sighting must record, never fire — or enabling the feature
+       would alert for every favourite at once. */
+    t('a first sighting records a baseline instead of alerting',
+      /if \(!prev \|\| !Number\.isFinite\(prev\.base\)/.test(paCode));
+    /*
+     * `at` must mean "last ALERTED", not "last seen". It first got a stamp
+     * when the baseline was recorded, so a coin's very first genuine alert
+     * was swallowed by its own cooldown. Found by stepping a simulated price
+     * through the function; the code read correctly.
+     */
+    t('...and the cooldown cannot swallow the first real alert',
+      /prev\.at != null && now - prev\.at < cooldownMs/.test(paCode) &&
+      /next\[coin\.id\] = \{ base: price \};/.test(paCode));
+    /* Number(null) is 0 and 0 is finite, so the positivity test must lead. */
+    t('...and a null price cannot become a zero baseline',
+      /!Number\.isFinite\(price\) \|\| price <= 0/.test(paCode));
+    t('...and unstarring a coin drops its baseline',
+      /if \(!starred\.has\(id\)\) delete next\[id\]/.test(paCode));
+    /* Wording must be translated by the caller, never decided in the lib. */
+    t('...and the library never writes user-facing copy itself',
+      !/'[A-Z][a-z]+ (is|moved|went)/.test(paCode));
+
+    const market = code(read('src/pages/Market.jsx'));
+    t('Market runs the check on data it already polls',
+      /runPriceAlerts\(/.test(market));
+    t('...and passes translated copy in', /notify\.price\.up/.test(market));
+    {
+      const en = JSON.parse(read('src/i18n/locales/en.json'));
+      const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+      const ar = JSON.parse(read('src/i18n/locales/ar.json'));
+      t('...translated in all three written languages',
+        ['notify.price.title', 'notify.price.up', 'notify.price.down']
+          .every((k) => hasKey(en, k) && hasKey(fa, k) && hasKey(ar, k)));
+    }
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. VELORA — THE ONE AGGREGATOR ON THE SHORTLIST THAT WORKS.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Every other candidate was tested live and rejected: 1inch, 0x, OKX DEX,
+     * SimpleSwap and StealthEX each demand a key, and SimpleSwap's own terms
+     * name Iran. Velora answered with a full route and no credentials, and
+     * honoured partnerFeeBps=70 as partnerFee 0.7 under a partner name we
+     * invented on the spot.
+     */
+    const vel = existsSync('src/lib/velora.js') ? read('src/lib/velora.js') : '';
+    t('src/lib/velora.js exists', Boolean(vel));
+    const velCode = code(vel);
+    /*
+     * Their DEFAULT parks fees in a FeeClaimer the partner must later claim
+     * from — an extra Ethereum transaction we would pay for. Direct transfer
+     * is the only thing that makes 70 bps worth collecting.
+     */
+    t('the fee goes straight to our wallet, not into a claim contract',
+      /isDirectFeeTransfer', 'true'/.test(velCode) && /takeSurplus', 'true'/.test(velCode));
+    /*
+     * Reading destAmount when a fee was requested would overstate the output
+     * by exactly our fee and hand Velora wins it did not earn.
+     */
+    t('...and the after-fee amount is read, so it cannot win unfairly',
+      /data\.destAmountAfterFee \?\? data\.destAmount/.test(velCode));
+    t('...and it is quote-only until it proves itself',
+      /executable: false/.test(velCode));
+    t('...on a short leash so a third source cannot slow the quote',
+      /TIMEOUT_MS = 3000/.test(velCode));
+    t('swap.js actually asks it', /getVeloraQuote\(common\)/.test(code(read('src/lib/swap.js'))));
+    /* The integrator name must match LI.FI's, or analytics split in two. */
+    t("...under the same partner name as everywhere else",
+      /VELORA_PARTNER = 'fbtswap'/.test(velCode));
+  }
+
   return rows;
 }
