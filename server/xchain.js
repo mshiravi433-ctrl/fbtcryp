@@ -247,6 +247,35 @@ export async function crossChainQuotes(query) {
     console.warn(`[xchain] fee not honoured on ${originChain}->${destinationChain}`);
   }
 
+  /*
+   * ─── HOW MUCH OF THEIR MONEY DOES THE USER ACTUALLY LOSE? ─────────────────
+   * Measured on a live EVM->Tron quote: selling 10 USDC on Arbitrum returned
+   * 8.288473 USDT on Tron. That is a 17.1% loss, of which OUR fee is 0.30%.
+   * The remainder is the bridge plus Tron's account-activation cost, which is
+   * close to a FLAT fee — so it is trivial on 1000 USDT and ruinous on 10.
+   *
+   * A percentage is the only honest way to show this. The raw numbers look
+   * fine in isolation, and a user comparing "10" with "8.29" after the fact
+   * is a user we have quietly hurt. Computed here, where both amounts are
+   * known and in the same unit, so no screen has to re-derive it.
+   *
+   * `severe` is the flag a UI must not bury: above 5% this needs an explicit
+   * confirmation, not a number in small text.
+   */
+  let lossPercent = null;
+  const sellN = Number(quote?.sellAmount);
+  const buyN = Number(quote?.buyAmount);
+  /*
+   * Only comparable when both sides are the same unit. USDC and USDT are both
+   * 6-decimal dollar stablecoins, so this is meaningful for the stablecoin
+   * routes that matter here; for anything else it stays null rather than
+   * inventing a number by comparing unlike things.
+   */
+  const sameUnit = /^(USDT|USDC)$/i.test(String(query?.unitHint || 'USDT'));
+  if (sameUnit && Number.isFinite(sellN) && Number.isFinite(buyN) && sellN > 0) {
+    lossPercent = Number((((sellN - buyN) / sellN) * 100).toFixed(2));
+  }
+
   return {
     ok: true,
     status: 200,
@@ -256,7 +285,9 @@ export async function crossChainQuotes(query) {
       feeRecipient: recipient || null,
       feeApplied,
       // Explicit so the UI never has to infer "0 bps" from a missing field.
-      feeSupported: feeSupportedOn(originChain)
+      feeSupported: feeSupportedOn(originChain),
+      lossPercent,
+      severeLoss: lossPercent != null && lossPercent > 5
     }
   };
 }

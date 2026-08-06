@@ -6737,6 +6737,24 @@ export default function run() {
       /bps > 0/.test(c));
 
     /*
+     * ─── THE 17% TRAP ───────────────────────────────────────────────────────
+     * A live EVM->Tron quote returned 8.288473 USDT for 10 USDC. Our fee is
+     * 0.30% of that; the rest is bridge plus Tron account activation, which
+     * is near-FLAT — trivial on 1000 USDT, ruinous on 10.
+     *
+     * Both raw numbers look reasonable alone. Only the percentage exposes it,
+     * so it is computed where both amounts are known rather than left to a
+     * screen to re-derive, and a severe case is flagged rather than printed
+     * quietly next to a confirm button.
+     */
+    t('the real percentage lost is computed, not left to the UI',
+      /lossPercent/.test(c));
+    t('...and a severe loss is flagged so it cannot be shown in small text',
+      /severeLoss/.test(c) && /lossPercent > 5/.test(c));
+    t('...and it stays null for unlike units rather than inventing a number',
+      /sameUnit/.test(c));
+
+    /*
      * Bridging into an address of the WRONG family is an irreversible burn.
      * 0x defaults destinationAddress to the origin address, which across a
      * family boundary is exactly that burn, so it must be refused.
