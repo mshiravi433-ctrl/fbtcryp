@@ -65,21 +65,43 @@ export const TRON = 'tron';
 const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 const TRON_ADDRESS = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 
+/** True for either accepted spelling of Tron as an origin. */
+export const isTronOrigin = (c) =>
+  String(c).toLowerCase() === TRON || String(c) === '999999999993';
+
+/**
+ * ⚠️ MEASURED, NOT ASSUMED: 0x DOES NOT PAY A FEE ON A TRON ORIGIN.
+ *
+ * The monetisation guide describes feeBps/feeRecipient without carving Tron
+ * out, so this module was first written expecting a Tron-origin fee paid to
+ * our Tron address. Probing the real API from inside our own server returned:
+ *
+ *   {"field":"feeBps",       "reason":"Fee collection is not supported when origin chain is Tron"}
+ *   {"field":"feeRecipient", "reason":"Fee collection is not supported when origin chain is Tron"}
+ *   {"field":"feeToken",     "reason":"Fee collection is not supported when origin chain is Tron"}
+ *
+ * And it is a HARD 400: sending the fee fields does not merely fail to earn,
+ * it makes the whole quote fail. So a Tron origin must be requested with no
+ * fee at all, or Tron simply does not work.
+ *
+ * This is exactly why /probe exists. Reading the docs would have shipped a
+ * Tron tab that returned INPUT_INVALID on every single request.
+ *
+ * Consequence for the product, stated plainly: Tron -> elsewhere is a service
+ * we can offer but CANNOT charge for. Tron as a DESTINATION is unaffected,
+ * because the fee is taken on the origin chain — so EVM -> Tron does earn.
+ */
+export const feeSupportedOn = (originChain) => !isTronOrigin(originChain);
+
 /**
  * The fee address for a given ORIGIN chain.
  *
  * Mirrors the family rule in src/lib/payout.js: an address never crosses
- * families. Returning an EVM address for a Tron origin is not a smaller
- * mistake than returning nothing — 0x would reject it, and any path that got
- * past that validation would send our revenue nowhere retrievable.
+ * families. Returns empty for Tron because no fee is collectable there at
+ * all — returning our Tron address would imply an income that cannot exist.
  */
 export function feeRecipientFor(originChain) {
-  const isTron = String(originChain).toLowerCase() === TRON || String(originChain) === '999999999993';
-  if (isTron) {
-    const tron = process.env.CROSSCHAIN_FEE_TRON || process.env.VITE_PAYOUT_TRON ||
-      'TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ';
-    return TRON_ADDRESS.test(tron) ? tron : '';
-  }
+  if (isTronOrigin(originChain)) return '';
   const evm = process.env.CROSSCHAIN_FEE_EVM || process.env.VITE_PAYOUT_EVM ||
     '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
   return EVM_ADDRESS.test(evm) ? evm : '';
@@ -187,8 +209,13 @@ export async function crossChainQuotes(query) {
   });
   if (looksLikeAddress(destinationAddress)) params.set('destinationAddress', destinationAddress);
 
+  /*
+   * Attach the fee ONLY where 0x accepts one. On a Tron origin these fields
+   * are a hard 400, not a silent zero — sending them would break the quote
+   * entirely, so the guard is what makes Tron work at all.
+   */
   const recipient = feeRecipientFor(originChain);
-  const bps = feeBps();
+  const bps = feeSupportedOn(originChain) ? feeBps() : 0;
   if (recipient && bps > 0) {
     params.set('feeRecipient', recipient);
     params.set('feeBps', String(bps));
@@ -210,15 +237,27 @@ export async function crossChainQuotes(query) {
     : Number(f.integratorFee?.amount || 0);
   const feeApplied = bps === 0 ? true : collected > 0;
 
-  if (!feeApplied && quote) {
+  /*
+   * Only a fee we ASKED for and did not get is a problem. Tron earns nothing
+   * by the upstream's own rule, so warning there would train us to ignore the
+   * warning that matters.
+   */
+  if (!feeApplied && quote && bps > 0) {
     // eslint-disable-next-line no-console
-    console.warn(`[crosschain] fee not honoured on ${originChain}->${destinationChain}`);
+    console.warn(`[xchain] fee not honoured on ${originChain}->${destinationChain}`);
   }
 
   return {
     ok: true,
     status: 200,
-    body: { ...r.body, feeBps: bps, feeRecipient: recipient || null, feeApplied }
+    body: {
+      ...r.body,
+      feeBps: bps,
+      feeRecipient: recipient || null,
+      feeApplied,
+      // Explicit so the UI never has to infer "0 bps" from a missing field.
+      feeSupported: feeSupportedOn(originChain)
+    }
   };
 }
 
@@ -266,8 +305,15 @@ export async function crossChainProbe() {
       httpStatus: r.status,
       accessDenied: r.status === 401 || r.status === 403,
       tronRouteFound: Boolean(quote),
+      /*
+       * Measured, not read: 0x refuse fee collection on a Tron ORIGIN and
+       * return 400 if the fields are sent. Reported here so the finding
+       * cannot be lost, and so a future upstream change shows up as this
+       * flipping to true rather than as a silent zero.
+       */
+      tronFeeSupported: feeSupportedOn(TRON),
       feeApplied: r.body?.feeApplied ?? null,
-      feeBps: feeBps(),
+      feeBps: feeSupportedOn(TRON) ? feeBps() : 0,
       feeRecipient: feeRecipientFor(TRON) || null,
       buyAmount: quote?.buyAmount ?? null,
       provider: quote?.steps?.[0]?.provider ?? null,
@@ -284,7 +330,8 @@ export function crossChainStatus() {
     configured: crossChainConfigured(),
     feeBps: feeBps(),
     feeRecipientEvm: feeRecipientFor('1') || null,
-    feeRecipientTron: feeRecipientFor(TRON) || null,
-    tronSupported: true
+    // Tron works as a route but pays us nothing on the origin side.
+    tronRoutable: true,
+    tronFeeSupported: feeSupportedOn(TRON)
   };
 }

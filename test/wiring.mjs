@@ -6707,12 +6707,34 @@ export default function run() {
      */
     t('the fee address is chosen per origin chain, not fixed',
       /export function feeRecipientFor\(/.test(c));
-    t('...and a Tron origin gets the Tron payout address',
-      /TJNNUB2zStAvm1wHci5vf9gBGFzbBKjBJZ/.test(c));
     t('...and an EVM origin gets the EVM one',
       /0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6/.test(c));
-    t('...with both validated against their own address shape',
+    t('...with both address shapes validated',
       /\^T\[1-9A-HJ-NP-Za-km-z\]\{33\}\$/.test(c) && /\^0x\[a-fA-F0-9\]\{40\}\$/.test(c));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * MEASURED: 0x PAY NO FEE ON A TRON ORIGIN, AND 400 IF YOU ASK.
+     * ═══════════════════════════════════════════════════════════════════════
+     * This module was first written expecting a Tron-origin fee, because the
+     * monetisation guide carves out no exception. The live probe returned:
+     *
+     *   "Fee collection is not supported when origin chain is Tron"
+     *
+     * on feeBps, feeRecipient AND feeToken — as a hard 400, so sending them
+     * does not merely fail to earn, it kills the quote. Shipping from the
+     * documentation alone would have produced a Tron tab that returned
+     * INPUT_INVALID on every request.
+     *
+     * The guard is therefore load-bearing, not cosmetic, and is pinned here
+     * so nobody "tidies" it away and silently breaks Tron.
+     */
+    t('no fee is requested on a Tron origin, which would 400 the whole quote',
+      /feeSupportedOn\(originChain\) \? feeBps\(\) : 0/.test(c));
+    t('...and the Tron fee address is empty, not our Tron wallet, since none is payable',
+      /isTronOrigin\(originChain\)\) return '';/.test(c));
+    t('...and the echo check does not cry wolf where a fee is impossible',
+      /bps > 0/.test(c));
 
     /*
      * Bridging into an address of the WRONG family is an irreversible burn.
