@@ -5923,5 +5923,90 @@ export default function run() {
     }
   }
 
+  /* ---- 71. the deployment budget ---------------------------------------- */
+  {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY PRODUCTION STOPPED UPDATING, AND IT WAS NOT A BUILD FAILURE.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Six commits in a row reached `main` with green tests, a clean build and
+     * a valid vercel.json, and production stayed pinned to an older SHA. My
+     * first instinct was another vercel.json schema break — the failure that
+     * silently killed seven deploys before. It was not.
+     *
+     * Counted from the GitHub deployments API instead of guessing:
+     *
+     *     2026-08-04   78 deployments
+     *     2026-08-05  128 deployments      <-- over the Hobby limit
+     *     rolling 24h 111 deployments
+     *
+     * Vercel Hobby allows 100 deployments per rolling 86400 seconds. Past
+     * that it returns `api-deployments-free-per-day` and simply does not
+     * build. Nothing fails; nothing is reported on the commit. Production
+     * just stops moving, which is why it reads as a mystery rather than an
+     * error.
+     *
+     * ─── WHERE THE BUDGET WENT ──────────────────────────────────────────────
+     * ONE push was creating FOUR deployments. Two Vercel projects are
+     * connected to this repository (`fbtcryp-kkxi` and `fbtcryp4`), and each
+     * builds BOTH a Production and a Preview deployment for the same commit:
+     *
+     *     Production - fbtcryp-kkxi
+     *     Preview    - fbtcryp-kkxi
+     *     Production - fbtcryp4
+     *     Preview    - fbtcryp4
+     *
+     * Verified per-SHA: every commit before the cap shows exactly 4, and the
+     * commits after it show 3, 1, 3, 0 as the quota ran out.
+     *
+     * Only `fbtcryp-kkxi` serves fbtswap.ir. So three quarters of every
+     * commit's budget was spent on builds nobody looks at.
+     *
+     * ─── THE FIX, WHICH COSTS NOTHING ───────────────────────────────────────
+     * `git.deploymentEnabled` with a glob turns off automatic PREVIEW builds
+     * for the working branch. Production still deploys, because production
+     * tracks `main` and `main` is not matched by the pattern. That halves the
+     * spend immediately and needs no dashboard access and no paid plan.
+     *
+     * The remaining duplication is the second PROJECT, which cannot be fixed
+     * from this file — it needs someone to disconnect `fbtcryp4` in the
+     * Vercel dashboard. Documented rather than silently left.
+     */
+    const vj = JSON.parse(read('vercel.json'));
+
+    t('vercel.json disables preview builds for the working branch',
+      vj.git?.deploymentEnabled?.['arena/*'] === false);
+
+    /*
+     * PRODUCTION MUST NOT BE CAUGHT BY THE RULE. This is the one way this
+     * change could be catastrophic: a pattern that also matches `main` would
+     * turn off production deploys entirely, and the symptom would be
+     * identical to the bug it is meant to fix — the site silently not
+     * updating. So the branch that actually serves the site is asserted to be
+     * unaffected, both explicitly and via the glob.
+     */
+    const rules = vj.git?.deploymentEnabled ?? {};
+    t('...but never disables main',
+      rules.main !== false && rules['*'] !== false && rules['**'] !== false);
+    t('...and deploymentEnabled is not switched off wholesale',
+      vj.git?.deploymentEnabled !== false);
+
+    /*
+     * `git` must be a KNOWN key. The schema at openapi.vercel.sh declares
+     * `additionalProperties: false`, so an invented key does not warn — it
+     * makes the whole file invalid and the build dies before it starts, which
+     * is exactly how seven deploys were lost to a `"//"` comment. `git` is
+     * documented at vercel.com/docs/project-configuration/git-configuration.
+     * Section 12 already guards the top-level allowlist; this pins the shape.
+     */
+    t('...and the git block holds only deploymentEnabled',
+      Object.keys(vj.git ?? {}).every((k) => k === 'deploymentEnabled'));
+
+    /* The diagnosis has to survive in writing, or the next person spends
+       another hour blaming the CDN. */
+    t('the deployment-budget diagnosis is documented',
+      existsSync('docs/VERCEL-DEPLOY-LIMIT-FA.md'));
+  }
+
   return rows;
 }
