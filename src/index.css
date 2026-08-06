@@ -839,6 +839,25 @@ select option { background: #0a0c12; }
 }
 .coin-row:active { background: rgba(255, 255, 255, 0.06); border-color: var(--line-strong); }
 
+/*
+   A coin row rendered as a <button>.
+
+   A <button> does not stretch like a <div>: it sizes to its content and
+   centres its text, so the same markup that looks right as a div collapses to
+   a narrow, centred pill. The obvious fix is style={{ width: '100%' }} — and
+   that is exactly the inline-width hack `test/wallet-probe.jsx` forbids,
+   because a screen full of them is how the Wallet layout drifted out of the
+   stylesheet's control the first time.
+
+   So the fix lives here, once, as a class.
+*/
+.coin-row-btn {
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+}
+
 .coin-logo {
   width: 34px;
   height: 34px;

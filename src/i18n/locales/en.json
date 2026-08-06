@@ -2527,5 +2527,15 @@
     "open": "Open the vault",
     "verify": "Verify on-chain",
     "venueNote": "Deposits and withdrawals happen on Morpho’s own audited interface, not inside this app, so you never depend on us being online to reach your money."
+  },
+  "hardware": {
+    "title": "Keep your keys where this app cannot reach them",
+    "intro": "Your keys live on this phone. That is fine for everyday amounts and it is how a non-custodial wallet works — but a phone gets lost, stolen, and reads messages from strangers. A hardware wallet keeps the key on a separate device that never connects to the internet, so a compromised phone cannot spend your funds. You still swap here; you just sign with something a thief has to physically hold.",
+    "ledgerBlurb": "Nano, Flex and Stax. The most widely supported devices — works with almost every wallet app.",
+    "trezorBlurb": "Open-source firmware you can read and verify yourself, rather than trust.",
+    "disclosure": "If you buy through this link we receive {{rate}}% of the sale from {{vendor}}. It costs you nothing extra, and we would recommend a hardware wallet with or without it.",
+    "cautionTitle": "Never buy one second-hand, and why that matters more than the brand",
+    "caution": "Buy only from the manufacturer's own shop. The known attack is simple: someone sells a device on a marketplace with a recovery phrase they already generated and wrote into the box, then waits and drains it once you fund it. A genuine device generates its phrase in front of you, on first use, and never arrives with one printed on a card. If a device asks you to enter a phrase that was supplied with it, stop.",
+    "notRequired": "None of this is required to use FBT Swap. Everything here works with the wallet you already have — this is for people holding an amount they would be genuinely sorry to lose."
   }
 }

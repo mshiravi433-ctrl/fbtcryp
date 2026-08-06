@@ -5501,5 +5501,124 @@ export default function run() {
     }
   }
 
+  /* ---- 68. hardware-wallet referral: the one that can actually pay ------ */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY THIS IS THE ONLY AFFILIATE LINK IN THE APP.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Every other candidate settles through the banking system. Impact.com
+     * (Travala's network) will not pay out without a W-8BEN naming a country
+     * of residence, and OFAC FAQ 54 states that an account "with a W-8
+     * showing an address in Iran ... should be considered restricted". The
+     * money never arrives. Bitrefill pays store credit, not money. Koinly and
+     * CoinLedger pay PayPal only.
+     *
+     * Ledger pays "in Bitcoins" per its own affiliate page. Crypto settlement
+     * is the whole reason this one is viable.
+     */
+    t('the hardware referral module exists', existsSync('src/lib/hardware.js'));
+    t('the hardware card exists', existsSync('src/components/HardwareWalletCard.jsx'));
+
+    if (existsSync('src/lib/hardware.js') && existsSync('src/components/HardwareWalletCard.jsx')) {
+      const lib = code(read('src/lib/hardware.js'));
+      const card = code(read('src/components/HardwareWalletCard.jsx'));
+      const wallet = read('src/pages/Wallet.jsx');
+
+      /*
+       * ─── THE UNCONFIGURED STATE MUST BE THE CORRECT STATE ───────────────
+       * This repo has shipped "wired to nothing" three times. The fix here is
+       * that a missing affiliate id yields the PLAIN shop URL, never null and
+       * never a broken link — so the card is truthful and useful from day one
+       * and simply starts earning when one env var is set.
+       */
+      t('an unset affiliate id still yields a working link',
+        /if \(!id\) return vendor\.url;/.test(lib));
+
+      /*
+       * Only https may become an href. A mistyped or hostile env value must
+       * not be able to produce a `javascript:` URL — and everything that is
+       * not a full https URL goes through URLSearchParams, which percent-
+       * encodes it into a query value where it is inert.
+       */
+      t('...and only an https value is used verbatim',
+        /\^https:\\\/\\\//.test(lib) || lib.includes('^https:'));
+      t('...anything else is encoded into a query parameter',
+        /searchParams\.set/.test(lib));
+
+      /*
+       * ─── THE DISCLOSURE IS NOT OPTIONAL, AND IT IS PER VENDOR ───────────
+       * The moment a link earns money the reader is owed that fact before
+       * tapping. Equally, showing "we earn a commission" over a link that
+       * earns nothing is a lie in the other direction — so it must be null
+       * when unconfigured.
+       */
+      t('the disclosure is null when nothing is configured',
+        /hardwareConfigured\(vendor\) \? 'hardware\.disclosure' : null/.test(lib));
+      t('...and the card renders it per vendor, not once for the card',
+        /const disclosure = hardwareDisclosure\(v\)/.test(card));
+      /* Pinned to the interpolation: a disclosure that cannot name the real
+         rate is the vague "we may earn something" this avoids. */
+      t('...naming the real commission rate',
+        /rate: v\.rate/.test(card));
+
+      /*
+       * ─── PLACEMENT ──────────────────────────────────────────────────────
+       * Real tab only. Recommending a $79 device to protect virtual practice
+       * credits would be absurd and would read as a plain advert.
+       */
+      t('the card is wired into the wallet screen', /HardwareWalletCard/.test(wallet));
+      t("...on the real tab, not over practice credits",
+        /\{tab === 'real' && <HardwareWalletCard \/>\}/.test(code(wallet)));
+
+      /* Both env vars documented, or nobody can ever turn this on. */
+      const envx = read('.env.example');
+      t('both affiliate ids are documented',
+        /VITE_AFFILIATE_LEDGER=/.test(envx) && /VITE_AFFILIATE_TREZOR=/.test(envx));
+      /*
+       * These are genuinely public identifiers — they appear in an outbound
+       * URL the user can read in their own address bar — so VITE_ is correct
+       * here. Asserted so a future reader does not "fix" it into a secret.
+       */
+      t('...as public VITE_ identifiers, which is correct for a tracking id',
+        /VITE_AFFILIATE_LEDGER/.test(lib));
+
+      /* Copy in all three written languages, or the card renders raw keys. */
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      const keys = [...card.matchAll(/t\('(hardware\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+      const blurbs = ['hardware.ledgerBlurb', 'hardware.trezorBlurb', 'hardware.disclosure'];
+      const all = [...new Set([...keys, ...blurbs])];
+      const missing = all.filter((k) => !hasKey(enL, k) || !hasKey(faL, k) || !hasKey(arL, k));
+      t(`every hardware.* key is translated in all three (${all.length} checked)` +
+        (missing.length ? ` — missing: ${missing.join(', ')}` : ''), missing.length === 0);
+
+      /*
+       * ─── THE SECOND-HAND WARNING IS THE POINT OF THE CAUTION BOX ────────
+       * The known attack is a marketplace device shipped with a pre-generated
+       * recovery phrase. A caution box that does not say this is decoration.
+       */
+      t('the caution names the pre-generated-phrase attack',
+        /marketplace/i.test(enL.hardware.caution) &&
+        /recovery phrase/i.test(enL.hardware.caution) &&
+        /manufacturer/i.test(enL.hardware.caution));
+      /*
+       * And it must not read as a requirement to use the app. Pinned to the
+       * word "required" rather than a phrase, because the sentence is
+       * "None of this is required..." and matching a fixed phrase would make
+       * this brittle against a harmless rewording.
+       */
+      t('...and says the device is not required to use FBT Swap',
+        /required/i.test(enL.hardware.notRequired) &&
+        /FBT Swap/.test(enL.hardware.notRequired));
+    }
+  }
+
   return rows;
 }

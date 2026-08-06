@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
+import HardwareWalletCard from '../components/HardwareWalletCard';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sheet from '../components/Sheet';
 import { usePriceMap } from '../hooks/useMarket';
@@ -505,6 +506,16 @@ export default function Wallet() {
           </div>
         </motion.section>
       )}
+
+      {/*
+        ─── ON THE REAL TAB ONLY, AND THAT IS THE WHOLE PLACEMENT ARGUMENT ──
+        The practice tab trades virtual credits; recommending a $79 device to
+        protect play money would be absurd and would read as a plain advert.
+        On the real tab the reader has actual funds under a key stored on a
+        phone, which is exactly the situation a hardware wallet answers — and
+        which the security copy on this very screen already warns about.
+      */}
+      {tab === 'real' && <HardwareWalletCard />}
 
       {tab === 'practice' && (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
