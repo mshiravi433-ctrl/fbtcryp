@@ -145,6 +145,33 @@ export function revenueReadiness() {
 
     /* ─── WAITING ON SOMEBODY ELSE ──────────────────────────────────────── */
     line({
+      id: 'velora',
+      /* Quote-only today: it improves the price we show and proves itself
+         before we route money through a fourth signing path. */
+      live: true,
+      ready: true,
+      cost: 0,
+      note: 'Third price source, keyless. Pays 70 bps direct to our wallet when promoted to executable — no registration needed'
+    }),
+    line({
+      id: 'avantis',
+      live: Boolean(env('VITE_AVANTIS_REF_CODE')),
+      ready: true,
+      envVar: 'VITE_AVANTIS_REF_CODE',
+      cost: 0,
+      blockedBy: 'SIGNUP',
+      note: 'Perps on crypto, forex, metals and indices. Permissionless, 5% of referred fees, one wallet signature at avantisfi.com'
+    }),
+    line({
+      id: 'utex',
+      live: Boolean(env('VITE_UTEX_CAMPAIGN_ID')),
+      ready: true,
+      envVar: 'VITE_UTEX_CAMPAIGN_ID',
+      cost: 0,
+      blockedBy: 'SIGNUP',
+      note: 'US stocks settled in USDT — no bank and no W-8BEN, which is why it works where Alpaca and Kraken do not. 40-60% of referred fees at partners.utex.io'
+    }),
+    line({
       id: 'trezor',
       live: Boolean(env('VITE_AFFILIATE_TREZOR')),
       ready: true,

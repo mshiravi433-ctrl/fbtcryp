@@ -7502,5 +7502,52 @@ export default function run() {
       /VELORA_PARTNER = 'fbtswap'/.test(velCode));
   }
 
+  /* ---- 82. UTEX, and the shape of the API audit ------------------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * UTEX was the only broker on the shortlist that survived. Every other
+     * one — Alpaca, Public.com, Kraken — settles through the banking system
+     * and needs a W-8BEN, and OFAC FAQ 54 says an account with a W-8 showing
+     * Iran should be treated as restricted. UTEX settles entirely in USDT and
+     * its own partner guide says access holds "no matter where they live".
+     */
+    const vr = code(read('src/lib/venueReferral.js'));
+    t('UTEX is wired as an earning venue', /utex: \{/.test(vr) && /UTEX_CAMPAIGN/.test(vr));
+    t('...using their campaignId parameter, not an invented one',
+      /param: 'campaignId'/.test(vr));
+    /*
+     * It must be the ONLY earning venue with userBenefit false. GMX and
+     * Avantis both discount the referee's fees; UTEX offers a bonus that a
+     * manager has to activate, which we cannot promise on their behalf.
+     */
+    t('...and does not claim a user benefit we cannot guarantee',
+      /userBenefit: false,\s*param: 'campaignId'/.test(vr));
+    /* The code validator must be shared, or a malformed id earns nothing. */
+    t('...and its id runs through the same validator as the others',
+      /venueId === 'utex' \? UTEX_CAMPAIGN/.test(vr));
+
+    /*
+     * The risk disclosure is not optional. UTEX holds no broker licence and
+     * its "stocks" are USDT margin positions, which is a materially different
+     * product from the tokenised equities this app sells backed 1:1 by real
+     * shares. The two must not blur together.
+     */
+    t('the env file states UTEX holds no broker licence',
+      /holds NO broker licence/.test(read('.env.example')));
+
+    /* Readiness must list every new line, or the report quietly lies. */
+    const rd = read('server/readiness.js');
+    for (const id of ['velora', 'avantis', 'utex']) {
+      t(`readiness reports ${id}`, new RegExp(`id: '${id}'`).test(rd));
+    }
+    t('...and still separates code-readiness from earning',
+      /allRemainingAreCodeComplete/.test(rd));
+  }
+
   return rows;
 }

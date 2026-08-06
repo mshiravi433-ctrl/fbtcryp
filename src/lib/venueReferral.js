@@ -92,6 +92,34 @@ export const GMX_CODE = env('VITE_GMX_REF_CODE');
 export const AVANTIS_CODE = env('VITE_AVANTIS_REF_CODE');
 
 /**
+ * UTEX campaign id. Public by design, like the two above.
+ *
+ * ─── WHY THIS ONE SURVIVED THE AUDIT WHEN THE OTHERS DID NOT ────────────────
+ * Asked to look hard for platforms we had missed. Most of the shortlist failed
+ * for the same two reasons — a mandatory API key, or terms that name Iran. The
+ * full list and the evidence for each is in docs/API-AUDIT-FA.md.
+ *
+ * UTEX clears both bars, and for an unusual reason: it settles ENTIRELY IN
+ * USDT and never touches the banking system. Its own partner guide says the
+ * platform gives "investors and traders worldwide simple and truly free access
+ * to the US market — no matter where they live or what market restrictions
+ * they face". There is no W-8BEN, no bank transfer, and therefore none of the
+ * machinery that blocks every other stock broker on the list.
+ *
+ * Attribution is a plain `?campaignId=` on any UTEX URL, so it needs no API
+ * integration at all — the same shape as the GMX and Avantis codes.
+ *
+ * ⚠️ WHAT THE USER MUST BE TOLD, AND IS: UTEX is registered in Saint Vincent
+ * and the Grenadines and holds NO broker licence. Its "stocks" are margin
+ * positions settled in USDT, not shares — the buyer is not on any shareholder
+ * register and has no investor-compensation scheme behind them. That is a
+ * materially different product from the tokenised equities this app already
+ * sells, which are backed 1:1 by real shares in custody, and the screen must
+ * not let the two blur together.
+ */
+export const UTEX_CAMPAIGN = env('VITE_UTEX_CAMPAIGN_ID');
+
+/**
  * GMX referral codes are on-chain bytes32 and the docs restrict them to
  * letters, digits and underscores, up to 20 characters. They are also
  * CASE-SENSITIVE, which is the trap: `FBTSwap` and `fbtswap` are two different
@@ -127,6 +155,20 @@ export const VENUE_REFERRAL = {
     userBenefit: true,
     param: 'ref'
   },
+  utex: {
+    /* 40-60% of the referred trader's fees, by cumulative referred volume. */
+    earns: true,
+    /*
+     * FALSE, deliberately, and it is the only earning venue here marked so.
+     * GMX and Avantis both discount the referee's fees, so those links are
+     * genuinely good for the user. UTEX gives a signup bonus that must be
+     * activated by an account manager, which is not a reliable benefit we can
+     * promise on their behalf. Claiming one we cannot guarantee is worse than
+     * claiming none.
+     */
+    userBenefit: false,
+    param: 'campaignId'
+  },
   dydx: { earns: false, userBenefit: false, reason: 'VOLUME_REQUIRED' },
   apx: { earns: false, userBenefit: false, reason: 'NO_PROGRAMME' },
   hyperliquid: { earns: false, userBenefit: false, reason: 'DEPOSIT_REQUIRED' }
@@ -155,7 +197,11 @@ export function withReferral(venueId, url) {
    * how a malformed code silently earns nothing, which is exactly what the
    * LI.FI integrator id did before it was caught.
    */
-  const code = venueId === 'gmx' ? GMX_CODE : venueId === 'avantis' ? AVANTIS_CODE : '';
+  const code =
+    venueId === 'gmx' ? GMX_CODE
+      : venueId === 'avantis' ? AVANTIS_CODE
+        : venueId === 'utex' ? UTEX_CAMPAIGN
+          : '';
   if (!isValidGmxCode(code)) return url;
 
   try {
