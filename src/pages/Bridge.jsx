@@ -15,6 +15,8 @@ import {
 } from '../lib/bridge';
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
+import ThorPanel from '../components/ThorPanel';
+import SegIndicator from '../components/SegIndicator';
 import { useSettingsStore } from '../store/useSettingsStore';
 
 /**
@@ -46,6 +48,18 @@ export default function Bridge() {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const wallet = useWallet();
+
+  /*
+   * ─── TWO DIFFERENT OPERATIONS, TWO TABS ─────────────────────────────────
+   * `tokens` is the LI.FI path: ERC-20 between EVM chains, signed by a
+   * connected wallet. `native` is THORChain: real BTC for real ETH, executed
+   * by sending coins with a memo from whatever wallet holds them — no connect
+   * step, and possibly no EVM wallet at all.
+   *
+   * Folding both into one form would mean half the fields vanishing depending
+   * on the pair. Two tabs is honest about them being different acts.
+   */
+  const [mode, setMode] = useState('tokens');
 
   const [fromChain, setFromChain] = useState(56);
   const [toChain, setToChain] = useState(42161);
@@ -229,6 +243,25 @@ export default function Bridge() {
         <h1 className="h1">{t('bridge.title')}</h1>
         <p className="muted">{t('bridge.subtitle')}</p>
       </motion.div>
+
+      <div className="segmented">
+        {['tokens', 'native'].map((k) => (
+          <button
+            key={k}
+            className={mode === k ? 'active' : ''}
+            onClick={() => setMode(k)}
+            style={{ isolation: 'isolate' }}
+          >
+            {mode === k && <SegIndicator id="bridgemode" />}
+            {t(`bridge.mode.${k}`)}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'native' ? (
+        <ThorPanel />
+      ) : (
+        <>
 
       {/* what this is, before anything is tapped */}
       <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
@@ -451,6 +484,10 @@ export default function Bridge() {
         </div>
       </motion.section>
 
+        </>
+      )}
+
+      {/* Shared by both modes: the risk applies either way. */}
       <p className="notice notice-danger">{t('bridge.disclaimer')}</p>
     </PageTransition>
   );

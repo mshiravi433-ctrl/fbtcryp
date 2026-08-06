@@ -6186,5 +6186,137 @@ export default function run() {
     }
   }
 
+  /* ---- 73. THORChain native swaps, and the 80-byte memo wall ------------ */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    t('the THORChain server module exists', existsSync('server/thorchain.js'));
+    t('the native-swap panel exists', existsSync('src/components/ThorPanel.jsx'));
+
+    if (existsSync('server/thorchain.js') && existsSync('src/components/ThorPanel.jsx')) {
+      const thor = code(read('server/thorchain.js'));
+      const appSrc = code(read('server/app.js'));
+      const lib = code(read('src/lib/thorswap.js'));
+      const panel = code(read('src/components/ThorPanel.jsx'));
+      const bridge = code(read('src/pages/Bridge.jsx'));
+
+      /* Full chain: module -> routes -> routes call it -> lib -> panel ->
+         page imports it -> page RENDERS it. */
+      t('...the quote route is mounted', /['"`]\/api\/thor\/quote['"`]/.test(appSrc));
+      t('...the pools route is mounted', /['"`]\/api\/thor\/pools['"`]/.test(appSrc));
+      t('...and the routes call the module',
+        /thorQuote\(/.test(appSrc) && /fetchThorPools/.test(appSrc));
+      t('...the client library calls them', /\/thor\/quote/.test(lib) && /\/thor\/pools/.test(lib));
+      t('...the panel uses the library', /getThorQuote/.test(panel));
+      t('...Bridge imports it', /ThorPanel/.test(read('src/pages/Bridge.jsx')));
+      t('...and renders it behind a tab',
+        /mode === 'native'/.test(bridge) && /<ThorPanel \/>/.test(bridge));
+
+      /*
+       * ═════════════════════════════════════════════════════════════════════
+       * THE 80-BYTE MEMO WALL — the reason this module is shaped as it is.
+       * ═════════════════════════════════════════════════════════════════════
+       * On Bitcoin the memo rides in an OP_RETURN capped at 80 bytes, and our
+       * raw thor1 address is 43 characters. Measured against the live API:
+       *
+       *   BTC.BTC -> ETH.ETH, no affiliate     -> quote OK
+       *   BTC.BTC -> ETH.ETH, + our address    -> {"code":2, "message":
+       *                                            "generated memo too long
+       *                                             for source chain"}
+       *   ETH.ETH -> BTC.BTC, + our address    -> "affiliate": "20608"  ✅
+       *
+       * So the fee is applied PER SOURCE CHAIN. Getting this wrong in either
+       * direction is expensive: include it everywhere and Bitcoin swaps stop
+       * quoting at all; omit it everywhere and every ETH/AVAX/BSC/Cosmos swap
+       * earns nothing for a limit that does not apply to them.
+       */
+      t('the UTXO chains are excluded from the fee',
+        /TIGHT_MEMO_CHAINS = new Set\(\['BTC', 'BCH', 'LTC', 'DOGE'\]\)/.test(thor));
+      t('...and the roomy chains still carry it',
+        /return TIGHT_MEMO_CHAINS\.has\(chainOf\(fromAsset\)\) \? null : AFFILIATE;/.test(thor));
+      /*
+       * A THORName is short enough for every chain, so it must short-circuit
+       * the whole exclusion — that one env var is the entire upgrade path.
+       */
+      t('...and a THORName turns the excluded chains back on',
+        /if \(THORNAME\) return THORNAME;/.test(thor));
+
+      /*
+       * The verified address, character for character. A typo would send
+       * every fee to an address nobody controls, and SILENTLY — THORChain
+       * skips an unparseable affiliate and executes the swap anyway.
+       */
+      t('the verified affiliate address is unchanged',
+        thor.includes('thor12cqv53jqz6tnzmlsg9y207xe83raeem8nywqxt'));
+      /* As a DEFAULT, not only an env var, so a missing variable in a future
+         deploy cannot silently zero the revenue. */
+      t('...used as the default, not only as an env var',
+        /THOR_AFFILIATE \|\|\s*'thor1/.test(thor));
+
+      /*
+       * The fee parameters must NEVER come from the caller. Same rule as the
+       * LI.FI bridge: a query-string affiliate lets anyone redirect our
+       * commission to their own wallet.
+       */
+      t('the affiliate is set server-side, never from the query',
+        /qs\.set\('affiliate', affiliate\)/.test(thor) &&
+        !/req\.query\.affiliate/.test(appSrc));
+
+      /*
+       * If the memo overflows anyway, retry WITHOUT the fee rather than
+       * showing the user an error about our configuration. A working swap
+       * that earns nothing beats a broken one that earns nothing.
+       */
+      t('...and an overflow falls back to a fee-free quote, not an error',
+        /memo too long/i.test(thor) && /qs\.delete\('affiliate'\)/.test(thor));
+
+      /*
+       * ─── WE QUOTE, WE DO NOT SEND ───────────────────────────────────────
+       * We hold no Bitcoin keys. A wrong memo character loses the funds
+       * permanently — not reverted, gone. The panel must show the address and
+       * memo for the user's own wallet and must not pretend to execute.
+       */
+      t('the panel shows the inbound address and memo for the user to send',
+        /inbound_address/.test(panel) && /quote\.memo/.test(panel));
+      t('...and warns that the memo must be exact',
+        /memoWarning/.test(panel));
+
+      /* Halted chains must never reach a dropdown. */
+      t('halted pools are filtered out server-side',
+        /trading_halted === false/.test(thor));
+
+      /*
+       * Amount is validated as an integer STRING. Number() would accept
+       * scientific notation and lose precision above 2^53 — only ~90 million
+       * units on an 8-decimal chain.
+       */
+      t('the amount is validated as integer base units',
+        /\^\\d\{1,20\}\$/.test(thor));
+
+      /* Copy in all three written languages, or the tab renders raw keys. */
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      const keys = [...panel.matchAll(/t\('(thor\.[a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+      const all = [...new Set([...keys, 'bridge.mode.tokens', 'bridge.mode.native',
+        'thor.err.QUOTE_FAILED', 'toast.memoCopied'])];
+      const miss = all.filter((k) => !hasKey(enL, k) || !hasKey(faL, k) || !hasKey(arL, k));
+      t(`every thor.* key is translated in all three (${all.length} checked)` +
+        (miss.length ? ` — missing: ${miss.join(', ')}` : ''), miss.length === 0);
+
+      /*
+       * The copy must be honest about the two things that can cost the user
+       * money: an irreversible destination, and a memo that must be exact.
+       */
+      t('...the destination warning says it cannot be reversed',
+        /reverse/i.test(enL.thor.destinationNote));
+      t('...and the no-fee note explains WHY rather than hiding it',
+        /80 bytes/.test(enL.thor.noFeeNote));
+    }
+  }
+
   return rows;
 }

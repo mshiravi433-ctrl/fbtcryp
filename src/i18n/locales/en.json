@@ -430,7 +430,8 @@
     "orderErr.BAD_STOP": "Enter a stop-loss price",
     "orderErr.BRACKET_INVERTED": "Take-profit must be above the stop-loss, or both would trigger instantly",
     "orderErr.BAD_STEPS": "Pick between 2 and 8 steps",
-    "orderErr.LADDER_FLAT": "The first and last price must differ, otherwise every step is the same order"
+    "orderErr.LADDER_FLAT": "The first and last price must differ, otherwise every step is the same order",
+    "memoCopied": "Memo copied"
   },
   "swap": {
     "title": "Swap",
@@ -2374,7 +2375,11 @@
     "slippageNote": "Slippage tolerance is {{pct}}%, taken from your Settings so it matches the swap screen. Raise it only if quotes keep failing — a bridge takes minutes and cannot be cheaply retried, so a loose tolerance costs more here than it does on a swap.",
     "toAddressLabel": "Send to a different address (optional)",
     "toAddressNote": "Leave this empty and the funds arrive at the same address they left from, which is what you want unless you are bridging to an exchange deposit address. Check it character by character: a bridge cannot be reversed and nobody can recover funds sent to the wrong place.",
-    "badToAddress": "That is not a valid address. Clear the field to send to your own wallet, or paste a full 0x address."
+    "badToAddress": "That is not a valid address. Clear the field to send to your own wallet, or paste a full 0x address.",
+    "mode": {
+      "tokens": "Tokens",
+      "native": "Native (BTC, ETH…)"
+    }
   },
   "autopilot": {
     "title": "Autopilot",
@@ -2548,5 +2553,32 @@
     "why3": "So this is not entertainment. Put it on before you open a position, not instead of reading the chart. Nothing here is advice, and music will not tell you what a market is going to do.",
     "source": "Open the source page",
     "credit": "Every track is Public Domain, CC BY or CC BY-SA — freely reusable, with the artist named on each row as the licence requires. Streamed from the Internet Archive's own servers; we host nothing and change nothing."
+  },
+  "thor": {
+    "whatTitle": "What a native swap is, and how it differs from bridging",
+    "what1": "This swaps REAL Bitcoin for REAL Ethereum. Not wrapped BTC, not a token that represents Bitcoin somewhere else — actual coins settled on their own chains by THORChain, a network with no company behind it and no account to open.",
+    "what2": "It is not the same as the Tokens tab. That one moves ERC-20 tokens between EVM chains and your wallet signs it. Here you send coins yourself, from whatever wallet holds them, to an address the network gives you.",
+    "what3": "We show you the price, the address and the exact memo. We deliberately do not send it for you: we hold no Bitcoin keys and never will, and a swap like this is completed by your own wallet.",
+    "from": "You send",
+    "to": "You receive",
+    "amount": "Amount",
+    "destination": "Your receiving address",
+    "destinationPlaceholder": "The address that should receive the coins",
+    "destinationNote": "Check this address character by character. It is where the coins land, it must be on the receiving chain, and nobody — not us, not THORChain — can reverse a transfer to the wrong place.",
+    "youReceive": "You receive about",
+    "totalFee": "Total cost",
+    "eta": "Estimated time",
+    "minutes": "min",
+    "inboundAddress": "Send to this address",
+    "memo": "With exactly this memo",
+    "sendWarning": "Send only the asset you selected, only to this address, and only before the quote expires. This address changes between quotes — never reuse an old one.",
+    "memoWarning": "The memo is the instruction. Paste it exactly, with no spaces added and nothing missing. A wallet that cannot attach a memo cannot be used for this, and a swap sent without one — or with a broken one — cannot be recovered by anyone.",
+    "noFeeNote": "We earn nothing on this particular swap. Bitcoin-family chains cap the memo at 80 bytes and our fee identifier does not fit, so the fee is left off rather than the swap being refused. You pay less; we simply do not take a cut here.",
+    "err": {
+      "QUOTE_FAILED": "No price available for this pair right now. The pool may be too thin for this amount, or that chain may be paused — THORChain halts chains from time to time and resumes them on its own.",
+      "SAME_ASSET": "Choose two different assets.",
+      "BAD_AMOUNT": "Enter an amount greater than zero.",
+      "MEMO_TOO_LONG": "This pair cannot carry the instruction on the sending chain. Try sending from a different chain."
+    }
   }
 }

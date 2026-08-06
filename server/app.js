@@ -28,6 +28,7 @@ import {
 import { telegramAuth } from './telegramAuth.js';
 import { fetchAudio } from './audio.js';
 import { fetchCalm } from './calm.js';
+import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
@@ -667,6 +668,47 @@ app.get('/api/coin-venue/:id', async (req, res) => {
     const out = await resolveVenue(req.params.id);
     if (out.error) return res.status(400).json(out);
     res.set('cache-control', 'public, max-age=3600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/* ------------------------- THORChain native swaps ------------------------- */
+/*
+ * Real BTC for real ETH — no wrapping, no bridge holding the coins. Our EVM
+ * aggregator cannot do this, so it adds a trade rather than re-routing one we
+ * already earn on.
+ *
+ * The affiliate address is attached SERVER-SIDE and never read from the
+ * query, same rule as the LI.FI bridge: a caller who could set it would point
+ * our commission at their own wallet.
+ */
+app.get('/api/thor/status', (_req, res) => res.json(thorStatus()));
+
+/*
+ * Pools are cached for five minutes and NOT longer, deliberately. This is the
+ * list the UI uses to decide which pairs to offer, and THORChain halts
+ * individual chains regularly — BSC, Solana and Base were all halted while
+ * this was written. A stale list means offering a pair that cannot trade,
+ * which is the dead-button failure this project keeps removing.
+ */
+app.get('/api/thor/pools', (_req, res) =>
+  serve(res, 300_000)(fetchThorPools, 'thor-pools'));
+
+app.get('/api/thor/quote', async (req, res) => {
+  try {
+    const out = await thorQuote({
+      from: req.query.from,
+      to: req.query.to,
+      amount: req.query.amount,
+      destination: req.query.destination,
+      streaming: req.query.streaming === '1'
+    });
+    if (out.error) return res.status(400).json(out);
+    /* Never cached: the response carries an inbound address and an expiry,
+       and their own warning says "Do not cache this response." */
+    res.set('cache-control', 'no-store');
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
