@@ -16,7 +16,7 @@
 | **پل بین‌شبکه‌ای (LI.FI)** | ✅ **کارمزد می‌گیریم — ۰٫۳۰٪** | `https://fbtswap.ir/api/bridge/status` → `{"integrator":"fbtswap","registered":true,"feePercent":0.003}` |
 | **THORChain (شبکه‌های غیر بیت‌کوینی)** | ✅ کارمزد می‌گیریم — ۰٫۷۰٪ | قبلاً تست شد: `"affiliate":"20608"` روی ETH→BTC |
 | **THORChain (BTC/BCH/LTC/DOGE)** | ❌ صفر | دیوارهٔ ۸۰ بایتی memo — نیاز به THORName (~۹ دلار) |
-| **سواپ سولانا (Jupiter)** | ❌ **صفر** | `https://fbtswap.ir/api/solana/status` → `{"configured":false,"feeReady":false,"referralAccount":null}` |
+| **سواپ سولانا (OpenOcean)** | ✅ **کارمزد می‌گیریم — ۰٫۷۰٪** (از ۲۰۲۶/۰۸/۰۶) | `https://fbtswap.ir/api/solana/oo/status` → `{"feeReady":true,"feeBps":70,...}` و تراکنش زنده ۵٬۶۰۰٬۰۰۰ lamport به کیف ما می‌دهد. جزئیات: `docs/STEP-TRON-FA.md` |
 | **GMX** | ❌ صفر | `VITE_GMX_REF_CODE` خالی است |
 | **کیف‌پول سخت‌افزاری (Trezor)** | ❌ صفر | منتظر تأیید آن‌ها |
 
