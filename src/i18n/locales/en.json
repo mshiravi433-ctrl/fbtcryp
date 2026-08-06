@@ -507,7 +507,11 @@
     "failedNothingSent": "Nothing was sent. No tokens left your wallet and no network fee was charged. You can safely try again.",
     "network": "Network",
     "max": "MAX",
-    "custodyTitle": "Who holds your money here, and how to not lose it"
+    "custodyTitle": "Who holds your money here, and how to not lose it",
+    "chainTab": {
+      "evm": "EVM chains",
+      "solana": "Solana"
+    }
   },
   "onboarding": {
     "skip": "Skip",
@@ -963,7 +967,8 @@
     },
     "outlookLocal": "Indicator read",
     "aiMetaLocal": "Generated on this device straight from the indicators (RSI, MACD, Bollinger, moving averages, volatility). No language model is involved — every sentence comes from a number that was actually computed.",
-    "disclaimerTitle": "What these indicators are — and what they cannot tell you"
+    "disclaimerTitle": "What these indicators are — and what they cannot tell you",
+    "projectionTitle": "Weekly and monthly outlook"
   },
   "stocks": {
     "title": "Stocks",
@@ -2183,6 +2188,16 @@
         "name": "Already hold crypto?",
         "buy": "Then skip the fiat step. Swap what you have for what you want, right here.",
         "sell": "Convert to a stablecoin first, then cash out. Often smoother than selling a volatile coin."
+      },
+      "bisq": {
+        "name": "Bisq — peer-to-peer, no account",
+        "buy": "Open-source desktop software. No registration and no identity check: you buy directly from another person and the bitcoin sits in 2-of-2 multisig, so nobody — including Bisq — can take it. Desktop only, which is its one real drawback.",
+        "sell": "Sell directly to another person over Tor, with no account and no verification. The bitcoin stays in multisig escrow until you confirm the money arrived. Desktop only."
+      },
+      "hodlhodl": {
+        "name": "Hodl Hodl — peer-to-peer, works on a phone",
+        "buy": "Non-custodial escrow, no verification required, 100+ currencies, running since 2018. It needs an email address, but unlike Bisq it works in a mobile browser. Bitcoin only.",
+        "sell": "Sell bitcoin to a person of your choosing with multisig escrow protecting both sides. No identity check, and it works on a phone. Bitcoin only."
       }
     },
     "yourAddress": "Coins arrive here",

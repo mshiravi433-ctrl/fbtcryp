@@ -540,9 +540,24 @@ export default function Signals() {
         </motion.section>
       )}
 
-      {/* ---------- projection cone ---------- */}
+      {/*
+        ─── THE WEEKLY / MONTHLY VIEW, FOLDED AWAY ──────────────────────────
+        Requested: «در سیگنال، سیگنال هفتگی و ماهانه را بزار داخل باکس باز
+        شونده با شکل قشنگ‌تر».
+
+        This IS the weekly and monthly signal — the 7D and 30D horizons of
+        the projection. It was an always-open card sitting between the
+        indicators and the buy/sell buttons, and it is the single most
+        speculative thing on the page: a volatility range, not a forecast.
+
+        Folding it is the right default for exactly that reason. Someone who
+        wants a price target opens it deliberately; someone reading the
+        indicators is no longer handed a number that looks like a prediction
+        on the way past.
+      */}
       {projection && !scanning && (
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <InfoBox title={t('signals.projectionTitle')} tone="info" id="signals-projection">
+        <motion.section className="card card-soft" variants={riseIn} initial="hidden" animate="show">
           <div className="row-between" style={{ marginBottom: 10 }}>
             <p className="section-label" style={{ margin: 0 }}>{t('signals.projection')}</p>
             <div className="segmented" style={{ width: 'auto' }}>
@@ -595,6 +610,7 @@ export default function Signals() {
             {t('signals.coneExplain', { p: projection.probability, d: projection.days })}
           </p>
         </motion.section>
+        </InfoBox>
       )}
 
       <AdBanner slot="swap" />

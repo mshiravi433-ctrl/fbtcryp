@@ -115,7 +115,15 @@ export default function run() {
     '/predict', '/invest',      // -> /lab
     '/explore', '/discover',    // -> /explore-hub
     '/help', '/docs',           // -> /learn
-    '/earn', '/leaderboard'     // -> /rewards
+    '/earn', '/leaderboard',    // -> /rewards
+    /*
+     * Solana is a TAB inside /swap now, on the owner's instruction. The route
+     * is deliberately kept alive rather than deleted: links to it are already
+     * shared, and Stocks and Farm hand off to it with ?to=<mint>. A menu entry
+     * is discovery; a route is a contract with everything that already links
+     * to it.
+     */
+    '/solana'                   // -> tab inside /swap
   ]);
 
   const orphans = routes.filter(
@@ -4085,8 +4093,28 @@ export default function run() {
     t('...and a status route', /\/api\/fiat\/status/.test(appSrc));
     t('the client calls the published path', /fiat\/quote/.test(lib));
     t('the panel calls the client lib', /getFiatQuote\s*\(/.test(code(panel)));
-    t('the Buy screen renders the panel', /<FiatPanel/.test(buy));
-    t('...keyed to the buy/sell tab the user chose', /<FiatPanel mode=\{tab\}/.test(buy));
+    /*
+     * ─── THE PANEL IS OFF THE BUY SCREEN, AND THAT IS NOW THE REQUIREMENT ──
+     * ChangeNOW told the owner fiat is suspended until September, so the
+     * panel was pulled. It was NOT visibly broken — /api/fiat/status still
+     * answered {"enabled":true} in production — so it rendered, accepted an
+     * amount, and would only have failed when somebody pressed the button
+     * with real money in hand.
+     *
+     * This check is INVERTED rather than deleted, because the danger now runs
+     * the other way: nothing must quietly put a dead partner back on a money
+     * screen. Everything below still verifies the module, its routes and its
+     * client stay intact, so re-enabling is a one-line revert.
+     */
+    t('the Buy screen does NOT render the suspended fiat panel',
+      !/<FiatPanel/.test(code(buy)));
+    /*
+     * The panel still ACCEPTS a mode and still keys off it — verified on the
+     * component rather than the removed call site, so the wiring is preserved
+     * for the day it goes back on the screen.
+     */
+    t('...though the panel still keys off buy/sell for when it returns',
+      /mode === 'sell'/.test(code(panel)));
 
     /*
      * ─── THE LINE THAT KEEPS THIS FROM BECOMING A RIVAL SWAP ────────────────
@@ -6340,6 +6368,153 @@ export default function run() {
         /reverse/i.test(enL.thor.destinationNote));
       t('...and the no-fee note explains WHY rather than hiding it',
         /80 bytes/.test(enL.thor.noFeeNote));
+    }
+  }
+
+  /* ---- 74. fiat pulled, swap unified, projection folded ----------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const buy = read('src/pages/Buy.jsx');
+    const buyCode = code(buy);
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. THE CHANGENOW PANEL IS OFF THE BUY SCREEN.
+     * ═══════════════════════════════════════════════════════════════════════
+     * The partner told the owner fiat is suspended until September. The panel
+     * was NOT visibly broken — /api/fiat/status still answered
+     * {"enabled":true} in production — so the form rendered, took an amount,
+     * and would only have failed when somebody pressed the button with real
+     * money in hand. That is the worst place in the app to learn a partner is
+     * offline.
+     */
+    t('the fiat panel is off the buy screen', !/FiatPanel/.test(buyCode));
+
+    /*
+     * The server module and its routes STAY. Nothing is thrown away and
+     * re-enabling is a one-line revert; deleting them would turn a two-month
+     * pause into a rewrite.
+     */
+    t('...but the fiat module is kept for when it returns',
+      existsSync('server/fiat.js') && /\/api\/fiat\/quote/.test(read('server/app.js')));
+
+    /*
+     * ─── THE REPLACEMENT LINKS WERE EACH OPENED, NOT COPIED ────────────────
+     * Verified live: Bisq — "No registration required", 2-of-2 multisig, Tor
+     * by default, open source. Hodl Hodl — "Non-custodial", "Anonymous — No
+     * verification required", multisig escrow, 100+ currencies.
+     *
+     * freepd.com taught this lesson last week: a source everyone recommends
+     * can simply be gone.
+     */
+    t('...replaced by desks that need no identity check',
+      /bisq\.network/.test(buyCode) && /hodlhodl\.com/.test(buyCode));
+    /* https only — these open in a Custom Tab where the domain is visible. */
+    t('...over https',
+      !/http:\/\/(bisq|hodlhodl)/.test(buyCode));
+
+    {
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      for (const id of ['bisq', 'hodlhodl']) {
+        t(`the ${id} route is described in en and fa`,
+          hasKey(enL, `buy.route.${id}.name`) && hasKey(enL, `buy.route.${id}.buy`) &&
+          hasKey(faL, `buy.route.${id}.name`) && hasKey(faL, `buy.route.${id}.buy`));
+      }
+      /*
+       * Each entry must state its real limitation. Bisq is desktop-only and
+       * Hodl Hodl is Bitcoin-only; a directory that hides those sends people
+       * to a door they cannot open, which is the dead-button failure with
+       * extra steps.
+       */
+      t('...and each names its own limitation',
+        /[Dd]esktop only/.test(enL.buy.route.bisq.buy) &&
+        /Bitcoin only/.test(enL.buy.route.hodlhodl.buy));
+    }
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. SWAP AND SOLANA SWAP ARE ONE SCREEN.
+     * ═══════════════════════════════════════════════════════════════════════
+     */
+    const swap = code(read('src/pages/Swap.jsx'));
+    const more = code(read('src/components/MoreSheet.jsx'));
+
+    t('Solana is a tab inside the swap screen',
+      /<SolanaSwap embedded \/>/.test(swap) && /chainTab === 'solana'/.test(swap));
+    /*
+     * `embedded` matters: nesting two PageTransitions animates the same
+     * subtree twice and produces a visible double-fade on every tab change.
+     */
+    t('...rendered embedded, so it does not nest a second page transition',
+      /PageTransition embedded=\{embedded\}/.test(code(read('src/pages/SolanaSwap.jsx'))));
+    t('...and removed from the More menu', !/'\/solana'/.test(more));
+    /*
+     * The ROUTE must survive. Links are already shared, and the Stocks and
+     * Farm screens hand off with ?to=<mint>. A menu entry is discovery; a
+     * route is a contract.
+     */
+    t('...while the /solana route still works for existing links',
+      /path="\/solana"/.test(read('src/App.jsx')));
+
+    /* Both tabs need labels or the strip renders raw keys. */
+    {
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      t('...and both chain tabs are labelled everywhere',
+        ['swap.chainTab.evm', 'swap.chainTab.solana']
+          .every((k) => hasKey(enL, k) && hasKey(faL, k) && hasKey(arL, k)));
+    }
+
+    /*
+     * ─── EVERY EVM CHAIN THE APP OFFERS MUST BE SWAPPABLE ──────────────────
+     * Asked directly: «سواپ ببین همه شبکه‌ها را در بر گرفته». A chain in the
+     * picker that the aggregator cannot route is a dead dropdown entry.
+     */
+    {
+      const chains = code(read('src/lib/chains.js'));
+      const agg = code(read('src/lib/aggregator.js'));
+      const ids = [...chains.matchAll(/^\s{2}(\d+):\s*\{/gm)].map((m) => m[1]);
+      const missing = ids.filter((id) => !new RegExp(`\\b${id}:`).test(agg));
+      t(`every configured EVM chain is routable (${ids.length} chains)` +
+        (missing.length ? ` — missing ${missing.join(', ')}` : ''),
+        ids.length >= 7 && missing.length === 0);
+    }
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3. THE WEEKLY / MONTHLY PROJECTION IS FOLDED AWAY.
+     * ═══════════════════════════════════════════════════════════════════════
+     * It is the single most speculative thing on the Signals page — a
+     * volatility range, not a forecast — and it sat always-open between the
+     * indicators and the buy/sell buttons.
+     */
+    const sig = code(read('src/pages/Signals.jsx'));
+    t('the weekly/monthly projection is inside a collapsible box',
+      /InfoBox title=\{t\('signals\.projectionTitle'\)\}/.test(sig));
+    /* Nested card must not draw a second competing surface. */
+    t('...and the nested card does not double up its border',
+      /card card-soft/.test(sig) && /\.card-soft \{/.test(read('src/index.css')));
+    {
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      t('...with a translated title',
+        hasKey(enL, 'signals.projectionTitle') && hasKey(faL, 'signals.projectionTitle'));
+    }
+
+    /* The prettier box: a gradient surface, and light theme handled too. */
+    {
+      const css = read('src/index.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      const box = /\n\.infobox \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
+      t('the collapsible box has a real surface, not a flat wash',
+        /linear-gradient/.test(box) && /box-shadow/.test(box));
+      t('...and light theme gets its own, since white-on-white is invisible',
+        /:root\[data-theme='light'\] \.infobox \{[^}]*linear-gradient/.test(css));
     }
   }
 

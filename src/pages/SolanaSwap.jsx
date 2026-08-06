@@ -76,7 +76,14 @@ const BASE_TOKENS = [
 
 const DEBOUNCE_MS = 450;
 
-export default function SolanaSwap() {
+/**
+ * @param {object}  props
+ * @param {boolean} [props.embedded]  rendered as a TAB inside the Swap screen
+ *        rather than as its own route. When embedded it must not open its own
+ *        PageTransition — two nested transitions animate the same subtree
+ *        twice and produce a visible double-fade on every tab change.
+ */
+export default function SolanaSwap({ embedded = false }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   useHideBalances();
@@ -378,7 +385,7 @@ export default function SolanaSwap() {
     : null;
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       {/* ---------------------------- wallet ---------------------------- */}
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />

@@ -85,10 +85,24 @@ const GROUPS = [
       /* Cross-chain. Sits next to Swap because that is the question it
          answers: "my token is on the wrong network". */
       { to: '/bridge', key: 'nav.bridge', Icon: IconSwap, hue: 'var(--rgb-3)' },
-      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' },
-      // Solana lives on its own screen, not as a tab inside Swap: it uses a
-      // different aggregator, wallet and signing scheme, so nothing is shared.
-      { to: '/solana', key: 'nav.solana', Icon: IconSwap, hue: '#14f195' }
+      { to: '/p2p', key: 'nav.p2p', Icon: IconSwap, hue: 'var(--rgb-6)' }
+      /*
+       * ─── SOLANA IS NOT LISTED HERE ANY MORE ─────────────────────────────
+       * It is a TAB inside /swap now, on the owner's instruction: «سواپ و
+       * سواپ سولانا را داخل یک صفحه در دو تب بزار و از منو سواپ سولانا را
+       * پاک کن».
+       *
+       * The old comment here argued it deserved its own entry because it
+       * uses a different aggregator, wallet and signing scheme. All true,
+       * and all invisible to the user — who is asking one question, "swap
+       * this for that", and was being made to hunt through a menu for half
+       * the answer.
+       *
+       * The /solana ROUTE still exists and still works. Removing it would
+       * break every link already shared, and the Stocks and Farm screens
+       * hand off to it with ?to=<mint>. A menu entry is discovery; a route
+       * is a contract.
+       */
     ]
   },
   {

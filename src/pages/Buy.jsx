@@ -7,7 +7,6 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap, IconQr } from '../components/Icons';
-import FiatPanel from '../components/FiatPanel';
 import SegIndicator from '../components/SegIndicator';
 
 /**
@@ -90,6 +89,66 @@ const ROUTES = [
     to: '/swap',
     color: 'var(--rgb-2)',
     Icon: IconSwap
+  },
+
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * ─── EXTERNAL DESKS, EACH ONE OPENED AND CHECKED ────────────────────────
+   * ═══════════════════════════════════════════════════════════════════════
+   * Asked for: «لینک سایت معتبر بزار تا بعد» — put a link to a real site
+   * here until the partner comes back.
+   *
+   * The bar every candidate had to clear, and most failed:
+   *
+   *   1. NO IDENTITY VERIFICATION TO START. A link to a desk that demands a
+   *      passport our users cannot supply is a dead button dressed as help.
+   *   2. NON-CUSTODIAL OR REAL ESCROW. We are sending someone toward their
+   *      own money; a custodial desk that can freeze it is a liability we
+   *      would be lending our name to.
+   *   3. THE SITE ANSWERED WHEN I OPENED IT. Not "is well reviewed" —
+   *      actually loaded. freepd.com taught this lesson last week: a source
+   *      everyone recommends can simply be gone.
+   *
+   * ─── AND WE EARN NOTHING FROM THESE, ON PURPOSE ─────────────────────────
+   * No referral codes attached. Both run peer-to-peer marketplaces where the
+   * counterparty is another person, and attaching a commission to a
+   * recommendation on THAT page would quietly change what the
+   * recommendation is for. The revenue comes from the swap they do here
+   * afterwards, which is ours at 0.70%.
+   */
+  {
+    id: 'bisq',
+    /*
+     * Verified by opening it: "Buy and sell bitcoin for fiat ... using
+     * Bisq's peer-to-peer network and open-source desktop software. No
+     * registration required." Funds sit in 2-of-2 multisig, every node is a
+     * Tor hidden service, and the code is open.
+     *
+     * Listed FIRST because it is the only one on this screen that is
+     * genuinely decentralised — there is no company that can decide our
+     * users are the wrong nationality.
+     *
+     * Its one real cost is honest and stated in the copy: it is desktop
+     * software, so a phone-only user cannot use it today.
+     */
+    url: 'https://bisq.network/',
+    color: 'var(--rgb-5)',
+    Icon: IconShield
+  },
+  {
+    id: 'hodlhodl',
+    /*
+     * Verified by opening it: "Non-custodial Bitcoin trading solution, we
+     * don't hold your funds", "Anonymous — No verification required",
+     * multisig P2SH escrow, 100+ currencies, eight years running.
+     *
+     * Second because it needs an email address, which Bisq does not — but
+     * it works in a mobile browser, which Bisq does not. Between them they
+     * cover both kinds of user.
+     */
+    url: 'https://hodlhodl.com/',
+    color: 'var(--rgb-3)',
+    Icon: IconShield
   }
 ];
 
@@ -152,14 +211,26 @@ export default function Buy() {
       </div>
 
       {/*
-        ─── BUYING WITH MONEY, WHERE IT BELONGS ────────────────────────────
-        On the buy/sell screen, keyed to the tab the user already chose. The
-        crypto-to-crypto swap deliberately does NOT appear here: that is our
-        own product at 0.70%, and routing it to a partner would hand over a
-        customer we already have. `server/fiat.js` makes a crypto-to-crypto
-        pair impossible to even request.
+        ─── THE CHANGENOW PANEL IS GONE, TEMPORARILY ────────────────────────
+        Removed on the owner's instruction: «گفتند تا سپتامبر تعطیله برش
+        دار» — the partner told him fiat is suspended until September.
+
+        This is the right call and the reason is worth stating, because the
+        panel was NOT visibly broken. `/api/fiat/status` still answered
+        `{"enabled":true}` in production, so the form rendered, accepted an
+        amount, and would only have failed at the moment somebody pressed the
+        button with real money in hand. That is the worst place in the whole
+        app to discover a partner is offline.
+
+        Deleting the panel rather than flipping CHANGENOW_FIAT_ENABLED is
+        deliberate: the env var lives in the Vercel dashboard, so the code
+        would still be one accidental toggle away from re-exposing a dead
+        integration. The server module, its routes and its tests all stay —
+        nothing is thrown away, and re-enabling is a one-line revert.
+
+        What replaces it is a directory of on-ramps that were each opened and
+        checked, not a list copied from an article. See ROUTES.
       */}
-      <FiatPanel mode={tab} />
 
       {/* ------------------------------ intro ------------------------------ */}
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">

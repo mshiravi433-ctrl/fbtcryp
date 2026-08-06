@@ -30,6 +30,8 @@ import {
   needsApproval
 } from '../lib/swap';
 import TokenIcon from '../lib/tokenIcon';
+import SolanaSwap from './SolanaSwap';
+import SegIndicator from '../components/SegIndicator';
 import { fmtQty } from '../lib/format';
 import { NATIVE_GAS_FLOOR, formatUnitsExact } from '../lib/swap';
 import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
@@ -632,6 +634,26 @@ export default function Swap() {
 
   /* --------------------------------- UI ---------------------------------- */
 
+  /*
+   * ─── EVM AND SOLANA, ONE SCREEN ─────────────────────────────────────────
+   * Requested: «سواپ و سواپ سولانا را داخل یک صفحه در دو تب بزار و از منو
+   * سواپ سولانا را پاک کن».
+   *
+   * The old comment in BottomNav argued Solana deserved its own screen
+   * because it uses a different wallet. That was true and still is — but it
+   * is an implementation detail, not a user-facing distinction. From the
+   * user's side both tabs answer the same question: "swap this for that".
+   * Making them hunt through the More menu for half the answer was the
+   * mistake.
+   *
+   * The panels stay as SEPARATE COMPONENTS rather than being merged into one
+   * form. They genuinely differ — different wallet adapters, different
+   * address formats, different aggregators — and folding them together would
+   * produce a form where half the fields change meaning depending on a
+   * dropdown. Two tabs is honest; one confused form is not.
+   */
+  const [chainTab, setChainTab] = useState('evm');
+
   return (
     <PageTransition>
       <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
@@ -651,6 +673,32 @@ export default function Swap() {
         </motion.button>
       </motion.div>
 
+      <div className="segmented">
+        {['evm', 'solana'].map((k) => (
+          <button
+            key={k}
+            className={chainTab === k ? 'active' : ''}
+            onClick={() => {
+              haptic?.('select');
+              setChainTab(k);
+            }}
+            style={{ isolation: 'isolate' }}
+          >
+            {chainTab === k && <SegIndicator id="swapchain" />}
+            {t(`swap.chainTab.${k}`)}
+          </button>
+        ))}
+      </div>
+
+      {/*
+        `embedded` so it does not open a second PageTransition inside this
+        one — nesting them animates the same subtree twice and produces a
+        visible double-fade every time the tab changes.
+      */}
+      {chainTab === 'solana' && <SolanaSwap embedded />}
+
+      {chainTab === 'evm' && (
+      <>
       {/*
         ─── THE POLICY EXPLANATION COLLAPSES; THE PER-TAP WARNINGS DO NOT ────
         Asked for: «همه هشدارها و نظرات را در هر صفحه بزار تو باکس باز شونده
@@ -1325,6 +1373,8 @@ export default function Swap() {
       </Sheet>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
+      </>
+      )}
     </PageTransition>
   );
 }

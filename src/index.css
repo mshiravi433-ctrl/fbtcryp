@@ -387,6 +387,25 @@ body {
 
 .card-tight { padding: 12px; }
 
+/*
+ * A card nested INSIDE another container — an InfoBox body, a sheet.
+ *
+ * Asked for as «شکل بعضی از باکس‌ها قشنگ‌تر شود». The problem was specific
+ * rather than aesthetic: a full `.card` inside a collapsible box drew a
+ * second opaque panel with its own border on top of the first, so the two
+ * edges sat 12px apart and the result read as a box that had accidentally
+ * been rendered twice.
+ *
+ * `.card-soft` keeps the padding and radius but drops the competing surface:
+ * transparent background, no border, no shadow. The parent provides the
+ * container; this only provides the spacing.
+ */
+.card-soft {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
 /* animated conic border — the signature "RGB edge" */
 .card-rgb::before {
   content: '';
@@ -6346,9 +6365,25 @@ body { overflow-x: clip; }
 
 .infobox {
   border: 1px solid var(--line);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.028);
+  border-radius: 14px;
+  /*
+   * A faint gradient rather than a flat wash. Asked for as «شکل بعضی از
+   * باکس‌ها قشنگ‌تر شود», and the reason a gradient reads as "nicer" here is
+   * concrete: a flat 2.8% white on a dark panel is almost the same value as
+   * the panel itself, so the box had no top edge and looked like a stray
+   * border rather than a surface. Two stops give it a lit top and a settled
+   * bottom, which is what makes it read as an object.
+   */
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055),
+    rgba(255, 255, 255, 0.018)
+  );
   overflow: hidden;
+  /* Lifts it off the page just enough to separate from an adjacent card
+     without competing with the real elevated surfaces. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   /*
    * ─── THE BOX OWNS ITS OWN TOP MARGIN ──────────────────────────────────
@@ -6430,7 +6465,12 @@ body { overflow-x: clip; }
 /* The left border only appears once open. Collapsed, the tone dot is enough;
    a permanent coloured edge on eight stacked boxes is the visual noise this
    component exists to remove. */
-.infobox.is-open { border-color: var(--line-strong); }
+/* Open: slightly stronger edge and lift, so the expanded box reads as the
+   thing currently in focus rather than one of several identical panels. */
+.infobox.is-open {
+  border-color: var(--line-strong);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
+}
 .infobox-warn.is-open   { border-inline-start: 2px solid rgba(255, 179, 0, 0.5); }
 .infobox-danger.is-open { border-inline-start: 2px solid rgba(255, 59, 107, 0.5); }
 .infobox-info.is-open   { border-inline-start: 2px solid rgba(0, 229, 255, 0.4); }
@@ -6456,8 +6496,21 @@ body { overflow-x: clip; }
 }
 .infobox-body li::marker { color: var(--text-3); }
 
+/*
+ * Light theme needs the gradient inverted in intent: on white, a WHITE
+ * gradient is invisible, so the tint has to come from the ink colour
+ * instead. Same two-stop idea, opposite direction.
+ */
 :root[data-theme='light'] .infobox {
-  background: rgba(15, 23, 42, 0.022);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.012),
+    rgba(15, 23, 42, 0.038)
+  );
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme='light'] .infobox.is-open {
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.1);
 }
 :root[data-theme='light'] .infobox-body { font-weight: 450; }
 
