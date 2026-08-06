@@ -164,8 +164,15 @@ export default function P2P() {
             thing we chose not to build (Android removed the API in 14) and
             why proximity must never be able to move money on its own.
           */}
+          {/*
+            Folded into a collapsible box, as asked. It is a secondary route —
+            most P2P here is still the desks above — and an always-open panel
+            with a QR code in it pushed the primary content off the screen.
+          */}
           <motion.div variants={riseIn} initial="hidden" animate="show">
-            <TapToPay onAddress={() => setSendOpen(true)} />
+            <InfoBox title={t('tap.title')} tone="info" id="tap-to-pay">
+              <TapToPay onAddress={() => setSendOpen(true)} />
+            </InfoBox>
           </motion.div>
 
           <AdBanner slot="swap" />

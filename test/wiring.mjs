@@ -7119,5 +7119,174 @@ export default function run() {
       /VITE_AFFILIATE_TREZOR/.test(code(read('src/lib/hardware.js'))));
   }
 
+  /* ---- 79. thor destination, laptop nav, send percentages, arrival ------ */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. THE BRIDGE ERROR WAS A LIE, TWICE OVER.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Reported: pick two assets, start typing a destination, and every token
+     * shows "no price for this pair — the pool may be shallow".
+     *
+     * Reproduced against production, which returned the real reasons:
+     *   destination=bc1q2nf -> "bad destination address: unable to parse"
+     *   0x… address for a BTC payout -> "not the same chain as the target asset"
+     * Neither is about pool depth. The panel sent the address on EVERY
+     * keystroke, so the error was permanent while typing.
+     */
+    const addr = existsSync('src/lib/thorAddress.js') ? read('src/lib/thorAddress.js') : '';
+    t('src/lib/thorAddress.js exists', Boolean(addr));
+    const addrCode = code(addr);
+    /* The four states must stay distinct: only one of them is an error. */
+    for (const st of ['incomplete', 'wrong-chain', 'empty', 'ok']) {
+      t(`destination state '${st}' is distinguished`, new RegExp(`'${st}'`).test(addrCode));
+    }
+    t('...and upstream wording is mapped to real causes, not one catch-all',
+      /DEST_WRONG_CHAIN/.test(addrCode) && /CHAIN_HALTED/.test(addrCode) &&
+      /AMOUNT_TOO_SMALL/.test(addrCode));
+
+    const thorPanel = code(read('src/components/ThorPanel.jsx'));
+    t('the panel no longer sends a half-typed address',
+      /shouldSendDestination\(destination, to\)/.test(thorPanel));
+    t('...and a complete wrong-chain address is caught before any request',
+      /destState === 'wrong-chain'/.test(thorPanel));
+    t('...and errors are classified from the upstream text',
+      /classifyQuoteError\(e\.detail\)/.test(thorPanel));
+    /* The detail must survive the fetch wrapper or classification has nothing
+       to read — this is the link that made all errors look identical. */
+    t('...and the client keeps that upstream detail instead of discarding it',
+      /err\.detail = body\?\.detail/.test(code(read('src/lib/thorswap.js'))));
+    t('...and the expected address format is shown before the mistake',
+      /addressHintFor\(to\)/.test(thorPanel));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. HALF THE BOTTOM MENU ON A LAPTOP.
+     * ═══════════════════════════════════════════════════════════════════════
+     * The base rule centres the nav with `left:50%` + `translateX(-50%)`. The
+     * wide-screen rules switched to margin-based centring but the TRANSFORM
+     * survived, pushing the bar half its own width off centre.
+     *
+     * Worse, `nav-float` baked `translateX(-50%)` into every keyframe, and an
+     * animation beats a plain declaration — so `transform: none` in the media
+     * query was overwritten every frame. Centring now lives in `translate`,
+     * an independent property the animation does not touch.
+     */
+    const css = read('src/index.css');
+    const navRule = /\.bottom-nav \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
+    t('the nav centres with `translate`, not `transform`',
+      /translate: -50% 0/.test(navRule) && !/transform: translateX\(-50%\)/.test(navRule));
+    {
+      const kf = /@keyframes nav-float \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
+      t('...and the float animation no longer re-centres it every frame',
+        Boolean(kf) && !/translateX/.test(kf));
+    }
+    t('...so wide screens can clear it (both breakpoints)',
+      (css.match(/translate: none;/g) ?? []).length >= 2);
+    /*
+     * A laptop is WIDE but SHORT. The only compact rule was
+     * `max-height: 480px and orientation: landscape`, written for a phone on
+     * its side, which a 768px-tall laptop never matches — so it got full
+     * phone spacing on a screen that cannot afford it.
+     */
+    t('short viewports get a compact nav, which laptops previously missed',
+      /@media \(max-height: 720px\) and \(min-width: 700px\)/.test(css));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3. AMOUNT, ASSET, AND THE RECEIVER'S CONFIRMATION.
+     * ═══════════════════════════════════════════════════════════════════════
+     */
+    const send = code(read('src/components/SendSheet.jsx'));
+    t('the send sheet lets the user choose WHICH asset',
+      /setTokenSym/.test(send) && /send\.asset/.test(send));
+    t('...and offers 25/50/75/100 as well as a typed amount',
+      /\[25, 50, 75, 100\]/.test(send));
+    /*
+     * 100% must route through setMax(), which reserves gas on a native coin.
+     * A plain x1 would build a transfer of the entire balance, which cannot
+     * be mined — a button that always fails.
+     */
+    t('...and 100% reserves gas instead of sending the literal whole balance',
+      /if \(pct >= 100\) return setMax\(\)/.test(send));
+    t('...and changing asset clears a figure typed for the previous one',
+      /setTokenSym\(e\.target\.value\);[\s\S]{0,80}setAmount\(''\)/.test(send));
+
+    const watch = existsSync('src/lib/incomingWatch.js') ? read('src/lib/incomingWatch.js') : '';
+    t('src/lib/incomingWatch.js exists', Boolean(watch));
+    const watchCode = code(watch);
+    /* The first read is the reference point. Treating it as an arrival would
+       fire immediately for anyone who already holds the token. */
+    t('the first balance read is a baseline, never an arrival',
+      /if \(baseline == null\)/.test(watchCode));
+    t('...and a failed read is ignored rather than reported as zero',
+      /if \(now == null\) return/.test(watchCode));
+    t('...and a spend elsewhere re-baselines instead of under-reporting later',
+      /now < baseline/.test(watchCode));
+    t('...and it stops, so it cannot poll forever in the background',
+      /return \(\) => \{[\s\S]{0,120}clearInterval/.test(watchCode));
+
+    const pop = existsSync('src/components/ArrivalPopup.jsx') ? read('src/components/ArrivalPopup.jsx') : '';
+    t('the arrival popup exists', Boolean(pop));
+    t('...and TapToPay mounts it', /<ArrivalPopup/.test(code(read('src/components/TapToPay.jsx'))));
+    /*
+     * Centred by FLEXBOX. Motion animates `scale` and writes its own
+     * transform, so a translate-based centring would be erased and the card
+     * would drop to a corner — the bug already shipped twice here.
+     */
+    {
+      const bd = /\.arrival-backdrop \{[\s\S]*?\n\}/.exec(css)?.[0] ?? '';
+      t('...centred with flexbox, not a transform Motion would overwrite',
+        /align-items: center/.test(bd) && /justify-content: center/.test(bd) &&
+        !/translate\(-50%/.test(bd));
+    }
+    t('...and is themed with variables so light mode is not broken',
+      /var\(--bg-panel-solid\)/.test(read('src/index.css')) &&
+      /data-theme='light'\] \.arrival-tick/.test(css));
+    t('the tap box is collapsible, as asked',
+      /<InfoBox title=\{t\('tap\.title'\)\}/.test(code(read('src/pages/P2P.jsx'))));
+    t('...and states plainly whether NFC works on this device',
+      /tap\.nfcYes/.test(code(read('src/components/TapToPay.jsx'))));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 4. REVENUE: STAKING AND A DEAD SETTING.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Farm reads yields from DefiLlama and links OUT — we do the work and
+     * somebody else takes the transaction. Buying stETH IS staking, so the
+     * same outcome can go through our own swap at the normal fee. Both were
+     * quoted live and echoed our fee receiver before being listed.
+     */
+    const chains = read('src/lib/chains.js');
+    t('liquid staking tokens are listed with verified addresses',
+      /0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84/.test(chains) &&
+      /0xae78736Cd615f374D3085123A210448E74Fc6393/.test(chains));
+    t('...and are flagged so Farm can route them in-app', /stake: 'eth'/.test(chains));
+    t('Farm offers an in-app staking route instead of only linking away',
+      /farm\.ethStakingTitle/.test(code(read('src/pages/Farm.jsx'))));
+    /* Addresses must come from the token table, never retyped. */
+    t('...and reads the token list rather than duplicating addresses',
+      /TOKENS\[1\] \?\? \[\]\)\.filter\(\(tk\) => tk\.stake === 'eth'\)/.test(read('src/pages/Farm.jsx')));
+    t('jupSOL is offered, the largest LST we were missing',
+      /jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v/.test(read('src/lib/solanaAssets.js')));
+
+    /*
+     * The Solana RPC setting was stored, redrawn in the UI from what was
+     * stored, and read by nothing — the broadcast path had the public
+     * endpoint hard-coded. Same defect the EVM RPC, expertMode and
+     * autoLockMinutes each had before they were fixed.
+     */
+    const swal = code(read('src/lib/solanaWallet.js'));
+    t('the Solana RPC setting is actually used, not just stored',
+      /st\.solanaRpc/.test(swal) && /solanaCluster === 'devnet'/.test(swal));
+    t('...over https only, matching the EVM rule',
+      /\^https:\\\/\\\//.test(swal));
+  }
+
   return rows;
 }

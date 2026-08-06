@@ -62,7 +62,21 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
    * the sheet has to say so rather than crash.
    */
   const chainTokens = TOKENS[wallet.chainId] ?? [];
-  const token = initialToken ?? chainTokens[0] ?? null;
+  /*
+   * WHICH token, chosen by the user.
+   *
+   * This used to be fixed to `initialToken ?? chainTokens[0]`, so a transfer
+   * opened from the tap-to-pay flow could only ever send the chain's first
+   * token. Reported: «چه نوعی این مهمه» — which asset is being moved matters,
+   * and the screen never asked.
+   *
+   * `initialToken` is still honoured as the STARTING selection so an explicit
+   * hand-off (from a coin page, say) is respected, but it no longer locks the
+   * choice.
+   */
+  const [tokenSym, setTokenSym] = useState(null);
+  const token =
+    chainTokens.find((tk) => tk.symbol === tokenSym) ?? initialToken ?? chainTokens[0] ?? null;
 
   // Reset every time the sheet opens: a stale address from a previous send is
   // the kind of thing that quietly sends money to the wrong person.
@@ -70,6 +84,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
     if (!open) return;
     setTo('');
     setAmount('');
+    setTokenSym(null);
     setStage('form');
     setError(null);
     setHash(null);
@@ -108,6 +123,34 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
     const reserve = NATIVE_GAS_FLOOR[wallet.chainId] ?? 0.002;
     const spendable = Number(balanceText) - reserve;
     setAmount(spendable > 0 ? String(spendable) : '0');
+  };
+
+  /**
+   * Send a PERCENTAGE of the balance.
+   *
+   * Requested: «درصد مقدار ۲۵ درصد و ۵۰ درصد ۷۵ درصد و ۱۰۰ درصد را انتخاب کند
+   * و یا هر مقداری که میخاد».
+   *
+   * 100% is routed through `setMax()` rather than multiplying by 1, because
+   * for a NATIVE coin the whole balance is not spendable — the gas has to
+   * come out of the same balance, and a transfer of literally everything is
+   * unmineable. That reserve logic already exists in one place and must not
+   * be duplicated here where it would drift.
+   *
+   * The lower percentages need no reserve: 75% of a balance always leaves
+   * more than the gas floor behind.
+   */
+  const setPercent = (pct) => {
+    if (!balanceText || !token) return;
+    if (pct >= 100) return setMax();
+    const v = (Number(balanceText) * pct) / 100;
+    if (!Number.isFinite(v) || v <= 0) return;
+    /*
+     * Trim to the token's own precision. Sending more decimal places than the
+     * token has causes the transfer to be rejected when the value is parsed
+     * back into base units, and USDT has 6 while ETH has 18.
+     */
+    setAmount(String(Number(v.toFixed(Math.min(token.decimals ?? 18, 8)))));
   };
 
   const addressLooksValid = /^0x[a-fA-F0-9]{40}$/.test(to.trim());
@@ -235,12 +278,39 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
               <p className="notice notice-danger" style={{ marginTop: 7 }}>{t('send.err.INVALID_ADDRESS')}</p>
             )}
 
+            {/*
+              WHICH ASSET. Previously fixed to the chain's first token, so a
+              transfer could only ever move one thing and the screen never
+              said which. Only rendered when there is a real choice.
+            */}
+            {chainTokens.length > 1 && (
+              <>
+                <div className="faint" style={{ marginTop: 14 }}>{t('send.asset')}</div>
+                <select
+                  value={token.symbol}
+                  onChange={(e) => {
+                    setTokenSym(e.target.value);
+                    /* A figure typed for one asset is meaningless for another
+                       and would silently become an over-send. */
+                    setAmount('');
+                  }}
+                  style={{ width: '100%', marginTop: 6 }}
+                >
+                  {chainTokens.map((tk) => (
+                    <option key={tk.symbol} value={tk.symbol}>
+                      {tk.symbol} — {tk.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+
             <div className="row-between" style={{ margin: '14px 0 6px' }}>
               <span className="faint">{t('send.amount')}</span>
               {balanceText && (
-                <button className="btn btn-ghost btn-sm" onClick={setMax}>
-                  {t('send.max')} · {Number(balanceText).toFixed(6)} {token.symbol}
-                </button>
+                <span className="faint mono" style={{ fontSize: 11 }}>
+                  {Number(balanceText).toFixed(6)} {token.symbol}
+                </span>
               )}
             </div>
 
@@ -252,6 +322,30 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
               placeholder="0.0"
               style={{ width: '100%' }}
             />
+
+            {/*
+              QUARTER STEPS PLUS MAX.
+
+              Typing an amount by hand is the slow, error-prone part of a
+              transfer standing in front of someone. 100% deliberately calls
+              setMax(), which reserves gas on a native coin — a literal
+              whole-balance transfer cannot be mined, so a plain ×1 here would
+              produce a button that always fails.
+            */}
+            {balanceText && Number(balanceText) > 0 && (
+              <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                {[25, 50, 75, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    className="btn btn-ghost btn-sm"
+                    style={{ flex: 1 }}
+                    onClick={() => setPercent(pct)}
+                  >
+                    {pct === 100 ? t('send.max') : `${pct}%`}
+                  </button>
+                ))}
+              </div>
+            )}
             {overBalance && (
               <p className="notice notice-danger" style={{ marginTop: 7 }}>{t('send.err.INSUFFICIENT')}</p>
             )}

@@ -27,7 +27,20 @@ async function getJson(path, { timeout = 20000 } = {}) {
     if (!res.ok) {
       /* Surface the server's own error CODE rather than an HTTP number, so
          the UI can translate it instead of showing "400" to a user. */
-      throw new Error(body?.error || `HTTP ${res.status}`);
+      const err = new Error(body?.error || `HTTP ${res.status}`);
+      /*
+       * KEEP THE UPSTREAM TEXT. It was being thrown away, and that is what
+       * made every failure look identical: a half-typed address, an
+       * ethereum address entered for a bitcoin payout, and a genuinely
+       * halted chain all arrived as the single code QUOTE_FAILED, so the
+       * screen blamed pool depth for all three. Only one of them is ever
+       * about pool depth, and none of them is fixed by changing the amount.
+       *
+       * `detail` carries THORChain's own words so classifyQuoteError() can
+       * turn them into an accurate message.
+       */
+      err.detail = body?.detail ?? null;
+      throw err;
     }
     return body;
   } finally {

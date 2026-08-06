@@ -11,6 +11,12 @@ import {
   getThorQuote,
   toThorUnits
 } from '../lib/thorswap';
+import {
+  addressHintFor,
+  checkDestination,
+  classifyQuoteError,
+  shouldSendDestination
+} from '../lib/thorAddress';
 import { copyText } from '../lib/share';
 import { useAppStore } from '../store/useAppStore';
 
@@ -97,12 +103,45 @@ export default function ThorPanel() {
       return undefined;
     }
 
+    /*
+     * ─── A HALF-TYPED ADDRESS MUST NOT BE SENT ────────────────────────────
+     * Reported: entering an address made EVERY pair show "no price for this
+     * pair - the pool may be shallow". That message was false. The panel sent
+     * `destination` on every keystroke, and THORChain rejects the whole quote
+     * for an unparseable address:
+     *
+     *   destination=bc1q2nf -> "bad destination address: unable to parse
+     *                           address: THORName doesn't exist: bc1q2nf"
+     *
+     * So the user saw a red error for the whole time they were typing.
+     *
+     * Quoting WITHOUT a destination works - production returns a full quote -
+     * so while the address is incomplete we omit it and keep showing a live
+     * price. It is added once it is actually an address, which is also when
+     * the memo it affects becomes real.
+     */
+    const destState = checkDestination(destination, to);
+    const dest = shouldSendDestination(destination, to) ? destination.trim() : undefined;
+
+    /*
+     * A COMPLETE address of the WRONG CHAIN is the one state here that is
+     * genuinely an error. It will never resolve by typing more, and sending
+     * bitcoin to an ethereum address is the most expensive mistake this
+     * screen can produce - so it is caught before any request.
+     */
+    if (destState === 'wrong-chain') {
+      setQuote(null);
+      setQuoteErr('DEST_WRONG_CHAIN');
+      setQuoting(false);
+      return undefined;
+    }
+
     const mine = ++seq.current;
     setQuoting(true);
     setQuoteErr(null);
 
     const id = setTimeout(() => {
-      getThorQuote({ from, to, amount: units, destination: destination.trim() || undefined })
+      getThorQuote({ from, to, amount: units, destination: dest })
         .then((q) => {
           if (seq.current !== mine) return;
           setQuote(q);
@@ -110,7 +149,14 @@ export default function ThorPanel() {
         .catch((e) => {
           if (seq.current !== mine) return;
           setQuote(null);
-          setQuoteErr(String(e.message || 'QUOTE_FAILED'));
+          /*
+           * Classify from THORChain's OWN words. Previously every failure
+           * became the single code QUOTE_FAILED, so a wrong-chain address, a
+           * dust-sized amount and a halted chain all printed the same
+           * sentence about pool depth - and changing the amount, the action
+           * that sentence invites, fixes none of them.
+           */
+          setQuoteErr(classifyQuoteError(e.detail) || String(e.message || 'QUOTE_FAILED'));
         })
         .finally(() => {
           if (seq.current === mine) setQuoting(false);
@@ -201,6 +247,16 @@ export default function ThorPanel() {
               real money" case the InfoBox rule deliberately excludes: the
               destination is where the coins land, and there is no undo.
             */}
+            {/*
+              The shape the receiving chain expects, shown BEFORE the mistake.
+              Someone pasting an address has no way to know BTC wants `bc1…`
+              and that this pair will reject `0x…` until it has already failed.
+            */}
+            {addressHintFor(to) && (
+              <div className="faint" style={{ marginTop: 5, fontSize: 11 }}>
+                {t('thor.expectsFormat', { format: addressHintFor(to) })}
+              </div>
+            )}
             <p className="notice" style={{ marginTop: 10 }}>{t('thor.destinationNote')}</p>
           </div>
 

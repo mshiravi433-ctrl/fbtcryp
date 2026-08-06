@@ -931,7 +931,12 @@ select option { background: #0a0c12; }
   position: fixed;
   bottom: calc(14px + env(safe-area-inset-bottom));
   left: 50%;
-  transform: translateX(-50%);
+  /* `translate`, not `transform`. The float animation owns `transform`, and a
+     keyframe replaces that property outright — so centring parked there had
+     to be repeated inside every keyframe, which in turn made it impossible to
+     override on wide screens. `translate` is an independent property, so the
+     two compose and each can be changed alone. */
+  translate: -50% 0;
   width: calc(100% - 28px);
   max-width: 440px;
   display: flex;
@@ -1201,9 +1206,26 @@ select option { background: #0a0c12; }
 }
 
 /* gentle vertical drift so the bar reads as floating, not glued */
+/* ---------------------------------------------------------------------------
+   nav-float — the gentle bob, WITHOUT re-centring the bar.
+
+   These keyframes used to bake `translateX(-50%)` into every step, because on
+   a phone the bar is centred by `left: 50%` + that transform, and a keyframe
+   replacing `transform` wholesale would otherwise cancel the centring.
+
+   That made the desktop fix impossible: an ANIMATION beats a plain
+   declaration in the cascade, so `transform: none` in the wide-screen media
+   query was overwritten on every single frame, and the bar stayed shifted
+   half its own width off centre — the reported «منو زیری در لپتاپ نصفش میاد».
+
+   The horizontal centring now lives entirely in `translate` (a separate,
+   independent property) and the animation only touches `transform`. The two
+   compose instead of fighting, so the wide-screen rule can switch centring
+   method by clearing `translate` and the bob keeps working untouched on both.
+   --------------------------------------------------------------------------- */
 @keyframes nav-float {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-3px); }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
 }
 
 /* Wavy animated top edge — an SVG mask would be static, so we animate a
@@ -5118,9 +5140,18 @@ input, select, textarea { font-size: 16px !important; }
   }
 
   /* The nav is position:fixed, so it spans the whole viewport unless it is
-     given the same width and centring as the shell. */
+     given the same width and centring as the shell.
+
+     `left/right/transform` are reset for the reason spelled out in the
+     600-899px block above: the base rule centres with translateX(-50%), and
+     leaving that transform in place while switching to margin-based centring
+     pushes the bar half its own width off screen. That is the reported
+     «نصفش میاد». */
   .bottom-nav {
     max-width: 680px;
+    left: auto;
+    right: auto;
+    translate: none;
     inset-inline: 0;
     margin-inline: auto;
     border-radius: 18px 18px 0 0;
@@ -5277,6 +5308,24 @@ input, select, textarea { font-size: 16px !important; }
   /* The nav is position:fixed, so without inset-inline + margin it spans the
      whole viewport and floats detached from the column above it. */
   .bottom-nav {
+    /* ─── left AND transform MUST BE CANCELLED, NOT JUST OVERRIDDEN ────────
+       Reported: «منو زیری در لپتاپ نصفش میاد» — on a laptop only half the
+       bottom menu is visible.
+
+       The base rule centres the bar with `left: 50%` + `translateX(-50%)`.
+       Setting `inset-inline: 0` here does NOT undo that: `inset-inline` is
+       shorthand for left/right, so it does reset `left`, but the -50%
+       TRANSFORM survives and shifts the whole bar half its own width off
+       centre. With `margin-inline: auto` also applied the two mechanisms
+       fight, and the bar lands half off the edge.
+
+       This is the identical class of bug already documented for `.more-layer`
+       and `.ap` in this file: a transform-based centring silently broken by a
+       second centring mechanism. Cancelling the transform explicitly is the
+       fix that works in every combination. */
+    left: auto;
+    right: auto;
+    translate: none;
     inset-inline: 0;
     border-radius: 20px 20px 0 0;
   }
@@ -5291,6 +5340,53 @@ input, select, textarea { font-size: 16px !important; }
 /* ---- Tablet landscape and small laptops ---------------------------------- */
 @media (min-width: 900px) and (max-width: 1399px) {
   .nft-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---------------------------------------------------------------------------
+   SHORT VIEWPORTS — THE LAPTOP CASE
+   ---------------------------------------------------------------------------
+   Reported: «وقتی روی دسکتاپ میگذاری یا تبلت به جای تلفن سایزش به خصوص لپ‌تاپ
+   بهم میخوره».
+
+   The existing compact rule is `@media (max-height: 480px) and (orientation:
+   landscape)`, which is written for a phone turned sideways. A 1366x768
+   laptop leaves roughly 610px of usable viewport after browser chrome — far
+   too tall to match that rule, yet much shorter than the ~850px the layout
+   assumes. So a laptop got the full-height phone spacing on a screen that
+   cannot afford it: an 88px nav plus its bottom offset ate a fifth of the
+   window, and the content underneath was permanently cramped.
+
+   Height, not width, is the axis that matters here — an ultrawide monitor is
+   fine and a short one is not, regardless of how wide either is. So this keys
+   off height alone and applies wherever the viewport is short, including a
+   phone in landscape, which previously fell between the two rules whenever it
+   was between 480 and 720 px tall.
+   --------------------------------------------------------------------------- */
+@media (max-height: 720px) and (min-width: 700px) {
+  :root { --nav-h: 68px; }
+
+  .bottom-nav {
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    padding: 6px 7px;
+    --notch-r: 26px;
+  }
+
+  .nav-notch-gap { width: 38px; }
+
+  .nav-centre {
+    width: 46px;
+    height: 46px;
+    /* Recomputed, not scaled by eye: the bar sits 8px up, its own height is
+       ~58px, so the top edge is at 66px. Half the 46px circle above that
+       edge puts the centre at 66px and the bottom at 66 - 23 = 43px. */
+    bottom: calc(43px + env(safe-area-inset-bottom));
+  }
+
+  /* Give the page back the vertical room the nav no longer needs. */
+  .app-shell { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px); }
+
+  /* The top bar is sticky and competes for the same scarce height. */
+  .top-bar { padding-block: 6px; }
 }
 
 /* ---- Hover is a capability, not a screen size ----------------------------
@@ -6903,4 +6999,89 @@ body { overflow-x: clip; }
 */
 @media (prefers-reduced-motion: reduce) {
   .radio-pill-eq.is-live i { animation: none; height: 15px; }
+}
+
+/* ==========================================================================
+   ARRIVAL POPUP — "your money arrived", centred
+   --------------------------------------------------------------------------
+   Requested to be centred and correctly themed. Both are load-bearing:
+
+   CENTRING uses flexbox on the backdrop, NOT `top:50%; translate(-50%,-50%)`
+   on the card. Framer Motion animates `scale` on that card and writes its own
+   `transform`, which would erase a translate-based centring and drop the card
+   to the bottom-right quadrant. That exact bug has already shipped twice here
+   (`.more-layer`, then `.ap`), so the pattern is avoided rather than
+   re-litigated.
+
+   THEME is entirely variables. A hard-coded dark panel is how the light theme
+   silently breaks, which is what happened to the ad banner's gradient.
+   ========================================================================== */
+
+.arrival-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 6, 14, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.arrival-card {
+  width: min(340px, 100%);
+  padding: 26px 22px 22px;
+  border-radius: 22px;
+  text-align: center;
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 26px 70px -20px rgba(0, 0, 0, 0.8);
+}
+
+.arrival-tick {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #04210f;
+  background: var(--rgb-4);
+  /* A soft ring rather than a hard edge, so the disc reads as lit. */
+  box-shadow: 0 0 0 8px rgba(0, 255, 157, 0.12);
+}
+
+.arrival-label {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.arrival-amount {
+  margin-top: 6px;
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.25;
+  /* Long figures must wrap rather than overflow a 340px card. */
+  word-break: break-word;
+}
+
+.arrival-symbol {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* Light theme: the mint tick on a white card needs a darker ink to stay
+   legible, and the ring has to be visible against white rather than glowing. */
+:root[data-theme='light'] .arrival-backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+:root[data-theme='light'] .arrival-tick {
+  box-shadow: 0 0 0 8px rgba(0, 136, 84, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrival-card { transition: none; }
 }

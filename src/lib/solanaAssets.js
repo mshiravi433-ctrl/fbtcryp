@@ -76,6 +76,28 @@ export const LST_ASSETS = [
     llamaSymbol: 'MSOL',
     protocolFeePct: 6,
     capturesMev: false
+  },
+  {
+    /*
+     * jupSOL. Added because it is the largest LST we were not offering, and
+     * because Jupiter charges NO management fee on it — which makes it the
+     * highest net yield of the three for the user, not merely another option.
+     *
+     * Verified routable and fee-paying before listing: a live SOL -> jupSOL
+     * quote through our own endpoint returned feeBps 70 with our Solana
+     * payout address as the receiver, so this earns exactly like any other
+     * swap. Buying it IS staking; there is no separate deposit.
+     */
+    id: 'jupsol',
+    mint: 'jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v',
+    symbol: 'jupSOL',
+    name: 'Jupiter Staked SOL',
+    decimals: 9,
+    llamaProject: 'jupiter-staked-sol',
+    llamaSymbol: 'JUPSOL',
+    /* Jupiter publishes a 0% management fee on jupSOL. */
+    protocolFeePct: 0,
+    capturesMev: true
   }
 ];
 

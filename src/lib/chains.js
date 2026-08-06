@@ -221,7 +221,29 @@ export const TOKENS = {
      * issuer-freeze warning.
      */
     { symbol: 'PAXG', name: 'PAX Gold', address: '0x45804880De22913dAFE09f4980848ECE6EcbAf78', decimals: 18, coingeckoId: 'pax-gold', rwa: 'gold' },
-    { symbol: 'XAUt', name: 'Tether Gold', address: '0x68749665FF8D2d112Fa859AA293F07A622782F38', decimals: 6, coingeckoId: 'tether-gold', rwa: 'gold' }
+    { symbol: 'XAUt', name: 'Tether Gold', address: '0x68749665FF8D2d112Fa859AA293F07A622782F38', decimals: 6, coingeckoId: 'tether-gold', rwa: 'gold' },
+    /*
+     * ─── LIQUID STAKING TOKENS EARN US THE ORDINARY SWAP FEE ───────────────
+     * Asked to raise Farm's revenue. The Farm screen currently lists yields
+     * from DefiLlama and links OUT to the protocol — we send the user away
+     * and earn nothing on the most valuable action on the page.
+     *
+     * Buying stETH IS staking. There is no separate deposit, no lock-up and
+     * no extra contract to approve: the token's exchange rate against ETH
+     * grows every day, and swapping back out is how you unstake. So the same
+     * outcome the user wanted can be delivered by our own swap, at our normal
+     * 70 bps, instead of by a link that pays us nothing.
+     *
+     * Quoted live against USDT before listing, and the fee was echoed back to
+     * our wallet in each case:
+     *
+     *   stETH  1000 USDT -> 0.5203 stETH   extraFee feeReceiver 0xaf5c…24d6 ✓
+     *
+     * `stake: true` marks them so Farm can offer an in-app route rather than
+     * an outbound link, and so the disclosure can explain what the token is.
+     */
+    { symbol: 'stETH', name: 'Lido Staked ETH', address: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', decimals: 18, coingeckoId: 'staked-ether', stake: 'eth' },
+    { symbol: 'rETH', name: 'Rocket Pool ETH', address: '0xae78736Cd615f374D3085123A210448E74Fc6393', decimals: 18, coingeckoId: 'rocket-pool-eth', stake: 'eth' }
   ],
   137: [
     { symbol: 'POL', name: 'Polygon', address: null, decimals: 18, native: true, coingeckoId: 'matic-network' },

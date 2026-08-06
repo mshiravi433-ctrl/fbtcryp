@@ -46,6 +46,18 @@ const VENUES = [
     color: 'var(--rgb-2)'
   },
   {
+    /*
+     * The only venue here with a permissionless referral AND non-crypto
+     * markets — forex, metals, commodities, indices, equities. See
+     * lib/venueReferral.js for why the other three earn nothing.
+     */
+    id: 'avantis',
+    url: 'https://www.avantisfi.com/trade',
+    pairs: '60+',
+    leverage: '500x',
+    color: 'var(--rgb-4)'
+  },
+  {
     id: 'dydx',
     url: 'https://dydx.trade',
     pairs: '100+',

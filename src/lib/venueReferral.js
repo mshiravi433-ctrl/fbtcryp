@@ -69,6 +69,29 @@ const env = (k) => (typeof import.meta !== 'undefined' ? import.meta.env?.[k] : 
 export const GMX_CODE = env('VITE_GMX_REF_CODE');
 
 /**
+ * Avantis referral code. Public by design, like the GMX one.
+ *
+ * ─── WHY THIS VENUE WAS ADDED ───────────────────────────────────────────────
+ * Asked how futures could earn. The three venues already listed answer that
+ * badly: dYdX needs $10,000 of volume before a referral pays anything,
+ * ApolloX has no programme at all, and GMX — the one that does work — is
+ * crypto-only.
+ *
+ * Avantis is the one perps venue found that is permissionless like GMX AND
+ * covers forex, metals, commodities, indices and equities. From their own
+ * referral page: "Avantis features a FULLY PERMISSIONLESS referral system,
+ * meaning anyone (any trader, LP, community member, or influencer) can be a
+ * referrer" and "Referrers: Earn 5% Rebates". No volume gate, no application,
+ * no approval queue — the same shape as GMX, which is why it costs nothing to
+ * prepare and only a wallet signature to switch on.
+ *
+ * It is also the venue whose markets match what this app already sells: we
+ * list tokenised gold and tokenised equities, and Avantis is where someone
+ * would go to take a leveraged view on the same things.
+ */
+export const AVANTIS_CODE = env('VITE_AVANTIS_REF_CODE');
+
+/**
  * GMX referral codes are on-chain bytes32 and the docs restrict them to
  * letters, digits and underscores, up to 20 characters. They are also
  * CASE-SENSITIVE, which is the trap: `FBTSwap` and `fbtswap` are two different
@@ -96,6 +119,14 @@ export const VENUE_REFERRAL = {
     userBenefit: true,
     param: 'ref'
   },
+  avantis: {
+    /* 5% of the referred trader's fees, permissionless, no volume minimum. */
+    earns: true,
+    /* Their docs also give the referee a fee discount, so the link is good
+       for the user as well — the same test applied to the GMX link. */
+    userBenefit: true,
+    param: 'ref'
+  },
   dydx: { earns: false, userBenefit: false, reason: 'VOLUME_REQUIRED' },
   apx: { earns: false, userBenefit: false, reason: 'NO_PROGRAMME' },
   hyperliquid: { earns: false, userBenefit: false, reason: 'DEPOSIT_REQUIRED' }
@@ -118,7 +149,13 @@ export function withReferral(venueId, url) {
   if (!cfg?.earns || !cfg.param) return url;
   if (typeof url !== 'string' || !url) return url;
 
-  const code = venueId === 'gmx' ? GMX_CODE : '';
+  /*
+   * Both venues use the same code shape (letters, digits, underscore) and the
+   * same validator. Reusing it is deliberate: a lax check on one of them is
+   * how a malformed code silently earns nothing, which is exactly what the
+   * LI.FI integrator id did before it was caught.
+   */
+  const code = venueId === 'gmx' ? GMX_CODE : venueId === 'avantis' ? AVANTIS_CODE : '';
   if (!isValidGmxCode(code)) return url;
 
   try {

@@ -3,9 +3,12 @@ import { useTranslation } from 'react-i18next';
 import qrcode from 'qrcode-generator';
 import SegIndicator from './SegIndicator';
 import QrScanner from './QrScanner';
+import ArrivalPopup from './ArrivalPopup';
 import { IconCheck, IconCopy, IconQr, IconWallet } from './Icons';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
+import { watchIncoming } from '../lib/incomingWatch';
+import { TOKENS } from '../lib/chains';
 import {
   buildPayLink,
   nfcSupported,
@@ -54,7 +57,7 @@ import {
 export default function TapToPay({ onAddress }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
-  const { address: myAddress, chainId } = useWallet();
+  const { address: myAddress, chainId, getReadProvider } = useWallet();
 
   const [mode, setMode] = useState('receive');
   const [scanning, setScanning] = useState(false);
@@ -64,7 +67,63 @@ export default function TapToPay({ onAddress }) {
   const [manual, setManual] = useState('');
   const [copied, setCopied] = useState(false);
 
+  const [arrived, setArrived] = useState(null);
+  const [watchSym, setWatchSym] = useState(null);
+
   const abortRef = useRef(null);
+
+  /*
+   * WHICH asset to watch for. The receiver has to say, because a balance poll
+   * can only watch one token at a time — there is no "any token" query that
+   * does not need a log filter, and log filters are exactly what the public
+   * RPCs this app falls back to serve badly.
+   */
+  const chainTokens = useMemo(() => TOKENS[chainId] ?? [], [chainId]);
+  const watchToken = useMemo(
+    () => chainTokens.find((tk) => tk.symbol === watchSym) ?? chainTokens[0] ?? null,
+    [chainTokens, watchSym]
+  );
+
+  /*
+   * ─── THE RECEIVER'S CONFIRMATION ──────────────────────────────────────────
+   * Poll only while the receive tab is actually showing. This is not a
+   * background service: it starts when the user says "I am receiving" and
+   * stops the moment they switch away or close the box, so it cannot quietly
+   * drain a battery. See lib/incomingWatch.js for why polling beats a log
+   * subscription on the connections this app has to work over.
+   */
+  useEffect(() => {
+    if (mode !== 'receive' || !myAddress || !watchToken) return undefined;
+
+    /*
+     * `getReadProvider` is async, so the watcher cannot start synchronously.
+     * `stop` is assigned once it resolves and the cleanup handles both orders:
+     * if the component unmounts before the provider arrives, `cancelled`
+     * prevents a watcher being started that nobody would ever stop.
+     */
+    let stop = null;
+    let cancelled = false;
+
+    getReadProvider(chainId)
+      .then((provider) => {
+        if (cancelled || !provider) return;
+        stop = watchIncoming({
+          provider,
+          address: myAddress,
+          token: watchToken,
+          onArrive: ({ amount, symbol }) => setArrived({ amount, symbol })
+        });
+      })
+      .catch(() => {
+        /* No provider means no confirmation popup. The QR still works, and a
+           silent absence is better than an error about our own plumbing. */
+      });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [mode, myAddress, watchToken, chainId, getReadProvider]);
 
   /*
    * Stop any live NFC scan when this component goes away. Without it the radio
@@ -172,6 +231,17 @@ export default function TapToPay({ onAddress }) {
           <p className="muted" style={{ fontSize: 12, marginTop: 5, lineHeight: 1.8 }}>
             {t('tap.intro')}
           </p>
+          {/*
+            Say outright whether NFC works on THIS device, as asked. Users
+            should not have to switch to the pay tab and press a button to
+            discover their phone cannot do it — and on iOS it never can.
+          */}
+          <p
+            className="faint"
+            style={{ fontSize: 11, marginTop: 6, lineHeight: 1.7 }}
+          >
+            {supported ? t('tap.nfcYes') : t('tap.nfcNo')}
+          </p>
         </div>
       </div>
 
@@ -269,6 +339,32 @@ export default function TapToPay({ onAddress }) {
               <p className="muted" style={{ fontSize: 11, marginTop: 10, lineHeight: 1.8 }}>
                 {t('tap.receiveHelp')}
               </p>
+
+              {/*
+                WHICH asset to watch for. A balance poll can only follow one
+                token at a time — see lib/incomingWatch.js for why a log
+                filter, which could watch all of them, is not usable on the
+                RPCs this app has to fall back to.
+              */}
+              {chainTokens.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="faint">{t('tap.watchAsset')}</div>
+                  <select
+                    value={watchToken?.symbol ?? ''}
+                    onChange={(e) => setWatchSym(e.target.value)}
+                    style={{ width: '100%', marginTop: 6 }}
+                  >
+                    {chainTokens.map((tk) => (
+                      <option key={tk.symbol} value={tk.symbol}>
+                        {tk.symbol} — {tk.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="faint" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.7 }}>
+                    ● {t('tap.watching')} {t('tap.watchHint')}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <p className="notice" style={{ marginTop: 4 }}>{t('tap.connectFirst')}</p>
@@ -365,6 +461,17 @@ export default function TapToPay({ onAddress }) {
           />
         </div>
       )}
+
+      {/*
+        Rendered outside the tab branches so a payment landing at the exact
+        moment the user switches tabs is still announced.
+      */}
+      <ArrivalPopup
+        open={Boolean(arrived)}
+        amount={arrived?.amount}
+        symbol={arrived?.symbol}
+        onClose={() => setArrived(null)}
+      />
     </div>
   );
 }

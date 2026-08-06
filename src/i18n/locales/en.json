@@ -794,6 +794,11 @@
         "name": "dYdX",
         "short": "dYdX",
         "desc": "Order-book perp exchange on its own appchain."
+      },
+      "avantis": {
+        "name": "Avantis",
+        "short": "AVT",
+        "desc": "Perps on crypto plus forex, gold, oil and stock indices. On Base, no KYC."
       }
     },
     "thirdPartyNotice": "These are independent third-party protocols. Fanous Bazaar Pishgam is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
@@ -912,7 +917,9 @@
     "protocolFee": "{{pct}}% protocol fee",
     "stakeNow": "Get {{sym}}",
     "stakingNote": "Yields are variable and come from network rewards, so they move with validator performance and network activity. The protocol fee shown is already deducted from the rate above it. Swapping back to SOL is usually instant through the same screen, but the price you get depends on pool depth at that moment — this is not a savings account and there is no guaranteed exit price.",
-    "custodyTitle": "Who holds the funds?"
+    "custodyTitle": "Who holds the funds?",
+    "ethStakingTitle": "Ethereum staking",
+    "ethStakingNote": "Buying these IS staking — the token grows against ETH on its own, with no lock-up, and swapping back out is how you unstake. Our normal 0.70% EVM swap fee applies; there is no extra staking charge."
   },
   "signals": {
     "title": "AI Signals",
@@ -1827,7 +1834,8 @@
       "FAILED": "The transfer failed. Nothing was sent.",
       "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
       "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism or Avalanche and try again."
-    }
+    },
+    "asset": "Asset"
   },
   "receive": {
     "title": "Receive",
@@ -2596,8 +2604,14 @@
       "QUOTE_FAILED": "No price available for this pair right now. The pool may be too thin for this amount, or that chain may be paused — THORChain halts chains from time to time and resumes them on its own.",
       "SAME_ASSET": "Choose two different assets.",
       "BAD_AMOUNT": "Enter an amount greater than zero.",
-      "MEMO_TOO_LONG": "This pair cannot carry the instruction on the sending chain. Try sending from a different chain."
-    }
+      "MEMO_TOO_LONG": "This route cannot carry the required instruction on the source chain. Try the other direction, or a different pair.",
+      "DEST_WRONG_CHAIN": "That address belongs to a different network. Check the receiving address matches the coin you are buying — sending to the wrong network loses the funds permanently.",
+      "DEST_INVALID": "That receiving address could not be read. Check it character by character, or paste it again.",
+      "CHAIN_HALTED": "THORChain has paused this network for the moment. It usually reopens on its own within a few minutes — nothing is wrong with your details.",
+      "AMOUNT_TOO_SMALL": "This amount is too small to cover the network fees for this route. Try a larger amount.",
+      "NO_POOL": "THORChain does not have a pool for one of these assets."
+    },
+    "expectsFormat": "This network expects an address like {{format}}"
   },
   "tap": {
     "title": "Tap to pay, in person",
@@ -2627,6 +2641,12 @@
       "BAD_ADDRESS": "That is not a valid wallet address. Check it character by character — a transfer to a wrong address cannot be undone.",
       "CANCELLED": "Cancelled."
     },
-    "scanCode": "Scan their code"
+    "scanCode": "Scan their code",
+    "received": "Received",
+    "watching": "Watching for payment…",
+    "watchHint": "Keep this open. You will see a confirmation the moment it arrives.",
+    "nfcYes": "NFC works on this phone — you can tap phones instead of scanning.",
+    "nfcNo": "NFC is not available on this device, so use the code. It works exactly the same.",
+    "watchAsset": "Watch for which asset"
   }
 }

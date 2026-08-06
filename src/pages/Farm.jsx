@@ -13,6 +13,7 @@ import { IconExternal, IconPools, IconShield, IconSwap } from '../components/Ico
 import TokenIcon from '../lib/tokenIcon';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { RISK_BANDS, getYields, pairTokens, projectEarnings, rateIsUnusual, realShare } from '../lib/yields';
+import { TOKENS } from '../lib/chains';
 import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
 
 /**
@@ -171,6 +172,13 @@ function PoolRow({ pool, amount, onOpen, onGetTokens, t }) {
     </motion.div>
   );
 }
+
+/*
+ * Read from the curated token table, never retyped. A second copy of a
+ * contract address is a second chance to get one wrong, and these are tokens
+ * the user will spend money on.
+ */
+const ETH_STAKE_TOKENS = (TOKENS[1] ?? []).filter((tk) => tk.stake === 'eth');
 
 export default function Farm() {
   // Subscribe so the figures re-render the moment the switch moves; the
@@ -414,6 +422,72 @@ export default function Farm() {
           <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.stakingNote')}</p>
         </section>
       )}
+
+      {/* ---------- ethereum staking ---------- */}
+      {/*
+        ─── WHY THIS SECTION EARNS AND THE POOL LIST BELOW DOES NOT ───────────
+        The pools further down are read from DefiLlama and link OUT to the
+        protocol. That is useful information and it pays us nothing — we do the
+        work of finding the yield and hand the transaction to somebody else.
+
+        Ethereum staking is different because buying the token IS the deposit.
+        stETH and rETH grow against ETH by themselves; there is no separate
+        stake step, no lock-up, and unstaking is just swapping back. So the
+        exact outcome the user wants can be delivered by our own swap screen at
+        the normal 0.70%, with no extra contract for them to approve.
+        Verified live before shipping: both echoed our fee receiver back.
+
+        This mirrors what the Solana section above already does with jitoSOL
+        and mSOL — the EVM half was simply missing.
+      */}
+      <section>
+        <div className="row-between" style={{ marginBottom: 8 }}>
+          <p className="section-label" style={{ margin: 0 }}>{t('farm.ethStakingTitle')}</p>
+        </div>
+
+        <motion.div variants={stagger} initial="hidden" animate="show" className="stack" style={{ gap: 9 }}>
+          {ETH_STAKE_TOKENS.map((tk) => {
+            const live = (data?.pools ?? []).find(
+              (pl) => String(pl.symbol || '').toUpperCase() === tk.symbol.toUpperCase()
+            );
+            return (
+              <motion.div key={tk.symbol} className="card card-soft" variants={riseIn}>
+                <div className="row-between">
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{tk.symbol}</div>
+                    <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>{tk.name}</div>
+                  </div>
+                  {/*
+                    Only shown when the live feed actually carries this token.
+                    A hard-coded APY would be wrong within a week and nobody
+                    would notice — the same mistake this page was built to fix.
+                  */}
+                  {live?.apy != null && (
+                    <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--rgb-4)' }}>
+                      {live.apy.toFixed(2)}%
+                    </div>
+                  )}
+                </div>
+
+                <div className="farm-actions" style={{ marginTop: 10 }}>
+                  <button
+                    className="btn btn-ghost farm-btn"
+                    onClick={() => {
+                      haptic?.('select');
+                      navigate(`/swap?chain=1&from=USDT&to=${encodeURIComponent(tk.symbol)}`);
+                    }}
+                  >
+                    <IconSwap width={15} height={15} />
+                    {t('farm.stakeNow', { sym: tk.symbol })}
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+
+        <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.ethStakingNote')}</p>
+      </section>
 
       {/* ---------- pools ---------- */}
       <section>

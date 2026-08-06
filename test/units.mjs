@@ -2590,8 +2590,15 @@ export default function run() {
     const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
     const all = [...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS];
 
+    /*
+     * The count is pinned deliberately: this list is the ONLY thing standing
+     * between a user and a pump.fun clone with the same ticker and logo, so
+     * an asset appearing here must be a decision somebody made, never a merge
+     * artefact. 17 as of adding jupSOL, which was quoted live through our own
+     * endpoint (feeBps 70, our payout address) before being listed.
+     */
     t('every curated mint is a plausible Solana address',
-      all.length === 16 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 17 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.

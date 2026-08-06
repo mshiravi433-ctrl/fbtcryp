@@ -297,8 +297,41 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
  * production path — it exists only so an unusual wallet is not a dead end. The
  * common wallets all implement signAndSendTransaction and never reach here.
  */
+/**
+ * The Solana RPC to broadcast through.
+ *
+ * ─── A DEAD SETTING, NOW LIVE ───────────────────────────────────────────────
+ * Settings has both a cluster selector (Mainnet/Devnet) and a custom Solana
+ * RPC field. Both were stored, both were redrawn in the UI from what was
+ * stored, and NOTHING read either one — this function had the public mainnet
+ * endpoint hard-coded. So a user who pointed the app at their own node, or
+ * switched to devnet to test, got neither, while the screen told them it had
+ * taken effect. Exactly the same defect the custom EVM RPC had before it was
+ * fixed, and the same one `expertMode` and `autoLockMinutes` each had.
+ *
+ * The store is read at call time rather than imported as a constant so a
+ * change in Settings applies to the very next transaction without a reload.
+ *
+ * https only, for the reason spelled out in WalletContext: the Android
+ * WebView blocks cleartext anyway, and quietly downgrading a wallet's RPC to
+ * plaintext is worth refusing outright rather than failing obscurely.
+ */
+async function solanaRpcUrl() {
+  try {
+    const { useSettingsStore } = await import('../store/useSettingsStore');
+    const st = useSettingsStore.getState();
+    const custom = String(st.solanaRpc || '').trim();
+    if (/^https:\/\//i.test(custom)) return custom;
+    return st.solanaCluster === 'devnet'
+      ? 'https://api.devnet.solana.com'
+      : 'https://api.mainnet-beta.solana.com';
+  } catch {
+    return 'https://api.mainnet-beta.solana.com';
+  }
+}
+
 async function sendRawSolana(base64Signed) {
-  const res = await fetch('https://api.mainnet-beta.solana.com', {
+  const res = await fetch(await solanaRpcUrl(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

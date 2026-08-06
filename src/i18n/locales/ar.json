@@ -760,6 +760,11 @@
         "name": "dYdX",
         "short": "dYdX",
         "desc": "Order-book perp exchange on its own appchain."
+      },
+      "avantis": {
+        "name": "Avantis",
+        "short": "AVT",
+        "desc": "عقود دائمة على العملات الرقمية إضافة إلى الفوركس والذهب والنفط ومؤشرات الأسهم. على شبكة Base، دون تحقق هوية."
       }
     },
     "thirdPartyNotice": "These are independent third-party protocols. فانوس بازار بيشغام is not the counterparty, does not control them, earns nothing from them, and cannot help recover losses. Verify every URL yourself — perp venues are a common phishing target.",
@@ -2066,7 +2071,13 @@
       "QUOTE_FAILED": "لا يوجد سعر لهذا الزوج الآن. قد يكون المجمّع ضحلاً لهذا المبلغ، أو أن تلك السلسلة موقوفة مؤقتاً — يوقف THORChain السلاسل أحياناً ثم يعيدها من تلقاء نفسه.",
       "SAME_ASSET": "اختر أصلين مختلفين.",
       "BAD_AMOUNT": "أدخل مبلغاً أكبر من صفر.",
-      "MEMO_TOO_LONG": "هذا الزوج لا يستطيع حمل التعليمة على سلسلة الإرسال. جرّب الإرسال من سلسلة أخرى."
-    }
+      "MEMO_TOO_LONG": "لا يستطيع هذا المسار حمل التعليمات المطلوبة على شبكة المصدر. جرّب الاتجاه المعاكس أو زوجًا آخر.",
+      "DEST_WRONG_CHAIN": "هذا العنوان يخص شبكة أخرى. تأكد أن عنوان الاستلام يطابق العملة التي تشتريها — الإرسال إلى الشبكة الخطأ يعني فقدان المبلغ نهائيًا.",
+      "DEST_INVALID": "تعذّرت قراءة عنوان الاستلام. راجعه حرفًا بحرف أو الصقه من جديد.",
+      "CHAIN_HALTED": "أوقفت THORChain هذه الشبكة مؤقتًا. عادةً تعود من تلقاء نفسها خلال دقائق — لا خطأ في بياناتك.",
+      "AMOUNT_TOO_SMALL": "هذا المبلغ أصغر من أن يغطي رسوم الشبكة على هذا المسار. جرّب مبلغًا أكبر.",
+      "NO_POOL": "لا تملك THORChain مجمّع سيولة لإحدى هاتين العملتين."
+    },
+    "expectsFormat": "تتوقع هذه الشبكة عنوانًا مثل {{format}}"
   }
 }
