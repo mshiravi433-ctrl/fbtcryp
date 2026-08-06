@@ -1708,7 +1708,8 @@
     },
     "tab": {
       "read": "Headlines",
-      "listen": "Radio"
+      "listen": "Radio",
+      "calm": "Calm"
     }
   },
   "notify": {
@@ -2538,5 +2539,14 @@
     "cautionTitle": "Never buy one second-hand, and why that matters more than the brand",
     "caution": "Buy only from the manufacturer's own shop. The known attack is simple: someone sells a device on a marketplace with a recovery phrase they already generated and wrote into the box, then waits and drains it once you fund it. A genuine device generates its phrase in front of you, on first use, and never arrives with one printed on a card. If a device asks you to enter a phrase that was supplied with it, stop.",
     "notRequired": "None of this is required to use FBT Swap. Everything here works with the wallet you already have — this is for people holding an amount they would be genuinely sorry to lose."
+  },
+  "calm": {
+    "title": "Calm music",
+    "whyTitle": "Why music is on a trading screen",
+    "why1": "Calm in investing. A clearer head makes a better decision — and in markets that is not a nice sentiment, it is the whole difference between a plan and a reaction.",
+    "why2": "The two most expensive habits in trading are selling in a panic and buying out of frustration. Neither is a mistake of analysis; both are what happens when you decide while your pulse is up. If a few minutes of quiet stops one impulsive trade, this tab has paid for itself many times over.",
+    "why3": "So this is not entertainment. Put it on before you open a position, not instead of reading the chart. Nothing here is advice, and music will not tell you what a market is going to do.",
+    "source": "Open the source page",
+    "credit": "Every track is Public Domain, CC BY or CC BY-SA — freely reusable, with the artist named on each row as the licence requires. Streamed from the Internet Archive's own servers; we host nothing and change nothing."
   }
 }

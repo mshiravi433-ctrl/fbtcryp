@@ -102,14 +102,33 @@ function CentreAction({ active, still, label, onClick }) {
           bar. It points at Automatic Orders, which is where this button now
           goes.
 
-          STROKED, not filled, and only 17px. The previous filled plus was
-          heavier than the reference: on a small flat circle a light outline
-          reads as more delicate, which is the whole request. `round` caps
-          keep it soft rather than technical.
+          STROKED, not filled. On a small flat circle a light outline reads as
+          more delicate than a filled glyph, which was the original request.
+          `round` caps keep it soft rather than technical.
+
+          ─── SIZE: 17 -> 21 ────────────────────────────────────────────────
+          Reported: «ایکون وسط دایره خیلی کم بزرگترش کن» — the glyph in the
+          centre circle is too small, make it a little bigger.
+
+          The circle grew from 42px to 56px when it was resized to fill the
+          notch, and the glyph was never grown with it. At 17px it occupied
+          30% of the circle; the other four bar icons sit at 22px inside no
+          circle at all, so the raised button — the most important target in
+          the bar — had the SMALLEST mark on screen.
+
+          21px is exactly the size the four flat bar icons already use, so the
+          centre mark now reads as the same weight as its neighbours instead
+          of noticeably lighter. That is the real argument for this number
+          rather than any ratio: consistency across the bar is visible, and a
+          one-off size is what made it look wrong.
+
+          Deliberately not larger. At 21px the glyph is 37.5% of the 56px
+          circle; past roughly 40% the arrows crowd the ring and the button
+          stops reading as a droplet.
         */}
         <svg
-          width="17"
-          height="17"
+          width="21"
+          height="21"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

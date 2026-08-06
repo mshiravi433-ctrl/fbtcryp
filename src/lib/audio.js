@@ -26,6 +26,29 @@ export async function getAudio({ timeout = 15000 } = {}) {
 }
 
 /**
+ * Calm music — same shape as `getAudio`, different endpoint.
+ *
+ * Returns items that are field-for-field compatible with the podcast items,
+ * which is what lets one `AudioPlayer` and one list renderer serve both. A
+ * separate track type would have meant a second player, and two players means
+ * two episodes can end up playing at once.
+ */
+export async function getCalm({ timeout = 15000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(`${API_BASE}/calm`, {
+      signal: ctrl.signal,
+      headers: { accept: 'application/json' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Seconds → `H:MM:SS` or `M:SS`.
  *
  * Returns null rather than "0:00" when the duration is unknown, because the

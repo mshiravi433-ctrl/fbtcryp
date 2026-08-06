@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
+import CalmPanel from '../components/CalmPanel';
 import SegIndicator from '../components/SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
@@ -167,7 +168,16 @@ export default function News() {
       </motion.div>
 
       <div className="segmented">
-        {['read', 'listen'].map((k) => (
+        {/*
+          THREE tabs now: headlines, radio, calm music.
+
+          The third was asked for as «یک تب از اهنگ های ارامشبخش» and it is
+          last on purpose — someone opening the news screen wants news. The
+          order is also the order of urgency: what happened, what people are
+          saying about it, and then the one thing here that is about the
+          reader rather than the market.
+        */}
+        {['read', 'listen', 'calm'].map((k) => (
           <button
             key={k}
             className={tab === k ? 'active' : ''}
@@ -180,7 +190,9 @@ export default function News() {
         ))}
       </div>
 
-      {tab === 'listen' ? (
+      {tab === 'calm' ? (
+        <CalmPanel />
+      ) : tab === 'listen' ? (
         /*
           ─── RADIO, NOT TELEVISION, AND THE REASON IS UNCHANGED ───────────
           Asked again for TV. It is still not buildable honestly: a video tab

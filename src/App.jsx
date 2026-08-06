@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,19 @@ import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
 import RadioDock from './components/RadioDock';
 import RouteBoundary from './components/RouteBoundary';
+/*
+ * ─── EVERY ROUTE LOADS THROUGH lazyRetry, NOT React.lazy ────────────────────
+ * Reported: tapping a coin from the market list crashes, and RELOADING fixes
+ * it permanently. That shape is the diagnosis — the browser's module map
+ * caches the RESULT of a dynamic import including a FAILURE, so once
+ * `import('./pages/CoinDetail')` has rejected once, every later call replays
+ * the cached rejection without touching the network. Vite's own docs: "you
+ * cannot retry the dynamic import due to browser limitations".
+ *
+ * The likeliest thing that poisons it is our OWN prefetch below, which warms
+ * CoinDetail during idle time and swallows failures. See lib/lazyRetry.js.
+ */
+import lazyRetry from './lib/lazyRetry';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
@@ -24,11 +37,11 @@ import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
 import { captureReferral } from './lib/referral';
 
-const Market = lazy(() => import('./pages/Market'));
-const CoinDetail = lazy(() => import('./pages/CoinDetail'));
-const Trade = lazy(() => import('./pages/Trade'));
-const Swap = lazy(() => import('./pages/Swap'));
-const Bridge = lazy(() => import('./pages/Bridge'));
+const Market = lazyRetry(() => import('./pages/Market'));
+const CoinDetail = lazyRetry(() => import('./pages/CoinDetail'));
+const Trade = lazyRetry(() => import('./pages/Trade'));
+const Swap = lazyRetry(() => import('./pages/Swap'));
+const Bridge = lazyRetry(() => import('./pages/Bridge'));
 /*
  * Prediction, perpetuals and invest are gated behind SPECULATION_ENABLED and
  * default to OFF — see the long note in lib/features.js. Short version:
@@ -38,35 +51,35 @@ const Bridge = lazy(() => import('./pages/Bridge'));
  * they earn nothing. Gating on a build-time literal is what lets Rollup prove
  * the import is unreachable and emit no chunk at all.
  */
-const Invest = SPECULATION_ENABLED ? lazy(() => import('./pages/Invest')) : () => null;
-const Predict = SPECULATION_ENABLED ? lazy(() => import('./pages/Predict')) : () => null;
-const Earn = lazy(() => import('./pages/Earn'));
-const Wallet = lazy(() => import('./pages/Wallet'));
-const Settings = lazy(() => import('./pages/Settings'));
-const About = lazy(() => import('./pages/About'));
-const Contact = lazy(() => import('./pages/Contact'));
-const Legal = lazy(() => import('./pages/Legal'));
-const Perp = SPECULATION_ENABLED ? lazy(() => import('./pages/Perp')) : () => null;
-const Farm = lazy(() => import('./pages/Farm'));
-const Signals = lazy(() => import('./pages/Signals'));
-const Stocks = lazy(() => import('./pages/Stocks'));
-const Help = lazy(() => import('./pages/Help'));
-const Docs = lazy(() => import('./pages/Docs'));
-const Audit = lazy(() => import('./pages/Audit'));
-const Developers = lazy(() => import('./pages/Developers'));
-const Ecosystem = lazy(() => import('./pages/Ecosystem'));
-const Business = lazy(() => import('./pages/Business'));
-const P2P = lazy(() => import('./pages/P2P'));
-const Leaderboard = lazy(() => import('./pages/Leaderboard'));
-const News = lazy(() => import('./pages/News'));
-const Explore = lazy(() => import('./pages/Explore'));
-const Discover = lazy(() => import('./pages/Discover'));
-const Nft = lazy(() => import('./pages/Nft'));
-const Orders = lazy(() => import('./pages/Orders'));
+const Invest = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Invest')) : () => null;
+const Predict = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Predict')) : () => null;
+const Earn = lazyRetry(() => import('./pages/Earn'));
+const Wallet = lazyRetry(() => import('./pages/Wallet'));
+const Settings = lazyRetry(() => import('./pages/Settings'));
+const About = lazyRetry(() => import('./pages/About'));
+const Contact = lazyRetry(() => import('./pages/Contact'));
+const Legal = lazyRetry(() => import('./pages/Legal'));
+const Perp = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Perp')) : () => null;
+const Farm = lazyRetry(() => import('./pages/Farm'));
+const Signals = lazyRetry(() => import('./pages/Signals'));
+const Stocks = lazyRetry(() => import('./pages/Stocks'));
+const Help = lazyRetry(() => import('./pages/Help'));
+const Docs = lazyRetry(() => import('./pages/Docs'));
+const Audit = lazyRetry(() => import('./pages/Audit'));
+const Developers = lazyRetry(() => import('./pages/Developers'));
+const Ecosystem = lazyRetry(() => import('./pages/Ecosystem'));
+const Business = lazyRetry(() => import('./pages/Business'));
+const P2P = lazyRetry(() => import('./pages/P2P'));
+const Leaderboard = lazyRetry(() => import('./pages/Leaderboard'));
+const News = lazyRetry(() => import('./pages/News'));
+const Explore = lazyRetry(() => import('./pages/Explore'));
+const Discover = lazyRetry(() => import('./pages/Discover'));
+const Nft = lazyRetry(() => import('./pages/Nft'));
+const Orders = lazyRetry(() => import('./pages/Orders'));
 // Lazy on purpose: pulls @solana/web3.js, which is 19 MB installed and is
 // only needed by users who actually open the Solana screen.
-const SolanaSwap = lazy(() => import('./pages/SolanaSwap'));
-const Buy = lazy(() => import('./pages/Buy'));
+const SolanaSwap = lazyRetry(() => import('./pages/SolanaSwap'));
+const Buy = lazyRetry(() => import('./pages/Buy'));
 
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
@@ -75,10 +88,10 @@ const Buy = lazy(() => import('./pages/Buy'));
  * just give related screens one entry point instead of scattering them
  * through the More menu.
  */
-const Lab = SPECULATION_ENABLED ? lazy(() => import('./pages/Lab')) : () => null;
-const ExploreHub = lazy(() => import('./pages/ExploreHub'));
-const Learn = lazy(() => import('./pages/Learn'));
-const Rewards = lazy(() => import('./pages/Rewards'));
+const Lab = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Lab')) : () => null;
+const ExploreHub = lazyRetry(() => import('./pages/ExploreHub'));
+const Learn = lazyRetry(() => import('./pages/Learn'));
+const Rewards = lazyRetry(() => import('./pages/Rewards'));
 
 /**
  * Suspense fallback for a not-yet-downloaded route chunk.
@@ -130,6 +143,40 @@ function Loader() {
  * contend with the market API calls that the user is actually waiting on.
  */
 function prefetchLikelyRoutes() {
+  /*
+   * ─── THIS FUNCTION CAUSED THE COIN-PAGE CRASH ─────────────────────────────
+   * Worth stating at the top, because the code below looks harmless and is
+   * not. A prefetch that FAILS does not merely fail to help — it writes a
+   * rejection into the browser's module map, and every later
+   * `import('./pages/CoinDetail')` replays that cached rejection instantly
+   * without a network request. So on a connection where the idle warm-up
+   * times out, an optimisation meant to make the coin page faster instead
+   * makes it permanently broken until the user reloads.
+   *
+   * The user never sees the prefetch fail. They see a crash minutes later
+   * when they tap a coin, which is exactly what was reported.
+   *
+   * Two independent guards now:
+   *
+   *   1. Every route goes through `lazyRetry`, so a poisoned entry is
+   *      recovered with a cache-busted retry rather than a crash. That is the
+   *      real fix and it covers failures from any cause, not just this one.
+   *
+   *   2. This function only runs when the connection looks capable of
+   *      finishing the job. Prefetching on a slow or metered link was always
+   *      questionable — it competes with the market API calls the user is
+   *      actually waiting on — and it is the situation most likely to fail.
+   *
+   * `navigator.connection` is Chromium-only, so its ABSENCE must mean "go
+   * ahead". Treating unknown as slow would silently disable prefetching for
+   * every Firefox and Safari user to fix a Chrome-detectable problem.
+   */
+  const conn = navigator.connection;
+  if (conn) {
+    if (conn.saveData) return;
+    if (/(^|-)2g$/.test(String(conn.effectiveType ?? ''))) return;
+  }
+
   const warm = [
     () => import('./pages/Swap'),
     () => import('./pages/Signals'),

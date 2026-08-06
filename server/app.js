@@ -27,6 +27,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { fetchAudio } from './audio.js';
+import { fetchCalm } from './calm.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
@@ -307,6 +308,34 @@ app.get('/api/audio', async (_req, res) => {
       memoryStore
     );
     res.set('cache-control', 'public, max-age=900');
+    if (cached) res.set('x-cache', tier.toUpperCase());
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/*
+ * CALM MUSIC — the third news tab.
+ *
+ * Persistently cached like /api/audio and for a stronger reason: this endpoint
+ * costs up to eleven upstream requests (three searches plus one metadata
+ * lookup per item), and archive.org is a charity running on donated
+ * bandwidth. Re-running that per visitor would be rude as well as slow.
+ *
+ * Six hours rather than thirty minutes. Podcast feeds publish daily; a
+ * public-domain music catalogue from 2008 does not change at all, so there is
+ * nothing to gain from asking more often.
+ */
+app.get('/api/calm', async (_req, res) => {
+  try {
+    const { value, cached, tier } = await withPersistentCache(
+      'calm',
+      6 * 3600_000,
+      fetchCalm,
+      memoryStore
+    );
+    res.set('cache-control', 'public, max-age=3600');
     if (cached) res.set('x-cache', tier.toUpperCase());
     return res.json(value);
   } catch (err) {

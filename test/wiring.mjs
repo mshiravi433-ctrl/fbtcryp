@@ -6008,5 +6008,183 @@ export default function run() {
       existsSync('docs/VERCEL-DEPLOY-LIMIT-FA.md'));
   }
 
+  /* ---- 72. the poisoned-module crash, nav glyph, calm music ------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. TAP A COIN -> CRASH. RELOAD -> WORKS FOREVER.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «باگ صفحه بازار وقتی میزنی روی یک کوین کرش میکنه ... وقتی بازنشانی
+     *    میکنی میره داخل و دیگه کرش نمیزنه»
+     *
+     * That shape IS the diagnosis. The coin, the component and the API
+     * response are identical before and after a reload, so it cannot be data
+     * or code. The browser's MODULE MAP caches the RESULT of a dynamic import
+     * INCLUDING a failure — Vite's own docs say "you cannot retry the dynamic
+     * import due to browser limitations" — so once
+     * `import('./pages/CoinDetail')` has rejected once, every later call
+     * replays the cached rejection with no network request. A reload builds a
+     * fresh map.
+     *
+     * The likeliest thing that poisons it is our OWN idle prefetch, which
+     * warms CoinDetail and swallows failures. The swallow is right; its
+     * side-effect on the module map is not.
+     */
+    t('the lazy-retry wrapper exists', existsSync('src/lib/lazyRetry.js'));
+
+    if (existsSync('src/lib/lazyRetry.js')) {
+      const lr = code(read('src/lib/lazyRetry.js'));
+      const app = code(read('src/App.jsx'));
+
+      /*
+       * A NEW SPECIFIER is the only thing that defeats the module map, since
+       * it is keyed by resolved URL. A retry that reuses the same URL would
+       * replay the cached rejection and change nothing.
+       */
+      t('...the retry busts the module-map cache with a fresh URL',
+        /searchParams\.set\('t'/.test(lr));
+      /*
+       * Timestamped, not a fixed marker. `?retry=1` would itself be cached
+       * after its first failure, reintroducing the same bug one layer down.
+       */
+      t('...using a timestamp, so a second incident is not cached too',
+        /String\(Date\.now\(\)\)/.test(lr));
+
+      /*
+       * Only TRANSPORT failures may be retried. Re-running a module that
+       * threw a real error during evaluation would run its side effects twice
+       * and still fail, delaying the honest error screen.
+       */
+      t('...only load failures are retried, never a real crash',
+        /if \(!isLoadFailure\(error\)\) throw error;/.test(lr));
+
+      /* Every route, or the ones left behind still crash. */
+      const converted = (app.match(/lazyRetry\(\(\) => import\(/g) ?? []).length;
+      const plain = (app.match(/[^y]lazy\(\(\) => import\(/g) ?? []).length;
+      t(`every route uses the retrying loader (${converted} routes, ${plain} left on plain lazy)`,
+        converted >= 30 && plain === 0);
+
+      /*
+       * The prefetch must not run on a connection that cannot finish. Its
+       * failure is what poisons the map in the first place, and saveData
+       * users should never have been paying for it.
+       */
+      t('the idle prefetch is skipped on save-data and 2G',
+        /conn\.saveData/.test(app) && /effectiveType/.test(app));
+      /*
+       * ...but ABSENCE of the API must mean "go ahead". navigator.connection
+       * is Chromium-only; treating unknown as slow would disable prefetching
+       * for every Firefox and Safari user.
+       */
+      t('...but an unknown connection still prefetches',
+        /const conn = navigator\.connection;\s*if \(conn\) \{/.test(app));
+    }
+
+    /*
+     * ─── 2. THE CENTRE GLYPH WAS TOO SMALL ────────────────────────────────
+     *   «ایکون وسط دایره خیلی کم بزرگترش کن»
+     *
+     * The circle grew 42px -> 56px when it was resized to fill the notch and
+     * the glyph never grew with it, so the most important target in the bar
+     * carried the smallest mark on screen. Pinned to the SAME number the four
+     * flat icons use, because matching them is the actual argument.
+     */
+    const nav = read('src/components/BottomNav.jsx');
+    const centreSvg = /<svg\s+width="(\d+)"/.exec(code(nav))?.[1];
+    t(`the centre glyph matches the other nav icons (${centreSvg}px)`,
+      centreSvg === '21');
+    t('...and the flat icons are still that size',
+      /width=\{21\}/.test(code(nav)));
+
+    /*
+     * ─── 3. CALM MUSIC ────────────────────────────────────────────────────
+     *   «یک تب از اهنگ های ارامشبخش ... ارامش در سرمایه گذاری»
+     *
+     * The whole engineering problem here is LICENSING. Streaming music we do
+     * not have rights to is a lawsuit, not a bug.
+     */
+    t('the calm-music module exists', existsSync('server/calm.js'));
+
+    if (existsSync('server/calm.js')) {
+      const calm = code(read('server/calm.js'));
+      const appSrc = code(read('server/app.js'));
+
+      /* The full chain, because "wired to nothing" is this repo's classic. */
+      t('...the route is mounted', /['"`]\/api\/calm['"`]/.test(appSrc));
+      t('...and calls the fetcher', /fetchCalm/.test(appSrc));
+      t('...the client library calls the route', /\/calm/.test(code(read('src/lib/audio.js'))));
+      t('...the panel exists', existsSync('src/components/CalmPanel.jsx'));
+      t('...News imports it', /CalmPanel/.test(read('src/pages/News.jsx')));
+      t('...and renders it behind a third tab',
+        /'read', 'listen', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
+        /tab === 'calm'/.test(code(read('src/pages/News.jsx'))));
+
+      /*
+       * ─── THE LICENCE GATE IS THE SAFETY PROPERTY ────────────────────────
+       * The first netlabels item I opened by hand was by-nc-nd/2.5 —
+       * NonCommercial AND NoDerivatives. We are a commercial product, so NC
+       * alone disqualifies it. A collection being "free music" says nothing
+       * about an individual item's terms.
+       */
+      t('...NonCommercial and NoDerivatives are rejected',
+        /DENIED_LICENCE = \['-nc', '-nd'\]/.test(calm));
+      t('...and the deny list is checked before the allow list',
+        calm.indexOf('DENIED_LICENCE.some') < calm.indexOf('ALLOWED_LICENCE.some'));
+      /* An unlicensed item must be dropped: silence is not permission. */
+      t('...a track with no recognised licence is dropped, not credited wrongly',
+        /if \(!label\) return null;/.test(calm));
+      /*
+       * Attribution is a CONDITION of CC BY / CC BY-SA, not a courtesy, so
+       * the artist must reach the screen.
+       */
+      t('...the licence and artist are shown on every row',
+        /item\.licence/.test(read('src/components/CalmPanel.jsx')) &&
+        /item\.stationName/.test(read('src/components/CalmPanel.jsx')));
+
+      /* One player for both tabs, or two things play at once. */
+      t('...calm music drives the same shared player as the radio',
+        /useRadioStore/.test(read('src/components/CalmPanel.jsx')));
+      t('...and renders no player of its own',
+        !/<AudioPlayer/.test(read('src/components/CalmPanel.jsx')));
+
+      /*
+       * freepd.com — the obvious source — is DEAD. Fetched it: "Site Closed".
+       * Every blog recommending it now points at nothing, and building on it
+       * would have shipped the dead-button failure this project keeps fixing.
+       */
+      t('...and it does not depend on the now-closed freepd.com',
+        !/freepd\.com/.test(calm));
+
+      /* Copy in all three written languages, or the tab renders raw keys. */
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      const keys = ['calm.title', 'calm.whyTitle', 'calm.why1', 'calm.why2',
+        'calm.why3', 'calm.credit', 'news.tab.calm'];
+      const miss = keys.filter((k) => !hasKey(enL, k) || !hasKey(faL, k) || !hasKey(arL, k));
+      t(`every calm.* key is translated in all three${miss.length ? ` — missing: ${miss.join(', ')}` : ''}`,
+        miss.length === 0);
+
+      /*
+       * The copy must carry the OWNER'S argument — calm leads to better
+       * decisions — rather than reading as a music perk. That framing is the
+       * only thing that justifies music on a screen about money.
+       */
+      t('...and the explanation makes the investing argument, not a perk pitch',
+        /decision/i.test(enL.calm.why1) && /panic/i.test(enL.calm.why2));
+      /* And it must not read as advice. */
+      /* Matched on the word, not a fixed phrase: "Nothing here is advice"
+         and "this is not advice" both satisfy the requirement, and pinning
+         one wording makes the check brittle against a harmless rewrite. */
+      t('...while stating plainly that it is not advice',
+        /\badvice\b/i.test(enL.calm.why3));
+    }
+  }
+
   return rows;
 }
