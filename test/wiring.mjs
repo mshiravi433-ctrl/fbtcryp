@@ -2127,6 +2127,53 @@ export default function run() {
     );
 
     /*
+     * ─── AND THE CLASS NAME ITSELF MUST BE REAL ─────────────────────────────
+     * The check above only inspects files that ALREADY say
+     * `className="segmented"`. TapToPay was written with an invented
+     * `className="seg"` and `seg-on`, neither of which exists in index.css,
+     * so it matched no rule, inherited no styling, and sailed past this sweep
+     * entirely. Reported as «دکمه های nfc طوسی شکل اندازه و رنگ نامناسب دارند»
+     * — grey, wrong size, wrong colour. They were simply unstyled.
+     *
+     * A misspelt class is invisible in review and invisible to a build: CSS
+     * has no such thing as an unknown-selector error. So the defined class
+     * list is read out of the stylesheet and every tab-like className in the
+     * source is required to appear in it.
+     */
+    {
+      const css = read('src/index.css');
+      const defined = new Set(
+        [...css.matchAll(/\.([a-z][a-z0-9-]*)\s*(?:\{|,|:|\s+[.a-z[])/gi)].map((m) => m[1])
+      );
+      /*
+       * Strip comments FIRST. This file EXPLAINS the wrong class name in its
+       * own header, and a check that matched its own rationale would fail
+       * forever while the code was correct — trap #1 in this suite, hit again
+       * on the very commit that added this check.
+       */
+      const strip = (src) => src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      const bogus = [];
+      for (const f of files) {
+        const src = strip(read(f));
+        for (const m of src.matchAll(/className="([a-z][a-z0-9- ]*)"/gi)) {
+          for (const cls of m[1].trim().split(/\s+/)) {
+            /* Only audit the segmented-control family; a general sweep would
+               drown in utility classes defined in other stylesheets. */
+            if (!/^seg/.test(cls)) continue;
+            if (!defined.has(cls)) bogus.push(`${f}:${cls}`);
+          }
+        }
+      }
+      t(
+        `no screen uses an undefined seg* class${bogus.length ? ` — ${[...new Set(bogus)].join(', ')}` : ''}`,
+        bogus.length === 0
+      );
+    }
+
+    /*
      * And the CSS safety net must stay. If someone "tidies away" the fallback
      * background because it looks redundant next to the pill, the next screen
      * that forgets SegIndicator is invisible again with nothing to catch it.
@@ -6954,6 +7001,122 @@ export default function run() {
     /* Same token = no swap = no fee. Charging one would be taking money for nothing. */
     t('a same-token transfer is not charged a swap fee',
       /mode: 'transfer', earns: false, feeBps: 0/.test(tapCode));
+  }
+
+  /* ---- 78. tap-to-pay styling, and the revenue readiness report --------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. THE NFC BUTTONS WERE UNSTYLED, NOT BADLY STYLED.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «دکمه های nfc طوسی شکل اندازه و رنگ نامناسب دارند و کارایی کمی دارند»
+     *
+     * Grey, wrong size, wrong colour, and does little. One root cause: the
+     * component used className="seg" / "seg-on", which exist in no stylesheet.
+     * The real control is `.segmented` + `.active` + <SegIndicator>. A misspelt
+     * class produces no error anywhere — CSS has no unknown-selector failure
+     * and the build does not care — so it shipped looking broken.
+     */
+    const tap = read('src/components/TapToPay.jsx');
+    const tapCode = code(tap);
+    t('tap-to-pay uses the real segmented control',
+      /className="segmented"/.test(tapCode));
+    t('...with the real active class, not an invented one',
+      /className=\{mode === k \? 'active' : ''\}/.test(tapCode));
+    t('...and renders the selection pill every other control renders',
+      /<SegIndicator/.test(tapCode));
+    t('...and announces the selection to a screen reader',
+      /aria-pressed/.test(tapCode));
+
+    /*
+     * "Does little" was the fair half of the complaint. The receive side
+     * printed the link as TEXT for the other person to read off a screen and
+     * retype — the exact 42-character transcription this feature exists to
+     * remove, and the one mistake an on-chain transfer cannot undo.
+     *
+     * This repo already ships a QR generator (ReceiveSheet) and a QR scanner
+     * (QrScanner, on the WebView's native BarcodeDetector). Both sat unused
+     * while iPhone users — who cannot use NFC at all — were told to "use the
+     * code" that was never rendered.
+     */
+    t('the receive side renders a real scannable QR, not just text',
+      /qrcode\(0, 'M'\)/.test(tapCode) && /<svg/.test(tapCode));
+    t('...on a white plate, since scanners need dark modules on light',
+      /background: '#fff'/.test(tapCode));
+    t('the pay side can open the real camera scanner',
+      /<QrScanner/.test(tapCode) && /tap\.scanCode/.test(tapCode));
+    /*
+     * Scanning must come FIRST. NFC reaches ~6% of browsers and no iPhone, so
+     * leading with it puts the unusable option in front of almost everyone.
+     */
+    t('...and scanning is the primary action, with NFC as the secondary one',
+      tapCode.indexOf('tap.scanCode') < tapCode.indexOf('tap.startScan'));
+    t('...and the copy button exists for the case where neither is convenient',
+      /navigator\.clipboard\.writeText/.test(tapCode));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. THE P2P FEE, PROVEN RATHER THAN CLAIMED.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Asked to be sure it really earns. Verified by decoding the signable
+     * transaction from a live /api/gasless/quote with recipient set to an
+     * address that was NOT the payer:
+     *
+     *   recipient of the swap : 0x1111…1111
+     *   fee transfer (a9059cbb) destination : 0xaf5ce154…24d6   <- our wallet
+     *   bps field 0x46 = 70
+     *
+     * So the payee receives the bought token and we receive 70 bps, in one
+     * signed transaction. The guards that make that true are pinned here.
+     */
+    const gasless = code(read('server/gasless.js'));
+    t('recipient reaches the upstream, or the payee never gets paid',
+      /'recipient'/.test(gasless));
+    t('...and a malformed one is refused, since a wrong address is final',
+      /BAD_RECIPIENT/.test(gasless) && /\^0x\[a-fA-F0-9\]\{40\}\$/.test(gasless));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3. THE ZERO-COST PREPARATION, MADE CHECKABLE.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Every remaining revenue line was already code-complete and waiting on a
+     * payment. What was missing was any way for the owner — who works from a
+     * phone and cannot read source — to VERIFY that, having been told "just
+     * set the variable" for five different features.
+     */
+    const rd = existsSync('server/readiness.js') ? read('server/readiness.js') : '';
+    t('server/readiness.js exists', Boolean(rd));
+    const rdCode = code(rd);
+    t('the readiness route is mounted and calls it',
+      /'\/api\/revenue\/readiness'/.test(code(read('server/app.js'))) &&
+      /revenueReadiness\(/.test(code(read('server/app.js'))));
+    /*
+     * `ready` and `live` must stay separate. Collapsing them hides the entire
+     * finding: the remaining work is a purchase, not a build.
+     */
+    t('...and it separates "code is ready" from "we are earning"',
+      /allRemainingAreCodeComplete/.test(rdCode) && /live:/.test(rdCode) && /ready:/.test(rdCode));
+    t('...and never echoes a configured value, only whether it is set',
+      !/value:|env\(k\)\s*\}/.test(rdCode) && /Boolean\(env\(/.test(rdCode));
+    /* Each waiting line must name the exact variable that switches it on. */
+    for (const v of ['VITE_GMX_REF_CODE', 'THOR_NAME', 'VITE_FBT_VAULT_ADDRESS', 'VITE_AFFILIATE_TREZOR']) {
+      t(`readiness names ${v} as the switch`, new RegExp(v).test(rdCode));
+    }
+    /*
+     * And those variables must genuinely be read by the feature, or the report
+     * is a comforting lie. This is the "wired to nothing" check applied to the
+     * readiness report itself.
+     */
+    t('...and every named switch is actually read by its feature',
+      /env\('VITE_GMX_REF_CODE'\)/.test(code(read('src/lib/venueReferral.js'))) &&
+      /process\.env\.THOR_NAME/.test(code(read('server/thorchain.js'))) &&
+      /env\('VITE_FBT_VAULT_ADDRESS'\)/.test(code(read('src/lib/vault.js'))) &&
+      /VITE_AFFILIATE_TREZOR/.test(code(read('src/lib/hardware.js'))));
   }
 
   return rows;

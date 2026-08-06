@@ -2605,7 +2605,7 @@
     "iReceive": "I am receiving",
     "iPay": "I am paying",
     "showThis": "Show this to the other phone",
-    "receiveHelp": "The other person scans or taps this to fill in your address. It is a public receiving address — sharing it is safe.",
+    "receiveHelp": "The other person scans this code, or taps phones if their Android supports it. This is a public receiving address — showing it is safe.",
     "connectFirst": "Connect your wallet first so we know which address to show.",
     "startScan": "Tap the other phone",
     "holdNear": "Hold the phones together…",
@@ -2626,6 +2626,7 @@
       "NFC_SCAN_FAILED": "NFC could not start. Use the code instead.",
       "BAD_ADDRESS": "That is not a valid wallet address. Check it character by character — a transfer to a wrong address cannot be undone.",
       "CANCELLED": "Cancelled."
-    }
+    },
+    "scanCode": "Scan their code"
   }
 }

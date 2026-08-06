@@ -41,6 +41,7 @@ import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasl
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
+import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
@@ -835,6 +836,18 @@ app.get('/api/solana/oo/swap', async (req, res) => {
  * cannot be exercised from a laptop. It answers whether Tron genuinely works
  * on OUR key rather than whether the documentation says it should.
  */
+/*
+ * One place to see every revenue line and what each is waiting on.
+ *
+ * The owner works from a phone and cannot read the source, and has been told
+ * "it is ready, just set the variable" for five separate features. That claim
+ * was unverifiable until now, which is the same shape as the "wired to
+ * nothing" bug this repo has shipped three times.
+ *
+ * Reports booleans only, never the configured values.
+ */
+app.get('/api/revenue/readiness', (_req, res) => res.json(revenueReadiness()));
+
 app.get('/api/xchain/status', (_req, res) => res.json(crossChainStatus()));
 
 app.get('/api/xchain/probe', async (_req, res) => {
