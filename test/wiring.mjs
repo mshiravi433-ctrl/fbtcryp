@@ -7549,5 +7549,64 @@ export default function run() {
       /allRemainingAreCodeComplete/.test(rd));
   }
 
+  /* ---- 83. The one to-do list, and the claims inside it ------------------ */
+  {
+    /*
+     * ─── WHY THIS SECTION EXISTS ────────────────────────────────────────────
+     * Asked for one step-by-step list, with links, of everything still
+     * outstanding. Fifty-odd Persian docs already exist and the owner cannot
+     * be expected to know which is current — so there is now exactly ONE
+     * index, and these checks stop it from rotting into the same problem.
+     *
+     * What is checked is deliberately narrow: that the file exists, that it
+     * still points at the live readiness endpoint rather than a hard-coded
+     * count that will drift, and that the two facts most likely to cost real
+     * money if they were lost are still spelled out.
+     */
+    t('the single step-by-step to-do list exists',
+      existsSync('docs/TODO-STEP-BY-STEP-FA.md'));
+    const todo = existsSync('docs/TODO-STEP-BY-STEP-FA.md')
+      ? read('docs/TODO-STEP-BY-STEP-FA.md')
+      : '';
+
+    /*
+     * The live endpoint, not a number typed into prose. Every previous doc
+     * baked in "8 of 16" and every one of them is now wrong or soon will be.
+     */
+    t('...and sends the owner to the live readiness endpoint',
+      /api\/revenue\/readiness/.test(todo));
+
+    /*
+     * The GMX code is case-sensitive on-chain. Registering `FBTSwap` when the
+     * app sends `fbtswap` earns zero forever and cannot be undone, so the
+     * warning has to survive in the doc the owner actually follows.
+     */
+    t('...and warns that the GMX code is case-sensitive',
+      /fbtswap/.test(todo) && /GMX/.test(todo)
+      && /(case-sensitive|حساس)/i.test(todo));
+
+    /*
+     * Rotating the Firebase service-account key outranks every revenue line
+     * in this file: it is full admin on the whole database. It must be first.
+     */
+    t('...and puts the Firebase key rotation before the revenue work',
+      todo.indexOf('serviceaccounts') > -1
+      && todo.indexOf('serviceaccounts') < todo.indexOf('app.gmx.io'));
+
+    /*
+     * deBridge was measured today at 70 bps paid straight to our address —
+     * more than double the 30 bps LI.FI pays — and it needs no key and no
+     * signup. Losing that finding would lose the largest free upgrade found.
+     */
+    t('...and records the deBridge finding with its measured rate',
+      /deBridge/.test(todo) && /70/.test(todo));
+
+    /*
+     * The blocked list has to stay, or the same dead ends get re-researched.
+     * OFAC FAQ 54 is the single citation that explains most of them.
+     */
+    t('...and keeps the blocked-platform evidence', /OFAC FAQ 54/.test(todo));
+  }
+
   return rows;
 }
