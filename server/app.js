@@ -39,6 +39,7 @@ import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
+import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured } from './fcm.js';
@@ -796,6 +797,29 @@ app.get('/api/solana/order', async (req, res) => {
 
 app.post('/api/solana/execute', async (req, res) => {
   const r = await solanaExecute(req.body);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * Solana via OpenOcean — the path that actually pays us.
+ *
+ * Jupiter above earns zero and cannot be fixed without on-chain account
+ * creation we have no SOL for; see server/solanaOcean.js for the decoded
+ * proof that this route splits a real 0.70% inside the swap transaction.
+ *
+ * `referrer` and `referrerFee` are attached server-side and are NOT in any
+ * forwarded parameter list — from the browser they are unreachable, so nobody
+ * can redirect our revenue or inflate the rate in our name.
+ */
+app.get('/api/solana/oo/status', (_req, res) => res.json(oceanStatus()));
+
+app.get('/api/solana/oo/quote', async (req, res) => {
+  const r = await oceanQuote(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/solana/oo/swap', async (req, res) => {
+  const r = await oceanSwap(req.query);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 

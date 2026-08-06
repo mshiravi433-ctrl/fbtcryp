@@ -224,6 +224,96 @@ export async function signSolanaTransaction(base64Tx) {
   return bytesToBase64(signed.serialize());
 }
 
+/**
+ * Sign AND broadcast — the OpenOcean path.
+ *
+ * ─── WHY THIS IS A SEPARATE FUNCTION FROM signSolanaTransaction ─────────────
+ * The two aggregators have opposite responsibilities for landing the trade,
+ * and using the wrong helper fails in a way that looks like success.
+ *
+ *   Jupiter    returns a transaction and lands it ITSELF via /execute. We must
+ *              sign only; broadcasting ourselves breaks RFQ routes, which are
+ *              the ones that price best.
+ *   OpenOcean  returns an unsigned transaction and nothing else. Nobody sends
+ *              it but us. Signing only would leave the user staring at a
+ *              spinner for a swap that was never submitted.
+ *
+ * Folding these into one function with a flag was the obvious tidy option and
+ * is rejected deliberately: the failure mode of getting the flag wrong is a
+ * silently unsent money transaction, and two named functions cannot be
+ * confused at the call site.
+ *
+ * `signAndSendTransaction` is part of the Solana wallet standard and is
+ * implemented by both Phantom and Solflare. Where a wallet somehow lacks it we
+ * fall back to sign-then-send through the wallet's own connection rather than
+ * failing outright.
+ *
+ * @param {string}  base64Tx    the transaction from /api/solana/oo/swap
+ * @param {boolean} [versioned] whether to use VersionedTransaction. Passed
+ *        through from the API's `isVersioned` rather than guessed — the wrong
+ *        deserialiser throws at signing time, after the user has committed.
+ * @returns {Promise<string>} the transaction signature
+ */
+export async function signAndSendSolana(base64Tx, versioned = true) {
+  const provider = getSolanaProvider();
+  if (!provider) throw new Error('NO_WALLET');
+
+  const { Transaction, VersionedTransaction } = await import('@solana/web3.js');
+
+  let tx;
+  try {
+    const bytes = base64ToBytes(base64Tx);
+    tx = versioned ? VersionedTransaction.deserialize(bytes) : Transaction.from(bytes);
+  } catch {
+    throw new Error('BAD_TRANSACTION');
+  }
+
+  try {
+    if (typeof provider.signAndSendTransaction === 'function') {
+      const res = await provider.signAndSendTransaction(tx);
+      // Phantom returns { signature }, some wallets return the string directly.
+      const sig = typeof res === 'string' ? res : res?.signature;
+      if (!sig) throw new Error('NO_SIGNATURE');
+      return sig;
+    }
+    if (typeof provider.signTransaction === 'function') {
+      const signed = await provider.signTransaction(tx);
+      return await sendRawSolana(bytesToBase64(signed.serialize()));
+    }
+    throw new Error('CANNOT_SIGN');
+  } catch (err) {
+    if (err?.code === 4001 || /reject|denied|cancel/i.test(String(err?.message))) {
+      throw new Error('REJECTED');
+    }
+    if (err?.message === 'CANNOT_SIGN' || err?.message === 'NO_SIGNATURE') throw err;
+    throw new Error('SEND_FAILED');
+  }
+}
+
+/**
+ * Last-resort broadcast for a wallet that can sign but not send.
+ *
+ * Uses Solana's public RPC. That endpoint is heavily rate limited and is not a
+ * production path — it exists only so an unusual wallet is not a dead end. The
+ * common wallets all implement signAndSendTransaction and never reach here.
+ */
+async function sendRawSolana(base64Signed) {
+  const res = await fetch('https://api.mainnet-beta.solana.com', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'sendTransaction',
+      params: [base64Signed, { encoding: 'base64', maxRetries: 3 }]
+    })
+  });
+  const body = await res.json().catch(() => null);
+  if (body?.error) throw new Error(body.error.message || 'SEND_FAILED');
+  if (!body?.result) throw new Error('SEND_FAILED');
+  return body.result;
+}
+
 /*
  * base64 <-> bytes without Buffer.
  *

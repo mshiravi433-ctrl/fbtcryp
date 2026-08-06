@@ -120,7 +120,7 @@ const PAGES = [
        * When the referral account exists this line changes with it. Do not
        * edit it back to a single figure before then.
        */
-      ['Platform fee', '0.70% on EVM networks, shown on screen before you sign. No platform fee on Solana swaps right now'],
+      ['Platform fee', '0.70% of the input amount, shown on screen before you sign, on EVM networks and on Solana'],
       ['Custody', 'None. Your keys stay in your wallet'],
       ['Signup', 'Not required']
     ]

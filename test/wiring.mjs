@@ -2475,9 +2475,21 @@ export default function run() {
     const page = strip(read('src/pages/SolanaSwap.jsx'));
     const lib = strip(read('src/lib/solana.js'));
 
+    /*
+     * THE RULE IS UNCHANGED; THE FLAG MOVED.
+     *
+     * The requirement is still that whatever decides to CHARGE also decides
+     * what to ANNOUNCE. It used to be `solanaFeeReady()`, a Jupiter-referral
+     * check. The screen no longer swaps through Jupiter, and that flag now
+     * answers false — which would announce a free swap while charging 0.70%.
+     *
+     * The quote's own `feeBps` is the authority now: it is the literal value
+     * the server put into the OpenOcean request, so the number announced and
+     * the number charged are the same number, not two that agree by luck.
+     */
     t(
-      'the fee notice is gated on the same readiness flag as the fee itself',
-      /solanaFeeReady\(\)/.test(page) && /if \(solanaFeeReady\(\)\)/.test(lib)
+      'the fee notice is driven by the quote that carries the charge',
+      /order\?\.feeBps/.test(page) && /attachFee\(params\)/.test(read('server/solanaOcean.js'))
     );
     t('there is honest copy for the no-fee case', hasKey(en, 'solana.feeNoneNotice'));
     t('the no-fee copy is actually used', /solana\.feeNoneNotice/.test(page));
@@ -3407,10 +3419,30 @@ export default function run() {
     /* Strip comments first: these checks must not match their own rationale. */
     const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-    t('the landing page no longer quotes a flat platform fee',
-      !/\['Platform fee', '0\.70% of the input/.test(code(landing)));
-    t('...and says plainly that Solana is not charged',
-      /No platform fee on Solana/.test(landing));
+    /*
+     * This asserted the ABSENCE of a flat 0.70% claim, because Solana was
+     * then free and the flat claim was a lie by omission. Solana now charges
+     * the same 0.70%, so a single flat figure is the accurate statement and
+     * the absence check would forbid telling the truth.
+     *
+     * What still must not appear is a rate quoted without saying it is shown
+     * before signing — that is the part that makes it honest.
+     */
+    t('the landing page quotes the fee AND promises it is shown before signing',
+      /shown on screen before you sign/.test(code(landing)));
+    /*
+     * WAS: asserted the landing page says Solana is NOT charged.
+     *
+     * That was true while Solana routed through Jupiter, which earned us
+     * nothing because its fee needs on-chain accounts we have no SOL for.
+     * Solana now routes through OpenOcean, which splits a verified 0.70%
+     * inside the swap transaction — so the old sentence became a public,
+     * indexed promise of a free swap that we charge for. Understating a fee
+     * is the dangerous direction: the user finds out after signing.
+     */
+    t('...and quotes the same 0.70% for Solana, which is now charged there too',
+      /0\.70% of the input amount/.test(landing) &&
+      !/No platform fee on Solana/.test(landing));
 
     /*
      * The request-side guard. Jupiter does NOT error on a referralFee sent
@@ -3428,8 +3460,9 @@ export default function run() {
      * charge, so the two can never disagree again.
      */
     const solPage = code(read('src/pages/SolanaSwap.jsx'));
-    t('the screen picks its fee notice from that same flag',
-      /solanaFeeReady\(\)\s*\?/.test(solPage));
+    /* Same correction as above: the quote is the single source of the rate. */
+    t('the screen picks its fee notice from the quote it just showed',
+      /order\?\.feeBps\s*$/m.test(solPage) || /order\?\.feeBps/.test(solPage));
     t('...and has a no-fee notice to fall back on',
       /solana\.feeNoneNotice/.test(solPage));
 
@@ -6516,6 +6549,128 @@ export default function run() {
       t('...and light theme gets its own, since white-on-white is invisible',
         /:root\[data-theme='light'\] \.infobox \{[^}]*linear-gradient/.test(css));
     }
+  }
+
+  /* ---- 75. Solana swap routed through OpenOcean so it actually earns ----- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE BUG CLASS THIS SECTION EXISTS FOR: "wired to nothing".
+     * ═══════════════════════════════════════════════════════════════════════
+     * Shipped three times already (bridge, gasless, fiat): a module is
+     * written, tested, and never reachable from the screen. Solana is the
+     * worst possible place to repeat it, because the OLD path also "works" —
+     * swaps succeed and earn zero, which is indistinguishable from success.
+     *
+     * So every link in the chain is asserted: server module -> route ->
+     * route calls it -> client lib -> page imports it -> page CALLS it ->
+     * the old earning-nothing path is gone.
+     */
+    const srv = existsSync('server/solanaOcean.js') ? read('server/solanaOcean.js') : '';
+    t('server/solanaOcean.js exists', Boolean(srv));
+
+    const srvCode = code(srv);
+
+    /* The fee params must be set by US, never forwarded from a caller. */
+    t('the referrer is attached server-side, not taken from the request',
+      /params\.set\('referrer',/.test(srvCode) &&
+      /params\.set\('referrerFee',/.test(srvCode));
+    t('...and the payout address defaults to the published Solana wallet',
+      /B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4/.test(srvCode));
+
+    /*
+     * bps -> PERCENT. OpenOcean wants 0.7 for 70 bps and accepts up to 5.
+     * Sending 70 where a percent is expected requests 70% of the swap, so the
+     * literal divisor is pinned rather than checked loosely.
+     */
+    t('bps are converted to percent (70 -> 0.7), not passed raw',
+      /Number\(bps\) \/ 100/.test(srvCode));
+    t('...and the rate is clamped so a typo cannot request an outrageous cut',
+      /Math\.min\(100, Math\.max\(0,/.test(srvCode));
+
+    /*
+     * The echo check. A fee we asked for and did not get is this repo's most
+     * expensive recurring bug — it must be detected, not assumed.
+     */
+    t('the returned feeRatio is compared against what we asked for',
+      /feeApplied/.test(srvCode) && /Math\.abs\(got - asked\)/.test(srvCode));
+    t('...with a tolerance, because 0.7% comes back as 0.006999999999999999',
+      /1e-6/.test(srvCode));
+
+    /* Routes exist AND call the module. */
+    const app = code(read('server/app.js'));
+    t('app.js imports the OpenOcean Solana module',
+      /from '\.\/solanaOcean\.js'/.test(app));
+    for (const [route, fn] of [
+      ['/api/solana/oo/status', 'oceanStatus'],
+      ['/api/solana/oo/quote', 'oceanQuote'],
+      ['/api/solana/oo/swap', 'oceanSwap']
+    ]) {
+      t(`${route} is mounted and calls ${fn}()`,
+        new RegExp(`'${route.replace(/\//g, '\\/')}'`).test(app) &&
+        new RegExp(`${fn}\\(`).test(app));
+    }
+
+    /* Client lib exists and points at our own API, never OpenOcean directly. */
+    const lib = existsSync('src/lib/solanaOcean.js') ? read('src/lib/solanaOcean.js') : '';
+    t('src/lib/solanaOcean.js exists', Boolean(lib));
+    const libCode = code(lib);
+    t('the client calls OUR api, so the fee fields stay unforgeable',
+      /\/solana\/oo\/quote/.test(libCode) && /\/solana\/oo\/swap/.test(libCode));
+    t('...and never calls OpenOcean from the browser, which would expose them',
+      !/open-api\.openocean\.finance/.test(libCode));
+
+    /*
+     * THE LINK THAT MATTERS MOST: the page must actually use it. A perfect
+     * library nobody imports is the exact shape of the three past failures.
+     */
+    const page = read('src/pages/SolanaSwap.jsx');
+    const pageCode = code(page);
+    t('SolanaSwap imports the OpenOcean client',
+      /from '\.\.\/lib\/solanaOcean'/.test(pageCode));
+    t('...and QUOTES through it', /getOceanQuote\(/.test(pageCode));
+    t('...and BUILDS the swap through it', /getOceanSwap\(/.test(pageCode));
+
+    /*
+     * The old Jupiter execution path must be GONE from this screen, not just
+     * unused. Left importable, a later edit re-reaches for it and silently
+     * returns the screen to earning nothing.
+     */
+    t('the earning-nothing Jupiter order path is no longer used here',
+      !/getSolanaOrder\(/.test(pageCode) && !/executeSolanaOrder\(/.test(pageCode));
+
+    /*
+     * Sign-AND-send, not sign-only. Jupiter lands its own transactions;
+     * OpenOcean does not. Using the Jupiter helper would leave the trade
+     * unsent while the UI reported success.
+     */
+    const wallet = code(read('src/lib/solanaWallet.js'));
+    t('a sign-and-broadcast helper exists for the OpenOcean path',
+      /export async function signAndSendSolana/.test(wallet));
+    t('...and it is the one the page calls', /signAndSendSolana\(/.test(pageCode));
+    t('...and it uses signAndSendTransaction, since nobody else broadcasts',
+      /signAndSendTransaction/.test(wallet));
+
+    /*
+     * The button used to be gated on `order.transaction`, which Jupiter's
+     * quote carried and ours deliberately does not. Unchanged, that is a
+     * permanently disabled button on a working integration.
+     */
+    t('the swap button is gated on a quote, not on a transaction',
+      /disabled=\{!address \|\| !order\?\.outAmount \|\| busy\}/.test(pageCode));
+
+    /*
+     * The disclosure must follow the SAME number that is charged. It read
+     * solanaFeeReady() — a Jupiter-only flag that now answers false, which
+     * would tell every user the swap is free while charging 0.70%.
+     */
+    t('the fee notice follows the quote, so it cannot understate the charge',
+      /order\?\.feeBps/.test(pageCode) && !/solanaFeeReady\(\)\n?\s*\?/.test(pageCode));
   }
 
   return rows;

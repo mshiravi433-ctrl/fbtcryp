@@ -10,21 +10,16 @@ import {
   SOL_MINT,
   USDC_MINT,
   USDT_MINT,
-  executeSolanaOrder,
-  executeSucceeded,
   fromBaseUnits,
-  getSolanaOrder,
   isSolanaAddress,
-  orderErrorKey,
-  referralFeeBps,
-  solanaFeeReady,
   toBaseUnits
 } from '../lib/solana';
+import { getOceanQuote, getOceanSwap } from '../lib/solanaOcean';
 import {
   canInjectSolana,
   connectSolana,
   disconnectSolana,
-  signSolanaTransaction,
+  signAndSendSolana,
   solanaAddress,
   solanaWalletAvailable,
   solanaWalletName,
@@ -281,19 +276,34 @@ export default function SolanaSwap({ embedded = false }) {
 
     const id = setTimeout(async () => {
       try {
-        const o = await getSolanaOrder({
+        /*
+         * ─── WHY THE QUOTE COMES FROM OPENOCEAN NOW ────────────────────────
+         * This screen used to quote Jupiter, which earned us nothing: its fee
+         * needs a referralAccount plus a referralTokenAccount per fee mint,
+         * all created by on-chain transactions, and the Solana payout wallet
+         * holds 0 SOL. Jupiter's own docs say an uninitialised token account
+         * means the swap executes WITHOUT our fee and returns no error, so
+         * the screen was silently free forever.
+         *
+         * OpenOcean takes a plain wallet address as `referrer`. Verified by
+         * decoding a live transaction: 1 SOL in produced 5,600,000 lamports
+         * to us and 1,400,000 to OpenOcean — 0.70000% exactly, split 80/20.
+         *
+         * The quote deliberately does NOT pass the wallet address. Without it
+         * nothing signable comes back, so a price refresh cannot hand anyone
+         * a transaction they did not ask for.
+         */
+        const q = await getOceanQuote({
           inputMint: fromToken.mint,
           outputMint: toToken.mint,
-          amount: base,
-          taker: address || undefined
+          amount: base
         });
         if (reqSeq.current !== seq) return; // a newer request won
-        const errKey = orderErrorKey(o);
-        if (errKey) {
-          setQuoteErr(errKey);
+        if (!q?.outAmount || q.outAmount === '0') {
+          setQuoteErr('NO_ROUTE');
           setOrder(null);
         } else {
-          setOrder(o);
+          setOrder(q);
         }
       } catch (err) {
         if (reqSeq.current !== seq) return;
@@ -310,25 +320,47 @@ export default function SolanaSwap({ embedded = false }) {
   /* -------------------------------- swap --------------------------------- */
 
   const swap = async () => {
-    if (!order?.transaction || busy) return;
+    if (!order || busy || !address) return;
     setBusy(true);
     setTxErr(null);
     haptic?.('medium');
 
     try {
-      const signed = await signSolanaTransaction(order.transaction);
-      const res = await executeSolanaOrder({
-        signedTransaction: signed,
-        requestId: order.requestId
+      /*
+       * ─── THE TRANSACTION IS FETCHED HERE, NOT AT QUOTE TIME ──────────────
+       * The quote above is priced without a wallet and carries no transaction.
+       * We ask for a fresh, signable one only once the user has committed by
+       * pressing the button.
+       *
+       * That ordering is the safety property, not an extra round trip for its
+       * own sake: a transaction built seconds ago against a moved market is
+       * exactly what a user should not be signing. This is the same
+       * re-quote-before-signing rule the EVM path already follows.
+       */
+      const built = await getOceanSwap({
+        inputMint: fromToken.mint,
+        outputMint: toToken.mint,
+        amount: toBaseUnits(amount, fromToken.decimals),
+        account: address
       });
 
-      if (executeSucceeded(res)) {
-        setResult(res);
+      if (!built?.transaction) throw new Error('NO_TRANSACTION');
+
+      /*
+       * signAndSend, NOT sign-only. OpenOcean returns an unsigned transaction
+       * and does not broadcast; the Jupiter helper signs and hands back, which
+       * here would leave the trade never submitted while the UI reported
+       * success. Two named functions so the two cannot be swapped by accident.
+       */
+      const signature = await signAndSendSolana(built.transaction, built.versioned);
+
+      if (signature) {
+        setResult({ signature });
         setAmount('');
         setOrder(null);
         haptic?.('success');
       } else {
-        setTxErr(res?.error || `CODE_${res?.code ?? 'UNKNOWN'}`);
+        setTxErr('SEND_FAILED');
         haptic?.('error');
       }
     } catch (err) {
@@ -568,7 +600,7 @@ export default function SolanaSwap({ embedded = false }) {
           <div className="stack" style={{ gap: 6, marginTop: 12 }}>
             <div className="row-between">
               <span className="faint">{t('solana.router')}</span>
-              <span className="mono" style={{ fontSize: 12 }}>{order.router ?? '—'}</span>
+              <span className="mono" style={{ fontSize: 12 }}>OpenOcean</span>
             </div>
             <div className="row-between">
               <span className="faint">{t('swap.networkFee')}</span>
@@ -579,10 +611,19 @@ export default function SolanaSwap({ embedded = false }) {
           </div>
         )}
 
+        {/*
+          The button is gated on a QUOTE, not on a transaction.
+
+          It used to require `order.transaction`, which was correct for
+          Jupiter because its quote carried one. Ours deliberately does not —
+          the signable transaction is fetched inside swap() after the user
+          commits. Left unchanged, this condition would have disabled the
+          button permanently: a working integration with a dead button.
+        */}
         <button
           className="btn btn-primary"
           style={{ marginTop: 14 }}
-          disabled={!address || !order?.transaction || busy}
+          disabled={!address || !order?.outAmount || busy}
           onClick={swap}
         >
           {busy ? t('swap.dontClose') : t('nav.swap')}
@@ -680,8 +721,22 @@ export default function SolanaSwap({ embedded = false }) {
             the same flag that decides whether to REQUEST the fee decides
             whether to ANNOUNCE it, so the two can never disagree again.
           */}
-          {solanaFeeReady()
-            ? t('solana.feeNotice', { fee: referralFeeBps() / 100 })
+          {/*
+            ─── THE FLAG CHANGED WITH THE ROUTE ───────────────────────────────
+            This asked `solanaFeeReady()`, which reports whether a JUPITER
+            referral account is configured. The screen no longer swaps through
+            Jupiter, so that flag now answers a question nobody is asking —
+            and it answers "false", meaning we would tell every user the swap
+            is free while charging them 0.70%.
+            
+            Understating a fee is the dangerous direction to be wrong in: the
+            user discovers it only after signing something irreversible. The
+            notice now follows the quote's OWN `feeBps`, which is the exact
+            number the server put in the request, so the announcement and the
+            charge cannot drift apart.
+          */}
+          {order?.feeBps
+            ? t('solana.feeNotice', { fee: order.feeBps / 100 })
             : t('solana.feeNoneNotice')}
         </p>
         {/*
