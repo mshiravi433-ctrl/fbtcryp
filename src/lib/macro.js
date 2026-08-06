@@ -232,7 +232,18 @@ export function cyclePosition({ price, ath, athChange } = {}) {
  * @param {number[]} args.btcSeries  BTC prices over the same window
  * @param {object}   args.global     global market stats
  */
-export function macroContext({ coin = {}, series = [], btcSeries = [], global = null } = {}) {
+export function macroContext({ coin: coinArg, series = [], btcSeries = [], global = null } = {}) {
+  /*
+   * `coin = {}` does NOT catch `null` — a default parameter only fires for
+   * `undefined`. That exact gap crashed the coin page (see the long note in
+   * lib/verdict.js): a caller passing a not-yet-loaded coin sailed past the
+   * default and threw on the first property access.
+   *
+   * Normalised explicitly here for the same reason. These functions run on a
+   * screen the user is trying to read a price on, and none of them is
+   * important enough to take that screen down.
+   */
+  const coin = coinArg ?? {};
   const regime = marketRegime({ global, btcSeries });
 
   /*

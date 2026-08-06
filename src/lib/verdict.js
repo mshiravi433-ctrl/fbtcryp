@@ -467,7 +467,34 @@ function buildHorizon(horizon, { analysis, series, macro }) {
  * @param {object}   args.global     global market stats
  * @returns {{short, long, macro, facts, agree}|null}
  */
-export function verdict({ analysis, series = [], btcSeries = [], coin = {}, global = null } = {}) {
+export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, global = null } = {}) {
+  /*
+   * ─── A DEFAULT PARAMETER DOES NOT CATCH `null` ──────────────────────────
+   * This signature was `coin = {}`, which looks safe and is not: a default
+   * only fires for `undefined`. Passing `null` skips it entirely, and
+   * `macroContext` then destructures the null and throws.
+   *
+   * THE CRASH THIS CAUSED, reported as: «برای اولین بار هر توکنی را انتخاب
+   * کنی کرش میکنه بار دوم خوبه ... اگر وارد یک صفحه دیگر شوی و دوباره برگردی
+   * دوباره کرش میکنه».
+   *
+   * On a cold open of a coin page three requests race: the coin, its chart,
+   * and the markets list. If the CHART resolves before the COIN — which is
+   * common, since the chart endpoint is lighter — CoinDetail has
+   * `loading === false` but `coin === null`, its "not found" guard does not
+   * fire because the coin fetch is still in flight, and it renders
+   * `<VerdictPanel coin={null}>`. Straight into this destructure.
+   *
+   * The second tap succeeds because `getCoin` is memoised by then, so `coin`
+   * is populated on the first render. Navigating away and back re-runs the
+   * same cold ordering, which is exactly why it came back — and why a
+   * module-map explanation was wrong: that failure would have been permanent.
+   *
+   * Normalising here as well as in the caller is deliberate. This function is
+   * called from three screens, and a crash in a read-only analysis panel must
+   * never take down a page the user is trying to read a price on.
+   */
+  const coin = coinArg ?? {};
   const v = clean(series);
   if (!v.length) return null;
 

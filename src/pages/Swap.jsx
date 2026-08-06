@@ -120,6 +120,31 @@ export default function Swap() {
     const amt = searchParams.get('amount');
     if (!from && !to && !amt) return;
 
+    /*
+     * ─── HONOUR `?chain=` HERE TOO ────────────────────────────────────────
+     * `curated` is the token list FOR THE CURRENT CHAIN. A symbol that only
+     * exists on another chain therefore finds nothing, and the prefill fails
+     * silently — the screen opens on its defaults and the user is left
+     * wondering why the link did nothing.
+     *
+     * That is why tokenised gold looked unsellable: PAXG and XAUt are
+     * Ethereum-only, so a link to them while the wallet sat on BNB Chain
+     * matched no entry at all. Reported as «الان توکن rwa هم نمیشه درامد
+     * زایی کرد» — the tokens were listed and routable, but nothing could
+     * reach them. The same defect silently broke the new Farm staking links,
+     * which are also Ethereum-only.
+     *
+     * The address prefill below already solved this; the symbol prefill was
+     * simply never given the same treatment. Switch first and let the effect
+     * re-run once the chain matches, rather than matching against the wrong
+     * list and giving up.
+     */
+    const wantedChain = Number(searchParams.get('chain'));
+    if (EVM_CHAINS[wantedChain] && wantedChain !== chainId) {
+      wallet.switchChain?.(wantedChain).catch(() => {});
+      return;
+    }
+
     prefillDone.current = true;
 
     // Match against the curated list only. A symbol from the URL must never
@@ -133,7 +158,7 @@ export default function Swap() {
     if (amt && Number(amt) > 0) setAmount(String(amt));
 
     setSearchParams({}, { replace: true });
-  }, [searchParams, setSearchParams, curated]);
+  }, [searchParams, setSearchParams, curated, chainId, wallet]);
 
   /*
    * ─── PRE-FILL BY CONTRACT ADDRESS, FROM A COIN PAGE ─────────────────────

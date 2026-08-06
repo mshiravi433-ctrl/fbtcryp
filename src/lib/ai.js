@@ -165,7 +165,18 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * Weights are fixed and hand-chosen, deliberately NOT fitted to historical
  * data — fitting them produces impressive backtests and useless live results.
  */
-export function analyze(prices, coin = {}) {
+export function analyze(prices, coinArg = {}) {
+  /*
+   * `coin = {}` does NOT catch `null` — a default parameter only fires for
+   * `undefined`. That exact gap crashed the coin page (see the long note in
+   * lib/verdict.js): a caller passing a not-yet-loaded coin sailed past the
+   * default and threw on the first property access.
+   *
+   * Normalised explicitly here for the same reason. These functions run on a
+   * screen the user is trying to read a price on, and none of them is
+   * important enough to take that screen down.
+   */
+  const coin = coinArg ?? {};
   const values = (prices ?? []).filter((n) => Number.isFinite(n) && n > 0);
   if (values.length < 30) return null;
 

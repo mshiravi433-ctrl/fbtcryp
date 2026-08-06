@@ -7288,5 +7288,121 @@ export default function run() {
       /\^https:\\\/\\\//.test(swal));
   }
 
+  /* ---- 80. the real coin crash, header scale, selects, rwa reachability - */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. THE COIN CRASH — THIRD CAUSE, AND THE ONE THAT MATCHED THE REPORT.
+     * ═══════════════════════════════════════════════════════════════════════
+     * «برای اولین بار هر توکنی را انتخاب کنی کرش میکنه بار دوم خوبه، اگر وارد
+     *  یک صفحه دیگر شوی و دوباره برگردی دوباره کرش میکنه»
+     *
+     * Crashes on FIRST open of ANY token, fine on the second, and CRASHES
+     * AGAIN after navigating away and back. That last clause is what ruled
+     * out both earlier diagnoses: a poisoned module-map entry and a cached
+     * empty response are each permanent for the session, so neither can
+     * come back after being fixed.
+     *
+     * The real cause: `verdict({ coin = {} })`. A default parameter fires
+     * only for `undefined`, never for `null`. On a cold open the chart
+     * request often resolves before the coin request, so CoinDetail has
+     * `loading === false` while `coin` is still null, its not-found guard
+     * does not fire (the coin fetch is still in flight), and it renders
+     * <VerdictPanel coin={null}> straight into a destructure of null.
+     *
+     * Second tap works because getCoin is memoised by then. Leaving and
+     * returning re-runs the same cold race — exactly the reported shape.
+     *
+     * Verified by removing the guards and watching the throw return.
+     */
+    for (const [file, fn] of [
+      ['src/lib/verdict.js', 'verdict'],
+      ['src/lib/macro.js', 'macroContext'],
+      ['src/lib/localOutlook.js', 'localOutlook'],
+      ['src/lib/ai.js', 'analyze']
+    ]) {
+      const src = code(read(file));
+      t(`${fn}() normalises a null coin, which a default parameter cannot`,
+        /coin = coinArg \?\? \{\}/.test(src));
+      /* The old signature must be gone, not merely shadowed. */
+      t(`...and ${fn}() no longer relies on \`coin = {}\``,
+        !/\bcoin = \{\}(?!\s*;)/.test(src.replace(/coinArg = \{\}/g, '')));
+    }
+    /*
+     * And the screen must not draw an analysis of a coin it cannot identify:
+     * with no coin there is no volume, no market cap and no name, so the
+     * panel would render a confident read of an unknown asset.
+     */
+    t('the coin page waits for the coin before rendering its analysis',
+      /const analysisReady = Boolean\(coin\) && analysis/.test(code(read('src/pages/CoinDetail.jsx'))));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. RWA WAS UNREACHABLE, NOT UNPROFITABLE.
+     * ═══════════════════════════════════════════════════════════════════════
+     * «الان توکن rwa هم نمیشه درامد زایی کرد»
+     *
+     * The tokens were listed, routable and fee-paying — a live quote echoed
+     * our receiver. But every link to them is `?chain=1&from=USDT&to=PAXG`,
+     * and the SYMBOL prefill never read `?chain=`: it matched against
+     * `curated`, which is the list FOR THE CURRENT CHAIN. On any chain but
+     * Ethereum the symbol matched nothing and the prefill failed silently.
+     *
+     * The ADDRESS prefill had always handled this. The symbol path was just
+     * never given the same treatment, which also silently broke the new Farm
+     * staking links.
+     */
+    const swap = code(read('src/pages/Swap.jsx'));
+    /* Both prefills must switch chain — hence two occurrences. */
+    t('the symbol prefill honours ?chain=, so an off-chain token is reachable',
+      (swap.match(/const wantedChain = Number\(searchParams\.get\('chain'\)\)/g) ?? []).length === 2);
+    t('...and switches rather than matching against the wrong chain list',
+      (swap.match(/wallet\.switchChain\?\.\(wantedChain\)/g) ?? []).length === 2);
+    /* chainId must be a dependency or the effect never re-runs after switching. */
+    t('...and re-runs once the chain has changed',
+      /\}, \[searchParams, setSearchParams, curated, chainId, wallet\]\)/.test(swap));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3. HEADER AND SELECTS ON DESKTOP.
+     * ═══════════════════════════════════════════════════════════════════════
+     */
+    const css = read('src/index.css');
+    /*
+     * Everything in the header was a fixed phone value while the column grew
+     * from 520 to 760px, so it read as a caption rather than a title.
+     */
+    t('the header scales with the column at every wide breakpoint',
+      /\.brand-name \{ font-size: 16\.5px; \}/.test(css) &&
+      /\.brand-name \{ font-size: 18\.5px; \}/.test(css) &&
+      /\.brand-name \{ font-size: 20px; \}/.test(css));
+    t('...and the mark and buttons grow with it, not just the text',
+      /\.brand-mark \{ width: 38px/.test(css) && /\.icon-btn \{ min-width: 42px/.test(css));
+
+    /*
+     * A themed box around an unthemed control: without `appearance: none` the
+     * browser keeps its own widget — a grey system arrow on Chrome, a full
+     * bevelled control on desktop Firefox and Safari — inside our dark
+     * rounded field. That is the reported «بسیار ساده است».
+     */
+    t('selects drop the browser widget and draw their own arrow',
+      /select \{[\s\S]{0,400}?appearance: none/.test(css) &&
+      /background-image: url\("data:image\/svg\+xml/.test(css));
+    /* A <select> is a replaced element; a ::after arrow is unreliable on it. */
+    t('...via background-image, since a select cannot host a pseudo-element',
+      !/select::after/.test(css));
+    t('...with an arrow that flips for right-to-left',
+      /\[dir='rtl'\] select \{ background-position: left/.test(css));
+    t('...and a light-theme arrow, since the dark one vanishes on white',
+      /data-theme='light'\] select \{/.test(css));
+    t('...and an option list that is dark on the dark theme',
+      /select option \{[\s\S]{0,120}color: #e8ecf4/.test(css));
+  }
+
   return rows;
 }

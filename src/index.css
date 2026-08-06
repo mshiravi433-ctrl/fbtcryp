@@ -658,7 +658,65 @@ input, select {
 }
 input:focus, select:focus { border-color: var(--rgb-1); box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12); }
 input::placeholder { color: var(--text-3); }
-select option { background: #0a0c12; }
+
+/* ---------------------------------------------------------------------------
+   SELECTS LOOKED LIKE RAW BROWSER CONTROLS
+
+   Reported: «در جعبه که میخواهد گزینه‌ای انتخاب کند در مرورگر بسیار ساده است».
+
+   The box around a select was already themed, but the CONTROL inside it was
+   not: without `appearance: none` a browser keeps its own chrome — the grey
+   system arrow on Chrome, a full grey bevelled widget on desktop Safari and
+   Firefox — sitting inside our dark rounded field. On a phone that is a small
+   mismatch. On a desktop it is a 1990s form control glued into a modern card,
+   which is exactly what "very plain in the browser" describes.
+
+   `appearance: none` strips it, and the arrow is redrawn as an inline SVG in
+   `background-image`. Deliberately NOT a ::after pseudo-element: a <select>
+   is a replaced element and cannot host pseudo-elements reliably, which is
+   the usual reason a hand-built dropdown arrow silently fails to appear.
+
+   The arrow is `currentColor`-matched by hand (two variants, one per theme)
+   because an SVG in a data URI cannot inherit CSS variables.
+
+   `padding-inline-end` reserves room so a long option label never runs
+   underneath the arrow, and the RTL-aware property means the Persian layout
+   flips the padding along with the arrow position.
+   --------------------------------------------------------------------------- */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%238b93a7' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  padding-inline-end: 34px;
+  cursor: pointer;
+}
+
+/* RTL: the arrow belongs on the left when the text runs right-to-left. */
+[dir='rtl'] select { background-position: left 13px center; }
+
+:root[data-theme='light'] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2352607a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+select:hover { border-color: var(--line-strong); }
+
+/*
+ * The OPEN list is drawn by the operating system and is almost entirely
+ * beyond CSS — only the colours can be influenced, and only on some engines.
+ * Setting both means the list is dark on a dark theme instead of a white
+ * flash, which is the part users actually notice.
+ */
+select option {
+  background: #0a0c12;
+  color: #e8ecf4;
+}
+
+:root[data-theme='light'] select option {
+  background: #ffffff;
+  color: #0f172a;
+}
 
 .field-label {
   font-family: var(--font-mono);
@@ -5157,10 +5215,33 @@ input, select, textarea { font-size: 16px !important; }
     border-radius: 18px 18px 0 0;
   }
 
+  /* ---------------------------------------------------------------------
+     THE HEADER HAS TO GROW WITH THE COLUMN.
+
+     Reported: «هیدر در دسکتاپ و لپ‌تاپ هم خیلی کوچیکه».
+
+     Everything in the header was a fixed phone-sized value — a 15px brand
+     name, a 30px mark, 34px buttons — while the column beside it widened
+     from 520px to 680px. Held next to that, and viewed from desktop
+     distance rather than phone distance, the bar reads as a caption on top
+     of the page rather than its title.
+
+     Scaled proportionally rather than by a blanket zoom: the mark, the
+     wordmark and the buttons each have their own minimum for their own
+     reason (the buttons must stay a comfortable click target, the sub-label
+     must stay readable at a mono letter-spacing of 0.2em).
+     --------------------------------------------------------------------- */
   .top-bar {
     max-width: 680px;
     margin-inline: auto;
+    padding: 18px 20px 15px;
   }
+
+  .brand { gap: 11px; }
+  .brand-mark { width: 38px; height: 38px; border-radius: 11px; }
+  .brand-name { font-size: 18.5px; }
+  .brand-sub { font-size: 9.5px; }
+  .icon-btn { min-width: 42px; min-height: 42px; font-size: 16px; }
 
   /* Two-up on wide screens: these grids are single-column on a phone and
      leave a lot of dead space once the column grows. */
@@ -5177,6 +5258,12 @@ input, select, textarea { font-size: 16px !important; }
   .top-bar {
     max-width: 760px;
   }
+
+  /* The column grows once more here, so the header keeps pace. Capped at
+     20px: past that the wordmark starts to dominate a page whose actual
+     content is 13px financial rows. */
+  .brand-name { font-size: 20px; }
+  .brand-mark { width: 40px; height: 40px; }
 }
 
 /* ==========================================================================
@@ -5304,6 +5391,14 @@ input, select, textarea { font-size: 16px !important; }
     max-width: 600px;
     margin-inline: auto;
   }
+
+  /* A step between phone and desktop, for the same reason as the 900px
+     block: the column is wider here too, so a phone-sized header looks
+     undersized against it. Smaller step, because a tablet is held closer
+     than a laptop. */
+  .top-bar { padding: 16px 18px 13px; }
+  .brand-mark { width: 34px; height: 34px; }
+  .brand-name { font-size: 16.5px; }
 
   /* The nav is position:fixed, so without inset-inline + margin it spans the
      whole viewport and floats detached from the column above it. */

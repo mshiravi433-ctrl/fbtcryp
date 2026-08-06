@@ -206,6 +206,21 @@ export default function CoinDetail() {
   const up = rangeChange >= 0;
   const color = up ? '#00ff9d' : '#ff3b6b';
 
+  /*
+   * ─── DO NOT RENDER THE ANALYSIS UNTIL THE COIN ITSELF EXISTS ────────────
+   * The guard below only fires once EVERYTHING has settled. On a cold open
+   * the chart request often lands before the coin request, which leaves
+   * `loading === false` while `coin` is still null — and the page then
+   * rendered `<VerdictPanel coin={null}>`, which threw. That is the reported
+   * crash-on-first-tap that returns after navigating away and back.
+   *
+   * verdict() has been hardened too, but a panel that ANALYSES a coin should
+   * not be drawn before the coin is known regardless: with no coin there is
+   * no volume, no market cap and no name, so it would render a confident
+   * read of an asset it cannot identify.
+   */
+  const analysisReady = Boolean(coin) && analysis;
+
   if (!coin && !loading && !coinLoading) {
     /*
      * ─── TWO DIFFERENT FAILURES THAT LOOKED IDENTICAL ─────────────────────
@@ -422,7 +437,7 @@ export default function CoinDetail() {
         have the correct impression rather than a list of measurements they
         have to synthesise themselves.
       */}
-      {analysis && (
+      {analysisReady && (
         <motion.div variants={riseIn} initial="hidden" animate="show">
           <VerdictPanel
             analysis={analysis}

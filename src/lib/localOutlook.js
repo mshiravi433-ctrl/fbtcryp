@@ -473,7 +473,18 @@ function startSentence(clause, lang) {
  * @param {string} args.lang     UI language
  * @param {number} args.days     horizon for the volatility cone
  */
-export function localOutlook({ analysis, coin = {}, lang = 'en', days = 7 }) {
+export function localOutlook({ analysis, coin: coinArg, lang = 'en', days = 7 }) {
+  /*
+   * `coin = {}` does NOT catch `null` — a default parameter only fires for
+   * `undefined`. That exact gap crashed the coin page (see the long note in
+   * lib/verdict.js): a caller passing a not-yet-loaded coin sailed past the
+   * default and threw on the first property access.
+   *
+   * Normalised explicitly here for the same reason. These functions run on a
+   * screen the user is trying to read a price on, and none of them is
+   * important enough to take that screen down.
+   */
+  const coin = coinArg ?? {};
   if (!analysis) return null;
 
   const p = pack(lang);
