@@ -53,10 +53,42 @@
  * do nothing about.
  */
 
-const THORNODE =
-  process.env.THORNODE_BASE || 'https://thornode.thorchain.liquify.com';
+/**
+ * ─── SEVERAL NODES, TRIED IN ORDER ──────────────────────────────────────────
+ * Shipped with a single host and it failed in production the moment it
+ * deployed: `/api/thor/status` (no upstream call) answered fine while
+ * `/api/thor/pools` and `/api/thor/quote` both returned
+ * `{"error":"UPSTREAM_FAILED","detail":"fetch failed"}`.
+ *
+ * "fetch failed" with no HTTP status is a CONNECTION failure, not a rejected
+ * request — the Vercel function could not reach that host at all, even though
+ * the same URL answers fine from elsewhere. Whether that is regional routing,
+ * an IP block, or the node being picky about datacentre traffic does not
+ * matter: relying on one third-party node was the mistake.
+ *
+ * `gateway.liquify.com` is the endpoint THORChain's own developer docs list
+ * first, and it answered. It leads.
+ *
+ * The list is tried in order and the first that responds wins, so a node
+ * having a bad afternoon degrades to a slightly slower request instead of a
+ * dead feature. This is the same `allSettled`-style resilience the radio and
+ * calm-music modules already use, applied to a service where the failure was
+ * observed rather than anticipated.
+ */
+export const THOR_NODES = (process.env.THORNODE_BASE
+  ? [process.env.THORNODE_BASE]
+  : [
+      'https://gateway.liquify.com/chain/thorchain_api',
+      'https://thornode.ninerealms.com',
+      'https://thornode.thorchain.liquify.com'
+    ]);
 
-const TIMEOUT_MS = Number(process.env.THOR_TIMEOUT_MS || 15000);
+/*
+ * Per-attempt, not total. Three nodes at 15s each could otherwise keep a
+ * serverless function alive for 45 seconds on a request the user abandoned
+ * ten seconds ago.
+ */
+const TIMEOUT_MS = Number(process.env.THOR_TIMEOUT_MS || 8000);
 
 /**
  * Our affiliate, verified live before being written here.
@@ -123,13 +155,23 @@ export function affiliateStatus(fromAsset) {
   return { earning: true, reason: 'raw-address' };
 }
 
-async function getJson(url) {
+async function fetchOne(base, path) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${base}${path}`, {
       signal: ctrl.signal,
-      headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' }
+      headers: {
+        accept: 'application/json',
+        /*
+         * Liquify's docs ask integrators to identify themselves with this
+         * header and say they will raise limits for apps that send it. It
+         * costs nothing and the default anonymous cap is shared with every
+         * other anonymous caller.
+         */
+        'x-client-id': 'fbt-swap',
+        'user-agent': 'fbt-swap-app/1.0'
+      }
     });
     const body = await res.json().catch(() => null);
     /*
@@ -141,6 +183,27 @@ async function getJson(url) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Try each node until one answers.
+ *
+ * A node that returns a BUSINESS error (`{code, message}` — "memo too long",
+ * "pool not found") has answered correctly and must NOT trigger a failover:
+ * the next node would give the identical answer, and retrying would triple
+ * the latency of every legitimate rejection. Only a transport failure moves
+ * on to the next host.
+ */
+async function getJson(path) {
+  let lastErr = null;
+  for (const base of THOR_NODES) {
+    try {
+      return await fetchOne(base, path);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error('ALL_NODES_FAILED');
 }
 
 /**
@@ -162,7 +225,7 @@ const ASSET_RE = /^[A-Z]{2,10}[.~/][A-Z0-9\-.]{1,90}$/i;
  * which is the dead-button failure this project keeps removing.
  */
 export async function fetchThorPools() {
-  const pools = await getJson(`${THORNODE}/thorchain/pools`);
+  const pools = await getJson('/thorchain/pools');
   if (!Array.isArray(pools)) throw new Error('BAD_SHAPE');
 
   const items = pools
@@ -227,7 +290,7 @@ export async function thorQuote({ from, to, amount, destination, streaming }) {
     qs.set('affiliate_bps', String(Math.min(Math.max(AFFILIATE_BPS, 0), 1000)));
   }
 
-  const data = await getJson(`${THORNODE}/thorchain/quote/swap?${qs.toString()}`);
+  const data = await getJson(`/thorchain/quote/swap?${qs.toString()}`);
 
   /*
    * ─── THE FALLBACK THAT KEEPS THE FEATURE USABLE ─────────────────────────
@@ -240,7 +303,7 @@ export async function thorQuote({ from, to, amount, destination, streaming }) {
   if (data?.code === 2 && /memo too long/i.test(String(data.message)) && affiliate) {
     qs.delete('affiliate');
     qs.delete('affiliate_bps');
-    const retry = await getJson(`${THORNODE}/thorchain/quote/swap?${qs.toString()}`);
+    const retry = await getJson(`/thorchain/quote/swap?${qs.toString()}`);
     if (retry && !retry.code) {
       return { ...retry, feeApplied: false, feeSkipped: 'MEMO_TOO_LONG' };
     }
@@ -257,7 +320,7 @@ export async function thorQuote({ from, to, amount, destination, streaming }) {
 /** Config sanity, for the Developers page and for debugging from a phone. */
 export function thorStatus() {
   return {
-    node: THORNODE,
+    nodes: THOR_NODES,
     affiliate: AFFILIATE,
     thorname: THORNAME || null,
     bps: AFFILIATE_BPS,

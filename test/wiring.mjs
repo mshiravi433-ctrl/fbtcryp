@@ -6285,6 +6285,31 @@ export default function run() {
         /memoWarning/.test(panel));
 
       /* Halted chains must never reach a dropdown. */
+      /*
+       * ─── MORE THAN ONE NODE, BECAUSE ONE FAILED IN PRODUCTION ──────────
+       * Shipped with a single host and it broke on deploy: /api/thor/status
+       * (no upstream call) answered while /pools and /quote both returned
+       * "fetch failed" — a CONNECTION failure, not a rejected request. The
+       * Vercel function could not reach that host at all, though the same URL
+       * answers from elsewhere. gateway.liquify.com is the endpoint
+       * THORChain's own developer docs list first.
+       */
+      t('several THORChain nodes are tried, not one', /THOR_NODES = /.test(thor));
+      t('...with the endpoint their own docs list first',
+        thor.includes('gateway.liquify.com/chain/thorchain_api'));
+      t('...and at least one independent fallback',
+        thor.includes('thornode.ninerealms.com'));
+      /*
+       * A BUSINESS error must not trigger failover. "memo too long" is a
+       * correct answer; the next node would say the same thing, and retrying
+       * would triple the latency of every legitimate rejection.
+       */
+      t('...only a transport failure moves to the next node',
+        thor.includes('lastErr = err;'));
+      /* Per-attempt timeout, or three nodes could hold a function 45s. */
+      t('...with a per-attempt timeout short enough for three tries',
+        thor.includes('THOR_TIMEOUT_MS || 8000'));
+
       t('halted pools are filtered out server-side',
         /trading_halted === false/.test(thor));
 
