@@ -1853,6 +1853,25 @@ select option { background: #0a0c12; }
 /* The icon tile keeps the neon gradient but needs light glyphs on it. */
 :root[data-theme='light'] .ad-icon { color: #fff; }
 
+/*
+ * ─── AND THE DRAWN ARTWORK, WHICH WAS THE LAST NEON THING LEFT ─────────────
+ * Reported: «ایکون و رنگ‌بندی در تم سفید اشتباهه» on the Farm banner.
+ *
+ * The text, border and tint were converted to the readable inks when this
+ * block was first written; the inline SVG was missed because its gradient
+ * stops were hard-coded in JSX and no CSS rule could reach them. AdBanner now
+ * routes those stops through --ad-art-a/--ad-art-b, which is what makes this
+ * override possible at all.
+ *
+ * Measured against white: farm's neon pair (#00ff9d, #00e5ff) scores 1.30:1
+ * and 1.42:1. The inks score 4.52:1 and 4.50:1 — AA for the stroked shapes
+ * that carry the whole illustration.
+ */
+:root[data-theme='light'] .ad-banner {
+  --ad-art-a: var(--ad-ink);
+  --ad-art-b: var(--ad-ink-b);
+}
+
 :root[data-theme='light'] .ad-cta {
   color: var(--ad-ink);
   background: color-mix(in srgb, var(--ad-ink) 10%, #fff);
@@ -6330,9 +6349,46 @@ body { overflow-x: clip; }
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.028);
   overflow: hidden;
+
+  /*
+   * ─── THE BOX OWNS ITS OWN TOP MARGIN ──────────────────────────────────
+   * Reported: «در صفحه والت ایکون کشویی کنترل مول ما دست کیست بدون فاصله
+   * چسبیده با دکمه‌های بالا» — on the Wallet screen the collapsible box is
+   * stuck to the buttons above it with no gap.
+   *
+   * The only margin this component had was `.infobox + .infobox`, which
+   * applies to a box following ANOTHER box. Every InfoBox that is the FIRST
+   * (or only) one in its section therefore had zero separation from whatever
+   * came before — a button row, a balance card, a paragraph. It looked
+   * welded on.
+   *
+   * That was not a Wallet bug; Wallet is just where it was noticed. The same
+   * collision existed on Swap, Signals, Settings, Discover, Ecosystem, P2P,
+   * Predict, Nft, Earn, Stocks, SolanaSwap and the radio panel — everywhere
+   * the component is used exactly once. Fixing it at the call site would
+   * have meant twelve inline margins and a thirteenth bug the next time
+   * somebody added one.
+   *
+   * `margin-top` and not `margin-block`: the boxes are vertically stacked in
+   * both LTR and RTL, so the logical property would resolve identically
+   * while being harder to read.
+   */
+  margin-top: 12px;
 }
 
+/*
+ * Tighter between consecutive boxes than after arbitrary content. A stack of
+ * related boxes should read as ONE group; 12px between each would break them
+ * apart into unrelated items.
+ */
 .infobox + .infobox { margin-top: 8px; }
+
+/*
+ * ...and no margin when it is the very first thing in its container. A
+ * section that OPENS with an InfoBox already has the container's own padding
+ * above it, and adding to that leaves an obvious dead band at the top.
+ */
+.infobox:first-child { margin-top: 0; }
 
 .infobox-head {
   width: 100%;
@@ -6422,8 +6478,37 @@ body { overflow-x: clip; }
 .ap {
   position: fixed;
   bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+
+  /*
+   * ─── CENTRED WITH margin:auto, NOT translateX(-50%) ─────────────────────
+   * Reported: «Mp3 player رادیو نصفش در صفحه هست نصفه دیگش رفته باید بیاد
+   * وسط» — half the player is off the screen.
+   *
+   * The cause is a direct collision with Framer Motion, and it is worth
+   * naming because it will happen again to anyone who styles an animated
+   * component this way.
+   *
+   * The bar used `left: 50%; transform: translateX(-50%)`, which is the
+   * standard centring trick. But the component animates in with
+   * `animate={{ y: 0 }}`, and Framer writes that to the element's INLINE
+   * `transform` — inline styles beat any stylesheet rule, so the moment the
+   * entrance animation resolves, `translateX(-50%)` is replaced by
+   * `translateY(0)`. The `left: 50%` survives; the correction that cancelled
+   * it does not. The bar therefore sits with its LEFT EDGE at the middle of
+   * the screen and the right half hanging off — exactly what was reported.
+   *
+   * It only looked correct for the fraction of a second before Framer took
+   * over the property, which is why it can pass a glance and fail in use.
+   *
+   * `inset-inline` plus `margin-inline: auto` centres without touching
+   * `transform` at all, so Framer is free to own that property. Logical
+   * properties rather than left/right because this app is RTL in Persian and
+   * Arabic; with a symmetric box they resolve the same, but a future
+   * asymmetric offset would break silently otherwise.
+   */
+  inset-inline: 0;
+  margin-inline: auto;
+
   width: calc(100% - 28px);
   max-width: 440px;
   z-index: 60;
@@ -6659,4 +6744,110 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .ap-seek::-webkit-slider-thumb { transition: none; }
   .ap-seek:active::-webkit-slider-thumb { transform: none; }
+}
+
+/* ==========================================================================
+   Radio dock — background playback and the small edge marker
+   --------------------------------------------------------------------------
+   Requested: «امکان پخش در پس‌زمینه داشته باشد ... با یک ایکون جعبه‌ای ریز در
+   کنار صفحه به عنوان هشدار باشد که وقتی روش می‌زنی پلیر باز شود تا قطع کنی».
+   ========================================================================== */
+
+/*
+   TUCKED, NOT UNMOUNTED.
+
+   The <audio> element must keep existing while the pill is showing, or the
+   sound stops — which is the entire bug being fixed. So the transport is
+   hidden with CSS instead of being conditionally rendered.
+
+   `visibility: hidden` and NOT `display: none`: several mobile browsers treat
+   a display:none media element as detached from the document and suspend
+   playback. `visibility` keeps it in the layout tree and playing while making
+   it invisible and untouchable.
+
+   `pointer-events: none` matters too — an invisible full-width bar sitting
+   over the bottom of every screen would silently eat taps meant for the page.
+*/
+.radio-dock.is-tucked {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/*
+   THE PILL.
+
+   Sits above the bottom navigation and hard against the inline-end edge,
+   which is the RIGHT in English and the LEFT in Persian and Arabic —
+   `inset-inline-end` rather than `right`, so it lands on the side the thumb
+   is already on in each direction.
+
+   Small on purpose. It is a marker, not a control surface: its only job is to
+   say "something is still playing" and to reopen the real transport. 40px is
+   the smallest square that still clears the 40px minimum touch target most
+   accessibility guidance asks for.
+*/
+.radio-pill {
+  position: fixed;
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 14px);
+  inset-inline-end: 14px;
+  z-index: 59; /* just under .ap (60), so the transport covers it on open */
+
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+
+  border-radius: 13px;
+  border: 1px solid var(--rgb-4);
+  background: var(--bg-raised);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  /* The tinted shadow is what stops it disappearing against a busy chart. */
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(0, 255, 157, 0.07);
+  cursor: pointer;
+  padding: 0;
+}
+.radio-pill:active { transform: scale(0.92); }
+
+/* Three bars, because a speaker glyph reads as "mute" to a lot of people and
+   this control does the opposite. Motion carries the state at a size where a
+   colour change alone would not be noticed. */
+.radio-pill-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 15px;
+}
+.radio-pill-eq i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--rgb-4);
+  /* Paused height: short, even, obviously static. */
+  height: 5px;
+  transition: height 0.2s ease;
+}
+.radio-pill-eq.is-live i { animation: radio-eq 1.05s ease-in-out infinite; }
+.radio-pill-eq.is-live i:nth-child(2) { animation-delay: 0.18s; }
+.radio-pill-eq.is-live i:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes radio-eq {
+  0%, 100% { height: 5px; }
+  50%      { height: 15px; }
+}
+
+:root[data-theme='light'] .radio-pill {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.16), 0 0 0 4px rgba(0, 168, 104, 0.08);
+  border-color: var(--up);
+}
+:root[data-theme='light'] .radio-pill-eq i { background: var(--up); }
+
+/*
+   Reduced motion: freeze the bars at full height rather than stopping them
+   short. A static short bar looks paused, and "paused" is information this
+   indicator would then be reporting incorrectly.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .radio-pill-eq.is-live i { animation: none; height: 15px; }
 }

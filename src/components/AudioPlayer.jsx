@@ -48,7 +48,17 @@ export default function AudioPlayer({
   track,
   queue = [],
   onTrack,
-  onClose
+  onClose,
+  /*
+   * Reports real play/pause up to the store, so the floating pill can show
+   * whether sound is actually coming out.
+   *
+   * Driven by the element's own `play`/`pause`/`error` events, never
+   * optimistically on tap. A pill that claims "playing" because a button was
+   * pressed while the CDN refused the file is the dishonest state this app
+   * keeps removing.
+   */
+  onPlayingChange
 }) {
   const { t } = useTranslation();
 
@@ -226,6 +236,13 @@ export default function AudioPlayer({
   }, [track, next, prev, onTrack, t]);
 
   /* ---------------------------- transport -------------------------------- */
+
+  /* Mirror playback state to the store on every change, including the
+     transitions the user did not cause: auto-advance, a stall that ends, a
+     CDN error. Anything less and the pill drifts out of sync with reality. */
+  useEffect(() => {
+    onPlayingChange?.(playing);
+  }, [playing, onPlayingChange]);
 
   const toggle = () => {
     const el = audio.current;

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { riseIn, stagger } from './PageTransition';
-import AudioPlayer from './AudioPlayer';
 import InfoBox from './InfoBox';
+import { useRadioStore } from '../store/useRadioStore';
 import { timeAgo } from '../lib/format';
 import { getAudio, fmtDuration } from '../lib/audio';
 import { openUrl } from '../lib/browser';
@@ -46,7 +46,21 @@ export default function RadioPanel() {
 
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
-  const [current, setCurrent] = useState(null);
+
+  /*
+   * ─── THE SELECTION LIVES IN A STORE, NOT IN THIS COMPONENT ──────────────
+   * It used to be `useState` here, and the transport was rendered here too.
+   * Both are inside a route, and every route in this app is unmounted by
+   * <AnimatePresence> on navigation — so leaving the News screen destroyed
+   * the <audio> element and playback stopped. That was the component tree
+   * working exactly as written, which is why it could not be fixed from
+   * inside this file.
+   *
+   * The transport now lives in `RadioDock`, mounted above the router in
+   * App.jsx. This screen only chooses what plays.
+   */
+  const current = useRadioStore((s) => s.track);
+  const toggleTrack = useRadioStore((s) => s.toggleTrack);
   /* `null` = every station. A station id filters the list to one show. */
   const [station, setStation] = useState(null);
 
@@ -172,7 +186,7 @@ export default function RadioPanel() {
                 <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
                   <button
                     className="icon-btn"
-                    onClick={() => setCurrent(isCurrent ? null : item)}
+                    onClick={() => toggleTrack(item, queue)}
                     aria-label={isCurrent ? t('radio.stop') : t('radio.play')}
                     style={{
                       flexShrink: 0,
@@ -240,21 +254,12 @@ export default function RadioPanel() {
       )}
 
       {/*
-        AnimatePresence so the bar slides away instead of vanishing. A control
-        that disappears between frames leaves the user unsure whether they hit
-        stop or the app crashed.
+        No player rendered here, deliberately.
+
+        `RadioDock` in App.jsx owns the transport, above the router, so it
+        survives navigation. Rendering a second one here would create a second
+        <audio> element and two episodes would play at once.
       */}
-      <AnimatePresence>
-        {current && (
-          <AudioPlayer
-            key="ap"
-            track={current}
-            queue={queue}
-            onTrack={setCurrent}
-            onClose={() => setCurrent(null)}
-          />
-        )}
-      </AnimatePresence>
     </section>
   );
 }

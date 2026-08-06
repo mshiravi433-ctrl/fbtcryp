@@ -2509,7 +2509,8 @@
     "speed": "Playback speed",
     "seek": "Seek within the episode",
     "playerLabel": "Radio player",
-    "failed": "This episode would not play. The show's own server refused the file — it is not a problem with your connection or with the app. Try another episode."
+    "failed": "This episode would not play. The show's own server refused the file — it is not a problem with your connection or with the app. Try another episode.",
+    "dockOpen": "Open the radio player to pause or stop it"
   },
   "crash": {
     "title": "This screen ran into a problem",

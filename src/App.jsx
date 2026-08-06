@@ -9,6 +9,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
+import RadioDock from './components/RadioDock';
 import RouteBoundary from './components/RouteBoundary';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
@@ -361,6 +362,25 @@ export default function App() {
           <AnimatedRoutes />
           <BottomNav />
         </div>
+        {/*
+          ─── THE RADIO, OUTSIDE <AnimatedRoutes> AND THAT IS THE FEATURE ───
+          Requested: «امکان پخش در پس‌زمینه داشته باشد، مثلا وقتی پادکست را
+          می‌زنی و می‌روی به صفحه سواپ».
+
+          `AnimatedRoutes` unmounts the outgoing page on every navigation, so
+          an <audio> element owned by a page is destroyed the moment you leave
+          it. Playback stopping was not a missing feature — it was the
+          component tree working exactly as written, and it could not be fixed
+          from inside the News screen.
+
+          Sitting here, it survives every route change. Still INSIDE
+          <HashRouter>, because the dock reads `useLocation()` to decide
+          between the full transport (on /news) and the small pill (anywhere
+          else) — the box the request describes.
+
+          It renders nothing at all until something is playing.
+        */}
+        <RadioDock />
       </HashRouter>
     );
   }

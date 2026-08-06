@@ -87,6 +87,15 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
       style={{
         '--ad-a': cfg.hues[0],
         '--ad-b': cfg.hues[1],
+        /*
+         * The ARTWORK colours, seeded to the neon pair. Dark theme uses them
+         * as-is; the light-theme block in index.css redefines these two to
+         * the readable inks. Kept separate from --ad-a/--ad-b so the glow and
+         * the tint can stay neon-derived while the drawn strokes go dark —
+         * a soft 35%-opacity glow is fine on white, a 1.3:1 stroke is not.
+         */
+        '--ad-art-a': cfg.hues[0],
+        '--ad-art-b': cfg.hues[1],
         // Readable variants for text/borders; the stylesheet picks these up
         // in light theme only. See SLOTS.
         '--ad-ink': cfg.inks[0],
@@ -114,9 +123,42 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
           style={{ position: 'relative', zIndex: 1 }}
         >
           <defs>
+            {/*
+              ─── THE ICON GRADIENT READS A CSS VARIABLE, NOT A HUE ────────
+              Reported: «در پایین صفحه فارم یک بنر تبلیغاتی هست که ایکون و
+              رنگ‌بندی در تم سفید اشتباهه».
+
+              The banner's TEXT and border were already fixed for light theme
+              by swapping in the darker `inks`. The ARTWORK was not, and the
+              reason is structural: these two stops hard-coded `cfg.hues` —
+              the neon pair — straight into the DOM from JSX. No stylesheet
+              rule can reach an SVG stop attribute, so the
+              `:root[data-theme='light']` block a few lines away in index.css
+              was powerless over the one part of the banner made entirely of
+              colour.
+
+              Measured, which is why this is a bug and not a taste argument:
+              farm's neon pair is #00ff9d and #00e5ff, which come out at
+              1.30:1 and 1.42:1 against white. WCAG AA wants 4.5:1. The
+              stroked icon was very nearly invisible — worst on Farm, because
+              mint-on-white is the weakest pair in the set, which is exactly
+              the screen the report names.
+
+              Pointing the stops at a custom property fixes it with no theme
+              detection in JavaScript: the component already sets these
+              inline, and index.css already knows what they should be per
+              theme. SVG `stop-color` resolves CSS variables, so the artwork
+              now follows the theme the same way the text does — one source
+              of truth instead of two that drift apart.
+
+              The fallback chain matters: if `--ad-art-a` is somehow not set,
+              it falls back to `--ad-a`, which is always set inline. A stop
+              that fails to resolve renders BLACK, so a missing variable here
+              would be a very visible regression.
+            */}
             <linearGradient id={`adg-${slot}`} x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor={cfg.hues[0]} />
-              <stop offset="100%" stopColor={cfg.hues[1]} />
+              <stop offset="0%" stopColor="var(--ad-art-a, var(--ad-a))" />
+              <stop offset="100%" stopColor="var(--ad-art-b, var(--ad-b))" />
             </linearGradient>
           </defs>
 

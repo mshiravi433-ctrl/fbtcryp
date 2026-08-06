@@ -5620,5 +5620,195 @@ export default function run() {
     }
   }
 
+  /* ---- 69. background radio, dock geometry, banner + infobox spacing ---- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const css = read('src/index.css');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1. THE PLAYER WAS HALF OFF THE SCREEN.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «Mp3 player رادیو نصفش در صفحه هست نصفه دیگش رفته باید بیاد وسط»
+     *
+     * `left: 50%; transform: translateX(-50%)` is the standard centring
+     * trick and it is WRONG for a Framer Motion component. Motion writes
+     * `animate={{ y }}` to the inline `transform`, which beats the
+     * stylesheet — so the -50% correction is erased while `left: 50%`
+     * survives, parking the left edge at mid-screen.
+     *
+     * This exact bug was already fixed once for `.more-layer`. Pinning it
+     * here so it cannot come back a third time.
+     */
+    /*
+     * Comments stripped FIRST. The explanation inside this very rule names
+     * `translateX(-50%)` as the thing it removed, so an un-stripped match
+     * fails on its own documentation. That trap has now caught this suite
+     * five separate times, which is why the stripper is applied to the CSS
+     * before the block is extracted rather than after.
+     */
+    const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const apBlock = /\.ap \{[\s\S]*?\n\}/.exec(cssCode)?.[0] ?? '';
+    t('the radio player block exists', apBlock.length > 0);
+    t('...it does NOT centre with a transform Motion will overwrite',
+      !/transform:\s*translateX\(-50%\)/.test(apBlock));
+    t('...it centres with auto margins instead',
+      /margin-inline:\s*auto/.test(apBlock) && /inset-inline:\s*0/.test(apBlock));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 2. BACKGROUND PLAYBACK.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «امکان پخش در پس‌زمینه داشته باشد ... با یک ایکون جعبه‌ای ریز»
+     *
+     * The full chain, because "wired to nothing" is this repo's recurring
+     * failure: store → dock → mounted ABOVE the router → the page no longer
+     * renders its own player → the pill exists and is reachable.
+     */
+    t('the radio store exists', existsSync('src/store/useRadioStore.js'));
+    t('the radio dock exists', existsSync('src/components/RadioDock.jsx'));
+
+    if (existsSync('src/store/useRadioStore.js') && existsSync('src/components/RadioDock.jsx')) {
+      const store = code(read('src/store/useRadioStore.js'));
+      const dock = code(read('src/components/RadioDock.jsx'));
+      const app = code(read('src/App.jsx'));
+      const panel = code(read('src/components/RadioPanel.jsx'));
+      const player = code(read('src/components/AudioPlayer.jsx'));
+
+      /*
+       * THE PLACEMENT IS THE WHOLE FEATURE. Inside <AnimatedRoutes> the dock
+       * would be unmounted on every navigation and nothing would have
+       * changed. It must also stay INSIDE HashRouter, because it reads
+       * useLocation() to choose between the bar and the pill.
+       */
+      t('the dock is mounted in App', /<RadioDock \/>/.test(app));
+      t('...outside AnimatedRoutes, or it would be unmounted on navigation',
+        app.indexOf('<RadioDock />') > app.indexOf('<AnimatedRoutes />') &&
+        app.indexOf('<RadioDock />') < app.indexOf('</HashRouter>'));
+
+      /*
+       * Exactly ONE AudioPlayer in the tree. A second one means two <audio>
+       * elements and two episodes playing at once — and the obvious way to
+       * write this bug is to leave the old player on the News screen.
+       */
+      t('the News panel no longer renders its own player',
+        !/<AudioPlayer/.test(panel));
+      t('...the dock is the only thing that renders one',
+        /<AudioPlayer/.test(dock));
+
+      /*
+       * The pill must HIDE the transport, never unmount it. Unmounting
+       * destroys the <audio> element and stops the sound, which is the bug.
+       * And it must be `visibility`, not `display: none` — several mobile
+       * browsers suspend a display:none media element.
+       */
+      t('the transport is hidden rather than unmounted',
+        /is-tucked/.test(dock) && /is-tucked/.test(css));
+      const tucked = /\.radio-dock\.is-tucked \{[\s\S]*?\n\}/.exec(cssCode)?.[0] ?? '';
+      t('...with visibility, not display:none',
+        /visibility:\s*hidden/.test(tucked) && !/display:\s*none/.test(tucked));
+      t('...and it cannot swallow taps while hidden',
+        /pointer-events:\s*none/.test(tucked));
+
+      /* The pill itself, and that it can reopen the transport. */
+      t('the pill exists and is styled', /\.radio-pill \{/.test(css));
+      t('...and tapping it reopens the transport', /setExpanded\(true\)/.test(dock));
+      t('...and it sits under the transport, not over it',
+        /z-index:\s*59/.test(css));
+      /* RTL: the pill must land on the thumb side in both directions. */
+      t('...positioned with a logical edge so RTL is handled',
+        /inset-inline-end/.test(/\.radio-pill \{[\s\S]*?\n\}/.exec(css)?.[0] ?? ''));
+
+      /*
+       * "Playing" must come from the ELEMENT, not from the tap. A pill that
+       * claims to be playing while the CDN refused the file is the
+       * dishonest state this app keeps removing.
+       */
+      t('playing state is reported up from the audio element',
+        /onPlayingChange/.test(player) && /onPlayingChange/.test(dock));
+
+      /*
+       * NOT persisted. Restoring "was playing" would try to autoplay on load,
+       * which every browser refuses — leaving a bar that lies about what it
+       * is doing.
+       */
+      t('the radio state is not persisted across reloads',
+        !/persist/.test(store));
+
+      /* Copy for the pill, in all three written languages. */
+      const enL = JSON.parse(read('src/i18n/locales/en.json'));
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      t('the pill has an accessible label everywhere',
+        hasKey(enL, 'radio.dockOpen') && hasKey(faL, 'radio.dockOpen') &&
+        hasKey(arL, 'radio.dockOpen'));
+    }
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3. THE COLLAPSIBLE BOX WAS WELDED TO WHAT SAT ABOVE IT.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «ایکون کشویی ... بدون فاصله چسبیده با دکمه‌های بالا»
+     *
+     * The only margin was `.infobox + .infobox`, which applies to a box
+     * following ANOTHER box. Every InfoBox that is the only one in its
+     * section — which is most of them, on a dozen screens — had none.
+     */
+    const ibBlock = /\n\.infobox \{[\s\S]*?\n\}/.exec(cssCode)?.[0] ?? '';
+    t('the collapsible box owns a top margin of its own',
+      /margin-top:\s*\d/.test(ibBlock));
+    /* ...but not when it opens a container, or there is a dead band at the top. */
+    t('...and drops it when it is the first child',
+      /\.infobox:first-child \{[^}]*margin-top:\s*0/.test(css));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 4. THE BANNER ARTWORK IGNORED THE LIGHT THEME.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «در پایین صفحه فارم یک بنر تبلیغاتی هست که ایکون و رنگ‌بندی در تم
+     *    سفید اشتباهه»
+     *
+     * The text and border were converted to readable inks long ago. The SVG
+     * was missed because its gradient stops were hard-coded from JSX, and no
+     * stylesheet rule can reach an SVG stop attribute. Farm is the screen
+     * named in the report because mint-on-white (#00ff9d, 1.30:1) is the
+     * weakest pair in the set.
+     */
+    const ad = code(read('src/components/AdBanner.jsx'));
+    t('the banner artwork no longer hard-codes the neon hues',
+      !/stopColor=\{cfg\.hues/.test(ad));
+    t('...it reads a custom property the theme can override',
+      /stopColor="var\(--ad-art-a/.test(ad) && /stopColor="var\(--ad-art-b/.test(ad));
+    /* A stop that fails to resolve renders BLACK, so the fallback is not
+       cosmetic — a missing variable would be a very visible regression. */
+    t('...with a fallback so an unresolved variable never renders black',
+      /var\(--ad-art-a, var\(--ad-a\)\)/.test(ad));
+    t('...the component still seeds it inline for dark theme',
+      /'--ad-art-a': cfg\.hues\[0\]/.test(ad));
+    t('...and light theme redirects it to the readable inks',
+      /:root\[data-theme='light'\] \.ad-banner \{[^}]*--ad-art-a:\s*var\(--ad-ink\)/.test(css));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 5. PERSIAN REGISTER ON THE SWAP SCREEN.
+     * ═══════════════════════════════════════════════════════════════════════
+     *   «در صفحه سواپ پول‌ات اشتباهه، پول شما درسته»
+     *
+     * `پول‌ات` is a clumsy construction. Pinned so it cannot return, and
+     * checked as a SUBSTRING of the live value rather than an equality test
+     * on the whole sentence, which would break on any harmless rewording.
+     */
+    {
+      const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+      const title = faL.swap?.custodyTitle ?? '';
+      t('the swap custody title uses the polite form',
+        title.includes('پول شما') && !title.includes('پول\u200cات'));
+    }
+  }
+
   return rows;
 }
