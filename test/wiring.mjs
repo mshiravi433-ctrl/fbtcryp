@@ -7827,6 +7827,62 @@ export default function run() {
     /* The payout address has to be in the guide, or it cannot be checked. */
     t('...and states the wallet address to connect',
       av.includes('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
+
+    /*
+     * ─── AVANTIS WITHOUT GAS ────────────────────────────────────────────────
+     * The owner could not complete the signature because he had no ETH on
+     * Base. Avantis sponsor gas through Gelato, but for an EVM wallet it is
+     * OFF unless "Smart Wallet" is toggled at login - social logins get it by
+     * default, which is the trap, because a social login creates a Privy
+     * CUSTODIAL wallet and our referral code would bind to a wallet we hold
+     * no keys for. So the free route and the custodial warning have to travel
+     * together; either one alone leads him somewhere wrong.
+     */
+    t('...and gives the gasless route for a wallet with no ETH',
+      /Smart Wallet/.test(av));
+
+    /* ---- where each rotated credential goes -------------------------- */
+    const wk = existsSync('docs/WHERE-TO-PUT-KEYS-FA.md')
+      ? read('docs/WHERE-TO-PUT-KEYS-FA.md')
+      : '';
+    t('the key-placement guide exists', wk.length > 0);
+    /*
+     * The names must be exact. `ALCHEMY_API_KEY` with a VITE_ prefix would be
+     * compiled into the browser bundle and leak again - re-leaking the very
+     * key being rotated.
+     */
+    for (const k of ['ALCHEMY_API_KEY', 'GROQ_API_KEY', 'BLOB_READ_WRITE_TOKEN',
+      'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']) {
+      t(`...and names ${k} exactly`, wk.includes(k));
+    }
+    t('...and warns against the VITE_ prefix on server secrets',
+      /VITE_/.test(wk) && /مرورگر/.test(wk));
+    /*
+     * The \n handling is the single most common cause of a failed rotation,
+     * and it fails with `invalid_grant`, which names nothing.
+     */
+    t('...and explains the private-key newline trap',
+      /invalid_grant/.test(wk));
+    t('...and tells him to delete the downloaded JSON afterwards',
+      /JSON/.test(wk) && /پاک/.test(wk));
+
+    /*
+     * A rotation done from a phone needs a way to see WHICH part is wrong.
+     * `fcm: false` has three causes with three different fixes.
+     */
+    const fcmSrc = code(read('server/fcm.js'));
+    t('the FCM diagnostic exists', /export function fcmDiagnose/.test(fcmSrc));
+    t('...and separates the three private-key failure modes',
+      /looksPem/.test(fcmSrc) && /hasNewlines/.test(fcmSrc) && /present:/.test(fcmSrc));
+    /*
+     * It must NEVER echo the key. The project id is fine - it already ships
+     * in the browser bundle as VITE_FIREBASE_PROJECT_ID.
+     */
+    t('...and never echoes the private key itself',
+      !/privateKey:\s*PRIVATE_KEY/.test(fcmSrc)
+      && !/key:\s*PRIVATE_KEY\b/.test(fcmSrc));
+    t('...and is reachable from the push status route',
+      code(read('server/app.js')).includes('fcmDetail'));
   }
 
   return rows;

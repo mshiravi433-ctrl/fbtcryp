@@ -52,6 +52,51 @@ const PRIVATE_KEY = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n
 export const fcmConfigured = () =>
   Boolean(PROJECT_ID && CLIENT_EMAIL && PRIVATE_KEY.includes('BEGIN PRIVATE KEY'));
 
+/**
+ * Which project is actually configured, and does each part look sane?
+ *
+ * ─── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ * The owner has to rotate a leaked service-account key from a phone, and
+ * `fcmConfigured()` answers only true/false. When it says false there are
+ * three candidate causes and no way to tell them apart without reading logs
+ * he cannot reach.
+ *
+ * Worse, writing the rotation guide turned up a real ambiguity: this repo
+ * names TWO Firebase projects. `.env.example` carries `fbt-cryp` for the
+ * browser SDK, while every server-side doc says `fbt-room-a46fc`. Those may
+ * legitimately be two projects, or one of them may be stale — but if the new
+ * key is created under the wrong one, FCM breaks with an opaque `invalid_grant`
+ * and the guide would be blamed before the project id was.
+ *
+ * So this echoes the project id being used. That is safe: a Firebase project
+ * id is public by construction — it appears in the client bundle already, in
+ * VITE_FIREBASE_PROJECT_ID. The private key is NEVER echoed, only described.
+ */
+export function fcmDiagnose() {
+  return {
+    configured: fcmConfigured(),
+    /* Public identifier, already shipped in the browser bundle. */
+    projectId: PROJECT_ID || null,
+    clientEmailSet: Boolean(CLIENT_EMAIL),
+    /*
+     * The three failure modes of the private key, reported separately because
+     * the fix for each is different:
+     *
+     *   present=false  -> the variable was not saved, or not redeployed
+     *   looksPem=false -> the BEGIN/END wrapper was trimmed off in copying
+     *   hasNewlines=false -> the \n sequences were stripped or pre-converted,
+     *                        which is the single most common mistake and the
+     *                        one that produces the misleading `invalid_grant`
+     */
+    privateKey: {
+      present: PRIVATE_KEY.length > 0,
+      looksPem: PRIVATE_KEY.includes('BEGIN PRIVATE KEY')
+        && PRIVATE_KEY.includes('END PRIVATE KEY'),
+      hasNewlines: PRIVATE_KEY.includes('\n')
+    }
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* OAuth2         
 /* -------------------------------------------------------------------------- */

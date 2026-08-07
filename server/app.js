@@ -45,7 +45,7 @@ import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js
 import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
-import { fcmBroadcast, fcmConfigured } from './fcm.js';
+import { fcmBroadcast, fcmConfigured, fcmDiagnose } from './fcm.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import {
@@ -1211,7 +1211,13 @@ app.get('/api/push/status', async (_req, res) => {
     web: webReady,
     fcm: fcmReady,
     subscribers: await readSubscriptionsSafe(),
-    devices: await readFcmTokensSafe()
+    devices: await readFcmTokensSafe(),
+    /*
+     * Enough detail to fix a failed key rotation from a phone. `fcm: false`
+     * alone has three possible causes with three different fixes; this names
+     * which one. No secret is echoed — see fcmDiagnose().
+     */
+    fcmDetail: fcmDiagnose()
   });
 });
 

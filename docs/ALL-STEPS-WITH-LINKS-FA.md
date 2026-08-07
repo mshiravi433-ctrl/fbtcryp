@@ -51,7 +51,9 @@ https://vercel.com/dashboard  →  fbtcryp-kkxi  →  Settings
 
 ## ۱-۲ · چهار کلید دیگر
 
-📖 **راهنمای کلیک‌به‌کلیک: [`ROTATE-KEYS-STEPS-FA.md`](ROTATE-KEYS-STEPS-FA.md)**
+📖 **کجا بگذارم؟ [`WHERE-TO-PUT-KEYS-FA.md`](WHERE-TO-PUT-KEYS-FA.md)** — جواب دقیق
+هر چهار مورد، با اسم متغیرها
+📖 **چطور بسازم؟ [`ROTATE-KEYS-STEPS-FA.md`](ROTATE-KEYS-STEPS-FA.md)**
 
 | چه چیزی | لینک | متغیر |
 |---|---|---|
@@ -85,6 +87,9 @@ https://vercel.com/dashboard  →  fbtcryp-kkxi  →  Settings
 |---|---|
 | ورود | 🔗 https://www.avantisfi.com/trade |
 | ساخت کد | 🔗 https://www.avantisfi.com/referral |
+
+💡 **پول گس نداری؟** موقع ورود کلید **Smart Wallet** را روشن کن — خودشان گس
+را می‌دهند. جزئیات در راهنما.
 
 ⚠️ **سه تله:**
 1. آدرس **`/referral`** است — **مفرد**. `/referrals` خطای ۴۰۴ می‌دهد (تست کردم)
