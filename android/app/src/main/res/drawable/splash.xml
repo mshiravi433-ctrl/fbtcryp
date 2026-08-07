@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LAUNCH BACKGROUND — replaces the stretched splash.png bitmaps.
+
+  ─── WHAT WAS WRONG ─────────────────────────────────────────────────────────
+  Every splash.png in this project was a WHITE canvas (measured: 98.8% pure
+  #FFFFFF pixels) carrying a small blue "X" that is not even our mark — it is
+  the stock Capacitor placeholder that ships with `npx cap add android` and was
+  never replaced.
+
+  So on a black-themed crypto app the launch sequence was:
+      white screen with a stranger's blue X  ->  black app
+  which is exactly the "white box" complaint, and it is the most visible
+  half-second the app has.
+
+  ─── WHY A LAYER-LIST AND NOT A BITMAP ──────────────────────────────────────
+  A single PNG set as android:windowBackground is STRETCHED to the window. The
+  old files were fixed-aspect (480x320, 720x1280, ...), so on any phone whose
+  aspect ratio did not match one of eleven hard-coded buckets the artwork was
+  distorted. A layer-list draws a flat colour to the edges and centres the mark
+  at its natural density size, so it is correct on every screen — foldables,
+  tablets and split-screen included — from ONE definition.
+
+  The colour is @color/ic_launcher_background (#00030F), the same value the
+  adaptive launcher icon and Capacitor's backgroundColor use. Three places
+  agreeing is what makes the icon -> splash -> app transition look continuous
+  instead of like three different apps.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
+    <item>
+        <bitmap
+            android:src="@drawable/splash_mark"
+            android:gravity="center" />
+    </item>
+</layer-list>

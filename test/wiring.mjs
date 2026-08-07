@@ -8767,5 +8767,171 @@ export default function run() {
       /Gold/i.test(String(JSON.parse(read('src/i18n/locales/en.json')).earn?.pointsNotice)));
   }
 
+  /* ---- 92. the white box behind the logo, on both platforms -------------- */
+  /*
+   * REPORTED: «لوگو در pwa با یک کادر سفید هست جالب نیست» — a white box around
+   * the logo. There were THREE separate causes, all real and all measured.
+   *
+   * ─── CAUSE 1 · no maskable icon at 192, which is the size a phone uses ───
+   * The manifest declared maskable at 512 ONLY. Chrome picks the icon nearest
+   * the launcher's requested size — 192 on almost every phone — and at 192 the
+   * only candidates were purpose "any". Android Oreo and later force one
+   * silhouette on every home-screen icon, and an icon it cannot mask is
+   * SHRUNK AND PLACED ON A WHITE PLATE. That white plate is the report.
+   *
+   * The 512 maskable entry looked like the box was ticked, which is why this
+   * survived: the Lighthouse audit "has a maskable icon" passed, because it
+   * only checks that SOME entry declares the purpose.
+   *
+   * ─── CAUSE 2 · the native app's splash was a white Capacitor placeholder ──
+   * Every splash.png in android/ was measured at 98.8% pure #FFFFFF carrying
+   * the stock blue Capacitor "X" — not our mark, never replaced since
+   * `cap add android`. Cold start was: white screen, stranger's logo, then a
+   * black app.
+   *
+   * ─── CAUSE 3 · Android 12+ ignored all of it ─────────────────────────────
+   * From API 31 the system draws its own splash and does not read
+   * android:windowBackground when it is a drawable. With no
+   * windowSplashScreenBackground set it derives the colour from the theme —
+   * and the theme's parent was Theme.AppCompat.LIGHT.DarkActionBar. A Light
+   * parent under an all-black app is a white window background, so the flash
+   * came back on exactly the devices most people own.
+   */
+  {
+    const m = JSON.parse(read('public/manifest.webmanifest'));
+    const icons = m.icons ?? [];
+    const maskable = icons.filter((i) => String(i.purpose ?? '') === 'maskable');
+    const anyPurpose = icons.filter((i) => String(i.purpose ?? 'any') === 'any');
+
+    /*
+     * 192 is the operative one — that is what the launcher asks for. Pinning
+     * the literal size rather than "has some maskable icon" is the whole point
+     * of this section; the generic form is what passed while broken.
+     */
+    t('there is a maskable icon at 192, the size a phone actually requests',
+      maskable.some((i) => i.sizes === '192x192'));
+    t('...and at 512, for the install prompt and splash',
+      maskable.some((i) => i.sizes === '512x512'));
+
+    /*
+     * "any maskable" on one file is the trap web.dev warns about: the padded
+     * artwork gets used UNMASKED too, and then the logo looks too small next
+     * to every other app. Separate files, separate purposes.
+     */
+    t('no icon claims both purposes at once',
+      icons.every((i) => !/\s/.test(String(i.purpose ?? '').trim())));
+    t('the unmasked icons are still full-bleed',
+      anyPurpose.some((i) => i.sizes === '192x192') && anyPurpose.some((i) => i.sizes === '512x512'));
+
+    /* Every file named must exist, including the new ones. */
+    const missing = icons
+      .map((i) => i.src.replace(/^\//, ''))
+      .filter((p) => !existsSync(join('public', p)));
+    t(`every icon file exists${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
+      missing.length === 0);
+
+    /*
+     * Shortcuts get masked by the same launcher. They pointed at the
+     * full-bleed icon-192, so a long-press menu showed three more white boxes.
+     */
+    t('the shortcut icons are maskable too',
+      (m.shortcuts ?? []).every((s) =>
+        (s.icons ?? []).some((i) => String(i.purpose ?? '') === 'maskable')));
+
+    /*
+     * A maskable icon MUST be opaque to the corners. A transparent one is
+     * filled by the OS with its own grey or white before masking — the same
+     * white box by another route. Checked by reading the PNG header: colour
+     * type 2 is RGB with no alpha channel at all, which cannot be transparent.
+     * (Types 6 and 4 carry alpha and would need a pixel scan we do not do
+     * here, so they are rejected outright rather than assumed safe.)
+     */
+    for (const i of maskable) {
+      const buf = readFileSync(join('public', i.src.replace(/^\//, '')));
+      const colourType = buf[25];
+      t(`${i.src} is opaque (PNG colour type ${colourType}, no alpha)`,
+        colourType === 2 || colourType === 0);
+    }
+  }
+
+  /* ---- 92b. the native launch screen ------------------------------------ */
+  {
+    const RES = 'android/app/src/main/res';
+
+    /*
+     * The stock white bitmaps are GONE, not merely overwritten. Leaving eleven
+     * fixed-aspect PNGs in place means the next `cap sync` or a stray density
+     * bucket can put one back on screen, and a stretched 480x320 on a 20:9
+     * phone is its own defect.
+     */
+    const strays = readdirSync(RES)
+      .filter((d) => /^drawable-(land|port)-/.test(d));
+    t(`the fixed-aspect splash buckets are gone${strays.length ? ` — found ${strays.join(', ')}` : ''}`,
+      strays.length === 0);
+    t('the old placeholder bitmap is gone', !existsSync(join(RES, 'drawable/splash.png')));
+
+    /* Replaced by a layer-list: a flat brand colour plus a centred mark, so
+       nothing is ever stretched and one file covers every screen. */
+    const splash = read(join(RES, 'drawable/splash.xml'));
+    t('the launch background is a layer-list, not a stretched bitmap',
+      /<layer-list/.test(splash));
+    t('...it paints the brand colour to the edges',
+      /@color\/ic_launcher_background/.test(splash));
+    t('...and centres the mark instead of scaling it',
+      /android:gravity="center"/.test(splash) && /@drawable\/splash_mark/.test(splash));
+
+    /* The mark must exist at every density, or the launcher upscales one. */
+    for (const d of ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+      t(`the splash mark ships at ${d}`, existsSync(join(RES, `drawable-${d}/splash_mark.png`)));
+    }
+
+    const styles = read(join(RES, 'values/styles.xml'));
+
+    /*
+     * THE ANDROID 12 ATTRIBUTES. Without these the OS builds its own splash
+     * from the theme and ignores the drawable entirely.
+     */
+    t('Android 12+ is told which colour to use for the splash',
+      /windowSplashScreenBackground[^>]*>@color\/ic_launcher_background/.test(styles));
+    t('Android 12+ is told which icon to draw',
+      /windowSplashScreenAnimatedIcon[^>]*>@drawable\/splash_icon/.test(styles));
+    t('the splash icon file exists', existsSync(join(RES, 'drawable/splash_icon.png')));
+    /* And it must hand over to the running theme, or the launch drawable
+       stays behind the WebView for the life of the process. */
+    t('the launch theme hands over to the app theme afterwards',
+      /postSplashScreenTheme[^>]*>@style\/AppTheme\.NoActionBar</.test(styles));
+
+    /*
+     * No Light parent anywhere. This is the root cause of cause 3 and it is a
+     * single word in a parent attribute — exactly the kind of thing that gets
+     * reintroduced by a template.
+     */
+    t('no theme inherits from a Light parent',
+      !/parent="Theme\.AppCompat\.Light/.test(styles));
+    /* The window background must be an explicit brand colour rather than
+       @null, which lets whatever is underneath (white) show through. */
+    t('the running theme paints its own background, not @null',
+      !/android:background">@null</.test(styles));
+
+    /*
+     * One black, four places. When the launcher icon background, the splash,
+     * the theme and Capacitor disagree the launch reads as a hand-off between
+     * different apps.
+     */
+    const colours = read(join(RES, 'values/ic_launcher_background.xml'));
+    const brand = (colours.match(/name="ic_launcher_background">(#[0-9A-Fa-f]{6})/) ?? [])[1];
+    t(`the brand black is declared once (${brand})`, brand === '#00030F');
+    const cap = JSON.parse(read('capacitor.config.json'));
+    t('...and Capacitor agrees with it',
+      String(cap.android?.backgroundColor ?? '').toLowerCase() === brand.toLowerCase());
+    t('...and so does the splash plugin',
+      String(cap.plugins?.SplashScreen?.backgroundColor ?? '').toLowerCase() === brand.toLowerCase());
+
+    /* colorAccent resolved to Capacitor's stock Material indigo #3F51B5,
+       which is not a colour that appears anywhere in this product. */
+    t('the accent is ours, not the Capacitor default',
+      /name="brand_accent"/.test(colours) && /colorAccent">@color\/brand_accent/.test(styles));
+  }
+
   return rows;
 }

@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.27.0 — versionCode 55
+
+### The white box around the logo — three causes, all fixed
+
+Reported as a PWA problem. It was three separate defects that produced the same
+white plate, and each was measured before being touched.
+
+**1 · No maskable icon at the size a phone actually asks for.** The manifest
+declared `purpose: maskable` at 512 only. The launcher requests 192 on almost
+every phone, and at 192 the only candidates were `purpose: any`. Android Oreo
+and later force one silhouette on every home-screen icon, and an icon it cannot
+mask is shrunk and placed **on a white plate**. That plate is the report.
+
+This survived a long time because the Lighthouse audit "has a maskable icon"
+*passed* — it only checks that some entry declares the purpose, never that the
+right size does. Added `icon-maskable-192.png` and `-384.png`, both flattened
+onto the brand black so they carry **no alpha channel at all** (a transparent
+maskable icon gets filled with the OS's own grey or white before masking, which
+is the same bug by another route). The three long-press shortcuts pointed at
+the full-bleed icon too, so a long-press menu showed three more white boxes;
+they now use the maskable file.
+
+**2 · The native app's launch screen was a white Capacitor placeholder.** Every
+`splash.png` under `android/` measured **98.8% pure #FFFFFF** and carried the
+stock blue Capacitor "X" — not our mark, never replaced since `cap add android`.
+Cold start was: white screen, a stranger's logo, then a black app. Replaced with
+a layer-list (flat brand colour + centred mark at each density), so nothing is
+stretched and one definition covers every screen — the eleven fixed-aspect
+bitmaps distorted the artwork on any phone that did not match one of their
+hard-coded ratios.
+
+**3 · Android 12 and later ignored all of the above.** From API 31 the system
+draws its own splash and does not read `android:windowBackground` when it is a
+drawable. With no `windowSplashScreenBackground` set it derives the colour from
+the theme — and the theme's parent was `Theme.AppCompat.**Light**.DarkActionBar`.
+A Light parent under an all-black app is a white window background, so the flash
+returned on exactly the devices most people own. The theme is now DayNight, the
+Android 12 splash attributes are set explicitly, and `postSplashScreenTheme`
+hands over to the running theme so the launch drawable does not linger behind
+the WebView.
+
+### One black instead of four
+
+`#00030F` is now declared once and referenced by the adaptive icon background,
+the launch screen, the app theme and Capacitor's `backgroundColor`. When those
+drift the launch reads as a hand-off between different apps. `colorAccent` also
+resolved to Capacitor's stock Material indigo `#3F51B5`, a colour that appears
+nowhere in this product; it is now the brand cyan.
+
+### Twenty-eight new guards
+
+Section 92 of the wiring audit pins the literal sizes rather than asking
+"is there a maskable icon" — the generic form is what passed while broken. It
+also fails if a Light theme parent, an `any maskable` combined purpose, or the
+fixed-aspect splash buckets ever come back. One of these guards caught a real
+mistake during this change: the first pass at the 192 and 384 icons kept an
+alpha channel.
+
 ## 1.22.0 — versionCode 50
 
 ### The Buy screen no longer complains about MoonPay

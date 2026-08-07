@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      The single source of truth for "FBT black". Used by the adaptive launcher
+      icon, the launch screen, the app theme and Capacitor's backgroundColor.
+      When these drift apart the launch reads as three different apps handing
+      off to each other.
+    -->
     <color name="ic_launcher_background">#00030F</color>
+
+    <!--
+      Accent. colorAccent used to resolve to Capacitor's stock Material indigo
+      #3F51B5 (from the library's own colors.xml), which is not a brand colour
+      here and showed up in system-drawn chrome such as text selection handles.
+    -->
+    <color name="brand_accent">#00E5FF</color>
 </resources>
