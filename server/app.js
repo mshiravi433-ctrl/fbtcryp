@@ -37,6 +37,7 @@ import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
 import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
+import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
@@ -514,6 +515,40 @@ app.get('/api/bridge/status', async (_req, res) => {
 app.get('/api/bridge/quote', async (req, res) => {
   try {
     const { ok, status, body } = await bridgeQuote(req.query);
+    return res.status(ok ? 200 : status || 502).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/*
+ * ─── THE SECOND BRIDGE, AT MORE THAN TWICE THE FEE ──────────────────────────
+ * deBridge DLN pays us 70 bps where LI.FI pays 30, needs no key and no
+ * account. It is NOT a replacement: DLN adds a FIXED protocol fee in the
+ * origin chain's native coin, which is negligible on a large transfer and
+ * ruinous on a small one. Both are quoted and the user picks — see
+ * server/dln.js for the measured numbers behind that decision.
+ *
+ * Same security boundary as LI.FI: the affiliate parameters are set on the
+ * server and are never accepted from the query string.
+ */
+app.get('/api/dln/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=300');
+  return res.json(dlnStatus());
+});
+
+app.get('/api/dln/quote', async (req, res) => {
+  try {
+    const { ok, status, body } = await dlnQuote(req.query);
+    return res.status(ok ? 200 : status || 502).json(body);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+app.get('/api/dln/tx', async (req, res) => {
+  try {
+    const { ok, status, body } = await dlnCreateTx(req.query);
     return res.status(ok ? 200 : status || 502).json(body);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });

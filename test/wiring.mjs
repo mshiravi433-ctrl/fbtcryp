@@ -7527,9 +7527,18 @@ export default function run() {
      */
     t('...and does not claim a user benefit we cannot guarantee',
       /userBenefit: false,\s*param: 'campaignId'/.test(vr));
-    /* The code validator must be shared, or a malformed id earns nothing. */
+    /*
+     * The code validator must be shared, or a malformed id earns nothing.
+     *
+     * This used to match the inline ternary inside `withReferral`. That
+     * ternary was extracted into `referralCodeFor` when a bug was found in
+     * its twin — `venueDisclosure` had its own copy that only ever checked
+     * GMX, so any other venue would have earned while reporting that it did
+     * not. The check now asserts the shared lookup covers UTEX, which is the
+     * property that actually matters and survives the next refactor.
+     */
     t('...and its id runs through the same validator as the others',
-      /venueId === 'utex' \? UTEX_CAMPAIGN/.test(vr));
+      /referralCodeFor/.test(vr) && /venueId === 'utex'\) return UTEX_CAMPAIGN/.test(vr));
 
     /*
      * The risk disclosure is not optional. UTEX holds no broker licence and
@@ -7594,18 +7603,198 @@ export default function run() {
       && todo.indexOf('serviceaccounts') < todo.indexOf('app.gmx.io'));
 
     /*
-     * deBridge was measured today at 70 bps paid straight to our address —
-     * more than double the 30 bps LI.FI pays — and it needs no key and no
-     * signup. Losing that finding would lose the largest free upgrade found.
+     * deBridge needs no key and no signup, and was first written up here at
+     * 70 bps because that is more than double what LI.FI pays us. Quoting both
+     * providers side by side proved 70 bps leaves the USER worse off than the
+     * bridge we already had, so the rate is 40.
+     *
+     * This check pins the CORRECTION, not the original finding. A doc that
+     * still advertises 70 bps would send the next person to re-raise the rate
+     * and undo the only thing that made this route honest.
      */
-    t('...and records the deBridge finding with its measured rate',
-      /deBridge/.test(todo) && /70/.test(todo));
+    t('...and records the deBridge correction, not the original 70 bps claim',
+      /deBridge/.test(todo) && /۰٫۴٪/.test(todo) && /۰٫۷٪/.test(todo));
 
     /*
      * The blocked list has to stay, or the same dead ends get re-researched.
      * OFAC FAQ 54 is the single citation that explains most of them.
      */
     t('...and keeps the blocked-platform evidence', /OFAC FAQ 54/.test(todo));
+  }
+
+  /* ---- 84. deBridge DLN, and the fee rate the comparison forced ---------- */
+  {
+    /*
+     * ─── WHAT THIS SECTION IS REALLY GUARDING ───────────────────────────────
+     * Not "does the file exist". The dangerous thing about this integration is
+     * that it pays us more than the bridge we already had, which makes the
+     * greedy choice feel like the obvious one. Quoting both providers at the
+     * same amount in the same minute showed that at 0.7% the user ends up $25
+     * worse off on a $10,000 transfer than on LI.FI — we would have shipped a
+     * route that was better for us and worse for them, and the output amount
+     * alone would never have revealed it.
+     *
+     * So these checks pin the RATE and the REASONING, because a future edit
+     * that "optimises" 0.4 back up to 0.7 would look like a revenue win in a
+     * diff and would silently be a betrayal of the user.
+     */
+    const dlnSrv = existsSync('server/dln.js') ? read('server/dln.js') : '';
+    t('the deBridge server module exists', dlnSrv.length > 0);
+
+    /*
+     * Comments are stripped FIRST. This suite has been fooled six times by
+     * checks that matched their own explanatory prose, most memorably on the
+     * very commit that added the undefined-CSS-class check.
+     *
+     * `code` is redeclared here rather than reused: it is `const` inside each
+     * section's block, so referring to a sibling block's copy is a
+     * ReferenceError at run time, not a lint warning.
+     */
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const dlnCode = code(dlnSrv);
+
+    t('...and asks for 0.4%, not the 0.7% that loses to LI.FI',
+      /\?\?\s*0\.4/.test(dlnCode) && /return 0\.4/.test(dlnCode));
+
+    /*
+     * The clamp matters as much as the default: deBridge accepts far more than
+     * 1% and a stray keystroke taking 7% of a bridge is unrecoverable.
+     */
+    t('...and clamps the rate so a typo cannot take a huge cut',
+      /raw\s*<\s*0\s*\|\|\s*raw\s*>\s*1/.test(dlnCode));
+
+    /*
+     * The measured table is the evidence for the rate. Without it the next
+     * person sees an arbitrary-looking 0.4 next to a competitor paying 0.7 and
+     * "fixes" it.
+     */
+    t('...and keeps the measured evidence for why 0.4 and not 0.7',
+      /9,949\.74/.test(dlnSrv) && /9,919\.76/.test(dlnSrv));
+
+    /*
+     * The affiliate parameters must be set server-side. This is the same
+     * boundary as server/bridge.js: a caller who could supply them would
+     * redirect our commission by editing a query string.
+     */
+    t('...and sets the affiliate parameters itself',
+      /affiliateFeeRecipient:\s*dlnFeeRecipient/.test(dlnCode));
+    t('...and never reads them from the caller',
+      !/query\??\.\[?['"`]?affiliateFee/.test(dlnCode));
+
+    /*
+     * The fee is taken on the ORIGIN chain, so a Solana origin needs a Solana
+     * address. Returning our EVM address there would be a burn, not a payment
+     * — the same family-crossing mistake lib/payout.js exists to prevent.
+     */
+    t('...and picks a fee address matching the origin chain family',
+      /SOLANA_CHAIN/.test(dlnCode) && /TRON_CHAIN/.test(dlnCode));
+
+    /*
+     * The fee is read BACK out of the response rather than assumed. Three
+     * integrations in this repo looked configured and earned nothing.
+     */
+    t('...and reads our fee back out of the response',
+      /AffiliateFee/.test(dlnCode) && /affiliateFeeFrom/.test(dlnCode));
+
+    /* The routes. A module nobody can reach earns exactly as much as none. */
+    const appSrc = code(read('server/app.js'));
+    for (const r of ['/api/dln/quote', '/api/dln/tx', '/api/dln/status']) {
+      t(`${r} is routed`, appSrc.includes(r));
+    }
+
+    /* ---- the client half ---- */
+    const dlnLib = existsSync('src/lib/dln.js') ? code(read('src/lib/dln.js')) : '';
+    t('the client comparison exists', /export function compareRoutes/.test(dlnLib));
+
+    /*
+     * The whole point: no winner is declared when the fixed fee cannot be
+     * priced. Comparing "9.94 out" against "9.68 out plus 0.001 ETH you also
+     * pay" and picking the bigger number is how the user gets recommended the
+     * route that costs them more.
+     */
+    t('...and refuses to pick a winner when the fixed fee is unpriced',
+      /FIXED_FEE_UNPRICED/.test(dlnLib));
+
+    /*
+     * `Number(null)` is 0 and 0 is finite. The null guard must come FIRST or a
+     * missing fixed fee reads as a free one. Hit before, in priceAlerts.
+     */
+    t('...and null-checks the fixed fee before any arithmetic',
+      /fixFeeUsd\s*==\s*null/.test(dlnLib));
+    t('...and rejects a zero or missing transfer total',
+      /total\s*<=\s*0/.test(dlnLib));
+
+    /* The Bridge screen has to actually render it and be able to sign it. */
+    const brg = code(read('src/pages/Bridge.jsx'));
+    t('the bridge screen quotes deBridge too', /getDlnQuote/.test(brg));
+    t('...and can execute through it', /getDlnTx/.test(brg));
+    /*
+     * Default `lifi`. Defaulting to the higher-paying route would make the
+     * user's choice a formality and put our revenue ahead of their price.
+     */
+    t('...and defaults to LI.FI rather than the route that pays us more',
+      /useState\('lifi'\)/.test(brg));
+    /*
+     * The fixed protocol fee travels in tx.value. Dropping it produces a
+     * revert that costs gas and explains nothing.
+     */
+    t('...and forwards the fixed fee in the transaction value',
+      /value:\s*order\.tx\.value/.test(brg));
+    /*
+     * A DLN order is invisible to scan.li.fi. Sending someone there after a
+     * successful bridge shows "not found" at the most anxious possible moment.
+     */
+    t('...and links to the right tracker for each provider',
+      /app\.debridge\.finance\/orders/.test(brg));
+    /* The severe-burden warning must reach the screen, not just exist. */
+    t('...and warns when the fixed fee dwarfs a small transfer',
+      /burden\?\.severe/.test(brg));
+
+    /* Copy, in the three locales that actually have a bridge section. */
+    for (const lang of ['en', 'fa', 'ar']) {
+      const j = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const b = j.bridge ?? {};
+      t(`${lang} names both bridge providers`,
+        Boolean(b.provider?.lifi) && Boolean(b.provider?.dln));
+      t(`${lang} explains the fixed fee`, Boolean(b.fixedFee) && Boolean(b.fixedFeeWarn));
+      t(`${lang} can say the routes are not comparable`, Boolean(b.cannotCompare));
+    }
+
+    /* Readiness must list it, or the report the owner reads quietly lies. */
+    t('readiness reports the deBridge line', /id: 'bridge-dln'/.test(read('server/readiness.js')));
+
+    /* And the env file must carry the warning, since that is where a rate
+       change would actually be made. */
+    const envx = read('.env.example');
+    t('the env file documents the DLN rate', /DLN_FEE_PERCENT=0\.4/.test(envx));
+    t('...and warns that raising it moves the user to the worse side',
+      /it moves the user to the worse side/.test(envx));
+
+    /*
+     * ─── THE DISCLOSURE BUG FOUND WHILE VERIFYING THE AVANTIS PATH ──────────
+     * `venueDisclosure` hard-coded GMX:
+     *
+     *   isValidGmxCode(venueId === 'gmx' ? GMX_CODE : '')
+     *
+     * For any other venue that is `isValidGmxCode('')`, always false. So the
+     * moment the Avantis code is registered, links would carry it and start
+     * earning while the notice on screen still told the user we earn nothing.
+     * Wrong in the worst direction: taking a share and denying it.
+     *
+     * Proven by building the module with the env var set and watching the
+     * disclosure flip from 'none' to 'earning' only after the fix.
+     */
+    const vref = code(read('src/lib/venueReferral.js'));
+    t('the referral code lookup is shared, not duplicated per caller',
+      /export function referralCodeFor/.test(vref));
+    t('...and the disclosure uses it instead of hard-coding GMX',
+      /isValidGmxCode\(referralCodeFor\(venueId\)\)/.test(vref));
+    t('...so no venue can earn while reporting that it does not',
+      !/venueId === 'gmx' \? GMX_CODE : ''/.test(vref));
   }
 
   return rows;

@@ -97,6 +97,19 @@ export function revenueReadiness() {
       note: '0x cross-chain, 30 bps. Tron works as a DESTINATION only — 0x refuse fees on a Tron origin'
     }),
     line({
+      id: 'bridge-dln',
+      /*
+       * Live the moment it deploys: deBridge needs no key and no account, so
+       * there is nothing to configure and nothing to wait for. Measured
+       * against our own address before this line was written — the response
+       * carries a real AffiliateFee row at exactly the bps we ask for.
+       */
+      live: true,
+      ready: true,
+      cost: 0,
+      note: "deBridge DLN, 40 bps. Keyless, no account. Rate is 40 and not 70 because DLN adds a FIXED native-coin fee: measured side by side on $10,000, 70 bps would leave the user $25 WORSE off than the LI.FI route we already have, while 40 bps leaves them better off and still pays us a third more than LI.FI"
+    }),
+    line({
       id: 'gold-rwa',
       live: true,
       ready: true,

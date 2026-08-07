@@ -2410,6 +2410,15 @@
     "mode": {
       "tokens": "Tokens",
       "native": "Native (BTC, ETH…)"
+    },
+    "routesTitle": "Compare routes",
+    "fixedFee": "Fixed network fee",
+    "fixedFeeWarn": "deBridge charges a fixed fee that is {{pct}}% of this transfer. Fixed fees hurt small amounts badly — the same fee would be a rounding error on a large one. LI.FI is almost certainly cheaper here.",
+    "cannotCompare": "The fixed fee is charged in the network's own coin and we could not price it just now, so the two routes cannot be compared fairly. Both amounts are shown as quoted.",
+    "betterRoute": "{{name}} leaves you about {{amount}} more after every fee, including the fixed one.",
+    "provider": {
+      "lifi": "LI.FI",
+      "dln": "deBridge"
     }
   },
   "autopilot": {

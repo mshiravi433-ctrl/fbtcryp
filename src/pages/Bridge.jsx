@@ -13,6 +13,13 @@ import {
   toBaseUnits,
   tokensFor
 } from '../lib/bridge';
+import {
+  compareRoutes,
+  fixFeeNative,
+  fixedFeeBurden,
+  getDlnQuote,
+  getDlnTx
+} from '../lib/dln';
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import ThorPanel from '../components/ThorPanel';
@@ -74,6 +81,22 @@ export default function Bridge() {
   const [txHash, setTxHash] = useState(null);
   const [txErr, setTxErr] = useState(null);
 
+  /*
+   * ─── THE SECOND PROVIDER ────────────────────────────────────────────────
+   * deBridge DLN pays us 70 bps where LI.FI pays 30, and needs no key and no
+   * account. It is quoted ALONGSIDE LI.FI rather than replacing it, because
+   * DLN adds a fixed protocol fee in the origin chain's native coin: measured
+   * today on Base that is 0.001 ETH, which is 0.19% of a $1,000 transfer and
+   * 19% of a $10 one.
+   *
+   * That asymmetry is why `provider` is a user choice with a default of
+   * `lifi`. Silently routing to whichever pays us more would, on small
+   * transfers, be routing to whichever costs the user more — and we would be
+   * the only party who could see it.
+   */
+  const [dln, setDln] = useState(null);
+  const [provider, setProvider] = useState('lifi');
+
   const fromTokens = useMemo(() => tokensFor(fromChain), [fromChain]);
   const toTokens = useMemo(() => tokensFor(toChain), [toChain]);
 
@@ -93,6 +116,38 @@ export default function Bridge() {
   );
 
   const summary = useMemo(() => summariseQuote(quote), [quote]);
+
+  /*
+   * ─── PRICING THE FIXED FEE, WITHOUT A NEW DEPENDENCY ────────────────────
+   * The fixed fee is quoted in wei of the origin chain's native coin, and
+   * comparing the two providers is meaningless until it is in dollars. LI.FI's
+   * own quote already carries that coin's USD price in its gas breakdown, so
+   * the figure comes from a request the screen makes anyway — priced at the
+   * same moment as everything else it is being compared against.
+   *
+   * When LI.FI has not answered, this stays null and `compareRoutes` returns
+   * no winner rather than guessing.
+   */
+  const dlnFixedUsd = useMemo(() => {
+    if (dln?.fixFee == null || summary?.nativePriceUsd == null) return null;
+    const native = Number(fixFeeNative(dln.fixFee));
+    if (!Number.isFinite(native)) return null;
+    return native * summary.nativePriceUsd;
+  }, [dln, summary]);
+
+  const burden = useMemo(
+    () => fixedFeeBurden(dlnFixedUsd, summary?.fromAmountUsd),
+    [dlnFixedUsd, summary]
+  );
+
+  const comparison = useMemo(
+    () => compareRoutes(
+      { toAmount: summary?.toAmount },
+      { toAmount: dln?.toAmount, fixFeeUsd: dlnFixedUsd },
+      toToken?.decimals ?? 6
+    ),
+    [summary, dln, dlnFixedUsd, toToken]
+  );
 
   /* ------------------------------- quoting ------------------------------- */
 
@@ -171,6 +226,29 @@ export default function Bridge() {
     } finally {
       setQuoting(false);
     }
+
+    /*
+     * DLN is asked SEPARATELY and its failure is swallowed.
+     *
+     * A second provider must never be able to break the first. If deBridge is
+     * down, rate-limiting us, or has no route for this pair, the LI.FI quote
+     * above is already set and the screen keeps working with one option — the
+     * comparison row simply does not appear. Awaiting both together, or
+     * letting this throw, would turn an optional upgrade into a new way for
+     * the whole screen to fail.
+     */
+    try {
+      const d = await getDlnQuote({
+        srcChainId: fromChain,
+        srcChainTokenIn: fromToken.address,
+        srcChainTokenInAmount: raw,
+        dstChainId: toChain,
+        dstChainTokenOut: toToken.address
+      });
+      setDln(d);
+    } catch {
+      setDln(null);
+    }
   }, [wallet.isConnected, wallet.address, fromChain, toChain, fromToken, toToken, amount,
       slippage, toAddress, toAddressValid]);
 
@@ -182,7 +260,100 @@ export default function Bridge() {
 
   /* ------------------------------ execution ------------------------------ */
 
+  /**
+   * Execute through deBridge.
+   *
+   * ─── WHY THIS IS A SEPARATE FUNCTION AND NOT A BRANCH ───────────────────
+   * DLN needs three things LI.FI's path does not: its own approval, to its own
+   * spender, and a transaction whose `value` carries the fixed protocol fee in
+   * native coin. Folding that into the existing `run()` as conditionals would
+   * put four `if (provider === …)` branches inside the one function in this
+   * screen that moves real money.
+   *
+   * The order is BUILT HERE rather than reused from the price quote: the price
+   * call deliberately sends no addresses, so it cannot produce a signable
+   * order. Building it at the moment of signing also re-prices it, which is
+   * the same protection the swap screen's re-quote gives.
+   */
+  const runDln = async () => {
+    setBusy(true);
+    setTxErr(null);
+    haptic?.('medium');
+
+    try {
+      if (wallet.chainId !== fromChain) {
+        await wallet.switchChain?.(fromChain);
+      }
+      const signer = wallet.getSigner?.();
+      if (!signer) throw new Error('NO_SIGNER');
+
+      const raw = toBaseUnits(amount, fromToken.decimals);
+      if (!raw) throw new Error('BAD_AMOUNT');
+
+      const order = await getDlnTx({
+        srcChainId: fromChain,
+        srcChainTokenIn: fromToken.address,
+        srcChainTokenInAmount: raw,
+        dstChainId: toChain,
+        dstChainTokenOut: toToken.address,
+        senderAddress: wallet.address,
+        ...(toAddress.trim() && toAddressValid
+          ? { dstChainTokenOutRecipient: toAddress.trim() }
+          : {})
+      });
+
+      if (!order?.tx?.data || !order?.tx?.to) throw new Error('NO_ROUTE');
+
+      /*
+       * Approve DLN's own spender, for this amount only.
+       *
+       * The allowance target differs per chain and is returned by the quote,
+       * so it is read from the response rather than hard-coded — a wrong
+       * spender here does not fail loudly, it fails at signing time with an
+       * opaque revert. Exact-amount approval, never infinite: the same rule
+       * lib/swap.js documents.
+       */
+      const { Contract } = await import('ethers');
+      const { ERC20_ABI } = await import('../lib/chains');
+      const erc20 = new Contract(fromToken.address, ERC20_ABI, signer);
+      const spender = dln?.allowanceTarget || order.tx.to;
+      const need = BigInt(raw);
+      const current = await erc20.allowance(wallet.address, spender);
+
+      if (current < need) {
+        /* Some ERC-20s reject a non-zero to non-zero change; zero it first. */
+        if (current > 0n) {
+          const reset = await erc20.approve(spender, 0n);
+          await reset.wait();
+        }
+        const approval = await erc20.approve(spender, need);
+        await approval.wait();
+      }
+
+      const sent = await signer.sendTransaction({
+        to: order.tx.to,
+        data: order.tx.data,
+        /*
+         * The fixed protocol fee travels in `value`, in native coin. Dropping
+         * it produces a revert that costs gas and explains nothing, so it is
+         * passed through exactly as returned.
+         */
+        value: order.tx.value ?? undefined
+      });
+
+      setTxHash(sent.hash);
+      haptic?.('success');
+    } catch (e) {
+      setTxErr(e?.shortMessage || e?.message || 'TX_FAILED');
+      haptic?.('error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const run = async () => {
+    if (provider === 'dln') return runDln();
+
     const tx = quote?.transactionRequest;
     if (!tx) return;
 
@@ -435,13 +606,104 @@ export default function Bridge() {
           </div>
         )}
 
+        {/*
+          ─── THE SECOND ROUTE, SHOWN NOT CHOSEN ───────────────────────────
+          deBridge pays us more than twice what LI.FI does, which is exactly
+          why the app must not pick it silently. Its fixed protocol fee is
+          negligible on a large transfer and can exceed a sixth of a small
+          one, so both routes are shown with that fee on its own line and the
+          user decides.
+
+          Rendered only when DLN actually answered with a route. An empty
+          "compare" box that never populates is worse than no box.
+        */}
+        {dln?.toAmount && !quoting && (
+          <div className="brg-quote" style={{ marginTop: 10 }}>
+            <div className="field-label" style={{ marginTop: 0 }}>{t('bridge.routesTitle')}</div>
+
+            <div className="segmented">
+              {['lifi', 'dln'].map((k) => (
+                <button
+                  key={k}
+                  className={provider === k ? 'active' : ''}
+                  onClick={() => setProvider(k)}
+                  style={{ isolation: 'isolate' }}
+                >
+                  {provider === k && <SegIndicator id="brgprov" />}
+                  {t(`bridge.provider.${k}`)}
+                </button>
+              ))}
+            </div>
+
+            <div className="row-between" style={{ marginTop: 8 }}>
+              <span className="faint">{t('bridge.provider.dln')}</span>
+              <span className="mono" style={{ fontSize: 12 }}>
+                {fromBaseUnits(dln.toAmount, toToken?.decimals ?? 6)} {toToken?.symbol}
+              </span>
+            </div>
+
+            {/*
+              The fixed fee is stated in the coin it is actually charged in,
+              and in dollars when we can price it. Showing only the dollar
+              figure would hide that the user needs that much NATIVE coin in
+              the wallet — a separate requirement, and a common reason a
+              bridge fails at signing.
+            */}
+            {dln.fixFee != null && (
+              <div className="row-between">
+                <span className="faint">{t('bridge.fixedFee')}</span>
+                <span className="mono" style={{ fontSize: 12 }}>
+                  {fixFeeNative(dln.fixFee)} {summary?.nativeSymbol ?? ''}
+                  {dlnFixedUsd != null ? ` · ${fmtUsd(dlnFixedUsd)}` : ''}
+                </span>
+              </div>
+            )}
+
+            {/*
+              The warning that makes this honest. A fixed fee worth 19% of the
+              transfer is the single thing that turns the better-paying route
+              into the wrong one, and it is invisible in the output amount.
+            */}
+            {burden?.severe && (
+              <p className="notice notice-danger" style={{ marginTop: 9 }}>
+                {t('bridge.fixedFeeWarn', { pct: burden.percent.toFixed(1) })}
+              </p>
+            )}
+
+            {/*
+              When the native coin could not be priced we say so instead of
+              declaring a winner. A comparison that ignores a fee we know
+              exists is worse than no comparison.
+            */}
+            {comparison.reason === 'FIXED_FEE_UNPRICED' && (
+              <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
+                {t('bridge.cannotCompare')}
+              </p>
+            )}
+            {comparison.winner && (
+              <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
+                {t('bridge.betterRoute', {
+                  name: t(`bridge.provider.${comparison.winner}`),
+                  amount: fmtUsd(comparison.differenceUsd)
+                })}
+              </p>
+            )}
+          </div>
+        )}
+
         {!wallet.isConnected ? (
           <p className="notice" style={{ marginTop: 12 }}>{t('bridge.connectFirst')}</p>
         ) : (
           <button
             className="btn btn-primary"
             style={{ marginTop: 12, width: '100%' }}
-            disabled={!quote?.transactionRequest || busy}
+            /*
+             * Each provider gates on ITS OWN readiness. Gating the DLN button
+             * on LI.FI's `transactionRequest` would disable a working route
+             * whenever the other provider had no path — which is precisely
+             * when the second route is most valuable.
+             */
+            disabled={busy || (provider === 'dln' ? !dln?.toAmount : !quote?.transactionRequest)}
             onClick={run}
           >
             {busy ? t('bridge.sending') : t('bridge.send')}
@@ -457,7 +719,17 @@ export default function Bridge() {
             <a
               className="row"
               style={{ gap: 6, marginTop: 8, fontSize: 12 }}
-              href={`https://scan.li.fi/tx/${txHash}`}
+              /*
+               * The tracker has to match the provider that actually executed.
+               * scan.li.fi knows nothing about a DLN order and would show a
+               * "not found" page — which reads as "my money is gone" at the
+               * exact moment the user is most anxious.
+               */
+              href={
+                provider === 'dln'
+                  ? `https://app.debridge.finance/orders?s=${txHash}`
+                  : `https://scan.li.fi/tx/${txHash}`
+              }
               target="_blank"
               rel="noopener noreferrer"
             >

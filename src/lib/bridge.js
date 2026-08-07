@@ -149,9 +149,25 @@ export function summariseQuote(quote) {
     }
   }
 
+  /*
+   * ─── THE NATIVE-COIN PRICE, TAKEN FROM A RESPONSE WE ALREADY HAVE ─────────
+   * deBridge charges a FIXED fee in the origin chain's native coin, and
+   * without a price for that coin the two providers cannot honestly be
+   * compared — see lib/dln.js, which returns "unpriced" rather than guess.
+   *
+   * LI.FI's gas cost entry already carries the coin and its USD price, so the
+   * number is right here in a call the screen makes anyway. Adding a separate
+   * price feed for it would be a new dependency, a new failure mode, and a
+   * new way for the two sides of the comparison to be priced at different
+   * moments.
+   */
+  const nativeGas = gas.find((g) => Number(g?.token?.priceUSD) > 0);
+
   return {
     tool: quote.tool ?? null,
     toolName: quote.toolDetails?.name ?? quote.tool ?? null,
+    nativePriceUsd: nativeGas ? Number(nativeGas.token.priceUSD) : null,
+    nativeSymbol: nativeGas?.token?.symbol ?? null,
     fromAmountUsd: Number(est.fromAmountUSD) || 0,
     toAmountUsd: Number(est.toAmountUSD) || 0,
     toAmount: est.toAmount ?? null,

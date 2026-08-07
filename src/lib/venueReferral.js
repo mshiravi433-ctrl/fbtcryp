@@ -186,22 +186,41 @@ export const VENUE_REFERRAL = {
  * would put the parameter somewhere the app never reads it — the link would
  * look right and attribute nothing.
  */
+/**
+ * The configured code for a venue, or ''.
+ *
+ * ─── WHY THIS IS ITS OWN FUNCTION ───────────────────────────────────────────
+ * It was inlined in `withReferral`, and `venueDisclosure` had its own copy
+ * that only ever looked at GMX:
+ *
+ *   isValidGmxCode(venueId === 'gmx' ? GMX_CODE : '')
+ *
+ * For any venue that was not GMX that expression is `isValidGmxCode('')`,
+ * which is always false. So the moment the Avantis code is registered, links
+ * would correctly carry it and start earning while the notice on screen kept
+ * telling the user we earn nothing from this venue.
+ *
+ * That is the wrong direction to be wrong in — we would be taking a share and
+ * denying it — and it is invisible from the outside, because the link works.
+ * Both callers now read the same source, so a new venue cannot be half-wired.
+ *
+ * Every venue uses the same code shape (letters, digits, underscore) and the
+ * same validator: a lax check on one of them is how a malformed code silently
+ * earns nothing, which is exactly what the LI.FI integrator id did.
+ */
+export function referralCodeFor(venueId) {
+  if (venueId === 'gmx') return GMX_CODE;
+  if (venueId === 'avantis') return AVANTIS_CODE;
+  if (venueId === 'utex') return UTEX_CAMPAIGN;
+  return '';
+}
+
 export function withReferral(venueId, url) {
   const cfg = VENUE_REFERRAL[venueId];
   if (!cfg?.earns || !cfg.param) return url;
   if (typeof url !== 'string' || !url) return url;
 
-  /*
-   * Both venues use the same code shape (letters, digits, underscore) and the
-   * same validator. Reusing it is deliberate: a lax check on one of them is
-   * how a malformed code silently earns nothing, which is exactly what the
-   * LI.FI integrator id did before it was caught.
-   */
-  const code =
-    venueId === 'gmx' ? GMX_CODE
-      : venueId === 'avantis' ? AVANTIS_CODE
-        : venueId === 'utex' ? UTEX_CAMPAIGN
-          : '';
+  const code = referralCodeFor(venueId);
   if (!isValidGmxCode(code)) return url;
 
   try {
@@ -244,7 +263,13 @@ export function withReferral(venueId, url) {
 export function venueDisclosure(venueId) {
   const cfg = VENUE_REFERRAL[venueId];
   if (!cfg?.earns) return 'none';
-  return isValidGmxCode(venueId === 'gmx' ? GMX_CODE : '') ? 'earning' : 'none';
+  /*
+   * Reads the SAME source `withReferral` uses. It used to hard-code GMX, so
+   * every other venue reported 'none' even once its code was live — we would
+   * have been earning while telling the user we were not. See
+   * `referralCodeFor` for the full explanation.
+   */
+  return isValidGmxCode(referralCodeFor(venueId)) ? 'earning' : 'none';
 }
 
 /** Do we earn from ANY venue on screen? Drives which notice the page shows. */
