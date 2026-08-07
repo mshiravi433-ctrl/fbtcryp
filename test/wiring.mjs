@@ -8567,5 +8567,111 @@ export default function run() {
       Boolean(JSON.parse(read('src/i18n/locales/fa.json')).solana?.notSolana));
   }
 
+  /* ---- 90. The board is real, and says where you stand ------------------ */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── "MAKE SURE THE TOP TRADERS ARE REAL, NOT INVENTED" ─────────────────
+     * They are. The board is served from /api/leaderboard and every row is a
+     * device that published its own score; there is no seed list. The old
+     * SEED_NAMES fixture is gone and must stay gone — fifty invented handles
+     * out-ranking a new user is a lie they can catch.
+     */
+    const board = code(read('src/pages/Leaderboard.jsx'));
+    t('the board comes from the API', /fetchLeaderboard/.test(board));
+    /*
+     * Comments stripped first — `code()` — because the explanation of WHY the
+     * seed list was deleted necessarily names it. Matching prose instead of
+     * code is the trap this suite has fallen into six times, most recently on
+     * the very commit that added the reachability check.
+     */
+    t('...with no invented users', !/SEED_NAMES/.test(code(read('src/lib/ranks.js'))));
+    t('...and the seed generator is deleted, not merely unused',
+      !/buildLeaderboard/.test(code(read('src/lib/ranks.js'))));
+    /* An empty real board beats a full fake one, so the empty state stays. */
+    t('...and an empty board says so honestly', /rank\.emptyBoard/.test(board));
+
+    /*
+     * ─── REAL BUG: THE USER WAS LISTED TWICE ────────────────────────────────
+     * `decorate` looked for `anon:${clientId}`. The server never writes that —
+     * server/app.js stores the BARE client id for an anonymous row and
+     * `tg:<id>` for a verified one. So our own server row never matched, the
+     * "not on the board yet" fallback appended a second local row, and the
+     * user appeared twice with two different scores. Reproduced against the
+     * live response shape before it was changed.
+     */
+    const lb = code(read('src/lib/leaderboard.js'));
+    t('the user is matched by the id the server actually stores',
+      /id === mine/.test(lb));
+    t('...including a Telegram-verified row', /startsWith\('tg:'\)/.test(lb));
+    t('...and the legacy anon: shape still matches rather than duplicating',
+      /anon:\$\{mine\}/.test(lb));
+    /*
+     * Equal scores must not reshuffle between renders — a rank that changes
+     * while you look at it is a rank nobody trusts.
+     */
+    t('...and ties are ordered stably', /localeCompare/.test(lb));
+
+    /*
+     * ─── "SHOW THE LEADER, THEN WHERE I STAND" ──────────────────────────────
+     * Asked for: top score, then "you are #409 with N points". A number alone
+     * says nothing until you know it is first and you are not.
+     */
+    t('the leader score is shown', /rank\.leaderIs/.test(board));
+    t('...and the user placement beside it', /rank\.youArePlaced/.test(board));
+    /*
+     * `rows.length`, not `top.length`. The table renders at most TOP_N, so
+     * "of 50" becomes a lie the moment the board outgrows one page.
+     */
+    t('...counted against every player, not just the visible page',
+      /total: fmtNum\(rows\.length/.test(board));
+    /* A score still in flight must not present a rank as settled. */
+    t('...and an unsynced score is flagged', /rank\.pendingSync/.test(board));
+
+    const enRank = JSON.parse(read('src/i18n/locales/en.json')).rank;
+    const faRank = JSON.parse(read('src/i18n/locales/fa.json')).rank;
+    t('the placement copy exists in both languages',
+      Boolean(enRank?.youArePlaced) && Boolean(faRank?.youArePlaced)
+      && Boolean(faRank?.leaderIs));
+
+    /*
+     * ─── COPY THE OWNER ASKED TO CHANGE ─────────────────────────────────────
+     * The "we will not hand you a code that does nothing" line was defensive
+     * and pointed at a failure the user has not had. Removed in every locale.
+     */
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} drops the defensive not-ready sentence`,
+        String(L.perks?.notReady ?? '').length < 60);
+    }
+    /* The "why is this free" answer must still explain WHO pays. */
+    t('the perk explainer still names who funds the discount',
+      /venue pays us/i.test(String(
+        JSON.parse(read('src/i18n/locales/en.json')).perks?.howBody
+      )));
+
+    /*
+     * ─── PREFER OUR OWN SCREENS FOR REAL YIELD ──────────────────────────────
+     * Asked for. `liquidStake` pointed at lido.fi, which was a genuine
+     * mistake: the Farm screen already sells stETH and rETH, and for a liquid
+     * staking token BUYING IT IS THE DEPOSIT. The user was sent elsewhere for
+     * something this app does in one swap, and we earned nothing for it.
+     */
+    const earnSrc = code(read('src/pages/Earn.jsx'));
+    t('liquid staking routes to our own farm screen',
+      /id: 'liquidStake'[\s\S]{0,220}internal: '\/farm'/.test(earnSrc));
+    /*
+     * And the user must be able to TELL. The chevron already encoded it, but
+     * only for somebody who knows the convention.
+     */
+    t('...and in-app routes are labelled as such', /earn\.inApp/.test(earnSrc));
+    t('...in Persian too',
+      Boolean(JSON.parse(read('src/i18n/locales/fa.json')).earn?.inApp));
+  }
+
   return rows;
 }

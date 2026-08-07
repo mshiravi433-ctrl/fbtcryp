@@ -232,7 +232,7 @@
       "points": "Points"
     },
     "realTitle": "Make your crypto work",
-    "realBody": "These are genuine on-chain opportunities. You deposit from your own wallet into audited protocols and keep everything you earn — we take nothing beyond the swap fee you'd pay anyway.",
+    "realBody": "Real on-chain yield, paid by real borrowers and traders. Where the row says “In this app”, you can do the whole thing here — your keys never leave your wallet and no extra approval is needed. The rest we simply show you honestly, including the ones we earn nothing from.",
     "opportunities": "Ways to earn",
     "yield": {
       "stablePool": {
@@ -275,7 +275,8 @@
     "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
     "realRisk": "Yield is never free money. Pools can lose value to impermanent loss, lending markets can take bad debt, staking can be slashed, and any smart contract can be exploited. The higher-risk entries here can also be paused by the protocol itself, leaving you unable to withdraw for a while. Start small and only use protocols you have read about.",
     "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all.",
-    "riskTitle": "What can go wrong here"
+    "riskTitle": "What can go wrong here",
+    "inApp": "In this app"
   },
   "wallet": {
     "guest": "Guest",
@@ -1652,7 +1653,10 @@
     },
     "offlineNotice": "The ranking server is unreachable, so this is the last copy cached on your device.",
     "localOnly": "Your rank is calculated from activity on this device.",
-    "emptyBoard": "Nobody has posted a score yet. Make a swap or check in and yours will be the first name on this board."
+    "emptyBoard": "Nobody has posted a score yet. Make a swap or check in and yours will be the first name on this board.",
+    "leaderIs": "Top of the board: {{name}} · {{n}} points",
+    "youArePlaced": "You are #{{place}} of {{total}}, with {{points}} points",
+    "pendingSync": "Your latest score is still syncing, so this position may shift slightly."
   },
   "guide": {
     "title": "A short guide before you start",
@@ -2753,11 +2757,11 @@
     "title": "What your rank unlocks",
     "intro": "Each rank unlocks a real discount on a venue we work with. Nothing here is a voucher we invented — the discount is the venue's own referral benefit, and it applies the moment you use the code.",
     "locked": "{{n}} more points to reach {{tier}}",
-    "notReady": "Ready to unlock, but this venue is not registered yet. It will appear here the moment it is — we will not hand you a code that does nothing.",
+    "notReady": "Opening soon.",
     "copyCode": "Copy {{code}}",
     "use": "Open venue",
-    "howTitle": "Why are these free for me?",
-    "howBody": "Because the venue pays us. When you trade through our code they give you a fee discount and pay us a share of the fee they keep — you pay less than going direct, and we earn without charging you anything extra. That is the whole arrangement, and it is why we can show a discount rather than a coupon nobody honours. Your points are never spent: a rank is a level you keep, not a balance that runs out.",
+    "howTitle": "Why does this cost me nothing?",
+    "howBody": "Because the venue pays us, not you. Trade through our code and they give you a lower fee than you would get going there directly — then pay us a slice of what they keep. You are not funding this discount; they are, because bringing them a trader is worth more to them than the few basis points they give up. Your points stay exactly where they are. A rank is something you reach and keep, not a balance that drains every time you use it.",
     "item": {
       "gmxFee": {
         "title": "5% off trading fees on GMX",

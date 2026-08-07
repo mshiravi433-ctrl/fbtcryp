@@ -72,12 +72,28 @@ const YIELD = [
     url: 'https://app.venus.io'
   },
   {
+    /*
+     * ─── ROUTED INWARDS, BECAUSE WE ACTUALLY DO THIS ONE ────────────────────
+     * Asked to prefer our own screens over external links here.
+     *
+     * This row pointed at lido.fi, which was a real mistake rather than a
+     * missed optimisation: the Farm screen already sells stETH and rETH
+     * directly, and for a liquid staking token BUYING IT IS THE DEPOSIT —
+     * there is no separate stake step, no lock-up, and it grows against ETH by
+     * itself. So the user got sent to another site to accomplish something
+     * this app performs in one swap, and we earned nothing for finding it for
+     * them.
+     *
+     * `internal` makes the card navigate rather than open a browser, and the
+     * 0.70% swap fee applies exactly as it does anywhere else.
+     */
     id: 'liquidStake',
     Icon: IconSwap,
     apr: '3–6%',
     risk: 'medium',
     color: 'var(--rgb-8)',
-    url: 'https://lido.fi'
+    url: 'https://lido.fi',
+    internal: '/farm'
   },
 
   /*
@@ -352,11 +368,21 @@ export default function Earn({ embedded = false }) {
                       <IconExternal width={15} height={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                     )}
                   </div>
-                  <div className="row" style={{ gap: 6, marginTop: 9 }}>
+                  <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
                     <span className="pill pill-up">APR {y.apr}</span>
                     <span className={`pill ${y.risk === 'low' ? 'pill-neutral' : 'pill-rgb'}`}>
                       {t(`invest.risk.${y.risk}`)}
                     </span>
+                    {/*
+                      Says plainly which rows stay in the app.
+
+                      The chevron-versus-external-icon already encoded this,
+                      but only to somebody who knows the convention. Asked to
+                      favour our own screens here, and a route the user cannot
+                      TELL is ours is not favoured in any way that matters —
+                      they still tap it expecting to leave.
+                    */}
+                    {y.internal && <span className="pill pill-neutral">{t('earn.inApp')}</span>}
                   </div>
                 </motion.button>
               ))}

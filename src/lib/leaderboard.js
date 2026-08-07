@@ -110,16 +110,42 @@ export async function publishScore({ name, points, swaps = 0, referrals = 0, tel
 /** Merge the server rows with the local user and attach rank + tier. */
 export function decorate(rows, { points = 0, username = '' } = {}) {
   const mine = clientId();
-  const out = rows.map((r) => ({
-    ...r,
-    isUser: r.id === `anon:${mine}` || r.id?.startsWith('tg:') === false ? r.id === `anon:${mine}` : r.isUser
-  }));
 
-  // If our own score has not made it onto the server board yet, show it
-  // locally so the user always sees where they stand.
+  /*
+   * ─── REAL BUG: THE USER APPEARED ON THE BOARD TWICE ───────────────────────
+   * This used to look for `anon:${mine}`. The server never writes that. In
+   * server/app.js the row id is:
+   *
+   *   const id = tgId ? `tg:${tgId}` : clientId.slice(0, 64);
+   *
+   * — the BARE client id for an anonymous user, with no prefix. So the match
+   * never fired on our own server row, the "not on the board yet" fallback
+   * below then appended a SECOND local row, and the user was listed twice:
+   * once with their synced score and once with their local one. Reproduced
+   * against the live response shape before changing anything.
+   *
+   * The old expression was also self-contradicting — a ternary whose condition
+   * and whose branch tested the same thing — which is how it survived review.
+   *
+   * Both id shapes are accepted now: `tg:<id>` for a Telegram-verified row and
+   * the bare client id for an anonymous one. `anon:` is kept only so a row
+   * cached by an older build still matches instead of duplicating.
+   */
+  const isMine = (id) => {
+    if (typeof id !== 'string' || !id) return false;
+    return id === mine || id === `anon:${mine}` || (id.startsWith('tg:') && id.slice(3) === mine);
+  };
+
+  const out = rows.map((r) => ({ ...r, isUser: isMine(r.id) }));
+
+  /*
+   * Only when our score genuinely is not on the server board yet — a first
+   * visit, or a failed publish. Now that `isMine` matches, this stops firing
+   * for the common case, which is what removes the duplicate.
+   */
   if ((points > 0 || username) && !out.some((r) => r.isUser)) {
     out.push({
-      id: `anon:${mine}`,
+      id: mine,
       name: username || 'You',
       points,
       swaps: 0,
@@ -129,6 +155,14 @@ export function decorate(rows, { points = 0, username = '' } = {}) {
     });
   }
 
-  out.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+  /*
+   * Sort by points, then by id for a stable order.
+   *
+   * Without the tiebreak, two users on the same score swap places on every
+   * refresh because Array.sort is not required to be stable across engines for
+   * equal keys — a board that reshuffles while you watch it looks broken and
+   * makes the rank number untrustworthy.
+   */
+  out.sort((a, b) => (b.points ?? 0) - (a.points ?? 0) || String(a.id).localeCompare(String(b.id)));
   return out.map((r, i) => ({ ...r, rank: i + 1, tier: tierFor(r.points ?? 0) }));
 }

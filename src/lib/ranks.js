@@ -58,65 +58,22 @@ export function tierProgress(points) {
 /* Leaderboard                                                                */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Seed entries for the leaderboard.
+/*
+ * ─── THE FIFTY INVENTED USERS ARE GONE ──────────────────────────────────────
+ * This file used to export `buildLeaderboard()` and a `SEED_NAMES` list of
+ * fifty handles — CryptoFalcon, MoonHunter, PersianBull and so on — with
+ * scores from a decay curve, so a brand-new user opened the board and found
+ * fifty strangers already above them.
  *
- * An empty leaderboard makes a new app look abandoned, so the board is
- * pre-populated. These are clearly-labelled sample entries — the UI marks the
- * list as a demo board until a real backend supplies live rankings, because
- * passing invented users off as real ones would be a lie a user could later
- * catch, and that costs more trust than an empty list ever would.
+ * The board is now served from /api/leaderboard and every row is a real device
+ * that published its own score (see lib/leaderboard.js). Nothing imported
+ * `buildLeaderboard` any more, so this was dead code carrying a live
+ * liability: the one thing on a ranking screen that has to be true is the
+ * ranking, and an invented rival is a lie the user can catch by scrolling.
  *
- * Names are generic handles, deliberately not real people.
+ * Deleted rather than left unused, because unused code gets re-imported. An
+ * empty real board beats a full fake one, and the screen says so in
+ * `rank.emptyBoard`.
  */
-const SEED_NAMES = [
-  'CryptoFalcon', 'AliTrader', 'MoonHunter', 'SaraFX', 'BlockSmith', 'ZarrinCoin',
-  'NightSwap', 'PersianBull', 'DeFiNomad', 'ShahinX', 'TokenWolf', 'ArzDigital',
-  'HodlKing', 'NovaTrade', 'ParsChain', 'SilkRoute', 'AtlasFin', 'YaldaCrypto',
-  'IronLedger', 'SwiftSwap', 'KavehOne', 'MetaVahid', 'BazaarPro', 'CyrusCap',
-  'OrionDeFi', 'RoyaTrade', 'SepehrX', 'GoldenPars', 'ChainMehdi', 'VelvetBull',
-  'AmirLiquid', 'QuantumRial', 'DariushFX', 'NeonTrader', 'FarsiWhale', 'EchoStake',
-  'TitanArz', 'LunaKaveh', 'RapidHodl', 'ZenithSwap', 'MahsaChain', 'BorjTrade',
-  'PixelYield', 'SamanBlock', 'ArashDeFi', 'CobaltFin', 'NimaSwaps', 'HelixArz',
-  'RostamCap', 'AzarLedger'
-];
-
-/**
- * Deterministic pseudo-random so the board is stable between renders —
- * a leaderboard that reshuffles on every navigation looks broken.
- */
-function seeded(i, salt = 0) {
-  const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-export function buildLeaderboard(userPoints = 0, username = '') {
-  const rows = SEED_NAMES.map((name, i) => {
-    // Steep decay so the top looks competitive and the tail looks reachable
-    const base = Math.round(52000 * Math.pow(0.93, i) + seeded(i) * 400);
-    return {
-      id: `seed-${i}`,
-      name,
-      points: base,
-      swaps: Math.round(20 + seeded(i, 3) * 400),
-      referrals: Math.round(seeded(i, 7) * 60),
-      seed: true
-    };
-  });
-
-  if (userPoints > 0 || username) {
-    rows.push({
-      id: 'me',
-      name: username || 'You',
-      points: userPoints,
-      swaps: 0,
-      referrals: 0,
-      isUser: true
-    });
-  }
-
-  rows.sort((a, b) => b.points - a.points);
-  return rows.map((r, i) => ({ ...r, rank: i + 1, tier: tierFor(r.points) }));
-}
 
 export const TOP_N = 50;

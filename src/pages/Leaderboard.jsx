@@ -229,6 +229,67 @@ export default function Leaderboard({ embedded = false }) {
             ))}
           </div>
         )}
+
+        {/*
+          ─── WHERE YOU STAND, RIGHT UNDER THE LEADER ────────────────────────
+          Asked for: show the top score, then "you are #409 with N points".
+
+          The podium already names the leader, but a number in isolation says
+          nothing — 85 points is only meaningful once you know it is first and
+          you are not. This line closes that gap in one sentence, and it is
+          placed directly beneath the podium because that is the moment the
+          question forms.
+
+          Rendered only when the board actually has entries and we know our own
+          rank. Inventing a position for somebody with no score would be the
+          same dishonesty the empty-board message above was written to avoid.
+        */}
+        {!loading && me && rows.length > 0 && (
+          <motion.div
+            className="card card-tight"
+            variants={riseIn}
+            initial="hidden"
+            animate="show"
+            style={{ marginTop: 12, borderColor: `${tier.color}55` }}
+          >
+            <div className="row-between" style={{ gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="faint" style={{ fontSize: 11.5 }}>
+                  {t('rank.leaderIs', {
+                    name: rows[0].isUser ? t('rank.you') : rows[0].name,
+                    n: fmtNum(rows[0].points, 0)
+                  })}
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 13.5, marginTop: 3 }}>
+                  {/*
+                    `rows.length`, not `top.length`. The table is capped at
+                    TOP_N for rendering, so "of 50" would be a lie the moment
+                    the board outgrows the page.
+                  */}
+                  {t('rank.youArePlaced', {
+                    place: fmtNum(me.rank, 0),
+                    total: fmtNum(rows.length, 0),
+                    points: fmtNum(me.points, 0)
+                  })}
+                </div>
+              </div>
+              <span
+                className="mono"
+                style={{ fontSize: 17, fontWeight: 800, color: tier.color, flexShrink: 0 }}
+              >
+                #{fmtNum(me.rank, 0)}
+              </span>
+            </div>
+
+            {/*
+              Honest about a score that has not reached the server yet, rather
+              than showing a rank that will move once it syncs.
+            */}
+            {me.pendingSync && (
+              <p className="faint" style={{ marginTop: 8, fontSize: 11 }}>{t('rank.pendingSync')}</p>
+            )}
+          </motion.div>
+        )}
       </section>
 
       {/*
