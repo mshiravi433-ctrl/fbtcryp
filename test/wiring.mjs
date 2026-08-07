@@ -8449,5 +8449,123 @@ export default function run() {
       /sellDecimals: String\(token\.decimals\)/.test(code(read('src/components/TronPanel.jsx'))));
   }
 
+  /* ---- 89. Perks, the rank medal, and the self-referential banner ------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── THE BANNER THAT NAVIGATED TO ITSELF ────────────────────────────────
+     * Reported: tapping the invite banner goes to another page. It did, and the
+     * destination was the bug. `AdBanner slot="referral"` points at `/earn`,
+     * and it was rendered ON the earn screen, directly under the referral card
+     * it advertised. Inside the Rewards tabs it was worse: `/earn` is also a
+     * standalone route, so the tap threw the user out of the tabbed screen into
+     * a bare copy of the tab they were already reading.
+     */
+    const earn = code(read('src/pages/Earn.jsx'));
+    t('the earn screen no longer advertises itself',
+      !/AdBanner slot="referral"/.test(earn));
+    t('...and neither does the leaderboard',
+      !/AdBanner slot="referral"/.test(code(read('src/pages/Leaderboard.jsx'))));
+
+    /*
+     * ─── THE RANK MEDAL IN THE HEADER ───────────────────────────────────────
+     * Asked for the medal between the brand and the settings cog. It shows the
+     * medal ONLY — no number. Section 21 removed a virtual balance from that
+     * exact spot because the first figure a user sees on a non-custodial
+     * exchange must not look like money, and a points TOTAL beside the brand
+     * would repeat that in a quieter way.
+     */
+    const header = code(read('src/components/Header.jsx'));
+    t('the header shows a rank medal', /rank-chip/.test(header));
+    t('...taking only the tier, never a points total',
+      /usePoints\(\)/.test(header) && !/\{points\}/.test(header));
+    /*
+     * And it must still not reach the play-money store. The hook is the narrow
+     * opening that keeps section 21's blunt rule intact.
+     */
+    t('...through a hook rather than the balance store',
+      existsSync('src/hooks/usePoints.js') && !/useAppStore/.test(header));
+    /* An invented class name fails silently — this has shipped here before. */
+    const css = read('src/index.css');
+    for (const cls of ['rank-chip', 'perk-row', 'perk-medal']) {
+      t(`the ${cls} class is defined in CSS`,
+        new RegExp(`\\.${cls}[^-a-zA-Z0-9]`).test(css));
+    }
+
+    /*
+     * ─── PERKS: REAL DISCOUNTS, NEVER INVENTED VOUCHERS ─────────────────────
+     * Asked whether ranks could unlock redeemable services that also earn
+     * revenue. The dangerous version of this feature is a shop: spend points,
+     * get a code, discover it buys nothing. Every gift-card route was checked
+     * and fails for us — Bitrefill pays commission in STORE CREDIT, Travala
+     * pays cash but only through Impact.com, which needs a bank account and a
+     * tax form (already recorded as blocked under OFAC FAQ 54).
+     *
+     * So a perk is the venue's own referral discount on a venue we have
+     * measured paying us. The checks below pin the two properties that keep it
+     * honest.
+     */
+    const perks = code(read('src/lib/perks.js'));
+    t('rank perks exist', existsSync('src/lib/perks.js'));
+    /*
+     * THE CRITICAL ONE. A perk whose venue code is not registered must never
+     * produce a code or a link. Unit-tested at every rank including the top:
+     * with nothing configured, nothing is claimable.
+     */
+    t('...and no code is issued unless the venue is really registered',
+      /available: unlocked && configured/.test(perks));
+    t('...and the link is null until then',
+      /link: unlocked && configured/.test(perks));
+    /*
+     * Points are a SCORE, not a currency — lib/ranks.js says so explicitly.
+     * Deducting them on redemption would make them a balance and would demote
+     * the user for using the thing they earned.
+     */
+    t('...and points are never spent', !/spendPoints|deductPoints/.test(perks));
+    /* Locked perks must still be visible, with the distance stated. */
+    t('...and a locked perk states how far away it is',
+      /pointsToGo/.test(perks) && /perks\.locked/.test(earn));
+    /* The three states must stay distinct in the UI. */
+    t('...and an unconfigured venue says so instead of handing out a link',
+      /perks\.notReady/.test(earn));
+    /* Every perk must route through the shared referral builder, or it earns
+       nothing while looking identical. */
+    t('...and every perk link carries the referral code',
+      /withReferral\(p\.venue, p\.url\)/.test(perks));
+    /* The disclosure is the reason the discount is believable. */
+    t('...and the arrangement is disclosed to the user',
+      /perks\.howTitle/.test(earn));
+
+    const enPerks = JSON.parse(read('src/i18n/locales/en.json')).perks;
+    const faPerks = JSON.parse(read('src/i18n/locales/fa.json')).perks;
+    t('perks copy exists in English and Persian',
+      Boolean(enPerks?.title) && Boolean(faPerks?.title) && Boolean(faPerks?.howBody));
+    t('...and every perk has a title and description',
+      ['gmxFee', 'avantisFee', 'utexStocks']
+        .every((k) => Boolean(enPerks?.item?.[k]?.title) && Boolean(faPerks?.item?.[k]?.desc)));
+
+    /*
+     * ─── WHICH WALLETS ARE SOLANA WALLETS ───────────────────────────────────
+     * Asked for an explainer in a collapsible box. The one fact that prevents
+     * an unrecoverable mistake is that an 0x address is NOT a Solana address.
+     */
+    const solPage = code(read('src/pages/SolanaSwap.jsx'));
+    t('the Solana wallet explainer is a collapsible box',
+      /id="solana-which"/.test(solPage));
+    const enSol = JSON.parse(read('src/i18n/locales/en.json')).solana;
+    t('...naming the three Solana wallets',
+      ['phantom', 'solflare', 'backpack'].every((w) => Boolean(enSol?.wallets?.[w]?.name)));
+    t('...and how to connect on each platform',
+      ['desktop', 'android', 'ios', 'app'].every((k) => Boolean(enSol?.how?.[k])));
+    t('...and warns that an 0x address is not a Solana address',
+      /0x/.test(String(enSol?.notSolana)));
+    t('...translated into Persian',
+      Boolean(JSON.parse(read('src/i18n/locales/fa.json')).solana?.notSolana));
+  }
+
   return rows;
 }

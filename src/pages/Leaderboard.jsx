@@ -231,7 +231,19 @@ export default function Leaderboard({ embedded = false }) {
         )}
       </section>
 
-      <AdBanner slot="referral" compact />
+      {/*
+        `swap`, not `referral`.
+
+        The referral slot points at `/earn`, and inside the Rewards tabs this
+        screen IS one of the earn tabs — so the banner threw the user out of
+        the tabbed page into a standalone copy of the tab beside them. Same
+        self-referential bug as the one removed from Earn.
+
+        Swap is the honest destination here: points on this board come from
+        swapping, it is a different screen from this one, and it is the route
+        that actually earns the platform fee.
+      */}
+      <AdBanner slot="swap" compact />
 
       {/* ---------------- table ---------------- */}
       <motion.div className="stack" style={{ gap: 6 }} variants={stagger} initial="hidden" animate="show">

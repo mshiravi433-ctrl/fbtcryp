@@ -15,6 +15,7 @@ import SegIndicator from '../components/SegIndicator';
 import ShareSheet from '../components/ShareSheet';
 import VaultCard from '../components/VaultCard';
 import InfoBox from '../components/InfoBox';
+import { perksFor } from '../lib/perks';
 import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
 import { publicAppUrl } from '../lib/nativeShell';
@@ -220,6 +221,9 @@ export default function Earn({ embedded = false }) {
   const tier = tierFor(points);
   const next = nextTier(points);
   const progress = tierProgress(points);
+  /* Recomputed only when the score changes — the venue codes are build-time
+     constants, so nothing else can alter the result. */
+  const perks = useMemo(() => perksFor(points), [points]);
 
   const canClaim = Date.now() - lastClaim >= 20 * 3600000;
   const hoursLeft = Math.max(0, Math.ceil((lastClaim + 20 * 3600000 - Date.now()) / 3600000));
@@ -431,6 +435,97 @@ export default function Earn({ embedded = false }) {
             )}
           </motion.section>
 
+          {/*
+            ─── WHAT THE POINTS ARE FOR ──────────────────────────────────────
+            Asked whether each rank could unlock redeemable services, and
+            whether that could earn revenue. Both, but only where the thing
+            behind the code is real — see lib/perks.js for the routes that were
+            checked and rejected (Bitrefill pays in store credit; Travala needs
+            a bank account and a tax form).
+
+            Placed immediately under the rank card because that card is where
+            the user just learned their tier, and "so what?" is the next
+            question. Locked perks are shown WITH their distance in points: a
+            reward nobody can see motivates nobody.
+          */}
+          <section>
+            <p className="section-label">{t('perks.title')}</p>
+            <p className="prose-sm" style={{ marginTop: 4 }}>{t('perks.intro')}</p>
+
+            <motion.div className="stack" style={{ gap: 9, marginTop: 10 }} variants={stagger} initial="hidden" animate="show">
+              {perks.map((pk) => (
+                <motion.div
+                  key={pk.id}
+                  className="card card-tight perk-row"
+                  variants={riseIn}
+                  data-locked={!pk.unlocked}
+                >
+                  <div className="row-between" style={{ gap: 10 }}>
+                    <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                      <span
+                        className="perk-medal"
+                        style={{ borderColor: pk.tierColor, '--perk-glow': `${pk.tierColor}55` }}
+                        aria-hidden="true"
+                      >
+                        {pk.tierIcon}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12.8 }}>{t(`perks.item.${pk.id}.title`)}</div>
+                        <p className="prose-sm" style={{ marginTop: 2 }}>{t(`perks.item.${pk.id}.desc`)}</p>
+                      </div>
+                    </div>
+                    {pk.benefitPct != null && (
+                      <span className="pill pill-up" style={{ flexShrink: 0 }}>−{pk.benefitPct}%</span>
+                    )}
+                  </div>
+
+                  {/*
+                    Three states, never collapsed into two. A locked perk shows
+                    the gap; an unlocked perk whose venue is not registered says
+                    so instead of handing over a link that quietly does nothing;
+                    only the third gives a real code.
+                  */}
+                  {!pk.unlocked ? (
+                    <p className="faint" style={{ marginTop: 9, fontSize: 11.8 }}>
+                      {t('perks.locked', {
+                        n: fmtNum(pk.pointsToGo, 0),
+                        tier: t(`rank.tier.${pk.tier}`)
+                      })}
+                    </p>
+                  ) : !pk.configured ? (
+                    <p className="faint" style={{ marginTop: 9, fontSize: 11.8 }}>
+                      {t('perks.notReady')}
+                    </p>
+                  ) : (
+                    <div className="btn-row" style={{ marginTop: 10 }}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={async () => {
+                          const ok = await copyText(pk.code);
+                          useAppStore.getState().notify(ok ? 'linkCopied' : 'copyFailed', ok ? 'success' : 'error');
+                        }}
+                      >
+                        {t('perks.copyCode', { code: pk.code })}
+                      </button>
+                      <button className="btn btn-primary btn-sm" onClick={() => open(pk.link)}>
+                        {t('perks.use')}
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </motion.div>
+
+            {/*
+              The honest footnote. These discounts exist because the venue pays
+              us a referral share — saying so costs nothing and is the reason
+              anyone should trust the number above.
+            */}
+            <InfoBox title={t('perks.howTitle')} tone="info" id="perks-how">
+              <p>{t('perks.howBody')}</p>
+            </InfoBox>
+          </section>
+
           {/* daily check-in */}
           <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
             <div className="row-between" style={{ marginBottom: 10 }}>
@@ -525,7 +620,22 @@ export default function Earn({ embedded = false }) {
             </div>
           </motion.section>
 
-          <AdBanner slot="referral" compact />
+          {/*
+            ─── THE SELF-REFERENTIAL BANNER IS GONE ──────────────────────────
+            Reported: tapping the invite banner navigates to another page.
+
+            It did, and the destination was the bug. `AdBanner slot="referral"`
+            points at `/earn`, and this banner was rendered ON the earn screen —
+            directly beneath the referral card it was advertising. Inside the
+            Rewards tabs it was worse: `/earn` is also a standalone route, so
+            the tap threw the user out of the tabbed screen into a bare copy of
+            the tab they were already reading, losing the tab bar.
+
+            Deleted rather than repointed. The referral card with its code,
+            Copy and Share buttons is the thing it was promoting and it is
+            immediately above; a banner that scrolls you to the element you can
+            already see is noise, not navigation.
+          */}
 
           {/* quests */}
           <section>

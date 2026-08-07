@@ -317,6 +317,63 @@ body {
 }
 .icon-btn:active { transform: scale(0.94); }
 
+/*
+ * RANK MEDAL in the header, between the brand and the settings cog.
+ *
+ * Sized to match .icon-btn exactly (34px) so the two sit on one optical line;
+ * a badge even two pixels taller makes the row look misaligned on a phone.
+ *
+ * The tier colour arrives as an inline `border-color` and `--rank-glow`, set
+ * from lib/ranks.js, so bronze through legend each carry their own colour
+ * without six CSS classes that could drift out of sync with the data.
+ */
+.rank-chip {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  /* The emoji medal renders at its own colour; font-size is what sizes it. */
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 0 0 0 var(--rank-glow, transparent);
+  transition: box-shadow 0.25s, border-color 0.2s;
+}
+.rank-chip:hover { box-shadow: 0 0 9px 0 var(--rank-glow, transparent); }
+.rank-chip:active { transform: scale(0.94); }
+
+/*
+ * RANK PERKS on the points screen.
+ *
+ * A locked perk is dimmed rather than hidden — a reward nobody can see
+ * motivates nobody — but not so far that its text fails contrast. 0.62 keeps
+ * body copy above 4.5:1 on both themes, which 0.4 did not.
+ */
+.perk-row[data-locked='true'] { opacity: 0.62; }
+
+/*
+ * The medal beside each perk. Sized against the row's two-line text block so
+ * it reads as an anchor rather than an icon floating in space, and coloured
+ * by the tier through an inline custom property — six tiers, one rule, no CSS
+ * that can drift out of sync with lib/ranks.js.
+ */
+.perk-medal {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 30% 30%, var(--perk-glow, transparent), transparent 72%);
+  font-size: 15px;
+  line-height: 1;
+}
+
 .lang-switch {
   display: flex;
   gap: 2px;

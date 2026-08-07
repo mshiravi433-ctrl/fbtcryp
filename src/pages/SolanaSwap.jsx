@@ -582,6 +582,61 @@ export default function SolanaSwap({ embedded = false }) {
             {t('solana.detected', { name: solanaWalletName() })}
           </p>
         )}
+
+        {/*
+          ─── WHICH WALLETS ARE SOLANA WALLETS, AND HOW EACH CONNECTS ────────
+          Asked for directly: an explainer saying which wallets are Solana
+          wallets and how the connection works, inside a collapsible box.
+
+          Collapsed by default and placed AFTER the connect row rather than
+          before it. Somebody who already has Phantom should not have to scroll
+          past an explanation to reach the button; somebody who does not is
+          exactly the person who will open it. That is the same rule the rest of
+          the app's InfoBoxes follow — the title has to be a real question, and
+          this one is the question people actually ask.
+
+          The content is a table because the honest answer differs by platform:
+          the same wallet connects three different ways depending on whether
+          you are on a desktop, in Chrome for Android, or in our APK. A
+          paragraph would have to hedge; a table can just say it.
+        */}
+        <InfoBox title={t('solana.whichTitle')} tone="info" id="solana-which">
+          <p>{t('solana.whichIntro')}</p>
+
+          <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+            {['phantom', 'solflare', 'backpack'].map((w) => (
+              <div key={w} className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+                <span
+                  className="wallet-badge"
+                  style={{ width: 26, height: 26, fontSize: 11, flexShrink: 0 }}
+                  aria-hidden="true"
+                >
+                  {t(`solana.wallets.${w}.short`)}
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5 }}>{t(`solana.wallets.${w}.name`)}</div>
+                  <p className="prose-sm" style={{ marginTop: 2 }}>{t(`solana.wallets.${w}.desc`)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p style={{ marginTop: 12, fontWeight: 700, fontSize: 12.5 }}>{t('solana.howTitle')}</p>
+          <ol className="p2p-steps">
+            {['desktop', 'android', 'ios', 'app'].map((k) => (
+              <li key={k}>{t(`solana.how.${k}`)}</li>
+            ))}
+          </ol>
+
+          {/*
+            The one thing that is NOT a Solana wallet, said plainly. Trying to
+            paste an 0x address into a Solana field is the single most common
+            mistake here, and it is unrecoverable if funds follow.
+          */}
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {t('solana.notSolana')}
+          </p>
+        </InfoBox>
       </motion.section>
 
       {/*

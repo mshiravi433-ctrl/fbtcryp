@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { AnimatedSettings, useStill } from './AnimatedIcon';
+import { usePoints } from '../hooks/usePoints';
 
 /**
  * Top bar: brand and settings.
@@ -18,6 +19,24 @@ export default function Header() {
   const navigate = useNavigate();
   const still = useStill();
   const [cogSpin, setCogSpin] = useState(false);
+
+  /*
+   * ─── THE RANK MEDAL ─────────────────────────────────────────────────────
+   * Asked for the rank badge between the logo and the settings icon, showing
+   * the medal only.
+   *
+   * Deliberately JUST the medal, no number beside it. The header used to carry
+   * a virtual NX balance and it was removed for a specific reason recorded
+   * below: on a non-custodial exchange, the first number a user sees must not
+   * be a figure that looks like money but is not. A points TOTAL in the same
+   * position would repeat that mistake in a quieter way — 2,450 next to the
+   * brand reads as a balance. A medal is unambiguous: it is a rank, and it
+   * cannot be mistaken for a currency.
+   *
+   * Subscribed to `points` rather than read once, so earning a tier updates
+   * the medal immediately instead of on the next full reload.
+   */
+  const { tier } = usePoints();
 
   return (
     <header className="top-bar">
@@ -77,6 +96,26 @@ export default function Header() {
           Real balances live on /wallet, where they are labelled and where the
           on-chain wallet now sits above the virtual one.
         */}
+
+        {/*
+          Tapping it goes to the points screen, which is where the medal is
+          explained and where the next tier is shown. A badge that displays a
+          status and cannot be tapped invites the question "what is this?" with
+          nowhere to answer it.
+        */}
+        <motion.button
+          className="rank-chip"
+          onClick={() => navigate('/rewards')}
+          whileTap={{ scale: 0.9 }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          aria-label={t(`rank.tier.${tier.id}`)}
+          title={t(`rank.tier.${tier.id}`)}
+          style={{ '--rank-glow': tier.glow, borderColor: tier.color }}
+        >
+          <span aria-hidden="true">{tier.icon}</span>
+        </motion.button>
 
         {/* The cog turns rather than the button rotating whole — the gear
             teeth moving is what reads as a mechanism. */}

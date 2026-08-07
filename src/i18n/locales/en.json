@@ -2217,7 +2217,34 @@
     "openSolflare": "Open in Solflare",
     "openInWalletHint": "It is the same site and the same account; nothing is lost. If the wallet app is not installed, the button will offer to install it first.",
     "feeNoneNotice": "No platform fee on Solana swaps right now — you pay only the Solana network fee and whatever the route costs. If that changes, the exact rate will be shown here before you sign.",
-    "aboutTitle": "Custody and fees on this swap"
+    "aboutTitle": "Custody and fees on this swap",
+    "whichTitle": "Which wallets work here, and how do I connect?",
+    "whichIntro": "Solana is a separate network with its own wallets. MetaMask and Trust Wallet cannot sign Solana transactions — not because they are blocked, but because they speak a different format. These three are the common Solana wallets:",
+    "wallets": {
+      "phantom": {
+        "short": "PH",
+        "name": "Phantom",
+        "desc": "The most widely used. Free, works on Android, iPhone and desktop."
+      },
+      "solflare": {
+        "short": "SF",
+        "name": "Solflare",
+        "desc": "Solana-native, supports hardware wallets such as Ledger."
+      },
+      "backpack": {
+        "short": "BP",
+        "name": "Backpack",
+        "desc": "Newer, handles Solana and Ethereum in one app."
+      }
+    },
+    "howTitle": "How the connection works, per device",
+    "how": {
+      "desktop": "Desktop browser: install the wallet's extension, then press Connect here. It appears immediately.",
+      "android": "Chrome on Android: press Connect and pick your wallet. Android opens it, you approve, and it returns here — nothing else to do.",
+      "ios": "iPhone: Apple does not permit apps to talk to each other this way, so open this page inside the wallet's own browser using the button above.",
+      "app": "Our Android app: same as iPhone — use the button above to reopen this page inside the wallet's browser."
+    },
+    "notSolana": "Do not paste an address starting with 0x here. That is an Ethereum address, and a Solana address never looks like one — it is 32 to 44 letters and digits with no 0x. Sending to the wrong format cannot be undone."
   },
   "buy": {
     "title": "Buy & sell",
@@ -2721,5 +2748,29 @@
     "sentBody": "Sent. The bridge delivers USDT to your Tron address, usually within a couple of minutes. Check your Tron wallet, not this screen.",
     "whyTitle": "Why send to Tron at all?",
     "whyBody": "USDT on Tron is the cheapest widely-accepted way to hold and move dollars — sending it later costs cents. The catch is getting it there: the receiving side has a near-fixed cost, so it pays to move a meaningful amount once rather than small amounts often. We take 0.30% on this route, shown in the quote before you sign."
+  },
+  "perks": {
+    "title": "What your rank unlocks",
+    "intro": "Each rank unlocks a real discount on a venue we work with. Nothing here is a voucher we invented — the discount is the venue's own referral benefit, and it applies the moment you use the code.",
+    "locked": "{{n}} more points to reach {{tier}}",
+    "notReady": "Ready to unlock, but this venue is not registered yet. It will appear here the moment it is — we will not hand you a code that does nothing.",
+    "copyCode": "Copy {{code}}",
+    "use": "Open venue",
+    "howTitle": "Why are these free for me?",
+    "howBody": "Because the venue pays us. When you trade through our code they give you a fee discount and pay us a share of the fee they keep — you pay less than going direct, and we earn without charging you anything extra. That is the whole arrangement, and it is why we can show a discount rather than a coupon nobody honours. Your points are never spent: a rank is a level you keep, not a balance that runs out.",
+    "item": {
+      "gmxFee": {
+        "title": "5% off trading fees on GMX",
+        "desc": "Perpetual futures on crypto. The discount applies to opening and closing fees, every trade, permanently."
+      },
+      "avantisFee": {
+        "title": "5% off trading fees on Avantis",
+        "desc": "Leverage on forex, gold, silver, oil and indices as well as crypto — the markets our other screens show but cannot trade."
+      },
+      "utexStocks": {
+        "title": "Priority access to US stock markets",
+        "desc": "Trade US equities settled entirely in USDT, with no bank account and no tax forms."
+      }
+    }
   }
 }
