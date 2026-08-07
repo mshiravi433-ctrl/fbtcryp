@@ -257,6 +257,97 @@ export const EQUITY_ASSETS = [
     name: 'Meta',
     decimals: 8,
     kind: 'single'
+  },
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ─── OIL, AI AND NEWER LISTINGS ───────────────────────────────────────────
+   * ═════════════════════════════════════════════════════════════════════════
+   * Asked for oil, artificial-intelligence and newly-listed companies.
+   *
+   * ─── HOW EACH MINT HERE WAS ESTABLISHED ───────────────────────────────────
+   * A wrong mint address is the one truly unrecoverable mistake this file can
+   * make: it sends money to a token nobody can sell. So none of these were
+   * typed from memory. Each was cross-checked THREE ways before being added:
+   *
+   *   1. Listed on Backed's own products page (xstocks.com/us/products)
+   *   2. Matching an independent published mint list
+   *   3. Resolved live through Jupiter's token API, confirming symbol, 8
+   *      decimals, `isVerified: true`, the `xstocks` tag, AND — the check that
+   *      actually matters — the SAME mint authority and freeze authority as
+   *      the assets already in this file:
+   *        mintAuthority   7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj
+   *        freezeAuthority JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs
+   *
+   * A convincing fake can copy a name and a ticker. It cannot be minted by
+   * Backed's authority, which is why that is the check that decides.
+   *
+   * ─── AND WHY THIS LIST IS SHORT WHEN 60+ EXIST ────────────────────────────
+   * Liquidity, measured at the same time. Adding every ticker Backed issue
+   * would fill the screen with tokens whose pool is a few thousand dollars,
+   * where a $500 order moves the price several percent. The depth gate on the
+   * Stocks screen would then reject most of what it lists, which is a worse
+   * experience than a shorter honest list. AVGOx and XOMx are included at
+   * lower depth because they are the only route to those sectors; the screen's
+   * own depth warning covers the rest.
+   */
+
+  /* ─── ENERGY / OIL ─────────────────────────────────────────────────────── */
+  {
+    id: 'xomx',
+    mint: 'XsaHND8sHyfMfsWPj6kSdd5VwvCayZvjYgKmmcNL5qh',
+    symbol: 'XOMx',
+    name: 'Exxon Mobil',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'cvxx',
+    mint: 'XsNNMt7WTNA2sV3jrb1NNfNgapxRF5i4i6GcnTRRHts',
+    symbol: 'CVXx',
+    name: 'Chevron',
+    decimals: 8,
+    kind: 'single'
+  },
+
+  /* ─── ARTIFICIAL INTELLIGENCE ──────────────────────────────────────────── */
+  {
+    /* The AI defence/analytics name, and the most traded of this group. */
+    id: 'pltrx',
+    mint: 'XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4',
+    symbol: 'PLTRx',
+    name: 'Palantir',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    /* The chips behind most AI infrastructure after NVIDIA. */
+    id: 'avgox',
+    mint: 'XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo',
+    symbol: 'AVGOx',
+    name: 'Broadcom',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'amznx',
+    mint: 'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg',
+    symbol: 'AMZNx',
+    name: 'Amazon',
+    decimals: 8,
+    kind: 'single'
+  },
+
+  /* ─── RECENT LISTINGS ──────────────────────────────────────────────────── */
+  {
+    /* Listed 2021 but only reached this market recently, and the one most
+       likely to be recognised by someone who already trades crypto. */
+    id: 'hoodx',
+    mint: 'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg',
+    symbol: 'HOODx',
+    name: 'Robinhood',
+    decimals: 8,
+    kind: 'single'
   }
 ];
 

@@ -36,7 +36,11 @@ const NETWORK_SLUG = {
   42161: 'arbitrum',
   10: 'optimism',
   8453: 'base',
-  43114: 'avalanche'
+  43114: 'avalanche',
+  /* Both verified live against the aggregator with our real fee receiver
+     before being listed — see the note in chains.js. */
+  59144: 'linea',
+  146: 'sonic'
 };
 
 /** Identifies our app to KyberSwap. Not a secret, not an API key. */

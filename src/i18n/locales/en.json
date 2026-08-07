@@ -535,7 +535,15 @@
     "saveAsDefault": "Save {{pct}}% as my default",
     "compared": "Price sources",
     "comparedN": "compared {{n}}",
-    "beatenBy": "Best quote-only route led by"
+    "beatenBy": "Best quote-only route led by",
+    "gaslessTitle": "Swap without gas",
+    "gaslessSub": "Costs a little more, but needs no {{coin}}",
+    "gaslessNeeded": "You have no {{coin}} for gas — this is the way to swap",
+    "gaslessWhat": "How can a swap need no gas?",
+    "gaslessHelp": "Normally every action needs the network's own coin to pay the miners, and buying that coin is itself an action that needs it — which is why an empty wallet holding only USDT is stuck. Here you sign a message instead of sending a transaction. Our partner submits it and pays the gas, then takes that cost out of the token you are selling. So it is not free — it is paid in the token instead of in the coin you do not have.",
+    "gaslessGasFee": "Gas (paid in token)",
+    "gaslessZeroExFee": "Relayer fee",
+    "gaslessSubmitted": "Your signature has been relayed. The transaction is submitted for you and settles in a moment — you do not need to keep this open."
   },
   "onboarding": {
     "skip": "Skip",
@@ -796,7 +804,7 @@
     "indexPrice": "Index price",
     "indexNote": "Spot index from our market feed, shown for reference. Actual perp marks and funding rates are set by the venue you trade on.",
     "honestTitle": "Why Fanous Bazaar Pishgam doesn't run its own perp engine",
-    "honestBody": "A perpetual exchange needs an on-chain matching engine, oracle feeds, a liquidation keeper network, an insurance fund and market makers. PancakeSwap doesn't build this in-house either — their perp product is powered by ApolloX. Shipping a fake perp screen would be worse than shipping none, because you'd think your leveraged position was real. So we show live prices and route you to venues that actually run the infrastructure.",
+    "honestBody": "Leverage multiplies both directions. At 10x a 10% move against you erases your position entirely — and on these venues that happens automatically, with no call and no chance to add funds. Most people who trade leverage lose money. We route to these venues; we do not run them and cannot help recover a liquidation.",
     "venues": "Trade perps on",
     "pairs": "pairs",
     "upTo": "up to",
@@ -895,9 +903,9 @@
     "title": "Farm",
     "subtitle": "Live yields from across DeFi, filtered down to pools large enough and old enough to be worth your time.",
     "whatTitle": "How farming works",
-    "whatBody": "You deposit into a pool and earn a share of what it makes. Lending pools pay you interest from borrowers. Trading pools pay you a cut of every swap. Staking pays you for helping secure a network. All of it is paid by somebody doing something real — which is exactly why a pool advertising 900% a year is not paying you out of revenue.",
+    "whatBody": "You deposit into a pool and earn a share of what it makes: interest from borrowers, a cut of every swap, or rewards for helping secure a network. All of it is paid by someone doing something real — which is why a pool advertising 900% a year is not paying you out of revenue.",
     "ilTitle": "Impermanent loss — read before depositing",
-    "ilBody": "If the two tokens change price relative to each other, you end up with more of the one that fell and less of the one that rose. You can finish worse off than if you had simply held them, even after collecting fees. The wider the price gap moves, the worse it gets. Stablecoin pairs barely suffer from this; volatile pairs suffer a lot.",
+    "ilBody": "If the two tokens move apart in price, you end up holding more of the loser and less of the winner — possibly worse off than just holding them, even after fees. The wider the gap, the worse it gets. Stablecoin pairs barely suffer; volatile pairs suffer a lot.",
     "pools": "Popular pools",
     "aprNote": "Every figure here is today's live rate, refreshed hourly from DefiLlama. Rates are variable and change constantly with borrowing demand, trading volume and how much money is already in the pool. Nothing on this screen is a promise and nothing here is guaranteed.",
     "custodyNotice": "These pools are run by their own protocols, not by Fanous Bazaar Pishgam. You deposit directly from your own wallet into their contracts — we never touch your funds and we take no cut of your yield. If you use our swap to get the tokens first, that swap pays our normal {{fee}}% fee and nothing else does.",
@@ -937,7 +945,7 @@
     "mevBoost": "Includes MEV rewards",
     "protocolFee": "{{pct}}% protocol fee",
     "stakeNow": "Get {{sym}}",
-    "stakingNote": "Yields are variable and come from network rewards, so they move with validator performance and network activity. The protocol fee shown is already deducted from the rate above it. Swapping back to SOL is usually instant through the same screen, but the price you get depends on pool depth at that moment — this is not a savings account and there is no guaranteed exit price.",
+    "stakingNote": "Yields are variable and come from network rewards, so they move with validator performance. The protocol fee shown is already deducted. Swapping back to SOL is usually instant, but the price depends on pool depth at that moment — this is not a savings account and there is no guaranteed exit price.",
     "custodyTitle": "Who holds the funds?",
     "ethStakingTitle": "Ethereum staking",
     "ethStakingNote": "Buying these IS staking — the token grows against ETH on its own, with no lock-up, and swapping back out is how you unstake. Our normal 0.70% EVM swap fee applies; there is no extra staking charge."
@@ -1036,7 +1044,7 @@
     "realTitle": "What these actually are",
     "realBody": "Each token is backed one-for-one by a real share held with a regulated custodian in Switzerland, issued by Backed Finance under the Swiss DLT Act. They trade 24/7 with no broker and no bank account. The price follows the real share.",
     "freezeTitle": "Read this before you buy",
-    "freezeBody": "The issuer can freeze these tokens. That is not a theoretical clause — it is a live authority written into the token itself, and issuers use it: Tether has frozen over $5 billion across roughly 10,000 wallets under the same kind of power. Backed does not offer xStocks in the United States, United Kingdom, Canada, Australia or the EU, and it can act against a wallet it decides it should not be serving. If that happens to you, the tokens stay in your wallet but stop moving, and we cannot reverse it. This is the fundamental difference between a tokenized share and a share held at a broker: you own the exposure, not the protection.",
+    "freezeBody": "The issuer can freeze these tokens — a live authority written into the token, and issuers use it: Tether has frozen over $5bn across ~10,000 wallets. Backed does not serve the US, UK, Canada, Australia or EU, and can act against any wallet it decides not to serve. Frozen tokens stay in your wallet but stop moving, and we cannot reverse it. You own the exposure, not the protection.",
     "available": "Available to buy",
     "ifIBuy": "If I buy",
     "kindIndex": "Index fund",
@@ -1059,7 +1067,8 @@
       "p2": "No shareholder rights come with them: no vote, and dividends only if the issuer chooses to pass them on. If the issuer fails, the token is worth whatever the market thinks their promise is worth.",
       "p3": "Liquidity is thin compared with a real exchange. A large order can move the price against you sharply, and there may be no buyer at all when you want out."
     },
-    "kycTitle": "Do I need identity verification?"
+    "kycTitle": "Do I need identity verification?",
+    "riskTitle": "Risks you are taking"
   },
   "help": {
     "title": "Help & support",
@@ -1361,7 +1370,7 @@
       "coinVenue": "Which chains a coin can actually be traded on here, resolved from its own contract addresses"
     },
     "fairUse": "Fair use, stated plainly",
-    "fairUseBody": "This data costs us upstream quota that is shared by every user of the app. Cache what you fetch, poll no faster than the cache tiers above, and identify your client in the user-agent so we can talk to you rather than block you. There is no commercial tier and no paid plan — if you need more than the limit allows, self-host, which is free and takes three commands.",
+    "fairUseBody": "This data costs upstream quota shared by every user. Cache what you fetch, poll no faster than the tiers above, and identify your client in the user-agent so we can contact you rather than block you. No paid tier exists — if you need more, self-host. It is free and takes three commands.",
     "selfHost": "Running your own copy",
     "selfHostBody": "Every endpoint on this page runs from one Express server with no database. Clone, install, and it works against the free public tiers of its upstream providers.",
     "selfHostKeys": "It runs with an empty .env. Keys only unlock extras: a CoinGecko key raises the market-data rate limit, an AI key enables the analysis routes, and the fiat, bridge and Solana fee settings stay off until you set your own. Nothing is required to get market data working.",
@@ -2443,7 +2452,8 @@
     "badToAddress": "That is not a valid address. Clear the field to send to your own wallet, or paste a full 0x address.",
     "mode": {
       "tokens": "Tokens",
-      "native": "Native (BTC, ETH…)"
+      "native": "Native (BTC, ETH…)",
+      "tron": "Tron (USDT)"
     },
     "routesTitle": "Compare routes",
     "fixedFee": "Fixed network fee",
@@ -2616,7 +2626,7 @@
     "trezorBlurb": "Open-source firmware you can read and verify yourself, rather than trust.",
     "disclosure": "If you buy through this link we receive {{rate}}% of the sale from {{vendor}}. It costs you nothing extra, and we would recommend a hardware wallet with or without it.",
     "cautionTitle": "Never buy one second-hand, and why that matters more than the brand",
-    "caution": "Buy only from the manufacturer's own shop. The known attack is simple: someone sells a device on a marketplace with a recovery phrase they already generated and wrote into the box, then waits and drains it once you fund it. A genuine device generates its phrase in front of you, on first use, and never arrives with one printed on a card. If a device asks you to enter a phrase that was supplied with it, stop.",
+    "caution": "Buy only from the manufacturer or an official reseller. A marketplace, second-hand or gifted device can be tampered with, and one that arrives with a recovery phrase already printed is a theft in progress — a real device makes you generate it yourself, offline, on first use.",
     "notRequired": "None of this is required to use FBT Swap. Everything here works with the wallet you already have — this is for people holding an amount they would be genuinely sorry to lose."
   },
   "calm": {
@@ -2696,5 +2706,17 @@
     "nfcYes": "NFC works on this phone — you can tap phones instead of scanning.",
     "nfcNo": "NFC is not available on this device, so use the code. It works exactly the same.",
     "watchAsset": "Watch for which asset"
+  },
+  "tron": {
+    "tab": "Tron (USDT)",
+    "from": "Send from",
+    "to": "Tron address (TRC-20)",
+    "badAddress": "That is not a Tron address. It should start with T and be 34 characters. An Ethereum 0x address will not work here.",
+    "tooSmall": "Tron charges a roughly fixed cost to receive, so small transfers lose a large share of their value. Below about ${{min}} this is rarely worth it — the same fee is barely noticeable on a larger amount.",
+    "totalLoss": "Total you lose",
+    "severeLoss": "You lose {{pct}}% of this transfer. Almost all of that is Tron's fixed receiving cost, not our fee — sending a larger amount at once costs the same in absolute terms.",
+    "sentBody": "Sent. The bridge delivers USDT to your Tron address, usually within a couple of minutes. Check your Tron wallet, not this screen.",
+    "whyTitle": "Why send to Tron at all?",
+    "whyBody": "USDT on Tron is the cheapest widely-accepted way to hold and move dollars — sending it later costs cents. The catch is getting it there: the receiving side has a near-fixed cost, so it pays to move a meaningful amount once rather than small amounts often. We take 0.30% on this route, shown in the quote before you sign."
   }
 }

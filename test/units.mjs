@@ -2594,11 +2594,15 @@ export default function run() {
      * The count is pinned deliberately: this list is the ONLY thing standing
      * between a user and a pump.fun clone with the same ticker and logo, so
      * an asset appearing here must be a decision somebody made, never a merge
-     * artefact. 17 as of adding jupSOL, which was quoted live through our own
-     * endpoint (feeBps 70, our payout address) before being listed.
+     * artefact. 23 as of adding the oil, AI and recent-listing names — XOMx,
+     * CVXx, PLTRx, AVGOx, AMZNx and HOODx. Each was resolved live through
+     * Jupiter and matched on the SAME mint authority
+     * (7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj) and freeze authority as
+     * the assets already listed, which is the check a convincing clone cannot
+     * pass: it can copy a name and a ticker, it cannot be minted by Backed.
      */
     t('every curated mint is a plausible Solana address',
-      all.length === 17 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 23 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.

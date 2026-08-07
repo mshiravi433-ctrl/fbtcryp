@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
+import { gaslessEligible, getGaslessPrice, getGaslessQuote, submitGasless, summariseGasless } from '../lib/gasless';
 import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
@@ -580,7 +581,107 @@ export default function Swap() {
   /* Kept as a named alias so existing callers read clearly. */
   const setMax = () => setPortion(100);
 
+  /**
+   * Execute WITHOUT the user holding any native coin.
+   *
+   * ─── HOW THIS DIFFERS FROM A NORMAL SWAP, AND WHY IT IS SEPARATE ────────
+   * A normal swap builds a transaction the wallet broadcasts. This builds one
+   * or two EIP-712 MESSAGES the wallet signs, which we relay to 0x, who submit
+   * them and pay the gas. Different approval mechanism (Permit2), different
+   * failure modes, different response shape. Threading it through `runSwap`
+   * would put four more branches inside the one function on this screen that
+   * moves real money.
+   *
+   * ─── THE USER SIGNS; WE NEVER HOLD ANYTHING ─────────────────────────────
+   * We relay a signature. We cannot alter what it authorises, cannot execute
+   * it twice, and never take custody. The non-custodial property is unchanged
+   * — what changes is only who pays the gas.
+   */
+  const runGasless = async () => {
+    const signer = wallet.getSigner?.();
+    if (!signer) return;
+
+    setTxState({ stage: 'preparing' });
+    try {
+      /*
+       * The EXACT integer, taken from the quote rather than re-derived from
+       * the typed string. `Number(amount) * 10 ** decimals` loses precision
+       * well inside the range users type — 0.1 at 18 decimals does not come
+       * out clean — and 0x reject a non-integer amount. The quote already
+       * holds it as a BigInt for precisely this reason.
+       */
+      const raw = quote?.amountInWei != null ? quote.amountInWei.toString() : null;
+      if (!raw) throw new Error('BAD_AMOUNT');
+
+      /*
+       * Re-quote at the moment of signing rather than reusing the indicative
+       * price. A gasless quote carries the exact payload to be signed and it
+       * expires; signing a stale one fails upstream after the user has already
+       * approved it in their wallet.
+       */
+      setTxState({ stage: 'quoting' });
+      const q = await getGaslessQuote({
+        chainId,
+        sellToken: fromToken.address,
+        buyToken: toToken.address,
+        sellAmount: raw,
+        taker: wallet.address,
+        slippageBps: String(Math.round(effectiveSlippage * 100))
+      });
+
+      if (q?.liquidityAvailable === false) throw new Error('NO_ROUTE');
+
+      setTxState({ stage: 'signing' });
+
+      /*
+       * Two signatures at most, and the approval one is often absent — a token
+       * that already has a Permit2 allowance returns only `trade`. Treating a
+       * missing `approval` as an error would break the second swap of every
+       * token the user has already used.
+       */
+      const signed = {};
+      for (const kind of ['approval', 'trade']) {
+        const obj = q?.[kind];
+        if (!obj?.eip712) continue;
+        const { domain, types, message } = obj.eip712;
+        /*
+         * EIP712Domain is implicit in ethers and MUST be removed, or signing
+         * throws on an ambiguous primary type. This is the single most common
+         * mistake integrating 0x gasless.
+         */
+        const t712 = { ...types };
+        delete t712.EIP712Domain;
+        const signature = await signer.signTypedData(domain, t712, message);
+        signed[kind] = { type: obj.type, eip712: obj.eip712, signature };
+      }
+
+      if (!signed.trade) throw new Error('NOTHING_TO_SIGN');
+
+      setTxState({ stage: 'pending' });
+      const res = await submitGasless({
+        chainId,
+        ...(signed.approval ? { approval: signed.approval } : {}),
+        trade: signed.trade
+      });
+
+      /*
+       * 0x return a tradeHash, not a transaction hash — they have not
+       * submitted it on-chain yet. Showing it as a tx hash would send the user
+       * to an explorer page that does not exist, which reads as "my money is
+       * gone" at the worst moment. It is reported as a pending trade instead.
+       */
+      setTxState({ stage: 'success', gaslessHash: res?.tradeHash ?? null, gasless: true });
+      haptic?.('success');
+      notifyTrade?.({ from: fromToken.symbol, to: toToken.symbol, amount });
+    } catch (e) {
+      setTxState({ stage: 'error', message: e?.shortMessage || e?.message || 'TX_FAILED' });
+      haptic?.('error');
+    }
+  };
+
   const runSwap = async () => {
+    if (useGasless) return runGasless();
+
     const signer = wallet.getSigner?.();
     if (!signer || !quote || quote.error) return;
 
@@ -727,6 +828,45 @@ export default function Swap() {
 
   /** The side we are buying into, when it isn't hand-verified. */
   const unverifiedTarget = toToken && !toToken.verified && !toToken.native ? toToken : null;
+
+  /*
+   * ─── GASLESS: THE DEAD END THIS OPENS ───────────────────────────────────
+   * Someone holding USDT with no BNB can do NOTHING here — every EVM action
+   * needs the chain's native coin, and buying that coin is itself a
+   * transaction needing gas. `server/gasless.js` has solved this since it
+   * shipped and no screen could reach it.
+   *
+   * Offered rather than forced. It costs more than a normal swap (0x take a
+   * cut on top of ours, and the gas is priced into the token), so defaulting
+   * to it would quietly overcharge everyone who does have gas. It appears as
+   * an option, and is RECOMMENDED only when the user genuinely cannot pay gas.
+   */
+  const gaslessOk = gaslessEligible({ chainId, fromToken, toToken });
+  const [useGasless, setUseGasless] = useState(false);
+  const [gaslessQuote, setGaslessQuote] = useState(null);
+  const [gaslessBusy, setGaslessBusy] = useState(false);
+
+  /*
+   * The user cannot pay gas at all. This is the case the feature exists for,
+   * and the only case where we actively recommend it.
+   *
+   * `nativeBal <= 0` rather than `lowGas`: lowGas also fires when the balance
+   * is merely tight, and nudging somebody onto a costlier route because they
+   * are close to the line would be us profiting from a scare.
+   */
+  const cannotPayGas = wallet.isConnected && gaslessOk && nativeBal <= 0;
+
+  /* Switching pair or chain must drop a stale quote — it is priced for the
+     old pair and would be signed against the new one. */
+  useEffect(() => {
+    setGaslessQuote(null);
+    if (!gaslessOk) setUseGasless(false);
+  }, [gaslessOk, chainId, fromSym, toSym, amount]);
+
+  const gaslessSummary = useMemo(
+    () => summariseGasless(gaslessQuote, toToken?.decimals ?? 6),
+    [gaslessQuote, toToken?.decimals]
+  );
 
   /* --------------------------------- UI ---------------------------------- */
 
@@ -1098,10 +1238,104 @@ export default function Swap() {
         {/* Gas is paid in the chain's own coin, from the same wallet, and it
             is NOT covered by the platform fee. Saying which coin, per chain,
             removes the single most common support question. */}
-        {lowGas && (
+        {lowGas && !useGasless && (
           <p className="notice notice-danger" style={{ marginTop: 10 }}>
             {t('swap.needGas', { coin: cfg.native.symbol, chain: cfg.name })}
           </p>
+        )}
+
+        {/*
+          ─── THE GASLESS OPTION ────────────────────────────────────────────
+          Placed directly under the gas warning, because that warning is the
+          moment the user learns they are stuck. Answering the objection where
+          it appears is the difference between a feature and a setting nobody
+          finds — and this one was previously reachable from nowhere at all.
+
+          It is an OPTION, never the default. 0x take a cut on top of ours and
+          the gas is priced into the token, so it costs more than a normal
+          swap. Defaulting to it would quietly overcharge every user who does
+          have gas.
+        */}
+        {gaslessOk && (
+          <div className="card card-tight" style={{ marginTop: 10 }}>
+            <div className="set-row" style={{ padding: 0 }}>
+              <span className="set-row-label">
+                <div>{t('swap.gaslessTitle')}</div>
+                <div className="set-row-sub">
+                  {cannotPayGas ? t('swap.gaslessNeeded', { coin: cfg.native.symbol }) : t('swap.gaslessSub')}
+                </div>
+              </span>
+              <Switch
+                on={useGasless}
+                label={t('swap.gaslessTitle')}
+                onChange={async () => {
+                  haptic?.('select');
+                  const next = !useGasless;
+                  setUseGasless(next);
+                  if (!next || !quote?.amountInWei) return;
+                  /*
+                   * Price it only when switched ON. A firm quote costs more
+                   * upstream and expires, so it is requested at signing time;
+                   * this is the cheap indicative one, used to show the real
+                   * cost BEFORE the user commits to the route.
+                   */
+                  setGaslessBusy(true);
+                  try {
+                    setGaslessQuote(await getGaslessPrice({
+                      chainId,
+                      sellToken: fromToken.address,
+                      buyToken: toToken.address,
+                      sellAmount: quote.amountInWei.toString(),
+                      taker: wallet.address,
+                      slippageBps: String(Math.round(effectiveSlippage * 100))
+                    }));
+                  } catch {
+                    /* Swallowed: the toggle still works and the firm quote at
+                       signing time is the one that matters. A failed preview
+                       must not block the route. */
+                    setGaslessQuote(null);
+                  } finally {
+                    setGaslessBusy(false);
+                  }
+                }}
+              />
+            </div>
+
+            {gaslessBusy && <p className="faint" style={{ marginTop: 8, fontSize: 12 }}>{t('swap.quoting')}</p>}
+
+            {/*
+              Every deduction, named. Three come out of the sell token: ours,
+              0x's, and the gas 0x is fronting. The gas line especially has to
+              be visible — "no ETH needed" means "paid in the token instead",
+              and hiding that would make an honest feature look dishonest the
+              first time somebody did the arithmetic.
+            */}
+            {useGasless && gaslessSummary && !gaslessBusy && (
+              <div className="stack" style={{ gap: 6, marginTop: 10 }}>
+                <div className="row-between">
+                  <span className="faint">{t('swap.gaslessGasFee')}</span>
+                  <span className="mono" style={{ fontSize: 11.5 }}>
+                    {fmtQty(gaslessSummary.gasFee)} {fromToken.symbol}
+                  </span>
+                </div>
+                {gaslessSummary.zeroExFee > 0 && (
+                  <div className="row-between">
+                    <span className="faint">{t('swap.gaslessZeroExFee')}</span>
+                    <span className="mono" style={{ fontSize: 11.5 }}>
+                      {fmtQty(gaslessSummary.zeroExFee)} {fromToken.symbol}
+                    </span>
+                  </div>
+                )}
+                {!gaslessSummary.liquidityAvailable && (
+                  <p className="notice notice-danger" style={{ marginTop: 4 }}>{t('swap.err.NO_ROUTE')}</p>
+                )}
+              </div>
+            )}
+
+            <InfoBox title={t('swap.gaslessWhat')} tone="info" id="swap-gasless-help">
+              <p>{t('swap.gaslessHelp')}</p>
+            </InfoBox>
+          </div>
         )}
 
         {/* Being in a public token list is not an endorsement. */}
@@ -1577,8 +1811,23 @@ export default function Swap() {
                   why the wallet has not updated yet.
                 */}
                 <p className="faint" style={{ fontSize: 11.5, marginTop: 10, lineHeight: 1.7 }}>
-                  {t('swap.successWhere')}
+                  {txState.gasless ? t('swap.gaslessSubmitted') : t('swap.successWhere')}
                 </p>
+
+                {/*
+                  ─── A tradeHash IS NOT A TRANSACTION HASH ──────────────────
+                  0x return a trade identifier and submit the transaction
+                  themselves a moment later. Rendering it as a tx hash would
+                  link to an explorer page that does not exist yet — which
+                  reads as "my money has vanished" at the most anxious point
+                  in the whole flow. Shown as a reference, deliberately not as
+                  a link.
+                */}
+                {txState.gaslessHash && (
+                  <p className="mono faint" style={{ fontSize: 10, marginTop: 8, wordBreak: 'break-all' }}>
+                    {txState.gaslessHash}
+                  </p>
+                )}
               </motion.div>
             )}
 

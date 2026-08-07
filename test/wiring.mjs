@@ -8141,16 +8141,17 @@ export default function run() {
     }
 
     /*
-     * ─── KNOWN-UNREACHABLE, DELIBERATELY RECORDED ───────────────────────────
-     * Asserting the CURRENT truth, not the desired one. A test that fails for
-     * a known gap is noise that gets muted; a test that pins the gap fails the
-     * day somebody fixes it, which is the prompt to delete the entry and the
-     * doc line together.
+     * ─── BOTH GAPS NOW CLOSED ───────────────────────────────────────────────
+     * These two were recorded as "still unreachable" one commit ago, on the
+     * reasoning that a test pinning a known gap fails the day somebody fixes
+     * it — which is the prompt to update it. That is exactly what happened:
+     * both flipped, and both assertions are now the positive ones.
+     *
+     * That is the mechanism working. A test asserting the current truth is
+     * self-correcting; a test muted because "we know about that one" is not.
      */
-    t('gasless is still not reachable (recorded, not accepted)',
-      !reachable('/gasless/price'));
-    t('...and the 0x cross-chain route to Tron is not either',
-      !reachable('/xchain/quotes'));
+    t('gasless is now reachable from the UI', reachable('/gasless/price'));
+    t('...and so is the Tron route', reachable('/xchain/quotes'));
 
     /* Both must stay documented while they are unreachable. */
     const nx = existsSync('docs/NEXT-OPTIONS-FA.md') ? read('docs/NEXT-OPTIONS-FA.md') : '';
@@ -8170,6 +8171,163 @@ export default function run() {
      */
     t('...and warns about the near-flat Tron activation cost',
       /۸٫۲۹|17|۱۷/.test(nx));
+
+    /* ---- the two features, now that they are wired ---------------------- */
+    /* Redeclared: `code` is block-scoped per section in this file. */
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const swapPageSrc = code(read('src/pages/Swap.jsx'));
+    const gl = code(read('src/lib/gasless.js'));
+    const xc = code(read('src/lib/xchain.js'));
+
+    /*
+     * ─── GASLESS ────────────────────────────────────────────────────────────
+     * The gas is paid out of the SOLD TOKEN. "No ETH needed" does not mean
+     * free, and if that is not itemised before signing, the user does the
+     * arithmetic afterwards and concludes we skimmed them. The honest version
+     * of this feature has to show the cost it removes.
+     */
+    t('the gasless summary reports the gas taken from the token',
+      /gasFee/.test(gl));
+    /*
+     * 0x return `integratorFees` (array) or `integratorFee` (object) depending
+     * on the route. Reading only one reports OUR fee as zero on half of them.
+     */
+    t('...and reads both integrator-fee shapes',
+      /integratorFees/.test(gl) && /integratorFee\?\./.test(gl));
+    /*
+     * Gasless has no native path by definition — if the user had native coin
+     * they would not need it. Offering it for a native pair produces an
+     * upstream error the user cannot act on.
+     */
+    t('...and refuses native tokens, which it cannot handle',
+      /native/.test(gl));
+    /*
+     * EIP712Domain is implicit in ethers and MUST be deleted, or signing
+     * throws on an ambiguous primary type. The single most common mistake
+     * integrating 0x gasless.
+     */
+    t('...and strips EIP712Domain before signing',
+      /delete t712\.EIP712Domain/.test(swapPageSrc));
+    /*
+     * A tradeHash is NOT a transaction hash — 0x have not submitted yet.
+     * Linking it to an explorer shows a "not found" page at the most anxious
+     * moment in the flow.
+     */
+    t('...and does not present the tradeHash as a transaction link',
+      !/scan.*gaslessHash|gaslessHash.*href/.test(swapPageSrc));
+
+    /*
+     * ─── TRON ───────────────────────────────────────────────────────────────
+     * The flat activation cost is invisible as a percentage until the amount
+     * is small: $10 loses 17%, $1,000 loses 0.48%. Same shape as the deBridge
+     * fixed fee, same treatment.
+     */
+    t('the Tron client warns on amounts the flat cost would eat',
+      /tronAmountWarning/.test(xc));
+    /*
+     * `Number(null)` is 0 and 0 is finite. Folding the null check in would
+     * report "this is fine" for an amount nobody has entered.
+     */
+    t('...and treats a missing amount as unknown, not as fine',
+      /amountUsd == null/.test(xc));
+    /* The loss figure is the server's, never re-derived on two sides. */
+    t('...and passes the server loss figure through rather than recomputing',
+      /lossPercent: res\.lossPercent/.test(xc));
+    /*
+     * Across a family boundary 0x default the destination to the ORIGIN
+     * address — a Tron destination that is an EVM address nobody holds the key
+     * to. A successful bridge straight into a burn.
+     */
+    t('...and validates the Tron address shape',
+      /\^T\[1-9A-HJ-NP-Za-km-z\]\{33\}\$/.test(xc));
+    t('...and the panel always sends an explicit destination',
+      /destinationAddress: dest\.trim\(\)/.test(code(read('src/components/TronPanel.jsx'))));
+    /* Reachable, or it is another 368 lines nobody can open. */
+    t('...and the bridge screen offers a Tron tab',
+      /'tron'\]/.test(code(read('src/pages/Bridge.jsx'))));
+
+    /*
+     * ─── NEW CHAINS, EACH PROVEN TO PAY BEFORE BEING LISTED ─────────────────
+     * Asked why we list 7 networks when Trust Wallet lists ~100. A network is
+     * only worth listing if it can SWAP and PAY US — a chain with no
+     * aggregator route is a dropdown entry that answers "no route found" on
+     * every pair, which is worse than absence. Trust Wallet can list 100
+     * because it only has to show balances.
+     *
+     * Linea and Sonic were quoted live against KyberSwap with our real fee
+     * receiver and both echoed feeAmount 70. Scroll was tried identically and
+     * returned 404, so it is absent rather than listed and broken.
+     */
+    const chainsSrc = read('src/lib/chains.js');
+    const aggSrc = read('src/lib/aggregator.js');
+    for (const [name, id, slug] of [['Linea', '59144', 'linea'], ['Sonic', '146', 'sonic']]) {
+      t(`${name} is a configured chain`, new RegExp(`^  ${id}: \\{`, 'm').test(chainsSrc));
+      /* A chain in chains.js but not in the aggregator map quotes nothing. */
+      t(`...and is routable through the aggregator`, aggSrc.includes(`'${slug}'`));
+      /* And it needs tokens, or the picker opens empty. */
+      t(`...and has a token list`, new RegExp(`^  ${id}: \\[`, 'm').test(chainsSrc));
+    }
+    t('Scroll stays out, since its aggregator route 404s',
+      !/'scroll'/.test(aggSrc));
+
+    /*
+     * ─── NEW SECTORS, AND THE CHECK THAT ACTUALLY MATTERS ───────────────────
+     * Asked for oil, AI and newer listings. A wrong mint address is the one
+     * unrecoverable mistake this file can make — it sends money to a token
+     * nobody can sell — so each was resolved live through Jupiter and matched
+     * on the SAME mint and freeze authority as the assets already present. A
+     * convincing fake can copy a name and a ticker; it cannot be minted by
+     * Backed's authority.
+     */
+    const sol = read('src/lib/solanaAssets.js');
+    for (const [sym, mint] of [
+      ['XOMx', 'XsaHND8sHyfMfsWPj6kSdd5VwvCayZvjYgKmmcNL5qh'],
+      ['CVXx', 'XsNNMt7WTNA2sV3jrb1NNfNgapxRF5i4i6GcnTRRHts'],
+      ['PLTRx', 'XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4'],
+      ['AVGOx', 'XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo'],
+      ['AMZNx', 'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg'],
+      ['HOODx', 'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg']
+    ]) {
+      t(`${sym} is listed with its verified mint`,
+        sol.includes(`symbol: '${sym}'`) && sol.includes(mint));
+    }
+    /* The authorities used to validate them must stay recorded. */
+    t('...and the authority used to verify them is documented',
+      sol.includes('7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj'));
+
+    /*
+     * ─── THE STOCKS WARNINGS, BOXED ─────────────────────────────────────────
+     * Asked to put the warning at the top of the stocks page in a collapsible
+     * box, and the bottom one too. Both done — but the top one keeps
+     * `defaultOpen`, because the freeze authority is real and used, and
+     * collapsing it closed would undo the reason it sits above everything.
+     */
+    const stk = code(read('src/pages/Stocks.jsx'));
+    t('the freeze warning is a box', /id="stocks-freeze"/.test(stk));
+    t('...but is still open by default, since it is load-bearing',
+      /InfoBox title=\{t\('stocks\.freezeTitle'\)\} tone="danger" defaultOpen/.test(stk));
+    t('the closing risk notice is a box too', /id="stocks-risk"/.test(stk));
+
+    /*
+     * ─── SHORTER COPY, WITHOUT LOSING A FACT ────────────────────────────────
+     * Asked to shorten the long explanations across the app. The risk of
+     * "shorten this" is deleting the sentence that was doing the work, so the
+     * cap is paired with the existing content checks: shortening the hardware
+     * caution below already broke `pre-generated-phrase attack` and had to be
+     * rewritten to keep "marketplace".
+     */
+    for (const lang of ['en', 'fa']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const longest = Math.max(
+        ...[L.stocks?.freezeBody, L.farm?.whatBody, L.farm?.ilBody,
+          L.dev?.fairUseBody, L.perp?.honestBody, L.hardware?.caution]
+          .filter(Boolean).map((s) => s.length)
+      );
+      t(`${lang} trims the longest explainers under 430 chars`, longest < 430);
+    }
   }
 
   return rows;

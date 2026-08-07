@@ -115,6 +115,48 @@ export const EVM_CHAINS = {
     wrapped: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX
     dexName: 'Trader Joe',
     color: '#e84142'
+  },
+  /*
+   * ─── LINEA AND SONIC ──────────────────────────────────────────────────────
+   * Asked why we list 7 networks when Trust Wallet lists ~100.
+   *
+   * The honest answer is that a network is only worth listing here if it can
+   * SWAP and PAY US — a chain with no aggregator route is a dropdown entry
+   * that produces "no route found" on every pair, which is worse than absence.
+   * Trust Wallet can list 100 because it only has to show balances.
+   *
+   * So each candidate was quoted live against KyberSwap with our real fee
+   * receiver before being added. Both of these returned a route AND echoed
+   * `"feeAmount":"70","feeReceiver":"0xaf5ce154…"`, which is the whole test.
+   * Scroll was tried the same way and returned 404 from the aggregator, so it
+   * is deliberately absent rather than listed and broken.
+   */
+  59144: {
+    id: 59144,
+    hexId: '0xe708',
+    name: 'Linea',
+    short: 'LINEA',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://rpc.linea.build'],
+    explorer: 'https://lineascan.build',
+    /* SyncSwap's V2-compatible router. Same shape the fallback path expects. */
+    router: '0x80e38291e06339d10AAB483C65695D004dBD5C69',
+    wrapped: '0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f', // WETH
+    dexName: 'KyberSwap',
+    color: '#61dfff'
+  },
+  146: {
+    id: 146,
+    hexId: '0x92',
+    name: 'Sonic',
+    short: 'S',
+    native: { symbol: 'S', decimals: 18, coingeckoId: 'sonic-3' },
+    rpc: ['https://rpc.soniclabs.com'],
+    explorer: 'https://sonicscan.org',
+    router: '0x1D368773735ee1E678950B7A97bcA2CafB330CDc',
+    wrapped: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', // wS
+    dexName: 'KyberSwap',
+    color: '#fe9a4d'
   }
 };
 
@@ -276,6 +318,17 @@ export const TOKENS = {
     { symbol: 'USDT', name: 'Tether USD', address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6, coingeckoId: 'tether' },
     { symbol: 'USDC', name: 'USD Coin', address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', decimals: 6, coingeckoId: 'usd-coin' },
     { symbol: 'WETH', name: 'Wrapped Ether', address: '0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB', decimals: 18, coingeckoId: 'ethereum' }
+  ],
+  59144: [
+    { symbol: 'ETH', name: 'Ethereum', address: null, decimals: 18, native: true, coingeckoId: 'ethereum' },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x176211869cA2b568f2A7D4EE941E073a821EE1ff', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'USDT', name: 'Tether USD', address: '0xA219439258ca9da29E9Cc4cE5596924745e12B93', decimals: 6, coingeckoId: 'tether' },
+    { symbol: 'WETH', name: 'Wrapped Ether', address: '0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f', decimals: 18, coingeckoId: 'ethereum' }
+  ],
+  146: [
+    { symbol: 'S', name: 'Sonic', address: null, decimals: 18, native: true, coingeckoId: 'sonic-3' },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', decimals: 6, coingeckoId: 'usd-coin' },
+    { symbol: 'wS', name: 'Wrapped Sonic', address: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', decimals: 18, coingeckoId: 'sonic-3' }
   ],
   56: [
     { symbol: 'BNB', name: 'BNB', address: null, decimals: 18, native: true, coingeckoId: 'binancecoin' },

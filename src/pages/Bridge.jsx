@@ -23,6 +23,7 @@ import {
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import ThorPanel from '../components/ThorPanel';
+import TronPanel from '../components/TronPanel';
 import SegIndicator from '../components/SegIndicator';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -416,7 +417,7 @@ export default function Bridge() {
       </motion.div>
 
       <div className="segmented">
-        {['tokens', 'native'].map((k) => (
+        {['tokens', 'native', 'tron'].map((k) => (
           <button
             key={k}
             className={mode === k ? 'active' : ''}
@@ -429,7 +430,16 @@ export default function Bridge() {
         ))}
       </div>
 
-      {mode === 'native' ? (
+      {/*
+        A third tab rather than an option inside the first. Tron is not another
+        EVM chain: the destination is a different address FORMAT, the fee rules
+        differ (0x refuse a fee on a Tron origin), and the flat activation cost
+        needs its own warning. Folding it into the token form would produce
+        fields that change meaning depending on a dropdown.
+      */}
+      {mode === 'tron' ? (
+        <TronPanel />
+      ) : mode === 'native' ? (
         <ThorPanel />
       ) : (
         <>

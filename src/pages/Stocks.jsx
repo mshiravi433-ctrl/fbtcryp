@@ -176,17 +176,28 @@ export default function Stocks() {
             position they already own. Nobody should tap Buy without having
             read that sentence first.
           */}
-          <motion.section className="card notice-danger stk-warn" variants={riseIn} initial="hidden" animate="show">
-            <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-              <span style={{ color: 'var(--down)', flexShrink: 0 }}>
-                <IconShield width={20} height={20} />
-              </span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 5 }}>{t('stocks.freezeTitle')}</div>
-                <p style={{ fontSize: 12.2, margin: 0, lineHeight: 1.85 }}>{t('stocks.freezeBody')}</p>
-              </div>
-            </div>
-          </motion.section>
+          {/*
+            ─── NOW A BOX, BUT STILL OPEN BY DEFAULT ─────────────────────────
+            Asked to put this warning in a collapsible box. Done — with one
+            deliberate qualification: `defaultOpen`.
+
+            The original comment above argued placement is everything, and it
+            was right. Collapsing this one CLOSED would undo the reason it sits
+            at the top: the freeze authority is real and used, Tether have
+            frozen over $5bn across roughly 10,000 addresses under the same
+            kind of power, and Backed hold it over every xStock. Someone can
+            lose access to a position they already own.
+
+            So the box gives what was asked — one tidy container instead of a
+            loose red slab, and the user can fold it away once read — while
+            still being visible the first time. That is the same rule already
+            applied to `stocks.beforeBuy` directly below.
+          */}
+          <motion.div variants={riseIn} initial="hidden" animate="show">
+            <InfoBox title={t('stocks.freezeTitle')} tone="danger" defaultOpen id="stocks-freeze">
+              <p>{t('stocks.freezeBody')}</p>
+            </InfoBox>
+          </motion.div>
 
           <section>
             <p className="section-label">{t('stocks.available')}</p>
@@ -384,7 +395,19 @@ export default function Stocks() {
         </>
       )}
 
-      <p className="notice notice-danger">{t('stocks.riskNotice')}</p>
+      {/*
+        The closing risk notice, also boxed as asked.
+
+        Closed by default, unlike the freeze warning at the top. The difference
+        is what each one does: the freeze notice describes something that can
+        happen to money the user is about to commit, while this restates the
+        general position — no advice, no guarantees, prices move. That is worth
+        having and is not worth spending the user's attention on before they
+        have even chosen an asset.
+      */}
+      <InfoBox title={t('stocks.riskTitle')} tone="danger" id="stocks-risk">
+        <p>{t('stocks.riskNotice')}</p>
+      </InfoBox>
     </PageTransition>
   );
 }
