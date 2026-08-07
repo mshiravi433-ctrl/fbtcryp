@@ -26,7 +26,7 @@
       "more": "More"
     },
     "p2p": "P2P",
-    "leaderboard": "Ranking",
+    "leaderboard": "Your points",
     "news": "News",
     "explore": "Explorer",
     "discover": "Discover",
@@ -1615,21 +1615,13 @@
     "cashBody": "Meeting someone with banknotes has no escrow at all — nothing can be reversed and nobody can arbitrate. If you do it anyway: meet inside a bank branch or a police-station lobby in daylight, count the notes before touching your phone, and have the sender broadcast the transaction while you are both standing there. Never travel to a private address, and never hand over cash against a screenshot — only against a confirmation you have read on-chain yourself."
   },
   "rank": {
-    "title": "Ranking",
+    "title": "Your points",
     "points": "points",
     "pts": "pts",
-    "you": "You",
-    "yourRank": "Rank #{{n}}",
-    "unranked": "Not ranked yet",
     "toNext": "{{n}} points to {{tier}}",
     "tiers": "Tiers",
-    "top": "Top traders",
-    "viewBoard": "View the leaderboard",
-    "refs": "{{n}} invites",
-    "swaps": "{{n}} swaps",
     "howTo": "How to earn points",
     "startEarning": "Start earning",
-    "demoNotice": "Rankings are calculated from real user activity and refresh from the server each time you open the app.",
     "tier": {
       "bronze": "Bronze",
       "silver": "Silver",
@@ -1651,12 +1643,13 @@
       "backupWallet": "Back up your wallet",
       "enable2fa": "Turn on two-factor"
     },
-    "offlineNotice": "The ranking server is unreachable, so this is the last copy cached on your device.",
-    "localOnly": "Your rank is calculated from activity on this device.",
-    "emptyBoard": "Nobody has posted a score yet. Make a swap or check in and yours will be the first name on this board.",
-    "leaderIs": "Top of the board: {{name}} · {{n}} points",
-    "youArePlaced": "You are #{{place}} of {{total}}, with {{points}} points",
-    "pendingSync": "Your latest score is still syncing, so this position may shift slightly."
+    "noneYet": "You haven't earned any points yet. Make a swap, back up your wallet or check in — the first one lands here straight away.",
+    "historyTitle": "How you earned them",
+    "historyEmpty": "Every point you earn will be listed here with the date, so you can always see where it came from.",
+    "atTier": "You are {{tier}}",
+    "topTier": "You have reached the highest tier.",
+    "privateNote": "Your points are yours alone. Nothing here is published, nobody else can see your score, and it is not compared with anyone.",
+    "viewBoard": "See where your points came from"
   },
   "guide": {
     "title": "A short guide before you start",
@@ -2340,7 +2333,7 @@
     "title": "Learn"
   },
   "rewards": {
-    "title": "Points & Ranking"
+    "title": "Points & rewards"
   },
   "verdict": {
     "title": "The full picture",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -6,114 +6,91 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useAppStore } from '../store/useAppStore';
-import { useSettingsStore } from '../store/useSettingsStore';
-import { tierFor, nextTier, tierProgress, TIERS, TOP_N, POINT_VALUES } from '../lib/ranks';
-import { decorate, fetchLeaderboard, publishScore } from '../lib/leaderboard';
-import { useTelegram } from '../context/TelegramContext';
-import { fmtNum } from '../lib/format';
+import { tierFor, nextTier, tierProgress, TIERS, POINT_VALUES } from '../lib/ranks';
+import { fmtNum, fmtDateTime } from '../lib/format';
 import { IconChevronLeft } from '../components/Icons';
 
-/** Podium card for ranks 1–3. */
-function Podium({ row, place }) {
-  const { t } = useTranslation();
-  const heights = { 1: 96, 2: 74, 3: 62 };
-  const order = { 1: 2, 2: 1, 3: 3 };
+/**
+ * YOUR POINTS — formerly "Top traders" / the leaderboard.
+ *
+ * ─── WHY THE BOARD IS GONE ──────────────────────────────────────────────────
+ * Asked for directly: «تبدیلش کن به امتیاز تو و برترین ها نباشه [...] فقط
+ * امتیاز همون فرد» — make it your points, drop the rankings, show only this
+ * person's score and nobody else's.
+ *
+ * The immediate trigger was the empty state reading "nobody has posted a score
+ * yet", which is a strange thing for an app to tell its user about itself. But
+ * the deeper problem is the one the instruction fixes: the screen's whole
+ * premise was comparison, and there was nothing honest to compare against.
+ * /api/leaderboard returns `{"rows":[]}` — measured live — so every user saw
+ * either an empty hall or a board of one. Ranking somebody against an empty
+ * set produces "#1 of 1", which flatters and means nothing.
+ *
+ * ─── WHAT REPLACED IT, AND WHY IT IS MORE THAN A DELETION ───────────────────
+ * The points were always real (they are awarded from confirmed events — see
+ * QUEST_POINTS in useAppStore) but the user could only ever see a TOTAL. Where
+ * that total came from was invisible, which is exactly what makes a score feel
+ * arbitrary. `pointsLog` has been recorded on every award all along and was
+ * rendered NOWHERE — grepped: zero references in any .jsx before this change.
+ *
+ * So the space the podium and the table used to occupy now shows that log:
+ * every award, what it was for, and when. Same layout language, same tier
+ * card, same "how to earn" table — the styling the owner explicitly asked to
+ * keep — with the comparison replaced by an explanation.
+ *
+ * ─── WHAT THIS SCREEN NO LONGER DOES ────────────────────────────────────────
+ * It does not call the network at all. It used to POST this device's score,
+ * display name and referral count to a public endpoint on every open, purely
+ * so it could be ranked. With the ranking gone that upload has no purpose, and
+ * publishing a name and a score nobody will ever read is a privacy cost with
+ * no product left behind it. `publishScore` and `fetchLeaderboard` are no
+ * longer imported here.
+ *
+ * A consequence worth stating plainly: the screen now works offline, and it
+ * can no longer show a stale rank cached from a previous session.
+ */
 
-  return (
-    <motion.div
-      style={{ order: order[place], flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 * place, type: 'spring', stiffness: 260, damping: 20 }}
-    >
-      <motion.div
-        animate={{ y: [0, -4, 0] }}
-        transition={{ duration: 3 + place * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ fontSize: place === 1 ? 30 : 24 }}
-      >
-        {row.tier.icon}
-      </motion.div>
-
-      <div style={{ fontSize: 10.5, fontWeight: 700, textAlign: 'center', maxWidth: 74, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {row.name}
-      </div>
-      <div className="mono" style={{ fontSize: 10, color: row.tier.color }}>{fmtNum(row.points)}</div>
-
-      <motion.div
-        initial={{ height: 0 }}
-        animate={{ height: heights[place] }}
-        transition={{ delay: 0.15 * place, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        style={{
-          width: '100%',
-          borderRadius: '14px 14px 0 0',
-          background: `linear-gradient(180deg, ${row.tier.color}44, ${row.tier.color}0d)`,
-          border: `1px solid ${row.tier.color}66`,
-          borderBottom: 'none',
-          display: 'grid',
-          placeItems: 'start center',
-          paddingTop: 8,
-          fontFamily: 'var(--font-mono)',
-          fontWeight: 700,
-          fontSize: 17,
-          color: row.tier.color
-        }}
-      >
-        {place}
-      </motion.div>
-    </motion.div>
-  );
+/** Human label for a pointsLog entry. */
+function actionLabel(t, action) {
+  /*
+   * Quest awards are logged as `quest:<id>` by awardPointsOnce, so the raw
+   * action string is not a translation key on its own. Splitting first means a
+   * quest and its standalone equivalent (`firstSwap` fired from Swap.jsx vs
+   * `quest:firstSwap`) resolve to the SAME label instead of one of them
+   * rendering as the literal string "quest:firstSwap" on screen.
+   */
+  const id = String(action ?? '').replace(/^quest:/, '');
+  /*
+   * i18next returns the key itself when it is missing, which is how a raw id
+   * would leak into the UI. Ask for no fallback, then supply our own.
+   */
+  const label = t(`rank.action.${id}`, { defaultValue: '' });
+  return label || t('rank.action.quest');
 }
 
 export default function Leaderboard({ embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const { tg } = useTelegram();
   const points = useAppStore((s) => s.points);
-  const referrals = useAppStore((s) => s.referrals);
-  const username = useSettingsStore((s) => s.username);
-
-  /**
-   * Live board from the API. Opening the screen also publishes this device's
-   * score, which is why the board fills up on its own once the app is in real
-   * hands — no seeding required, and nothing invented.
-   */
-  const [board, setBoard] = useState({ rows: [], live: true, durable: true, at: 0 });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      // Publish first so our own row is in the response we are about to read.
-      await publishScore({
-        name: username,
-        points,
-        referrals,
-        telegramInitData: tg?.initData
-      });
-      const data = await fetchLeaderboard();
-      if (!alive) return;
-      setBoard(data);
-      setLoading(false);
-    })();
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, username, referrals]);
-
-  const rows = useMemo(() => decorate(board.rows, { points, username }), [board, points, username]);
-  const top = rows.slice(0, TOP_N);
-  const me = rows.find((r) => r.isUser);
+  const pointsLog = useAppStore((s) => s.pointsLog);
 
   const tier = tierFor(points);
   const next = nextTier(points);
   const progress = tierProgress(points);
 
+  /*
+   * Newest first. The store already prepends, but sorting here means the list
+   * cannot be thrown out of order by a future write that appends instead —
+   * a history that is nearly in order is harder to read than one that is not.
+   */
+  const history = useMemo(
+    () => [...(pointsLog ?? [])].sort((a, b) => (b.at ?? 0) - (a.at ?? 0)),
+    [pointsLog]
+  );
+
   return (
     <PageTransition embedded={embedded}>
-      {/* Suppressed when hosted in a tabbed page — the shell already draws a
-          back button and a title, and two of each is clutter. */}
       {!embedded && (
         <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
           <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
@@ -123,7 +100,7 @@ export default function Leaderboard({ embedded = false }) {
         </motion.div>
       )}
 
-      {/* ---------------- your rank ---------------- */}
+      {/* ---------------- your points ---------------- */}
       <motion.section
         className="card card-rgb"
         variants={riseIn}
@@ -153,8 +130,14 @@ export default function Leaderboard({ embedded = false }) {
             </motion.div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, color: tier.color }}>{t(`rank.tier.${tier.id}`)}</div>
+              {/*
+                Was "Rank #4" / "Not ranked yet". A position is meaningless
+                without the field it was measured against, and there is no
+                field any more. The tier is the standing now, and it is one the
+                user reaches on their own rather than by out-scoring somebody.
+              */}
               <div className="faint">
-                {me ? t('rank.yourRank', { n: me.rank }) : t('rank.unranked')}
+                {next ? t('rank.atTier', { tier: t(`rank.tier.${tier.id}`) }) : t('rank.topTier')}
               </div>
             </div>
           </div>
@@ -209,139 +192,59 @@ export default function Leaderboard({ embedded = false }) {
         </div>
       </section>
 
-      {/* ---------------- podium ---------------- */}
+      {/* ---------------- where your points came from ---------------- */}
       <section>
-        <p className="section-label">{t('rank.top')}</p>
-        {loading ? (
-          <div className="skel" style={{ height: 120, marginTop: 12 }} />
-        ) : top.length === 0 ? (
-          // An empty real board beats a full fake one. It fills up on its own
-          // as people use the app, and saying that is more reassuring than
-          // pretending fifty strangers already out-ranked you.
+        <p className="section-label">{t('rank.historyTitle')}</p>
+
+        {history.length === 0 ? (
+          /*
+            The empty state the owner asked for, in the first person: "you
+            haven't earned any points yet", not "nobody has posted a score".
+            The old wording described the state of a shared board — which,
+            since we no longer keep one, would have been describing something
+            that does not exist.
+          */
           <div className="empty" style={{ marginTop: 10 }}>
-            <span className="empty-icon">🏆</span>
-            {t('rank.emptyBoard')}
+            <span className="empty-icon">✨</span>
+            {points > 0 ? t('rank.historyEmpty') : t('rank.noneYet')}
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 12 }}>
-            {top.slice(0, 3).map((r, i) => (
-              <Podium key={r.id} row={r} place={i + 1} />
+          <motion.div className="stack" style={{ gap: 6, marginTop: 10 }} variants={stagger} initial="hidden" animate="show">
+            {history.map((entry) => (
+              <motion.div key={entry.id} variants={riseIn} className="coin-row">
+                {/*
+                  A neutral mark, deliberately NOT the tier medal. Stamping
+                  today's medal on every past award would say the row was
+                  earned at that tier, and the log does not record what tier
+                  the user held at the time — so the medal would be a claim we
+                  cannot support.
+                */}
+                <span style={{ fontSize: 16 }}>✨</span>
+                <div className="coin-meta">
+                  <div className="coin-sym" style={{ textTransform: 'none', fontSize: 12.5 }}>
+                    {actionLabel(t, entry.action)}
+                  </div>
+                  <div className="coin-name">{fmtDateTime(entry.at)}</div>
+                </div>
+                <div className="coin-right">
+                  <div className="mono up" style={{ fontSize: 12.5, fontWeight: 700 }}>
+                    +{fmtNum(entry.amount)}
+                  </div>
+                </div>
+              </motion.div>
             ))}
-          </div>
-        )}
-
-        {/*
-          ─── WHERE YOU STAND, RIGHT UNDER THE LEADER ────────────────────────
-          Asked for: show the top score, then "you are #409 with N points".
-
-          The podium already names the leader, but a number in isolation says
-          nothing — 85 points is only meaningful once you know it is first and
-          you are not. This line closes that gap in one sentence, and it is
-          placed directly beneath the podium because that is the moment the
-          question forms.
-
-          Rendered only when the board actually has entries and we know our own
-          rank. Inventing a position for somebody with no score would be the
-          same dishonesty the empty-board message above was written to avoid.
-        */}
-        {!loading && me && rows.length > 0 && (
-          <motion.div
-            className="card card-tight"
-            variants={riseIn}
-            initial="hidden"
-            animate="show"
-            style={{ marginTop: 12, borderColor: `${tier.color}55` }}
-          >
-            <div className="row-between" style={{ gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div className="faint" style={{ fontSize: 11.5 }}>
-                  {t('rank.leaderIs', {
-                    name: rows[0].isUser ? t('rank.you') : rows[0].name,
-                    n: fmtNum(rows[0].points, 0)
-                  })}
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 13.5, marginTop: 3 }}>
-                  {/*
-                    `rows.length`, not `top.length`. The table is capped at
-                    TOP_N for rendering, so "of 50" would be a lie the moment
-                    the board outgrows the page.
-                  */}
-                  {t('rank.youArePlaced', {
-                    place: fmtNum(me.rank, 0),
-                    total: fmtNum(rows.length, 0),
-                    points: fmtNum(me.points, 0)
-                  })}
-                </div>
-              </div>
-              <span
-                className="mono"
-                style={{ fontSize: 17, fontWeight: 800, color: tier.color, flexShrink: 0 }}
-              >
-                #{fmtNum(me.rank, 0)}
-              </span>
-            </div>
-
-            {/*
-              Honest about a score that has not reached the server yet, rather
-              than showing a rank that will move once it syncs.
-            */}
-            {me.pendingSync && (
-              <p className="faint" style={{ marginTop: 8, fontSize: 11 }}>{t('rank.pendingSync')}</p>
-            )}
           </motion.div>
         )}
       </section>
 
       {/*
-        `swap`, not `referral`.
-
-        The referral slot points at `/earn`, and inside the Rewards tabs this
-        screen IS one of the earn tabs — so the banner threw the user out of
-        the tabbed page into a standalone copy of the tab beside them. Same
-        self-referential bug as the one removed from Earn.
-
-        Swap is the honest destination here: points on this board come from
-        swapping, it is a different screen from this one, and it is the route
+        `swap`, not `referral`: the referral slot points at /earn, and this
+        screen is one of the Rewards tabs, so that banner threw the user out of
+        the tabbed page into a standalone copy of the tab beside them. Swap is
+        the honest destination — points come from swapping, and it is the route
         that actually earns the platform fee.
       */}
       <AdBanner slot="swap" compact />
-
-      {/* ---------------- table ---------------- */}
-      <motion.div className="stack" style={{ gap: 6 }} variants={stagger} initial="hidden" animate="show">
-        {top.slice(3).map((r) => (
-          <motion.div
-            key={r.id}
-            variants={riseIn}
-            className="coin-row"
-            style={
-              r.isUser
-                ? { borderColor: 'var(--rgb-1)', background: 'rgba(0,229,255,.08)' }
-                : undefined
-            }
-          >
-            <span
-              className="mono"
-              style={{ width: 24, fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}
-            >
-              {r.rank}
-            </span>
-            <span style={{ fontSize: 16 }}>{r.tier.icon}</span>
-            <div className="coin-meta">
-              <div className="coin-sym" style={{ textTransform: 'none', fontSize: 12.5 }}>
-                {r.isUser ? t('rank.you') : r.name}
-              </div>
-              <div className="coin-name">
-                {t('rank.refs', { n: r.referrals })} · {t('rank.swaps', { n: r.swaps })}
-              </div>
-            </div>
-            <div className="coin-right">
-              <div className="mono" style={{ fontSize: 12.5, color: r.tier.color, fontWeight: 700 }}>
-                {fmtNum(r.points)}
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </motion.div>
 
       {/* ---------------- how to earn points ---------------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -364,14 +267,14 @@ export default function Leaderboard({ embedded = false }) {
         </button>
       </motion.section>
 
-      {/* Say what this board actually is, in the state it is actually in. */}
-      <p className="notice">
-        {!board.live
-          ? t('rank.offlineNotice')
-          : board.durable
-            ? t('rank.demoNotice')
-            : t('rank.localOnly')}
-      </p>
+      {/*
+        The three old notices described the BOARD's state — live, cached, or
+        device-only. None of them applies now, and leaving one would describe
+        machinery that is gone. This says the one thing that is true of the new
+        screen and that the user cannot verify for themselves: the score is not
+        published anywhere.
+      */}
+      <p className="notice">{t('rank.privateNote')}</p>
     </PageTransition>
   );
 }

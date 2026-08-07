@@ -101,7 +101,7 @@ export async function startBot({ token, webAppUrl }) {
         .join('\n');
       await ctx.replyWithHTML(`<b>🏆 Top 10 by market cap</b>\n\n${lines}`, launchKeyboard);
     } catch {
-      await ctx.reply('Could not fetch the leaderboard right now.');
+      await ctx.reply('Could not fetch the top coins right now.');
     }
   });
 

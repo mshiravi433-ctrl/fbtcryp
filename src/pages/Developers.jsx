@@ -45,7 +45,7 @@ import {
  * is a wall a reader skips.
  *
  * ─── WHAT IS DELIBERATELY NOT LISTED ────────────────────────────────────────
- * The write routes (`/api/orders/watch`, `/api/push/*`, `/api/leaderboard`,
+ * The write routes (`/api/orders/watch`, `/api/push/*`,
  * `/api/solana/execute`) exist and are not documented here. They are not
  * secret — anyone can read the network tab — but they mutate state tied to a
  * specific device or Telegram identity, and publishing them as though they

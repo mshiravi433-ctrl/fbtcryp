@@ -185,8 +185,8 @@ const KB = [
       ar: ['أموال حقيقية', 'افتراضي', 'نقاط']
     },
     a: {
-      en: 'Two different things live in this app and the line between them is never blurred. Swap and Wallet are real: real chains, real tokens, real irreversible transactions. Predict, Invest, Earn and the leaderboard run on virtual credits with no cash value, no deposits and no withdrawals — they exist to teach the mechanics safely. Every one of those screens says so on the screen itself.',
-      fa: 'در این اپ دو چیز کاملاً جدا وجود دارد و مرزشان هیچ‌وقت مبهم نیست. سواپ و کیف پول واقعی‌اند: شبکه واقعی، توکن واقعی، تراکنش واقعی و برگشت‌ناپذیر. پیش‌بینی، سرمایه‌گذاری، درآمد و جدول رتبه‌بندی با اعتبار مجازی کار می‌کنند که هیچ ارزش نقدی ندارد، واریز و برداشتی هم ندارد — این‌ها هستند تا مکانیزم بازار را بی‌خطر یاد بگیری. روی هر کدام از آن صفحه‌ها هم همین موضوع نوشته شده.',
+      en: 'Two different things live in this app and the line between them is never blurred. Swap and Wallet are real: real chains, real tokens, real irreversible transactions. Predict, Invest and Earn run on virtual credits with no cash value, no deposits and no withdrawals — they exist to teach the mechanics safely. Every one of those screens says so on the screen itself.',
+      fa: 'در این اپ دو چیز کاملاً جدا وجود دارد و مرزشان هیچ‌وقت مبهم نیست. سواپ و کیف پول واقعی‌اند: شبکه واقعی، توکن واقعی، تراکنش واقعی و برگشت‌ناپذیر. پیش‌بینی، سرمایه‌گذاری و درآمد با اعتبار مجازی کار می‌کنند که هیچ ارزش نقدی ندارد، واریز و برداشتی هم ندارد — این‌ها هستند تا مکانیزم بازار را بی‌خطر یاد بگیری. روی هر کدام از آن صفحه‌ها هم همین موضوع نوشته شده.',
       ar: 'التبادل والمحفظة حقيقيان بالكامل، أما التوقع والاستثمار والأرباح فتعمل برصيد افتراضي بلا قيمة نقدية.'
     }
   },

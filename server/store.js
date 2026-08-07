@@ -49,69 +49,21 @@ export async function storeSet(key, value) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* leaderboard                                                                 */
+/* points were never stored here                                               */
 /* -------------------------------------------------------------------------- */
-
-const LB_KEY = 'leaderboard:v1';
-const MAX_ROWS = 500;
-
-/** Trim a display name to something safe to render in someone else's client. */
-function safeName(name, fallbackId) {
-  const clean = String(name ?? '')
-    .replace(/[\u0000-\u001f<>"'`\\]/g, '')
-    .trim()
-    .slice(0, 24);
-  return clean || `trader${String(fallbackId).slice(-4)}`;
-}
-
-export async function readLeaderboard() {
-  const rows = await storeGet(LB_KEY, []);
-  return Array.isArray(rows) ? rows : [];
-}
-
-/**
- * Record a user's score.
+/*
+ * `readLeaderboard` and `submitScore` used to live here, backing a public
+ * ranking board. The board was replaced by a private per-device points screen
+ * (see src/pages/Leaderboard.jsx) and the two routes that called these were
+ * deleted from server/app.js.
  *
- * Identity comes from the verified Telegram user id when present. An anonymous
- * client id is accepted too, but those rows are flagged so the client can show
- * the board without pretending an unauthenticated score is verified — anyone
- * can POST a number, and a leaderboard that hides that is just a lie with a
- * ranking on it.
+ * These are removed rather than left exported and unused. An exported writer
+ * that accepts a display name plus a score, still wired to durable storage, is
+ * one import away from silently resurrecting the collection the product just
+ * promised it does not do. Unused code gets re-imported; that is the whole
+ * reason the fifty invented leaderboard names were deleted rather than
+ * commented out.
  */
-export async function submitScore({ id, name, points, swaps = 0, referrals = 0, verified = false }) {
-  if (!id) throw new Error('NO_ID');
-  const pts = Math.max(0, Math.min(10_000_000, Math.round(Number(points) || 0)));
-
-  const rows = await readLeaderboard();
-  const idx = rows.findIndex((r) => r.id === id);
-  const row = {
-    id,
-    name: safeName(name, id),
-    points: pts,
-    swaps: Math.max(0, Math.round(Number(swaps) || 0)),
-    referrals: Math.max(0, Math.round(Number(referrals) || 0)),
-    verified: Boolean(verified),
-    at: Date.now()
-  };
-
-  if (idx >= 0) {
-    // Points only ever go up; a client replaying an old payload must not
-    // rewind someone's rank.
-    row.points = Math.max(rows[idx].points ?? 0, pts);
-    rows[idx] = row;
-  } else {
-    rows.push(row);
-  }
-
-  rows.sort((a, b) => b.points - a.points);
-  const trimmed = rows.slice(0, MAX_ROWS);
-  await storeSet(LB_KEY, trimmed);
-
-  return {
-    rank: trimmed.findIndex((r) => r.id === id) + 1 || null,
-    total: trimmed.length
-  };
-}
 
 /* -------------------------------------------------------------------------- */
 /* push subscriptions                                                          */

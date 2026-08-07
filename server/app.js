@@ -52,11 +52,9 @@ import {
   addFcmToken,
   addSubscription,
   readFcmTokens,
-  readLeaderboard,
   removeFcmToken,
   removeSubscription,
-  storeDurable,
-  submitScore
+  storeDurable
 } from './store.js';
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 
@@ -1082,51 +1080,29 @@ app.get('/api/nft/:chainId/:owner', (req, res) => {
     });
 });
 
-/* ----------------------------- leaderboard -------------------------------- */
+/* ----------------------------- points (was: leaderboard) ------------------ */
 /*
- * These were MISSING too. `readLeaderboard` and `submitScore` were imported at
- * the top of this file but never mounted, so GET /api/leaderboard always 404'd
- * and the client's catch-all turned that into "could not reach the server" —
- * a message that pointed at the network when the route simply did not exist.
+ * ─── THE PUBLIC SCORE BOARD IS GONE, AND SO IS ITS ENDPOINT ─────────────────
+ * The ranking screen was replaced by a private "your points" screen on the
+ * owner's instruction: «تبدیلش کن به امتیاز تو و برترین ها نباشه [...] فقط
+ * امتیاز همون فرد».
+ *
+ * GET and POST /api/leaderboard are REMOVED rather than left running with no
+ * caller, for a reason that is worth stating: the POST accepted a display
+ * name, a score and a referral count from any client and stored them in a
+ * bucket that GET served to the whole world. That was a fair trade when the
+ * point was a public ranking. With the ranking gone it is collection with no
+ * purpose — and the new screen tells the user in three languages that their
+ * score is not published anywhere. Leaving a live write endpoint behind would
+ * make that sentence false, which is worse than the original design.
+ *
+ * Points now live only in the browser's own persisted store on the device that
+ * earned them. Nothing is uploaded, so nothing can leak.
+ *
+ * The stored rows are deliberately NOT read or migrated anywhere: they are
+ * self-reported numbers with display names attached, and the honest end for
+ * them is to stop being served.
  */
-
-app.get('/api/leaderboard', async (_req, res) => {
-  try {
-    const rows = await readLeaderboard();
-    res.json({ rows, durable: storeDurable(), at: Date.now() });
-  } catch (e) {
-    res.status(500).json({ error: 'READ_FAILED', detail: String(e.message).slice(0, 120) });
-  }
-});
-
-app.post('/api/leaderboard', async (req, res) => {
-  const { name, points, swaps, referrals, clientId } = req.body ?? {};
-
-  /*
-   * Identity: prefer the Telegram id, which telegramAuth has already verified
-   * against the bot token's HMAC. Fall back to the client-generated id, but
-   * flag the row as unverified — anyone can POST a number to a public
-   * endpoint, and a board that hides which rows are self-reported is just a
-   * lie with a ranking on it.
-   */
-  const tgId = req.tgUser?.id;
-  const id = tgId ? `tg:${tgId}` : (typeof clientId === 'string' && clientId.slice(0, 64));
-  if (!id) return res.status(400).json({ error: 'NO_ID' });
-
-  try {
-    const out = await submitScore({
-      id,
-      name,
-      points,
-      swaps,
-      referrals,
-      verified: Boolean(tgId)
-    });
-    res.json({ ok: true, ...out });
-  } catch (e) {
-    res.status(400).json({ error: String(e.message).slice(0, 120) });
-  }
-});
 
 /* -------------------------------- push ------------------------------------ */
 /*

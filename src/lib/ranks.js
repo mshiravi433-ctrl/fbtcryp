@@ -55,25 +55,22 @@ export function tierProgress(points) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Leaderboard                                                                */
+/* No ranking, by design                                                       */
 /* -------------------------------------------------------------------------- */
 
 /*
- * ─── THE FIFTY INVENTED USERS ARE GONE ──────────────────────────────────────
- * This file used to export `buildLeaderboard()` and a `SEED_NAMES` list of
- * fifty handles — CryptoFalcon, MoonHunter, PersianBull and so on — with
- * scores from a decay curve, so a brand-new user opened the board and found
- * fifty strangers already above them.
+ * ─── THIS FILE ONCE HELD FIFTY INVENTED RIVALS, THEN A REAL BOARD, NOW NONE ─
+ * First it exported `buildLeaderboard()` and a `SEED_NAMES` list of fifty
+ * handles — CryptoFalcon, MoonHunter, PersianBull — so a brand-new user opened
+ * the board and found fifty strangers already above them. Those were deleted
+ * as a lie the user could catch by scrolling.
  *
- * The board is now served from /api/leaderboard and every row is a real device
- * that published its own score (see lib/leaderboard.js). Nothing imported
- * `buildLeaderboard` any more, so this was dead code carrying a live
- * liability: the one thing on a ranking screen that has to be true is the
- * ranking, and an invented rival is a lie the user can catch by scrolling.
+ * The real API board that replaced them is now gone too, on the owner's
+ * instruction: the screen shows only your own points and compares you with
+ * nobody. `TOP_N` went with it — it capped how many rows of OTHER people were
+ * rendered, and there are no other people on the screen to cap.
  *
- * Deleted rather than left unused, because unused code gets re-imported. An
- * empty real board beats a full fake one, and the screen says so in
- * `rank.emptyBoard`.
+ * What remains is deliberately small: the tiers you climb on your own, and the
+ * table of what each action is worth. Both are used by the points screen and
+ * by the Earn screen, and they are the only two things a private score needs.
  */
-
-export const TOP_N = 50;

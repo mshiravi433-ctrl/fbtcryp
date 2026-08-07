@@ -9,9 +9,11 @@ import { IconCheck, IconUser } from './Icons';
  * Display-name input, shared by the welcome screen and Settings.
  *
  * WHAT THIS IS AND IS NOT
- * It is a *display name*: the label shown next to your score on the
- * leaderboard. It is not an account, there is no password, nothing is
- * reserved, and two people may pick the same one. Being explicit about that
+ * It is a *display name*: how the app greets you. It used to be the label
+ * shown next to your score on the public leaderboard — that board is gone and
+ * the name is no longer sent anywhere, so this is now purely local. It is not
+ * an account, there is no password, nothing is reserved, and two people may
+ * pick the same one. Being explicit about that
  * matters — in a wallet app, anything that looks like "register a username"
  * invites people to assume it protects or identifies their funds, and it does
  * neither. Identity here is a wallet address; this is a nickname.

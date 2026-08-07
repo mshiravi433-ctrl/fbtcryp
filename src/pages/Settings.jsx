@@ -250,8 +250,8 @@ export default function Settings() {
             sub={wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
             onClick={() => navigate('/wallet')}
           />
-          {/* Display name — the label next to your score on the leaderboard.
-              Not an account, no password, nothing reserved. */}
+          {/* Display name — how the app greets you. Stays on the device now
+              that the public board is gone. Not an account, no password. */}
           <Row
             icon={IconUser}
             label={t('profile.username')}

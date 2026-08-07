@@ -510,8 +510,6 @@ export default function run() {
       'fetchSimplePrices',
       'fetchDexPools',
       'fetchNfts',
-      'readLeaderboard',
-      'submitScore',
       'addSubscription',
       'removeSubscription',
       'addFcmToken',
@@ -8567,7 +8565,7 @@ export default function run() {
       Boolean(JSON.parse(read('src/i18n/locales/fa.json')).solana?.notSolana));
   }
 
-  /* ---- 90. The board is real, and says where you stand ------------------ */
+  /* ---- 90. Your points, and nobody else's ------------------------------- */
   {
     const code = (src) => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -8575,68 +8573,97 @@ export default function run() {
       .replace(/^\s*\/\/.*$/gm, '');
 
     /*
-     * ─── "MAKE SURE THE TOP TRADERS ARE REAL, NOT INVENTED" ─────────────────
-     * They are. The board is served from /api/leaderboard and every row is a
-     * device that published its own score; there is no seed list. The old
-     * SEED_NAMES fixture is gone and must stay gone — fifty invented handles
-     * out-ranking a new user is a lie they can catch.
+     * ─── THE LEADERBOARD IS GONE, ON INSTRUCTION ────────────────────────────
+     * Asked for directly: «تبدیلش کن به امتیاز تو و برترین ها نباشه [...] فقط
+     * امتیاز همون فرد» — make it your points, no rankings, show only this
+     * person's score.
+     *
+     * The trigger was the empty state reading "nobody has posted a score yet",
+     * which is a strange thing for an app to say about itself. The deeper
+     * problem: /api/leaderboard returned `{"rows":[]}` — measured live — so
+     * ranking anyone produced "#1 of 1", which flatters and means nothing.
      */
     const board = code(read('src/pages/Leaderboard.jsx'));
-    t('the board comes from the API', /fetchLeaderboard/.test(board));
+
+    t('the screen no longer fetches a board', !/fetchLeaderboard/.test(board));
+    t('...and no longer publishes the user\u2019s score', !/publishScore/.test(board));
     /*
-     * Comments stripped first — `code()` — because the explanation of WHY the
-     * seed list was deleted necessarily names it. Matching prose instead of
-     * code is the trap this suite has fallen into six times, most recently on
-     * the very commit that added the reachability check.
+     * Nothing on screen may rank, compare or name another user. Pinned as
+     * separate literals because a single blanket regex passing tells you
+     * nothing about WHICH half of the removal was done.
      */
-    t('...with no invented users', !/SEED_NAMES/.test(code(read('src/lib/ranks.js'))));
-    t('...and the seed generator is deleted, not merely unused',
-      !/buildLeaderboard/.test(code(read('src/lib/ranks.js'))));
-    /* An empty real board beats a full fake one, so the empty state stays. */
-    t('...and an empty board says so honestly', /rank\.emptyBoard/.test(board));
+    t('...no podium', !/Podium/.test(board));
+    t('...no other users are listed', !/isUser/.test(board));
+    t('...and no rank number is shown', !/rank\.yourRank|rank\.youArePlaced|rank\.leaderIs/.test(board));
 
     /*
-     * ─── REAL BUG: THE USER WAS LISTED TWICE ────────────────────────────────
-     * `decorate` looked for `anon:${clientId}`. The server never writes that —
-     * server/app.js stores the BARE client id for an anonymous row and
-     * `tg:<id>` for a verified one. So our own server row never matched, the
-     * "not on the board yet" fallback appended a second local row, and the
-     * user appeared twice with two different scores. Reproduced against the
-     * live response shape before it was changed.
+     * THE POINT OF THE REPLACEMENT, not just the deletion. `pointsLog` has
+     * been written on every award since points existed and was rendered
+     * NOWHERE — grepped: zero .jsx references before this change. The user
+     * could see a total but never where it came from, which is exactly what
+     * makes a score feel arbitrary.
      */
-    const lb = code(read('src/lib/leaderboard.js'));
-    t('the user is matched by the id the server actually stores',
-      /id === mine/.test(lb));
-    t('...including a Telegram-verified row', /startsWith\('tg:'\)/.test(lb));
-    t('...and the legacy anon: shape still matches rather than duplicating',
-      /anon:\$\{mine\}/.test(lb));
-    /*
-     * Equal scores must not reshuffle between renders — a rank that changes
-     * while you look at it is a rank nobody trusts.
-     */
-    t('...and ties are ordered stably', /localeCompare/.test(lb));
+    t('the points history is finally rendered', /pointsLog/.test(board));
+    t('...newest first', /\.at \?\? 0\) - \(a\.at \?\? 0\)|b\.at - a\.at/.test(board));
+    t('...with the date of each award', /fmtDateTime/.test(board));
 
     /*
-     * ─── "SHOW THE LEADER, THEN WHERE I STAND" ──────────────────────────────
-     * Asked for: top score, then "you are #409 with N points". A number alone
-     * says nothing until you know it is first and you are not.
+     * Quest awards are logged as `quest:<id>`, which is not a translation key.
+     * Without stripping the prefix the row renders the literal string
+     * "quest:firstSwap" — the same raw-key leak this suite exists to catch.
      */
-    t('the leader score is shown', /rank\.leaderIs/.test(board));
-    t('...and the user placement beside it', /rank\.youArePlaced/.test(board));
-    /*
-     * `rows.length`, not `top.length`. The table renders at most TOP_N, so
-     * "of 50" becomes a lie the moment the board outgrows one page.
-     */
-    t('...counted against every player, not just the visible page',
-      /total: fmtNum\(rows\.length/.test(board));
-    /* A score still in flight must not present a rank as settled. */
-    t('...and an unsynced score is flagged', /rank\.pendingSync/.test(board));
+    t('quest awards resolve to a human label, not a raw id',
+      /replace\(\/\^quest:\//.test(board));
+    /* i18next returns the key when it is missing, so a fallback is required. */
+    t('...and an unknown action never renders as its key',
+      /defaultValue: ''/.test(board));
 
-    const enRank = JSON.parse(read('src/i18n/locales/en.json')).rank;
-    const faRank = JSON.parse(read('src/i18n/locales/fa.json')).rank;
-    t('the placement copy exists in both languages',
-      Boolean(enRank?.youArePlaced) && Boolean(faRank?.youArePlaced)
-      && Boolean(faRank?.leaderIs));
+    /*
+     * ─── THE PRIVACY CLAIM MUST BE STRUCTURALLY TRUE ────────────────────────
+     * The screen tells the user in three languages that their score is not
+     * published. A sentence is not a guarantee: the client module and both
+     * server routes are DELETED, so there is no code path left that could
+     * upload a name and a score.
+     */
+    t('the leaderboard client module is deleted', !existsSync('src/lib/leaderboard.js'));
+    const server = read('server/app.js');
+    t('...the public write route is gone', !/app\.post\('\/api\/leaderboard'/.test(server));
+    t('...and the public read route with it', !/app\.get\('\/api\/leaderboard'/.test(server));
+    /*
+     * Deleted from the store too. An exported writer that takes a name and a
+     * score, still wired to durable storage, is one import away from silently
+     * resurrecting the collection we just promised not to do — the same reason
+     * the fifty invented names were deleted rather than left unused.
+     */
+    const store = read('server/store.js');
+    t('...and the store no longer keeps a scores bucket',
+      !/export async function submitScore/.test(store) && !/leaderboard:v1/.test(store));
+
+    /* Every locale says it, hand-written, not machine-translated. */
+    for (const lang of ['en', 'fa', 'ar']) {
+      const R = JSON.parse(read(`src/i18n/locales/${lang}.json`)).rank;
+      t(`${lang} states the score is private`, String(R?.privateNote ?? '').length > 60);
+      /* First person: "you haven't earned any yet", not "nobody has". */
+      t(`${lang} has a first-person empty state`, String(R?.noneYet ?? '').length > 40);
+      t(`${lang} labels the history section`, Boolean(R?.historyTitle));
+      /* Board-era keys must not linger: an unused key gets re-used by mistake. */
+      for (const dead of ['emptyBoard', 'leaderIs', 'youArePlaced', 'pendingSync', 'yourRank', 'top', 'refs']) {
+        t(`${lang} drops the board-era key ${dead}`, R?.[dead] === undefined);
+      }
+    }
+
+    /*
+     * The signposts must agree with the destination. A tab labelled "Ranking"
+     * that opens a screen with no ranking is the dead-signpost failure this
+     * suite audits for everywhere else.
+     */
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} does not label the tab a ranking`,
+        !/ranking|رتبه|ترتيب/i.test(String(L.nav?.leaderboard ?? '')));
+      t(`${lang} does not send the reader to a board that is gone`,
+        !/leaderboard|جدول|لوحة/i.test(String(L.rank?.viewBoard ?? '')));
+    }
 
     /*
      * ─── COPY THE OWNER ASKED TO CHANGE ─────────────────────────────────────
