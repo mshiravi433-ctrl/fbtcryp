@@ -8068,5 +8068,109 @@ export default function run() {
       && ['b1', 'b6'].every((k) => Boolean(faP2p.buyStep?.[k])));
   }
 
+  /* ---- 87. Server features nobody can reach ----------------------------- */
+  {
+    /*
+     * ─── THE BUG CLASS THIS REPO KEEPS SHIPPING ─────────────────────────────
+     * Three times now a complete, tested, revenue-generating server feature
+     * has gone live with no way for a user to arrive at it: the LI.FI bridge
+     * shipped a release before the Bridge screen existed, priceAlerts had a
+     * settings toggle read by nothing, and solanaRpc was stored and redrawn
+     * but never used.
+     *
+     * Reviewing the whole app for "what could we add" turned up the largest
+     * instance yet. `server/gasless.js` is 245 lines, has four live routes, a
+     * working 0x key, and a measured 0.70% fee — verified against production
+     * while writing this:
+     *
+     *   "integratorFee": { "amount": "70000" }   on a 10 USDC sell
+     *
+     * and the only place the word `gasless` appears in the entire UI is the
+     * Developers page, which is an API listing no ordinary user opens. It
+     * solves the single most common dead end in crypto — holding USDT with no
+     * native coin for gas — and it is unreachable.
+     *
+     * This check does not fix it. It makes the class of bug VISIBLE, so a
+     * feature cannot quietly become unreachable again, and it names the ones
+     * currently outstanding rather than letting them be rediscovered by
+     * accident in six months.
+     */
+    const uiFiles = [];
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) walk(full);
+        /* Developers.jsx is an API listing by design — referencing a route
+           there is documentation, not reachability, so it must not count. */
+        else if (/\.jsx?$/.test(entry.name) && entry.name !== 'Developers.jsx') {
+          /*
+           * COMMENTS STRIPPED FIRST. Caught by this very check on its first
+           * run: lib/tapToPay.js DOCUMENTS `GET /api/gasless/price` in a
+           * header comment explaining how tap-to-pay relates to it, and that
+           * made the route look reachable when nothing calls it.
+           *
+           * That is the sixth time a check in this file has matched prose
+           * instead of code. A route mentioned in a comment is documentation;
+           * only a route in executable source is reachability.
+           */
+          uiFiles.push(
+            read(full)
+              .replace(/\/\*[\s\S]*?\*\//g, '')
+              .replace(/^\s*\/\/.*$/gm, '')
+          );
+        }
+      }
+    };
+    walk('src');
+    const ui = uiFiles.join('\n');
+
+    /*
+     * A route counts as reachable when ANY non-Developers source mentions its
+     * path prefix — directly, or through a lib wrapper that a screen imports.
+     */
+    const reachable = (prefix) => ui.includes(prefix);
+
+    /* These are wired and must STAY wired. */
+    for (const [name, prefix] of [
+      ['the bridge', '/bridge/quote'],
+      ['deBridge', '/dln/quote'],
+      ['THORChain', '/thor/quote'],
+      ['the Solana swap', '/solana/oo']
+    ]) {
+      t(`${name} is reachable from the UI`, reachable(prefix));
+    }
+
+    /*
+     * ─── KNOWN-UNREACHABLE, DELIBERATELY RECORDED ───────────────────────────
+     * Asserting the CURRENT truth, not the desired one. A test that fails for
+     * a known gap is noise that gets muted; a test that pins the gap fails the
+     * day somebody fixes it, which is the prompt to delete the entry and the
+     * doc line together.
+     */
+    t('gasless is still not reachable (recorded, not accepted)',
+      !reachable('/gasless/price'));
+    t('...and the 0x cross-chain route to Tron is not either',
+      !reachable('/xchain/quotes'));
+
+    /* Both must stay documented while they are unreachable. */
+    const nx = existsSync('docs/NEXT-OPTIONS-FA.md') ? read('docs/NEXT-OPTIONS-FA.md') : '';
+    t('the options review exists', nx.length > 0);
+    t('...and names gasless as the top gap', /gasless/i.test(nx));
+    t('...and names the Tron route', /xchain|ترون/i.test(nx));
+    /*
+     * The measured evidence has to travel with the claim, or the next reader
+     * cannot tell a verified number from an optimistic one.
+     */
+    t('...and carries the measured fee proving gasless earns',
+      /70000/.test(nx));
+    /*
+     * The Tron activation cost is near-FLAT, which is invisible as a
+     * percentage until the amount is small — same shape as the deBridge fixed
+     * fee. Losing that warning would ship a 17% loss looking like a fee.
+     */
+    t('...and warns about the near-flat Tron activation cost',
+      /۸٫۲۹|17|۱۷/.test(nx));
+  }
+
   return rows;
 }
