@@ -14,9 +14,33 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { POINT_VALUES } from '../lib/ranks';
 
 const START_BALANCE = 10000;
 const MAX_HISTORY = 200;
+
+/*
+ * Reputation points per quest id.
+ *
+ * Read from POINT_VALUES — the SAME table the Earn screen prints on each row —
+ * so the figure the user is promised and the figure that lands can never
+ * disagree. Duplicating the numbers here is how a row ends up advertising 300
+ * and paying 150.
+ *
+ * `firstTrade` and `firstStake` are the arcade's own quest ids, fired from
+ * buy() and openInvestment(). They are mapped to the swap and liquidity values
+ * because they are the paper-trading equivalents of the same milestone.
+ */
+const QUEST_POINTS = {
+  connectWallet: POINT_VALUES.connectWallet,
+  firstSwap: POINT_VALUES.firstSwap,
+  addLiquidity: POINT_VALUES.addLiquidity,
+  backupWallet: POINT_VALUES.backupWallet,
+  enable2fa: POINT_VALUES.enable2fa,
+  inviteFriend: POINT_VALUES.referral,
+  firstTrade: POINT_VALUES.firstSwap,
+  firstStake: POINT_VALUES.addLiquidity
+};
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
@@ -244,11 +268,39 @@ export const useAppStore = create(
         return reward;
       },
 
+      /**
+       * Mark a quest done and pay its REPUTATION POINTS.
+       *
+       * ─── REAL BUG: FIVE OF THE SIX QUESTS COULD NEVER BE COMPLETED ────────
+       * The Earn screen advertises six quests. Only `inviteFriend` ever called
+       * `awardPoints`; the other five just navigated to a screen and left the
+       * row un-ticked forever. So the app promised 685 points — connect a
+       * wallet, first swap, add liquidity, back up, enable 2FA — that no user
+       * could ever collect. Verified by grepping every `awardPoints` call site
+       * in the app: there were four, all in Earn.jsx, none of them a quest.
+       *
+       * This function also paid the wrong currency. It credited `balance`, the
+       * play-money NX used by the arcade, and XP — neither of which is the
+       * reputation score the rank tiers and the leaderboard read. A quest
+       * could therefore "complete" and move the rank not at all.
+       *
+       * Points now come from POINT_VALUES, the same table the UI displays, so
+       * the number on the row is the number that lands. Passing them in would
+       * let a caller invent a reward.
+       */
       completeQuest(questId, reward = 0) {
         if (get().quests[questId]?.done) return false;
         set((s) => ({ quests: { ...s.quests, [questId]: { done: true, at: Date.now() } } }));
         if (reward > 0) get().credit(reward, 'questReward');
         get().addXp(15);
+        /*
+         * `awardPointsOnce`, not `awardPoints`. The quest flag already guards
+         * against a second call, but the two live in different slices of the
+         * same store and a future reset of one must not re-open the other —
+         * this is the belt to that braces.
+         */
+        const pts = QUEST_POINTS[questId];
+        if (pts > 0) get().awardPointsOnce(`quest:${questId}`, pts);
         return true;
       },
 

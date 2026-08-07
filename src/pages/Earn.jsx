@@ -284,7 +284,19 @@ export default function Earn({ embedded = false }) {
   const QUESTS = [
     { id: 'connectWallet', to: '/wallet', pts: POINT_VALUES.connectWallet, Icon: IconWallet, tone: 'var(--rgb-1)' },
     { id: 'firstSwap', to: '/swap', pts: POINT_VALUES.firstSwap, Icon: IconSwap, tone: 'var(--rgb-2)' },
-    { id: 'addLiquidity', to: '/farm', pts: POINT_VALUES.addLiquidity, Icon: IconPools, tone: 'var(--rgb-4)' },
+    /*
+     * ─── REMOVED, BECAUSE WE CANNOT SEE IT HAPPEN ───────────────────────────
+     * "Add liquidity to a pool, +150" was advertised and could never complete.
+     * Unlike the other five, that is not a wiring bug we can fix: the Farm
+     * screen LINKS OUT to PancakeSwap and Venus, so the deposit happens on
+     * somebody else's site and we have no way to know whether it occurred.
+     *
+     * The three options were to pay on the tap (rewarding a click, which any
+     * user could farm), to leave it advertised and unearnable (the bug being
+     * fixed here), or to remove it. Removed. Liquid staking still earns
+     * through `firstSwap`, because on our Farm screen buying stETH or rETH IS
+     * the deposit and it routes through our own swap.
+     */
     { id: 'backupWallet', to: '/wallet', pts: POINT_VALUES.backupWallet, Icon: IconKey, tone: 'var(--rgb-5)' },
     { id: 'enable2fa', to: '/settings', pts: POINT_VALUES.enable2fa, Icon: IconShield, tone: 'var(--rgb-1)' },
     /*

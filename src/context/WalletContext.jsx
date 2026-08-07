@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAppStore } from '../store/useAppStore';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
 import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -380,6 +381,22 @@ export function WalletProvider({ children }) {
     if (!address && loadVault()) attachLocal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * ─── THE "CONNECT YOUR WALLET" QUEST, FIRED WHERE IT ACTUALLY HAPPENS ────
+   * The Earn screen advertises "+100, connect your wallet" and nothing marked
+   * it done. There are THREE ways to arrive connected — injected, WalletConnect
+   * and the built-in vault — so putting the call in one of them would quietly
+   * pay only a third of users.
+   *
+   * Watching `address` covers all three, including the auto-attach above,
+   * which is the path a returning user takes without pressing anything.
+   * `completeQuest` is idempotent, so re-renders and reconnects cannot pay
+   * twice.
+   */
+  useEffect(() => {
+    if (address) useAppStore.getState().completeQuest('connectWallet');
+  }, [address]);
 
   useEffect(() => {
     const eip = window.ethereum;

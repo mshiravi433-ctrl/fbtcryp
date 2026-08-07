@@ -8673,5 +8673,99 @@ export default function run() {
       Boolean(JSON.parse(read('src/i18n/locales/fa.json')).earn?.inApp));
   }
 
+  /* ---- 91. Points that are really earned, perks that must be reached ---- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── REAL BUG: FIVE OF SIX QUESTS COULD NEVER BE COMPLETED ──────────────
+     * Asked to make sure points are genuinely earned. They were not. The Earn
+     * screen advertised six quests; only `inviteFriend` ever called
+     * awardPoints. The other five just navigated to a screen and left the row
+     * un-ticked forever, so the app promised 685 points nobody could collect.
+     *
+     * Worse, `completeQuest` paid the WRONG CURRENCY — it credited `balance`
+     * (the arcade's play-money NX) and XP, neither of which is the reputation
+     * score the tiers and the leaderboard read. A quest could "complete" and
+     * move the rank not at all.
+     */
+    const store = code(read('src/store/useAppStore.js'));
+    t('completing a quest awards reputation points',
+      /awardPointsOnce\(`quest:\$\{questId\}`/.test(store));
+    /*
+     * The reward table must be POINT_VALUES — the same source the UI prints on
+     * each row. Duplicating the numbers is how a row advertises 300 and pays
+     * 150.
+     */
+    t('...from the same table the screen displays',
+      /QUEST_POINTS/.test(store) && /POINT_VALUES\.firstSwap/.test(store));
+
+    /* Each quest must fire from the real event, not from tapping the row. */
+    t('the swap quest fires on a confirmed receipt',
+      /if \(ok\) useAppStore\.getState\(\)\.completeQuest\('firstSwap'\)/
+        .test(code(read('src/pages/Swap.jsx'))));
+    t('the wallet quest covers every connect path',
+      /completeQuest\('connectWallet'\)/.test(code(read('src/context/WalletContext.jsx'))));
+    t('the 2FA quest fires after the code is verified',
+      /completeQuest\('enable2fa'\)/.test(code(read('src/pages/Settings.jsx'))));
+    t('the backup quest fires after a successful export',
+      /completeQuest\('backupWallet'\)/.test(code(read('src/pages/Wallet.jsx'))));
+
+    /*
+     * `addLiquidity` was REMOVED rather than wired. The Farm screen links out
+     * to PancakeSwap and Venus, so the deposit happens on somebody else's site
+     * and we cannot see it. Paying on the tap would reward a click any user
+     * could farm; leaving it advertised and unearnable is the bug being fixed.
+     */
+    const earnSrc = code(read('src/pages/Earn.jsx'));
+    t('the unverifiable liquidity quest is gone, not left dangling',
+      !/id: 'addLiquidity'/.test(earnSrc));
+
+    /*
+     * ─── PERKS START AT GOLD ────────────────────────────────────────────────
+     * Asked for: nothing for Bronze or Silver, so there is a reason to climb.
+     * Bronze is 0 points — every user is Bronze on install, and a reward that
+     * arrives before any effort is the default state rather than a prize.
+     */
+    const perks = code(read('src/lib/perks.js'));
+    t('no perk is granted below gold',
+      !/tier: 'bronze'/.test(perks) && !/tier: 'silver'/.test(perks));
+    /* And the higher tiers now have their own, so the ladder keeps going. */
+    for (const tierId of ['gold', 'platinum', 'diamond']) {
+      t(`...and ${tierId} has a perk of its own`,
+        new RegExp(`tier: '${tierId}'`).test(perks));
+    }
+    /*
+     * Locked perks must still be VISIBLE with their distance. A reward nobody
+     * can see motivates nobody; one you can see and cannot reach yet is the
+     * entire mechanism being asked for.
+     */
+    t('...and locked perks still show how far away they are',
+      /pointsToGo/.test(perks) && /perks\.locked/.test(earnSrc));
+
+    /*
+     * ─── THE WARNINGS ───────────────────────────────────────────────────────
+     * Asked to write them better. The points notice has to say the one thing
+     * that could mislead — they never become money — and the yield warning has
+     * to name what actually costs people money rather than listing hazards.
+     */
+    for (const lang of ['en', 'fa']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} still says points never become money`,
+        String(L.earn?.pointsNotice ?? '').length > 80);
+      t(`${lang} warns that yield is paid by someone taking a risk`,
+        String(L.earn?.realRisk ?? '').length > 150);
+      /* The actionable half matters more than the hazard list. */
+      t(`${lang} tells the reader what to actually do about it`,
+        /read|بخوان/i.test(String(L.earn?.realRisk ?? '')));
+    }
+    /* The gold-and-above rule must be explained to the user, not just coded. */
+    t('the points notice mentions the rank benefit',
+      /Gold/i.test(String(JSON.parse(read('src/i18n/locales/en.json')).earn?.pointsNotice)));
+  }
+
   return rows;
 }

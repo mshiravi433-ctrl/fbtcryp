@@ -56,25 +56,65 @@ import { GMX_CODE, AVANTIS_CODE, UTEX_CAMPAIGN, isValidGmxCode, withReferral } f
  * rank is a THRESHOLD you cross and keep; the perks it unlocks stay unlocked.
  */
 export const PERKS = [
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ─── NOTHING BELOW GOLD, ON PURPOSE ──────────────────────────────────────
+   * ═════════════════════════════════════════════════════════════════════════
+   * Asked for directly: perks start at Gold, with Diamond and Platinum above,
+   * and NOTHING for Bronze or Silver so people have a reason to climb.
+   *
+   * That is also the better design, and it is worth saying why rather than
+   * just doing it. Bronze is 0 points — every user is Bronze the moment they
+   * open the app. A reward that arrives before any effort is not a reward, it
+   * is the default state, and it makes the tiers above it feel like more of
+   * the same rather than something worth reaching for.
+   *
+   * Gold is 2,000 points. On the current table that is a real commitment:
+   * roughly a first swap, a wallet connected and backed up, 2FA enabled, an
+   * invited friend and a month of daily check-ins. Putting the first perk
+   * there means the ladder has a visible prize at the top of it, and Bronze
+   * and Silver read as progress toward something instead of as tiers that
+   * quietly hand out nothing.
+   *
+   * The locked rows are still SHOWN with their distance in points — see
+   * `perksFor`. A reward nobody can see motivates nobody; a reward you can see
+   * and cannot reach yet is the entire mechanism.
+   */
+
   {
+    /*
+     * GOLD — 2,000 points. Perpetuals on crypto, the most-used of the three.
+     * GMX docs, Tier 1: trader discount 5%, affiliate reward 5%.
+     */
     id: 'gmxFee',
-    tier: 'bronze',
+    tier: 'gold',
     venue: 'gmx',
-    /* GMX docs, Tier 1: trader discount 5%, affiliate reward 5%. */
     benefitPct: 5,
     url: 'https://app.gmx.io/#/trade'
   },
   {
+    /*
+     * PLATINUM — 6,000 points. Avantis covers forex, gold, silver, oil and
+     * indices as well as crypto, so it is the wider market and sits a tier
+     * above. "Referrers: Earn 5% Rebates", fully permissionless.
+     */
     id: 'avantisFee',
-    tier: 'silver',
+    tier: 'platinum',
     venue: 'avantis',
-    /* Avantis: "Referrers: Earn 5% Rebates", fully permissionless. */
     benefitPct: 5,
     url: 'https://www.avantisfi.com/trade'
   },
   {
+    /*
+     * DIAMOND — 15,000 points. US equities settled entirely in USDT, which is
+     * the hardest market to reach from here and therefore the top prize.
+     *
+     * `benefitPct` is null and stays null: UTEX pay us 40-60% of referred
+     * fees but publish no fixed trader discount, and inventing a percentage
+     * to make the row look consistent would be a number we cannot honour.
+     */
     id: 'utexStocks',
-    tier: 'gold',
+    tier: 'diamond',
     venue: 'utex',
     benefitPct: null,
     url: 'https://utex.io/'

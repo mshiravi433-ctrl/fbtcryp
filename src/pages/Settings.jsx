@@ -21,6 +21,7 @@ import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import Sheet from '../components/Sheet';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAppStore } from '../store/useAppStore';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { firebaseConfigured, pullSettings, pushSettings } from '../lib/firebase';
@@ -172,6 +173,12 @@ export default function Settings() {
     }
     s.enable2FA(totpSecret);
     setRecovery(generateRecoveryCodes());
+    /*
+     * The Earn screen advertises "+60, enable 2FA" and nothing ever marked it
+     * done. Fired here, after the code has been VERIFIED — enabling on an
+     * unverified secret would lock the user out and still pay them for it.
+     */
+    useAppStore.getState().completeQuest('enable2fa');
     haptic?.('success');
   };
 

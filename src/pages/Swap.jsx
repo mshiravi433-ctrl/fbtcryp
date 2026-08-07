@@ -43,6 +43,7 @@ import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../com
 import { PAYOUT_DIRECTORY } from '../lib/payout';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAppStore } from '../store/useAppStore';
 
 /**
  * Real on-chain swap screen.
@@ -671,6 +672,8 @@ export default function Swap() {
        * gone" at the worst moment. It is reported as a pending trade instead.
        */
       setTxState({ stage: 'success', gaslessHash: res?.tradeHash ?? null, gasless: true });
+      /* A gasless swap is still a first swap. */
+      useAppStore.getState().completeQuest('firstSwap');
       haptic?.('success');
       notifyTrade?.({ from: fromToken.symbol, to: toToken.symbol, amount });
     } catch (e) {
@@ -755,6 +758,15 @@ export default function Swap() {
         gotSymbol: toToken.symbol,
         chainName: cfg?.name ?? null
       });
+
+      /*
+       * ─── THE QUEST ACTUALLY COMPLETES NOW ─────────────────────────────────
+       * The Earn screen has always advertised "make your first swap, +300",
+       * and nothing anywhere marked it done — the row navigated here and then
+       * stayed un-ticked forever. Fired on a CONFIRMED receipt only, never on
+       * submission, so a reverted transaction cannot pay points.
+       */
+      if (ok) useAppStore.getState().completeQuest('firstSwap');
 
       // Ring + vibrate the moment the trade settles. A swap can take a minute
       // to confirm and people put the phone down — a silent success is a

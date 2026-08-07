@@ -716,6 +716,13 @@ export default function Wallet() {
             try {
               const res = await exportWallet();
               setBackupResult(res);
+              /*
+               * "+75, back up your wallet" was advertised on the Earn screen
+               * and nothing ever marked it done. Fired only after the export
+               * actually succeeded — paying for a backup that threw would be
+               * rewarding the user for a file they do not have.
+               */
+              useAppStore.getState().completeQuest('backupWallet');
               haptic?.('success');
             } catch (e) {
               setBackupErr(e.message === 'NO_VAULT' ? 'NO_VAULT' : 'FAILED');

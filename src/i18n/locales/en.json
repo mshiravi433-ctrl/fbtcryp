@@ -210,7 +210,7 @@
     "comeBackIn": "Come back in {{h}}h",
     "referral": "Invite friends",
     "referralDesc": "Share your code to grow your streak bonus",
-    "referralNote": "Referral credits are virtual. A paid referral scheme that pays real value can be treated as a financial promotion — check local rules before launching one.",
+    "referralNote": "Referral points are a score, not a payment. If you ever reward invites with real money or crypto, that can count as a financial promotion in many countries — check the rules where you are before doing it.",
     "shareInvite": "Share invite link",
     "shareText": "Join me on Fanous Bazaar Pishgam SWAP — the crypto terminal mini app",
     "quests": "Quests",
@@ -272,9 +272,9 @@
         "body": "Deposit real BTC — not a wrapped IOU — and earn from swap fees"
       }
     },
-    "aprNote": "APR ranges are indicative and change constantly with volume and rewards. Always check the live rate on the protocol before depositing.",
-    "realRisk": "Yield is never free money. Pools can lose value to impermanent loss, lending markets can take bad debt, staking can be slashed, and any smart contract can be exploited. The higher-risk entries here can also be paused by the protocol itself, leaving you unable to withdraw for a while. Start small and only use protocols you have read about.",
-    "pointsNotice": "Points are a reputation score for using the app. They are not money, cannot be withdrawn, exchanged or transferred, and have no cash value. They rank you on the leaderboard — that's all.",
+    "aprNote": "These rates move constantly with volume and rewards, so treat them as a rough guide and check the live number on the protocol before you deposit. A rate that looks unusually high is usually paying in a token whose price is falling.",
+    "realRisk": "Every yield here is paid by someone taking a risk, and sometimes that someone is you. A pool can hand you back less than you put in if the two tokens move apart. A lending market can freeze withdrawals when too many borrowers default at once. Any contract can be drained, no matter how long it has run without trouble. None of that is unlikely enough to ignore — so put in an amount you could lose without it changing your month, and read the protocol before the deposit rather than after.",
+    "pointsNotice": "Points measure how much you have used the app — nothing more. They are not money and never become money: you cannot withdraw them, send them to anyone, or exchange them for crypto. What they do is set your rank, and from Gold upward your rank unlocks lower trading fees on the venues below.",
     "riskTitle": "What can go wrong here",
     "inApp": "In this app"
   },
