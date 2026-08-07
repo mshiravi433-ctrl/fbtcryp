@@ -543,7 +543,10 @@
     "gaslessHelp": "Normally every action needs the network's own coin to pay the miners, and buying that coin is itself an action that needs it — which is why an empty wallet holding only USDT is stuck. Here you sign a message instead of sending a transaction. Our partner submits it and pays the gas, then takes that cost out of the token you are selling. So it is not free — it is paid in the token instead of in the coin you do not have.",
     "gaslessGasFee": "Gas (paid in token)",
     "gaslessZeroExFee": "Relayer fee",
-    "gaslessSubmitted": "Your signature has been relayed. The transaction is submitted for you and settles in a moment — you do not need to keep this open."
+    "gaslessSubmitted": "Your signature has been relayed. The transaction is submitted for you and settles in a moment — you do not need to keep this open.",
+    "solanaSlippageNote": "Solana swaps use {{pct}}% — the same default as the EVM tab, so one setting covers both.",
+    "solanaOnlyTitle": "Why fewer options here?",
+    "solanaOnlyBody": "Auto-slippage, the transaction deadline and expert mode are specific to the EVM path: auto-slippage is derived from an EVM price quote, the deadline is an argument to an EVM router, and expert mode skips the EVM review screen. None of them has an equivalent on Solana, so showing them here would be controls that do nothing — which is exactly the problem this screen just had."
   },
   "onboarding": {
     "skip": "Skip",

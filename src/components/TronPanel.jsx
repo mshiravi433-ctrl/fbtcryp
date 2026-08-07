@@ -116,6 +116,14 @@ export default function TronPanel() {
         sellAmount: raw,
         originAddress: wallet.address,
         /*
+         * The server needs these to compute the loss percentage. Without them
+         * it assumed 6 decimals on both sides and reported "you lose 100%" for
+         * a perfectly good BNB Chain quote, where USDC carries 18. Measured
+         * against production before this was added.
+         */
+        sellDecimals: String(token.decimals),
+        buyDecimals: '6',
+        /*
          * REQUIRED across a family boundary. 0x default the destination to the
          * origin address, which on Tron is an address nobody holds the key to
          * — a successful bridge straight into a burn. The server refuses

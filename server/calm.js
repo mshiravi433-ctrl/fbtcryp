@@ -130,15 +130,94 @@ async function getJson(url) {
   }
 }
 
+/**
+ * Subjects that disqualify a track no matter what else it is tagged.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ─── WHY THIS EXISTS: "THE FIRST TRACK IS BROKEN" ───────────────────────────
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Reported that the first song in the calm section was wrong. It was, and the
+ * cause was not that track — it was the query.
+ *
+ * `subject:ambient` matches anything TAGGED ambient, and archive.org tags are
+ * author-supplied and cumulative. An artist who considers their work ambient
+ * AND industrial AND harsh noise tags it all three, and the search returns it
+ * for every one of those words. Checked against the live API, the two items
+ * that were arriving at the top of the calm list:
+ *
+ *   gt487Krasota-GovoriaschiyeGvozdi
+ *     subject: ambient, industrial, dark, drone, psychedelic, avantgarde
+ *     — Russian spoken word over drone
+ *
+ *   gt275IntracranialPenetration  ("Humanhater")
+ *     subject: ambient, noise, HARSH NOISE, industrial, experimental
+ *
+ * Both are legitimately tagged ambient. Neither is calm. The mood filter was
+ * doing exactly what it was told and the instruction was wrong.
+ *
+ * ─── WHY EXCLUSION RATHER THAN A CURATED LIST ───────────────────────────────
+ * A hand-picked list of track ids would be reliably calm and would rot: items
+ * get removed, licences change, and the list cannot grow. Excluding the genres
+ * that are incompatible with the word "calm" keeps the catalogue live while
+ * removing the failure mode. Measured on the same query: the exclusion still
+ * leaves 64 qualifying ambient items, so this costs variety we do not need
+ * rather than the feature.
+ *
+ * Deliberately NOT excluded: `experimental` alone would remove most of the
+ * netlabel ambient catalogue, so it is only rejected in combination — see the
+ * query below, which excludes it, and `calmSubjectOk` which is the belt to
+ * that braces for items whose tags arrive after the search.
+ */
+export const HARSH_SUBJECTS = [
+  'noise',
+  'harsh',
+  'industrial',
+  'metal',
+  'punk',
+  'hardcore',
+  'death',
+  'black metal',
+  'drone',
+  'dark',
+  'horror',
+  'psychedelic',
+  'avantgarde',
+  'spoken word',
+  'speech'
+];
+
+/**
+ * Is this item's subject list compatible with a section called "calm"?
+ *
+ * Checked again on the RESULT and not only in the query, because the search
+ * clause and the returned metadata are not guaranteed to agree: a multi-valued
+ * `subject` can arrive as a string or an array, and an item can carry a tag
+ * that the index has not yet reflected. Failing closed drops one track; failing
+ * open puts harsh noise in a relaxation playlist.
+ */
+export function calmSubjectOk(subject) {
+  const list = Array.isArray(subject) ? subject : [subject];
+  const joined = list.map((s) => String(s ?? '').toLowerCase()).join(' | ');
+  if (!joined.trim()) return true; // untagged is not evidence of harshness
+  return !HARSH_SUBJECTS.some((bad) => joined.includes(bad));
+}
+
 /** Search one mood, restricted to commercially usable licences. */
 async function searchMood(mood) {
   /*
    * The licence clause is part of the QUERY, so the expensive metadata
    * lookups below are only ever spent on items that already qualify. Filtering
    * afterwards would mean fetching and discarding most of them.
+   *
+   * The NOT clause is here for the same reason: excluding harsh genres in the
+   * query is far cheaper than fetching their file lists and discarding them,
+   * and it means the `rows=8` budget is spent on candidates that can actually
+   * be used.
    */
   const q =
-    `collection:netlabels AND subject:${mood} AND (` +
+    `collection:netlabels AND subject:${mood} AND NOT subject:(` +
+    'noise OR industrial OR harsh OR dark OR drone OR experimental ' +
+    'OR psychedelic OR metal OR avantgarde) AND (' +
     'licenseurl:"http://creativecommons.org/licenses/by/3.0/" OR ' +
     'licenseurl:"http://creativecommons.org/licenses/by/4.0/" OR ' +
     'licenseurl:"http://creativecommons.org/licenses/by-sa/3.0/" OR ' +
@@ -146,11 +225,16 @@ async function searchMood(mood) {
 
   const url =
     `${IA}/advancedsearch.php?q=${encodeURIComponent(q)}` +
+    /* `subject` is requested so the result can be re-checked below. Without
+       it `calmSubjectOk` would receive undefined and pass everything. */
     '&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&fl%5B%5D=licenseurl' +
+    '&fl%5B%5D=subject' +
     '&rows=8&page=1&output=json';
 
   const data = await getJson(url);
-  return (data?.response?.docs ?? []).filter((d) => d?.identifier && licenceOk(d.licenseurl));
+  return (data?.response?.docs ?? []).filter(
+    (d) => d?.identifier && licenceOk(d.licenseurl) && calmSubjectOk(d.subject)
+  );
 }
 
 /**

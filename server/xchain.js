@@ -265,15 +265,56 @@ export async function crossChainQuotes(query) {
   let lossPercent = null;
   const sellN = Number(quote?.sellAmount);
   const buyN = Number(quote?.buyAmount);
+
   /*
-   * Only comparable when both sides are the same unit. USDC and USDT are both
-   * 6-decimal dollar stablecoins, so this is meaningful for the stablecoin
-   * routes that matter here; for anything else it stays null rather than
-   * inventing a number by comparing unlike things.
+   * ─── REAL BUG: NOT EVERY DOLLAR STABLECOIN HAS 6 DECIMALS ─────────────────
+   * This used to divide the raw integers directly, on the stated assumption
+   * that "USDC and USDT are both 6-decimal dollar stablecoins". That is true
+   * on every chain we offered when it was written — and FALSE on BNB Chain,
+   * where both USDC and USDT carry 18 decimals.
+   *
+   * Measured against production after wiring the Tron screen: 100 USDC from
+   * BSC returned a correct quote and `"lossPercent": 100`. The bridge was
+   * fine; the arithmetic compared 1e20 base units against 98063326 and
+   * concluded the user lost everything. A screen showing "you lose 100%" over
+   * a working route is worse than showing nothing — it destroys trust in the
+   * one warning on this page that matters.
+   *
+   * Decimals are now taken from the quote's own token metadata where 0x
+   * provide it, and fall back to the caller's hint. Both sides are scaled to
+   * a real number before the comparison, so an 18-decimal origin and a
+   * 6-decimal destination compare correctly.
+   */
+  const dec = (v, fallback) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 0 && n <= 36 ? n : fallback;
+  };
+  /*
+   * The origin decimals must be right or the result is nonsense, so the
+   * caller states them. Defaulting to 6 rather than 18 is the safer error:
+   * it under-reports the loss on an 18-decimal origin instead of inventing
+   * a catastrophic one, and the amount check on the client catches the rest.
+   */
+  const sellDec = dec(query?.sellDecimals, 6);
+  const buyDec = dec(query?.buyDecimals, 6);
+
+  const sellUnits = sellN / 10 ** sellDec;
+  const buyUnits = buyN / 10 ** buyDec;
+
+  /*
+   * Only comparable when both sides are the same unit of account. Both are
+   * dollar stablecoins on the routes this screen offers; for anything else it
+   * stays null rather than inventing a number by comparing unlike things.
    */
   const sameUnit = /^(USDT|USDC)$/i.test(String(query?.unitHint || 'USDT'));
-  if (sameUnit && Number.isFinite(sellN) && Number.isFinite(buyN) && sellN > 0) {
-    lossPercent = Number((((sellN - buyN) / sellN) * 100).toFixed(2));
+  if (sameUnit && Number.isFinite(sellUnits) && Number.isFinite(buyUnits) && sellUnits > 0) {
+    const pct = Number((((sellUnits - buyUnits) / sellUnits) * 100).toFixed(2));
+    /*
+     * A result outside 0-100 means the decimals were wrong, not that the user
+     * gained or lost everything. Reporting null is honest; reporting 100 is
+     * the bug this replaces.
+     */
+    lossPercent = pct >= 0 && pct < 100 ? pct : null;
   }
 
   return {

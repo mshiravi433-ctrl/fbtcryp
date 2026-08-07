@@ -109,6 +109,81 @@ export function solflareBrowseLink(url) {
 export { publicAppUrl } from './nativeShell';
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ─── MOBILE WALLET ADAPTER: A ROUTE THAT DID NOT EXIST WHEN THIS WAS WRITTEN
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Asked whether there are other ways to connect a Solana wallet. There is now
+ * one more than when the comment above was written, and it is worth having.
+ *
+ * `@solana-mobile/wallet-standard-mobile` is the OFFICIAL Solana Mobile
+ * package for web apps. It registers MWA as a Wallet Standard wallet, so
+ * Chrome for Android can open Phantom, Solflare or Backpack over an Android
+ * intent and get a signature back — no extension, no in-app browser detour.
+ *
+ * Checked before adding rather than assumed:
+ *   • npm version 0.5.3, published 2026-07-30 — actively maintained, not the
+ *     2022 hackathon plugin the note below correctly rejected.
+ *   • Solana Mobile's own platform table: Android full, MOBILE WEB (Chrome for
+ *     Android) SUPPORTED, iOS NOT SUPPORTED — "due to platform restrictions on
+ *     inter-app communication".
+ *
+ * ─── WHAT THIS DOES AND DOES NOT FIX ────────────────────────────────────────
+ * It fixes Chrome on Android, which previously had no path at all. It does
+ * NOT fix iOS — Apple does not permit the inter-app channel MWA needs — and it
+ * does not fix our own APK, because a Capacitor WebView is not Chrome and
+ * cannot receive the intent result. Both of those keep the in-app-browser
+ * deeplink, which remains the only thing that works there.
+ *
+ * ─── WHY REGISTRATION IS LAZY AND GUARDED ───────────────────────────────────
+ * `registerMwa` must run in a browser and only once. It is imported
+ * dynamically so the package is not in the initial bundle for the majority of
+ * users who will never use it, and it is skipped entirely outside Android
+ * Chrome so an iOS user cannot end up with a wallet option that opens nothing.
+ * A failure here must never break the screen: Solana swapping still works
+ * through an injected provider, so the catch is deliberately silent.
+ */
+let mwaRegistered = false;
+/* The address from an MWA session. See connectSolana for why this is needed. */
+let mwaAddress = null;
+
+/** True only where MWA can actually complete a round trip. */
+export function canUseMwa() {
+  if (typeof window === 'undefined') return false;
+  /* A Capacitor WebView is not Chrome; the intent result never comes back. */
+  if (isNativeShell()) return false;
+  const ua = String(window.navigator?.userAgent ?? '');
+  if (!/Android/i.test(ua)) return false; // iOS cannot, desktop does not need it
+  /* Firefox and other Android browsers are not covered by the official
+     support statement, so they keep the deeplink rather than a maybe. */
+  return /Chrome|CriOS/i.test(ua);
+}
+
+export async function registerMobileWalletAdapter(appUrl) {
+  if (mwaRegistered || !canUseMwa()) return false;
+  try {
+    const mod = await import('@solana-mobile/wallet-standard-mobile');
+    mod.registerMwa({
+      appIdentity: {
+        name: 'FBT Swap',
+        uri: appUrl || window.location.origin,
+        icon: 'icon-192.png'
+      },
+      authorizationCache: mod.createDefaultAuthorizationCache(),
+      /* Mainnet only. Offering devnet here would let somebody authorise a
+         chain their real funds are not on and wonder where the balance went. */
+      chains: ['solana:mainnet'],
+      chainSelector: mod.createDefaultChainSelector(),
+      onWalletNotFound: mod.createDefaultWalletNotFoundHandler()
+    });
+    mwaRegistered = true;
+    return true;
+  } catch {
+    /* Silent by design — see the header. The injected path is unaffected. */
+    return false;
+  }
+}
+
+/**
  * Find an injected Solana provider.
  *
  * Phantom namespaces itself under `window.phantom.solana` and ALSO sets
@@ -149,9 +224,72 @@ export function solanaWalletName() {
  * those differ per wallet and are not translatable. The caller maps the key to
  * localised copy.
  */
+/**
+ * Find a Wallet Standard wallet, which is how MWA presents itself.
+ *
+ * ─── WHY THIS IS SEPARATE FROM getSolanaProvider ────────────────────────────
+ * An injected wallet sets a global object. A Wallet Standard wallet instead
+ * REGISTERS itself and is discovered through `window.navigator.wallets`, so
+ * `getSolanaProvider()` cannot see it no matter what it checks. After
+ * `registerMwa` runs on Android Chrome the MWA wallet exists only here.
+ *
+ * The shapes also differ: Wallet Standard exposes numbered feature strings
+ * (`standard:connect`) rather than a `.connect()` method, which is why the
+ * caller below cannot simply treat one as the other.
+ */
+export function getStandardWallets() {
+  if (typeof window === 'undefined') return [];
+  const api = window.navigator?.wallets;
+  if (!api) return [];
+  try {
+    /* `get()` is the documented accessor; some builds expose an array. */
+    const list = typeof api.get === 'function' ? api.get() : api;
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The registered MWA wallet, if `registerMobileWalletAdapter` succeeded. */
+export function getMwaWallet() {
+  return getStandardWallets().find((w) =>
+    /mobile wallet adapter/i.test(String(w?.name ?? ''))
+    && w?.features?.['standard:connect']) ?? null;
+}
+
 export async function connectSolana() {
   const provider = getSolanaProvider();
-  if (!provider) throw new Error('NO_WALLET');
+
+  /*
+   * Prefer an injected provider when one exists — inside Phantom's own browser
+   * that is the wallet the user deliberately opened us in, and routing them
+   * back out through an intent would be a worse experience than the one they
+   * chose. MWA is the fallback for Android Chrome, where nothing is injected.
+   */
+  if (!provider) {
+    const mwa = getMwaWallet();
+    if (mwa) {
+      const res = await mwa.features['standard:connect'].connect();
+      /*
+       * Wallet Standard returns accounts as an ARRAY and the address is
+       * already a base58 string — not a PublicKey with `.toString()` like the
+       * injected path. Reusing that assumption here would produce
+       * "[object Object]" as an address, which is the kind of bug that only
+       * surfaces after somebody has sent funds.
+       */
+      const address = res?.accounts?.[0]?.address;
+      if (!address) throw new Error('NO_ACCOUNT');
+      /*
+       * Held here because MWA does NOT populate `window.solana.publicKey` the
+       * way an injected wallet does — `solanaAddress()` below reads that, and
+       * would report null immediately after a successful MWA connection,
+       * making the screen look like the connection had failed.
+       */
+      mwaAddress = address;
+      return address;
+    }
+    throw new Error('NO_WALLET');
+  }
 
   try {
     const res = await provider.connect();
@@ -169,17 +307,32 @@ export async function connectSolana() {
 }
 
 export async function disconnectSolana() {
+  /* Cleared FIRST and unconditionally: if the wallet's own disconnect throws,
+     the catch below swallows it, and leaving this set would keep the UI
+     showing a connected address the user just asked to remove. */
+  mwaAddress = null;
   try {
     await getSolanaProvider()?.disconnect?.();
   } catch {
     /* a wallet that cannot disconnect is not an error worth surfacing */
   }
+  try {
+    await getMwaWallet()?.features?.['standard:disconnect']?.disconnect?.();
+  } catch {
+    /* same reasoning */
+  }
 }
 
-/** The currently connected address, or null. */
+/**
+ * The currently connected address, or null.
+ *
+ * The injected provider is authoritative when present. `mwaAddress` is the
+ * fallback for an Android Chrome session, where no provider object exists at
+ * all and the address is only known from the connect response.
+ */
 export function solanaAddress() {
   const p = getSolanaProvider();
-  return p?.publicKey?.toString?.() ?? null;
+  return p?.publicKey?.toString?.() ?? mwaAddress ?? null;
 }
 
 /**

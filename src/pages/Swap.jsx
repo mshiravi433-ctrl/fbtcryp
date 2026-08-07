@@ -1548,6 +1548,66 @@ export default function Swap() {
 
       {/* ------------------------------ settings ----------------------------- */}
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title={t('swap.settings')}>
+        {/*
+          ─── THE SOLANA TAB GETS ITS OWN SHEET ────────────────────────────────
+          Reported that swap settings did not work on the Solana tab. They did
+          not, and the gear being in the SHARED header is exactly why: it looked
+          like it governed whichever tab you were on, while every control inside
+          wrote to EVM-only state.
+
+          Auto-slippage, the deadline and expert mode are all genuinely
+          EVM-specific — auto-slippage derives from an EVM price impact, the
+          deadline is a router argument, and expert mode skips the EVM review
+          sheet. Showing them on the Solana tab would repeat the original
+          mistake in a new place.
+
+          So the sheet now shows what actually applies. The one setting both
+          paths share is the stored default slippage, and SolanaSwap now reads
+          it from the same store and sends it as `slippageBps` on both the
+          quote and the swap.
+        */}
+        {chainTab === 'solana' ? (
+          <>
+            <label className="field-label">{t('swap.slippage')}</label>
+            <div className="row" style={{ gap: 6 }}>
+              {[0.1, 0.5, 1, 3].map((sv) => (
+                <button
+                  key={sv}
+                  className={`tag ${storedSlippage === sv ? 'active' : ''}`}
+                  style={{ flex: 1, textAlign: 'center' }}
+                  onClick={() => {
+                    haptic?.('select');
+                    useSettingsStore.getState().setSlippage(sv);
+                  }}
+                >
+                  {sv}%
+                </button>
+              ))}
+            </div>
+
+            <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
+              {t('swap.solanaSlippageNote', { pct: storedSlippage })}
+            </p>
+
+            <InfoBox title={t('swap.slippageWhat')} tone="info" id="sol-slippage-help">
+              <p>{t('swap.slippageHelp')}</p>
+            </InfoBox>
+
+            {storedSlippage > 3 && (
+              <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('swap.slippageHigh')}</p>
+            )}
+
+            {/*
+              Named honestly rather than hidden. Someone who opened this sheet
+              looking for the deadline should be told it does not exist here,
+              not left hunting for a control that was silently removed.
+            */}
+            <InfoBox title={t('swap.solanaOnlyTitle')} tone="info" id="sol-only">
+              <p>{t('swap.solanaOnlyBody')}</p>
+            </InfoBox>
+          </>
+        ) : (
+        <>
         <label className="field-label">{t('swap.slippage')}</label>
 
         {/*
@@ -1686,6 +1746,8 @@ export default function Swap() {
           >
             {t('swap.saveAsDefault', { pct: slippage })}
           </button>
+        )}
+        </>
         )}
       </Sheet>
 

@@ -15,8 +15,10 @@ import {
   toBaseUnits
 } from '../lib/solana';
 import { getOceanQuote, getOceanSwap } from '../lib/solanaOcean';
+import { useSettingsStore } from '../store/useSettingsStore';
 import {
   canInjectSolana,
+  registerMobileWalletAdapter,
   connectSolana,
   disconnectSolana,
   signAndSendSolana,
@@ -102,6 +104,46 @@ export default function SolanaSwap({ embedded = false }) {
   const [fromToken, setFromToken] = useState(BASE_TOKENS[0]);
   const [toToken, setToToken] = useState(BASE_TOKENS[1]);
   const [amount, setAmount] = useState('');
+
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * ─── SLIPPAGE: THE SETTING THAT DID NOTHING HERE ────────────────────────
+   * ═══════════════════════════════════════════════════════════════════════
+   * Reported that swap settings do not work on the Solana tab. They did not,
+   * and the reason is structural rather than a broken control.
+   *
+   * The gear icon lives in Swap.jsx's shared header, above the EVM/Solana
+   * tab switcher, so it is visible on both tabs. But its sheet only ever
+   * wrote to Swap.jsx's own `slippage` state, and this component had no
+   * slippage state at all — it never read the setting and never sent one.
+   * `getOceanQuote` and `getOceanSwap` have both accepted `slippageBps`
+   * since they were written; neither call site supplied it.
+   *
+   * So every Solana swap silently used OpenOcean's server-side default,
+   * whatever the user had chosen. A control that appears to apply to the
+   * screen you are looking at and quietly applies to a different one is
+   * worse than no control: it is a promise the app does not keep.
+   *
+   * Read from the SAME store the EVM side seeds from, so one setting now
+   * governs both tabs. Subscribed rather than read once, because the sheet
+   * is open ON THIS SCREEN — a snapshot taken at mount would ignore the
+   * change the user just made and appear broken all over again.
+   */
+  const defaultSlippage = useSettingsStore((s) => s.defaultSlippage);
+
+  /*
+   * Percent to basis points, which is what OpenOcean expects. 0.5% -> 50.
+   *
+   * Clamped and floored at 1 bp: `Math.round(0.005 * 100)` is 1, but a
+   * malformed stored value could produce 0, and 0 bps means "no slippage
+   * tolerance at all", which fails every quote on a moving market. The
+   * upper clamp mirrors the store's own 50% ceiling.
+   */
+  const slippageBps = useMemo(() => {
+    const pct = Number(defaultSlippage);
+    if (!Number.isFinite(pct) || pct <= 0) return 50;
+    return Math.min(5000, Math.max(1, Math.round(pct * 100)));
+  }, [defaultSlippage]);
 
   /*
    * ?to=<mint> handoff from the Stocks and Farm screens.
@@ -213,6 +255,30 @@ export default function SolanaSwap({ embedded = false }) {
   const canInject = canInjectSolana();
 
   /*
+   * ─── REGISTER MOBILE WALLET ADAPTER, WHERE IT CAN WORK ──────────────────
+   * Chrome for Android had NO path to a Solana wallet: extensions do not exist
+   * on mobile, so `canInject` is false and the screen could only offer the
+   * "open this inside Phantom" deeplink. MWA is the official route and adds a
+   * real in-place connection there.
+   *
+   * Registered on mount rather than at module load so the package stays out of
+   * the initial bundle, and guarded by `canUseMwa()` so iOS and our own APK —
+   * neither of which can complete the intent round trip — are untouched.
+   *
+   * `mwaReady` only relaxes the "no wallet here" messaging; it never gates the
+   * connect button, because a registration failure must not remove a path the
+   * user already had.
+   */
+  const [mwaReady, setMwaReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    registerMobileWalletAdapter(publicAppUrl('/')).then((ok) => {
+      if (alive && ok) setMwaReady(true);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  /*
    * Must leave our own WebView.
    *
    * lib/browser.js openUrl() prefers the in-app browser plugin, which would
@@ -296,7 +362,9 @@ export default function SolanaSwap({ embedded = false }) {
         const q = await getOceanQuote({
           inputMint: fromToken.mint,
           outputMint: toToken.mint,
-          amount: base
+          amount: base,
+          /* The user's setting, finally reaching the request. */
+          slippageBps
         });
         if (reqSeq.current !== seq) return; // a newer request won
         if (!q?.outAmount || q.outAmount === '0') {
@@ -315,7 +383,7 @@ export default function SolanaSwap({ embedded = false }) {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(id);
-  }, [amount, fromToken, toToken, address]);
+  }, [amount, fromToken, toToken, address, slippageBps]);
 
   /* -------------------------------- swap --------------------------------- */
 
@@ -341,7 +409,13 @@ export default function SolanaSwap({ embedded = false }) {
         inputMint: fromToken.mint,
         outputMint: toToken.mint,
         amount: toBaseUnits(amount, fromToken.decimals),
-        account: address
+        account: address,
+        /*
+         * MUST match the quote above. Building the signable transaction with
+         * a different tolerance than the one priced would mean the user
+         * consented to one number and signed another.
+         */
+        slippageBps
       });
 
       if (!built?.transaction) throw new Error('NO_TRANSACTION');
@@ -433,7 +507,16 @@ export default function SolanaSwap({ embedded = false }) {
               {t('wallet.disconnect')}
             </button>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={connect} disabled={connecting || !hasWallet}>
+            /*
+              Enabled when EITHER path exists. Gating on `hasWallet` alone kept
+              the button disabled on Android Chrome even after MWA registered
+              successfully - the exact dead end MWA was added to remove.
+            */
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={connect}
+              disabled={connecting || (!hasWallet && !mwaReady)}
+            >
               {connecting ? t('wallet.connecting') : t('wallet.connect')}
             </button>
           )}
@@ -454,7 +537,12 @@ export default function SolanaSwap({ embedded = false }) {
           in-app browser, where the provider IS injected. So instead of an
           error, this offers the button that actually gets them there.
         */}
-        {!hasWallet && (
+        {/*
+          `mwaReady` suppresses this whole block: on Android Chrome the user now
+          has a working in-place connection, so telling them to reopen the page
+          inside a wallet would send them out of a flow that already works.
+        */}
+        {!hasWallet && !mwaReady && (
           canInject ? (
             <p className="notice notice-danger" style={{ marginTop: 11 }}>
               {t('solana.noWallet')}

@@ -8330,5 +8330,124 @@ export default function run() {
     }
   }
 
+  /* ---- 88. Solana settings, MWA, calm music, and the decimals bug ------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── "SWAP SETTINGS DO NOT WORK ON THE SOLANA TAB" ──────────────────────
+     * They did not. The gear lives in Swap.jsx's SHARED header, above the tab
+     * switcher, so it looked like it governed whichever tab was open — while
+     * every control inside wrote to EVM-only state. SolanaSwap had no slippage
+     * state at all and never sent one, so every Solana swap silently used
+     * OpenOcean's server default whatever the user had chosen.
+     *
+     * `getOceanQuote`/`getOceanSwap` accepted `slippageBps` from the day they
+     * were written. Neither call site supplied it.
+     */
+    const solPage = code(read('src/pages/SolanaSwap.jsx'));
+    t('the Solana screen reads the stored slippage',
+      /useSettingsStore\(\(s\) => s\.defaultSlippage\)/.test(solPage));
+    t('...and sends it when pricing', (solPage.match(/slippageBps/g) || []).length >= 3);
+    /*
+     * The swap must use the SAME tolerance as the quote, or the user consented
+     * to one number and signed another.
+     */
+    t('...and re-quotes when it changes',
+      /address, slippageBps\]/.test(solPage));
+    /*
+     * 0 bps means "no tolerance at all" and fails every quote on a moving
+     * market, so the conversion floors at 1.
+     */
+    t('...and never sends zero basis points',
+      /Math\.max\(1, Math\.round\(pct \* 100\)\)/.test(code(read('src/pages/SolanaSwap.jsx'))));
+    /* The sheet must show Solana-relevant controls, not EVM-only ones. */
+    t('the settings sheet branches for the Solana tab',
+      /chainTab === 'solana' \?/.test(code(read('src/pages/Swap.jsx'))));
+
+    /*
+     * ─── MOBILE WALLET ADAPTER ──────────────────────────────────────────────
+     * Asked whether other Solana connection methods exist. One does now that
+     * did not before: the official @solana-mobile/wallet-standard-mobile, which
+     * gives Chrome for Android a real in-place connection where previously
+     * there was none (extensions do not exist on mobile).
+     */
+    const sw = code(read('src/lib/solanaWallet.js'));
+    t('Mobile Wallet Adapter can be registered', /registerMwa/.test(sw));
+    /*
+     * Solana Mobile's own platform table: iOS NOT supported, due to platform
+     * restrictions on inter-app communication. Offering it there would be a
+     * button that opens nothing.
+     */
+    t('...and is refused on iOS and desktop', /Android/i.test(sw) && /canUseMwa/.test(sw));
+    /* A Capacitor WebView is not Chrome; the intent result never returns. */
+    t('...and refused inside our own APK', /isNativeShell\(\)/.test(sw));
+    /*
+     * MWA registers as a WALLET STANDARD wallet — it never appears on
+     * window.solana, so getSolanaProvider cannot see it.
+     */
+    t('...and is discovered through Wallet Standard, not window.solana',
+      /navigator\?\.wallets/.test(sw));
+    /*
+     * Wallet Standard returns accounts as an array of objects whose `address`
+     * is ALREADY a base58 string. Reusing the injected path's
+     * `publicKey.toString()` would yield "[object Object]" as an address.
+     */
+    t('...and reads the address from the accounts array',
+      /accounts\?\.\[0\]\?\.address/.test(sw));
+    /* Disconnect must clear it or the UI shows a connected wallet forever. */
+    t('...and disconnect clears the MWA session', /mwaAddress = null/.test(sw));
+    /* Lazy import, or the package ships to every user who cannot use it. */
+    t('...and the package is imported dynamically',
+      /await import\('@solana-mobile\/wallet-standard-mobile'\)/.test(sw));
+    /* The button must not stay disabled once MWA is available. */
+    t('...and the connect button accepts either path',
+      /!hasWallet && !mwaReady/.test(solPage));
+
+    /*
+     * ─── THE CALM SECTION'S FIRST TRACK ─────────────────────────────────────
+     * Reported broken. It was: `subject:ambient` matches anything TAGGED
+     * ambient, and archive.org tags are author-supplied and cumulative. The
+     * two items arriving at the top were tagged ambient AND, respectively,
+     * `industrial/dark/drone` (Russian spoken word) and `harsh noise`
+     * ("Humanhater"). Both legitimately ambient-tagged; neither remotely calm.
+     */
+    const calm = code(read('server/calm.js'));
+    t('harsh genres are excluded from the calm search',
+      /NOT subject:\(/.test(calm) && /harsh/.test(calm));
+    /*
+     * Re-checked on the RESULT too, because the query and the returned
+     * metadata are not guaranteed to agree and `subject` can arrive as a bare
+     * string rather than an array.
+     */
+    t('...and re-checked on each result', /calmSubjectOk\(d\.subject\)/.test(calm));
+    /* Without requesting `subject` the re-check receives undefined and passes
+       everything, which would make it decoration. */
+    t('...with the subject field actually requested',
+      /fl%5B%5D=subject/.test(calm));
+
+    /*
+     * ─── THE DECIMALS BUG THE TRON SCREEN EXPOSED ───────────────────────────
+     * The loss percentage divided raw integers on the stated assumption that
+     * "USDC and USDT are both 6-decimal". True everywhere we offered when it
+     * was written; FALSE on BNB Chain, where both carry 18.
+     *
+     * Measured live: 100 USDC from BSC returned a correct quote and
+     * `lossPercent: 100`. The bridge was fine; the arithmetic said the user
+     * lost everything. A false 100% over a working route destroys trust in the
+     * one warning on that screen that matters.
+     */
+    const xc = code(read('server/xchain.js'));
+    t('the loss figure scales by each side decimals',
+      /sellDecimals/.test(xc) && /buyDecimals/.test(xc));
+    t('...and refuses to report an impossible loss',
+      /pct >= 0 && pct < 100/.test(xc));
+    t('...and the Tron panel sends the real token decimals',
+      /sellDecimals: String\(token\.decimals\)/.test(code(read('src/components/TronPanel.jsx'))));
+  }
+
   return rows;
 }
