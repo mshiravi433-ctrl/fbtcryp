@@ -31,8 +31,8 @@ no email, no identity check, and no company wallet holding your money.
 
 WHAT IT DOES
 
-• Swap tokens on seven networks: BNB Smart Chain, Ethereum, Polygon,
-  Arbitrum One, Base, Optimism and Avalanche.
+• Swap tokens on ten networks: BNB Smart Chain, Ethereum, Polygon,
+  Arbitrum One, Base, Optimism, Avalanche, Linea, Sonic and Solana.
 • Thousands of tokens from public token lists, with search by ticker, name or
   contract address — plus import-any-contract if a token is too new to be
   listed.
@@ -142,10 +142,10 @@ routing interface to public smart contracts.
 
 | Field | Value |
 |---|---|
-| Email | your support email (required, shown publicly) |
-| Website | your Vercel URL, e.g. `https://<your-app>.vercel.app` |
+| Email | `fbtswap@gmail.com` (required, shown publicly) |
+| Website | `https://fbtswap.ir` |
 | Phone | leave empty — it is optional and it becomes public |
-| Privacy policy URL | `https://<your-app>.vercel.app/legal/privacy` |
+| Privacy policy URL | `https://fbtswap.ir/#/legal/privacy` — **the `#` is required**, the path without it 404s |
 
 The privacy policy URL is **mandatory** and Google does open it. It must be a
 public page that loads without login. The app already serves that route.
