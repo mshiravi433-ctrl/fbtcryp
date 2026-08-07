@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
+import Switch from '../components/Switch';
 import Sheet from '../components/Sheet';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useWallet, shortAddress } from '../context/WalletContext';
@@ -88,24 +89,6 @@ function Row({ icon: Icon, label, sub, right, onClick }) {
   );
 }
 
-function Switch({ on, onChange }) {
-  // The knob is positioned with `inset-inline-start`, which flips sides in
-  // RTL — but `x` is a physical transform that always moves right. In Persian
-  // the knob therefore started at the right edge and slid further right, out
-  // of the track. Travel must follow the writing direction.
-  const rtl = typeof document !== 'undefined' && document.documentElement.getAttribute('dir') === 'rtl';
-  const travel = rtl ? -19 : 19;
-
-  return (
-    <button className="switch" data-on={on} onClick={onChange} type="button" role="switch" aria-checked={on}>
-      <motion.span
-        className="switch-knob"
-        animate={{ x: on ? travel : 0 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-      />
-    </button>
-  );
-}
 
 export default function Settings() {
   const { t, i18n } = useTranslation();

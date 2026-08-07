@@ -43,6 +43,77 @@ export const DEFAULT_SLIPPAGE = 0.5; // percent
 export const DEFAULT_DEADLINE_MIN = 20;
 
 /**
+ * Suggest a slippage tolerance for the pair actually being swapped.
+ *
+ * ─── WHY A SINGLE NUMBER IS WRONG IN BOTH DIRECTIONS ────────────────────────
+ * The screen shipped with a fixed 0.5%. On a stablecoin pair that is already
+ * three times more than needed, and every basis point of it is headroom a
+ * sandwich bot is free to take. On a thin token it fails outright, so the user
+ * raises it to 3% — and 3% then STAYS SET for their next USDT swap, where it
+ * is an open invitation.
+ *
+ * That is the real failure: not that the default is wrong for some pair, but
+ * that the correction persists into pairs where it is dangerous. Deriving it
+ * per quote is what removes the incentive to set a blanket-high value.
+ *
+ * ─── WHY IT KEYS OFF PRICE IMPACT AND NOT A TOKEN LIST ──────────────────────
+ * A hardcoded list of "safe" tokens goes stale, and it cannot see that a pair
+ * is thin ON THIS CHAIN today. Price impact is the live measurement of exactly
+ * the thing slippage protects against: how far this trade moves the pool. It
+ * comes back in the quote we already have, so this costs no extra request.
+ *
+ * Returns a REASON as well as a number, because a UI that says "1.2%" teaches
+ * nothing while one that says "1.2% — this pair is thin" teaches the user why
+ * their next trade might differ.
+ *
+ * @param {object} opts
+ * @param {number|null} opts.priceImpact  percent, from the quote
+ * @param {boolean} opts.bothStable       both sides are stablecoins
+ * @returns {{ slippage: number, reason: string }}
+ */
+export function suggestSlippage({ priceImpact = null, bothStable = false } = {}) {
+  /*
+   * Stablecoin pairs first, and deliberately BEFORE the null check below: a
+   * USDC/USDT swap should get the tight value even on the first render when no
+   * quote has arrived yet, because that is the common case and widening it
+   * later would only ever be a downgrade.
+   */
+  if (bothStable) return { slippage: 0.1, reason: 'stable' };
+
+  /*
+   * `Number(null)` is 0 and 0 is finite — so the null test has to come FIRST
+   * and separately, or a missing impact reads as a perfect zero-impact trade
+   * and returns the tightest tolerance for a pair we know nothing about.
+   */
+  if (priceImpact == null) return { slippage: DEFAULT_SLIPPAGE, reason: 'default' };
+  const impact = Number(priceImpact);
+  if (!Number.isFinite(impact)) return { slippage: DEFAULT_SLIPPAGE, reason: 'default' };
+
+  const abs = Math.abs(impact);
+
+  /*
+   * Headroom above the measured impact, not a replacement for it. The trade
+   * already moves the price by `abs`; slippage must cover that PLUS whatever
+   * moves between quoting and mining. Below 0.3% impact the pair is deep and
+   * the default is generous enough.
+   */
+  if (abs < 0.3) return { slippage: DEFAULT_SLIPPAGE, reason: 'deep' };
+
+  /*
+   * Capped at 5%. Above that the honest answer is "this trade is too big for
+   * this pool", and quietly widening tolerance to let it through would hand
+   * the difference to a sandwich bot while looking like a convenience.
+   */
+  const suggested = Math.min(5, Math.round((abs + 0.5) * 10) / 10);
+  return { slippage: suggested, reason: abs >= 2 ? 'thin' : 'moderate' };
+}
+
+/** Symbols we treat as dollar-pegged for the pairing rule above. */
+const STABLES = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDD', 'USDP', 'USD₮0']);
+
+export const isStableSymbol = (s) => STABLES.has(String(s ?? '').toUpperCase());
+
+/**
  * Minimum native coin to leave behind for gas, per chain, when a user taps MAX.
  *
  * These are floors, not estimates — the live estimate is used when it is

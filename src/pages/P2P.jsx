@@ -245,31 +245,89 @@ export default function P2P() {
             </motion.div>
           </section>
 
+          {/*
+            ─── THE PART THAT WAS MISSING: HOW TO ACTUALLY DO IT ───────────────
+            Asked to write the cash-buying section better. Reading it back, the
+            screen explained why we do not run a desk, listed three desks, and
+            then listed four ways to be defrauded — but never once told someone
+            HOW to complete a purchase. It was all context and warning with no
+            instruction, which is why it read as discouraging rather than
+            useful.
+
+            The OTC tab already has a numbered `p2p.step.*` list for sending to
+            a person. The fiat side had no equivalent. This is it, and the order
+            is the order the actions actually happen in, so it can be followed
+            with the desk open in another tab.
+          */}
           <section>
-            <p className="section-label">{t('p2p.scamsTitle')}</p>
-            <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-              {SCAMS.map((k, i) => (
-                <motion.div key={k} className="card card-tight" variants={riseIn}>
-                  <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                    <span
-                      className="mono"
-                      style={{
-                        minWidth: 20, height: 20, borderRadius: 6, display: 'grid', placeItems: 'center',
-                        fontSize: 10, fontWeight: 700, flexShrink: 0,
-                        background: 'rgba(255,59,107,.16)', color: 'var(--down)'
-                      }}
-                    >
-                      {i + 1}
-                    </span>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 12.6 }}>{t(`p2p.scam.${k}.title`)}</div>
-                      <p className="prose-sm" style={{ marginTop: 3 }}>{t(`p2p.scam.${k}.body`)}</p>
-                    </div>
-                  </div>
-                </motion.div>
+            <p className="section-label">{t('p2p.howTitle')}</p>
+            <p className="prose-sm" style={{ marginTop: 4 }}>{t('p2p.howIntro')}</p>
+            <motion.ol className="p2p-steps" variants={stagger} initial="hidden" animate="show">
+              {['b1', 'b2', 'b3', 'b4', 'b5', 'b6'].map((k) => (
+                <motion.li key={k} variants={riseIn}>{t(`p2p.buyStep.${k}`)}</motion.li>
               ))}
-            </motion.div>
+            </motion.ol>
           </section>
+
+          {/*
+            ─── EVERY WARNING, IN ONE BOX THAT OPENS ───────────────────────────
+            Asked for directly. This tab previously rendered SIX separate
+            warning surfaces: four always-expanded red-numbered scam cards, the
+            liability notice, and the restrictions link. On a phone that is a
+            column of alarm the user scrolls past to reach the desk buttons.
+
+            That is the exact mechanism InfoBox was built for and documented
+            against: when every block is a warning, none of them is. The
+            content is unchanged and nothing is deleted — the four scams keep
+            their numbers and their full text, one tap away, under a title that
+            states what is inside.
+
+            `defaultOpen` is false on purpose. A collapsed box with an
+            informative title is read; an expanded wall is skipped. The single
+            thing that could cost money on THIS tap — the liability notice —
+            stays as its own box below rather than being buried in with the
+            educational content.
+          */}
+          <InfoBox title={t('p2p.scamsTitle')} tone="warn" id="p2p-scams">
+            <p style={{ marginBottom: 10 }}>{t('p2p.scamsIntro')}</p>
+            <div className="stack" style={{ gap: 10 }}>
+              {SCAMS.map((k, i) => (
+                <div key={k} className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+                  <span
+                    className="mono"
+                    style={{
+                      minWidth: 20, height: 20, borderRadius: 6, display: 'grid', placeItems: 'center',
+                      fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      background: 'rgba(255,59,107,.16)', color: 'var(--down)'
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 12.6 }}>{t(`p2p.scam.${k}.title`)}</div>
+                    <p className="prose-sm" style={{ marginTop: 3 }}>{t(`p2p.scam.${k}.body`)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </InfoBox>
+
+          {/*
+            ─── PHYSICAL CASH, WHICH THE SCREEN NEVER ADDRESSED ────────────────
+            "Buy with cash" listed three online desks and stopped. But handing
+            somebody banknotes in person is how a large share of real P2P
+            happens here, and it is the case with NO escrow, no arbitration and
+            no reversal — the most dangerous one, and the one we said nothing
+            about.
+
+            It is not discouraged into silence, because saying nothing does not
+            stop anybody; it just means they do it without the two rules that
+            matter (meet somewhere with cameras, and verify on-chain yourself
+            rather than trusting a screenshot).
+          */}
+          <InfoBox title={t('p2p.cashTitle')} tone="warn" id="p2p-cash">
+            <p>{t('p2p.cashBody')}</p>
+          </InfoBox>
 
           <InfoBox title={t('p2p.noticeTitle')} tone="danger" id="p2p-notice">
             <p>{t('p2p.notice')}</p>

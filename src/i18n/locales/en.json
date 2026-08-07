@@ -514,7 +514,28 @@
       "evm": "EVM chains",
       "solana": "Solana"
     },
-    "rwaFreezeNotice": "PAXG and XAUt are claims on gold held by a company, not bearer assets. Paxos and Tether can each freeze a balance to comply with a legal order, and Paxos’s contract can also burn one. That has not happened to ordinary holders, but it is a real difference from ETH or BTC and you should know it before buying."
+    "rwaFreezeNotice": "PAXG and XAUt are claims on gold held by a company, not bearer assets. Paxos and Tether can each freeze a balance to comply with a legal order, and Paxos’s contract can also burn one. That has not happened to ordinary holders, but it is a real difference from ETH or BTC and you should know it before buying.",
+    "auto": "Auto",
+    "autoUsing": "Using {{pct}}% — {{reason}}",
+    "autoReason": {
+      "stable": "both sides are stablecoins, so almost no movement is expected",
+      "deep": "this pair is deep, the default is enough",
+      "moderate": "this trade moves the price a little, so it needs headroom",
+      "thin": "this pair is thin and your trade moves it noticeably",
+      "default": "no quote yet, using the standard value"
+    },
+    "slippageWhat": "What is slippage tolerance?",
+    "deadline": "Transaction deadline",
+    "deadlineWhat": "What is a deadline?",
+    "deadlineHelp": "If your transaction is still unconfirmed after this long, it reverts instead of executing. That matters when the network is busy: a swap that sits pending for an hour and then goes through does so at an hour-old price. Reverting costs the gas, but not the difference.",
+    "minutes": "{{n}} min",
+    "expert": "Expert mode",
+    "expertSub": "Skip the confirmation screen and allow high slippage",
+    "expertWarn": "The review screen is now skipped. Your swap is submitted the moment you tap the button, with no second chance to check the amounts.",
+    "saveAsDefault": "Save {{pct}}% as my default",
+    "compared": "Price sources",
+    "comparedN": "compared {{n}}",
+    "beatenBy": "Best quote-only route led by"
   },
   "onboarding": {
     "skip": "Skip",
@@ -1565,7 +1586,20 @@
       "s4": "Send a small test amount first when the sum is large. Losing a dollar to a mistake is a lesson; losing the whole amount is not recoverable.",
       "s5": "Send the rest, then give them the transaction link so they can verify it on-chain themselves."
     },
-    "noticeTitle": "We do not run these platforms and cannot recover your money"
+    "noticeTitle": "We do not run these platforms and cannot recover your money",
+    "howTitle": "How to buy with cash, step by step",
+    "howIntro": "Every desk below works the same way. The escrow is what protects you, so the whole method is: never leave it, and never release before the money is genuinely in your account.",
+    "buyStep": {
+      "b1": "Open one of the desks below and create an account. You will need identity verification — that is not optional on any real desk, and a platform offering to skip it is the warning sign, not the bargain.",
+      "b2": "Choose BUY, pick your own currency, and sort by price. Ignore the very best rate and look at the seller's completed-order count and release time instead. A rate two percent worse from someone with 5,000 trades is the cheaper option once your time is counted.",
+      "b3": "Open the order for the amount you want. The moment you do, the desk LOCKS the seller's crypto in escrow. They cannot take it back, and this is the only thing standing between you and a stranger — which is why every instruction below is about not leaving it.",
+      "b4": "Pay using the exact method the order names, from an account in YOUR OWN name. Send the precise amount. Never write 'crypto', 'USDT' or the desk's name in the payment reference — banks freeze accounts over that wording.",
+      "b5": "Mark the order paid and upload your receipt. Then wait. The seller releases and the crypto lands in your desk account, usually in minutes.",
+      "b6": "Withdraw to your own wallet — do not leave it sitting on the desk. Copy your address from the Wallet screen, pick the SAME network on both sides, and send a small test amount first if the sum is large."
+    },
+    "scamsIntro": "Every one of these works by getting you outside the escrow, or by getting you to release before the money is really yours. If you recognise the shape, none of them work.",
+    "cashTitle": "Buying with physical cash, in person",
+    "cashBody": "Meeting someone with banknotes has no escrow at all — nothing can be reversed and nobody can arbitrate. If you do it anyway: meet inside a bank branch or a police-station lobby in daylight, count the notes before touching your phone, and have the sender broadcast the transaction while you are both standing there. Never travel to a private address, and never hand over cash against a screenshot — only against a confirmation you have read on-chain yourself."
   },
   "rank": {
     "title": "Ranking",

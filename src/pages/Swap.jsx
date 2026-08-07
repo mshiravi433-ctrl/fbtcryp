@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
+import Switch from '../components/Switch';
 import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
@@ -20,6 +21,7 @@ import {
 } from '../lib/tokenLists';
 import { notifyTrade, primeAudio } from '../lib/notify';
 import {
+  DEFAULT_DEADLINE_MIN,
   DEFAULT_SLIPPAGE,
   approveToken,
   estimateGasCost,
@@ -27,7 +29,9 @@ import {
   getBalances,
   getPriceImpact,
   getQuote,
-  needsApproval
+  isStableSymbol,
+  needsApproval,
+  suggestSlippage
 } from '../lib/swap';
 import TokenIcon from '../lib/tokenIcon';
 import SolanaSwap from './SolanaSwap';
@@ -96,8 +100,58 @@ export default function Swap() {
   const [slippage, setSlippage] = useState(
     () => useSettingsStore.getState().defaultSlippage ?? DEFAULT_SLIPPAGE
   );
+
+  /*
+   * ─── AUTO SLIPPAGE ──────────────────────────────────────────────────────
+   * On by default. See `suggestSlippage` in lib/swap.js for why a single fixed
+   * number is wrong in both directions — the short version is that the 3% a
+   * user sets to get a thin token through then STAYS SET for their next USDT
+   * swap, where it is free money for a sandwich bot.
+   *
+   * Turning it off is sticky for the session: an override that keeps reverting
+   * is worse than no override.
+   */
+  const [autoSlippage, setAutoSlippage] = useState(true);
+
+  /*
+   * The transaction deadline, in minutes.
+   *
+   * `executeSwap` and `executeAggregatorSwap` have both accepted
+   * `deadlineMinutes` since they were written and NOTHING ever passed it, so
+   * every swap this app has made used the hardcoded 20. It is now a real
+   * control and is actually forwarded at the call site.
+   */
+  const [deadlineMin, setDeadlineMin] = useState(DEFAULT_DEADLINE_MIN);
+
+  const expertMode = useSettingsStore((s) => s.expertMode);
+  const storedSlippage = useSettingsStore((s) => s.defaultSlippage);
+
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
+  const [impact, setImpact] = useState(null);
+
+  /*
+   * ─── THE SLIPPAGE ACTUALLY USED ─────────────────────────────────────────
+   * One derived value, so the number shown in Settings, the number shown in
+   * the review sheet, and the number sent to the router can never disagree.
+   * Keeping three copies in sync by hand is precisely how a user ends up
+   * consenting to one figure and signing another.
+   *
+   * ─── AND WHY IT IS DECLARED HERE, NOT NEXT TO THE OTHER DERIVED VALUES ──
+   * `const` is hoisted but not initialised, so a reference before this line is
+   * a ReferenceError, not `undefined`. Declared lower down it read fine and
+   * crashed the whole screen on mount — the quote effect closes over it ~250
+   * lines earlier. The render test caught it; the browser would have shown a
+   * blank page. It has to sit above its first use.
+   */
+  const slippageAdvice = useMemo(
+    () => suggestSlippage({
+      priceImpact: impact,
+      bothStable: isStableSymbol(fromToken?.symbol) && isStableSymbol(toToken?.symbol)
+    }),
+    [impact, fromToken?.symbol, toToken?.symbol]
+  );
+  const effectiveSlippage = autoSlippage ? slippageAdvice.slippage : slippage;
 
   /*
    * PRE-FILL FROM A LIMIT ORDER / DCA PLAN.
@@ -249,7 +303,8 @@ export default function Swap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, chainId]);
   const [balances, setBalances] = useState({});
-  const [impact, setImpact] = useState(null);
+  /* `impact` is declared earlier, beside the quote state: `slippageAdvice`
+     derives from it and must not sit in its temporal dead zone. */
   const [gasCost, setGasCost] = useState(null);
   const [picker, setPicker] = useState(null); // 'from' | 'to'
   const [pickerQuery, setPickerQuery] = useState('');
@@ -399,7 +454,11 @@ export default function Swap() {
     const timer = setTimeout(async () => {
       try {
         const provider = await wallet.getReadProvider(chainId);
-        const q = await getQuote({ provider, chainId, fromToken, toToken, amountIn: amount, slippage });
+        const q = await getQuote({
+          provider, chainId, fromToken, toToken, amountIn: amount,
+          /* The value the router will actually use - see effectiveSlippage. */
+          slippage: effectiveSlippage
+        });
         if (seq !== quoteSeq.current) return; // a newer request superseded this one
         setQuote(q);
         if (q && !q.error) {
@@ -418,7 +477,7 @@ export default function Swap() {
     }, 420); // debounce typing
 
     return () => clearTimeout(timer);
-  }, [amount, fromToken, toToken, slippage, chainId, wallet, fromSym, toSym]);
+  }, [amount, fromToken, toToken, effectiveSlippage, chainId, wallet, fromSym, toSym]);
 
   // refresh the quote every 15s so it can't go stale under the user
   useEffect(() => {
@@ -553,11 +612,22 @@ export default function Swap() {
 
       // 2. re-quote right before sending — prices move while you approve
       setTxState({ stage: 'quoting' });
-      const fresh = await getQuote({ provider, chainId, fromToken, toToken, amountIn: amount, slippage });
+      const fresh = await getQuote({
+        provider, chainId, fromToken, toToken, amountIn: amount,
+        slippage: effectiveSlippage
+      });
       if (!fresh || fresh.error) throw new Error('QUOTE_EXPIRED');
 
       setTxState({ stage: 'signing' });
-      const tx = await executeSwap({ signer, chainId, fromToken, toToken, quote: fresh });
+      /*
+       * `deadlineMinutes` is forwarded for the first time here. It has been a
+       * parameter of executeSwap since the file was written, defaulting to 20,
+       * and no caller ever supplied one — so the Settings control that now
+       * exists would have been pure decoration without this line.
+       */
+      const tx = await executeSwap({
+        signer, chainId, fromToken, toToken, quote: fresh, deadlineMinutes: deadlineMin
+      });
       setTxState({ stage: 'pending', hash: tx.hash });
       haptic?.('medium');
 
@@ -639,6 +709,7 @@ export default function Swap() {
       : Number(amount) > fromBal;
   const canSwap = wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
   const highImpact = impact != null && impact > 5;
+
 
   /**
    * Gas warning. The native balance has to cover the estimated gas AND, when
@@ -974,6 +1045,46 @@ export default function Swap() {
                     : `${quote.hops} ${t('swap.hops')}`}
                 </span>
               </div>
+
+              {/*
+                ─── "COMPARED N SOURCES", WHICH WAS COMPUTED AND NEVER SHOWN ───
+                `getQuote` has been returning `routesChecked` and `beatenBy`,
+                with a comment in lib/swap.js saying routesChecked "drives the
+                'compared N routes' line in the UI". No such line existed —
+                nothing in the app read either field. The work of quoting three
+                aggregators was being done on every keystroke and thrown away.
+
+                It is worth showing for a reason beyond decoration: the single
+                most common objection to a wallet swap is "you are hiding a
+                worse price behind convenience". Naming the number of venues
+                checked answers that, and it is a claim we can actually back.
+              */}
+              {quote.routesChecked > 1 && (
+                <div className="row-between">
+                  <span className="faint">{t('swap.compared')}</span>
+                  <span className="mono faint" style={{ fontSize: 10.5 }}>
+                    {t('swap.comparedN', { n: quote.routesChecked })}
+                  </span>
+                </div>
+              )}
+
+              {/*
+                And when a source we CANNOT execute quoted better, say so.
+
+                Hiding it would be the easy choice. But `beatenBy` exists
+                precisely because bestQuote.js refuses to sign a quote-only
+                route, and a user who later checks that venue and finds a
+                better number should have heard it from us first. Only shown
+                above 0.1% — below that it is noise, not a shortfall.
+              */}
+              {quote.beatenBy > 10 && (
+                <div className="row-between">
+                  <span className="faint">{t('swap.beatenBy')}</span>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+                    {(quote.beatenBy / 100).toFixed(2)}%
+                  </span>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1204,29 +1315,144 @@ export default function Swap() {
       {/* ------------------------------ settings ----------------------------- */}
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title={t('swap.settings')}>
         <label className="field-label">{t('swap.slippage')}</label>
+
+        {/*
+          ─── AUTO IS THE DEFAULT, AND IT IS NOT COSMETIC ──────────────────────
+          A fixed slippage is wrong in both directions: 0.5% fails constantly on
+          a thin token, and the 3% someone sets to escape that stays set on the
+          next USDT swap, where it is an invitation to be sandwiched.
+
+          `autoSlippage` derives it from the pair being quoted — see
+          `suggestSlippage` in lib/swap.js. The user can still pin a number, and
+          pinning is remembered for the session, because an override that keeps
+          silently reverting is worse than no override at all.
+        */}
         <div className="row" style={{ gap: 6 }}>
+          <button
+            className={`tag ${autoSlippage ? 'active' : ''}`}
+            style={{ flex: 1, textAlign: 'center' }}
+            onClick={() => { haptic?.('select'); setAutoSlippage(true); }}
+          >
+            {t('swap.auto')}
+          </button>
           {[0.1, 0.5, 1, 3].map((s) => (
             <button
               key={s}
-              className={`tag ${slippage === s ? 'active' : ''}`}
+              className={`tag ${!autoSlippage && slippage === s ? 'active' : ''}`}
               style={{ flex: 1, textAlign: 'center' }}
-              onClick={() => setSlippage(s)}
+              onClick={() => { haptic?.('select'); setAutoSlippage(false); setSlippage(s); }}
             >
               {s}%
             </button>
           ))}
         </div>
-        <input
-          type="number"
-          step="0.1"
-          min="0.05"
-          max="50"
-          value={slippage}
-          onChange={(e) => setSlippage(Math.min(50, Math.max(0.05, Number(e.target.value) || 0.5)))}
-          style={{ marginTop: 10 }}
-        />
-        <p className="notice" style={{ marginTop: 10 }}>{t('swap.slippageHelp')}</p>
-        {slippage > 3 && <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('swap.slippageHigh')}</p>}
+
+        {autoSlippage ? (
+          <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
+            {t('swap.autoUsing', { pct: effectiveSlippage, reason: t(`swap.autoReason.${slippageAdvice.reason}`) })}
+          </p>
+        ) : (
+          <input
+            type="number"
+            step="0.1"
+            min="0.05"
+            max="50"
+            value={slippage}
+            onChange={(e) => setSlippage(Math.min(50, Math.max(0.05, Number(e.target.value) || 0.5)))}
+            style={{ marginTop: 10 }}
+          />
+        )}
+
+        <InfoBox title={t('swap.slippageWhat')} tone="info" id="swap-slippage-help">
+          <p>{t('swap.slippageHelp')}</p>
+        </InfoBox>
+
+        {/*
+          Stays a plain inline notice, never folded away: this one describes
+          what the NEXT tap will do with the user's money. InfoBox is for
+          explaining how a market works, not for hiding live risk.
+        */}
+        {effectiveSlippage > 3 && (
+          <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('swap.slippageHigh')}</p>
+        )}
+
+        {/*
+          ─── TRANSACTION DEADLINE ─────────────────────────────────────────────
+          `deadlineMinutes` has been a parameter of `executeSwap` and
+          `executeAggregatorSwap` since they were written, defaulting to 20, and
+          NOTHING has ever passed it — so the value was unreachable and every
+          swap silently used 20 minutes.
+
+          It matters on a congested chain: a transaction that sits pending for
+          twenty minutes and then executes does so at a price from twenty
+          minutes ago. A short deadline makes it revert instead, which costs gas
+          but not the difference.
+        */}
+        <label className="field-label" style={{ marginTop: 16 }}>{t('swap.deadline')}</label>
+        <div className="row" style={{ gap: 6 }}>
+          {[5, 20, 60].map((m) => (
+            <button
+              key={m}
+              className={`tag ${deadlineMin === m ? 'active' : ''}`}
+              style={{ flex: 1, textAlign: 'center' }}
+              onClick={() => { haptic?.('select'); setDeadlineMin(m); }}
+            >
+              {t('swap.minutes', { n: m })}
+            </button>
+          ))}
+        </div>
+        <InfoBox title={t('swap.deadlineWhat')} tone="info" id="swap-deadline-help">
+          <p>{t('swap.deadlineHelp')}</p>
+        </InfoBox>
+
+        {/*
+          ─── EXPERT MODE, SHOWN WHERE IT APPLIES ──────────────────────────────
+          It already exists in Settings and is read by this screen to decide
+          whether the review sheet can be skipped. Mirroring it here is not a
+          duplicate control — it is the same store value — but it is the only
+          place the user is actually about to feel its effect.
+        */}
+        <div className="set-row" style={{ marginTop: 16 }}>
+          <span className="set-row-label">
+            <div>{t('swap.expert')}</div>
+            <div className="set-row-sub">{t('swap.expertSub')}</div>
+          </span>
+          {/*
+            The real Switch component, not `<input type="checkbox">`.
+            `.switch` in index.css styles a BUTTON with `data-on` and an
+            animated `.switch-knob` child — a checkbox with that class matches
+            the selector, inherits the track, and then draws the browser's
+            native tick inside it with no knob. It would look broken rather
+            than fail loudly, which is the same shape as the invented
+            `className="seg"` that shipped here once before.
+          */}
+          <Switch
+            on={expertMode}
+            label={t('swap.expert')}
+            onChange={() => { haptic?.('select'); useSettingsStore.getState().toggle('expertMode'); }}
+          />
+        </div>
+        {expertMode && (
+          <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('swap.expertWarn')}</p>
+        )}
+
+        {/*
+          Persisting the per-swap choice as the new default. Without this the
+          user re-sets the same number on every visit, because the screen seeds
+          from `defaultSlippage` on mount.
+        */}
+        {!autoSlippage && slippage !== storedSlippage && (
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 14, width: '100%' }}
+            onClick={() => {
+              haptic?.('light');
+              useSettingsStore.getState().setSlippage(slippage);
+            }}
+          >
+            {t('swap.saveAsDefault', { pct: slippage })}
+          </button>
+        )}
       </Sheet>
 
       {/* ------------------------------- review ------------------------------ */}
@@ -1263,7 +1489,7 @@ export default function Swap() {
               )}
               <div className="row-between">
                 <span className="faint">{t('swap.slippage')}</span>
-                <span className="mono">{slippage}%</span>
+                <span className="mono">{effectiveSlippage}%</span>
               </div>
               <div className="row-between">
                 <span className="faint">{t('swap.recipient')}</span>

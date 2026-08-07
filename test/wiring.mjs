@@ -7885,5 +7885,188 @@ export default function run() {
       code(read('server/app.js')).includes('fcmDetail'));
   }
 
+  /* ---- 85. Swap settings, and the three controls wired to nothing ------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const swapLib = code(read('src/lib/swap.js'));
+    const swapPage = code(read('src/pages/Swap.jsx'));
+
+    /*
+     * ─── AUTO SLIPPAGE ──────────────────────────────────────────────────────
+     * A single fixed tolerance is wrong in both directions, and the damage is
+     * not the wrong default — it is that the 3% someone sets to push a thin
+     * token through STAYS SET for their next stablecoin swap, where it is free
+     * money for a sandwich bot. Deriving it per pair is what removes the
+     * incentive to set a blanket-high value.
+     */
+    t('slippage can be derived from the pair', /export function suggestSlippage/.test(swapLib));
+    /*
+     * `Number(null)` is 0 and 0 is finite. If the null guard does not come
+     * FIRST, a missing price impact reads as a perfect zero-impact trade and
+     * returns the TIGHTEST tolerance for a pair we know nothing about — the
+     * worst possible direction to be wrong in. Hit before in priceAlerts.
+     */
+    t('...and treats a missing impact as unknown, not as zero',
+      /priceImpact == null/.test(swapLib));
+    t('...and caps the suggestion rather than widening without limit',
+      /Math\.min\(5,/.test(swapLib));
+    /*
+     * A reason, not just a number — a bare "1.2%" teaches nothing while
+     * "1.2%, this pair is thin" tells the user why the next trade may differ.
+     *
+     * Matched as bare literals rather than `reason: 'thin'`: the thin/moderate
+     * pair is returned from a ternary, so the key-colon form only ever matched
+     * two of the four and the check passed for the wrong reason.
+     */
+    for (const r of ['stable', 'deep', 'moderate', 'thin', 'default']) {
+      t(`...and can explain the '${r}' case`, new RegExp(`'${r}'`).test(swapLib));
+    }
+    /* Every reason must have copy, or the UI renders a raw key. */
+    const enSwap = JSON.parse(read('src/i18n/locales/en.json')).swap;
+    t('...and every reason has user-facing copy',
+      ['stable', 'deep', 'moderate', 'thin', 'default']
+        .every((r) => Boolean(enSwap.autoReason?.[r])));
+
+    /*
+     * The derived value must be what is QUOTED and SIGNED, not merely
+     * displayed. Three copies kept in sync by hand is how a user consents to
+     * one number and signs another.
+     */
+    t('the swap screen computes an effective slippage',
+      /const effectiveSlippage/.test(swapPage));
+    t('...and quotes with it', /slippage: effectiveSlippage/.test(swapPage));
+    t('...and re-quotes with it before signing',
+      (swapPage.match(/slippage: effectiveSlippage/g) || []).length >= 2);
+    /*
+     * The dependency array has to track the DERIVED value. Tracking the raw
+     * one means auto-slippage changes never trigger a re-quote, so the screen
+     * would show a stale price for the new tolerance.
+     */
+    t('...and re-quotes when the derived value changes',
+      /effectiveSlippage, chainId/.test(swapPage));
+    t('...and the review sheet shows what will actually be signed',
+      /\{effectiveSlippage\}%/.test(swapPage));
+
+    /*
+     * ─── THE DEADLINE, UNREACHABLE UNTIL NOW ────────────────────────────────
+     * `deadlineMinutes` has been a parameter of executeSwap since the file was
+     * written, defaulting to 20, and no caller ever passed one. So every swap
+     * this app has ever made used 20 minutes and the parameter was dead code.
+     */
+    t('the deadline is a real control', /setDeadlineMin/.test(swapPage));
+    t('...and is actually forwarded to the signer',
+      /deadlineMinutes: deadlineMin/.test(swapPage));
+
+    /*
+     * ─── "COMPARED N SOURCES", COMPUTED AND NEVER RENDERED ──────────────────
+     * lib/swap.js returns `routesChecked` with a comment saying it "drives the
+     * 'compared N routes' line in the UI". No such line existed — three
+     * aggregators were quoted on every keystroke and the result thrown away.
+     */
+    t('the number of price sources reaches the screen',
+      /quote\.routesChecked/.test(swapPage));
+    /*
+     * And when a route we cannot execute quoted better, say so. Hiding it is
+     * the easy choice; a user who checks that venue later should have heard it
+     * from us first.
+     */
+    t('...and a better quote-only route is disclosed, not hidden',
+      /quote\.beatenBy/.test(swapPage));
+
+    /*
+     * ─── THE SWITCH, WHICH MUST NOT BE A CHECKBOX ───────────────────────────
+     * `.switch` styles a BUTTON with `data-on` and an animated `.switch-knob`
+     * child. An `<input type="checkbox" className="switch">` matches the
+     * selector, inherits the track, and draws the browser's native tick inside
+     * it with no knob — it LOOKS broken rather than failing loudly. Same shape
+     * as the invented `className="seg"` that shipped here once.
+     */
+    t('the toggle is a shared component', existsSync('src/components/Switch.jsx'));
+    t('...and is not reimplemented as a checkbox in the swap sheet',
+      !/type="checkbox"[^>]*className="switch"/.test(swapPage));
+    /* The RTL travel fix must survive the extraction. */
+    t('...and keeps the RTL knob-travel correction',
+      /rtl \? -19 : 19/.test(code(read('src/components/Switch.jsx'))));
+    /* Settings must use the extracted one, not keep a private copy. */
+    t('...and Settings uses it rather than a duplicate',
+      !/function Switch\(/.test(code(read('src/pages/Settings.jsx'))));
+
+    /*
+     * Every class name used must be DEFINED. `set-row-title` was used in the
+     * first draft of this sheet and exists in no stylesheet.
+     */
+    const cssText = read('src/index.css');
+    for (const cls of ['set-row', 'set-row-label', 'set-row-sub', 'switch', 'switch-knob']) {
+      t(`the ${cls} class is defined in CSS`,
+        new RegExp(`\\.${cls}[^-a-zA-Z0-9]`).test(cssText));
+    }
+    t('...and the swap sheet uses no undefined set-row-title',
+      !/set-row-title/.test(swapPage));
+  }
+
+  /* ---- 86. Buying with cash, and the warnings in one box ---------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const p2p = code(read('src/pages/P2P.jsx'));
+
+    /*
+     * ─── THE INSTRUCTION THAT WAS MISSING ───────────────────────────────────
+     * The fiat tab explained why we do not run a desk, listed three desks, and
+     * listed four ways to be defrauded — and never once said HOW to complete a
+     * purchase. All context and warning, no instruction, which is why it read
+     * as discouraging rather than useful. The OTC tab had a numbered walk-
+     * through; this side had none.
+     */
+    t('the cash tab explains how to actually buy', /p2p\.buyStep\./.test(p2p));
+    const enP2p = JSON.parse(read('src/i18n/locales/en.json')).p2p;
+    t('...in ordered steps', ['b1', 'b2', 'b3', 'b4', 'b5', 'b6']
+      .every((k) => Boolean(enP2p.buyStep?.[k])));
+    /*
+     * The two instructions that actually prevent losses: pay from an account
+     * in your own name, and never name crypto in the bank reference — banks
+     * freeze accounts over that wording.
+     */
+    t('...and warns to pay from an account in your own name',
+      /OWN NAME/i.test(JSON.stringify(enP2p.buyStep)));
+    t('...and warns against naming crypto in the payment reference',
+      /reference/i.test(JSON.stringify(enP2p.buyStep)));
+
+    /*
+     * ─── THE WARNINGS, COLLAPSED ────────────────────────────────────────────
+     * Asked for directly. This tab rendered six separate warning surfaces:
+     * four always-expanded red-numbered scam cards plus two notices. When
+     * every block is a warning, none of them is — the exact mechanism InfoBox
+     * was built for.
+     */
+    t('the scam warnings live in a collapsible box',
+      /InfoBox title=\{t\('p2p\.scamsTitle'\)\}/.test(p2p));
+    /* Nothing was deleted — all four keep their text. */
+    t('...and all four scams are still present',
+      /SCAMS\.map/.test(p2p) && ['reversal', 'thirdParty', 'offPlatform', 'overpay']
+        .every((k) => Boolean(enP2p.scam?.[k]?.body)));
+    /*
+     * Physical cash has NO escrow and no arbitration — the most dangerous
+     * case, and the screen said nothing about it. Silence does not stop
+     * anybody; it just removes the two rules that matter.
+     */
+    t('...and in-person cash is addressed rather than ignored',
+      /p2p\.cashTitle/.test(p2p));
+    t('...stating that a physical handover has no escrow at all',
+      /no escrow at all/i.test(String(enP2p.cashBody)));
+
+    /* Persian must be hand-written, and present, in every new key. */
+    const faP2p = JSON.parse(read('src/i18n/locales/fa.json')).p2p;
+    t('the cash guide is translated into Persian',
+      Boolean(faP2p.howTitle) && Boolean(faP2p.cashBody)
+      && ['b1', 'b6'].every((k) => Boolean(faP2p.buyStep?.[k])));
+  }
+
   return rows;
 }
