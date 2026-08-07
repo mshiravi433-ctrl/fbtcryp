@@ -99,9 +99,9 @@ allRemainingAreCodeComplete: true
 
 خلاصه‌اش:
 
-۱. 🔗 برو به **https://www.avantisfi.com** ← دکمهٔ **Trade now**
-۲. **Connect Wallet** — همان کیف EVM خودمان (`0xaf5CE154...24d6`) روی شبکهٔ **Base**
-۳. از منو برو به بخش **Referrals**
+۱. 🔗 برو به **https://www.avantisfi.com/trade** (صفحهٔ معرف: **/referral** مفرد است)
+۲. **Connect Wallet** — همان کیف EVM خودمان (`0xaf5CE154...24d6`) روی شبکهٔ **Base**. ⚠️ با کیف واقعی وارد شو، **نه با گوگل/ایمیل** — آن‌ها کیف امانی می‌سازند و درآمد به آن می‌رود
+۳. برو به 🔗 **https://www.avantisfi.com/referral** — ⚠️ **مفرد**، `/referrals` خطای ۴۰۴ می‌دهد
 ۴. **Create referral link** را بزن
 ۵. کد را بنویس: `fbtswap`
 

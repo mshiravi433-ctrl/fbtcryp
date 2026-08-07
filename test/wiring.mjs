@@ -7795,6 +7795,38 @@ export default function run() {
       /isValidGmxCode\(referralCodeFor\(venueId\)\)/.test(vref));
     t('...so no venue can earn while reporting that it does not',
       !/venueId === 'gmx' \? GMX_CODE : ''/.test(vref));
+
+    /*
+     * ─── THE AVANTIS URL, WHICH IS SINGULAR ─────────────────────────────────
+     * Their referral page is /referral. I wrote /referrals in the first draft
+     * of the owner's guide and checking it live returned "404: This page could
+     * not be found" — while the docs site's own page really is /rewards/
+     * referrals, which is what made the plural look right.
+     *
+     * The app itself links to /trade, which is correct and live. This check
+     * exists so that "helpfully" changing it to a referral URL later cannot
+     * silently introduce the 404, and so the owner's guide keeps the singular.
+     */
+    const perp = read('src/pages/Perp.jsx');
+    t('the Avantis venue link points at a page that exists',
+      /avantisfi\.com\/trade/.test(perp) && !/avantisfi\.com\/referrals/.test(perp));
+
+    const av = existsSync('docs/AVANTIS-STEPS-FA.md')
+      ? read('docs/AVANTIS-STEPS-FA.md')
+      : '';
+    t('the Avantis guide exists', av.length > 0);
+    t('...and uses the singular /referral that actually loads',
+      /avantisfi\.com\/referral\b/.test(av));
+    /*
+     * Logging in with Google or X gets you a Privy CUSTODIAL wallet, per their
+     * own onboarding docs. The referral earnings would land in a wallet we do
+     * not hold the keys to. The guide must keep warning about this.
+     */
+    t('...and warns against the social login that creates a custodial wallet',
+      /custodial/i.test(av));
+    /* The payout address has to be in the guide, or it cannot be checked. */
+    t('...and states the wallet address to connect',
+      av.includes('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
   }
 
   return rows;
