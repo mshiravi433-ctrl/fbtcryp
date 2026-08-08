@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:353454762754:android:ff2e16f0af75d19324b01b",
         "android_client_info": {
-          "package_name": "ir.fbt.swap"
+          "package_name": "ir.fbtswap.app"
         }
       },
       "oauth_client": [],

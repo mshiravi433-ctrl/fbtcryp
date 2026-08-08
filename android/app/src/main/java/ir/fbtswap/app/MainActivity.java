@@ -1,4 +1,4 @@
-package ir.fbt.swap;
+package ir.fbtswap.app;
 
 import com.getcapacitor.BridgeActivity;
 

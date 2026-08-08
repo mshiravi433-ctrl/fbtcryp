@@ -9067,5 +9067,118 @@ export default function run() {
       /LEGACY_EMAIL_IN_LOCALES = 'fbtswap@gmail\.com'/.test(contact));
   }
 
+  /* ---- 94. the package rename, and the four things it silently breaks ---- */
+  /*
+   * Bazaar rejected the upload: «نام بسته قبلی را میگه تکراری» — the package
+   * name is already taken. It is `ir.fbt.swap` under a Cafe Bazaar account
+   * that is not reachable, and a package name is PERMANENT once published, so
+   * the only route to a Bazaar/Myket listing is a new one.
+   *
+   * A package rename is not a find-and-replace. It is the app's identity to
+   * the OS, and four separate things key off it. Each is asserted here because
+   * three of the four fail SILENTLY — the build stays green and the damage
+   * only shows up on a user's phone.
+   */
+  {
+    const APP_ID = 'ir.fbtswap.app';
+
+    /* 1. The three places Android itself reads. */
+    const gradle = read('android/app/build.gradle');
+    t(`build.gradle declares the new applicationId (${APP_ID})`,
+      new RegExp(`applicationId "${APP_ID}"`).test(gradle));
+    t('...and the matching namespace',
+      new RegExp(`namespace "${APP_ID}"`).test(gradle));
+    const cap = JSON.parse(read('capacitor.config.json'));
+    t('Capacitor agrees', cap.appId === APP_ID);
+
+    /*
+     * 2. The Java package must match the directory it lives in, or javac
+     *    refuses to compile. This one at least fails loudly.
+     */
+    t('MainActivity moved to the matching directory',
+      existsSync('android/app/src/main/java/ir/fbtswap/app/MainActivity.java'));
+    t('...and its package statement was updated',
+      new RegExp(`package ${APP_ID.replace(/\./g, '\\.')};`)
+        .test(read('android/app/src/main/java/ir/fbtswap/app/MainActivity.java')));
+    t('...and the old directory is gone, not left as a stale copy',
+      !existsSync('android/app/src/main/java/ir/fbt/swap/MainActivity.java'));
+
+    /*
+     * 3. SILENT FAILURE #1 — WalletConnect's return link.
+     *    `redirect.native` is the custom scheme a wallet uses to hand control
+     *    back after signing. The scheme is derived from the package name, so
+     *    a rename that misses it leaves the user stranded INSIDE their wallet
+     *    app after approving: the approval genuinely succeeded, but nothing
+     *    comes back. Reported once already; that is why the guard exists.
+     */
+    const strings = read('android/app/src/main/res/values/strings.xml');
+    const scheme = /<string name="custom_url_scheme">([^<]+)</.exec(strings)?.[1];
+    t(`the deep-link scheme was renamed too (${scheme})`, scheme === APP_ID);
+    t('...and WalletConnect points at the new one',
+      read('src/context/WalletContext.jsx').includes(`${APP_ID}://`));
+    t('...with the manifest declaring it',
+      /android:scheme="@string\/custom_url_scheme"/.test(
+        read('android/app/src/main/AndroidManifest.xml')));
+
+    /*
+     * 4. SILENT FAILURE #2 — the wallet backup path.
+     *    Android's per-app external directory is Android/data/<packageName>/.
+     *    A stale hint sends someone hunting for their encrypted seed backup in
+     *    a folder that does not exist, at the worst possible moment.
+     */
+    t('the backup folder hint follows the package name',
+      read('src/lib/walletBackup.js').includes(`Android/data/${APP_ID}/files`));
+
+    /*
+     * 5. SILENT FAILURE #3 — Firebase.
+     *    The google-services plugin matches `package_name` against the
+     *    applicationId and FAILS THE BUILD on a mismatch, so this one is
+     *    caught. But the mobilesdk_app_id inside still belongs to the app
+     *    registered under the OLD package, and Google state plainly that
+     *    hand-editing this file is not supported — FCM routes by App ID, so
+     *    push may keep working for now and stop without warning later.
+     *
+     *    The honest fix is a new Android app in the Firebase console for
+     *    ir.fbtswap.app and a freshly downloaded google-services.json. That
+     *    needs console access, so it is documented rather than faked.
+     */
+    const gs = JSON.parse(read('android/app/google-services.json'));
+    const pkgs = gs.client.map((c) => c.client_info.android_client_info.package_name);
+    t(`google-services.json lists the new package (${pkgs.join(', ')})`,
+      pkgs.includes(APP_ID));
+    t('...and the re-registration step is written down, not assumed',
+      /google-services\.json/.test(read('docs/PACKAGE-RENAME-FA.md')));
+
+    /*
+     * 6. NOTHING may still reference the old id in shipped code. Docs and the
+     *    changelog legitimately mention it as history, so only source and
+     *    Android config are scanned.
+     */
+    const shipped = [
+      'capacitor.config.json',
+      'android/app/build.gradle',
+      'android/app/src/main/res/values/strings.xml',
+      'android/app/src/main/AndroidManifest.xml',
+      'android/app/google-services.json',
+      'src/lib/walletBackup.js',
+      'src/context/WalletContext.jsx'
+    ];
+    const stale = shipped.filter((f) => existsSync(f) && read(f).includes('ir.fbt.swap'));
+    t(`no shipped file still says ir.fbt.swap${stale.length ? ` — ${stale.join(', ')}` : ''}`,
+      stale.length === 0);
+
+    /*
+     * 7. A rename makes the app a DIFFERENT app to Android: it installs
+     *    alongside the old one instead of updating it, and the old install
+     *    keeps its data. Anyone with an in-app wallet must export their seed
+     *    BEFORE uninstalling the old build. That warning has to exist.
+     */
+    const doc = read('docs/PACKAGE-RENAME-FA.md');
+    t('the "it installs alongside, it does not update" warning is documented',
+      /کنار|جداگانه/.test(doc));
+    t('...and the seed-backup-before-uninstall warning with it',
+      /عبارت بازیابی|پشتیبان/.test(doc));
+  }
+
   return rows;
 }

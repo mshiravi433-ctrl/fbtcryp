@@ -230,7 +230,7 @@ export function WalletProvider({ children }) {
            * — so the promise that would have set the address never resolves.
            *
            * `native` is the custom scheme declared in AndroidManifest.xml
-           * (ir.fbt.swap://), which the MainActivity intent-filter already
+           * (ir.fbtswap.app://), which the MainActivity intent-filter already
            * catches. `universal` gives wallets that refuse custom schemes an
            * https route to the same place.
            *
@@ -238,7 +238,7 @@ export function WalletProvider({ children }) {
            * cannot grant a wallet any additional access.
            */
           redirect: {
-            native: 'ir.fbt.swap://',
+            native: 'ir.fbtswap.app://',
             universal: publicUrl
           }
         }

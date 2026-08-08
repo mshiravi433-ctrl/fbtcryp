@@ -26,7 +26,7 @@
             </intent-filter>
 
             <!-- Deep links: wallets return here after signing, e.g.
-                 WalletConnect redirecting back with ir.fbt.swap:// -->
+                 WalletConnect redirecting back with ir.fbtswap.app:// -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

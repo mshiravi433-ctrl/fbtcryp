@@ -1,5 +1,5 @@
 {
-  "appId": "ir.fbt.swap",
+  "appId": "ir.fbtswap.app",
   "appName": "FBT Swap",
   "webDir": "dist",
   "android": {

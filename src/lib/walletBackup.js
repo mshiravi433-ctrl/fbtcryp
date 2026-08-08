@@ -92,7 +92,7 @@ function buildPayload() {
  * somewhere durable rather than leave it in place, and why the written seed
  * phrase stays the primary backup.
  */
-const BACKUP_DIR_HINT = 'Android/data/ir.fbt.swap/files';
+const BACKUP_DIR_HINT = 'Android/data/ir.fbtswap.app/files';
 
 /**
  * Save the backup to the device.

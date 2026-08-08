@@ -1,14 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "ir.fbt.swap"
+    namespace "ir.fbtswap.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "ir.fbt.swap"
+        applicationId "ir.fbtswap.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 55
-        versionName "1.27.0"
+        versionCode 56
+        versionName "1.28.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -86,7 +86,7 @@ try {
     logger.warn(" Native push (FCM) will NOT work in this build.")
     logger.warn(" Limit-order alerts will not arrive while the app is closed.")
     logger.warn(" Download it from the Firebase console > Project settings >")
-    logger.warn(" Your apps > Android app 'ir.fbt.swap'.")
+    logger.warn(" Your apps > Android app 'ir.fbtswap.app'.")
     logger.warn("========================================================")
     logger.warn("")
 }
