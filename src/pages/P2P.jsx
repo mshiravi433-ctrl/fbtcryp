@@ -12,6 +12,7 @@ import TapToPay from '../components/TapToPay';
 import RestrictionsSheet from '../components/RestrictionsSheet';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
+import BoardPanel from '../components/BoardPanel';
 
 /**
  * Peer-to-peer trading.
@@ -93,8 +94,16 @@ export default function P2P() {
 
       <p className="prose-sm">{t('p2p.subtitle')}</p>
 
+      {/*
+        A THIRD TAB, ADDED WITHOUT DISTURBING THE OTHER TWO.
+
+        `board` is appended rather than inserted so the default tab stays
+        'otc' and anybody who knows this screen finds it unchanged. The board
+        is the new revenue surface (see components/BoardPanel.jsx); the two
+        existing tabs are untouched.
+      */}
       <div className="segmented">
-        {['otc', 'fiat'].map((k) => (
+        {['otc', 'fiat', 'board'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
             {tab === k && <SegIndicator id="p2ptab" />}
             {t(`p2p.tab.${k}`)}
@@ -179,6 +188,14 @@ export default function P2P() {
 
           <SendSheet open={sendOpen} onClose={() => setSendOpen(false)} />
         </>
+      ) : tab === 'board' ? (
+        /*
+          The classifieds board. A component rather than inline JSX because
+          this file is already long, and because the board owns real state
+          (fetching, a form, a payment flow) that has no business being
+          interleaved with the two link-out tabs.
+        */
+        <BoardPanel />
       ) : (
         <>
           <motion.section className="card" variants={riseIn} initial="hidden" animate="show">

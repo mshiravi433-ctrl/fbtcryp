@@ -19,6 +19,7 @@ import Swap from '../src/pages/Swap.jsx';
 import Leaderboard from '../src/pages/Leaderboard.jsx';
 import Help from '../src/pages/Help.jsx';
 import P2P from '../src/pages/P2P.jsx';
+import BoardPanel from '../src/components/BoardPanel.jsx';
 import Explore from '../src/pages/Explore.jsx';
 import Discover from '../src/pages/Discover.jsx';
 import Nft from '../src/pages/Nft.jsx';
@@ -139,6 +140,21 @@ export async function run(container) {
    * loudly in the user's hands.
    */
   await mount('P2P', <P2P />);
+
+  /*
+   * The classifieds board, mounted DIRECTLY rather than through P2P.
+   *
+   * Mounting the page only proves the default tab renders — the board lives
+   * behind a click, so a crash inside it (a bad hook order, a missing locale
+   * namespace, an undefined read on `terms` before the fetch resolves) would
+   * never be reached by the P2P mount above. That is the same blind spot the
+   * comment above this line was written about, one level deeper.
+   *
+   * It renders with no wallet connected and with fetch failing, which is the
+   * hostile case: the component must show the connect prompt and the offline
+   * empty state instead of throwing.
+   */
+  await mount('BoardPanel', <BoardPanel />);
   await mount('Explore', <Explore />);
   await mount('Discover', <Discover />);
   await mount('Nft', <Nft />);

@@ -434,7 +434,20 @@
     "orderErr.BRACKET_INVERTED": "Take-profit must be above the stop-loss, or both would trigger instantly",
     "orderErr.BAD_STEPS": "Pick between 2 and 8 steps",
     "orderErr.LADDER_FLAT": "The first and last price must differ, otherwise every step is the same order",
-    "memoCopied": "Memo copied"
+    "memoCopied": "Memo copied",
+    "boardPosted": "Your advert is live",
+    "boardRemoved": "Advert removed",
+    "boardFailed": "That did not go through. Check the fields and try again.",
+    "boardBadAsset": "Enter which asset you are trading",
+    "boardBadContact": "Enter a way for people to reach you",
+    "boardNoListing": "Post an advert first, then promote it",
+    "boardProActive": "Pro placement is active",
+    "payRejected": "Payment cancelled in your wallet",
+    "payInsufficient": "Not enough balance for the payment plus network gas",
+    "payWrongChain": "Switch your wallet to Base and try again",
+    "payNoSigner": "Unlock or reconnect your wallet first",
+    "payFailed": "The payment did not complete",
+    "payClaimLater": "Payment sent. It is still confirming — reopen this screen in a minute to activate."
   },
   "swap": {
     "title": "Swap",
@@ -2769,5 +2782,48 @@
         "desc": "Trade US equities settled entirely in USDT, with no bank account and no tax forms."
       }
     }
+  },
+  "board": {
+    "tab": "Board",
+    "title": "Local board",
+    "safetyTitle": "Nobody is holding the money — not even us",
+    "safetyBody": "This is a notice board, not an exchange. We do not hold anyone’s funds, we cannot reverse a payment, and we cannot settle an argument between two people. Anything you agree here you agree directly with a stranger. Meet in daylight in a public place, count cash before you touch your phone, and never release crypto for a screenshot — only for a confirmation you have read on the chain yourself.",
+    "postTitle": "Post an advert",
+    "editTitle": "Your advert",
+    "connectFirst": "Connect a wallet to post. Your wallet address is your identity here — there is no signup and no password.",
+    "iWantTo": "I want to",
+    "side": {
+      "buy": "Buy",
+      "sell": "Sell"
+    },
+    "asset": "Asset",
+    "amount": "Amount",
+    "price": "Price",
+    "method": "Payment method",
+    "city": "City",
+    "contact": "Contact",
+    "note": "Note",
+    "publish": "Publish",
+    "update": "Update",
+    "remove": "Remove",
+    "oneEach": "One advert per wallet ({{addr}}). Posting again replaces it. Adverts expire after 14 days.",
+    "listings": "Adverts",
+    "empty": "No adverts yet. Yours would be the first.",
+    "offline": "The board is unreachable right now. Try again in a moment.",
+    "swapFor": "Swap",
+    "pro": "PRO",
+    "proTitle": "Pro placement",
+    "proPer": "for {{days}} days",
+    "perk": {
+      "top": "Pinned above every free advert",
+      "badge": "PRO badge and a highlighted card",
+      "longer": "Stays live for 30 days instead of 14",
+      "highlight": "Edit the text as often as you like without losing the placement"
+    },
+    "payWith": "Pay with {{symbol}} on {{chain}}",
+    "paying": "Waiting for the payment…",
+    "proNote": "Paid in {{symbol}} on {{chain}}, straight from your wallet to ours. We check the transaction on the chain before the placement starts, so nothing is taken on trust. Network gas is separate and goes to {{chain}}, not to us.",
+    "proUntil": "Pro placement active until {{date}}.",
+    "footerNotice": "Adverts are written by users. We do not verify them, we take no part in the trade, and we hold no money at any point. The only thing we charge for on this screen is placement."
   }
 }

@@ -7237,3 +7237,157 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .arrival-card { transition: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   P2P CLASSIFIEDS BOARD
+   ---------------------------------------------------------------------------
+   Every class here is new and used only by the board. Nothing above is
+   touched, so no existing screen can change appearance because of this
+   feature — the rule this file keeps breaking when a "small tweak" to a
+   shared class ripples into six screens.
+
+   Note there is no `.brd-input`: `input` and `select` are already styled
+   globally at the top of this file, and adding a competing class is how two
+   rules end up fighting over padding.
+--------------------------------------------------------------------------- */
+
+.brd-row {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--bg-raised);
+}
+
+/* A promoted row is the product being sold, so it has to look bought — but
+   not so loud that the free rows read as broken. A tinted edge and a badge,
+   nothing animated. */
+.brd-row-promoted {
+  border-color: rgba(255, 201, 60, 0.55);
+  background: linear-gradient(180deg, rgba(255, 201, 60, 0.09), transparent 60%);
+}
+
+.brd-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.brd-side {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.brd-side-buy { background: rgba(0, 255, 157, 0.14); color: var(--up); }
+.brd-side-sell { background: rgba(255, 59, 107, 0.14); color: var(--down); }
+
+.brd-asset { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+
+.brd-star {
+  margin-inline-start: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #ffc93c;
+  border: 1px solid rgba(255, 201, 60, 0.45);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.brd-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.brd-meta b { color: var(--text-1); font-weight: 700; }
+
+.brd-note {
+  margin: 9px 0 0;
+  font-size: 12.3px;
+  line-height: 1.75;
+  color: var(--text-2);
+  /* User-supplied text: force it to wrap instead of stretching the card. */
+  overflow-wrap: anywhere;
+}
+
+.brd-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.brd-contact {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.brd-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 10px;
+}
+/* One column on narrow phones: two 12px-padded inputs side by side leave no
+   room for a placeholder to be readable below ~340px. */
+@media (max-width: 360px) {
+  .brd-form-grid { grid-template-columns: 1fr; }
+}
+.brd-form-grid .brd-wide { grid-column: 1 / -1; }
+
+.brd-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 5px;
+}
+
+/* Pro panel. Deliberately contained: this is the only place in the app that
+   advertises the paid plan, and it must not leak into other screens. */
+.brd-pro {
+  border: 1px solid rgba(255, 201, 60, 0.4);
+  border-radius: 16px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(255, 201, 60, 0.1), transparent 70%);
+}
+
+.brd-pro-price {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffc93c;
+  line-height: 1.1;
+}
+
+.brd-perks { list-style: none; padding: 0; margin: 11px 0 0; }
+.brd-perks li {
+  position: relative;
+  padding-inline-start: 20px;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--text-2);
+}
+.brd-perks li::before {
+  content: '✓';
+  position: absolute;
+  inset-inline-start: 0;
+  color: #ffc93c;
+  font-weight: 700;
+}
+
+:root[data-theme='light'] .brd-row-promoted {
+  border-color: rgba(180, 120, 0, 0.5);
+  background: linear-gradient(180deg, rgba(255, 201, 60, 0.18), transparent 60%);
+}
+:root[data-theme='light'] .brd-star,
+:root[data-theme='light'] .brd-pro-price,
+:root[data-theme='light'] .brd-perks li::before { color: var(--ink-amber, #9d6e00); }

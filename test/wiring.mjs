@@ -9209,5 +9209,136 @@ export default function run() {
       /عبارت بازیابی|پشتیبان/.test(doc));
   }
 
+  /* ---- 95. the classifieds board: a forum, never a money transmitter ----- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── THE LINE THIS FEATURE IS BUILT ON ──────────────────────────────────
+     * FinCEN: a platform that "only provides a forum where buyers and sellers
+     * post their bids and offers" while "the parties themselves settle through
+     * an outside venue" is NOT a money transmitter. Escrow, dispute handling,
+     * or a fee ON THE TRANSFER crosses it — a felony under 18 USC 1960 when
+     * unlicensed.
+     *
+     * Asserted as ABSENCES, because the danger is a well-meaning future commit
+     * adding "just a small escrow" and nothing failing.
+     */
+    const server = code(read('server/board.js'));
+    const client = code(read('src/lib/board.js'));
+    const panel = code(read('src/components/BoardPanel.jsx'));
+
+    for (const [name, src] of [['server', server], ['client', client], ['UI', panel]]) {
+      t(`the board ${name} holds no escrow`, !/escrow/i.test(src));
+      t(`...and arbitrates no disputes (${name})`, !/dispute|arbitrat/i.test(src));
+    }
+    /* No endpoint may exist that settles or releases a trade. */
+    t('there is no settle/release/refund route',
+      !/\/board\/(settle|release|refund|trade|escrow)/.test(code(read('server/app.js'))));
+
+    /*
+     * ─── THE OPS BUDGET, WHICH IS WHAT KEEPS THIS FREE ──────────────────────
+     * Vercel Blob's free tier is 10,000 SIMPLE OPS PER MONTH. One blob per
+     * listing would spend that in days: a single feed load costs one op per
+     * row, so 200 users refreshing a 50-row board is 10,000 ops in an
+     * afternoon. The whole board is therefore ONE document, served from the
+     * in-process cache in store.js on a warm instance for zero ops.
+     */
+    t('the whole board lives under one storage key', /const KEY = 'board:v1'/.test(server));
+    t('...with a hard row cap so a cold read stays small', /MAX_ROWS/.test(server));
+    t('...and listings expire on their own, with no cron to depend on',
+      /TTL_MS/.test(server) && /isLive/.test(server));
+
+    /*
+     * ─── PAYMENT IS VERIFIED, NOT BELIEVED ──────────────────────────────────
+     * The browser says "I paid, here is the hash". If the server trusted that,
+     * any 66-character string would buy a promotion.
+     */
+    const promote = code(read('server/promote.js'));
+    t('the promotion payment is checked against the chain',
+      /eth_getTransactionReceipt/.test(promote));
+    t('...the transfer must be to OUR address',
+      /PROMO_RECIPIENT/.test(promote) && /topics\[2\]/.test(promote));
+    t('...for at least the asking price', /PRICE_UNITS/.test(promote) && /value < PRICE_UNITS/.test(promote));
+    t('...on a transaction that actually succeeded', /receipt\.status/.test(promote));
+    /*
+     * The payer check stops somebody watching the chain for a large transfer
+     * to us and claiming a stranger's payment as their own.
+     */
+    t('...sent by the wallet claiming it', /same\(receipt\.from, payer\)/.test(promote));
+    /*
+     * REPLAY. A valid hash stays valid forever, so without this one $25
+     * payment could promote a listing every month, or be handed to a friend.
+     */
+    t('a payment hash can only ever be spent once',
+      /txAlreadyUsed/.test(server) && /txAlreadyUsed/.test(code(read('server/app.js'))));
+
+    /* No API key: this must keep working if a key is rotated or revoked. */
+    t('verification needs no API key', !/ALCHEMY|API_KEY|apiKey/i.test(promote));
+
+    /*
+     * ─── THE PAID PLAN IS CONFINED TO ONE SCREEN ────────────────────────────
+     * Asked for explicitly: «نمیخام در صفحات دیگر این تبلیغات نشان داده شود».
+     * The Pro upsell renders inside BoardPanel and nowhere else. Checked by
+     * scanning every OTHER page and component for the panel or its class.
+     */
+    const files = [];
+    for (const dir of ['src/pages', 'src/components']) {
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith('.jsx')) continue;
+        if (f === 'BoardPanel.jsx') continue;
+        files.push(join(dir, f));
+      }
+    }
+    const leaked = files.filter((f) => /brd-pro|board\.proTitle|payForPromotion/.test(read(f)));
+    t(`the Pro upsell appears on no other screen${leaked.length ? ` — ${leaked.join(', ')}` : ''}`,
+      leaked.length === 0);
+    /* And it is only offered to someone who has something to promote. */
+    t('...and is only shown when the user has a listing', /mine && !mine\.promoted/.test(panel));
+
+    /*
+     * ─── USER TEXT IS RENDERED IN OTHER PEOPLE'S CLIENTS ────────────────────
+     * Same rule UsernameField already applies: angle brackets and quotes are
+     * removed outright rather than escaped, and bidi overrides are stripped
+     * because they let a string visually reverse the text around it.
+     */
+    t('listing text is sanitised before storage', /BIDI/.test(server) && /\[<>"'`\\\\\]/.test(server));
+    t('...and contact handles cannot carry a URL', /cleanContact/.test(server));
+
+    /*
+     * ─── FAILURE MODES THAT COST THE USER MONEY ─────────────────────────────
+     * The money leaves the wallet before the claim call. If that call fails
+     * the user must be told the payment SUCCEEDED, not that it failed —
+     * otherwise they pay twice.
+     */
+    t('a failed claim after a successful payment does not report failure',
+      /payClaimLater/.test(panel));
+    /* Sending Base calldata on the wrong chain can hit a different contract. */
+    t('the chain is re-checked after switching, before spending',
+      /WRONG_CHAIN/.test(client) && /wallet\.chainId !== terms\.chainId/.test(client));
+    /* Handing over a mempool hash would read as "payment rejected". */
+    t('the payment waits for a confirmation before claiming', /tx\.wait/.test(client));
+
+    /* Locale coverage, hand-written in both primary languages. */
+    for (const lang of ['en', 'fa']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} has the board copy`, Boolean(L.board?.title));
+      t(`${lang} says plainly that nobody holds the money`,
+        String(L.board?.safetyBody ?? '').length > 150);
+      /* Toasts resolve `toast.<key>`; a missing one renders the raw key. */
+      for (const k of ['boardPosted', 'boardFailed', 'payRejected', 'payWrongChain', 'payClaimLater']) {
+        t(`${lang} has the ${k} toast`, Boolean(L.toast?.[k]));
+      }
+    }
+
+    /* The tab must exist, and the other two must be untouched. */
+    const p2p = code(read('src/pages/P2P.jsx'));
+    t('the board is reachable as a third P2P tab', /'otc', 'fiat', 'board'/.test(p2p));
+    t('...and the default tab is still OTC', /useState\('otc'\)/.test(p2p));
+  }
+
   return rows;
 }

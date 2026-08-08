@@ -46,6 +46,8 @@ import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
+import { promoteListing, putListing, readBoard, removeListing, txAlreadyUsed } from './board.js';
+import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import {
@@ -1078,6 +1080,77 @@ app.get('/api/nft/:chainId/:owner', (req, res) => {
       ];
       res.status(502).json({ error: known.includes(code) ? code : 'FAILED' });
     });
+});
+
+/* ------------------------------ P2P board --------------------------------- */
+/*
+ * A CLASSIFIEDS BOARD, AND NOTHING MORE.
+ *
+ * FinCEN's CVC guidance says a platform that only hosts bids and offers, where
+ * "the parties themselves settle any matched transactions through an outside
+ * venue", is NOT a money transmitter. Holding funds, arbitrating disputes or
+ * taking a cut of the transfer would cross that line — a felony under 18 USC
+ * 1960 when unlicensed, and $50k-$500k per state to do legally.
+ *
+ * So there is no trade endpoint, no balance, no escrow and no dispute route
+ * here, and there must never be. We earn from PROMOTION and from the swap the
+ * two parties make anyway, never from the money moving between them.
+ */
+
+app.get('/api/board', async (_req, res) => {
+  try {
+    res.json({ rows: await readBoard(), durable: storeDurable(), terms: promotionTerms() });
+  } catch (e) {
+    res.status(500).json({ error: 'READ_FAILED', detail: String(e.message).slice(0, 120) });
+  }
+});
+
+app.post('/api/board', async (req, res) => {
+  try {
+    res.json({ ok: true, row: await putListing(req.body ?? {}) });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: String(e.message).slice(0, 60) });
+  }
+});
+
+app.post('/api/board/remove', async (req, res) => {
+  const owner = String(req.body?.owner ?? '').trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) return res.status(400).json({ ok: false, error: 'BAD_OWNER' });
+  try {
+    return res.json({ ok: true, ...(await removeListing(owner)) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e.message).slice(0, 60) });
+  }
+});
+
+/*
+ * PROMOTION — verified on-chain before anything is granted.
+ *
+ * The client sends a transaction hash. We do NOT trust it: server/promote.js
+ * fetches the receipt from a public Base RPC and checks the transfer really
+ * happened, to our address, for at least the price, from this exact wallet.
+ *
+ * The replay check is the easy one to forget. A valid hash stays valid
+ * forever, so without it one payment could buy a promotion every month, or be
+ * passed to a friend. Each hash is recorded and can be spent once.
+ */
+app.post('/api/board/promote', async (req, res) => {
+  const owner = String(req.body?.owner ?? '').trim();
+  const txHash = String(req.body?.txHash ?? '').trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) return res.status(400).json({ ok: false, error: 'BAD_OWNER' });
+
+  try {
+    if (await txAlreadyUsed(txHash)) {
+      return res.status(400).json({ ok: false, error: 'TX_ALREADY_USED' });
+    }
+
+    const check = await verifyPromotionPayment(txHash, owner);
+    if (!check.ok) return res.status(400).json({ ok: false, error: check.reason });
+
+    return res.json({ ok: true, ...(await promoteListing(owner, txHash)) });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e.message).slice(0, 60) });
+  }
 });
 
 /* ----------------------------- points (was: leaderboard) ------------------ */
