@@ -75,7 +75,7 @@ https://support.google.com/googleplay/android-developer/contact/protectappeals
 
 | فیلد | چه بنویسی |
 |---|---|
-| Package name | `ir.fbt.swap` |
+| Package name | `ir.fbtswap.app` |
 | App name | `FBT Swap` |
 | Developer / Company | `Fanous Bazaar Pishgam Co.` |
 | Contact email | `fbtswap@gmail.com` |
@@ -110,7 +110,7 @@ https://github.com/mshiravi433-ctrl/fbtcryp/releases/download/latest/app-release
 (Mobile Unwanted Software principles و تعریف PHA):
 
 ```
-FBT Swap (ir.fbt.swap) is a non-custodial cryptocurrency swap interface for
+FBT Swap (ir.fbtswap.app) is a non-custodial cryptocurrency swap interface for
 Android, built with Capacitor. It is distributed outside Google Play because
 our company is based in Iran and cannot register a Play Console account.
 
@@ -137,7 +137,7 @@ targets API 35, sets usesCleartextTraffic="false", is signed with a release
 key, and is not debuggable.
 
 Source code is public at https://github.com/mshiravi433-ctrl/fbtcryp and the
-website is https://www.lawpoetics.ir
+website is https://fbtswap.ir
 
 We believe the block is a false positive caused by the app being newly
 published and not yet known to Play Protect, rather than by any behaviour
@@ -167,68 +167,12 @@ Application definitions.
 
 # ایراد ۲ — ایمیل سازمانی
 
-## این یعنی چه
-
-بازار ایمیلی می‌خواهد **روی دامنهٔ خودت**، نه جی‌میل:
-
-```
-❌ fbtswap@gmail.com
-✅ info@lawpoetics.ir   یا   support@lawpoetics.ir
-```
-
-دلیلش این است که جی‌میل را هرکسی در سی ثانیه می‌سازد، ولی ایمیل روی یک
-دامنه یعنی واقعاً آن دامنه را کنترل می‌کنی — یک لایه احراز هویت ارزان برای
-آن‌ها.
-
-## خبر خوب: دامنه را از قبل داری
-
-`lawpoetics.ir` مال خودت است و سایت روی همان بالاست. یعنی **نصف کار انجام
-شده**؛ فقط باید سرویس ایمیل به آن وصل شود.
-
-## سه راه، از ارزان به گران
-
-### راه ۱ — سرویس ایمیل ایرانی (پیشنهاد من)
-
-سرویس‌هایی مثل **لیارا**، **میلفا** یا **پارس‌پک** روی دامنهٔ `.ir` ایمیل
-می‌دهند، پرداخت ریالی دارند و فیلتر نیستند. ارزان‌ترین پلن‌ها معمولاً
-ماهی چند ده هزار تومان است.
-
-| سرویس | لینک |
-|---|---|
-| لیارا | https://liara.ir/products/business-email/ |
-| میلفا | https://mailfa.com/email-hosting |
-| پارس‌پک | https://parspack.com |
-
-بعد از ساختن، **forwarding** را روشن کن تا هرچه به `info@lawpoetics.ir`
-می‌آید داخل همان جی‌میل فعلی‌ات بیفتد — نیازی نیست صندوق جدیدی را چک کنی.
-
-> ⚠️ **یک نکتهٔ فنی که ممکن است سایت را بخواباند:** سرویس ایمیل از تو
-> می‌خواهد رکورد **MX** به DNS دامنه اضافه کنی. رکوردهای `A` و `CNAME` که
-> الان دامنه را به Vercel وصل کرده‌اند را **دست نزن** — فقط MX را اضافه کن.
-> MX فقط ایمیل را مسیریابی می‌کند و به سایت کاری ندارد. اگر اشتباهی A را
-> عوض کنی، `lawpoetics.ir` از دسترس خارج می‌شود.
-
-### راه ۲ — Zoho Mail
-
-پلن رایگانش یک دامنه و پنج کاربر می‌دهد. **ولی** ثبت‌نام از IP ایران معمولاً
-مشکل دارد و حساب‌های ایرانی سابقهٔ بسته‌شدن دارند. اگر ایمیل پشتیبانی رسمی
-اپت وسط کار قطع شود، بدتر از نداشتنش است. **پیشنهاد نمی‌کنم.**
-
-### راه ۳ — Google Workspace
-
-ماهی حدود ۶ دلار، و کارت خارجی می‌خواهد. برای این مرحله بی‌مورد است.
-
-## بعد از ساختن ایمیل، این‌جاها را عوض کن
-
-آدرس ایمیل در چند جای پروژه نوشته شده. وقتی ایمیل سازمانی آماده شد، بگو تا
-همه را با هم به‌روز کنم:
-
-| کجا | الان |
-|---|---|
-| `index.html` (داده‌های ساختاریافته) | `fbtswap@gmail.com` |
-| صفحهٔ تماس در اپ | `fbtswap@gmail.com` |
-| `store/UPLOAD-KIT-EN.md` | `fbtswap@gmail.com` |
-| فرم فروشگاه‌ها | `fbtswap@gmail.com` |
+> ✅ **این بخش دیگر موضوعیت ندارد.** مالک تصمیم گرفت روی `fbtswap@gmail.com`
+> بماند و ایمیل دامنه‌ای فعلاً راه نیندازد. راهنمای کاملش اگر روزی خواستی، در
+> `docs/EMAIL-STEPS-NOW-FA.md` هست (ImprovMX رایگان روی `fbtswap.ir`).
+>
+> متن قدیمی این بخش به دامنهٔ منقضی `lawpoetics.ir` اشاره می‌کرد و پاک شد تا
+> کسی از روی آن آدرس اشتباه در فرم فروشگاه ننویسد.
 
 ---
 
@@ -239,8 +183,6 @@ Application definitions.
 | ۱ | ببین بازار دقیقاً کدام پیام Play Protect را گفته | — | ۲ دقیقه |
 | ۲ | با تغییر IP فرم اعتراض را بفرست | رایگان | ۱۵ دقیقه + ۱–۲ هفته انتظار |
 | ۳ | **همزمان** در APKPure و Uptodown منتشر کن | رایگان | ~۳۵ دقیقه |
-| ۴ | ایمیل سازمانی روی `lawpoetics.ir` بگیر | ~ماهی چند ده هزار تومان | ۳۰ دقیقه |
-| ۵ | ایمیل جدید را در پروژه جایگزین کن | — | من انجام می‌دهم |
 
 **صادقانه:** مرحلهٔ ۳ را زودتر از ۲ نتیجه می‌دهد. اعتراض به گوگل هفته‌ها طول
 می‌کشد و تضمینی هم نیست؛ APKPure و Uptodown هیچ‌کدام این دو ایراد را
