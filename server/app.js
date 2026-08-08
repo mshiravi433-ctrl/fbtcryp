@@ -45,7 +45,7 @@ import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js
 import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
-import { fcmBroadcast, fcmConfigured, fcmDiagnose } from './fcm.js';
+import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import {
@@ -1195,6 +1195,26 @@ app.get('/api/push/status', async (_req, res) => {
      */
     fcmDetail: fcmDiagnose()
   });
+});
+
+/*
+ * "Does push actually work?" — asked of Google, not of our own env vars.
+ *
+ * /api/push/status reports whether the credentials LOOK right. That passed
+ * happily while the package rename left google-services.json pointing at the
+ * old Firebase app id, which is exactly the kind of failure that shows up
+ * weeks later as "alerts stopped arriving". This route performs a real
+ * authenticated call against the real project and reports which stage failed.
+ *
+ * Nothing is delivered: it uses validate_only plus a token literal that can
+ * never match a device.
+ */
+app.get('/api/push/selftest', async (_req, res) => {
+  try {
+    res.json(await fcmSelfTest());
+  } catch (e) {
+    res.status(500).json({ ok: false, stage: 'ERROR', detail: String(e.message).slice(0, 120) });
+  }
 });
 
 app.post('/api/push/fcm/remove', async (req, res) => {

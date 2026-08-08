@@ -512,6 +512,7 @@ export default function run() {
       'fetchNfts',
       'addSubscription',
       'removeSubscription',
+      'fcmSelfTest',
       'addFcmToken',
       'removeFcmToken',
       'putWatches',

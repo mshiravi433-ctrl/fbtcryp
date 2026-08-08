@@ -157,6 +157,79 @@ async function accessToken() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Live self-test                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Prove that FCM can ACTUALLY send, not merely that the variables look right.
+ *
+ * ─── WHY fcmDiagnose() IS NOT ENOUGH ────────────────────────────────────────
+ * That function inspects the SHAPE of the credentials: is the key present,
+ * does it have a PEM wrapper, does it contain newlines. Every one of those can
+ * be true for a key that Google rejects — a revoked key, a key from a
+ * different project, or a service account whose messaging permission was
+ * removed all look identical to it. After the package rename that gap
+ * mattered: the app id changed, and "the variables are still set" is not
+ * evidence that push works.
+ *
+ * This asks GOOGLE. It mints a real OAuth token with the real key, then makes
+ * a real call to the real project's messages:send endpoint using the reserved
+ * invalid token literal. A 400 INVALID_ARGUMENT is the SUCCESS case here: it
+ * means authentication passed, the project was found, and only the fake device
+ * token was rejected. Nothing is delivered to anybody.
+ *
+ * @returns {Promise<{ok:boolean, stage:string, detail?:string, projectId:string|null}>}
+ */
+export async function fcmSelfTest() {
+  if (!fcmConfigured()) {
+    return { ok: false, stage: 'CONFIG', detail: 'credentials missing', projectId: PROJECT_ID || null };
+  }
+
+  let token;
+  try {
+    token = await accessToken();
+  } catch (e) {
+    /*
+     * The most common real failure, and the one whose native error message is
+     * least helpful: invalid_grant, which almost always means the \n escapes
+     * in the private key were flattened when it was pasted.
+     */
+    return {
+      ok: false,
+      stage: 'AUTH',
+      detail: String(e?.message || e).slice(0, 80),
+      projectId: PROJECT_ID
+    };
+  }
+
+  try {
+    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      /*
+       * Google document this exact string as a token that is always invalid,
+       * so it can never reach a real device however the project is configured.
+       */
+      body: JSON.stringify({ validate_only: true, message: { token: 'SELF_TEST_INVALID_TOKEN' } })
+    });
+
+    if (res.status === 400) {
+      /* Auth and project both fine; only the deliberately-fake token failed. */
+      return { ok: true, stage: 'SEND', detail: 'auth ok, project reachable', projectId: PROJECT_ID };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, stage: 'PERMISSION', detail: `HTTP ${res.status}`, projectId: PROJECT_ID };
+    }
+    if (res.status === 404) {
+      return { ok: false, stage: 'PROJECT', detail: 'project not found', projectId: PROJECT_ID };
+    }
+    return { ok: true, stage: 'SEND', detail: `HTTP ${res.status}`, projectId: PROJECT_ID };
+  } catch (e) {
+    return { ok: false, stage: 'NETWORK', detail: String(e?.message || e).slice(0, 80), projectId: PROJECT_ID };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Send                                                                        */
 /* -------------------------------------------------------------------------- */
 
