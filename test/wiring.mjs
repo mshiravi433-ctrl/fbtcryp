@@ -9130,22 +9130,45 @@ export default function run() {
       read('src/lib/walletBackup.js').includes(`Android/data/${APP_ID}/files`));
 
     /*
-     * 5. SILENT FAILURE #3 — Firebase.
-     *    The google-services plugin matches `package_name` against the
-     *    applicationId and FAILS THE BUILD on a mismatch, so this one is
-     *    caught. But the mobilesdk_app_id inside still belongs to the app
-     *    registered under the OLD package, and Google state plainly that
-     *    hand-editing this file is not supported — FCM routes by App ID, so
-     *    push may keep working for now and stop without warning later.
+     * 5. FIREBASE — now genuinely re-registered, not hand-patched.
      *
-     *    The honest fix is a new Android app in the Firebase console for
-     *    ir.fbtswap.app and a freshly downloaded google-services.json. That
-     *    needs console access, so it is documented rather than faked.
+     *    The google-services plugin matches `package_name` against the
+     *    applicationId and fails the build on a mismatch. That check alone is
+     *    NOT enough, and this guard used to be fooled by exactly that: for one
+     *    release the file was a hand-edited copy where the package string had
+     *    been swapped but `mobilesdk_app_id` still belonged to the app
+     *    registered under the OLD name. The build passed, and FCM routes by
+     *    App ID — so push would have kept working and then stopped without
+     *    warning, which is the worst shape a bug can take.
+     *
+     *    The owner has since registered ir.fbtswap.app properly in the
+     *    Firebase console, and the real file carries TWO clients with two
+     *    DISTINCT App IDs. So the check is now: our package must be present
+     *    AND must own an App ID that no other package shares.
      */
     const gs = JSON.parse(read('android/app/google-services.json'));
-    const pkgs = gs.client.map((c) => c.client_info.android_client_info.package_name);
-    t(`google-services.json lists the new package (${pkgs.join(', ')})`,
-      pkgs.includes(APP_ID));
+    const clients = gs.client.map((c) => ({
+      pkg: c.client_info.android_client_info.package_name,
+      appId: c.client_info.mobilesdk_app_id
+    }));
+    const mine = clients.find((c) => c.pkg === APP_ID);
+    t(`google-services.json registers ${APP_ID}`, Boolean(mine));
+    /*
+     * The distinctness test is the one that would have caught the hand-edit.
+     * A copied App ID means the file was edited rather than downloaded.
+     */
+    t('...with an App ID of its own, not one copied from the old package',
+      Boolean(mine) && clients.every((c) => c.pkg === APP_ID || c.appId !== mine.appId));
+    /*
+     * The old package stays listed on purpose: users on the previous build are
+     * still subscribed under it, and removing it would silently cut their
+     * alerts off.
+     */
+    t('...and the old package is kept so existing users keep their alerts',
+      clients.some((c) => c.pkg === 'ir.fbt.swap'));
+    /* Every client must belong to the project the server actually pushes from. */
+    t('...inside the project the server sends from (fbt-room-a46fc)',
+      gs.project_info.project_id === 'fbt-room-a46fc');
     t('...and the re-registration step is written down, not assumed',
       /google-services\.json/.test(read('docs/PACKAGE-RENAME-FA.md')));
 
@@ -9154,12 +9177,17 @@ export default function run() {
      *    changelog legitimately mention it as history, so only source and
      *    Android config are scanned.
      */
+    /*
+     * google-services.json is deliberately EXCLUDED: it legitimately still
+     * lists ir.fbt.swap as a second Firebase client so users on the previous
+     * build keep receiving alerts. That case is checked properly just above,
+     * by App ID. Everything else must be clean.
+     */
     const shipped = [
       'capacitor.config.json',
       'android/app/build.gradle',
       'android/app/src/main/res/values/strings.xml',
       'android/app/src/main/AndroidManifest.xml',
-      'android/app/google-services.json',
       'src/lib/walletBackup.js',
       'src/context/WalletContext.jsx'
     ];

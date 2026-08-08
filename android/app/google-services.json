@@ -9,6 +9,25 @@
       "client_info": {
         "mobilesdk_app_id": "1:353454762754:android:ff2e16f0af75d19324b01b",
         "android_client_info": {
+          "package_name": "ir.fbt.swap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDxvqfPOMaZZpzVMrlImoubWjT-NUXVvoI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:353454762754:android:c68893d34d871cc924b01b",
+        "android_client_info": {
           "package_name": "ir.fbtswap.app"
         }
       },
