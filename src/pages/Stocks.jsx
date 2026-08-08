@@ -7,7 +7,8 @@ import CoinLogo from '../components/CoinLogo';
 import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
-import { useMarkets } from '../hooks/useMarket';
+import HistoryPanel from '../components/HistoryPanel';
+import { useChart, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { IconExternal, IconShield } from '../components/Icons';
@@ -118,6 +119,22 @@ export default function Stocks() {
   const commodities = useMemo(
     () => (assets?.commodities ?? []).filter((a) => a.liquidity >= MIN_EQUITY_LIQUIDITY),
     [assets]
+  );
+
+  /*
+   * 90 days of gold, for the "What the past says" panel below the gold rows.
+   *
+   * The id is passed as null unless the gold section is ACTUALLY going to
+   * render — `useChart` resolves to an empty array on a null id, so nothing is
+   * requested. Fetching unconditionally would poll CoinGecko every 60 seconds
+   * for a chart nobody is looking at, including on the RWA tab and while the
+   * asset list is still loading.
+   */
+  const goldId = commodities.length > 0 && tab === 'equity' ? 'pax-gold' : null;
+  const { data: goldChart } = useChart(goldId, 90);
+  const goldSeries = useMemo(
+    () => (goldChart ?? []).map((d) => d.p).filter((p) => Number.isFinite(p)),
+    [goldChart]
   );
 
   const open = (url) => {
@@ -294,6 +311,30 @@ export default function Stocks() {
                   <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} />
                 ))}
               </motion.div>
+
+              {/*
+                ─── "WHAT THE PAST SAYS", ON GOLD ────────────────────────────
+                Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد».
+
+                It is attached to GOLD specifically, and that is a data
+                constraint rather than a preference. The equity rows come from
+                /api/solana/assets, which returns a Jupiter spot price and a
+                24-hour change — one number and a delta, no series at all. The
+                panel measures support levels, range position and the largest
+                drawdown across a window, so with no window there is nothing
+                for it to compute and it would render empty.
+
+                PAXG is different: it is on CoinGecko, so a real 90-day series
+                exists and every figure below is measured from it. Gold is
+                also the row where the panel earns its place — someone buying
+                gold is usually asking "is this a normal price or a spike",
+                which is exactly the question it answers.
+              */}
+              {goldSeries.length >= 20 && (
+                <div style={{ marginTop: 10 }}>
+                  <HistoryPanel series={goldSeries} days={90} />
+                </div>
+              )}
             </section>
           )}
 

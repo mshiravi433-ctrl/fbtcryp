@@ -6,7 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
@@ -18,8 +18,6 @@ import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
-import VerdictPanel from '../components/VerdictPanel';
-import { analyze } from '../lib/ai';
 import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
 
 /**
@@ -162,17 +160,26 @@ export default function CoinDetail() {
   }, [id, fetched, coinLoading, refreshCoin]);
 
   const resolvedRoute = useMemo(() => venueRoute(venue), [venue]);
+
   /*
-   * Bitcoin over the SAME range, plus the global stats, for the verdict
-   * panel's macro layer. Both series have to come from one endpoint with one
-   * `days` value or their daily returns cannot be paired, which is why this
-   * follows `range` rather than using a fixed window.
+   * ─── THE WEEKLY / MONTHLY VERDICT LIVES ON /signals NOW ────────────────────
+   * Asked for: «نمای کلی هفتگی و ماهانه در صفحه نمودار هر توکن را حذف کن باید
+   * در صفحه سیگنال فقط باشد».
    *
-   * On the bitcoin page this is the identical request the line above already
-   * made, so the poll cache answers it without touching the network.
+   * The same VerdictPanel was rendered on BOTH this page and Signals, so the
+   * app gave two homes to one answer. On a chart page that is the wrong
+   * emphasis: someone opening a coin wants the price and its history, and a
+   * stance card at the top turns a reference screen into an opinion screen.
+   * Signals is the screen whose whole job is the opinion.
+   *
+   * Removed with it: the Bitcoin series and the global stats. They were
+   * fetched ONLY to feed this panel's macro layer, so leaving them would be
+   * two network polls per coin view — repeated every 60s by usePoll — with
+   * nothing reading the result.
+   *
+   * HistoryPanel below stays: it reports measured facts about this coin's own
+   * chart, which is exactly what a chart page is for.
    */
-  const { data: btcSeries } = useChart('bitcoin', range.days);
-  const { data: global } = useGlobalStats();
 
   const favorites = useAppStore((s) => s.favorites);
   const toggleFavorite = useAppStore((s) => s.toggleFavorite);
@@ -187,39 +194,11 @@ export default function CoinDetail() {
 
   const chartData = series ?? [];
 
-  /*
-   * The technical read, computed here rather than inside VerdictPanel.
-   *
-   * `analyze()` needs at least 30 valid points and returns null below that,
-   * which is the signal to render nothing at all — a coin listed last week
-   * genuinely has nothing to say and a panel full of "unknown" would be worse
-   * than no panel. Keeping the call here means that decision is visible at
-   * the call site instead of buried in the component.
-   */
-  const analysis = useMemo(
-    () => analyze(chartData.map((d) => d.p), coin ?? {}),
-    [chartData, coin]
-  );
   const first = chartData[0]?.p ?? 0;
   const last = chartData[chartData.length - 1]?.p ?? 0;
   const rangeChange = first ? ((last - first) / first) * 100 : 0;
   const up = rangeChange >= 0;
   const color = up ? '#00ff9d' : '#ff3b6b';
-
-  /*
-   * ─── DO NOT RENDER THE ANALYSIS UNTIL THE COIN ITSELF EXISTS ────────────
-   * The guard below only fires once EVERYTHING has settled. On a cold open
-   * the chart request often lands before the coin request, which leaves
-   * `loading === false` while `coin` is still null — and the page then
-   * rendered `<VerdictPanel coin={null}>`, which threw. That is the reported
-   * crash-on-first-tap that returns after navigating away and back.
-   *
-   * verdict() has been hardened too, but a panel that ANALYSES a coin should
-   * not be drawn before the coin is known regardless: with no coin there is
-   * no volume, no market cap and no name, so it would render a confident
-   * read of an asset it cannot identify.
-   */
-  const analysisReady = Boolean(coin) && analysis;
 
   if (!coin && !loading && !coinLoading) {
     /*
@@ -430,25 +409,6 @@ export default function CoinDetail() {
         `series` is the chart data already on screen — no extra request, and
         the panel follows whichever range the user picked.
       */}
-      {/*
-        The verdict first, then the raw history behind it. That order matters:
-        the verdict is the readable answer and the history panel is the
-        evidence, and a reader who stops after the first panel should already
-        have the correct impression rather than a list of measurements they
-        have to synthesise themselves.
-      */}
-      {analysisReady && (
-        <motion.div variants={riseIn} initial="hidden" animate="show">
-          <VerdictPanel
-            analysis={analysis}
-            series={(series ?? []).map((d) => d.p)}
-            btcSeries={(btcSeries ?? []).map((d) => d.p)}
-            coin={coin}
-            global={global}
-          />
-        </motion.div>
-      )}
-
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <HistoryPanel
           series={(series ?? []).map((d) => d.p)}

@@ -2914,7 +2914,19 @@ export default function run() {
     const signals = read('src/pages/Signals.jsx');
     const detail = read('src/pages/CoinDetail.jsx');
     t('the Signals screen mounts the panel', /<VerdictPanel/.test(signals));
-    t('the coin screen mounts it too', /<VerdictPanel/.test(detail));
+
+    /*
+     * ─── AND THE COIN PAGE DELIBERATELY DOES NOT ────────────────────────────
+     * Asked for: «نمای کلی هفتگی و ماهانه در صفحه نمودار هر توکن را حذف کن
+     * باید در صفحه سیگنال فقط باشد».
+     *
+     * One answer, one home. The same panel used to render on both screens; on
+     * a chart page that is the wrong emphasis, because someone opening a coin
+     * wants the price and its history, not a stance card. Asserted as an
+     * ABSENCE so re-adding it fails the build rather than quietly restoring
+     * the duplicate.
+     */
+    t('the coin screen does NOT mount the verdict panel', !/<VerdictPanel/.test(detail));
 
     /*
      * The macro layer is the whole reason this engine is better than the old
@@ -2922,12 +2934,22 @@ export default function run() {
      * that mounts the panel but passes no `btcSeries` gets a verdict with the
      * macro layer silently weighted to zero — working code, dead feature, and
      * invisible in review.
+     *
+     * Only Signals is checked now; CoinDetail has no panel to feed.
      */
-    for (const [name, src] of [['Signals', signals], ['CoinDetail', detail]]) {
-      t(`${name} passes a bitcoin series to the macro layer`, /btcSeries=\{/.test(src));
-      t(`${name} fetches one`, /useChart\('bitcoin'/.test(src));
-      t(`${name} passes global stats too`, /global=\{/.test(src));
-    }
+    t('Signals passes a bitcoin series to the macro layer', /btcSeries=\{/.test(signals));
+    t('Signals fetches one', /useChart\('bitcoin'/.test(signals));
+    t('Signals passes global stats too', /global=\{/.test(signals));
+
+    /*
+     * The inputs must go with it. `analyze()`, the Bitcoin series and the
+     * global stats were fetched on the coin page ONLY to feed that panel, and
+     * useChart polls every 60 seconds — leaving them would be two live network
+     * polls per coin view whose results nothing reads.
+     */
+    t('...and the coin page stopped fetching the inputs it no longer uses',
+      !/useChart\('bitcoin'/.test(detail) && !/useGlobalStats/.test(detail));
+    t('...including the technical analysis call', !/\banalyze\(/.test(detail));
 
     /*
      * The ceilings must be IMPORTED, never re-typed. A copied constant in the
@@ -7332,12 +7354,15 @@ export default function run() {
         !/\bcoin = \{\}(?!\s*;)/.test(src.replace(/coinArg = \{\}/g, '')));
     }
     /*
-     * And the screen must not draw an analysis of a coin it cannot identify:
-     * with no coin there is no volume, no market cap and no name, so the
-     * panel would render a confident read of an unknown asset.
+     * The coin page used to need an `analysisReady` guard here, because it
+     * rendered a VerdictPanel and a null coin crashed it. That panel now lives
+     * only on Signals, so the guard is gone with the thing it guarded — and
+     * the crash it prevented is now impossible rather than handled.
+     *
+     * Asserted so nothing quietly re-introduces the render without the guard.
      */
-    t('the coin page waits for the coin before rendering its analysis',
-      /const analysisReady = Boolean\(coin\) && analysis/.test(code(read('src/pages/CoinDetail.jsx'))));
+    t('the coin page no longer renders an analysis it must guard',
+      !/analysisReady/.test(code(read('src/pages/CoinDetail.jsx'))));
 
     /*
      * ═══════════════════════════════════════════════════════════════════════
@@ -8958,6 +8983,88 @@ export default function run() {
        which is not a colour that appears anywhere in this product. */
     t('the accent is ours, not the Capacitor default',
       /name="brand_accent"/.test(colours) && /colorAccent">@color\/brand_accent/.test(styles));
+  }
+
+  /* ---- 93. one home for the verdict, history on gold, a real address ----- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── "WHAT THE PAST SAYS" ON THE STOCKS SCREEN ──────────────────────────
+     * Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد».
+     *
+     * It is attached to GOLD, and that is a data constraint rather than a
+     * choice. The equity rows come from /api/solana/assets, which returns a
+     * Jupiter spot price and a 24h change — one number and a delta, no series.
+     * HistoryPanel measures support levels, range position and the largest
+     * drawdown ACROSS A WINDOW, so with no window it computes nothing and
+     * renders empty. PAXG is on CoinGecko, so a real 90-day series exists.
+     */
+    const stocks = code(read('src/pages/Stocks.jsx'));
+    t('the stocks screen renders the history panel', /<HistoryPanel/.test(stocks));
+    t('...fed by a real gold series, not the spot-only equity rows',
+      /useChart\(goldId, 90\)/.test(stocks) && /'pax-gold'/.test(stocks));
+    /*
+     * historyFacts() returns [] below 20 points, which would render an empty
+     * section header with nothing under it. Gate on the data, not on hope.
+     */
+    t('...and is hidden when there is not enough history',
+      /goldSeries\.length >= 20/.test(stocks));
+    /*
+     * The id must be null unless the section is really shown — useChart polls
+     * every 60s, so an unconditional fetch would hit CoinGecko forever on the
+     * RWA tab and while the asset list is still loading.
+     */
+    t('...and nothing is fetched while the gold section is not on screen',
+      /commodities\.length > 0 && tab === 'equity' \? 'pax-gold' : null/.test(stocks));
+
+    /*
+     * ─── A SUPPORT ADDRESS ON OUR OWN DOMAIN ────────────────────────────────
+     * Asked whether info@fbtswap.ir is possible. The code path already
+     * existed — SUPPORT_EMAIL reads VITE_SUPPORT_EMAIL and withContactEmail()
+     * rewrites the address inside already-translated sentences — but the
+     * variable was documented NOWHERE, so the capability was unreachable in
+     * practice. A switch nobody can find is the same as no switch.
+     */
+    t('the support address is configurable', /VITE_SUPPORT_EMAIL/.test(read('src/lib/contact.js')));
+    t('...and the variable is documented for whoever sets it',
+      /VITE_SUPPORT_EMAIL/.test(read('.env.example')));
+    /*
+     * ─── THE ONE STEP THAT CANNOT BE AUTOMATED FROM HERE ────────────────────
+     * The APK is built by CI, and Vite inlines import.meta.env at BUILD TIME.
+     * So `.github/workflows/build-apk.yml` must also pass the variable through
+     * with `VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}`, or setting it
+     * in Vercel changes the website and leaves the Android app on the old
+     * Gmail address — the two disagree while both look correct in isolation.
+     * The same trap is already documented for VITE_FEE_BPS in that file.
+     *
+     * This is NOT asserted, deliberately. GitHub refuses a push from this
+     * agent's token that touches `.github/workflows/` ("refusing to allow a
+     * GitHub App to create or update workflow ... without `workflows`
+     * permission"), so the line has to be added by the owner by hand. A check
+     * that can never pass would be a permanently red build that trains people
+     * to ignore the suite.
+     *
+     * The step is written down in docs/EMAIL-DOMAIN-FA.md instead, and this
+     * check makes sure it stays written down.
+     */
+    t('the CI step that cannot be automated is documented',
+      /VITE_SUPPORT_EMAIL/.test(read('docs/EMAIL-DOMAIN-FA.md')));
+    /*
+     * The rewrite must stay wired into i18n. Without it, changing the variable
+     * updates the Contact screen but not the twelve locale bundles that embed
+     * the address mid-sentence — a support address that is stale in one screen
+     * is worse than a missing one, because the user writes into a void.
+     */
+    t('translated copy is rewritten too, not just the Contact screen',
+      /withContactEmail/.test(read('src/i18n/index.js')));
+    /* The needle must not follow the setting, or the search finds nothing. */
+    const contact = code(read('src/lib/contact.js'));
+    t('the legacy address is a fixed needle, not a second setting',
+      /LEGACY_EMAIL_IN_LOCALES = 'fbtswap@gmail\.com'/.test(contact));
   }
 
   return rows;
