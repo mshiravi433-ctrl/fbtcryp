@@ -32,6 +32,7 @@ import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
+import { fetchAvantisEquities } from './avantis.js';
 import { fetchPerpMarkets } from './perp.js';
 import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
@@ -640,6 +641,21 @@ app.get('/api/yields', (_req, res) => serve(res, 3_600_000)(fetchYields, 'yields
  * misleading in a way an hour-old APY is not.
  */
 app.get('/api/solana/assets', (_req, res) => serve(res, 300_000)(fetchSolanaAssets, 'solana-assets'));
+
+/**
+ * AVANTIS EQUITIES — the ticker list for the Stocks screen.
+ *
+ * Asked for: the stocks themselves on the stocks page, not just an advert.
+ * See server/avantis.js for why the LIST comes from Avantis and not from UTEX
+ * (UTEX geo-blocks our server outright, so there is no list to read) and why
+ * both upstreams here are public and keyless.
+ *
+ * 60s rather than the 300s used for /api/solana/assets. These are live venue
+ * prices during US market hours, and this list sits directly above a link that
+ * sends the reader to go and trade on them.
+ */
+app.get('/api/avantis/equities', (_req, res) =>
+  serve(res, 60_000)(fetchAvantisEquities, 'avantis-equities'));
 
 /**
  * PERPETUAL FUNDING RATES — the Perp screen's data.

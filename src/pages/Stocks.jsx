@@ -15,6 +15,7 @@ import { IconExternal, IconShield } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import { venueDisclosure, withReferral } from '../lib/venueReferral';
+import { fetchAvantisEquities } from '../lib/avantisEquities';
 
 /**
  * STOCKS — tokenized equities, RWA sector tokens, and the honest limits.
@@ -92,6 +93,29 @@ export default function Stocks() {
       alive = false;
     };
   }, []);
+
+  /*
+   * ─── THE AVANTIS TICKER LIST ────────────────────────────────────────────
+   * Asked for: «سهام ها باشد در صفحه سهام فقط بنر تبلیغاتی نباشد» — the
+   * stocks themselves, not just an advert. See lib/avantisEquities.js.
+   *
+   * Loaded only on the equity tab. Fetching it while the user is reading the
+   * RWA tab would spend a request on a section that is not rendered.
+   */
+  const [avantis, setAvantis] = useState(null);
+  const [avantisLoading, setAvantisLoading] = useState(true);
+
+  useEffect(() => {
+    if (tab !== 'equity') return undefined;
+    let alive = true;
+    setAvantisLoading(true);
+    fetchAvantisEquities()
+      .then((d) => alive && setAvantis(d))
+      .finally(() => alive && setAvantisLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [tab]);
 
   const rwaCoins = useMemo(
     () => (coins ?? []).filter((c) => RWA_IDS.includes(c.id)),
@@ -390,45 +414,165 @@ export default function Stocks() {
             most likely to be misread on a page whose whole subject is buying
             equities — the two must not blur together.
           */}
+          {/*
+            ─── THE OTHER MARKET: REAL TICKERS, NOT A BANNER ──────────────────
+            The previous version of this block was a single row saying "UTEX
+            has hundreds of tickers, tap here". The owner's objection was
+            exact and correct: «فقط بنر تبلیغاتی نباشد». A row that asks you
+            to leave before showing you anything is an advert, not a feature.
+
+            So the list is real. Symbols, live prices, leverage caps and
+            market-hours state come from Avantis' own public pair table plus
+            Pyth — both keyless. See server/avantis.js.
+
+            ─── WHY THE LIST IS AVANTIS AND THE LINK BELOW IS UTEX ────────────
+            Not a preference. UTEX pays us far more and I tried it first, but
+            margin.utex.io answers "UTEX is not available in your country" to
+            our server on every path, so there is no ticker list to read. A
+            hard-coded list of UTEX symbols would be one we cannot price and
+            cannot notice going stale — the "wired to nothing" failure this
+            project keeps re-learning. Avantis publishes everything openly, so
+            Avantis is what can be shown honestly.
+
+            ─── AND WHY THIS SITS BELOW THE TOKENISED EQUITIES ────────────────
+            Same rule as before, and it still binds: both venues here pay us
+            more than our own 70 bps and both are riskier for the buyer than a
+            share backed 1:1 in custody. We never promote the worse product
+            because it pays better — the deBridge precedent.
+          */}
           <section>
-            <p className="section-label">{t('stocks.utex.title')}</p>
-            <p className="farm-filtered faint">{t('stocks.utex.intro')}</p>
-
-            <p className="notice notice-danger" style={{ marginTop: 9 }}>
-              {t('stocks.utex.warning')}
-            </p>
-
-            <motion.button
-              className="wallet-option"
-              variants={riseIn}
-              initial="hidden"
-              animate="show"
-              whileTap={{ scale: 0.985 }}
-              style={{ marginTop: 9 }}
-              onClick={() => open(withReferral('utex', 'https://utex.io/'))}
-            >
-              <span className="wallet-badge" style={{ color: 'var(--rgb-5)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                UTEX
-              </span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                  {t('stocks.utex.name')}
-                </span>
-                <span className="set-row-sub">{t('stocks.utex.desc')}</span>
-              </span>
-              <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-            </motion.button>
+            <p className="section-label">{t('stocks.other.title')}</p>
+            <p className="farm-filtered faint">{t('stocks.other.intro')}</p>
 
             {/*
-              The disclosure tracks the code, not a hard-coded sentence. If the
-              campaign id is ever removed the link stops earning AND this line
-              stops claiming it does — they cannot disagree, which is the bug
-              that was caught on the Perp screen and again on Avantis.
+              Inline, never collapsed. These are leveraged perpetuals sitting
+              on a page whose whole subject is buying equities, and "this is
+              not a share" is the single most misreadable fact here.
+            */}
+            <p className="notice notice-danger" style={{ marginTop: 9 }}>
+              {t('stocks.other.warning')}
+            </p>
+
+            {avantisLoading && !avantis ? (
+              <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="skel" style={{ height: 52 }} />
+                ))}
+              </div>
+            ) : !avantis?.live || !avantis.rows.length ? (
+              /*
+               * Degrades to nothing dramatic. The venue link below still
+               * works, so a dead upstream costs the reader the table and not
+               * the section.
+               */
+              <p className="notice" style={{ marginTop: 10 }}>{t('stocks.other.unavailable')}</p>
+            ) : (
+              <motion.div
+                className="stack"
+                style={{ gap: 8, marginTop: 10 }}
+                variants={stagger}
+                initial="hidden"
+                animate="show"
+              >
+                {avantis.rows.map((r) => (
+                  <motion.div key={r.id} className="coin-row" variants={riseIn}>
+                    <span
+                      className="wallet-badge"
+                      style={{ color: 'var(--rgb-5)', fontSize: 10.5, fontFamily: 'var(--font-mono)', flexShrink: 0 }}
+                    >
+                      {r.symbol.slice(0, 4)}
+                    </span>
+                    <div className="coin-meta">
+                      <div className="coin-sym">{r.symbol}</div>
+                      <div className="coin-name">
+                        {/*
+                          The leverage cap is the honest headline number for a
+                          perp, and it is the OVERRIDE value where Avantis has
+                          one — the live payload had pairs whose base cap was
+                          10x while the override held them at 2x.
+                        */}
+                        {r.maxLeverage ? t('stocks.other.upTo', { n: r.maxLeverage }) : t('stocks.other.perp')}
+                      </div>
+                    </div>
+                    <div className="coin-right">
+                      {/*
+                        `price` is null when Pyth had no value — rendered as a
+                        dash, never as $0.00. Number(null) is 0 and 0 is
+                        finite, so a plausible wrong number is the easy bug.
+                      */}
+                      <div className="mono" style={{ fontSize: 12.5 }}>
+                        {r.price ? `$${fmtPrice(r.price)}` : '—'}
+                      </div>
+                      {/*
+                        US markets are shut most of the week in Tehran. Without
+                        this the price looks stale or broken.
+                      */}
+                      <div className="faint mono" style={{ fontSize: 10 }}>
+                        {r.marketOpen === false ? t('stocks.other.closed') : t('stocks.other.openNow')}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+
+            <div className="stack" style={{ gap: 9, marginTop: 10 }}>
+              {/*
+                Avantis first: it is the venue the table above belongs to, so
+                sending the reader anywhere else from these rows would be a
+                bait-and-switch.
+              */}
+              <motion.button
+                className="wallet-option"
+                variants={riseIn}
+                initial="hidden"
+                animate="show"
+                whileTap={{ scale: 0.985 }}
+                onClick={() => open(withReferral('avantis', 'https://www.avantisfi.com/trade'))}
+              >
+                <span className="wallet-badge" style={{ color: 'var(--rgb-4)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                  AVNT
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
+                    {t('stocks.other.avantisName')}
+                  </span>
+                  <span className="set-row-sub">{t('stocks.other.avantisDesc')}</span>
+                </span>
+                <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+              </motion.button>
+
+              <motion.button
+                className="wallet-option"
+                variants={riseIn}
+                initial="hidden"
+                animate="show"
+                whileTap={{ scale: 0.985 }}
+                onClick={() => open(withReferral('utex', 'https://utex.io/'))}
+              >
+                <span className="wallet-badge" style={{ color: 'var(--rgb-5)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                  UTEX
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
+                    {t('stocks.other.utexName')}
+                  </span>
+                  <span className="set-row-sub">{t('stocks.other.utexDesc')}</span>
+                </span>
+                <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+              </motion.button>
+            </div>
+
+            {/*
+              The disclosure tracks the configured codes, not a hard-coded
+              sentence. If either code is removed the links stop earning AND
+              this line stops claiming they do — they cannot disagree, which
+              is the bug caught on Perp and again on Avantis itself.
             */}
             <p className="faint" style={{ marginTop: 9, lineHeight: 1.75 }}>
-              {venueDisclosure('utex') === 'earning'
-                ? t('stocks.utex.earning')
-                : t('stocks.utex.noEarn')}
+              {venueDisclosure('utex') === 'earning' || venueDisclosure('avantis') === 'earning'
+                ? t('stocks.other.earning')
+                : t('stocks.other.noEarn')}
             </p>
           </section>
         </>

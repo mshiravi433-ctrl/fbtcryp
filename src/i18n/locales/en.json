@@ -1087,17 +1087,24 @@
       "p2": "No shareholder rights come with them: no vote, and dividends only if the issuer chooses to pass them on. If the issuer fails, the token is worth whatever the market thinks their promise is worth.",
       "p3": "Liquidity is thin compared with a real exchange. A large order can move the price against you sharply, and there may be no buyer at all when you want out."
     },
-    "utex": {
-      "title": "Cannot find your ticker?",
-      "intro": "The list above covers a few dozen large caps. UTEX carries a much wider range of US names, settled entirely in USDT — no bank account and no tax form, which is why it works from places a normal broker does not.",
-      "warning": "These are NOT shares. A UTEX position is a margin contract settled in USDT: you are not on any shareholder register, you own no part of the company, and there is no investor-compensation scheme behind it. UTEX is registered in Saint Vincent and the Grenadines and holds no broker licence. That is a different product from the tokenised equities above, which are backed one-for-one by real shares held in custody.",
-      "name": "UTEX — US stocks against USDT",
-      "desc": "Hundreds of US tickers. Account with an email, settled in USDT.",
-      "earning": "We earn a share of the fees UTEX charges on trades from this link. It costs you nothing extra, and it is why this row is here — you should know that before you tap it. We are not affiliated with UTEX and cannot help with their account, deposits or withdrawals.",
-      "noEarn": "We earn nothing from this link and are not affiliated with UTEX. We cannot help with their account, deposits or withdrawals."
-    },
     "kycTitle": "Do I need identity verification?",
-    "riskTitle": "Risks you are taking"
+    "riskTitle": "Risks you are taking",
+    "other": {
+      "title": "The rest of the market",
+      "intro": "The names above are the ones you can buy through us as tokens backed 1:1. These are listed on outside venues instead — shown live so you can see what exists before you go anywhere.",
+      "warning": "These are NOT shares and NOT the tokens above. Each one is a leveraged perpetual contract settled in stablecoins: you are on no shareholder register, you own no part of the company, and there is no investor-compensation scheme. Leverage means a small move against you can close the position and take the whole deposit. Avantis is permissionless software; UTEX is registered in Saint Vincent and the Grenadines and holds no broker licence.",
+      "upTo": "Perpetual · up to {{n}}x",
+      "perp": "Perpetual contract",
+      "closed": "market closed",
+      "openNow": "open",
+      "unavailable": "The live list is unreachable right now. The venues below still work.",
+      "avantisName": "Avantis — trade the list above",
+      "avantisDesc": "On-chain on Base. Your own wallet, no account, no sign-up.",
+      "utexName": "UTEX — a wider list of US tickers",
+      "utexDesc": "Hundreds of names against USDT. Account with an email.",
+      "earning": "We earn a share of the fees these venues charge on trades from these links. It costs you nothing extra, and it is why they are listed here — you should know that before you tap. We are not affiliated with either and cannot help with their accounts, deposits or withdrawals.",
+      "noEarn": "We earn nothing from these links and are not affiliated with either venue. We cannot help with their accounts, deposits or withdrawals."
+    }
   },
   "help": {
     "title": "Help & support",

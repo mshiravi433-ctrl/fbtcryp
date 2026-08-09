@@ -9604,7 +9604,7 @@ export default function run() {
       /@supports not \(background: conic-gradient\(from var\(--angle\)[\s\S]{0,400}?brd-row-neon/.test(css));
   }
 
-  /* ---- 98. UTEX reaches the Stocks screen, below the real equities ------- */
+  /* ---- 98. real tickers on Stocks, and the perks released ---------------- */
   {
     const code = (src) => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -9612,70 +9612,148 @@ export default function run() {
       .replace(/^\s*\/\/.*$/gm, '');
 
     const stocks = code(read('src/pages/Stocks.jsx'));
+    const srv = code(read('server/avantis.js'));
+    const appSrc = code(read('server/app.js'));
 
     /*
-     * ─── THE VISIBILITY BUG THIS FIXES ──────────────────────────────────────
-     * UTEX was a live 30-60% revenue line that appeared in exactly ONE place:
-     * the Earn rank perks, gated behind Diamond at 15,000 points. Measured by
-     * running perksFor() — below 15,000 it returns link:null. A line nobody
-     * can reach earns nothing, so it now has a home on the screen about the
-     * same market.
+     * ─── A LIST, NOT A BANNER ───────────────────────────────────────────────
+     * The first version of this block was one row saying "UTEX has hundreds of
+     * tickers, tap here". The objection was exact: «فقط بنر تبلیغاتی نباشد».
+     * So the whole chain has to exist — a missing link anywhere turns the
+     * section back into an advert without anyone noticing.
      */
-    t('Stocks links UTEX', /stocks\.utex\.name/.test(stocks));
-    t('...through withReferral, so the campaign id is attached',
-      /withReferral\('utex', 'https:\/\/utex\.io\/'\)/.test(stocks));
+    t('the Avantis equity module exists', existsSync('server/avantis.js'));
+    t('...the route is mounted', /['"`]\/api\/avantis\/equities['"`]/.test(appSrc));
+    t('...and calls the fetcher', /fetchAvantisEquities/.test(appSrc));
+    t('...the client library calls the route', /avantis\/equities/.test(code(read('src/lib/avantisEquities.js'))));
+    t('...and Stocks renders the rows', /avantis\.rows\.map/.test(stocks));
 
     /*
-     * ─── ORDERING IS A SAFETY PROPERTY, NOT A LAYOUT PREFERENCE ─────────────
-     * UTEX pays us far more than the xStocks rows above (30-60% of fees vs 70
-     * bps) and is the WORSE product for the buyer — no licence, no share, no
-     * compensation scheme. The house rule from the deBridge decision is that
-     * we never route a user somewhere worse because it pays more, so it must
-     * sit BELOW the real equities. Asserted by index so a future edit that
-     * promotes it to the top fails here.
+     * Both upstreams must stay keyless. This project has had keys rotated,
+     * revoked and geo-blocked; a revenue-adjacent screen must not inherit that.
+     */
+    t('the pair table needs no API key', !/API_KEY|apiKey|x-api-key|Authorization/i.test(srv));
+    t('...and it is the public endpoint Avantis own SDK uses',
+      /socket-api-pub\.avantisfi\.com\/socket-api\/v1\/data/.test(srv));
+
+    /*
+     * Group 6 is EQUITIES today, but a group index is POSITIONAL and Avantis
+     * can reorder them. Matching the number would silently publish forex pairs
+     * onto a stocks screen.
+     */
+    t('the equity group is matched by name, not by index',
+      /EQUITY_GROUP = 'EQUITIES'/.test(srv) && /name \?\? ''\)\.toUpperCase\(\) === EQUITY_GROUP/.test(srv));
+
+    /*
+     * Number(null) is 0 and 0 is finite, so a missing Pyth price would render
+     * as "$0.00" — a plausible, wrong number on a screen about money.
+     */
+    t('a missing price stays null and never becomes zero',
+      /if \(raw === null \|\| raw === undefined/.test(srv));
+    t('...and the row renders a dash rather than \$0.00',
+      /r\.price \? `\$\$\{fmtPrice\(r\.price\)\}` : '—'/.test(stocks));
+
+    /* Delisted pairs stay in the payload with isPairListed:false. */
+    t('delisted pairs are dropped', /isPairListed === false/.test(srv));
+
+    /*
+     * leverageOverride is what actually binds — the live payload had pairs
+     * whose base cap was 10x while the override held them at 2x. Showing the
+     * base figure would overstate what the venue allows.
+     */
+    t('the binding leverage cap is the override where one is active',
+      /leverageOverride/.test(srv) && /ovr\?\.active/.test(srv));
+
+    /* Forty pairs must not mean forty outbound calls to a free endpoint. */
+    t('all prices are fetched in one Hermes call',
+      /rows\.map\(\(r\) => `ids\[\]=\$\{r\.feedId\}`\)\.join\('&'\)/.test(srv));
+
+    /* A dead price feed must not blank the section. */
+    /*
+     * Asserted structurally: the Hermes call is inside its own try/catch that
+     * swallows, and `rows` is returned AFTER it. My first attempt at this
+     * check matched an explanatory comment — comments are stripped above, so
+     * it could never pass. Match the code.
+     */
+    t('a price failure still returns the list',
+      /try \{[\s\S]{0,700}?hermes[\s\S]{0,700}?\} catch \{[\s\S]{0,80}?\}/i.test(srv) &&
+      /return \{ rows, at: Date\.now\(\) \};\s*\}\s*$/m.test(srv));
+    t('...and the client never throws', /return \{ rows: \[\], live: false \}/.test(code(read('src/lib/avantisEquities.js'))));
+
+    /* US markets are shut most of the week in Tehran; an unlabelled price
+       looks stale or broken. */
+    t('market-hours state is carried through', /marketOpen/.test(srv) && /marketOpen === false/.test(stocks));
+
+    /*
+     * ─── ORDERING IS STILL A SAFETY PROPERTY ────────────────────────────────
+     * Both venues pay us more than our own 70 bps and both are riskier than a
+     * share backed 1:1 in custody. The deBridge rule — never promote the worse
+     * product because it pays better — puts this section BELOW the tokenised
+     * equities. Asserted by index so a later edit that promotes it fails.
      */
     const iEquities = stocks.indexOf('stocks.available');
-    const iUtex = stocks.indexOf('stocks.utex.title');
-    t('...below the tokenised equities, never above them',
-      iEquities > 0 && iUtex > 0 && iUtex > iEquities);
+    const iOther = stocks.indexOf('stocks.other.title');
+    t('the outside venues sit below the tokenised equities',
+      iEquities > 0 && iOther > 0 && iOther > iEquities);
 
-    /*
-     * The "these are not shares" warning must be a PLAIN inline notice, not an
-     * InfoBox. InfoBox's own header states the rule: anything describing what
-     * the button is about to do stays visible; only explainers collapse. On a
-     * page whose whole subject is buying equities, "this one is not a share"
-     * is the single most misreadable fact.
-     */
-    t('...and the not-a-share warning is inline, not collapsed',
-      /notice notice-danger[\s\S]{0,120}?stocks\.utex\.warning/.test(stocks));
+    /* Leverage is the fact that empties an account; it cannot be collapsed. */
+    t('the leverage warning is inline, not in a collapsible box',
+      /notice notice-danger[\s\S]{0,120}?stocks\.other\.warning/.test(stocks));
 
-    /*
-     * The disclosure must be derived from the configured code, exactly like
-     * the Perp screen. A hard-coded "we earn from this" sentence would keep
-     * claiming revenue after the id was removed — and a hard-coded "we earn
-     * nothing" would deny a share we were taking, which is the worse
-     * direction and the bug already caught twice on this project.
-     */
-    t('...and the earnings disclosure is derived, not hard-coded',
-      /venueDisclosure\('utex'\) === 'earning'/.test(stocks));
+    /* Disclosure derived from the codes, never hard-coded. */
+    t('the earnings disclosure is derived from the configured codes',
+      /venueDisclosure\('utex'\) === 'earning' \|\| venueDisclosure\('avantis'\) === 'earning'/.test(stocks));
+    t('...and both venue links carry their referral code',
+      /withReferral\('avantis', 'https:\/\/www\.avantisfi\.com\/trade'\)/.test(stocks) &&
+      /withReferral\('utex', 'https:\/\/utex\.io\/'\)/.test(stocks));
 
     for (const lang of ['en', 'fa', 'ar']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
-      const U = L.stocks?.utex;
-      t(`${lang} has the UTEX copy`, Boolean(U?.title && U?.name && U?.desc));
+      const O = L.stocks?.other;
+      t(`${lang} has the outside-venue copy`, Boolean(O?.title && O?.intro && O?.avantisName && O?.utexName));
+      t(`${lang} labels closed markets`, Boolean(O?.closed) && Boolean(O?.openNow));
       t(`${lang} states both earning and non-earning disclosures`,
-        Boolean(U?.earning) && Boolean(U?.noEarn));
+        Boolean(O?.earning) && Boolean(O?.noEarn));
+      /* The old single-link copy must be gone, or a stale key lingers. */
+      t(`${lang} no longer carries the advert-only copy`, L.stocks?.utex === undefined);
+
+      const w = String(O?.warning ?? '');
+      t(`${lang} warns these are not shares`, w.length > 200);
       /*
-       * The three facts that make this honest. Written by hand in each
-       * language, never machine-translated: this is safety copy.
+       * ─── THE WORDING TRAP ────────────────────────────────────────────────
+       * My first version of this asserted the literal word «اهرم». The
+       * store-vocabulary guard in test/run.mjs greps the BUILT bundle for
+       * exactly that word — it is one of the terms APKPure rejected the app
+       * over — so satisfying this check broke that one. The Perp screen can
+       * use it because its copy is stripped from the store build; this copy
+       * ships.
+       *
+       * So the check is on the RISK being stated, not on a banned word:
+       * a small move against you can close the position and take everything
+       * you put in. Same fact, sayable in a shipping build.
        */
-      const w = String(U?.warning ?? '');
-      t(`${lang} warns it is not a share`, w.length > 150);
-      t(`${lang} names the missing broker licence`,
-        /licen|مجوز|ترخيص/i.test(w));
-      t(`${lang} names the jurisdiction`,
-        /Vincent|وینسنت|فنسنت/i.test(w));
+      t(`${lang} warns the whole deposit can be lost`,
+        /close the position and take the whole deposit|موقعیت را ببندد و کل مبلغی را که گذاشته‌ای|تُغلق المركز وتمحو كامل ما وضعته/.test(w));
+      t(`${lang} warning avoids the store-flagged vocabulary`,
+        !/اهرم|الرافعة|قمار|المضاربة/.test(w));
+      t(`${lang} names the missing broker licence`, /licen|مجوز|ترخيص/i.test(w));
     }
+
+    /*
+     * ─── THE PERKS ARE RELEASED ─────────────────────────────────────────────
+     * Asked for: «الان ازادش کن ... هر شخصی با هر امتیازی سهام ها را ببیند».
+     * Both live venues were behind 6,000 and 15,000 points while the only perk
+     * reachable early was GMX, which is not registered and pays nothing.
+     */
+    const perks = code(read('src/lib/perks.js'));
+    t('perks are ungated for now', /const PERKS_UNGATED = true/.test(perks));
+    t('...applied to the unlock decision', /PERKS_UNGATED \|\| reached/.test(perks));
+    /*
+     * The ladder is SUSPENDED, not deleted. The owner wants to design a promo
+     * code later, and rebuilding the tier machinery then would be waste.
+     */
+    t('...but the tier ladder is kept for the promised promo-code design',
+      /tierMeets\(userTier\.id, p\.tier\)/.test(perks) && /reached,/.test(perks));
   }
 
   return rows;

@@ -158,11 +158,46 @@ function codeFor(venue) {
  *                 over a link that quietly does nothing.
  *   ready       — reached and configured. The link carries the code.
  */
+/**
+ * ─── PERKS ARE UNLOCKED FOR EVERYONE, FOR NOW ───────────────────────────────
+ * Instruction, verbatim: «بعدا فکر برای امتیازها میکنم مثلا یک پرومو کدی چیزی
+ * میزاریم الان ازادش کن و بزار هر دو را کامل و هر شخصی با هر امتیازی سهام ها
+ * را ببیند» — release it now, everyone at any score sees them, and a promo
+ * code mechanism will be designed later.
+ *
+ * ─── WHY THE GATE WAS WRONG BY THE TIME IT SHIPPED ──────────────────────────
+ * The tier gate was correct when written: neither Avantis nor UTEX was
+ * registered, and a reward that does not exist yet should sit far away. Both
+ * went live on 2026-08-09 and the arrangement inverted. Measured by running
+ * perksFor():
+ *
+ *   gmxFee      gold      2,000 pts   configured=false   <- NOT registered
+ *   avantisFee  platinum  6,000 pts   configured=true
+ *   utexStocks  diamond  15,000 pts   configured=true
+ *
+ * The only perk a new user could reach was the only one that pays nothing,
+ * and the two live revenue lines were invisible. With zero users nobody was
+ * ever going to cross 15,000 points to find them.
+ *
+ * ─── WHAT IS DELIBERATELY *NOT* DELETED ─────────────────────────────────────
+ * `tier`, `tierMeets` and the ladder all stay, and `requiredPoints` /
+ * `pointsToGo` are still computed and still correct. Only the boolean that
+ * gates ACCESS is forced true. So the tier a perk belongs to is still shown,
+ * and re-gating later — or gating on a promo code instead — is one line here
+ * rather than a rebuild.
+ *
+ * The owner's earlier instruction that Bronze and Silver get nothing is not
+ * being overruled permanently; it is suspended on his explicit request, and
+ * the structure that implements it is intact.
+ */
+const PERKS_UNGATED = true;
+
 export function perksFor(points) {
   const userTier = tierFor(Number(points) || 0);
 
   return PERKS.map((p) => {
-    const unlocked = tierMeets(userTier.id, p.tier);
+    const reached = tierMeets(userTier.id, p.tier);
+    const unlocked = PERKS_UNGATED || reached;
     const code = codeFor(p.venue);
     const configured = isValidGmxCode(code);
     const required = TIERS.find((t) => t.id === p.tier);
@@ -170,10 +205,17 @@ export function perksFor(points) {
     return {
       ...p,
       unlocked,
+      /*
+       * Whether the tier was genuinely EARNED, kept separate from whether the
+       * perk is usable. While PERKS_UNGATED is on these differ, and a future
+       * promo-code design needs the honest answer, not the override.
+       */
+      reached,
       configured,
       /* Only a perk that is BOTH unlocked and backed by a real code. */
       available: unlocked && configured,
       requiredPoints: required?.min ?? 0,
+      /* Zero while ungated — `unlocked` is the gate, so this follows it. */
       pointsToGo: unlocked ? 0 : Math.max(0, (required?.min ?? 0) - (Number(points) || 0)),
       tierColor: required?.color ?? null,
       tierIcon: required?.icon ?? null,
