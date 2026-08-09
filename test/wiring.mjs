@@ -9668,6 +9668,24 @@ export default function run() {
     t('all prices are fetched in one Hermes call',
       /rows\.map\(\(r\) => `ids\[\]=\$\{r\.feedId\}`\)\.join\('&'\)/.test(srv));
 
+    /*
+     * ─── FOUND ON THE LIVE ENDPOINT, NOT IN TESTING ─────────────────────────
+     * The first deploy returned 27 correct rows and every single price null.
+     * Cause: SPCX ships with feedId 0x0000…0000 and Hermes is ALL-OR-NOTHING —
+     * one unknown id fails the whole batch with "Price ids not found", taking
+     * every other price with it.
+     *
+     * Two independent defences, because the placeholder fixes the case we
+     * found while the retry fixes the class: Avantis can list a pair before
+     * Pyth publishes its feed at any time.
+     */
+    t('the all-zero placeholder feed is dropped', /if \(\/\^0\+\$\/\.test\(feedId\)\) return null;/.test(srv));
+    t('...and an unknown id cannot blank every other price',
+      /ignore_invalid_price_ids=true/.test(srv));
+    /* A miss must leave the row null, never overwrite a good price with 0. */
+    t('...with prices applied only where Hermes actually answered',
+      /if \(hit\) r\.price = pythPrice\(hit\);/.test(srv));
+
     /* A dead price feed must not blank the section. */
     /*
      * Asserted structurally: the Hermes call is inside its own try/catch that

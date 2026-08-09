@@ -115,8 +115,22 @@ function toRow(pair, index) {
   const symbol = String(pair.from ?? '').trim().toUpperCase();
   if (!symbol || !/^[A-Z0-9.]{1,12}$/.test(symbol)) return null;
 
+  /*
+   * ─── THE ALL-ZERO FEED ID IS A PLACEHOLDER, NOT A FEED ──────────────────
+   * Caught on the LIVE endpoint after deploying, not in testing: SPCX ships
+   * with feedId 0x0000…0000, and Hermes rejects the WHOLE batch when any id
+   * is unknown —
+   *
+   *   "Price ids not found: 0x0000000000000000000000000000000000000000…"
+   *
+   * — which is why the first live response had 27 correct rows and every
+   * single price null. One placeholder poisoned all of them. The row is
+   * dropped here rather than filtered at the price step, because a ticker we
+   * can never price is not a row worth showing on a screen about prices.
+   */
   const feedId = bareId(pair.feed?.feedId);
   if (!/^[0-9a-f]{64}$/.test(feedId)) return null;
+  if (/^0+$/.test(feedId)) return null;
 
   const attrs = pair.feed?.attributes ?? {};
 
@@ -195,18 +209,40 @@ export async function fetchAvantisEquities() {
 
   if (!rows.length) return { rows: [], at: Date.now() };
 
-  /* One Hermes call for every feed we need. */
-  try {
-    const qs = rows.map((r) => `ids[]=${r.feedId}`).join('&');
-    const feed = await getJson(`${HERMES_URL}?${qs}&parsed=true&encoding=hex`);
+  /*
+   * ─── ONE CALL, WITH A PER-FEED RETRY — AND WHY BOTH ARE NEEDED ──────────
+   * Hermes is all-or-nothing: a single id it does not recognise fails the
+   * ENTIRE request with "Price ids not found", taking every other price down
+   * with it. That is exactly what happened on the first live deploy.
+   *
+   * The all-zero placeholder is already excluded above, but that fixes the
+   * one case we found rather than the class. Avantis can list a pair before
+   * Pyth publishes its feed at any time, so the batch is retried once with
+   * `ignore_invalid_price_ids`, which makes Hermes return what it does know.
+   * Belt and braces on purpose: the guard above keeps unpriceable rows off
+   * the screen, and this keeps one unexpected id from blanking the rest.
+   */
+  const applyPrices = (feed) => {
     const byId = new Map(
       (Array.isArray(feed?.parsed) ? feed.parsed : []).map((p) => [bareId(p?.id), p])
     );
     for (const r of rows) {
-      r.price = pythPrice(byId.get(r.feedId));
+      const hit = byId.get(r.feedId);
+      if (hit) r.price = pythPrice(hit);
     }
+  };
+
+  const qs = rows.map((r) => `ids[]=${r.feedId}`).join('&');
+  try {
+    applyPrices(await getJson(`${HERMES_URL}?${qs}&parsed=true&encoding=hex`));
   } catch {
-    /* Prices unavailable; the rest of the row is still correct. */
+    try {
+      applyPrices(
+        await getJson(`${HERMES_URL}?${qs}&parsed=true&encoding=hex&ignore_invalid_price_ids=true`)
+      );
+    } catch {
+      /* Prices unavailable; names, hours and leverage caps are still true. */
+    }
   }
 
   /*
