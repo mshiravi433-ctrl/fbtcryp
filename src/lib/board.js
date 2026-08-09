@@ -36,16 +36,19 @@ async function jfetch(path, init, timeout = 12000) {
  * Returns an empty list rather than throwing: an unreachable API must leave
  * the screen usable and honest, not crash the tab the user is standing on.
  */
-export async function fetchBoard() {
+export async function fetchBoard(owner) {
   try {
-    const data = await jfetch('/board');
+    const q = owner ? `?owner=${encodeURIComponent(owner)}` : '';
+    const data = await jfetch(`/board${q}`);
     return {
       rows: Array.isArray(data?.rows) ? data.rows : [],
+      /* The caller's own row, which may be an unpaid draft nobody else sees. */
+      mine: data?.mine ?? null,
       terms: data?.terms ?? null,
       live: true
     };
   } catch {
-    return { rows: [], terms: null, live: false };
+    return { rows: [], mine: null, terms: null, live: false };
   }
 }
 
@@ -65,8 +68,8 @@ export function deleteListing(owner) {
   });
 }
 
-export function claimPromotion(owner, txHash) {
-  return jfetch('/board/promote', {
+export function publishListing(owner, txHash) {
+  return jfetch('/board/publish', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ owner, txHash })
@@ -91,8 +94,8 @@ export function claimPromotion(owner, txHash) {
  *
  * @returns {Promise<{ok:boolean, hash?:string, reason?:string}>}
  */
-export async function payForPromotion({ terms, wallet }) {
-  if (!terms) return { ok: false, reason: 'NO_TERMS' };
+export async function payForPromotion({ terms, tier, wallet }) {
+  if (!terms || !tier) return { ok: false, reason: 'NO_TERMS' };
   if (!wallet?.isConnected) return { ok: false, reason: 'NOT_CONNECTED' };
 
   /*
@@ -114,7 +117,12 @@ export async function payForPromotion({ terms, wallet }) {
     if (wallet.chainId !== terms.chainId) return { ok: false, reason: 'WRONG_CHAIN' };
   }
 
-  const units = BigInt(Math.round(terms.priceUsd * 10 ** terms.decimals));
+  /*
+   * The amount comes from the SELECTED TIER, and the server re-derives which
+   * tier that buys from the amount it actually receives — so a tampered client
+   * that sends $1 while asking for 30 days simply gets one day.
+   */
+  const units = BigInt(Math.round(tier.usd * 10 ** terms.decimals));
   const to = String(terms.recipient).toLowerCase().replace(/^0x/, '').padStart(64, '0');
   const amount = units.toString(16).padStart(64, '0');
   const data = `${TRANSFER_SELECTOR}${to}${amount}`;

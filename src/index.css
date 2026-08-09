@@ -7491,3 +7491,42 @@ body { overflow-x: clip; }
   background: rgba(0, 131, 146, 0.1);
 }
 :root[data-theme='light'] .cmt-author { color: var(--ink-cyan, #008392); }
+
+/* Tier buttons on the board. New classes only — nothing above is touched. */
+.brd-tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+/* Three price buttons cannot hold a "$25" and a "30 days" side by side much
+   below 340px, so they stack rather than clipping the label. */
+@media (max-width: 340px) {
+  .brd-tiers { grid-template-columns: 1fr; }
+}
+
+.brd-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 11px 6px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, opacity 0.18s;
+}
+.brd-tier:disabled { opacity: 0.55; cursor: default; }
+.brd-tier:active:not(:disabled) { border-color: var(--rgb-1); }
+
+/* The longest tier is the one we want bought, so it is marked — but only with
+   a border, never by making the cheaper options look broken. */
+.brd-tier.is-best { border-color: rgba(255, 201, 60, 0.55); }
+
+.brd-tier-price { font-family: var(--font-mono); font-size: 17px; font-weight: 800; }
+.brd-tier-days { font-size: 10.5px; color: var(--text-3); }
+.brd-tier-wait { font-size: 10px; color: var(--rgb-1); }
+
+:root[data-theme='light'] .brd-tier.is-best { border-color: rgba(180, 120, 0, 0.5); }

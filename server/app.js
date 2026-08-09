@@ -46,7 +46,7 @@ import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
-import { promoteListing, putListing, readBoard, removeListing, txAlreadyUsed } from './board.js';
+import { activateListing, myListing, putListing, readBoard, removeListing, tierForAmount, txAlreadyUsed } from './board.js';
 import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
@@ -1127,9 +1127,16 @@ app.get('/api/community', async (req, res) => {
  * two parties make anyway, never from the money moving between them.
  */
 
-app.get('/api/board', async (_req, res) => {
+/*
+ * The public board carries PAID listings only. A caller's own row — which may
+ * be an unpaid draft nobody else can see — is returned separately so the owner
+ * can edit it without it looking as though it vanished.
+ */
+app.get('/api/board', async (req, res) => {
   try {
-    res.json({ rows: await readBoard(), durable: storeDurable(), terms: promotionTerms() });
+    const owner = String(req.query.owner ?? '').trim();
+    const mine = /^0x[a-fA-F0-9]{40}$/.test(owner) ? await myListing(owner) : null;
+    res.json({ rows: await readBoard(), mine, durable: storeDurable(), terms: promotionTerms() });
   } catch (e) {
     res.status(500).json({ error: 'READ_FAILED', detail: String(e.message).slice(0, 120) });
   }
@@ -1154,17 +1161,21 @@ app.post('/api/board/remove', async (req, res) => {
 });
 
 /*
- * PROMOTION — verified on-chain before anything is granted.
+ * PUBLISH — verified on-chain before the listing becomes visible.
  *
  * The client sends a transaction hash. We do NOT trust it: server/promote.js
  * fetches the receipt from a public Base RPC and checks the transfer really
- * happened, to our address, for at least the price, from this exact wallet.
+ * happened, to our address, for at least the cheapest tier, from this exact
+ * wallet.
+ *
+ * THE TIER IS DERIVED FROM THE AMOUNT ACTUALLY RECEIVED, never from anything
+ * the client claims. Otherwise a $1 payment could ask for 30 days and get it.
  *
  * The replay check is the easy one to forget. A valid hash stays valid
- * forever, so without it one payment could buy a promotion every month, or be
- * passed to a friend. Each hash is recorded and can be spent once.
+ * forever, so without it one payment could publish an advert every month, or
+ * be passed to a friend. Each hash is recorded and can be spent once.
  */
-app.post('/api/board/promote', async (req, res) => {
+app.post('/api/board/publish', async (req, res) => {
   const owner = String(req.body?.owner ?? '').trim();
   const txHash = String(req.body?.txHash ?? '').trim();
   if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) return res.status(400).json({ ok: false, error: 'BAD_OWNER' });
@@ -1177,7 +1188,10 @@ app.post('/api/board/promote', async (req, res) => {
     const check = await verifyPromotionPayment(txHash, owner);
     if (!check.ok) return res.status(400).json({ ok: false, error: check.reason });
 
-    return res.json({ ok: true, ...(await promoteListing(owner, txHash)) });
+    const tier = tierForAmount(check.amount);
+    if (!tier) return res.status(400).json({ ok: false, error: 'UNDERPAID' });
+
+    return res.json({ ok: true, paid: check.amount, ...(await activateListing(owner, txHash, tier.id)) });
   } catch (e) {
     return res.status(400).json({ ok: false, error: String(e.message).slice(0, 60) });
   }

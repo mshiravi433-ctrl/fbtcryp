@@ -9253,16 +9253,43 @@ export default function run() {
       /TTL_MS/.test(server) && /isLive/.test(server));
 
     /*
+     * ─── PAY TO PUBLISH: AN UNPAID ADVERT MUST BE INVISIBLE ─────────────────
+     * A free board fills with adverts from people with nothing to sell.
+     * Charging for the slot costs a spammer real money per advert.
+     *
+     * The property that matters is that invisibility is enforced by the DATA,
+     * not by a caller remembering to filter: `liveUntil` is set ONLY by
+     * activateListing, which runs only after a verified payment. So a bug in
+     * the UI cannot publish an unpaid row.
+     */
+    t('the public board shows only paid listings', /filter\(\(r\) => isLive\(r, now\)\)/.test(server));
+    t('...and only a verified payment can set the live window',
+      /liveUntil: until/.test(server) && !/liveUntil = Date\.now/.test(server));
+    /* Three tiers, one source of truth, cheapest first. */
+    t('the price list is declared once', /export const TIERS = \[/.test(server));
+    for (const [usd, days] of [[1, 1], [5, 7], [25, 30]]) {
+      t(`...including $${usd} for ${days} day(s)`,
+        new RegExp(`usd: ${usd}[^}]*\\}`).test(server.replace(/\s+/g, ' '))
+        || new RegExp(`days: ${days}, usd: ${usd}`).test(server));
+    }
+    /*
+     * The tier is derived from the amount RECEIVED, never from what the client
+     * asks for — otherwise a $1 payment could request 30 days and get it.
+     */
+    t('the tier is decided by the amount actually paid', /tierForAmount/.test(server));
+    t('...and rounds down rather than up', /paid \+ 1e-9 >= t\.usd/.test(server));
+
+    /*
      * ─── PAYMENT IS VERIFIED, NOT BELIEVED ──────────────────────────────────
      * The browser says "I paid, here is the hash". If the server trusted that,
-     * any 66-character string would buy a promotion.
+     * any 66-character string would buy a listing.
      */
     const promote = code(read('server/promote.js'));
     t('the promotion payment is checked against the chain',
       /eth_getTransactionReceipt/.test(promote));
     t('...the transfer must be to OUR address',
       /PROMO_RECIPIENT/.test(promote) && /topics\[2\]/.test(promote));
-    t('...for at least the asking price', /PRICE_UNITS/.test(promote) && /value < PRICE_UNITS/.test(promote));
+    t('...for at least the cheapest tier', /MIN_UNITS/.test(promote) && /value < MIN_UNITS/.test(promote));
     t('...on a transaction that actually succeeded', /receipt\.status/.test(promote));
     /*
      * The payer check stops somebody watching the chain for a large transfer
@@ -9273,8 +9300,19 @@ export default function run() {
      * REPLAY. A valid hash stays valid forever, so without this one $25
      * payment could promote a listing every month, or be handed to a friend.
      */
+    /*
+     * ─── REAL BUG FOUND IN TESTING ──────────────────────────────────────────
+     * A single `paidTx` field was overwritten on each renewal, so after a
+     * second payment the FIRST hash was forgotten and could be replayed for
+     * free days — by the buyer, or by anyone who read it off the public chain.
+     * Every spent hash is now remembered.
+     */
     t('a payment hash can only ever be spent once',
       /txAlreadyUsed/.test(server) && /txAlreadyUsed/.test(code(read('server/app.js'))));
+    t('...and EVERY past payment stays blocked, not just the latest',
+      /paidTxs/.test(server) && /paidTxs\.includes\(needle\)/.test(server));
+    /* Rows written before the fix must keep blocking their hash after deploy. */
+    t('...including rows written before that fix', /r\?\.paidTx === needle/.test(server));
 
     /* No API key: this must keep working if a key is rotated or revoked. */
     t('verification needs no API key', !/ALCHEMY|API_KEY|apiKey/i.test(promote));
@@ -9293,11 +9331,21 @@ export default function run() {
         files.push(join(dir, f));
       }
     }
-    const leaked = files.filter((f) => /brd-pro|board\.proTitle|payForPromotion/.test(read(f)));
+    const leaked = files.filter((f) => /brd-pro|brd-tier|board\.publishTitle|payForPromotion/.test(read(f)));
     t(`the Pro upsell appears on no other screen${leaked.length ? ` — ${leaked.join(', ')}` : ''}`,
       leaked.length === 0);
     /* And it is only offered to someone who has something to promote. */
-    t('...and is only shown when the user has a listing', /mine && !mine\.promoted/.test(panel));
+    t('...and is only shown when the user has a listing', /address && mine && tiers\.length > 0/.test(panel));
+    /*
+     * THE PRICE LIST IN A COLLAPSIBLE WARNING BOX — asked for explicitly. It
+     * is built from the server's own tiers so the screen cannot advertise a
+     * price the server will not honour.
+     */
+    t('the costs are shown in a collapsible warning box',
+      /board\.costsTitle/.test(panel) && /tone="warn"/.test(panel));
+    t('...built from the server price list, not hard-coded',
+      /tiers\.map/.test(panel) && !/\$25|\$5\b/.test(panel.replace(/\$\{[^}]*\}/g, '')));
+    t('...and warns that payment is final', /board\.costsRefund/.test(panel));
 
     /*
      * ─── USER TEXT IS RENDERED IN OTHER PEOPLE'S CLIENTS ────────────────────

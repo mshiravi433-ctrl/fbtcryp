@@ -39,6 +39,8 @@
  */
 
 /** Base mainnet. Cheap, and where our swap screen can already source USDC. */
+import { TIERS } from './board.js';
+
 export const PROMO_CHAIN_ID = 8453;
 export const PROMO_CHAIN_NAME = 'Base';
 
@@ -47,9 +49,16 @@ export const PROMO_TOKEN = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 export const PROMO_TOKEN_SYMBOL = 'USDC';
 const TOKEN_DECIMALS = 6;
 
-/** $25, in the token's smallest unit. */
-export const PROMO_PRICE_USD = 25;
-const PRICE_UNITS = BigInt(PROMO_PRICE_USD) * 10n ** BigInt(TOKEN_DECIMALS);
+/**
+ * The CHEAPEST tier's price, which is the floor a payment must clear to count
+ * for anything. The exact tier is decided from the amount actually received —
+ * see tierForAmount in board.js — so this is a minimum, not a price.
+ *
+ * Imported rather than repeated: a duplicated price list is how the screen
+ * advertises $1 and the server silently demands $25.
+ */
+const MIN_PRICE_USD = Math.min(...TIERS.map((t) => t.usd));
+const MIN_UNITS = BigInt(Math.round(MIN_PRICE_USD * 10 ** TOKEN_DECIMALS));
 
 /**
  * Where the money goes. Read from the environment so it can be changed without
@@ -159,8 +168,18 @@ export async function verifyPromotionPayment(txHash, payer) {
     } catch {
       continue;
     }
-    if (value < PRICE_UNITS) continue;
+    /*
+     * Below the cheapest tier this buys nothing. Reported as its own reason so
+     * somebody who underpaid is told they underpaid, rather than being told
+     * their transaction was not found.
+     */
+    if (value < MIN_UNITS) return { ok: false, reason: 'UNDERPAID', amount: Number(value) / 10 ** TOKEN_DECIMALS };
 
+    /*
+     * The AMOUNT is what decides the tier, upstream. Deliberately not trusting
+     * any tier the client claims: otherwise a $1 payment could ask for 30 days
+     * and get it.
+     */
     return { ok: true, amount: Number(value) / 10 ** TOKEN_DECIMALS };
   }
 
@@ -175,7 +194,8 @@ export function promotionTerms() {
     token: PROMO_TOKEN,
     symbol: PROMO_TOKEN_SYMBOL,
     decimals: TOKEN_DECIMALS,
-    priceUsd: PROMO_PRICE_USD,
-    recipient: PROMO_RECIPIENT
+    recipient: PROMO_RECIPIENT,
+    /* The whole price list, so the UI can never disagree with the server. */
+    tiers: TIERS
   };
 }

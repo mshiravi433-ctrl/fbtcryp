@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { riseIn, stagger } from './PageTransition';
 import InfoBox from './InfoBox';
 import { useWallet, shortAddress } from '../context/WalletContext';
-import { claimPromotion, deleteListing, fetchBoard, payForPromotion, postListing } from '../lib/board';
+import { deleteListing, fetchBoard, payForPromotion, postListing, publishListing } from '../lib/board';
 import { useAppStore } from '../store/useAppStore';
 
 /**
@@ -19,15 +19,21 @@ import { useAppStore } from '../store/useAppStore';
  * which is a licensing burden we cannot meet and, unlicensed in the US, a
  * felony.
  *
- * We earn two ways, both of them off the transfer:
- *   1. Pro promotion, $25, paid on-chain and verified on-chain.
- *   2. The swap either party needs anyway, at our normal 70 bps.
+ * ─── WHY POSTING COSTS MONEY ────────────────────────────────────────────────
+ * Asked for, and it is the right mechanism: a free board fills with adverts
+ * from people who have nothing to sell. Charging for the SLOT costs a spammer
+ * real money per advert while costing a genuine trader about the price of a
+ * coffee. $1 / 1 day, $5 / 7 days, $25 / 30 days.
  *
- * ─── WHY THE WARNING IS ALWAYS OPEN ─────────────────────────────────────────
- * Every other InfoBox on this screen collapses. This one does not, because the
- * whole failure mode of a classifieds board is somebody believing a platform
- * stands behind the trade. If they read one thing, it must be that nobody is
- * holding the money.
+ * The listing is INVISIBLE until it is paid for. That is enforced on the
+ * server — `liveUntil` is only ever set by a verified payment — so a bug in
+ * this file cannot publish an unpaid advert.
+ *
+ * ─── WHY THE PRICES APPEAR TWICE ────────────────────────────────────────────
+ * Once in the collapsible warning box (asked for explicitly) and once on the
+ * buttons. Both read the SAME list from the server's `terms.tiers`, so they
+ * cannot drift apart — a hard-coded price in the UI is how a screen advertises
+ * $5 while the server demands $25.
  */
 
 const EMPTY_FORM = {
@@ -48,13 +54,13 @@ function Row({ row, mine, onDelete, onSwap }) {
   return (
     <motion.div
       variants={riseIn}
-      className={`brd-row${row.promoted ? ' brd-row-promoted' : ''}`}
+      className={`brd-row${row.featured ? ' brd-row-promoted' : ''}`}
     >
       <div className="brd-head">
         <span className={`brd-side brd-side-${row.side}`}>{t(`board.side.${row.side}`)}</span>
         <span className="brd-asset">{row.asset}</span>
         {row.amount ? <span className="faint" style={{ fontSize: 12 }}>{row.amount}</span> : null}
-        {row.promoted ? <span className="brd-star">★ {t('board.pro')}</span> : null}
+        {row.featured ? <span className="brd-star">★ {t('board.pro')}</span> : null}
       </div>
 
       <div className="brd-meta">
@@ -95,14 +101,16 @@ export default function BoardPanel() {
   const wallet = useWallet();
   const notify = useAppStore((s) => s.notify);
 
-  const [state, setState] = useState({ rows: [], terms: null, live: true });
+  const [state, setState] = useState({ rows: [], mine: null, terms: null, live: true });
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
-  const [paying, setPaying] = useState(false);
+  const [paying, setPaying] = useState(null);
 
-  const load = useCallback(async () => {
-    const data = await fetchBoard();
+  const address = wallet?.address ?? null;
+
+  const load = useCallback(async (addr) => {
+    const data = await fetchBoard(addr);
     setState(data);
     setLoading(false);
   }, []);
@@ -110,7 +118,7 @@ export default function BoardPanel() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const data = await fetchBoard();
+      const data = await fetchBoard(address);
       if (!alive) return;
       setState(data);
       setLoading(false);
@@ -118,19 +126,10 @@ export default function BoardPanel() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [address]);
 
-  const address = wallet?.address ?? null;
-
-  /*
-   * Case-insensitive: a wallet may report a checksummed address while the row
-   * was stored from a lowercase one, and a mismatch would hide the user's own
-   * delete button on their own listing.
-   */
-  const mine = useMemo(
-    () => (address ? state.rows.find((r) => r.owner?.toLowerCase() === address.toLowerCase()) : null),
-    [state.rows, address]
-  );
+  const mine = state.mine;
+  const tiers = state.terms?.tiers ?? [];
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -142,15 +141,21 @@ export default function BoardPanel() {
     try {
       await postListing({ ...form, owner: address });
       setForm(EMPTY_FORM);
-      await load();
-      notify?.('boardPosted', 'success');
+      await load(address);
+      /* "Saved, now pay" — never "published", because it is not visible yet. */
+      notify?.(mine?.live ? 'boardPosted' : 'boardDraftSaved', 'success');
     } catch (err) {
       /*
        * Server error codes are mapped to real sentences. Rendering BAD_CONTACT
        * to a user is the raw-key leak this project keeps auditing for.
        */
       const code = String(err?.message || '');
-      const known = { BAD_ASSET: 'boardBadAsset', BAD_CONTACT: 'boardBadContact', BAD_SIDE: 'boardFailed', BAD_OWNER: 'boardFailed' };
+      const known = {
+        BAD_ASSET: 'boardBadAsset',
+        BAD_CONTACT: 'boardBadContact',
+        BAD_SIDE: 'boardFailed',
+        BAD_OWNER: 'boardFailed'
+      };
       notify?.(known[code] ?? 'boardFailed', 'error');
     } finally {
       setBusy(false);
@@ -162,7 +167,7 @@ export default function BoardPanel() {
     setBusy(true);
     try {
       await deleteListing(address);
-      await load();
+      await load(address);
       notify?.('boardRemoved', 'info');
     } catch {
       notify?.('boardFailed', 'error');
@@ -171,23 +176,18 @@ export default function BoardPanel() {
     }
   };
 
-  /** Pay $25 and claim the promotion. */
-  const goPro = async () => {
+  /** Pay for one tier and publish. */
+  const buy = async (tier) => {
     if (paying) return;
     if (!mine) {
       notify?.('boardNoListing', 'error');
       return;
     }
 
-    setPaying(true);
+    setPaying(tier.id);
     try {
-      const paid = await payForPromotion({ terms: state.terms, wallet });
+      const paid = await payForPromotion({ terms: state.terms, tier, wallet });
       if (!paid.ok) {
-        /*
-         * Mapped to toast keys rather than interpolated, so a reason we have
-         * no wording for degrades to a real sentence instead of printing
-         * "WRONG_CHAIN" at the user.
-         */
         const said = {
           REJECTED: 'payRejected',
           INSUFFICIENT: 'payInsufficient',
@@ -200,37 +200,61 @@ export default function BoardPanel() {
       }
 
       /*
-       * The money has left the wallet by this point. If the claim call fails
+       * The money has left the wallet by this point. If the publish call fails
        * the user must NOT be told "payment failed" — they must be told the
-       * payment went through and given the hash, so it can be claimed again
-       * rather than paid twice.
+       * payment went through, so they retry the claim rather than pay twice.
        */
       try {
-        await claimPromotion(address, paid.hash);
-        await load();
-        notify?.('boardProActive', 'success');
+        await publishListing(address, paid.hash);
+        await load(address);
+        notify?.('boardLive', 'success');
       } catch {
         notify?.('payClaimLater', 'info');
       }
     } finally {
-      setPaying(false);
+      setPaying(null);
     }
   };
 
-  const terms = state.terms;
+  const priceList = tiers.map((x) => `$${x.usd} / ${x.days}d`).join(' · ');
 
   return (
     <>
       {/*
-        Always open. See the note at the top of this file: on a board of
-        strangers, "nobody is holding your money" is the one sentence that has
-        to be read before anything else.
+        Always open. On a board of strangers, "nobody is holding your money" is
+        the one sentence that has to be read before anything else.
       */}
       <motion.div variants={riseIn} initial="hidden" animate="show">
         <InfoBox title={t('board.safetyTitle')} tone="danger" defaultOpen id="board-safety">
           <p>{t('board.safetyBody')}</p>
         </InfoBox>
       </motion.div>
+
+      {/*
+        ─── THE PRICE LIST, IN A COLLAPSIBLE WARNING BOX ─────────────────────
+        Asked for explicitly. Collapsed by default because it is reference
+        material rather than a warning somebody must read to stay safe — the
+        danger box above is the one that stays open.
+
+        Built from `terms.tiers`, so it is literally the server's price list
+        and cannot drift from what will be charged.
+      */}
+      {tiers.length > 0 ? (
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <InfoBox title={t('board.costsTitle')} tone="warn" id="board-costs">
+            <ul className="brd-perks">
+              {tiers.map((x) => (
+                <li key={x.id}>{t('board.costRow', { usd: x.usd, days: x.days })}</li>
+              ))}
+            </ul>
+            <p>{t('board.costsBody', {
+              symbol: state.terms?.symbol ?? 'USDC',
+              chain: state.terms?.chainName ?? 'Base'
+            })}</p>
+            <p>{t('board.costsRefund')}</p>
+          </InfoBox>
+        </motion.div>
+      ) : null}
 
       {/* ---------------- post / edit ---------------- */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -286,7 +310,7 @@ export default function BoardPanel() {
             </div>
 
             <button className="btn btn-primary" type="submit" style={{ marginTop: 12 }} disabled={busy}>
-              {mine ? t('board.update') : t('board.publish')}
+              {mine ? t('board.update') : t('board.saveDraft')}
             </button>
             <p className="faint" style={{ marginTop: 8, fontSize: 11.5 }}>
               {t('board.oneEach', { addr: shortAddress(address) })}
@@ -295,45 +319,50 @@ export default function BoardPanel() {
         )}
       </motion.section>
 
-      {/* ---------------- Pro ---------------- */}
+      {/* ---------------- pay to publish ---------------- */}
       {/*
         THE ONLY PLACE THE PAID PLAN IS ADVERTISED.
 
-        Asked for explicitly: «نمیخام در صفحات دیگر این تبلیغات نشان داده شود».
-        There is no Pro badge in the header, no upsell on Swap, no banner
-        anywhere else — this panel renders inside the board tab and nowhere
-        else, and it is only shown to somebody who already has a listing to
-        promote, because selling a promotion for nothing is the fastest way to
-        make the feature feel like a scam.
+        Asked for: «نمیخام در صفحات دیگر این تبلیغات نشان داده شود». There is no
+        upsell in the header, on Swap, or anywhere else — this panel renders
+        inside the board tab only, and only for somebody who has a listing to
+        publish.
       */}
-      {address && mine && !mine.promoted && terms ? (
+      {address && mine && tiers.length > 0 ? (
         <motion.section className="brd-pro" variants={riseIn} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 6 }}>{t('board.proTitle')}</p>
-          <div className="brd-pro-price">${terms.priceUsd}</div>
-          <p className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>
-            {t('board.proPer', { days: 30 })}
+          <p className="section-label" style={{ marginBottom: 6 }}>
+            {mine.live ? t('board.extendTitle') : t('board.publishTitle')}
           </p>
 
-          <ul className="brd-perks">
-            {['top', 'badge', 'longer', 'highlight'].map((k) => (
-              <li key={k}>{t(`board.perk.${k}`)}</li>
+          {mine.live ? (
+            <p className="prose-sm" style={{ marginTop: 0 }}>
+              {t('board.liveUntil', { date: new Date(mine.liveUntil).toLocaleDateString('en-GB') })}
+            </p>
+          ) : (
+            <p className="prose-sm" style={{ marginTop: 0 }}>{t('board.draftHidden')}</p>
+          )}
+
+          <div className="brd-tiers">
+            {tiers.map((x) => (
+              <button
+                key={x.id}
+                type="button"
+                className={`brd-tier${x.id === 'd30' ? ' is-best' : ''}`}
+                onClick={() => buy(x)}
+                disabled={Boolean(paying)}
+              >
+                <span className="brd-tier-price">${x.usd}</span>
+                <span className="brd-tier-days">{t('board.daysN', { n: x.days })}</span>
+                {paying === x.id ? <span className="brd-tier-wait">{t('board.paying')}</span> : null}
+              </button>
             ))}
-          </ul>
+          </div>
 
-          <button className="btn btn-primary" style={{ marginTop: 13 }} onClick={goPro} disabled={paying}>
-            {paying ? t('board.paying') : t('board.payWith', { symbol: terms.symbol, chain: terms.chainName })}
-          </button>
-          <p className="faint" style={{ marginTop: 9, fontSize: 11.3, lineHeight: 1.75 }}>
-            {t('board.proNote', { symbol: terms.symbol, chain: terms.chainName })}
-          </p>
-        </motion.section>
-      ) : null}
-
-      {address && mine?.promoted ? (
-        <motion.section className="brd-pro" variants={riseIn} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 6 }}>{t('board.proTitle')}</p>
-          <p className="prose-sm" style={{ margin: 0 }}>
-            {t('board.proUntil', { date: new Date(mine.promoUntil).toLocaleDateString('en-GB') })}
+          <p className="faint" style={{ marginTop: 10, fontSize: 11.3, lineHeight: 1.75 }}>
+            {t('board.proNote', {
+              symbol: state.terms?.symbol ?? 'USDC',
+              chain: state.terms?.chainName ?? 'Base'
+            })}
           </p>
         </motion.section>
       ) : null}
@@ -366,7 +395,7 @@ export default function BoardPanel() {
         )}
       </section>
 
-      <p className="notice">{t('board.footerNotice')}</p>
+      <p className="notice">{t('board.footerNotice', { prices: priceList })}</p>
     </>
   );
 }
