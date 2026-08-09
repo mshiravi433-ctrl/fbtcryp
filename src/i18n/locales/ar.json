@@ -33,7 +33,8 @@
     "nft": "NFT الخاصة بي",
     "orders": "الأوامر",
     "solana": "تبادل سولانا",
-    "buy": "شراء وبيع"
+    "buy": "شراء وبيع",
+    "shop": "المتجر"
   },
   "common": {
     "balance": "الرصيد",
@@ -2287,5 +2288,87 @@
     "joinBody": "You need a Farcaster account, which costs a few dollars a year in storage rent paid to the protocol — not to us. We deliberately cannot post on your behalf: that would mean holding your signing key, and we do not hold keys of any kind.",
     "openFarcaster": "Open Farcaster",
     "notice": "These posts are written by strangers on a public network. We do not host them, verify them or moderate them, and showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here."
+  },
+  "shop": {
+    "title": "المتجر",
+    "subtitle": "أنفق العملات الرقمية على أشياء حقيقية.",
+    "pickCountry": "أين ستستخدمها؟",
+    "pickCountryWhy": "بطاقات الهدايا مرتبطة ببلد. اختر البلد الذي ستستخدم فيه البطاقة لا مكان وجودك — البطاقة المشتراة لبلد خاطئ غالباً لا تُسترد.",
+    "chooseOne": "اختر بلداً",
+    "tab": {
+      "cards": "بطاقات وشحن",
+      "flights": "رحلات",
+      "stays": "إقامة"
+    },
+    "search": "ابحث في {{country}} — علامة، PayPal، ألعاب…",
+    "all": "الكل",
+    "count": "{{n}} متاح في {{country}}",
+    "outOfStock": "غير متوفر",
+    "noMatch": "لا يوجد ما يطابق البحث.",
+    "noneHere": "لا توجد علامات مدرجة لـ {{country}} بعد.",
+    "unavailable": "المتجر غير متاح حالياً. حاول بعد قليل.",
+    "noDenoms": "لا توجد مبالغ متاحة حالياً.",
+    "buyAt": "اشترِ {{brand}} بالعملات الرقمية",
+    "cat": {
+      "e-money": "PayPal وVisa",
+      "e-commerce": "تسوق",
+      "games": "ألعاب",
+      "streaming": "بث",
+      "food": "طعام",
+      "groceries": "بقالة",
+      "retail": "تجزئة",
+      "entertainment": "ترفيه",
+      "electronics": "إلكترونيات",
+      "apparel_clothing": "ملابس",
+      "home": "منزل",
+      "health_beauty": "صحة وجمال",
+      "books_learning": "كتب",
+      "travel": "سفر",
+      "mobile_credits": "رصيد الجوال",
+      "mobile_data": "باقة بيانات",
+      "e-sim": "eSIM",
+      "other": "أخرى"
+    },
+    "flight": {
+      "title": "سافر بالدفع بالعملات الرقمية",
+      "body": "مئات شركات الطيران. التذكرة تصدرها شركة الطيران عبر شريك معتمد من IATA.",
+      "from": "من",
+      "fromHint": "إسطنبول",
+      "to": "إلى",
+      "toHint": "دبي",
+      "depart": "تاريخ المغادرة",
+      "return": "تاريخ العودة",
+      "passengers": "المسافرون",
+      "cabin": "الدرجة",
+      "cabinOpt": {
+        "economy": "اقتصادية",
+        "premium_economy": "اقتصادية مميزة",
+        "business": "رجال الأعمال",
+        "first": "الأولى"
+      },
+      "roundTrip": "ذهاب وعودة",
+      "directOnly": "مباشر فقط",
+      "search": "ابحث عن رحلات"
+    },
+    "stay": {
+      "title": "فنادق وشقق",
+      "body": "احجز إقامتك وادفع بالعملات المستقرة.",
+      "where": "أين",
+      "whereHint": "دبي",
+      "checkIn": "الوصول",
+      "checkOut": "المغادرة",
+      "guests": "الضيوف",
+      "search": "ابحث عن إقامة"
+    },
+    "esim": {
+      "name": "بيانات eSIM",
+      "desc": "بيانات جوال في أكثر من ١٨٠ دولة، دون شريحة."
+    },
+    "limits": {
+      "title": "أين يعمل هذا",
+      "body": "يدير المتجر Cryptorefills ويخدم ٢٣٣ دولة. إيران وسوريا وكوبا وكوريا الشمالية ليست ضمنها — سيكون الكتالوج فارغاً هناك. تركيا والإمارات والعراق ولبنان وروسيا وأوروبا وآسيا تعمل. بعض البطاقات مقيدة بمنطقة ولن تغير VPN ذلك."
+    },
+    "earning": "نحصل على حصة عند الشراء من هنا. لا يكلفك ذلك شيئاً إضافياً.",
+    "noEarn": "لا نجني شيئاً من هذه الروابط حالياً."
   }
 }

@@ -63,6 +63,7 @@ const Perp = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Perp')) : () 
 const Farm = lazyRetry(() => import('./pages/Farm'));
 const Signals = lazyRetry(() => import('./pages/Signals'));
 const Stocks = lazyRetry(() => import('./pages/Stocks'));
+const Shop = lazyRetry(() => import('./pages/Shop'));
 const Help = lazyRetry(() => import('./pages/Help'));
 const Docs = lazyRetry(() => import('./pages/Docs'));
 const Audit = lazyRetry(() => import('./pages/Audit'));
@@ -241,6 +242,7 @@ function AnimatedRoutes() {
             <Route path="/farm" element={<Farm />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/stocks" element={<Stocks />} />
+            <Route path="/shop" element={<Shop />} />
             <Route path="/help" element={<Help />} />
             <Route path="/docs" element={<Docs />} />
             <Route path="/audit" element={<Audit />} />

@@ -9804,5 +9804,147 @@ export default function run() {
       /tierMeets\(userTier\.id, p\.tier\)/.test(perks) && /reached,/.test(perks));
   }
 
+  /* ---- 99. the shop: a real catalogue, not a storefront mock ------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const srv = code(read('server/shop.js'));
+    const links = code(read('src/lib/shopLinks.js'));
+    const client = code(read('src/lib/shop.js'));
+    const page = code(read('src/pages/Shop.jsx'));
+    const appSrc = code(read('server/app.js'));
+
+    /* The whole chain, because "wired to nothing" is this repo's classic. */
+    t('the shop module exists', existsSync('server/shop.js'));
+    t('...the catalogue route is mounted', /['"`]\/api\/shop\/catalogue['"`]/.test(appSrc));
+    t('...the products route is mounted', /['"`]\/api\/shop\/products['"`]/.test(appSrc));
+    t('...the countries route is mounted', /['"`]\/api\/shop\/countries['"`]/.test(appSrc));
+    t('...the client library calls them', /shop\/catalogue/.test(client) && /shop\/products/.test(client));
+    t('...the page renders the catalogue', /shown\.map/.test(page));
+    t('...and the route is reachable', /path="\/shop"/.test(read('src/App.jsx')));
+    t('...and it is in the menu', /to: '\/shop'/.test(read('src/components/MoreSheet.jsx')));
+
+    /*
+     * ─── COUNTRY IS THE WHOLE PRODUCT ───────────────────────────────────────
+     * The catalogue differs per country and a card bought for the wrong one is
+     * usually unrefundable — Steam say so in their own note. So it must be
+     * ASKED, never inferred: browser locale is wrong for a Persian phone in
+     * Dubai, and IP is wrong for anyone on a VPN, which is most of this
+     * audience.
+     */
+    t('the country is asked, not guessed from locale or IP',
+      /getShopCountry/.test(page) && !/navigator\.language/.test(page));
+    t('...and remembered between visits', /setShopCountry/.test(client) && /localStorage/.test(client));
+    t('...and every catalogue call is scoped to it', /country_code=\$\{cc\}/.test(srv));
+    t('...with a per-country cache key, not one shared entry',
+      /shop-cat-\$\{cc\}/.test(srv));
+
+    /*
+     * The provider REQUIRES the end user's IP and UA. `x-forwarded-for` is a
+     * chain when several proxies are involved and the ORIGINAL client is the
+     * FIRST entry — taking the last forwards our own edge IP and makes every
+     * shopper look like the same person in a datacentre.
+     */
+    t('the end-user IP is forwarded, not our server IP',
+      /x-forwarded-for[\s\S]{0,80}?\.split\(','\)\[0\]/.test(srv));
+
+    /*
+     * Third-party strings land in our UI, so the same defences as the board
+     * and the Farcaster feed apply.
+     */
+    t('brand text is stripped of bidi and control characters', /BIDI/.test(srv) && /cleanText/.test(srv));
+    t('...logos are accepted only from the provider CDN',
+      /cdn\\.cryptorefills\\.com/.test(srv));
+    t('...and colours are validated before being inlined as a style',
+      /\^#\[0-9a-fA-F\]\{3,8\}\$/.test(srv));
+
+    /*
+     * Their tree nests the SAME brand under several categories — Amazon.com.tr
+     * appears under e-commerce AND electronics. Rendering it verbatim shows
+     * Amazon four times.
+     */
+    t('brands are de-duplicated across categories', /byId\.set\(b\.id, b\)/.test(srv));
+    t('...and the filter list is built from what the country returned',
+      /counts\.set/.test(srv) && !/const CATEGORIES = \[/.test(srv));
+
+    /*
+     * Number(null) is 0 and 0 is finite. The same reflex that renders a
+     * missing price as "$0.00" also SORTS it to the front — caught by feeding
+     * a null coin_amount through the real function, which put the unpriced
+     * card at the top of the list.
+     */
+    t('a missing price stays null', /if \(v === null \|\| v === undefined \|\| v === ''\) return null;/.test(srv));
+    t('...and unpriced rows sort last, not first',
+      /if \(av === null\) return 1;/.test(srv) && /if \(bv === null\) return -1;/.test(srv));
+
+    /* Out of stock is shown, not hidden: someone hunting for a brand should
+       learn it is unavailable rather than conclude we never carried it. */
+    t('out-of-stock brands are flagged rather than dropped',
+      /outOfStock: b\.is_out_of_stock === true/.test(srv) && /shop\.outOfStock/.test(page));
+
+    /*
+     * ─── FLIGHTS ARE NOT IN THE REST API ────────────────────────────────────
+     * Their developer reference lists what it covers and then says "Not
+     * covered here: Flights, Stays". So there is no endpoint returning fares,
+     * and rendering a fake results list would be the worst version of this.
+     * The form collects origin/destination/date and hands over a PREFILLED
+     * search page — verified live that /flights/new_york-to-london opens with
+     * JFK and LHR already chosen.
+     */
+    t('the flight form collects origin, destination and dates',
+      /shop\.flight\.from/.test(page) && /shop\.flight\.to/.test(page) && /type="date"/.test(page));
+    t('...and builds the route slug the provider actually reads',
+      /\$\{a\}-to-\$\{b\}/.test(links));
+    t('...and no fake fare list is invented',
+      !/fare|itinerary|airlineResults/i.test(page));
+    /* A return date before departure is prevented, not validated afterwards. */
+    t('...the return date cannot precede departure', /min=\{trip\.depart/.test(page));
+    t('...and search is disabled until both cities are given',
+      /disabled=\{!trip\.from\.trim\(\) \|\| !trip\.to\.trim\(\)\}/.test(page));
+
+    /* Attribution in ONE place, so it cannot be forgotten on a new link —
+       the Avantis bug, where a working link credited nobody. */
+    t('every outbound link is built in one module', /function withRef/.test(links));
+    t('...and the partner id is a compiled default, not env-only',
+      /VITE_CRYPTOREFILLS_PARTNER_ID'\) \|\| ''/.test(links));
+    t('...with the disclosure derived from it rather than hard-coded',
+      /shopEarns\(\)/.test(page) && /Boolean\(CR_PARTNER\)/.test(links));
+
+    /* A whole screen on one third party must degrade, never throw. */
+    t('a dead upstream returns empty instead of throwing',
+      /return \{ rows: \[\], categories: \[\], live: false \}/.test(client));
+    t('...and the page says so', /shop\.unavailable/.test(page));
+
+    /*
+     * Asked for explicitly: a collapsible for the restrictions, and NOT lots
+     * of explanation or warnings. One folded box, short factual list.
+     */
+    t('the restrictions are in a collapsible box', /id="shop-limits"/.test(page));
+    t('...and there is no wall of warning notices', (page.match(/notice-danger/g) ?? []).length === 0);
+
+    /* Revenue was the point. The ad slots stay. */
+    t('the shop carries ad slots', /<AdBanner/.test(page));
+
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const S = L.shop;
+      t(`${lang} has the shop copy`, Boolean(S?.title && S?.subtitle && S?.pickCountry));
+      t(`${lang} labels all three tabs`,
+        Boolean(S?.tab?.cards && S?.tab?.flights && S?.tab?.stays));
+      t(`${lang} has the flight form labels`,
+        Boolean(S?.flight?.from && S?.flight?.to && S?.flight?.depart && S?.flight?.search));
+      t(`${lang} names the countries that do not work`,
+        /Iran|ایران|إيران/.test(String(S?.limits?.body ?? '')));
+      t(`${lang} explains why the country matters`,
+        String(S?.pickCountryWhy ?? '').length > 60);
+      t(`${lang} states both earning and non-earning disclosures`,
+        Boolean(S?.earning) && Boolean(S?.noEarn));
+      t(`${lang} labels the shop in the menu`, Boolean(L.nav?.shop));
+    }
+  }
+
   return rows;
 }

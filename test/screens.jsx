@@ -39,6 +39,7 @@ import Signals from '../src/pages/Signals.jsx';
 import Farm from '../src/pages/Farm.jsx';
 import CoinDetail from '../src/pages/CoinDetail.jsx';
 import Stocks from '../src/pages/Stocks.jsx';
+import Shop from '../src/pages/Shop.jsx';
 import Bridge from '../src/pages/Bridge.jsx';
 import Docs from '../src/pages/Docs.jsx';
 import Developers from '../src/pages/Developers.jsx';
@@ -218,6 +219,14 @@ export async function run(container) {
    * `assets.equities` of undefined.
    */
   await mount('Stocks (no network)', <Stocks />);
+
+  /*
+   * Shop with every host black-holed AND no country chosen — the very first
+   * state a new user sees. It must render the country picker rather than
+   * throw on `countries.map` of undefined, and the collapsible limits box
+   * must still be reachable.
+   */
+  await mount('Shop (no network, no country)', <Shop />);
   /*
    * Bridge with no wallet connected — the state every visitor is in before
    * they connect. It must render the "connect a wallet" notice and NOT try to

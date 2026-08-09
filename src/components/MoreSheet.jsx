@@ -9,6 +9,7 @@ import { SPECULATION_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
 import {
   IconActivity,
+  IconBriefcase,
   IconBuilding,
   IconDoc,
   IconGlobe,
@@ -81,6 +82,12 @@ const GROUPS = [
           ]
         : []),
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
+      /*
+       * Spend crypto on real things. Sits in `markets` rather than `more`
+       * because it is a destination people arrive wanting, not a setting they
+       * go hunting for.
+       */
+      { to: '/shop', key: 'nav.shop', Icon: IconBriefcase, hue: 'var(--rgb-9)' },
       { to: '/buy', key: 'nav.buy', Icon: IconSwap, hue: 'var(--rgb-4)' },
       /* Cross-chain. Sits next to Swap because that is the question it
          answers: "my token is on the wrong network". */

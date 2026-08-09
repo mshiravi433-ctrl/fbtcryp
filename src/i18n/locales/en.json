@@ -34,7 +34,8 @@
     "orders": "Auto Orders",
     "solana": "Solana swap",
     "buy": "Buy & sell",
-    "bridge": "Bridge"
+    "bridge": "Bridge",
+    "shop": "Shop"
   },
   "common": {
     "balance": "Balance",
@@ -2855,5 +2856,87 @@
     "joinBody": "You need a Farcaster account, which costs a few dollars a year in storage rent paid to the protocol — not to us. We deliberately cannot post on your behalf: that would mean holding your signing key, and we do not hold keys of any kind.",
     "openFarcaster": "Open Farcaster",
     "notice": "These posts are written by strangers on a public network. We do not host them, verify them or moderate them, and showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here."
+  },
+  "shop": {
+    "title": "Shop",
+    "subtitle": "Spend crypto on real things.",
+    "pickCountry": "Where will you use it?",
+    "pickCountryWhy": "Gift cards are tied to a country. Pick the one where you will redeem, not where you are — a card bought for the wrong country usually cannot be refunded.",
+    "chooseOne": "Choose a country",
+    "tab": {
+      "cards": "Cards & top-ups",
+      "flights": "Flights",
+      "stays": "Stays"
+    },
+    "search": "Search {{country}} — brand, PayPal, gaming…",
+    "all": "All",
+    "count": "{{n}} available in {{country}}",
+    "outOfStock": "out of stock",
+    "noMatch": "Nothing matches that search.",
+    "noneHere": "No brands listed for {{country}} yet.",
+    "unavailable": "The shop is unreachable right now. Try again shortly.",
+    "noDenoms": "No amounts available right now.",
+    "buyAt": "Buy {{brand}} with crypto",
+    "cat": {
+      "e-money": "PayPal & Visa",
+      "e-commerce": "Shopping",
+      "games": "Gaming",
+      "streaming": "Streaming",
+      "food": "Food",
+      "groceries": "Groceries",
+      "retail": "Retail",
+      "entertainment": "Entertainment",
+      "electronics": "Electronics",
+      "apparel_clothing": "Clothing",
+      "home": "Home",
+      "health_beauty": "Health & beauty",
+      "books_learning": "Books",
+      "travel": "Travel",
+      "mobile_credits": "Mobile credit",
+      "mobile_data": "Mobile data",
+      "e-sim": "eSIM",
+      "other": "Other"
+    },
+    "flight": {
+      "title": "Fly, paid in crypto",
+      "body": "Hundreds of airlines. Tickets issued by the airline through an IATA-accredited partner.",
+      "from": "From",
+      "fromHint": "Istanbul",
+      "to": "To",
+      "toHint": "Dubai",
+      "depart": "Departure",
+      "return": "Return",
+      "passengers": "Passengers",
+      "cabin": "Cabin",
+      "cabinOpt": {
+        "economy": "Economy",
+        "premium_economy": "Premium economy",
+        "business": "Business",
+        "first": "First"
+      },
+      "roundTrip": "Round trip",
+      "directOnly": "Direct only",
+      "search": "Search flights"
+    },
+    "stay": {
+      "title": "Hotels and rentals",
+      "body": "Book a stay and pay in stablecoins.",
+      "where": "Where",
+      "whereHint": "Dubai",
+      "checkIn": "Check in",
+      "checkOut": "Check out",
+      "guests": "Guests",
+      "search": "Search stays"
+    },
+    "esim": {
+      "name": "eSIM data",
+      "desc": "Mobile data in 180+ countries, no SIM card."
+    },
+    "limits": {
+      "title": "Where this works",
+      "body": "The shop is run by Cryptorefills and serves 233 countries. Iran, Syria, Cuba and North Korea are not among them — the catalogue will be empty there. Turkey, the UAE, Iraq, Lebanon, Russia, Europe and Asia all work. Some individual cards are region-locked and a VPN will not change that."
+    },
+    "earning": "We earn a share when you buy through here. It costs you nothing extra.",
+    "noEarn": "We earn nothing from these links today."
   }
 }

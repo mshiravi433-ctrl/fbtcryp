@@ -33,6 +33,7 @@ import { fetchNews } from './news.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
+import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
 import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
@@ -656,6 +657,41 @@ app.get('/api/solana/assets', (_req, res) => serve(res, 300_000)(fetchSolanaAsse
  */
 app.get('/api/avantis/equities', (_req, res) =>
   serve(res, 60_000)(fetchAvantisEquities, 'avantis-equities'));
+
+/* --------------------------------- shop ---------------------------------- */
+/*
+ * SPEND CRYPTO ON REAL THINGS — gift cards, top-ups, eSIMs, travel.
+ *
+ * See server/shop.js for the provider audit and for why we never touch the
+ * buyer's money: Cryptorefills is the Merchant of Record, so this stays a
+ * non-custodial app.
+ *
+ * These three routes hand-roll their caching instead of using `serve()`,
+ * because `serve()` takes a single fixed cache key and every one of these is
+ * keyed by user input — country, and brand family. One shared key would serve
+ * the Turkish catalogue to a shopper in the UAE.
+ */
+const shopRoute = (res, work) =>
+  work
+    .then(({ value }) => {
+      res.set('cache-control', 'public, max-age=300');
+      res.json(value);
+    })
+    .catch((err) =>
+      res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) })
+    );
+
+app.get('/api/shop/countries', (_req, res) => shopRoute(res, shopCountries()));
+
+/*
+ * The end user's IP and user-agent are forwarded to the provider on the two
+ * catalogue calls — they require it, and it is why `req` is threaded through.
+ */
+app.get('/api/shop/catalogue', (req, res) =>
+  shopRoute(res, getShopCatalogue(req.query.country, req)));
+
+app.get('/api/shop/products', (req, res) =>
+  shopRoute(res, getShopProducts({ country: req.query.country, family: req.query.family }, req)));
 
 /**
  * PERPETUAL FUNDING RATES — the Perp screen's data.
