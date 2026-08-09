@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { riseIn, stagger } from './PageTransition';
 import InfoBox from './InfoBox';
-import { useWallet, shortAddress } from '../context/WalletContext';
+import { useWallet } from '../context/WalletContext';
 import { deleteListing, fetchBoard, payForPromotion, postListing, publishListing } from '../lib/board';
 import { useAppStore } from '../store/useAppStore';
 
@@ -54,7 +54,21 @@ function Row({ row, mine, onDelete, onSwap }) {
   return (
     <motion.div
       variants={riseIn}
-      className={`brd-row${row.featured ? ' brd-row-promoted' : ''}`}
+      /*
+        The neon edge is coloured by the tier that was PAID FOR — white for a
+        day, grey for a week, gold for a month — so the border itself is the
+        receipt. `row.tier` comes from the server, which derives it from the
+        amount actually received, so a card cannot show gold without gold
+        having been paid.
+
+        Falls back to no neon class if a row somehow has no tier, rather than
+        emitting `brd-neon-undefined` and styling nothing.
+      */
+      className={[
+        'brd-row',
+        row.featured ? 'brd-row-promoted' : '',
+        row.tier ? `brd-row-neon brd-neon-${row.tier}` : ''
+      ].filter(Boolean).join(' ')}
     >
       <div className="brd-head">
         <span className={`brd-side brd-side-${row.side}`}>{t(`board.side.${row.side}`)}</span>
@@ -312,9 +326,6 @@ export default function BoardPanel() {
             <button className="btn btn-primary" type="submit" style={{ marginTop: 12 }} disabled={busy}>
               {mine ? t('board.update') : t('board.saveDraft')}
             </button>
-            <p className="faint" style={{ marginTop: 8, fontSize: 11.5 }}>
-              {t('board.oneEach', { addr: shortAddress(address) })}
-            </p>
           </form>
         )}
       </motion.section>
@@ -341,6 +352,23 @@ export default function BoardPanel() {
           ) : (
             <p className="prose-sm" style={{ marginTop: 0 }}>{t('board.draftHidden')}</p>
           )}
+
+          {/*
+            ─── CANCELLING HAS TO BE REACHABLE FROM HERE ────────────────────
+            There is a Remove button on the user's own row in the list, but an
+            UNPAID draft never appears in that list — it is hidden from
+            everyone, including its author. So without this button a draft
+            could be edited forever and never deleted, which is the one state
+            with no way out.
+          */}
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 10 }}
+            onClick={remove}
+            disabled={busy}
+          >
+            {mine.live ? t('board.cancelLive') : t('board.cancelDraft')}
+          </button>
 
           <div className="brd-tiers">
             {tiers.map((x) => (

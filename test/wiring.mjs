@@ -9476,5 +9476,74 @@ export default function run() {
     t('...and OTC is still the default tab', /useState\('otc'\)/.test(p2p));
   }
 
+  /* ---- 97. cancelling, the deleted sentence, and a cheap neon border ----- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const panel = code(read('src/components/BoardPanel.jsx'));
+    const css = read('src/index.css');
+
+    /*
+     * ─── AN UNPAID DRAFT MUST BE DELETABLE ──────────────────────────────────
+     * There is a Remove button on the user's own row in the public list, but a
+     * draft NEVER appears in that list — it is hidden from everyone including
+     * its author. Without a second control the draft state had no way out.
+     */
+    t('a draft can be deleted from the panel itself', /board\.cancelDraft/.test(panel));
+    t('...and a live advert can be cancelled too', /board\.cancelLive/.test(panel));
+    t('...both wired to the delete call', /deleteListing/.test(code(read('src/lib/board.js'))));
+
+    /* The owner asked for this sentence to go. */
+    t('the "one advert per wallet" sentence is gone', !/oneEach/.test(panel));
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} no longer carries that string`, L.board?.oneEach === undefined);
+      t(`${lang} has the cancel labels`, Boolean(L.board?.cancelDraft) && Boolean(L.board?.cancelLive));
+    }
+
+    /*
+     * ─── THE NEON BORDER IS CSS, AND THAT IS THE WHOLE POINT ────────────────
+     * The component that was proposed mounts ~18 nested divs per advert, six
+     * of them blurred, and rebuilds two 27-stop conic gradients from
+     * JavaScript on EVERY frame — 2,400 gradient rebuilds per second with 20
+     * adverts on screen. The brief was explicitly "don't put the app under
+     * strain", so it is one pseudo-element driven by an animated custom
+     * property instead, reusing the `steps()` trick this file already uses for
+     * .card-rgb.
+     */
+    t('the neon border exists', /\.brd-row-neon::before/.test(css));
+    t('...and is not a per-frame JavaScript animation',
+      !/requestAnimationFrame/.test(panel) && !/ResizeObserver/.test(panel));
+    /* steps() is what turns 60 repaints per second into 10. */
+    t('...repainting is quantised with steps()',
+      /\.brd-row-neon::before[\s\S]{0,1200}?animation: rotate-angle [\d.]+s steps\(\d+\)/.test(css));
+    /* An animated blur filter on a list row is the most expensive thing there
+       is; the glow is a static shadow that never repaints. */
+    t('...and the glow does not animate a blur filter',
+      !/\.brd-row-neon[\s\S]{0,400}?filter:\s*blur/.test(css));
+
+    /* Colour per tier, as asked: 1 day white, 7 grey, 30 gold. */
+    for (const tier of ['d1', 'd7', 'd30']) {
+      t(`the ${tier} border has its own colour`, new RegExp(`\\.brd-neon-${tier}\\b`).test(css));
+    }
+    t('...and the class is chosen from the tier that was paid for',
+      /brd-neon-\$\{row\.tier\}/.test(panel));
+    /* A row with no tier must not emit brd-neon-undefined. */
+    t('...with no class at all when a row has no tier', /row\.tier \?/.test(panel));
+
+    /*
+     * A rotating border is exactly the motion that triggers vestibular
+     * symptoms, and an unsupported @property would leave a bright arc frozen
+     * in one corner looking like a rendering fault.
+     */
+    t('reduced motion stops the rotation but keeps the colour',
+      /prefers-reduced-motion[\s\S]{0,200}?\.brd-row-neon::before \{ animation: none/.test(css));
+    t('...and there is a fallback where @property is unsupported',
+      /@supports not \(background: conic-gradient\(from var\(--angle\)[\s\S]{0,400}?brd-row-neon/.test(css));
+  }
+
   return rows;
 }

@@ -2241,7 +2241,6 @@
     "note": "Note",
     "update": "Update",
     "remove": "Remove",
-    "oneEach": "One advert per wallet ({{addr}}). Posting again replaces it. Adverts expire after 14 days.",
     "listings": "Adverts",
     "empty": "No adverts yet. Yours would be the first.",
     "offline": "The board is unreachable right now. Try again in a moment.",
@@ -2259,7 +2258,9 @@
     "publishTitle": "Publish your advert",
     "extendTitle": "Extend your advert",
     "liveUntil": "Live until {{date}}. Paying again adds to the time you have left.",
-    "daysN": "{{n}} day(s)"
+    "daysN": "{{n}} day(s)",
+    "cancelDraft": "حذف هذا الإعلان",
+    "cancelLive": "إلغاء وحذف"
   },
   "community": {
     "tab": "Community",

@@ -7530,3 +7530,124 @@ body { overflow-x: clip; }
 .brd-tier-wait { font-size: 10px; color: var(--rgb-1); }
 
 :root[data-theme='light'] .brd-tier.is-best { border-color: rgba(180, 120, 0, 0.5); }
+
+/* ---------------------------------------------------------------------------
+   NEON BORDER ON A PAID ADVERT
+   ---------------------------------------------------------------------------
+   A rotating border whose COLOUR shows what the advertiser paid for:
+   white = 1 day, grey = 7 days, gold = 30 days.
+
+   ─── WHY THIS IS CSS AND NOT THE REACT COMPONENT THAT WAS SUGGESTED ────────
+   The pasted NeonBorder is beautiful and would have hurt. Per advert it mounts
+   ~18 nested divs, six of them blurred, and on EVERY animation frame it
+   rebuilds two conic-gradient strings of 27 colour stops each from JavaScript.
+   That is a style recalculation plus a repaint, 60 times a second, for each
+   card: with 20 adverts on screen that is 2,400 gradients rebuilt per second
+   on the main thread. On a mid-range Android it would stutter the whole page,
+   and the request was explicitly "I don't want the app to be under strain".
+
+   This file already solved the same problem once, for `.card-rgb`: animate a
+   registered `--angle` property with `steps(90)` so the browser repaints 15
+   times a second instead of 60, which is invisible on a slow rotation and is a
+   4x saving. The same trick is reused here, with no JavaScript at all — no
+   ResizeObserver, no requestAnimationFrame, no per-frame string building.
+
+   Cost per advert: ONE extra pseudo-element and one masked gradient.
+--------------------------------------------------------------------------- */
+
+.brd-row-neon {
+  position: relative;
+  isolation: isolate;
+}
+
+.brd-row-neon::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  /*
+   * One bright arc chasing the edge, not a full rainbow ring: the gradient is
+   * mostly transparent, so what the eye follows is a single travelling
+   * highlight. `--neon` is set per tier by the row's modifier class below.
+   */
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 0deg,
+    transparent 200deg,
+    var(--neon, #fff) 300deg,
+    var(--neon-hot, #fff) 340deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* 90 steps over 9s = 10 repaints/second. Slower than .card-rgb on purpose:
+     several of these can be on screen at once, which the hero card never is. */
+  animation: rotate-angle 9s steps(90) infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* The glow. A static box-shadow rather than the three blurred, plus-lighter
+   layers the original used — a blur filter that animates is the single most
+   expensive thing you can put on a list row. This one never repaints. */
+.brd-row-neon { box-shadow: 0 0 18px -8px var(--neon-glow, transparent); }
+
+/* ─── THE THREE TIERS ─────────────────────────────────────────────────────
+   Asked for: 1 day white, 7 days grey, 30 days gold. */
+.brd-neon-d1 {
+  --neon: rgba(255, 255, 255, 0.85);
+  --neon-hot: #ffffff;
+  --neon-glow: rgba(255, 255, 255, 0.35);
+}
+.brd-neon-d7 {
+  --neon: rgba(192, 200, 212, 0.8);
+  --neon-hot: #c0c8d4;
+  --neon-glow: rgba(192, 200, 212, 0.4);
+}
+.brd-neon-d30 {
+  --neon: rgba(255, 201, 60, 0.85);
+  --neon-hot: #ffd76a;
+  --neon-glow: rgba(255, 201, 60, 0.5);
+}
+
+/* On white, a white border is invisible and a pale grey nearly so. */
+:root[data-theme='light'] .brd-neon-d1 {
+  --neon: rgba(120, 130, 150, 0.8);
+  --neon-hot: #8b93a7;
+  --neon-glow: rgba(120, 130, 150, 0.3);
+}
+:root[data-theme='light'] .brd-neon-d7 {
+  --neon: rgba(90, 100, 120, 0.85);
+  --neon-hot: #5a6478;
+  --neon-glow: rgba(90, 100, 120, 0.32);
+}
+:root[data-theme='light'] .brd-neon-d30 {
+  --neon: rgba(180, 120, 0, 0.9);
+  --neon-hot: #b47800;
+  --neon-glow: rgba(180, 120, 0, 0.4);
+}
+
+/*
+ * ─── TWO ESCAPE HATCHES, BOTH LOAD-BEARING ─────────────────────────────────
+ * A rotating border is exactly the kind of motion that triggers vestibular
+ * symptoms, and this app already honours the preference elsewhere. The colour
+ * stays so the tier is still readable; only the movement stops.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .brd-row-neon::before { animation: none; }
+}
+
+/*
+ * And where @property is unsupported the gradient cannot rotate at all — the
+ * animation would silently do nothing and leave a fixed bright arc on one
+ * corner, which looks like a rendering fault. A plain tinted edge instead.
+ */
+@supports not (background: conic-gradient(from var(--angle), red, blue)) {
+  .brd-row-neon::before {
+    background: var(--neon, #fff);
+    opacity: 0.55;
+    animation: none;
+  }
+}
