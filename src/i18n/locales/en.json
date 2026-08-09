@@ -1560,8 +1560,7 @@
     "tab": {
       "otc": "On-chain OTC",
       "fiat": "Buy with cash",
-      "board": "Board",
-      "community": "Community"
+      "board": "Board"
     },
     "otcTitle": "Direct wallet-to-wallet",
     "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
@@ -1785,6 +1784,7 @@
     },
     "tab": {
       "read": "Headlines",
+      "community": "Community",
       "listen": "Radio",
       "calm": "Calm"
     }

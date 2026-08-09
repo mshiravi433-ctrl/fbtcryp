@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
 import CalmPanel from '../components/CalmPanel';
+import CommunityPanel from '../components/CommunityPanel';
 import SegIndicator from '../components/SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
@@ -177,7 +178,17 @@ export default function News() {
           saying about it, and then the one thing here that is about the
           reader rather than the market.
         */}
-        {['read', 'listen', 'calm'].map((k) => (
+        {/*
+          ─── THE COMMUNITY FEED MOVED HERE FROM P2P ───────────────────────
+          Asked for directly: «گفتگو نباید در p2p باشد باید در صفحه اخبار باشد».
+          It belongs here. P2P is a place where money moves — an untrusted
+          feed of strangers' posts sitting one tab away from a send form is
+          exactly the adjacency a scammer wants ("I posted my address in the
+          community tab, just send it"). On the news screen the same feed is
+          simply what people are saying about the headlines above it, which
+          is what it actually is.
+        */}
+        {['read', 'community', 'listen', 'calm'].map((k) => (
           <button
             key={k}
             className={tab === k ? 'active' : ''}
@@ -190,7 +201,13 @@ export default function News() {
         ))}
       </div>
 
-      {tab === 'calm' ? (
+      {tab === 'community' ? (
+        /*
+          Read-only Farcaster feed, hosted by the protocol rather than by us:
+          no storage cost, no moderation duty — see components/CommunityPanel.jsx.
+        */
+        <CommunityPanel />
+      ) : tab === 'calm' ? (
         <CalmPanel />
       ) : tab === 'listen' ? (
         /*

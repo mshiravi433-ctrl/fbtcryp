@@ -13,7 +13,6 @@ import RestrictionsSheet from '../components/RestrictionsSheet';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import BoardPanel from '../components/BoardPanel';
-import CommunityPanel from '../components/CommunityPanel';
 
 /**
  * Peer-to-peer trading.
@@ -104,7 +103,7 @@ export default function P2P() {
         existing tabs are untouched.
       */}
       <div className="segmented">
-        {['otc', 'fiat', 'board', 'community'].map((k) => (
+        {['otc', 'fiat', 'board'].map((k) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
             {tab === k && <SegIndicator id="p2ptab" />}
             {t(`p2p.tab.${k}`)}
@@ -197,12 +196,6 @@ export default function P2P() {
           interleaved with the two link-out tabs.
         */
         <BoardPanel />
-      ) : tab === 'community' ? (
-        /*
-          The Farcaster feed. Read-only and hosted by the protocol, so it adds
-          no storage cost and no moderation duty — see components/CommunityPanel.jsx.
-        */
-        <CommunityPanel />
       ) : (
         <>
           <motion.section className="card" variants={riseIn} initial="hidden" animate="show">

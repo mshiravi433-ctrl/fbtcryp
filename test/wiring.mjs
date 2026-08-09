@@ -6262,8 +6262,9 @@ export default function run() {
       t('...the client library calls the route', /\/calm/.test(code(read('src/lib/audio.js'))));
       t('...the panel exists', existsSync('src/components/CalmPanel.jsx'));
       t('...News imports it', /CalmPanel/.test(read('src/pages/News.jsx')));
-      t('...and renders it behind a third tab',
-        /'read', 'listen', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
+      /* Now the LAST of four tabs — the community feed was moved in ahead of it. */
+      t('...and renders it behind its own tab',
+        /'listen', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
         /tab === 'calm'/.test(code(read('src/pages/News.jsx'))));
 
       /*
@@ -9466,14 +9467,28 @@ export default function run() {
       t(`${lang} says the posts are not ours and not moderated`,
         String(L.community?.notice ?? '').length > 120);
       /* The tab label must exist or the button renders the raw key. */
-      t(`${lang} labels the community tab`, Boolean(L.p2p?.tab?.community));
+      t(`${lang} labels the community tab`, Boolean(L.news?.tab?.community));
       t(`${lang} labels the board tab`, Boolean(L.p2p?.tab?.board));
     }
 
+    /*
+     * ─── THE FEED LIVES ON NEWS, NOT ON P2P ─────────────────────────────────
+     * Moved on request. Asserted in BOTH directions, because a half-done move
+     * would leave the panel mounted twice and the P2P tab strip rendering a
+     * raw i18n key.
+     */
     const p2p = code(read('src/pages/P2P.jsx'));
-    t('the feed is reachable as a fourth P2P tab',
-      /'otc', 'fiat', 'board', 'community'/.test(p2p));
-    t('...and OTC is still the default tab', /useState\('otc'\)/.test(p2p));
+    const news = code(read('src/pages/News.jsx'));
+    t('the feed is reachable as a News tab',
+      /'read', 'community', 'listen', 'calm'/.test(news));
+    t('...and News actually renders the panel',
+      /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
+    t('...and P2P no longer mounts it',
+      !/CommunityPanel/.test(read('src/pages/P2P.jsx')));
+    t('...and the P2P tab strip is back to three tabs',
+      /\['otc', 'fiat', 'board'\]/.test(p2p));
+    t('...and OTC is still the default P2P tab', /useState\('otc'\)/.test(p2p));
+    t('...and Headlines is still the default News tab', /useState\('read'\)/.test(news));
   }
 
   /* ---- 97. cancelling, the deleted sentence, and a cheap neon border ----- */
