@@ -65,7 +65,21 @@ export const FLIGHT_ROUTES = [
  */
 export const STAY_CITIES = [
   { id: 'dubai', cc: 'ae', slug: 'dubai', city: 'Dubai', country: 'United Arab Emirates', img: `${IMG}/dubai_uae_2_200x250.webp` },
-  { id: 'istanbul', cc: 'tr', slug: 'istanbul', city: 'Istanbul', country: 'Türkiye', img: `${IMG}/istanbul_turkey_200x250.webp` },
+  /*
+   * ─── ISTANBUL IS DELIBERATELY ABSENT, AND THAT IS A CAUGHT MISTAKE ────────
+   * I added it because it is an obvious destination for this audience, and I
+   * invented the filename `istanbul_turkey_200x250.webp` by pattern-matching
+   * the others. It does not exist: the CDN answers AccessDenied for it and
+   * for `istanbul_turkiye_...` too, while every filename actually READ off
+   * their pages returns real image bytes.
+   *
+   * The hotel page /en/stays/tr/istanbul does work — so the tile would have
+   * linked correctly and shown a broken image. That is the worst shape of
+   * bug: plausible, half-working, and invisible until a user sees it.
+   *
+   * Rule for this list: only cities whose image was seen on their own pages.
+   */
+  { id: 'washington', cc: 'us', slug: 'washington_d.c.', city: 'Washington D.C.', country: 'United States', img: `${IMG}/washington_dc_us_200x250.webp` },
   { id: 'london', cc: 'gb', slug: 'london', city: 'London', country: 'United Kingdom', img: `${IMG}/london_uk_200x250.webp` },
   { id: 'paris', cc: 'fr', slug: 'paris', city: 'Paris', country: 'France', img: `${IMG}/paris_france_200x250.webp` },
   { id: 'rome', cc: 'it', slug: 'rome', city: 'Rome', country: 'Italy', img: `${IMG}/rome_italy_200x250.webp` },

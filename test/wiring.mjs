@@ -9926,6 +9926,32 @@ export default function run() {
       /new_york-to-london/.test(destSrc) && /-to-/.test(destSrc));
 
     /*
+     * ─── ONLY FILENAMES SEEN ON THEIR OWN PAGES ─────────────────────────────
+     * I added Istanbul because it is an obvious destination for this audience
+     * and invented `istanbul_turkey_200x250.webp` by pattern-matching the
+     * others. It does not exist — the CDN answers AccessDenied — while every
+     * filename actually read off their pages returns image bytes. The hotel
+     * PAGE for Istanbul does work, so the tile would have linked correctly
+     * and shown a broken image: plausible, half-working, invisible until a
+     * user hits it.
+     *
+     * This pins the exact set that was verified. Adding a city means checking
+     * its image first and then updating this list, which is the point.
+     */
+    const imgs = [...destSrc.matchAll(/\$\{IMG\}\/([a-z0-9_.]+\.webp)/g)].map((m) => m[1]);
+    const VERIFIED = new Set([
+      'london_uk_200x250.webp', 'dubai_uae_2_200x250.webp', 'tokyo_japan_200x250.webp',
+      'paris_france_200x250.webp', 'rome_italy_200x250.webp',
+      'amsterdam_netherlands_200x250.webp', 'miami_us_200x250.webp',
+      'las_vegas_us_200x250.webp', 'los_angeles_us_200x250.webp',
+      'toronto_canada_200x250.webp', 'san_francisco_us_200x250.webp',
+      'new_york_us_200x250.webp', 'washington_dc_us_200x250.webp'
+    ]);
+    t('every destination image was verified against their CDN',
+      imgs.length > 0 && imgs.every((f) => VERIFIED.has(f)));
+    t('...and the invented Istanbul filename is gone', !/istanbul/i.test(destSrc.replace(/\/\*[\s\S]*?\*\//g, '')));
+
+    /*
      * ─── THE REVIEW POINTS, EACH ASSERTED ───────────────────────────────────
      * Every one of these was a specific complaint, so each gets a guard rather
      * than a promise.
