@@ -167,22 +167,38 @@ export function revenueReadiness() {
       note: 'Third price source, keyless. Pays 70 bps direct to our wallet when promoted to executable — no registration needed'
     }),
     line({
+      /*
+       * ─── LIVE SINCE 2026-08-09, AND NOT GATED ON THE ENV VAR ─────────────
+       * This used to read `Boolean(env('VITE_AVANTIS_REF_CODE'))`, which is
+       * now the WRONG question in two ways.
+       *
+       * 1. The code `fbtswap` is registered on Base (tx 0x05d5708a…, calldata
+       *    selector 0x36def2c8 with argument "fbtswap") and is compiled into
+       *    the client as the default, so the app carries it whether or not
+       *    this variable is set.
+       * 2. This is SERVER-side env. A `VITE_` variable is a BUILD-time value
+       *    for the browser bundle; nothing guarantees it is present in the
+       *    Node process. So the check could report `live:false` on a build
+       *    that is demonstrably earning — the exact "readiness quietly lies"
+       *    failure this endpoint exists to prevent.
+       */
       id: 'avantis',
-      live: Boolean(env('VITE_AVANTIS_REF_CODE')),
+      live: true,
       ready: true,
       envVar: 'VITE_AVANTIS_REF_CODE',
       cost: 0,
-      blockedBy: 'SIGNUP',
-      note: 'Perps on crypto, forex, metals and indices. Permissionless, 5% of referred fees, one wallet signature at avantisfi.com'
+      note: 'Perps on crypto, forex, metals and indices. Code fbtswap registered on Base 2026-08-09; 5% of referred fees. Links go to /referral?code= — /trade ignores the parameter'
     }),
     line({
+      /* Campaign 517433 created 2026-08-09 and compiled in as the default,
+         so — like Avantis above — this is no longer gated on a VITE_ variable
+         that the server process may never see. */
       id: 'utex',
-      live: Boolean(env('VITE_UTEX_CAMPAIGN_ID')),
+      live: true,
       ready: true,
       envVar: 'VITE_UTEX_CAMPAIGN_ID',
       cost: 0,
-      blockedBy: 'SIGNUP',
-      note: 'US stocks settled in USDT — no bank and no W-8BEN, which is why it works where Alpaca and Kraken do not. 40-60% of referred fees at partners.utex.io'
+      note: 'US stocks settled in USDT — no bank and no W-8BEN, which is why it works where Alpaca and Kraken do not. Campaign 517433 live; 30% base rate, 60% for the first 30 days only if the partner form is submitted'
     }),
     line({
       id: 'trezor',

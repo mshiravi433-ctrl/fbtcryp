@@ -7836,6 +7836,50 @@ export default function run() {
     t('the Avantis venue link points at a page that exists',
       /avantisfi\.com\/trade/.test(perp) && !/avantisfi\.com\/referrals/.test(perp));
 
+    /*
+     * ─── THE PARAMETER BUG: `ref` ON /trade EARNED NOTHING ──────────────────
+     * We had `param: 'ref'` for Avantis, copied from the GMX convention
+     * without checking. Avantis reads neither `ref` nor anything at all on
+     * /trade — after the code was registered its own UI produced
+     *
+     *     https://www.avantisfi.com/referral?code=fbtswap
+     *
+     * so both the parameter NAME and the PATH were wrong. The failure is
+     * invisible from outside: the link opens a working trading page and
+     * attributes the trader to nobody. Pinned as literals, because a generic
+     * "has a param" check passes for the broken version too.
+     */
+    t('Avantis attributes on ?code=, not ?ref=', /param: 'code'/.test(vref));
+    t('...and on the /referral page, which is the only one that reads it',
+      /base: 'https:\/\/www\.avantisfi\.com\/referral'/.test(vref));
+    t('...so the GMX-style ref param is gone from the Avantis entry',
+      !/avantis: \{[\s\S]{0,900}?param: 'ref'/.test(vref));
+    t('...and withReferral honours a venue base URL', /new URL\(cfg\.base \?\? url\)/.test(vref));
+
+    /*
+     * ─── THE CODES ARE COMPILED IN, NOT ONLY ENV VARS ───────────────────────
+     * VITE_AVANTIS_REF_CODE and VITE_UTEX_CAMPAIGN_ID are absent from the env
+     * block of .github/workflows/build-apk.yml, and the agent token cannot
+     * edit workflow files. A value set only in Vercel therefore earns on the
+     * website and NOTHING in the APK, because Vite bakes the default in at
+     * build time. Both are public identifiers, so committing them leaks
+     * nothing.
+     */
+    t('the registered Avantis code is the compiled default',
+      /env\('VITE_AVANTIS_REF_CODE'\) \|\| 'fbtswap'/.test(vref));
+    t('the registered UTEX campaign is the compiled default',
+      /env\('VITE_UTEX_CAMPAIGN_ID'\) \|\| '517433'/.test(vref));
+
+    /*
+     * Readiness must not gate these on a VITE_ variable read from the SERVER
+     * process: VITE_ vars are build-time browser values, so the check could
+     * report live:false on a build that is provably earning.
+     */
+    const rdy = code(read('server/readiness.js'));
+    t('readiness does not gate Avantis on a build-time browser variable',
+      !/live: Boolean\(env\('VITE_AVANTIS_REF_CODE'\)\)/.test(rdy));
+    t('...nor UTEX', !/live: Boolean\(env\('VITE_UTEX_CAMPAIGN_ID'\)\)/.test(rdy));
+
     const av = existsSync('docs/AVANTIS-STEPS-FA.md')
       ? read('docs/AVANTIS-STEPS-FA.md')
       : '';

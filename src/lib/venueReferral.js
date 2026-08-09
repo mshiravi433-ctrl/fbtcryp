@@ -89,7 +89,28 @@ export const GMX_CODE = env('VITE_GMX_REF_CODE');
  * list tokenised gold and tokenised equities, and Avantis is where someone
  * would go to take a leveraged view on the same things.
  */
-export const AVANTIS_CODE = env('VITE_AVANTIS_REF_CODE');
+/*
+ * ─── REGISTERED 2026-08-09, SO THE DEFAULT IS THE REAL CODE ─────────────────
+ * Confirmed on Base, not taken on trust. Transaction
+ * 0x05d5708acd26efe1a32d6a51699dffde93513e45954218456bf3ebe02df2c869 succeeded
+ * in block 49725972 and its calldata decodes to selector 0x36def2c8 with a
+ * single UTF-8 argument: `fbtswap`. That is the code, on-chain, bound to
+ * 0xF0b09A0c472100bfa70b666442d77Db6D35dB3D5.
+ *
+ * ─── WHY THIS IS A DEFAULT AND NOT ONLY AN ENV VAR ──────────────────────────
+ * The env var still wins if set, but leaving the default empty would have
+ * meant earning zero on the ANDROID BUILD indefinitely: `VITE_AVANTIS_REF_CODE`
+ * is not in the `env:` block of .github/workflows/build-apk.yml, so Vite bakes
+ * the empty default into the APK no matter what is configured in Vercel. The
+ * agent token is not permitted to edit workflow files, so a code that lives
+ * only in an env var is a code the app never carries on the platform most of
+ * our users are on.
+ *
+ * A referral code is a public identifier — it is meant to be inside a link we
+ * hand out — so committing it breaks no secret-handling rule. The rule is
+ * about secrets, and this is the opposite of one.
+ */
+export const AVANTIS_CODE = env('VITE_AVANTIS_REF_CODE') || 'fbtswap';
 
 /**
  * UTEX campaign id. Public by design, like the two above.
@@ -117,7 +138,16 @@ export const AVANTIS_CODE = env('VITE_AVANTIS_REF_CODE');
  * sells, which are backed 1:1 by real shares in custody, and the screen must
  * not let the two blur together.
  */
-export const UTEX_CAMPAIGN = env('VITE_UTEX_CAMPAIGN_ID');
+/*
+ * Registered 2026-08-09. The partner tool produced
+ * `https://utex.io/?campaignId=517433`, so 517433 is the campaign id.
+ *
+ * Defaulted for the same reason as the Avantis code above: it is absent from
+ * the APK workflow's env block, so an env-var-only value earns nothing on
+ * Android. A campaign id is a public identifier by construction — it travels
+ * in the query string of a link we publish.
+ */
+export const UTEX_CAMPAIGN = env('VITE_UTEX_CAMPAIGN_ID') || '517433';
 
 /**
  * GMX referral codes are on-chain bytes32 and the docs restrict them to
@@ -153,7 +183,29 @@ export const VENUE_REFERRAL = {
     /* Their docs also give the referee a fee discount, so the link is good
        for the user as well — the same test applied to the GMX link. */
     userBenefit: true,
-    param: 'ref'
+    /*
+     * ─── `code`, NOT `ref`, AND ON /referral, NOT /trade ────────────────────
+     * This was wrong and would have earned exactly zero while looking correct.
+     * We had `param: 'ref'` appended to `/trade`, which is the GMX convention
+     * copied across without checking. Avantis does not read `ref` anywhere.
+     *
+     * The evidence is not a guess: after registering the code, Avantis' own
+     * UI produced the share link
+     *
+     *     https://www.avantisfi.com/referral?code=fbtswap
+     *
+     * and third-party listings of other people's Avantis codes use the
+     * identical `avantisfi.com/referral?code=…` shape. Both the PARAMETER NAME
+     * and the PATH differ from what we had, so appending to /trade would have
+     * produced a link that loads a perfectly good trading page and attributes
+     * the trader to nobody.
+     *
+     * `base` overrides the caller's URL when — and only when — a code exists.
+     * With no code the caller's own /trade link is returned untouched, so the
+     * "no half-configured state can break a link" property is preserved.
+     */
+    param: 'code',
+    base: 'https://www.avantisfi.com/referral'
   },
   utex: {
     /* 40-60% of the referred trader's fees, by cumulative referred volume. */
@@ -224,7 +276,14 @@ export function withReferral(venueId, url) {
   if (!isValidGmxCode(code)) return url;
 
   try {
-    const u = new URL(url);
+    /*
+     * Some venues attribute on a DIFFERENT page from the one we link to.
+     * Avantis reads `?code=` on /referral and ignores it on /trade, so
+     * decorating the caller's /trade URL would be a silent zero. Swapping the
+     * base happens only once a valid code exists — see the `base` note in
+     * VENUE_REFERRAL.
+     */
+    const u = new URL(cfg.base ?? url);
     /*
      * GMX reads `ref` from the query INSIDE the hash route, e.g.
      * `https://app.gmx.io/#/trade/?ref=CODE`. Verified against the format in
