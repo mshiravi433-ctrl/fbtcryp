@@ -9340,5 +9340,93 @@ export default function run() {
     t('...and the default tab is still OTC', /useState\('otc'\)/.test(p2p));
   }
 
+  /* ---- 96. the community feed: rendered, never hosted -------------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const server = code(read('server/farcaster.js'));
+    const client = code(read('src/lib/community.js'));
+    const panel = code(read('src/components/CommunityPanel.jsx'));
+
+    /*
+     * ─── WE RENDER A FEED, WE DO NOT HOST ONE ───────────────────────────────
+     * Hosting posts would blow the free storage tier at ~50 users AND make us
+     * the publisher of whatever a stranger writes. Asserted as an absence:
+     * nothing here may write a post to our own store.
+     */
+    t('the feed is not stored in our own key-value store',
+      !/storeSet|storeGet/.test(server));
+    t('...and the client cannot post, reply or like',
+      !/POST|method:\s*'POST'/.test(client));
+
+    /*
+     * No API key. Neynar is easier but needs one, and this project has had
+     * keys rotated, revoked and geo-blocked — a revenue-adjacent feature must
+     * not inherit that.
+     */
+    t('reading needs no API key', !/API_KEY|apiKey|x-api-key|neynar/i.test(server));
+
+    /*
+     * ─── THE THREE HUB QUIRKS, EACH FOUND BY CALLING THE REAL ENDPOINT ──────
+     * 1. `reverse=true` does not reliably sort — the live channel query
+     *    returned June casts next to December ones.
+     */
+    t('casts are sorted by us, not trusted from the hub', /sort\(\(a, b\) => b\.at - a\.at\)/.test(server));
+    /* 2. Timestamps are seconds from 2021-01-01, not the Unix epoch. */
+    t('the Farcaster epoch is applied', /FC_EPOCH_MS = 1609459200/.test(server));
+    /* 3. The user_data_type filter is ignored, so the field must be picked out. */
+    t('the username is selected from the full profile payload',
+      /USER_DATA_TYPE_USERNAME/.test(server));
+
+    /*
+     * A caller-supplied channel URL would make this an open proxy for
+     * arbitrary Farcaster content.
+     */
+    t('the channel is an allow-listed id, never a caller URL',
+      /CHANNELS\[channel\]/.test(server) && /UNKNOWN_CHANNEL/.test(server));
+
+    /*
+     * Embed URLs are counted, never returned. Rendering a remote image from an
+     * arbitrary poster leaks our users' IPs and hands a stranger a slot inside
+     * our app.
+     */
+    t('embed URLs are counted, not exposed', /embeds: Array\.isArray\(body\.embeds\) \? body\.embeds\.length/.test(server));
+
+    /* Posts are rendered in our UI, so the same bidi/control stripping applies. */
+    t('cast text is sanitised', /BIDI/.test(server) && /cleanText/.test(server));
+
+    /*
+     * A dead third-party feed must never break the page it sits on. The client
+     * swallows every failure and reports live:false instead.
+     */
+    t('a failing feed degrades instead of throwing', /return \{ rows: \[\], live: false \}/.test(client));
+    t('...and the UI offers a retry', /common\.retry/.test(panel));
+
+    /* Stale responses must not land under the wrong channel tab. */
+    t('a slow response cannot overwrite a newer channel', /let alive = true/.test(panel));
+
+    /* Cached, or every open would hit the hub for the same rows. */
+    t('the feed is cached server-side', /withCache/.test(server));
+
+    /* Copy: present, hand-written, and honest about what the feed is. */
+    for (const lang of ['en', 'fa']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} has the community copy`, Boolean(L.community?.title));
+      t(`${lang} says the posts are not ours and not moderated`,
+        String(L.community?.notice ?? '').length > 120);
+      /* The tab label must exist or the button renders the raw key. */
+      t(`${lang} labels the community tab`, Boolean(L.p2p?.tab?.community));
+      t(`${lang} labels the board tab`, Boolean(L.p2p?.tab?.board));
+    }
+
+    const p2p = code(read('src/pages/P2P.jsx'));
+    t('the feed is reachable as a fourth P2P tab',
+      /'otc', 'fiat', 'board', 'community'/.test(p2p));
+    t('...and OTC is still the default tab', /useState\('otc'\)/.test(p2p));
+  }
+
   return rows;
 }

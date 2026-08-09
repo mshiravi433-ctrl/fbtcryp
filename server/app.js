@@ -48,6 +48,7 @@ import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
 import { promoteListing, putListing, readBoard, removeListing, txAlreadyUsed } from './board.js';
 import { promotionTerms, verifyPromotionPayment } from './promote.js';
+import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import {
@@ -1080,6 +1081,35 @@ app.get('/api/nft/:chainId/:owner', (req, res) => {
       ];
       res.status(502).json({ error: known.includes(code) ? code : 'FAILED' });
     });
+});
+
+/* ------------------------------ community --------------------------------- */
+/*
+ * A READ-ONLY window onto Farcaster.
+ *
+ * We do not host these posts, do not store them, and cannot moderate them —
+ * which is the entire point. Hosting a social feed ourselves would put us over
+ * the free storage tier at about fifty users AND make us the publisher of
+ * whatever a stranger writes. See docs/SOCIAL-AND-P2P-REVIEW-FA.md.
+ *
+ * The channel is an ALLOW-LIST id, never a caller-supplied URL: accepting one
+ * would turn this route into an open proxy for arbitrary Farcaster content.
+ */
+app.get('/api/community', async (req, res) => {
+  const channel = String(req.query.channel || 'crypto');
+  const limit = Number(req.query.limit) || 20;
+  try {
+    const rows = await fetchChannel(channel, limit);
+    res.json({ rows, channel, channels: CHANNEL_IDS });
+  } catch (e) {
+    const msg = String(e.message);
+    /*
+     * A bad channel id is the caller's mistake; an unreachable hub is not.
+     * Reporting both as 500 would make a typo look like an outage.
+     */
+    const code = msg === 'UNKNOWN_CHANNEL' ? 400 : 502;
+    res.status(code).json({ error: msg.slice(0, 60), channels: CHANNEL_IDS });
+  }
 });
 
 /* ------------------------------ P2P board --------------------------------- */

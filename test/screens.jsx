@@ -20,6 +20,7 @@ import Leaderboard from '../src/pages/Leaderboard.jsx';
 import Help from '../src/pages/Help.jsx';
 import P2P from '../src/pages/P2P.jsx';
 import BoardPanel from '../src/components/BoardPanel.jsx';
+import CommunityPanel from '../src/components/CommunityPanel.jsx';
 import Explore from '../src/pages/Explore.jsx';
 import Discover from '../src/pages/Discover.jsx';
 import Nft from '../src/pages/Nft.jsx';
@@ -155,6 +156,14 @@ export async function run(container) {
    * empty state instead of throwing.
    */
   await mount('BoardPanel', <BoardPanel />);
+
+  /*
+   * The community feed, mounted directly for the same reason as the board: it
+   * lives behind a tab click, so the P2P mount above never reaches it. This
+   * renders with fetch failing, which is the case that matters — a dead feed
+   * must show the offline state, not throw and take the page with it.
+   */
+  await mount('CommunityPanel', <CommunityPanel />);
   await mount('Explore', <Explore />);
   await mount('Discover', <Discover />);
   await mount('Nft', <Nft />);

@@ -1556,7 +1556,9 @@
     "subtitle": "Trade directly with other people.",
     "tab": {
       "otc": "On-chain OTC",
-      "fiat": "Buy with cash"
+      "fiat": "Buy with cash",
+      "board": "Board",
+      "community": "Community"
     },
     "otcTitle": "Direct wallet-to-wallet",
     "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
@@ -2825,5 +2827,23 @@
     "proNote": "Paid in {{symbol}} on {{chain}}, straight from your wallet to ours. We check the transaction on the chain before the placement starts, so nothing is taken on trust. Network gas is separate and goes to {{chain}}, not to us.",
     "proUntil": "Pro placement active until {{date}}.",
     "footerNotice": "Adverts are written by users. We do not verify them, we take no part in the trade, and we hold no money at any point. The only thing we charge for on this screen is placement."
+  },
+  "community": {
+    "tab": "Community",
+    "title": "Community feed",
+    "intro": "Live posts from Farcaster, an open social protocol. Reading is free and needs no account. These are not our posts and this is not our network — we only show it.",
+    "channel": {
+      "crypto": "Crypto",
+      "base": "Base",
+      "dev": "Developers"
+    },
+    "attachments": "{{n}} attachment(s) not shown",
+    "openIn": "Open",
+    "empty": "Nothing in this channel right now.",
+    "offline": "The feed could not be reached. This does not affect anything else in the app.",
+    "joinTitle": "Want to post?",
+    "joinBody": "You need a Farcaster account, which costs a few dollars a year in storage rent paid to the protocol — not to us. We deliberately cannot post on your behalf: that would mean holding your signing key, and we do not hold keys of any kind.",
+    "openFarcaster": "Open Farcaster",
+    "notice": "These posts are written by strangers on a public network. We do not host them, verify them or moderate them, and showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here."
   }
 }

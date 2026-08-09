@@ -7391,3 +7391,103 @@ body { overflow-x: clip; }
 :root[data-theme='light'] .brd-star,
 :root[data-theme='light'] .brd-pro-price,
 :root[data-theme='light'] .brd-perks li::before { color: var(--ink-amber, #9d6e00); }
+
+/* ---------------------------------------------------------------------------
+   COMMUNITY FEED (Farcaster, read-only)
+   ---------------------------------------------------------------------------
+   All classes are new and prefixed .cmt-*, used only by CommunityPanel. As
+   with the board above, nothing existing is touched — a "small tweak" to a
+   shared class is how a change to one screen silently alters six others.
+--------------------------------------------------------------------------- */
+
+.cmt-tabs {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.cmt-tabs::-webkit-scrollbar { display: none; }
+
+.cmt-tab {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-3);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.cmt-tab.is-on {
+  color: var(--rgb-1);
+  border-color: rgba(0, 229, 255, 0.5);
+  background: rgba(0, 229, 255, 0.1);
+}
+
+.cmt-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--bg-raised);
+}
+
+.cmt-head { display: flex; align-items: baseline; gap: 8px; }
+
+.cmt-author {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--rgb-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.cmt-time { margin-inline-start: auto; font-size: 11px; color: var(--text-3); flex-shrink: 0; }
+
+.cmt-text {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-1);
+  /*
+    Posts are written by strangers in any language, and a single unbroken
+    token (a URL, a contract address) would otherwise stretch the card and
+    push the whole page sideways.
+  */
+  overflow-wrap: anywhere;
+  /* Casts preserve their line breaks; collapsing them mangles lists. */
+  white-space: pre-wrap;
+}
+
+.cmt-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+
+.cmt-embed { font-size: 11px; color: var(--text-3); }
+
+.cmt-open {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.cmt-open:active { color: var(--rgb-1); }
+
+:root[data-theme='light'] .cmt-tab.is-on {
+  color: var(--ink-cyan, #008392);
+  border-color: rgba(0, 131, 146, 0.45);
+  background: rgba(0, 131, 146, 0.1);
+}
+:root[data-theme='light'] .cmt-author { color: var(--ink-cyan, #008392); }
