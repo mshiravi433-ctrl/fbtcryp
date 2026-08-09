@@ -9989,6 +9989,86 @@ export default function run() {
     t('...and stops under reduced motion',
       /prefers-reduced-motion[\s\S]{0,400}?\.shop-glow::before \{ animation: none/.test(css));
 
+    /*
+     * ─── THEIR PROSE IS HTML, AND WE WERE PRINTING THE TAGS ─────────────────
+     * Reported by the owner, verbatim from the screen:
+     *   <p><strong>#protip</strong></p><p>Redeeming with a VPN may violate…
+     *
+     * Their `rich_description.markup` field is literally "html", so note and
+     * how_to_redeem are HTML fragments. `cleanText` stripped only control
+     * characters, so React printed the markup.
+     */
+    t('provider prose is converted from HTML to text', /function htmlToText/.test(srv));
+    t('...and the note goes through it', /note: htmlToText\(/.test(srv));
+    t('...and the redemption steps too', /howTo: htmlToText\(/.test(srv));
+    /*
+     * NEVER dangerouslySetInnerHTML. This is third-party copy about money,
+     * arriving over the network; injecting a stranger's HTML into a wallet app
+     * to tidy a paragraph is a catastrophic trade for a cosmetic gain.
+     */
+    t('...without ever injecting their HTML',
+      !/dangerouslySetInnerHTML/.test(page) && !/dangerouslySetInnerHTML/.test(srv));
+    /* Script CONTENT must go with the tag, or the javascript stays as text. */
+    t('...script bodies are removed, not just their tags',
+      /<\(script\|style\)/.test(srv));
+    /* A generic numeric-entity decoder would re-introduce the exact control
+       and bidi characters this file exists to strip. */
+    t('...entities decode from a fixed safe table', /const ENTITIES = \{/.test(srv));
+
+    /*
+     * ─── THE BUG THAT COST AN HOUR, PINNED ──────────────────────────────────
+     * BIDI is /[…\u0000-\u001F…]/ and U+000A is inside that range, so
+     * `s.replace(BIDI, '')` deleted every newline htmlToText had just
+     * inserted. Output was "• One.• Two.Three." on one line while every
+     * replacement literal was provably a real newline — which is why it kept
+     * looking like an escaping fault when it was not.
+     */
+    t('the control-character strip preserves newlines',
+      /u0000-\\u0008\\u000B-\\u001F/.test(srv));
+    /* And the UI has to honour them, or the server work is invisible. */
+    /*
+     * Both places, asserted individually. Counting ">= 2" was too loose:
+     * changing ONE of them to 'normal' still left two matches elsewhere and
+     * the mutation passed when it should have failed.
+     */
+    t('...and the note renders its line breaks',
+      /products\?\.note &&[\s\S]{0,220}?whiteSpace: 'pre-line'/.test(page));
+    t('...and so do the redemption steps',
+      /products\?\.howTo &&[\s\S]{0,320}?whiteSpace: 'pre-line'/.test(page));
+
+    /* The redemption steps were fetched and never shown at all. */
+    t('the redemption steps are actually displayed', /products\.howTo/.test(page));
+
+    /*
+     * ─── RESTRICTIONS: FULLER, AND STILL FOLDED ─────────────────────────────
+     * «محدودیت ها را با باز شونده بنویس کاملتر کن». Five separate facts, not
+     * one paragraph — a wall of text inside a collapsible is still a wall of
+     * text once opened.
+     */
+    t('the restrictions are a list, not one paragraph', /shop-limits/.test(page));
+    t('...still inside a collapsible', /id="shop-limits"/.test(page));
+
+    /* Motion: cheap, CSS-only, and disabled under reduced motion. */
+    t('tiles have press feedback', /\.shop-tile:active \.shop-shot::after/.test(css));
+    t('...and destination photos respond to a press', /\.shop-dest:active img/.test(css));
+    t('the loading skeleton matches the tile shape', /\.shop-sk-shot/.test(css) && /shop-sk-line/.test(page));
+    t('...and every shop animation stops under reduced motion',
+      /prefers-reduced-motion[\s\S]{0,400}?\.shop-sk-shot::after \{ animation: none/.test(css));
+    /*
+     * A blur or a rAF loop in a list of twenty tiles is the mistake the advert
+     * borders already taught us not to repeat.
+     *
+     * My first version of this matched any `filter: blur` near a .shop rule
+     * and failed on the route pill's STATIC backdrop-filter, which is painted
+     * once and costs nothing per frame. The property that matters is that no
+     * KEYFRAME animates a blur, and that nothing here runs a JS animation
+     * loop.
+     */
+    t('...no keyframe animates a blur',
+      !/@keyframes shop-[a-z-]+ \{[\s\S]{0,300}?filter:\s*blur/.test(css));
+    t('...and no per-frame JavaScript drives the motion',
+      !/requestAnimationFrame/.test(page) && !/requestAnimationFrame/.test(read('src/components/ShopTile.jsx')));
+
     /* Attribution in ONE place, so it cannot be forgotten on a new link —
        the Avantis bug, where a working link credited nobody. */
     t('every outbound link is built in one module', /function withRef/.test(links));
@@ -10038,8 +10118,19 @@ export default function run() {
       t(`${lang} has the picture-promo copy`, Boolean(S?.promo?.kicker && S?.promo?.flights));
       /* Dead keys from the removed form must not linger. */
       t(`${lang} dropped the old form copy`, S?.flight?.depart === undefined);
-      t(`${lang} names the countries that do not work`,
-        /Iran|ایران|إيران/.test(String(S?.limits?.body ?? '')));
+      /*
+       * The restrictions are five keys now, not one `body` paragraph. Joined
+       * before testing so the checks describe the CONTENT rather than the
+       * shape it happens to be stored in.
+       */
+      const lim = ['l1', 'l2', 'l3', 'l4', 'l5'].map((k) => String(S?.limits?.[k] ?? '')).join(' ');
+      t(`${lang} names the countries that do not work`, /Iran|ایران|إيران/.test(lim));
+      t(`${lang} warns that a VPN does not defeat the region lock`,
+        /VPN|وی‌پی‌ان/.test(lim));
+      t(`${lang} says who actually takes the money`, /Cryptorefills/.test(lim));
+      t(`${lang} has all five restriction points`,
+        ['l1', 'l2', 'l3', 'l4', 'l5'].every((k) => String(S?.limits?.[k] ?? '').length > 40));
+      t(`${lang} dropped the old single-paragraph copy`, S?.limits?.body === undefined);
       t(`${lang} explains why the country matters`,
         String(S?.pickCountryWhy ?? '').length > 60);
       t(`${lang} states both earning and non-earning disclosures`,

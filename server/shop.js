@@ -155,6 +155,95 @@ function cleanCountry(v) {
 const BIDI = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u0000-\u001F\u007F]/g;
 const cleanText = (v, max = 120) => String(v ?? '').replace(BIDI, '').trim().slice(0, max);
 
+/**
+ * ─── THEIR PROSE FIELDS ARE HTML, AND WE WERE PRINTING THE TAGS ─────────────
+ * Reported: the redemption note rendered as
+ *
+ *   <p><strong>#protip</strong></p><p>Redeeming with a VPN may violate…
+ *
+ * literally, tags and `&#39;` and all. The cause is in their own payload:
+ * `rich_description.markup` is the string "html", so `note`, `how_to_redeem`
+ * and the rest are HTML fragments. `cleanText` only stripped control
+ * characters, so React printed the markup as text — exactly as reported.
+ *
+ * ─── WHY THIS STRIPS RATHER THAN RENDERS ────────────────────────────────────
+ * The tempting fix is dangerouslySetInnerHTML. Absolutely not: this is
+ * third-party copy about money, arriving over the network, and one day it
+ * will contain something we did not anticipate. Injecting a stranger's HTML
+ * into a wallet app to make a paragraph look tidier is a catastrophic trade.
+ *
+ * So the tags are REMOVED and the text kept. Block-level tags become
+ * paragraph breaks so "#protip" stays on its own line, which is the only
+ * structure these notes actually carry.
+ */
+const ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  '#39': "'", '#039': "'", '#34': '"', '#x27': "'", '#x2F': '/', '#160': ' '
+};
+
+function htmlToText(v, max = 900) {
+  let s = String(v ?? '');
+  if (!s) return '';
+
+  /*
+   * Script and style CONTENT has to go with the tag. Stripping only the tags
+   * would leave the javascript itself sitting in the middle of the sentence.
+   */
+  s = s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ');
+
+  /*
+   * Block boundaries become newlines before the tags are dropped, or every
+   * paragraph runs into the next word.
+   *
+   * The opening <li> emits its own newline plus a bullet, and the closing tags
+   * add the break after. Measured, because the first two attempts were wrong:
+   * marking only the closer glued the items together, and routing the bullet
+   * through a control-character sentinel silently failed because \u0007 is
+   * inside the BIDI class this file strips. A literal bullet cannot be eaten
+   * by either step.
+   */
+  s = s.replace(/<li\b[^>]*>/gi, '\n• ');
+  s = s.replace(/<\/(p|div|li|h[1-6]|tr|ul|ol)\s*>/gi, '\n');
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+
+  /* Everything else that looks like a tag. */
+  s = s.replace(/<[^>]*>/g, '');
+
+  /*
+   * Entities, decoded with a fixed table. A generic `&#\d+;` decoder would
+   * happily produce control characters and bidi overrides from numeric
+   * escapes — the exact class this file already defends against — so only
+   * these known-safe ones are translated.
+   */
+  s = s.replace(/&([a-zA-Z]+|#x?[0-9a-fA-F]+);/g, (m, code) => {
+    const hit = ENTITIES[code] ?? ENTITIES[code.toLowerCase()];
+    return hit === undefined ? ' ' : hit;
+  });
+
+  /* Their notes start with a literal "#protip" glued to the first sentence
+     once the <strong> is gone. Give it its own line. */
+  s = s.replace(/#protip\s*/i, '');
+
+  /*
+   * ─── BIDI CONTAINS NEWLINE, WHICH COST ME AN HOUR ───────────────────────
+   * `BIDI` is /[...\u0000-\u001F...]/ and U+000A is inside that range, so
+   * `s.replace(BIDI, '')` deleted every line break this function had just
+   * inserted. The bullets came out as "• One.• Two.Three." on one line while
+   * every replacement literal was provably a real newline — the reason the
+   * fault kept looking like an escaping problem when it was not.
+   *
+   * Newline and tab are preserved here; everything else in the control range
+   * is still stripped, which is the property that actually matters.
+   */
+  s = s.replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u0000-\u0008\u000B-\u001F\u007F]/g, '');
+  /* Collapse the whitespace the tag removal left behind, but keep the
+     paragraph breaks we deliberately introduced. */
+  s = s.replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .replace(/\n{2,}/g, '\n');
+  return s.trim().slice(0, max);
+}
+
 /** Only http(s) URLs from their own CDN are ever passed to the client. */
 function cleanLogo(v) {
   const s = String(v ?? '');
@@ -356,8 +445,8 @@ export async function fetchShopProducts({ country, family, coin = 'USDC' }, req)
      * the page and it comes from the issuer, so it is passed through rather
      * than summarised. Longer cap than other fields for that reason.
      */
-    note: cleanText(rich.note, 600) || null,
-    howTo: cleanText(rich.how_to_redeem, 900) || null,
+    note: htmlToText(rich.note, 600) || null,
+    howTo: htmlToText(rich.how_to_redeem, 900) || null,
     rows,
     at: Date.now()
   };

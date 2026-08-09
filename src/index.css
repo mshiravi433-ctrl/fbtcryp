@@ -7992,3 +7992,108 @@ body { overflow-x: clip; }
 
 .shop-denom-face { font-size: 14.5px; font-weight: 800; }
 .shop-denom-coin { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
+
+/* ── restrictions list ──────────────────────────────────────────────────────
+   Five separate facts instead of one paragraph. A wall of text in a
+   collapsible is a wall of text nobody reads once they open it. */
+.shop-limits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 9px;
+}
+
+.shop-limits li {
+  position: relative;
+  padding-inline-start: 15px;
+  font-size: 12.4px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+/* A dot rather than a bullet glyph, so it lines up identically in Persian,
+   Arabic and English — list-style markers do not. */
+.shop-limits li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  opacity: .75;
+}
+
+/* ── tile entrance and press feedback ───────────────────────────────────────
+   The tiles already fade in through framer-motion's stagger. This adds the
+   one thing that was missing: a moving highlight on the artwork so a card
+   reads as a physical object rather than a flat rectangle.
+
+   Deliberately CSS and deliberately cheap — `transform` only, no blur, no
+   per-frame JavaScript. The pasted-component lesson from the advert borders:
+   a list can hold twenty of these at once. */
+.shop-shot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .22) 50%, transparent 62%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+
+.shop-tile:active .shop-shot::after {
+  transition: transform .55s ease;
+  transform: translateX(120%);
+}
+
+/* Destination photographs get a slow zoom on press, which is the cheapest
+   possible way to say "this is tappable" on an image with no button chrome. */
+.shop-dest img { transition: transform .5s ease; }
+.shop-dest:active img { transform: scale(1.06); }
+
+/* ── loading skeleton that matches the tile it replaces ─────────────────────
+   The generic .skel is a grey block. Matching the real tile's shape stops the
+   page jumping when the data lands, which is the actual complaint behind
+   "it feels unfinished". */
+.shop-sk {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.shop-sk-shot {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-raised);
+  position: relative;
+  overflow: hidden;
+}
+
+.shop-sk-shot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .07), transparent);
+  animation: shop-shine 1.4s ease-in-out infinite;
+}
+
+@keyframes shop-shine {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.shop-sk-line {
+  height: 11px;
+  margin: 11px 12px;
+  border-radius: 6px;
+  background: var(--bg-raised);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-sk-shot::after { animation: none; }
+  .shop-tile:active .shop-shot::after { transition: none; }
+  .shop-dest img,
+  .shop-dest:active img { transition: none; transform: none; }
+}

@@ -71,6 +71,27 @@ function catLabel(t, id) {
   return s === key ? String(id).replace(/[_-]/g, ' ') : s;
 }
 
+/**
+ * The restrictions, as a folded list rather than one long paragraph.
+ *
+ * Asked for: «محدودیت ها را با باز شونده بنویس کاملتر کن» — fuller, and in a
+ * collapsible. Five separate facts read far better than one block: the
+ * country list, the region lock, refunds, delivery, and who actually takes
+ * the money. Each is one line, which is the only way anybody reads them.
+ */
+function LimitsBox() {
+  const { t } = useTranslation();
+  return (
+    <InfoBox title={t('shop.limits.title')} tone="info" id="shop-limits">
+      <ul className="shop-limits">
+        {['l1', 'l2', 'l3', 'l4', 'l5'].map((k) => (
+          <li key={k}>{t(`shop.limits.${k}`)}</li>
+        ))}
+      </ul>
+    </InfoBox>
+  );
+}
+
 export default function Shop() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -234,10 +255,29 @@ export default function Shop() {
         </>
       )}
 
-      {/* The issuer's own redemption note — Steam's says region-locked, VPN
-          will not work, no refunds. Passed through verbatim; it is the single
-          most useful sentence available and it is not ours to summarise. */}
-      {products?.note && <p className="notice" style={{ marginTop: 12 }}>{products.note}</p>}
+      {/*
+        The issuer's own words, in two boxes.
+
+        `whiteSpace: 'pre-line'` is load-bearing: the server turns their HTML
+        into text with real line breaks, and without this React collapses them
+        and the redemption steps run into one paragraph. That was the shape of
+        the reported bug — the tags were visible AND the structure was lost.
+
+        Redemption steps are collapsed by default because they matter after
+        you buy; the warning note is not, because it changes whether you buy
+        at all.
+      */}
+      {products?.note && (
+        <p className="notice" style={{ marginTop: 12, whiteSpace: 'pre-line' }}>{products.note}</p>
+      )}
+
+      {products?.howTo && (
+        <div style={{ marginTop: 10 }}>
+          <InfoBox title={t('shop.howTo')} tone="info" id="shop-howto">
+            <p style={{ whiteSpace: 'pre-line' }}>{products.howTo}</p>
+          </InfoBox>
+        </div>
+      )}
 
       {openBrand && (
         <button
@@ -271,9 +311,7 @@ export default function Shop() {
           value={country}
           onPick={pickCountry}
         />
-        <InfoBox title={t('shop.limits.title')} tone="info" id="shop-limits">
-          <p>{t('shop.limits.body')}</p>
-        </InfoBox>
+        <LimitsBox />
       </PageTransition>
     );
   }
@@ -333,9 +371,15 @@ export default function Shop() {
           </div>
 
           {loading && !data ? (
+            /* A skeleton shaped like the tile it becomes, so the page does
+               not jump when the catalogue lands. */
             <div className="stack" style={{ gap: 12 }}>
               {[0, 1, 2].map((i) => (
-                <div key={i} className="skel" style={{ height: 210, borderRadius: 18 }} />
+                <div key={i} className="shop-sk">
+                  <div className="shop-sk-shot" />
+                  <div className="shop-sk-line" style={{ width: '52%' }} />
+                  <div className="shop-sk-line" style={{ width: '30%', height: 9 }} />
+                </div>
               ))}
             </div>
           ) : !data?.live ? (
@@ -524,9 +568,7 @@ export default function Shop() {
         onPick={pickCountry}
       />
 
-      <InfoBox title={t('shop.limits.title')} tone="info" id="shop-limits">
-        <p>{t('shop.limits.body')}</p>
-      </InfoBox>
+      <LimitsBox />
 
       <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>
         {shopEarns() ? t('shop.earning') : t('shop.noEarn')}

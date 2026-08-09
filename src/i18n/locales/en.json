@@ -2914,8 +2914,12 @@
       "desc": "Mobile data in 180+ countries, no SIM card."
     },
     "limits": {
-      "title": "Where this works",
-      "body": "The shop is run by Cryptorefills and serves 233 countries. Iran, Syria, Cuba and North Korea are not among them — the catalogue will be empty there. Turkey, the UAE, Iraq, Lebanon, Russia, Europe and Asia all work. Some individual cards are region-locked and a VPN will not change that."
+      "title": "Before you buy — where this works",
+      "l1": "Countries: 233 supported. Iran, Syria, Cuba and North Korea are not among them and the catalogue stays empty there. Turkey, the UAE, Iraq, Lebanon, Russia, Europe and Asia all work.",
+      "l2": "Region lock: most cards only redeem in the country they were bought for. A VPN does not get around it and can flag the account.",
+      "l3": "Refunds: an unused code can usually be exchanged. A code redeemed in the wrong region cannot.",
+      "l4": "Delivery: by email, within minutes. Give an address you can actually open.",
+      "l5": "Payment: USDC, USDT and 15+ coins on Solana, Base, Tron, Polygon and more. Cryptorefills is the merchant — your money never passes through us."
     },
     "earning": "We earn a share when you buy through here. It costs you nothing extra.",
     "noEarn": "We earn nothing from these links today.",
@@ -2927,6 +2931,7 @@
     "promo": {
       "kicker": "Pay with crypto",
       "flights": "Fly anywhere, paid in stablecoins"
-    }
+    },
+    "howTo": "How to redeem"
   }
 }
