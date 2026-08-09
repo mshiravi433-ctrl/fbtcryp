@@ -14,6 +14,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { IconExternal, IconShield } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
+import { venueDisclosure, withReferral } from '../lib/venueReferral';
 
 /**
  * STOCKS — tokenized equities, RWA sector tokens, and the honest limits.
@@ -354,6 +355,82 @@ export default function Stocks() {
             <p>{t('stocks.beforeBuy.p2')}</p>
             <p>{t('stocks.beforeBuy.p3')}</p>
           </InfoBox>
+
+          {/*
+            ─── UTEX: THE TICKERS THAT ARE NOT ABOVE ───────────────────────────
+            UTEX was registered as a revenue line but appeared in exactly ONE
+            place in the whole app — the Earn rank perks, behind Diamond at
+            15,000 points. In practice nobody could see it, which makes a live
+            30-60% line worth nothing.
+
+            ─── WHY IT SITS BELOW THE REAL EQUITIES AND NOT ABOVE ─────────────
+            This is the important decision on this block, and it is a rule this
+            project already has: never route a user to a worse product because
+            it pays us more. The precedent is deBridge, set to 0.4% instead of
+            0.7% because 0.7% measurably left the user worse off than the route
+            we already had.
+
+            The same test applies here and it is not close. The rows above are
+            backed 1:1 by real shares in custody and earn us 70 bps. UTEX pays
+            us far more — 30% of fees, up to 60% — and is the WORSE product for
+            the buyer: no broker licence, no share, no shareholder register, no
+            compensation scheme. Putting it first would be choosing our margin
+            over the user's outcome.
+
+            So it is framed as the honest thing it actually is: the answer to
+            "why isn't my ticker in the list". xStocks covers a few dozen large
+            caps; someone looking for a smaller US name will not find it above,
+            and today that question had no answer at all on this screen.
+
+            ─── AND WHY THE WARNING IS INLINE, NOT IN AN INFOBOX ───────────────
+            InfoBox's own rule, quoted from its header: "if it describes what
+            the button will do, it stays visible; if it explains how a market
+            works or restates policy, it goes in here." That a UTEX position is
+            not a share is exactly the first kind. It is also the single fact
+            most likely to be misread on a page whose whole subject is buying
+            equities — the two must not blur together.
+          */}
+          <section>
+            <p className="section-label">{t('stocks.utex.title')}</p>
+            <p className="farm-filtered faint">{t('stocks.utex.intro')}</p>
+
+            <p className="notice notice-danger" style={{ marginTop: 9 }}>
+              {t('stocks.utex.warning')}
+            </p>
+
+            <motion.button
+              className="wallet-option"
+              variants={riseIn}
+              initial="hidden"
+              animate="show"
+              whileTap={{ scale: 0.985 }}
+              style={{ marginTop: 9 }}
+              onClick={() => open(withReferral('utex', 'https://utex.io/'))}
+            >
+              <span className="wallet-badge" style={{ color: 'var(--rgb-5)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                UTEX
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
+                  {t('stocks.utex.name')}
+                </span>
+                <span className="set-row-sub">{t('stocks.utex.desc')}</span>
+              </span>
+              <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+            </motion.button>
+
+            {/*
+              The disclosure tracks the code, not a hard-coded sentence. If the
+              campaign id is ever removed the link stops earning AND this line
+              stops claiming it does — they cannot disagree, which is the bug
+              that was caught on the Perp screen and again on Avantis.
+            */}
+            <p className="faint" style={{ marginTop: 9, lineHeight: 1.75 }}>
+              {venueDisclosure('utex') === 'earning'
+                ? t('stocks.utex.earning')
+                : t('stocks.utex.noEarn')}
+            </p>
+          </section>
         </>
       ) : (
         <>

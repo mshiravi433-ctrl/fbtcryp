@@ -9604,5 +9604,79 @@ export default function run() {
       /@supports not \(background: conic-gradient\(from var\(--angle\)[\s\S]{0,400}?brd-row-neon/.test(css));
   }
 
+  /* ---- 98. UTEX reaches the Stocks screen, below the real equities ------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const stocks = code(read('src/pages/Stocks.jsx'));
+
+    /*
+     * ─── THE VISIBILITY BUG THIS FIXES ──────────────────────────────────────
+     * UTEX was a live 30-60% revenue line that appeared in exactly ONE place:
+     * the Earn rank perks, gated behind Diamond at 15,000 points. Measured by
+     * running perksFor() — below 15,000 it returns link:null. A line nobody
+     * can reach earns nothing, so it now has a home on the screen about the
+     * same market.
+     */
+    t('Stocks links UTEX', /stocks\.utex\.name/.test(stocks));
+    t('...through withReferral, so the campaign id is attached',
+      /withReferral\('utex', 'https:\/\/utex\.io\/'\)/.test(stocks));
+
+    /*
+     * ─── ORDERING IS A SAFETY PROPERTY, NOT A LAYOUT PREFERENCE ─────────────
+     * UTEX pays us far more than the xStocks rows above (30-60% of fees vs 70
+     * bps) and is the WORSE product for the buyer — no licence, no share, no
+     * compensation scheme. The house rule from the deBridge decision is that
+     * we never route a user somewhere worse because it pays more, so it must
+     * sit BELOW the real equities. Asserted by index so a future edit that
+     * promotes it to the top fails here.
+     */
+    const iEquities = stocks.indexOf('stocks.available');
+    const iUtex = stocks.indexOf('stocks.utex.title');
+    t('...below the tokenised equities, never above them',
+      iEquities > 0 && iUtex > 0 && iUtex > iEquities);
+
+    /*
+     * The "these are not shares" warning must be a PLAIN inline notice, not an
+     * InfoBox. InfoBox's own header states the rule: anything describing what
+     * the button is about to do stays visible; only explainers collapse. On a
+     * page whose whole subject is buying equities, "this one is not a share"
+     * is the single most misreadable fact.
+     */
+    t('...and the not-a-share warning is inline, not collapsed',
+      /notice notice-danger[\s\S]{0,120}?stocks\.utex\.warning/.test(stocks));
+
+    /*
+     * The disclosure must be derived from the configured code, exactly like
+     * the Perp screen. A hard-coded "we earn from this" sentence would keep
+     * claiming revenue after the id was removed — and a hard-coded "we earn
+     * nothing" would deny a share we were taking, which is the worse
+     * direction and the bug already caught twice on this project.
+     */
+    t('...and the earnings disclosure is derived, not hard-coded',
+      /venueDisclosure\('utex'\) === 'earning'/.test(stocks));
+
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const U = L.stocks?.utex;
+      t(`${lang} has the UTEX copy`, Boolean(U?.title && U?.name && U?.desc));
+      t(`${lang} states both earning and non-earning disclosures`,
+        Boolean(U?.earning) && Boolean(U?.noEarn));
+      /*
+       * The three facts that make this honest. Written by hand in each
+       * language, never machine-translated: this is safety copy.
+       */
+      const w = String(U?.warning ?? '');
+      t(`${lang} warns it is not a share`, w.length > 150);
+      t(`${lang} names the missing broker licence`,
+        /licen|مجوز|ترخيص/i.test(w));
+      t(`${lang} names the jurisdiction`,
+        /Vincent|وینسنت|فنسنت/i.test(w));
+    }
+  }
+
   return rows;
 }
