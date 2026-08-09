@@ -39,22 +39,85 @@ function withRef(url) {
 }
 
 /**
- * Country page for one brand.
+ * ─── COUNTRY SLUGS, BECAUSE THE ISO CODE IS NOT WHAT THE PATH WANTS ─────────
+ * Reported: most brand pages 404. They did, and the cause was mine — I built
+ * `/en/buy/{brand}?country=TR`, which does not exist on their site at all.
+ * Confirmed by opening it: /en/buy/steam returns "We couldn't find that page".
  *
- * ─── WHY THE COUNTRY IS IN THE PATH ─────────────────────────────────────────
- * Their catalogue is per-country and a gift card bought on the wrong one is
- * frequently unredeemable — Steam's own note says region-locked cards fail
- * even over a VPN, with no refund. Sending a Turkish shopper to the US page
- * would be actively harmful, so the country the user selected travels with
- * them.
+ * The real grammar, read off their own catalogue links:
+ *
+ *   /en/{country_slug}/gift_cards/{brand_slug}
+ *   e.g. /en/turkiye/gift_cards/steam        (verified, loads)
+ *        /en/united_states/gift_cards/steam  (verified, loads)
+ *        /en/united_arab_emirates/gift_cards/noon (verified, loads)
+ *
+ * The country segment is a NAME slug, not an ISO code — `turkiye`, not `TR` —
+ * so a mapping is unavoidable. Only the countries this app actually surfaces
+ * are listed; everything else falls back to the brand's global page, which is
+ * a real page with its own country picker rather than a 404.
+ */
+const COUNTRY_SLUG = {
+  TR: 'turkiye', US: 'united_states', AE: 'united_arab_emirates',
+  GB: 'united_kingdom', DE: 'germany', IT: 'italy', FR: 'france',
+  ES: 'spain', NL: 'netherlands', CA: 'canada', AU: 'australia',
+  JP: 'japan', BR: 'brazil', MX: 'mexico', IN: 'india', ID: 'indonesia',
+  PH: 'philippines', NG: 'nigeria', ZA: 'south_africa', PL: 'poland',
+  PT: 'portugal', SE: 'sweden', NO: 'norway', DK: 'denmark', FI: 'finland',
+  IE: 'ireland', AT: 'austria', BE: 'belgium', CH: 'switzerland',
+  GR: 'greece', RO: 'romania', SA: 'saudi_arabia', EG: 'egypt',
+  MA: 'morocco', KE: 'kenya', AR: 'argentina', CL: 'chile', CO: 'colombia',
+  PE: 'peru', MY: 'malaysia', SG: 'singapore', TH: 'thailand',
+  VN: 'vietnam', KR: 'south_korea', NZ: 'new_zealand', CZ: 'czechia',
+  HU: 'hungary', UA: 'ukraine', IL: 'israel', PK: 'pakistan', BD: 'bangladesh'
+};
+
+/**
+ * Their brand slug: lowercase, spaces to underscores, and DOTS KEPT.
+ *
+ * That last part is not a detail — their own link for Amazon.com is
+ * `/gift_cards/amazon.com`, so stripping punctuation the way my first version
+ * did produced `amazon-com` and a 404. Ampersands become underscores
+ * (`travel_&_flights` appears in their category list, but brand names use the
+ * plain form), and everything else that is not a letter, digit or dot
+ * collapses to a single underscore.
+ */
+function brandSlug(family) {
+  return String(family ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, '_')
+    .replace(/[^a-z0-9.]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
+ * The page for one brand in one country.
+ *
+ * Falls back to `/en/{brand}-bitcoin` when the country is not in the map —
+ * verified that /en/steam-bitcoin loads and carries its own country selector,
+ * so an unmapped country costs the user one extra tap instead of a dead end.
  */
 export function brandUrl(countryCode, family) {
   const cc = String(countryCode ?? '').trim().toUpperCase();
-  const fam = String(family ?? '').trim();
-  if (!fam) return withRef(`${BASE}/gift_cards`);
-  const slug = fam.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  if (!slug) return withRef(`${BASE}/gift_cards`);
-  return withRef(`${BASE}/buy/${slug}${/^[A-Z]{2}$/.test(cc) ? `?country=${cc}` : ''}`);
+  const slug = brandSlug(family);
+  if (!slug) return withRef(`${BASE}/united_states/gift_cards`);
+
+  const country = COUNTRY_SLUG[cc];
+  if (!country) return withRef(`${BASE}/${slug.replace(/[._]/g, '-')}-bitcoin`);
+  return withRef(`${BASE}/${country}/gift_cards/${slug}`);
+}
+
+/** The whole gift-card catalogue for a country, for "see everything". */
+export function countryUrl(countryCode) {
+  const country = COUNTRY_SLUG[String(countryCode ?? '').trim().toUpperCase()];
+  return withRef(`${BASE}/${country || 'united_states'}/gift_cards`);
+}
+
+/** Mobile top-up and data, which is a sibling section rather than a category. */
+export function topUpUrl(countryCode) {
+  const country = COUNTRY_SLUG[String(countryCode ?? '').trim().toUpperCase()];
+  return withRef(`${BASE}/${country || 'united_states'}/mobile_top_up`);
 }
 
 /**

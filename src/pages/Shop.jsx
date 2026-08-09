@@ -7,7 +7,6 @@ import InfoBox from '../components/InfoBox';
 import Sheet from '../components/Sheet';
 import ShopCountrySheet from '../components/ShopCountrySheet';
 import ShopTile from '../components/ShopTile';
-import SegIndicator from '../components/SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
 import { IconChevronLeft, IconSearch } from '../components/Icons';
 import {
@@ -17,7 +16,9 @@ import {
   getShopCountry,
   setShopCountry
 } from '../lib/shop';
-import { brandUrl, esimUrl, flightUrl, shopEarns, stayCityUrl } from '../lib/shopLinks';
+import { brandUrl, countryUrl, esimUrl, flightUrl, shopEarns, stayCityUrl, topUpUrl } from '../lib/shopLinks';
+import { IconBed, IconCard, IconMoney, IconPlane, IconSim, IconTopUp } from '../components/ShopIcons';
+import { openUrl } from '../lib/browser';
 import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
 
 /**
@@ -52,7 +53,19 @@ import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
  * narrowed, with nothing to retype.
  */
 
-const TABS = ['cards', 'flights', 'stays'];
+/*
+ * Five tabs, each with an icon. `topup` and `esim` were buried — top-up was
+ * reachable only if a country happened to list a telecom brand, and eSIM was
+ * a single row at the bottom of Stays. Both are their own product on the
+ * provider's site and both are things a crypto holder actually buys.
+ */
+const TABS = [
+  { id: 'cards', Icon: IconCard },
+  { id: 'money', Icon: IconMoney },
+  { id: 'topup', Icon: IconTopUp },
+  { id: 'flights', Icon: IconPlane },
+  { id: 'stays', Icon: IconBed }
+];
 
 /*
  * Category order. The API sorts by count, which buries the interesting ones —
@@ -113,12 +126,26 @@ export default function Shop() {
   const [products, setProducts] = useState(null);
   const [productsLoading, setProductsLoading] = useState(false);
 
+  /*
+   * ─── OPEN INSIDE THE APP ────────────────────────────────────────────────
+   * Asked for: «امکان داره در خود اپ باز شه بهتره بخصوص در اپ».
+   *
+   * `openUrl` was already in the codebase and this screen simply was not
+   * using it — every shop link went out through window.open and kicked the
+   * user into Chrome, losing the app. It opens an Android Custom Tab instead:
+   * the system browser rendering inside our task, so the back gesture returns
+   * here and the toolbar picks up our colour.
+   *
+   * Deliberately NOT an embedded WebView. See lib/browser.js — a window we
+   * draw ourselves means we choose what the URL bar says, and on a checkout
+   * page that is exactly the guarantee the user needs us not to control.
+   */
   const open = useCallback(
     (url) => {
       if (!url) return;
       haptic?.('light');
       if (tg?.openLink) tg.openLink(url);
-      else window.open(url, '_blank', 'noopener,noreferrer');
+      else openUrl(url);
     },
     [haptic, tg]
   );
@@ -163,7 +190,19 @@ export default function Shop() {
     };
   }, [openBrand, country]);
 
-  const rows = data?.rows ?? [];
+  /*
+   * The `money` tab is the same catalogue narrowed to PayPal, Visa and Payz
+   * top-ups. It is a TAB rather than one category among thirty because for
+   * somebody holding crypto and no bank account it is the single most useful
+   * thing here, and buried in a rail it was invisible.
+   */
+  const allRows = data?.rows ?? [];
+  const rows = useMemo(
+    () => (tab === 'money'
+      ? allRows.filter((r) => r.category === 'e-money' || r.tags.includes('e-money'))
+      : allRows),
+    [allRows, tab]
+  );
 
   const categories = useMemo(() => {
     const cs = data?.categories ?? [];
@@ -338,25 +377,48 @@ export default function Shop() {
     <PageTransition>
       {header}
 
-      <div className="segmented">
-        {TABS.map((k) => (
+      <div className="shop-tabs">
+        {TABS.map(({ id, Icon }) => (
           <button
-            key={k}
-            className={tab === k ? 'active' : ''}
+            key={id}
+            className="shop-tab"
+            data-on={tab === id}
             onClick={() => {
-              setTab(k);
+              haptic?.('select');
+              setTab(id);
               setOpenBrand(null);
+              setOpenCat(null);
             }}
-            style={{ isolation: 'isolate' }}
           >
-            {tab === k && <SegIndicator id="shoptab" />}
-            {t(`shop.tab.${k}`)}
+            <Icon width={17} height={17} />
+            {t(`shop.tab.${id}`)}
           </button>
         ))}
       </div>
 
-      {tab === 'cards' ? (
+      {tab === 'cards' || tab === 'money' ? (
         <>
+          {/*
+            A storefront needs a front. The two shortcuts here are the things
+            that are NOT gift-card categories — the provider's full catalogue
+            for this country, and mobile top-up, which is a sibling section on
+            their site rather than a category inside gift cards.
+          */}
+          <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
+            <div className="shop-hero-title">{t('shop.heroTitle', { country: countryName })}</div>
+            <p className="shop-hero-sub">{t('shop.heroSub')}</p>
+            <div className="shop-quick">
+              <button onClick={() => open(countryUrl(country))}>
+                <IconCard width={18} height={18} />
+                {t('shop.quickAll')}
+              </button>
+              <button onClick={() => open(topUpUrl(country))}>
+                <IconTopUp width={18} height={18} />
+                {t('shop.quickTopUp')}
+              </button>
+            </div>
+          </motion.section>
+
           <div className="row" style={{ gap: 8 }}>
             <span className="icon-btn" style={{ pointerEvents: 'none' }}>
               <IconSearch width={16} height={16} />
@@ -436,11 +498,20 @@ export default function Shop() {
                 if (!list.length) return null;
                 return (
                   <section key={c.id}>
+                    {/*
+                      «برای هر کتگوری پر رنگ تر باشه عنوانش» — these were 11px
+                      grey uppercase labels that disappeared between the rails.
+                      Now 16px at full contrast with an accent bar, so the eye
+                      finds the section boundary while scrolling past.
+                    */}
                     <div className="shop-cat-row">
-                      <p className="section-label" style={{ margin: 0 }}>{catLabel(t, c.id)}</p>
+                      <h2 className="shop-cat-title">
+                        {catLabel(t, c.id)}
+                        <span className="shop-cat-count">{list.length}</span>
+                      </h2>
                       {list.length > PREVIEW && (
                         <button className="shop-more" onClick={() => setOpenCat(c.id)}>
-                          {t('shop.seeAll', { n: list.length })}
+                          {t('shop.seeAll', { n: list.length })} <span aria-hidden="true">›</span>
                         </button>
                       )}
                     </div>
@@ -459,6 +530,65 @@ export default function Shop() {
               })}
             </>
           )}
+        </>
+      ) : tab === 'topup' ? (
+        <>
+          {/*
+            Mobile top-up and eSIM. Both are separate products on the
+            provider's site, not gift-card categories, so neither could be
+            reached from the catalogue rails — top-up only appeared if a
+            country happened to list a telecom brand, and eSIM was one row at
+            the bottom of Stays.
+          */}
+          <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
+            <div className="shop-hero-title">{t('shop.topup.title')}</div>
+            <p className="shop-hero-sub">{t('shop.topup.body')}</p>
+            <div className="shop-quick">
+              <button onClick={() => open(topUpUrl(country))}>
+                <IconTopUp width={18} height={18} />
+                {t('shop.topup.go')}
+              </button>
+              <button onClick={() => open(esimUrl())}>
+                <IconSim width={18} height={18} />
+                {t('shop.esim.name')}
+              </button>
+            </div>
+          </motion.section>
+
+          {/* Any telecom brands the country's own catalogue carries. */}
+          {(() => {
+            const tel = allRows.filter((r) => r.kind === 'mobile_recharge');
+            if (!tel.length) return null;
+            return (
+              <section>
+                <div className="shop-cat-row">
+                  <h2 className="shop-cat-title">
+                    {t('shop.cat.mobile_credits')}
+                    <span className="shop-cat-count">{tel.length}</span>
+                  </h2>
+                </div>
+                <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
+                  {tel.map((b) => (
+                    <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
+                  ))}
+                </motion.div>
+              </section>
+            );
+          })()}
+
+          <motion.button
+            className="shop-promo shop-glow"
+            variants={riseIn}
+            initial="hidden"
+            animate="show"
+            onClick={() => open(esimUrl())}
+          >
+            <img src={STAY_CITIES[0].img} alt="" loading="lazy" />
+            <span className="shop-promo-txt">
+              <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
+              <span className="shop-promo-title">{t('shop.esim.desc')}</span>
+            </span>
+          </motion.button>
         </>
       ) : tab === 'flights' ? (
         <>

@@ -10069,6 +10069,59 @@ export default function run() {
     t('...and no per-frame JavaScript drives the motion',
       !/requestAnimationFrame/.test(page) && !/requestAnimationFrame/.test(read('src/components/ShopTile.jsx')));
 
+    /*
+     * ─── THE 404 BUG: I INVENTED THE BRAND URL ──────────────────────────────
+     * Reported: most card pages 404. They did. I had built
+     * `/en/buy/{brand}?country=TR`, a path that does not exist — confirmed by
+     * opening /en/buy/steam and getting "We couldn't find that page".
+     *
+     * The real grammar, read off their own catalogue links and each verified
+     * to load:
+     *   /en/turkiye/gift_cards/steam
+     *   /en/united_states/gift_cards/amazon.com
+     *   /en/united_arab_emirates/gift_cards/noon
+     *
+     * Two traps in it. The country segment is a NAME slug (`turkiye`) not the
+     * ISO code, so a map is unavoidable; and DOTS MUST SURVIVE the brand slug,
+     * because their Amazon link is literally `amazon.com` and my first
+     * punctuation strip turned it into `amazon-com`.
+     */
+    t('brand links use the country/gift_cards/brand path',
+      /\$\{country\}\/gift_cards\/\$\{slug\}/.test(links));
+    t('...never the invented /buy/ path', !/\/buy\//.test(links));
+    t('...with a name slug, not the ISO code', /const COUNTRY_SLUG = \{/.test(links) && /TR: 'turkiye'/.test(links));
+    t('...and dots kept so amazon.com resolves', /\[\^a-z0-9\.\]\+/.test(links));
+    /* An unmapped country must not dead-end; their global brand page carries
+       its own country picker. Verified /en/steam-bitcoin loads. */
+    t('...and an unmapped country falls back to a real page', /-bitcoin`/.test(links));
+
+    /*
+     * ─── LINKS OPEN INSIDE THE APP ──────────────────────────────────────────
+     * «امکان داره در خود اپ باز شه بهتره بخصوص در اپ». lib/browser.js already
+     * existed and this screen simply was not using it — every tap kicked the
+     * user out to Chrome and lost the app.
+     */
+    t('shop links open in the in-app browser', /openUrl/.test(page));
+    t('...rather than throwing the user out to a new tab',
+      !/window\.open/.test(page));
+
+    /*
+     * ─── FIVE TABS, EACH WITH AN SVG ────────────────────────────────────────
+     * «تب های بیشتر باشه و هر تب تصویر svg داشته باشد». PayPal/Visa and
+     * top-up/eSIM were unreachable: e-money was one rail among thirty, and
+     * eSIM was a single row at the foot of Stays.
+     */
+    const icons = read('src/components/ShopIcons.jsx');
+    t('the shop has five tabs', (page.match(/\{ id: '[a-z]+', Icon: Icon[A-Za-z]+ \}/g) ?? []).length === 5);
+    t('...each carrying an icon component', /<Icon width=/.test(page));
+    t('...drawn as real SVG paths', (icons.match(/<svg /g) ?? []).length >= 5);
+    t('...that inherit the theme colour', /stroke: 'currentColor'/.test(icons) && !/fill="#/.test(icons));
+
+    /* «برای هر کتگوری پر رنگ تر باشه عنوانش» — 11px grey uppercase became a
+       16px title with an accent bar. */
+    t('category headings are prominent',
+      /\.shop-cat-title \{[\s\S]{0,160}?font-size: 16px/.test(css) && /shop-cat-title/.test(page));
+
     /* Attribution in ONE place, so it cannot be forgotten on a new link —
        the Avantis bug, where a working link credited nobody. */
     t('every outbound link is built in one module', /function withRef/.test(links));

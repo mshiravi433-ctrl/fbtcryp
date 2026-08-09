@@ -8097,3 +8097,146 @@ body { overflow-x: clip; }
   .shop-dest img,
   .shop-dest:active img { transition: none; transform: none; }
 }
+
+/* ── icon tab bar ───────────────────────────────────────────────────────────
+   Asked for: «تب های بیشتر باشه و هر تب تصویر svg داشته باشد». The plain
+   .segmented text strip could not carry an icon, so this is a scrollable rail
+   of icon+label pills. Five tabs fit a phone only if they scroll. */
+.shop-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-inline: -16px;
+  padding: 2px 16px 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.shop-tabs::-webkit-scrollbar { display: none; }
+
+.shop-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12.8px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.shop-tab:active { transform: scale(.96); }
+
+.shop-tab[data-on='true'] {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, var(--line));
+  background: color-mix(in srgb, var(--rgb-1) 13%, var(--bg-raised));
+}
+
+/* The icon carries the accent colour so the active tab reads at a glance
+   rather than only by its slightly different background. */
+.shop-tab[data-on='true'] svg { color: var(--rgb-1); }
+
+/* ── category header ────────────────────────────────────────────────────────
+   «برای هر کتگوری پر رنگ تر باشه عنوانش» — the section labels were 11px grey
+   uppercase and vanished between the rails. Now 16px, full contrast, with an
+   accent bar so the eye finds the section boundary while scrolling. */
+.shop-cat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 20px 0 11px;
+}
+
+.shop-cat-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.shop-cat-title::before {
+  content: '';
+  width: 4px;
+  height: 17px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--rgb-1), var(--rgb-3));
+  flex-shrink: 0;
+}
+
+.shop-cat-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.shop-more {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rgb-1);
+  background: none;
+  border: 0;
+  padding: 5px 2px;
+  cursor: pointer;
+}
+
+/* ── storefront hero ────────────────────────────────────────────────────────
+   A shop needs a front. This is the country badge plus the two shortcuts that
+   are not gift-card categories: the full catalogue, and mobile top-up. */
+.shop-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 140% at 12% 0%, color-mix(in srgb, var(--rgb-1) 20%, transparent), transparent 62%),
+    radial-gradient(120% 140% at 92% 20%, color-mix(in srgb, var(--rgb-5) 18%, transparent), transparent 60%),
+    var(--bg-raised);
+}
+
+.shop-hero-title { font-size: 19px; font-weight: 800; letter-spacing: -.4px; }
+.shop-hero-sub { font-size: 12.4px; color: var(--text-2); margin-top: 3px; line-height: 1.6; }
+
+.shop-quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+.shop-quick button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-raised) 82%, transparent);
+  color: var(--text-1);
+  font-size: 12.4px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: start;
+  transition: transform .16s ease, border-color .16s ease;
+}
+
+.shop-quick button:active { transform: scale(.97); }
+.shop-quick button:hover { border-color: var(--line-strong); }
+.shop-quick svg { color: var(--rgb-1); flex-shrink: 0; }

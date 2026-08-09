@@ -2866,7 +2866,9 @@
     "tab": {
       "cards": "Cards & top-ups",
       "flights": "Flights",
-      "stays": "Stays"
+      "stays": "Stays",
+      "money": "PayPal & Visa",
+      "topup": "Top-up & eSIM"
     },
     "search": "Search {{country}} — brand, PayPal, gaming…",
     "all": "All",
@@ -2932,6 +2934,15 @@
       "kicker": "Pay with crypto",
       "flights": "Fly anywhere, paid in stablecoins"
     },
-    "howTo": "How to redeem"
+    "howTo": "How to redeem",
+    "heroTitle": "Spend crypto in {{country}}",
+    "heroSub": "Gift cards, PayPal and Visa top-ups, mobile credit. Paid in stablecoins, delivered by email in minutes.",
+    "quickAll": "Full catalogue",
+    "quickTopUp": "Mobile top-up",
+    "topup": {
+      "title": "Mobile credit and data",
+      "body": "Top up any prepaid number, or take an eSIM with data in 180+ countries — no plastic, no shop.",
+      "go": "Top up a number"
+    }
   }
 }
