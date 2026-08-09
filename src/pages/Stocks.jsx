@@ -14,7 +14,15 @@ import { useTelegram } from '../context/TelegramContext';
 import { IconExternal, IconShield } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
-import { venueDisclosure, withReferral } from '../lib/venueReferral';
+/*
+ * No `venueReferral` import any more, and that absence is deliberate.
+ *
+ * This screen used to attach our Avantis and UTEX referral codes to outbound
+ * buttons under the equity list. Both buttons are gone on instruction — «ما
+ * پروموت کننده رایگان هیچ شرکتی نیستیم در صفحه سهام» — so nothing here needs
+ * a referral code, and importing the module would leave a loaded gun for the
+ * next person editing this file.
+ */
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 
 /**
@@ -123,6 +131,44 @@ export default function Stocks() {
   );
 
   /*
+   * ─── ONLY THE TICKERS WE CANNOT SELL ────────────────────────────────────
+   * The reference table exists to answer "is my ticker here at all". Listing
+   * NVDA in it when NVDAx is buyable three sections above would be worse than
+   * useless: it puts a row with no button next to a row with one, for the
+   * same company, and invites the reader to think the buyable one is broken.
+   *
+   * Matched on the symbol with the xStock "x" suffix removed, so NVDA pairs
+   * with NVDAx. Uppercased both sides because the two feeds disagree on case.
+   *
+   * ─── AND THE ONE PAIR THAT SUFFIX-STRIPPING MISSES ───────────────────────
+   * Alphabet. Backed name it GOOGLx (from GOOGL, the class A ticker) while
+   * Avantis list GOOG (class C). Strip the x and you get GOOGL vs GOOG — no
+   * match — so Alphabet appeared in BOTH lists: once buyable, once as a
+   * reference row with no button, for the same company on one screen.
+   *
+   * Caught by diffing the two live symbol lists rather than by reading the
+   * code. Aliases are explicit because guessing at prefixes would eventually
+   * collapse two genuinely different companies into one.
+   */
+  const refRows = useMemo(() => {
+    const rows = avantis?.rows ?? [];
+    if (!rows.length) return [];
+
+    /* Avantis symbol -> the xStock ticker that already covers it. */
+    const ALIASES = { GOOG: 'GOOGL' };
+
+    const ours = new Set(
+      (assets?.equities ?? []).map((e) =>
+        String(e.symbol ?? '').toUpperCase().replace(/X$/, '')
+      )
+    );
+    return rows.filter((r) => {
+      const sym = String(r.symbol ?? '').toUpperCase();
+      return !ours.has(sym) && !ours.has(ALIASES[sym] ?? '');
+    });
+  }, [avantis, assets]);
+
+  /*
    * A second depth floor on top of the per-trade gate. That one asks "is this
    * ORDER too big for the pool"; this asks "is this pool deep enough to list
    * at all". A market with $5k of depth is not a market, and listing it
@@ -219,24 +265,25 @@ export default function Stocks() {
             read that sentence first.
           */}
           {/*
-            ─── NOW A BOX, BUT STILL OPEN BY DEFAULT ─────────────────────────
-            Asked to put this warning in a collapsible box. Done — with one
-            deliberate qualification: `defaultOpen`.
+            ─── NOW COLLAPSED, ON INSTRUCTION ────────────────────────────────
+            Asked for directly: «هشدار را در صفحه باز شونده بزار».
 
-            The original comment above argued placement is everything, and it
-            was right. Collapsing this one CLOSED would undo the reason it sits
-            at the top: the freeze authority is real and used, Tether have
-            frozen over $5bn across roughly 10,000 addresses under the same
-            kind of power, and Backed hold it over every xStock. Someone can
-            lose access to a position they already own.
+            `defaultOpen` is gone. I argued for keeping it open and the earlier
+            comment above still records that reasoning, so it is worth being
+            straight about the trade rather than quietly flipping a flag.
 
-            So the box gives what was asked — one tidy container instead of a
-            loose red slab, and the user can fold it away once read — while
-            still being visible the first time. That is the same rule already
-            applied to `stocks.beforeBuy` directly below.
+            What is lost: the freeze text is no longer read without a tap.
+            What is gained is the argument InfoBox itself makes in its header —
+            a collapsed box with a clear title IS read, while a stacked wall of
+            open red slabs is scrolled past. This tab was carrying two
+            permanently-open danger boxes above the first buyable row; at that
+            density neither of them was working.
+
+            The title still names the risk, so the fact survives the fold: it
+            says the issuer can freeze the token, not "more information".
           */}
           <motion.div variants={riseIn} initial="hidden" animate="show">
-            <InfoBox title={t('stocks.freezeTitle')} tone="danger" defaultOpen id="stocks-freeze">
+            <InfoBox title={t('stocks.freezeTitle')} tone="danger" id="stocks-freeze">
               <p>{t('stocks.freezeBody')}</p>
             </InfoBox>
           </motion.div>
@@ -368,12 +415,14 @@ export default function Stocks() {
             نیستند». Both are the same question — what am I actually buying —
             so they are one box rather than two stacked notices.
 
-            `defaultOpen` because this one is genuinely load-bearing: someone
-            who believes a tokenised share is a share has misunderstood what
-            they own, and unlike the other explainers on this page that
-            misunderstanding survives until it costs them.
+            It was `defaultOpen`, on the reasoning that someone who believes a
+            tokenised share is a share has misunderstood what they own. That is
+            still true — but the box now starts collapsed on instruction
+            («هشدار را در صفحه باز شونده بزار»), and the mitigation is that the
+            TITLE carries the load-bearing claim rather than a neutral label.
+            Folding it hides the detail, not the fact.
           */}
-          <InfoBox title={t('stocks.beforeBuy.title')} tone="warn" defaultOpen id="stocks-before">
+          <InfoBox title={t('stocks.beforeBuy.title')} tone="warn" id="stocks-before">
             <p>{t('stocks.notShares')}</p>
             <p>{t('stocks.beforeBuy.p1')}</p>
             <p>{t('stocks.beforeBuy.p2')}</p>
@@ -415,43 +464,30 @@ export default function Stocks() {
             equities — the two must not blur together.
           */}
           {/*
-            ─── THE OTHER MARKET: REAL TICKERS, NOT A BANNER ──────────────────
-            The previous version of this block was a single row saying "UTEX
-            has hundreds of tickers, tap here". The owner's objection was
-            exact and correct: «فقط بنر تبلیغاتی نباشد». A row that asks you
-            to leave before showing you anything is an advert, not a feature.
+            ─── REFERENCE PRICES. NO LINKS, AND THAT IS THE POINT ─────────────
+            Two instructions, both taken literally:
 
-            So the list is real. Symbols, live prices, leverage caps and
-            market-hours state come from Avantis' own public pair table plus
-            Pyth — both keyless. See server/avantis.js.
+              «لینک تبلیغاتی زیر سهام را حذف کن ما پروموت کننده رایگان هیچ
+               شرکتی نیستیم در صفحه سهام»
 
-            ─── WHY THE LIST IS AVANTIS AND THE LINK BELOW IS UTEX ────────────
-            Not a preference. UTEX pays us far more and I tried it first, but
-            margin.utex.io answers "UTEX is not available in your country" to
-            our server on every path, so there is no ticker list to read. A
-            hard-coded list of UTEX symbols would be one we cannot price and
-            cannot notice going stale — the "wired to nothing" failure this
-            project keeps re-learning. Avantis publishes everything openly, so
-            Avantis is what can be shown honestly.
+            The Avantis and UTEX buttons that used to sit here are GONE. Not
+            moved, not folded into a box — deleted. We are not anybody's free
+            promoter on the screen that sells our own product.
 
-            ─── AND WHY THIS SITS BELOW THE TOKENISED EQUITIES ────────────────
-            Same rule as before, and it still binds: both venues here pay us
-            more than our own 70 bps and both are riskier for the buyer than a
-            share backed 1:1 in custody. We never promote the worse product
-            because it pays better — the deBridge precedent.
+            ─── WHY THE TABLE STAYS WHEN THE LINKS GO ─────────────────────────
+            The data was never the problem; the outbound buttons were. These
+            are the US tickers that have no tokenised version we can sell —
+            NFLX, PLTR, AVGO, INTC and the rest — priced live from Pyth. As a
+            reference table it answers "is my ticker here at all", which the
+            list above cannot, and it sends nobody anywhere.
+
+            There is no referral code attached to anything in this block and
+            no `withReferral` call, so the earnings disclosure that used to
+            follow it is gone too: there is nothing left to disclose.
           */}
           <section>
-            <p className="section-label">{t('stocks.other.title')}</p>
-            <p className="farm-filtered faint">{t('stocks.other.intro')}</p>
-
-            {/*
-              Inline, never collapsed. These are leveraged perpetuals sitting
-              on a page whose whole subject is buying equities, and "this is
-              not a share" is the single most misreadable fact here.
-            */}
-            <p className="notice notice-danger" style={{ marginTop: 9 }}>
-              {t('stocks.other.warning')}
-            </p>
+            <p className="section-label">{t('stocks.ref.title')}</p>
+            <p className="farm-filtered faint">{t('stocks.ref.intro')}</p>
 
             {avantisLoading && !avantis ? (
               <div className="stack" style={{ gap: 8, marginTop: 10 }}>
@@ -459,13 +495,10 @@ export default function Stocks() {
                   <div key={i} className="skel" style={{ height: 52 }} />
                 ))}
               </div>
-            ) : !avantis?.live || !avantis.rows.length ? (
-              /*
-               * Degrades to nothing dramatic. The venue link below still
-               * works, so a dead upstream costs the reader the table and not
-               * the section.
-               */
-              <p className="notice" style={{ marginTop: 10 }}>{t('stocks.other.unavailable')}</p>
+            ) : !avantis?.live || !refRows.length ? (
+              /* Silent when empty. A reference table nobody asked for should
+                 not shout about being unavailable. */
+              null
             ) : (
               <motion.div
                 className="stack"
@@ -474,7 +507,7 @@ export default function Stocks() {
                 initial="hidden"
                 animate="show"
               >
-                {avantis.rows.map((r) => (
+                {refRows.map((r) => (
                   <motion.div key={r.id} className="coin-row" variants={riseIn}>
                     <span
                       className="wallet-badge"
@@ -486,29 +519,20 @@ export default function Stocks() {
                       <div className="coin-sym">{r.symbol}</div>
                       <div className="coin-name">
                         {/*
-                          The leverage cap is the honest headline number for a
-                          perp, and it is the OVERRIDE value where Avantis has
-                          one — the live payload had pairs whose base cap was
-                          10x while the override held them at 2x.
+                          Market hours, not a venue name. US markets are shut
+                          most of the week in Tehran and an unlabelled price
+                          reads as stale or broken.
                         */}
-                        {r.maxLeverage ? t('stocks.other.upTo', { n: r.maxLeverage }) : t('stocks.other.perp')}
+                        {r.marketOpen === false ? t('stocks.ref.closed') : t('stocks.ref.openNow')}
                       </div>
                     </div>
                     <div className="coin-right">
                       {/*
-                        `price` is null when Pyth had no value — rendered as a
-                        dash, never as $0.00. Number(null) is 0 and 0 is
-                        finite, so a plausible wrong number is the easy bug.
+                        Null stays a dash. Number(null) is 0 and 0 is finite,
+                        so "$0.00" is the easy and very misleading bug.
                       */}
                       <div className="mono" style={{ fontSize: 12.5 }}>
                         {r.price ? `$${fmtPrice(r.price)}` : '—'}
-                      </div>
-                      {/*
-                        US markets are shut most of the week in Tehran. Without
-                        this the price looks stale or broken.
-                      */}
-                      <div className="faint mono" style={{ fontSize: 10 }}>
-                        {r.marketOpen === false ? t('stocks.other.closed') : t('stocks.other.openNow')}
                       </div>
                     </div>
                   </motion.div>
@@ -516,63 +540,13 @@ export default function Stocks() {
               </motion.div>
             )}
 
-            <div className="stack" style={{ gap: 9, marginTop: 10 }}>
-              {/*
-                Avantis first: it is the venue the table above belongs to, so
-                sending the reader anywhere else from these rows would be a
-                bait-and-switch.
-              */}
-              <motion.button
-                className="wallet-option"
-                variants={riseIn}
-                initial="hidden"
-                animate="show"
-                whileTap={{ scale: 0.985 }}
-                onClick={() => open(withReferral('avantis', 'https://www.avantisfi.com/trade'))}
-              >
-                <span className="wallet-badge" style={{ color: 'var(--rgb-4)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                  AVNT
-                </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                    {t('stocks.other.avantisName')}
-                  </span>
-                  <span className="set-row-sub">{t('stocks.other.avantisDesc')}</span>
-                </span>
-                <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-              </motion.button>
-
-              <motion.button
-                className="wallet-option"
-                variants={riseIn}
-                initial="hidden"
-                animate="show"
-                whileTap={{ scale: 0.985 }}
-                onClick={() => open(withReferral('utex', 'https://utex.io/'))}
-              >
-                <span className="wallet-badge" style={{ color: 'var(--rgb-5)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                  UTEX
-                </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                    {t('stocks.other.utexName')}
-                  </span>
-                  <span className="set-row-sub">{t('stocks.other.utexDesc')}</span>
-                </span>
-                <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-              </motion.button>
-            </div>
-
             {/*
-              The disclosure tracks the configured codes, not a hard-coded
-              sentence. If either code is removed the links stop earning AND
-              this line stops claiming they do — they cannot disagree, which
-              is the bug caught on Perp and again on Avantis itself.
+              Says plainly that these are not for sale here and that we are not
+              routing anyone anywhere. Without it a price with no button looks
+              like a broken buy flow rather than a deliberate reference.
             */}
-            <p className="faint" style={{ marginTop: 9, lineHeight: 1.75 }}>
-              {venueDisclosure('utex') === 'earning' || venueDisclosure('avantis') === 'earning'
-                ? t('stocks.other.earning')
-                : t('stocks.other.noEarn')}
+            <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>
+              {t('stocks.ref.note')}
             </p>
           </section>
         </>

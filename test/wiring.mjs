@@ -4712,12 +4712,17 @@ export default function run() {
     const stocks = read('src/pages/Stocks.jsx');
     t('the stocks explainer is in a box', /stocks\.beforeBuy\.title/.test(stocks));
     /*
-     * Open by default, unlike the others. Someone who believes a tokenised
-     * share IS a share has misunderstood what they own, and that
-     * misunderstanding survives until it costs them.
+     * ─── THIS USED TO ASSERT `defaultOpen`, AND NOW ASSERTS THE OPPOSITE ────
+     * The old rule was mine and it was defensible: someone who believes a
+     * tokenised share IS a share has misunderstood what they own.
+     *
+     * The owner overruled it — «هشدار را در صفحه باز شونده بزار» — and the
+     * safety property moved rather than disappeared. It is now carried by the
+     * TITLE, which names the risk instead of saying "read this before you
+     * buy", so the fold hides detail and not the fact. Section 98 asserts the
+     * titles; this one just confirms the box exists.
      */
-    t('...and opens by default, because the misunderstanding is costly',
-      /stocks-before[\s\S]{0,40}defaultOpen|defaultOpen[\s\S]{0,40}stocks-before/.test(stocks));
+    t('...and the explainer is collapsible', /id="stocks-before"/.test(stocks));
     t('...and it still says these are not shares', /stocks\.notShares/.test(stocks));
 
     /* The three screens the owner named by location. */
@@ -8376,8 +8381,8 @@ export default function run() {
      */
     const stk = code(read('src/pages/Stocks.jsx'));
     t('the freeze warning is a box', /id="stocks-freeze"/.test(stk));
-    t('...but is still open by default, since it is load-bearing',
-      /InfoBox title=\{t\('stocks\.freezeTitle'\)\} tone="danger" defaultOpen/.test(stk));
+    t('...and it is collapsible, per the owner\'s instruction',
+      /id="stocks-freeze"/.test(stk) && !/stocks-freeze"[^>]*defaultOpen/.test(stk));
     t('the closing risk notice is a box too', /id="stocks-risk"/.test(stk));
 
     /*
@@ -9626,7 +9631,7 @@ export default function run() {
     t('...the route is mounted', /['"`]\/api\/avantis\/equities['"`]/.test(appSrc));
     t('...and calls the fetcher', /fetchAvantisEquities/.test(appSrc));
     t('...the client library calls the route', /avantis\/equities/.test(code(read('src/lib/avantisEquities.js'))));
-    t('...and Stocks renders the rows', /avantis\.rows\.map/.test(stocks));
+    t('...and Stocks renders the rows', /refRows\.map/.test(stocks));
 
     /*
      * Both upstreams must stay keyless. This project has had keys rotated,
@@ -9703,58 +9708,83 @@ export default function run() {
     t('market-hours state is carried through', /marketOpen/.test(srv) && /marketOpen === false/.test(stocks));
 
     /*
-     * ─── ORDERING IS STILL A SAFETY PROPERTY ────────────────────────────────
-     * Both venues pay us more than our own 70 bps and both are riskier than a
-     * share backed 1:1 in custody. The deBridge rule — never promote the worse
-     * product because it pays better — puts this section BELOW the tokenised
-     * equities. Asserted by index so a later edit that promotes it fails.
+     * ─── WE ARE NOBODY'S FREE PROMOTER ON THIS SCREEN ───────────────────────
+     * Instruction, verbatim: «لینک تبلیغاتی زیر سهام را حذف کن ما پروموت کننده
+     * رایگان هیچ شرکتی نیستیم در صفحه سهام».
+     *
+     * The Avantis and UTEX buttons under the equity list are DELETED. Asserted
+     * as an absence, in three independent ways, because a partial revert is
+     * the realistic failure: someone re-adds one button, or re-imports the
+     * referral helper "just in case".
+     */
+    t('no venue links remain on the Stocks screen',
+      !/avantisfi\.com/.test(stocks) && !/utex\.io/.test(stocks));
+    t('...and no referral code is attached anywhere on it',
+      !/withReferral/.test(stocks));
+    t('...and the referral module is not even imported',
+      !/from '\.\.\/lib\/venueReferral'/.test(read('src/pages/Stocks.jsx')));
+
+    /*
+     * The table itself stays — the data was never the problem, the outbound
+     * buttons were. It must still sit BELOW the tokenised equities we sell.
      */
     const iEquities = stocks.indexOf('stocks.available');
-    const iOther = stocks.indexOf('stocks.other.title');
-    t('the outside venues sit below the tokenised equities',
-      iEquities > 0 && iOther > 0 && iOther > iEquities);
+    const iRef = stocks.indexOf('stocks.ref.title');
+    t('the reference table sits below what we actually sell',
+      iEquities > 0 && iRef > 0 && iRef > iEquities);
 
-    /* Leverage is the fact that empties an account; it cannot be collapsed. */
-    t('the leverage warning is inline, not in a collapsible box',
-      /notice notice-danger[\s\S]{0,120}?stocks\.other\.warning/.test(stocks));
-
-    /* Disclosure derived from the codes, never hard-coded. */
-    t('the earnings disclosure is derived from the configured codes',
-      /venueDisclosure\('utex'\) === 'earning' \|\| venueDisclosure\('avantis'\) === 'earning'/.test(stocks));
-    t('...and both venue links carry their referral code',
-      /withReferral\('avantis', 'https:\/\/www\.avantisfi\.com\/trade'\)/.test(stocks) &&
-      /withReferral\('utex', 'https:\/\/utex\.io\/'\)/.test(stocks));
+    /*
+     * ─── NO DUPLICATE COMPANIES ACROSS THE TWO LISTS ────────────────────────
+     * A reference row with no button, directly under a buyable row for the
+     * same company, reads as a broken buy flow. Alphabet is the case that
+     * proves the suffix rule is not enough: Backed call it GOOGLx (class A)
+     * and Avantis call it GOOG (class C), so stripping the x gives GOOGL vs
+     * GOOG and Alphabet appeared twice. Found by diffing the live symbol
+     * lists, not by reading the code.
+     */
+    t('reference rows exclude tickers we already sell', /const refRows = useMemo/.test(stocks));
+    t('...matched with the xStock suffix stripped', /replace\(\/X\$\/, ''\)/.test(stocks));
+    t('...and GOOG is aliased to GOOGL so Alphabet cannot appear twice',
+      /ALIASES = \{ GOOG: 'GOOGL' \}/.test(stocks));
 
     for (const lang of ['en', 'fa', 'ar']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
-      const O = L.stocks?.other;
-      t(`${lang} has the outside-venue copy`, Boolean(O?.title && O?.intro && O?.avantisName && O?.utexName));
-      t(`${lang} labels closed markets`, Boolean(O?.closed) && Boolean(O?.openNow));
-      t(`${lang} states both earning and non-earning disclosures`,
-        Boolean(O?.earning) && Boolean(O?.noEarn));
-      /* The old single-link copy must be gone, or a stale key lingers. */
+      const R = L.stocks?.ref;
+      t(`${lang} has the reference-table copy`, Boolean(R?.title && R?.intro && R?.note));
+      t(`${lang} labels closed markets`, Boolean(R?.closed) && Boolean(R?.openNow));
+      /* Stale keys from the two previous versions of this block. */
       t(`${lang} no longer carries the advert-only copy`, L.stocks?.utex === undefined);
-
-      const w = String(O?.warning ?? '');
-      t(`${lang} warns these are not shares`, w.length > 200);
+      t(`${lang} no longer carries the venue-link copy`, L.stocks?.other === undefined);
       /*
-       * ─── THE WORDING TRAP ────────────────────────────────────────────────
-       * My first version of this asserted the literal word «اهرم». The
-       * store-vocabulary guard in test/run.mjs greps the BUILT bundle for
-       * exactly that word — it is one of the terms APKPure rejected the app
-       * over — so satisfying this check broke that one. The Perp screen can
-       * use it because its copy is stripped from the store build; this copy
-       * ships.
-       *
-       * So the check is on the RISK being stated, not on a banned word:
-       * a small move against you can close the position and take everything
-       * you put in. Same fact, sayable in a shipping build.
+       * A price with no buy button has to say why, or it reads as broken.
+       * The note must state BOTH that they are not sold here and that we are
+       * not routing the reader anywhere.
        */
-      t(`${lang} warns the whole deposit can be lost`,
-        /close the position and take the whole deposit|موقعیت را ببندد و کل مبلغی را که گذاشته‌ای|تُغلق المركز وتمحو كامل ما وضعته/.test(w));
-      t(`${lang} warning avoids the store-flagged vocabulary`,
-        !/اهرم|الرافعة|قمار|المضاربة/.test(w));
-      t(`${lang} names the missing broker licence`, /licen|مجوز|ترخيص/i.test(w));
+      t(`${lang} says these are reference prices, not for sale here`,
+        String(R?.note ?? '').length > 80);
+    }
+
+    /*
+     * ─── THE WARNINGS FOLD, BUT THEIR TITLES STILL CARRY THE FACT ───────────
+     * Asked for: «هشدار را در صفحه باز شونده بزار». Both danger boxes lost
+     * `defaultOpen`.
+     *
+     * That is only safe because of the second half: they previously shared the
+     * SAME neutral title, "Read this before you buy". Collapsed, that would
+     * have been two identical grey headers hiding both warnings behind a tap.
+     * Each title now names its own risk, so folding hides the detail and not
+     * the fact — and this check exists so a later edit cannot quietly restore
+     * a neutral title.
+     */
+    t('the danger boxes start collapsed', !/defaultOpen/.test(stocks));
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} freeze title names the freeze risk`,
+        /freeze|مسدود|تجميد/i.test(String(L.stocks?.freezeTitle ?? '')));
+      t(`${lang} before-buy title says they are not shares`,
+        /not shares|سهم نیستند|ليست أسهم/i.test(String(L.stocks?.beforeBuy?.title ?? '')));
+      t(`${lang} the two titles are no longer identical`,
+        String(L.stocks?.freezeTitle ?? 'a') !== String(L.stocks?.beforeBuy?.title ?? 'b'));
     }
 
     /*

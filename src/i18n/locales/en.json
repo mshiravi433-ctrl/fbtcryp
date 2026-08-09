@@ -1063,7 +1063,7 @@
     "riskNotice": "Tokenized assets carry market risk, issuer risk and freeze risk together. If the issuer fails, is shut down, or decides not to serve you, the token may not be redeemable for the underlying asset. Never put in money you cannot afford to lose.",
     "realTitle": "What these actually are",
     "realBody": "Each token is backed one-for-one by a real share held with a regulated custodian in Switzerland, issued by Backed Finance under the Swiss DLT Act. They trade 24/7 with no broker and no bank account. The price follows the real share.",
-    "freezeTitle": "Read this before you buy",
+    "freezeTitle": "The issuer can freeze this token",
     "freezeBody": "The issuer can freeze these tokens — a live authority written into the token, and issuers use it: Tether has frozen over $5bn across ~10,000 wallets. Backed does not serve the US, UK, Canada, Australia or EU, and can act against any wallet it decides not to serve. Frozen tokens stay in your wallet but stop moving, and we cannot reverse it. You own the exposure, not the protection.",
     "available": "Available to buy",
     "ifIBuy": "If I buy",
@@ -1082,28 +1082,19 @@
     "kindCommodity": "Physical gold",
     "privateCompany": "SpaceX is a private company — there is no stock exchange listing and no public price to check this against. That is exactly why this access is unusual, and also why it carries more risk than the others: the value moves on funding rounds, not on a live market.",
     "beforeBuy": {
-      "title": "Read this before you buy",
+      "title": "These are not shares — what you actually own",
       "p1": "These are tokens issued by a company that claims to hold the real share. You own the token. You do not own the share, and your claim is on that issuer rather than on the company whose name is on it.",
       "p2": "No shareholder rights come with them: no vote, and dividends only if the issuer chooses to pass them on. If the issuer fails, the token is worth whatever the market thinks their promise is worth.",
       "p3": "Liquidity is thin compared with a real exchange. A large order can move the price against you sharply, and there may be no buyer at all when you want out."
     },
     "kycTitle": "Do I need identity verification?",
     "riskTitle": "Risks you are taking",
-    "other": {
-      "title": "The rest of the market",
-      "intro": "The names above are the ones you can buy through us as tokens backed 1:1. These are listed on outside venues instead — shown live so you can see what exists before you go anywhere.",
-      "warning": "These are NOT shares and NOT the tokens above. Each one is a leveraged perpetual contract settled in stablecoins: you are on no shareholder register, you own no part of the company, and there is no investor-compensation scheme. Leverage means a small move against you can close the position and take the whole deposit. Avantis is permissionless software; UTEX is registered in Saint Vincent and the Grenadines and holds no broker licence.",
-      "upTo": "Perpetual · up to {{n}}x",
-      "perp": "Perpetual contract",
+    "ref": {
+      "title": "Other US tickers — reference only",
+      "intro": "Names with no tokenised version we can offer. Prices are live from Pyth, shown so you can check a number without leaving.",
       "closed": "market closed",
-      "openNow": "open",
-      "unavailable": "The live list is unreachable right now. The venues below still work.",
-      "avantisName": "Avantis — trade the list above",
-      "avantisDesc": "On-chain on Base. Your own wallet, no account, no sign-up.",
-      "utexName": "UTEX — a wider list of US tickers",
-      "utexDesc": "Hundreds of names against USDT. Account with an email.",
-      "earning": "We earn a share of the fees these venues charge on trades from these links. It costs you nothing extra, and it is why they are listed here — you should know that before you tap. We are not affiliated with either and cannot help with their accounts, deposits or withdrawals.",
-      "noEarn": "We earn nothing from these links and are not affiliated with either venue. We cannot help with their accounts, deposits or withdrawals."
+      "openNow": "market open",
+      "note": "Reference prices only. These are not for sale here and we do not route you anywhere to buy them — this app sells the tokenised shares listed above, and nothing on this row earns us anything."
     }
   },
   "help": {
