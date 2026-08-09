@@ -4,10 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
-import AdBanner from '../components/AdBanner';
+import Sheet from '../components/Sheet';
+import ShopCountrySheet from '../components/ShopCountrySheet';
+import ShopTile from '../components/ShopTile';
 import SegIndicator from '../components/SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
-import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
+import { IconChevronLeft, IconSearch } from '../components/Icons';
 import {
   fetchShopCatalogue,
   fetchShopCountries,
@@ -15,66 +17,58 @@ import {
   getShopCountry,
   setShopCountry
 } from '../lib/shop';
-import { brandUrl, esimUrl, flightUrl, shopEarns, stayUrl } from '../lib/shopLinks';
+import { brandUrl, esimUrl, flightUrl, shopEarns, stayCityUrl } from '../lib/shopLinks';
+import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
 
 /**
  * SHOP — spend crypto on real things.
  * ---------------------------------------------------------------------------
- * Gift cards, PayPal and Visa top-ups, mobile credit, eSIMs, flights and
- * stays. Paid in stablecoins, delivered by Cryptorefills.
+ * Second version. The first shipped as a list of 34px logos with 12px labels,
+ * a native <select> holding 233 countries, and a flat row of category tags.
+ * The owner's review was blunt and every point of it was right:
  *
- * ─── THE ONE DECISION EVERYTHING ELSE FOLLOWS: COUNTRY FIRST ────────────────
- * The catalogue is completely different per country — Turkey has Getir and
- * Hepsiburada, the UAE has Noon and Lulu — and a gift card bought for the
- * wrong country is often unredeemable with NO REFUND. Steam say so in their
- * own product note: region-locked, VPN will not help.
+ *   «خیلی کوچیکه عکس ها را بگتر کن»            — everything too small
+ *   «انتخاب کشورها حالت کشویی زشته»            — the dropdown is ugly
+ *   «هر کتگوری چندتا ... و بیشتر بره به صفحه ان دسته»  — category previews
+ *   «هر خط یک عکس و زیرش خیلی کوچک نباشه»      — one image per row
+ *   «تبلیغات ... با عکس نه اینکه فقط نوشتاری باشه»     — picture adverts
+ *   «برای هتل و بلیط ... وارد صفحه سایت میشه که همون ها را انتخاب کنی»
  *
- * So the screen asks once and remembers. It does not guess from the browser
- * locale (a Persian phone in Dubai wants the UAE catalogue) and it does not
- * guess from IP (most of this audience is on a VPN). Getting this wrong costs
- * the user real money, which is why it is a question and not an inference.
+ * ─── THE FLIGHT FORM WAS THE WORST OF IT, AND HE DIAGNOSED IT EXACTLY ───────
+ * You filled in origin, destination and dates here, and then landed on their
+ * site and had to fill in the same thing again. I built that, and it deserved
+ * the criticism.
  *
- * ─── WHY THE FLIGHT FORM DOES NOT SHOW FARES ────────────────────────────────
- * Checked before building: the provider's developer reference lists what the
- * REST API covers — gift cards, top-ups, eSIMs — and then says plainly "Not
- * covered here: Flights, Stays". There is no endpoint that returns fares.
+ * The cause is real: flights and stays are NOT in the REST API — their own
+ * developer reference says "Not covered here: Flights, Stays" — and their date
+ * pickers are React components that do not hydrate from query parameters, so
+ * `?departure_date=` genuinely does nothing.
  *
- * Inventing a results list would be the worst possible version of this
- * feature. What their site DOES accept is a route in the URL path — verified
- * live, /en/flights/new_york-to-london opens with JFK and LHR already
- * selected — so the form collects the tedious part and hands over a prefilled
- * search. That is honest and it is genuinely faster than starting cold.
+ * His own alternative is the right answer: «اگر نمیتونی بیاری بهترین های مقصد
+ * و مبدا را بزار». Real routes and cities, real photographs, one tap. What
+ * DOES survive into their page is the PATH — verified live that
+ * /en/flights/new_york-to-london opens with JFK and LHR already selected, and
+ * /en/stays/ae/dubai opens on Dubai. So a tap lands somewhere already
+ * narrowed, with nothing to retype.
  */
 
-/*
- * Tabs. Gift cards first because it is the deepest catalogue and the thing
- * most people came for; travel second because it is the highest value per
- * order; eSIM last because it is narrow.
- */
 const TABS = ['cards', 'flights', 'stays'];
 
 /*
- * ─── A CURATED CATEGORY ORDER, ON TOP OF WHATEVER THE COUNTRY RETURNS ───────
- * The API's own category ordering is by count, which buries the interesting
- * ones. `e-money` — PayPal, Visa, Payz top-ups — is the single most useful
- * category for someone holding crypto and no bank, and by raw count it sits
- * near the bottom. These are pulled to the front when present; everything
- * else keeps the data-driven order behind them.
+ * Category order. The API sorts by count, which buries the interesting ones —
+ * `e-money` (PayPal, Visa, Payz top-ups) is the single most useful category
+ * for someone holding crypto and no bank, and by raw count it sits near the
+ * bottom.
  */
-const PRIORITY = ['e-money', 'e-commerce', 'games', 'streaming', 'food', 'groceries', 'retail'];
+const PRIORITY = ['e-money', 'e-commerce', 'games', 'streaming', 'food', 'groceries', 'retail', 'entertainment'];
 
-/** Localised label if we have one, otherwise the raw id, tidied. */
+/** How many brands a category shows before "see all". */
+const PREVIEW = 6;
+
 function catLabel(t, id) {
   const key = `shop.cat.${id}`;
   const s = t(key);
-  return s === key ? id.replace(/[_-]/g, ' ') : s;
-}
-
-/** yyyy-mm-dd for an <input type="date">, n days from today. */
-function isoDay(offset = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return s === key ? String(id).replace(/[_-]/g, ' ') : s;
 }
 
 export default function Shop() {
@@ -85,30 +79,18 @@ export default function Shop() {
   const [tab, setTab] = useState('cards');
   const [country, setCountry] = useState(() => getShopCountry());
   const [countries, setCountries] = useState([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  const [cat, setCat] = useState(null);
+  /* null = the category overview; a string = that category's own page. */
+  const [openCat, setOpenCat] = useState(null);
   const [query, setQuery] = useState('');
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  /* The opened brand, and its denominations. */
   const [openBrand, setOpenBrand] = useState(null);
   const [products, setProducts] = useState(null);
   const [productsLoading, setProductsLoading] = useState(false);
-
-  /* Flight form. Defaults a week out so the date is never in the past. */
-  const [trip, setTrip] = useState({
-    from: '',
-    to: '',
-    depart: isoDay(7),
-    ret: isoDay(14),
-    adults: 1,
-    cabin: 'economy',
-    round: true,
-    direct: false
-  });
-  /* Stay form. */
-  const [stay, setStay] = useState({ city: '', checkIn: isoDay(7), checkOut: isoDay(10), guests: 2 });
 
   const open = useCallback(
     (url) => {
@@ -128,11 +110,17 @@ export default function Shop() {
     };
   }, []);
 
+  /* Ask on first visit rather than defaulting to a country that is probably
+     wrong — a card bought for the wrong one is usually unrefundable. */
+  useEffect(() => {
+    if (!country) setPickerOpen(true);
+  }, [country]);
+
   useEffect(() => {
     if (!country) return undefined;
     let alive = true;
     setLoading(true);
-    setCat(null);
+    setOpenCat(null);
     fetchShopCatalogue(country)
       .then((d) => alive && setData(d))
       .finally(() => alive && setLoading(false));
@@ -141,7 +129,6 @@ export default function Shop() {
     };
   }, [country]);
 
-  /* Load denominations when a brand is opened. */
   useEffect(() => {
     if (!openBrand || !country) return undefined;
     let alive = true;
@@ -155,99 +142,135 @@ export default function Shop() {
     };
   }, [openBrand, country]);
 
-  /*
-   * Categories, priority ones first. Built from what the country actually
-   * returned — a hard-coded menu would offer "groceries" in a country with no
-   * grocery brand and render an empty filter.
-   */
+  const rows = data?.rows ?? [];
+
   const categories = useMemo(() => {
-    const rows = data?.categories ?? [];
-    const inPriority = PRIORITY.map((id) => rows.find((r) => r.id === id)).filter(Boolean);
-    const rest = rows.filter((r) => !PRIORITY.includes(r.id));
-    return [...inPriority, ...rest];
+    const cs = data?.categories ?? [];
+    const first = PRIORITY.map((id) => cs.find((c) => c.id === id)).filter(Boolean);
+    return [...first, ...cs.filter((c) => !PRIORITY.includes(c.id))];
   }, [data]);
 
-  /*
-   * Search and filter.
-   *
-   * Matches the brand name AND its category tags, so "paypal" finds the
-   * Rewarble PayPal cards and "gaming" finds Steam even though neither word is
-   * in the other's name. Case- and space-insensitive because people type
-   * "app store" for "App Store & iTunes".
-   */
-  const shown = useMemo(() => {
-    let rows = data?.rows ?? [];
-    if (cat) rows = rows.filter((r) => r.category === cat || r.tags.includes(cat));
+  const inCat = useCallback(
+    (r, id) => r.category === id || r.tags.includes(id),
+    []
+  );
+
+  /* Search matches name AND tags, so "paypal" finds the Rewarble cards and
+     "gaming" finds Steam even though neither word is in the other's name. */
+  const searched = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter((r) => {
-        const hay = `${r.name} ${r.category} ${r.tags.join(' ')}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
-    return rows;
-  }, [data, cat, query]);
+    if (!q) return null;
+    return rows.filter((r) => `${r.name} ${r.category} ${r.tags.join(' ')}`.toLowerCase().includes(q));
+  }, [rows, query]);
+
+  const catRows = useMemo(
+    () => (openCat ? rows.filter((r) => inCat(r, openCat)) : []),
+    [rows, openCat, inCat]
+  );
 
   const pickCountry = (cc) => {
     haptic?.('select');
     setShopCountry(cc);
     setCountry(cc);
     setOpenBrand(null);
+    setQuery('');
+    setPickerOpen(false);
   };
 
-  /* ─── COUNTRY PICKER — the whole screen until it is answered ───────────── */
+  const countryName = countries.find((c) => c.code === country)?.name ?? country;
+
+  const header = (
+    <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
+      <div className="row" style={{ gap: 10 }}>
+        <button
+          className="icon-btn"
+          onClick={() => {
+            /* Inside a category, back means "back to the shop", not "leave". */
+            if (openCat) setOpenCat(null);
+            else navigate(-1);
+          }}
+          aria-label={t('common.back')}
+        >
+          <IconChevronLeft width={18} height={18} />
+        </button>
+        <div>
+          <h1 className="h1" style={{ fontSize: 19 }}>
+            {openCat ? catLabel(t, openCat) : t('shop.title')}
+          </h1>
+          <p className="prose-sm">{openCat ? countryName : t('shop.subtitle')}</p>
+        </div>
+      </div>
+      {country && (
+        <button className="chip" onClick={() => setPickerOpen(true)}>
+          <span aria-hidden="true">{flagOf(country)}</span> {country}
+        </button>
+      )}
+    </motion.div>
+  );
+
+  const brandSheet = (
+    <Sheet open={Boolean(openBrand)} onClose={() => setOpenBrand(null)} title={openBrand?.name ?? ''}>
+      {productsLoading ? (
+        <div className="stack" style={{ gap: 8 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skel" style={{ height: 44 }} />
+          ))}
+        </div>
+      ) : !products?.rows?.length ? (
+        <p className="faint">{t('shop.noDenoms')}</p>
+      ) : (
+        <>
+          <p className="section-label">{t('shop.amounts')}</p>
+          <div className="shop-denoms">
+            {products.rows.map((p) => (
+              <div key={p.id} className="shop-denom">
+                <div className="shop-denom-face">{p.label}</div>
+                <div className="shop-denom-coin">
+                  {p.coinAmount ? `${p.coinAmount} ${p.coin}` : '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* The issuer's own redemption note — Steam's says region-locked, VPN
+          will not work, no refunds. Passed through verbatim; it is the single
+          most useful sentence available and it is not ours to summarise. */}
+      {products?.note && <p className="notice" style={{ marginTop: 12 }}>{products.note}</p>}
+
+      {openBrand && (
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 12 }}
+          onClick={() => open(brandUrl(country, openBrand.family))}
+        >
+          {t('shop.buyAt', { brand: openBrand.name })}
+        </button>
+      )}
+    </Sheet>
+  );
+
+  /* ── no country yet: the picker is the screen ───────────────────────────── */
   if (!country) {
     return (
       <PageTransition>
-        <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
-          <div className="row" style={{ gap: 10 }}>
-            <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-              <IconChevronLeft width={18} height={18} />
-            </button>
-            <div>
-              <h1 className="h1" style={{ fontSize: 19 }}>{t('shop.title')}</h1>
-              <p className="prose-sm">{t('shop.subtitle')}</p>
-            </div>
-          </div>
-        </motion.div>
-
+        {header}
         <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
           <div className="sheen" />
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('shop.pickCountry')}</div>
           <p className="prose-sm" style={{ margin: 0 }}>{t('shop.pickCountryWhy')}</p>
         </motion.section>
-
-        {/*
-          A plain <select>. `select` is styled globally in index.css, and a
-          custom dropdown for 233 options on a phone would be worse than the
-          native one in every way that matters — search, scroll momentum,
-          accessibility.
-        */}
-        <div className="stack" style={{ gap: 9 }}>
-          <select
-            defaultValue=""
-            onChange={(e) => e.target.value && pickCountry(e.target.value)}
-            aria-label={t('shop.pickCountry')}
-          >
-            <option value="" disabled>{t('shop.chooseOne')}</option>
-            {countries.map((c) => (
-              <option key={c.code} value={c.code}>{c.name}</option>
-            ))}
-          </select>
-          {!countries.length && <div className="skel" style={{ height: 44 }} />}
-        </div>
-
-        {/*
-          ─── WHERE THIS DOES NOT WORK, IN A BOX ─────────────────────────────
-          Asked for: «یک صفحه باز شونده بزار برای محدودیت های کاربران زیاد
-          توضیحات ننویس و هشدار ننویس» — a collapsible for the restrictions,
-          and do not write a lot of explanation or warnings.
-
-          So it is one folded box with a short factual list, not a wall of
-          text. It exists because Iran genuinely is absent from the provider's
-          233-country list, and an Iranian user who taps through to an empty
-          catalogue would reasonably think the app is broken.
-        */}
+        <button className="btn btn-primary" onClick={() => setPickerOpen(true)}>
+          {t('shop.chooseOne')}
+        </button>
+        <ShopCountrySheet
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          countries={countries}
+          value={country}
+          onPick={pickCountry}
+        />
         <InfoBox title={t('shop.limits.title')} tone="info" id="shop-limits">
           <p>{t('shop.limits.body')}</p>
         </InfoBox>
@@ -255,33 +278,27 @@ export default function Shop() {
     );
   }
 
-  const countryName = countries.find((c) => c.code === country)?.name ?? country;
+  /* ── one category, full page ────────────────────────────────────────────── */
+  if (openCat) {
+    return (
+      <PageTransition>
+        {header}
+        <p className="faint" style={{ fontSize: 11.5 }}>
+          {t('shop.count', { n: catRows.length, country: countryName })}
+        </p>
+        <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
+          {catRows.map((b) => (
+            <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
+          ))}
+        </motion.div>
+        {brandSheet}
+      </PageTransition>
+    );
+  }
 
   return (
     <PageTransition>
-      <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 10 }}>
-          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-            <IconChevronLeft width={18} height={18} />
-          </button>
-          <div>
-            <h1 className="h1" style={{ fontSize: 19 }}>{t('shop.title')}</h1>
-            <p className="prose-sm">{t('shop.subtitle')}</p>
-          </div>
-        </div>
-        {/* Country is always visible and always one tap from changing, because
-            it silently determines everything below it. */}
-        <button
-          className="chip"
-          onClick={() => {
-            haptic?.('select');
-            setCountry(null);
-            setOpenBrand(null);
-          }}
-        >
-          {country}
-        </button>
-      </motion.div>
+      {header}
 
       <div className="segmented">
         {TABS.map((k) => (
@@ -302,7 +319,6 @@ export default function Shop() {
 
       {tab === 'cards' ? (
         <>
-          {/* ── search ── */}
           <div className="row" style={{ gap: 8 }}>
             <span className="icon-btn" style={{ pointerEvents: 'none' }}>
               <IconSearch width={16} height={16} />
@@ -316,292 +332,134 @@ export default function Shop() {
             />
           </div>
 
-          {/* ── category filter ── */}
-          {categories.length > 0 && (
-            <div className="tag-scroll">
-              <button className={`tag ${cat === null ? 'active' : ''}`} onClick={() => setCat(null)}>
-                {t('shop.all')}
-              </button>
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  className={`tag ${cat === c.id ? 'active' : ''}`}
-                  onClick={() => setCat(cat === c.id ? null : c.id)}
-                >
-                  {catLabel(t, c.id)}
-                </button>
-              ))}
-            </div>
-          )}
-
           {loading && !data ? (
-            <div className="stack" style={{ gap: 9 }}>
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="skel" style={{ height: 58 }} />
+            <div className="stack" style={{ gap: 12 }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skel" style={{ height: 210, borderRadius: 18 }} />
               ))}
             </div>
           ) : !data?.live ? (
             <p className="notice">{t('shop.unavailable')}</p>
-          ) : !shown.length ? (
+          ) : searched ? (
+            /* Searching flattens the categories — someone typing wants the
+               match, not a tour of the sections it might be in. */
+            !searched.length ? (
+              <div className="empty">
+                <span className="empty-icon">🛍</span>
+                {t('shop.noMatch')}
+              </div>
+            ) : (
+              <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
+                {searched.map((b) => (
+                  <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
+                ))}
+              </motion.div>
+            )
+          ) : !rows.length ? (
             <div className="empty">
               <span className="empty-icon">🛍</span>
-              {query || cat ? t('shop.noMatch') : t('shop.noneHere', { country: countryName })}
+              {t('shop.noneHere', { country: countryName })}
             </div>
           ) : (
             <>
-              <p className="faint" style={{ fontSize: 11.5 }}>
-                {t('shop.count', { n: shown.length, country: countryName })}
-              </p>
-              <motion.div
-                className="stack"
-                style={{ gap: 8 }}
-                variants={stagger}
+              {/*
+                ─── A PICTURE ADVERT, NOT A LINE OF TEXT ───────────────────
+                Asked for: «تبلیغات ... با عکس نه اینکه فقط نوشتاری باشه».
+                Uses a real destination photograph from the provider's CDN
+                rather than an emoji in a gradient box.
+              */}
+              <motion.button
+                className="shop-promo shop-glow"
+                variants={riseIn}
                 initial="hidden"
                 animate="show"
+                onClick={() => setTab('flights')}
               >
-                {shown.map((b) => (
-                  <motion.button
-                    key={b.id}
-                    className="coin-row"
-                    variants={riseIn}
-                    onClick={() => {
-                      haptic?.('select');
-                      setOpenBrand(openBrand?.id === b.id ? null : b);
-                    }}
-                    style={{ width: '100%', textAlign: 'start', opacity: b.outOfStock ? 0.55 : 1 }}
-                  >
-                    {/*
-                      Brand logos come from the provider's CDN and are
-                      validated server-side to that host. `onError` hides a
-                      broken image rather than leaving the browser's grey
-                      placeholder, which reads as an app bug.
-                    */}
-                    {b.logo ? (
-                      <img
-                        src={b.logo}
-                        alt=""
-                        width={34}
-                        height={34}
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                        style={{
-                          borderRadius: 9,
-                          objectFit: 'contain',
-                          background: b.bg || 'var(--bg-raised)',
-                          flexShrink: 0
-                        }}
-                      />
-                    ) : (
-                      <span className="wallet-badge" style={{ fontSize: 12, flexShrink: 0 }}>
-                        {b.name.slice(0, 2).toUpperCase()}
-                      </span>
-                    )}
-                    <div className="coin-meta">
-                      <div className="coin-sym">{b.name}</div>
-                      <div className="coin-name">
-                        {b.min && b.max ? `${b.min} – ${b.max}` : catLabel(t, b.category)}
-                      </div>
-                    </div>
-                    <div className="coin-right">
-                      {b.outOfStock ? (
-                        <span className="pill pill-down" style={{ fontSize: 10 }}>{t('shop.outOfStock')}</span>
-                      ) : (
-                        <span className="pill pill-neutral" style={{ fontSize: 10 }}>
-                          {catLabel(t, b.category)}
-                        </span>
-                      )}
-                    </div>
-                  </motion.button>
-                ))}
-              </motion.div>
-            </>
-          )}
-
-          {/*
-            ─── THE OPENED BRAND ────────────────────────────────────────────
-            Denominations with the REAL stablecoin cost next to the face
-            value. A $50 Steam card costs $53.86 in USDC — that spread is how
-            the provider and we get paid, and hiding it until checkout would
-            be the dishonest choice.
-          */}
-          {openBrand && (
-            <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-              <div className="row-between" style={{ marginBottom: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 13.5 }}>{openBrand.name}</span>
-                <button className="btn btn-sm btn-ghost" style={{ width: 'auto' }} onClick={() => setOpenBrand(null)}>
-                  {t('common.close')}
-                </button>
-              </div>
-
-              {productsLoading ? (
-                <div className="stack" style={{ gap: 8 }}>
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="skel" style={{ height: 38 }} />
-                  ))}
-                </div>
-              ) : !products?.rows?.length ? (
-                <p className="faint">{t('shop.noDenoms')}</p>
-              ) : (
-                <div className="stack" style={{ gap: 7 }}>
-                  {products.rows.map((p) => (
-                    <div key={p.id} className="row-between farm-calc">
-                      <span style={{ fontWeight: 700, fontSize: 12.8 }}>{p.label}</span>
-                      <span className="mono faint" style={{ fontSize: 11.5 }}>
-                        {p.coinAmount ? `${p.coinAmount} ${p.coin}` : '—'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                <img src={FLIGHT_ROUTES[1].img} alt="" loading="lazy" />
+                <span className="shop-promo-txt">
+                  <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
+                  <span className="shop-promo-title">{t('shop.promo.flights')}</span>
+                </span>
+              </motion.button>
 
               {/*
-                The issuer's own redemption note. Steam's says region-locked,
-                VPN will not work, no refunds — the single most useful
-                sentence on the page, so it is passed through verbatim rather
-                than summarised by us.
+                ─── CATEGORY PREVIEWS ───────────────────────────────────────
+                «هر کتگوری چندتا به صورت ورتیکال باشد و بیشتر بره به صفحه ان
+                دسته» — a few per category, and "more" opens that category.
               */}
-              {products?.note && (
-                <p className="notice" style={{ marginTop: 10 }}>{products.note}</p>
-              )}
-
-              <button
-                className="btn btn-primary"
-                style={{ marginTop: 11 }}
-                onClick={() => open(brandUrl(country, openBrand.family))}
-              >
-                {t('shop.buyAt', { brand: openBrand.name })}
-              </button>
-            </motion.section>
+              {categories.map((c) => {
+                const list = rows.filter((r) => inCat(r, c.id));
+                if (!list.length) return null;
+                return (
+                  <section key={c.id}>
+                    <div className="shop-cat-row">
+                      <p className="section-label" style={{ margin: 0 }}>{catLabel(t, c.id)}</p>
+                      {list.length > PREVIEW && (
+                        <button className="shop-more" onClick={() => setOpenCat(c.id)}>
+                          {t('shop.seeAll', { n: list.length })}
+                        </button>
+                      )}
+                    </div>
+                    <motion.div className="shop-rail" variants={stagger} initial="hidden" animate="show">
+                      {list.slice(0, PREVIEW).map((b) => (
+                        <ShopTile
+                          key={b.id}
+                          brand={b}
+                          open={openBrand?.id === b.id}
+                          onClick={() => setOpenBrand(b)}
+                        />
+                      ))}
+                    </motion.div>
+                  </section>
+                );
+              })}
+            </>
           )}
-
-          <AdBanner slot="swap" />
         </>
       ) : tab === 'flights' ? (
         <>
-          {/*
-            ─── ORIGIN, DESTINATION, DATE — the form that was asked for ─────
-            «برای بلیط ها امکان مبدا و مقصد و تاریخ باشد».
-
-            City names rather than IATA codes, because that is what the
-            provider's own URLs use (`new_york-to-london`) and what people
-            know. The route is what survives reliably into their search page;
-            the dates are passed too and are a bonus if their picker reads
-            them.
-          */}
           <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
             <div className="sheen" />
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('shop.flight.title')}</div>
             <p className="prose-sm" style={{ margin: 0 }}>{t('shop.flight.body')}</p>
           </motion.section>
 
-          <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-            <div className="stack" style={{ gap: 9 }}>
-              <div>
-                <p className="section-label">{t('shop.flight.from')}</p>
-                <input
-                  type="text"
-                  value={trip.from}
-                  onChange={(e) => setTrip({ ...trip, from: e.target.value })}
-                  placeholder={t('shop.flight.fromHint')}
-                />
-              </div>
-              <div>
-                <p className="section-label">{t('shop.flight.to')}</p>
-                <input
-                  type="text"
-                  value={trip.to}
-                  onChange={(e) => setTrip({ ...trip, to: e.target.value })}
-                  placeholder={t('shop.flight.toHint')}
-                />
-              </div>
-
-              <div className="row" style={{ gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <p className="section-label">{t('shop.flight.depart')}</p>
-                  <input
-                    type="date"
-                    value={trip.depart}
-                    min={isoDay(0)}
-                    onChange={(e) => setTrip({ ...trip, depart: e.target.value })}
-                  />
-                </div>
-                {trip.round && (
-                  <div style={{ flex: 1 }}>
-                    <p className="section-label">{t('shop.flight.return')}</p>
-                    <input
-                      type="date"
-                      value={trip.ret}
-                      /* Cannot return before departing. Enforced rather than
-                         validated after the fact. */
-                      min={trip.depart || isoDay(0)}
-                      onChange={(e) => setTrip({ ...trip, ret: e.target.value })}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="row" style={{ gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <p className="section-label">{t('shop.flight.passengers')}</p>
-                  <select
-                    value={trip.adults}
-                    onChange={(e) => setTrip({ ...trip, adults: Number(e.target.value) })}
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p className="section-label">{t('shop.flight.cabin')}</p>
-                  <select value={trip.cabin} onChange={(e) => setTrip({ ...trip, cabin: e.target.value })}>
-                    {['economy', 'premium_economy', 'business', 'first'].map((c) => (
-                      <option key={c} value={c}>{t(`shop.flight.cabinOpt.${c}`)}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                <button
-                  className={`tag ${trip.round ? 'active' : ''}`}
-                  onClick={() => setTrip({ ...trip, round: !trip.round })}
-                >
-                  {t('shop.flight.roundTrip')}
-                </button>
-                <button
-                  className={`tag ${trip.direct ? 'active' : ''}`}
-                  onClick={() => setTrip({ ...trip, direct: !trip.direct })}
-                >
-                  {t('shop.flight.directOnly')}
-                </button>
-              </div>
-
-              <button
-                className="btn btn-primary"
-                disabled={!trip.from.trim() || !trip.to.trim()}
-                onClick={() =>
-                  open(
-                    flightUrl({
-                      from: trip.from,
-                      to: trip.to,
-                      depart: trip.depart,
-                      ret: trip.round ? trip.ret : null,
-                      adults: trip.adults,
-                      cabin: trip.cabin,
-                      direct: trip.direct
-                    })
-                  )
-                }
+          <p className="section-label">{t('shop.flight.popular')}</p>
+          {/*
+            Two columns of photographs instead of a form. Each one lands on a
+            page where the route is already chosen — the thing the form failed
+            to do.
+          */}
+          <motion.div
+            className="stack"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}
+            variants={stagger}
+            initial="hidden"
+            animate="show"
+          >
+            {FLIGHT_ROUTES.map((r) => (
+              <motion.button
+                key={r.id}
+                className="shop-dest"
+                variants={riseIn}
+                onClick={() => open(flightUrl(r.slug))}
               >
-                {t('shop.flight.search')}
-              </button>
-            </div>
-          </motion.section>
+                <img src={r.img} alt="" loading="lazy" />
+                <span className="shop-dest-veil" />
+                <span className="shop-dest-txt">
+                  <span className="shop-dest-city">{r.city}</span>
+                  <span className="shop-dest-country">{r.country}</span>
+                  <span className="shop-dest-route">
+                    {r.from} <span aria-hidden="true">→</span> {r.to}
+                  </span>
+                </span>
+              </motion.button>
+            ))}
+          </motion.div>
 
-          <AdBanner slot="p2p" />
+          <button className="btn btn-ghost" onClick={() => open(flightUrl(null))}>
+            {t('shop.flight.other')}
+          </button>
         </>
       ) : (
         <>
@@ -611,91 +469,65 @@ export default function Shop() {
             <p className="prose-sm" style={{ margin: 0 }}>{t('shop.stay.body')}</p>
           </motion.section>
 
-          <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-            <div className="stack" style={{ gap: 9 }}>
-              <div>
-                <p className="section-label">{t('shop.stay.where')}</p>
-                <input
-                  type="text"
-                  value={stay.city}
-                  onChange={(e) => setStay({ ...stay, city: e.target.value })}
-                  placeholder={t('shop.stay.whereHint')}
-                />
-              </div>
-              <div className="row" style={{ gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <p className="section-label">{t('shop.stay.checkIn')}</p>
-                  <input
-                    type="date"
-                    value={stay.checkIn}
-                    min={isoDay(0)}
-                    onChange={(e) => setStay({ ...stay, checkIn: e.target.value })}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p className="section-label">{t('shop.stay.checkOut')}</p>
-                  <input
-                    type="date"
-                    value={stay.checkOut}
-                    min={stay.checkIn || isoDay(0)}
-                    onChange={(e) => setStay({ ...stay, checkOut: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div>
-                <p className="section-label">{t('shop.stay.guests')}</p>
-                <select value={stay.guests} onChange={(e) => setStay({ ...stay, guests: Number(e.target.value) })}>
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                className="btn btn-primary"
-                disabled={!stay.city.trim()}
-                onClick={() => open(stayUrl(stay))}
+          <p className="section-label">{t('shop.stay.popular')}</p>
+          <motion.div
+            className="stack"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}
+            variants={stagger}
+            initial="hidden"
+            animate="show"
+          >
+            {STAY_CITIES.map((c) => (
+              <motion.button
+                key={c.id}
+                className="shop-dest"
+                variants={riseIn}
+                onClick={() => open(stayCityUrl(c.cc, c.slug))}
               >
-                {t('shop.stay.search')}
-              </button>
-            </div>
-          </motion.section>
+                <img src={c.img} alt="" loading="lazy" />
+                <span className="shop-dest-veil" />
+                <span className="shop-dest-txt">
+                  <span className="shop-dest-city">{c.city}</span>
+                  <span className="shop-dest-country">{c.country}</span>
+                </span>
+              </motion.button>
+            ))}
+          </motion.div>
 
-          {/* eSIM lives here rather than as a fourth tab: it is a travel
-              purchase, and it is one link with no search of its own. */}
+          <button className="btn btn-ghost" onClick={() => open(stayCityUrl(null, null))}>
+            {t('shop.stay.other')}
+          </button>
+
           <motion.button
-            className="wallet-option"
+            className="shop-promo shop-glow"
             variants={riseIn}
             initial="hidden"
             animate="show"
-            whileTap={{ scale: 0.985 }}
             onClick={() => open(esimUrl())}
           >
-            <span className="wallet-badge" style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>eSIM</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('shop.esim.name')}</span>
-              <span className="set-row-sub">{t('shop.esim.desc')}</span>
+            <img src={STAY_CITIES[0].img} alt="" loading="lazy" />
+            <span className="shop-promo-txt">
+              <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
+              <span className="shop-promo-title">{t('shop.esim.name')}</span>
             </span>
-            <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
           </motion.button>
-
-          <AdBanner slot="signals" />
         </>
       )}
 
-      {/*
-        ─── RESTRICTIONS, FOLDED ─────────────────────────────────────────────
-        Asked for exactly this shape: a collapsible for the limits, and NOT a
-        lot of explanation or warnings. One box, short factual list, closed.
-      */}
+      {brandSheet}
+
+      <ShopCountrySheet
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        countries={countries}
+        value={country}
+        onPick={pickCountry}
+      />
+
       <InfoBox title={t('shop.limits.title')} tone="info" id="shop-limits">
         <p>{t('shop.limits.body')}</p>
       </InfoBox>
 
-      {/*
-        Whether we earn, derived from the configured partner id rather than
-        hard-coded — the bug caught on Perp and again on Avantis, where the
-        code earned while the copy denied it.
-      */}
       <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>
         {shopEarns() ? t('shop.earning') : t('shop.noEarn')}
       </p>

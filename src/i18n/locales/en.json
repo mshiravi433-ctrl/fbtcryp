@@ -2899,34 +2899,15 @@
     },
     "flight": {
       "title": "Fly, paid in crypto",
-      "body": "Hundreds of airlines. Tickets issued by the airline through an IATA-accredited partner.",
-      "from": "From",
-      "fromHint": "Istanbul",
-      "to": "To",
-      "toHint": "Dubai",
-      "depart": "Departure",
-      "return": "Return",
-      "passengers": "Passengers",
-      "cabin": "Cabin",
-      "cabinOpt": {
-        "economy": "Economy",
-        "premium_economy": "Premium economy",
-        "business": "Business",
-        "first": "First"
-      },
-      "roundTrip": "Round trip",
-      "directOnly": "Direct only",
-      "search": "Search flights"
+      "body": "Real routes, one tap. You land on a page with the route already chosen — no form to fill twice.",
+      "popular": "Popular routes",
+      "other": "Search another route"
     },
     "stay": {
       "title": "Hotels and rentals",
-      "body": "Book a stay and pay in stablecoins.",
-      "where": "Where",
-      "whereHint": "Dubai",
-      "checkIn": "Check in",
-      "checkOut": "Check out",
-      "guests": "Guests",
-      "search": "Search stays"
+      "body": "Pick a city and the hotel search opens already filtered to it.",
+      "popular": "Popular destinations",
+      "other": "Search another city"
     },
     "esim": {
       "name": "eSIM data",
@@ -2937,6 +2918,15 @@
       "body": "The shop is run by Cryptorefills and serves 233 countries. Iran, Syria, Cuba and North Korea are not among them — the catalogue will be empty there. Turkey, the UAE, Iraq, Lebanon, Russia, Europe and Asia all work. Some individual cards are region-locked and a VPN will not change that."
     },
     "earning": "We earn a share when you buy through here. It costs you nothing extra.",
-    "noEarn": "We earn nothing from these links today."
+    "noEarn": "We earn nothing from these links today.",
+    "searchCountry": "Search 233 countries…",
+    "popular": "Popular",
+    "allCountries": "All countries",
+    "seeAll": "See all {{n}}",
+    "amounts": "Amounts",
+    "promo": {
+      "kicker": "Pay with crypto",
+      "flights": "Fly anywhere, paid in stablecoins"
+    }
   }
 }

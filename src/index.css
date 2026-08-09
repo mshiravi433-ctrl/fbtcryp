@@ -7651,3 +7651,344 @@ body { overflow-x: clip; }
     animation: none;
   }
 }
+
+/* ============================================================================
+   SHOP
+   ----------------------------------------------------------------------------
+   The first version was a list of 34px logos with 12px labels. The owner's
+   verdict was blunt and correct: «خیلی کوچیکه عکس ها را بگتر کن» — everything
+   too small — plus the country dropdown was ugly, the categories were a flat
+   tag row, and the whole thing did not read as a shop.
+
+   This is a rebuild against how a real storefront works: big imagery, one
+   thing per row, category pages you drill into, and motion that confirms a
+   tap rather than decorating the page.
+   ========================================================================== */
+
+/* ── country picker ─────────────────────────────────────────────────────────
+   Replaces a <select> holding 233 options. A native dropdown on a phone is a
+   full-screen scroll of unlabelled text; this is a searchable grid of flags. */
+.cpick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 9px;
+}
+
+.cpick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 13px 8px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--bg-raised);
+  cursor: pointer;
+  transition: border-color .16s ease, transform .16s ease, background .16s ease;
+}
+
+.cpick:active { transform: scale(.96); }
+
+.cpick[data-on='true'] {
+  border-color: var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 12%, var(--bg-raised));
+}
+
+/* The flag is the whole point of the tile, so it is sized like a target and
+   not like an icon. */
+.cpick-flag { font-size: 30px; line-height: 1; }
+
+.cpick-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.3;
+  color: var(--text-2);
+  /* Two lines maximum: "United Arab Emirates" must not push the grid out of
+     alignment with its neighbours. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── category cards ─────────────────────────────────────────────────────────
+   Asked for: «هر کتگوری چندتا به صورت ورتیکال باشد و بیشتر بره به صفحه ان
+   دسته» — show a few per category, then "more" goes to that category's page.
+   These are the section headers that open one. */
+.shop-cat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 9px;
+}
+
+.shop-more {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--rgb-1);
+  background: none;
+  border: 0;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+
+/* ── brand tile ─────────────────────────────────────────────────────────────
+   One image per row with the name under it, as asked: «هر خط یک عکس و زیرش
+   خیلی کوچک نباشه». The logo gets a 16:9 stage on the brand's own background
+   colour, which is how gift-card art is meant to be seen. */
+.shop-tile {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  cursor: pointer;
+  text-align: start;
+  position: relative;
+  transition: border-color .18s ease, transform .18s ease;
+}
+
+.shop-tile:active { transform: scale(.985); }
+
+.shop-tile[data-open='true'] { border-color: var(--rgb-1); }
+
+.shop-shot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.shop-shot img {
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
+  /* The logo files are trimmed inconsistently; a little breathing room stops
+     the wide ones touching the edges. */
+  padding: 4px;
+}
+
+/* Readable monogram when a logo 404s or the brand has none. */
+.shop-shot-fb {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-1);
+  opacity: .75;
+}
+
+.shop-tile-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 14px, not the 12px that prompted the complaint. */
+.shop-tile-name {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-tile-sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* Out of stock is dimmed, never hidden — someone hunting a brand should learn
+   it is unavailable rather than assume we never carried it. */
+.shop-tile[data-stock='false'] .shop-shot { opacity: .38; filter: grayscale(1); }
+
+/* ── horizontal rail, for category previews ─────────────────────────────── */
+.shop-rail {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  /* Bleed to the screen edge so the row reads as scrollable rather than as a
+     clipped grid. */
+  margin-inline: -16px;
+  padding-inline: 16px;
+  scrollbar-width: none;
+}
+
+.shop-rail::-webkit-scrollbar { display: none; }
+
+.shop-rail > * {
+  flex: 0 0 46%;
+  scroll-snap-align: start;
+}
+
+/* ── destination card, for flights and stays ────────────────────────────────
+   A real photograph with the route over it. This is the replacement for the
+   form that made you type a route and then type it again on their site. */
+.shop-dest {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  cursor: pointer;
+  text-align: start;
+  transition: transform .18s ease;
+}
+
+.shop-dest:active { transform: scale(.98); }
+
+.shop-dest img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Gradient rather than a flat overlay: the city name has to stay legible over
+   a photograph whose brightness we do not control. */
+.shop-dest-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .35) 42%, rgba(0, 0, 0, 0) 72%);
+}
+
+.shop-dest-txt {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 11px 12px;
+  color: #fff;
+}
+
+.shop-dest-city { font-size: 15px; font-weight: 800; line-height: 1.25; }
+.shop-dest-country { font-size: 11px; opacity: .8; margin-top: 1px; }
+
+.shop-dest-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
+  backdrop-filter: blur(6px);
+}
+
+/* ── promo banner with real artwork ─────────────────────────────────────────
+   Asked for: «تبلیغات برای هر صفحه چندتا باشه با عکس نه اینکه فقط نوشتاری
+   باشه». The existing AdBanner is text and an emoji; this one is a picture. */
+.shop-promo {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  aspect-ratio: 21 / 9;
+  cursor: pointer;
+  text-align: start;
+  transition: transform .18s ease;
+}
+
+.shop-promo:active { transform: scale(.99); }
+
+.shop-promo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shop-promo-txt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px 14px;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0, 0, 0, .8), rgba(0, 0, 0, .1) 65%);
+}
+
+.shop-promo-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  opacity: .85;
+}
+
+.shop-promo-title { font-size: 15.5px; font-weight: 800; line-height: 1.3; margin-top: 2px; }
+
+/* ── animated border, reusing the existing @property --angle ────────────────
+   Deliberately NOT a new animation system. `--angle` and `rotate-angle` are
+   already defined near line 494 for .card-rgb, and `steps(90)` keeps this at
+   ~10 repaints a second instead of 60 — the same budget decision made for the
+   advert borders. */
+.shop-glow { position: relative; }
+
+.shop-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--angle), var(--rgb-1), var(--rgb-3), var(--rgb-5), var(--rgb-1));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rotate-angle 9s steps(90) infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-glow::before { animation: none; }
+}
+
+@supports not (background: conic-gradient(from var(--angle), red, blue)) {
+  .shop-glow::before {
+    background: linear-gradient(120deg, var(--rgb-1), var(--rgb-3), var(--rgb-5));
+    animation: none;
+  }
+}
+
+/* ── denomination chips ─────────────────────────────────────────────────── */
+.shop-denoms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.shop-denom {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--bg-raised);
+  text-align: center;
+}
+
+.shop-denom-face { font-size: 14.5px; font-weight: 800; }
+.shop-denom-coin { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); margin-top: 2px; }

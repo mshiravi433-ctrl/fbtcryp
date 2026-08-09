@@ -9823,7 +9823,7 @@ export default function run() {
     t('...the products route is mounted', /['"`]\/api\/shop\/products['"`]/.test(appSrc));
     t('...the countries route is mounted', /['"`]\/api\/shop\/countries['"`]/.test(appSrc));
     t('...the client library calls them', /shop\/catalogue/.test(client) && /shop\/products/.test(client));
-    t('...the page renders the catalogue', /shown\.map/.test(page));
+    t('...the page renders the catalogue', /ShopTile/.test(page) && /list\.slice\(0, PREVIEW\)/.test(page));
     t('...and the route is reachable', /path="\/shop"/.test(read('src/App.jsx')));
     t('...and it is in the menu', /to: '\/shop'/.test(read('src/components/MoreSheet.jsx')));
 
@@ -9883,33 +9883,93 @@ export default function run() {
     /* Out of stock is shown, not hidden: someone hunting for a brand should
        learn it is unavailable rather than conclude we never carried it. */
     t('out-of-stock brands are flagged rather than dropped',
-      /outOfStock: b\.is_out_of_stock === true/.test(srv) && /shop\.outOfStock/.test(page));
+      /outOfStock: b\.is_out_of_stock === true/.test(srv) &&
+      /shop\.outOfStock/.test(read('src/components/ShopTile.jsx')));
 
     /*
-     * ─── FLIGHTS ARE NOT IN THE REST API ────────────────────────────────────
-     * Their developer reference lists what it covers and then says "Not
-     * covered here: Flights, Stays". So there is no endpoint returning fares,
-     * and rendering a fake results list would be the worst version of this.
-     * The form collects origin/destination/date and hands over a PREFILLED
-     * search page — verified live that /flights/new_york-to-london opens with
-     * JFK and LHR already chosen.
+     * ─── THE FORM WAS THE BUG, AND IT IS GONE ───────────────────────────────
+     * v1 built a query string from origin/destination/dates. The owner caught
+     * the flaw in one sentence: you fill it in here, then fill in the SAME
+     * thing again on their site. True — their date pickers are React
+     * components that ignore query parameters entirely, so the form cost time
+     * and bought nothing.
+     *
+     * Only the PATH survives into their page, verified live:
+     *   /en/flights/new_york-to-london -> JFK and LHR pre-selected
+     *   /en/stays/ae/dubai             -> opens on Dubai
+     *
+     * So the form is replaced by real routes and cities with photographs.
+     * Asserted as an ABSENCE too, because re-adding a date field is exactly
+     * the "helpful" change that would bring the problem back.
      */
-    t('the flight form collects origin, destination and dates',
-      /shop\.flight\.from/.test(page) && /shop\.flight\.to/.test(page) && /type="date"/.test(page));
-    t('...and builds the route slug the provider actually reads',
-      /\$\{a\}-to-\$\{b\}/.test(links));
-    t('...and no fake fare list is invented',
-      !/fare|itinerary|airlineResults/i.test(page));
-    /* A return date before departure is prevented, not validated afterwards. */
-    t('...the return date cannot precede departure', /min=\{trip\.depart/.test(page));
-    t('...and search is disabled until both cities are given',
-      /disabled=\{!trip\.from\.trim\(\) \|\| !trip\.to\.trim\(\)\}/.test(page));
+    t('the flight date form is gone', !/type="date"/.test(page));
+    t('...and no dead query parameters are sent',
+      !/departure_date|check_in|cabin_class/.test(links));
+    t('...real routes are offered instead', /FLIGHT_ROUTES\.map/.test(page));
+    t('...and real cities for stays', /STAY_CITIES\.map/.test(page));
+    t('...each landing on a page that is already narrowed',
+      /flightUrl\(r\.slug\)/.test(page) && /stayCityUrl\(c\.cc, c\.slug\)/.test(page));
+    t('...and no fake fare list is invented', !/fare|itinerary|airlineResults/i.test(page));
+
+    /*
+     * Slugs are whitelisted by SHAPE, not trusted. A bad one must fall back to
+     * the index page rather than build a URL that 404s — or worse, escape the
+     * path with `../`.
+     */
+    const destSrc = read('src/lib/shopDestinations.js');
+    t('flight slugs are validated before use', /\^\[a-z0-9_,-\]\+\$/.test(links));
+    t('...and stay slugs too', /\^\[a-z\]\{2\}\$/.test(links));
+    /* Every route/city here was read off their own pages; a typo is a 404. */
+    t('the destinations use the provider CDN images',
+      /cdn\.cryptorefills\.com\/images\/destinations/.test(destSrc));
+    t('...and the flight slugs match their "x-to-y" format',
+      /new_york-to-london/.test(destSrc) && /-to-/.test(destSrc));
+
+    /*
+     * ─── THE REVIEW POINTS, EACH ASSERTED ───────────────────────────────────
+     * Every one of these was a specific complaint, so each gets a guard rather
+     * than a promise.
+     */
+    const css = read('src/index.css');
+
+    /* «خیلی کوچیکه عکس ها را بگتر کن» — a 16:9 stage, not a 34px icon. */
+    t('brand art gets a real stage', /\.shop-shot \{[\s\S]{0,200}?aspect-ratio: 16 \/ 9/.test(css));
+    /* «زیرش خیلی کوچک نباشه» — 14px, up from 12. */
+    t('...and the brand name is not tiny',
+      /\.shop-tile-name \{[\s\S]{0,120}?font-size: 14px/.test(css));
+
+    /* «انتخاب کشورها حالت کشویی زشته» — no native select for 233 options. */
+    t('the country picker is not a raw dropdown', !/<select/.test(page));
+    t('...it is a searchable sheet with flags',
+      existsSync('src/components/ShopCountrySheet.jsx') &&
+      /cpick-flag/.test(read('src/components/ShopCountrySheet.jsx')));
+    t('...with a shortlist ahead of all 233', /POPULAR_COUNTRIES/.test(read('src/components/ShopCountrySheet.jsx')));
+
+    /* «هر کتگوری چندتا ... و بیشتر بره به صفحه ان دسته» */
+    t('categories show a preview then open their own page',
+      /const PREVIEW = \d+/.test(page) && /setOpenCat\(c\.id\)/.test(page));
+    t('...and the category page renders that category only', /catRows\.map/.test(page));
+    /* Back inside a category must return to the shop, not leave the screen. */
+    t('...and back exits the category first', /if \(openCat\) setOpenCat\(null\)/.test(page));
+
+    /* «تبلیغات ... با عکس نه اینکه فقط نوشتاری باشه» */
+    t('the promo banners carry real artwork',
+      /shop-promo/.test(page) && /\.shop-promo img/.test(css));
+
+    /* Animation reuses the existing @property, rather than adding a second
+       animation system for one screen. */
+    t('the animated border reuses the existing rotate-angle',
+      /\.shop-glow::before[\s\S]{0,400}?animation: rotate-angle [\d.]+s steps\(\d+\)/.test(css));
+    t('...and stops under reduced motion',
+      /prefers-reduced-motion[\s\S]{0,400}?\.shop-glow::before \{ animation: none/.test(css));
 
     /* Attribution in ONE place, so it cannot be forgotten on a new link —
        the Avantis bug, where a working link credited nobody. */
     t('every outbound link is built in one module', /function withRef/.test(links));
-    t('...and the partner id is a compiled default, not env-only',
-      /VITE_CRYPTOREFILLS_PARTNER_ID'\) \|\| ''/.test(links));
+    t('...and the registered partner id is the compiled default',
+      /VITE_CRYPTOREFILLS_PARTNER_ID'\) \|\| 'mYf7QvsDKa'/.test(links));
+    t('...on the server side too, so catalogue calls are attributed',
+      /CRYPTOREFILLS_PARTNER_ID \|\| 'mYf7QvsDKa'/.test(srv));
     t('...with the disclosure derived from it rather than hard-coded',
       /shopEarns\(\)/.test(page) && /Boolean\(CR_PARTNER\)/.test(links));
 
@@ -9925,8 +9985,21 @@ export default function run() {
     t('the restrictions are in a collapsible box', /id="shop-limits"/.test(page));
     t('...and there is no wall of warning notices', (page.match(/notice-danger/g) ?? []).length === 0);
 
-    /* Revenue was the point. The ad slots stay. */
-    t('the shop carries ad slots', /<AdBanner/.test(page));
+    /*
+     * Revenue was the point, and the adverts stay — but as PICTURES now, which
+     * is what was asked for: «تبلیغات ... با عکس نه اینکه فقط نوشتاری باشه».
+     * The old text-and-emoji AdBanner is deliberately not used here.
+     */
+    /*
+     * Counts the BANNER, not the class name. My first version matched
+     * /shop-promo/ which also hits shop-promo-txt, -kicker and -title — four
+     * matches per banner — so deleting one still left the count above the
+     * threshold and the mutation test passed when it should have failed.
+     */
+    t('the shop carries more than one picture advert',
+      (page.match(/className="shop-promo shop-glow"/g) ?? []).length >= 2);
+    t('...and each is an image, not an emoji in a box',
+      (page.match(/className="shop-promo shop-glow"[\s\S]{0,300}?<img/g) ?? []).length >= 2);
 
     for (const lang of ['en', 'fa', 'ar']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
@@ -9934,8 +10007,11 @@ export default function run() {
       t(`${lang} has the shop copy`, Boolean(S?.title && S?.subtitle && S?.pickCountry));
       t(`${lang} labels all three tabs`,
         Boolean(S?.tab?.cards && S?.tab?.flights && S?.tab?.stays));
-      t(`${lang} has the flight form labels`,
-        Boolean(S?.flight?.from && S?.flight?.to && S?.flight?.depart && S?.flight?.search));
+      t(`${lang} labels the destination sections`,
+        Boolean(S?.flight?.popular && S?.stay?.popular));
+      t(`${lang} has the picture-promo copy`, Boolean(S?.promo?.kicker && S?.promo?.flights));
+      /* Dead keys from the removed form must not linger. */
+      t(`${lang} dropped the old form copy`, S?.flight?.depart === undefined);
       t(`${lang} names the countries that do not work`,
         /Iran|ایران|إيران/.test(String(S?.limits?.body ?? '')));
       t(`${lang} explains why the country matters`,

@@ -62,7 +62,13 @@ const API = 'https://api.cryptorefills.com';
  * automatic at cryptorefills.com/account, and until it is set the API still
  * answers, we simply earn nothing.
  */
-const PARTNER_ID = String(process.env.CRYPTOREFILLS_PARTNER_ID || '').trim();
+/*
+ * REGISTERED 2026-08-10 from the owner's own account. Compiled in as a default
+ * for the same reason the Avantis and UTEX codes are: a value that lives only
+ * in an env var is a value the Android build never sees, because Vite bakes
+ * the empty default in and the agent token cannot edit build-apk.yml.
+ */
+const PARTNER_ID = String(process.env.CRYPTOREFILLS_PARTNER_ID || 'mYf7QvsDKa').trim();
 
 const APP_VERSION = String(process.env.APP_VERSION_NAME || '1.0').trim();
 const TIMEOUT_MS = 12_000;

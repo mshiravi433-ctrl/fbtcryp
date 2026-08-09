@@ -20,10 +20,9 @@ const env = (k) => (typeof import.meta !== 'undefined' ? import.meta.env?.[k] : 
  * value that lives only in Vercel earns on the website and nothing in the
  * APK, and the agent token cannot edit workflow files.
  *
- * Empty until registered. Registration is free and instant at
- * cryptorefills.com/account — no approval step.
+ * REGISTERED 2026-08-10 as `mYf7QvsDKa`, from the owner's own account.
  */
-export const CR_PARTNER = env('VITE_CRYPTOREFILLS_PARTNER_ID') || '';
+export const CR_PARTNER = env('VITE_CRYPTOREFILLS_PARTNER_ID') || 'mYf7QvsDKa';
 
 const BASE = 'https://www.cryptorefills.com/en';
 
@@ -59,67 +58,51 @@ export function brandUrl(countryCode, family) {
 }
 
 /**
- * ─── FLIGHTS ARE NOT IN THE REST API ────────────────────────────────────────
- * Checked before building anything: the developer reference lists what it
- * covers — "Gift cards, Mobile top-ups, eSIM purchases" — and then states
- * "Not covered here: Flights, Stays". There is no endpoint to search flights,
- * so the app CANNOT render live fares. Faking a results list would be the
- * worst possible version of this feature.
+ * ─── FLIGHTS ARE NOT IN THE REST API, AND THE FORM WAS THE WRONG ANSWER ─────
+ * Their developer reference lists what it covers and then says plainly "Not
+ * covered here: Flights, Stays". There is no endpoint returning fares.
  *
- * What exists is a search page that accepts a route in its path. Verified
- * live: /en/flights/new_york-to-london loads with JFK and LHR already
- * selected in the form. So the app collects origin, destination, date and
- * passengers, and hands over a page that opens with the search prefilled.
+ * The first version of this file built a query string from a form: origin,
+ * destination, departure date, return date, passengers, cabin. The owner
+ * found the flaw immediately —
  *
- * The slug is city names joined by "-to-", lowercase, spaces as underscores —
- * read off their own destination links (`washington,_dc-to-toronto`).
+ *   «پس از انتخاب مقصد و مبدا و تاریخ وارد صفحه سایت میشه که همون ها را
+ *    انتخاب کنی درست نیست»
+ *
+ * — you fill it in here, then fill in the same thing again on their site.
+ * That is exactly what happened, because their date pickers are React
+ * components that do not hydrate from query parameters. The parameters were
+ * accepted and ignored, so the form cost the user time and bought nothing.
+ *
+ * What DOES survive is the PATH. Verified live: /en/flights/new_york-to-london
+ * opens with JFK and LHR already selected. So the app offers real routes and
+ * passes only the slug, which actually works.
+ *
+ * @param slug e.g. `new_york-to-london`, or null for the flights home page.
  */
-export function flightUrl({ from, to, depart, ret, adults, cabin, direct } = {}) {
-  const slug = (v) =>
-    String(v ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9,\s_-]/g, '')
-      .replace(/\s+/g, '_');
-
-  const a = slug(from);
-  const b = slug(to);
-  const path = a && b ? `${BASE}/flights/${a}-to-${b}` : `${BASE}/flights`;
-
-  try {
-    const u = new URL(path);
-    /*
-     * Query parameters are passed on a best-effort basis. Their form reads the
-     * ROUTE from the path reliably; the date fields are a React date picker
-     * and may or may not hydrate from the query. Passing them costs nothing
-     * and cannot break the page, and the route — the tedious part — always
-     * survives.
-     */
-    if (depart) u.searchParams.set('departure_date', depart);
-    if (ret) u.searchParams.set('return_date', ret);
-    if (adults && Number(adults) > 1) u.searchParams.set('adults', String(Number(adults)));
-    if (cabin && cabin !== 'economy') u.searchParams.set('cabin_class', cabin);
-    if (direct) u.searchParams.set('direct', 'true');
-    if (CR_PARTNER) u.searchParams.set('ref', CR_PARTNER);
-    return u.toString();
-  } catch {
-    return withRef(path);
-  }
+export function flightUrl(slug) {
+  const s = String(slug ?? '').trim();
+  /*
+   * Whitelist the shape rather than the value: lowercase letters, digits,
+   * underscore, comma and hyphen are everything their own slugs use
+   * (`washington,_dc-to-toronto`). Anything else falls back to the index page
+   * rather than building a URL that 404s.
+   */
+  if (!s || !/^[a-z0-9_,-]+$/.test(s)) return withRef(`${BASE}/flights`);
+  return withRef(`${BASE}/flights/${s}`);
 }
 
-/** Stays. Same shape, same caveat: a search page, not an API. */
-export function stayUrl({ city, checkIn, checkOut, guests } = {}) {
-  try {
-    const u = new URL(`${BASE}/stays`);
-    if (city) u.searchParams.set('location', String(city).slice(0, 80));
-    if (checkIn) u.searchParams.set('check_in', checkIn);
-    if (checkOut) u.searchParams.set('check_out', checkOut);
-    if (guests && Number(guests) > 1) u.searchParams.set('guests', String(Number(guests)));
-    if (CR_PARTNER) u.searchParams.set('ref', CR_PARTNER);
-    return u.toString();
-  } catch {
-    return withRef(`${BASE}/stays`);
-  }
+/**
+ * One city's hotel page.
+ *
+ * Their format is /en/stays/{cc}/{city} — verified live that
+ * /en/stays/ae/dubai opens on Dubai with the filter panel ready.
+ */
+export function stayCityUrl(cc, slug) {
+  const c = String(cc ?? '').trim().toLowerCase();
+  const s = String(slug ?? '').trim();
+  if (!/^[a-z]{2}$/.test(c) || !/^[a-z0-9_.,-]+$/.test(s)) return withRef(`${BASE}/stays`);
+  return withRef(`${BASE}/stays/${c}/${s}`);
 }
 
 export function esimUrl() {
