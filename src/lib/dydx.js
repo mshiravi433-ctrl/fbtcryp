@@ -14,7 +14,7 @@
  */
 
 export const DYDX_BUILDER_ADDRESS = 'dydx17493m25rh59j2sf2525r49htr2cva5rqnf76r7';
-export const DYDX_BUILDER_FEE_PPM = 500; // 5 bps = 500 parts per million
+export const DYDX_BUILDER_FEE_PPM = 800; // 8 bps = 800 parts per million — raised per request for three new pages (افق جهانی / مدار dYdX / تالار مشتقه)
 /* Kept for the server-side documentation and diagnostics; browser reads use
    the same-origin proxy below so the indexer never has to satisfy CORS. */
 export const DYDX_INDEXER = 'https://indexer.dydx.trade';
