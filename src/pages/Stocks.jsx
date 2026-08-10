@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,17 @@ import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient
  */
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 import { SPECULATION_ENABLED } from '../lib/features';
+import lazyRetry from '../lib/lazyRetry';
+
+/*
+ * These are tab routes, not imports. The Stocks page is already a lazy route,
+ * but importing the three heavy screens here would still put all of their
+ * code—and dYdX's SDK—behind the first Stocks request. Keep each screen in its
+ * own chunk and fetch it only after the user selects that tab.
+ */
+const LazyOstium = SPECULATION_ENABLED ? lazyRetry(() => import('./Ostium')) : null;
+const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
+const LazyDerivatives = SPECULATION_ENABLED ? lazyRetry(() => import('./DerivativesDashboard')) : null;
 
 /**
  * STOCKS — tokenized equities, RWA sector tokens, and the honest limits.
@@ -78,6 +89,9 @@ const ISSUERS = [
 
 /** Sizes for the depth gate. Deliberately the same set the Farm screen uses. */
 const AMOUNTS = [100, 1000, 5000];
+const STOCK_TABS = SPECULATION_ENABLED
+  ? ['equity', 'rwa', 'ostium', 'dydx', 'derivatives']
+  : ['equity', 'rwa'];
 
 export default function Stocks() {
   const { t } = useTranslation();
@@ -233,32 +247,16 @@ export default function Stocks() {
         <p className="muted">{t('stocks.subtitle')}</p>
       </motion.div>
 
-      {/* Tokenised shares above are ownership-like instruments; Ostium is the
-          separate leveraged derivative path. Keeping it a clearly labelled
-          doorway rather than mixing its rows into the share list preserves
-          the distinction the earlier stock-page work insisted on. */}
-      {SPECULATION_ENABLED && <motion.button
-        className="card card-rgb"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        whileTap={{ scale: 0.985 }}
-        onClick={() => navigate('/ostium')}
-        style={{ width: '100%', textAlign: 'start', cursor: 'pointer' }}
-      >
-        <div className="sheen" />
-        <div className="row-between">
-          <div>
-            <div style={{ fontWeight: 700 }}>{t('ostium.title')}</div>
-            <div className="faint">{t('ostium.subtitle')}</div>
-          </div>
-          <span style={{ fontSize: 20 }}>›</span>
-        </div>
-      </motion.button>}
-
-      <div className="segmented">
-        {['equity', 'rwa'].map((k) => (
-          <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)} style={{ isolation: 'isolate' }}>
+      <div className="segmented" role="tablist" aria-label={t('stocks.title')}>
+        {STOCK_TABS.map((k) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={tab === k}
+            className={tab === k ? 'active' : ''}
+            onClick={() => setTab(k)}
+            style={{ isolation: 'isolate' }}
+          >
             {tab === k && <SegIndicator id="stk" />}
             {t(`stocks.tab.${k}`)}
           </button>
@@ -574,7 +572,7 @@ export default function Stocks() {
             </p>
           </section>
         </>
-      ) : (
+      ) : tab === 'rwa' ? (
         <>
           <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
             <div className="sheen" />
@@ -653,6 +651,12 @@ export default function Stocks() {
             <p>{t('stocks.kycNotice')}</p>
           </InfoBox>
         </>
+      ) : (
+        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
+          {tab === 'ostium' && LazyOstium && <LazyOstium />}
+          {tab === 'dydx' && LazyDydx && <LazyDydx />}
+          {tab === 'derivatives' && LazyDerivatives && <LazyDerivatives />}
+        </Suspense>
       )}
 
       {/*

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -79,6 +80,18 @@ function stripDisabledLocaleCopy() {
 
 export default defineConfig({
   plugins: [react(), stripDisabledLocaleCopy()],
+
+  /*
+   * `@dydxprotocol/v4-client-js` imports `https-proxy-agent` even though the
+   * browser order path never supplies a Node proxy. Alias that optional helper
+   * to a tiny browser-only implementation so Vite does not pull `net`, `tls`
+   * and `assert` into the dYdX lazy chunk.
+   */
+  resolve: {
+    alias: {
+      'https-proxy-agent': fileURLToPath(new URL('./src/shims/https-proxy-agent.js', import.meta.url))
+    }
+  },
 
   /**
    * Build-time literals.

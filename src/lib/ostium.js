@@ -75,6 +75,7 @@ export const OSTIUM_SPENDER = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7';
  * snapshot below was read from it live before this module was written.
  */
 export const OSTIUM_API = 'https://builder.prod.bedrock.ostium.io';
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 /**
  * The exact function this app encodes.
@@ -432,16 +433,16 @@ export async function buildApproveCollateral({ amountUsd }) {
 /**
  * Live prices, straight from Ostium's keyless market-data API.
  *
- * ─── WHY THIS ONE IS ALLOWED TO BE CLIENT-SIDE ──────────────────────────────
- * The perp and yield screens fetch through our server because their upstream
- * returns the entire universe and would be indefensible on a phone. This
- * response is a few dozen rows — the whole tradable list — so proxying it
- * would add a hop and a cache to save nothing.
- *
- * Returns `{ pairs: [], live: false }` rather than throwing, so a dead feed
- * renders an empty state instead of a crashed screen.
+ * ─── WHY THIS ONE USES OUR SERVER ───────────────────────────────────────────
+ * The response is public and small, but the upstream does not consistently
+ * expose the CORS headers the browser needs. The server proxy keeps this read
+ * same-origin and caches the short price snapshot for all users. A failed feed
+ * still returns `{ pairs: [], live: false }` rather than crashing the screen.
  */
-const OSTIUM_SUBGRAPH = `${OSTIUM_API}/v1/subgraph/gn`;
+/* Both public reads go through our same-origin proxy. `OSTIUM_API` remains
+   exported as the documented upstream, but is deliberately not fetched from
+   browser code so CORS and regional network policy cannot break the screen. */
+const OSTIUM_SUBGRAPH = `${API_BASE}/ostium/subgraph`;
 
 /*
  * The Builder API intentionally keeps /v1/prices small; pair ids, fee rates
@@ -578,7 +579,7 @@ export async function getOstiumPrices({ timeout = 12000 } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(`${OSTIUM_API}/v1/prices`, {
+    const res = await fetch(`${API_BASE}/ostium/prices`, {
       signal: ctrl.signal,
       headers: { accept: 'application/json' }
     });

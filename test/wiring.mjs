@@ -9983,8 +9983,9 @@ export default function run() {
      */
     const css = read('src/index.css');
     const modernShop = read('src/styles/shop-modern.css');
-    t('the modern storefront layer is loaded after the shared stylesheet',
-      /styles\/shop-modern\.css/.test(read('src/main.jsx')));
+    t('the modern storefront layer is loaded only with the lazy shop route',
+      !/styles\/shop-modern\.css/.test(read('src/main.jsx')) &&
+      /styles\/shop-modern\.css/.test(read('src/pages/Shop.jsx')));
     t('mobile products use a two-column grid and wide web grows to three',
       /repeat\(2, minmax\(0, 1fr\)\)/.test(modernShop) &&
       /repeat\(3, minmax\(0, 1fr\)\)/.test(modernShop));
@@ -10750,6 +10751,51 @@ export default function run() {
       /کلید API/.test(doc) && /غیرکاستدیال/.test(doc));
     t('...and carries the 25x arithmetic',
       /۲۵ برابر/.test(doc));
+  }
+
+  /* ------------------- stocks venue tabs and CORS proxies ------------------ */
+  {
+    const stocks = read('src/pages/Stocks.jsx');
+    const appSrc = read('server/app.js');
+    const dydxClient = read('src/lib/dydx.js');
+    const ostiumClient = read('src/lib/ostium.js');
+    const vite = read('vite.config.js');
+    const sw = read('public/sw.js');
+
+    t('Stocks exposes the three venue tabs',
+      /'ostium', 'dydx', 'derivatives'/.test(stocks) &&
+      /stocks\.tab\.\$\{k\}/.test(stocks));
+    t('venue tabs lazy-load their pages',
+      /lazyRetry\(\(\) => import\('\.\/Ostium'\)\)/.test(stocks) &&
+      /lazyRetry\(\(\) => import\('\.\/Dydx'\)\)/.test(stocks) &&
+      /lazyRetry\(\(\) => import\('\.\/DerivativesDashboard'\)\)/.test(stocks));
+
+    t('dYdX exposes all three same-origin public routes',
+      /app\.get\('\/api\/dydx\/markets'/.test(appSrc) &&
+      /app\.get\('\/api\/dydx\/orderbook\/:ticker'/.test(appSrc) &&
+      /app\.get\('\/api\/dydx\/account\/:address\/:number'/.test(appSrc));
+    t('dYdX browser reads use the same-origin API',
+      /API_BASE.*\/api/.test(dydxClient) &&
+      /API_BASE}\/dydx\/markets/.test(dydxClient) &&
+      /API_BASE}\/dydx\/orderbook/.test(dydxClient) &&
+      /API_BASE}\/dydx\/account/.test(dydxClient) &&
+      !/DYDX_INDEXER}\/v4\//.test(dydxClient));
+
+    t('Ostium exposes same-origin prices and subgraph routes',
+      /app\.get\('\/api\/ostium\/prices'/.test(appSrc) &&
+      /app\.post\('\/api\/ostium\/subgraph'/.test(appSrc));
+    t('Ostium browser reads use the proxy rather than CORS upstream',
+      /API_BASE}\/ostium\/prices/.test(ostiumClient) &&
+      /API_BASE}\/ostium\/subgraph/.test(ostiumClient) &&
+      !/fetch\(`\$\{OSTIUM_API\}/.test(ostiumClient));
+
+    t('dYdX proxy has a browser https-proxy-agent shim',
+      existsSync('src/shims/https-proxy-agent.js') &&
+      /https-proxy-agent/.test(vite) &&
+      /src\/shims\/https-proxy-agent\.js/.test(vite) &&
+      /class HttpsProxyAgent/.test(read('src/shims/https-proxy-agent.js')));
+    t('the service-worker shell cache moved to v3',
+      /fbt-shell-v3/.test(sw) && !/fbt-shell-v2/.test(sw));
   }
 
   return rows;

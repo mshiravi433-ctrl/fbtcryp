@@ -932,7 +932,10 @@
     "subtitle": "Tokenized real-world assets.",
     "tab": {
       "rwa": "RWA tokens",
-      "equity": "Tokenized equity"
+      "equity": "Tokenized equity",
+      "ostium": "أسواق Ostium الحقيقية",
+      "dydx": "dYdX",
+      "derivatives": "المشتقات"
     },
     "rwaTitle": "Real-world assets on-chain",
     "rwaBody": "RWA protocols bring treasury bills, credit and commodities onto the blockchain. Their governance tokens trade like any other crypto asset and you can swap them here.",

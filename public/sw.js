@@ -10,8 +10,8 @@
 
 /*
  * ─── THE VERSION SUFFIX IS LOAD-BEARING ─────────────────────────────────────
- * Bumped v1 -> v2 so the `activate` handler below deletes the old cache. A
- * v1 cache can be holding an index.html from a previous deploy, and that HTML
+ * Bumped v2 -> v3 so the `activate` handler below deletes the old cache. A
+ * v2 cache can be holding an index.html from a previous deploy, and that HTML
  * names chunk files (CoinDetail-<hash>.js) the server no longer has. Serving
  * it produces a 404 on the dynamic import, which throws past <Suspense> and
  * lands the user on the crash screen -- reported as «بعضی اوقات ... کرش
@@ -20,7 +20,7 @@
  *
  * Bump this whenever the shell caching strategy changes.
  */
-const SHELL = 'fbt-shell-v2';
+const SHELL = 'fbt-shell-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
