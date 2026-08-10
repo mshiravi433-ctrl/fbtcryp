@@ -125,11 +125,34 @@ export default function Dydx() {
           </div>
         </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('dydx.risk')}</div>
         </motion.div>
 
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
+        {/* راهنمای مراحل — داخل باکس بسته‌شونده، بعد از اتصال هم درست کنترل می‌کند */}
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
+          <InfoBox title="مراحل کار — چطور پیش می‌رود؟" tone="info" id="dydx-steps">
+            <ol style={{ margin: 0, paddingInlineStart: 18, display: 'grid', gap: 7, fontSize: 12.5, lineHeight: 1.9 }}>
+              <li><strong>اتصال کیف پول</strong> — کیف پول EVM را وصل کن و پیام آنبوردینگ dYdX را امضا کن. کلید dYdX فقط در حافظه می‌ماند.</li>
+              <li><strong>انتخاب بازار و اندازه</strong> — بازار (مثلاً BTC-USD)، جهت (لانگ/شورت) و اندازه را وارد کن. تا اندازه ننویسی دکمهٔ ادامه فعال نمی‌شود — این طبیعی است.</li>
+              <li><strong>بررسی</strong> — نوشنال و کارمزد (۰٫۰۵٪) را ببین و روی «بررسی سفارش» بزن.</li>
+              <li><strong>تأیید نهایی</strong> — در شیت تأیید، ریسک را بخوان و «تأیید» را بزن تا سفارش واقعی روی dYdX Chain برود.</li>
+              <li>بعد از ارسال، هش تراکنش و پوزیشن‌های باز پایین صفحه می‌آید. اگر موجودی کافی نباشد، پیام «وثیقه کافی نیست» می‌بینی — یعنی باید حساب dYdX را شارژ کنی.</li>
+            </ol>
+            {dydxAddress && !canReview && (
+              <p className="notice" style={{ marginTop: 10 }}>
+                کیف پول وصل است. برای ادامه، <strong>اندازه</strong> را وارد کن (مثلاً ۰٫۰۱ BTC). دکمه تا وقتی اندازه صفر است غیرفعال می‌ماند تا سفارش خالی نفرستی.
+              </p>
+            )}
+            {!dydxAddress && (
+              <p className="faint" style={{ marginTop: 8, fontSize: 11.5 }}>
+                هنوز وصل نیستی — اول «اتصال dYdX» را بزن. اگر کیف پول وصل نیست، اول کیف پول را وصل کن.
+              </p>
+            )}
+          </InfoBox>
+        </motion.div>
+
+      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
         <div className="sheen" />
         <div className="row-between">
           <div>
@@ -151,8 +174,8 @@ export default function Dydx() {
         <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
       </motion.section>
 
-      {!live ? <p className="notice">{t('dydx.marketUnavailable')}</p> : (
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      {!live ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
+        <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
           <label className="field-label">{t('dydx.market')}</label>
           <select value={market?.ticker || ''} onChange={(e) => setTicker(e.target.value)}>
             {markets.filter((m) => m.status === 'ACTIVE').map((m) => <option value={m.ticker} key={m.ticker}>{m.ticker}</option>)}
@@ -189,10 +212,10 @@ export default function Dydx() {
         </motion.section>
       )}
 
-      {result && <div className="notice"><strong>{t('dydx.submitted')}</strong>{result.hash && <div className="mono faint" style={{ marginTop: 5, wordBreak: 'break-all' }}>{result.hash}</div>}</div>}
+      {result && <div className="notice" style={{ marginTop: 16 }}><strong>{t('dydx.submitted')}</strong>{result.hash && <div className="mono faint" style={{ marginTop: 5, wordBreak: 'break-all' }}>{result.hash}</div>}</div>}
 
-      {dydxAddress && <section>
-        <p className="section-label">{t('dydx.positions')}</p>
+      {dydxAddress && <section style={{ marginTop: 18 }}>
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('dydx.positions')}</p>
         {!accountLive ? <p className="notice">{t('dydx.accountUnavailable')}</p> : positions.length === 0 ? <div className="empty">{t('dydx.noPositions')}</div> : (
           <div className="stack" style={{ gap: 8 }}>{positions.map((p) => <div className="card card-tight" key={p.market}>
             <div className="row-between"><strong>{p.market}</strong><span className={`pill ${p.side === 'LONG' ? 'pill-up' : 'pill-down'}`}>{p.side}</span></div>
@@ -202,11 +225,11 @@ export default function Dydx() {
         )}
       </section>}
 
-      <InfoBox title={t('dydx.builderTitle')} tone="info" id="dydx-builder">
+      <div style={{ marginTop: 18 }}><InfoBox title={t('dydx.builderTitle')} tone="info" id="dydx-builder">
         <p>{t('dydx.builderBody', { fee: DYDX_BUILDER_FEE_PPM, address: DYDX_BUILDER_ADDRESS })}</p>
-      </InfoBox>
+      </InfoBox></div>
 
-      <a className="btn btn-ghost" href="https://dydx.trade" target="_blank" rel="noopener noreferrer">{t('dydx.fundAccount')}</a>
+      <a className="btn btn-ghost" href="https://dydx.trade" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box', display: 'block', textAlign: 'center' }}target="_blank" rel="noopener noreferrer">{t('dydx.fundAccount')}</a>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>

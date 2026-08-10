@@ -6,7 +6,11 @@
 .derivatives-hall {
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  /* no overflow:hidden here — it was clipping the board’s glow and making boxes feel boxed-in */
+  overflow: visible;
 }
 
 /* aurora behind the board — two soft orbs drifting */
@@ -50,10 +54,12 @@
   .derivatives-aurora::before, .derivatives-aurora::after { animation: none; }
 }
 
-/* hero — glass + neon edge */
+/* hero */
 .derivatives-hero {
   position: relative;
-  padding: 18px 16px 16px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px 18px 18px;
   border-radius: 22px;
   background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
   border: 1px solid rgba(255,255,255,0.10);
@@ -149,7 +155,9 @@
 /* glass board for table */
 .glass-board {
   position: relative;
-  padding: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 14px 14px;
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.03));
   border: 1px solid rgba(255,255,255,0.08);
@@ -175,9 +183,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 0 2px;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 0 4px;
 }
 .glass-board-label span {
   font-size: 11px;
@@ -192,16 +200,17 @@
   background: linear-gradient(90deg, rgba(255,255,255,0.12), transparent);
 }
 
-/* rows — glass tiles */
+/* rows — tiles */
 .glass-row {
   position: relative;
   display: grid;
   grid-template-columns: 1fr auto auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 11px 12px;
-  border-radius: 14px;
+  box-sizing: border-box;
+  padding: 13px 14px;
+  border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.07);
   background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
   backdrop-filter: blur(10px);
@@ -297,10 +306,12 @@
   margin-top: 3px;
 }
 
-/* detail — big glass card with neon grid */
+/* detail — big card */
 .glass-detail {
   position: relative;
-  padding: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px 14px 16px;
   border-radius: 22px;
   background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.03));
   border: 1px solid rgba(255,255,255,0.09);
@@ -367,11 +378,11 @@
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px;
+  gap: 12px;
 }
 .glass-metric {
   position: relative;
-  padding: 11px 11px;
+  padding: 13px 12px;
   border-radius: 14px;
   background: rgba(255,255,255,0.045);
   border: 1px solid rgba(255,255,255,0.07);
@@ -411,25 +422,36 @@
   color: var(--text-3);
 }
 
-/* funding panel inside glass hall — soften it */
+/* cards inside hall — ensure full width and breathing gap */
 .derivatives-hall .card {
+  width: 100%;
+  box-sizing: border-box;
   background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
   border-color: rgba(255,255,255,0.08);
   backdrop-filter: blur(14px) saturate(1.4);
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
   box-shadow: 0 16px 44px rgba(0,0,0,0.32);
 }
+/* ensure stacked blocks inside hall have real gap even if a card has no inline margin */
+.derivatives-hall > .card + .card,
+.derivatives-hall > .card + .tag-scroll,
+.derivatives-hall > .tag-scroll + .card,
+.derivatives-hall > section + section {
+  margin-top: 16px;
+}
 
-/* notice as glass */
+/* notice */
 .glass-notice {
   position: relative;
-  padding: 12px 13px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px;
   border-radius: 14px;
   background: rgba(0,229,255,0.07);
   border: 1px solid rgba(0,229,255,0.14);
   color: var(--text-2);
-  font-size: 12px;
-  line-height: 1.85;
+  font-size: 12.2px;
+  line-height: 1.9;
   backdrop-filter: blur(10px);
 }
 .glass-notice::before {

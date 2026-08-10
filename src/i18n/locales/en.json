@@ -38,7 +38,7 @@
     "shop": "Shop",
     "ostium": "Global Horizon",
     "dydx": "dYdX Orbit",
-    "derivatives": "Glass Hall"
+    "derivatives": "Derivatives Hall"
   },
   "common": {
     "balance": "Balance",
@@ -1040,7 +1040,7 @@
       "equity": "Tokenized equity",
       "ostium": "Global Horizon",
       "dydx": "dYdX Orbit",
-      "derivatives": "Glass Hall"
+      "derivatives": "Derivatives Hall"
     },
     "rwaTitle": "Real-world assets on-chain",
     "rwaBody": "RWA protocols bring treasury bills, credit and commodities onto the blockchain. Their governance tokens trade like any other crypto asset and you can swap them here.",
@@ -2992,7 +2992,7 @@
   },
   "ostium": {
     "title": "Global Horizon",
-    "subtitle": "Gold, oil, forex, stocks & indices — a glass neon terminal on Arbitrum.",
+    "subtitle": "Gold, oil, forex, stocks & indices — real-world markets on Arbitrum.",
     "live": "Live",
     "offline": "Unavailable",
     "risk": "These are leveraged perpetual derivatives, not the underlying gold, oil or shares. Leverage can liquidate all your collateral. Most retail leveraged traders lose money.",
@@ -3082,7 +3082,7 @@
   },
   "dydx": {
     "title": "dYdX Orbit",
-    "subtitle": "200+ perpetual markets — a neon glass orbit on dYdX Chain, always live.",
+    "subtitle": "200+ perpetual markets on dYdX Chain — always live, directly with your wallet.",
     "live": "Live",
     "offline": "Unavailable",
     "risk": "Perpetuals are leveraged derivatives. You can lose all collateral, and most retail leveraged traders lose money. You do not own the underlying asset.",
@@ -3127,10 +3127,10 @@
     }
   },
   "derivatives": {
-    "title": "Glass Hall",
-    "subtitle": "Live funding, basis & depth — a breathing glass board with soft neon.",
-    "notice": "Board is live data only, not a signal. Basis compares perp oracle to spot; arbitrage is not guaranteed and can widen in stress.",
-    "marketTable": "Markets on the glass board — by open interest",
+    "title": "Derivatives Hall",
+    "subtitle": "Live funding, basis & depth — everything in one board, at a glance.",
+    "notice": "Live data only, not a signal. Basis compares perp to spot; arbitrage is not guaranteed and can widen in stress.",
+    "marketTable": "Markets — by open interest",
     "basis": "Perp basis",
     "perpPrice": "Perpetual price",
     "spotPrice": "Spot reference",

@@ -41,6 +41,16 @@ const friendlyCategory = (raw) => {
   return 'Other';
 };
 
+// توضیح هر دسته برای پاپ‌آپ «هر دسته چیست؟»
+const CATEGORY_HELP = [
+  { id: 'Commodities', fa: 'کالا', icon: '◈', desc: 'طلا، نقره، نفت و فلزات — دارایی‌های فیزیکی با قیمت جهانی. برای حفظ ارزش و تنوع.' },
+  { id: 'Forex', fa: 'فارکس', icon: '◎', desc: 'جفت‌ارزها مثل EUR/USD و GBP/JPY — معاملهٔ نرخ برابری ارزهای جهانی.' },
+  { id: 'Stocks', fa: 'سهام', icon: '⬡', desc: 'سهام شرکت‌های بزرگ آمریکا مثل اپل و تسلا — به شکل پرپچوال با تسویه USDC.' },
+  { id: 'Indices', fa: 'شاخص', icon: '▭', desc: 'شاخص‌های بزرگ مثل S&P 500 و Nasdaq — یک نماد، یک سبد از صدها شرکت.' },
+  { id: 'ETFs', fa: 'صندوق', icon: '⬣', desc: 'صندوق‌های قابل معامله (ETF) — مثل طلا یا اوراق، در یک نماد قابل معامله.' },
+  { id: 'Crypto', fa: 'کریپتو', icon: '⬢', desc: 'کریپتوهای اصلی — با تسویه آنچین روی آربیتروم.' },
+];
+
 const displayError = (e) => {
   const msg = String(e?.shortMessage || e?.reason || e?.message || e || 'TX_FAILED');
   if (/rejected|denied|cancelled/i.test(msg)) return 'USER_REJECTED';
@@ -75,6 +85,7 @@ export default function Ostium() {
   const [managing, setManaging] = useState(null);
   const [manageAction, setManageAction] = useState('close');
   const [manageValue, setManageValue] = useState('100');
+  const [catHelpOpen, setCatHelpOpen] = useState(false);
 
   const loadMarkets = useCallback(async () => {
     setLoading(true);
@@ -335,11 +346,11 @@ export default function Ostium() {
           </div>
         </motion.section>
 
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('ostium.risk')}</div>
         </motion.div>
 
-      <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
         <div className="sheen" />
         <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
           <IconShield width={21} height={21} style={{ color: 'var(--rgb-1)', flexShrink: 0 }} />
@@ -350,15 +361,18 @@ export default function Ostium() {
         </div>
       </motion.section>
 
-      <div className="tag-scroll">
+      <div className="tag-scroll" style={{ gap: 8, paddingBottom: 2, marginTop: 16 }}>
         {categories.map((c) => (
           <button key={c} className={`tag ${category === c ? 'active' : ''}`} onClick={() => setCategory(c)}>
             {t(`ostium.category.${c.toLowerCase()}`, { defaultValue: c })}
           </button>
         ))}
+        <button className="tag" onClick={() => setCatHelpOpen(true)} style={{ borderStyle: 'dashed', gap: 6 }}>
+          <span style={{ fontSize: 12 }}>؟</span> هر دسته چیست؟
+        </button>
       </div>
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
         {loading ? <div className="skel" style={{ height: 240 }} /> : !feedLive ? (
           <div className="empty">
             <span className="empty-icon">⌁</span>
@@ -465,7 +479,7 @@ export default function Ostium() {
       </motion.section>
 
       {txHash && (
-        <div className="notice">
+        <div className="notice" style={{ marginTop: 16 }}>
           <strong>{t('ostium.submitted')}</strong>
           <a className="row" style={{ gap: 6, marginTop: 7 }} href={`https://arbiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
             {t('ostium.viewTransaction')} <IconExternal width={14} height={14} />
@@ -474,8 +488,8 @@ export default function Ostium() {
       )}
 
       {wallet.isConnected && (
-        <section>
-          <div className="row-between">
+        <section style={{ marginTop: 18 }}>
+          <div className="row-between" style={{ marginBottom: 10 }}>
             <p className="section-label">{t('ostium.positions')}</p>
             <button className="tag" onClick={() => getOstiumPositions({ trader: wallet.address, markets }).then(setPositions)}>{t('common.refresh')}</button>
           </div>
@@ -501,15 +515,15 @@ export default function Ostium() {
         </section>
       )}
 
-      <InfoBox title={t('ostium.whatYouTrade')} tone="warn" id="ostium-product">
+      <div style={{ marginTop: 18 }}><InfoBox title={t('ostium.whatYouTrade')} tone="warn" id="ostium-product">
         <p>{t('ostium.derivativeNotice')}</p>
         <p>{t('ostium.rolloverNotice')}</p>
-      </InfoBox>
+      </InfoBox></div>
 
       <button
         className="btn btn-ghost"
         onClick={() => navigate('/swap?chain=42161&to=USDC')}
-        style={{ width: '100%' }}
+        style={{ width: '100%', marginTop: 16, boxSizing: 'border-box' }}
       >
         {t('ostium.getUsdc')}
       </button>
@@ -529,6 +543,25 @@ export default function Ostium() {
       </Sheet>
 
       <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
+
+      {/* پاپ‌آپ توضیح دسته‌ها — کالا، فارکس، سهام، صندوق، کریپتو */}
+      <Sheet open={catHelpOpen} onClose={() => setCatHelpOpen(false)} title="هر دسته چیست؟">
+        <div className="stack" style={{ gap: 10 }}>
+          {CATEGORY_HELP.map((c) => (
+            <div key={c.id} className="card card-tight" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', width: '100%', boxSizing: 'border-box' }}>
+              <span style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--line)', fontSize: 14, flexShrink: 0 }}>{c.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13.5 }}>{c.fa} <span className="faint" style={{ fontWeight: 600, fontSize: 11 }}>• {c.id}</span></div>
+                <p className="muted" style={{ margin: '4px 0 0', fontSize: 12.3, lineHeight: 1.85 }}>{c.desc}</p>
+              </div>
+            </div>
+          ))}
+          <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.8, margin: '4px 0 0' }}>
+            هر دسته قیمت جهانی دارد و روی همین صفحه با USDC و اهرم قابل معامله است. انتخاب دسته فقط فیلتر است — معامله همیشه با همان مراحل انجام می‌شود.
+          </p>
+        </div>
+      </Sheet>
+
       <Sheet open={confirming} onClose={() => !busy && setConfirming(false)} title={t('ostium.confirmTitle')}>
         {market && costs && (
           <div className="card card-tight stack" style={{ gap: 8 }}>

@@ -44,13 +44,12 @@ export default function DerivativesDashboard() {
       <div className="derivatives-hall">
         <div className="derivatives-aurora" aria-hidden="true" />
 
-        {/* HERO — glass + neon */}
+        {/* HERO */}
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div className="derivatives-title">
                 <span className="derivatives-title-glow">{t('derivatives.title')}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1.2 }}>• GLASS HALL</span>
               </div>
               <p className="derivatives-subtitle">{t('derivatives.subtitle')}</p>
             </div>
@@ -61,18 +60,18 @@ export default function DerivativesDashboard() {
           </div>
         </motion.section>
 
-        {/* notice — glass */}
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+        {/* notice */}
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <div className="glass-notice">{t('derivatives.notice')}</div>
         </motion.div>
 
-        {/* funding — stays but inside hall it becomes glass via CSS */}
-        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+        {/* funding */}
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
           <FundingPanel />
         </motion.div>
 
-        {/* BOARD — glass */}
-        <motion.section className="glass-board" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+        {/* BOARD */}
+        <motion.section className="glass-board" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
           <div className="glass-board-label">
             <span>{t('derivatives.marketTable')}</span>
             <i aria-hidden="true" />
@@ -80,24 +79,24 @@ export default function DerivativesDashboard() {
           </div>
 
           {loading ? (
-            <div className="stack" style={{ gap: 8 }}>
+            <div className="stack" style={{ gap: 12 }}>
               {Array.from({ length: 6 }).map((_, i) => (
                 <motion.div
                   key={i}
                   className="skel"
-                  style={{ height: 56, borderRadius: 14 }}
+                  style={{ height: 60, borderRadius: 16 }}
                   animate={{ opacity: [0.45, 0.85, 0.45] }}
                   transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.08 }}
                 />
               ))}
             </div>
           ) : rows.length === 0 ? (
-            <div className="empty" style={{ padding: '18px 0' }}>
+            <div className="empty" style={{ padding: '20px 0' }}>
               <span className="empty-icon">◎</span>
               <span className="muted" style={{ fontSize: 12.5 }}>بازاری برای نمایش نیست — فید لحظه‌ای در دسترس نیست</span>
             </div>
           ) : (
-            <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
+            <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
               {rows.slice(0, 30).map((r) => {
                 const active = selected?.ticker === r.ticker;
                 const basisUp = r.basis == null ? null : r.basis >= 0;
@@ -131,9 +130,9 @@ export default function DerivativesDashboard() {
           )}
         </motion.section>
 
-        {/* DETAIL — big glass card */}
+        {/* DETAIL */}
         {selected && (
-          <motion.section className="glass-detail" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <motion.section className="glass-detail" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18 }}>
             <div className="glass-detail-head">
               <div className="glass-detail-ticker">{selected.ticker}</div>
               <span className="glass-detail-pill">dYdX • PERP</span>
@@ -182,8 +181,8 @@ export default function DerivativesDashboard() {
               </div>
             </div>
 
-            <p className="faint" style={{ marginTop: 12, fontSize: 11, lineHeight: 1.7, position: 'relative' }}>
-              بورد شیشه‌ای است — هر سلول با نئون خودش نفس می‌کشد. سطر انتخاب‌شده لبهٔ نئونی می‌گیرد و بقیه آرام می‌مانند تا چشم فقط روی انتخاب بماند.
+            <p className="faint" style={{ marginTop: 14, fontSize: 11.5, lineHeight: 1.9, position: 'relative' }}>
+              هر سطر با انتخاب تو برجسته می‌شود — بقیه آرام می‌مانند تا تمرکز روی انتخاب بماند. بورد برای خواندن در یک نگاه ساخته شده، نه برای شلوغی.
             </p>
           </motion.section>
         )}
