@@ -15,6 +15,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
 import SegIndicator from '../components/SegIndicator';
 import VerdictPanel from '../components/VerdictPanel';
+import '../styles/docs-modern.css';
 
 const HORIZONS = [
   { days: 1, key: '1D' },
@@ -32,7 +33,7 @@ function Gauge({ score, label, confidence }) {
     score > 40 ? 'var(--up)' : score > 12 ? '#7ee787' : score < -40 ? 'var(--down)' : score < -12 ? '#ff8fa3' : 'var(--rgb-5)';
 
   return (
-    <div style={{ position: 'relative', width: '100%', maxWidth: 250, margin: '0 auto' }}>
+    <div style={{ position: 'relative', width: '100%', maxWidth: 260, margin: '0 auto' }}>
       <svg viewBox="0 0 200 116" style={{ width: '100%', overflow: 'visible' }}>
         <defs>
           <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
@@ -40,18 +41,26 @@ function Gauge({ score, label, confidence }) {
             <stop offset="50%" stopColor="#ffb300" />
             <stop offset="100%" stopColor="#00ff9d" />
           </linearGradient>
+          <filter id="gaugeGlow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
-        <path d="M14 100 A86 86 0 0 1 186 100" fill="none" stroke="rgba(127,127,127,.18)" strokeWidth="13" strokeLinecap="round" />
+        <path d="M14 100 A86 86 0 0 1 186 100" fill="none" stroke="rgba(127,127,127,.14)" strokeWidth="14" strokeLinecap="round" />
         <motion.path
           d="M14 100 A86 86 0 0 1 186 100"
           fill="none"
           stroke="url(#gaugeGrad)"
-          strokeWidth="13"
+          strokeWidth="14"
           strokeLinecap="round"
           strokeDasharray="270"
           initial={{ strokeDashoffset: 270 }}
           animate={{ strokeDashoffset: 270 - 270 * pct }}
           transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+          style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,157,0.25))' }}
         />
         <motion.g
           initial={{ rotate: -90 }}
@@ -59,18 +68,19 @@ function Gauge({ score, label, confidence }) {
           transition={{ type: 'spring', stiffness: 60, damping: 14 }}
           style={{ transformOrigin: '100px 100px' }}
         >
-          <line x1="100" y1="100" x2="100" y2="34" stroke={color} strokeWidth="3.5" strokeLinecap="round" />
-          <circle cx="100" cy="100" r="7" fill={color} />
+          <line x1="100" y1="100" x2="100" y2="30" stroke={color} strokeWidth="3.5" strokeLinecap="round" />
+          <circle cx="100" cy="100" r="8" fill={color} style={{ filter: 'drop-shadow(0 0 6px currentColor)' }} />
+          <circle cx="100" cy="100" r="3" fill="#fff" />
         </motion.g>
       </svg>
 
-      <div style={{ textAlign: 'center', marginTop: -18 }}>
-        <div className="stat-value" style={{ color, fontSize: 30 }}>
+      <div style={{ textAlign: 'center', marginTop: -14 }}>
+        <div className="stat-value" style={{ color, fontSize: 32, fontWeight: 900 }}>
           <AnimatedNumber value={score} format={(v) => (v > 0 ? `+${Math.round(v)}` : String(Math.round(v)))} />
         </div>
         <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>{t(`signals.label.${label}`)}</div>
-        <div className="faint" style={{ marginTop: 3 }}>
-          {t('signals.confidence')}: {confidence}%
+        <div className="faint" style={{ marginTop: 4, fontSize: 12 }}>
+          {t('signals.confidence')}: <span style={{ color: 'var(--text-1)', fontWeight: 700 }}>{confidence}%</span>
         </div>
       </div>
     </div>
@@ -82,37 +92,100 @@ function IndicatorBar({ signal }) {
   const pct = Math.abs(signal.score);
   const positive = signal.score >= 0;
   return (
-    <motion.div variants={riseIn} style={{ marginBottom: 11 }}>
-      <div className="row-between" style={{ marginBottom: 4 }}>
-        <span style={{ fontSize: 12, fontWeight: 600 }}>{t(`signals.ind.${signal.key}`)}</span>
-        <span className={`mono ${positive ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
+    <motion.div variants={riseIn} style={{ marginBottom: 12 }}>
+      <div className="row-between" style={{ marginBottom: 6 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700 }}>{t(`signals.ind.${signal.key}`)}</span>
+        <span className={`mono ${positive ? 'up' : 'down'}`} style={{ fontSize: 11.5, fontWeight: 800 }}>
           {positive ? '+' : ''}{signal.score}
         </span>
       </div>
-      <div style={{ display: 'flex', height: 6, borderRadius: 999, overflow: 'hidden', background: 'rgba(127,127,127,.14)' }}>
+      <div style={{ display: 'flex', height: 7, borderRadius: 999, overflow: 'hidden', background: 'rgba(127,127,127,.12)', padding: 1 }}>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
           {!positive && (
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${pct}%` }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
-              style={{ background: 'var(--down)', borderRadius: 999 }}
+              style={{ background: 'var(--down)', borderRadius: 999, boxShadow: '0 0 8px rgba(255,59,107,0.35)' }}
             />
           )}
         </div>
-        <div style={{ width: 1, background: 'rgba(255,255,255,.25)' }} />
+        <div style={{ width: 2, background: 'rgba(255,255,255,.22)', borderRadius: 2, margin: '0 1px' }} />
         <div style={{ flex: 1 }}>
           {positive && (
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${pct}%` }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
-              style={{ background: 'var(--up)', borderRadius: 999, height: '100%' }}
+              style={{ background: 'var(--up)', borderRadius: 999, height: '100%', boxShadow: '0 0 8px rgba(0,255,157,0.35)' }}
             />
           )}
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function ProjectionCard({ title, sub, projection, hue }) {
+  const { t } = useTranslation();
+  if (!projection) return null;
+  return (
+    <div className="docs-card" style={{ '--card-hue': hue, padding: 16 }} data-open="true">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <span className="docs-icon" style={{ width: 36, height: 36, borderRadius: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 900 }}>{projection.days === 7 ? '۷' : '۳۰'}</span>
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 13.5 }}>{title}</div>
+          <div className="faint" style={{ fontSize: 11.5 }}>{sub}</div>
+        </div>
+        <span className="pill" style={{ background: `color-mix(in srgb, ${hue} 12%, transparent)`, borderColor: `color-mix(in srgb, ${hue} 22%, transparent)`, color: hue, fontSize: 10, fontWeight: 800 }}>
+          {projection.days}D
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 10, alignItems: 'end', marginBottom: 14 }}>
+        <div>
+          <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.low')}</div>
+          <div className="mono down" style={{ fontSize: 13.5, fontWeight: 800, marginTop: 4 }}>${fmtPrice(projection.low)}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.mid')}</div>
+          <div className="mono" style={{ fontSize: 17, fontWeight: 900, marginTop: 4 }}>${fmtPrice(projection.mid)}</div>
+        </div>
+        <div style={{ textAlign: 'end' }}>
+          <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.high')}</div>
+          <div className="mono up" style={{ fontSize: 13.5, fontWeight: 800, marginTop: 4 }}>${fmtPrice(projection.high)}</div>
+        </div>
+      </div>
+
+      <div style={{ position: 'relative', height: 10, borderRadius: 999, background: 'linear-gradient(90deg,var(--down),var(--rgb-5),var(--up))', opacity: 0.85, padding: 2 }}>
+        <div style={{ position: 'absolute', inset: 2, borderRadius: 999, background: 'rgba(0,0,0,0.12)' }} />
+        <motion.div
+          initial={{ left: '50%' }}
+          animate={{ left: '50%' }}
+          style={{
+            position: 'absolute',
+            top: -3,
+            width: 4,
+            height: 16,
+            background: '#fff',
+            borderRadius: 2,
+            boxShadow: '0 0 10px rgba(255,255,255,.9), 0 0 18px currentColor',
+            transform: 'translateX(-50%)'
+          }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+        <span className="faint" style={{ fontSize: 10.5 }}>${fmtPrice(projection.low)}</span>
+        <span className="faint" style={{ fontSize: 10.5 }}>${fmtPrice(projection.high)}</span>
+      </div>
+
+      <p className="notice" style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.8 }}>
+        {t('signals.coneExplain', { p: projection.probability, d: projection.days })}
+      </p>
+    </div>
   );
 }
 
@@ -135,18 +208,6 @@ export default function Signals() {
   const [aiError, setAiError] = useState(null);
 
   const { data: chart } = useChart(coinId, 30);
-  /*
-   * Bitcoin's own chart, over the SAME window, for the macro layer.
-   *
-   * This is what lets the app say something no single-asset indicator can:
-   * how hard this token moves when Bitcoin moves, and whether money is
-   * currently rotating INTO Bitcoin (the phase where a healthy-looking
-   * altcoin chart breaks anyway). Both series must come from the same
-   * endpoint with the same `days` or the returns cannot be paired.
-   *
-   * When the selected coin IS bitcoin this is the same request, so the
-   * poll cache in useMarket serves it without a second network call.
-   */
   const { data: btcChart } = useChart('bitcoin', 30);
   const coin = useMemo(() => (coins ?? []).find((c) => c.id === coinId), [coins, coinId]);
 
@@ -165,6 +226,8 @@ export default function Signals() {
     () => (analysis ? projectRange(analysis, horizon.days) : null),
     [analysis, horizon]
   );
+  const weeklyProjection = useMemo(() => (analysis ? projectRange(analysis, 7) : null), [analysis]);
+  const monthlyProjection = useMemo(() => (analysis ? projectRange(analysis, 30) : null), [analysis]);
 
   const sentiment = useMemo(() => marketSentiment(global), [global]);
 
@@ -172,9 +235,6 @@ export default function Signals() {
     aiStatus().then(setAi);
   }, []);
 
-  // Daily market brief. When a model is configured the server caches it per
-  // 6h window, so it is one call shared by every user; otherwise it is
-  // narrated locally from the same global stats. Either way it renders.
   useEffect(() => {
     if (!global || !coins?.length) return;
     getMarketBrief({ global, top: coins.slice(0, 8), lang: i18n.language })
@@ -182,17 +242,6 @@ export default function Signals() {
       .catch(() => {});
   }, [global, coins, i18n.language]);
 
-  /**
-   * Per-asset outlook.
-   *
-   * No longer gated on a model being configured. The indicators this narrates
-   * are computed locally either way, so gating the narration on a remote key
-   * meant hiding analysis we had already done — the screen said "temporarily
-   * unavailable" when in fact nothing was ever wrong or ever configured.
-   *
-   * `analysis` is passed through so the local narrator has the full signal
-   * breakdown; the remote tiers ignore the extra field.
-   */
   useEffect(() => {
     if (!analysis || !coin) return undefined;
     let alive = true;
@@ -218,18 +267,14 @@ export default function Signals() {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coin?.id, analysis?.score, i18n.language, horizon.days]);
 
-  // brief "scanning" animation whenever the asset changes — signals that the
-  // numbers were recomputed rather than left stale
   useEffect(() => {
     setScanning(true);
     const id = setTimeout(() => setScanning(false), 850);
     return () => clearTimeout(id);
   }, [coinId]);
 
-  /** Top opportunities across the market, ranked by |score| × confidence. */
   const ranked = useMemo(() => {
     if (!coins?.length) return [];
     return coins
@@ -244,43 +289,44 @@ export default function Signals() {
 
   return (
     <PageTransition>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t('signals.title')}</h1>
-        <p className="muted">{t('signals.subtitle')}</p>
-      </motion.div>
+      {/* Hero — glass like docs */}
+      <motion.section className="docs-hero" variants={riseIn} initial="hidden" animate="show">
+        <div className="docs-hero-title">{t('signals.title')}</div>
+        <p className="docs-hero-sub">{t('signals.subtitle')}</p>
+      </motion.section>
 
-      {/* ---------- market sentiment gauge ---------- */}
+      {/* market sentiment — glass */}
       {sentiment && (
-        <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
-          <div className="sheen" />
-          <div className="row-between">
+        <motion.section className="docs-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, '--card-hue': sentiment.score > 55 ? 'var(--up)' : sentiment.score < 45 ? 'var(--down)' : 'var(--rgb-5)', padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
             <div>
-              <div className="faint">{t('signals.marketMood')}</div>
-              <div className="stat-mini" style={{ fontSize: 19 }}>
-                {t(`signals.mood.${sentiment.label}`)}
-              </div>
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7 }}>{t('signals.marketMood')}</div>
+              <div style={{ fontWeight: 900, fontSize: 17, marginTop: 2 }}>{t(`signals.mood.${sentiment.label}`)}</div>
+              <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>کل بازار — یک نگاه</div>
             </div>
             <div
               style={{
-                width: 54,
-                height: 54,
+                width: 62,
+                height: 62,
                 borderRadius: '50%',
                 display: 'grid',
                 placeItems: 'center',
                 fontFamily: 'var(--font-mono)',
-                fontWeight: 700,
-                fontSize: 17,
-                background: `conic-gradient(${sentiment.score > 55 ? 'var(--up)' : sentiment.score < 45 ? 'var(--down)' : 'var(--rgb-5)'} ${sentiment.score}%, rgba(127,127,127,.15) 0)`
+                fontWeight: 800,
+                fontSize: 18,
+                background: `conic-gradient(${sentiment.score > 55 ? 'var(--up)' : sentiment.score < 45 ? 'var(--down)' : 'var(--rgb-5)'} ${sentiment.score}%, rgba(127,127,127,.14) 0)`,
+                padding: 3
               }}
             >
               <span
                 style={{
-                  width: 42,
-                  height: 42,
+                  width: 48,
+                  height: 48,
                   borderRadius: '50%',
                   background: 'var(--bg-panel-solid)',
                   display: 'grid',
-                  placeItems: 'center'
+                  placeItems: 'center',
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)'
                 }}
               >
                 {sentiment.score}
@@ -291,37 +337,40 @@ export default function Signals() {
       )}
 
       {brief && (
-        <motion.section className="card edge-mint card-rgb" variants={riseIn} initial="hidden" animate="show">
-          <div className="aurora" />
-          <div className="row-between" style={{ marginBottom: 7 }}>
-            <span className="field-label" style={{ margin: 0 }}>✦ {t('signals.dailyBrief')}</span>
+        <motion.section className="docs-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, '--card-hue': 'var(--rgb-4)', borderColor: 'rgba(0,255,157,0.14)', background: 'linear-gradient(145deg, rgba(0,255,157,0.07), rgba(255,255,255,0.02))' }}>
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.7, color: 'var(--rgb-4)' }}>✦ {t('signals.dailyBrief')}</span>
             <span className={`pill ${brief.bias === 'bullish' ? 'pill-up' : brief.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`}>
               {t(`signals.bias.${brief.bias}`)}
             </span>
           </div>
-          <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 5 }}>{brief.headline}</div>
-          <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{brief.summary}</p>
+          <div style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.5 }}>{brief.headline}</div>
+          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, marginTop: 6 }}>{brief.summary}</p>
         </motion.section>
       )}
 
-      {/* ---------- asset picker ---------- */}
-      <div className="tag-scroll">
-        {(coins ?? []).slice(0, 14).map((c) => (
-          <button
-            key={c.id}
-            className={`tag ${coinId === c.id ? 'active' : ''}`}
-            onClick={() => {
-              haptic?.('select');
-              setCoinId(c.id);
-            }}
-          >
-            {c.symbol}
-          </button>
-        ))}
-      </div>
+      {/* asset picker — spacious */}
+      <motion.div className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, padding: 14 }}>
+        <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7, marginBottom: 10 }}>انتخاب دارایی</div>
+        <div className="tag-scroll" style={{ gap: 8 }}>
+          {(coins ?? []).slice(0, 14).map((c) => (
+            <button
+              key={c.id}
+              className={`tag ${coinId === c.id ? 'active' : ''}`}
+              onClick={() => {
+                haptic?.('select');
+                setCoinId(c.id);
+              }}
+              style={{ minHeight: 32, padding: '6px 12px', fontSize: 12.5 }}
+            >
+              {c.symbol}
+            </button>
+          ))}
+        </div>
+      </motion.div>
 
-      {/* ---------- the gauge ---------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      {/* gauge — larger, glass */}
+      <motion.section className="docs-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, '--card-hue': 'var(--rgb-1)', padding: 18 }}>
         <AnimatePresence mode="wait">
           {scanning || !analysis ? (
             <motion.div
@@ -329,32 +378,33 @@ export default function Signals() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              style={{ height: 210, display: 'grid', placeItems: 'center', gap: 12 }}
+              style={{ height: 230, display: 'grid', placeItems: 'center', gap: 14 }}
             >
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }}
                 style={{
-                  width: 42,
-                  height: 42,
+                  width: 46,
+                  height: 46,
                   borderRadius: '50%',
-                  border: '3px solid rgba(127,127,127,.2)',
-                  borderTopColor: 'var(--rgb-1)'
+                  border: '3px solid rgba(127,127,127,.14)',
+                  borderTopColor: 'var(--rgb-1)',
+                  boxShadow: '0 0 16px rgba(0,229,255,0.18)'
                 }}
               />
-              <span className="faint">{t('signals.analyzing')}</span>
+              <span className="faint" style={{ fontSize: 12.5 }}>{t('signals.analyzing')}</span>
             </motion.div>
           ) : (
-            <motion.div key="gauge" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-              <div className="row-between" style={{ marginBottom: 6 }}>
-                <div className="row" style={{ gap: 9 }}>
+            <motion.div key="gauge" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}>
+              <div className="row-between" style={{ marginBottom: 12 }}>
+                <div className="row" style={{ gap: 10 }}>
                   <CoinLogo coin={coin} />
                   <div>
-                    <div style={{ fontWeight: 700 }}>{coin?.symbol}</div>
-                    <div className="faint mono">${fmtPrice(coin?.price)}</div>
+                    <div style={{ fontWeight: 800, fontSize: 14 }}>{coin?.symbol}</div>
+                    <div className="faint mono" style={{ fontSize: 11.5 }}>${fmtPrice(coin?.price)}</div>
                   </div>
                 </div>
-                <span className={`pill ${(coin?.change24h ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`}>
+                <span className={`pill ${(coin?.change24h ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 11.5, padding: '4px 9px' }}>
                   {fmtPct(coin?.change24h ?? 0)}
                 </span>
               </div>
@@ -365,20 +415,8 @@ export default function Signals() {
         </AnimatePresence>
       </motion.section>
 
-      {/*
-        ─── THE FULL PICTURE ──────────────────────────────────────────────
-        Placed directly under the gauge and ABOVE the indicator narration on
-        purpose. The gauge is a number; this is the answer. Someone who reads
-        only the first line of this panel and then leaves has understood the
-        situation, which is the whole brief: «هر کسی با هر سوادی بفهمه چخبره».
-
-        It is the only thing on the screen that looks past the asset's own
-        chart — at Bitcoin, at where money is rotating, at how far this token
-        already is from its high — so it belongs above everything that does
-        not.
-      */}
       {analysis && !scanning && (
-        <motion.div variants={riseIn} initial="hidden" animate="show">
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
           <VerdictPanel
             analysis={analysis}
             series={priceSeries}
@@ -389,111 +427,107 @@ export default function Signals() {
         </motion.div>
       )}
 
-      {/* ---------- AI outlook ---------- */}
+      {/* AI outlook — glass */}
       {(
-        <motion.section className="card card-rgb edge-orchid" variants={riseIn} initial="hidden" animate="show">
-          <div className="aurora" />
-          <div className="row-between" style={{ marginBottom: 10 }}>
-            <div className="row" style={{ gap: 8 }}>
+        <motion.section className="docs-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, '--card-hue': 'var(--rgb-2)' }}>
+          <div className="row-between" style={{ marginBottom: 12 }}>
+            <div className="row" style={{ gap: 9 }}>
               <motion.span
                 animate={{ scale: [1, 1.15, 1] }}
                 transition={{ duration: 2.4, repeat: Infinity }}
-                style={{ fontSize: 15 }}
+                style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-2), var(--rgb-1))', color: '#fff', fontSize: 13 }}
               >
                 ✦
               </motion.span>
-              <span style={{ fontWeight: 700, fontSize: 13.5 }}>
+              <span style={{ fontWeight: 800, fontSize: 13.5 }}>
                 {outlook?.source === 'local' ? t('signals.outlookLocal') : t('signals.aiOutlook')}
               </span>
             </div>
             {outlook && (
-              <span className={`pill ${outlook.bias === 'bullish' ? 'pill-up' : outlook.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`}>
+              <span className={`pill ${outlook.bias === 'bullish' ? 'pill-up' : outlook.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`} style={{ fontSize: 11 }}>
                 {t(`signals.bias.${outlook.bias}`)} · {outlook.confidence}%
               </span>
             )}
           </div>
 
           {aiLoading && (
-            <div className="stack" style={{ gap: 8 }}>
+            <div className="stack" style={{ gap: 10 }}>
               {[92, 78, 60].map((w) => (
                 <motion.div
                   key={w}
                   className="skel"
-                  style={{ height: 11, width: `${w}%` }}
+                  style={{ height: 11, width: `${w}%`, borderRadius: 8 }}
                   animate={{ opacity: [0.4, 0.9, 0.4] }}
                   transition={{ duration: 1.4, repeat: Infinity }}
                 />
               ))}
-              <span className="faint" style={{ marginTop: 4 }}>{t('signals.aiThinking')}</span>
+              <span className="faint" style={{ marginTop: 4, fontSize: 12 }}>{t('signals.aiThinking')}</span>
             </div>
           )}
 
-          {aiError && <p className="notice">{t('signals.aiUnavailable')}</p>}
+          {aiError && <p className="notice" style={{ marginTop: 10 }}>{t('signals.aiUnavailable')}</p>}
 
           {outlook && !aiLoading && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.6, marginBottom: 7 }}>
+              <div style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.6, marginBottom: 8 }}>
                 {outlook.headline}
               </div>
-              <p className="muted" style={{ fontSize: 12.4, margin: 0 }}>{outlook.summary}</p>
+              <p className="muted" style={{ fontSize: 12.7, lineHeight: 1.85, margin: 0 }}>{outlook.summary}</p>
 
               {outlook.range?.low != null && (
-                <div className="card card-tight row-between" style={{ marginTop: 11 }}>
-                  <span className="faint">{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
-                  <span className="mono" style={{ fontSize: 12.5 }}>
+                <div className="card card-tight row-between" style={{ marginTop: 14, background: 'rgba(255,255,255,0.04)' }}>
+                  <span className="faint" style={{ fontSize: 11 }}>{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
+                  <span className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>
                     ${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}
                   </span>
                 </div>
               )}
 
               {outlook.drivers?.length > 0 && (
-                <div style={{ marginTop: 11 }}>
-                  <div className="field-label">{t('signals.drivers')}</div>
+                <div style={{ marginTop: 14 }}>
+                  <div className="field-label" style={{ fontSize: 11 }}>{t('signals.drivers')}</div>
                   {outlook.drivers.map((d, i) => (
                     <motion.div
                       key={i}
                       className="row"
-                      style={{ gap: 7, marginTop: 4, alignItems: 'flex-start' }}
+                      style={{ gap: 8, marginTop: 6, alignItems: 'flex-start' }}
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.05 * i }}
                     >
-                      <span className="up" style={{ fontSize: 11 }}>▲</span>
-                      <span className="muted" style={{ fontSize: 12 }}>{d}</span>
+                      <span className="up" style={{ fontSize: 11, marginTop: 2 }}>▲</span>
+                      <span className="muted" style={{ fontSize: 12.5, lineHeight: 1.7 }}>{d}</span>
                     </motion.div>
                   ))}
                 </div>
               )}
 
               {outlook.risks?.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div className="field-label">{t('signals.risks')}</div>
+                <div style={{ marginTop: 12 }}>
+                  <div className="field-label" style={{ fontSize: 11 }}>{t('signals.risks')}</div>
                   {outlook.risks.map((r, i) => (
                     <motion.div
                       key={i}
                       className="row"
-                      style={{ gap: 7, marginTop: 4, alignItems: 'flex-start' }}
+                      style={{ gap: 8, marginTop: 6, alignItems: 'flex-start' }}
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.05 * i }}
                     >
-                      <span className="down" style={{ fontSize: 11 }}>▼</span>
-                      <span className="muted" style={{ fontSize: 12 }}>{r}</span>
+                      <span className="down" style={{ fontSize: 11, marginTop: 2 }}>▼</span>
+                      <span className="muted" style={{ fontSize: 12.5, lineHeight: 1.7 }}>{r}</span>
                     </motion.div>
                   ))}
                 </div>
               )}
 
               {outlook.invalidation && (
-                <p className="notice" style={{ marginTop: 11 }}>
+                <p className="notice" style={{ marginTop: 14, fontSize: 12, lineHeight: 1.8 }}>
                   <strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}
                 </p>
               )}
 
-              {/* Name the source. Attributing a locally-narrated read to a
-                  model would be a small lie that makes every other attribution
-                  in the app worthless. */}
-              <div className="faint" style={{ marginTop: 9, fontSize: 10, lineHeight: 1.7 }}>
+              <div className="faint" style={{ marginTop: 12, fontSize: 10.5, lineHeight: 1.7 }}>
                 {outlook.source === 'local'
                   ? t('signals.aiMetaLocal')
                   : t('signals.aiMeta', { model: outlook.model })}
@@ -503,70 +537,67 @@ export default function Signals() {
         </motion.section>
       )}
 
-      {/* ---------- indicator breakdown ---------- */}
+      {/* indicator breakdown — spacious */}
       {analysis && !scanning && (
-        <motion.section className="card" variants={stagger} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 12 }}>{t('signals.breakdown')}</p>
+        <motion.section className="docs-card" variants={stagger} initial="hidden" animate="show" style={{ marginTop: 14, '--card-hue': 'var(--rgb-3)' }}>
+          <p className="section-label" style={{ marginBottom: 16, fontSize: 11, letterSpacing: 0.8 }}>{t('signals.breakdown')}</p>
           {analysis.signals.map((s) => (
             <IndicatorBar key={s.key} signal={s} />
           ))}
 
-          <div className="grid-2" style={{ gap: 9, marginTop: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
             {analysis.indicators.rsi != null && (
-              <div className="card card-tight">
-                <div className="faint">RSI (14)</div>
-                <div className="mono" style={{ fontSize: 13 }}>{analysis.indicators.rsi.toFixed(1)}</div>
+              <div className="card card-tight" style={{ padding: 12, textAlign: 'center' }}>
+                <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>RSI (14)</div>
+                <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.rsi.toFixed(1)}</div>
               </div>
             )}
             {analysis.indicators.volatility != null && (
-              <div className="card card-tight">
-                <div className="faint">{t('signals.volatility')}</div>
-                <div className="mono" style={{ fontSize: 13 }}>{analysis.indicators.volatility.toFixed(0)}%</div>
+              <div className="card card-tight" style={{ padding: 12, textAlign: 'center' }}>
+                <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.volatility')}</div>
+                <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.volatility.toFixed(0)}%</div>
               </div>
             )}
             {analysis.indicators.support != null && (
-              <div className="card card-tight">
-                <div className="faint">{t('signals.support')}</div>
-                <div className="mono up" style={{ fontSize: 13 }}>${fmtPrice(analysis.indicators.support)}</div>
+              <div className="card card-tight" style={{ padding: 12, textAlign: 'center' }}>
+                <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.support')}</div>
+                <div className="mono up" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.support)}</div>
               </div>
             )}
             {analysis.indicators.resistance != null && (
-              <div className="card card-tight">
-                <div className="faint">{t('signals.resistance')}</div>
-                <div className="mono down" style={{ fontSize: 13 }}>${fmtPrice(analysis.indicators.resistance)}</div>
+              <div className="card card-tight" style={{ padding: 12, textAlign: 'center' }}>
+                <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.resistance')}</div>
+                <div className="mono down" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.resistance)}</div>
               </div>
             )}
           </div>
         </motion.section>
       )}
 
-      {/*
-        ─── THE WEEKLY / MONTHLY VIEW, FOLDED AWAY ──────────────────────────
-        Requested: «در سیگنال، سیگنال هفتگی و ماهانه را بزار داخل باکس باز
-        شونده با شکل قشنگ‌تر».
+      {/* ——— Weekly & Monthly in collapsible boxes ——— */}
+      {analysis && !scanning && weeklyProjection && (
+        <InfoBox title="📅 سیگنال هفتگی — ۷ روز آینده" tone="info" id="signals-weekly">
+          <ProjectionCard title="بازهٔ هفتگی" sub="بر اساس نوسان ۳۰ روزه" projection={weeklyProjection} hue="var(--rgb-1)" />
+        </InfoBox>
+      )}
+      {analysis && !scanning && monthlyProjection && (
+        <InfoBox title="🗓️ سیگنال ماهانه — ۳۰ روز آینده" tone="info" id="signals-monthly">
+          <ProjectionCard title="بازهٔ ماهانه" sub="بر اساس نوسان ۳۰ روزه — بازه وسیع‌تر" projection={monthlyProjection} hue="var(--rgb-2)" />
+        </InfoBox>
+      )}
 
-        This IS the weekly and monthly signal — the 7D and 30D horizons of
-        the projection. It was an always-open card sitting between the
-        indicators and the buy/sell buttons, and it is the single most
-        speculative thing on the page: a volatility range, not a forecast.
-
-        Folding it is the right default for exactly that reason. Someone who
-        wants a price target opens it deliberately; someone reading the
-        indicators is no longer handed a number that looks like a prediction
-        on the way past.
-      */}
+      {/* keep the original horizon selector inside a collapsible too — for daily */}
       {projection && !scanning && (
         <InfoBox title={t('signals.projectionTitle')} tone="info" id="signals-projection">
-        <motion.section className="card card-soft" variants={riseIn} initial="hidden" animate="show">
-          <div className="row-between" style={{ marginBottom: 10 }}>
-            <p className="section-label" style={{ margin: 0 }}>{t('signals.projection')}</p>
+          <div className="row-between" style={{ marginBottom: 14 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{t('signals.projection')}</span>
             <div className="segmented" style={{ width: 'auto' }}>
               {HORIZONS.map((h) => (
                 <button
                   key={h.key}
                   className={horizon.key === h.key ? 'active' : ''}
                   onClick={() => setHorizon(h)}
-                  style={{ isolation: 'isolate', padding: '6px 11px' }}
+                  style={{ isolation: 'isolate', padding: '6px 12px', fontSize: 12 }}
                 >
                   {horizon.key === h.key && <SegIndicator id="hz" />}
                   {h.key}
@@ -574,73 +605,37 @@ export default function Signals() {
               ))}
             </div>
           </div>
-
-          <div className="row-between" style={{ marginBottom: 8 }}>
-            <div>
-              <div className="faint">{t('signals.low')}</div>
-              <div className="mono down" style={{ fontSize: 13 }}>${fmtPrice(projection.low)}</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="faint">{t('signals.mid')}</div>
-              <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>${fmtPrice(projection.mid)}</div>
-            </div>
-            <div style={{ textAlign: 'end' }}>
-              <div className="faint">{t('signals.high')}</div>
-              <div className="mono up" style={{ fontSize: 13 }}>${fmtPrice(projection.high)}</div>
-            </div>
-          </div>
-
-          <div style={{ position: 'relative', height: 8, borderRadius: 999, background: 'linear-gradient(90deg,var(--down),var(--rgb-5),var(--up))', opacity: 0.75 }}>
-            <motion.div
-              initial={{ left: '50%' }}
-              animate={{ left: '50%' }}
-              style={{
-                position: 'absolute',
-                top: -4,
-                width: 3,
-                height: 16,
-                background: '#fff',
-                borderRadius: 2,
-                boxShadow: '0 0 8px rgba(255,255,255,.8)'
-              }}
-            />
-          </div>
-
-          <p className="notice" style={{ marginTop: 12 }}>
-            {t('signals.coneExplain', { p: projection.probability, d: projection.days })}
-          </p>
-        </motion.section>
+          <ProjectionCard title={`بازهٔ ${horizon.key}`} sub={`انتخاب فعلی — ${horizon.days} روز`} projection={projection} hue="var(--rgb-5)" />
         </InfoBox>
       )}
 
       <AdBanner slot="swap" />
 
-      {/* ---------- market scan ---------- */}
+      {/* market scan — spacious */}
       {ranked.length > 0 && (
-        <section>
-          <p className="section-label">{t('signals.topSignals')}</p>
-          <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+        <section style={{ marginTop: 18 }}>
+          <p className="section-label" style={{ marginBottom: 12, fontSize: 11, letterSpacing: 0.8 }}>{t('signals.topSignals')}</p>
+          <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
             {ranked.map(({ coin: c, a }) => (
               <motion.div
                 key={c.id}
-                className="coin-row"
+                className="docs-card"
                 variants={riseIn}
                 onClick={() => {
                   haptic?.('select');
                   setCoinId(c.id);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
+                style={{ '--card-hue': a.score >= 0 ? 'var(--up)' : 'var(--down)', padding: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}
               >
                 <CoinLogo coin={c} />
-                <div className="coin-meta">
-                  <div className="coin-sym">{c.symbol}</div>
-                  <div className="coin-name">{t(`signals.label.${a.label}`)} · {a.confidence}%</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>{c.symbol}</div>
+                  <div className="faint" style={{ fontSize: 11.5 }}>{t(`signals.label.${a.label}`)} · {a.confidence}%</div>
                 </div>
-                <Sparkline data={c.sparkline?.slice(-40) ?? []} up={a.score >= 0} width={52} height={24} />
-                <div className="coin-right">
-                  <div className={`mono ${a.score >= 0 ? 'up' : 'down'}`} style={{ fontSize: 13, fontWeight: 700 }}>
-                    {a.score > 0 ? '+' : ''}{a.score}
-                  </div>
+                <Sparkline data={c.sparkline?.slice(-40) ?? []} up={a.score >= 0} width={56} height={28} />
+                <div className={`mono ${a.score >= 0 ? 'up' : 'down'}`} style={{ fontSize: 15, fontWeight: 900, minWidth: 42, textAlign: 'end' }}>
+                  {a.score > 0 ? '+' : ''}{a.score}
                 </div>
               </motion.div>
             ))}
@@ -648,22 +643,15 @@ export default function Signals() {
         </section>
       )}
 
-      {/*
-        The disclaimer is a paragraph about what these indicators ARE and what
-        they cannot do. It is the last thing on a long page and, as a red
-        block, it was competing with the buy/sell buttons directly beneath it
-        — which is the exact inversion of what a warning is for. Collapsed
-        with an honest title, it gets read; expanded and ignored, it did not.
-      */}
-      <InfoBox title={t('signals.disclaimerTitle')} tone="warn" id="signals-disclaimer">
-        <p>{t('signals.disclaimer')}</p>
+      <InfoBox title={t('signals.disclaimerTitle')} tone="warn" id="signals-disclaimer" style={{ marginTop: 18 }}>
+        <p style={{ fontSize: 12.5, lineHeight: 1.9 }}>{t('signals.disclaimer')}</p>
       </InfoBox>
 
-      <div className="row" style={{ gap: 10 }}>
-        <button className="btn btn-primary" onClick={() => navigate(`/swap?coin=${coinId}`)}>
+      <div className="row" style={{ gap: 12, marginTop: 18 }}>
+        <button className="btn btn-primary" style={{ flex: 1, minHeight: 46 }} onClick={() => navigate(`/swap?coin=${coinId}`)}>
           {t('nav.swap')}
         </button>
-        <button className="btn btn-ghost" onClick={() => navigate(`/coin/${coinId}`)}>
+        <button className="btn btn-ghost" style={{ flex: 1, minHeight: 46 }} onClick={() => navigate(`/coin/${coinId}`)}>
           {t('signals.viewChart')}
         </button>
       </div>
