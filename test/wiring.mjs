@@ -10568,10 +10568,12 @@ export default function run() {
       t(`...and does not claim ${id} is built`,
         new RegExp(`id: '${id}',[\\s\\S]{0,120}?ready: false`).test(rdc));
     }
-    for (const id of ['builder-ostium', 'builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+    for (const id of ['builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
       t(`...nor that ${id} is earning`,
         new RegExp(`id: '${id}',[\\s\\S]{0,160}?live: false`).test(rdc));
     }
+    t('the completed Ostium order path is live',
+      /id: 'builder-ostium',[\s\S]{0,160}?live: true/.test(rdc));
 
     /*
      * ─── THE BUG THIS SECTION FOUND ─────────────────────────────────────────
@@ -10688,21 +10690,24 @@ export default function run() {
     t('an unknown venue fee produces no total rather than a wrong one',
       /totalFee: venueFee == null \? null :/.test(ost));
 
-    /* Readiness must now say BUILT but NOT EARNING. Both halves matter: the
-       encoder is real, and no screen routes an order yet. */
+    /* The encoder and the wallet-signed order screen are now both wired. */
     t('readiness reports the Ostium encoder as built',
       /id: 'builder-ostium',[\s\S]{0,200}?ready: true/.test(rdc));
-    t('...but still earning nothing',
-      /id: 'builder-ostium',[\s\S]{0,160}?live: false/.test(rdc));
+    t('...and the order path as live',
+      /id: 'builder-ostium',[\s\S]{0,160}?live: true/.test(rdc));
+    t('the Ostium page signs the encoder output with the user wallet',
+      existsSync('src/pages/Ostium.jsx') &&
+      /buildOpenTrade/.test(read('src/pages/Ostium.jsx')) &&
+      /signer\.sendTransaction/.test(read('src/pages/Ostium.jsx')));
 
     /* The Ostium build report, and the two facts in it that must not rot. */
     t('the Ostium build is written up', existsSync('docs/OSTIUM-BUILDER-FA.md'));
     const odoc = read('docs/OSTIUM-BUILDER-FA.md');
     t('...it says the encoder was verified against their SDK',
       /بایت‌به‌بایت/.test(odoc));
-    /* The status line is the part most likely to be quietly overstated later. */
-    t('...and does not claim it is earning yet',
-      /live\s*=\s*false/.test(odoc));
+    /* The historical report now points readers to the completed next step. */
+    t('...and records the completed trading screen',
+      /صفحهٔ معامله ساخته شد/.test(odoc));
 
     /* The Persian write-up, which is the actual deliverable for this question. */
     t('the CCXT answer is written up', existsSync('docs/CCXT-BUILDER-CODES-FA.md'));

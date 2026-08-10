@@ -78,6 +78,7 @@ const GROUPS = [
       ...(SPECULATION_ENABLED
         ? [
             { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
+            { to: '/ostium', key: 'nav.ostium', Icon: IconTrend, hue: 'var(--rgb-3)' },
             { to: '/lab', key: 'lab.title', Icon: IconActivity, hue: 'var(--rgb-8)' }
           ]
         : []),

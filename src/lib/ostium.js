@@ -385,6 +385,138 @@ export async function buildApproveCollateral({ amountUsd }) {
  * Returns `{ pairs: [], live: false }` rather than throwing, so a dead feed
  * renders an empty state instead of a crashed screen.
  */
+const OSTIUM_SUBGRAPH = `${OSTIUM_API}/v1/subgraph/gn`;
+
+/*
+ * The Builder API intentionally keeps /v1/prices small; pair ids, fee rates
+ * and leverage limits live in the public subgraph.  We query only the fields
+ * the ticket needs instead of shipping the 177 KB SDK merely to render a
+ * picker.  The conversion constants below are copied from (and golden-tested
+ * against) the SDK: leverage is x100 and takerFeeP is bps x 1e4.
+ */
+const PAIRS_QUERY = `query FbtOstiumPairs {
+  pairs(orderBy: id, orderDirection: asc, subgraphError: allow) {
+    id from to maxLeverage overnightMaxLeverage takerFeeP
+    group { name maxLeverage }
+  }
+}`;
+
+const POSITIONS_QUERY = `query FbtOstiumPositions($trader: String!) {
+  trades(where: { isOpen: true, trader: $trader }, first: 100, orderBy: timestamp, orderDirection: desc) {
+    id tradeID isBuy isDayTrade index collateral tradeNotional leverage
+    openPrice stopLossPrice takeProfitPrice timestamp
+    pair { id from to }
+  }
+}`;
+
+const scaled = (value, decimals) => {
+  try {
+    const raw = BigInt(value ?? 0);
+    const base = 10n ** BigInt(decimals);
+    return Number(raw / base) + Number(raw % base) / Number(base);
+  } catch {
+    return 0;
+  }
+};
+
+async function ostiumGraph(query, variables = {}, timeout = 12000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(OSTIUM_SUBGRAPH, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ query, variables })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (json?.errors?.length) throw new Error('SUBGRAPH_ERROR');
+    return json?.data ?? null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Pair metadata merged with the same live bid/mid/ask feed used for signing. */
+export async function getOstiumMarkets({ timeout = 12000 } = {}) {
+  try {
+    const [graph, feed] = await Promise.all([
+      ostiumGraph(PAIRS_QUERY, {}, timeout),
+      getOstiumPrices({ timeout })
+    ]);
+    if (!feed.live || !Array.isArray(graph?.pairs)) return { pairs: [], live: false };
+
+    const prices = new Map(
+      feed.pairs.map((p) => [
+        String(p.pair || `${p.from}/${p.to}`).replace('-', '/').toUpperCase(),
+        p
+      ])
+    );
+    const pairs = graph.pairs.map((p) => {
+      const from = String(p.from || '').toUpperCase();
+      const to = String(p.to || 'USD').toUpperCase();
+      const price = prices.get(`${from}/${to}`) || prices.get(`${from}-${to}`);
+      const ownMax = Number(p.maxLeverage || 0);
+      const groupMax = Number(p.group?.maxLeverage || 0);
+      return {
+        pairId: String(p.id),
+        from,
+        to,
+        name: `${from}/${to}`,
+        category: String(p.group?.name || 'Other'),
+        maxLeverage: (ownMax || groupMax) / 100,
+        overnightMaxLeverage: Number(p.overnightMaxLeverage || 0) / 100,
+        openFeeBps: Number(p.takerFeeP || 0) / 10_000,
+        bid: Number(price?.bid),
+        mid: Number(price?.mid),
+        ask: Number(price?.ask),
+        isMarketOpen: price?.isMarketOpen === true,
+        isDayTradingClosed: price?.isDayTradingClosed === true,
+        timestampSeconds: Number(price?.timestampSeconds || 0)
+      };
+    }).filter((p) => Number.isFinite(p.mid) && p.mid > 0);
+    return { pairs, live: pairs.length > 0, generatedAt: feed.generatedAt };
+  } catch {
+    return { pairs: [], live: false, generatedAt: null };
+  }
+}
+
+/**
+ * Lightweight account view.  PnL is deliberately not invented here: the SDK
+ * projects rollover at the current Arbitrum block, and showing spot-only PnL
+ * would overstate the account.  The UI shows entry/current/collateral instead.
+ */
+export async function getOstiumPositions({ trader, markets = [], timeout = 12000 }) {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(String(trader || ''))) return { positions: [], live: false };
+  try {
+    const graph = await ostiumGraph(POSITIONS_QUERY, { trader: trader.toLowerCase() }, timeout);
+    if (!Array.isArray(graph?.trades)) throw new Error('BAD_SHAPE');
+    const byId = new Map(markets.map((m) => [String(m.pairId), m]));
+    return {
+      live: true,
+      positions: graph.trades.map((tr) => {
+        const market = byId.get(String(tr.pair?.id));
+        return {
+          id: tr.id,
+          pairId: String(tr.pair?.id),
+          name: `${String(tr.pair?.from || '').toUpperCase()}/${String(tr.pair?.to || '').toUpperCase()}`,
+          buy: Boolean(tr.isBuy),
+          collateral: scaled(tr.collateral, 6),
+          leverage: Number(tr.leverage || 0) / 100,
+          entryPrice: scaled(tr.openPrice, 18),
+          currentPrice: market?.mid ?? null,
+          takeProfit: scaled(tr.takeProfitPrice, 18),
+          stopLoss: scaled(tr.stopLossPrice, 18),
+          openedAt: Number(tr.timestamp || 0) * 1000
+        };
+      })
+    };
+  } catch {
+    return { positions: [], live: false };
+  }
+}
+
 export async function getOstiumPrices({ timeout = 12000 } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);

@@ -347,7 +347,16 @@ export function WalletProvider({ children }) {
     if (!cfg) return false;
     const eip = eip1193Ref.current;
     if (!eip) {
-      setChainId(targetId); // local wallet: just point the RPC elsewhere
+      /*
+       * A local ethers Wallet is connected to a concrete Provider. Merely
+       * changing the React chain label leaves the signer broadcasting to the
+       * old network — catastrophic for a same-address contract call. Reconnect
+       * the in-memory signer to the target RPC before reporting success.
+       */
+      if (signerRef.current?.connect) {
+        signerRef.current = signerRef.current.connect(await getReadProvider(targetId));
+      }
+      setChainId(targetId);
       return true;
     }
     try {
@@ -373,7 +382,7 @@ export function WalletProvider({ children }) {
       }
       return false;
     }
-  }, []);
+  }, [getReadProvider]);
 
   /* ------------------------------ auto-attach ---------------------------- */
 

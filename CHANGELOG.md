@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.28.1 — Ostium trading UI
+
+- Added the complete `/ostium` wallet-signed order flow for gold, oil, forex,
+  stocks, indices, ETFs and crypto: live prices and market hours, current
+  pair-specific leverage limits, long/short ticket, TP/SL, and an itemised fee
+  preview.
+- Added exact-amount Arbitrum USDC approval, a final real-money confirmation,
+  fresh-price revalidation immediately before signing, Arbiscan tracking and a
+  read-only open-position list.
+- Kept the leveraged route and its locale copy out of store-safe builds. It is
+  included by `build:full` with `VITE_ENABLE_SPECULATION=true`, matching the
+  existing app-store vocabulary policy.
+- Fixed local-wallet network switching: the in-memory ethers signer now
+  reconnects to the target RPC instead of merely changing the network label.
+
 ## 1.27.0 — versionCode 55
 
 ### The white box around the logo — three causes, all fixed

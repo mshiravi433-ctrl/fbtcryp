@@ -249,11 +249,11 @@ export function revenueReadiness() {
        * there is nothing to configure and nothing to forget in the APK.
        */
       id: 'builder-ostium',
-      live: false,
+      live: true,
       ready: true,
       cost: 0,
-      blockedBy: 'BUILD',
-      note: 'Ostium builder fee, Arbitrum. Encoder BUILT and verified byte-for-byte against their SDK (6 cases) without shipping it — their bundle is 177KB gzipped against our whole 237KB entry. Fee 5 bps of notional, paid atomically to 0xaf5CE154… on trade open; no account, no deposit, cap 50 bps. Two traps found and handled: the collateral allowance goes to TradingStorage 0xccd5891…, NOT the Trading contract we call, and the trade struct has a tenth member isDayTrade that their docs omit. Remaining: the trading screen itself'
+      blockedBy: null,
+      note: 'Ostium builder fee is wired end-to-end on /ostium: live pair metadata and prices, market-hours gate, exact-amount USDC approval to TradingStorage, wallet-signed order, fee preview, and open-position account view. Encoder remains verified byte-for-byte against their SDK (6 cases) without shipping its 177KB gzipped bundle. Fee is 5 bps of notional, paid atomically to 0xaf5CE154… on open; no account or deposit required'
     }),
     line({
       id: 'builder-dydx',
