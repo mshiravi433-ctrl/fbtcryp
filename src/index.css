@@ -222,12 +222,27 @@ body {
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .spacer { flex: 1; }
 
+/*
+ * ─── SECTION HEADINGS WERE TOO FAINT TO READ ────────────────────────────────
+ * Reported: «عنوان های هر چیزی خیلی کم رنگه مثلا طلا» — every heading is too
+ * pale, "Gold" given as the example.
+ *
+ * It was 10.5px monospace, uppercase, 0.18em tracked, in --text-3 (the
+ * lowest-contrast ink in the palette). Every one of those five choices
+ * subtracts legibility, and together they made a section title quieter than
+ * the body text under it — backwards.
+ *
+ * Now 12.5px, semibold, in --text-2, with the tracking halved. Still clearly
+ * a label rather than a headline, but readable at arm's length. This is a
+ * global class used across many screens, so the change lifts all of them.
+ */
 .section-label {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.18em;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-2);
   margin: 0;
   display: flex;
   align-items: center;
@@ -5213,8 +5228,32 @@ input, select, textarea { font-size: 16px !important; }
 .tok-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /*
+   * ─── `contain`, NOT `cover` ─────────────────────────────────────────────
+   * Reported: the company logos do not appear on the Stocks screen.
+   *
+   * `cover` fills a circle by cropping, and the xStocks artwork is a square
+   * PNG with the mark inset in generous padding. Cropping to a circle cut the
+   * mark away and left the padding, so the row showed an empty disc — which
+   * reads as a broken image rather than as a logo.
+   *
+   * `contain` fits the whole mark inside the circle. Slight letterboxing is
+   * the correct trade: a small logo beats no logo.
+   */
+  object-fit: contain;
   border-radius: 50%;
+}
+
+/*
+ * ─── AND A BACKDROP, BECAUSE THE ARTWORK IS OFTEN WHITE ────────────────────
+ * Several issuer logos are white-on-transparent. On the light theme that is
+ * white on near-white: technically rendered, visually absent. A neutral disc
+ * behind every icon guarantees contrast in both themes without us having to
+ * know which files are light and which are dark.
+ */
+.tok-icon {
+  background: color-mix(in srgb, var(--text-1) 8%, var(--bg-raised));
+  padding: 2px;
 }
 
 .tok-icon-text {
@@ -7914,6 +7953,37 @@ body { overflow-x: clip; }
 
 .shop-promo:active { transform: scale(.99); }
 
+/*
+ * ─── THE VEIL WAS EATING THE PHOTOGRAPH ─────────────────────────────────────
+ * Reported as «خیلی کم رنگ و زشته». The old gradient ran to 80% black and
+ * started fading only at 65% height, so most of the frame was a dark smear
+ * with an image somewhere behind it.
+ *
+ * Now it covers the lower half only and tops out at 72%, which is still ample
+ * contrast for white text on an unpredictable photo while leaving the top of
+ * the image actually visible.
+ */
+.shop-promo-txt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 13px 15px;
+  color: #fff;
+  border: 0;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+  background: linear-gradient(to top,
+    rgba(0, 0, 0, .72) 0%,
+    rgba(0, 0, 0, .42) 26%,
+    rgba(0, 0, 0, .06) 52%,
+    transparent 72%);
+}
+
+/* Both stacked in the same grid cell so a cross-fade overlaps instead of
+   pushing the outgoing slide out of the frame. */
 .shop-promo img {
   position: absolute;
   inset: 0;
@@ -7922,15 +7992,23 @@ body { overflow-x: clip; }
   object-fit: cover;
 }
 
-.shop-promo-txt {
-  position: absolute;
-  inset: 0;
+.shop-promo-dots {
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 12px 14px;
-  color: #fff;
-  background: linear-gradient(to top, rgba(0, 0, 0, .8), rgba(0, 0, 0, .1) 65%);
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.shop-promo-dots i {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, .35);
+  transition: background .35s ease, width .35s ease;
+}
+
+.shop-promo-dots i[data-on='true'] {
+  width: 24px;
+  background: #fff;
 }
 
 .shop-promo-kicker {

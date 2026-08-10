@@ -7,6 +7,7 @@ import InfoBox from '../components/InfoBox';
 import Sheet from '../components/Sheet';
 import ShopCountrySheet from '../components/ShopCountrySheet';
 import ShopTile from '../components/ShopTile';
+import ShopPromo from '../components/ShopPromo';
 import { useTelegram } from '../context/TelegramContext';
 import { IconChevronLeft, IconSearch } from '../components/Icons';
 import {
@@ -77,6 +78,18 @@ const PRIORITY = ['e-money', 'e-commerce', 'games', 'streaming', 'food', 'grocer
 
 /** How many brands a category shows before "see all". */
 const PREVIEW = 6;
+
+/*
+ * Promo slides. Images are the same verified CDN destination photographs the
+ * travel tabs use — every filename here is in the checked list in
+ * lib/shopDestinations.js, so none of them can 404.
+ */
+const PROMOS = [
+  { id: 'p-fly', img: FLIGHT_ROUTES[1].img, kicker: 'shop.promo.kicker', title: 'shop.promo.flights', go: 'flights' },
+  { id: 'p-stay', img: STAY_CITIES[2].img, kicker: 'shop.promo.kicker', title: 'shop.promo.stays', go: 'stays' },
+  { id: 'p-card', img: FLIGHT_ROUTES[2].img, kicker: 'shop.promo.kicker', title: 'shop.promo.cards', go: 'cards' },
+  { id: 'p-esim', img: STAY_CITIES[0].img, kicker: 'shop.promo.kicker', title: 'shop.promo.esim', go: 'topup' }
+];
 
 function catLabel(t, id) {
   const key = `shop.cat.${id}`;
@@ -474,19 +487,7 @@ export default function Shop() {
                 Uses a real destination photograph from the provider's CDN
                 rather than an emoji in a gradient box.
               */}
-              <motion.button
-                className="shop-promo shop-glow"
-                variants={riseIn}
-                initial="hidden"
-                animate="show"
-                onClick={() => setTab('flights')}
-              >
-                <img src={FLIGHT_ROUTES[1].img} alt="" loading="lazy" />
-                <span className="shop-promo-txt">
-                  <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
-                  <span className="shop-promo-title">{t('shop.promo.flights')}</span>
-                </span>
-              </motion.button>
+              <ShopPromo slides={PROMOS} onSlide={(sl) => setTab(sl.go)} />
 
               {/*
                 ─── CATEGORY PREVIEWS ───────────────────────────────────────

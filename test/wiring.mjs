@@ -10192,5 +10192,85 @@ export default function run() {
     }
   }
 
+  /* ---- 100. logos, legibility and the promo slideshow ------------------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const css = read('src/index.css');
+    const shop = code(read('src/pages/Shop.jsx'));
+
+    /*
+     * ─── THE STOCK LOGOS WERE BEING CROPPED AWAY ────────────────────────────
+     * Reported: company logos do not appear on the Stocks screen. The server
+     * sends a valid `icon` for every xStock and tokenIcon.jsx reads it — the
+     * failure was purely visual. `.tok-icon img` used `object-fit: cover`,
+     * which fills a CIRCLE by cropping, and the xStocks artwork is a square
+     * PNG with the mark inset in padding. Cropping kept the padding and threw
+     * away the mark, leaving an empty disc that reads as a broken image.
+     */
+    t('token logos are fitted, not cropped',
+      /\.tok-icon img \{[\s\S]{0,700}?object-fit: contain/.test(css));
+    /* Several issuer logos are white-on-transparent, i.e. invisible on the
+       light theme without a backdrop behind them. */
+    t('...on a backdrop so white artwork still shows',
+      /\.tok-icon \{[\s\S]{0,400}?background: color-mix/.test(css));
+
+    /*
+     * ─── HEADINGS WERE QUIETER THAN THE BODY TEXT ───────────────────────────
+     * «عنوان های هر چیزی خیلی کم رنگه مثلا طلا». `.section-label` was 10.5px
+     * uppercase mono, 0.18em tracked, in --text-3 — the lowest-contrast ink in
+     * the palette. Five compounding choices, each subtracting legibility, on a
+     * class used across most screens.
+     */
+    t('section headings are legible',
+      /\.section-label \{[\s\S]{0,260}?font-size: 12\.5px/.test(css));
+    t('...and not the lowest-contrast ink',
+      !/\.section-label \{[\s\S]{0,300}?color: var\(--text-3\)/.test(css));
+
+    /*
+     * ─── THE PROMO IS A SLIDESHOW NOW ───────────────────────────────────────
+     * «چندتا عکس بزار چند ثانیه یکبار با عنوان جدید عوض بشه اسلایدی باشه».
+     */
+    t('the promo banner rotates through slides', existsSync('src/components/ShopPromo.jsx'));
+    const promo = code(read('src/components/ShopPromo.jsx'));
+    t('...with more than one slide', /const PROMOS = \[/.test(shop) && (shop.match(/\{ id: 'p-/g) ?? []).length >= 3);
+    t('...each with its own headline', /t\(s\.title\)/.test(promo));
+
+    /*
+     * A carousel is where apps burn battery. ONE interval, cleared on unmount,
+     * and stopped entirely by the existing useStill() guard — the same one
+     * AdBanner uses for reduced motion and native.
+     */
+    t('...driven by a single interval', (promo.match(/setInterval/g) ?? []).length === 1);
+    t('...that is cleared on unmount', /clearInterval/.test(promo));
+    t('...and does not run under reduced motion', /if \(still/.test(promo));
+    /* Opacity only: no layout, no blur, no filter animation on a photograph. */
+    t('...cross-fading on opacity alone',
+      /initial=\{\{ opacity: 0 \}\}/.test(promo) && !/filter:/.test(promo));
+
+    /*
+     * The old gradient ran to 80% black across the whole frame, which is what
+     * made the image look «کم رنگ و زشت» — it was a dark smear, not a photo.
+     */
+    t('the promo veil no longer swallows the photograph',
+      /\.shop-promo-txt \{[\s\S]{0,600}?rgba\(0, 0, 0, \.72\) 0%/.test(css));
+    t('...and slide position is shown', /shop-promo-dots/.test(css) && /shop-promo-dots/.test(promo));
+
+    /* Every promo image must come from the verified destination set, or a
+       slide 404s exactly the way the invented Istanbul filename did. */
+    t('promo images reuse the verified destinations',
+      /FLIGHT_ROUTES\[\d\]\.img/.test(shop) && /STAY_CITIES\[\d\]\.img/.test(shop));
+
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const P = L.shop?.promo;
+      t(`${lang} has a headline for every slide`,
+        Boolean(P?.flights && P?.stays && P?.cards && P?.esim));
+    }
+  }
+
   return rows;
 }

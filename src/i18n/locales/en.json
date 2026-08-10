@@ -2932,7 +2932,10 @@
     "amounts": "Amounts",
     "promo": {
       "kicker": "Pay with crypto",
-      "flights": "Fly anywhere, paid in stablecoins"
+      "flights": "Fly anywhere, paid in stablecoins",
+      "stays": "Hotels worldwide, booked in crypto",
+      "cards": "Gift cards for 200+ brands",
+      "esim": "Data in 180+ countries, no SIM"
     },
     "howTo": "How to redeem",
     "heroTitle": "Spend crypto in {{country}}",
