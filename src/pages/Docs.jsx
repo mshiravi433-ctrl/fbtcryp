@@ -74,6 +74,12 @@ const SECTIONS = [
   },
   { id: 'trade', Icon: IconTrend, steps: 3 },
   {
+    id: 'dydx',
+    Icon: IconTrend,
+    steps: 5,
+    en: youtube('dydx how to deposit fund account tutorial dydx.trade')
+  },
+  {
     id: 'security',
     Icon: IconShield,
     steps: 5,

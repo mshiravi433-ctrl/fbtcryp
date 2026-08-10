@@ -1244,7 +1244,17 @@
       "step5": "Keep gas money on each chain you use. Running out mid-transaction wastes the fee you already paid.",
       "pitfall": "Chasing the highest APR you can find is how most people lose money in DeFi. A steady 8% you understand beats a 900% pool whose token you can't sell."
     },
-    "watchEn": "Search on YouTube"
+    "watchEn": "Search on YouTube",
+    "dydx": {
+      "title": "dYdX Orbit — funding only on origin",
+      "sub": "Deposit only on dydx.trade",
+      "step1": "Open dYdX Orbit from the Stocks tabs and tap Connect dYdX — sign the onboarding message with the same EVM wallet. The dYdX key stays in memory only.",
+      "step2": "Tap the “Where is funding?” card — in the Telegram app it opens via tg.openLink, on web in a new tab, both to dydx.trade.",
+      "step3": "On the origin site connect the same wallet and deposit USDC — start with a small test, pick the correct network (dYdX Chain).",
+      "step4": "Back in the app/web pick market (e.g. BTC-USD), side and size — tap Review order and see the 0.10% builder fee on notional.",
+      "step5": "Confirm — order is signed with BuilderCode (0.10%) and sent to dYdX Chain. Tx hash and open positions appear below.",
+      "pitfall": "Funding is not inside the app — only connect and order are here. Deposit on the wrong network is not reversible and never enter your seed phrase."
+    }
   },
   "audit": {
     "title": "Security",
