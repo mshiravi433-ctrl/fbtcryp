@@ -59,7 +59,7 @@ export default function ShopPromo({ slides, onSlide }) {
       <AnimatePresence initial={false}>
         <motion.img
           key={s.id}
-          src={s.img}
+          src={s.img.src}
           alt=""
           loading={i === 0 ? 'eager' : 'lazy'}
           initial={{ opacity: 0 }}
@@ -74,7 +74,7 @@ export default function ShopPromo({ slides, onSlide }) {
         className="shop-promo-txt"
         onClick={() => onSlide?.(s)}
       >
-        <span className="shop-promo-kicker">{t(s.kicker)}</span>
+        <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
         <motion.span
           key={s.id}
           className="shop-promo-title"
@@ -95,6 +95,19 @@ export default function ShopPromo({ slides, onSlide }) {
           </span>
         )}
       </button>
+
+      {/*
+        ─── THE CREDIT IS A LICENCE OBLIGATION, NOT A CAPTION ────────────────
+        Every one of these photographs is Creative Commons with
+        `AttributionRequired: true` — read from the Commons API, not assumed.
+        CC-BY and CC-BY-SA both require naming the author wherever the work
+        appears. Omitting it because it is small print would be a copyright
+        violation, so it renders on the banner itself rather than in a
+        credits page nobody opens.
+      */}
+      <span className="shop-promo-credit">
+        © {s.img.credit} · {s.img.licence}
+      </span>
     </div>
   );
 }

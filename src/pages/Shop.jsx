@@ -21,6 +21,7 @@ import { brandUrl, countryUrl, esimUrl, flightUrl, shopEarns, stayCityUrl, topUp
 import { IconBed, IconCard, IconMoney, IconPlane, IconSim, IconTopUp } from '../components/ShopIcons';
 import { openUrl } from '../lib/browser';
 import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
+import { PROMO_IMAGES, PROMO_SLIDES } from '../lib/shopImages';
 
 /**
  * SHOP — spend crypto on real things.
@@ -80,16 +81,12 @@ const PRIORITY = ['e-money', 'e-commerce', 'games', 'streaming', 'food', 'grocer
 const PREVIEW = 6;
 
 /*
- * Promo slides. Images are the same verified CDN destination photographs the
- * travel tabs use — every filename here is in the checked list in
- * lib/shopDestinations.js, so none of them can 404.
+ * Promo slides now live in lib/shopImages.js with their photographer credits.
+ * The provider's own destination pictures are only 200px wide — there is no
+ * larger variant, I checked — so on a full-width banner they were upscaled
+ * roughly six times, which is what made them look washed out. These are
+ * 1280px Iranian landmarks from Wikimedia instead.
  */
-const PROMOS = [
-  { id: 'p-fly', img: FLIGHT_ROUTES[1].img, kicker: 'shop.promo.kicker', title: 'shop.promo.flights', go: 'flights' },
-  { id: 'p-stay', img: STAY_CITIES[2].img, kicker: 'shop.promo.kicker', title: 'shop.promo.stays', go: 'stays' },
-  { id: 'p-card', img: FLIGHT_ROUTES[2].img, kicker: 'shop.promo.kicker', title: 'shop.promo.cards', go: 'cards' },
-  { id: 'p-esim', img: STAY_CITIES[0].img, kicker: 'shop.promo.kicker', title: 'shop.promo.esim', go: 'topup' }
-];
 
 function catLabel(t, id) {
   const key = `shop.cat.${id}`;
@@ -487,7 +484,7 @@ export default function Shop() {
                 Uses a real destination photograph from the provider's CDN
                 rather than an emoji in a gradient box.
               */}
-              <ShopPromo slides={PROMOS} onSlide={(sl) => setTab(sl.go)} />
+              <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
 
               {/*
                 ─── CATEGORY PREVIEWS ───────────────────────────────────────
@@ -584,10 +581,13 @@ export default function Shop() {
             animate="show"
             onClick={() => open(esimUrl())}
           >
-            <img src={STAY_CITIES[0].img} alt="" loading="lazy" />
+            <img src={PROMO_IMAGES.persepolis.src} alt="" loading="lazy" />
             <span className="shop-promo-txt">
               <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
               <span className="shop-promo-title">{t('shop.esim.desc')}</span>
+            </span>
+            <span className="shop-promo-credit">
+              © {PROMO_IMAGES.persepolis.credit} · {PROMO_IMAGES.persepolis.licence}
             </span>
           </motion.button>
         </>
@@ -680,10 +680,13 @@ export default function Shop() {
             animate="show"
             onClick={() => open(esimUrl())}
           >
-            <img src={STAY_CITIES[0].img} alt="" loading="lazy" />
+            <img src={PROMO_IMAGES.persepolis.src} alt="" loading="lazy" />
             <span className="shop-promo-txt">
               <span className="shop-promo-kicker">{t('shop.promo.kicker')}</span>
               <span className="shop-promo-title">{t('shop.esim.name')}</span>
+            </span>
+            <span className="shop-promo-credit">
+              © {PROMO_IMAGES.persepolis.credit} · {PROMO_IMAGES.persepolis.licence}
             </span>
           </motion.button>
         </>

@@ -275,7 +275,6 @@
     },
     "aprNote": "These rates move constantly with volume and rewards, so treat them as a rough guide and check the live number on the protocol before you deposit. A rate that looks unusually high is usually paying in a token whose price is falling.",
     "realRisk": "Every yield here is paid by someone taking a risk, and sometimes that someone is you. A pool can hand you back less than you put in if the two tokens move apart. A lending market can freeze withdrawals when too many borrowers default at once. Any contract can be drained, no matter how long it has run without trouble. None of that is unlikely enough to ignore — so put in an amount you could lose without it changing your month, and read the protocol before the deposit rather than after.",
-    "pointsNotice": "Points measure how much you have used the app — nothing more. They are not money and never become money: you cannot withdraw them, send them to anyone, or exchange them for crypto. What they do is set your rank, and from Gold upward your rank unlocks lower trading fees on the venues below.",
     "riskTitle": "What can go wrong here",
     "inApp": "In this app"
   },

@@ -8857,17 +8857,31 @@ export default function run() {
      */
     for (const lang of ['en', 'fa']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
-      t(`${lang} still says points never become money`,
-        String(L.earn?.pointsNotice ?? '').length > 80);
       t(`${lang} warns that yield is paid by someone taking a risk`,
         String(L.earn?.realRisk ?? '').length > 150);
       /* The actionable half matters more than the hazard list. */
       t(`${lang} tells the reader what to actually do about it`,
         /read|بخوان/i.test(String(L.earn?.realRisk ?? '')));
     }
-    /* The gold-and-above rule must be explained to the user, not just coded. */
-    t('the points notice mentions the rank benefit',
-      /Gold/i.test(String(JSON.parse(read('src/i18n/locales/en.json')).earn?.pointsNotice)));
+
+    /*
+     * ─── THE POINTS NOTICE IS GONE, ON REQUEST ──────────────────────────────
+     * Two guards here used to require `earn.pointsNotice` to exist and to
+     * mention Gold. The owner asked for that red slab at the foot of the
+     * quests list to be deleted, and it WAS redundant: FbtPanel now states the
+     * same limits once, in one line, directly under the balance they describe.
+     *
+     * The claim is not lost, and this asserts that in both directions — the
+     * old copy must be gone AND the replacement must still be present, so
+     * "delete the warning" can never quietly become "ship with no warning".
+     */
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} dropped the old points notice`, L.earn?.pointsNotice === undefined);
+      t(`${lang} still states the limit once, on the balance itself`,
+        String(L.fbt?.notCoin ?? '').length > 80);
+    }
+    t('...and nothing renders the removed key', !/pointsNotice/.test(read('src/pages/Earn.jsx')));
   }
 
   /* ---- 92. the white box behind the logo, on both platforms -------------- */
@@ -10236,7 +10250,9 @@ export default function run() {
      */
     t('the promo banner rotates through slides', existsSync('src/components/ShopPromo.jsx'));
     const promo = code(read('src/components/ShopPromo.jsx'));
-    t('...with more than one slide', /const PROMOS = \[/.test(shop) && (shop.match(/\{ id: 'p-/g) ?? []).length >= 3);
+    const imgsSrc = read('src/lib/shopImages.js');
+    t('...with more than one slide',
+      /export const PROMO_SLIDES = \[/.test(imgsSrc) && (imgsSrc.match(/\{ id: 'p-/g) ?? []).length >= 3);
     t('...each with its own headline', /t\(s\.title\)/.test(promo));
 
     /*
@@ -10259,10 +10275,34 @@ export default function run() {
       /\.shop-promo-txt \{[\s\S]{0,600}?rgba\(0, 0, 0, \.72\) 0%/.test(css));
     t('...and slide position is shown', /shop-promo-dots/.test(css) && /shop-promo-dots/.test(promo));
 
-    /* Every promo image must come from the verified destination set, or a
-       slide 404s exactly the way the invented Istanbul filename did. */
-    t('promo images reuse the verified destinations',
-      /FLIGHT_ROUTES\[\d\]\.img/.test(shop) && /STAY_CITIES\[\d\]\.img/.test(shop));
+    /*
+     * ─── RESOLUTION WAS THE PROBLEM, NOT THE GRADIENT ───────────────────────
+     * Reported twice as washed out. The provider's destination photos exist at
+     * exactly one size, 200x250 — `_400x500` and `_600x750` both return
+     * AccessDenied — so a full-width banner was upscaling them roughly six
+     * times. These are 1280px instead, which is a downscale.
+     *
+     * Also asked for Iran, and the provider has no Iranian destination at all
+     * because Iran is not among the 233 countries they serve.
+     */
+    t('promo art is high resolution', /1280px-/.test(imgsSrc));
+    t('...and no longer the 200px provider thumbnails',
+      !/200x250/.test(code(imgsSrc)));
+    t('...with Iranian landmarks in the rotation',
+      /Si-o-se-Pol/.test(imgsSrc) && /Naghsh-e_Jahan|Lotfollah/.test(imgsSrc));
+
+    /*
+     * These are Creative Commons with AttributionRequired — read off the
+     * Commons API, not assumed. Naming the author is a LICENCE CONDITION, so
+     * shipping them uncredited would be a copyright violation. Asserted on
+     * the data and on the render, because either half alone is useless.
+     */
+    t('every promo image carries a credit and licence',
+      (imgsSrc.match(/credit: '/g) ?? []).length >= 4 &&
+      (imgsSrc.match(/licence: 'CC /g) ?? []).length >= 4);
+    t('...and the credit is actually rendered',
+      /shop-promo-credit/.test(read('src/components/ShopPromo.jsx')) &&
+      /s\.img\.credit/.test(read('src/components/ShopPromo.jsx')));
 
     for (const lang of ['en', 'fa', 'ar']) {
       const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));

@@ -730,7 +730,19 @@ export default function Earn({ embedded = false }) {
             </motion.div>
           </section>
 
-          <p className="notice">{t('earn.pointsNotice')}</p>
+          {/*
+            ─── THE OLD POINTS NOTICE IS GONE, ON REQUEST ────────────────────
+            It said points are "not money and never will be", cannot be
+            withdrawn, sent or exchanged. Removed because it is now both
+            redundant and wrong in tone: FbtPanel states the same limits once,
+            in one line, right under the balance it applies to. Repeating it
+            here as a red slab at the foot of the quests list was the
+            warning-fatigue pattern this project has already stripped out of
+            Wallet and Stocks.
+
+            The claim itself is NOT lost — see components/FbtPanel.jsx, where
+            `fbt.notCoin` is deliberately never collapsed.
+          */}
         </>
       )}
 
