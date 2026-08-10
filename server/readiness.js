@@ -209,6 +209,60 @@ export function revenueReadiness() {
       blockedBy: 'THIRD_PARTY',
       note: 'Application submitted, no reply yet. The one hardware programme whose form lists Iran'
     }),
+    /* ─── BUILDER CODES: NOT BUILT, AND SAYING SO ───────────────────────── */
+    /*
+     * ─── WHY THESE FOUR ARE `ready: false` AND EVERY OTHER LINE IS TRUE ─────
+     * Every other row in this file is code-complete and waiting on a purchase
+     * or somebody's reply. These are the opposite and the endpoint must not
+     * blur them together, because the whole reason it exists is that the owner
+     * has been told "it's ready, just set the variable" for things that were
+     * not.
+     *
+     * A builder code only pays when WE BUILD AND SUBMIT THE ORDER. There is no
+     * link to decorate and no env var that switches it on — unlike GMX,
+     * Avantis and UTEX, where the code path already exists and a referral code
+     * is the only missing piece. Reporting these as `ready` would be the
+     * fourth "wired to nothing" bug in this repo.
+     *
+     * They are listed anyway because they are, per dollar of volume, worth
+     * about 25 times the referral links we already ship — see
+     * src/lib/builderCodes.js for that arithmetic and
+     * docs/CCXT-BUILDER-CODES-FA.md for why CCXT and the exchange broker
+     * programmes are NOT the route to the same money.
+     */
+    line({
+      id: 'builder-ostium',
+      live: false,
+      ready: false,
+      cost: 0,
+      blockedBy: 'BUILD',
+      note: 'Ostium builder fee, Arbitrum. Their docs: "Any address can act as a builder without prior approval or registration" — no account, no deposit, cap 50 bps, paid atomically to our address on trade open. Gold, oil, forex and indices, which is what our Stocks and gold screens already price and cannot sell. Cheapest real option: costs nothing, needs an order path'
+    }),
+    line({
+      id: 'builder-dydx',
+      live: false,
+      ready: false,
+      cost: 0,
+      blockedBy: 'BUILD',
+      note: 'dYdX builder codes, cap 100 bps. CORRECTS an older claim in venueReferral.js: the $10,000 volume floor is on their AFFILIATE programme, not on builder codes — their docs say "No governance proposal is required to use builder codes". Fee rides in the order message as BuilderCodeParameters and is added on top of the fill'
+    }),
+    line({
+      id: 'builder-hyperliquid',
+      live: false,
+      ready: false,
+      cost: 100,
+      blockedBy: 'DEPOSIT',
+      note: 'Where the money actually is: top ten builders have taken $63M+, Phantom over $20M at the same 5 bps we would charge. The 100 USDC is a BALANCE, not a fee — "at least 100 USDC in perps account value" — and stays ours. Cap 10 bps perps, 100 bps spot. Every user must sign ApproveBuilderFee once from their main wallet first'
+    }),
+    line({
+      id: 'builder-drift',
+      live: false,
+      ready: false,
+      cost: 6,
+      blockedBy: 'DEPOSIT',
+      note: 'Drift builder codes on Solana, permissionless. Held back because the rent is PER USER: each trader needs a RevenueShareEscrow account (~0.035 SOL) that their docs expect the builder to pay for, so we would be spending before earning'
+    }),
+
     line({
       id: 'kyberswap-key',
       /* Not a new revenue line — insurance on the largest existing one. */
@@ -223,6 +277,25 @@ export function revenueReadiness() {
 
   const live = lines.filter((l) => l.live).length;
   const waiting = lines.filter((l) => !l.live && l.ready);
+  /*
+   * ─── THE ROWS THAT NEED A BUILD, COUNTED SEPARATELY ─────────────────────
+   * `waiting` is `!live && ready`, so a `ready: false` row falls out of it
+   * entirely — which used to mean `allRemainingAreCodeComplete` reported TRUE
+   * while four builder-code lines needed real work. `.every()` on a filtered
+   * array is vacuously true, and a headline that is vacuously true is exactly
+   * the kind of quiet lie this endpoint was built to stop.
+   */
+  const notCodeComplete = lines.filter((l) => !l.live && !l.ready);
+  /*
+   * ─── "NEEDS A BUILD" AND "NOT CODE-COMPLETE" ARE NOT THE SAME SET ────────
+   * First cut reported all five `ready: false` rows as `needsBuild`, which put
+   * `kyberswap-key` on the build list. That row is not a build at all — the
+   * code works, we are on the legacy rate-limited host and are waiting for
+   * Kyber to answer an email. Telling the owner to "build" something whose
+   * blocker is somebody else's inbox is the same class of misdirection this
+   * endpoint exists to remove, just pointing the other way.
+   */
+  const needsBuild = notCodeComplete.filter((l) => l.blockedBy !== 'THIRD_PARTY');
 
   return {
     live,
@@ -232,10 +305,13 @@ export function revenueReadiness() {
       waiting.reduce((n, l) => n + (l.blockedBy === 'THIRD_PARTY' ? 0 : l.cost || 0), 0).toFixed(2)
     ),
     /*
-     * The honest headline: every remaining line is code-complete. If this ever
-     * reports false for something, that IS a build task and not a purchase.
+     * The honest headline: is every remaining line code-complete? Now counts
+     * the build rows too, so it goes FALSE the moment something on this list
+     * is a build task rather than a purchase.
      */
-    allRemainingAreCodeComplete: waiting.every((l) => l.ready),
+    allRemainingAreCodeComplete: notCodeComplete.length === 0,
+    /* Named, not just counted — "4 things need building" is unactionable. */
+    needsBuild: needsBuild.map((l) => l.id),
     lines
   };
 }

@@ -39,6 +39,12 @@ jobs:
           # silently differs between platforms, which is the worst outcome
           # because both look correct in isolation.
           VITE_FEE_BPS: ${{ vars.VITE_FEE_BPS }}
+          # The builder-code fee, for the day an order path exists. Same trap
+          # as VITE_FEE_BPS above and worse: a builder fee is charged on
+          # NOTIONAL, so at 20x a 5 bps difference between web and APK is a
+          # 1%-of-capital difference to the trader. Listed now so the variable
+          # cannot be introduced later and quietly miss the APK.
+          VITE_BUILDER_BPS: ${{ vars.VITE_BUILDER_BPS }}
           VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
           # The support address. Cafe Bazaar requires one on our own domain
           # rather than a Gmail account, so this will change - and if it is

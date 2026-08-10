@@ -10417,5 +10417,202 @@ export default function run() {
     }
   }
 
+  /*
+   * ─── BUILDER CODES: THE FACTS, AND THE PROMISE NOT TO OVERSTATE THEM ──────
+   * Asked whether we could take a commission on other venues' futures and spot
+   * through an API, with a link to the CCXT spec. The answer is builder codes,
+   * not CCXT — see docs/CCXT-BUILDER-CODES-FA.md.
+   *
+   * Two failure modes this section exists to prevent, and they pull in
+   * opposite directions:
+   *
+   *   1. Claiming revenue we do not have. A builder code only pays when WE
+   *      build and submit the order; there is no link to decorate and no env
+   *      var to set. Reporting it as `ready` would be the fourth
+   *      "wired to nothing" bug here.
+   *   2. Losing the research. The numbers below were read out of each venue's
+   *      own docs; an undocumented constant is one that gets "tidied" into
+   *      something wrong six months from now.
+   */
+  {
+    /* Redeclared: `code` is block-scoped per section in this file. */
+    const code = (src) =>
+      String(src)
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+
+    t('the builder-code module exists', existsSync('src/lib/builderCodes.js'));
+    const bc = code(read('src/lib/builderCodes.js'));
+
+    /*
+     * The rate. Pinned to the literal, because a generic /BUILDER_BPS_DEFAULT/
+     * would pass for 5, 50 or the venue cap — the exact "a check that passes
+     * for the right AND the wrong value" trap already hit here several times.
+     */
+    t('our builder fee is 5 bps, Phantom\u2019s rate and not the venue cap',
+      /const BUILDER_BPS_DEFAULT = 5;/.test(bc));
+    /*
+     * And our own ceiling is 10, well under every venue's. Ostium allows 50,
+     * dYdX and Hyperliquid-spot allow 100. A misconfigured env var must not be
+     * able to reach those.
+     */
+    t('...and our own cap is 10, far below what the venues permit',
+      /const BUILDER_BPS_MAX = 10;/.test(bc));
+    t('...with an out-of-range value falling back rather than clamping',
+      /n > BUILDER_BPS_MAX/.test(bc) && /return BUILDER_BPS_DEFAULT;/.test(bc));
+
+    /*
+     * Null guards FIRST. Number(null) is 0 and 0 is finite, which is how this
+     * codebase has printed "$0.00" twice. Assert the explicit null check, not
+     * just the presence of isFinite.
+     */
+    t('a null notional cannot become a zero fee',
+      /if \(notionalUsd == null \|\| bps == null\) return null;/.test(bc));
+
+    /*
+     * The honesty function. A perp fee is charged on NOTIONAL, so at 20x our
+     * 5 bps is 1% of the trader's actual capital. Any screen showing the bps
+     * must be able to show this beside it.
+     */
+    t('the fee can be expressed against the user\u2019s real capital',
+      /export function feeAsPctOfCollateral/.test(bc));
+
+    /*
+     * The number that justifies the whole exercise: a builder fee is ours in
+     * full, a referral is a slice of somebody else's. Avantis pays 5% of a
+     * 0.04% fee, so 5 bps is 25x better per dollar routed.
+     */
+    t('the referral comparison is computed, not asserted in prose',
+      /export function referralMultiple/.test(bc));
+    /* Dividing by a zero referral would give Infinity, and "infinitely
+       better" is not a number anyone can act on. */
+    t('...and a zero-paying referral returns null, never Infinity',
+      /if \(referralBps <= 0\) return null;/.test(bc));
+
+    /*
+     * Venue facts. Each pinned to its literal so a future edit that "rounds"
+     * one has to come through this test. Ostium 50 bps and dYdX 100 bps are
+     * from their own developer docs.
+     */
+    /*
+     * ─── `[^}]` IS THE FENCE; A CHARACTER BUDGET IS NOT ─────────────────────
+     * These started as `venue: \{[\s\S]{0,400}?field` and two of them were
+     * useless: flipping Ostium's `permissionless` to false stayed GREEN,
+     * because the non-greedy match ran straight past the closing brace and
+     * matched DRIFT's `permissionless: true` instead. Guessing a window width
+     * is guessing; `[^}]*?` physically cannot leave the venue's own block.
+     */
+    t('Ostium is recorded as permissionless and free',
+      /ostium: \{[^}]*?capBps: 50,/.test(bc) &&
+      /ostium: \{[^}]*?setupCostUsd: 0,/.test(bc));
+    /*
+     * ─── A WINDOW WIDE ENOUGH TO REACH THE NEXT VENUE IS NO WINDOW ──────────
+     * My first version was `hyperliquid: \{[\s\S]{0,700}?refundable: true`.
+     * Flipping Hyperliquid to `refundable: false` left it GREEN, because the
+     * non-greedy match simply ran on and found Drift's `refundable: true`
+     * inside the same 700 characters. Anchor the two fields to each other
+     * instead: `refundable` must be the line that follows `setupCostUsd: 100`.
+     *
+     * This distinction is the whole point of the row — 100 USDC that stays
+     * ours is a deposit, and the moment it reads as a purchase it belongs in a
+     * different column under a no-spending rule.
+     */
+    t('Hyperliquid\u2019s 100 USDC is recorded as refundable, not as a purchase',
+      /setupCostUsd: 100,\s*refundable: true,/.test(bc));
+    /* Ostium and dYdX cost nothing, so "refundable" there is trivially true;
+       the claim that matters is that neither needs permission. */
+    t('...and the two free venues are recorded as permissionless',
+      /ostium: \{[^}]*?permissionless: true,/.test(bc) &&
+      /dydx: \{[^}]*?permissionless: true,/.test(bc));
+
+    /*
+     * ─── THE CORRECTION, GUARDED ────────────────────────────────────────────
+     * venueReferral.js says dYdX earns us nothing because of a $10,000 volume
+     * floor. That is true of their AFFILIATE programme and false of builder
+     * codes, whose docs say no approval is required at all. If someone deletes
+     * this note the old wrong belief quietly returns.
+     */
+    t('the dYdX volume-floor correction is recorded',
+      /correctsPreviousClaim:/.test(bc) && /dydx: \{[^}]*?setupCostUsd: 0,/.test(bc));
+
+    /*
+     * Ordering: cheapest first. Explicitly NOT by cap — sorting by what pays
+     * us most is the "route the user to the worse product" failure this
+     * project has refused twice already.
+     */
+    t('venues are ordered by what they cost us, not by what they pay us',
+      /a\.setupCostUsd - b\.setupCostUsd/.test(bc) && !/capBps - a\.capBps/.test(bc));
+
+    /*
+     * ─── READINESS MUST SAY "NOT BUILT" ─────────────────────────────────────
+     * The whole point of /api/revenue/readiness is that the owner cannot read
+     * source and has been told "it's ready, just set the variable" for things
+     * that were not. These four are genuinely not built.
+     */
+    const rd = read('server/readiness.js');
+    const rdc = code(rd);
+    for (const id of ['builder-ostium', 'builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+      t(`readiness lists ${id}`, new RegExp(`id: '${id}'`).test(rdc));
+    }
+    /*
+     * My first version of this checked `/ready: false/.test(rdc)` — which was
+     * already true elsewhere in the file (kyberswap-key), so it passed no
+     * matter what these four said. Window from each id to its own `ready`.
+     */
+    for (const id of ['builder-ostium', 'builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+      t(`...and does not claim ${id} is built`,
+        new RegExp(`id: '${id}',[\\s\\S]{0,120}?ready: false`).test(rdc));
+      t(`...nor that ${id} is earning`,
+        new RegExp(`id: '${id}',[\\s\\S]{0,80}?live: false`).test(rdc));
+    }
+
+    /*
+     * ─── THE BUG THIS SECTION FOUND ─────────────────────────────────────────
+     * `allRemainingAreCodeComplete` was `waiting.every(l => l.ready)` where
+     * `waiting` is already filtered to `ready === true`. So it was vacuously
+     * true and stayed true even with four unbuilt lines on the list — a
+     * headline that could never go false, in the one endpoint whose job is to
+     * stop exactly that kind of quiet lie.
+     */
+    t('the code-complete headline counts the unbuilt rows',
+      /notCodeComplete = lines\.filter\(\(l\) => !l\.live && !l\.ready\)/.test(rdc) &&
+      /allRemainingAreCodeComplete: notCodeComplete\.length === 0/.test(rdc));
+    /*
+     * And the BUILD list is narrower than that. kyberswap-key is `ready:false`
+     * but its blocker is Kyber answering an email, not code — putting it on a
+     * build list would misdirect in the opposite direction.
+     */
+    t('...but the build list excludes rows blocked on somebody else',
+      /needsBuild = notCodeComplete\.filter\(\(l\) => l\.blockedBy !== 'THIRD_PARTY'\)/.test(rdc));
+    t('...and cannot be the old vacuous form',
+      !/allRemainingAreCodeComplete: waiting\.every/.test(rdc));
+    /* Naming them, because "4 things need building" is unactionable. */
+    t('...and names what still needs building',
+      /needsBuild: needsBuild\.map\(\(l\) => l\.id\)/.test(rdc));
+
+    /*
+     * ─── NOTHING ON SCREEN MAY CLAIM THIS YET ───────────────────────────────
+     * The Perp screen's notice already switches between "we earn nothing" and
+     * "we take a share" based on venueReferral. Builder codes are a separate,
+     * unbuilt mechanism and must not leak into that decision until an order
+     * path exists.
+     */
+    t('the builder module is not wired into any screen yet',
+      !/builderCodes/.test(read('src/pages/Perp.jsx')));
+
+    /* The Persian write-up, which is the actual deliverable for this question. */
+    t('the CCXT answer is written up', existsSync('docs/CCXT-BUILDER-CODES-FA.md'));
+    const doc = read('docs/CCXT-BUILDER-CODES-FA.md');
+    /*
+     * The two conclusions that must survive editing: CCXT's own route needs
+     * the user's API key on our server, and builder codes are 25x the
+     * referral. Matched on the claim, not on one phrasing of it.
+     */
+    t('...it says why the CCXT broker route needs the user\u2019s API key',
+      /کلید API/.test(doc) && /غیرکاستدیال/.test(doc));
+    t('...and carries the 25x arithmetic',
+      /۲۵ برابر/.test(doc));
+  }
+
   return rows;
 }
