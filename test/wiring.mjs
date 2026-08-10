@@ -9982,6 +9982,14 @@ export default function run() {
      * than a promise.
      */
     const css = read('src/index.css');
+    const modernShop = read('src/styles/shop-modern.css');
+    t('the modern storefront layer is loaded after the shared stylesheet',
+      /styles\/shop-modern\.css/.test(read('src/main.jsx')));
+    t('mobile products use a two-column grid and wide web grows to three',
+      /repeat\(2, minmax\(0, 1fr\)\)/.test(modernShop) &&
+      /repeat\(3, minmax\(0, 1fr\)\)/.test(modernShop));
+    t('the storefront has integrated search, trust signals and a visual CTA',
+      /shop-search/.test(page) && /shop-trust-row/.test(page) && /shop-promo-cta/.test(read('src/components/ShopPromo.jsx')));
 
     /* «خیلی کوچیکه عکس ها را بگتر کن» — a 16:9 stage, not a 34px icon. */
     t('brand art gets a real stage', /\.shop-shot \{[\s\S]{0,200}?aspect-ratio: 16 \/ 9/.test(css));

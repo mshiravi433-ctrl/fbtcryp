@@ -1,7 +1,12 @@
 # Changelog
 
-## 1.28.1 — Ostium and dYdX trading
+## 1.28.1 — Ostium, dYdX and storefront refresh
 
+- Rebuilt the Shop as a modern mobile storefront: image-first campaign hero,
+  five-item icon navigation, trust chips, integrated search, two-column mobile
+  product grid (three on wide web), cleaner brand cards and stronger product
+  hierarchy. The existing country restrictions and external-checkout honesty
+  remain unchanged.
 - Added `/dydx`: official EVM-signature onboarding, memory-only dYdX signing
   session, 200+ live markets, account/position reads and IOC market orders with
   the supplied `dydx1…` Builder Code at 500 ppm. The official client is pinned

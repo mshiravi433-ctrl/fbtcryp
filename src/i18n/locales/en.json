@@ -2942,7 +2942,8 @@
       "flights": "Fly anywhere, paid in stablecoins",
       "stays": "Hotels worldwide, booked in crypto",
       "cards": "Gift cards for 200+ brands",
-      "esim": "Data in 180+ countries, no SIM"
+      "esim": "Data in 180+ countries, no SIM",
+      "explore": "Explore now"
     },
     "howTo": "How to redeem",
     "heroTitle": "Spend crypto in {{country}}",
@@ -2953,7 +2954,15 @@
       "title": "Mobile credit and data",
       "body": "Top up any prepaid number, or take an eSIM with data in 180+ countries — no plastic, no shop.",
       "go": "Top up a number"
-    }
+    },
+    "heroKicker": "EVERYDAY CRYPTO COMMERCE",
+    "trust": {
+      "fast": "Fast delivery",
+      "crypto": "Pay with crypto",
+      "email": "Delivered by email"
+    },
+    "digital": "DIGITAL",
+    "clear": "Clear search"
   },
   "fbt": {
     "title": "Your FBT balance",

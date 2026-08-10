@@ -84,6 +84,7 @@ export default function ShopPromo({ slides, onSlide }) {
         >
           {t(s.title)}
         </motion.span>
+        <span className="shop-promo-cta">{t('shop.promo.explore')} <b aria-hidden="true">›</b></span>
 
         {/* Position dots. Also the only affordance telling the reader there is
             more than one slide, which a silent cross-fade does not. */}
