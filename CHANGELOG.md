@@ -1,7 +1,16 @@
 # Changelog
 
-## 1.28.1 — Ostium trading UI
+## 1.28.1 — Ostium and dYdX trading
 
+- Added `/dydx`: official EVM-signature onboarding, memory-only dYdX signing
+  session, 200+ live markets, account/position reads and IOC market orders with
+  the supplied `dydx1…` Builder Code at 500 ppm. The official client is pinned
+  exactly to known-good 3.4.0 because multiple adjacent npm releases were
+  compromised in the January 2026 supply-chain incident.
+- Added full Ostium position management: partial/full close, TP, SL, exact-
+  approval collateral top-up and collateral removal.
+- Added a public derivatives dashboard for funding, perp basis, open interest,
+  spread, and bid/ask depth within 1%.
 - Fixed the Ostium → Swap handoff: it now selects Arbitrum USDC, and the generic
   network-reset effect can no longer overwrite a token supplied by a deep link.
 - Fixed Solana Mobile Wallet Adapter end-to-end. The app now uses the current

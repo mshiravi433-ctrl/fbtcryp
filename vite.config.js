@@ -36,8 +36,8 @@ function stripDisabledLocaleCopy() {
    */
 
   /* Top-level namespaces to drop, and the nav labels that point at them. */
-  const drop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium'];
-  const navDrop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium'];
+  const drop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives'];
+  const navDrop = speculation ? [] : ['predict', 'perp', 'invest', 'ostium', 'dydx', 'derivatives'];
 
   return {
     name: 'strip-disabled-locale-copy',

@@ -67,6 +67,8 @@ const Stocks = lazyRetry(() => import('./pages/Stocks'));
    other leveraged screens: unlike the virtual lab it is real, but the same
    store vocabulary rule applies. Full builds include the complete route. */
 const Ostium = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Ostium')) : () => null;
+const Dydx = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Dydx')) : () => null;
+const DerivativesDashboard = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/DerivativesDashboard')) : () => null;
 const Shop = lazyRetry(() => import('./pages/Shop'));
 const Help = lazyRetry(() => import('./pages/Help'));
 const Docs = lazyRetry(() => import('./pages/Docs'));
@@ -247,6 +249,8 @@ function AnimatedRoutes() {
             <Route path="/signals" element={<Signals />} />
             <Route path="/stocks" element={<Stocks />} />
             {SPECULATION_ENABLED && <Route path="/ostium" element={<Ostium />} />}
+            {SPECULATION_ENABLED && <Route path="/dydx" element={<Dydx />} />}
+            {SPECULATION_ENABLED && <Route path="/derivatives" element={<DerivativesDashboard />} />}
             <Route path="/shop" element={<Shop />} />
             <Route path="/help" element={<Help />} />
             <Route path="/docs" element={<Docs />} />

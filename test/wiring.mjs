@@ -3668,8 +3668,10 @@ export default function run() {
     const renderers = walk('src')
       .filter((f) => /<FundingPanel/.test(read(f)))
       .map((f) => f.replace(/\\/g, '/'));
-    t(`only the gated perp page renders the funding panel (${renderers.length})`,
-      renderers.length === 1 && renderers[0].endsWith('src/pages/Perp.jsx'));
+    t(`only gated website pages render the funding panel (${renderers.length})`,
+      renderers.length === 2 &&
+      renderers.some((f) => f.endsWith('src/pages/Perp.jsx')) &&
+      renderers.some((f) => f.endsWith('src/pages/DerivativesDashboard.jsx')));
   }
 
   /* ---- 52. automatic orders: watched in the BACKGROUND, end to end ----- */
@@ -10573,16 +10575,26 @@ export default function run() {
      * down; these three are still research only. Listing it here as well would
      * have been a guard asserting the opposite of the truth.
      */
-    for (const id of ['builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+    for (const id of ['builder-hyperliquid', 'builder-drift']) {
       t(`...and does not claim ${id} is built`,
         new RegExp(`id: '${id}',[\\s\\S]{0,120}?ready: false`).test(rdc));
     }
-    for (const id of ['builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+    for (const id of ['builder-hyperliquid', 'builder-drift']) {
       t(`...nor that ${id} is earning`,
         new RegExp(`id: '${id}',[\\s\\S]{0,160}?live: false`).test(rdc));
     }
     t('the completed Ostium order path is live',
       /id: 'builder-ostium',[\s\S]{0,160}?live: true/.test(rdc));
+    t('the completed dYdX order path is live',
+      /id: 'builder-dydx',[\s\S]{0,160}?live: true/.test(rdc));
+    const dydx = read('src/lib/dydx.js');
+    t('dYdX orders carry the supplied payout address and 500 ppm fee',
+      /dydx17493m25rh59j2sf2525r49htr2cva5rqnf76r7/.test(dydx) &&
+      /DYDX_BUILDER_FEE_PPM = 500/.test(dydx) && /builderAddress: DYDX_BUILDER_ADDRESS/.test(dydx));
+    t('the dYdX key is memory-only and the order page is reachable',
+      !/localStorage/.test(code(dydx)) && /path="\/dydx"/.test(app));
+    t('the known compromised dYdX client versions are not installed',
+      JSON.parse(read('package.json')).dependencies['@dydxprotocol/v4-client-js'] === '3.4.0');
 
     /*
      * ─── THE BUG THIS SECTION FOUND ─────────────────────────────────────────

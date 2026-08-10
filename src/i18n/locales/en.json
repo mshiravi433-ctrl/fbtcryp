@@ -36,7 +36,9 @@
     "buy": "Buy & sell",
     "bridge": "Bridge",
     "shop": "Shop",
-    "ostium": "Real Markets"
+    "ostium": "Real Markets",
+    "dydx": "dYdX",
+    "derivatives": "Derivatives Data"
   },
   "common": {
     "balance": "Balance",
@@ -3048,6 +3050,82 @@
       "BAD_RISK_PRICE": "Take-profit and stop-loss must be valid positive prices.",
       "BAD_LONG_RISK": "For a long, take-profit must be above the current price and stop-loss below it.",
       "BAD_SHORT_RISK": "For a short, take-profit must be below the current price and stop-loss above it."
+    },
+    "manage": "Manage position",
+    "manageTitle": "Manage Ostium position",
+    "manageAction": {
+      "close": "Close",
+      "tp": "Take profit",
+      "sl": "Stop loss",
+      "collateral": "Collateral"
+    },
+    "manageField": {
+      "close": "Percent to close",
+      "tp": "New take-profit price",
+      "sl": "New stop-loss price",
+      "collateral": "USDC change"
+    },
+    "collateralHint": "Positive adds; negative removes",
+    "manageRisk": "This is a real position-management transaction. Closing can realize a loss; removing collateral moves liquidation closer. A positive top-up requires an exact USDC approval first."
+  },
+  "dydx": {
+    "title": "dYdX perpetuals",
+    "subtitle": "Wallet-derived, onchain orders across 200+ perpetual markets.",
+    "live": "Live",
+    "offline": "Unavailable",
+    "risk": "Perpetuals are leveraged derivatives. You can lose all collateral, and most retail leveraged traders lose money. You do not own the underlying asset.",
+    "tradingAccount": "dYdX Chain account",
+    "notConnected": "Not connected",
+    "connect": "Connect dYdX",
+    "connectNote": "Your EVM wallet signs the official onboarding message. The derived dYdX key exists only in memory and is never sent to FBT or stored.",
+    "equity": "Account equity",
+    "marketUnavailable": "The dYdX indexer is unavailable. Orders are disabled instead of using stale data.",
+    "market": "Market",
+    "oraclePrice": "Oracle price",
+    "openInterest": "Open interest",
+    "buy": "Long / Buy",
+    "sell": "Short / Sell",
+    "size": "Size ({{asset}})",
+    "slippage": "Maximum execution slippage",
+    "notional": "Notional",
+    "builderFee": "FBT builder fee (0.05%)",
+    "funding": "Next funding rate",
+    "review": "Review order",
+    "submitted": "Order submitted to dYdX.",
+    "positions": "Open dYdX positions",
+    "accountUnavailable": "Account state could not be verified.",
+    "noPositions": "No open positions.",
+    "sizeLabel": "Size",
+    "entryPrice": "Entry price",
+    "builderTitle": "Builder fee is inside the signed order",
+    "builderBody": "dYdX pays the {{fee}} ppm builder fee to {{address}} on each fill. It is visible onchain and FBT never holds the trade collateral.",
+    "fundAccount": "Fund or manage the account on official dYdX",
+    "confirmTitle": "Confirm real dYdX order",
+    "direction": "Direction",
+    "confirmRisk": "This broadcasts a real order to dYdX Chain. IOC market orders may fill partially or at a worse price up to the displayed slippage limit.",
+    "err": {
+      "REJECTED": "You rejected the onboarding signature. Nothing was sent.",
+      "NO_SIGNER": "Unlock or reconnect your EVM wallet.",
+      "CONNECT_FAILED": "Could not create the dYdX signing session.",
+      "NOT_CONNECTED": "Connect dYdX first.",
+      "BAD_SIZE": "Enter a valid position size.",
+      "BAD_SLIPPAGE": "Choose a valid slippage limit.",
+      "NO_COLLATERAL": "This dYdX account has insufficient collateral. Fund it before placing an order.",
+      "ORDER_FAILED": "dYdX rejected the order. Nothing is shown as filled."
     }
+  },
+  "derivatives": {
+    "title": "Derivatives market dashboard",
+    "subtitle": "Funding, perp basis, open interest and executable order-book depth.",
+    "notice": "Public market data only—not a trading signal. Basis here compares a perpetual oracle price with spot; it is not guaranteed arbitrage and can widen during stress.",
+    "marketTable": "Markets by open interest",
+    "basis": "Perp basis",
+    "perpPrice": "Perpetual price",
+    "spotPrice": "Spot reference",
+    "openInterest": "Open interest",
+    "nextFunding": "Next funding rate",
+    "spread": "Best bid/ask spread",
+    "bidDepth": "Bid depth within 1%",
+    "askDepth": "Ask depth within 1%"
   }
 }

@@ -347,6 +347,62 @@ export async function buildOpenTrade({
   return { to: OSTIUM_TRADING, data, chainId: OSTIUM_CHAIN_ID };
 }
 
+/** Full or partial market close, verified against SDK 0.7.0 ABI/scaling. */
+export async function buildCloseTrade({ pairId, index, closePercent = 100, price, slippageBps = 25 }) {
+  const { Interface, parseUnits } = await loadEthers();
+  const pct = Number(closePercent);
+  if (!Number.isFinite(pct) || pct <= 0 || pct > 100) throw new Error('BAD_CLOSE_PERCENT');
+  if (!Number.isFinite(Number(price)) || Number(price) <= 0) throw new Error('BAD_PRICE');
+  const iface = new Interface([
+    'function closeTradeMarket(uint16 pairIndex,uint8 index,uint16 closePercentage,uint192 marketPrice,uint32 slippageP)'
+  ]);
+  return {
+    to: OSTIUM_TRADING,
+    data: iface.encodeFunctionData('closeTradeMarket', [
+      Number(pairId), Number(index), Math.round(pct * 100), parseUnits(String(price), 18), Math.round(Number(slippageBps))
+    ]),
+    chainId: OSTIUM_CHAIN_ID
+  };
+}
+
+/** Update one risk control at a time, matching the SDK's explicit rule. */
+export async function buildModifyPosition({ pairId, index, takeProfit = null, stopLoss = null }) {
+  const { Interface, parseUnits } = await loadEthers();
+  const hasTp = takeProfit != null && takeProfit !== '';
+  const hasSl = stopLoss != null && stopLoss !== '';
+  if (hasTp === hasSl) throw new Error('ONE_CHANGE_AT_A_TIME');
+  const name = hasTp ? 'updateTp' : 'updateSl';
+  const value = hasTp ? takeProfit : stopLoss;
+  if (!Number.isFinite(Number(value)) || Number(value) < 0) throw new Error('BAD_PRICE');
+  const iface = new Interface([
+    'function updateTp(uint16 pairIndex,uint8 index,uint192 newTp)',
+    'function updateSl(uint16 pairIndex,uint8 index,uint192 newSl)'
+  ]);
+  return {
+    to: OSTIUM_TRADING,
+    data: iface.encodeFunctionData(name, [Number(pairId), Number(index), parseUnits(String(value), 18)]),
+    chainId: OSTIUM_CHAIN_ID
+  };
+}
+
+/** Positive adds collateral; negative removes it. USDC uses six decimals. */
+export async function buildUpdateCollateral({ pairId, index, amountUsd }) {
+  const { Interface, parseUnits } = await loadEthers();
+  const amount = Number(amountUsd);
+  if (!Number.isFinite(amount) || amount === 0) throw new Error('BAD_COLLATERAL_CHANGE');
+  const name = amount > 0 ? 'topUpCollateral' : 'removeCollateral';
+  const iface = new Interface([
+    'function topUpCollateral(uint16 pairIndex,uint8 index,uint256 topUpAmount)',
+    'function removeCollateral(uint16 pairIndex,uint8 index,uint256 removeAmount)'
+  ]);
+  return {
+    to: OSTIUM_TRADING,
+    data: iface.encodeFunctionData(name, [Number(pairId), Number(index), parseUnits(String(Math.abs(amount)), 6)]),
+    chainId: OSTIUM_CHAIN_ID,
+    needsApproval: amount > 0
+  };
+}
+
 /**
  * The USDC approval that must land before the first trade ever can.
  *
@@ -500,6 +556,7 @@ export async function getOstiumPositions({ trader, markets = [], timeout = 12000
         return {
           id: tr.id,
           pairId: String(tr.pair?.id),
+          index: Number(tr.index || 0),
           name: `${String(tr.pair?.from || '').toUpperCase()}/${String(tr.pair?.to || '').toUpperCase()}`,
           buy: Boolean(tr.isBuy),
           collateral: scaled(tr.collateral, 6),

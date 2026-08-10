@@ -19,6 +19,9 @@ import {
   OSTIUM_SPENDER,
   buildApproveCollateral,
   buildOpenTrade,
+  buildCloseTrade,
+  buildModifyPosition,
+  buildUpdateCollateral,
   getOstiumMarkets,
   getOstiumPositions,
   tradeCosts,
@@ -68,6 +71,9 @@ export default function Ostium() {
   const [txHash, setTxHash] = useState(null);
   const [account, setAccount] = useState({ balance: null, allowance: null });
   const [positions, setPositions] = useState({ positions: [], live: true });
+  const [managing, setManaging] = useState(null);
+  const [manageAction, setManageAction] = useState('close');
+  const [manageValue, setManageValue] = useState('100');
 
   const loadMarkets = useCallback(async () => {
     setLoading(true);
@@ -258,6 +264,49 @@ export default function Ostium() {
     }
   };
 
+  const submitManagement = async () => {
+    if (!managing) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await ensureChain();
+      const signer = wallet.getSigner?.();
+      if (!signer) throw new Error('NO_SIGNER');
+      let tx;
+      if (manageAction === 'close') {
+        const fresh = await getOstiumMarkets();
+        const row = fresh.pairs.find((m) => String(m.pairId) === String(managing.pairId));
+        if (!fresh.live || !row?.isMarketOpen) throw new Error('MARKET_CLOSED');
+        tx = await buildCloseTrade({
+          pairId: managing.pairId, index: managing.index, closePercent: manageValue,
+          price: row.mid, slippageBps: Math.round(Number(slippagePct) * 100)
+        });
+      } else if (manageAction === 'tp') {
+        tx = await buildModifyPosition({ pairId: managing.pairId, index: managing.index, takeProfit: manageValue });
+      } else if (manageAction === 'sl') {
+        tx = await buildModifyPosition({ pairId: managing.pairId, index: managing.index, stopLoss: manageValue });
+      } else {
+        tx = await buildUpdateCollateral({ pairId: managing.pairId, index: managing.index, amountUsd: manageValue });
+        if (tx.needsApproval) {
+          const approval = await buildApproveCollateral({ amountUsd: Math.abs(Number(manageValue)) });
+          const approved = await signer.sendTransaction({ to: approval.to, data: approval.data });
+          await approved.wait();
+        }
+      }
+      const sent = await signer.sendTransaction({ to: tx.to, data: tx.data });
+      setTxHash(sent.hash);
+      setManaging(null);
+      const refreshed = await getOstiumPositions({ trader: wallet.address, markets });
+      setPositions(refreshed);
+      haptic?.('success');
+    } catch (e) {
+      setError(displayError(e));
+      haptic?.('error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const buttonLabel = !wallet.isConnected
     ? t('ostium.connect')
     : wallet.chainId !== OSTIUM_CHAIN_ID
@@ -434,6 +483,9 @@ export default function Ostium() {
                   </div>
                   <div className="row-between" style={{ marginTop: 7 }}><span className="faint">{t('ostium.collateral')}</span><span className="mono">{fmtUsd(p.collateral)}</span></div>
                   <div className="row-between"><span className="faint">{t('ostium.entryCurrent')}</span><span className="mono">${fmtPrice(p.entryPrice)} / {p.currentPrice ? `$${fmtPrice(p.currentPrice)}` : '—'}</span></div>
+                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 9 }} onClick={() => { setManaging(p); setManageAction('close'); setManageValue('100'); }}>
+                    {t('ostium.manage')}
+                  </button>
                 </div>
               ))}
             </div>
@@ -453,6 +505,20 @@ export default function Ostium() {
       >
         {t('ostium.getUsdc')}
       </button>
+
+      <Sheet open={Boolean(managing)} onClose={() => !busy && setManaging(null)} title={t('ostium.manageTitle')}>
+        {managing && <>
+          <div className="card card-tight"><div className="row-between"><strong>{managing.name}</strong><span className="mono">{managing.leverage}×</span></div></div>
+          <div className="segmented" style={{ marginTop: 10 }}>
+            {['close', 'tp', 'sl', 'collateral'].map((a) => <button key={a} className={manageAction === a ? 'active' : ''} onClick={() => { setManageAction(a); setManageValue(a === 'close' ? '100' : ''); }}>{t(`ostium.manageAction.${a}`)}</button>)}
+          </div>
+          <label className="field-label" style={{ marginTop: 12 }}>{t(`ostium.manageField.${manageAction}`)}</label>
+          <input type="number" inputMode="decimal" value={manageValue} onChange={(e) => setManageValue(e.target.value)} placeholder={manageAction === 'collateral' ? t('ostium.collateralHint') : '0'} />
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('ostium.manageRisk')}</p>
+          {error && <p className="notice notice-danger">{t(`ostium.err.${error}`, { defaultValue: error })}</p>}
+          <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy || !manageValue} onClick={submitManagement}>{busy ? t('common.loading') : t('common.confirm')}</button>
+        </>}
+      </Sheet>
 
       <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
       <Sheet open={confirming} onClose={() => !busy && setConfirming(false)} title={t('ostium.confirmTitle')}>
