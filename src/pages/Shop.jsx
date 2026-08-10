@@ -78,7 +78,7 @@ const TABS = [
 const PRIORITY = ['e-money', 'e-commerce', 'games', 'streaming', 'food', 'groceries', 'retail', 'entertainment'];
 
 /** How many brands a category shows before "see all". */
-const PREVIEW = 6;
+const PREVIEW = 4;
 
 /*
  * Promo slides now live in lib/shopImages.js with their photographer credits.
@@ -373,7 +373,7 @@ export default function Shop() {
         <p className="faint" style={{ fontSize: 11.5 }}>
           {t('shop.count', { n: catRows.length, country: countryName })}
         </p>
-        <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
+        <motion.div className="shop-grid" variants={stagger} initial="hidden" animate="show">
           {catRows.map((b) => (
             <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
           ))}
@@ -387,7 +387,15 @@ export default function Shop() {
     <PageTransition>
       {header}
 
-      <div className="shop-tabs">
+      {/* A modern storefront opens with merchandise, not navigation chrome.
+          The visual campaign sits above categories like current mobile retail
+          apps; the first useful product is visible before any explanatory
+          card. */}
+      {(tab === 'cards' || tab === 'money') && (
+        <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
+      )}
+
+      <div className="shop-tabs" role="tablist" aria-label={t('shop.title')}>
         {TABS.map(({ id, Icon }) => (
           <button
             key={id}
@@ -415,8 +423,14 @@ export default function Shop() {
             their site rather than a category inside gift cards.
           */}
           <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
+            <span className="shop-hero-kicker">{t('shop.heroKicker')}</span>
             <div className="shop-hero-title">{t('shop.heroTitle', { country: countryName })}</div>
             <p className="shop-hero-sub">{t('shop.heroSub')}</p>
+            <div className="shop-trust-row">
+              <span>⚡ {t('shop.trust.fast')}</span>
+              <span>◈ {t('shop.trust.crypto')}</span>
+              <span>✉ {t('shop.trust.email')}</span>
+            </div>
             <div className="shop-quick">
               <button onClick={() => open(countryUrl(country))}>
                 <IconCard width={18} height={18} />
@@ -429,18 +443,18 @@ export default function Shop() {
             </div>
           </motion.section>
 
-          <div className="row" style={{ gap: 8 }}>
-            <span className="icon-btn" style={{ pointerEvents: 'none' }}>
-              <IconSearch width={16} height={16} />
-            </span>
+          <label className="shop-search">
+            <IconSearch width={18} height={18} />
             <input
-              type="text"
+              type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('shop.search', { country: countryName })}
-              style={{ flex: 1 }}
             />
-          </div>
+            {query && (
+              <button type="button" onClick={() => setQuery('')} aria-label={t('shop.clear')}>×</button>
+            )}
+          </label>
 
           {loading && !data ? (
             /* A skeleton shaped like the tile it becomes, so the page does
@@ -465,7 +479,7 @@ export default function Shop() {
                 {t('shop.noMatch')}
               </div>
             ) : (
-              <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
+              <motion.div className="shop-grid" variants={stagger} initial="hidden" animate="show">
                 {searched.map((b) => (
                   <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
                 ))}
@@ -478,14 +492,6 @@ export default function Shop() {
             </div>
           ) : (
             <>
-              {/*
-                ─── A PICTURE ADVERT, NOT A LINE OF TEXT ───────────────────
-                Asked for: «تبلیغات ... با عکس نه اینکه فقط نوشتاری باشه».
-                Uses a real destination photograph from the provider's CDN
-                rather than an emoji in a gradient box.
-              */}
-              <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
-
               {/*
                 ─── CATEGORY PREVIEWS ───────────────────────────────────────
                 «هر کتگوری چندتا به صورت ورتیکال باشد و بیشتر بره به صفحه ان

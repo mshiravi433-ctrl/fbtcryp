@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.28.1 — Ostium, dYdX and storefront refresh
+
+- Rebuilt the Shop as a modern mobile storefront: image-first campaign hero,
+  five-item icon navigation, trust chips, integrated search, two-column mobile
+  product grid (three on wide web), cleaner brand cards and stronger product
+  hierarchy. The existing country restrictions and external-checkout honesty
+  remain unchanged.
+- Added `/dydx`: official EVM-signature onboarding, memory-only dYdX signing
+  session, 200+ live markets, account/position reads and IOC market orders with
+  the supplied `dydx1…` Builder Code at 500 ppm. The official client is pinned
+  exactly to known-good 3.4.0 because multiple adjacent npm releases were
+  compromised in the January 2026 supply-chain incident.
+- Added full Ostium position management: partial/full close, TP, SL, exact-
+  approval collateral top-up and collateral removal.
+- Added a public derivatives dashboard for funding, perp basis, open interest,
+  spread, and bid/ask depth within 1%.
+- Fixed the Ostium → Swap handoff: it now selects Arbitrum USDC, and the generic
+  network-reset effect can no longer overwrite a token supplied by a deep link.
+- Fixed Solana Mobile Wallet Adapter end-to-end. The app now uses the current
+  Wallet Standard registry and can sign/send after connecting instead of
+  looking only for `window.solana` and reporting that the transaction was not
+  signed.
+- Added exact Solana source/SOL balance checks before opening the signing
+  prompt, plus always-visible Phantom, Solflare and Backpack launch links.
+- Wallet identity links now reject the retired `lawpoetics.ir` environment
+  value and always identify the production dapp as `fbtswap.ir`.
+- Added the complete `/ostium` wallet-signed order flow for gold, oil, forex,
+  stocks, indices, ETFs and crypto: live prices and market hours, current
+  pair-specific leverage limits, long/short ticket, TP/SL, and an itemised fee
+  preview.
+- Added exact-amount Arbitrum USDC approval, a final real-money confirmation,
+  fresh-price revalidation immediately before signing, Arbiscan tracking and a
+  read-only open-position list.
+- Kept the leveraged route and its locale copy out of store-safe builds. It is
+  included by `build:full` with `VITE_ENABLE_SPECULATION=true`, matching the
+  existing app-store vocabulary policy.
+- Fixed local-wallet network switching: the in-memory ethers signer now
+  reconnects to the target RPC instead of merely changing the network label.
+
 ## 1.27.0 — versionCode 55
 
 ### The white box around the logo — three causes, all fixed

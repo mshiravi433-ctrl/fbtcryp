@@ -1,0 +1,213 @@
+import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import PageTransition, { riseIn } from '../components/PageTransition';
+import InfoBox from '../components/InfoBox';
+import SegIndicator from '../components/SegIndicator';
+import Sheet from '../components/Sheet';
+import WalletConnectSheet from '../components/WalletConnectSheet';
+import { useWallet, shortAddress } from '../context/WalletContext';
+import { useTelegram } from '../context/TelegramContext';
+import { fmtPrice, fmtUsd } from '../lib/format';
+import {
+  DYDX_BUILDER_ADDRESS,
+  DYDX_BUILDER_FEE_PPM,
+  connectDydx,
+  disconnectDydx,
+  dydxFeeUsd,
+  getDydxMarkets,
+  getDydxSubaccount,
+  placeDydxOrder
+} from '../lib/dydx';
+
+export default function Dydx() {
+  const { t } = useTranslation();
+  const wallet = useWallet();
+  const { haptic } = useTelegram();
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [markets, setMarkets] = useState([]);
+  const [live, setLive] = useState(false);
+  const [ticker, setTicker] = useState('BTC-USD');
+  const [side, setSide] = useState('buy');
+  const [size, setSize] = useState('');
+  const [slippage, setSlippage] = useState('0.5');
+  const [dydxAddress, setDydxAddress] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [accountLive, setAccountLive] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => getDydxMarkets().then((r) => {
+      if (!alive) return;
+      setMarkets(r.markets);
+      setLive(r.live);
+    });
+    load();
+    const id = setInterval(load, 20_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const market = markets.find((m) => m.ticker === ticker) || markets[0];
+  useEffect(() => {
+    if (market && !markets.some((m) => m.ticker === ticker)) setTicker(market.ticker);
+  }, [market, markets, ticker]);
+
+  const notional = Number(size || 0) * Number(market?.oraclePrice || 0);
+  const fee = dydxFeeUsd(notional);
+  const positions = account?.subaccount?.openPerpetualPositions
+    ? Object.values(account.subaccount.openPerpetualPositions)
+    : [];
+
+  const refreshAccount = async (address = dydxAddress) => {
+    if (!address) return;
+    const r = await getDydxSubaccount(address);
+    setAccount(r.account);
+    setAccountLive(r.live);
+  };
+
+  const connect = async () => {
+    if (!wallet.isConnected) return setConnectOpen(true);
+    setBusy(true);
+    setError(null);
+    try {
+      const signer = wallet.getSigner?.();
+      const connected = await connectDydx(signer);
+      setDydxAddress(connected.address);
+      await refreshAccount(connected.address);
+      haptic?.('success');
+    } catch (e) {
+      setError(/reject|denied|cancel/i.test(String(e?.message)) ? 'REJECTED' : (e?.message || 'CONNECT_FAILED'));
+      haptic?.('error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const order = await placeDydxOrder({ market, side, size, slippagePct: slippage });
+      setResult(order);
+      setReviewing(false);
+      await refreshAccount();
+      haptic?.('success');
+    } catch (e) {
+      const msg = String(e?.message || 'ORDER_FAILED');
+      setError(/insufficient|does not exist|not found/i.test(msg) ? 'NO_COLLATERAL' : msg.slice(0, 160));
+      haptic?.('error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canReview = dydxAddress && market?.status === 'ACTIVE' && Number(size) > 0 && notional > 0;
+
+  return (
+    <PageTransition>
+      <motion.div variants={riseIn} initial="hidden" animate="show">
+        <div className="row-between">
+          <div><h1 className="h1">{t('dydx.title')}</h1><p className="muted">{t('dydx.subtitle')}</p></div>
+          <span className={`pill ${live ? 'pill-up' : 'pill-down'}`}>{live ? t('dydx.live') : t('dydx.offline')}</span>
+        </div>
+      </motion.div>
+
+      <p className="notice notice-danger">{t('dydx.risk')}</p>
+
+      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
+        <div className="sheen" />
+        <div className="row-between">
+          <div>
+            <div className="faint">{t('dydx.tradingAccount')}</div>
+            <strong>{dydxAddress ? shortAddress(dydxAddress, 7) : t('dydx.notConnected')}</strong>
+          </div>
+          {dydxAddress ? (
+            <button className="btn btn-ghost btn-sm" onClick={() => { disconnectDydx(); setDydxAddress(null); setAccount(null); }}>{t('wallet.disconnect')}</button>
+          ) : (
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={connect}>{busy ? t('common.loading') : t('dydx.connect')}</button>
+          )}
+        </div>
+        {dydxAddress && (
+          <div className="row-between" style={{ marginTop: 10 }}>
+            <span className="faint">{t('dydx.equity')}</span>
+            <span className="mono">{account?.subaccount?.equity ? fmtUsd(account.subaccount.equity) : '0 USDC'}</span>
+          </div>
+        )}
+        <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
+      </motion.section>
+
+      {!live ? <p className="notice">{t('dydx.marketUnavailable')}</p> : (
+        <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+          <label className="field-label">{t('dydx.market')}</label>
+          <select value={market?.ticker || ''} onChange={(e) => setTicker(e.target.value)}>
+            {markets.filter((m) => m.status === 'ACTIVE').map((m) => <option value={m.ticker} key={m.ticker}>{m.ticker}</option>)}
+          </select>
+
+          {market && <div className="row-between" style={{ margin: '12px 0' }}>
+            <div><div className="faint">{t('dydx.oraclePrice')}</div><div className="stat-mini mono">${fmtPrice(market.oraclePrice)}</div></div>
+            <div style={{ textAlign: 'end' }}><div className="faint">{t('dydx.openInterest')}</div><div className="mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div></div>
+          </div>}
+
+          <div className="segmented" style={{ marginBottom: 12 }}>
+            {['buy', 'sell'].map((s) => <button key={s} className={side === s ? 'active' : ''} onClick={() => setSide(s)} style={{ isolation: 'isolate' }}>
+              {side === s && <SegIndicator id="dydx-side" />}{t(`dydx.${s}`)}
+            </button>)}
+          </div>
+
+          <label className="field-label">{t('dydx.size', { asset: market?.ticker?.split('-')[0] || '' })}</label>
+          <input type="number" inputMode="decimal" min="0" value={size} onChange={(e) => setSize(e.target.value)} placeholder="0.00" />
+          <label className="field-label" style={{ marginTop: 10 }}>{t('dydx.slippage')}</label>
+          <div className="row" style={{ gap: 6 }}>
+            {[0.1, 0.5, 1].map((n) => <button className={`tag ${Number(slippage) === n ? 'active' : ''}`} key={n} onClick={() => setSlippage(String(n))}>{n}%</button>)}
+          </div>
+
+          <div className="brg-quote" style={{ marginTop: 12 }}>
+            <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
+            <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
+            <div className="row-between"><span className="faint">{t('dydx.funding')}</span><span className="mono">{Number(market?.nextFundingRate || 0).toFixed(6)}%</span></div>
+          </div>
+
+          {error && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`dydx.err.${error}`, { defaultValue: error })}</p>}
+          <button className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`} disabled={!canReview || busy} onClick={() => setReviewing(true)} style={{ width: '100%', marginTop: 12 }}>
+            {dydxAddress ? t('dydx.review') : t('dydx.connect')}
+          </button>
+        </motion.section>
+      )}
+
+      {result && <div className="notice"><strong>{t('dydx.submitted')}</strong>{result.hash && <div className="mono faint" style={{ marginTop: 5, wordBreak: 'break-all' }}>{result.hash}</div>}</div>}
+
+      {dydxAddress && <section>
+        <p className="section-label">{t('dydx.positions')}</p>
+        {!accountLive ? <p className="notice">{t('dydx.accountUnavailable')}</p> : positions.length === 0 ? <div className="empty">{t('dydx.noPositions')}</div> : (
+          <div className="stack" style={{ gap: 8 }}>{positions.map((p) => <div className="card card-tight" key={p.market}>
+            <div className="row-between"><strong>{p.market}</strong><span className={`pill ${p.side === 'LONG' ? 'pill-up' : 'pill-down'}`}>{p.side}</span></div>
+            <div className="row-between" style={{ marginTop: 7 }}><span className="faint">{t('dydx.sizeLabel')}</span><span className="mono">{p.size}</span></div>
+            <div className="row-between"><span className="faint">{t('dydx.entryPrice')}</span><span className="mono">${fmtPrice(Number(p.entryPrice))}</span></div>
+          </div>)}</div>
+        )}
+      </section>}
+
+      <InfoBox title={t('dydx.builderTitle')} tone="info" id="dydx-builder">
+        <p>{t('dydx.builderBody', { fee: DYDX_BUILDER_FEE_PPM, address: DYDX_BUILDER_ADDRESS })}</p>
+      </InfoBox>
+
+      <a className="btn btn-ghost" href="https://dydx.trade" target="_blank" rel="noopener noreferrer">{t('dydx.fundAccount')}</a>
+
+      <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
+      <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
+        <div className="card card-tight stack" style={{ gap: 8 }}>
+          <div className="row-between"><span className="faint">{t('dydx.market')}</span><strong>{market?.ticker}</strong></div>
+          <div className="row-between"><span className="faint">{t('dydx.direction')}</span><strong>{t(`dydx.${side}`)}</strong></div>
+          <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
+          <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
+        </div>
+        <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('dydx.confirmRisk')}</p>
+        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
+      </Sheet>
+    </PageTransition>
+  );
+}

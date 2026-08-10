@@ -35,7 +35,8 @@ export default function ShopTile({ brand, open, onClick }) {
       variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
       onClick={onClick}
     >
-      <div className="shop-shot" style={{ background: brand.bg || 'var(--bg-raised)' }}>
+      <div className="shop-shot" style={{ '--shop-brand': brand.bg || 'var(--bg-raised)', background: brand.bg || 'var(--bg-raised)' }}>
+        <span className="shop-digital-badge">{t('shop.digital')}</span>
         {showImg ? (
           <img src={brand.logo} alt="" loading="lazy" onError={() => setBroken(true)} />
         ) : (
@@ -43,7 +44,7 @@ export default function ShopTile({ brand, open, onClick }) {
         )}
       </div>
       <div className="shop-tile-body">
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div className="shop-tile-name">{brand.name}</div>
           {brand.min && brand.max && (
             <div className="shop-tile-sub">
@@ -56,10 +57,12 @@ export default function ShopTile({ brand, open, onClick }) {
           as a slow image load. The word has to be there, so somebody hunting a
           brand learns it is unavailable rather than assuming we never had it.
         */}
-        {brand.outOfStock && (
+        {brand.outOfStock ? (
           <span className="pill pill-down" style={{ fontSize: 10, flexShrink: 0 }}>
             {t('shop.outOfStock')}
           </span>
+        ) : (
+          <span className="shop-tile-go" aria-hidden="true">›</span>
         )}
       </div>
     </motion.button>

@@ -24,6 +24,7 @@ import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient
  * next person editing this file.
  */
 import { fetchAvantisEquities } from '../lib/avantisEquities';
+import { SPECULATION_ENABLED } from '../lib/features';
 
 /**
  * STOCKS — tokenized equities, RWA sector tokens, and the honest limits.
@@ -231,6 +232,29 @@ export default function Stocks() {
         <h1 className="h1">{t('stocks.title')}</h1>
         <p className="muted">{t('stocks.subtitle')}</p>
       </motion.div>
+
+      {/* Tokenised shares above are ownership-like instruments; Ostium is the
+          separate leveraged derivative path. Keeping it a clearly labelled
+          doorway rather than mixing its rows into the share list preserves
+          the distinction the earlier stock-page work insisted on. */}
+      {SPECULATION_ENABLED && <motion.button
+        className="card card-rgb"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        whileTap={{ scale: 0.985 }}
+        onClick={() => navigate('/ostium')}
+        style={{ width: '100%', textAlign: 'start', cursor: 'pointer' }}
+      >
+        <div className="sheen" />
+        <div className="row-between">
+          <div>
+            <div style={{ fontWeight: 700 }}>{t('ostium.title')}</div>
+            <div className="faint">{t('ostium.subtitle')}</div>
+          </div>
+          <span style={{ fontSize: 20 }}>›</span>
+        </div>
+      </motion.button>}
 
       <div className="segmented">
         {['equity', 'rwa'].map((k) => (

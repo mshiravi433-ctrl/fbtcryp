@@ -4,6 +4,7 @@ import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import './i18n';
 import './index.css';
+import './styles/shop-modern.css';
 
 /**
  * Top-level crash guard.

@@ -249,19 +249,19 @@ export function revenueReadiness() {
        * there is nothing to configure and nothing to forget in the APK.
        */
       id: 'builder-ostium',
-      live: false,
+      live: true,
       ready: true,
       cost: 0,
-      blockedBy: 'BUILD',
-      note: 'Ostium builder fee, Arbitrum. Encoder BUILT and verified byte-for-byte against their SDK (6 cases) without shipping it — their bundle is 177KB gzipped against our whole 237KB entry. Fee 5 bps of notional, paid atomically to 0xaf5CE154… on trade open; no account, no deposit, cap 50 bps. Two traps found and handled: the collateral allowance goes to TradingStorage 0xccd5891…, NOT the Trading contract we call, and the trade struct has a tenth member isDayTrade that their docs omit. Remaining: the trading screen itself'
+      blockedBy: null,
+      note: 'Ostium builder fee is wired end-to-end on /ostium: live pair metadata and prices, market-hours gate, exact-amount USDC approval to TradingStorage, wallet-signed order, fee preview, and open-position account view. Encoder remains verified byte-for-byte against their SDK (6 cases) without shipping its 177KB gzipped bundle. Fee is 5 bps of notional, paid atomically to 0xaf5CE154… on open; no account or deposit required'
     }),
     line({
       id: 'builder-dydx',
-      live: false,
-      ready: false,
+      live: true,
+      ready: true,
       cost: 0,
-      blockedBy: 'BUILD',
-      note: 'dYdX builder codes, cap 100 bps. CORRECTS an older claim in venueReferral.js: the $10,000 volume floor is on their AFFILIATE programme, not on builder codes — their docs say "No governance proposal is required to use builder codes". Fee rides in the order message as BuilderCodeParameters and is added on top of the fill'
+      blockedBy: null,
+      note: 'dYdX Builder Code is wired on /dydx with payout dydx17493m…f76r7 and 500 ppm (5 bps) inside each order. The user signs official EIP-712 onboarding with their EVM wallet; the derived dYdX key remains memory-only. Live indexer markets/account/positions, IOC market-order review and explicit fee preview are connected. Client is pinned exactly to known-good official 3.4.0 because 3.4.1 and three older npm releases were compromised in Jan 2026'
     }),
     line({
       id: 'builder-hyperliquid',

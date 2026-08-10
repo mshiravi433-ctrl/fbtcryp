@@ -36,7 +36,7 @@ import {
   referredBy,
   referrerShare
 } from '../src/lib/referral.js';
-import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
+import { backpackBrowseLink, phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
@@ -139,9 +139,13 @@ import {
   OSTIUM_TRADING,
   buildApproveCollateral,
   buildOpenTrade,
+  buildCloseTrade,
+  buildModifyPosition,
+  buildUpdateCollateral,
   feeBpsToContractUnits,
   ostiumFeeBps
 } from '../src/lib/ostium.js';
+import { DYDX_BUILDER_ADDRESS, DYDX_BUILDER_FEE_PPM, dydxFeeUsd, isDydxAddress } from '../src/lib/dydx.js';
 
 export default async function run() {
   const rows = [];
@@ -1293,6 +1297,10 @@ export default async function run() {
     t('junk is refused', phantomBrowseLink('not a url') === null);
 
     t('Solflare gets its own host', new URL(solflareBrowseLink('https://x.io')).host === 'solflare.com');
+    const backpack = new URL(backpackBrowseLink('https://fbtswap.ir/#/solana'));
+    t('Backpack gets its documented browse link',
+      backpack.host === 'backpack.app' && backpack.pathname === '/ul/v1/browse/' &&
+      backpack.searchParams.get('url') === 'https://fbtswap.ir/#/solana');
 
     /*
      * publicAppUrl must never be localhost. Capacitor serves the APK from
@@ -1302,6 +1310,7 @@ export default async function run() {
     const app = publicAppUrl();
     t(`the app url is public, not localhost (${app})`, !/localhost/.test(app));
     t('the app url is https', app.startsWith('https://'));
+    t('the wallet identity is the canonical FBT domain', new URL(app).host === 'fbtswap.ir');
     /*
      * The default is the bare origin, and the CALLER names the route. It
      * briefly defaulted to '/#/solana' while the wallet deeplink was the only
@@ -4076,6 +4085,14 @@ export default async function run() {
     t('a chain without Morpho is not offered', !VAULT_CHAINS[101]);
   }
 
+  /* -------------------------- dYdX builder code -------------------------- */
+  {
+    t('the supplied dYdX payout has the expected public-address shape', isDydxAddress(DYDX_BUILDER_ADDRESS));
+    t('dYdX charges the same 5 bps builder rate', DYDX_BUILDER_FEE_PPM === 500);
+    t('dYdX fee arithmetic is on notional', dydxFeeUsd(10_000) === 5);
+    t('an invalid dYdX payout is rejected', !isDydxAddress('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6'));
+  }
+
   /*
    * ─── OSTIUM: OUR CALLDATA vs THEIRS, BYTE FOR BYTE ────────────────────────
    * The Ostium builder fee is the first revenue this app earns on a trade it
@@ -4136,6 +4153,16 @@ export default async function run() {
     t('...with TradingStorage as the spender, not the callee',
       ap.data.toLowerCase().includes(OSTIUM_SPENDER.slice(2).toLowerCase()) &&
       OSTIUM_SPENDER.toLowerCase() !== OSTIUM_TRADING.toLowerCase());
+
+    const close = await buildCloseTrade({ pairId: 5, index: 2, closePercent: 50, price: '2400', slippageBps: 25 });
+    t('Ostium position close targets Trading and encodes a real call',
+      close.to.toLowerCase() === OSTIUM_TRADING.toLowerCase() && close.data.length > 10);
+    const tp = await buildModifyPosition({ pairId: 5, index: 2, takeProfit: '2500' });
+    const sl = await buildModifyPosition({ pairId: 5, index: 2, stopLoss: '2200' });
+    t('TP and SL are distinct management calls', tp.data.slice(0, 10) !== sl.data.slice(0, 10));
+    const topup = await buildUpdateCollateral({ pairId: 5, index: 2, amountUsd: '25' });
+    const remove = await buildUpdateCollateral({ pairId: 5, index: 2, amountUsd: '-10' });
+    t('only collateral top-up requires approval', topup.needsApproval === true && remove.needsApproval === false);
 
     /*
      * The fee scale, verified against the same SDK output: 5 bps encodes as

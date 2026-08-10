@@ -104,6 +104,13 @@ export function solflareBrowseLink(url) {
   return `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}`;
 }
 
+/** Backpack's documented browse universal link. */
+export function backpackBrowseLink(url) {
+  if (typeof url !== 'string' || !/^https:\/\//.test(url)) return null;
+  const encoded = encodeURIComponent(url);
+  return `https://backpack.app/ul/v1/browse/?url=${encoded}&ref=${encoded}`;
+}
+
 // publicAppUrl moved to lib/nativeShell.js — it is needed by the referral
 // invite too, and importing this module for it would pull in the Solana stack.
 export { publicAppUrl } from './nativeShell';
@@ -143,8 +150,16 @@ export { publicAppUrl } from './nativeShell';
  * through an injected provider, so the catch is deliberately silent.
  */
 let mwaRegistered = false;
-/* The address from an MWA session. See connectSolana for why this is needed. */
+/*
+ * Wallet Standard's app registry must be listening BEFORE registerMwa emits
+ * its registration event. Reading navigator.wallets was the deprecated API
+ * and returned nothing with current MWA, so Android could connect in theory
+ * but the app never discovered the registered wallet in practice.
+ */
+let walletStandardApi = null;
+/* The account/address from an MWA session. Signing needs the full account. */
 let mwaAddress = null;
+let mwaAccount = null;
 
 /** True only where MWA can actually complete a round trip. */
 export function canUseMwa() {
@@ -161,7 +176,12 @@ export function canUseMwa() {
 export async function registerMobileWalletAdapter(appUrl) {
   if (mwaRegistered || !canUseMwa()) return false;
   try {
-    const mod = await import('@solana-mobile/wallet-standard-mobile');
+    const [{ getWallets }, mod] = await Promise.all([
+      import('@wallet-standard/app'),
+      import('@solana-mobile/wallet-standard-mobile')
+    ]);
+    /* Initialise first so the registration event below cannot be missed. */
+    walletStandardApi = getWallets();
     mod.registerMwa({
       appIdentity: {
         name: 'FBT Swap',
@@ -239,11 +259,8 @@ export function solanaWalletName() {
  */
 export function getStandardWallets() {
   if (typeof window === 'undefined') return [];
-  const api = window.navigator?.wallets;
-  if (!api) return [];
   try {
-    /* `get()` is the documented accessor; some builds expose an array. */
-    const list = typeof api.get === 'function' ? api.get() : api;
+    const list = walletStandardApi?.get?.() ?? [];
     return Array.isArray(list) ? list : [];
   } catch {
     return [];
@@ -277,7 +294,8 @@ export async function connectSolana() {
        * "[object Object]" as an address, which is the kind of bug that only
        * surfaces after somebody has sent funds.
        */
-      const address = res?.accounts?.[0]?.address;
+      const account = res?.accounts?.[0] ?? mwa.accounts?.[0];
+      const address = account?.address;
       if (!address) throw new Error('NO_ACCOUNT');
       /*
        * Held here because MWA does NOT populate `window.solana.publicKey` the
@@ -286,6 +304,7 @@ export async function connectSolana() {
        * making the screen look like the connection had failed.
        */
       mwaAddress = address;
+      mwaAccount = account;
       return address;
     }
     throw new Error('NO_WALLET');
@@ -311,6 +330,7 @@ export async function disconnectSolana() {
      the catch below swallows it, and leaving this set would keep the UI
      showing a connected address the user just asked to remove. */
   mwaAddress = null;
+  mwaAccount = null;
   try {
     await getSolanaProvider()?.disconnect?.();
   } catch {
@@ -333,6 +353,48 @@ export async function disconnectSolana() {
 export function solanaAddress() {
   const p = getSolanaProvider();
   return p?.publicKey?.toString?.() ?? mwaAddress ?? null;
+}
+
+/**
+ * Read the exact source balance and whether the destination token account
+ * already exists. A wallet simulation error after opening the signing prompt
+ * is too late to tell somebody their empty wallet cannot make the swap.
+ */
+export async function getSolanaSwapBalances({ owner, inputMint, outputMint }) {
+  const { Connection, PublicKey } = await import('@solana/web3.js');
+  const connection = new Connection(await solanaRpcUrl(), 'confirmed');
+  const ownerKey = new PublicKey(owner);
+  const nativeMint = 'So11111111111111111111111111111111111111112';
+
+  const tokenState = async (mint) => {
+    if (mint === nativeMint) {
+      return { raw: BigInt(await connection.getBalance(ownerKey, 'confirmed')), exists: true };
+    }
+    const rows = await connection.getParsedTokenAccountsByOwner(
+      ownerKey,
+      { mint: new PublicKey(mint) },
+      'confirmed'
+    );
+    return {
+      raw: rows.value.reduce(
+        (sum, row) => sum + BigInt(row.account.data.parsed?.info?.tokenAmount?.amount || 0),
+        0n
+      ),
+      /* An empty but existing ATA still avoids account-creation rent. */
+      exists: rows.value.length > 0
+    };
+  };
+
+  const [source, solLamports, output] = await Promise.all([
+    tokenState(inputMint),
+    connection.getBalance(ownerKey, 'confirmed').then(BigInt),
+    tokenState(outputMint)
+  ]);
+  return {
+    sourceRaw: source.raw,
+    solLamports,
+    outputAccountExists: output.exists
+  };
 }
 
 /**
@@ -409,6 +471,41 @@ export async function signSolanaTransaction(base64Tx) {
  */
 export async function signAndSendSolana(base64Tx, versioned = true) {
   const provider = getSolanaProvider();
+  const mwa = !provider ? getMwaWallet() : null;
+
+  /*
+   * MWA is Wallet Standard, not an injected provider. The old implementation
+   * connected through MWA, stored the address, then immediately threw
+   * NO_WALLET here because it only looked for window.solana. That is the
+   * reported "connected, but transaction was not signed" failure.
+   */
+  if (mwa) {
+    const feature = mwa.features?.['solana:signAndSendTransaction'];
+    const account = mwaAccount ?? mwa.accounts?.find((a) => a.address === mwaAddress);
+    if (!feature?.signAndSendTransaction || !account) throw new Error('CANNOT_SIGN');
+    const supported = feature.supportedTransactionVersions ?? [];
+    const wantedVersion = versioned ? 0 : 'legacy';
+    if (supported.length && !supported.includes(wantedVersion)) throw new Error('UNSUPPORTED_TRANSACTION');
+    try {
+      const results = await feature.signAndSendTransaction({
+        account,
+        transaction: base64ToBytes(base64Tx),
+        chain: 'solana:mainnet',
+        options: { commitment: 'confirmed', skipPreflight: false, maxRetries: 3 }
+      });
+      const signature = results?.[0]?.signature;
+      if (!(signature instanceof Uint8Array) || signature.length === 0) throw new Error('NO_SIGNATURE');
+      return bytesToBase58(signature);
+    } catch (err) {
+      if (err?.code === 4001 || /reject|denied|cancel/i.test(String(err?.message))) {
+        throw new Error('REJECTED');
+      }
+      if (['CANNOT_SIGN', 'NO_SIGNATURE', 'UNSUPPORTED_TRANSACTION'].includes(err?.message)) throw err;
+      if (/insufficient|simulation failed|0x1/i.test(String(err?.message))) throw new Error('INSUFFICIENT_BALANCE');
+      throw new Error('SEND_FAILED');
+    }
+  }
+
   if (!provider) throw new Error('NO_WALLET');
 
   const { Transaction, VersionedTransaction } = await import('@solana/web3.js');
@@ -439,6 +536,7 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
       throw new Error('REJECTED');
     }
     if (err?.message === 'CANNOT_SIGN' || err?.message === 'NO_SIGNATURE') throw err;
+    if (/insufficient|simulation failed|0x1/i.test(String(err?.message))) throw new Error('INSUFFICIENT_BALANCE');
     throw new Error('SEND_FAILED');
   }
 }
@@ -521,4 +619,27 @@ function bytesToBase64(bytes) {
     bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(bin);
+}
+
+/** Encode Wallet Standard's raw 64-byte signature for Solscan. */
+function bytesToBase58(bytes) {
+  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  if (!(bytes instanceof Uint8Array) || bytes.length === 0) return '';
+  const digits = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i += 1) {
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+  let out = '';
+  for (let i = 0; i < bytes.length - 1 && bytes[i] === 0; i += 1) out += '1';
+  for (let i = digits.length - 1; i >= 0; i -= 1) out += alphabet[digits[i]];
+  return out;
 }

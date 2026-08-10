@@ -22,9 +22,11 @@ import {
   connectSolana,
   disconnectSolana,
   signAndSendSolana,
+  getSolanaSwapBalances,
   solanaAddress,
   solanaWalletAvailable,
   solanaWalletName,
+  backpackBrowseLink,
   phantomBrowseLink,
   publicAppUrl,
   solflareBrowseLink
@@ -100,6 +102,8 @@ export default function SolanaSwap({ embedded = false }) {
   const [address, setAddress] = useState(() => solanaAddress());
   const [connecting, setConnecting] = useState(false);
   const [walletErr, setWalletErr] = useState(null);
+  const [walletBalances, setWalletBalances] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
 
   const [fromToken, setFromToken] = useState(BASE_TOKENS[0]);
   const [toToken, setToToken] = useState(BASE_TOKENS[1]);
@@ -318,8 +322,32 @@ export default function SolanaSwap({ embedded = false }) {
   const disconnect = useCallback(async () => {
     await disconnectSolana();
     setAddress(null);
+    setWalletBalances(null);
     setOrder(null);
   }, []);
+
+  const loadWalletBalances = useCallback(async () => {
+    if (!address) return null;
+    setBalanceLoading(true);
+    try {
+      const state = await getSolanaSwapBalances({
+        owner: address,
+        inputMint: fromToken.mint,
+        outputMint: toToken.mint
+      });
+      setWalletBalances(state);
+      return state;
+    } catch {
+      setWalletBalances(null);
+      return null;
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [address, fromToken.mint, toToken.mint]);
+
+  useEffect(() => {
+    loadWalletBalances();
+  }, [loadWalletBalances]);
 
   /* ------------------------------- quoting ------------------------------- */
 
@@ -395,6 +423,22 @@ export default function SolanaSwap({ embedded = false }) {
 
     try {
       /*
+       * Fail before opening a wallet prompt when the account is empty. Wallet
+       * simulation used to surface this as the vague "not signed" error even
+       * though signing was never the problem. Check exact base units and SOL
+       * for network fee / possible destination ATA rent.
+       */
+      const balancesNow = await loadWalletBalances();
+      if (!balancesNow) throw new Error('BALANCE_UNAVAILABLE');
+      const rawAmount = BigInt(toBaseUnits(amount, fromToken.decimals));
+      if (balancesNow.sourceRaw < rawAmount) throw new Error('INSUFFICIENT_BALANCE');
+      const isSolInput = fromToken.mint === SOL_MINT;
+      const gasLamports = balancesNow.outputAccountExists ? 20_000n : 2_100_000n;
+      if (balancesNow.solLamports < gasLamports + (isSolInput ? rawAmount : 0n)) {
+        throw new Error('INSUFFICIENT_GAS');
+      }
+
+      /*
        * ─── THE TRANSACTION IS FETCHED HERE, NOT AT QUOTE TIME ──────────────
        * The quote above is priced without a wallet and carries no transaction.
        * We ask for a fresh, signable one only once the user has committed by
@@ -432,6 +476,7 @@ export default function SolanaSwap({ embedded = false }) {
         setResult({ signature });
         setAmount('');
         setOrder(null);
+        loadWalletBalances();
         haptic?.('success');
       } else {
         setTxErr('SEND_FAILED');
@@ -489,6 +534,12 @@ export default function SolanaSwap({ embedded = false }) {
   const outAmount = order?.outAmount
     ? fromBaseUnits(order.outAmount, toToken.decimals)
     : null;
+  const sourceBalance = walletBalances
+    ? fromBaseUnits(walletBalances.sourceRaw.toString(), fromToken.decimals)
+    : null;
+  const solBalance = walletBalances
+    ? fromBaseUnits(walletBalances.solLamports.toString(), 9)
+    : null;
 
   return (
     <PageTransition embedded={embedded}>
@@ -522,6 +573,15 @@ export default function SolanaSwap({ embedded = false }) {
           )}
         </div>
 
+        {address && (
+          <div className="row-between" style={{ marginTop: 9 }}>
+            <span className="faint">
+              {balanceLoading ? t('common.loading') : `${sourceBalance ?? '—'} ${fromToken.symbol}`}
+            </span>
+            <span className="mono faint" style={{ fontSize: 11.5 }}>{solBalance ?? '—'} SOL</span>
+          </div>
+        )}
+
         {/*
           ---------- NO INJECTED PROVIDER ----------
 
@@ -548,30 +608,31 @@ export default function SolanaSwap({ embedded = false }) {
               {t('solana.noWallet')}
             </p>
           ) : (
-            <div style={{ marginTop: 11 }}>
-              <p className="notice">{t('solana.openInWallet')}</p>
-              <div className="row" style={{ gap: 8, marginTop: 10 }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ flex: 1 }}
-                  onClick={() => openExternal(phantomBrowseLink(publicAppUrl('/#/solana')))}
-                >
-                  {t('solana.openPhantom')}
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ flex: 1 }}
-                  onClick={() => openExternal(solflareBrowseLink(publicAppUrl('/#/solana')))}
-                >
-                  {t('solana.openSolflare')}
-                </button>
-              </div>
-              <p className="faint" style={{ fontSize: 11, marginTop: 9, lineHeight: 1.7 }}>
-                {t('solana.openInWalletHint')}
-              </p>
-            </div>
+            <p className="notice" style={{ marginTop: 11 }}>{t('solana.openInWallet')}</p>
           )
         )}
+
+        {/* Always available, including after connection. A mobile session can
+            lose its injected provider after an app switch; hiding the escape
+            links once connected turned that recoverable state into a dead end. */}
+        <div style={{ marginTop: 11 }}>
+          <p className="field-label">{t('solana.walletLinksTitle')}</p>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(phantomBrowseLink(publicAppUrl('/#/solana')))}>
+              Phantom
+            </button>
+            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(solflareBrowseLink(publicAppUrl('/#/solana')))}>
+              Solflare
+            </button>
+            <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => openExternal(backpackBrowseLink(publicAppUrl('/#/solana')))}>
+              Backpack
+            </button>
+          </div>
+          <p className="faint" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.7 }}>
+            {t('solana.openInWalletHint')}
+          </p>
+        </div>
+
         {walletErr && (
           <p className="notice notice-danger" style={{ marginTop: 11 }}>
             {t(`solana.err.${walletErr}`, t('solana.err.CONNECT_FAILED'))}

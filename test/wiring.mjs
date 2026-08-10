@@ -841,10 +841,9 @@ export default function run() {
      * deployment that no longer exists.
      */
     const wallet = read('src/context/WalletContext.jsx');
-    const fallback = /isLocal \? '(https:\/\/[^']+)'/.exec(wallet)?.[1];
     t(
-      `the WC metadata fallback is not the dead vercel host (${fallback})`,
-      Boolean(fallback) && !fallback.includes('fbtcryp.vercel.app')
+      'the WC metadata uses the canonical public identity helper',
+      wallet.includes("publicAppUrl('/')")
     );
   }
 
@@ -3669,8 +3668,10 @@ export default function run() {
     const renderers = walk('src')
       .filter((f) => /<FundingPanel/.test(read(f)))
       .map((f) => f.replace(/\\/g, '/'));
-    t(`only the gated perp page renders the funding panel (${renderers.length})`,
-      renderers.length === 1 && renderers[0].endsWith('src/pages/Perp.jsx'));
+    t(`only gated website pages render the funding panel (${renderers.length})`,
+      renderers.length === 2 &&
+      renderers.some((f) => f.endsWith('src/pages/Perp.jsx')) &&
+      renderers.some((f) => f.endsWith('src/pages/DerivativesDashboard.jsx')));
   }
 
   /* ---- 52. automatic orders: watched in the BACKGROUND, end to end ----- */
@@ -7396,6 +7397,10 @@ export default function run() {
     /* chainId must be a dependency or the effect never re-runs after switching. */
     t('...and re-runs once the chain has changed',
       /\}, \[searchParams, setSearchParams, curated, chainId, wallet\]\)/.test(swap));
+    t('the generic chain reset cannot overwrite a pending deep-link token',
+      /searchParams\.get\('from'\).*searchParams\.get\('to'\).*searchParams\.get\('toAddress'\)/s.test(swap));
+    t('Ostium hands Swap the Arbitrum USDC pair explicitly',
+      /swap\?chain=42161&to=USDC/.test(read('src/pages/Ostium.jsx')));
 
     /*
      * ═══════════════════════════════════════════════════════════════════════
@@ -8463,20 +8468,26 @@ export default function run() {
      * MWA registers as a WALLET STANDARD wallet — it never appears on
      * window.solana, so getSolanaProvider cannot see it.
      */
-    t('...and is discovered through Wallet Standard, not window.solana',
-      /navigator\?\.wallets/.test(sw));
+    t('...and is discovered through the current Wallet Standard app registry',
+      /getWallets/.test(sw) && /walletStandardApi\?\.get/.test(sw));
     /*
      * Wallet Standard returns accounts as an array of objects whose `address`
      * is ALREADY a base58 string. Reusing the injected path's
      * `publicKey.toString()` would yield "[object Object]" as an address.
      */
     t('...and reads the address from the accounts array',
-      /accounts\?\.\[0\]\?\.address/.test(sw));
+      /accounts\?\.\[0\]/.test(sw) && /address = account\?\.address/.test(sw));
     /* Disconnect must clear it or the UI shows a connected wallet forever. */
     t('...and disconnect clears the MWA session', /mwaAddress = null/.test(sw));
     /* Lazy import, or the package ships to every user who cannot use it. */
     t('...and the package is imported dynamically',
-      /await import\('@solana-mobile\/wallet-standard-mobile'\)/.test(sw));
+      /import\('@solana-mobile\/wallet-standard-mobile'\)/.test(sw));
+    t('...and MWA can sign and send after connecting, not merely expose an address',
+      /solana:signAndSendTransaction/.test(sw) && /mwaAccount/.test(sw));
+    t('...and an empty wallet is refused before the signing prompt',
+      /getSolanaSwapBalances/.test(solPage) && /INSUFFICIENT_BALANCE/.test(solPage));
+    t('wallet-app launch links stay visible for Phantom, Solflare and Backpack',
+      /backpackBrowseLink/.test(solPage) && /walletLinksTitle/.test(solPage));
     /* The button must not stay disabled once MWA is available. */
     t('...and the connect button accepts either path',
       /!hasWallet && !mwaReady/.test(solPage));
@@ -9971,6 +9982,14 @@ export default function run() {
      * than a promise.
      */
     const css = read('src/index.css');
+    const modernShop = read('src/styles/shop-modern.css');
+    t('the modern storefront layer is loaded after the shared stylesheet',
+      /styles\/shop-modern\.css/.test(read('src/main.jsx')));
+    t('mobile products use a two-column grid and wide web grows to three',
+      /repeat\(2, minmax\(0, 1fr\)\)/.test(modernShop) &&
+      /repeat\(3, minmax\(0, 1fr\)\)/.test(modernShop));
+    t('the storefront has integrated search, trust signals and a visual CTA',
+      /shop-search/.test(page) && /shop-trust-row/.test(page) && /shop-promo-cta/.test(read('src/components/ShopPromo.jsx')));
 
     /* «خیلی کوچیکه عکس ها را بگتر کن» — a 16:9 stage, not a 34px icon. */
     t('brand art gets a real stage', /\.shop-shot \{[\s\S]{0,200}?aspect-ratio: 16 \/ 9/.test(css));
@@ -10564,14 +10583,26 @@ export default function run() {
      * down; these three are still research only. Listing it here as well would
      * have been a guard asserting the opposite of the truth.
      */
-    for (const id of ['builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+    for (const id of ['builder-hyperliquid', 'builder-drift']) {
       t(`...and does not claim ${id} is built`,
         new RegExp(`id: '${id}',[\\s\\S]{0,120}?ready: false`).test(rdc));
     }
-    for (const id of ['builder-ostium', 'builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+    for (const id of ['builder-hyperliquid', 'builder-drift']) {
       t(`...nor that ${id} is earning`,
         new RegExp(`id: '${id}',[\\s\\S]{0,160}?live: false`).test(rdc));
     }
+    t('the completed Ostium order path is live',
+      /id: 'builder-ostium',[\s\S]{0,160}?live: true/.test(rdc));
+    t('the completed dYdX order path is live',
+      /id: 'builder-dydx',[\s\S]{0,160}?live: true/.test(rdc));
+    const dydx = read('src/lib/dydx.js');
+    t('dYdX orders carry the supplied payout address and 500 ppm fee',
+      /dydx17493m25rh59j2sf2525r49htr2cva5rqnf76r7/.test(dydx) &&
+      /DYDX_BUILDER_FEE_PPM = 500/.test(dydx) && /builderAddress: DYDX_BUILDER_ADDRESS/.test(dydx));
+    t('the dYdX key is memory-only and the order page is reachable',
+      !/localStorage/.test(code(dydx)) && /path="\/dydx"/.test(app));
+    t('the known compromised dYdX client versions are not installed',
+      JSON.parse(read('package.json')).dependencies['@dydxprotocol/v4-client-js'] === '3.4.0');
 
     /*
      * ─── THE BUG THIS SECTION FOUND ─────────────────────────────────────────
@@ -10688,21 +10719,24 @@ export default function run() {
     t('an unknown venue fee produces no total rather than a wrong one',
       /totalFee: venueFee == null \? null :/.test(ost));
 
-    /* Readiness must now say BUILT but NOT EARNING. Both halves matter: the
-       encoder is real, and no screen routes an order yet. */
+    /* The encoder and the wallet-signed order screen are now both wired. */
     t('readiness reports the Ostium encoder as built',
       /id: 'builder-ostium',[\s\S]{0,200}?ready: true/.test(rdc));
-    t('...but still earning nothing',
-      /id: 'builder-ostium',[\s\S]{0,160}?live: false/.test(rdc));
+    t('...and the order path as live',
+      /id: 'builder-ostium',[\s\S]{0,160}?live: true/.test(rdc));
+    t('the Ostium page signs the encoder output with the user wallet',
+      existsSync('src/pages/Ostium.jsx') &&
+      /buildOpenTrade/.test(read('src/pages/Ostium.jsx')) &&
+      /signer\.sendTransaction/.test(read('src/pages/Ostium.jsx')));
 
     /* The Ostium build report, and the two facts in it that must not rot. */
     t('the Ostium build is written up', existsSync('docs/OSTIUM-BUILDER-FA.md'));
     const odoc = read('docs/OSTIUM-BUILDER-FA.md');
     t('...it says the encoder was verified against their SDK',
       /بایت‌به‌بایت/.test(odoc));
-    /* The status line is the part most likely to be quietly overstated later. */
-    t('...and does not claim it is earning yet',
-      /live\s*=\s*false/.test(odoc));
+    /* The historical report now points readers to the completed next step. */
+    t('...and records the completed trading screen',
+      /صفحهٔ معامله ساخته شد/.test(odoc));
 
     /* The Persian write-up, which is the actual deliverable for this question. */
     t('the CCXT answer is written up', existsSync('docs/CCXT-BUILDER-CODES-FA.md'));
