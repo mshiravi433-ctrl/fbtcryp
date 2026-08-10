@@ -78,9 +78,16 @@ const GROUPS = [
       ...(SPECULATION_ENABLED
         ? [
             { to: '/perp', key: 'nav.perp', Icon: IconTrend, hue: 'var(--rgb-3)' },
-            { to: '/ostium', key: 'nav.ostium', Icon: IconTrend, hue: 'var(--rgb-3)' },
-            { to: '/dydx', key: 'nav.dydx', Icon: IconTrend, hue: 'var(--rgb-2)' },
-            { to: '/derivatives', key: 'nav.derivatives', Icon: IconActivity, hue: 'var(--rgb-1)' },
+            /*
+             * ─── dydx / ostium / derivatives REMOVED FROM MENU ──────────────
+             * روی درخواست: «سه صفحه dydx ,بازار مشتقه و بازار واقعی را از منو
+             * حذف کن چون در صفحه سهام هست»
+             * این سه صفحه حالا تب‌های داخل /stocks هستن (STOCK_TABS در
+             * src/pages/Stocks.jsx) و از منو حذف شدن تا منو خلوت و بدون
+             * تکرار باشد. Route های /dydx و /ostium و /derivatives در
+             * App.jsx همچنان وجود دارن تا لینک قدیمی/مستقیم نشکنه — فقط
+             * ورودی منو حذف شده، مثل کاری که قبلا برای /solana شد.
+             */
             { to: '/lab', key: 'lab.title', Icon: IconActivity, hue: 'var(--rgb-8)' }
           ]
         : []),
