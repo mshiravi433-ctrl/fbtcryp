@@ -10559,11 +10559,18 @@ export default function run() {
      * already true elsewhere in the file (kyberswap-key), so it passed no
      * matter what these four said. Window from each id to its own `ready`.
      */
-    for (const id of ['builder-ostium', 'builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
+    /*
+     * Ostium has since been BUILT and moves to its own pair of checks further
+     * down; these three are still research only. Listing it here as well would
+     * have been a guard asserting the opposite of the truth.
+     */
+    for (const id of ['builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
       t(`...and does not claim ${id} is built`,
         new RegExp(`id: '${id}',[\\s\\S]{0,120}?ready: false`).test(rdc));
+    }
+    for (const id of ['builder-ostium', 'builder-dydx', 'builder-hyperliquid', 'builder-drift']) {
       t(`...nor that ${id} is earning`,
-        new RegExp(`id: '${id}',[\\s\\S]{0,80}?live: false`).test(rdc));
+        new RegExp(`id: '${id}',[\\s\\S]{0,160}?live: false`).test(rdc));
     }
 
     /*
@@ -10599,6 +10606,103 @@ export default function run() {
      */
     t('the builder module is not wired into any screen yet',
       !/builderCodes/.test(read('src/pages/Perp.jsx')));
+
+    /*
+     * ─── OSTIUM: THE FIRST BUILDER CODE ACTUALLY ENCODED ────────────────────
+     * Everything above is research. This is the transaction, and the checks
+     * below guard the four things that would each earn zero — or lose a
+     * user's money — while looking entirely correct on screen.
+     */
+    t('the Ostium module exists', existsSync('src/lib/ostium.js'));
+    const ost = code(read('src/lib/ostium.js'));
+
+    /*
+     * ─── TRAP 1: THE ALLOWANCE GOES SOMEWHERE ELSE ──────────────────────────
+     * We call Trading (0x6D0b…) but collateral is pulled by TradingStorage
+     * (0xccd5…). Approving the contract we call is the obvious, reasonable,
+     * completely broken choice — every trade would revert on transferFrom.
+     * Pinned to both literals so they cannot be "tidied" into one address.
+     */
+    t('the Trading contract address is pinned',
+      /OSTIUM_TRADING = '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411'/.test(ost));
+    t('...and the USDC spender is TradingStorage, not the contract we call',
+      /OSTIUM_SPENDER = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7'/.test(ost));
+    t('...and the approval really uses the spender, not the callee',
+      /encodeFunctionData\('approve', \[\s*OSTIUM_SPENDER,/.test(ost));
+
+    /*
+     * ─── TRAP 2: THE TENTH STRUCT MEMBER ────────────────────────────────────
+     * Ostium's developer page documents nine fields ending at `buy`. The
+     * deployed contract has ten. Omitting `isDayTrade` changes the selector,
+     * so the transaction does not merely misbehave — it fails to decode.
+     * Also pins slippageP as uint256; the older docs imply a small int.
+     */
+    t('the trade struct carries isDayTrade, which the docs omit',
+      /bool buy,bool isDayTrade\) t/.test(ost));
+    t('...and slippageP is uint256 as the contract declares',
+      /uint8 orderType,uint256 slippageP\)/.test(ost));
+
+    /*
+     * ─── TRAP 3: THE FACTOR-OF-100 FEE ──────────────────────────────────────
+     * builderFee is a PERCENT scaled by 1e6, so 5 bps is 50000 — verified
+     * against the SDK's own encoding. A slip here charges 5% instead of 0.05%.
+     */
+    t('the builder fee is scaled the way the contract wants',
+      /return Math\.round\(n \* 10_000\);/.test(ost));
+
+    /*
+     * ─── TRAP 4: A CAP THAT DID NOT CAP ─────────────────────────────────────
+     * `ostiumFeeBps` shipped for an hour as `Math.min(n, venueCap)` with a
+     * comment claiming our 10 bps limit won. It did not — Ostium's 50 did, so
+     * any direct caller could charge ten times our intended rate. Assert the
+     * MIN OF BOTH, and separately that the old one-sided form is gone.
+     */
+    t('the fee is clamped by our cap and the venue\u2019s, not just theirs',
+      /Math\.min\(BUILDER_BPS_MAX, BUILDER_VENUES\.ostium\.capBps\)/.test(ost));
+    t('...and the old one-sided clamp cannot come back',
+      !/Math\.min\(n, venueCap\)/.test(ost));
+
+    /*
+     * The SDK is deliberately NOT a dependency: 177KB gzipped against a 237KB
+     * entry bundle. If it ever appears in package.json this decision has been
+     * silently reversed and the bundle has nearly doubled.
+     */
+    const pkg = JSON.parse(read('package.json'));
+    t('the 177KB Ostium SDK is not shipped to the browser',
+      !pkg.dependencies?.['@ostium/builder-sdk'] && !/@ostium\/builder-sdk/.test(ost));
+
+    /*
+     * This module must never submit. It returns unsigned calldata and the
+     * wallet layer signs, exactly like aggregator.js. A sendTransaction here
+     * would be a module that can move money on its own.
+     */
+    t('the Ostium module cannot submit a transaction by itself',
+      !/sendTransaction/.test(ost));
+
+    /* Below Ostium's own minimum the contract rejects, and letting someone
+       sign a doomed transaction costs them gas for nothing. */
+    t('trades below the venue minimum are refused before signing',
+      /MIN_COLLATERAL_USD = 5/.test(ost) && /return 'BELOW_MIN'/.test(ost));
+    /* Null, not a partial sum, when the venue's own fee is unknown — a total
+       that omits a component reads as cheaper than the trade really is. */
+    t('an unknown venue fee produces no total rather than a wrong one',
+      /totalFee: venueFee == null \? null :/.test(ost));
+
+    /* Readiness must now say BUILT but NOT EARNING. Both halves matter: the
+       encoder is real, and no screen routes an order yet. */
+    t('readiness reports the Ostium encoder as built',
+      /id: 'builder-ostium',[\s\S]{0,200}?ready: true/.test(rdc));
+    t('...but still earning nothing',
+      /id: 'builder-ostium',[\s\S]{0,160}?live: false/.test(rdc));
+
+    /* The Ostium build report, and the two facts in it that must not rot. */
+    t('the Ostium build is written up', existsSync('docs/OSTIUM-BUILDER-FA.md'));
+    const odoc = read('docs/OSTIUM-BUILDER-FA.md');
+    t('...it says the encoder was verified against their SDK',
+      /بایت‌به‌بایت/.test(odoc));
+    /* The status line is the part most likely to be quietly overstated later. */
+    t('...and does not claim it is earning yet',
+      /live\s*=\s*false/.test(odoc));
 
     /* The Persian write-up, which is the actual deliverable for this question. */
     t('the CCXT answer is written up', existsSync('docs/CCXT-BUILDER-CODES-FA.md'));

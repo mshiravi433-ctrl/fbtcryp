@@ -134,8 +134,16 @@ import faLocale from '../src/i18n/locales/fa.json';
 import arLocale from '../src/i18n/locales/ar.json';
 import { LANGUAGES, coverageFor, isComplete } from '../src/i18n/languages.js';
 import { readFileSync } from 'node:fs';
+import {
+  OSTIUM_SPENDER,
+  OSTIUM_TRADING,
+  buildApproveCollateral,
+  buildOpenTrade,
+  feeBpsToContractUnits,
+  ostiumFeeBps
+} from '../src/lib/ostium.js';
 
-export default function run() {
+export default async function run() {
   const rows = [];
   const t = (name, ok) => rows.push([name, Boolean(ok)]);
 
@@ -4066,6 +4074,89 @@ export default function run() {
      * somewhere with no vault at the other end.
      */
     t('a chain without Morpho is not offered', !VAULT_CHAINS[101]);
+  }
+
+  /*
+   * ─── OSTIUM: OUR CALLDATA vs THEIRS, BYTE FOR BYTE ────────────────────────
+   * The Ostium builder fee is the first revenue this app earns on a trade it
+   * does not itself execute, and it rides inside a transaction the USER signs.
+   * If the encoding is wrong the failure is not a wrong number on a screen —
+   * it is a signed transaction that reverts, or worse, one that succeeds while
+   * paying our fee to nobody.
+   *
+   * We deliberately do NOT ship @ostium/builder-sdk (177KB gzipped against a
+   * 237KB entry bundle) and hand-encode with ethers instead. That decision is
+   * only defensible if the hand-encoding is provably identical, so these
+   * vectors are the SDK's ACTUAL OUTPUT, captured from @ostium/builder-sdk
+   * 0.7.0 and committed as test/ostium-golden.json.
+   *
+   * Two of the five exist because reading their public docs would have got it
+   * wrong: the deployed struct has a tenth member (`isDayTrade`) the developer
+   * page does not list, and `slippageP` is `uint256` where an older example
+   * implies a small integer. Either mistake changes the function selector.
+   */
+  {
+    const golden = JSON.parse(readFileSync('test/ostium-golden.json', 'utf8'));
+
+    /* If the vectors were built against a different payout address, every
+       comparison below would pass while paying somebody else. */
+    t('the golden vectors were captured for OUR payout address',
+      golden.builder.toLowerCase() === PAYOUT_ADDRESSES.evm.toLowerCase());
+    /* A file that lost its cases would make every check below vacuous. */
+    t('there are still five openTrade vectors', golden.openTrade.length === 5);
+
+    for (const c of golden.openTrade) {
+      const built = await buildOpenTrade({
+        trader: c.trader,
+        pairId: c.pairId,
+        buy: c.buy,
+        price: c.price,
+        collateralUsd: c.collateralUsd,
+        leverage: c.leverage,
+        takeProfit: c.takeProfit ?? '0',
+        stopLoss: c.stopLoss ?? '0',
+        isDayTrade: c.isDayTrade ?? false,
+        slippageBps: c.slippageBps ?? 25,
+        bps: c.bps
+      });
+      t(`ostium calldata matches the SDK — ${c.n}`, built.data.toLowerCase() === c.data);
+      t(`...and goes to the Trading contract — ${c.n}`,
+        built.to.toLowerCase() === c.to.toLowerCase());
+    }
+
+    /* The approval is the other half, and the one whose spender is NOT the
+       contract we call. Getting it wrong reverts every trade on transferFrom. */
+    const ap = await buildApproveCollateral({ amountUsd: golden.approve.amountUsd });
+    t('the USDC approval matches the SDK byte for byte',
+      ap.data.toLowerCase() === golden.approve.data);
+    t('...and approves the USDC contract itself',
+      ap.to.toLowerCase() === golden.approve.to.toLowerCase());
+    /* Pinned separately: the spender inside that calldata must be
+       TradingStorage, which is a DIFFERENT address from the one we send to. */
+    t('...with TradingStorage as the spender, not the callee',
+      ap.data.toLowerCase().includes(OSTIUM_SPENDER.slice(2).toLowerCase()) &&
+      OSTIUM_SPENDER.toLowerCase() !== OSTIUM_TRADING.toLowerCase());
+
+    /*
+     * The fee scale, verified against the same SDK output: 5 bps encodes as
+     * 50000, because builderFee is a PERCENT scaled by 1e6. A factor-of-100
+     * slip here charges 5% of notional instead of 0.05%.
+     */
+    t('5 bps encodes as 50000, not 500 or 5000000', feeBpsToContractUnits(5) === 50_000);
+    t('20 bps encodes as 200000', feeBpsToContractUnits(20) === 200_000);
+
+    /*
+     * The cap that did not cap. This shipped for an hour as `Math.min(n,
+     * venueCap)` — Ostium allows 50 bps, so a direct caller could charge ten
+     * times our intended rate while the comment above it claimed otherwise.
+     * Pinned to 10, not merely to "less than 999".
+     */
+    t('an absurd fee is clamped to OUR 10 bps, not to Ostium\u2019s 50',
+      ostiumFeeBps(999) === 10 && ostiumFeeBps(50) === 10);
+    t('...and a sane fee passes through untouched', ostiumFeeBps(5) === 5);
+    /* Number(null) is 0 and 0 is finite — the guard that has to come first. */
+    t('a nonsense fee becomes zero, never NaN',
+      ostiumFeeBps(null) === 0 && ostiumFeeBps(NaN) === 0 && ostiumFeeBps(-1) === 0);
   }
 
   return rows;

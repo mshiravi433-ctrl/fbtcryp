@@ -66,7 +66,7 @@ console.log('▸ building unit suite…');
 npx(['vite', 'build', '-c', 'test/vite.units.mjs', '--logLevel', 'error']);
 installDom();
 const { default: runUnits } = await import('./.out/units/units.js');
-report('units (tokens · payout · faq · news)', runUnits());
+report('units (tokens · payout · faq · news)', await runUnits());
 
 /* ------------------------------- 1. boot -------------------------------- */
 console.log('▸ building app as a classic script for jsdom…');

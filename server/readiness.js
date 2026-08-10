@@ -231,12 +231,29 @@ export function revenueReadiness() {
      * programmes are NOT the route to the same money.
      */
     line({
+      /*
+       * ─── THE ENCODER IS BUILT AND VERIFIED; THE SCREEN IS NOT ────────────
+       * `ready` flipped to true because the hard part is done and checked:
+       * src/lib/ostium.js encodes openTrade and the USDC approval, and both
+       * were diffed BYTE-FOR-BYTE against @ostium/builder-sdk across six
+       * cases. That diff is what makes this a real claim rather than an
+       * optimistic one — reading their docs alone would have produced calldata
+       * that reverts, because the deployed struct carries a tenth member
+       * (`isDayTrade`) their developer page does not show.
+       *
+       * `live` stays FALSE and will stay false until a screen actually routes
+       * an order. Encoding a transaction nobody signs earns nothing, and this
+       * endpoint exists precisely to stop "built" being read as "earning".
+       *
+       * No env var: the builder address is our existing EVM payout address, so
+       * there is nothing to configure and nothing to forget in the APK.
+       */
       id: 'builder-ostium',
       live: false,
-      ready: false,
+      ready: true,
       cost: 0,
       blockedBy: 'BUILD',
-      note: 'Ostium builder fee, Arbitrum. Their docs: "Any address can act as a builder without prior approval or registration" — no account, no deposit, cap 50 bps, paid atomically to our address on trade open. Gold, oil, forex and indices, which is what our Stocks and gold screens already price and cannot sell. Cheapest real option: costs nothing, needs an order path'
+      note: 'Ostium builder fee, Arbitrum. Encoder BUILT and verified byte-for-byte against their SDK (6 cases) without shipping it — their bundle is 177KB gzipped against our whole 237KB entry. Fee 5 bps of notional, paid atomically to 0xaf5CE154… on trade open; no account, no deposit, cap 50 bps. Two traps found and handled: the collateral allowance goes to TradingStorage 0xccd5891…, NOT the Trading contract we call, and the trade struct has a tenth member isDayTrade that their docs omit. Remaining: the trading screen itself'
     }),
     line({
       id: 'builder-dydx',
