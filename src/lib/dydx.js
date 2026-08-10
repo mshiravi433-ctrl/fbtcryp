@@ -15,7 +15,10 @@
 
 export const DYDX_BUILDER_ADDRESS = 'dydx17493m25rh59j2sf2525r49htr2cva5rqnf76r7';
 export const DYDX_BUILDER_FEE_PPM = 500; // 5 bps = 500 parts per million
+/* Kept for the server-side documentation and diagnostics; browser reads use
+   the same-origin proxy below so the indexer never has to satisfy CORS. */
 export const DYDX_INDEXER = 'https://indexer.dydx.trade';
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 let session = null;
 let clientPromise = null;
@@ -41,35 +44,43 @@ export function dydxFeeUsd(notional) {
   return (n * DYDX_BUILDER_FEE_PPM) / 1_000_000;
 }
 
+const normaliseMarket = (m) => ({
+  ticker: m.ticker,
+  status: m.status,
+  oraclePrice: Number(m.oraclePrice),
+  priceChange24H: Number(m.priceChange24H || 0),
+  volume24H: Number(m.volume24H || 0),
+  openInterest: Number(m.openInterest || 0),
+  nextFundingRate: Number(m.nextFundingRate || 0),
+  atomicResolution: Number(m.atomicResolution),
+  quantumConversionExponent: Number(m.quantumConversionExponent),
+  stepBaseQuantums: Number(m.stepBaseQuantums),
+  subticksPerTick: Number(m.subticksPerTick),
+  clobPairId: String(m.clobPairId),
+  raw: m
+});
+
+/** Public market metadata through our same-origin CORS proxy. */
 export async function getDydxMarkets() {
   try {
-    const body = await timeoutFetch(`${DYDX_INDEXER}/v4/perpetualMarkets?limit=500`);
-    const values = Object.values(body?.markets || {});
-    const markets = values.map((m) => ({
-      ticker: m.ticker,
-      status: m.status,
-      oraclePrice: Number(m.oraclePrice),
-      priceChange24H: Number(m.priceChange24H || 0),
-      volume24H: Number(m.volume24H || 0),
-      openInterest: Number(m.openInterest || 0),
-      nextFundingRate: Number(m.nextFundingRate || 0),
-      atomicResolution: Number(m.atomicResolution),
-      quantumConversionExponent: Number(m.quantumConversionExponent),
-      stepBaseQuantums: Number(m.stepBaseQuantums),
-      subticksPerTick: Number(m.subticksPerTick),
-      clobPairId: String(m.clobPairId),
-      raw: m
-    })).filter((m) => m.ticker && Number.isFinite(m.oraclePrice) && m.oraclePrice > 0);
+    const body = await timeoutFetch(`${API_BASE}/dydx/markets`);
+    const values = Array.isArray(body?.markets)
+      ? body.markets
+      : Object.values(body?.markets || {});
+    const markets = values
+      .map(normaliseMarket)
+      .filter((m) => m.ticker && Number.isFinite(m.oraclePrice) && m.oraclePrice > 0);
     return { markets, live: markets.length > 0 };
   } catch {
     return { markets: [], live: false };
   }
 }
 
+/** Public orderbook data through our same-origin CORS proxy. */
 export async function getDydxOrderbook(ticker) {
   if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(String(ticker || ''))) return { live: false };
   try {
-    const body = await timeoutFetch(`${DYDX_INDEXER}/v4/orderbooks/perpetualMarket/${encodeURIComponent(ticker)}`);
+    const body = await timeoutFetch(`${API_BASE}/dydx/orderbook/${encodeURIComponent(ticker)}`);
     const bids = Array.isArray(body?.bids) ? body.bids : [];
     const asks = Array.isArray(body?.asks) ? body.asks : [];
     const bestBid = Number(bids[0]?.price);
@@ -90,10 +101,13 @@ export async function getDydxOrderbook(ticker) {
   }
 }
 
+/** Public subaccount data through our same-origin CORS proxy. */
 export async function getDydxSubaccount(address, number = 0) {
   if (!isDydxAddress(address)) return { account: null, live: false };
   try {
-    const account = await timeoutFetch(`${DYDX_INDEXER}/v4/addresses/${address}/subaccountNumber/${number}`);
+    const account = await timeoutFetch(
+      `${API_BASE}/dydx/account/${encodeURIComponent(address)}/${encodeURIComponent(number)}`
+    );
     return { account, live: true };
   } catch (err) {
     /* An unfunded derived address is a legitimate empty account. */

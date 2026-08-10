@@ -1037,7 +1037,10 @@
     "subtitle": "Real shares and index funds, held 1:1 by a regulated custodian and traded as tokens.",
     "tab": {
       "rwa": "RWA tokens",
-      "equity": "Tokenized equity"
+      "equity": "Tokenized equity",
+      "ostium": "Ostium real markets",
+      "dydx": "dYdX",
+      "derivatives": "Derivatives"
     },
     "rwaTitle": "Real-world assets on-chain",
     "rwaBody": "RWA protocols bring treasury bills, credit and commodities onto the blockchain. Their governance tokens trade like any other crypto asset and you can swap them here.",

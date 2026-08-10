@@ -35,6 +35,8 @@ import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
 import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
+import { fetchDydxAccount, fetchDydxMarkets, fetchDydxOrderbook } from './dydx.js';
+import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
 import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
@@ -682,6 +684,63 @@ app.get('/api/solana/assets', (_req, res) => serve(res, 300_000)(fetchSolanaAsse
  */
 app.get('/api/avantis/equities', (_req, res) =>
   serve(res, 60_000)(fetchAvantisEquities, 'avantis-equities'));
+
+/* -------------------------- dYdX public indexer --------------------------- */
+/*
+ * These are read-only same-origin proxies. The browser must not call the
+ * public indexer directly: some deployments reject the request during CORS
+ * preflight, and the dYdX client itself imports Node's proxy-agent package
+ * when its full order module is loaded. Keep public market/account data on the
+ * same origin and leave signing/order submission in the browser wallet path.
+ */
+app.get('/api/dydx/markets', (_req, res) =>
+  serve(res, 30_000)(fetchDydxMarkets, 'dydx-markets')
+);
+
+app.get('/api/dydx/orderbook/:ticker', (req, res) => {
+  const ticker = String(req.params.ticker || '').toUpperCase();
+  if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(ticker)) {
+    return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
+  }
+  return serve(res, 5_000)(() => fetchDydxOrderbook(ticker), `dydx-orderbook:${ticker}`);
+});
+
+app.get('/api/dydx/account/:address/:number', async (req, res) => {
+  try {
+    const address = String(req.params.address || '').toLowerCase();
+    const number = Number(req.params.number);
+    const account = await fetchDydxAccount(address, number);
+    /* Account data is public but belongs to one address; do not let a shared
+       cache serve one trader's response to another request. */
+    res.set('cache-control', 'no-store');
+    return res.json(account);
+  } catch (error) {
+    const status = Number(error?.status) === 404 ? 404 : Number(error?.status) === 400 ? 400 : 502;
+    return res.status(status).json({ error: error?.message || 'DYDX_UPSTREAM_FAILED' });
+  }
+});
+
+/* -------------------------- Ostium public data --------------------------- */
+/*
+ * Ostium's prices and GraphQL subgraph are public. Proxying both fixed
+ * upstreams removes the browser CORS failure without exposing a general URL
+ * fetcher. The subgraph route is POST because it carries the query document
+ * and, for positions, the public wallet address as variables.
+ */
+app.get('/api/ostium/prices', (_req, res) =>
+  serve(res, 10_000)(fetchOstiumPrices, 'ostium-prices')
+);
+
+app.post('/api/ostium/subgraph', async (req, res) => {
+  try {
+    const data = await fetchOstiumSubgraph(req.body);
+    res.set('cache-control', 'no-store');
+    return res.json(data);
+  } catch (error) {
+    const status = Number(error?.status) === 400 ? 400 : 502;
+    return res.status(status).json({ error: error?.message || 'OSTIUM_UPSTREAM_FAILED' });
+  }
+});
 
 /* --------------------------------- shop ---------------------------------- */
 /*
