@@ -36,7 +36,7 @@ import {
   referredBy,
   referrerShare
 } from '../src/lib/referral.js';
-import { phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
+import { backpackBrowseLink, phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
@@ -1293,6 +1293,10 @@ export default async function run() {
     t('junk is refused', phantomBrowseLink('not a url') === null);
 
     t('Solflare gets its own host', new URL(solflareBrowseLink('https://x.io')).host === 'solflare.com');
+    const backpack = new URL(backpackBrowseLink('https://fbtswap.ir/#/solana'));
+    t('Backpack gets its documented browse link',
+      backpack.host === 'backpack.app' && backpack.pathname === '/ul/v1/browse/' &&
+      backpack.searchParams.get('url') === 'https://fbtswap.ir/#/solana');
 
     /*
      * publicAppUrl must never be localhost. Capacitor serves the APK from
@@ -1302,6 +1306,7 @@ export default async function run() {
     const app = publicAppUrl();
     t(`the app url is public, not localhost (${app})`, !/localhost/.test(app));
     t('the app url is https', app.startsWith('https://'));
+    t('the wallet identity is the canonical FBT domain', new URL(app).host === 'fbtswap.ir');
     /*
      * The default is the bare origin, and the CALLER names the route. It
      * briefly defaulted to '/#/solana' while the wallet deeplink was the only

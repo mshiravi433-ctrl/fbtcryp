@@ -841,10 +841,9 @@ export default function run() {
      * deployment that no longer exists.
      */
     const wallet = read('src/context/WalletContext.jsx');
-    const fallback = /isLocal \? '(https:\/\/[^']+)'/.exec(wallet)?.[1];
     t(
-      `the WC metadata fallback is not the dead vercel host (${fallback})`,
-      Boolean(fallback) && !fallback.includes('fbtcryp.vercel.app')
+      'the WC metadata uses the canonical public identity helper',
+      wallet.includes("publicAppUrl('/')")
     );
   }
 
@@ -7396,6 +7395,10 @@ export default function run() {
     /* chainId must be a dependency or the effect never re-runs after switching. */
     t('...and re-runs once the chain has changed',
       /\}, \[searchParams, setSearchParams, curated, chainId, wallet\]\)/.test(swap));
+    t('the generic chain reset cannot overwrite a pending deep-link token',
+      /searchParams\.get\('from'\).*searchParams\.get\('to'\).*searchParams\.get\('toAddress'\)/s.test(swap));
+    t('Ostium hands Swap the Arbitrum USDC pair explicitly',
+      /swap\?chain=42161&to=USDC/.test(read('src/pages/Ostium.jsx')));
 
     /*
      * ═══════════════════════════════════════════════════════════════════════
@@ -8463,20 +8466,26 @@ export default function run() {
      * MWA registers as a WALLET STANDARD wallet — it never appears on
      * window.solana, so getSolanaProvider cannot see it.
      */
-    t('...and is discovered through Wallet Standard, not window.solana',
-      /navigator\?\.wallets/.test(sw));
+    t('...and is discovered through the current Wallet Standard app registry',
+      /getWallets/.test(sw) && /walletStandardApi\?\.get/.test(sw));
     /*
      * Wallet Standard returns accounts as an array of objects whose `address`
      * is ALREADY a base58 string. Reusing the injected path's
      * `publicKey.toString()` would yield "[object Object]" as an address.
      */
     t('...and reads the address from the accounts array',
-      /accounts\?\.\[0\]\?\.address/.test(sw));
+      /accounts\?\.\[0\]/.test(sw) && /address = account\?\.address/.test(sw));
     /* Disconnect must clear it or the UI shows a connected wallet forever. */
     t('...and disconnect clears the MWA session', /mwaAddress = null/.test(sw));
     /* Lazy import, or the package ships to every user who cannot use it. */
     t('...and the package is imported dynamically',
-      /await import\('@solana-mobile\/wallet-standard-mobile'\)/.test(sw));
+      /import\('@solana-mobile\/wallet-standard-mobile'\)/.test(sw));
+    t('...and MWA can sign and send after connecting, not merely expose an address',
+      /solana:signAndSendTransaction/.test(sw) && /mwaAccount/.test(sw));
+    t('...and an empty wallet is refused before the signing prompt',
+      /getSolanaSwapBalances/.test(solPage) && /INSUFFICIENT_BALANCE/.test(solPage));
+    t('wallet-app launch links stay visible for Phantom, Solflare and Backpack',
+      /backpackBrowseLink/.test(solPage) && /walletLinksTitle/.test(solPage));
     /* The button must not stay disabled once MWA is available. */
     t('...and the connect button accepts either path',
       /!hasWallet && !mwaReady/.test(solPage));

@@ -2,6 +2,16 @@
 
 ## 1.28.1 — Ostium trading UI
 
+- Fixed the Ostium → Swap handoff: it now selects Arbitrum USDC, and the generic
+  network-reset effect can no longer overwrite a token supplied by a deep link.
+- Fixed Solana Mobile Wallet Adapter end-to-end. The app now uses the current
+  Wallet Standard registry and can sign/send after connecting instead of
+  looking only for `window.solana` and reporting that the transaction was not
+  signed.
+- Added exact Solana source/SOL balance checks before opening the signing
+  prompt, plus always-visible Phantom, Solflare and Backpack launch links.
+- Wallet identity links now reject the retired `lawpoetics.ir` environment
+  value and always identify the production dapp as `fbtswap.ir`.
 - Added the complete `/ostium` wallet-signed order flow for gold, oil, forex,
   stocks, indices, ETFs and crypto: live prices and market hours, current
   pair-specific leverage limits, long/short ticket, TP/SL, and an itemised fee

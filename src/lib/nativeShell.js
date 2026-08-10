@@ -33,15 +33,19 @@ export function isNativeShell() {
  * Callers name the route they want.
  */
 export function publicAppUrl(path = '/') {
-  const base =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_URL) ||
-    /*
-     * The canonical home moved from www.lawpoetics.ir to fbtswap.ir, and this
-     * default matters more than most: it is what a referral invite and a
-     * share link resolve to inside the APK, where window.location is
-     * https://localhost. Left stale, every invite the app has ever generated
-     * would keep pointing at the old host.
-     */
-    'https://fbtswap.ir';
+  const configured =
+    typeof import.meta !== 'undefined' ? String(import.meta.env?.VITE_PUBLIC_URL || '') : '';
+  /*
+   * A stale Vercel/CI variable can outlive the code that set it. That happened:
+   * VITE_PUBLIC_URL still named lawpoetics.ir, so Phantom correctly displayed
+   * that unrelated domain even though every fallback in source said fbtswap.ir.
+   *
+   * Production identity is not a user preference. Only the canonical host (or
+   * an explicit preview host for testing) may override it; the retired domain
+   * is rejected rather than trusted merely because it came from an env var.
+   */
+  const allowed = /^https:\/\/(?:www\.)?fbtswap\.ir(?=\/|$)/i.test(configured)
+    || /^https:\/\/[^/]+\.e2b\.app(?=\/|$)/i.test(configured);
+  const base = allowed ? configured : 'https://fbtswap.ir';
   return `${String(base).replace(/\/+$/, '')}${path}`;
 }

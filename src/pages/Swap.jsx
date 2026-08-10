@@ -341,6 +341,12 @@ export default function Swap() {
   // Switching chains invalidates the selected pair — a BSC token address means
   // nothing on Arbitrum, and quoting it would fail confusingly.
   useEffect(() => {
+    /* A deep link switches the chain first, then applies its token selection.
+       Do not let this generic chain reset run later in the same commit and
+       overwrite that prefill with ETH/USDT defaults. This was why Ostium's
+       "get USDC" handoff reached Swap on the right chain but showed the wrong
+       token. */
+    if (searchParams.get('from') || searchParams.get('to') || searchParams.get('toAddress')) return;
     const list = TOKENS[chainId] ?? [];
     if (!list.length) return;
     setFromToken(list[0]);

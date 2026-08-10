@@ -446,7 +446,11 @@ export default function Ostium() {
         <p>{t('ostium.rolloverNotice')}</p>
       </InfoBox>
 
-      <button className="btn btn-ghost" onClick={() => navigate('/swap')} style={{ width: '100%' }}>
+      <button
+        className="btn btn-ghost"
+        onClick={() => navigate('/swap?chain=42161&to=USDC')}
+        style={{ width: '100%' }}
+      >
         {t('ostium.getUsdc')}
       </button>
 

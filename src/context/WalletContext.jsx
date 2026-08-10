@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
 import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { publicAppUrl } from '../lib/nativeShell';
 
 /**
  * NON-CUSTODIAL WALLET LAYER
@@ -180,9 +181,12 @@ export function WalletProvider({ children }) {
        * Pointing at the live domain means the fallback is at least a real
        * site. VITE_PUBLIC_URL still overrides it for other deployments.
        */
-      const publicUrl =
-        import.meta.env?.VITE_PUBLIC_URL?.replace(/\/$/, '') ||
-        (isLocal ? 'https://fbtswap.ir' : runtimeOrigin);
+      /* One canonical identity for every wallet prompt. publicAppUrl rejects
+         the retired lawpoetics.ir env value; using the runtime origin here
+         made Solana and EVM prompts disagree about which site was connecting. */
+      const publicUrl = publicAppUrl('/').replace(/\/$/, '');
+      void isLocal;
+      void runtimeOrigin;
 
       const wc = await EthereumProvider.init({
         projectId,
