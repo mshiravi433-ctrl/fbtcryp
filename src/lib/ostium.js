@@ -152,8 +152,8 @@ export function ostiumFeeBps(bps = BUILDER_BPS) {
  * `builderFee` as the contract wants it: a fraction scaled by 1e6, expressed
  * as a PERCENT rather than a basis point.
  *
- * 8 bps is 0.08%, and 0.08 × 1e6 / 100 = 80000. Verified against the SDK's
- * own encoding: 8 bps produced the word `0x…c350` (50000) and 20 bps produced
+ * 10 bps is 0.10%, and 0.10 × 1e6 / 100 = 100000. Verified against the SDK's
+ * own encoding: 10 bps produced the word `0x…c350` (50000) and 20 bps produced
  * `0x…30d40` (200000).
  *
  * This is the single most error-prone number in the file — a factor-of-100
@@ -186,7 +186,7 @@ export function notionalUsd({ collateralUsd, leverage }) {
  * Everything the review screen has to show before the user signs.
  *
  * ─── WHY THE OPENING FEE IS INCLUDED AND NOT JUST OURS ──────────────────────
- * Ours is 8 bps (raised from 5). Ostium's own opening fee is 3-10 bps and there is a flat
+ * Ours is 10 bps (MAX, raised from 5). Ostium's own opening fee is 3-10 bps and there is a flat
  * $0.10 oracle fee on top. Showing only our slice would make the trade look
  * cheaper than it is, and the number the user needs is the total that leaves
  * their collateral.
@@ -227,7 +227,7 @@ export function tradeCosts({
        silently omits the venue's own fee is worse than no total. */
     totalFee: venueFee == null ? null : ourFee + venueFee + oracleFee,
     /*
-     * The honesty line. Our 8 bps of NOTIONAL at 20x is 1.6% of what the trader
+     * The honesty line. Our 10 bps of NOTIONAL at 20x is 2% of what the trader
      * actually put up, and that multiplication is invisible in "5 bps".
      */
     ourFeePctOfCollateral: (ourFee / Number(collateralUsd)) * 100
