@@ -6,6 +6,7 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
+import { IconExternal } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
@@ -24,7 +25,13 @@ import {
 export default function Dydx() {
   const { t } = useTranslation();
   const wallet = useWallet();
-  const { haptic } = useTelegram();
+  const { haptic, tg } = useTelegram();
+  const openDydx = () => {
+    haptic?.('light');
+    const url = 'https://dydx.trade';
+    if (tg?.openLink) tg.openLink(url);
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  };
   const [connectOpen, setConnectOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [live, setLive] = useState(false);
@@ -229,7 +236,22 @@ export default function Dydx() {
         <p>{t('dydx.builderBody', { fee: DYDX_BUILDER_FEE_PPM, address: DYDX_BUILDER_ADDRESS })}</p>
       </InfoBox></div>
 
-      <a className="btn btn-ghost" href="https://dydx.trade" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box', display: 'block', textAlign: 'center' }}target="_blank" rel="noopener noreferrer">{t('dydx.fundAccount')}</a>
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18, width: '100%', boxSizing: 'border-box', borderColor: 'rgba(0,229,255,0.14)', background: 'linear-gradient(145deg, rgba(0,229,255,0.06), rgba(255,255,255,0.02))' }}>
+        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 9, background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.18)', color: 'var(--rgb-1)' }}><IconExternal width={15} height={15} /></span>
+          شارژ حساب کجاست؟
+        </div>
+        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.9, margin: 0 }}>
+          شارژ و واریز وثیقهٔ dYdX <strong style={{ color: 'var(--text-1)' }}>داخل اپ انجام نمی‌شود</strong> — نه در اپ، نه در وب خودمان. واریز USDC، برداشت و مدیریت حساب فقط در <strong style={{ color: 'var(--text-1)' }}>سایت مبدا dydx.trade</strong> با همان کیف پولی که وصل کردی انجام می‌شود. اپ فقط سفارش را می‌سازد و برای امضا به کیف پولت می‌فرستد؛ هیچ پولی دست ما نمی‌ماند.
+        </p>
+        <button type="button" className="btn btn-primary" style={{ width: '100%', marginTop: 12, gap: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={openDydx}>
+          <IconExternal width={15} height={15} />
+          {t('dydx.fundAccount')}
+        </button>
+        <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, textAlign: 'center' }}>
+          باز شدن در تب جدید — سایت مبدا
+        </p>
+      </motion.section>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
