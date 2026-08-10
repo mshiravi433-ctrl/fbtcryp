@@ -147,11 +147,36 @@ setInterval(() => {
 
 /* -------------------------------- helpers -------------------------------- */
 
+/**
+ * ─── WHY `s-maxage` AND NOT JUST `max-age` ──────────────────────────────────
+ * The site got slower and this was the cause.
+ *
+ * `max-age` is a BROWSER instruction. Vercel's CDN ignores it and treats the
+ * response as private, so every request — from every user, on every page —
+ * woke a serverless function. Measured on the live site: /api/health reported
+ * `uptime: 33s` and then `38s` seconds later, i.e. the instance had just been
+ * created, and `cache.entries: 2` on a server with dozens of cached endpoints.
+ * The in-memory cache in cache.js was being thrown away constantly, so almost
+ * every call was a cold start plus a full upstream fetch.
+ *
+ * `s-maxage` is the SHARED-cache instruction the CDN actually reads. With it,
+ * the first user warms the edge and everyone after that is served from it
+ * without the function running at all.
+ *
+ * `stale-while-revalidate` is the other half: past the TTL the edge serves the
+ * slightly-stale copy IMMEDIATELY and refreshes in the background, so nobody
+ * ever waits for a cold start. For prices that are already 30-300s old by
+ * design, a few extra seconds is invisible; a 2-second stall is not.
+ */
 function serve(res, ttlMs) {
   return async (producer, key) => {
     try {
       const { value, cached, stale } = await withCache(key, ttlMs, producer);
-      res.set('cache-control', `public, max-age=${Math.floor(ttlMs / 1000)}`);
+      const secs = Math.floor(ttlMs / 1000);
+      res.set(
+        'cache-control',
+        `public, max-age=${secs}, s-maxage=${secs}, stale-while-revalidate=${secs * 4}`
+      );
       if (stale) res.set('x-data-stale', '1');
       if (cached) res.set('x-cache', 'HIT');
       return res.json(value);
@@ -198,7 +223,7 @@ app.get(`/api/indexnow-key/${INDEXNOW_KEY}.txt`, (_req, res) => {
   res.type('text/plain; charset=utf-8');
   /* A day: long enough to be cheap, short enough that rotating the key
      propagates without waiting on a CDN. */
-  res.set('cache-control', 'public, max-age=86400');
+  res.set('cache-control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=345600');
   res.send(INDEXNOW_KEY);
 });
 
@@ -315,7 +340,7 @@ app.get('/api/audio', async (_req, res) => {
       fetchAudio,
       memoryStore
     );
-    res.set('cache-control', 'public, max-age=900');
+    res.set('cache-control', 'public, max-age=900, s-maxage=900, stale-while-revalidate=3600');
     if (cached) res.set('x-cache', tier.toUpperCase());
     return res.json(value);
   } catch (err) {
@@ -343,7 +368,7 @@ app.get('/api/calm', async (_req, res) => {
       fetchCalm,
       memoryStore
     );
-    res.set('cache-control', 'public, max-age=3600');
+    res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
     if (cached) res.set('x-cache', tier.toUpperCase());
     return res.json(value);
   } catch (err) {
@@ -508,7 +533,7 @@ app.get('/api/category/:slug', (req, res) => {
 
 app.get('/api/bridge/status', async (_req, res) => {
   try {
-    res.set('cache-control', 'public, max-age=300');
+    res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
     return res.json(await bridgeStatus());
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
@@ -536,7 +561,7 @@ app.get('/api/bridge/quote', async (req, res) => {
  * server and are never accepted from the query string.
  */
 app.get('/api/dln/status', (_req, res) => {
-  res.set('cache-control', 'public, max-age=300');
+  res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
   return res.json(dlnStatus());
 });
 
@@ -569,7 +594,7 @@ app.get('/api/dln/tx', async (req, res) => {
  */
 
 app.get('/api/gasless/status', (_req, res) => {
-  res.set('cache-control', 'public, max-age=300');
+  res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
   res.json(gaslessStatus());
 });
 
@@ -674,7 +699,7 @@ app.get('/api/avantis/equities', (_req, res) =>
 const shopRoute = (res, work) =>
   work
     .then(({ value }) => {
-      res.set('cache-control', 'public, max-age=300');
+      res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
       res.json(value);
     })
     .catch((err) =>
@@ -736,7 +761,7 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
     const out = await resolveIds(req.params.chainId, req.query.addresses);
     if (out.error) return res.status(400).json(out);
     /* An id mapping is near-permanent; let the browser hold it for an hour. */
-    res.set('cache-control', 'public, max-age=3600');
+    res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
@@ -758,7 +783,7 @@ app.get('/api/coin-venue/:id', async (req, res) => {
   try {
     const out = await resolveVenue(req.params.id);
     if (out.error) return res.status(400).json(out);
-    res.set('cache-control', 'public, max-age=3600');
+    res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
@@ -1118,7 +1143,7 @@ app.get('/api/nft/:chainId/:owner', (req, res) => {
   const key = `nft:${chainId}:${owner.toLowerCase()}`;
   return withCache(key, 300000, () => fetchNfts(chainId, owner))
     .then(({ value }) => {
-      res.set('cache-control', 'public, max-age=300');
+      res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
       res.json(value);
     })
     .catch((err) => {
@@ -1565,7 +1590,7 @@ app.use(
        * screen with no way to force a refresh. A week is effectively free on
        * repeat visits and still lets a fix propagate.
        */
-      res.setHeader('cache-control', 'public, max-age=604800');
+      res.setHeader('cache-control', 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2419200');
     }
   })
 );

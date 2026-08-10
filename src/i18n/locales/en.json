@@ -2947,5 +2947,28 @@
       "body": "Top up any prepaid number, or take an eSIM with data in 180+ countries — no plastic, no shop.",
       "go": "Top up a number"
     }
+  },
+  "fbt": {
+    "title": "Your FBT balance",
+    "notCoin": "FBT is a loyalty balance inside this app. It is not a tradable coin, has no price, and cannot be sold or withdrawn — it buys you lower fees and free adverts here.",
+    "toNext": "{{n}} FBT to {{tier}}",
+    "perkFee": "off swaps — soon",
+    "perkAd": "free advert",
+    "howTitle": "How FBT works",
+    "ladder": "The ladder",
+    "ladderRow": "{{tier}} — from {{n}} FBT, −{{bps}} bps on swaps",
+    "tier": {
+      "base": "Starter",
+      "bronze": "Bronze",
+      "silver": "Silver",
+      "gold": "Gold",
+      "diamond": "Diamond"
+    },
+    "how": {
+      "h1": "You earn FBT for using the app: swapping, inviting a friend, checking in. Nothing is bought and nothing is sold.",
+      "h2": "Fee discounts are shown here and go live with the next swap update; adverts already work.",
+      "h3": "From Silver it also pays for adverts on the board, which otherwise cost $1 to $25.",
+      "h4": "If we ever issue a real on-chain token, this balance converts one-to-one. Until then it stays here, and we do not promise a date or a value."
+    }
   }
 }

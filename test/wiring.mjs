@@ -10272,5 +10272,110 @@ export default function run() {
     }
   }
 
+  /* ---- 101. FBT, and the CDN cache that was making the site slow -------- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    /*
+     * ─── THE SITE GOT SLOWER, AND THIS WAS WHY ──────────────────────────────
+     * Every cached response set `max-age` only. That is a BROWSER directive;
+     * Vercel's CDN ignores it and treats the response as private, so every
+     * request from every user woke a serverless function.
+     *
+     * Measured on the live site rather than guessed: /api/health reported
+     * `uptime: 33s`, then `38s` a moment later — the instance had just been
+     * created — with `cache.entries: 2` on a server that caches dozens of
+     * endpoints. The in-memory cache was being discarded constantly, so almost
+     * every call was a cold start plus a full upstream fetch.
+     *
+     * `s-maxage` is what a shared cache reads; `stale-while-revalidate` means
+     * that past the TTL the edge answers instantly from the stale copy and
+     * refreshes behind the request, so nobody waits for a cold start.
+     */
+    const appSrc = read('server/app.js');
+    t('cached responses are cacheable by the CDN, not just the browser',
+      /s-maxage=\$\{secs\}/.test(appSrc));
+    t('...and serve stale while they refresh', /stale-while-revalidate=\$\{secs \* 4\}/.test(appSrc));
+    /* Every hand-rolled header too, or those routes still cold-start per user. */
+    t('...on every hand-written cache header as well',
+      !/'public, max-age=\d+'/.test(appSrc));
+
+    /*
+     * ─── FBT: A LOYALTY BALANCE, NOT A COIN ─────────────────────────────────
+     * Asked for our own token. A real one needs a liquidity pool — actual
+     * money, locked — and the 2026 market rate for a working launch is
+     * $35k-$280k against a standing "no money to spend" rule. So this is the
+     * free, honest half: the points that were already accruing, given a name,
+     * a symbol and a job.
+     */
+    t('the FBT module exists', existsSync('src/lib/fbt.js'));
+    const fbt = code(read('src/lib/fbt.js'));
+    const panel = code(read('src/components/FbtPanel.jsx'));
+
+    /* It is built ON the existing points, not a second parallel ledger. */
+    t('FBT is derived from the existing points', /s\.points/.test(panel));
+    t('...and is mounted where the points already live', /FbtPanel/.test(read('src/pages/Leaderboard.jsx')));
+
+    /*
+     * The single most important property in this feature. A balance with a
+     * symbol and a tier ladder LOOKS like a token; if a user concludes they
+     * own something sellable, that is both a broken promise and the thing that
+     * would turn a discount scheme into an unregistered offering.
+     */
+    /*
+     * My first version of this checked `!/InfoBox[^>]*fbt.notCoin/`, which
+     * cannot match because the key sits in the CHILDREN of the element, not in
+     * its attributes — wrapping the line in an InfoBox left the guard green.
+     * Assert the positive shape instead: it must be the plain .fbt-note
+     * paragraph, which by construction cannot be inside a collapsible.
+     */
+    t('the not-a-coin line is always visible, never collapsed',
+      /<p className="fbt-note">\{t\('fbt\.notCoin'\)\}<\/p>/.test(panel));
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const F = L.fbt;
+      t(`${lang} has the FBT copy`, Boolean(F?.title && F?.notCoin && F?.howTitle));
+      /*
+       * Matches the CLAIM, not one exact phrasing. My first version required
+       * "ليست عملة" and the correct Arabic here is "ليس عملة" — the guard was
+       * wrong, not the translation, and pinning a whole sentence would break
+       * on any future rewording that still says the same thing.
+       */
+      t(`${lang} says it cannot be sold or withdrawn`,
+        /cannot be sold or withdrawn|فروختنی و برداشت‌شدنی نیست|لا يمكن بيعه أو سحبه/.test(String(F?.notCoin ?? '')));
+      t(`${lang} states it is not tradable`,
+        /not a tradable coin|ارز قابل معامله نیست|ليس عملة قابلة للتداول/.test(String(F?.notCoin ?? '')));
+      t(`${lang} promises no date and no value for a real token`,
+        /do not promise a date|نه تاریخی قول می‌دهیم|لا نعد بتاريخ/.test(String(F?.how?.h4 ?? '')));
+      t(`${lang} names every tier`,
+        ['base', 'bronze', 'silver', 'gold', 'diamond'].every((k) => Boolean(F?.tier?.[k])));
+    }
+
+    /* Number(null) is 0 and 0 is finite — the trap that has produced "$0.00"
+       twice in this codebase. Guarded explicitly here. */
+    t('a bad balance cannot become a tier', /!Number\.isFinite\(n\) \|\| n <= 0/.test(fbt));
+    /* A mis-edited table must not be able to produce a negative or inflated
+       fee, so the discount is clamped at both ends independently of it. */
+    t('the discount is hard-capped', /MAX_DISCOUNT_BPS = 20/.test(fbt) && /Math\.min\(MAX_DISCOUNT_BPS/.test(fbt));
+    t('...and can never exceed the base fee', /Math\.max\(0, Math\.min\(base, base - disc\)\)/.test(fbt));
+
+    /*
+     * The fee discount is DISPLAYED but not yet applied to the live swap, and
+     * that stop is deliberate: FEE_BPS is threaded through the aggregator
+     * quote AND the hand-encoded calldata, and a quote built with one fee and
+     * a transaction carrying another does not misprint a number, it reverts.
+     * The copy must not claim a discount that is not active.
+     */
+    t('the swap path is untouched for now', !/feeBpsFor/.test(read('src/lib/swap.js')));
+    for (const lang of ['en', 'fa', 'ar']) {
+      const L = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} does not claim the fee discount is live yet`,
+        /soon|به‌زودی|قريباً/.test(String(L.fbt?.perkFee ?? '')));
+    }
+  }
+
   return rows;
 }

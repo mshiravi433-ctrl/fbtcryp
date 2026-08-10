@@ -8318,3 +8318,136 @@ body { overflow-x: clip; }
 .shop-quick button:active { transform: scale(.97); }
 .shop-quick button:hover { border-color: var(--line-strong); }
 .shop-quick svg { color: var(--rgb-1); flex-shrink: 0; }
+
+/* ── FBT balance card ───────────────────────────────────────────────────────
+   The loyalty balance that `points` has always been accruing. Styled like a
+   wallet card because that is what it behaves like — but never with a fiat
+   value anywhere, because it has none. */
+.fbt-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(130% 150% at 8% 0%, color-mix(in srgb, var(--rgb-1) 22%, transparent), transparent 60%),
+    radial-gradient(120% 130% at 95% 15%, color-mix(in srgb, var(--rgb-3) 18%, transparent), transparent 58%),
+    var(--bg-raised);
+}
+
+/* One static sheen. Deliberately not animated: this card sits at the top of a
+   screen the user reads, and a permanent loop there is the battery mistake the
+   advert borders already taught. */
+.fbt-glow {
+  position: absolute;
+  inset-inline-start: -30%;
+  top: -60%;
+  width: 70%;
+  height: 200%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .07), transparent);
+  transform: rotate(12deg);
+  pointer-events: none;
+}
+
+.fbt-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 4px;
+}
+
+.fbt-amount { display: flex; align-items: baseline; gap: 7px; }
+
+.fbt-num {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.fbt-sym {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rgb-1);
+}
+
+.fbt-tier {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-2);
+}
+
+.fbt-tier[data-tier='bronze']  { color: #cd7f32; border-color: #cd7f3255; }
+.fbt-tier[data-tier='silver']  { color: #9aa4b2; border-color: #9aa4b255; }
+.fbt-tier[data-tier='gold']    { color: var(--ink-amber); border-color: #ffc93c66; }
+.fbt-tier[data-tier='diamond'] { color: var(--ink-cyan); border-color: #4dd0e166; }
+
+/* The claim that must always be visible, not folded away. */
+.fbt-note {
+  margin: 11px 0 0;
+  font-size: 11.6px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.fbt-bar {
+  margin-top: 13px;
+  height: 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-1) 10%, transparent);
+  overflow: hidden;
+}
+
+.fbt-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
+}
+
+.fbt-next { margin: 7px 0 0; font-size: 11.4px; color: var(--text-3); }
+
+.fbt-perks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.fbt-perk {
+  padding: 11px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-raised) 78%, transparent);
+  /* Locked perks are dimmed, never hidden — a reward you can see and cannot
+     reach yet is the entire mechanism. */
+  opacity: .45;
+}
+
+.fbt-perk[data-on='true'] {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, var(--line));
+}
+
+.fbt-perk-v {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.fbt-perk-k { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fbt-bar i { transition: none; }
+}

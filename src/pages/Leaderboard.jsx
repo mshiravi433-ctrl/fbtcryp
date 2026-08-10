@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import FbtPanel from '../components/FbtPanel';
 import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useAppStore } from '../store/useAppStore';
@@ -99,6 +100,24 @@ export default function Leaderboard({ embedded = false }) {
           <h1 className="h1" style={{ fontSize: 19 }}>{t('rank.title')}</h1>
         </motion.div>
       )}
+
+      {/*
+        ─── THE FBT BALANCE, ABOVE THE POINTS CARD ─────────────────────────
+        Asked for our own coin. The full reasoning is in docs/FBT-TOKEN-FA.md;
+        the short version is that a real on-chain token needs a liquidity pool
+        — real money, locked — and the market rate for a working launch is
+        $35k-$280k against a standing "no money to spend" constraint.
+
+        This is the half that is free and honest today: the points that have
+        been accruing all along, given a name, a symbol and an actual job
+        (cheaper swaps, free adverts). If a token is ever affordable, this
+        balance converts one-to-one and nobody was promised anything we could
+        not deliver.
+
+        It sits ABOVE the rank card because it is the thing with consequences;
+        the rank is a label.
+      */}
+      <FbtPanel />
 
       {/* ---------------- your points ---------------- */}
       <motion.section
