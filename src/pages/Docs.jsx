@@ -8,6 +8,7 @@ import {
   IconChevronLeft, IconChevronRight, IconExternal, IconSwap,
   IconPools, IconWallet, IconActivity, IconShield, IconTrend
 } from '../components/Icons';
+import '../styles/docs-modern.css';
 
 /**
  * In-app documentation for beginners.
@@ -16,73 +17,54 @@ import {
  * mistake people actually make there. The "pitfall" line matters more than the
  * steps — most losses come from not knowing what can go wrong, not from being
  * unable to find a button.
- *
- * YouTube links point at well-known educational channels rather than anything
- * we produced, and are labelled as third-party so nobody assumes we vetted
- * every word.
  */
-/*
- * ─── TWO VIDEO SOURCES, AND WHY ─────────────────────────────────────────────
- * Every tutorial link used to be a YOUTUBE SEARCH. Two problems with that,
- * and the first one is fatal for most of our users:
- *
- *   1. YouTube is blocked in Iran. A tutorial button that opens a page which
- *      never loads is worse than no button — the user concludes the app is
- *      broken, not that their network is.
- *
- *   2. A search URL is not a tutorial. It hands someone a results page and
- *      hopes the top hit is good, in a category full of referral-farming
- *      channels. We cannot vet a search result that has not happened yet.
- *
- * So each section now carries BOTH: an Aparat search (Iran's own video
- * platform, reachable without a VPN, and Persian-language) and the YouTube
- * one for everyone else. The UI offers whichever is likely to work, labelled
- * by language so nobody taps into a video they cannot understand.
- *
- * Still searches rather than fixed video IDs, and that is deliberate: a
- * pinned video can be deleted, monetised or edited into something we would
- * not endorse, and we would never know. A search stays useful.
- */
+
 const youtube = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
 
 const SECTIONS = [
-  { id: 'why', Icon: IconTrend, steps: 5 },
-  { id: 'strategy', Icon: IconPools, steps: 5 },
+  { id: 'why', Icon: IconTrend, steps: 5, hue: 'var(--rgb-1)' },
+  { id: 'strategy', Icon: IconPools, steps: 5, hue: 'var(--rgb-2)' },
   {
     id: 'start',
     Icon: IconWallet,
     steps: 4,
+    hue: 'var(--rgb-4)',
     en: youtube('how to use metamask beginner')
   },
   {
     id: 'swap',
     Icon: IconSwap,
     steps: 5,
+    hue: 'var(--rgb-1)',
     en: youtube('how to swap tokens dex beginner')
   },
   {
     id: 'farm',
     Icon: IconPools,
     steps: 4,
+    hue: 'var(--rgb-5)',
     en: youtube('liquidity pool impermanent loss explained')
   },
   {
     id: 'signals',
     Icon: IconActivity,
     steps: 3,
+    hue: 'var(--rgb-3)',
     en: youtube('rsi macd explained beginners')
   },
-  { id: 'trade', Icon: IconTrend, steps: 3 },
+  { id: 'trade', Icon: IconTrend, steps: 3, hue: 'var(--rgb-2)' },
   {
     id: 'dydx',
     Icon: IconTrend,
     steps: 5,
+    hue: 'var(--rgb-1)',
     en: youtube('dydx how to deposit fund account tutorial dydx.trade')
   },
   {
     id: 'security',
     Icon: IconShield,
     steps: 5,
+    hue: 'var(--rgb-3)',
     en: youtube('crypto wallet security seed phrase')
   }
 ];
@@ -101,45 +83,56 @@ export default function Docs({ embedded = false }) {
 
   return (
     <PageTransition embedded={embedded}>
-      {/* Suppressed when hosted in a tabbed page — the shell already draws a
-          back button and a title, and two of each is clutter. */}
       {!embedded && (
-        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
+        <motion.div className="row" style={{ gap: 12 }} variants={riseIn} initial="hidden" animate="show">
           <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
             <IconChevronLeft width={18} height={18} />
           </button>
-          <h1 className="h1" style={{ fontSize: 19 }}>{t('docs.title')}</h1>
+          <h1 className="h1" style={{ fontSize: 20 }}>{t('docs.title')}</h1>
         </motion.div>
       )}
 
-      <p className="prose-sm">{t('docs.intro')}</p>
+      {/* Hero — spacious, friendly */}
+      <motion.section className="docs-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: embedded ? 0 : 12 }}>
+        <div className="docs-hero-title">{t('docs.title')}</div>
+        <p className="docs-hero-sub">{t('docs.intro')}</p>
+      </motion.section>
 
-      <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
-        {SECTIONS.map(({ id, Icon, steps, en }) => {
+      <motion.div className="docs-grid" variants={stagger} initial="hidden" animate="show" style={{ marginTop: 16 }}>
+        {SECTIONS.map(({ id, Icon, steps, hue, en }) => {
           const isOpen = openId === id;
           return (
-            <motion.div key={id} className={`card ${isOpen ? 'card-rgb' : ''}`} variants={riseIn} layout>
+            <motion.div
+              key={id}
+              className="docs-card"
+              data-open={isOpen ? 'true' : 'false'}
+              variants={riseIn}
+              layout
+              style={{ '--card-hue': hue }}
+            >
               <button
+                className="docs-card-header"
                 onClick={() => {
                   haptic?.('select');
                   setOpenId(isOpen ? null : id);
                 }}
-                style={{ background: 'none', border: 'none', width: '100%', padding: 0, cursor: 'pointer', textAlign: 'start' }}
+                aria-expanded={isOpen}
               >
-                <div className="row-between">
-                  <div className="row" style={{ gap: 11 }}>
-                    <span className="wallet-badge" style={{ width: 36, height: 36 }}>
-                      <Icon width={18} height={18} />
-                    </span>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t(`docs.${id}.title`)}</div>
-                      <div className="faint">{t(`docs.${id}.sub`)}</div>
-                    </div>
-                  </div>
-                  <motion.span animate={{ rotate: isOpen ? 90 : 0 }} style={{ color: 'var(--text-3)' }}>
-                    <IconChevronRight width={17} height={17} />
-                  </motion.span>
-                </div>
+                <span className="docs-icon" aria-hidden="true">
+                  <Icon width={20} height={20} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="docs-card-title">{t(`docs.${id}.title`)}</span>
+                  <span className="docs-card-sub" style={{ display: 'block' }}>{t(`docs.${id}.sub`)}</span>
+                </span>
+                <motion.span
+                  className="docs-chevron"
+                  animate={{ rotate: isOpen ? 90 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  aria-hidden="true"
+                >
+                  <IconChevronRight width={16} height={16} />
+                </motion.span>
               </button>
 
               <AnimatePresence initial={false}>
@@ -151,86 +144,30 @@ export default function Docs({ embedded = false }) {
                     transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <div style={{ paddingTop: 13 }}>
+                    <div style={{ paddingTop: 16 }}>
                       {Array.from({ length: steps }).map((_, i) => (
                         <motion.div
                           key={i}
-                          className="row"
-                          style={{ gap: 10, alignItems: 'flex-start', marginBottom: 9 }}
+                          className="docs-step"
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.05 }}
                         >
-                          <span
-                            className="mono"
-                            style={{
-                              minWidth: 21, height: 21, borderRadius: 7, display: 'grid', placeItems: 'center',
-                              fontSize: 10, fontWeight: 700, flexShrink: 0,
-                              background: 'linear-gradient(135deg,var(--rgb-1),var(--rgb-2))', color: '#000'
-                            }}
-                          >
-                            {i + 1}
-                          </span>
-                          <span className="prose-sm">{t(`docs.${id}.step${i + 1}`)}</span>
+                          <span className="docs-step-num">{i + 1}</span>
+                          <span className="docs-step-text">{t(`docs.${id}.step${i + 1}`)}</span>
                         </motion.div>
                       ))}
 
-                      <p className="notice notice-danger" style={{ marginTop: 10 }}>
+                      <div className="docs-pitfall">
                         <strong>{t('docs.pitfall')}:</strong> {t(`docs.${id}.pitfall`)}
-                      </p>
+                      </div>
 
-                      {/*
-                        ─── THIS LINE CRASHED THE PAGE ────────────────────
-                        It read `{(fa || en) && (`. When the Persian video
-                        button was removed I deleted `fa` from the map
-                        destructuring but left this reference behind, so the
-                        component threw a ReferenceError on render and the
-                        whole Docs screen went blank. Reported as «در مستندات
-                        وقتی میریم صفحه کرش میزنه».
-
-                        The build did not catch it: `fa` is a valid free
-                        identifier at parse time and only fails when the line
-                        actually runs. Wiring check #59 now renders this
-                        screen so a dead reference cannot ship again.
-                      */}
                       {en && (
-                        <div className="doc-videos">
-                          {/*
-                            Persian first. Most of this app's users are in
-                            Iran, where YouTube does not load at all — putting
-                            the reachable option second would mean most people
-                            tap the broken one first.
-                          */}
-                          {/*
-                            ─── THE PERSIAN VIDEO BUTTON IS GONE ────────────
-                            Reported: «فیلم های فارسی حذف بشه نمیارع» — the
-                            Persian videos do not come up.
-
-                            That was accurate, and the cause was structural
-                            rather than a bad link. This never pointed at a
-                            specific video; it ran an Aparat SEARCH for a
-                            phrase like «آموزش نصب کیف پول متامسک». Whether
-                            anything relevant came back depended on Aparat's
-                            index that day, so the button promised a lesson
-                            and often delivered an empty or irrelevant page.
-
-                            A button that works sometimes is worse than no
-                            button: the user blames the app and stops trusting
-                            the other links too. The written guide above is
-                            ours, always loads, and is complete — so the
-                            honest move is to let it stand alone rather than
-                            decorate it with a coin-flip.
-
-                            English is kept because a YouTube search for a
-                            technical phrase does reliably return results —
-                            though it is now labelled as a search, not a video.
-                          */}
-                          {en && (
-                            <button className="doc-video" onClick={() => open(en)}>
-                              <IconExternal width={13} height={13} />
-                              {t('docs.watchEn')}
-                            </button>
-                          )}
+                        <div className="docs-videos">
+                          <button className="doc-video" onClick={() => open(en)} style={{ '--card-hue': hue }}>
+                            <IconExternal width={13} height={13} />
+                            {t('docs.watchEn')}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -242,33 +179,11 @@ export default function Docs({ embedded = false }) {
         })}
       </motion.div>
 
-      <p className="prose-sm" style={{ marginTop: 10 }}>{t('docs.videoNote')}</p>
+      <p className="prose-sm" style={{ marginTop: 16, color: 'var(--text-2)', lineHeight: 1.85 }}>{t('docs.videoNote')}</p>
 
-      {/*
-        ─── THE RADIO MOVED TO THE NEWS SCREEN ─────────────────────────────
-        Requested: «در مستندات رادیو کریپتو را پاک کن و بزار داخل اخبار».
-
-        It was on both pages, which was the mistake: the same four feeds
-        rendered twice, so a reader met the identical episode list in the
-        learning section and again under the headlines. Duplication is not
-        extra value, it is the app repeating itself.
-
-        News is the right home — it is the same content type as the headlines
-        above it, and it now has its own tab there rather than sitting at the
-        bottom of a scroll.
-
-        Nothing was lost from this page: the written guides above are ours,
-        always load, and were never dependent on the audio.
-      */}
-
-      {/*
-        The disclaimer belongs in the docs, not only buried in Settings: it is
-        the page to hand to an exchange listing reviewer or a store, and it
-        states the copyright position now that the repository is public.
-      */}
-      <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/help')}>{t('help.title')}</button>
-        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/legal/disclaimer')}>{t('disclaimer.title')}</button>
+      <div className="row" style={{ gap: 12, marginTop: 18 }}>
+        <button className="btn btn-ghost" style={{ flex: 1, minHeight: 44 }} onClick={() => navigate('/help')}>{t('help.title')}</button>
+        <button className="btn btn-ghost" style={{ flex: 1, minHeight: 44 }} onClick={() => navigate('/legal/disclaimer')}>{t('disclaimer.title')}</button>
       </div>
     </PageTransition>
   );

@@ -1,0 +1,205 @@
+/* Docs — modern, spacious, friendly */
+.docs-hero {
+  position: relative;
+  padding: 20px 18px 18px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06) inset;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+.docs-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.18;
+  pointer-events: none;
+}
+.docs-hero-title {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2) 45%, var(--rgb-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.docs-hero-sub {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.85;
+  max-width: 38ch;
+}
+.docs-grid {
+  display: grid;
+  gap: 14px;
+}
+.docs-card {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 16px 14px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.28);
+  transition: border-color 0.22s ease, transform 0.18s ease, box-shadow 0.22s ease;
+  overflow: hidden;
+}
+.docs-card:hover {
+  border-color: color-mix(in srgb, var(--card-hue, var(--rgb-1)) 22%, rgba(255,255,255,0.08));
+  box-shadow: 0 16px 44px rgba(0,0,0,0.34), 0 0 0 1px color-mix(in srgb, var(--card-hue, var(--rgb-1)) 10%, transparent) inset;
+  transform: translateY(-1px);
+}
+.docs-card[data-open='true'] {
+  border-color: color-mix(in srgb, var(--card-hue, var(--rgb-1)) 32%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--card-hue, var(--rgb-1)) 7%, rgba(255,255,255,0.06)), rgba(255,255,255,0.03));
+  box-shadow: 0 18px 48px rgba(0,0,0,0.36), 0 0 18px color-mix(in srgb, var(--card-hue, var(--rgb-1)) 14%, transparent);
+}
+.docs-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: start;
+}
+.docs-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--card-hue) 22%, rgba(255,255,255,0.06)), color-mix(in srgb, var(--card-hue) 8%, transparent));
+  border: 1px solid color-mix(in srgb, var(--card-hue) 22%, transparent);
+  color: var(--card-hue);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--card-hue) 18%, transparent);
+}
+.docs-icon svg { width: 20px; height: 20px; }
+.docs-card-title {
+  font-weight: 800;
+  font-size: 14.5px;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+  color: var(--text-1);
+}
+.docs-card-sub {
+  margin-top: 3px;
+  font-size: 12.3px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.docs-chevron {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--text-3);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.docs-card[data-open='true'] .docs-chevron {
+  background: color-mix(in srgb, var(--card-hue) 12%, rgba(255,255,255,0.06));
+  border-color: color-mix(in srgb, var(--card-hue) 18%, transparent);
+  color: var(--card-hue);
+}
+.docs-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.docs-step:last-child { margin-bottom: 0; }
+.docs-step-num {
+  min-width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--card-hue), color-mix(in srgb, var(--card-hue) 70%, var(--rgb-2)));
+  color: #001014;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--card-hue) 24%, transparent);
+}
+.docs-step-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--text-1);
+}
+.docs-pitfall {
+  margin-top: 14px;
+  padding: 12px 13px;
+  border-radius: 13px;
+  background: rgba(255,59,107,0.07);
+  border: 1px solid rgba(255,59,107,0.14);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.85;
+}
+.docs-pitfall strong { color: #ff5a7a; }
+.docs-videos {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.doc-video {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.09);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.doc-video:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: color-mix(in srgb, var(--card-hue) 22%, transparent);
+}
+:root[data-theme='light'] .docs-hero,
+:root[data-theme='light'] .docs-card {
+  background: rgba(255,255,255,0.82);
+  border-color: rgba(13,16,32,0.07);
+  box-shadow: 0 12px 32px rgba(13,16,32,0.07);
+}
+:root[data-theme='light'] .docs-icon {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--card-hue) 14%, #fff), color-mix(in srgb, var(--card-hue) 6%, #fff));
+  border-color: color-mix(in srgb, var(--card-hue) 14%, transparent);
+}
+:root[data-theme='light'] .docs-pitfall {
+  background: rgba(255,59,107,0.06);
+  border-color: rgba(255,59,107,0.12);
+  color: #2b344d;
+}
