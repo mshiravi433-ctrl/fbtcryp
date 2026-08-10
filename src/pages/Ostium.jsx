@@ -12,6 +12,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fmtPrice, fmtUsd } from '../lib/format';
+import '../styles/derivatives-glass.css';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -317,19 +318,26 @@ export default function Ostium() {
 
   return (
     <PageTransition>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <div className="row-between" style={{ alignItems: 'flex-start' }}>
-          <div>
-            <h1 className="h1">{t('ostium.title')}</h1>
-            <p className="muted">{t('ostium.subtitle')}</p>
+      <div className="derivatives-hall">
+        <div className="derivatives-aurora" aria-hidden="true" />
+        <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div className="derivatives-title">
+                <span className="derivatives-title-glow">{t('ostium.title')}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1 }}>• OSTIUM</span>
+              </div>
+              <p className="derivatives-subtitle">{t('ostium.subtitle')}</p>
+            </div>
+            <span className={`pill ${feedLive ? 'pill-up' : 'pill-down'}`} style={{ alignSelf: 'flex-start' }}>
+              {feedLive ? t('ostium.live') : t('ostium.offline')}
+            </span>
           </div>
-          <span className={`pill ${feedLive ? 'pill-up' : 'pill-down'}`}>
-            {feedLive ? t('ostium.live') : t('ostium.offline')}
-          </span>
-        </div>
-      </motion.div>
+        </motion.section>
 
-      <p className="notice notice-danger">{t('ostium.risk')}</p>
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('ostium.risk')}</div>
+        </motion.div>
 
       <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
@@ -538,6 +546,7 @@ export default function Ostium() {
           <button className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`} disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button>
         </div>
       </Sheet>
+      </div>
     </PageTransition>
   );
 }

@@ -36,9 +36,9 @@
     "buy": "Buy & sell",
     "bridge": "Bridge",
     "shop": "Shop",
-    "ostium": "Real Markets",
-    "dydx": "dYdX",
-    "derivatives": "Derivatives Data"
+    "ostium": "Global Horizon",
+    "dydx": "dYdX Orbit",
+    "derivatives": "Glass Hall"
   },
   "common": {
     "balance": "Balance",
@@ -1038,9 +1038,9 @@
     "tab": {
       "rwa": "RWA tokens",
       "equity": "Tokenized equity",
-      "ostium": "Ostium real markets",
-      "dydx": "dYdX",
-      "derivatives": "Derivatives"
+      "ostium": "Global Horizon",
+      "dydx": "dYdX Orbit",
+      "derivatives": "Glass Hall"
     },
     "rwaTitle": "Real-world assets on-chain",
     "rwaBody": "RWA protocols bring treasury bills, credit and commodities onto the blockchain. Their governance tokens trade like any other crypto asset and you can swap them here.",
@@ -2991,8 +2991,8 @@
     }
   },
   "ostium": {
-    "title": "Real-world markets",
-    "subtitle": "Trade gold, oil, forex, stocks and indices through Ostium on Arbitrum.",
+    "title": "Global Horizon",
+    "subtitle": "Gold, oil, forex, stocks & indices — a glass neon terminal on Arbitrum.",
     "live": "Live",
     "offline": "Unavailable",
     "risk": "These are leveraged perpetual derivatives, not the underlying gold, oil or shares. Leverage can liquidate all your collateral. Most retail leveraged traders lose money.",
@@ -3081,8 +3081,8 @@
     "manageRisk": "This is a real position-management transaction. Closing can realize a loss; removing collateral moves liquidation closer. A positive top-up requires an exact USDC approval first."
   },
   "dydx": {
-    "title": "dYdX perpetuals",
-    "subtitle": "Wallet-derived, onchain orders across 200+ perpetual markets.",
+    "title": "dYdX Orbit",
+    "subtitle": "200+ perpetual markets — a neon glass orbit on dYdX Chain, always live.",
     "live": "Live",
     "offline": "Unavailable",
     "risk": "Perpetuals are leveraged derivatives. You can lose all collateral, and most retail leveraged traders lose money. You do not own the underlying asset.",
@@ -3127,10 +3127,10 @@
     }
   },
   "derivatives": {
-    "title": "Derivatives market dashboard",
-    "subtitle": "Funding, perp basis, open interest and executable order-book depth.",
-    "notice": "Public market data only—not a trading signal. Basis here compares a perpetual oracle price with spot; it is not guaranteed arbitrage and can widen during stress.",
-    "marketTable": "Markets by open interest",
+    "title": "Glass Hall",
+    "subtitle": "Live funding, basis & depth — a breathing glass board with soft neon.",
+    "notice": "Board is live data only, not a signal. Basis compares perp oracle to spot; arbitrage is not guaranteed and can widen in stress.",
+    "marketTable": "Markets on the glass board — by open interest",
     "basis": "Perp basis",
     "perpPrice": "Perpetual price",
     "spotPrice": "Spot reference",

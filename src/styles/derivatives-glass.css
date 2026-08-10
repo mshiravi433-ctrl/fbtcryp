@@ -1,0 +1,479 @@
+/* ==========================================================================
+   TALAR SHISHEI — Glass Hall for Derivatives
+   شیشه‌ای + نئون آرام — هر فضا نفس می‌کشد
+   ========================================================================== */
+
+.derivatives-hall {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* aurora behind the board — two soft orbs drifting */
+.derivatives-aurora {
+  position: absolute;
+  inset: -120px -40px auto -40px;
+  height: 420px;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: 24px;
+}
+.derivatives-aurora::before,
+.derivatives-aurora::after {
+  content: '';
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.18;
+  will-change: transform;
+}
+.derivatives-aurora::before {
+  left: -120px;
+  top: -80px;
+  background: radial-gradient(circle at 30% 30%, var(--rgb-1), transparent 62%);
+  animation: aurora-drift 18s ease-in-out infinite alternate;
+}
+.derivatives-aurora::after {
+  right: -140px;
+  top: 20px;
+  background: radial-gradient(circle at 70% 30%, var(--rgb-3), transparent 62%);
+  animation: aurora-drift 22s ease-in-out infinite alternate-reverse;
+}
+@keyframes aurora-drift {
+  0% { transform: translate3d(0,0,0) scale(1); }
+  100% { transform: translate3d(18px, -14px, 0) scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .derivatives-aurora::before, .derivatives-aurora::after { animation: none; }
+}
+
+/* hero — glass + neon edge */
+.derivatives-hero {
+  position: relative;
+  padding: 18px 16px 16px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow:
+    0 16px 48px rgba(0,0,0,0.35),
+    0 0 0 1px rgba(255,255,255,0.06) inset,
+    0 1px 0 rgba(255,255,255,0.10) inset;
+  overflow: hidden;
+}
+.derivatives-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.22;
+  pointer-events: none;
+}
+.derivatives-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.07) 42%, transparent 62%);
+  transform: translateX(-100%);
+  animation: sheen-sweep 7s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes sheen-sweep {
+  0%, 70% { transform: translateX(-100%); }
+  85% { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .derivatives-hero::after { display: none; }
+}
+
+.derivatives-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.6px;
+  line-height: 1;
+}
+.derivatives-title-glow {
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2) 45%, var(--rgb-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 12px rgba(0,229,255,0.35));
+}
+.derivatives-subtitle {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 12.7px;
+  line-height: 1.85;
+  max-width: 32ch;
+}
+.derivatives-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(0,229,255,0.10);
+  border: 1px solid rgba(0,229,255,0.22);
+  color: var(--rgb-1);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  backdrop-filter: blur(8px);
+}
+.derivatives-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  box-shadow: 0 0 10px var(--rgb-1), 0 0 18px rgba(0,229,255,0.6);
+  animation: neon-pulse 2.2s ease-in-out infinite;
+}
+@keyframes neon-pulse {
+  0%,100% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px var(--rgb-1), 0 0 18px rgba(0,229,255,0.6); }
+  50% { opacity: 0.85; transform: scale(0.92); box-shadow: 0 0 6px var(--rgb-1), 0 0 10px rgba(0,229,255,0.4); }
+}
+
+/* glass board for table */
+.glass-board {
+  position: relative;
+  padding: 12px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.03));
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px) saturate(1.45);
+  -webkit-backdrop-filter: blur(16px) saturate(1.45);
+  box-shadow:
+    0 18px 50px rgba(0,0,0,0.38),
+    0 0 0 1px rgba(255,255,255,0.05) inset;
+  overflow: hidden;
+}
+.glass-board::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rgb-1) 14%, transparent), color-mix(in srgb, var(--rgb-2) 10%, transparent), color-mix(in srgb, var(--rgb-3) 10%, transparent));
+  filter: blur(14px);
+  opacity: 0.45;
+  z-index: -1;
+  pointer-events: none;
+}
+.glass-board-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.glass-board-label span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.glass-board-label i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.12), transparent);
+}
+
+/* rows — glass tiles */
+.glass-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.22s ease, transform 0.18s ease, background 0.22s ease, box-shadow 0.22s ease;
+}
+.glass-row:hover {
+  border-color: color-mix(in srgb, var(--rgb-1) 28%, rgba(255,255,255,0.09));
+  background: linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035));
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,229,255,0.08) inset;
+}
+.glass-row:active { transform: scale(0.985); }
+.glass-row[data-active='true'] {
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--rgb-1) 10%, rgba(255,255,255,0.07)), rgba(255,255,255,0.04));
+  box-shadow:
+    0 12px 32px rgba(0,0,0,0.28),
+    0 0 18px color-mix(in srgb, var(--rgb-1) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--rgb-1) 30%, transparent) inset;
+}
+.glass-row[data-active='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 0 10px rgba(0,229,255,0.7);
+  opacity: 0.9;
+}
+.glass-row-symbol {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--text-1);
+}
+.glass-row-price {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.glass-row-basis {
+  min-width: 74px;
+  text-align: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 11.2px;
+  font-weight: 800;
+  backdrop-filter: blur(6px);
+}
+.glass-row-basis[data-up='true'] {
+  color: var(--up);
+  background: rgba(0,255,157,0.09);
+  border-color: rgba(0,255,157,0.16);
+  box-shadow: 0 0 12px rgba(0,255,157,0.14);
+}
+.glass-row-basis[data-up='false'] {
+  color: var(--down);
+  background: rgba(255,59,107,0.08);
+  border-color: rgba(255,59,107,0.16);
+  box-shadow: 0 0 10px rgba(255,59,107,0.12);
+}
+.glass-row-basis[data-up='null'] {
+  color: var(--text-3);
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+}
+.glass-row-oi {
+  text-align: end;
+  min-width: 92px;
+}
+.glass-row-oi-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  line-height: 1;
+}
+.glass-row-oi-value {
+  font-family: var(--font-mono);
+  font-size: 11.6px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-top: 3px;
+}
+
+/* detail — big glass card with neon grid */
+.glass-detail {
+  position: relative;
+  padding: 16px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.03));
+  border: 1px solid rgba(255,255,255,0.09);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.42),
+    0 0 0 1px rgba(255,255,255,0.06) inset,
+    0 1px 0 rgba(255,255,255,0.12) inset;
+  overflow: hidden;
+}
+.glass-detail::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(transparent 96%, rgba(0,229,255,0.07) 100%),
+    linear-gradient(90deg, transparent 96%, rgba(124,77,255,0.06) 100%);
+  background-size: 22px 22px;
+  opacity: 0.45;
+  pointer-events: none;
+  mask: linear-gradient(180deg, black 60%, transparent 100%);
+}
+.glass-detail::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, var(--rgb-1), var(--rgb-2), var(--rgb-3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.18;
+  pointer-events: none;
+}
+.glass-detail-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 12px;
+}
+.glass-detail-ticker {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+.glass-detail-pill {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
+  color: #001014;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  box-shadow: 0 6px 18px rgba(0,229,255,0.28);
+}
+.glass-metrics {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.glass-metric {
+  position: relative;
+  padding: 11px 11px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.07);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+.glass-metric::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--metric-accent, var(--rgb-1));
+  opacity: 0.9;
+  box-shadow: 0 0 10px var(--metric-accent, var(--rgb-1));
+}
+.glass-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  line-height: 1;
+}
+.glass-metric-value {
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 13.2px;
+  font-weight: 800;
+  color: var(--text-1);
+  letter-spacing: -0.2px;
+}
+.glass-metric-sub {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* funding panel inside glass hall — soften it */
+.derivatives-hall .card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+  border-color: rgba(255,255,255,0.08);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: 0 16px 44px rgba(0,0,0,0.32);
+}
+
+/* notice as glass */
+.glass-notice {
+  position: relative;
+  padding: 12px 13px;
+  border-radius: 14px;
+  background: rgba(0,229,255,0.07);
+  border: 1px solid rgba(0,229,255,0.14);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.85;
+  backdrop-filter: blur(10px);
+}
+.glass-notice::before {
+  content: '◐';
+  float: inline-start;
+  margin-inline-end: 8px;
+  color: var(--rgb-1);
+  font-size: 12px;
+  line-height: 1.85;
+  filter: drop-shadow(0 0 6px var(--rgb-1));
+}
+
+/* light theme adjustments — glass becomes white frosted */
+:root[data-theme='light'] .derivatives-hero,
+:root[data-theme='light'] .glass-board,
+:root[data-theme='light'] .glass-detail,
+:root[data-theme='light'] .derivatives-hall .card {
+  background: rgba(255,255,255,0.78);
+  border-color: rgba(13,16,32,0.08);
+  box-shadow: 0 16px 40px rgba(13,16,32,0.08), 0 0 0 1px rgba(255,255,255,0.9) inset;
+}
+:root[data-theme='light'] .glass-row {
+  background: rgba(255,255,255,0.62);
+  border-color: rgba(13,16,32,0.07);
+}
+:root[data-theme='light'] .glass-row:hover {
+  background: rgba(255,255,255,0.88);
+  border-color: rgba(0,229,255,0.22);
+}
+:root[data-theme='light'] .glass-row[data-active='true'] {
+  background: linear-gradient(145deg, rgba(0,229,255,0.10), rgba(255,255,255,0.9));
+  border-color: rgba(0,229,255,0.28);
+}
+:root[data-theme='light'] .glass-metric {
+  background: rgba(255,255,255,0.72);
+  border-color: rgba(13,16,32,0.06);
+}
+:root[data-theme='light'] .glass-notice {
+  background: rgba(0,229,255,0.06);
+  border-color: rgba(0,229,255,0.14);
+  color: #2b344d;
+}
+:root[data-theme='light'] .derivatives-aurora::before,
+:root[data-theme='light'] .derivatives-aurora::after {
+  opacity: 0.09;
+  filter: blur(60px);
+}

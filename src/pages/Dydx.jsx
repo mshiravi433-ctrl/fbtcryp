@@ -9,6 +9,7 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
+import '../styles/derivatives-glass.css';
 import {
   DYDX_BUILDER_ADDRESS,
   DYDX_BUILDER_FEE_PPM,
@@ -109,14 +110,24 @@ export default function Dydx() {
 
   return (
     <PageTransition>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <div className="row-between">
-          <div><h1 className="h1">{t('dydx.title')}</h1><p className="muted">{t('dydx.subtitle')}</p></div>
-          <span className={`pill ${live ? 'pill-up' : 'pill-down'}`}>{live ? t('dydx.live') : t('dydx.offline')}</span>
-        </div>
-      </motion.div>
+      <div className="derivatives-hall">
+        <div className="derivatives-aurora" aria-hidden="true" />
+        <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div className="derivatives-title">
+                <span className="derivatives-title-glow">{t('dydx.title')}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', letterSpacing: 1 }}>• dYdX</span>
+              </div>
+              <p className="derivatives-subtitle">{t('dydx.subtitle')}</p>
+            </div>
+            <span className={`pill ${live ? 'pill-up' : 'pill-down'}`} style={{ alignSelf: 'flex-start' }}>{live ? t('dydx.live') : t('dydx.offline')}</span>
+          </div>
+        </motion.section>
 
-      <p className="notice notice-danger">{t('dydx.risk')}</p>
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+          <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('dydx.risk')}</div>
+        </motion.div>
 
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
@@ -208,6 +219,7 @@ export default function Dydx() {
         <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('dydx.confirmRisk')}</p>
         <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
       </Sheet>
+      </div>
     </PageTransition>
   );
 }
