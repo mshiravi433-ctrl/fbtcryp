@@ -670,7 +670,7 @@ export default function Settings() {
             dangerous control this app could ship.
 
             Building it properly means testnet RPCs, testnet router addresses
-            and testnet token lists for seven chains — real work, and worth
+            and testnet token lists for nine EVM chains — real work, and worth
             doing only if someone asks. Until then, showing nothing is honest
             and showing the switch is not.
           */}

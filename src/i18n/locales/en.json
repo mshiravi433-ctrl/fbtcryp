@@ -1247,7 +1247,7 @@
       "title": "Why Fanous Bazaar Pishgam is different",
       "sub": "What we do that other apps don't",
       "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
-      "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
+      "step2": "Ten swap networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. Choose the network that holds your token before trading.",
       "step3": "Truly non-custodial: no signup, no KYC, no deposit address. Your funds never sit in our account, so there is no withdrawal queue and nothing to freeze.",
       "step4": "AI analysis built in, with honest confidence figures — it tells you when the signal is unclear instead of inventing certainty to look smart.",
       "step5": "One clear fee: {{fee}}% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
@@ -1859,8 +1859,8 @@
       "body": "Live prices for a thousand-plus coins, free and with no signup."
     },
     "promo2": {
-      "title": "Swap across 7 networks",
-      "body": "BNB, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche — all from your own wallet."
+      "title": "Swap across 10 networks",
+      "body": "BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana — all from your own wallet."
     },
     "promo3": {
       "title": "Today's crypto headlines",
@@ -1942,7 +1942,7 @@
       "REJECTED": "You rejected the request in your wallet.",
       "FAILED": "The transfer failed. Nothing was sent.",
       "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
-      "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism or Avalanche and try again."
+      "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again."
     },
     "asset": "Asset"
   },

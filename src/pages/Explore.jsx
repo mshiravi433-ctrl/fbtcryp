@@ -16,7 +16,7 @@ import QrScanner, { parseScanned, scannerSupported } from '../components/QrScann
  * A lookup tool for transaction hashes and addresses.
  *
  * ─── WHY THIS DOES NOT RENDER CHAIN DATA ITSELF ────────────────────────────
- * Building a real block explorer means indexing every block of seven chains,
+ * Building a real block explorer means indexing every block of nine EVM chains,
  * decoding logs, resolving token metadata and keeping it live. That is
  * infrastructure with a permanent running cost, and a half-built version is
  * actively dangerous: an explorer that misses a transaction, or shows a stale

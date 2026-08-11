@@ -2,7 +2,7 @@
  * CONTRACT ADDRESS → COINGECKO ID
  * ---------------------------------------------------------------------------
  * ─── THE CEILING THIS REMOVES ───────────────────────────────────────────────
- * The automatic-order screen offered 36 token entries across seven chains —
+ * The automatic-order screen offered 36 token entries across nine EVM chains —
  * 17 unique symbols. Not because the app cannot swap more: `tokenLists.js`
  * already loads thousands per chain from the public token lists, and the swap
  * screen uses all of them. The order screen was stuck on the hard-coded

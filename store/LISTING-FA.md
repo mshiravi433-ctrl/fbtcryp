@@ -44,8 +44,8 @@ FBT Swap یک صرافی غیرمتمرکز و غیرحضانتی است. کیف
 
 چه کاری انجام می‌دهد
 
-• سواپ توکن روی هفت شبکه: BNB Smart Chain، اتریوم، پالیگان، Arbitrum One،
-  Base، Optimism و آوالانچ.
+• سواپ توکن روی ده شبکه: BNB Smart Chain، اتریوم، پالیگان، Arbitrum One،
+  Base، Optimism، آوالانچ، Linea، Sonic و Solana.
 • هزاران توکن از فهرست‌های عمومی، با جست‌وجو بر اساس نماد، نام یا آدرس
   قرارداد — به‌علاوه افزودن دستی هر قرارداد، برای توکن‌هایی که آن‌قدر تازه‌اند
   که هنوز در فهرست‌ها نیستند.
@@ -241,7 +241,7 @@ Production ارتقا بده.
 | فایل | پیام |
 |---|---|
 | `promo-1-swap.png` | Swap on-chain — Your wallet. Your keys. |
-| `promo-2-market.png` | Live markets — Thousands of tokens, 7 networks. |
+| `promo-2-market.png` | Live markets — Thousands of tokens, 10 networks. |
 | `promo-3-security.png` | Non-custodial — We never hold your funds. |
 
 همه دقیقاً ۱۶۰۰×۹۰۰ (نسبت ۱۶:۹)، زیر ۳ مگابایت، حداکثر بُعد زیر ۳۰۰۰ پیکسل.

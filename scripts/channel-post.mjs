@@ -227,7 +227,7 @@ export function buildPost({ global: g, coins, comment, appUrl }) {
   }
 
   lines.push('');
-  lines.push(`🔄 Swap on 8 networks — you keep your keys: ${appUrl}`);
+  lines.push(`🔄 Swap on 10 networks — you keep your keys: ${appUrl}`);
   lines.push('');
   lines.push('<i>Market data only. Not financial advice.</i>');
 

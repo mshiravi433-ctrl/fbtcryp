@@ -59,7 +59,7 @@ DeFi
 ## فیلد ۳ — Website
 
 ```
-https://www.lawpoetics.ir
+https://fbtswap.ir
 ```
 
 > ❌ **لینک گوگل‌پلی اینجا نگذار.** خودشان گفته‌اند فیلد جداگانه‌ای برای فروشگاه‌ها دارند.
@@ -71,7 +71,7 @@ https://www.lawpoetics.ir
 > سقف رسمی: **۱۶۰ کاراکتر**. متن زیر ۱۱۰ کاراکتر است.
 
 ```
-Non-custodial DEX interface for swapping crypto across nine networks. You hold your keys and sign every trade.
+Non-custodial crypto swap interface across 10 supported networks. Users hold their keys and sign every trade.
 ```
 
 ---
@@ -92,18 +92,11 @@ Wallet
 
 ## فیلد ۶ — Smart contracts
 
-زیر هر شبکه، **فقط خود آدرس** — بدون لینک اکسپلورر:
+فقط آدرس قراردادهایی را وارد کن که واقعاً توسط FBT Swap deploy و کنترل شده‌اند.
 
-```
-0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
-```
-
-این آدرس را زیر این شبکه‌ها بگذار:
-**BNB Chain · Ethereum · Polygon · Arbitrum · Base · Optimism · Avalanche**
-
-> **چرا همین آدرس:** ما قرارداد هوشمند خودمان را deploy نکرده‌ایم چون سواپ‌ها از روترهای موجود (PancakeSwap، Uniswap) عبور می‌کنند. این آدرس دریافت‌کنندهٔ کارمزد ماست و **تراکنش واقعی روی زنجیره دارد** — یعنی همان چیزی که برای ردیابی فعالیت لازم دارند.
+> **مهم:** آدرس دریافت‌کنندهٔ کارمزد و قراردادهای PancakeSwap، KyberSwap، Uniswap یا هر تجمیع‌کنندهٔ ثالث را به‌عنوان قرارداد FBT Swap وارد نکن. آن‌ها قراردادِ محصول ما نیستند و چنین ثبت‌نامی گمراه‌کننده است.
 >
-> اگر فرم آدرس را نپذیرفت، در توضیح بلند بنویس که واسط غیرحضانتی هستیم و به روترهای شخص ثالث مسیریابی می‌کنیم. این حالت را از قبل در متن زیر آورده‌ام.
+> اگر داشبورد بین `dApp` و `Web3 project` انتخاب می‌دهد و قرارداد مستقلِ live برای FBT Swap نداریم، گزینهٔ `Web3 project` را انتخاب کن. اگر فرم فقط برای dApp آدرس می‌خواهد، توضیح بده که FBT Swap یک رابط غیرامانی است که به روترهای ثالث مسیریابی می‌کند و فقط بعد از deploy قرارداد مستقل، آدرس آن را اضافه کن.
 
 ---
 
@@ -112,17 +105,17 @@ Wallet
 این را کامل کپی کن — **۱۶۴۸ کاراکتر** است، جا دارد:
 
 ```
-FBT Swap is a non-custodial exchange interface that lets you trade tokens across nine networks without ever handing over your keys.
+FBT Swap is a non-custodial exchange interface that lets you trade tokens across 10 supported networks without ever handing over your keys.
 
 Connect MetaMask, Trust Wallet or any WalletConnect wallet — or create an encrypted wallet inside the app. Every transaction is signed on your own device and broadcast straight to the blockchain. FBT Swap holds no funds, stores no private keys, and cannot move, freeze or reverse anything. There is no account to open and no identity check to pass.
 
-Supported networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Solana and Tron.
+Supported networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana.
 
 Orders route through established DEX aggregators, so you get competitive pricing and deep liquidity without a custodial middleman. The 0.70% platform fee is collected on-chain inside the same transaction you sign, and it is shown to you before you sign — never buried.
 
 What you can do:
 
-• Swap tokens across nine chains from one screen
+• Swap tokens across ten supported networks from one interface
 • Set limit orders and trailing stops that alert you when your price hits
 • Run DCA plans that buy on a fixed schedule
 • Track live prices, charts and market data

@@ -118,7 +118,7 @@ export const EVM_CHAINS = {
   },
   /*
    * ─── LINEA AND SONIC ──────────────────────────────────────────────────────
-   * Asked why we list 7 networks when Trust Wallet lists ~100.
+   * Asked why we list 9 EVM networks when Trust Wallet lists ~100.
    *
    * The honest answer is that a network is only worth listing here if it can
    * SWAP and PAY US — a chain with no aggregator route is a dropdown entry

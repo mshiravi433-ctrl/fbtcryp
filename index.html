@@ -99,13 +99,13 @@
       ═══════════════════════════════════════════════════════════════════════
     -->
     <!--
-      EIGHT, not nine, and no Tron.
+      TEN, not nine, and no Tron.
 
-      This said "9 Chains" and the description listed Tron. We support seven
-      EVM chains (BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche)
-      plus Solana. That is eight, and there is no Tron swap route at all —
-      lib/chains.js mentions Tron only to warn that sending an EVM address to
-      it burns the funds.
+      This once said "9 Chains" and the description listed Tron. We now support
+      nine EVM chains (BNB, Ethereum, Polygon, Arbitrum, Base, Optimism,
+      Avalanche, Linea and Sonic) plus Solana. That is ten, and there is no
+      Tron swap route at all — lib/chains.js mentions Tron only to warn that
+      sending an EVM address to it burns the funds.
 
       This mattered more than a typo: it was the text Google had indexed, so
       the one thing the search engine knew about us was partly false. Someone
@@ -116,7 +116,7 @@
     <title>FBT Swap — Non-Custodial DEX &amp; Crypto Swap on 10 Chains</title>
     <meta
       name="description"
-      content="Swap crypto across BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche and Solana. Non-custodial: you hold your keys, you sign every trade. Live prices, limit orders and DCA."
+      content="Non-custodial crypto swaps on 10 networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. You hold your keys."
     />
     <meta
       name="keywords"
@@ -150,9 +150,12 @@
       content="Swap crypto across 10 networks without giving up your keys. Live prices, limit orders and DCA, in 12 languages."
     />
     <meta property="og:url" content="https://fbtswap.ir/" />
-    <meta property="og:image" content="https://fbtswap.ir/icon-512.png" />
-    <meta property="og:image:width" content="512" />
-    <meta property="og:image:height" content="512" />
+    <meta property="og:image" content="https://fbtswap.ir/social-card.png" />
+    <meta property="og:image:secure_url" content="https://fbtswap.ir/social-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1024" />
+    <meta property="og:image:height" content="500" />
+    <meta property="og:image:alt" content="FBT Swap — Non-custodial crypto swap" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:locale:alternate" content="fa_IR" />
 
@@ -164,7 +167,8 @@
       name="twitter:description"
       content="Swap crypto across 10 networks without giving up your keys."
     />
-    <meta name="twitter:image" content="https://fbtswap.ir/icon-512.png" />
+    <meta name="twitter:image" content="https://fbtswap.ir/social-card.png" />
+    <meta name="twitter:image:alt" content="FBT Swap — Non-custodial crypto swap" />
 
     <!--
       Structured data. This is what a directory or a search engine reads to
@@ -175,23 +179,76 @@
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
+        "@id": "https://fbtswap.ir/#app",
         "name": "FBT Swap",
         "applicationCategory": "FinanceApplication",
+        "applicationSubCategory": "Non-custodial decentralized exchange",
         "operatingSystem": "Android, Web",
         "url": "https://fbtswap.ir/",
-        "description": "Non-custodial decentralized exchange interface. Swap crypto across ten networks while holding your own keys.",
+        "image": "https://fbtswap.ir/social-card.png",
+        "screenshot": "https://fbtswap.ir/social-card.png",
+        "description": "Non-custodial decentralized exchange interface for crypto swaps across ten supported networks. You hold your own keys and sign every trade.",
+        "featureList": "Non-custodial crypto swaps, wallet connection, market prices, price alerts, recurring-buy reminders",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": {
-          "@type": "Organization",
-          "name": "Fanous Bazaar Pishgam Co.",
-          "email": "fbtswap@gmail.com",
-          "address": {
-            "@type": "PostalAddress",
-            "addressLocality": "Khomeyni Shahr",
-            "addressRegion": "Isfahan",
-            "addressCountry": "IR"
+        "author": { "@id": "https://fbtswap.ir/#organization" },
+        "publisher": { "@id": "https://fbtswap.ir/#organization" }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://fbtswap.ir/#organization",
+            "name": "FBT Swap",
+            "legalName": "Fanous Bazaar Pishgam Co.",
+            "url": "https://fbtswap.ir/",
+            "email": "fbtswap@gmail.com",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://fbtswap.ir/icon-512.png",
+              "width": 512,
+              "height": 512
+            },
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "email": "fbtswap@gmail.com",
+              "contactType": "customer support",
+              "availableLanguage": ["Persian", "English"]
+            },
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Khomeyni Shahr",
+              "addressRegion": "Isfahan",
+              "addressCountry": "IR"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://fbtswap.ir/#website",
+            "url": "https://fbtswap.ir/",
+            "name": "FBT Swap",
+            "inLanguage": ["fa", "en"],
+            "publisher": { "@id": "https://fbtswap.ir/#organization" }
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://fbtswap.ir/#webpage",
+            "url": "https://fbtswap.ir/",
+            "name": "FBT Swap — Non-Custodial DEX & Crypto Swap on 10 Chains",
+            "description": "Non-custodial crypto swaps on ten supported networks. You hold your own keys and sign every trade.",
+            "inLanguage": "fa-IR",
+            "isPartOf": { "@id": "https://fbtswap.ir/#website" },
+            "about": { "@id": "https://fbtswap.ir/#app" },
+            "primaryImageOfPage": {
+              "@type": "ImageObject",
+              "url": "https://fbtswap.ir/social-card.png",
+              "width": 1024,
+              "height": 500
+            }
           }
-        }
+        ]
       }
     </script>
 
@@ -359,6 +416,47 @@
         <button onclick="location.reload()">تلاش دوباره</button>
       </div>
     </div>
+    <!--
+      A real, readable fallback rather than an SEO-only hidden block. The app
+      itself needs JavaScript, but this lets a no-JS visitor and a lightweight
+      crawler understand what the domain is for, reach the static guides, and
+      avoid an endless boot spinner. The `<style>` is inside `<noscript>`, so
+      it never changes the JavaScript application.
+    -->
+    <noscript>
+      <style>
+        #boot { display: none !important; }
+        #no-js-content {
+          max-width: 720px;
+          margin: 0 auto;
+          padding: 32px 20px 64px;
+          direction: rtl;
+          background: #06070c;
+          color: #e8ecf6;
+          font: 16px/1.95 'Vazirmatn', system-ui, sans-serif;
+        }
+        #no-js-content h1 { font-size: clamp(26px, 7vw, 38px); line-height: 1.25; margin: 0 0 18px; }
+        #no-js-content h2 { font-size: 18px; margin: 30px 0 10px; }
+        #no-js-content p, #no-js-content li { color: #c3cbe0; }
+        #no-js-content li { margin: 10px 0; }
+        #no-js-content a { color: #00e5ff; }
+        #no-js-content .no-js-note { border-inline-start: 2px solid #ffb300; padding-inline-start: 12px; color: #9eaac5; }
+      </style>
+      <main id="no-js-content">
+        <p><strong>FBT Swap</strong></p>
+        <h1>اف‌بی‌تی سواپ؛ سواپ غیرامانی ارز دیجیتال روی ۱۰ شبکه</h1>
+        <p>اف‌بی‌تی سواپ یک رابط سواپ غیرامانی است: کیف پول خودت را وصل می‌کنی، نرخ و کارمزد را می‌بینی و هر تراکنش را در همان کیف پول امضا می‌کنی. دارایی و عبارت بازیابی‌ات نزد خودت می‌ماند.</p>
+        <p>شبکه‌های پشتیبانی‌شده: بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا.</p>
+        <h2>راهنماهای FBT Swap</h2>
+        <ul>
+          <li><a href="/صرافی-غیرمتمرکز">سواپ ارز دیجیتال و صرافی غیرمتمرکز</a></li>
+          <li><a href="/هشدار-قیمت-ارز-دیجیتال">هشدار قیمت ارز دیجیتال و خرید پله‌ای</a></li>
+          <li><a href="/تحلیل-تکنیکال-ارز-دیجیتال">تحلیل تکنیکال ارز دیجیتال</a></li>
+          <li><a href="/کیف-پول-غیرامانی">کیف پول غیرامانی و نکات امنیتی</a></li>
+        </ul>
+        <p class="no-js-note">برای اجرای برنامهٔ سواپ، JavaScript را در مرورگر فعال کن. ارزهای دیجیتال پرنوسان‌اند و تراکنش‌های روی زنجیره برگشت‌ناپذیرند؛ این متن توصیهٔ مالی نیست.</p>
+      </main>
+    </noscript>
     <div id="root"></div>
 
     <script>

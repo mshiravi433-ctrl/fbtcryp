@@ -2,8 +2,8 @@
  * REVENUE / PAYOUT ROUTING
  * ---------------------------------------------------------------------------
  * The platform fee used to be a single EVM address, which quietly assumed
- * every swap happens on BNB Chain. It doesn't: the app quotes on seven EVM
- * chains, and users hold value on Solana and Tron too. This module is the one
+ * every swap happens on BNB Chain. It doesn't: the app quotes on nine EVM
+ * chains and on Solana too. This module is the one
  * place that answers "where does the fee for THIS chain go?".
  *
  * Two rules, both deliberate:

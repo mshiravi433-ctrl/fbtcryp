@@ -37,7 +37,7 @@ export async function startBot({ token, webAppUrl }) {
      * ─── A FALSE SAFETY CLAIM, NOW REMOVED ────────────────────────────────
      * This used to say "Everything runs on virtual NX credits." That was true
      * when the app was only paper trading. It has not been true for a long
-     * time: Swap moves real funds on eight networks, and the mini-games it
+     * time: Swap moves real funds on ten networks, and the mini-games it
      * referred to are compiled out of release builds entirely.
      *
      * Telling someone their first trade is play money, immediately before
@@ -52,7 +52,7 @@ export async function startBot({ token, webAppUrl }) {
     await ctx.replyWithHTML(
       `<b>FBT Swap</b>\n\n` +
         `Hey ${name} 👋\n` +
-        `Live market data and a non-custodial swap across eight networks — you hold your own keys, and you sign every trade yourself.${referral}\n\n` +
+        `Live market data and a non-custodial swap across 10 networks — you hold your own keys, and you sign every trade yourself.${referral}\n\n` +
         `<i>⚠️ Swaps move real funds and on-chain transactions cannot be reversed. This bot never takes deposits, never holds your keys, and will never ask you to send crypto anywhere.</i>\n\n` +
         `Commands: /price /top /global /trending /help`,
       launchKeyboard

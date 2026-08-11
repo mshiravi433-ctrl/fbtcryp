@@ -1106,7 +1106,7 @@
       "title": "Why فانوس بازار بيشغام is different",
       "sub": "What we do that other apps don't",
       "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
-      "step2": "Seven networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. No separate app or bridge to juggle.",
+      "step2": "Ten swap networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. Choose the network that holds your token before trading.",
       "step3": "Truly non-custodial: no signup, no KYC, no deposit address. Your funds never sit in our account, so there is no withdrawal queue and nothing to freeze.",
       "step4": "AI analysis built in, with honest confidence figures — it tells you when the signal is unclear instead of inventing certainty to look smart.",
       "step5": "One clear fee: {{fee}}% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
@@ -1665,8 +1665,8 @@
       "body": "أسعار حية لأكثر من ألف عملة مجاناً."
     },
     "promo2": {
-      "title": "التبادل على ٧ شبكات",
-      "body": "من محفظتك مباشرة على سبع شبكات."
+      "title": "التبادل على ١٠ شبكات",
+      "body": "من محفظتك مباشرة على عشر شبكات."
     },
     "promo3": {
       "title": "عناوين اليوم",
@@ -1748,7 +1748,7 @@
       "REJECTED": "رفضت الطلب في محفظتك.",
       "FAILED": "فشل التحويل. لم يُرسل شيء.",
       "NO_SIGNER": "المحفظة مقفلة. افتحها وحاول مجدداً.",
-      "WRONG_NETWORK": "محفظتك على شبكة غير مدعومة. بدّل إلى BNB Smart Chain أو إيثريوم أو بوليجون أو أربيتروم أو بيس أو أوبتيميزم أو أفالانش."
+      "WRONG_NETWORK": "محفظتك على شبكة غير مدعومة. بدّل إلى BNB Smart Chain أو إيثريوم أو بوليجون أو أربيتروم أو بيس أو أوبتيميزم أو أفالانش أو لينيا أو سونيك."
     }
   },
   "receive": {

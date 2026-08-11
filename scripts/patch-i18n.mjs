@@ -229,11 +229,11 @@ const T = {
       }
     },
     promo2: {
-      title: { fa: 'سواپ روی ۷ شبکه', en: 'Swap across 7 networks', ar: 'التبادل على ٧ شبكات' },
+      title: { fa: 'سواپ روی ۱۰ شبکه', en: 'Swap across 10 networks', ar: 'التبادل على ١٠ شبكات' },
       body: {
-        fa: 'BNB، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم و آوالانچ — همه از کیف پول خودت.',
-        en: 'BNB, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche — all from your own wallet.',
-        ar: 'من محفظتك مباشرة على سبع شبكات.'
+        fa: 'BNB، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا — همه از کیف پول خودت.',
+        en: 'BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana — all from your own wallet.',
+        ar: 'من محفظتك مباشرة على عشر شبكات.'
       }
     },
     promo3: {

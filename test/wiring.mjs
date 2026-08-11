@@ -1316,6 +1316,20 @@ export default function run() {
     }
     t('a Twitter/X card is declared', /twitter:card/.test(html));
 
+    /* A square app icon makes a weak large-image preview in Telegram/X. The
+       social card is a real wide PNG, and both root tags must use it so every
+       shared link has the same recognisable visual identity. */
+    t('a wide social card is published', existsSync('public/social-card.png'));
+    t('root social tags use the wide social card',
+      /og:image" content="https:\/\/fbtswap\.ir\/social-card\.png/.test(html) &&
+      /twitter:image" content="https:\/\/fbtswap\.ir\/social-card\.png/.test(html));
+
+    /* The SPA needs JavaScript, but a no-JS visitor must not be left behind a
+       permanent boot spinner. This is visible fallback content—not a hidden
+       keyword block—and gives lightweight crawlers real paths to the guides. */
+    t('the homepage has a readable no-JS fallback linked to the guides',
+      /<noscript>[\s\S]*?id="no-js-content"[\s\S]*?صرافی-غیرمتمرکز/.test(html));
+
     // Structured data is what turns us from an untyped page into a
     // recognised application in a directory or a rich result.
     t('structured data is present', /application\/ld\+json/.test(html));
@@ -2611,6 +2625,16 @@ export default function run() {
      */
     t('pages declare a canonical url', /rel="canonical"/.test(gen));
 
+    /* The FAQ schema must mirror text a visitor can open on the page. This
+       adds useful page structure without pretending invisible keywords are
+       content, and makes the new Persian guides answer actual questions. */
+    t('landing pages have visible FAQs and matching FAQ schema',
+      /<details>/.test(gen) && /FAQPage/.test(gen));
+    t('landing pages use the wide social card', /social-card\.png/.test(gen));
+    for (const slug of ['هشدار-قیمت-ارز-دیجیتال', 'تحلیل-تکنیکال-ارز-دیجیتال', 'کیف-پول-غیرامانی']) {
+      t(`a substantive Persian feature page exists for ${slug}`, gen.includes(`slug: '${slug}'`));
+    }
+
     /* A finance landing page without a risk statement is the kind of thing a
        store reviewer and a regulator both look for. */
     t('pages carry the risk statement', /Nothing here is financial advice/.test(gen));
@@ -2621,13 +2645,14 @@ export default function run() {
      * them unaided.
      */
     t('the sitemap is regenerated', /sitemap\.xml/.test(gen));
+    t('the sitemap does not manufacture a new lastmod on every build', !/<lastmod>/.test(gen));
   }
 
   /* ---- 35. advertised chains must actually exist ------------------------ */
   /*
    * REAL BUG, and it was the text Google had indexed: the <title> said
-   * "9 Chains" and the description listed Tron. We support seven EVM chains
-   * plus Solana — eight — and there is no Tron swap route at all; chains.js
+   * "9 Chains" and the description listed Tron. We now support nine EVM chains
+   * plus Solana — ten — and there is no Tron swap route at all; chains.js
    * mentions Tron only to warn that sending an EVM address to it burns the
    * funds.
    *
@@ -2662,6 +2687,25 @@ export default function run() {
     t('the description does not advertise Tron', !/\bTron\b/i.test(meta));
     t('the manifest does not claim nine networks',
       !/nine networks/i.test(read('public/manifest.webmanifest')));
+
+    /* The title was corrected while the Help answer and notification copy
+       still said seven. A user who sees two different network counts assumes
+       one of them is a phishing clone, so the live marketing surfaces and the
+       script that regenerates their locale values must name Linea and Sonic. */
+    const faq = read('src/lib/faqLocal.js');
+    const promo = read('server/promos.js');
+    const localeEn = read('src/i18n/locales/en.json');
+    const localeFa = read('src/i18n/locales/fa.json');
+    const localeAr = read('src/i18n/locales/ar.json');
+    const localePatch = read('scripts/patch-i18n.mjs');
+    t('the English support and promo copy includes Linea and Sonic',
+      /Linea/.test(faq) && /Sonic/.test(faq) && /Linea/.test(promo) && /Sonic/.test(promo) &&
+      /Linea/.test(localeEn) && /Sonic/.test(localeEn));
+    t('the Persian and Arabic support copy includes the added chains',
+      /لینیا/.test(localeFa) && /سونیک/.test(localeFa) && /لينيا/.test(localeAr) && /سونيك/.test(localeAr));
+    t('the locale patch cannot restore the old seven-network promo',
+      /Linea/.test(localePatch) && /Sonic/.test(localePatch) &&
+      !/Swap across 7 networks|سواپ روی ۷ شبکه|التبادل على ٧ شبكات/.test(localePatch));
   }
 
   /* ---- 36. one source of truth for the wallet panel's geometry ---------- */
