@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.28.2 — Advanced Settings, Complete 9-EVM Network Support, Transaction Deadline & Storage Management
+
+- Rebuilt the Settings screen (`Settings.jsx`) with a modern hero summary banner featuring interactive status badges for network, slippage, deadline, and security, plus one-tap controls for theme and balance visibility.
+- Expanded EVM Networks default chain selection from 5 to all 9 active chains: BNB Smart Chain (BSC), Ethereum, Polygon, Arbitrum One, Base, Optimism, Avalanche, Linea, and Sonic, synchronized across Settings and Swap (`EVM_CHAIN_ORDER`).
+- Added Default Transaction Deadline (`defaultDeadlineMin`) to Trading Settings with options for 5, 10, 20, 30, and 60 minutes, automatically protecting swaps on congested networks from delayed execution at outdated prices.
+- Added a new Data & Storage (`settings.dataStorage`) section with safe cache clearing (`clearAppCache`) for prices, charts, and token lists without affecting wallet keys or security preferences.
+- Added Backup Settings (`exportSettingsBackup`) allowing users to download a portable JSON file containing their Watchlist, theme, username, and display preferences.
+- Updated bilingual translations (`fa.json` and `en.json`) for all new titles, subtitles, and confirmation toast notifications.
+
 ## 1.28.1 — Ostium, dYdX and storefront refresh
 
 - Rebuilt the Shop as a modern mobile storefront: image-first campaign hero,

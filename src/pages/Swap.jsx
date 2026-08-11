@@ -12,7 +12,7 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
-import { EVM_CHAINS, TOKENS, explorerTx } from '../lib/chains';
+import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS, explorerTx } from '../lib/chains';
 import {
   getTokensSync,
   importTokenByAddress,
@@ -123,7 +123,12 @@ export default function Swap() {
    * every swap this app has made used the hardcoded 20. It is now a real
    * control and is actually forwarded at the call site.
    */
-  const [deadlineMin, setDeadlineMin] = useState(DEFAULT_DEADLINE_MIN);
+  const storedDeadlineMin = useSettingsStore((s) => s.defaultDeadlineMin ?? DEFAULT_DEADLINE_MIN);
+  const [deadlineMin, setDeadlineMin] = useState(storedDeadlineMin);
+
+  useEffect(() => {
+    if (storedDeadlineMin) setDeadlineMin(storedDeadlineMin);
+  }, [storedDeadlineMin]);
 
   const expertMode = useSettingsStore((s) => s.expertMode);
   const storedSlippage = useSettingsStore((s) => s.defaultSlippage);
@@ -1023,7 +1028,7 @@ export default function Swap() {
 
       {/* --------------------------- chain selector -------------------------- */}
       <div className="tag-scroll">
-        {Object.values(EVM_CHAINS).map((c) => (
+        {EVM_CHAIN_ORDER.map((id) => EVM_CHAINS[id]).filter(Boolean).map((c) => (
           <motion.button
             key={c.id}
             className={`tag ${chainId === c.id ? 'active' : ''}`}
@@ -1702,12 +1707,16 @@ export default function Swap() {
         */}
         <label className="field-label" style={{ marginTop: 16 }}>{t('swap.deadline')}</label>
         <div className="row" style={{ gap: 6 }}>
-          {[5, 20, 60].map((m) => (
+          {[5, 10, 20, 30, 60].map((m) => (
             <button
               key={m}
               className={`tag ${deadlineMin === m ? 'active' : ''}`}
               style={{ flex: 1, textAlign: 'center' }}
-              onClick={() => { haptic?.('select'); setDeadlineMin(m); }}
+              onClick={() => {
+                haptic?.('select');
+                setDeadlineMin(m);
+                useSettingsStore.getState().setDefaultDeadlineMin(m);
+              }}
             >
               {t('swap.minutes', { n: m })}
             </button>

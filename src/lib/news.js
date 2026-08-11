@@ -177,6 +177,13 @@ function writeCache(items) {
   }
 }
 
+/** Clear cached news headlines. */
+export function clearNewsCache() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {}
+}
+
 const clean = (html) =>
   String(html || '')
     .replace(/<[^>]*>/g, ' ')

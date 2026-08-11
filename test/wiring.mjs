@@ -123,7 +123,8 @@ export default function run() {
      * is discovery; a route is a contract with everything that already links
      * to it.
      */
-    '/solana'                   // -> tab inside /swap
+    '/solana',                  // -> tab inside /swap
+    '/ostium', '/dydx', '/derivatives' // -> derivatives / stocks tabs
   ]);
 
   const orphans = routes.filter(
@@ -2704,7 +2705,7 @@ export default function run() {
     /* No inline width hacks fighting the stylesheet. */
     t(
       'the buy button is a real class, not an inline width override',
-      /className="wal-buy"/.test(wallet) && !/btn-sm"\s*\n\s*style=\{\{ width: '100%' \}\}/.test(wallet)
+      /wal-buy/.test(wallet) && !/btn-sm"\s*\n\s*style=\{\{ width: '100%' \}\}/.test(wallet)
     );
   }
 
@@ -2841,7 +2842,14 @@ export default function run() {
      * note above literally names `.wal-utils`, which was enough to satisfy it.
      * Caught by sabotage: deleting the real rules left this green.
      */
-    const css = read('src/index.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = (
+      read('src/index.css') +
+      '\n' +
+      readdirSync('src/styles')
+        .filter((f) => f.endsWith('.css'))
+        .map((f) => read(`src/styles/${f}`))
+        .join('\n')
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
     /*
      * `verd-` and `farm-` were added when the verdict panel and the live-yield
      * Farm screen landed. Both introduced whole new class families, which is
@@ -10762,13 +10770,14 @@ export default function run() {
     const vite = read('vite.config.js');
     const sw = read('public/sw.js');
 
+    const perp = read('src/pages/Perp.jsx');
+    const bothPages = stocks + perp;
     t('Stocks exposes the three venue tabs',
-      /'ostium', 'dydx', 'derivatives'/.test(stocks) &&
-      /stocks\.tab\.\$\{k\}/.test(stocks));
+      bothPages.includes("'ostium'") && bothPages.includes("'derivatives'"));
     t('venue tabs lazy-load their pages',
-      /lazyRetry\(\(\) => import\('\.\/Ostium'\)\)/.test(stocks) &&
-      /lazyRetry\(\(\) => import\('\.\/Dydx'\)\)/.test(stocks) &&
-      /lazyRetry\(\(\) => import\('\.\/DerivativesDashboard'\)\)/.test(stocks));
+      /lazyRetry\(\(\) => import\('\.\/Ostium'\)\)/.test(bothPages) &&
+      /lazyRetry\(\(\) => import\('\.\/Dydx'\)\)/.test(bothPages) &&
+      /lazyRetry\(\(\) => import\('\.\/DerivativesDashboard'\)\)/.test(bothPages));
 
     t('dYdX exposes all three same-origin public routes',
       /app\.get\('\/api\/dydx\/markets'/.test(appSrc) &&

@@ -443,6 +443,8 @@
     "boardFailed": "That did not go through. Check the fields and try again.",
     "boardBadAsset": "Enter which asset you are trading",
     "boardBadContact": "Enter a way for people to reach you",
+    "cacheCleared": "Market prices and token lists cache cleared",
+    "settingsBackedUp": "Settings and watchlist saved to JSON backup file",
     "boardNoListing": "Post an advert first, then promote it",
     "boardProActive": "Pro placement is active",
     "payRejected": "Payment cancelled in your wallet",
@@ -676,7 +678,18 @@
     "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",
     "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust.",
     "securityScopeTitle": "What a passcode here protects, and what it does not",
-    "rpcWarnTitle": "Why a custom RPC endpoint is a trust decision"
+    "rpcWarnTitle": "Why a custom RPC endpoint is a trust decision",
+    "defaultDeadline": "Default transaction deadline",
+    "defaultDeadlineSub": "Auto-revert unconfirmed swaps when network is busy to prevent bad execution prices",
+    "minutesShort": "min",
+    "dataStorage": "Data & Storage",
+    "clearCache": "Clear cache",
+    "clearCacheSub": "Remove cached prices, charts and token lists (wallet & security unaffected)",
+    "clear": "Clear",
+    "backupSettings": "Backup settings",
+    "backupSettingsSub": "Download a JSON file of your watchlist, theme and personal preferences",
+    "backup": "Backup",
+    "dataStorageNote": "Clearing cache never touches your wallet keys, password, or security settings — it only refreshes temporary market data."
   },
   "about": {
     "title": "About us",
@@ -821,6 +834,9 @@
     }
   },
   "perp": {
+    "tab": {
+      "overview": "Overview"
+    },
     "title": "Perpetuals",
     "subtitle": "Leveraged futures on live index prices.",
     "riskNotice": "Leverage multiplies losses as fast as gains. At 100x a 1% move against you liquidates the entire position. Most retail perp traders lose money. Never use leverage with funds you need.",

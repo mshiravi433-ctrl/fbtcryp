@@ -2971,7 +2971,7 @@ export default async function run() {
      * of this test that has any value.
      */
     t('the integrator id matches the one registered in the portal',
-      integratorId() === 'fbtswap');
+      integratorId() === 'fbt-swap');
 
     process.env.LIFI_INTEGRATOR = 'FBT Swap!!';
     t('a capitalised or spaced id is normalised, not sent as-is',

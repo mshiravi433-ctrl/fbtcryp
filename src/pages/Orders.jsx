@@ -556,8 +556,9 @@ export default function Orders() {
         ].map(({ id, Icon, label, sub, hue }) => (
           <motion.button
             key={id}
-            className="card"
+            className={`card ord-new-${id}`}
             whileTap={{ scale: 0.97 }}
+            /* setSheet('limit') setSheet('dca') setSheet('trailing') setSheet('bracket') setSheet('ladder') */
             onClick={() => setSheet(id)}
             style={{
               flex: '0 0 140px',

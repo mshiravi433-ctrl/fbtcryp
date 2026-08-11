@@ -260,10 +260,12 @@ export default function Signals() {
               <div style={{ fontWeight: 800, fontSize: 14.5, lineHeight: 1.6, marginBottom: 8 }}>{outlook.headline}</div>
               <p className="muted" style={{ fontSize: 12.7, lineHeight: 1.85, margin: 0 }}>{outlook.summary}</p>
               {outlook.range?.low != null && (
-                <div className="card card-tight row-between" style={{ marginTop: 14, background: 'rgba(255,255,255,0.04)', borderRadius: 12 }}>
-                  <span className="faint" style={{ fontSize: 11 }}>{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
-                  <span className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}</span>
-                </div>
+                <InfoBox title={t('signals.projectionTitle')} tone="info" id="sig-proj-box">
+                  <div className="card card-soft row-between" style={{ marginTop: 6, background: 'rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                    <span className="faint" style={{ fontSize: 11 }}>{t('signals.aiRange', { d: outlook.range.horizonDays })}</span>
+                    <span className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>${fmtPrice(outlook.range.low)} – ${fmtPrice(outlook.range.high)}</span>
+                  </div>
+                </InfoBox>
               )}
               {outlook.drivers?.length > 0 && (
                 <div style={{ marginTop: 14 }}>
