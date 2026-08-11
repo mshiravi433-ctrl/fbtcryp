@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,11 @@ import { useTelegram } from '../context/TelegramContext';
 import FundingPanel from '../components/FundingPanel';
 import { IconExternal, IconShield } from '../components/Icons';
 import { anyVenueEarns, withReferral } from '../lib/venueReferral';
+import { SPECULATION_ENABLED } from '../lib/features';
+import SegIndicator from '../components/SegIndicator';
+import lazyRetry from '../lib/lazyRetry';
+
+const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
 
 /**
  * Perpetual futures.
@@ -74,6 +79,9 @@ export default function Perp() {
   const { haptic, tg } = useTelegram();
   const { data: coins, loading } = useMarkets(60);
 
+  const [perpTab, setPerpTab] = useState('overview');
+  const PERP_TABS = SPECULATION_ENABLED ? ['overview', 'dydx'] : ['overview'];
+
   const [selected, setSelected] = useState('bitcoin');
 
   const perpCoins = useMemo(
@@ -113,6 +121,29 @@ export default function Perp() {
         <h1 className="h1">{t('perp.title')}</h1>
         <p className="muted">{t('perp.subtitle')}</p>
       </motion.div>
+
+      <div className="segmented" role="tablist" aria-label={t('perp.title')} style={{ marginTop: 12 }}>
+        {PERP_TABS.map((k) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={perpTab === k}
+            className={perpTab === k ? 'active' : ''}
+            onClick={() => setPerpTab(k)}
+            style={{ isolation: 'isolate' }}
+          >
+            {perpTab === k && <SegIndicator id="perp-tab" />}
+            {k === 'overview' ? t('perp.tab.overview', { defaultValue: 'نمای کلی' }) : t('stocks.tab.dydx')}
+          </button>
+        ))}
+      </div>
+
+      {perpTab === 'dydx' ? (
+        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
+          {LazyDydx && <LazyDydx />}
+        </Suspense>
+      ) : (
+        <>
 
       {/*
         ─── THE RISK NOTICE STAYS VISIBLE; THE EXPLAINER FOLDS ───────────────
@@ -328,6 +359,8 @@ export default function Perp() {
           <span style={{ fontSize: 20 }}>›</span>
         </div>
       </motion.button>
+        </>
+      )}
     </PageTransition>
   );
 }

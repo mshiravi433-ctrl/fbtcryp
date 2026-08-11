@@ -34,7 +34,6 @@ import lazyRetry from '../lib/lazyRetry';
  * own chunk and fetch it only after the user selects that tab.
  */
 const LazyOstium = SPECULATION_ENABLED ? lazyRetry(() => import('./Ostium')) : null;
-const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
 const LazyDerivatives = SPECULATION_ENABLED ? lazyRetry(() => import('./DerivativesDashboard')) : null;
 
 /**
@@ -90,7 +89,7 @@ const ISSUERS = [
 /** Sizes for the depth gate. Deliberately the same set the Farm screen uses. */
 const AMOUNTS = [100, 1000, 5000];
 const STOCK_TABS = SPECULATION_ENABLED
-  ? ['equity', 'rwa', 'ostium', 'dydx', 'derivatives']
+  ? ['equity', 'rwa', 'ostium', 'derivatives']
   : ['equity', 'rwa'];
 
 export default function Stocks() {
@@ -654,7 +653,6 @@ export default function Stocks() {
       ) : (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
           {tab === 'ostium' && LazyOstium && <LazyOstium />}
-          {tab === 'dydx' && LazyDydx && <LazyDydx />}
           {tab === 'derivatives' && LazyDerivatives && <LazyDerivatives />}
         </Suspense>
       )}
