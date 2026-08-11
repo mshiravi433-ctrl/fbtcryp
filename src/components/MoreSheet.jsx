@@ -276,9 +276,8 @@ export default function MoreSheet({ open, onClose }) {
                             boxShadow: `0 8px 20px color-mix(in srgb, ${item.hue} 20%, transparent)`,
                             width: 44, height: 44, borderRadius: 14
                           }}
-                        >                          }}
                         >
-                          <item.Icon width={19} height={19} />
+                          <item.Icon width={22} height={22} />
                         </span>
                         <span className="more-tile-label">{t(item.key)}</span>
                       </button>
