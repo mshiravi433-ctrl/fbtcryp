@@ -245,6 +245,114 @@ export default function Settings() {
         <p className="muted">{t('settings.subtitle')}</p>
       </motion.div>
 
+      {/* ---------------- modern settings hero / status banner ---------------- */}
+      <motion.section
+        className="card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{
+          marginTop: 14,
+          marginBottom: 16,
+          padding: 16,
+          borderRadius: 20,
+          background: 'linear-gradient(135deg, rgba(0,229,255,0.08), rgba(124,77,255,0.10) 60%, rgba(255,45,149,0.06))',
+          border: '1px solid rgba(255,255,255,0.08)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(500px 180px at 20% 0%, rgba(0,229,255,0.12), transparent 70%), radial-gradient(400px 160px at 90% 100%, rgba(124,77,255,0.10), transparent 70%)', pointerEvents: 'none' }} />
+        <div className="row-between" style={{ position: 'relative', gap: 12 }}>
+          <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 15,
+                background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))',
+                display: 'grid',
+                placeItems: 'center',
+                color: '#fff',
+                fontWeight: 900,
+                fontSize: 20,
+                boxShadow: '0 10px 24px rgba(0,229,255,0.22)'
+              }}
+            >
+              {s.username ? s.username[0].toUpperCase() : '✦'}
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 15 }}>
+                {s.username || t('profile.usernameUnset')}
+              </div>
+              <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>
+                {wallet.address ? shortAddress(wallet.address) : t('settings.noWallet')}
+              </div>
+            </div>
+          </div>
+
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                haptic?.('light');
+                s.setTheme(s.theme === 'dark' ? 'light' : 'dark');
+              }}
+              style={{ borderRadius: 12, padding: '0 10px', height: 34 }}
+              title={t('settings.theme')}
+            >
+              {s.theme === 'dark' ? '🌙' : '☀️'}
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                haptic?.('light');
+                s.toggle('hideBalances');
+              }}
+              style={{ borderRadius: 12, padding: '0 10px', height: 34 }}
+              title={t('settings.hideBalances')}
+            >
+              {s.hideBalances ? '👁️‍🗨️' : '👁️'}
+            </button>
+          </div>
+        </div>
+
+        {/* Status badges row */}
+        <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap', position: 'relative' }}>
+          <span className="pill pill-rgb" style={{ fontSize: 11, fontWeight: 700 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: EVM_CHAINS[wallet.chainId ?? s.evmChainId]?.color || 'var(--rgb-1)',
+                marginRight: 5
+              }}
+            />
+            {EVM_CHAINS[wallet.chainId ?? s.evmChainId]?.short || 'EVM'}
+          </span>
+          <span className="pill" style={{ fontSize: 11, background: 'rgba(255,255,255,0.06)' }}>
+            ⚡ {t('swap.slippage')}: {s.defaultSlippage}%
+          </span>
+          <span className="pill" style={{ fontSize: 11, background: 'rgba(255,255,255,0.06)' }}>
+            ⏱ {s.defaultDeadlineMin || 20} {t('settings.minutesShort', 'min')}
+          </span>
+          {s.twoFactorEnabled && (
+            <span className="pill pill-up" style={{ fontSize: 11 }}>
+              🔒 2FA
+            </span>
+          )}
+          {s.biometricEnabled && (
+            <span className="pill pill-up" style={{ fontSize: 11 }}>
+              🛡️ Bio
+            </span>
+          )}
+        </div>
+      </motion.section>
+
       {/* ---------------- profile ---------------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.profile')}</p>
