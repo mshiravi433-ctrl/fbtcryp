@@ -156,7 +156,7 @@ export default function Signals() {
         <div style={{ position: 'absolute', inset: -40, background: 'radial-gradient(600px 300px at 20% 0%, rgba(0,229,255,0.12), transparent 60%), radial-gradient(500px 280px at 90% 0%, rgba(124,77,255,0.12), transparent 60%)', pointerEvents: 'none' }} />
         <div style={{ position: 'relative' }}>
           <div className="docs-hero-title" style={{ fontSize: 24 }}>{t('signals.title')}</div>
-          <p className="docs-hero-sub" style={{ maxWidth: 42, fontSize: 13 }}>{t('signals.subtitle')}</p>
+          <p className="docs-hero-sub" style={{ maxWidth: 'none', fontSize: 13, lineHeight: 1.9, whiteSpace: 'normal' }}>{t('signals.subtitle')}</p>
           <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <span className="pill pill-rgb" style={{ fontSize: 11, padding: '5px 10px' }}>✦ AI Powered</span>
             <span className="pill" style={{ background: 'rgba(0,255,157,0.08)', borderColor: 'rgba(0,255,157,0.16)', color: 'var(--up)', fontSize: 11 }}>Live</span>
@@ -238,6 +238,14 @@ export default function Signals() {
             </div>
             {outlook && <span className={`pill ${outlook.bias === 'bullish' ? 'pill-up' : outlook.bias === 'bearish' ? 'pill-down' : 'pill-rgb'}`} style={{ fontSize: 11 }}>{t(`signals.bias.${outlook.bias}`)} · {outlook.confidence}%</span>}
           </div>
+          <div className="segmented" style={{ width: '100%', marginBottom: 12 }}>
+            {HORIZONS.filter(h => h.days !== 1).map((h) => (
+              <button key={h.key} className={horizon.key === h.key ? 'active' : ''} onClick={() => setHorizon(h)} style={{ isolation: 'isolate', flex: 1, minHeight: 36 }}>
+                {horizon.key === h.key && <SegIndicator id="hz-outlook" />}
+                {h.key === '7D' ? 'هفتگی ۷ روز' : 'ماهانه ۳۰ روز'}
+              </button>
+            ))}
+          </div>
           {aiLoading && (
             <div className="stack" style={{ gap: 10 }}>
               {[92, 78, 60].map((w) => (
@@ -298,34 +306,6 @@ export default function Signals() {
             {analysis.indicators.resistance != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.resistance')}</div><div className="mono down" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.resistance)}</div></div>}
           </div>
         </motion.section>
-      )}
-
-      {/* Weekly & Monthly — ultra modern collapsible */}
-      {analysis && !scanning && weeklyProjection && (
-        <InfoBox title="📅 نمای هفتگی — ۷ روز آینده" tone="info" id="signals-weekly">
-          <ProjectionCard projection={weeklyProjection} hue="var(--rgb-1)" title="بازهٔ هفتگی" sub="نوسان ۳۰ روزه • احتمال ۶۸٪" />
-        </InfoBox>
-      )}
-      {analysis && !scanning && monthlyProjection && (
-        <InfoBox title="🗓️ نمای ماهانه — ۳۰ روز آینده" tone="info" id="signals-monthly">
-          <ProjectionCard projection={monthlyProjection} hue="var(--rgb-2)" title="بازهٔ ماهانه" sub="نوسان ۳۰ روزه • بازهٔ وسیع‌تر" />
-        </InfoBox>
-      )}
-      {projection && !scanning && (
-        <InfoBox title={t('signals.projectionTitle')} tone="info" id="signals-projection">
-          <div className="row-between" style={{ marginBottom: 14 }}>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>{t('signals.projection')}</span>
-            <div className="segmented" style={{ width: 'auto' }}>
-              {HORIZONS.map((h) => (
-                <button key={h.key} className={horizon.key === h.key ? 'active' : ''} onClick={() => setHorizon(h)} style={{ isolation: 'isolate', padding: '6px 12px', fontSize: 12 }}>
-                  {horizon.key === h.key && <SegIndicator id="hz" />}
-                  {h.key}
-                </button>
-              ))}
-            </div>
-          </div>
-          <ProjectionCard projection={projection} hue="var(--rgb-5)" title={`نمای ${horizon.key}`} sub={`انتخاب فعلی — ${horizon.days} روز`} />
-        </InfoBox>
       )}
 
       <AdBanner slot="swap" />

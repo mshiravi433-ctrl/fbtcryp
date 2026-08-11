@@ -151,7 +151,32 @@ export async function exportWallet() {
 
 /** Offer the OS share sheet so the file can go to a password manager, etc. */
 export async function shareWalletBackup() {
-  if (!isNative()) return { ok: false, reason: 'NOT_NATIVE' };
+  const json = buildPayload();
+  if (!isNative()) {
+    try {
+      if (navigator.share && navigator.canShare) {
+        const file = new File([json], BACKUP_FILENAME, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: 'FBT Swap wallet backup (encrypted)', text: 'Encrypted wallet backup. Useless without your password — store it offline.', files: [file] });
+          return { ok: true, webShared: true };
+        }
+        if (navigator.share) {
+          await navigator.share({ title: 'FBT Swap wallet backup', text: json.slice(0, 200) + '...' });
+          return { ok: true, webShared: true };
+        }
+      }
+    } catch (e) {}
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = BACKUP_FILENAME;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return { ok: true, downloaded: true };
+  }
 
   const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
   const { Share } = await import('@capacitor/share');
@@ -161,7 +186,7 @@ export async function shareWalletBackup() {
   // share button failed with the identical permission error.
   await Filesystem.writeFile({
     path: BACKUP_FILENAME,
-    data: buildPayload(),
+    data: json,
     directory: Directory.External,
     encoding: Encoding.UTF8,
     recursive: true

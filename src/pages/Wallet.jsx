@@ -410,10 +410,17 @@ export default function Wallet() {
           style={{ marginTop: 9 }}
           onClick={async () => {
             try {
-              await shareWalletBackup();
-              haptic?.('success');
-            } catch {
+              const res = await shareWalletBackup();
+              if (res?.ok) {
+                useAppStore.getState().notify(res.downloaded ? 'فایل دانلود شد — پوشه Downloads را ببین' : res.webShared ? 'اشتراک‌گذاری انجام شد' : 'آماده شد', 'success');
+                haptic?.('success');
+              } else {
+                setBackupErr('FAILED');
+                haptic?.('error');
+              }
+            } catch (e) {
               setBackupErr('FAILED');
+              haptic?.('error');
             }
           }}
         >
