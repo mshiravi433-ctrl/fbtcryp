@@ -495,30 +495,94 @@ export default function Orders() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('orders.title')}</h1>
       </motion.div>
 
-      <p className="muted">{t('orders.subtitle')}</p>
+      <p className="muted" style={{ lineHeight: 1.85 }}>{t('orders.subtitle')}</p>
 
-      <motion.div className="row" style={{ gap: 8 }} variants={riseIn} initial="hidden" animate="show">
-        <button className="ord-new ord-new-limit" onClick={() => setSheet('limit')}>
-          <IconTrend width={17} height={17} />
-          {t('orders.newLimit')}
-        </button>
-        <button className="ord-new ord-new-trailing" onClick={() => setSheet('trailing')}>
-          <IconTrend width={17} height={17} />
-          {t('orders.newTrailing')}
-        </button>
-        <button className="ord-new ord-new-bracket" onClick={() => setSheet('bracket')}>
-          <IconShield width={17} height={17} />
-          {t('orders.newBracket')}
-        </button>
-        <button className="ord-new ord-new-ladder" onClick={() => setSheet('ladder')}>
-          <IconPools width={17} height={17} />
-          {t('orders.newLadder')}
-        </button>
-        <button className="ord-new ord-new-dca" onClick={() => setSheet('dca')}>
-          <IconClock width={17} height={17} />
-          {t('orders.newDca')}
-        </button>
-      </motion.div>
+      {/* Animated banner with SVG illustration */}
+      <motion.section
+        className="card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{
+          padding: 0,
+          overflow: 'hidden',
+          borderRadius: 20,
+          background: 'linear-gradient(135deg, rgba(0,229,255,0.10), rgba(124,77,255,0.10) 55%, rgba(255,45,149,0.08))',
+          border: '1px solid rgba(255,255,255,0.08)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          position: 'relative'
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(600px 200px at 20% 0%, rgba(0,229,255,0.12), transparent 60%), radial-gradient(500px 180px at 90% 100%, rgba(124,77,255,0.10), transparent 60%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, padding: '18px 16px 16px' }}>
+          <motion.div
+            animate={{ y: [0, -6, 0], rotate: [0, 2, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ width: 72, height: 72, borderRadius: 18, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', flexShrink: 0, boxShadow: '0 12px 32px rgba(0,229,255,0.22)' }}
+          >
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L13.5 8.5H20L14.75 12.5L16.25 19L12 14.75L7.75 19L9.25 12.5L4 8.5H10.5L12 2z" />
+              <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.9" stroke="none" />
+            </svg>
+          </motion.div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.3 }}>{t('orders.bannerTitle', { defaultValue: 'سفارش خودکار — بازار منتظر تو نمی‌ماند' })}</div>
+            <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 4 }}>{t('orders.bannerSub', { defaultValue: 'حد، تریلینگ، براکت، نردبانی و DCA — یک‌بار بساز، خودکار اجرا شو' })}</div>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* Rail of order types — horizontal scroll, modern cards */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+          scrollSnapType: 'x mandatory',
+          padding: '6px 2px 8px',
+          marginTop: 4
+        }}
+        className="ord-rail"
+      >
+        {[
+          { id: 'limit', Icon: IconTrend, label: t('orders.newLimit'), sub: 'حد', hue: 'var(--rgb-1)' },
+          { id: 'trailing', Icon: IconTrend, label: t('orders.newTrailing'), sub: 'تریلینگ', hue: 'var(--rgb-3)' },
+          { id: 'bracket', Icon: IconShield, label: t('orders.newBracket'), sub: 'براکت', hue: 'var(--rgb-4)' },
+          { id: 'ladder', Icon: IconPools, label: t('orders.newLadder'), sub: 'نردبانی', hue: 'var(--rgb-5)' },
+          { id: 'dca', Icon: IconClock, label: t('orders.newDca'), sub: 'DCA', hue: 'var(--rgb-2)' },
+        ].map(({ id, Icon, label, sub, hue }) => (
+          <motion.button
+            key={id}
+            className="card"
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setSheet(id)}
+            style={{
+              flex: '0 0 140px',
+              scrollSnapAlign: 'start',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
+              padding: '16px 10px',
+              borderRadius: 18,
+              background: `linear-gradient(145deg, color-mix(in srgb, ${hue} 10%, rgba(255,255,255,0.05)), rgba(255,255,255,0.03))`,
+              border: `1px solid color-mix(in srgb, ${hue} 14%, rgba(255,255,255,0.08))`,
+              backdropFilter: 'blur(12px)',
+              textAlign: 'center',
+              minHeight: 110
+            }}
+          >
+            <span style={{ width: 44, height: 44, borderRadius: 13, display: 'grid', placeItems: 'center', background: `linear-gradient(135deg, ${hue}, color-mix(in srgb, ${hue} 70%, #000))`, color: '#fff', boxShadow: `0 8px 20px color-mix(in srgb, ${hue} 20%, transparent)` }}>
+              <Icon width={22} height={22} />
+            </span>
+            <span style={{ fontWeight: 800, fontSize: 12.5, lineHeight: 1.3 }}>{label}</span>
+            <span className="faint" style={{ fontSize: 11 }}>{sub}</span>
+          </motion.button>
+        ))}
+      </div>
 
       {/* The limitation, stated before the user creates anything. */}
       <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">

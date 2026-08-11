@@ -2146,7 +2146,9 @@
     "notEnoughHistory": "Only {{n}} days of price history here — at least {{need}} are needed before any suggestion would mean anything, so none is offered.",
     "typeUnorderable": "No price feed is available for this token, so an automatic order on it could never be checked. Pick another token, or swap it manually.",
     "bracketRow": "Take profit {{tp}} · Stop loss {{sl}} {{quote}}",
-    "ladderRow": "{{done}} of {{total}} steps done · next at {{next}}"
+    "ladderRow": "{{done}} of {{total}} steps done · next at {{next}}",
+    "bannerTitle": "Auto Orders — market won't wait",
+    "bannerSub": "Limit, trailing, bracket, ladder & DCA — set once, auto-fill"
   },
   "lock": {
     "title": "Locked",
