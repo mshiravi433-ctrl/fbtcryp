@@ -7251,7 +7251,7 @@ export default function run() {
     t('...and 100% reserves gas instead of sending the literal whole balance',
       /if \(pct >= 100\) return setMax\(\)/.test(send));
     t('...and changing asset clears a figure typed for the previous one',
-      /setTokenSym\(e\.target\.value\);[\s\S]{0,80}setAmount\(''\)/.test(send));
+      /setTokenSym\((e\.target\.value|tk\.symbol)\);[\s\S]{0,80}setAmount\(''\)/.test(send));
 
     const watch = existsSync('src/lib/incomingWatch.js') ? read('src/lib/incomingWatch.js') : '';
     t('src/lib/incomingWatch.js exists', Boolean(watch));

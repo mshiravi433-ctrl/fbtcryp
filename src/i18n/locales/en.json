@@ -1919,6 +1919,7 @@
     "title": "Send crypto",
     "toAddress": "Recipient address",
     "amount": "Amount",
+    "balance": "Balance",
     "max": "Max",
     "scan": "Scan",
     "review": "Review transfer",

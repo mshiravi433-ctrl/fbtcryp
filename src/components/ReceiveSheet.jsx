@@ -5,6 +5,7 @@ import Sheet from './Sheet';
 import { useWallet } from '../context/WalletContext';
 import { EVM_CHAINS } from '../lib/chains';
 import { useAppStore } from '../store/useAppStore';
+import { IconCopy, IconCheck } from './Icons';
 
 /**
  * RECEIVE — show this wallet's address so someone can pay into it.
@@ -108,7 +109,7 @@ export default function ReceiveSheet({ open, onClose }) {
     <Sheet open={open} onClose={onClose} title={t('receive.title')}>
       <div className="recv-wrap">
         {qrPath && (
-          <div className="recv-qr">
+          <div className="recv-qr recv-qr-modern">
             <svg
               viewBox={`0 0 ${qrPath.count} ${qrPath.count}`}
               shapeRendering="crispEdges"
@@ -122,24 +123,32 @@ export default function ReceiveSheet({ open, onClose }) {
           </div>
         )}
 
-        <p className="recv-net">
+        <span className="recv-net-pill">
+          <span className="recv-net-dot" aria-hidden="true" />
           {t('receive.onlyOn', { network: chain?.name ?? t('receive.unknownNetwork') })}
-        </p>
+        </span>
 
-        <div className="recv-addr mono">{chunked(address)}</div>
+        <div className="recv-addr recv-addr-modern mono">{chunked(address)}</div>
 
-        <div className="row" style={{ gap: 8, marginTop: 12 }}>
-          <button className="btn btn-primary" style={{ flex: 1 }} onClick={copy}>
+        <div className="recv-actions">
+          <button className="recv-btn recv-btn-copy" onClick={copy}>
+            {copied ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />}
             {copied ? t('receive.copied') : t('receive.copy')}
           </button>
           {typeof navigator !== 'undefined' && navigator.share && (
-            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={share}>
+            <button className="recv-btn recv-btn-share" onClick={share}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+              </svg>
               {t('receive.share')}
             </button>
           )}
         </div>
 
-        <p className="notice" style={{ marginTop: 12 }}>{t('receive.warning')}</p>
+        <p className="notice" style={{ marginTop: 13, width: '100%' }}>{t('receive.warning')}</p>
       </div>
     </Sheet>
   );

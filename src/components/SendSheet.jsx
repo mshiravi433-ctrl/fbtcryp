@@ -5,7 +5,9 @@ import QrScanner, { scannerSupported } from './QrScanner';
 import { useWallet } from '../context/WalletContext';
 import { formatUnitsExact, getTokenBalance, NATIVE_GAS_FLOOR, sendToken } from '../lib/swap';
 import { EVM_CHAINS, TOKENS } from '../lib/chains';
-import { IconQr } from './Icons';
+import { IconQr, IconCheck, IconExternal, IconWallet } from './Icons';
+import { IconSend } from './WalletArt';
+import TokenIcon from '../lib/tokenIcon';
 
 /**
  * DIRECT SEND (the real OTC leg)
@@ -198,55 +200,52 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
     <>
       <Sheet open={open} onClose={onClose} title={t('send.title')}>
         {stage === 'done' ? (
-          <div style={{ padding: '4px 2px' }}>
-            <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{t('send.sent')}</p>
-            <p className="muted" style={{ fontSize: 12.3, lineHeight: 1.8 }}>{t('send.sentBody')}</p>
+          <div className="xfer-done">
+            <div className="xfer-done-ico" aria-hidden="true"><IconCheck width={30} height={30} /></div>
+            <div className="xfer-done-title">{t('send.sent')}</div>
+            <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.8, marginTop: 6 }}>{t('send.sentBody')}</p>
             {hash && chain?.explorer && (
               <button
-                className="btn btn-ghost"
-                style={{ marginTop: 12 }}
+                className="recv-btn recv-btn-share"
+                style={{ marginTop: 14 }}
                 onClick={() => window.open(`${chain.explorer}/tx/${hash}`, '_blank', 'noopener,noreferrer')}
               >
-                {t('send.viewTx')}
+                <IconExternal width={15} height={15} /> {t('send.viewTx')}
               </button>
             )}
-            <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={onClose}>
+            <button className="xfer-submit" style={{ marginTop: 10 }} onClick={onClose}>
               {t('common.close')}
             </button>
           </div>
         ) : stage === 'confirm' ? (
-          <div style={{ padding: '4px 2px' }}>
-            <p className="section-label" style={{ marginBottom: 8 }}>{t('send.confirmTitle')}</p>
+          <div className="xfer-form">
+            <p className="section-label" style={{ marginBottom: 10 }}>{t('send.confirmTitle')}</p>
 
-            <div className="card card-tight" style={{ marginBottom: 10 }}>
-              <div className="faint" style={{ fontSize: 11 }}>{t('send.youSend')}</div>
-              <div style={{ fontWeight: 800, fontSize: 18, marginTop: 2 }}>
-                {amount} {token.symbol}
+            <div className="xfer-summary">
+              <div className="xfer-summary-ico" aria-hidden="true"><IconSend width={20} height={20} /></div>
+              <div className="xfer-summary-amount">
+                {amount} <span>{token.symbol}</span>
               </div>
-              <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>
-                {t('send.onNetwork', { network: chain?.name })}
+              <div className="xfer-summary-net-row">
+                <span className="xfer-summary-net">🔗 {t('send.onNetwork', { network: chain?.name })}</span>
               </div>
-            </div>
-
-            <div className="card card-tight">
-              <div className="faint" style={{ fontSize: 11, marginBottom: 4 }}>{t('send.toAddress')}</div>
+              <div className="xfer-summary-divider" />
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700 }}>{t('send.toAddress')}</div>
               {/* Chunked + LTR so an RTL layout cannot visually reorder hex. */}
-              <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.8, wordBreak: 'break-all', direction: 'ltr' }}>
-                {chunked(to.trim())}
-              </div>
+              <div className="xfer-summary-addr">{chunked(to.trim())}</div>
             </div>
 
-            <p className="notice" style={{ marginTop: 11 }}>{t('send.irreversible')}</p>
+            <p className="notice" style={{ marginTop: 12 }}>{t('send.irreversible')}</p>
 
             {error && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t(`send.err.${error}`)}</p>}
 
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setStage('form')}>
+              <button className="btn btn-ghost" style={{ flex: 1, minHeight: 48, borderRadius: 14 }} onClick={() => setStage('form')}>
                 {t('common.back')}
               </button>
               <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
+                className="xfer-submit xfer-submit-danger"
+                style={{ flex: 1, marginTop: 0, minHeight: 48 }}
                 disabled={stage === 'sending'}
                 onClick={doSend}
               >
@@ -255,25 +254,28 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
             </div>
           </div>
         ) : (
-          <div style={{ padding: '4px 2px' }}>
-            <div className="row-between" style={{ marginBottom: 6 }}>
-              <span className="faint">{t('send.toAddress')}</span>
+          <div className="xfer-form">
+            <div className="xfer-label-row">
+              <span className="xfer-label">{t('send.toAddress')}</span>
               {scannerSupported() && (
-                <button className="btn btn-ghost btn-sm" onClick={() => setScanOpen(true)}>
-                  <IconQr width={14} height={14} /> {t('send.scan')}
+                <button className="xfer-scan" onClick={() => setScanOpen(true)}>
+                  <IconQr width={13} height={13} /> {t('send.scan')}
                 </button>
               )}
             </div>
 
-            <input
-              type="text"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              placeholder="0x…"
-              spellCheck={false}
-              autoComplete="off"
-              style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 12.5, direction: 'ltr' }}
-            />
+            <div className={`xfer-input xfer-input-ltr ${to ? (addressLooksValid ? 'is-valid' : 'is-invalid') : ''}`}>
+              <span className="xfer-input-icon" aria-hidden="true"><IconWallet width={16} height={16} /></span>
+              <input
+                type="text"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                placeholder="0x…"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              {addressLooksValid && <span className="xfer-ok" aria-hidden="true"><IconCheck width={14} height={14} /></span>}
+            </div>
             {to && !addressLooksValid && (
               <p className="notice notice-danger" style={{ marginTop: 7 }}>{t('send.err.INVALID_ADDRESS')}</p>
             )}
@@ -283,45 +285,53 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
               transfer could only ever move one thing and the screen never
               said which. Only rendered when there is a real choice.
             */}
-            {chainTokens.length > 1 && (
-              <>
-                <div className="faint" style={{ marginTop: 14 }}>{t('send.asset')}</div>
-                <select
-                  value={token.symbol}
-                  onChange={(e) => {
-                    setTokenSym(e.target.value);
-                    /* A figure typed for one asset is meaningless for another
-                       and would silently become an over-send. */
-                    setAmount('');
-                  }}
-                  style={{ width: '100%', marginTop: 6 }}
-                >
-                  {chainTokens.map((tk) => (
-                    <option key={tk.symbol} value={tk.symbol}>
-                      {tk.symbol} — {tk.name}
-                    </option>
-                  ))}
-                </select>
-              </>
+            <div className="xfer-label" style={{ marginTop: 15 }}>{t('send.asset')}</div>
+            {chainTokens.length > 1 ? (
+              <div className="xfer-chips">
+                {chainTokens.map((tk) => (
+                  <button
+                    key={tk.symbol}
+                    className={`xfer-chip ${token.symbol === tk.symbol ? 'active' : ''}`}
+                    onClick={() => {
+                      setTokenSym(tk.symbol);
+                      /* A figure typed for one asset is meaningless for another
+                         and would silently become an over-send. */
+                      setAmount('');
+                    }}
+                  >
+                    <TokenIcon token={{ symbol: tk.symbol, address: tk.address, native: tk.native }} chainId={wallet.chainId} size={18} />
+                    {tk.symbol}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="xfer-chip-single">
+                <TokenIcon token={{ symbol: token.symbol, address: token.address, native: token.native }} chainId={wallet.chainId} size={20} />
+                <span>
+                  <b>{token.symbol}</b> <span className="faint">{token.name}</span>
+                </span>
+              </div>
             )}
 
-            <div className="row-between" style={{ margin: '14px 0 6px' }}>
-              <span className="faint">{t('send.amount')}</span>
+            <div className="xfer-label-row" style={{ marginTop: 15 }}>
+              <span className="xfer-label">{t('send.amount')}</span>
               {balanceText && (
-                <span className="faint mono" style={{ fontSize: 11 }}>
-                  {Number(balanceText).toFixed(6)} {token.symbol}
+                <span className="xfer-balance">
+                  {t('send.balance')}: <b>{Number(balanceText).toFixed(6)} {token.symbol}</b>
                 </span>
               )}
             </div>
 
-            <input
-              type="number"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.0"
-              style={{ width: '100%' }}
-            />
+            <div className="xfer-input xfer-amount-input">
+              <input
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.0"
+              />
+              <span className="xfer-token-sym">{token.symbol}</span>
+            </div>
 
             {/*
               QUARTER STEPS PLUS MAX.
@@ -333,12 +343,11 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
               produce a button that always fails.
             */}
             {balanceText && Number(balanceText) > 0 && (
-              <div className="row" style={{ gap: 6, marginTop: 8 }}>
+              <div className="xfer-pcts">
                 {[25, 50, 75, 100].map((pct) => (
                   <button
                     key={pct}
-                    className="btn btn-ghost btn-sm"
-                    style={{ flex: 1 }}
+                    className="xfer-pct"
                     onClick={() => setPercent(pct)}
                   >
                     {pct === 100 ? t('send.max') : `${pct}%`}
@@ -347,20 +356,19 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
               </div>
             )}
             {overBalance && (
-              <p className="notice notice-danger" style={{ marginTop: 7 }}>{t('send.err.INSUFFICIENT')}</p>
+              <p className="notice notice-danger" style={{ marginTop: 8 }}>{t('send.err.INSUFFICIENT')}</p>
             )}
 
             {token.native && (
-              <p className="faint" style={{ marginTop: 9, lineHeight: 1.7 }}>{t('send.gasReserve')}</p>
+              <p className="xfer-hint">{t('send.gasReserve')}</p>
             )}
 
             <button
-              className="btn btn-primary"
-              style={{ marginTop: 13 }}
+              className="xfer-submit"
               disabled={!canReview}
               onClick={() => setStage('confirm')}
             >
-              {t('send.review')}
+              <IconSend width={17} height={17} /> {t('send.review')}
             </button>
           </div>
         )}

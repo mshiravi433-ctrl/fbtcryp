@@ -93,22 +93,22 @@ export default function Wallet() {
 
       {tab === 'practice' && (
         <>
-          <motion.div variants={riseIn} initial="hidden" animate="show" className="notice" style={{ marginTop: 14, borderRadius: 14, padding: '12px 14px', fontSize: 12.5 }}>
+          <motion.div variants={riseIn} initial="hidden" animate="show" className="notice" style={{ marginTop: 12, borderRadius: 12, padding: '10px 12px', fontSize: 12 }}>
             {t('wallet.practiceNotice')}
           </motion.div>
-          <motion.section className="wallet-hero-modern wal-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <motion.section className="wallet-hero-modern wal-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
             <div className="wallet-hero-aurora" aria-hidden="true" />
             <div className="row-between">
-              <div className="row" style={{ gap: 12 }}>
+              <div className="row" style={{ gap: 11 }}>
                 <div
                   className="coin-logo"
-                  style={{ width: 48, height: 48, fontSize: 18, background: 'linear-gradient(135deg,var(--rgb-2),var(--rgb-3))', color: '#fff', borderRadius: 14, boxShadow: '0 10px 24px rgba(124,77,255,0.24)' }}
+                  style={{ width: 44, height: 44, fontSize: 17, background: 'linear-gradient(135deg,var(--rgb-2),var(--rgb-3))', color: '#fff', borderRadius: 13, boxShadow: '0 10px 24px rgba(124,77,255,0.24)' }}
                 >
                   {(user?.first_name ?? 'N')[0].toUpperCase()}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 15 }}>{user?.first_name ?? t('wallet.guest')}</div>
-                  <div className="faint" style={{ fontSize: 12 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14.5 }}>{user?.first_name ?? t('wallet.guest')}</div>
+                  <div className="faint" style={{ fontSize: 11.5 }}>
                     {user?.username ? `@${user.username}` : t('wallet.localSession')} · L{level}
                   </div>
                 </div>
@@ -116,12 +116,12 @@ export default function Wallet() {
               <button className="icon-btn" onClick={() => setConfirmReset(true)}>⚙</button>
             </div>
 
-            <div style={{ marginTop: 18 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.netWorth')}</div>
-              <div className="wallet-total-modern" style={{ marginTop: 4 }}>
+            <div style={{ marginTop: 16 }}>
+              <div className="faint" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.netWorth')}</div>
+              <div className="wallet-total-modern" style={{ marginTop: 3 }}>
                 <AnimatedNumber value={netWorth} format={(v) => `${fmtNum(v, 2)} NX`} />
               </div>
-              <div className={`mono ${allTimePnl >= 0 ? 'up' : 'down'}`} style={{ fontSize: 12.5, marginTop: 6, fontWeight: 700 }}>
+              <div className={`mono ${allTimePnl >= 0 ? 'up' : 'down'}`} style={{ fontSize: 12, marginTop: 5, fontWeight: 700 }}>
                 {allTimePnl >= 0 ? '+' : ''}{fmtNum(allTimePnl, 2)} ({fmtPct((allTimePnl / START_BALANCE_CONST) * 100)}) {t('wallet.allTime')}
               </div>
             </div>
@@ -132,12 +132,12 @@ export default function Wallet() {
       {/* ----------------- on-chain wallet (non-custodial) ----------------- */}
       {tab !== 'practice' && (
         <>
-          <motion.section className="wallet-hero-modern wal-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <motion.section className="wallet-hero-modern wal-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
             <div className="wallet-hero-aurora" aria-hidden="true" />
             <WalletMesh />
 
             {wallet.address ? (
-              <div className="stack" style={{ gap: 12, position: 'relative' }}>
+              <div className="stack" style={{ gap: 13, position: 'relative' }}>
                 <div className="row-between">
                   <span className="wallet-chip-modern">
                     <span className={`wal-chip-dot ${wallet.locked ? '' : 'is-live'}`} style={{ background: wallet.locked ? 'var(--rgb-5)' : 'var(--up)', width: 8, height: 8, borderRadius: '50%', display: 'inline-block', boxShadow: wallet.locked ? 'none' : '0 0 8px var(--up)' }} />
@@ -150,101 +150,114 @@ export default function Wallet() {
                 </div>
 
                 <div>
-                  <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.onchainValue')}</div>
-                  <div className="wallet-total-modern" style={{ marginTop: 4 }}>
+                  <div className="faint" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.onchainValue')}</div>
+                  <div className="wallet-total-modern" style={{ marginTop: 3 }}>
                     {onchain.loading && !onchain.rows.length ? '…' : fmtUsd(onchain.total)}
                   </div>
                   {onchain.partial && (
-                    <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>{t('wallet.partialValue')}</div>
+                    <div className="faint" style={{ fontSize: 10.5, marginTop: 3 }}>{t('wallet.partialValue')}</div>
                   )}
                 </div>
 
                 <div className="wallet-actions-modern">
                   <button className="wallet-action-modern recv" onClick={() => setReceiveOpen(true)}>
                     <span className="wallet-action-icon-modern" aria-hidden="true"><IconReceive /></span>
-                    <span style={{ fontWeight: 800, fontSize: 12 }}>{t('receive.title')}</span>
+                    <span className="wallet-action-label">{t('receive.title')}</span>
                   </button>
                   <button className="wallet-action-modern send" onClick={() => setSendOpen(true)} disabled={wallet.locked}>
                     <span className="wallet-action-icon-modern" aria-hidden="true"><IconSend /></span>
-                    <span style={{ fontWeight: 800, fontSize: 12 }}>{t('send.title')}</span>
+                    <span className="wallet-action-label">{t('send.title')}</span>
                   </button>
                 </div>
 
                 <button className="wallet-buy-modern wal-buy" onClick={() => navigate('/buy')}>
                   {t('nav.buy')} →
                 </button>
-
-                {onchain.rows.length > 0 ? (
-                  <div className="stack" style={{ gap: 10, marginTop: 8 }}>
-                    <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.yourTokens')}</div>
-                    {onchain.rows.map((r) => (
-                      <div key={r.symbol} className="wallet-token-row-modern">
-                        <TokenIcon token={{ symbol: r.symbol, address: r.address, native: r.native }} chainId={wallet.chainId} size={32} />
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <div className="row" style={{ gap: 6 }}>
-                            <span style={{ fontSize: 13.5, fontWeight: 800 }}>{r.symbol}</span>
-                            {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
-                          </div>
-                          <div className="faint" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
-                        </span>
-                        <span style={{ textAlign: 'end', flexShrink: 0 }}>
-                          <div className="mono" style={{ fontSize: 13.5, fontWeight: 800 }}>{fmtQty(r.amount)}</div>
-                          <div className="faint mono" style={{ fontSize: 11 }}>{r.value != null ? fmtUsd(r.value) : '—'}</div>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  !onchain.loading && (
-                    <p className="faint" style={{ fontSize: 12.5, marginTop: 4, textAlign: 'center', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px dashed var(--line)' }}>
-                      {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
-                    </p>
-                  )
-                )}
-
-                <div className="row" style={{ gap: 8, marginTop: 4 }}>
-                  <button className="btn btn-ghost" style={{ flex: 1, minHeight: 36, borderRadius: 12 }} onClick={() => { wallet.refreshBalance?.(); onchain.refresh(); }}>
-                    {onchain.loading ? '…' : t('common.refresh')}
-                  </button>
-                  {wallet.mode === 'local' && !wallet.locked && (
-                    <button className="btn btn-ghost" style={{ flex: 1, minHeight: 36, borderRadius: 12 }} onClick={wallet.lock}>{t('wallet.lock')}</button>
-                  )}
-                  {wallet.locked ? (
-                    <button className="btn btn-primary" style={{ flex: 1, minHeight: 36, borderRadius: 12 }} onClick={() => setConnectOpen(true)}>{t('wallet.unlock')}</button>
-                  ) : (
-                    <button className="btn btn-ghost" style={{ flex: 1, minHeight: 36, borderRadius: 12, color: 'var(--down)', borderColor: 'rgba(255,59,107,0.18)' }} onClick={wallet.disconnect}>{t('wallet.disconnect')}</button>
-                  )}
-                </div>
-
-                <a href={explorerAddr(wallet.chainId, wallet.address)} target="_blank" rel="noopener noreferrer" className="faint" style={{ fontSize: 11, textAlign: 'center', textDecoration: 'none', display: 'block', marginTop: 4 }}>
-                  {t('swap.viewOnExplorer')} ↗
-                </a>
-
-                {wallet.mode === 'local' && (
-                  <div className="row" style={{ gap: 8, marginTop: 4 }}>
-                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, borderRadius: 12 }} onClick={() => setSeedSheet(true)}>{t('wallet.revealSeed')}</button>
-                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, borderRadius: 12 }} onClick={() => { setBackupResult(null); setBackupErr(null); setBackupSheet(true); }}>{t('wallet.backupFile')}</button>
-                  </div>
-                )}
               </div>
             ) : (
-              <div className="wal-empty" style={{ position: 'relative', textAlign: 'center', padding: '8px 0' }}>
-                <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 28, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12c0 1.1.9 2 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" /></svg>
+              <div className="wal-empty" style={{ position: 'relative', textAlign: 'center', padding: '6px 0 2px' }}>
+                <div style={{ width: 68, height: 68, borderRadius: 19, margin: '0 auto 13px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 26, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12c0 1.1.9 2 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" /></svg>
                 </div>
                 <div style={{ fontWeight: 800, fontSize: 16 }}>{t('wallet.emptyTitle')}</div>
                 <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>{t('wallet.emptyBody')}</p>
-                <button className="btn btn-primary" style={{ marginTop: 16, minHeight: 46, borderRadius: 14, padding: '0 24px' }} onClick={() => setConnectOpen(true)}>{t('wallet.connect')}</button>
-                <p className="faint" style={{ fontSize: 11.5, marginTop: 12, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
+                <button className="btn btn-primary" style={{ marginTop: 15, minHeight: 44, borderRadius: 14, padding: '0 24px' }} onClick={() => setConnectOpen(true)}>{t('wallet.connect')}</button>
+                <p className="faint" style={{ fontSize: 11.5, marginTop: 11, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
               </div>
             )}
-
-            <div style={{ marginTop: 14 }}>
-              <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
-                <p style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('wallet.custodyNotice')}</p>
-              </InfoBox>
-            </div>
           </motion.section>
+
+          {/* ----------------- assets (outside the hero, so the hero stays short) ----------------- */}
+          {wallet.address && (
+            <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+              <div className="row-between" style={{ marginBottom: 10 }}>
+                <span className="wallet-section-title">{t('wallet.yourTokens')}</span>
+                {onchain.rows.length > 0 && <span className="faint" style={{ fontSize: 11 }}>{onchain.rows.length} دارایی</span>}
+              </div>
+              {onchain.loading && !onchain.rows.length ? (
+                <div className="faint" style={{ fontSize: 12, textAlign: 'center', padding: 12 }}>…</div>
+              ) : onchain.rows.length > 0 ? (
+                <div className="stack" style={{ gap: 9 }}>
+                  {onchain.rows.map((r) => (
+                    <div key={r.symbol} className="wallet-token-row-modern">
+                      <TokenIcon token={{ symbol: r.symbol, address: r.address, native: r.native }} chainId={wallet.chainId} size={32} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <div className="row" style={{ gap: 6 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 800 }}>{r.symbol}</span>
+                          {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+                        </div>
+                        <div className="faint" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                      </span>
+                      <span style={{ textAlign: 'end', flexShrink: 0 }}>
+                        <div className="mono" style={{ fontSize: 13.5, fontWeight: 800 }}>{fmtQty(r.amount)}</div>
+                        <div className="faint mono" style={{ fontSize: 11 }}>{r.value != null ? fmtUsd(r.value) : '—'}</div>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="faint" style={{ fontSize: 12.5, textAlign: 'center', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px dashed var(--line)' }}>
+                  {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
+                </p>
+              )}
+            </motion.section>
+          )}
+
+          {/* ----------------- manage: refresh / lock / disconnect + seed + backup ----------------- */}
+          {wallet.address && (
+            <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+              <div className="wal-utils">
+                <button className="wal-util" onClick={() => { wallet.refreshBalance?.(); onchain.refresh(); }}>
+                  {onchain.loading ? '…' : t('common.refresh')}
+                </button>
+                {wallet.mode === 'local' && !wallet.locked && (
+                  <button className="wal-util" onClick={wallet.lock}>{t('wallet.lock')}</button>
+                )}
+                {wallet.locked ? (
+                  <button className="wal-util" onClick={() => setConnectOpen(true)}>{t('wallet.unlock')}</button>
+                ) : (
+                  <button className="wal-util wal-util-danger" onClick={wallet.disconnect}>{t('wallet.disconnect')}</button>
+                )}
+              </div>
+
+              <a href={explorerAddr(wallet.chainId, wallet.address)} target="_blank" rel="noopener noreferrer" className="wal-explorer">
+                {t('swap.viewOnExplorer')} ↗
+              </a>
+
+              {wallet.mode === 'local' && (
+                <div className="wal-utils" style={{ marginTop: 8 }}>
+                  <button className="wal-util" onClick={() => setSeedSheet(true)}>{t('wallet.revealSeed')}</button>
+                  <button className="wal-util" onClick={() => { setBackupResult(null); setBackupErr(null); setBackupSheet(true); }}>{t('wallet.backupFile')}</button>
+                </div>
+              )}
+            </motion.section>
+          )}
+
+          <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+            <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
+              <p style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('wallet.custodyNotice')}</p>
+            </InfoBox>
+          </motion.div>
         </>
       )}
 
