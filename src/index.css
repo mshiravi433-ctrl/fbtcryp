@@ -4442,8 +4442,11 @@ input, select, textarea { font-size: 16px !important; }
  * tell them apart before reading. Mint for the protective order (take-profit
  * + stop-loss), amber for the staged one.
  */
+.card-soft { border: none; }
 .ord-new-bracket { border-color: color-mix(in srgb, var(--rgb-4) 45%, transparent); color: var(--ink-mint); }
 .ord-new-ladder { border-color: color-mix(in srgb, var(--rgb-5) 45%, transparent); color: var(--ink-amber); }
+.ord-new-trailing { border-color: color-mix(in srgb, var(--rgb-3) 45%, transparent); color: var(--ink-magenta); }
+.ord-rail { display: flex; gap: 12px; }
 
 /* ==========================================================================
    AUTOPILOT  —  .ap-*

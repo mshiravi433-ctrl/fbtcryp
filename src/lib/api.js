@@ -144,6 +144,11 @@ export function invalidate(key) {
   memo.delete(key);
 }
 
+/** Clear all in-memory memoized API responses. */
+export function clearApiCache() {
+  memo.clear();
+}
+
 /* -------------------------------------------------------------------------- */
 /* Global market stats (CoinLore shape)                                        */
 /* -------------------------------------------------------------------------- */

@@ -55,6 +55,7 @@ export const useSettingsStore = create(
       txConfirmations: true,
       expertMode: false,
       defaultSlippage: 0.5,
+      defaultDeadlineMin: 20,
 
       /* ---------------- networks ---------------- */
       // Testnet is opt-in and off by default: this is a commercial product and
@@ -95,6 +96,11 @@ export const useSettingsStore = create(
       },
       setSlippage(v) {
         set({ defaultSlippage: Math.min(50, Math.max(0.05, Number(v) || 0.5)) });
+      },
+      setDefaultDeadlineMin(minutes) {
+        const allowed = [5, 10, 20, 30, 60];
+        const val = Number(minutes);
+        set({ defaultDeadlineMin: allowed.includes(val) ? val : 20 });
       },
       setEvmChain(id) {
         set({ evmChainId: Number(id) || 56 });
@@ -153,12 +159,14 @@ export const useSettingsStore = create(
           username: s.username,
           reduceMotion: s.reduceMotion,
           hideBalances: s.hideBalances,
-          autoLockMinutes: s.autoLockMinutes
+          autoLockMinutes: s.autoLockMinutes,
+          defaultSlippage: s.defaultSlippage,
+          defaultDeadlineMin: s.defaultDeadlineMin
         };
       },
 
       applyRemote(remote = {}) {
-        const allowed = ['theme', 'accent', 'username', 'reduceMotion', 'hideBalances', 'autoLockMinutes'];
+        const allowed = ['theme', 'accent', 'username', 'reduceMotion', 'hideBalances', 'autoLockMinutes', 'defaultSlippage', 'defaultDeadlineMin'];
         const patch = {};
         allowed.forEach((k) => {
           if (remote[k] !== undefined) patch[k] = remote[k];

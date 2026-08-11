@@ -161,6 +161,7 @@ export const EVM_CHAINS = {
 };
 
 export const DEFAULT_CHAIN = 56;
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146];
 
 /**
  * Platform fee — always charged, on every chain.

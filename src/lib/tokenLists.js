@@ -105,6 +105,20 @@ function writeCache(chainId, tokens) {
   }
 }
 
+/** Clear all cached token lists from localStorage. */
+export function clearTokenListCache() {
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('fbt-tokens-') || k.startsWith('fbt-token-'))) {
+        keys.push(k);
+      }
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {}
+}
+
 async function fetchList(url, timeout = 12000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);

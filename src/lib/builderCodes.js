@@ -71,7 +71,7 @@
  * tiny becomes the largest cost in the trade. Ten is the ceiling this app will
  * allow regardless of what a venue permits — we are now at that ceiling.
  */
-const BUILDER_BPS_DEFAULT = 10;
+const BUILDER_BPS_DEFAULT = 5;
 const BUILDER_BPS_MAX = 10;
 
 function resolveBuilderBps() {

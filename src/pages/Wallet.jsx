@@ -96,7 +96,7 @@ export default function Wallet() {
           <motion.div variants={riseIn} initial="hidden" animate="show" className="notice" style={{ marginTop: 14, borderRadius: 14, padding: '12px 14px', fontSize: 12.5 }}>
             {t('wallet.practiceNotice')}
           </motion.div>
-          <motion.section className="wallet-hero-modern" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <motion.section className="wallet-hero-modern wal-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
             <div className="wallet-hero-aurora" aria-hidden="true" />
             <div className="row-between">
               <div className="row" style={{ gap: 12 }}>
@@ -129,9 +129,10 @@ export default function Wallet() {
         </>
       )}
 
+      {/* ----------------- on-chain wallet (non-custodial) ----------------- */}
       {tab !== 'practice' && (
         <>
-          <motion.section className="wallet-hero-modern" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <motion.section className="wallet-hero-modern wal-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
             <div className="wallet-hero-aurora" aria-hidden="true" />
             <WalletMesh />
 
@@ -169,7 +170,7 @@ export default function Wallet() {
                   </button>
                 </div>
 
-                <button className="wallet-buy-modern" onClick={() => navigate('/buy')}>
+                <button className="wallet-buy-modern wal-buy" onClick={() => navigate('/buy')}>
                   {t('nav.buy')} →
                 </button>
 
@@ -227,8 +228,10 @@ export default function Wallet() {
                 )}
               </div>
             ) : (
-              <div style={{ position: 'relative', textAlign: 'center', padding: '8px 0' }}>
-                <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 28, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>⬢</div>
+              <div className="wal-empty" style={{ position: 'relative', textAlign: 'center', padding: '8px 0' }}>
+                <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 14px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 28, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12c0 1.1.9 2 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" /></svg>
+                </div>
                 <div style={{ fontWeight: 800, fontSize: 16 }}>{t('wallet.emptyTitle')}</div>
                 <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>{t('wallet.emptyBody')}</p>
                 <button className="btn btn-primary" style={{ marginTop: 16, minHeight: 46, borderRadius: 14, padding: '0 24px' }} onClick={() => setConnectOpen(true)}>{t('wallet.connect')}</button>
@@ -259,7 +262,7 @@ export default function Wallet() {
         </motion.section>
       )}
 
-      {tab === 'real' && <div style={{ marginTop: 14 }}><HardwareWalletCard /></div>}
+      {tab === 'real' && <HardwareWalletCard />}
 
       {tab === 'practice' && (
         <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
@@ -281,8 +284,9 @@ export default function Wallet() {
         </motion.section>
       )}
 
-      {tab === 'practice' && (
-        <>
+      {/* ----------------- allocation ----------------- */}
+      {tab === 'practice' && <>
+          <AdBanner slot="farm" compact />
           <AdBanner slot="farm" compact />
           <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
             <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12 }}>{t('wallet.allocation')}</div>
@@ -371,8 +375,7 @@ export default function Wallet() {
               ))}
             </div>
           </motion.section>
-        </>
-      )}
+        </>}
 
       <Sheet open={backupSheet} onClose={() => setBackupSheet(false)} title={t('wallet.backupFile')}>
         <p className="notice notice-danger">{t('wallet.backupWarn')}</p>

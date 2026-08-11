@@ -51,8 +51,13 @@ import {
   vibrate
 } from '../lib/notify';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
+import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
+import { clearAppCache, exportSettingsBackup } from '../lib/dataStorage';
 import {
   IconBell,
+  IconClock,
+  IconSparkle,
+  IconCopy,
   IconChevronRight,
   IconFingerprint,
   IconNews,
@@ -443,6 +448,24 @@ export default function Settings() {
             }
           />
           <Row
+            icon={IconClock}
+            label={t('settings.defaultDeadline')}
+            sub={t('settings.defaultDeadlineSub')}
+            right={
+              <select
+                value={s.defaultDeadlineMin || 20}
+                onChange={(e) => s.setDefaultDeadlineMin(Number(e.target.value))}
+                style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
+              >
+                {[5, 10, 20, 30, 60].map((v) => (
+                  <option key={v} value={v}>
+                    {v} {t('settings.minutesShort', 'min')}
+                  </option>
+                ))}
+              </select>
+            }
+          />
+          <Row
             icon={IconShield}
             label={t('settings.expertMode')}
             sub={t('settings.expertModeSub')}
@@ -566,11 +589,15 @@ export default function Settings() {
                 }}
                 style={{ width: 'auto', padding: '6px 8px', fontSize: 13 }}
               >
-                <option value={56}>BSC</option>
-                <option value={1}>Ethereum</option>
-                <option value={137}>Polygon</option>
-                <option value={42161}>Arbitrum</option>
-                <option value={8453}>Base</option>
+                {EVM_CHAIN_ORDER.map((id) => {
+                  const c = EVM_CHAINS[id];
+                  if (!c) return null;
+                  return (
+                    <option key={id} value={id}>
+                      {c.name} ({c.short})
+                    </option>
+                  );
+                })}
               </select>
             }
           />
@@ -596,6 +623,54 @@ export default function Settings() {
             onClick={() => setRpcSheet(true)}
           />
         </div>
+      </motion.section>
+
+      {/* ---------------- data & storage ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.dataStorage')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconSparkle}
+            label={t('settings.clearCache')}
+            sub={t('settings.clearCacheSub')}
+            right={
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  haptic?.('light');
+                  clearAppCache();
+                  useAppStore.getState().notify('cacheCleared', 'success');
+                }}
+              >
+                {t('settings.clear')}
+              </button>
+            }
+          />
+          <Row
+            icon={IconCopy}
+            label={t('settings.backupSettings')}
+            sub={t('settings.backupSettingsSub')}
+            right={
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={async () => {
+                  haptic?.('light');
+                  try {
+                    await exportSettingsBackup();
+                    useAppStore.getState().notify('settingsBackedUp', 'success');
+                  } catch (e) {
+                    useAppStore.getState().notify('toast.error', 'error');
+                  }
+                }}
+              >
+                {t('settings.backup')}
+              </button>
+            }
+          />
+        </div>
+        <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }}>
+          {t('settings.dataStorageNote')}
+        </p>
       </motion.section>
 
       {/* ---------------- sync ---------------- */}
