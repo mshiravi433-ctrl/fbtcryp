@@ -39,6 +39,8 @@ export default function Dydx() {
   const [side, setSide] = useState('buy');
   const [size, setSize] = useState('');
   const [slippage, setSlippage] = useState('0.5');
+  const [orderType, setOrderType] = useState('market');
+  const [limitPrice, setLimitPrice] = useState('');
   const [dydxAddress, setDydxAddress] = useState(null);
   const [account, setAccount] = useState(null);
   const [accountLive, setAccountLive] = useState(true);
@@ -99,7 +101,7 @@ export default function Dydx() {
     setBusy(true);
     setError(null);
     try {
-      const order = await placeDydxOrder({ market, side, size, slippagePct: slippage });
+      const order = await placeDydxOrder({ market, side, size, slippagePct: slippage, orderType, limitPrice });
       setResult(order);
       setReviewing(false);
       await refreshAccount();
@@ -113,7 +115,7 @@ export default function Dydx() {
     }
   };
 
-  const canReview = dydxAddress && market?.status === 'ACTIVE' && Number(size) > 0 && notional > 0;
+  const canReview = dydxAddress && market?.status === 'ACTIVE' && Number(size) > 0 && notional > 0 && (orderType === 'market' || (orderType === 'limit' && Number(limitPrice) > 0));
 
   return (
     <PageTransition>
@@ -199,6 +201,26 @@ export default function Dydx() {
             </button>)}
           </div>
 
+          <div className="segmented" style={{ marginBottom: 12 }}>
+            {[
+              { id: 'market', label: 'مارکت' },
+              { id: 'limit', label: 'لیمیت' }
+            ].map((o) => (
+              <button key={o.id} className={orderType === o.id ? 'active' : ''} onClick={() => setOrderType(o.id)} style={{ isolation: 'isolate' }}>
+                {orderType === o.id && <SegIndicator id="dydx-otype" />}
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {orderType === 'limit' && (
+            <>
+              <label className="field-label">قیمت لیمیت (USD)</label>
+              <input type="number" inputMode="decimal" min="0" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder={market ? `$${market.oraclePrice.toFixed(2)}` : '0.00'} />
+              <p className="faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.7 }}>سفارش لیمیت فقط وقتی اجرا می‌شود که قیمت به این عدد برسد — کارمزد ۰٫۱۰٪ همچنان روی نوشنال گرفته می‌شود.</p>
+            </>
+          )}
+
           <label className="field-label">{t('dydx.size', { asset: market?.ticker?.split('-')[0] || '' })}</label>
           <input type="number" inputMode="decimal" min="0" value={size} onChange={(e) => setSize(e.target.value)} placeholder="0.00" />
           <label className="field-label" style={{ marginTop: 10 }}>{t('dydx.slippage')}</label>
@@ -257,6 +279,7 @@ export default function Dydx() {
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
         <div className="card card-tight stack" style={{ gap: 8 }}>
           <div className="row-between"><span className="faint">{t('dydx.market')}</span><strong>{market?.ticker}</strong></div>
+          <div className="row-between"><span className="faint">نوع سفارش</span><strong>{orderType === 'limit' ? `لیمیت @ $${limitPrice}` : 'مارکت'}</strong></div>
           <div className="row-between"><span className="faint">{t('dydx.direction')}</span><strong>{t(`dydx.${side}`)}</strong></div>
           <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
           <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>

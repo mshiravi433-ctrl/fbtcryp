@@ -167,29 +167,43 @@ export function disconnectDydx() {
 export const dydxSessionAddress = () => session?.address || null;
 
 /** Market/IOC order with our builder address and fee inside the signed order. */
-export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, reduceOnly = false }) {
+export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, reduceOnly = false, orderType = 'market', limitPrice: userPrice = null }) {
   if (!session) throw new Error('NOT_CONNECTED');
   if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
   const qty = Number(size);
   if (!Number.isFinite(qty) || qty <= 0) throw new Error('BAD_SIZE');
-  const slip = Number(slippagePct);
-  if (!Number.isFinite(slip) || slip <= 0 || slip > 10) throw new Error('BAD_SLIPPAGE');
   const buy = side === 'buy';
-  const limitPrice = market.oraclePrice * (1 + (buy ? 1 : -1) * slip / 100);
+  const sdkTmp = await loadClient();
+  let limitPrice;
+  let orderTypeEnum;
+  let execution;
+  if (orderType === 'limit' && userPrice != null && String(userPrice).trim() !== '') {
+    const lp = Number(userPrice);
+    if (!Number.isFinite(lp) || lp <= 0) throw new Error('BAD_PRICE');
+    limitPrice = lp;
+    orderTypeEnum = sdkTmp.OrderType.LIMIT;
+    execution = sdkTmp.OrderExecution.GTC;
+  } else {
+    const slip = Number(slippagePct);
+    if (!Number.isFinite(slip) || slip <= 0 || slip > 10) throw new Error('BAD_SLIPPAGE');
+    limitPrice = market.oraclePrice * (1 + (buy ? 1 : -1) * slip / 100);
+    orderTypeEnum = sdkTmp.OrderType.MARKET;
+    execution = sdkTmp.OrderExecution.IOC;
+  }
   const clientId = crypto.getRandomValues(new Uint32Array(1))[0];
   const { sdk, client, subaccount } = session;
 
   const result = await client.placeOrder(
     subaccount,
     market.ticker,
-    sdk.OrderType.MARKET,
+    orderTypeEnum,
     buy ? sdk.OrderSide.BUY : sdk.OrderSide.SELL,
     limitPrice,
     qty,
     clientId,
     undefined,
     undefined,
-    sdk.OrderExecution.IOC,
+    execution,
     false,
     Boolean(reduceOnly),
     undefined,

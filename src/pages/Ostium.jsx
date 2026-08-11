@@ -70,6 +70,7 @@ export default function Ostium() {
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('Commodities');
   const [pairId, setPairId] = useState('');
+  const [marketSearch, setMarketSearch] = useState('');
   const [side, setSide] = useState('long');
   const [collateral, setCollateral] = useState('50');
   const [leverage, setLeverage] = useState('5');
@@ -111,7 +112,12 @@ export default function Ostium() {
     if (categories.length && !categories.includes(category)) setCategory(categories[0]);
   }, [categories, category]);
 
-  const visible = useMemo(() => markets.filter((m) => m.uiCategory === category), [markets, category]);
+  const visible = useMemo(() => {
+    let rows = markets.filter((m) => m.uiCategory === category);
+    const q = marketSearch.trim().toLowerCase();
+    if (q) rows = rows.filter((m) => String(m.name || '').toLowerCase().includes(q) || String(m.pairId || '').toLowerCase().includes(q));
+    return rows;
+  }, [markets, category, marketSearch]);
 
   useEffect(() => {
     if (visible.length && !visible.some((m) => m.pairId === pairId)) setPairId(visible[0].pairId);
@@ -371,6 +377,22 @@ export default function Ostium() {
           <span style={{ fontSize: 12 }}>؟</span> هر دسته چیست؟
         </button>
       </div>
+
+      <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <input
+          type="text"
+          value={marketSearch}
+          onChange={(e) => setMarketSearch(e.target.value)}
+          placeholder={`جستجوی جفت (مثلاً XAU, EURUSD, AAPL) — ${markets.length} بازار`}
+          style={{ flex: 1, fontSize: 12.5 }}
+        />
+        {marketSearch && (
+          <button className="tag" onClick={() => setMarketSearch('')}>پاک</button>
+        )}
+      </div>
+      {visible.length === 0 && marketSearch && (
+        <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>چیزی با «{marketSearch}» پیدا نشد — دسته را عوض کن یا جستجو را پاک کن.</p>
+      )}
 
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
         {loading ? <div className="skel" style={{ height: 240 }} /> : !feedLive ? (
