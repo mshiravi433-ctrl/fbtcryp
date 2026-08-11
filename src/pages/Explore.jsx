@@ -161,7 +161,7 @@ export default function Explore({ embedded = false }) {
                 variants={riseIn}
                 whileTap={{ scale: 0.985 }}
                 onClick={() => open(url)}
-                style={{ '--card-hue': chain.color, padding: 14, textAlign: 'start', cursor: 'pointer', width: '100%', display: 'flex', alignItems: 'center', gap: 12 }}
+                style={{ '--card-hue': chain.color, padding: 16, textAlign: 'start', cursor: 'pointer', width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: `linear-gradient(145deg, color-mix(in srgb, \${chain.color} 8%, rgba(255,255,255,0.05)), rgba(255,255,255,0.03))`, borderColor: `color-mix(in srgb, \${chain.color} 16%, rgba(255,255,255,0.08))` }}
               >
                 <span style={{ width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', background: `linear-gradient(135deg, \${chain.color}, \${chain.color}aa)`, color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{chain.name.slice(0,2).toUpperCase()}</span>
                 <span style={{ fontWeight: 700, fontSize: 13.5, flex: 1 }}>{chain.name}</span>

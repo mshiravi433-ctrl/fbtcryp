@@ -265,17 +265,18 @@ export default function MoreSheet({ open, onClose }) {
                         className="more-tile"
                         data-pressed={pressed === item.to ? 'true' : 'false'}
                         onClick={() => go(item.to)}
-                        style={{ padding: 12, borderRadius: 16, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)' }}
+                        style={{ padding: 12, borderRadius: 16, background: `linear-gradient(145deg, color-mix(in srgb, \${item.hue} 7%, rgba(255,255,255,0.05)), rgba(255,255,255,0.03))`, border: `1px solid color-mix(in srgb, \${item.hue} 12%, rgba(255,255,255,0.06))`, backdropFilter: 'blur(10px)' }}
                       >
                         <span
                           className="more-tile-icon"
                           style={{
-                            color: '#fff',
-                            background: `linear-gradient(135deg, \${item.hue}, color-mix(in srgb, \${item.hue} 70%, #000))`,
-                            borderColor: `color-mix(in srgb, \${item.hue} 30%, transparent)`,
-                            boxShadow: `0 6px 16px color-mix(in srgb, \${item.hue} 22%, transparent)`,
-                            width: 42, height: 42, borderRadius: 13
+                            color: item.hue,
+                            background: `linear-gradient(135deg, color-mix(in srgb, ${item.hue} 18%, rgba(255,255,255,0.10)), color-mix(in srgb, ${item.hue} 6%, transparent))`,
+                            borderColor: `color-mix(in srgb, ${item.hue} 28%, transparent)`,
+                            boxShadow: `0 8px 20px color-mix(in srgb, ${item.hue} 20%, transparent)`,
+                            width: 44, height: 44, borderRadius: 14
                           }}
+                        >                          }}
                         >
                           <item.Icon width={19} height={19} />
                         </span>
