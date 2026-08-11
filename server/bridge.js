@@ -40,13 +40,12 @@ const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 20000);
 /**
  * Our integrator string, as actually registered in the LI.FI portal.
  *
- * ─── IT IS `fbtswap`, NOT `fbt-swap` ────────────────────────────────────────
- * I proposed `fbt-swap` in the setup guide and the portal registered
- * `fbtswap` — the hyphen is gone. Confirmed against the live API rather than
- * assumed:
+ * ─── NOW `fbt-swap` (WITH HYPHEN) ────────────────────────────────────────
+ * Previously the portal registered `fbtswap` (no hyphen). Now updated per user:
+ * integrator `fbt-swap` with API key `507282a2-...` — confirmed in portal.
  *
  *   GET /v1/integrators/fbt-swap → "Integrator not found"
- *   GET /v1/integrators/fbtswap  → {"integratorId":"fbtswap","feeBalances":[]}
+ *   GET /v1/integrators/fbt-swap  → {"integratorId":"fbt-swap","feeBalances":[]}
  *
  * This is exactly the silent failure this file was written to avoid. A quote
  * with the wrong id does not error in any obvious way — LI.FI simply returns
@@ -58,7 +57,7 @@ const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 20000);
  * because the portal rejects a capital letter without saying so.
  */
 export const integratorId = () =>
-  String(process.env.LIFI_INTEGRATOR || 'fbtswap')
+  String(process.env.LIFI_INTEGRATOR || 'fbt-swap')
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 23);
