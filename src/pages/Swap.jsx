@@ -38,6 +38,7 @@ import TokenIcon from '../lib/tokenIcon';
 import SolanaSwap from './SolanaSwap';
 import SegIndicator from '../components/SegIndicator';
 import { fmtQty } from '../lib/format';
+import '../styles/lab-modern.css';
 import { NATIVE_GAS_FLOOR, formatUnitsExact } from '../lib/swap';
 import { AnimatedSearch, AnimatedSettings, AnimatedSwap, useStill } from '../components/AnimatedIcon';
 import { PAYOUT_DIRECTORY } from '../lib/payout';
@@ -999,7 +1000,7 @@ export default function Swap() {
       )}
 
       {/* connection status */}
-      <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">
+      <motion.div className="lab-card row-between" variants={riseIn} initial="hidden" animate="show" style={{ padding: '12px 14px' }}>
         {wallet.isConnected ? (
           <>
             <span className="row" style={{ gap: 7 }}>
@@ -1057,7 +1058,8 @@ export default function Swap() {
       </div>
 
       {/* ------------------------------ ticket ------------------------------ */}
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="swap-ticket" variants={riseIn} initial="hidden" animate="show">
+        <div className="lab-aurora" aria-hidden="true" />
         <div className="sheen" />
 
         {/* FROM */}
@@ -1093,7 +1095,7 @@ export default function Swap() {
           </div>
         )}
 
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row swap-field" style={{ gap: 8, padding: '6px 8px' }}>
           <button className="tag" style={{ padding: '10px 12px' }} onClick={() => setPicker('from')}>
             {fromToken.symbol} ▾
           </button>
@@ -1109,7 +1111,7 @@ export default function Swap() {
         </div>
 
         {/* flip */}
-        <div style={{ display: 'grid', placeItems: 'center', margin: '10px 0' }}>
+        <div style={{ display: 'grid', placeItems: 'center', margin: '12px 0' }}>
           {/* The arrows physically trade places, which is the action. */}
           <motion.button
             className="icon-btn swap-flip"
@@ -1117,7 +1119,7 @@ export default function Swap() {
             animate={still ? {} : { rotate: flipCount * 180 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             onClick={flip}
-            style={{ borderColor: 'var(--rgb-1)', color: 'var(--rgb-1)' }}
+            style={{ borderColor: 'var(--rgb-1)', color: 'var(--rgb-1)', background: 'rgba(0,229,255,0.08)' }}
             aria-label={t('swap.flip')}
           >
             <AnimatedSwap key={flipCount} active still={still} width={19} height={19} />
@@ -1131,7 +1133,7 @@ export default function Swap() {
             {t('swap.balance')}: {fmtQty(balances[tokenKey(toToken)]?.formatted ?? 0)}
           </span>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row swap-field" style={{ gap: 8, padding: '6px 8px' }}>
           <button className="tag" style={{ padding: '10px 12px' }} onClick={() => setPicker('to')}>
             {toToken.symbol} ▾
           </button>
@@ -1141,8 +1143,8 @@ export default function Swap() {
               textAlign: 'end',
               padding: 12,
               borderRadius: 12,
-              background: 'var(--bg-raised)',
-              border: '1px solid var(--line)',
+              background: 'transparent',
+              border: 'none',
               fontFamily: 'var(--font-mono)',
               fontSize: 15,
               color: quote?.amountOut ? 'var(--text-1)' : 'var(--text-3)'
@@ -1369,8 +1371,8 @@ export default function Swap() {
         )}
 
         <button
-          className="btn btn-primary"
-          style={{ marginTop: 14 }}
+          className="swap-cta"
+          style={{ marginTop: 16 }}
           disabled={!canSwap}
           onClick={() => {
             if (!wallet.isConnected) return setConnectOpen(true);

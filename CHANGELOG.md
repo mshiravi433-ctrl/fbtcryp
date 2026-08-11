@@ -1,6 +1,69 @@
 # Changelog
 
-## 1.28.2 — Advanced Settings, Complete 9-EVM Network Support, Transaction Deadline & Storage Management
+## 1.28.3 — SOL tradeable from the market, modern Lab/Trade/Buy/Swap surfaces, revenue roadmap
+
+### SOL is no longer "not on this network"
+
+Reported: «در بازار بعضی از کویین ها میگه هنوز روی این شبکه نداری مثل توکن
+سولنا». SOL is the native coin of Solana — it sat in every market list, but
+the curated swap table (`coinToSwap.js`) only covered EVM tokens, so the
+market showed no swap button for it and the coin page fell back to
+«قابل سواپ نیست … روی شبکهای که پشتیبانی نمیکنیم». We have a working Solana
+swap screen (Jupiter/OpenOcean routing), so that refusal was a leak:
+
+- `swapTargetFor('solana')` now resolves instantly and offline to a curated
+  Solana target; the market list shows the swap button and the coin page's
+  Buy/Sell go straight to `/solana?to=SOL&side=…`.
+- **Sell handoff bug fixed on the Solana screen**: `side=sell` was read and
+  then discarded, so every "Sell" tap on a coin page opened a BUY order.
+  Both the `?to=` and `?toMint=` handoffs now honour the side and flip the
+  pair (asset leaves, stablecoin received).
+- The wallet's "no token balances on this network" empty state now says
+  balances are per-network and offers a one-tap route to the Solana swap
+  instead of ending the conversation.
+
+### Lab — prediction & invest, modernised
+
+- New `lab-modern.css` language (glass cards, aurora glow, lit rims) shared
+  by Lab, Trade and Swap.
+- Predict: live-price hero with aurora, big tabular price, 24h badge,
+  full-width ▲/▼ direction cards with payout sub-labels, duration segmented
+  control, payout preview bar against balance, live countdown chips and
+  status dots on open rounds.
+- Invest: gradient summary hero, plan cards with per-plan glow tiles and APR
+  display, chips for lock/min/risk, progress bars tinted per plan.
+
+### Buy & Sell — both tabs, both screens
+
+- Trade (practice spot): glass order ticket, gradient buy/sell segmented
+  indicator, tinted CTA (mint for buy / pink for sell), cleaner fee rows and
+  a modernised portfolio hero.
+- Buy (fiat in/out): the two tabs share a new hero, glass route rows with
+  tinted icon tiles, and the address/safety cards are in the new surface
+  language.
+
+### Swap — modern ticket, fee confirmed on both sides
+
+- The EVM ticket is now a glass card with the signature gradient rim, an
+  aurora wash, focused field glow, and a dominant cyan→violet CTA.
+- Platform fee verified end-to-end on every path: EVM swap 70 bps
+  (KyberSwap integrator), gasless 70 bps (0x), Solana 70 bps (OpenOcean
+  referrer), bridge 30 bps (LI.FI). The quote card and the review sheet
+  both itemise the exact amount before anything is signed.
+
+### Revenue — what is still missing
+
+- New `docs/REVENUE-REMAINING-FA.md` answers «چه راههای درآمدی هنوز
+  نداریم»: what is already live (table), what remains (THORName ~$9 for
+  native BTC, GMX referral ~2¢, Morpho vault ~$25, Hyperliquid builder code
+  $100 lock, Ledger affiliate, AADS ads, own P2P escrow, staking doorway),
+  and what is permanently blocked and why.
+
+### Tests
+
+All suites pass; wiring audit now at 1807 checks, including the new
+predict/invest translation keys and the SOL curated-target + sell-handoff
+assertions (section 103).
 
 - Rebuilt the Settings screen (`Settings.jsx`) with a modern hero summary banner featuring interactive status badges for network, slippage, deadline, and security, plus one-tap controls for theme and balance visibility.
 - Expanded EVM Networks default chain selection from 5 to all 9 active chains: BNB Smart Chain (BSC), Ethereum, Polygon, Arbitrum One, Base, Optimism, Avalanche, Linea, and Sonic, synchronized across Settings and Swap (`EVM_CHAIN_ORDER`).

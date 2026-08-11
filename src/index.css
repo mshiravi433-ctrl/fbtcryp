@@ -4342,7 +4342,14 @@ input, select, textarea { font-size: 16px !important; }
 
 :root[data-theme='light'] .wal-hero-aurora { opacity: 0.3; }
 
-.wal-hero > *:not(.wal-hero-aurora):not(.wal-mesh) { position: relative; z-index: 1; }
+/*
+   The JSX renders the glow layer as `wallet-hero-aurora` (Wallet.jsx,
+   Signals.jsx). The exclusion must name THAT class — an exception spelled
+   `wal-hero-aurora` silently stopped matching, the glow became a real
+   ~280px block above the address, and the whole panel was pushed down.
+   Both spellings are excluded so the rule can never re-break.
+*/
+.wal-hero > *:not(.wal-hero-aurora):not(.wallet-hero-aurora):not(.wal-mesh) { position: relative; z-index: 1; }
 
 /* The address, as a discrete object you could copy rather than a stray
    string. */

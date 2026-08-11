@@ -216,9 +216,20 @@ export default function Wallet() {
                   ))}
                 </div>
               ) : (
-                <p className="faint" style={{ fontSize: 12.5, textAlign: 'center', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px dashed var(--line)' }}>
-                  {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
-                </p>
+                <div className="stack" style={{ gap: 9 }}>
+                  <p className="faint" style={{ fontSize: 12.5, textAlign: 'center', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px dashed var(--line)' }}>
+                    {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
+                  </p>
+                  {!onchain.error && (
+                    <button
+                      className="wal-util"
+                      style={{ justifyContent: 'center' }}
+                      onClick={() => navigate('/solana')}
+                    >
+                      {t('wallet.solanaHint')}
+                    </button>
+                  )}
+                </div>
               )}
             </motion.section>
           )}

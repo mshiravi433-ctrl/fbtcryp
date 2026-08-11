@@ -8,6 +8,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconShield, IconSwap, IconQr } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
+import '../styles/lab-modern.css';
 
 /**
  * BUY & SELL — getting fiat in and out.
@@ -233,10 +234,10 @@ export default function Buy() {
       */}
 
       {/* ------------------------------ intro ------------------------------ */}
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
-        <p className="section-label" style={{ marginBottom: 8 }}>{t(`buy.${tab}.heading`)}</p>
-        <p className="prose-sm">{t(`buy.${tab}.body`)}</p>
+      <motion.section className="lab-hero" variants={riseIn} initial="hidden" animate="show" style={{ padding: 18 }}>
+        <div className="lab-aurora" aria-hidden="true" />
+        <p className="section-label" style={{ marginBottom: 8, position: 'relative' }}>{t(`buy.${tab}.heading`)}</p>
+        <p className="prose-sm" style={{ position: 'relative' }}>{t(`buy.${tab}.body`)}</p>
 
         {/*
           ─── THE OLD "WE TAKE NOTHING" NOTICE IS GONE, AND HAD TO GO ──────
@@ -261,16 +262,15 @@ export default function Buy() {
           {ROUTES.map((r) => (
             <motion.button
               key={r.id}
-              className="set-row"
+              className="buy-route"
               variants={riseIn}
               onClick={() => go(r)}
-              style={{ width: '100%', textAlign: 'start', cursor: 'pointer' }}
             >
-              <span className="set-row-icon" style={{ color: r.color }}>
-                <r.Icon width={18} height={18} />
+              <span className="buy-route-icon" style={{ color: r.color }}>
+                <r.Icon width={19} height={19} />
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 13 }}>
+                <span style={{ display: 'block', fontWeight: 800, fontSize: 13.5 }}>
                   {t(`buy.route.${r.id}.name`)}
                 </span>
                 <span className="set-row-sub">{t(`buy.route.${r.id}.${tab}`)}</span>
@@ -288,7 +288,7 @@ export default function Buy() {
         in front of them, not three screens away.
       */}
       {tab === 'buy' && (
-        <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+        <motion.section className="lab-card" variants={riseIn} initial="hidden" animate="show" style={{ padding: 15 }}>
           <p className="section-label" style={{ marginBottom: 8 }}>{t('buy.yourAddress')}</p>
           {wallet.address ? (
             <>
@@ -322,7 +322,7 @@ export default function Buy() {
       )}
 
       {/* ------------------------------ safety ------------------------------ */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="lab-card" variants={riseIn} initial="hidden" animate="show" style={{ padding: 15 }}>
         <div className="row" style={{ gap: 8, marginBottom: 10 }}>
           <span style={{ color: 'var(--rgb-5)' }}><IconShield width={17} height={17} /></span>
           <p className="section-label" style={{ margin: 0 }}>{t('buy.safetyTitle')}</p>

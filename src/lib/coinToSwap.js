@@ -46,9 +46,30 @@ import { EVM_CHAINS, TOKENS } from './chains.js';
 const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 1];
 
 /**
+ * ─── SOLANA ITSELF IS CURATED, NOT A COIN-VENUE LOOKUP ─────────────────────
+ * Reported: «در بازار بعضی از کویین ها میگه هنوز روی این شبکه نداری مثل
+ * توکن سولنا». SOL is the native coin of the Solana chain. It appears in
+ * every market list, it is not in the EVM `TOKENS` table, and CoinGecko's
+ * platform map points it at the wrapped-SOL mint — so the coin page had no
+ * curated entry and the market list showed no swap button for the most
+ * recognisable token after BTC/ETH.
+ *
+ * The app HAS a working Solana swap screen (Jupiter routing, see
+ * src/lib/solana.js), so SOL deserves a first-class target here, resolved
+ * offline and instantly, exactly like the curated EVM entries — not a
+ * network round-trip that can fail.
+ */
+export const SOLANA_TARGET = {
+  kind: 'solana',
+  chainId: null,
+  chainName: 'Solana',
+  token: { symbol: 'SOL', name: 'Solana', native: true, coingeckoId: 'solana' }
+};
+
+/**
  * Find a real, swappable token for a CoinGecko coin id.
  *
- * @returns {{chainId:number, token:object, chainName:string}|null}
+ * @returns {{kind:'evm'|'solana', chainId:number|null, token:object, chainName:string}|null}
  *          null means "we cannot trade this here", which the UI must say
  *          plainly rather than papering over.
  */
@@ -56,11 +77,14 @@ export function swapTargetFor(coingeckoId) {
   const id = String(coingeckoId || '').trim().toLowerCase();
   if (!id) return null;
 
+  /* The Solana native coin, handled before the EVM scan for clarity. */
+  if (id === 'solana') return SOLANA_TARGET;
+
   for (const chainId of CHAIN_PREFERENCE) {
     const list = TOKENS[chainId] ?? [];
     const token = list.find((tk) => String(tk.coingeckoId || '').toLowerCase() === id);
     if (token) {
-      return { chainId, token, chainName: EVM_CHAINS[chainId]?.name ?? String(chainId) };
+      return { kind: 'evm', chainId, token, chainName: EVM_CHAINS[chainId]?.name ?? String(chainId) };
     }
   }
   return null;
@@ -85,6 +109,13 @@ export const isSwappable = (coingeckoId) => swapTargetFor(coingeckoId) !== null;
 export function swapUrlFor(coingeckoId, side = 'buy') {
   const target = swapTargetFor(coingeckoId);
   if (!target) return null;
+
+  /* Solana native coin — land on the Solana swap screen directly. The
+     screen resolves ?to=SOL against its curated assets, so no mint is ever
+     taken from a URL (see src/pages/SolanaSwap.jsx). */
+  if (target.kind === 'solana') {
+    return `/solana?to=${encodeURIComponent(target.token.symbol)}&side=${side}`;
+  }
 
   const { chainId, token } = target;
   const list = TOKENS[chainId] ?? [];

@@ -10807,5 +10807,67 @@ export default function run() {
       /fbt-shell-v3/.test(sw) && !/fbt-shell-v2/.test(sw));
   }
 
+  /* ---- 102. the wallet glow layer must not push the panel down ---------- */
+  /*
+   * REAL BUG: `.wal-hero > *` gives every direct child `position: relative`
+   * so the content can stack above the decorative layers. The exception list
+   * spelled the glow layer's class with a dash (`wal-hero-aurora`) while the
+   * JSX actually renders `wallet-hero-aurora` (Wallet.jsx, Signals.jsx).
+   *
+   * Because `.wal-hero > *` has higher specificity than the glow's own
+   * `position: absolute` rule, the exception never matched: the light layer
+   * was forced in-flow as a real ~280px block, and a big empty bar appeared
+   * above the address, pushing the whole panel's content down.
+   *
+   * So: every aurora class actually used in the JSX must appear in that
+   * rule's `:not()` list, or the glow will take up space again.
+   */
+  {
+    const css = read('src/index.css');
+    const rule = css.match(/\.wal-hero\s*>\s*\*[^}]*}/)?.[0] ?? '';
+
+    const used = new Set();
+    for (const f of files) {
+      for (const m of read(f).matchAll(/className="([^"]*)"/g)) {
+        for (const c of m[1].split(/\s+/)) {
+          // Only the wallet hero's own glow layer. Other aurora effects
+          // (`aurora`, `derivatives-aurora`) are separate layers in their
+          // own containers and must not be dragged into this rule.
+          if (/^(wal-|wallet-)hero-aurora$/.test(c)) used.add(c);
+        }
+      }
+    }
+
+    const uncovered = [...used].filter((c) => !rule.includes(`:not(.${c})`));
+    t(
+      `the hero stacking rule excludes every aurora class used in JSX${
+        uncovered.length ? ` — missing: ${uncovered.join(', ')}` : ''
+      }`,
+      used.size > 0 && uncovered.length === 0
+    );
+  }
+
+  /* ---- 103. SOL must be swappable, and Sell must mean sell ----------------- */
+  /*
+   * REAL BUG: «در بازار بعضی از کویین ها میگه هنوز روی این شبکه نداری مثل
+   * توکن سولنا». The curated swap table only covered EVM tokens, so SOL had
+   * no market button and its coin page said "not swappable / on a network we
+   * do not support" — while the app has a working Solana swap screen.
+   * Second half: the Solana screen read `side=sell` and discarded it, so a
+   * coin page's Sell button opened a BUY order.
+   */
+  {
+    const c2s = read('src/lib/coinToSwap.js');
+    const sol = read('src/pages/SolanaSwap.jsx');
+
+    t('SOL resolves to a curated Solana target, offline',
+      /if \(id === 'solana'\) return SOLANA_TARGET;/.test(c2s) &&
+      /kind: 'solana'/.test(c2s) &&
+      /\/solana\?to=\$\{encodeURIComponent\(target\.token\.symbol\)\}&side=\$\{side\}/.test(c2s));
+
+    t('the Solana screen honours side=sell in every handoff',
+      (sol.match(/searchParams\.get\('side'\) === 'sell'/g) || []).length >= 2);
+  }
+
   return rows;
 }
