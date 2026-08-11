@@ -121,6 +121,21 @@ export const AVALANCHE_BASE = [
   ['DAI', 'Dai', '0xd586E7F844cEa2F87f50152665BCbc2C279D8d70', 18]
 ];
 
+/** Linea (59144). */
+export const LINEA_BASE = [
+  ['WETH', 'Wrapped Ether', '0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f', 18],
+  ['USDC', 'USD Coin', '0x176211869cA2b568f2A7D4EE941E073a821EE1ff', 6],
+  ['USDT', 'Tether USD', '0xA219439258ca9da29E9Cc4cE5596924745e12B93', 6],
+  ['FOXY', 'Foxy', '0x5FBDF89403270a1846F5ae7D113A989F850d1566', 18]
+];
+
+/** Sonic (146). */
+export const SONIC_BASE = [
+  ['wS', 'Wrapped Sonic', '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', 18],
+  ['USDC', 'USD Coin', '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', 6],
+  ['WETH', 'Wrapped Ether', '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b', 18]
+];
+
 const expand = (rows, coingeckoIds = {}) =>
   rows.map(([symbol, name, address, decimals]) => ({
     symbol,
@@ -140,5 +155,7 @@ export const BASE_TOKENS = {
   42161: expand(ARBITRUM_BASE),
   8453: expand(BASE_BASE),
   10: expand(OPTIMISM_BASE),
-  43114: expand(AVALANCHE_BASE)
+  43114: expand(AVALANCHE_BASE),
+  59144: expand(LINEA_BASE),
+  146: expand(SONIC_BASE)
 };

@@ -132,7 +132,9 @@ export const NATIVE_GAS_FLOOR = {
   42161: 0.0004, // ETH on Arbitrum
   8453: 0.0003,  // ETH on Base
   10: 0.0003,    // ETH on Optimism
-  43114: 0.01    // AVAX
+  43114: 0.01,   // AVAX
+  59144: 0.0003, // ETH on Linea
+  146: 0.05      // S on Sonic
 };
 
 /**

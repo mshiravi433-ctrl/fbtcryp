@@ -374,7 +374,7 @@ export default function Market() {
                   )}
                 </div>
               );
-            })}}
+            })}
 
             {extraHits.length > 0 && (
               <>
@@ -408,7 +408,6 @@ export default function Market() {
                     </div>
                   );
                 })}
-                ))}
               </>
             )}
           </motion.div>
