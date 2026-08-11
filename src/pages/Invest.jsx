@@ -7,6 +7,7 @@ import Sheet from '../components/Sheet';
 import { fmtNum, fmtPct } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
+import '../styles/lab-modern.css';
 
 /**
  * Simulated yield products. APRs are fixed, deterministic and paid from the
@@ -63,213 +64,225 @@ export default function Invest({ embedded = false }) {
 
   return (
     <PageTransition embedded={embedded}>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t('invest.title')}</h1>
-        <p className="muted">{t('invest.subtitle')}</p>
-      </motion.div>
-
-      <p className="notice">{t('invest.simNotice')}</p>
-
-      {/* ---------- summary ---------- */}
-      <motion.section className="card card-rgb card-glow-magenta" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
-        <div className="faint">{t('invest.totalStaked')}</div>
-        <div className="stat-value">
-          <AnimatedNumber value={totals.staked} format={(v) => `${fmtNum(v, 2)} NX`} />
-        </div>
-        <div className="grid-2" style={{ marginTop: 12 }}>
-          <div>
-            <div className="faint">{t('invest.projectedYield')}</div>
-            <div className="mono up" style={{ fontSize: 13 }}>+{fmtNum(totals.projected, 2)} NX</div>
-          </div>
-          <div>
-            <div className="faint">{t('invest.lifetimeEarned')}</div>
-            <div className="mono" style={{ fontSize: 13 }}>{fmtNum(totals.earned, 2)} NX</div>
-          </div>
-        </div>
-      </motion.section>
-
-      {/* ---------- plans ---------- */}
-      <section>
-        <p className="section-label">{t('invest.plans')}</p>
-        <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-          {PLANS.map((p) => (
-            <motion.button
-              key={p.id}
-              className="card"
-              variants={riseIn}
-              whileTap={{ scale: 0.985 }}
-              onClick={() => {
-                haptic?.('light');
-                setPlan(p);
-                setAmount(String(p.min));
-              }}
-              style={{ textAlign: 'start', cursor: 'pointer', borderColor: 'var(--line)' }}
-            >
-              <div className="row-between">
-                <div className="row" style={{ gap: 10 }}>
-                  <div
-                    className="coin-logo"
-                    style={{ background: `${p.color}1f`, borderColor: p.color, fontSize: 17 }}
-                  >
-                    {p.emoji}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{t(`invest.plan.${p.id}.name`)}</div>
-                    <div className="faint">{t(`invest.plan.${p.id}.desc`)}</div>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'end' }}>
-                  <div className="mono" style={{ fontSize: 19, fontWeight: 700, color: p.color }}>
-                    {p.apr}%
-                  </div>
-                  <div className="faint">APR</div>
-                </div>
-              </div>
-              <div className="row" style={{ gap: 6, marginTop: 10 }}>
-                <span className="pill pill-neutral">{t('invest.lockDays', { days: p.days })}</span>
-                <span className="pill pill-neutral">{t('invest.min')}: {fmtNum(p.min)} NX</span>
-                <span className={`pill ${p.risk === 'high' ? 'pill-down' : p.risk === 'medium' ? 'pill-rgb' : 'pill-up'}`}>
-                  {t(`invest.risk.${p.risk}`)}
-                </span>
-              </div>
-            </motion.button>
-          ))}
+      {!embedded && (
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <h1 className="h1">{t('invest.title')}</h1>
+          <p className="muted">{t('invest.subtitle')}</p>
         </motion.div>
-      </section>
+      )}
 
-      {/* ---------- active positions ---------- */}
-      {active.length > 0 && (
+      <div className="lab-modern" style={{ marginTop: embedded ? 2 : 8 }}>
+        <p className="notice">{t('invest.simNotice')}</p>
+
+        {/* ---------- summary hero ---------- */}
+        <motion.section className="lab-hero" variants={riseIn} initial="hidden" animate="show" style={{ padding: 18 }}>
+          <div className="lab-aurora" aria-hidden="true" />
+          <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, position: 'relative' }}>
+            {t('invest.totalStaked')}
+          </div>
+          <div className="lab-hero-price" style={{ position: 'relative' }}>
+            <AnimatedNumber value={totals.staked} format={(v) => `${fmtNum(v, 2)} NX`} />
+          </div>
+          <div className="grid-2" style={{ marginTop: 16, position: 'relative', gap: 10 }}>
+            <div className="lab-stat">
+              <div className="faint" style={{ fontSize: 10.5 }}>{t('invest.projectedYield')}</div>
+              <div className="mono up" style={{ fontSize: 15, fontWeight: 800, marginTop: 3 }}>
+                +{fmtNum(totals.projected, 2)} NX
+              </div>
+            </div>
+            <div className="lab-stat">
+              <div className="faint" style={{ fontSize: 10.5 }}>{t('invest.lifetimeEarned')}</div>
+              <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 3 }}>
+                {fmtNum(totals.earned, 2)} NX
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ---------- plans ---------- */}
         <section>
-          <p className="section-label">{t('invest.active')}</p>
+          <p className="section-label">{t('invest.plans')}</p>
           <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-            <AnimatePresence>
-              {active.map((inv) => {
-                const pr = progressOf(inv);
-                const matured = pr >= 100;
-                const meta = PLANS.find((p) => p.id === inv.planId);
-                return (
-                  <motion.div key={inv.id} className="card card-tight" variants={riseIn} layout exit={{ opacity: 0, scale: 0.95 }}>
-                    <div className="row-between">
-                      <div className="row" style={{ gap: 8 }}>
-                        <span style={{ fontSize: 17 }}>{meta?.emoji ?? '💠'}</span>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{t(`invest.plan.${inv.planId}.name`)}</div>
-                          <div className="faint mono">
-                            {fmtNum(inv.amount, 2)} NX · {inv.apr}% · {inv.days}d
-                          </div>
-                        </div>
-                      </div>
-                      <span className={`pill ${matured ? 'pill-up' : 'pill-rgb'}`}>
-                        {matured ? t('invest.matured') : `${pr.toFixed(1)}%`}
-                      </span>
-                    </div>
-
-                    <div className="progress" style={{ marginTop: 10 }}>
-                      <motion.div
-                        className="progress-fill"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pr}%` }}
-                        transition={{ duration: 0.9, ease: 'easeOut' }}
-                      />
-                    </div>
-
-                    <button
-                      className={`btn ${matured ? 'btn-primary' : 'btn-ghost'}`}
-                      style={{ marginTop: 10, padding: 10, fontSize: 12.5 }}
-                      onClick={() => {
-                        haptic?.(matured ? 'success' : 'warning');
-                        claimInvestment(inv.id);
-                      }}
+            {PLANS.map((p) => (
+              <motion.button
+                key={p.id}
+                className="lab-plan"
+                variants={riseIn}
+                whileTap={{ scale: 0.985 }}
+                onClick={() => {
+                  haptic?.('light');
+                  setPlan(p);
+                  setAmount(String(p.min));
+                }}
+                style={{ '--plan-glow': p.color }}
+              >
+                <div className="row-between">
+                  <div className="row" style={{ gap: 11 }}>
+                    <div
+                      className="coin-logo"
+                      style={{ background: `${p.color}22`, borderColor: p.color, fontSize: 18 }}
                     >
-                      {matured ? t('invest.claim') : t('invest.earlyExit')}
-                    </button>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
+                      {p.emoji}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: 14.5 }}>{t(`invest.plan.${p.id}.name`)}</div>
+                      <div className="faint" style={{ fontSize: 11.5, lineHeight: 1.5 }}>{t(`invest.plan.${p.id}.desc`)}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'end' }}>
+                    <div className="lab-plan-apr" style={{ color: p.color }}>
+                      {p.apr}%
+                    </div>
+                    <div className="faint" style={{ fontSize: 10 }}>APR</div>
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 6, marginTop: 12 }}>
+                  <span className="lab-chip">{t('invest.lockDays', { days: p.days })}</span>
+                  <span className="lab-chip">{t('invest.min')}: {fmtNum(p.min)} NX</span>
+                  <span className={`lab-chip ${p.risk === 'high' ? 'pill-down' : p.risk === 'medium' ? 'pill-rgb' : 'pill-up'}`}>
+                    {t(`invest.risk.${p.risk}`)}
+                  </span>
+                </div>
+              </motion.button>
+            ))}
           </motion.div>
         </section>
-      )}
 
-      {/* ---------- open plan sheet ---------- */}
-      <Sheet open={Boolean(plan)} onClose={() => setPlan(null)}>
-        {plan && (
-          <>
-            <h2 className="h2" style={{ marginBottom: 4 }}>
-              {plan.emoji} {t(`invest.plan.${plan.id}.name`)}
-            </h2>
-            <p className="muted" style={{ marginBottom: 12 }}>{t(`invest.plan.${plan.id}.desc`)}</p>
+        {/* ---------- active positions ---------- */}
+        {active.length > 0 && (
+          <section>
+            <p className="section-label">{t('invest.active')}</p>
+            <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+              <AnimatePresence>
+                {active.map((inv) => {
+                  const pr = progressOf(inv);
+                  const matured = pr >= 100;
+                  const meta = PLANS.find((p) => p.id === inv.planId);
+                  return (
+                    <motion.div key={inv.id} className="lab-card" variants={riseIn} layout exit={{ opacity: 0, scale: 0.95 }} style={{ padding: 14 }}>
+                      <div className="row-between">
+                        <div className="row" style={{ gap: 9 }}>
+                          <span style={{ fontSize: 19 }}>{meta?.emoji ?? '💠'}</span>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: 13.5 }}>{t(`invest.plan.${inv.planId}.name`)}</div>
+                            <div className="faint mono" style={{ fontSize: 11 }}>
+                              {fmtNum(inv.amount, 2)} NX · {inv.apr}% · {inv.days}d
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`pill ${matured ? 'pill-up' : 'pill-rgb'}`}>
+                          {matured ? t('invest.matured') : `${pr.toFixed(1)}%`}
+                        </span>
+                      </div>
 
-            <label className="field-label">{t('invest.amount')}</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={amount}
-              min={plan.min}
-              onChange={(e) => setAmount(e.target.value)}
-            />
+                      <div className="progress" style={{ marginTop: 11 }}>
+                        <motion.div
+                          className="progress-fill"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pr}%` }}
+                          transition={{ duration: 0.9, ease: 'easeOut' }}
+                          style={{ background: `linear-gradient(90deg, ${meta?.color ?? 'var(--rgb-1)'}, var(--rgb-1))` }}
+                        />
+                      </div>
 
-            <div className="row" style={{ gap: 6, marginTop: 9 }}>
-              {[plan.min, plan.min * 2, plan.min * 5].map((v) => (
-                <button key={v} className="tag" style={{ flex: 1, textAlign: 'center' }} onClick={() => setAmount(String(v))}>
-                  {fmtNum(v)}
-                </button>
-              ))}
-              <button className="tag" style={{ flex: 1, textAlign: 'center' }} onClick={() => setAmount(String(Math.floor(balance)))}>
-                MAX
-              </button>
-            </div>
-
-            <div className="card card-tight stack" style={{ gap: 7, marginTop: 14 }}>
-              <div className="row-between">
-                <span className="faint">APR</span>
-                <span className="mono up">{fmtPct(plan.apr, 1)}</span>
-              </div>
-              <div className="row-between">
-                <span className="faint">{t('invest.lockPeriod')}</span>
-                <span className="mono">{plan.days} {t('common.days')}</span>
-              </div>
-              <div className="row-between">
-                <span className="faint">{t('invest.estimatedReturn')}</span>
-                <span className="mono up">+{fmtNum(projectedYield, 2)} NX</span>
-              </div>
-              <div className="row-between">
-                <span className="faint">{t('invest.totalAtMaturity')}</span>
-                <span className="mono" style={{ fontWeight: 700 }}>{fmtNum(amt + projectedYield, 2)} NX</span>
-              </div>
-            </div>
-
-            <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('invest.earlyExitWarning')}</p>
-
-            <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={!canOpen} onClick={confirm}>
-              {amt < plan.min
-                ? t('invest.minRequired', { min: fmtNum(plan.min) })
-                : amt > balance
-                  ? t('toast.insufficientBalance')
-                  : t('invest.confirmStake')}
-            </button>
-          </>
+                      <button
+                        className={`btn ${matured ? 'btn-primary' : 'btn-ghost'}`}
+                        style={{ marginTop: 10, padding: 10, fontSize: 12.5, width: '100%' }}
+                        onClick={() => {
+                          haptic?.(matured ? 'success' : 'warning');
+                          claimInvestment(inv.id);
+                        }}
+                      >
+                        {matured ? t('invest.claim') : t('invest.earlyExit')}
+                      </button>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
+          </section>
         )}
-      </Sheet>
 
-      {closed.length > 0 && (
-        <section>
-          <p className="section-label">{t('invest.closed')}</p>
-          <div className="card card-tight" style={{ marginTop: 8 }}>
-            {closed.slice(0, 6).map((inv) => (
-              <div key={inv.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-                <span style={{ fontSize: 12 }}>{t(`invest.plan.${inv.planId}.name`)}</span>
-                <span className="mono" style={{ fontSize: 11.5 }}>{fmtNum(inv.amount, 2)} NX</span>
-                <span className={`mono ${(inv.payout ?? 0) >= inv.amount ? 'up' : 'down'}`} style={{ fontSize: 11.5 }}>
-                  {(inv.payout ?? 0) >= inv.amount ? '+' : ''}
-                  {fmtNum((inv.payout ?? 0) - inv.amount, 2)}
-                </span>
+        {/* ---------- open plan sheet ---------- */}
+        <Sheet open={Boolean(plan)} onClose={() => setPlan(null)}>
+          {plan && (
+            <>
+              <h2 className="h2" style={{ marginBottom: 4 }}>
+                {plan.emoji} {t(`invest.plan.${plan.id}.name`)}
+              </h2>
+              <p className="muted" style={{ marginBottom: 12 }}>{t(`invest.plan.${plan.id}.desc`)}</p>
+
+              <label className="field-label">{t('invest.amount')}</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                min={plan.min}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+
+              <div className="row" style={{ gap: 6, marginTop: 9 }}>
+                {[plan.min, plan.min * 2, plan.min * 5].map((v) => (
+                  <button key={v} className="tag" style={{ flex: 1, textAlign: 'center' }} onClick={() => setAmount(String(v))}>
+                    {fmtNum(v)}
+                  </button>
+                ))}
+                <button className="tag" style={{ flex: 1, textAlign: 'center' }} onClick={() => setAmount(String(Math.floor(balance)))}>
+                  MAX
+                </button>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+
+              <div className="card card-tight stack" style={{ gap: 7, marginTop: 14 }}>
+                <div className="row-between">
+                  <span className="faint">APR</span>
+                  <span className="mono up">{fmtPct(plan.apr, 1)}</span>
+                </div>
+                <div className="row-between">
+                  <span className="faint">{t('invest.lockPeriod')}</span>
+                  <span className="mono">{plan.days} {t('common.days')}</span>
+                </div>
+                <div className="row-between">
+                  <span className="faint">{t('invest.estimatedReturn')}</span>
+                  <span className="mono up">+{fmtNum(projectedYield, 2)} NX</span>
+                </div>
+                <div className="row-between">
+                  <span className="faint">{t('invest.totalAtMaturity')}</span>
+                  <span className="mono" style={{ fontWeight: 700 }}>{fmtNum(amt + projectedYield, 2)} NX</span>
+                </div>
+              </div>
+
+              <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('invest.earlyExitWarning')}</p>
+
+              <button className="btn btn-primary" style={{ marginTop: 12, width: '100%' }} disabled={!canOpen} onClick={confirm}>
+                {amt < plan.min
+                  ? t('invest.minRequired', { min: fmtNum(plan.min) })
+                  : amt > balance
+                    ? t('toast.insufficientBalance')
+                    : t('invest.confirmStake')}
+              </button>
+            </>
+          )}
+        </Sheet>
+
+        {/* ---------- closed ---------- */}
+        {closed.length > 0 && (
+          <section>
+            <p className="section-label">{t('invest.closed')}</p>
+            <div className="lab-card" style={{ marginTop: 8, padding: '4px 14px' }}>
+              {closed.slice(0, 6).map((inv) => (
+                <div key={inv.id} className="row-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>{t(`invest.plan.${inv.planId}.name`)}</span>
+                  <span className="mono" style={{ fontSize: 11.5 }}>{fmtNum(inv.amount, 2)} NX</span>
+                  <span className={`mono ${(inv.payout ?? 0) >= inv.amount ? 'up' : 'down'}`} style={{ fontSize: 11.5, fontWeight: 700 }}>
+                    {(inv.payout ?? 0) >= inv.amount ? '+' : ''}
+                    {fmtNum((inv.payout ?? 0) - inv.amount, 2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
     </PageTransition>
   );
 }

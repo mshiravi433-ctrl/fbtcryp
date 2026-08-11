@@ -10847,5 +10847,27 @@ export default function run() {
     );
   }
 
+  /* ---- 103. SOL must be swappable, and Sell must mean sell ----------------- */
+  /*
+   * REAL BUG: «در بازار بعضی از کویین ها میگه هنوز روی این شبکه نداری مثل
+   * توکن سولنا». The curated swap table only covered EVM tokens, so SOL had
+   * no market button and its coin page said "not swappable / on a network we
+   * do not support" — while the app has a working Solana swap screen.
+   * Second half: the Solana screen read `side=sell` and discarded it, so a
+   * coin page's Sell button opened a BUY order.
+   */
+  {
+    const c2s = read('src/lib/coinToSwap.js');
+    const sol = read('src/pages/SolanaSwap.jsx');
+
+    t('SOL resolves to a curated Solana target, offline',
+      /if \(id === 'solana'\) return SOLANA_TARGET;/.test(c2s) &&
+      /kind: 'solana'/.test(c2s) &&
+      /\/solana\?to=\$\{encodeURIComponent\(target\.token\.symbol\)\}&side=\$\{side\}/.test(c2s));
+
+    t('the Solana screen honours side=sell in every handoff',
+      (sol.match(/searchParams\.get\('side'\) === 'sell'/g) || []).length >= 2);
+  }
+
   return rows;
 }

@@ -12,6 +12,7 @@ import { fmtNum, fmtPct, fmtPrice } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
+import '../styles/lab-modern.css';
 
 /**
  * UP / DOWN market prediction rounds.
@@ -97,152 +98,226 @@ export default function Predict({ embedded = false }) {
     useAppStore.getState().notify('predictionPlaced', 'info');
   };
 
+  const up = (coin?.change24h ?? 0) >= 0;
+
   return (
     <PageTransition embedded={embedded}>
-      <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
-        <button className="icon-btn" onClick={() => navigate(-1)}>‹</button>
-        <div style={{ textAlign: 'center' }}>
-          <h1 className="h1" style={{ fontSize: 18 }}>{t('predict.title')}</h1>
-          <p className="faint">{t('predict.subtitle')}</p>
-        </div>
-        <div style={{ width: 34 }} />
-      </motion.div>
-
-      <InfoBox title={t('predict.riskTitle')} tone="danger" id="predict-risk" defaultOpen>
-        <p>{t('predict.riskNotice')}</p>
-      </InfoBox>
-
-      {/* ---------- asset strip ---------- */}
-      <div className="tag-scroll">
-        {(coins ?? []).slice(0, 12).map((c) => (
-          <button key={c.id} className={`tag ${coinId === c.id ? 'active' : ''}`} onClick={() => setCoinId(c.id)}>
-            {c.symbol}
-          </button>
-        ))}
-      </div>
-
-      {/* ---------- live price ---------- */}
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
-        <div className="row-between">
-          <div className="row" style={{ gap: 9 }}>
-            <CoinLogo coin={coin} />
-            <div>
-              <div style={{ fontWeight: 700 }}>{coin?.symbol}</div>
-              <div className="faint">{coin?.name}</div>
-            </div>
+      {!embedded && (
+        <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
+          <button className="icon-btn" onClick={() => navigate(-1)}>‹</button>
+          <div style={{ textAlign: 'center' }}>
+            <h1 className="h1" style={{ fontSize: 18 }}>{t('predict.title')}</h1>
+            <p className="faint">{t('predict.subtitle')}</p>
           </div>
-          <div style={{ textAlign: 'end' }}>
-            <div className="stat-mini">
-              <AnimatedNumber value={coin?.price ?? 0} format={(v) => `$${fmtPrice(v)}`} />
-            </div>
-            <div className={`mono ${(coin?.change24h ?? 0) >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
-              {fmtPct(coin?.change24h ?? 0)}
-            </div>
-          </div>
-        </div>
-        <div style={{ marginTop: 10 }}>
-          <Sparkline data={coin?.sparkline?.slice(-60) ?? []} up={(coin?.change24h ?? 0) >= 0} width={460} height={56} strokeWidth={2} />
-        </div>
-      </motion.section>
-
-      <div className="segmented">
-        {DURATIONS.map((d) => (
-          <button key={d.key} className={duration.key === d.key ? 'active' : ''} onClick={() => setDuration(d)} style={{ isolation: 'isolate' }}>
-            {duration.key === d.key && (
-              <SegIndicator id="dur-ind" />
-            )}
-            {d.key}
-          </button>
-        ))}
-      </div>
-
-      <div>
-        {/*
-          This used to read `game.stake`, borrowed from the arcade namespace.
-          When the arcade was deleted the key went with it and this label
-          silently became the raw string "game.stake" on screen — in a build
-          where this screen IS enabled, i.e. the website. Caught by the i18n
-          probe, which is exactly the class of breakage it exists for.
-        */}
-        <label className="field-label">{t('predict.stake')}</label>
-        <input type="number" value={stake} min="1" onChange={(e) => setStake(e.target.value)} />
-        <div className="row" style={{ gap: 6, marginTop: 8 }}>
-          {[10, 50, 100, 500].map((v) => (
-            <button key={v} className="tag" style={{ flex: 1, textAlign: 'center' }} onClick={() => setStake(String(v))}>
-              {v}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="card card-tight row-between">
-        <span className="faint">{t('predict.payout')}</span>
-        <span className="mono up">{PAYOUT_X}× → +{fmtNum(amt * PAYOUT_X - amt, 2)} NX</span>
-      </div>
-
-      <div className="row" style={{ gap: 10 }}>
-        <motion.button className="btn btn-success" whileTap={{ scale: 0.96 }} disabled={!canBet} onClick={() => place('up')}>
-          ▲ {t('predict.up')}
-        </motion.button>
-        <motion.button className="btn btn-danger" whileTap={{ scale: 0.96 }} disabled={!canBet} onClick={() => place('down')}>
-          ▼ {t('predict.down')}
-        </motion.button>
-      </div>
-
-      {/* ---------- open rounds ---------- */}
-      {open.length > 0 && (
-        <section>
-          <p className="section-label">{t('predict.openRounds')}</p>
-          <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-            <AnimatePresence>
-              {open.map((b) => {
-                const remain = Math.max(0, b.expiresAt - now);
-                const pct = 100 - (remain / (DURATIONS.find((d) => d.key === b.duration)?.ms ?? 60000)) * 100;
-                const live = priceMap[b.coinId] ?? b.openPrice;
-                const winning = b.dir === 'up' ? live > b.openPrice : live < b.openPrice;
-                return (
-                  <motion.div key={b.id} className="card card-tight" layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}>
-                    <div className="row-between">
-                      <span className={`pill ${b.dir === 'up' ? 'pill-up' : 'pill-down'}`}>
-                        {b.dir === 'up' ? '▲' : '▼'} {b.symbol}
-                      </span>
-                      <span className="mono" style={{ fontSize: 11.5 }}>{fmtNum(b.stake, 0)} NX</span>
-                      <span className={`mono ${winning ? 'up' : 'down'}`} style={{ fontSize: 11.5 }}>
-                        ${fmtPrice(live)}
-                      </span>
-                      <span className="mono faint">{Math.ceil(remain / 1000)}s</span>
-                    </div>
-                    <div className="progress" style={{ marginTop: 8 }}>
-                      <motion.div className="progress-fill" animate={{ width: `${pct}%` }} transition={{ duration: 0.9, ease: 'linear' }} />
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </motion.div>
-        </section>
+          <div style={{ width: 34 }} />
+        </motion.div>
       )}
 
-      {/* ---------- results ---------- */}
-      {settled.length > 0 && (
-        <section>
-          <p className="section-label">{t('predict.results')}</p>
-          <div className="card card-tight" style={{ marginTop: 8 }}>
-            {settled.map((b) => (
-              <div key={b.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-                <span className={`pill ${b.dir === 'up' ? 'pill-up' : 'pill-down'}`}>
-                  {b.dir === 'up' ? '▲' : '▼'} {b.symbol}
-                </span>
-                <span className="mono faint" style={{ fontSize: 11 }}>${fmtPrice(b.openPrice)} → ${fmtPrice(b.result?.closePrice)}</span>
-                <span className={`mono ${b.won ? 'up' : 'down'}`} style={{ fontSize: 11.5, fontWeight: 700 }}>
-                  {b.won ? `+${fmtNum(b.payout - b.stake, 2)}` : `-${fmtNum(b.stake, 2)}`}
-                </span>
+      <div className="lab-modern" style={{ marginTop: embedded ? 2 : 6 }}>
+        <InfoBox title={t('predict.riskTitle')} tone="danger" id="predict-risk" defaultOpen>
+          <p>{t('predict.riskNotice')}</p>
+        </InfoBox>
+
+        {/* ---------- live price hero ---------- */}
+        <motion.section
+          className="lab-hero"
+          variants={riseIn}
+          initial="hidden"
+          animate="show"
+          style={{ padding: 18 }}
+        >
+          <div className="lab-aurora" aria-hidden="true" />
+          <div className="row-between" style={{ position: 'relative' }}>
+            <div className="row" style={{ gap: 11 }}>
+              <CoinLogo coin={coin} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>{coin?.symbol ?? '—'}</div>
+                <div className="faint" style={{ fontSize: 12 }}>{coin?.name ?? ''}</div>
               </div>
+            </div>
+            <span className={`pill ${up ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 11 }}>
+              {fmtPct(coin?.change24h ?? 0, 2)}
+            </span>
+          </div>
+
+          <div className="lab-hero-price" style={{ marginTop: 14, position: 'relative' }}>
+            <AnimatedNumber value={coin?.price ?? 0} format={(v) => `$${fmtPrice(v)}`} />
+          </div>
+          <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>
+            {t('predict.livePrice')}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <Sparkline data={coin?.sparkline?.slice(-80) ?? []} up={up} width={470} height={58} strokeWidth={2} />
+          </div>
+
+          {/* ---------- asset strip ---------- */}
+          <div className="tag-scroll" style={{ marginTop: 14 }}>
+            {(coins ?? []).slice(0, 12).map((c) => (
+              <button
+                key={c.id}
+                className={`tag ${coinId === c.id ? 'active' : ''}`}
+                onClick={() => { haptic?.('select'); setCoinId(c.id); }}
+              >
+                {c.symbol}
+              </button>
             ))}
           </div>
-        </section>
-      )}
+        </motion.section>
+
+        {/* ---------- direction call ---------- */}
+        <motion.div
+          className="grid-2"
+          variants={riseIn}
+          initial="hidden"
+          animate="show"
+          style={{ gap: 10 }}
+        >
+          <motion.button
+            className="lab-dir-btn up"
+            whileTap={{ scale: 0.96 }}
+            disabled={!canBet}
+            onClick={() => place('up')}
+          >
+            <span className="lab-dir-glyph" aria-hidden="true">▲</span>
+            {t('predict.up')}
+            <span className="lab-dir-sub">×{PAYOUT_X}</span>
+          </motion.button>
+          <motion.button
+            className="lab-dir-btn down"
+            whileTap={{ scale: 0.96 }}
+            disabled={!canBet}
+            onClick={() => place('down')}
+          >
+            <span className="lab-dir-glyph" aria-hidden="true">▼</span>
+            {t('predict.down')}
+            <span className="lab-dir-sub">×{PAYOUT_X}</span>
+          </motion.button>
+        </motion.div>
+
+        {/* ---------- duration + stake ---------- */}
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <p className="section-label" style={{ marginBottom: 8 }}>{t('predict.roundLength')}</p>
+          <div className="segmented">
+            {DURATIONS.map((d) => (
+              <button
+                key={d.key}
+                className={duration.key === d.key ? 'active' : ''}
+                onClick={() => { haptic?.('select'); setDuration(d); }}
+                style={{ isolation: 'isolate' }}
+              >
+                {duration.key === d.key && <SegIndicator id="dur-ind" />}
+                {d.key}
+              </button>
+            ))}
+          </div>
+        </motion.section>
+
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <label className="field-label">{t('predict.stake')}</label>
+          <input type="number" value={stake} min="1" onChange={(e) => setStake(e.target.value)} />
+          <div className="row" style={{ gap: 6, marginTop: 8 }}>
+            {[10, 50, 100, 500].map((v) => (
+              <button key={v} className="tag" style={{ flex: 1, textAlign: 'center' }} onClick={() => setStake(String(v))}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* ---------- payout preview ---------- */}
+        <motion.div className="lab-card" variants={riseIn} initial="hidden" animate="show" style={{ padding: '13px 15px' }}>
+          <div className="row-between">
+            <span className="faint">{t('predict.payout')}</span>
+            <span className="mono up" style={{ fontWeight: 800 }}>
+              {PAYOUT_X}× → +{fmtNum(amt * PAYOUT_X - amt, 2)} NX
+            </span>
+          </div>
+          <div className="progress" style={{ marginTop: 9 }}>
+            <motion.div
+              className="progress-fill"
+              animate={{ width: `${balance > 0 ? Math.min(100, (amt / balance) * 100) : 0}%` }}
+              transition={{ duration: 0.4 }}
+            />
+          </div>
+          <div className="row-between" style={{ marginTop: 6 }}>
+            <span className="faint" style={{ fontSize: 10.5 }}>{t('trade.available')}</span>
+            <span className="mono" style={{ fontSize: 11 }}>{fmtNum(balance, 2)} NX</span>
+          </div>
+        </motion.div>
+
+        {/* ---------- open rounds ---------- */}
+        {open.length > 0 && (
+          <section>
+            <p className="section-label">{t('predict.openRounds')}</p>
+            <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+              <AnimatePresence>
+                {open.map((b) => {
+                  const remain = Math.max(0, b.expiresAt - now);
+                  const pct = 100 - (remain / (DURATIONS.find((d) => d.key === b.duration)?.ms ?? 60000)) * 100;
+                  const live = priceMap[b.coinId] ?? b.openPrice;
+                  const winning = b.dir === 'up' ? live > b.openPrice : live < b.openPrice;
+                  const mm = String(Math.floor(remain / 60000)).padStart(2, '0');
+                  const ss = String(Math.floor((remain % 60000) / 1000)).padStart(2, '0');
+                  return (
+                    <motion.div
+                      key={b.id}
+                      className="lab-round"
+                      layout
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                    >
+                      <div className="row-between">
+                        <span className="row" style={{ gap: 8 }}>
+                          <span className="lab-round-live" aria-hidden="true" />
+                          <span className={`pill ${b.dir === 'up' ? 'pill-up' : 'pill-down'}`}>
+                            {b.dir === 'up' ? '▲' : '▼'} {b.symbol}
+                          </span>
+                        </span>
+                        <span className="lab-count">{mm}:{ss}</span>
+                      </div>
+                      <div className="row-between" style={{ marginTop: 8 }}>
+                        <span className="mono" style={{ fontSize: 12 }}>{fmtNum(b.stake, 0)} NX</span>
+                        <span className={`mono ${winning ? 'up' : 'down'}`} style={{ fontSize: 12, fontWeight: 700 }}>
+                          ${fmtPrice(live)}
+                        </span>
+                      </div>
+                      <div className="progress" style={{ marginTop: 8 }}>
+                        <motion.div
+                          className="progress-fill"
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.9, ease: 'linear' }}
+                        />
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
+          </section>
+        )}
+
+        {/* ---------- results ---------- */}
+        {settled.length > 0 && (
+          <section>
+            <p className="section-label">{t('predict.results')}</p>
+            <div className="lab-card" style={{ marginTop: 8, padding: '4px 14px' }}>
+              {settled.map((b) => (
+                <div key={b.id} className="row-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                  <span className={`pill ${b.dir === 'up' ? 'pill-up' : 'pill-down'}`}>
+                    {b.dir === 'up' ? '▲' : '▼'} {b.symbol}
+                  </span>
+                  <span className="mono faint" style={{ fontSize: 11 }}>${fmtPrice(b.openPrice)} → ${fmtPrice(b.result?.closePrice)}</span>
+                  <span className={`mono ${b.won ? 'up' : 'down'}`} style={{ fontSize: 12, fontWeight: 800 }}>
+                    {b.won ? `+${fmtNum(b.payout - b.stake, 2)}` : `-${fmtNum(b.stake, 2)}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
     </PageTransition>
   );
 }

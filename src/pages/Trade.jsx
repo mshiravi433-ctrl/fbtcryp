@@ -13,6 +13,7 @@ import { useAppStore, valuePortfolio } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
+import '../styles/lab-modern.css';
 
 const FEE = 0.001; // 0.1% simulated taker fee
 const PERCENTS = [25, 50, 75, 100];
@@ -94,6 +95,8 @@ export default function Trade() {
     return q ? src.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)) : src;
   }, [coins, pickerQuery]);
 
+  const coinUp = (coin?.change24h ?? 0) >= 0;
+
   return (
     <PageTransition>
       <motion.div variants={riseIn} initial="hidden" animate="show">
@@ -102,7 +105,7 @@ export default function Trade() {
       </motion.div>
 
       {/* market-type switcher: spot (here), perpetuals, prediction */}
-      <div className="tag-scroll">
+      <div className="tag-scroll" style={{ marginTop: 8 }}>
         <button className="tag active">{t('trade.spot')}</button>
         <button className="tag" onClick={() => navigate('/perp')}>{t('nav.perp')}</button>
         <button className="tag" onClick={() => navigate('/predict')}>{t('nav.predict')}</button>
@@ -112,26 +115,27 @@ export default function Trade() {
       <p className="notice">{t('trade.paperNotice')}</p>
 
       {/* ---------- portfolio strip ---------- */}
-      <motion.section className="card card-tight" variants={riseIn} initial="hidden" animate="show">
-        <div className="row-between">
+      <motion.section className="lab-hero" variants={riseIn} initial="hidden" animate="show" style={{ padding: '16px 18px' }}>
+        <div className="lab-aurora" aria-hidden="true" />
+        <div className="row-between" style={{ position: 'relative' }}>
           <div>
-            <div className="faint">{t('trade.available')}</div>
-            <div className="stat-mini">
+            <div className="faint" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5 }}>{t('trade.available')}</div>
+            <div className="stat-mini" style={{ marginTop: 3 }}>
               <AnimatedNumber value={balance} format={(v) => `${fmtNum(v, 2)} NX`} />
             </div>
           </div>
           <div style={{ textAlign: 'end' }}>
-            <div className="faint">{t('trade.positionsValue')}</div>
-            <div className="stat-mini">{fmtNum(portfolio.value, 2)} NX</div>
+            <div className="faint" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5 }}>{t('trade.positionsValue')}</div>
+            <div className="stat-mini" style={{ marginTop: 3 }}>{fmtNum(portfolio.value, 2)} NX</div>
             <div className={`mono ${portfolio.pnl >= 0 ? 'up' : 'down'}`} style={{ fontSize: 10.5 }}>
-              {fmtPct(portfolio.pnlPct)}
+              {portfolio.pnl >= 0 ? '+' : ''}{fmtNum(portfolio.pnl, 2)} ({fmtPct(portfolio.pnlPct, 1)})
             </div>
           </div>
         </div>
       </motion.section>
 
       {/* ---------- order ticket ---------- */}
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="trade-ticket" variants={riseIn} initial="hidden" animate="show">
         <div className="segmented" style={{ marginBottom: 14 }}>
           {['buy', 'sell'].map((s) => (
             <button
@@ -164,17 +168,17 @@ export default function Trade() {
         <button
           className="coin-row"
           onClick={() => setPickerOpen(true)}
-          style={{ width: '100%', border: '1px solid var(--line)' }}
+          style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 16, background: 'rgba(255,255,255,0.04)' }}
         >
           <CoinLogo coin={coin} />
           <div className="coin-meta" style={{ textAlign: 'start' }}>
             <div className="coin-sym">{coin?.symbol ?? '—'}</div>
             <div className="coin-name">{coin?.name ?? ''}</div>
           </div>
-          <Sparkline data={coin?.sparkline?.slice(-40) ?? []} up={(coin?.change24h ?? 0) >= 0} width={54} height={24} />
+          <Sparkline data={coin?.sparkline?.slice(-40) ?? []} up={coinUp} width={54} height={24} />
           <div className="coin-right">
             <div className="mono" style={{ fontSize: 12.5 }}>${fmtPrice(price)}</div>
-            <div className={`mono ${(coin?.change24h ?? 0) >= 0 ? 'up' : 'down'}`} style={{ fontSize: 10.5 }}>
+            <div className={`mono ${coinUp ? 'up' : 'down'}`} style={{ fontSize: 10.5 }}>
               {fmtPct(coin?.change24h ?? 0, 1)}
             </div>
           </div>
@@ -202,23 +206,23 @@ export default function Trade() {
           ))}
         </div>
 
-        <div className="stack" style={{ gap: 6, marginTop: 14 }}>
-          <div className="row-between">
+        <div style={{ marginTop: 14 }}>
+          <div className="trade-summary-row">
             <span className="faint">{side === 'buy' ? t('trade.youReceive') : t('trade.youGet')}</span>
             <span className="mono" style={{ fontSize: 12.5 }}>
               {side === 'buy' ? `${fmtQty(qty)} ${coin?.symbol ?? ''}` : `${fmtNum(total, 2)} NX`}
             </span>
           </div>
-          <div className="row-between">
+          <div className="trade-summary-row">
             <span className="faint">{t('trade.fee')} (0.1%)</span>
             <span className="mono" style={{ fontSize: 12.5 }}>{fmtNum(fee, 2)} NX</span>
           </div>
-          <div className="row-between">
+          <div className="trade-summary-row">
             <span className="faint">{t('trade.total')}</span>
             <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>{fmtNum(total, 2)} NX</span>
           </div>
           {holding && (
-            <div className="row-between">
+            <div className="trade-summary-row">
               <span className="faint">{t('trade.yourPosition')}</span>
               <span className="mono" style={{ fontSize: 12 }}>
                 {fmtQty(holding.qty)} {coin?.symbol} @ ${fmtPrice(holding.avgPrice)}
@@ -228,8 +232,8 @@ export default function Trade() {
         </div>
 
         <button
-          className={`btn ${side === 'buy' ? 'btn-success' : 'btn-danger'}`}
-          style={{ marginTop: 14 }}
+          className={`trade-cta ${side === 'buy' ? 'buy' : 'sell'}`}
+          style={{ marginTop: 16 }}
           disabled={!canSubmit}
           onClick={() => {
             haptic?.('medium');
@@ -246,8 +250,14 @@ export default function Trade() {
           <p className="section-label">{t('trade.openPositions')}</p>
           <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
             {portfolio.rows.map((p) => (
-              <motion.div key={p.id} className="coin-row" variants={riseIn} onClick={() => { setCoinId(p.coinId); setSide('sell'); }}>
-                <div className="coin-logo">{p.symbol.slice(0, 3)}</div>
+              <motion.div
+                key={p.id}
+                className="coin-row lab-card"
+                variants={riseIn}
+                onClick={() => { setCoinId(p.coinId); setSide('sell'); }}
+                style={{ border: '1px solid var(--line)', borderRadius: 16 }}
+              >
+                <div className="coin-logo" style={{ background: 'linear-gradient(135deg,var(--rgb-2),var(--rgb-3))', color: '#fff' }}>{p.symbol.slice(0, 3)}</div>
                 <div className="coin-meta">
                   <div className="coin-sym">{p.symbol}</div>
                   <div className="coin-name mono">

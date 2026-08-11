@@ -167,14 +167,27 @@ export default function SolanaSwap({ embedded = false }) {
     if (!to) return;
     const asset = findAsset(to);
     if (asset) {
-      setToToken(BASE_TOKENS.find((tk) => tk.mint === asset.mint) ?? BASE_TOKENS[1]);
-      /* Buying an equity or an LST means paying with a stablecoin, not SOL. */
-      setFromToken(BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0]);
+      const target = BASE_TOKENS.find((tk) => tk.mint === asset.mint) ?? BASE_TOKENS[1];
+      const usdc = BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0];
+      /*
+       * `side=sell` (from a coin page's "Sell" button) flips the pair: the
+       * asset leaves the wallet and the stablecoin is received. Ignoring it
+       * opened a BUY order no matter which button was pressed.
+       */
+      if (searchParams.get('side') === 'sell') {
+        setFromToken(target);
+        setToToken(usdc);
+      } else {
+        /* Buying an equity or an LST means paying with a stablecoin, not SOL. */
+        setToToken(target);
+        setFromToken(usdc);
+      }
     }
-    /* Consume the param either way, so a refresh does not re-apply it and
-       fight the user's own selection. `replace` keeps it out of history. */
+    /* Consume the params either way, so a refresh does not re-apply them and
+       fight the user's own selection. `replace` keeps them out of history. */
     const next = new URLSearchParams(searchParams);
     next.delete('to');
+    next.delete('side');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -214,11 +227,21 @@ export default function SolanaSwap({ embedded = false }) {
 
     if (!isSolanaAddress(mint)) return;
 
+    const usdc = BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0];
+    /* A coin page's "Sell" button sends side=sell — honour it by flipping
+       the pair, or a sell tap opens a buy order (reported for SOL). */
+    const sell = searchParams.get('side') === 'sell';
+
     /* Already known — curated or previously imported. Just select it. */
     const curatedHit = BASE_TOKENS.find((tk) => tk.mint === mint);
     if (curatedHit) {
-      setToToken(curatedHit);
-      setFromToken(BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0]);
+      if (sell) {
+        setFromToken(curatedHit);
+        setToToken(usdc);
+      } else {
+        setToToken(curatedHit);
+        setFromToken(usdc);
+      }
       return;
     }
 
@@ -230,9 +253,14 @@ export default function SolanaSwap({ embedded = false }) {
       imported: true
     };
     setExtraTokens((prev) => (prev.some((tk) => tk.mint === mint) ? prev : [...prev, token]));
-    setToToken(token);
-    /* Paying with a stablecoin, not with SOL: the coin page sent a "buy". */
-    setFromToken(BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0]);
+    if (sell) {
+      setFromToken(token);
+      setToToken(usdc);
+    } else {
+      setToToken(token);
+      /* Paying with a stablecoin, not with SOL: the coin page sent a "buy". */
+      setFromToken(usdc);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
