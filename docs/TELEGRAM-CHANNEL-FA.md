@@ -168,7 +168,7 @@ BTC dominance: 54.31%
 
 Broad market softness with dominance holding steady.
 
-🔄 Swap on 8 networks — you keep your keys: https://www.lawpoetics.ir
+🔄 Swap on 10 networks — you keep your keys: https://fbtswap.ir
 
 Market data only. Not financial advice.
 ```

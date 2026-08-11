@@ -184,10 +184,10 @@ export async function directBrief({ global, top, lang }) {
 }
 
 const KB = `FBT Swap facts — answer only from these plus general crypto knowledge:
-- Non-custodial DEX on BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche.
+- Non-custodial DEX on ten supported swap networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana.
 - ${feePercentString()}% platform fee taken from the input token of every swap, on-chain, same transaction.
 - Network gas is separate and goes to validators, not FBT.
-- Swaps route via the KyberSwap aggregator across all DEXes on the chain.
+- Quotes use public aggregators on the selected network; Solana has its own routing screen.
 - Wallets: WalletConnect, browser wallets, or an in-app wallet with the seed AES-GCM encrypted on-device.
 - Lose your seed phrase and nobody, including FBT, can recover your funds.
 - Swap, Farm and P2P use real money. Points and rank are a usage score with no cash value and cannot be withdrawn.

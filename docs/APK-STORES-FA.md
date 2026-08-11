@@ -128,9 +128,9 @@ Uptodown).
 | App name | `FBT Swap` |
 | Category | `Finance` |
 | Package | `ir.fbt.swap` (خودکار پر می‌شود) |
-| Website | `https://www.lawpoetics.ir` |
+| Website | `https://fbtswap.ir` |
 | Email | `fbtswap@gmail.com` |
-| Privacy Policy | `https://www.lawpoetics.ir/#/legal/privacy` |
+| Privacy Policy | `https://fbtswap.ir/#/legal/privacy` |
 
 **۶.** توضیح کوتاه و کامل را از بخش «متن‌های آماده» پایین همین فایل کپی کن
 
@@ -168,7 +168,7 @@ Uptodown).
 | Name | `FBT Swap` |
 | Directory / Category | `Finance` یا `Tools` |
 | Package name | خودکار: `ir.fbt.swap` |
-| Official website | `https://www.lawpoetics.ir` |
+| Official website | `https://fbtswap.ir` |
 | PEGI | `18` |
 | Country Restriction | **دست نزن** — پیش‌فرض یعنی همهٔ دنیا. ✅ |
 | Nationality | Iran |
@@ -221,10 +221,10 @@ FBT Swap — صرافی غیرمتمرکز، نسخهٔ اندروید
 https://github.com/mshiravi433-ctrl/fbtcryp/releases/download/latest/app-release.apk
 
 یا بدون نصب، توی مرورگر:
-https://www.lawpoetics.ir
+https://fbtswap.ir
 
 • کلید خصوصی همیشه پیش خودت می‌ماند — ما هیچ‌وقت دارایی‌ات را نگه نمی‌داریم
-• سواپ روی ۷ شبکه: BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche
+• سواپ روی ۱۰ شبکه: BNB, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Solana
 • بدون ثبت‌نام، بدون ایمیل، بدون احراز هویت
 • کارمزد ۰٫۷٪ که قبل از امضا روی صفحه نشانت داده می‌شود
 
@@ -441,8 +441,8 @@ FBT Swap یک صرافی غیرمتمرکز و غیرحضانتی برای ان�
 
 چه کار می‌کند
 
-• سواپ توکن روی هفت شبکه: BNB Smart Chain، اتریوم، پالیگان، آربیتروم وان،
-  بیس، اپتیمیسم و آوالانچ.
+• سواپ توکن روی ده شبکه: BNB Smart Chain، اتریوم، پالیگان، آربیتروم وان،
+  بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا.
 • هزاران توکن از لیست‌های عمومی، با جستجو بر اساس نماد، نام یا آدرس قرارداد
   — و امکان افزودن هر قراردادی برای توکن‌هایی که تازه‌اند.
 • کیف پول اختیاری داخل اپ که عبارت بازیابی‌اش با AES-GCM روی خود دستگاه
@@ -505,11 +505,11 @@ FBT Swap دفتر سفارش خودش را ندارد و نقدینگی نگه �
 نام:              FBT Swap
 Package:          ir.fbt.swap
 دسته:             Finance
-وب‌سایت:          https://www.lawpoetics.ir
+وب‌سایت:          https://fbtswap.ir
 ایمیل:            fbtswap@gmail.com
-حریم خصوصی:       https://www.lawpoetics.ir/#/legal/privacy
-شرایط استفاده:    https://www.lawpoetics.ir/#/legal/terms
-سلب مسئولیت:      https://www.lawpoetics.ir/#/legal/disclaimer
+حریم خصوصی:       https://fbtswap.ir/#/legal/privacy
+شرایط استفاده:    https://fbtswap.ir/#/legal/terms
+سلب مسئولیت:      https://fbtswap.ir/#/legal/disclaimer
 X:                https://x.com/CompanyFbt
 لینکدین:          https://www.linkedin.com/in/mohammad-shiravi-a8891321b
 گیت‌هاب:          https://github.com/mshiravi433-ctrl/fbtcryp

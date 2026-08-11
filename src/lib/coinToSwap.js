@@ -13,7 +13,7 @@
  *
  * ─── WHY THIS NEEDS A MODULE AND NOT A ONE-LINE URL CHANGE ──────────────────
  * The market list is CoinGecko's — thousands of coins, keyed by ids like
- * `binancecoin`. The swap screen trades ERC-20 contracts on seven EVM chains,
+ * `binancecoin`. The swap screen trades ERC-20 contracts on nine EVM chains,
  * keyed by address. Most CoinGecko coins are not swappable here at all:
  *
  *   • some live on chains we do not support (Cardano, Tron, Ton)

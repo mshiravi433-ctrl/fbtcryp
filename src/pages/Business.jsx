@@ -23,7 +23,7 @@ const OFFERS = [
 ];
 
 const STATS = [
-  { value: '۷', label: 'شبکهٔ فعال', sub: 'BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche' },
+  { value: '۱۰', label: 'شبکهٔ فعال', sub: 'BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche · Linea · Sonic · Solana' },
   { value: '۰٫۱۰٪', label: 'کارمزد شفاف', sub: 'قبل از امضا نمایش داده می‌شود' },
   { value: '۲۴/۷', label: 'بازار باز', sub: 'بدون تعطیلی، بدون واسطه' },
 ];

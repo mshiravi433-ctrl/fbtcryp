@@ -93,7 +93,7 @@ const PAGES = [
     route: '/#/swap',
     title: 'Non-Custodial Crypto Swap — Keep Your Own Keys | FBT Swap',
     description:
-      'Swap tokens across eight networks without giving up your private keys. No account, no email, no identity check. You sign every trade from your own wallet.',
+      'Swap tokens across 10 supported networks without giving up your private keys. No account, no email, no identity check. You sign every trade from your own wallet.',
     h1: 'Swap crypto without giving up your keys',
     body: [
       'FBT Swap is a non-custodial exchange interface. You connect a wallet you already own, you swap, and your assets never leave your control. There is no account to create, no email to hand over and no identity check to pass.',
@@ -101,28 +101,24 @@ const PAGES = [
       'Because nobody here holds your keys, this also means what you would expect: we cannot reverse a transaction, freeze funds, or recover a lost recovery phrase. Nobody can.'
     ],
     facts: [
-      ['Networks', 'BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Solana'],
-      /*
-       * ─── THIS SAID A FLAT 0.70% AND THAT WAS NOT TRUE ─────────────────────
-       * The fee is 0.70% on the EVM chains, where KyberSwap's router takes it
-       * inside the same transaction. On Solana it is currently ZERO: Jupiter
-       * only pays an integrator fee into a referral account created on-chain,
-       * that account does not exist yet, and `/api/solana/status` reports
-       * `feeReady: false`.
-       *
-       * So this line was quoting a fee to search engines that Solana users are
-       * not charged, on a page that lists Solana as a supported network.
-       * Overstating a fee is the safer direction to be wrong in and it is
-       * still wrong — and the specific wrongness here, "the fee I was quoted
-       * is not the fee I paid", is what makes someone distrust every other
-       * number on an irreversible swap.
-       *
-       * When the referral account exists this line changes with it. Do not
-       * edit it back to a single figure before then.
-       */
-      ['Platform fee', '0.70% of the input amount, shown on screen before you sign, on EVM networks and on Solana'],
+      ['Networks', 'BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Solana'],
+      ['Platform fee', '0.70% of the input amount, shown on screen before you sign, on every supported network'],
       ['Custody', 'None. Your keys stay in your wallet'],
       ['Signup', 'Not required']
+    ],
+    faqs: [
+      {
+        q: 'Do I need an account or identity check to swap?',
+        a: 'No FBT Swap account is required for the on-chain swap interface. You connect a wallet you control and sign the transaction there. Your wallet or a third-party protocol can still show its own security checks.'
+      },
+      {
+        q: 'Does FBT Swap hold my crypto or recovery phrase?',
+        a: 'No. FBT Swap does not take deposits, hold a recovery phrase, or sign in place of a user. Assets remain in the connected wallet and each transaction requires the wallet holder’s approval.'
+      },
+      {
+        q: 'Which networks can I use?',
+        a: 'The supported networks are BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. Check the selected network carefully before sending or signing.'
+      }
     ]
   },
   {
@@ -131,18 +127,32 @@ const PAGES = [
     route: '/#/orders',
     title: 'Crypto Price Alerts and Recurring Buys | FBT Swap',
     description:
-      'Set a target price and get told when the market reaches it, or schedule recurring buys. Alerts reach your phone even when the app is closed.',
+      'Set a crypto price target, trailing stop or recurring-buy reminder without granting custody. You decide whether to sign every swap.',
     h1: 'Price alerts and recurring buys',
     body: [
-      'Set a target price on any supported pair and the app tells you when the market reaches it. The alert arrives on your phone even when the app is closed, and the swap is one tap away with the amounts already filled in.',
-      'Recurring buys work the same way: choose an amount and an interval, and you are reminded when each one is due. Spreading entries over time is what most people mean by dollar-cost averaging, and it removes the guessing about when the bottom is.',
+      'Set a target price on a supported pair and FBT Swap keeps the condition with your order. When notification delivery is enabled and available, a price-triggered alert can reach your device; otherwise the order remains visible when you next open the app.',
+      'Recurring buys work as reminders: choose an amount and an interval, then review and sign each swap yourself. Spreading entries over time is what most people mean by dollar-cost averaging, and it removes the pressure to choose one exact entry point.',
       'These are alerts, not automatic trades, and the difference is deliberate. Filling an order while you sleep requires somebody to hold your funds or an unlimited spending allowance over them. This app does neither, so nothing can move money without you signing for it. A limit order that silently does not fill would be worse than no feature at all, so the limitation is stated on the screen itself.'
     ],
     facts: [
-      ['Order types', 'Limit price, trailing stop, recurring buy'],
-      ['Alerts', 'Push notification, works with the app closed'],
+      ['Order types', 'Price target, trailing stop, take-profit/stop-loss, ladder and recurring-buy reminder'],
+      ['Alerts', 'Delivered when notifications are enabled and available; otherwise retained in the app'],
       ['Execution', 'You sign every swap — nothing is automatic'],
       ['Custody', 'None. No spending allowance is requested']
+    ],
+    faqs: [
+      {
+        q: 'Will FBT Swap trade automatically when my target is reached?',
+        a: 'No. It records and watches a condition, then asks you to review and sign the swap. The service does not hold funds or keep an allowance that could move them without your approval.'
+      },
+      {
+        q: 'Can a price alert reach me when the app is closed?',
+        a: 'A price-triggered alert can be delivered outside the app when notifications are enabled and the delivery service is available. Delivery depends on device settings and connectivity, so it is a reminder rather than a guaranteed execution service.'
+      },
+      {
+        q: 'What does recurring buy mean here?',
+        a: 'It is a scheduled reminder to review a planned purchase at your chosen interval. Each swap remains a separate transaction that you approve in your own wallet.'
+      }
     ]
   },
   {
@@ -163,6 +173,20 @@ const PAGES = [
       ['Drawdown', 'Worst peak-to-trough fall in the window'],
       ['Volume', 'Compared to this coin’s own median, not an absolute figure'],
       ['Forecasts', 'None. Every figure describes data that already happened']
+    ],
+    faqs: [
+      {
+        q: 'Does this chart analysis predict the next price?',
+        a: 'No. It summarizes measurements from past price and volume data. A support level that held before can still break, and no historical indicator guarantees a future result.'
+      },
+      {
+        q: 'What does a held-versus-broke level show?',
+        a: 'It counts how often price returned to a level in the selected history and whether it held or moved through it. It is context for research, not a trading instruction.'
+      },
+      {
+        q: 'Is this financial advice?',
+        a: 'No. Crypto assets are volatile and on-chain transactions are irreversible. Make your own decision and never trade money you cannot afford to lose.'
+      }
     ]
   },
 
@@ -208,7 +232,7 @@ const PAGES = [
     route: '/#/swap',
     title: 'صرافی غیرمتمرکز و سواپ ارز دیجیتال بدون احراز هویت | اف‌بی‌تی سواپ',
     description:
-      'سواپ ارز دیجیتال روی هشت شبکه، از کیف پول خودت. بدون ثبت‌نام، بدون احراز هویت و بدون اینکه دارایی‌ات دست کسی بیفتد. کلیدها پیش خودت می‌مانند.',
+      'سواپ ارز دیجیتال روی ۱۰ شبکه، از کیف پول خودت. بدون ثبت‌نام، بدون احراز هویت و بدون اینکه دارایی‌ات دست کسی بیفتد. کلیدها پیش خودت می‌مانند.',
     h1: 'سواپ ارز دیجیتال، بدون اینکه کلیدهایت را به کسی بدهی',
     body: [
       'اف‌بی‌تی سواپ یک رابط صرافی غیرمتمرکز است. کیف پولی را که خودت داری وصل می‌کنی، معامله می‌کنی، و دارایی‌ات هیچ‌وقت از کنترل تو خارج نمی‌شود. حسابی برای ساختن نیست، ایمیلی برای دادن نیست و احراز هویتی برای گذراندن نیست.',
@@ -217,16 +241,154 @@ const PAGES = [
       'برای استفاده از سواپ، کیف پول، نمودارها و هشدارهای قیمت به هیچ حسابی در هیچ‌جا نیاز نداری و هیچ محدودیت کشوری هم اعمال نمی‌شود — این‌ها روی خودِ بلاکچین اجرا می‌شوند. تنها بخشی که محدودیت دارد خرید با پول نقد است، چون آن یکی از طریق یک شریک پرداخت دارای مجوز انجام می‌شود و شبکه‌های کارت بین‌المللی از سال ۲۰۱۲ به سیستم بانکی ایران متصل نیستند. این را همان‌جا صریح نوشته‌ایم تا کسی وقتش را تلف نکند.'
     ],
     facts: [
-      ['شبکه‌ها', 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، سولانا'],
-      ['کارمزد پلتفرم', '۰٫۷۰٪ روی شبکه‌های EVM، پیش از امضا روی صفحه نمایش داده می‌شود. روی سواپ سولانا فعلاً کارمزد پلتفرم نداریم'],
+      ['شبکه‌ها', 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، سولانا'],
+      ['کارمزد پلتفرم', '۰٫۷۰٪ از مقدار ورودی، پیش از امضا روی صفحه نمایش داده می‌شود؛ روی همهٔ شبکه‌های پشتیبانی‌شده'],
       ['امانت‌داری', 'هیچ. کلیدها داخل کیف پول خودت می‌مانند'],
       ['ثبت‌نام', 'لازم نیست'],
-      ['احراز هویت', 'برای سواپ، کیف پول و هشدارها لازم نیست']
+      ['احراز هویت', 'برای رابط سواپ لازم نیست']
+    ],
+    faqs: [
+      {
+        q: 'آیا برای سواپ در اف‌بی‌تی سواپ احراز هویت لازم است؟',
+        a: 'برای استفاده از رابط سواپ روی زنجیره، حساب اف‌بی‌تی سواپ یا احراز هویت لازم نیست؛ کیف پول خودت را وصل می‌کنی و همان‌جا تراکنش را امضا می‌کنی. ممکن است خودِ کیف پول یا پروتکلِ ثالث بررسی امنیتی جداگانه داشته باشد.'
+      },
+      {
+        q: 'آیا اف‌بی‌تی سواپ دارایی یا عبارت بازیابی من را نگه می‌دارد؟',
+        a: 'نه. اف‌بی‌تی سواپ واریز نمی‌گیرد، عبارت بازیابی را نمی‌خواهد و به‌جای کاربر امضا نمی‌کند. دارایی داخل کیف پول متصل می‌ماند و هر تراکنش تأیید صاحب کیف پول را می‌خواهد.'
+      },
+      {
+        q: 'کدام شبکه‌ها پشتیبانی می‌شوند؟',
+        a: 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا پشتیبانی می‌شوند. قبل از ارسال یا امضا، شبکهٔ انتخاب‌شده را با دقت بررسی کن.'
+      }
     ],
     ctaLabel: 'باز کردن برنامه',
     glanceLabel: 'یک نگاه کلی',
     riskText:
       'ارزهای دیجیتال پرنوسان‌اند و تراکنش روی زنجیره برگشت‌ناپذیر است. ممکن است پول از دست بدهی، حتی همه‌اش را. هیچ‌چیز اینجا توصیه مالی نیست.'
+  },
+
+  /*
+   * Persian search intent pages. These are deliberately feature pages, not
+   * token-pair templates: each answers a distinct question a real visitor has
+   * and points to the screen that performs the described task.
+   */
+  {
+    slug: 'هشدار-قیمت-ارز-دیجیتال',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/orders',
+    title: 'هشدار قیمت ارز دیجیتال و خرید پله‌ای | اف‌بی‌تی سواپ',
+    description:
+      'برای قیمت هدف، حد ضرر متحرک یا خرید پله‌ای ارز دیجیتال یادآور بگذار. دارایی پیش خودت می‌ماند و هیچ سواپی بدون امضای تو انجام نمی‌شود.',
+    h1: 'هشدار قیمت ارز دیجیتال و خرید پله‌ای، بدون سپردن دارایی',
+    body: [
+      'اگر نمی‌خواهی تمام روز نمودار را نگاه کنی، برای یک جفت‌ارز قیمت هدف بگذار تا وقتی بازار به آن رسید، بتوانی دوباره بررسی‌اش کنی. اف‌بی‌تی سواپ قیمت هدف، حد ضرر متحرک، حد سود همراه با حد ضرر و فروش پله‌ای را به‌عنوان شرط نگه می‌دارد؛ نه به‌عنوان اجازه‌ای برای جابه‌جا کردن پول تو.',
+      'برای خرید پله‌ای هم مبلغ و فاصلهٔ زمانی را انتخاب می‌کنی و برنامه سرِ هر نوبت یادآور می‌شود. این یعنی فرصت بررسی دوباره پیش از هر خرید؛ خریدها روی یک حساب یا موجودیِ امانی جمع نمی‌شوند.',
+      'این تفاوت مهم است: هشدار با سفارش خودکار یکی نیست. برای معاملهٔ خودکار، یک سرویس باید دارایی تو را نگه دارد یا اجازهٔ برداشت از کیف پولت داشته باشد. اف‌بی‌تی سواپ هیچ‌کدام را نمی‌گیرد؛ وقتی شرط برقرار شد، خودت نرخ را می‌بینی و تراکنش را در کیف پول خودت امضا می‌کنی.',
+      'اگر اعلان‌ها را فعال کرده باشی و سرویس ارسال در دسترس باشد، هشدارِ قیمت می‌تواند بیرون از برنامه هم برسد. تنظیمات گوشی، اینترنت و سرویس اعلان روی رسیدن آن اثر می‌گذارند؛ پس هشدار جای تضمین انجام معامله نیست و شرط ثبت‌شده در برنامه هم باقی می‌ماند.'
+    ],
+    facts: [
+      ['نوع‌ها', 'قیمت هدف، حد ضرر متحرک، حد سود + حد ضرر، فروش پله‌ای و یادآور خرید پله‌ای'],
+      ['اجرا', 'هر سواپ با امضای خودت انجام می‌شود؛ هیچ‌چیز خودکار نیست'],
+      ['اعلان', 'با فعال‌بودن اعلان و در دسترس بودن سرویس ارسال می‌شود؛ در غیر این صورت داخل برنامه می‌ماند'],
+      ['امانت‌داری', 'هیچ. مجوز برداشت یا دارایی تو در اختیار سرویس نیست']
+    ],
+    faqs: [
+      {
+        q: 'آیا وقتی قیمت به هدف برسد اف‌بی‌تی سواپ خودش معامله می‌کند؟',
+        a: 'نه. برنامه شرط را نگه می‌دارد و وقتی برقرار شد از تو می‌خواهد سواپ را بررسی و امضا کنی. سرویس نه دارایی را نگه می‌دارد و نه مجوزی دارد که بدون تأیید تو آن را جابه‌جا کند.'
+      },
+      {
+        q: 'آیا هشدار قیمت وقتی برنامه بسته است هم می‌رسد؟',
+        a: 'اگر اعلان‌ها فعال باشند و سرویس ارسال و اینترنت در دسترس باشد، هشدارِ قیمت می‌تواند بیرون از برنامه هم برسد. دریافت اعلان به تنظیمات دستگاه و اتصال وابسته است؛ بنابراین یادآور است، نه تضمین اجرا.'
+      },
+      {
+        q: 'خرید پله‌ای در اینجا یعنی چه؟',
+        a: 'خرید پله‌ای یک یادآور زمان‌بندی‌شده برای بررسی خرید در فاصله‌های انتخابی توست. هر خرید یک تراکنش جداست که در کیف پول خودت تأیید می‌کنی.'
+      }
+    ],
+    ctaLabel: 'تنظیم هشدار و خرید پله‌ای',
+    glanceLabel: 'یک نگاه کلی',
+    riskText:
+      'هشدار، پیشنهاد خرید یا فروش نیست و رسیدن اعلان تضمین نمی‌شود. ارزهای دیجیتال پرنوسان‌اند و تراکنش روی زنجیره برگشت‌ناپذیر است؛ ممکن است همهٔ پولت را از دست بدهی.'
+  },
+  {
+    slug: 'تحلیل-تکنیکال-ارز-دیجیتال',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/signals',
+    title: 'تحلیل تکنیکال ارز دیجیتال | RSI، MACD و حمایت مقاومت | اف‌بی‌تی سواپ',
+    description:
+      'تاریخچهٔ قیمت ارز دیجیتال را با RSI، MACD، میانگین متحرک، نوسان، حمایت و مقاومت بخوان. دادهٔ گذشته است، نه پیش‌بینی قیمت.',
+    h1: 'تحلیل تکنیکال ارز دیجیتال؛ خواندن داده، نه وعدهٔ پیش‌بینی',
+    body: [
+      'تحلیل تکنیکال وقتی مفید است که بدانی چه می‌گوید و چه نمی‌گوید. در اف‌بی‌تی سواپ، RSI، MACD، باند بولینگر، میانگین‌های متحرک، نوسان و سطح‌های حمایت و مقاومت از تاریخچهٔ واقعی قیمت محاسبه می‌شوند تا بتوانی وضعیت فعلی نمودار را در کنار هم ببینی.',
+      'به‌جای اینکه یک عدد را «سیگنال قطعی» بدانی، می‌توانی ببینی اندیکاتورها چقدر با هم هم‌نظرند، قیمت چند بار به یک سطح برگشته و آن سطح چند بار نگه داشته یا شکسته شده است. حجم هم با میانهٔ همان دارایی مقایسه می‌شود، نه با یک عدد دل‌بخواهی برای همهٔ کوین‌ها.',
+      'هیچ‌کدام از این اندازه‌گیری‌ها آینده را تضمین نمی‌کنند. سطح حمایتی که چند بار دوام آورده ممکن است دفعهٔ بعد بشکند و بازارِ پرنوسان می‌تواند در چند دقیقه نتیجه را عوض کند. این صفحه برای تحقیق و فهم بهتر داده است، نه توصیهٔ مالی یا فرمان خرید و فروش.'
+    ],
+    facts: [
+      ['اندیکاتورها', 'RSI، MACD، باند بولینگر و میانگین‌های متحرک'],
+      ['سطح‌ها', 'تعداد برخوردها و سابقهٔ نگه‌داشتن یا شکستن قیمت'],
+      ['ریسک', 'بدترین افت از سقف تا کف در بازهٔ انتخاب‌شده'],
+      ['پیش‌بینی', 'ندارد؛ همهٔ عددها دربارهٔ داده‌ای هستند که قبلاً رخ داده است']
+    ],
+    faqs: [
+      {
+        q: 'آیا تحلیل تکنیکال این صفحه قیمت بعدی را پیش‌بینی می‌کند؟',
+        a: 'نه. این صفحه اندازه‌گیری‌هایی از قیمت و حجم گذشته را خلاصه می‌کند. هیچ اندیکاتور یا سطحی نتیجهٔ آینده را تضمین نمی‌کند.'
+      },
+      {
+        q: 'نگه‌داشتن یا شکستن یک سطح یعنی چه؟',
+        a: 'برنامه می‌شمارد قیمت در تاریخچهٔ انتخاب‌شده چند بار به یک سطح برگشته و آن سطح چند بار حفظ شده یا از آن عبور کرده است. این فقط زمینه‌ای برای تحقیق است، نه دستور معامله.'
+      },
+      {
+        q: 'آیا این محتوا توصیهٔ مالی است؟',
+        a: 'نه. ارزهای دیجیتال پرنوسان‌اند و تراکنش‌های روی زنجیره برگشت‌ناپذیرند. تصمیم و مسئولیت معامله با خود توست.'
+      }
+    ],
+    ctaLabel: 'باز کردن تحلیل بازار',
+    glanceLabel: 'یک نگاه کلی',
+    riskText:
+      'اندیکاتورهای تکنیکال دربارهٔ دادهٔ گذشته‌اند، نه تضمین آینده. این صفحه توصیهٔ مالی نیست و ممکن است در ارزهای دیجیتال همهٔ پولت را از دست بدهی.'
+  },
+  {
+    slug: 'کیف-پول-غیرامانی',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/wallet',
+    title: 'کیف پول غیرامانی ارز دیجیتال | کلید خصوصی در کنترل تو | اف‌بی‌تی سواپ',
+    description:
+      'کیف پول خودت را با WalletConnect وصل کن یا یک کیف پول داخلیِ رمزنگاری‌شده روی دستگاه بساز. کلید خصوصی به سرور اف‌بی‌تی سواپ فرستاده نمی‌شود.',
+    h1: 'کیف پول غیرامانی؛ کلید خصوصی و دارایی در کنترل تو',
+    body: [
+      'کیف پول غیرامانی یعنی کلید خصوصی یا عبارت بازیابی در اختیار خودت است، نه یک صرافی یا وب‌سایت. می‌توانی کیف پول موجودت را با WalletConnect یا مرورگرِ کیف پول متصل کنی، موجودی را ببینی و هر تراکنش را در همان کیف پول تأیید کنی.',
+      'برای شبکه‌های سازگار با EVM، برنامه امکان ساخت یا واردکردن یک کیف پول داخلیِ ۱۲ کلمه‌ای هم دارد. عبارت آن روی همان دستگاه و با رمز عبور رمزنگاری می‌شود و به سرور فرستاده نمی‌شود. با این حال، کیف پول داخلی داخل فضای مرورگر یا WebView است و به‌اندازهٔ کیف پول سخت‌افزاری یا یک کیف پول خارجیِ معتبر برای مبلغ مهم امن نیست.',
+      'عبارت بازیابی را فقط خودت می‌توانی نگه داری و بازیابی کنی. اگر آن را گم کنی، هیچ تیم پشتیبانی، صرافی یا اپلیکیشنی نمی‌تواند دارایی را برگرداند. اگر کسی در پیام، تماس یا فرم وب این عبارت یا رمز را خواست، کلاهبردار است؛ حتی اگر نام اف‌بی‌تی سواپ را نوشته باشد.'
+    ],
+    facts: [
+      ['روش اتصال', 'WalletConnect، کیف پول مرورگر و کیف پول داخلیِ EVM'],
+      ['کلید خصوصی', 'در کیف پول خارجی می‌ماند؛ کیف پول داخلی فقط به‌صورت رمزنگاری‌شده روی دستگاه ذخیره می‌شود'],
+      ['توصیهٔ امنیتی', 'برای مبلغ مهم از کیف پول خارجی معتبر یا سخت‌افزاری استفاده کن'],
+      ['بازیابی', 'عبارت بازیابی فقط نزد خودت است؛ گم‌شدن آن قابل جبران نیست']
+    ],
+    faqs: [
+      {
+        q: 'آیا اف‌بی‌تی سواپ عبارت بازیابی کیف پول خارجی من را می‌بیند؟',
+        a: 'نه. هنگام اتصال کیف پول خارجی، عبارت بازیابی و کلید خصوصی داخل همان کیف پول باقی می‌ماند. اف‌بی‌تی سواپ هرگز نباید عبارت بازیابی یا رمز کیف پول تو را در پیام، ایمیل یا فرم درخواست کند.'
+      },
+      {
+        q: 'کیف پول داخلی برای چه چیزی مناسب است؟',
+        a: 'کیف پول داخلی برای مبالغ کم و آشنایی با برنامه طراحی شده است؛ عبارت ۱۲ کلمه‌ای آن روی دستگاه با رمز عبور رمزنگاری می‌شود و به سرور فرستاده نمی‌شود. برای مبلغ مهم، کیف پول خارجی معتبر یا سخت‌افزاری انتخاب امن‌تری است.'
+      },
+      {
+        q: 'اگر عبارت بازیابی را گم کنم چه می‌شود؟',
+        a: 'راهی برای بازیابی آن از سمت اف‌بی‌تی سواپ وجود ندارد. عبارت را روی کاغذ و دور از اینترنت نگه دار و آن را با هیچ‌کس به اشتراک نگذار.'
+      }
+    ],
+    ctaLabel: 'باز کردن کیف پول',
+    glanceLabel: 'یک نگاه کلی',
+    riskText:
+      'عبارت بازیابی و کلید خصوصی را با هیچ‌کس به اشتراک نگذار. دارایی دیجیتال و تراکنش‌های روی زنجیره برگشت‌ناپذیرند و ممکن است همهٔ پولت را از دست بدهی.'
   }
 ];
 
@@ -238,7 +400,14 @@ const PAGES = [
  * are translations of each other, and it will then serve the wrong one to
  * half the audience.
  */
-const ALTERNATES = [['non-custodial-crypto-swap', '\u0635\u0631\u0627\u0641\u06cc-\u063a\u06cc\u0631\u0645\u062a\u0645\u0631\u06a9\u0632']];
+const ALTERNATES = [
+  ['non-custodial-crypto-swap', 'صرافی-غیرمتمرکز'],
+  ['crypto-price-alerts-and-dca', 'هشدار-قیمت-ارز-دیجیتال'],
+  ['crypto-market-history-analysis', 'تحلیل-تکنیکال-ارز-دیجیتال']
+];
+
+const SOCIAL_CARD = `${SITE}/social-card.png`;
+const SOCIAL_CARD_ALT = 'FBT Swap — Non-custodial crypto swap';
 
 /** Escape anything that goes into HTML text or an attribute. */
 const esc = (s) =>
@@ -247,6 +416,108 @@ const esc = (s) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+
+/** Escape a JSON-LD payload so a content edit can never close its script tag. */
+const jsonForScript = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
+
+function copyFor(lang) {
+  return lang === 'fa'
+    ? {
+        home: 'صفحهٔ اصلی',
+        breadcrumb: 'مسیر صفحه',
+        faq: 'پرسش‌های رایج',
+        eyebrow: 'شفاف، غیرامانی، در کنترل تو',
+        story: 'چیزی که باید بدانی',
+        details: 'دیدن جزئیات',
+        highlights: 'در یک نگاه',
+        risk: 'هشدار ریسک',
+        related: 'راهنماهای بیشتر',
+        faqHint: 'پاسخ‌های کوتاه و روشن، پیش از اینکه تصمیم بگیری.'
+      }
+    : {
+        home: 'Home',
+        breadcrumb: 'Breadcrumb',
+        faq: 'Frequently asked questions',
+        eyebrow: 'Transparent, non-custodial, yours',
+        story: 'What you should know',
+        details: 'See the details',
+        highlights: 'At a glance',
+        risk: 'Risk notice',
+        related: 'Explore more guides',
+        faqHint: 'Clear answers before you decide.'
+      };
+}
+
+/**
+ * The FAQ JSON-LD mirrors visible `<details>` content below. That matters:
+ * structured data is useful only when a visitor can read the same answer; a
+ * hidden keyword block would be spam, not documentation.
+ */
+function landingStructuredData(page, url) {
+  const ui = copyFor(page.lang);
+  const pageId = `${url}#webpage`;
+  const faqId = `${url}#faq`;
+  const organizationId = `${SITE}/#organization`;
+  const websiteId = `${SITE}/#website`;
+  const graph = [
+    {
+      '@type': 'Organization',
+      '@id': organizationId,
+      name: 'FBT Swap',
+      legalName: 'Fanous Bazaar Pishgam Co.',
+      url: `${SITE}/`,
+      email: 'fbtswap@gmail.com',
+      logo: { '@type': 'ImageObject', url: `${SITE}/icon-512.png`, width: 512, height: 512 }
+    },
+    {
+      '@type': 'WebSite',
+      '@id': websiteId,
+      url: `${SITE}/`,
+      name: 'FBT Swap',
+      inLanguage: ['fa', 'en'],
+      publisher: { '@id': organizationId }
+    },
+    {
+      '@type': 'WebPage',
+      '@id': pageId,
+      url,
+      name: page.title,
+      description: page.description,
+      inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
+      isPartOf: { '@id': websiteId },
+      publisher: { '@id': organizationId },
+      primaryImageOfPage: {
+        '@type': 'ImageObject',
+        url: SOCIAL_CARD,
+        width: 1024,
+        height: 500,
+        caption: SOCIAL_CARD_ALT
+      },
+      ...(page.faqs?.length ? { mainEntity: { '@id': faqId } } : {})
+    },
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: ui.home, item: `${SITE}/` },
+        { '@type': 'ListItem', position: 2, name: page.h1, item: url }
+      ]
+    }
+  ];
+
+  if (page.faqs?.length) {
+    graph.push({
+      '@type': 'FAQPage',
+      '@id': faqId,
+      mainEntity: page.faqs.map(({ q, a }) => ({
+        '@type': 'Question',
+        name: q,
+        acceptedAnswer: { '@type': 'Answer', text: a }
+      }))
+    });
+  }
+
+  return jsonForScript({ '@context': 'https://schema.org', '@graph': graph });
+}
 
 function render(page) {
   /*
@@ -271,23 +542,71 @@ function render(page) {
    * at every other one INCLUDING itself. A one-way link is silently dropped,
    * which is the usual reason people conclude "hreflang does not work".
    *
-   * Only same-topic pages are paired. The Persian page and the English swap
-   * page are the same subject in two languages, so they are alternates. The
-   * alerts and history pages have no Persian counterpart and are therefore
-   * NOT annotated — claiming an alternate that does not exist is worse than
-   * claiming none.
+   * Only same-topic pages are paired. The Persian swap, alert and analysis
+   * pages each have an English counterpart. The wallet page is intentionally
+   * Persian-only because it has no equivalent English long-form page yet —
+   * claiming an alternate that does not exist is worse than claiming none.
    */
   const altGroup = ALTERNATES.find((g) => g.includes(page.slug));
   const hreflang = altGroup
-    ? altGroup
-        .map((slug) => {
-          const other = PAGES.find((x) => x.slug === slug);
-          return `<link rel="alternate" hreflang="${other.lang || 'en'}" href="${esc(
-            `${SITE}/${encodeURIComponent(slug)}`
-          )}">`;
-        })
-        .join('\n')
+    ? (() => {
+        const pages = altGroup.map((slug) => PAGES.find((x) => x.slug === slug));
+        const defaultPage = pages.find((p) => p.lang === 'en') ?? pages[0];
+        return [
+          ...pages.map(
+            (other) =>
+              `<link rel="alternate" hreflang="${other.lang || 'en'}" href="${esc(
+                `${SITE}/${encodeURIComponent(other.slug)}`
+              )}">`
+          ),
+          `<link rel="alternate" hreflang="x-default" href="${esc(
+            `${SITE}/${encodeURIComponent(defaultPage.slug)}`
+          )}">`
+        ].join('\n');
+      })()
     : '';
+  const ui = copyFor(lang);
+  const factCards = page.facts
+    .map(
+      ([label, value], index) => `<article class="fact-card" style="--item:${index}">
+        <span class="fact-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
+        <h3>${esc(label)}</h3>
+        <p>${esc(value)}</p>
+      </article>`
+    )
+    .join('\n      ');
+  const highlights = page.facts
+    .slice(0, 3)
+    .map(
+      ([label, value]) => `<div class="highlight">
+        <span>${esc(label)}</span>
+        <strong>${esc(value)}</strong>
+      </div>`
+    )
+    .join('\n      ');
+  const siblingLinks = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
+    .map((p) => `<a href="/${encodeURIComponent(p.slug)}">${esc(p.h1)} <span aria-hidden="true">↗</span></a>`)
+    .join('\n        ');
+  const faqMarkup = page.faqs?.length
+    ? `<section class="faq-panel panel reveal" aria-labelledby="faq-heading" style="--delay:260ms">
+      <div class="section-heading">
+        <p class="section-kicker">FAQ</p>
+        <h2 id="faq-heading">${esc(ui.faq)}</h2>
+        <p>${esc(ui.faqHint)}</p>
+      </div>
+      <div class="faq-list">
+        ${page.faqs
+          .map(
+            ({ q, a }) => `<details>
+          <summary><span>${esc(q)}</span><span class="faq-plus" aria-hidden="true">+</span></summary>
+          <p>${esc(a)}</p>
+        </details>`
+          )
+          .join('\n        ')}
+      </div>
+    </section>`
+    : '';
+  const structuredData = landingStructuredData(page, url);
 
   /*
    * The redirect is a <link rel="canonical"> plus a normal link, NOT a
@@ -314,15 +633,24 @@ ${hreflang}
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="FBT Swap">
+<meta property="og:locale" content="${lang === 'fa' ? 'fa_IR' : 'en_US'}">
+<meta property="og:locale:alternate" content="${lang === 'fa' ? 'en_US' : 'fa_IR'}">
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${esc(url)}">
-<meta property="og:image" content="${esc(SITE)}/icon-512.png">
+<meta property="og:image" content="${esc(SOCIAL_CARD)}">
+<meta property="og:image:secure_url" content="${esc(SOCIAL_CARD)}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1024">
+<meta property="og:image:height" content="500">
+<meta property="og:image:alt" content="${esc(SOCIAL_CARD_ALT)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@CompanyFbt">
 <meta name="twitter:title" content="${esc(page.title)}">
 <meta name="twitter:description" content="${esc(page.description)}">
-<meta name="twitter:image" content="${esc(SITE)}/icon-512.png">
+<meta name="twitter:image" content="${esc(SOCIAL_CARD)}">
+<meta name="twitter:image:alt" content="${esc(SOCIAL_CARD_ALT)}">
+<script type="application/ld+json">${structuredData}</script>
 
 ${
   dir === 'rtl'
@@ -331,98 +659,443 @@ ${
     : ''
 }
 <style>
-  /* Inlined, because a landing page that waits on a stylesheet is a landing
-     page people leave. It is small enough that a second request would cost
-     more than the bytes. */
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --ink: #edf2ff;
+    --muted: #aab5cf;
+    --quiet: #75819f;
+    --line: rgba(174, 191, 234, .16);
+    --glass: rgba(13, 17, 31, .72);
+    --glass-strong: rgba(13, 17, 31, .9);
+    --cyan: #4eeaff;
+    --violet: #9476ff;
+    --pink: #ff68ca;
+    --lime: #63f5bb;
+  }
   * { box-sizing: border-box; }
+  html { min-height: 100%; background: #04050b; scroll-behavior: smooth; }
   body {
+    min-height: 100svh;
     margin: 0;
-    background: #06070c;
-    color: #e8ecf6;
-    /*
-     * The Persian page needs Vazirmatn, which the app already self-hosts.
-     * Falling back to system-ui renders Persian in whatever the device has —
-     * on many Android builds that is Noto Naskh, whose line height is wrong
-     * enough that the RTL paragraphs overlap. Named FIRST so it wins, and
-     * the Latin stack stays behind it so the English pages are unaffected.
-     *
-     * No @font-face here on purpose: the font is preloaded below only when
-     * the page is actually Persian, so English visitors do not download a
-     * 70 KB Arabic-script font they will never render a glyph from.
-     */
+    overflow-x: hidden;
+    background:
+      radial-gradient(900px 520px at 12% -8%, rgba(80, 63, 191, .20), transparent 62%),
+      radial-gradient(760px 500px at 96% 13%, rgba(0, 198, 255, .13), transparent 63%),
+      #04050b;
+    color: var(--ink);
     font: 16px/${dir === 'rtl' ? '1.95' : '1.75'} ${
       dir === 'rtl' ? "'Vazirmatn', " : ''
     }system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    padding: 32px 20px 64px;
   }
-  main { max-width: 680px; margin: 0 auto; }
-  a { color: #00e5ff; }
-  h1 { font-size: clamp(26px, 6vw, 38px); line-height: 1.2; margin: 0 0 18px; letter-spacing: -0.02em; }
-  h2 { font-size: 17px; margin: 34px 0 10px; }
-  p { color: #b9c2d8; margin: 0 0 16px; }
-  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; font-weight: 700; }
-  .brand img { width: 30px; height: 30px; border-radius: 9px; }
-  .cta {
-    display: inline-block;
-    margin: 10px 0 8px;
-    padding: 14px 26px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #00e5ff, #7c4dff);
-    color: #05060b;
-    font-weight: 700;
+  a { color: inherit; }
+  .skip-link {
+    position: fixed;
+    z-index: 20;
+    inset-block-start: 10px;
+    inset-inline-start: 10px;
+    transform: translateY(-180%);
+    padding: 9px 14px;
+    border-radius: 10px;
+    color: #041018;
+    background: var(--cyan);
+    font-weight: 800;
+    text-decoration: none;
+    transition: transform .18s ease;
+  }
+  .skip-link:focus { transform: translateY(0); }
+  .ambient { position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+  .ambient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(4, 5, 11, .05), rgba(4, 5, 11, .92) 82%, #04050b);
+  }
+  .ambient-grid {
+    position: absolute;
+    inset: -35%;
+    opacity: .42;
+    background-image:
+      linear-gradient(rgba(113, 127, 180, .11) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(113, 127, 180, .11) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(ellipse 68% 48% at 50% 26%, #000, transparent 76%);
+    transform: perspective(500px) rotateX(62deg) translateY(-10%);
+    animation: grid-drift 22s linear infinite;
+  }
+  .orb {
+    position: absolute;
+    width: clamp(260px, 35vw, 570px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    filter: blur(24px);
+    opacity: .34;
+    mix-blend-mode: screen;
+  }
+  .orb-one {
+    inset: -17% auto auto -13%;
+    background: radial-gradient(circle at 58% 52%, #8b5cff, transparent 66%);
+    animation: orb-one 18s ease-in-out infinite alternate;
+  }
+  .orb-two {
+    inset: 12% -14% auto auto;
+    background: radial-gradient(circle at 42% 42%, #00d9ff, transparent 64%);
+    animation: orb-two 21s ease-in-out infinite alternate;
+  }
+  .orb-three {
+    inset: auto 18% -26% auto;
+    width: clamp(220px, 28vw, 470px);
+    background: radial-gradient(circle at 50% 50%, #e851c6, transparent 66%);
+    animation: orb-three 16s ease-in-out infinite alternate;
+  }
+  .landing-page {
+    position: relative;
+    z-index: 1;
+    width: min(100% - 32px, 1060px);
+    margin: 0 auto;
+    padding: clamp(22px, 5vw, 58px) 0 72px;
+  }
+  .hero-panel,
+  .panel,
+  .risk-panel,
+  .related-panel,
+  footer {
+    border: 1px solid var(--line);
+    background: linear-gradient(140deg, rgba(20, 26, 47, .86), rgba(9, 12, 24, .70));
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .045);
+    backdrop-filter: blur(16px);
+  }
+  .hero-panel {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    padding: clamp(24px, 5vw, 54px);
+    border-radius: clamp(24px, 4vw, 38px);
+  }
+  .hero-panel::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: -55% -14% auto auto;
+    width: min(680px, 72vw);
+    aspect-ratio: 1;
+    border: 1px solid rgba(78, 234, 255, .22);
+    border-radius: 50%;
+    box-shadow: 0 0 0 48px rgba(133, 104, 255, .045), 0 0 0 96px rgba(78, 234, 255, .025);
+    animation: halo-spin 32s linear infinite;
+  }
+  .hero-panel::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    opacity: .7;
+    background: linear-gradient(110deg, transparent 24%, rgba(111, 237, 255, .08) 45%, transparent 61%);
+    transform: translateX(-120%);
+    animation: sheen 8s ease-in-out infinite;
+  }
+  .crumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 clamp(30px, 5vw, 50px);
+    color: var(--quiet);
+    font-size: 12px;
+  }
+  .crumb a { color: var(--muted); text-underline-offset: 4px; }
+  .crumb a:hover { color: var(--cyan); }
+  .crumb span[aria-current] { max-width: min(600px, 68vw); overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+  .brand-row { display: flex; align-items: center; gap: 12px; }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: .015em;
     text-decoration: none;
   }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; }
-  th, td { text-align: start; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.09); font-size: 14.5px; vertical-align: top; }
-  th { color: #8e98b3; font-weight: 600; width: 38%; }
-  footer { margin-top: 40px; font-size: 13px; color: #7a839c; }
-  footer a { color: #8e98b3; }
-  .risk { font-size: 13px; color: #8e98b3; border-inline-start: 2px solid #ffb300; padding-inline-start: 12px; margin-top: 26px; }
+  .brand-mark {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid rgba(119, 241, 255, .34);
+    border-radius: 13px;
+    background: linear-gradient(145deg, rgba(78, 234, 255, .24), rgba(148, 118, 255, .24));
+    box-shadow: 0 9px 28px rgba(23, 209, 255, .14);
+  }
+  .brand-mark img { width: 28px; height: 28px; border-radius: 9px; }
+  .hero-copy { max-width: 800px; margin-top: clamp(30px, 5vw, 58px); }
+  .eyebrow,
+  .section-kicker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 13px;
+    color: var(--cyan);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+  }
+  .eyebrow::before {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--lime);
+    box-shadow: 0 0 0 5px rgba(99, 245, 187, .12), 0 0 18px var(--lime);
+    content: '';
+    animation: pulse-dot 2.4s ease-in-out infinite;
+  }
+  h1,
+  h2,
+  h3,
+  p { margin-top: 0; }
+  h1 {
+    max-width: 900px;
+    margin-bottom: 19px;
+    color: #f5f7ff;
+    font-size: clamp(32px, 6vw, 62px);
+    font-weight: 850;
+    letter-spacing: -.045em;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+  .lede {
+    max-width: 720px;
+    margin-bottom: 0;
+    color: #c3cbe0;
+    font-size: clamp(16px, 2.1vw, 19px);
+    line-height: 1.85;
+    text-wrap: pretty;
+  }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 31px; }
+  .cta,
+  .soft-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    border-radius: 15px;
+    font-weight: 800;
+    text-decoration: none;
+    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+  }
+  .cta {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    gap: 12px;
+    padding: 13px 20px;
+    color: #041018;
+    background: linear-gradient(122deg, var(--cyan), #a8f7ff 42%, var(--violet));
+    box-shadow: 0 14px 34px rgba(51, 201, 255, .22);
+  }
+  .cta::before {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 22%, rgba(255, 255, 255, .72) 48%, transparent 72%);
+    content: '';
+    transform: translateX(-130%);
+    transition: transform .55s ease;
+  }
+  .cta:hover { box-shadow: 0 18px 44px rgba(51, 201, 255, .35); transform: translateY(-2px); }
+  .cta:hover::before { transform: translateX(130%); }
+  .cta-arrow { font-size: 18px; line-height: 1; transition: transform .22s ease; }
+  .cta:hover .cta-arrow { transform: translateX(4px); }
+  [dir="rtl"] .cta:hover .cta-arrow { transform: translateX(-4px); }
+  .soft-cta {
+    gap: 9px;
+    padding: 13px 18px;
+    border: 1px solid rgba(169, 185, 228, .22);
+    color: var(--muted);
+    background: rgba(255, 255, 255, .025);
+  }
+  .soft-cta:hover { border-color: rgba(78, 234, 255, .6); color: var(--ink); transform: translateY(-2px); }
+  .highlight-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: clamp(36px, 6vw, 62px);
+  }
+  .highlight {
+    min-width: 0;
+    padding: 15px;
+    border: 1px solid rgba(163, 181, 227, .13);
+    border-radius: 16px;
+    background: rgba(4, 7, 17, .34);
+  }
+  .highlight span { display: block; margin-bottom: 5px; color: var(--quiet); font-size: 11px; font-weight: 750; }
+  .highlight strong { display: -webkit-box; overflow: hidden; color: #e4e9f7; font-size: 12px; font-weight: 650; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .panel,
+  .risk-panel,
+  .related-panel { margin-top: 18px; border-radius: 25px; }
+  .story-card { padding: clamp(24px, 4vw, 40px); }
+  .section-heading { max-width: 710px; }
+  .section-heading h2 { margin-bottom: 9px; color: #eff3ff; font-size: clamp(23px, 3vw, 31px); letter-spacing: -.025em; line-height: 1.25; }
+  .section-heading > p:last-child { margin-bottom: 0; color: var(--quiet); font-size: 14px; }
+  .story-copy { max-width: 770px; margin-top: 25px; }
+  .story-copy p { margin-bottom: 17px; color: #bdc6dc; font-size: 15.5px; line-height: 1.95; }
+  .story-copy p:last-child { margin-bottom: 0; }
+  .facts-panel { padding: clamp(24px, 4vw, 40px); }
+  .facts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+  .fact-card {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    padding: 21px 20px 19px;
+    border: 1px solid rgba(164, 182, 229, .13);
+    border-radius: 19px;
+    background: linear-gradient(145deg, rgba(32, 40, 71, .45), rgba(9, 13, 27, .42));
+    transition: transform .24s ease, border-color .24s ease, background .24s ease;
+  }
+  .fact-card::after { position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: linear-gradient(var(--cyan), var(--violet)); content: ''; opacity: .72; }
+  .fact-card:hover { border-color: rgba(78, 234, 255, .42); background: linear-gradient(145deg, rgba(38, 51, 91, .64), rgba(9, 13, 27, .62)); transform: translateY(-4px); }
+  .fact-index { display: block; margin-bottom: 17px; color: rgba(148, 118, 255, .88); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+  .fact-card h3 { margin-bottom: 7px; color: #edf1ff; font-size: 15px; }
+  .fact-card p { margin-bottom: 0; color: var(--muted); font-size: 13.5px; line-height: 1.75; }
+  .faq-panel { padding: clamp(24px, 4vw, 40px); }
+  .faq-list { margin-top: 24px; border-top: 1px solid var(--line); }
+  .faq-list details { border-bottom: 1px solid var(--line); }
+  .faq-list summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; color: #e8edf9; cursor: pointer; font-size: 15px; font-weight: 730; line-height: 1.55; list-style: none; }
+  .faq-list summary::-webkit-details-marker { display: none; }
+  .faq-plus { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; border: 1px solid rgba(135, 150, 195, .26); border-radius: 9px; color: var(--cyan); font-size: 18px; font-weight: 400; transition: transform .2s ease, background .2s ease; }
+  details[open] .faq-plus { background: rgba(78, 234, 255, .11); transform: rotate(45deg); }
+  .faq-list details p { max-width: 750px; margin: -2px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.85; }
+  .risk-panel { display: flex; gap: 16px; padding: 20px 22px; border-color: rgba(255, 183, 70, .26); background: linear-gradient(135deg, rgba(77, 48, 18, .45), rgba(18, 15, 21, .65)); }
+  .risk-mark { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border: 1px solid rgba(255, 183, 70, .43); border-radius: 10px; color: #ffbf5d; font-family: ui-monospace, monospace; font-weight: 900; }
+  .risk-panel h2 { margin-bottom: 5px; color: #ffe4b5; font-size: 14px; }
+  .risk-panel p { margin-bottom: 0; color: #d1c3ac; font-size: 13px; line-height: 1.8; }
+  .related-panel { padding: clamp(24px, 4vw, 38px); }
+  .related-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 22px; }
+  .related-links a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 14px 15px; border: 1px solid rgba(163, 181, 227, .13); border-radius: 15px; color: #c5cee2; font-size: 13px; font-weight: 650; line-height: 1.55; text-decoration: none; transition: border-color .2s ease, color .2s ease, transform .2s ease; }
+  .related-links a:hover { border-color: rgba(78, 234, 255, .48); color: var(--cyan); transform: translateY(-2px); }
+  .related-links a span { color: var(--violet); font-size: 16px; }
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 19px 21px; border-radius: 19px; color: var(--quiet); font-size: 12px; }
+  footer p { margin: 0; }
+  footer a { color: var(--muted); text-underline-offset: 4px; }
+  footer a:hover { color: var(--cyan); }
+  .reveal { animation: rise-in .75s cubic-bezier(.16, 1, .3, 1) both; animation-delay: var(--delay, 0ms); }
+  @keyframes rise-in { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes grid-drift { from { transform: perspective(500px) rotateX(62deg) translate3d(0, -10%, 0); } to { transform: perspective(500px) rotateX(62deg) translate3d(54px, -10%, 0); } }
+  @keyframes orb-one { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(11vw, 9vh, 0) scale(1.16); } }
+  @keyframes orb-two { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-12vw, 12vh, 0) scale(1.13); } }
+  @keyframes orb-three { from { transform: translate3d(0, 0, 0) scale(.92); } to { transform: translate3d(-8vw, -9vh, 0) scale(1.14); } }
+  @keyframes halo-spin { to { transform: rotate(360deg); } }
+  @keyframes sheen { 0%, 35% { transform: translateX(-130%); } 62%, 100% { transform: translateX(130%); } }
+  @keyframes pulse-dot { 0%, 100% { box-shadow: 0 0 0 5px rgba(99, 245, 187, .12), 0 0 13px var(--lime); } 50% { box-shadow: 0 0 0 8px rgba(99, 245, 187, .04), 0 0 22px var(--lime); } }
+  @media (max-width: 680px) {
+    .landing-page { width: min(100% - 22px, 1060px); padding-top: 14px; }
+    .hero-panel { padding: 24px 20px 21px; border-radius: 24px; }
+    .crumb { margin-bottom: 31px; }
+    .crumb span[aria-current] { max-width: 56vw; }
+    h1 { font-size: clamp(31px, 10.2vw, 47px); }
+    .lede { font-size: 15.5px; }
+    .hero-actions { display: grid; grid-template-columns: 1fr; }
+    .cta, .soft-cta { width: 100%; }
+    .highlight-grid, .facts-grid, .related-links { grid-template-columns: 1fr; }
+    .highlight { padding: 13px 14px; }
+    .highlight strong { -webkit-line-clamp: 3; }
+    .panel, .risk-panel, .related-panel { border-radius: 21px; }
+    .fact-card { padding: 18px 17px; }
+    .risk-panel { padding: 18px; }
+    footer { display: block; line-height: 1.9; }
+    footer p + p { margin-top: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  }
 </style>
 </head>
-<body>
-<main>
-  <div class="brand">
-    <img src="/icon-192.png" alt="" width="30" height="30">
-    <span>FBT Swap</span>
-  </div>
+<body class="landing-body">
+<a class="skip-link" href="#content">${esc(ui.details)}</a>
+<div class="ambient" aria-hidden="true">
+  <span class="ambient-grid"></span>
+  <span class="orb orb-one"></span>
+  <span class="orb orb-two"></span>
+  <span class="orb orb-three"></span>
+</div>
+<main id="content" class="landing-page" tabindex="-1">
+  <header class="hero-panel reveal" style="--delay:40ms">
+    <nav class="crumb" aria-label="${esc(ui.breadcrumb)}">
+      <a href="${esc(SITE)}/">${esc(ui.home)}</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">${esc(page.h1)}</span>
+    </nav>
 
-  <h1>${esc(page.h1)}</h1>
+    <div class="brand-row">
+      <a class="brand" href="${esc(SITE)}/" aria-label="FBT Swap">
+        <span class="brand-mark"><img src="/icon-192.png" alt="" width="28" height="28"></span>
+        <span>FBT Swap</span>
+      </a>
+    </div>
 
-  ${page.body.map((p) => `<p>${esc(p)}</p>`).join('\n  ')}
+    <div class="hero-copy">
+      <p class="eyebrow">${esc(ui.eyebrow)}</p>
+      <h1>${esc(page.h1)}</h1>
+      <p class="lede">${esc(page.description)}</p>
+    </div>
 
-  <a class="cta" href="${esc(appUrl)}">${esc(page.ctaLabel || 'Open the app')}</a>
+    <div class="hero-actions">
+      <a class="cta" href="${esc(appUrl)}"><span>${esc(page.ctaLabel || 'Open the app')}</span><span class="cta-arrow" aria-hidden="true">→</span></a>
+      <a class="soft-cta" href="#facts"><span>${esc(ui.details)}</span><span aria-hidden="true">↓</span></a>
+    </div>
 
-  <h2>${esc(page.glanceLabel || 'At a glance')}</h2>
-  <table>
-    <tbody>
-      ${page.facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('\n      ')}
-    </tbody>
-  </table>
+    <div class="highlight-grid" aria-label="${esc(ui.highlights)}">
+      ${highlights}
+    </div>
+  </header>
 
-  <p class="risk">${esc(
-    page.riskText ||
-      'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
-  )}</p>
+  <section class="story-card panel reveal" aria-labelledby="story-heading" style="--delay:120ms">
+    <div class="section-heading">
+      <p class="section-kicker">FBT Swap</p>
+      <h2 id="story-heading">${esc(ui.story)}</h2>
+    </div>
+    <div class="story-copy">
+      ${page.body.map((paragraph) => `<p>${esc(paragraph)}</p>`).join('\n      ')}
+    </div>
+  </section>
 
-  <footer>
-    <p>
-      ${/*
-         Same-language siblings only. A Persian page footer full of English
-         links sends the reader somewhere they cannot read, and gives the
-         crawler a mixed-language cluster that muddies which page belongs to
-         which audience.
-      */ ''}${PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
-        .map((p) => `<a href="/${encodeURIComponent(p.slug)}">${esc(p.h1)}</a>`)
-        .join(' &middot; ')}
-    </p>
-    <p>
-      <a href="${esc(SITE)}/">FBT Swap</a> &middot;
-      <a href="${esc(SITE)}/#/legal/privacy">Privacy</a> &middot;
-      <a href="${esc(SITE)}/#/legal/terms">Terms</a><br>
-      Fanous Bazaar Pishgam Co., Isfahan, Iran
-    </p>
+  <section id="facts" class="facts-panel panel reveal" aria-labelledby="facts-heading" style="--delay:190ms">
+    <div class="section-heading">
+      <p class="section-kicker">${esc(ui.highlights)}</p>
+      <h2 id="facts-heading">${esc(page.glanceLabel || ui.highlights)}</h2>
+    </div>
+    <div class="facts-grid">
+      ${factCards}
+    </div>
+  </section>
+
+  ${faqMarkup}
+
+  <section class="risk-panel reveal" aria-labelledby="risk-heading" style="--delay:320ms">
+    <span class="risk-mark" aria-hidden="true">!</span>
+    <div>
+      <h2 id="risk-heading">${esc(ui.risk)}</h2>
+      <p>${esc(
+        page.riskText ||
+          'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
+      )}</p>
+    </div>
+  </section>
+
+  <section class="related-panel reveal" aria-labelledby="related-heading" style="--delay:380ms">
+    <div class="section-heading">
+      <p class="section-kicker">FBT Swap</p>
+      <h2 id="related-heading">${esc(ui.related)}</h2>
+    </div>
+    <div class="related-links">
+      ${siblingLinks}
+    </div>
+  </section>
+
+  <footer class="reveal" style="--delay:440ms">
+    <p><a href="${esc(SITE)}/">FBT Swap</a> &middot; <a href="${esc(SITE)}/#/legal/privacy">Privacy</a> &middot; <a href="${esc(SITE)}/#/legal/terms">Terms</a></p>
+    <p>Fanous Bazaar Pishgam Co., Isfahan, Iran</p>
   </footer>
 </main>
 </body>
@@ -449,12 +1122,19 @@ function main() {
    * a sitemap that omits them would leave the whole exercise depending on
    * Google finding the links on its own.
    */
-  const today = new Date().toISOString().slice(0, 10);
+  /*
+   * Do not manufacture a <lastmod> date here. This generator runs on every
+   * deployment, including deployments that only change JavaScript or server
+   * code; stamping every landing page with "today" would tell crawlers its
+   * editorial content changed when it did not. Omission is more honest than
+   * stale or synthetic metadata, and new URLs are still discoverable through
+   * this sitemap, robots.txt, internal links and IndexNow.
+   */
   const urls = [
-    `  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${SITE}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
     ...PAGES.map(
       (p) =>
-        `  <url>\n    <loc>${SITE}/${encodeURIComponent(p.slug)}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`
+        `  <url>\n    <loc>${SITE}/${encodeURIComponent(p.slug)}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>`
     )
   ];
 

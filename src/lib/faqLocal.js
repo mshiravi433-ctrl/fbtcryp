@@ -76,14 +76,14 @@ const KB = [
   {
     id: 'fees',
     k: {
-      en: ['fee', 'fees', 'commission', 'cost', 'charge', 'how much', '0.5', 'percent'],
-      fa: ['کارمزد', 'هزینه', 'درصد', 'کمیسیون', 'چقدر', 'نیم درصد', '۰.۵'],
+      en: ['fee', 'fees', 'commission', 'cost', 'charge', 'how much', '0.5', '0.7', 'percent'],
+      fa: ['کارمزد', 'هزینه', 'درصد', 'کمیسیون', 'چقدر', 'نیم درصد', '۰.۵', '۰.۷'],
       ar: ['رسوم', 'عمولة', 'تكلفة', 'كم']
     },
     a: {
-      en: 'Every swap carries two separate costs. (1) The platform fee: {{fee}}% of the amount you send in, taken on-chain in the same transaction and shown to you before you sign. (2) The network fee (gas), paid in the chain\'s own coin — BNB on BNB Chain, ETH on Ethereum/Arbitrum/Base/Optimism, POL on Polygon, AVAX on Avalanche, TRX on Tron, SOL on Solana. Gas goes to the blockchain validators, not to us, and we cannot reduce or refund it.',
-      fa: 'هر سواپ دو هزینه جدا دارد. ۱) کارمزد پلتفرم: {{fee}}٪ از مبلغ ورودی که روی زنجیره و در همان تراکنش برداشته می‌شود و قبل از امضا به تو نشان داده می‌شود. ۲) کارمزد شبکه (گس) که با کوین بومی همان شبکه پرداخت می‌شود — BNB روی BNB Chain، ETH روی اتریوم/آربیتروم/بیس/اپتیمیسم، POL روی پالیگان، AVAX روی آوالانچ، TRX روی ترون و SOL روی سولانا. گس به اعتبارسنج‌های بلاکچین می‌رسد نه به ما، و نه می‌توانیم کمش کنیم نه برگردانیم.',
-      ar: 'كل عملية تبادل لها تكلفتان: رسوم المنصة {{fee}}٪ من المبلغ المُدخل تُخصم على السلسلة في نفس المعاملة، ورسوم الشبكة (الغاز) تُدفع بعملة الشبكة نفسها وتذهب للمُدققين وليس لنا.'
+      en: 'Every swap carries two separate costs. (1) The platform fee: {{fee}}% of the amount you send in, taken on-chain in the same transaction and shown to you before you sign. (2) The network fee (gas), paid in the chain\'s own coin — BNB on BNB Chain, ETH on Ethereum/Arbitrum/Base/Optimism/Linea, POL on Polygon, AVAX on Avalanche, S on Sonic and SOL on Solana. Gas goes to the blockchain validators, not to us, and we cannot reduce or refund it.',
+      fa: 'هر سواپ دو هزینه جدا دارد. ۱) کارمزد پلتفرم: {{fee}}٪ از مبلغ ورودی که روی زنجیره و در همان تراکنش برداشته می‌شود و قبل از امضا به تو نشان داده می‌شود. ۲) کارمزد شبکه (گس) که با کوین بومی همان شبکه پرداخت می‌شود — BNB روی BNB Chain، ETH روی اتریوم/آربیتروم/بیس/اپتیمیسم/لینیا، POL روی پالیگان، AVAX روی آوالانچ، S روی سونیک و SOL روی سولانا. گس به اعتبارسنج‌های بلاکچین می‌رسد نه به ما، و نه می‌توانیم کمش کنیم نه برگردانیم.',
+      ar: 'كل عملية تبادل لها تكلفتان: رسوم المنصة {{fee}}٪ من المبلغ المُدخل تُخصم على السلسلة في نفس المعاملة، ورسوم الشبكة (الغاز) تُدفع بعملة الشبكة نفسها وتذهب للمُدققين وليس لنا. الغاز منفصل عن رسوم المنصة.'
     }
   },
   {
@@ -94,9 +94,9 @@ const KB = [
       ar: ['غاز', 'رسوم الشبكة', 'رصيد غير كاف']
     },
     a: {
-      en: 'Gas is always paid in the native coin of the network you are on, and it must be in the same wallet. On BNB Chain you need a little BNB; on Ethereum, Arbitrum, Base and Optimism you need ETH; on Polygon, POL; on Avalanche, AVAX; on Tron, TRX (or energy); on Solana, SOL. You cannot pay Ethereum gas with BNB. If a swap fails with "insufficient funds", the missing amount is almost always gas, not the token you are swapping — top up a few dollars of the native coin and retry.',
-      fa: 'گس همیشه با کوین بومی همان شبکه و از همان کیف پول پرداخت می‌شود. روی BNB Chain کمی BNB لازم داری؛ روی اتریوم، آربیتروم، بیس و اپتیمیسم اتر (ETH)؛ روی پالیگان POL؛ روی آوالانچ AVAX؛ روی ترون TRX یا Energy؛ روی سولانا SOL. با BNB نمی‌توانی گس اتریوم را بدهی. اگر سواپ با خطای «موجودی کافی نیست» شکست خورد، تقریباً همیشه کمبود گس است نه توکنی که می‌فروشی — چند دلار از کوین بومی شبکه شارژ کن و دوباره امتحان کن.',
-      ar: 'يُدفع الغاز دائماً بعملة الشبكة الأصلية ومن نفس المحفظة: BNB على BNB Chain، وETH على إيثريوم وأربيتروم وبيس وأوبتيميزم، وPOL على بوليجون، وAVAX على أفالانش، وTRX على ترون، وSOL على سولانا.'
+      en: 'Gas is always paid in the native coin of the network you are on, and it must be in the same wallet. On BNB Chain you need a little BNB; on Ethereum, Arbitrum, Base, Optimism and Linea you need ETH; on Polygon, POL; on Avalanche, AVAX; on Sonic, S; and on Solana, SOL. You cannot pay Ethereum gas with BNB. If a swap fails with "insufficient funds", the missing amount is almost always gas, not the token you are swapping — top up a few dollars of the native coin and retry.',
+      fa: 'گس همیشه با کوین بومی همان شبکه و از همان کیف پول پرداخت می‌شود. روی BNB Chain کمی BNB لازم داری؛ روی اتریوم، آربیتروم، بیس، اپتیمیسم و لینیا اتر (ETH)؛ روی پالیگان POL؛ روی آوالانچ AVAX؛ روی سونیک S؛ و روی سولانا SOL. با BNB نمی‌توانی گس اتریوم را بدهی. اگر سواپ با خطای «موجودی کافی نیست» شکست خورد، تقریباً همیشه کمبود گس است نه توکنی که می‌فروشی — چند دلار از کوین بومی شبکه شارژ کن و دوباره امتحان کن.',
+      ar: 'يُدفع الغاز دائماً بعملة الشبكة الأصلية ومن نفس المحفظة: BNB على BNB Chain، وETH على إيثريوم وأربيتروم وبيس وأوبتيميزم ولينيا، وPOL على بوليجون، وAVAX على أفالانش، وS على سونيك، وSOL على سولانا.'
     }
   },
   {
@@ -172,9 +172,9 @@ const KB = [
       ar: ['أي شبكة', 'الشبكات', 'سولانا', 'ترون']
     },
     a: {
-      en: 'Swaps run on seven EVM networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism and Avalanche. Solana has its own swap screen. For moving stablecoins BETWEEN networks — say USDT on BNB Chain to USDC on Arbitrum — use the Bridge screen, which compares every bridge and shows the full cost before you sign. Bridging to or from Solana and Tron is not offered yet.',
-      fa: 'سواپ روی هفت شبکه EVM انجام می‌شود: BNB Chain، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم و آوالانچ. سولانا صفحه سواپ جدای خودش را دارد. برای جابه‌جایی استیبل‌کوین بین شبکه‌ها — مثلاً تتر روی BNB به USDC روی آربیتروم — از صفحه «پل» استفاده کن که همه‌ی پل‌ها را مقایسه می‌کند و هزینه کامل را قبل از امضا نشان می‌دهد. پل زدن به سولانا و ترون فعلاً ارائه نمی‌شود.',
-      ar: 'يعمل التبادل على سبع شبكات EVM، وتُدعم سولانا وترون كشبكات استلام. التبادل عبر السلاسل يحتاج جسراً بمخاطره الخاصة.'
+      en: 'Swaps run on nine EVM networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea and Sonic. Solana has its own swap screen, for ten supported swap networks in total. For moving eligible assets BETWEEN networks — say USDT on BNB Chain to USDC on Arbitrum — use the Bridge screen. It only shows routes a provider can quote for the chosen asset and destination, and shows the full cost before you sign.',
+      fa: 'سواپ روی نه شبکه EVM انجام می‌شود: BNB Chain، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا و سونیک. سولانا هم صفحهٔ سواپ جدا دارد؛ یعنی در مجموع ده شبکهٔ سواپ پشتیبانی می‌شود. برای جابه‌جایی دارایی‌های قابل‌پشتیبانی بین شبکه‌ها — مثلاً تتر روی BNB به USDC روی آربیتروم — از صفحه «پل» استفاده کن. فقط مسیرهایی نمایش داده می‌شوند که سرویس‌دهنده برای دارایی و مقصد انتخاب‌شده بتواند quote واقعی بدهد و هزینهٔ کامل پیش از امضا نشان داده می‌شود.',
+      ar: 'يعمل التبادل على تسع شبكات EVM: BNB Chain وإيثريوم وبوليجون وأربيتروم وبيس وأوبتيميزم وأفالانش ولينيا وسونيك. ولسولانا شاشة تبديل خاصة، أي عشر شبكات مدعومة إجمالاً. للانتقال بين الشبكات استخدم شاشة الجسر؛ لا تظهر إلا المسارات التي يستطيع مزود الخدمة تسعيرها للأصل والوجهة المختارين، مع التكلفة الكاملة قبل التوقيع.'
     }
   },
   {

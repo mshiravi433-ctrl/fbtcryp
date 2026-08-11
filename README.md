@@ -1,10 +1,12 @@
-# FBT Swap — Decentralized Exchange
+# FBT Swap — Non-Custodial Decentralized Exchange
 
-A non-custodial DEX as a Telegram Mini App **and** an Android app. Real
-on-chain swaps across seven EVM networks, thousands of swappable tokens with
-search and import-by-address, a 0.5% platform fee collected on-chain in the
-same transaction the user signs, RGB dark/light theming, and twelve languages
-with full RTL support.
+**Official website:** [https://fbtswap.ir](https://fbtswap.ir/)
+
+FBT Swap is a non-custodial DEX interface available as a Telegram Mini App,
+web app and Android app. It supports real on-chain swaps across **10 networks**:
+BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea,
+Sonic and Solana. You connect a wallet you control and sign every trade
+there—FBT Swap does not take deposits or hold a recovery phrase.
 
 **Fanous Bazaar Pishgam** · Isfahan, Khomeyni Shahr
 
@@ -12,11 +14,19 @@ with full RTL support.
 
 | | |
 |---|---|
-| **Networks** | BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche (swaps) · Solana, Tron (payouts) |
+| **Networks** | BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana |
+| **Platform fee** | 0.70% of the input amount on supported swap routes, shown in the quote before signing; network gas is separate |
 | **Tokens** | Public token lists per chain — thousands — plus ~90 bundled hand-verified tokens that work offline, plus import-any-contract |
 | **Gas** | Paid in each chain's own native coin, warned about before signing. Not only BNB, and never taken from the platform fee |
 | **Languages** | fa · en · ar fully translated; zh · hi · es · fr · ru · tr · ur · id · pt cover navigation, onboarding, the guide, the swap flow and every safety warning |
 | **Keys required to run** | None. See [docs/APIS-FA.md](docs/APIS-FA.md) for what each optional key buys |
+
+### Public guides
+
+- [صرافی غیرمتمرکز و سواپ ارز دیجیتال](https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2)
+- [هشدار قیمت ارز دیجیتال و خرید پله‌ای](https://fbtswap.ir/%D9%87%D8%B4%D8%AF%D8%A7%D8%B1-%D9%82%DB%8C%D9%85%D8%AA-%D8%A7%D8%B1%D8%B2-%D8%AF%DB%8C%D8%AC%DB%8C%D8%AA%D8%A7%D9%84)
+- [تحلیل تکنیکال ارز دیجیتال](https://fbtswap.ir/%D8%AA%D8%AD%D9%84%DB%8C%D9%84-%D8%AA%DA%A9%D9%86%DB%8C%DA%A9%D8%A7%D9%84-%D8%A7%D8%B1%D8%B2-%D8%AF%DB%8C%D8%AC%DB%8C%D8%AA%D8%A7%D9%84)
+- [کیف پول غیرامانی](https://fbtswap.ir/%DA%A9%DB%8C%D9%81-%D9%BE%D9%88%D9%84-%D8%BA%DB%8C%D8%B1%D8%A7%D9%85%D8%A7%D9%86%DB%8C)
 
 ---
 
@@ -37,6 +47,7 @@ with full RTL support.
 | **[DOWNLOAD-FA.md](docs/DOWNLOAD-FA.md)** | **دانلود اپ و انتشار** — لینک مستقیم + ساخت نسخه امضاشده |
 | [BUILD-NOW-FA.md](docs/BUILD-NOW-FA.md) | **شروع از اینجا** — ساخت اپ و انتشار، گام به گام با گوشی |
 | [PLAY-STORE-FA.md](docs/PLAY-STORE-FA.md) | **انتشار در Google Play** — کلید امضا، AAB، Data safety، چک‌لیست |
+| **[SEO-VISIBILITY-FA.md](docs/SEO-VISIBILITY-FA.md)** | **دیده‌شدن سایت** — Search Console، Bing، Yandex، DappRadar، DappBay و WalletConnect |
 
 ---
 
@@ -91,9 +102,15 @@ npm ci && npm run android:apk
 
 ---
 
-## 💰 The 0.5% fee — how it actually works
+## 💰 Optional BNB FeeRouter example (50 bps)
 
-`contracts/FeeRouter.sol` takes 0.5% of the **input** token and forwards the
+> The public FBT Swap interface currently uses a **0.70%** fee quote on its
+> supported swap routes; that rate is shown before the user signs. The optional
+> `FeeRouter` below is a BNB-only contract example whose deployment script
+> defaults to **50 bps (0.5%)** unless `FEE_BPS` is explicitly set. It is not
+> the source of truth for the live multi-chain interface.
+
+`contracts/FeeRouter.sol` takes a 0.5% platform fee from the **input** token and forwards the
 rest to PancakeSwap **in the same transaction**. It's atomic: a user cannot
 receive their swap without the fee being paid, and there's no second
 transaction they can decline.
@@ -169,16 +186,14 @@ Setting `VITE_FEE_ROUTER_ADDRESS` automatically switches `FEE_MODE` to
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VITE_FEE_RECIPIENT` | `0xaf5CE154…24d6` | Where the 0.5% lands |
+| `VITE_FEE_RECIPIENT` | `0xaf5CE154…24d6` | Where the optional FeeRouter fee lands |
 | `VITE_FEE_MODE` | auto | `aggregator`, or `contract` when a FeeRouter address is set |
 | `VITE_FEE_ROUTER_ADDRESS` | *(blank)* | Your contract; setting it implies `contract` mode |
 
-**The 0.5% fee is always charged.** By default it is collected by the
-KyberSwap aggregator's audited router and paid to your wallet in the same
-transaction. If the aggregator can't return a route, the quote fails with a
-retry prompt rather than silently executing a fee-free swap — this is a
-commercial product and routing around its own revenue would be the wrong
-default.
+**The optional FeeRouter example charges 0.5% by default.** The live
+multi-chain app uses its own 70-bps quote configuration; see `src/lib/feeBps.js`
+and the quote screen rather than treating this contract example as the public
+fee schedule.
 
 ### Safety properties built into the contract
 
@@ -386,7 +401,7 @@ Tested against valid, wrong-token, tampered-payload and expired inputs.
 
 ```
 ┌─ Market ──── live prices, global cap, trending, search, sparklines
-├─ Swap ────── REAL on-chain swaps, 0.5% fee, you sign from your wallet
+├─ Swap ────── REAL on-chain swaps, 0.70% quote on supported routes, you sign from your wallet
 ├─ Trade ───── paper trading on virtual credits (clearly labelled)
 ├─ Wallet ──── net worth, allocation, WalletConnect / in-app self-custody
 └─ Settings ── theme, profile, 2FA, biometrics, about & contact

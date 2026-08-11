@@ -76,7 +76,10 @@ const SLUGS = [
   'crypto-price-alerts-and-dca',
   'crypto-market-history-analysis',
   /* Persian. Percent-encoded: an unencoded non-ASCII path is rejected. */
-  'صرافی-غیرمتمرکز'
+  'صرافی-غیرمتمرکز',
+  'هشدار-قیمت-ارز-دیجیتال',
+  'تحلیل-تکنیکال-ارز-دیجیتال',
+  'کیف-پول-غیرامانی'
 ];
 
 const urlList = SLUGS.map((s) => (s ? `${ORIGIN}/${encodeURIComponent(s)}` : `${ORIGIN}/`));

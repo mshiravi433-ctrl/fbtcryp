@@ -27,7 +27,7 @@
  *
  * A perspective grid receding to a vanishing point — the shape a "network"
  * has when drawn honestly, and a deliberate reference to the fact that this
- * wallet spans eight chains rather than one.
+ * wallet spans ten chains rather than one.
  *
  * Drawn as a handful of straight lines rather than a repeating CSS gradient
  * because a gradient cannot converge: parallel lines read as a floor tile,

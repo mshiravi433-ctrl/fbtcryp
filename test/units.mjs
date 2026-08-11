@@ -1703,7 +1703,7 @@ export default async function run() {
   /*
    * REAL BUG: /start told every new user "Everything runs on virtual NX
    * credits." True when the app was only paper trading; false for a long time
-   * since - Swap moves real funds on eight networks.
+   * since - Swap moves real funds on ten networks.
    *
    * Telling someone their first trade is play money, immediately before
    * handing them a button that opens a real exchange, is the most dangerous
