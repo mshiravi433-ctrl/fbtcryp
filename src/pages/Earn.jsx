@@ -326,7 +326,7 @@ export default function Earn({ embedded = false }) {
       {/* ============================ REAL YIELD ============================ */}
       {tab === 'real' ? (
         <>
-          <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ background: 'linear-gradient(145deg, color-mix(in srgb, var(--rgb-4) 6%, var(--bg-raised)), var(--bg-raised))', borderColor: 'color-mix(in srgb, var(--rgb-4) 14%, var(--line))', borderRadius: 16 }}>
+          <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}>
             <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-4), #00e5ff)', color: '#fff' }}>◈</span>
               {t('earn.realTitle')}
@@ -359,7 +359,7 @@ export default function Earn({ embedded = false }) {
                   variants={riseIn}
                   whileTap={{ scale: 0.985 }}
                   onClick={() => (y.internal ? navigate(y.internal) : open(y.url))}
-                  style={{ textAlign: 'start', cursor: 'pointer', width: '100%', padding: 16, borderRadius: 16, background: `linear-gradient(145deg, color-mix(in srgb, \${y.color} 6%, var(--bg-raised)), var(--bg-raised))`, borderColor: `color-mix(in srgb, \${y.color} 12%, var(--line))`, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
+                  style={{ textAlign: 'start', cursor: 'pointer', width: '100%', padding: 16, borderRadius: 16, background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}
                 >
                   <div className="row-between">
                     <div className="row" style={{ gap: 13, minWidth: 0 }}>

@@ -121,11 +121,11 @@ export default function Leaderboard({ embedded = false }) {
 
       {/* ---------------- your points ---------------- */}
       <motion.section
-        className="card card-rgb"
+        className="card"
         variants={riseIn}
         initial="hidden"
         animate="show"
-        style={{ borderColor: `${tier.color}55` }}
+        style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: 20, padding: 18, boxShadow: '0 16px 40px rgba(0,0,0,0.12)' }}
       >
         <div className="aurora" />
         <div className="row-between">
@@ -187,6 +187,19 @@ export default function Leaderboard({ embedded = false }) {
             </div>
           </>
         )}
+      </motion.section>
+
+      {/* Quick actions for امتیاز تو - more functional */}
+      <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff' }}>⚡</span>
+          سریع امتیاز بگیر
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/swap'}>سواپ +{POINT_VALUES.firstSwap}</button>
+          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/wallet'}>بک‌آپ +{POINT_VALUES.backupWallet}</button>
+          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/farm'}>فارم +50</button>
+        </div>
       </motion.section>
 
       {/* ---------------- all tiers ---------------- */}
