@@ -7,6 +7,7 @@ import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { EVM_CHAINS, explorerAddr, explorerTx } from '../lib/chains';
 import { IconChevronLeft, IconExternal, IconSearch } from '../components/Icons';
+import '../styles/docs-modern.css';
 import QrScanner, { parseScanned, scannerSupported } from '../components/QrScanner';
 
 /**
@@ -105,8 +106,9 @@ export default function Explore({ embedded = false }) {
 
       <p className="muted">{t('explore.subtitle')}</p>
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 7 }}>
+      <motion.section className="docs-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ '--card-hue': 'var(--rgb-1)', padding: 16 }}>
+        <div className="row" style={{ gap: 10 }}>
+          <span className="docs-icon" style={{ width: 38, height: 38, borderRadius: 11 }}><span style={{ fontSize: 16 }}>⌕</span></span>
           <input
             type="text"
             value={q}
@@ -114,7 +116,7 @@ export default function Explore({ embedded = false }) {
             placeholder={t('explore.placeholder')}
             spellCheck={false}
             autoComplete="off"
-            style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, direction: 'ltr' }}
+            style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12.5, direction: 'ltr', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 12px' }}
           />
           {scannerSupported() && (
             <button className="btn btn-ghost btn-sm" onClick={() => setScanOpen(true)} style={{ flexShrink: 0 }}>

@@ -98,9 +98,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 18px 10px 14px;
-  border-radius: 18px;
+  gap: 12px;
+  padding: 20px 12px 16px;
+  border-radius: 20px;
   border: 1px solid rgba(255,255,255,0.08);
   background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025));
   backdrop-filter: blur(14px);
@@ -127,14 +127,14 @@
 .wallet-action-modern.recv:hover { box-shadow: 0 14px 32px rgba(0,255,157,0.14), 0 0 0 1px rgba(0,255,157,0.12) inset; }
 .wallet-action-modern.send:hover { box-shadow: 0 14px 32px rgba(255,45,149,0.14), 0 0 0 1px rgba(255,45,149,0.12) inset; }
 .wallet-action-icon-modern {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
-  font-size: 20px;
+  font-size: 22px;
   color: #fff;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.20), 0 0 0 1px rgba(255,255,255,0.08) inset;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.10) inset;
   transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
 .wallet-action-modern:hover .wallet-action-icon-modern { transform: scale(1.06) rotate(2deg); box-shadow: 0 12px 28px rgba(0,0,0,0.24); }
@@ -189,4 +189,16 @@
   background: linear-gradient(90deg, #0d1020, #4a5a8a);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+
+/* Speed: reduce heavy blur on low-end, use will-change for transforms */
+.wallet-hero-modern, .wallet-token-row-modern, .wallet-action-modern {
+  will-change: transform;
+}
+.wallet-hero-aurora::before, .wallet-hero-aurora::after {
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wallet-hero-aurora::before, .wallet-hero-aurora::after { animation: none; }
 }

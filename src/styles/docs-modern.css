@@ -203,3 +203,12 @@
   border-color: rgba(255,59,107,0.12);
   color: #2b344d;
 }
+
+/* Speed: use will-change and contain for heavy glass */
+.docs-card, .glass-board, .glass-detail, .derivatives-hero {
+  will-change: transform;
+  contain: layout style paint;
+}
+@media (prefers-reduced-motion: reduce) {
+  .derivatives-aurora::before, .derivatives-aurora::after, .docs-hero::before { animation: none; }
+}

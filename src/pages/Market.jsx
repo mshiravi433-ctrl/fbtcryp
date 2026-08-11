@@ -14,6 +14,7 @@ import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { MARKET_CATEGORIES, getCategory } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts } from '../lib/priceAlerts';
+import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
 
@@ -350,27 +351,63 @@ export default function Market() {
           </div>
         ) : (
           <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
-            {list.map((c, i) => (
-              <CoinRow key={c.id} coin={c} rank={i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
-            ))}
+            {list.map((c, i) => {
+              const swappable = isSwappable(c.id);
+              const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
+              return (
+                <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <CoinRow coin={c} rank={i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
+                  </div>
+                  {swappable && swapUrl && (
+                    <button
+                      className="tag"
+                      style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(swapUrl);
+                      }}
+                      title={`${c.symbol} → سواپ در شبکه درست`}
+                    >
+                      سواپ
+                    </button>
+                  )}
+                </div>
+              );
+            })}}
 
             {extraHits.length > 0 && (
               <>
                 <p className="section-label" style={{ marginTop: 8 }}>{t('market.moreResults')}</p>
-                {extraHits.map((c) => (
-                  <button
-                    key={c.id}
-                    className="coin-row"
-                    onClick={() => navigate(`/coin/${c.id}`)}
-                    style={{ width: '100%', textAlign: 'start' }}
-                  >
-                    <CoinLogo coin={c} />
-                    <div className="coin-meta">
-                      <div className="coin-sym">{c.symbol}</div>
-                      <div className="coin-name">{c.name}</div>
+                {extraHits.map((c) => {
+                  const swappable = isSwappable(c.id);
+                  const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
+                  return (
+                    <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+                      <button
+                        className="coin-row"
+                        onClick={() => navigate(`/coin/${c.id}`)}
+                        style={{ flex: 1, minWidth: 0, textAlign: 'start' }}
+                      >
+                        <CoinLogo coin={c} />
+                        <div className="coin-meta">
+                          <div className="coin-sym">{c.symbol}</div>
+                          <div className="coin-name">{c.name}</div>
+                        </div>
+                        {c.rank > 0 && <span className="faint mono" style={{ fontSize: 11 }}>#{c.rank}</span>}
+                      </button>
+                      {swappable && swapUrl && (
+                        <button
+                          className="tag"
+                          style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
+                          onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
+                        >
+                          سواپ
+                        </button>
+                      )}
                     </div>
-                    {c.rank > 0 && <span className="faint mono" style={{ fontSize: 11 }}>#{c.rank}</span>}
-                  </button>
+                  );
+                })}
                 ))}
               </>
             )}

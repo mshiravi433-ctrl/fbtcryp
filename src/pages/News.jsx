@@ -273,11 +273,12 @@ export default function News() {
           {items.map((n) => (
             <motion.article
               key={n.id}
-              className="card lift"
+              className="docs-card"
+              data-open="false"
               variants={riseIn}
-              whileTap={n.url ? { scale: 0.99 } : undefined}
+              whileTap={n.url ? { scale: 0.985 } : undefined}
               onClick={() => open(n.url)}
-              style={{ cursor: n.url ? 'pointer' : 'default' }}
+              style={{ cursor: n.url ? 'pointer' : 'default', '--card-hue': 'var(--rgb-1)', padding: 16 }}
             >
               <div className="row-between" style={{ marginBottom: 5 }}>
                 <span className="row" style={{ gap: 5 }}>

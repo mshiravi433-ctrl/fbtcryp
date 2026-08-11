@@ -241,10 +241,12 @@ export default function P2P() {
               {DESKS.map((d) => (
                 <motion.button
                   key={d.id}
-                  className="wallet-option"
+                  className="docs-card"
+                  data-open="false"
                   variants={riseIn}
                   whileTap={{ scale: 0.985 }}
                   onClick={() => open(d.url)}
+                  style={{ '--card-hue': d.color, padding: 16, textAlign: 'start', cursor: 'pointer', width: '100%' }}
                 >
                   <span className="wallet-badge" style={{ color: d.color, fontSize: 10, fontFamily: 'var(--font-mono)' }}>
                     {t(`p2p.desk.${d.id}.short`)}

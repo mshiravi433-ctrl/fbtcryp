@@ -6817,7 +6817,7 @@ body { overflow-x: clip; }
 
 .ap {
   position: fixed;
-  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);
 
   /*
    * ─── CENTRED WITH margin:auto, NOT translateX(-50%) ─────────────────────
@@ -6853,16 +6853,13 @@ body { overflow-x: clip; }
   max-width: 440px;
   z-index: 60;
 
-  border-radius: 18px;
+  border-radius: 20px;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-raised);
-  /* The blur is what makes it read as floating glass rather than an opaque
-     slab pasted over the page. `saturate` keeps the colour behind it alive —
-     a plain blur turns the market list grey. */
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255,255,255,0.10);
+  background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255,255,255,0.06) inset;
 }
 
 /* --------------------------------- seek ---------------------------------- */
@@ -6947,21 +6944,23 @@ body { overflow-x: clip; }
 .ap-play {
   position: relative;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-sunken, rgba(255, 255, 255, 0.04));
-  color: var(--rgb-1);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #fff;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  transition: transform 0.18s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 20px rgba(0,229,255,0.22);
 }
 .ap-play.is-playing {
-  color: var(--rgb-4);
-  border-color: var(--rgb-4);
-  background: rgba(0, 255, 157, 0.08);
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--rgb-4), var(--rgb-1));
+  box-shadow: 0 10px 24px rgba(0,255,157,0.24);
 }
 .ap-play:active { transform: scale(0.94); }
 

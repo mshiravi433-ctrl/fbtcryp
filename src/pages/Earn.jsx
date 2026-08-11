@@ -353,36 +353,37 @@ export default function Earn({ embedded = false }) {
               {YIELD.map((y) => (
                 <motion.button
                   key={y.id}
-                  className="card lift"
+                  className="docs-card"
+                  data-open="false"
                   variants={riseIn}
                   whileTap={{ scale: 0.985 }}
                   onClick={() => (y.internal ? navigate(y.internal) : open(y.url))}
-                  style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
+                  style={{ textAlign: 'start', cursor: 'pointer', width: '100%', '--card-hue': y.color, padding: 16 }}
                 >
                   <div className="row-between">
-                    <div className="row" style={{ gap: 11, minWidth: 0 }}>
-                      <motion.span
-                        className="wallet-badge"
-                        style={{ color: y.color, width: 38, height: 38 }}
-                        animate={{ rotate: [0, 6, -6, 0] }}
-                        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                    <div className="row" style={{ gap: 13, minWidth: 0 }}>
+                      <span
+                        className="docs-icon"
+                        style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0 }}
                       >
-                        <y.Icon width={19} height={19} />
-                      </motion.span>
+                        <y.Icon width={20} height={20} />
+                      </span>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13.3 }}>{t(`earn.yield.${y.id}.title`)}</div>
-                        <div className="set-row-sub">{t(`earn.yield.${y.id}.body`)}</div>
+                        <div style={{ fontWeight: 800, fontSize: 14 }}>{t(`earn.yield.${y.id}.title`)}</div>
+                        <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 2 }}>{t(`earn.yield.${y.id}.body`)}</div>
                       </div>
                     </div>
-                    {y.internal ? (
-                      <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                    ) : (
-                      <IconExternal width={15} height={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                    )}
+                    <span className="docs-chevron" style={{ flexShrink: 0 }}>
+                      {y.internal ? (
+                        <IconChevronRight width={16} height={16} />
+                      ) : (
+                        <IconExternal width={14} height={14} />
+                      )}
+                    </span>
                   </div>
-                  <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
-                    <span className="pill pill-up">APR {y.apr}</span>
-                    <span className={`pill ${y.risk === 'low' ? 'pill-neutral' : 'pill-rgb'}`}>
+                  <div className="row" style={{ gap: 7, marginTop: 12, flexWrap: 'wrap' }}>
+                    <span className="pill pill-up" style={{ fontSize: 11, padding: '4px 8px' }}>APR {y.apr}</span>
+                    <span className={`pill ${y.risk === 'low' ? 'pill-neutral' : 'pill-rgb'}`} style={{ fontSize: 11 }}>
                       {t(`invest.risk.${y.risk}`)}
                     </span>
                     {/*
