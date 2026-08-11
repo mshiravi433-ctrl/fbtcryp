@@ -106,9 +106,9 @@ export default function Explore({ embedded = false }) {
 
       <p className="muted">{t('explore.subtitle')}</p>
 
-      <motion.section className="docs-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ '--card-hue': 'var(--rgb-1)', padding: 16 }}>
-        <div className="row" style={{ gap: 10 }}>
-          <span className="docs-icon" style={{ width: 38, height: 38, borderRadius: 11 }}><span style={{ fontSize: 16 }}>⌕</span></span>
+      <motion.section className="docs-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ '--card-hue': 'var(--rgb-1)', padding: 18, background: 'linear-gradient(145deg, rgba(0,229,255,0.08), rgba(255,255,255,0.03))', borderColor: 'rgba(0,229,255,0.14)' }}>
+        <div className="row" style={{ gap: 12 }}>
+          <span className="docs-icon" style={{ width: 44, height: 44, borderRadius: 13, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', boxShadow: '0 8px 20px rgba(0,229,255,0.20)' }}><span style={{ fontSize: 18 }}>⌕</span></span>
           <input
             type="text"
             value={q}
@@ -152,17 +152,19 @@ export default function Explore({ embedded = false }) {
             {t('explore.chainHint')}
           </p>
 
-          <div className="stack" style={{ gap: 7 }}>
+          <div className="stack" style={{ gap: 10 }}>
             {evmTargets.map(({ chain, url }) => (
               <motion.button
                 key={chain.id}
-                className="exp-row"
+                className="docs-card"
+                data-open="false"
                 variants={riseIn}
-                whileTap={{ scale: 0.99 }}
+                whileTap={{ scale: 0.985 }}
                 onClick={() => open(url)}
+                style={{ '--card-hue': chain.color, padding: 14, textAlign: 'start', cursor: 'pointer', width: '100%', display: 'flex', alignItems: 'center', gap: 12 }}
               >
-                <span className="exp-dot" style={{ background: chain.color }} />
-                <span className="exp-name">{chain.name}</span>
+                <span style={{ width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', background: `linear-gradient(135deg, \${chain.color}, \${chain.color}aa)`, color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{chain.name.slice(0,2).toUpperCase()}</span>
+                <span style={{ fontWeight: 700, fontSize: 13.5, flex: 1 }}>{chain.name}</span>
                 <span className="exp-go">
                   <IconExternal width={13} height={13} />
                 </span>
@@ -189,8 +191,8 @@ export default function Explore({ embedded = false }) {
         </motion.p>
       )}
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('explore.learnTitle')}</p>
+      <motion.section className="docs-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ '--card-hue': 'var(--rgb-2)', padding: 16 }}>
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('explore.learnTitle')}</p>
         <ul className="exp-learn">
           {['hash', 'address', 'pending', 'confirm'].map((k) => (
             <li key={k}>

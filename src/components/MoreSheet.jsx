@@ -265,12 +265,16 @@ export default function MoreSheet({ open, onClose }) {
                         className="more-tile"
                         data-pressed={pressed === item.to ? 'true' : 'false'}
                         onClick={() => go(item.to)}
+                        style={{ padding: 12, borderRadius: 16, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)' }}
                       >
                         <span
                           className="more-tile-icon"
                           style={{
-                            color: item.hue,
-                            borderColor: `color-mix(in srgb, ${item.hue} 40%, transparent)`
+                            color: '#fff',
+                            background: `linear-gradient(135deg, \${item.hue}, color-mix(in srgb, \${item.hue} 70%, #000))`,
+                            borderColor: `color-mix(in srgb, \${item.hue} 30%, transparent)`,
+                            boxShadow: `0 6px 16px color-mix(in srgb, \${item.hue} 22%, transparent)`,
+                            width: 42, height: 42, borderRadius: 13
                           }}
                         >
                           <item.Icon width={19} height={19} />
