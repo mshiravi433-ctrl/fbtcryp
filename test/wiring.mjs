@@ -2631,6 +2631,14 @@ export default function run() {
     t('landing pages have visible FAQs and matching FAQ schema',
       /<details>/.test(gen) && /FAQPage/.test(gen));
     t('landing pages use the wide social card', /social-card\.png/.test(gen));
+
+    /* These pages are marketing surfaces as well as documents. Keep the visual
+       design intentional: a modern hero and small ambient motion are fine, but
+       motion must always obey the visitor's reduced-motion preference. */
+    t('landing pages have an animated modern hero and card layout',
+      /hero-panel/.test(gen) && /ambient-grid/.test(gen) && /fact-card/.test(gen) && /@keyframes rise-in/.test(gen));
+    t('landing motion respects prefers-reduced-motion', /prefers-reduced-motion/.test(gen));
+
     for (const slug of ['هشدار-قیمت-ارز-دیجیتال', 'تحلیل-تکنیکال-ارز-دیجیتال', 'کیف-پول-غیرامانی']) {
       t(`a substantive Persian feature page exists for ${slug}`, gen.includes(`slug: '${slug}'`));
     }

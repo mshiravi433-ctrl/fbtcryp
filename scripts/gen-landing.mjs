@@ -422,8 +422,30 @@ const jsonForScript = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
 
 function copyFor(lang) {
   return lang === 'fa'
-    ? { home: 'صفحهٔ اصلی', breadcrumb: 'مسیر صفحه', faq: 'پرسش‌های رایج' }
-    : { home: 'Home', breadcrumb: 'Breadcrumb', faq: 'Frequently asked questions' };
+    ? {
+        home: 'صفحهٔ اصلی',
+        breadcrumb: 'مسیر صفحه',
+        faq: 'پرسش‌های رایج',
+        eyebrow: 'شفاف، غیرامانی، در کنترل تو',
+        story: 'چیزی که باید بدانی',
+        details: 'دیدن جزئیات',
+        highlights: 'در یک نگاه',
+        risk: 'هشدار ریسک',
+        related: 'راهنماهای بیشتر',
+        faqHint: 'پاسخ‌های کوتاه و روشن، پیش از اینکه تصمیم بگیری.'
+      }
+    : {
+        home: 'Home',
+        breadcrumb: 'Breadcrumb',
+        faq: 'Frequently asked questions',
+        eyebrow: 'Transparent, non-custodial, yours',
+        story: 'What you should know',
+        details: 'See the details',
+        highlights: 'At a glance',
+        risk: 'Risk notice',
+        related: 'Explore more guides',
+        faqHint: 'Clear answers before you decide.'
+      };
 }
 
 /**
@@ -544,15 +566,45 @@ function render(page) {
       })()
     : '';
   const ui = copyFor(lang);
+  const factCards = page.facts
+    .map(
+      ([label, value], index) => `<article class="fact-card" style="--item:${index}">
+        <span class="fact-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
+        <h3>${esc(label)}</h3>
+        <p>${esc(value)}</p>
+      </article>`
+    )
+    .join('\n      ');
+  const highlights = page.facts
+    .slice(0, 3)
+    .map(
+      ([label, value]) => `<div class="highlight">
+        <span>${esc(label)}</span>
+        <strong>${esc(value)}</strong>
+      </div>`
+    )
+    .join('\n      ');
+  const siblingLinks = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
+    .map((p) => `<a href="/${encodeURIComponent(p.slug)}">${esc(p.h1)} <span aria-hidden="true">↗</span></a>`)
+    .join('\n        ');
   const faqMarkup = page.faqs?.length
-    ? `<section class="faq" aria-labelledby="faq-heading">
-    <h2 id="faq-heading">${esc(ui.faq)}</h2>
-    ${page.faqs
-      .map(
-        ({ q, a }) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`
-      )
-      .join('\n    ')}
-  </section>`
+    ? `<section class="faq-panel panel reveal" aria-labelledby="faq-heading" style="--delay:260ms">
+      <div class="section-heading">
+        <p class="section-kicker">FAQ</p>
+        <h2 id="faq-heading">${esc(ui.faq)}</h2>
+        <p>${esc(ui.faqHint)}</p>
+      </div>
+      <div class="faq-list">
+        ${page.faqs
+          .map(
+            ({ q, a }) => `<details>
+          <summary><span>${esc(q)}</span><span class="faq-plus" aria-hidden="true">+</span></summary>
+          <p>${esc(a)}</p>
+        </details>`
+          )
+          .join('\n        ')}
+      </div>
+    </section>`
     : '';
   const structuredData = landingStructuredData(page, url);
 
@@ -607,112 +659,443 @@ ${
     : ''
 }
 <style>
-  /* Inlined, because a landing page that waits on a stylesheet is a landing
-     page people leave. It is small enough that a second request would cost
-     more than the bytes. */
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --ink: #edf2ff;
+    --muted: #aab5cf;
+    --quiet: #75819f;
+    --line: rgba(174, 191, 234, .16);
+    --glass: rgba(13, 17, 31, .72);
+    --glass-strong: rgba(13, 17, 31, .9);
+    --cyan: #4eeaff;
+    --violet: #9476ff;
+    --pink: #ff68ca;
+    --lime: #63f5bb;
+  }
   * { box-sizing: border-box; }
+  html { min-height: 100%; background: #04050b; scroll-behavior: smooth; }
   body {
+    min-height: 100svh;
     margin: 0;
-    background: #06070c;
-    color: #e8ecf6;
-    /*
-     * The Persian page needs Vazirmatn, which the app already self-hosts.
-     * Falling back to system-ui renders Persian in whatever the device has —
-     * on many Android builds that is Noto Naskh, whose line height is wrong
-     * enough that the RTL paragraphs overlap. Named FIRST so it wins, and
-     * the Latin stack stays behind it so the English pages are unaffected.
-     *
-     * No @font-face here on purpose: the font is preloaded below only when
-     * the page is actually Persian, so English visitors do not download a
-     * 70 KB Arabic-script font they will never render a glyph from.
-     */
+    overflow-x: hidden;
+    background:
+      radial-gradient(900px 520px at 12% -8%, rgba(80, 63, 191, .20), transparent 62%),
+      radial-gradient(760px 500px at 96% 13%, rgba(0, 198, 255, .13), transparent 63%),
+      #04050b;
+    color: var(--ink);
     font: 16px/${dir === 'rtl' ? '1.95' : '1.75'} ${
       dir === 'rtl' ? "'Vazirmatn', " : ''
     }system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    padding: 32px 20px 64px;
   }
-  main { max-width: 680px; margin: 0 auto; }
-  a { color: #00e5ff; }
-  h1 { font-size: clamp(26px, 6vw, 38px); line-height: 1.2; margin: 0 0 18px; letter-spacing: -0.02em; }
-  h2 { font-size: 17px; margin: 34px 0 10px; }
-  p { color: #b9c2d8; margin: 0 0 16px; }
-  .crumb { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; color: #8e98b3; font-size: 12px; margin-bottom: 22px; }
-  .crumb span[aria-current] { color: #b9c2d8; }
-  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; font-weight: 700; }
-  .brand img { width: 30px; height: 30px; border-radius: 9px; }
-  .cta {
-    display: inline-block;
-    margin: 10px 0 8px;
-    padding: 14px 26px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #00e5ff, #7c4dff);
-    color: #05060b;
-    font-weight: 700;
+  a { color: inherit; }
+  .skip-link {
+    position: fixed;
+    z-index: 20;
+    inset-block-start: 10px;
+    inset-inline-start: 10px;
+    transform: translateY(-180%);
+    padding: 9px 14px;
+    border-radius: 10px;
+    color: #041018;
+    background: var(--cyan);
+    font-weight: 800;
+    text-decoration: none;
+    transition: transform .18s ease;
+  }
+  .skip-link:focus { transform: translateY(0); }
+  .ambient { position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+  .ambient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(4, 5, 11, .05), rgba(4, 5, 11, .92) 82%, #04050b);
+  }
+  .ambient-grid {
+    position: absolute;
+    inset: -35%;
+    opacity: .42;
+    background-image:
+      linear-gradient(rgba(113, 127, 180, .11) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(113, 127, 180, .11) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(ellipse 68% 48% at 50% 26%, #000, transparent 76%);
+    transform: perspective(500px) rotateX(62deg) translateY(-10%);
+    animation: grid-drift 22s linear infinite;
+  }
+  .orb {
+    position: absolute;
+    width: clamp(260px, 35vw, 570px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    filter: blur(24px);
+    opacity: .34;
+    mix-blend-mode: screen;
+  }
+  .orb-one {
+    inset: -17% auto auto -13%;
+    background: radial-gradient(circle at 58% 52%, #8b5cff, transparent 66%);
+    animation: orb-one 18s ease-in-out infinite alternate;
+  }
+  .orb-two {
+    inset: 12% -14% auto auto;
+    background: radial-gradient(circle at 42% 42%, #00d9ff, transparent 64%);
+    animation: orb-two 21s ease-in-out infinite alternate;
+  }
+  .orb-three {
+    inset: auto 18% -26% auto;
+    width: clamp(220px, 28vw, 470px);
+    background: radial-gradient(circle at 50% 50%, #e851c6, transparent 66%);
+    animation: orb-three 16s ease-in-out infinite alternate;
+  }
+  .landing-page {
+    position: relative;
+    z-index: 1;
+    width: min(100% - 32px, 1060px);
+    margin: 0 auto;
+    padding: clamp(22px, 5vw, 58px) 0 72px;
+  }
+  .hero-panel,
+  .panel,
+  .risk-panel,
+  .related-panel,
+  footer {
+    border: 1px solid var(--line);
+    background: linear-gradient(140deg, rgba(20, 26, 47, .86), rgba(9, 12, 24, .70));
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .045);
+    backdrop-filter: blur(16px);
+  }
+  .hero-panel {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    padding: clamp(24px, 5vw, 54px);
+    border-radius: clamp(24px, 4vw, 38px);
+  }
+  .hero-panel::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: -55% -14% auto auto;
+    width: min(680px, 72vw);
+    aspect-ratio: 1;
+    border: 1px solid rgba(78, 234, 255, .22);
+    border-radius: 50%;
+    box-shadow: 0 0 0 48px rgba(133, 104, 255, .045), 0 0 0 96px rgba(78, 234, 255, .025);
+    animation: halo-spin 32s linear infinite;
+  }
+  .hero-panel::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    opacity: .7;
+    background: linear-gradient(110deg, transparent 24%, rgba(111, 237, 255, .08) 45%, transparent 61%);
+    transform: translateX(-120%);
+    animation: sheen 8s ease-in-out infinite;
+  }
+  .crumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 clamp(30px, 5vw, 50px);
+    color: var(--quiet);
+    font-size: 12px;
+  }
+  .crumb a { color: var(--muted); text-underline-offset: 4px; }
+  .crumb a:hover { color: var(--cyan); }
+  .crumb span[aria-current] { max-width: min(600px, 68vw); overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+  .brand-row { display: flex; align-items: center; gap: 12px; }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: .015em;
     text-decoration: none;
   }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; }
-  th, td { text-align: start; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.09); font-size: 14.5px; vertical-align: top; }
-  th { color: #8e98b3; font-weight: 600; width: 38%; }
-  .faq details { border-bottom: 1px solid rgba(255,255,255,.09); padding: 13px 0; }
-  .faq summary { cursor: pointer; color: #e8ecf6; font-weight: 650; line-height: 1.5; }
-  .faq summary::marker { color: #00e5ff; }
-  .faq details p { margin: 10px 0 0; font-size: 14.5px; }
-  footer { margin-top: 40px; font-size: 13px; color: #7a839c; }
-  footer a { color: #8e98b3; }
-  .risk { font-size: 13px; color: #8e98b3; border-inline-start: 2px solid #ffb300; padding-inline-start: 12px; margin-top: 26px; }
+  .brand-mark {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid rgba(119, 241, 255, .34);
+    border-radius: 13px;
+    background: linear-gradient(145deg, rgba(78, 234, 255, .24), rgba(148, 118, 255, .24));
+    box-shadow: 0 9px 28px rgba(23, 209, 255, .14);
+  }
+  .brand-mark img { width: 28px; height: 28px; border-radius: 9px; }
+  .hero-copy { max-width: 800px; margin-top: clamp(30px, 5vw, 58px); }
+  .eyebrow,
+  .section-kicker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 13px;
+    color: var(--cyan);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+  }
+  .eyebrow::before {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--lime);
+    box-shadow: 0 0 0 5px rgba(99, 245, 187, .12), 0 0 18px var(--lime);
+    content: '';
+    animation: pulse-dot 2.4s ease-in-out infinite;
+  }
+  h1,
+  h2,
+  h3,
+  p { margin-top: 0; }
+  h1 {
+    max-width: 900px;
+    margin-bottom: 19px;
+    color: #f5f7ff;
+    font-size: clamp(32px, 6vw, 62px);
+    font-weight: 850;
+    letter-spacing: -.045em;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+  .lede {
+    max-width: 720px;
+    margin-bottom: 0;
+    color: #c3cbe0;
+    font-size: clamp(16px, 2.1vw, 19px);
+    line-height: 1.85;
+    text-wrap: pretty;
+  }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 31px; }
+  .cta,
+  .soft-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    border-radius: 15px;
+    font-weight: 800;
+    text-decoration: none;
+    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+  }
+  .cta {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    gap: 12px;
+    padding: 13px 20px;
+    color: #041018;
+    background: linear-gradient(122deg, var(--cyan), #a8f7ff 42%, var(--violet));
+    box-shadow: 0 14px 34px rgba(51, 201, 255, .22);
+  }
+  .cta::before {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 22%, rgba(255, 255, 255, .72) 48%, transparent 72%);
+    content: '';
+    transform: translateX(-130%);
+    transition: transform .55s ease;
+  }
+  .cta:hover { box-shadow: 0 18px 44px rgba(51, 201, 255, .35); transform: translateY(-2px); }
+  .cta:hover::before { transform: translateX(130%); }
+  .cta-arrow { font-size: 18px; line-height: 1; transition: transform .22s ease; }
+  .cta:hover .cta-arrow { transform: translateX(4px); }
+  [dir="rtl"] .cta:hover .cta-arrow { transform: translateX(-4px); }
+  .soft-cta {
+    gap: 9px;
+    padding: 13px 18px;
+    border: 1px solid rgba(169, 185, 228, .22);
+    color: var(--muted);
+    background: rgba(255, 255, 255, .025);
+  }
+  .soft-cta:hover { border-color: rgba(78, 234, 255, .6); color: var(--ink); transform: translateY(-2px); }
+  .highlight-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: clamp(36px, 6vw, 62px);
+  }
+  .highlight {
+    min-width: 0;
+    padding: 15px;
+    border: 1px solid rgba(163, 181, 227, .13);
+    border-radius: 16px;
+    background: rgba(4, 7, 17, .34);
+  }
+  .highlight span { display: block; margin-bottom: 5px; color: var(--quiet); font-size: 11px; font-weight: 750; }
+  .highlight strong { display: -webkit-box; overflow: hidden; color: #e4e9f7; font-size: 12px; font-weight: 650; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .panel,
+  .risk-panel,
+  .related-panel { margin-top: 18px; border-radius: 25px; }
+  .story-card { padding: clamp(24px, 4vw, 40px); }
+  .section-heading { max-width: 710px; }
+  .section-heading h2 { margin-bottom: 9px; color: #eff3ff; font-size: clamp(23px, 3vw, 31px); letter-spacing: -.025em; line-height: 1.25; }
+  .section-heading > p:last-child { margin-bottom: 0; color: var(--quiet); font-size: 14px; }
+  .story-copy { max-width: 770px; margin-top: 25px; }
+  .story-copy p { margin-bottom: 17px; color: #bdc6dc; font-size: 15.5px; line-height: 1.95; }
+  .story-copy p:last-child { margin-bottom: 0; }
+  .facts-panel { padding: clamp(24px, 4vw, 40px); }
+  .facts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+  .fact-card {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    padding: 21px 20px 19px;
+    border: 1px solid rgba(164, 182, 229, .13);
+    border-radius: 19px;
+    background: linear-gradient(145deg, rgba(32, 40, 71, .45), rgba(9, 13, 27, .42));
+    transition: transform .24s ease, border-color .24s ease, background .24s ease;
+  }
+  .fact-card::after { position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: linear-gradient(var(--cyan), var(--violet)); content: ''; opacity: .72; }
+  .fact-card:hover { border-color: rgba(78, 234, 255, .42); background: linear-gradient(145deg, rgba(38, 51, 91, .64), rgba(9, 13, 27, .62)); transform: translateY(-4px); }
+  .fact-index { display: block; margin-bottom: 17px; color: rgba(148, 118, 255, .88); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+  .fact-card h3 { margin-bottom: 7px; color: #edf1ff; font-size: 15px; }
+  .fact-card p { margin-bottom: 0; color: var(--muted); font-size: 13.5px; line-height: 1.75; }
+  .faq-panel { padding: clamp(24px, 4vw, 40px); }
+  .faq-list { margin-top: 24px; border-top: 1px solid var(--line); }
+  .faq-list details { border-bottom: 1px solid var(--line); }
+  .faq-list summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; color: #e8edf9; cursor: pointer; font-size: 15px; font-weight: 730; line-height: 1.55; list-style: none; }
+  .faq-list summary::-webkit-details-marker { display: none; }
+  .faq-plus { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; border: 1px solid rgba(135, 150, 195, .26); border-radius: 9px; color: var(--cyan); font-size: 18px; font-weight: 400; transition: transform .2s ease, background .2s ease; }
+  details[open] .faq-plus { background: rgba(78, 234, 255, .11); transform: rotate(45deg); }
+  .faq-list details p { max-width: 750px; margin: -2px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.85; }
+  .risk-panel { display: flex; gap: 16px; padding: 20px 22px; border-color: rgba(255, 183, 70, .26); background: linear-gradient(135deg, rgba(77, 48, 18, .45), rgba(18, 15, 21, .65)); }
+  .risk-mark { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border: 1px solid rgba(255, 183, 70, .43); border-radius: 10px; color: #ffbf5d; font-family: ui-monospace, monospace; font-weight: 900; }
+  .risk-panel h2 { margin-bottom: 5px; color: #ffe4b5; font-size: 14px; }
+  .risk-panel p { margin-bottom: 0; color: #d1c3ac; font-size: 13px; line-height: 1.8; }
+  .related-panel { padding: clamp(24px, 4vw, 38px); }
+  .related-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 22px; }
+  .related-links a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 14px 15px; border: 1px solid rgba(163, 181, 227, .13); border-radius: 15px; color: #c5cee2; font-size: 13px; font-weight: 650; line-height: 1.55; text-decoration: none; transition: border-color .2s ease, color .2s ease, transform .2s ease; }
+  .related-links a:hover { border-color: rgba(78, 234, 255, .48); color: var(--cyan); transform: translateY(-2px); }
+  .related-links a span { color: var(--violet); font-size: 16px; }
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 19px 21px; border-radius: 19px; color: var(--quiet); font-size: 12px; }
+  footer p { margin: 0; }
+  footer a { color: var(--muted); text-underline-offset: 4px; }
+  footer a:hover { color: var(--cyan); }
+  .reveal { animation: rise-in .75s cubic-bezier(.16, 1, .3, 1) both; animation-delay: var(--delay, 0ms); }
+  @keyframes rise-in { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes grid-drift { from { transform: perspective(500px) rotateX(62deg) translate3d(0, -10%, 0); } to { transform: perspective(500px) rotateX(62deg) translate3d(54px, -10%, 0); } }
+  @keyframes orb-one { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(11vw, 9vh, 0) scale(1.16); } }
+  @keyframes orb-two { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-12vw, 12vh, 0) scale(1.13); } }
+  @keyframes orb-three { from { transform: translate3d(0, 0, 0) scale(.92); } to { transform: translate3d(-8vw, -9vh, 0) scale(1.14); } }
+  @keyframes halo-spin { to { transform: rotate(360deg); } }
+  @keyframes sheen { 0%, 35% { transform: translateX(-130%); } 62%, 100% { transform: translateX(130%); } }
+  @keyframes pulse-dot { 0%, 100% { box-shadow: 0 0 0 5px rgba(99, 245, 187, .12), 0 0 13px var(--lime); } 50% { box-shadow: 0 0 0 8px rgba(99, 245, 187, .04), 0 0 22px var(--lime); } }
+  @media (max-width: 680px) {
+    .landing-page { width: min(100% - 22px, 1060px); padding-top: 14px; }
+    .hero-panel { padding: 24px 20px 21px; border-radius: 24px; }
+    .crumb { margin-bottom: 31px; }
+    .crumb span[aria-current] { max-width: 56vw; }
+    h1 { font-size: clamp(31px, 10.2vw, 47px); }
+    .lede { font-size: 15.5px; }
+    .hero-actions { display: grid; grid-template-columns: 1fr; }
+    .cta, .soft-cta { width: 100%; }
+    .highlight-grid, .facts-grid, .related-links { grid-template-columns: 1fr; }
+    .highlight { padding: 13px 14px; }
+    .highlight strong { -webkit-line-clamp: 3; }
+    .panel, .risk-panel, .related-panel { border-radius: 21px; }
+    .fact-card { padding: 18px 17px; }
+    .risk-panel { padding: 18px; }
+    footer { display: block; line-height: 1.9; }
+    footer p + p { margin-top: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  }
 </style>
 </head>
-<body>
-<main>
-  <nav class="crumb" aria-label="${esc(ui.breadcrumb)}">
-    <a href="${esc(SITE)}/">${esc(ui.home)}</a>
-    <span aria-hidden="true">/</span>
-    <span aria-current="page">${esc(page.h1)}</span>
-  </nav>
+<body class="landing-body">
+<a class="skip-link" href="#content">${esc(ui.details)}</a>
+<div class="ambient" aria-hidden="true">
+  <span class="ambient-grid"></span>
+  <span class="orb orb-one"></span>
+  <span class="orb orb-two"></span>
+  <span class="orb orb-three"></span>
+</div>
+<main id="content" class="landing-page" tabindex="-1">
+  <header class="hero-panel reveal" style="--delay:40ms">
+    <nav class="crumb" aria-label="${esc(ui.breadcrumb)}">
+      <a href="${esc(SITE)}/">${esc(ui.home)}</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">${esc(page.h1)}</span>
+    </nav>
 
-  <div class="brand">
-    <img src="/icon-192.png" alt="" width="30" height="30">
-    <span>FBT Swap</span>
-  </div>
+    <div class="brand-row">
+      <a class="brand" href="${esc(SITE)}/" aria-label="FBT Swap">
+        <span class="brand-mark"><img src="/icon-192.png" alt="" width="28" height="28"></span>
+        <span>FBT Swap</span>
+      </a>
+    </div>
 
-  <h1>${esc(page.h1)}</h1>
+    <div class="hero-copy">
+      <p class="eyebrow">${esc(ui.eyebrow)}</p>
+      <h1>${esc(page.h1)}</h1>
+      <p class="lede">${esc(page.description)}</p>
+    </div>
 
-  ${page.body.map((p) => `<p>${esc(p)}</p>`).join('\n  ')}
+    <div class="hero-actions">
+      <a class="cta" href="${esc(appUrl)}"><span>${esc(page.ctaLabel || 'Open the app')}</span><span class="cta-arrow" aria-hidden="true">→</span></a>
+      <a class="soft-cta" href="#facts"><span>${esc(ui.details)}</span><span aria-hidden="true">↓</span></a>
+    </div>
 
-  <a class="cta" href="${esc(appUrl)}">${esc(page.ctaLabel || 'Open the app')}</a>
+    <div class="highlight-grid" aria-label="${esc(ui.highlights)}">
+      ${highlights}
+    </div>
+  </header>
 
-  <h2>${esc(page.glanceLabel || 'At a glance')}</h2>
-  <table>
-    <tbody>
-      ${page.facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('\n      ')}
-    </tbody>
-  </table>
+  <section class="story-card panel reveal" aria-labelledby="story-heading" style="--delay:120ms">
+    <div class="section-heading">
+      <p class="section-kicker">FBT Swap</p>
+      <h2 id="story-heading">${esc(ui.story)}</h2>
+    </div>
+    <div class="story-copy">
+      ${page.body.map((paragraph) => `<p>${esc(paragraph)}</p>`).join('\n      ')}
+    </div>
+  </section>
+
+  <section id="facts" class="facts-panel panel reveal" aria-labelledby="facts-heading" style="--delay:190ms">
+    <div class="section-heading">
+      <p class="section-kicker">${esc(ui.highlights)}</p>
+      <h2 id="facts-heading">${esc(page.glanceLabel || ui.highlights)}</h2>
+    </div>
+    <div class="facts-grid">
+      ${factCards}
+    </div>
+  </section>
 
   ${faqMarkup}
 
-  <p class="risk">${esc(
-    page.riskText ||
-      'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
-  )}</p>
+  <section class="risk-panel reveal" aria-labelledby="risk-heading" style="--delay:320ms">
+    <span class="risk-mark" aria-hidden="true">!</span>
+    <div>
+      <h2 id="risk-heading">${esc(ui.risk)}</h2>
+      <p>${esc(
+        page.riskText ||
+          'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
+      )}</p>
+    </div>
+  </section>
 
-  <footer>
-    <p>
-      ${/*
-         Same-language siblings only. A Persian page footer full of English
-         links sends the reader somewhere they cannot read, and gives the
-         crawler a mixed-language cluster that muddies which page belongs to
-         which audience.
-      */ ''}${PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
-        .map((p) => `<a href="/${encodeURIComponent(p.slug)}">${esc(p.h1)}</a>`)
-        .join(' &middot; ')}
-    </p>
-    <p>
-      <a href="${esc(SITE)}/">FBT Swap</a> &middot;
-      <a href="${esc(SITE)}/#/legal/privacy">Privacy</a> &middot;
-      <a href="${esc(SITE)}/#/legal/terms">Terms</a><br>
-      Fanous Bazaar Pishgam Co., Isfahan, Iran
-    </p>
+  <section class="related-panel reveal" aria-labelledby="related-heading" style="--delay:380ms">
+    <div class="section-heading">
+      <p class="section-kicker">FBT Swap</p>
+      <h2 id="related-heading">${esc(ui.related)}</h2>
+    </div>
+    <div class="related-links">
+      ${siblingLinks}
+    </div>
+  </section>
+
+  <footer class="reveal" style="--delay:440ms">
+    <p><a href="${esc(SITE)}/">FBT Swap</a> &middot; <a href="${esc(SITE)}/#/legal/privacy">Privacy</a> &middot; <a href="${esc(SITE)}/#/legal/terms">Terms</a></p>
+    <p>Fanous Bazaar Pishgam Co., Isfahan, Iran</p>
   </footer>
 </main>
 </body>
