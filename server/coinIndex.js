@@ -74,7 +74,9 @@ export const PLATFORM_SLUGS = {
   137: 'polygon-pos',
   8453: 'base',
   42161: 'arbitrum-one',
-  43114: 'avalanche'
+  43114: 'avalanche',
+  59144: 'linea',
+  146: 'sonic'
 };
 
 /** Six hours. New listings are not urgent; hammering a free API is rude. */

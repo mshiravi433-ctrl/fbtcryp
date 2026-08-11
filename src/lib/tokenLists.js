@@ -68,6 +68,12 @@ const LIST_SOURCES = {
   ],
   43114: [
     { id: 'coingecko-avax', url: 'https://tokens.coingecko.com/avalanche/all.json' }
+  ],
+  59144: [
+    { id: 'coingecko-linea', url: 'https://tokens.coingecko.com/linea/all.json' }
+  ],
+  146: [
+    { id: 'coingecko-sonic', url: 'https://tokens.coingecko.com/sonic/all.json' }
   ]
 };
 

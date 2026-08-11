@@ -43,7 +43,7 @@ import { EVM_CHAINS, TOKENS } from './chains.js';
  * should land on the cheapest one rather than on whichever chain happened to
  * be first in the object. Ethereum last for the same reason, reversed.
  */
-const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 1];
+const CHAIN_PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 1];
 
 /**
  * Find a real, swappable token for a CoinGecko coin id.

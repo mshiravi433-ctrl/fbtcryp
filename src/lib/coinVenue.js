@@ -132,7 +132,7 @@ export function venueRoute(venue, { side = 'buy' } = {}) {
   if (!entries.length) return null;
 
   /* Same preference order as coinToSwap.js: cheapest chain first. */
-  const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 1];
+  const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 1];
   entries.sort(
     (a, b) => PREFERENCE.indexOf(Number(a[0])) - PREFERENCE.indexOf(Number(b[0]))
   );

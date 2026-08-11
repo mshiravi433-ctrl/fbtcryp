@@ -183,7 +183,7 @@ export default async function run() {
   /* The picker must be useful with zero network. If a CDN is blocked or the
      device is offline, these are the tokens that still show up. */
 
-  for (const chain of [56, 1, 137, 42161, 8453, 10, 43114]) {
+  for (const chain of [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146]) {
     const list = getTokensSync(chain);
     t(`chain ${chain} has a bundled token floor`, list.length >= 4);
     t(`chain ${chain} exposes its native gas coin`, list.some((x) => x.native));
@@ -367,7 +367,7 @@ export default async function run() {
 
   // Gas reserve is per-chain, because a flat constant is wrong in both
   // directions: 0.002 ETH strands ~$7, and on a busy L1 it can be too little.
-  t('every swappable chain declares a gas floor', [56, 1, 137, 42161, 8453, 10, 43114].every((c) => NATIVE_GAS_FLOOR[c] > 0));
+  t('every swappable chain declares a gas floor', [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146].every((c) => NATIVE_GAS_FLOOR[c] > 0));
   t('the ETH floor is larger than the L2 floor', NATIVE_GAS_FLOOR[1] > NATIVE_GAS_FLOOR[42161]);
   t('no floor is absurdly large', Object.values(NATIVE_GAS_FLOOR).every((v) => v < 1));
 
