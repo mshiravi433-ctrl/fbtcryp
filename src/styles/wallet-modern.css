@@ -89,8 +89,15 @@
 .wallet-actions-modern {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 14px;
+  gap: 14px;
+  margin-top: 18px;
+  align-items: start;
+}
+.wallet-actions-modern .wallet-action-modern.recv {
+  margin-top: 6px;
+}
+.wallet-actions-modern .wallet-action-modern.send {
+  margin-bottom: 6px;
 }
 .wallet-action-modern {
   position: relative;

@@ -92,24 +92,28 @@ export function WalletMesh() {
  */
 export function IconReceive(props) {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      {/* Arrow INTO a tray: down, then the tray. Direction is the whole
-          meaning of this icon, so the arrow is the dominant shape. */}
+      {/* Tray with arrow — more detail: double line tray for depth */}
       <path d="M12 4v10" />
       <path d="M8 10.5 12 14.5 16 10.5" />
       <path d="M4.5 17v1.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V17" />
+      <path d="M6 17h12" opacity="0.35" />
+      {/* Sparkle for attractiveness */}
+      <path d="M19 5l0.7 0.7L19 6.5l-0.7-0.7L19 5z" fill="currentColor" stroke="none" opacity="0.9" />
     </svg>
   );
 }
 
 export function IconSend(props) {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
       <path d="M12 20V10" />
       <path d="M8 13.5 12 9.5 16 13.5" />
       <path d="M4.5 7V5.5A1.5 1.5 0 0 1 6 4h12a1.5 1.5 0 0 1 1.5 1.5V7" />
+      <path d="M6 7h12" opacity="0.35" />
+      <path d="M19 18l0.7 0.7L19 19.5l-0.7-0.7L19 18z" fill="currentColor" stroke="none" opacity="0.9" />
     </svg>
   );
 }
