@@ -88,17 +88,30 @@ function headers() {
   return h;
 }
 
-async function lifiFetch(path) {
+async function lifiFetch(path, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${LIFI_BASE}${path}`, { headers: headers(), signal: ctrl.signal });
+    const useKey = opts.useKey !== false;
+    const h = useKey ? headers() : { accept: 'application/json' };
+    const res = await fetch(`${LIFI_BASE}${path}`, { headers: h, signal: ctrl.signal });
     const text = await res.text();
     let body = null;
     try {
       body = text ? JSON.parse(text) : null;
     } catch {
       body = { message: text.slice(0, 300) };
+    }
+    if (!res.ok && useKey && body?.message && /invalid api key/i.test(String(body.message))) {
+      const res2 = await fetch(`${LIFI_BASE}${path}`, { headers: { accept: 'application/json' }, signal: ctrl.signal });
+      const text2 = await res2.text();
+      let body2 = null;
+      try {
+        body2 = text2 ? JSON.parse(text2) : null;
+      } catch {
+        body2 = { message: text2.slice(0, 300) };
+      }
+      return { ok: res2.ok, status: res2.status, body: body2 };
     }
     return { ok: res.ok, status: res.status, body };
   } finally {
