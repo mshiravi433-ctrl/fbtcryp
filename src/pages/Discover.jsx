@@ -234,7 +234,7 @@ export default function Discover({ embedded = false }) {
                 variants={riseIn}
                 whileTap={{ scale: 0.975 }}
                 onClick={() => go(item)}
-                style={{ '--disc-hue': item.hue, background: `linear-gradient(145deg, color-mix(in srgb, \${item.hue} 8%, var(--bg-panel)), var(--bg-panel))`, borderColor: `color-mix(in srgb, \${item.hue} 18%, var(--line))`, boxShadow: `0 8px 20px color-mix(in srgb, \${item.hue} 10%, transparent)` }}
+                style={{ '--disc-hue': item.hue, background: 'rgba(255,255,255,0.06)', border: 'none', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
               >
                 <span className="disc-mark" aria-hidden="true" style={{ background: `linear-gradient(135deg, \${item.hue}, color-mix(in srgb, \${item.hue} 70%, #000))`, color: '#fff', boxShadow: `0 6px 14px color-mix(in srgb, \${item.hue} 22%, transparent)`, width: 36, height: 36, borderRadius: 11, fontSize: 15 }}>
                   {t(`discover.site.${item.id}`).slice(0, 1)}
