@@ -139,13 +139,25 @@ export default function Settings() {
     const result = await requestNotificationPermission();
     setPerm(result);
     if (result !== 'granted') return;
+
     const mode = await pushMode(true);
     setPmode(mode);
-    // registerPushAnywhere, not registerPush: on the packaged Android app the
-    // WebView has no Push API, so the web path returns UNSUPPORTED and the
-    // toggle would appear to succeed while registering nothing.
-    if (mode === 'server') await registerPushAnywhere();
+
+    // Always try to register push (native or web)
+    // This is the critical fix for Android APK + browser
+    try {
+      await registerPushAnywhere();
+    } catch (e) {
+      console.warn('Push registration failed:', e);
+    }
   };
+
+  // Auto-register push when permission is already granted (on app open)
+  useEffect(() => {
+    if (perm === 'granted' && pmode === 'server') {
+      registerPushAnywhere().catch(() => {});
+    }
+  }, [perm, pmode]);
 
   /* ------------------------------ handlers ------------------------------ */
 
