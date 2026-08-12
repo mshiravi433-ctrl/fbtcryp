@@ -113,124 +113,200 @@ export default function Contact() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('contact.title')}</h1>
       </motion.div>
 
-      <p className="muted">{t('contact.intro')}</p>
+      <p className="muted" style={{ marginBottom: 24, fontSize: 14.5 }}>{t('contact.intro')}</p>
 
-      {/* ---------- social channels (modern premium) ---------- */}
-      <motion.div 
-        style={{ 
+      {/* ---------- Premium Social Grid ---------- */}
+      <div style={{ marginBottom: 32 }}>
+        <p className="section-label" style={{ marginBottom: 14, paddingLeft: 4 }}>{t('contact.socialTitle')}</p>
+        <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-          gap: 14 
-        }} 
-        variants={stagger} 
-        initial="hidden" 
-        animate="show"
-      >
-        {SOCIALS.map((soc) => (
-          <motion.button
-            key={soc.id}
-            variants={riseIn}
-            whileHover={{ scale: 1.015 }}
-            whileTap={{ scale: 0.985 }}
-            onClick={() => openLink(soc.url)}
-            style={{
-              textAlign: 'left',
-              cursor: 'pointer',
-              width: '100%',
-              padding: '18px 20px',
-              borderRadius: 20,
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(148,163,184,0.12)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 16,
-              transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+          gap: 16 
+        }}>
+          {SOCIALS.map((soc, index) => (
+            <motion.button
+              key={soc.id}
+              variants={riseIn}
+              initial="hidden"
+              animate="show"
+              custom={index}
+              whileHover={{ y: -4, scale: 1.01 }}
+              whileTap={{ scale: 0.985 }}
+              onClick={() => openLink(soc.url)}
+              style={{
+                textAlign: 'left',
+                padding: '22px 24px',
+                borderRadius: 24,
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))',
+                border: '1px solid rgba(148,163,184,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 18,
+                cursor: 'pointer',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+              }}
+            >
               <div style={{
-                width: 48,
-                height: 48,
-                borderRadius: 16,
+                width: 56,
+                height: 56,
+                borderRadius: 18,
                 background: soc.grad,
                 display: 'grid',
                 placeItems: 'center',
                 color: '#fff',
                 flexShrink: 0,
-                boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
+                boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
               }}>
                 <SocialIcon id={soc.id} />
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{t(`contact.social.${soc.id}`)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{t(`contact.social.${soc.id}`)}</div>
                 <div className="mono" style={{ 
-                  fontSize: 12.5, 
-                  color: '#94a3b8', 
-                  marginTop: 3,
-                  wordBreak: 'break-all' 
+                  fontSize: 13, 
+                  color: '#94a3b8',
+                  wordBreak: 'break-all'
                 }}>
                   {soc.handle}
                 </div>
               </div>
-            </div>
-            <IconExternal width={18} height={18} style={{ color: '#64748b', flexShrink: 0 }} />
-          </motion.button>
-        ))}
-      </motion.div>
+              <IconExternal width={20} height={20} style={{ color: '#64748b' }} />
+            </motion.button>
+          ))}
+        </div>
+      </div>
 
-      {/* ---------- company card ---------- */}
-      <motion.section className="card" variants={stagger} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 10 }}>{t('contact.companyInfo')}</p>
-
-        <motion.div className="info-row" variants={riseIn}>
-          <span className="info-row-icon"><IconBuilding width={18} height={18} /></span>
-          <div style={{ flex: 1 }}>
-            <div className="faint">{t('about.company')}</div>
-            <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>{t('about.companyFull')}</div>
+      {/* ---------- Elegant Company Info ---------- */}
+      <motion.section 
+        className="card" 
+        variants={riseIn} 
+        initial="hidden" 
+        animate="show"
+        style={{ 
+          padding: '28px 24px',
+          background: 'linear-gradient(145deg, rgba(255,255,255,0.03), transparent)',
+          border: '1px solid rgba(148,163,184,0.12)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ 
+            width: 42, 
+            height: 42, 
+            borderRadius: 14, 
+            background: 'linear-gradient(135deg, #00e5ff, #7c4dff)',
+            display: 'grid',
+            placeItems: 'center'
+          }}>
+            <IconBuilding width={22} height={22} color="#000" />
           </div>
-        </motion.div>
-
-        <motion.div className="info-row" variants={riseIn}>
-          <span className="info-row-icon"><IconMapPin width={18} height={18} /></span>
-          <div style={{ flex: 1 }}>
-            <div className="faint">{t('about.address')}</div>
-            <div style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.75 }}>{t('about.addressValue')}</div>
-            <div className="row" style={{ gap: 8, marginTop: 9 }}>
-              <button className="tag" onClick={() => copy(t('about.addressValue'), 'addressCopied')}>
-                {t('common.copy')}
-              </button>
-              <button className="tag" onClick={() => openLink(MAPS_URL)}>
-                {t('contact.viewMap')}
-              </button>
-            </div>
+          <div>
+            <div style={{ fontSize: 13, color: '#64748b' }}>{t('contact.companyInfo')}</div>
+            <div style={{ fontWeight: 800, fontSize: 17 }}>{t('about.companyFull')}</div>
           </div>
-        </motion.div>
+        </div>
 
+        <div style={{ paddingLeft: 54 }}>
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>{t('about.address')}</div>
+            <div style={{ fontSize: 14.5, lineHeight: 1.7 }}>{t('about.addressValue')}</div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button 
+              onClick={() => copy(t('about.addressValue'), 'addressCopied')}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(148,163,184,0.2)',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {t('common.copy')}
+            </button>
+            <button 
+              onClick={() => openLink(MAPS_URL)}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 999,
+                background: 'rgba(0,229,255,0.1)',
+                border: '1px solid rgba(0,229,255,0.3)',
+                color: '#00e5ff',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {t('contact.viewMap')}
+            </button>
+          </div>
+        </div>
       </motion.section>
 
-      {/* ---------- support expectations ---------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 10 }}>{t('contact.support')}</p>
-        <p className="muted">{t('contact.supportBody')}</p>
+      {/* ---------- Support Card ---------- */}
+      <motion.section 
+        className="card" 
+        variants={riseIn} 
+        initial="hidden" 
+        animate="show"
+        style={{ marginTop: 20 }}
+      >
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ 
+            width: 44, 
+            height: 44, 
+            borderRadius: 14, 
+            background: 'rgba(124,77,255,0.15)',
+            display: 'grid',
+            placeItems: 'center',
+            flexShrink: 0
+          }}>
+            <IconMail width={22} height={22} color="#7c4dff" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{t('contact.support')}</div>
+            <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.7 }}>{t('contact.supportBody')}</p>
+          </div>
+        </div>
       </motion.section>
 
-      {/* ---------- anti-scam warning ---------- */}
-      <p className="notice notice-danger">{t('contact.scamWarning')}</p>
+      {/* ---------- Scam Warning (Premium) ---------- */}
+      <div style={{
+        marginTop: 24,
+        padding: '18px 20px',
+        borderRadius: 18,
+        background: 'rgba(255,59,107,0.08)',
+        border: '1px solid rgba(255,59,107,0.2)'
+      }}>
+        <p style={{ 
+          fontSize: 13.5, 
+          color: '#ff3b6b', 
+          lineHeight: 1.65,
+          margin: 0
+        }}>
+          {t('contact.scamWarning')}
+        </p>
+      </div>
 
-      <div style={{ marginTop: 28 }}>
+      {/* ---------- Back to About ---------- */}
+      <div style={{ marginTop: 32 }}>
         <button 
           onClick={() => navigate('/about')}
           style={{
             width: '100%',
-            padding: '15px 24px',
-            borderRadius: 18,
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(148,163,184,0.2)',
+            padding: '16px 0',
+            borderRadius: 20,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+            border: '1px solid rgba(148,163,184,0.25)',
             color: '#fff',
-            fontWeight: 600,
+            fontWeight: 700,
             fontSize: 15,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
           }}
         >
           {t('about.title')}
