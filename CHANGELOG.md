@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.28.4 — swap "no route" bug fixed: OpenOcean executable, proxy fallback, Iran-friendly RPCs
+
+Reported: «در سواپ اصلی وقتی دوتا توکن را انتخاب کردی و مقدار را وارد کردی
+میگه مسیری برای این تراکنش وجود ندارد». The swap screen's entire quoting
+stack rested on ONE executable aggregator (KyberSwap); OpenOcean and Velora
+were quoted but could never win the comparison because they were marked
+non-executable. So whenever KyberSwap's API was unreachable — geo-filtering,
+ISP blocks, national censorship, the exact conditions Iranian customers hit —
+the app answered "no route between these two tokens" even though OpenOcean
+had found one. Every aggregator outage was a total swap outage.
+
+- **OpenOcean is now executable** (`lib/openocean.js`): its quote can win the
+  comparison and `executeSwap` signs its calldata. The 0.7% platform fee
+  survives via `referrer` + `referrerFee`, and it is VERIFIED before signing
+  by decoding the calldata (their `/decodeInputData`) and checking the
+  referrer is our payout address — fail-closed, same discipline as the
+  KyberSwap extraFee echo. `minOutput` is passed on BSC/ETH/Base for
+  on-chain slippage protection; gasLimit gets the documented 1.25–2.5×
+  headroom.
+- **Same-origin proxy fallback** (`server/swapProxy.js` + new `/api/swap/*`
+  routes): when a direct call to KyberSwap or OpenOcean fails at the NETWORK
+  layer, the identical request is retried through our own server, which
+  forwards it from a datacenter. The app's origin is reachable by anyone who
+  can open the app at all, so this turns a hard "no route" into a working
+  quote for exactly the users who were locked out. No open proxy: fixed
+  upstream allowlist, no SSRF.
+- **BSC RPCs are Iran-friendly** (`lib/chains.js`): the list now leads with
+  neutral community endpoints (PublicNode, Ankr, 1RPC, ninicoin.io) and keeps
+  the Binance-hosted seeds as tail redundancy — Binance's domains are blocked
+  for Iranian users, and blocked RPCs meant every on-chain read stalled and
+  the direct path failed.
+- **Honest errors + retry** (`lib/swap.js`, `Swap.jsx`, locales): when every
+  routing source is unreachable the app now says so (`QUOTE_NETWORK`, with a
+  VPN hint) instead of a false "no route", and a retry button re-quotes
+  without retyping the amount. Genuine no-route verdicts are still reported
+  as no-route.
+- **Approval fix** (`Swap.jsx`): the pre-signing re-quote can now come from a
+  different executable router than the one approved; the spender is
+  re-checked and approved if it changed, so a source flip can no longer
+  revert at the transfer step after the user paid gas.
+
 ## 1.28.3 — SOL tradeable from the market, modern Lab/Trade/Buy/Swap surfaces, revenue roadmap
 
 ### SOL is no longer "not on this network"

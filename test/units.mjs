@@ -41,7 +41,7 @@ import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
 import { comparable, improvementBps, isUsableQuote, pickBestQuote } from '../src/lib/bestQuote.js';
-import { bpsToPercent, openOceanSupports } from '../src/lib/openocean.js';
+import { bpsToPercent, ooSwapParams, openOceanSupports, toOOAddress } from '../src/lib/openocean.js';
 import { betaToBtc, cyclePosition, macroContext, marketRegime } from '../src/lib/macro.js';
 import { CONFIDENCE_CEILING, verdict } from '../src/lib/verdict.js';
 import {
@@ -103,8 +103,9 @@ import {
 import { pickPromoKey } from '../src/lib/notify.js';
 import { analyze } from '../src/lib/ai.js';
 import { backtest, confidenceFrom, signalAt } from '../src/lib/backtest.js';
-import { formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
-import { FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
+import { classifyQuoteFailure, formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
+import { EVM_CHAINS, EVM_CHAIN_ORDER, FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
+import { kyberSlug, kyberUpstreamUrl, ooSlug, ooUpstreamUrl } from '../server/swapProxy.js';
 import {
   DCA_INTERVALS,
   TRAIL_MAX_PCT,
@@ -1838,6 +1839,128 @@ export default async function run() {
     t('BNB Chain is supported', openOceanSupports(56));
     t('Ethereum is supported', openOceanSupports(1));
     t('an unknown chain is not', !openOceanSupports(999999));
+
+    /* ---- OpenOcean EXECUTION (the "no route" fix) ---- */
+    /*
+     * OpenOcean used to be quote-only, which made KyberSwap the single point
+     * of failure for the whole swap screen: an unexecutable quote can never
+     * win the comparison, so a KyberSwap outage (or a network that cannot
+     * reach it — the Iranian case) produced "no route" even when OpenOcean
+     * had found one. The executable flag is what lets the second aggregator
+     * actually save the swap.
+     */
+    const ooToken = { symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18, native: false };
+    const bnb = { symbol: 'BNB', address: null, decimals: 18, native: true };
+    const usdc = { symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18, native: false };
+
+    const swapParams = ooSwapParams({
+      chainId: 56,
+      fromToken: ooToken,
+      toToken: bnb,
+      amountInWei: 5000000n,
+      slippage: 0.5,
+      account: '0x1111111111111111111111111111111111111111',
+      feeBps: 70,
+      feeReceiver: '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6',
+      minOutWei: 4900000000000000n
+    });
+    t('the swap request carries the signer as account', swapParams.get('account') === '0x1111111111111111111111111111111111111111');
+    t('the fee is sent as a PERCENT of the input, not bps', swapParams.get('referrerFee') === '0.7');
+    t('the fee receiver is sent as referrer', swapParams.get('referrer') === '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6');
+    t('minOutput is sent on BNB Chain', swapParams.get('minOutput') === '4900000000000000');
+    t('the native coin maps to the sentinel', toOOAddress(bnb) === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE');
+
+    /*
+     * minOutput is only documented on Base/BNB/ETH. Sending it where it is
+     * unsupported could make the whole request fail — the guard must be
+     * per-chain, not universal.
+     */
+    const polyParams = ooSwapParams({
+      chainId: 137,
+      fromToken: ooToken,
+      toToken: usdc,
+      amountInWei: 5000000n,
+      slippage: 0.5,
+      account: '0x1111111111111111111111111111111111111111',
+      feeBps: 70,
+      feeReceiver: '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6',
+      minOutWei: 4900000n
+    });
+    t('minOutput is NOT sent on unsupported chains', polyParams.get('minOutput') === null);
+  }
+
+  /* --------------------- swap failure classification ---------------------- */
+  {
+    /*
+     * The user-facing difference between "no route between these tokens" and
+     * "couldn't reach the routing service" matters: the second is the
+     * geo-blocked/ISP-filtered case (Iranian customers) and retrying or
+     * switching networks genuinely helps. We only claim a network problem
+     * when NO source answered at all and every failure was network-level.
+     */
+    const netErr = () => {
+      const e = new Error('fetch failed');
+      e.network = true;
+      return e;
+    };
+    t(
+      'all sources unreachable is a NETWORK error, not a no-route verdict',
+      classifyQuoteFailure({ failures: [netErr(), netErr()], answered: 0 }) === 'QUOTE_NETWORK'
+    );
+    t('a genuine no-route answer wins over a network failure', classifyQuoteFailure({ failures: [netErr()], answered: 1 }) === 'NO_ROUTE');
+    t('no failures means no route', classifyQuoteFailure({ failures: [], answered: 2 }) === 'NO_ROUTE');
+    t('empty input defaults to no route', classifyQuoteFailure() === 'NO_ROUTE');
+  }
+
+  /* ---------------------- the aggregator proxy (server) ------------------- */
+  {
+    /*
+     * Same-origin proxy for users whose network cannot reach the aggregator
+     * APIs directly. The chainId is our routing key (consumed server-side);
+     * everything else must pass through verbatim so the proxied request is
+     * identical to the direct one.
+     */
+    t(
+      'kyber routes map to the bsc slug with params forwarded',
+      kyberUpstreamUrl('routes', { chainId: '56', tokenIn: '0xEeee', tokenOut: '0x55d3', amountIn: '1000' }) ===
+        'https://aggregator-api.kyberswap.com/bsc/api/v1/routes?tokenIn=0xEeee&tokenOut=0x55d3&amountIn=1000'
+    );
+    t('kyber build has no query string', kyberUpstreamUrl('build', { chainId: '1' }) === 'https://aggregator-api.kyberswap.com/ethereum/api/v1/route/build');
+    t('openocean quote maps chain 1 to eth', ooUpstreamUrl('quote', { chainId: '1', tokenIn: '0xEeee' }).startsWith('https://open-api.openocean.finance/v4/eth/quote?'));
+    t('unknown chains are refused, not forwarded', (() => {
+      try {
+        kyberUpstreamUrl('routes', { chainId: '999' });
+        return false;
+      } catch {
+        return true;
+      }
+    })());
+    t('an unknown chain on openocean is refused too', (() => {
+      try {
+        ooUpstreamUrl('swap', { chainId: '999' });
+        return false;
+      } catch {
+        return true;
+      }
+    })());
+    t('chainId never reaches the upstream', !kyberUpstreamUrl('routes', { chainId: '56', tokenIn: '0x1' }).includes('chainId'));
+    t('every supported EVM chain has a kyber slug', EVM_CHAIN_ORDER.every((id) => kyberSlug(id)));
+  }
+
+  /* ---------------------- RPC endpoints per chain ------------------------- */
+  {
+    /*
+     * BSC's Binance-hosted seeds are geo-filtered in some of our biggest
+     * markets (Iran), which used to make every on-chain read — and with it
+     * the swap's direct path — fail there. Neutral community endpoints must
+     * come first so the FallbackProvider never sits on a stall timeout for
+     * those users, with the Binance seeds kept as redundancy at the tail.
+     */
+    t('BSC leads with a neutral community RPC', EVM_CHAINS[56].rpc[0] === 'https://bsc-rpc.publicnode.com');
+    t('BSC keeps the Binance seeds as redundancy', EVM_CHAINS[56].rpc.includes('https://bsc-dataseed.binance.org'));
+    t('BSC offers at least five endpoints to fail over across', EVM_CHAINS[56].rpc.length >= 5);
+    t('every chain keeps at least one RPC endpoint', EVM_CHAIN_ORDER.every((id) => (EVM_CHAINS[id]?.rpc?.length ?? 0) >= 1));
+    t('every BSC RPC is https', EVM_CHAINS[56].rpc.every((u) => u.startsWith('https://')));
   }
 
   /* ---------------------- what the past actually says -------------------- */

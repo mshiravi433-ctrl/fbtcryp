@@ -51,6 +51,22 @@ export default async function run() {
   r = await quoteAllSources([boom(), boom()]);
   t('every source failing yields no quote, not a bad one', r.best === null);
 
+  /* ---- THE "NO ROUTE" REGRESSION: a down primary must not kill the swap ---- */
+  /*
+   * Before OpenOcean became executable, a KyberSwap outage — or a network
+   * that cannot reach it, the Iranian case — produced "no route" even when
+   * OpenOcean had found one, because a quote that cannot be signed can never
+   * win the comparison. The fix: an executable second aggregator must win
+   * the moment the primary fails.
+   */
+  const ooQuote = { ...q(140), source: 'openocean', executable: true, spender: '0x6352a56caadC4F1E25CD6c75970Fa768A3304e64' };
+  r = await quoteAllSources([boom(), after(20, ooQuote)]);
+  t('an executable OpenOcean quote saves the swap when KyberSwap is down', r.best?.source === 'openocean' && r.best?.amountOutWei === 140n);
+  t('...and the failure reason is reported for classification', r.failures.length === 1 && r.answered === 1);
+
+  r = await quoteAllSources([boom(), after(20, { ...ooQuote, executable: false })]);
+  t('a quote-only OpenOcean still cannot win (nothing signable)', r.best === null);
+
   /*
    * A source that returns something unusable (empty pool, error shape) is
    * discarded rather than ranked — otherwise a zero-output quote could win

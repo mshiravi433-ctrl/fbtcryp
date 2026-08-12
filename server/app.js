@@ -45,6 +45,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
+import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
@@ -71,7 +72,13 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '64kb' }));
+/*
+ * 256kb instead of the usual 64kb: the KyberSwap route/build proxy forwards a
+ * routeSummary, which grows with the number of pools in the route and can
+ * reach tens of kilobytes on multi-hop trades. Still far too small to be a
+ * DoS vector.
+ */
+app.use(express.json({ limit: '256kb' }));
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(telegramAuth(BOT_TOKEN)); // optional — populates req.tgUser when present
 
@@ -994,6 +1001,36 @@ app.get('/api/solana/oo/quote', async (req, res) => {
 
 app.get('/api/solana/oo/swap', async (req, res) => {
   const r = await oceanSwap(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * EVM swap aggregator proxy — the same-origin fallback that keeps swaps
+ * working for users whose network cannot reach the aggregator APIs directly
+ * (geo-filtering, ISP blocks, national censorship — see server/swapProxy.js
+ * and the file headers in lib/aggregator.js / lib/openocean.js).
+ *
+ * The client calls these only after its DIRECT call to the aggregator failed
+ * at the network layer; the request is forwarded verbatim from here, so the
+ * response is byte-for-byte what the direct call would have returned.
+ */
+app.get('/api/swap/kyber/routes', async (req, res) => {
+  const r = await proxyKyberRoutes(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.post('/api/swap/kyber/build', async (req, res) => {
+  const r = await proxyKyberBuild(req.body ?? {});
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/swap/oo/quote', async (req, res) => {
+  const r = await proxyOoQuote(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/swap/oo/swap', async (req, res) => {
+  const r = await proxyOoSwap(req.query);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
