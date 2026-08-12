@@ -204,11 +204,40 @@ export default function About() {
 
       <p className="notice" style={{ marginTop: 8 }}>{t('about.riskDisclosure')}</p>
 
-      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-        <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/contact')}>
+      <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+        <button 
+          onClick={() => navigate('/contact')}
+          style={{
+            flex: 1,
+            padding: '14px 20px',
+            borderRadius: 16,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(148,163,184,0.2)',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
           {t('contact.title')}
         </button>
-        <button className="btn" style={{ flex: 1 }} onClick={() => navigate('/audit')}>
+        <button 
+          onClick={() => navigate('/audit')}
+          style={{
+            flex: 1,
+            padding: '14px 20px',
+            borderRadius: 16,
+            background: 'linear-gradient(135deg, #00e5ff, #7c4dff)',
+            color: '#000',
+            fontWeight: 700,
+            fontSize: 14,
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(0,229,255,0.3)',
+            transition: 'all 0.2s ease'
+          }}
+        >
           {t('audit.title')}
         </button>
       </div>

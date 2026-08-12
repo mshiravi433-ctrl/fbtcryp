@@ -115,43 +115,66 @@ export default function Contact() {
 
       <p className="muted">{t('contact.intro')}</p>
 
-      {/* ---------- social channels ---------- */}
-      <motion.div className="stack" style={{ gap: 9 }} variants={stagger} initial="hidden" animate="show">
+      {/* ---------- social channels (modern premium) ---------- */}
+      <motion.div 
+        style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+          gap: 14 
+        }} 
+        variants={stagger} 
+        initial="hidden" 
+        animate="show"
+      >
         {SOCIALS.map((soc) => (
           <motion.button
             key={soc.id}
-            className="card lift"
             variants={riseIn}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.015 }}
+            whileTap={{ scale: 0.985 }}
             onClick={() => openLink(soc.url)}
-            style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
+            style={{
+              textAlign: 'left',
+              cursor: 'pointer',
+              width: '100%',
+              padding: '18px 20px',
+              borderRadius: 20,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(148,163,184,0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)'
+            }}
           >
-            <div className="row-between">
-              <div className="row" style={{ gap: 12, minWidth: 0 }}>
-                <motion.span
-                  whileHover={{ rotate: 8, scale: 1.08 }}
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 14,
-                    display: 'grid',
-                    placeItems: 'center',
-                    background: soc.grad,
-                    color: '#fff',
-                    flexShrink: 0
-                  }}
-                >
-                  <SocialIcon id={soc.id} />
-                </motion.span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t(`contact.social.${soc.id}`)}</div>
-                  <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', wordBreak: 'break-all' }}>
-                    {soc.handle}
-                  </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 16,
+                background: soc.grad,
+                display: 'grid',
+                placeItems: 'center',
+                color: '#fff',
+                flexShrink: 0,
+                boxShadow: '0 4px 14px rgba(0,0,0,0.15)'
+              }}>
+                <SocialIcon id={soc.id} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{t(`contact.social.${soc.id}`)}</div>
+                <div className="mono" style={{ 
+                  fontSize: 12.5, 
+                  color: '#94a3b8', 
+                  marginTop: 3,
+                  wordBreak: 'break-all' 
+                }}>
+                  {soc.handle}
                 </div>
               </div>
-              <IconExternal width={16} height={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
             </div>
+            <IconExternal width={18} height={18} style={{ color: '#64748b', flexShrink: 0 }} />
           </motion.button>
         ))}
       </motion.div>
@@ -195,9 +218,24 @@ export default function Contact() {
       {/* ---------- anti-scam warning ---------- */}
       <p className="notice notice-danger">{t('contact.scamWarning')}</p>
 
-      <button className="btn btn-ghost" onClick={() => navigate('/about')}>
-        {t('about.title')}
-      </button>
+      <div style={{ marginTop: 28 }}>
+        <button 
+          onClick={() => navigate('/about')}
+          style={{
+            width: '100%',
+            padding: '15px 24px',
+            borderRadius: 18,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(148,163,184,0.2)',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: 15,
+            cursor: 'pointer'
+          }}
+        >
+          {t('about.title')}
+        </button>
+      </div>
     </PageTransition>
   );
 }
