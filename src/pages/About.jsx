@@ -30,66 +30,106 @@ export default function About() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('about.title')}</h1>
       </motion.div>
 
-      {/* ---------- premium hero ---------- */}
+      {/* ---------- Ultra Premium Hero ---------- */}
       <motion.section 
-        className="card card-rgb" 
+        className="card" 
         style={{ 
-          background: 'linear-gradient(135deg, #0a0f1e 0%, #111827 100%)',
-          border: '1px solid rgba(0,229,255,0.2)',
+          background: 'linear-gradient(145deg, #0a0f1e 0%, #111827 100%)',
+          border: '1px solid rgba(0,229,255,0.25)',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          padding: '42px 24px 36px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)'
         }} 
         variants={riseIn} 
         initial="hidden" 
         animate="show"
       >
+        {/* Decorative glow */}
         <div style={{ 
           position: 'absolute', 
-          top: -50, 
-          right: -50, 
+          top: -80, 
+          right: -60, 
+          width: 280, 
+          height: 280, 
+          background: 'radial-gradient(circle, rgba(0,229,255,0.12) 0%, transparent 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none'
+        }} />
+        <div style={{ 
+          position: 'absolute', 
+          bottom: -60, 
+          left: -40, 
           width: 200, 
           height: 200, 
-          background: 'radial-gradient(circle, rgba(0,229,255,0.15) 0%, transparent 70%)',
-          borderRadius: '50%'
+          background: 'radial-gradient(circle, rgba(124,77,255,0.1) 0%, transparent 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none'
         }} />
-        
-        <div style={{ textAlign: 'center', padding: '32px 20px 24px', position: 'relative', zIndex: 1 }}>
+
+        <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          {/* Logo with premium glow */}
           <div style={{
-            width: 82,
-            height: 82,
-            borderRadius: 24,
-            margin: '0 auto 20px',
+            width: 92,
+            height: 92,
+            borderRadius: 26,
+            margin: '0 auto 24px',
             display: 'grid',
             placeItems: 'center',
-            background: 'linear-gradient(145deg, #00e5ff, #7c4dff)',
+            background: 'linear-gradient(145deg, #00e5ff, #7c4dff, #ff2d95)',
             color: '#000',
             fontWeight: 900,
-            fontSize: 26,
+            fontSize: 30,
             fontFamily: 'var(--font-mono)',
-            boxShadow: '0 10px 30px rgba(0,229,255,0.3)'
+            boxShadow: '0 16px 40px rgba(0,229,255,0.35), inset 0 2px 8px rgba(255,255,255,0.4)',
+            border: '1px solid rgba(255,255,255,0.3)'
           }}>
             FBT
           </div>
           
-          <h2 className="h2 gradient-text" style={{ fontSize: 24, marginBottom: 6 }}>
+          <h2 className="h2 gradient-text" style={{ 
+            fontSize: 26, 
+            marginBottom: 8,
+            letterSpacing: '-0.5px'
+          }}>
             {t('about.companyFull')}
           </h2>
-          <p style={{ color: '#94a3b8', fontSize: 15, maxWidth: 260, margin: '0 auto' }}>
+          
+          <p style={{ 
+            color: '#94a3b8', 
+            fontSize: 15.5, 
+            maxWidth: 280, 
+            margin: '0 auto 28px',
+            lineHeight: 1.6
+          }}>
             {t('about.tagline')}
           </p>
 
-          {/* Stats */}
+          {/* Beautiful Stats Row */}
           <div style={{ 
             display: 'flex', 
             justifyContent: 'center', 
-            gap: 32, 
-            marginTop: 28,
+            gap: 36, 
             flexWrap: 'wrap'
           }}>
             {stats.map((stat, i) => (
               <div key={i} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{stat.number}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{stat.label}</div>
+                <div style={{ 
+                  fontSize: 26, 
+                  fontWeight: 900, 
+                  color: '#fff',
+                  lineHeight: 1
+                }}>
+                  {stat.number}
+                </div>
+                <div style={{ 
+                  fontSize: 12.5, 
+                  color: '#64748b', 
+                  marginTop: 4,
+                  fontWeight: 500
+                }}>
+                  {stat.label}
+                </div>
               </div>
             ))}
           </div>

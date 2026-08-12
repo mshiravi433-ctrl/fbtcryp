@@ -34,7 +34,7 @@ import {
   syncWatches,
   updateOrder
 } from '../lib/orders';
-import { showLocalNotification } from '../lib/notify';
+import { showLocalNotification, playSound, vibrate } from '../lib/notify';
 import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -124,8 +124,14 @@ export default function Orders() {
 
       if (!ready || !shouldNotify(cur, now)) return cur;
       changed = true;
-      // Tagged per order so a re-fire replaces the old notification rather
-      // than stacking a second copy in the shade.
+
+      // === PREMIUM NOTIFICATION FOR AUTO ORDERS ===
+      // Distinct sound + notification for filled auto orders
+      const { playSound, vibrate } = await import('../lib/notify');
+      
+      playSound('alert');                    // Special alert sound
+      vibrate([80, 60, 80, 60, 120], haptic); // Stronger vibration pattern
+
       showLocalNotification(t('orders.notifyTitle'), {
         body: t('orders.notifyBody', {
           from: cur.fromToken.symbol,
