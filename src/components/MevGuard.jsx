@@ -73,15 +73,27 @@ export default function MevGuard({
       </div>
 
       {relay ? (
-        <div className="set-row" style={{ padding: '10px 0 0' }}>
-          <span className="set-row-label">
-            <div>{t('mev.privateTitle')}</div>
-            <div className="set-row-sub">{t('mev.privateSub', { name: relay.name })}</div>
-          </span>
-          <Switch on={protectOn} label={t('mev.privateTitle')} onChange={onProtectChange} />
-        </div>
+        <>
+          <div className="set-row" style={{ padding: '10px 0 0' }}>
+            <span className="set-row-label">
+              <div>{t('mev.privateTitle')}</div>
+              <div className="set-row-sub">{t('mev.privateSub', { name: relay.name })}</div>
+            </span>
+            <Switch on={protectOn} label={t('mev.privateTitle')} onChange={onProtectChange} />
+          </div>
+          {protectOn && (
+            <p className="faint" style={{ marginTop: 8, fontSize: 11, lineHeight: 1.7 }}>
+              {t('mev.noKey', { defaultValue: 'No API key needed — switch your wallet RPC to the URL below.' })}
+            </p>
+          )}
+        </>
       ) : (
-        <p className="faint" style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.7 }}>{t('mev.noRelay')}</p>
+        <div style={{ marginTop: 8 }}>
+          <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, margin: 0 }}>{t('mev.noRelay')}</p>
+          <p className="faint" style={{ fontSize: 11, lineHeight: 1.7, margin: '6px 0 0' }}>
+            {t('mev.noKey', { defaultValue: 'No API key required — on supported chains you only point your wallet at a Protect RPC (e.g. Flashbots on Ethereum).' })}
+          </p>
+        </div>
       )}
 
       {protectOn && relay && (

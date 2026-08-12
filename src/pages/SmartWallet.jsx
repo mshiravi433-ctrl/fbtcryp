@@ -20,7 +20,13 @@ import {
 } from '../lib/smartWallet';
 import { useTelegram } from '../context/TelegramContext';
 
-export default function SmartWallet() {
+/**
+ * Smart Wallet — prettier, more modern layout.
+ *
+ * Hero card with gradient + live daily-meter, then three bento-style cards
+ * (Session · Guardians · Allowlist) instead of one long flat stack.
+ */
+export default function SmartWallet({ embedded = false, onBack }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
@@ -33,28 +39,54 @@ export default function SmartWallet() {
   const [err, setErr] = useState(null);
 
   const refresh = () => setTick((n) => n + 1);
-
   const remaining = Math.max(0, policy.dailyLimitUsd - spend.usd);
+  const spentPct = Math.min(100, (spend.usd / Math.max(1, policy.dailyLimitUsd)) * 100);
 
-  return (
-    <PageTransition>
-      <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-          <IconChevronLeft width={18} height={18} />
-        </button>
-        <h1 className="h1" style={{ fontSize: 19 }}>{t('smart.title')}</h1>
-      </motion.div>
-      <p className="muted" style={{ lineHeight: 1.85 }}>{t('smart.subtitle')}</p>
+  const goBack = () => (onBack ? onBack() : navigate(-1));
 
-      <InfoBox title={t('smart.whatTitle')} tone="info" id="smart-what">
-        <p>{t('smart.whatBody')}</p>
-      </InfoBox>
+  const content = (
+    <>
+      {!embedded && (
+        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
+          <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
+            <IconChevronLeft width={18} height={18} />
+          </button>
+          <h1 className="h1" style={{ fontSize: 19 }}>{t('smart.title')}</h1>
+        </motion.div>
+      )}
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="set-row" style={{ padding: 0 }}>
-          <span className="set-row-label">
-            <div>{t('smart.enable')}</div>
-            <div className="set-row-sub">{t('smart.enableSub')}</div>
+      {/* ── HERO ────────────────────────────────────────────── */}
+      <motion.section
+        className="wallet-hero-modern"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{
+          marginTop: embedded ? 0 : 12,
+          padding: 20,
+          borderRadius: 22,
+          background: 'linear-gradient(135deg, rgba(124,77,255,0.22), rgba(0,229,255,0.12) 55%, rgba(255,45,149,0.18))',
+          border: '1px solid rgba(255,255,255,0.08)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <div className="wallet-hero-aurora" aria-hidden="true" />
+        <div className="row-between" style={{ position: 'relative' }}>
+          <span className="row" style={{ gap: 10 }}>
+            <span
+              style={{
+                width: 44, height: 44, borderRadius: 14, display: 'grid', placeItems: 'center',
+                background: 'linear-gradient(135deg,#7c4dff,#00e5ff)',
+                color: '#0b0f1a', boxShadow: '0 10px 26px rgba(124,77,255,0.35)'
+              }}
+            >
+              <IconShield width={22} height={22} />
+            </span>
+            <span>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{t('smart.title')}</div>
+              <div className="faint" style={{ fontSize: 11.5 }}>{t('smart.subtitle')}</div>
+            </span>
           </span>
           <Switch
             on={policy.enabled}
@@ -66,55 +98,106 @@ export default function SmartWallet() {
             }}
           />
         </div>
-      </motion.section>
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff' }}>
-            <IconShield width={18} height={18} />
-          </span>
-          <div>
-            <div style={{ fontWeight: 800 }}>{t('smart.today')}</div>
-            <div className="mono" style={{ fontSize: 18, fontWeight: 900 }}>${spend.usd.toFixed(2)}</div>
-            <div className="faint" style={{ fontSize: 11.5 }}>{t('smart.remaining', { n: remaining.toFixed(0) })}</div>
+        {/* Live spend meter */}
+        <div style={{ marginTop: 18, position: 'relative' }}>
+          <div className="row-between" style={{ marginBottom: 6 }}>
+            <span className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6 }}>
+              {t('smart.today')}
+            </span>
+            <span className="faint" style={{ fontSize: 11 }}>
+              ${spend.usd.toFixed(2)} / ${policy.dailyLimitUsd}
+            </span>
+          </div>
+          <div style={{ height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${spentPct}%` }}
+              transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+              style={{
+                height: '100%',
+                borderRadius: 999,
+                background: spentPct > 80
+                  ? 'linear-gradient(90deg,#ff2d95,#ff6b6b)'
+                  : 'linear-gradient(90deg,#00e5ff,#7c4dff)',
+                boxShadow: spentPct > 80
+                  ? '0 0 16px rgba(255,45,149,0.55)'
+                  : '0 0 16px rgba(0,229,255,0.45)'
+              }}
+            />
+          </div>
+          <div className="row-between" style={{ marginTop: 8 }}>
+            <span className="faint" style={{ fontSize: 11 }}>
+              {t('smart.remaining', { n: remaining.toFixed(0) })}
+            </span>
+            {session && (
+              <span className="pill pill-up" style={{ fontSize: 10 }}>
+                ⏱ {Math.max(0, Math.round(((session.expiresAt - Date.now()) / 60000)))}m
+              </span>
+            )}
           </div>
         </div>
-
-        <label className="field-label">{t('smart.daily')}</label>
-        <input
-          type="number"
-          inputMode="decimal"
-          value={policy.dailyLimitUsd}
-          onChange={(e) => {
-            savePolicy({ dailyLimitUsd: e.target.value });
-            refresh();
-          }}
-        />
-        <label className="field-label" style={{ marginTop: 10 }}>{t('smart.perTx')}</label>
-        <input
-          type="number"
-          inputMode="decimal"
-          value={policy.perTxLimitUsd}
-          onChange={(e) => {
-            savePolicy({ perTxLimitUsd: e.target.value });
-            refresh();
-          }}
-        />
-        <p className="faint" style={{ marginTop: 8, fontSize: 12 }}>{t('smart.example')}</p>
       </motion.section>
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>{t('smart.sessionTitle')}</div>
-        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75 }}>{t('smart.sessionBody')}</p>
+      {/* ── LIMITS BENTO ────────────────────────────────────── */}
+      <motion.section
+        className="wallet-pie-card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 12 }}>{t('smart.daily')} & {t('smart.perTx')}</div>
+        <div className="row" style={{ gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label className="field-label" style={{ marginTop: 0 }}>{t('smart.daily')}</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={policy.dailyLimitUsd}
+              onChange={(e) => { savePolicy({ dailyLimitUsd: e.target.value }); refresh(); }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="field-label" style={{ marginTop: 0 }}>{t('smart.perTx')}</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={policy.perTxLimitUsd}
+              onChange={(e) => { savePolicy({ perTxLimitUsd: e.target.value }); refresh(); }}
+            />
+          </div>
+        </div>
+        <p className="faint" style={{ marginTop: 10, fontSize: 11.5, lineHeight: 1.7 }}>{t('smart.example')}</p>
+      </motion.section>
+
+      {/* ── SESSION CARD ────────────────────────────────────── */}
+      <motion.section
+        className="wallet-pie-card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
+      >
+        <div className="row-between" style={{ marginBottom: 8 }}>
+          <div style={{ fontWeight: 800, fontSize: 13 }}>{t('smart.sessionTitle')}</div>
+          <span style={{ width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center',
+            background: 'linear-gradient(135deg,rgba(0,229,255,0.18),rgba(124,77,255,0.18))' }}>⏱</span>
+        </div>
+        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75, margin: 0 }}>{t('smart.sessionBody')}</p>
         {session ? (
           <>
-            <p className="mono" style={{ marginTop: 8 }}>{t('smart.sessionUntil', { t: new Date(session.expiresAt).toLocaleTimeString() })}</p>
-            <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => { endSession(); refresh(); }}>{t('smart.endSession')}</button>
+            <p className="mono" style={{ marginTop: 10, fontSize: 12 }}>
+              {t('smart.sessionUntil', { t: new Date(session.expiresAt).toLocaleTimeString() })}
+            </p>
+            <button className="btn btn-ghost" style={{ marginTop: 6 }} onClick={() => { endSession(); refresh(); }}>
+              {t('smart.endSession')}
+            </button>
           </>
         ) : (
           <button
             className="btn btn-primary"
-            style={{ marginTop: 8 }}
+            style={{ marginTop: 12, borderRadius: 14, minHeight: 44 }}
             onClick={() => {
               startSession({ minutes: 30, bonusUsd: 250 });
               haptic?.('success');
@@ -126,9 +209,16 @@ export default function SmartWallet() {
         )}
       </motion.section>
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>{t('smart.guardiansTitle')}</div>
-        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75 }}>{t('smart.guardiansBody')}</p>
+      {/* ── GUARDIANS ───────────────────────────────────────── */}
+      <motion.section
+        className="wallet-pie-card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 6 }}>{t('smart.guardiansTitle')}</div>
+        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75, marginTop: 0 }}>{t('smart.guardiansBody')}</p>
         <div className="row" style={{ gap: 8, marginTop: 10 }}>
           <input value={guardian} onChange={(e) => setGuardian(e.target.value)} placeholder="0x…" style={{ flex: 1 }} />
           <button
@@ -143,17 +233,33 @@ export default function SmartWallet() {
             {t('common.confirm')}
           </button>
         </div>
-        {policy.guardians.map((g) => (
-          <div key={g} className="row-between" style={{ marginTop: 8 }}>
-            <span className="mono" style={{ fontSize: 11 }}>{g.slice(0, 6)}…{g.slice(-4)}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => { removeGuardian(g); refresh(); }}>{t('common.close')}</button>
+        {policy.guardians.length > 0 && (
+          <div className="stack" style={{ gap: 7, marginTop: 10 }}>
+            {policy.guardians.map((g) => (
+              <div key={g} className="row-between" style={{
+                padding: '8px 10px', borderRadius: 12,
+                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)'
+              }}>
+                <span className="mono" style={{ fontSize: 11 }}>{g.slice(0, 8)}…{g.slice(-6)}</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => { removeGuardian(g); refresh(); }}>
+                  {t('common.close')}
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </motion.section>
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>{t('smart.allowTitle')}</div>
-        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75 }}>{t('smart.allowBody')}</p>
+      {/* ── ALLOWLIST ───────────────────────────────────────── */}
+      <motion.section
+        className="wallet-pie-card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 6 }}>{t('smart.allowTitle')}</div>
+        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75, marginTop: 0 }}>{t('smart.allowBody')}</p>
         <div className="row" style={{ gap: 8, marginTop: 10 }}>
           <input value={allow} onChange={(e) => setAllow(e.target.value)} placeholder="0x…" style={{ flex: 1 }} />
           <button
@@ -168,19 +274,32 @@ export default function SmartWallet() {
             {t('common.confirm')}
           </button>
         </div>
-        {policy.allowlist.map((g) => (
-          <div key={g} className="row-between" style={{ marginTop: 8 }}>
-            <span className="mono" style={{ fontSize: 11 }}>{g.slice(0, 6)}…{g.slice(-4)}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => { removeAllowlist(g); refresh(); }}>{t('common.close')}</button>
+        {policy.allowlist.length > 0 && (
+          <div className="stack" style={{ gap: 7, marginTop: 10 }}>
+            {policy.allowlist.map((g) => (
+              <div key={g} className="row-between" style={{
+                padding: '8px 10px', borderRadius: 12,
+                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)'
+              }}>
+                <span className="mono" style={{ fontSize: 11 }}>{g.slice(0, 8)}…{g.slice(-6)}</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => { removeAllowlist(g); refresh(); }}>
+                  {t('common.close')}
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </motion.section>
 
-      {err && <p className="notice notice-danger">{t(`smart.err.${err}`, { defaultValue: err })}</p>}
+      {err && <p className="notice notice-danger" style={{ marginTop: 12 }}>{t(`smart.err.${err}`, { defaultValue: err })}</p>}
 
-      <InfoBox title={t('smart.gasTitle')} tone="info" id="smart-gas">
+      <InfoBox title={t('smart.gasTitle')} tone="info" id="smart-gas" >
         <p>{t('smart.gasBody')}</p>
       </InfoBox>
-    </PageTransition>
+    </>
   );
+
+  if (embedded) return <div>{content}</div>;
+
+  return <PageTransition>{content}</PageTransition>;
 }

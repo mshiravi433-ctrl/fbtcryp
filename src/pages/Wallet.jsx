@@ -25,6 +25,8 @@ import { IconReceive, IconSend, WalletMesh } from '../components/WalletArt';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useWalletBalances } from '../hooks/useWalletBalances';
 import TokenIcon from '../lib/tokenIcon';
+import Portfolio from './Portfolio';
+import SmartWallet from './SmartWallet';
 import '../styles/wallet-modern.css';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
@@ -50,6 +52,8 @@ export default function Wallet() {
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [tab, setTab] = useState('real');
+  // Sub-tab inside on-chain (real) wallet: assets / intelligence / smart
+  const [realTab, setRealTab] = useState('assets');
   const [connectOpen, setConnectOpen] = useState(false);
   const [seedSheet, setSeedSheet] = useState(false);
   const [seedPw, setSeedPw] = useState('');
@@ -187,93 +191,121 @@ export default function Wallet() {
             )}
           </motion.section>
 
-          {/* ----------------- assets (outside the hero, so the hero stays short) ----------------- */}
           {wallet.address && (
-            <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-              <div className="row-between" style={{ marginBottom: 10 }}>
-                <span className="wallet-section-title">{t('wallet.yourTokens')}</span>
-                {onchain.rows.length > 0 && <span className="faint" style={{ fontSize: 11 }}>{onchain.rows.length} دارایی</span>}
+            <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+              <div
+                className="segmented"
+                style={{ padding: 5, borderRadius: 16, gap: 4 }}
+              >
+                {[
+                  { id: 'assets', label: t('wallet.yourTokens') },
+                  { id: 'intel', label: t('intel.title') },
+                  { id: 'smart', label: t('smart.title') }
+                ].map((k) => (
+                  <button
+                    key={k.id}
+                    className={realTab === k.id ? 'active' : ''}
+                    onClick={() => { haptic?.('select'); setRealTab(k.id); }}
+                    style={{ isolation: 'isolate', minHeight: 36, borderRadius: 12, fontWeight: 800, fontSize: 12.5 }}
+                  >
+                    {realTab === k.id && <SegIndicator id="wrealtab" />}
+                    {k.label}
+                  </button>
+                ))}
               </div>
-              {onchain.loading && !onchain.rows.length ? (
-                <div className="faint" style={{ fontSize: 12, textAlign: 'center', padding: 12 }}>…</div>
-              ) : onchain.rows.length > 0 ? (
-                <div className="stack" style={{ gap: 9 }}>
-                  {onchain.rows.map((r) => (
-                    <div key={r.symbol} className="wallet-token-row-modern">
-                      <TokenIcon token={{ symbol: r.symbol, address: r.address, native: r.native }} chainId={wallet.chainId} size={32} />
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <div className="row" style={{ gap: 6 }}>
-                          <span style={{ fontSize: 13.5, fontWeight: 800 }}>{r.symbol}</span>
-                          {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+
+              {realTab === 'assets' && (
+                <motion.section
+                  className="wallet-pie-card"
+                  variants={riseIn}
+                  initial="hidden"
+                  animate="show"
+                  style={{ marginTop: 10, padding: 14, borderRadius: 18 }}
+                >
+                  <div className="row-between" style={{ marginBottom: 10 }}>
+                    <span className="wallet-section-title">{t('wallet.yourTokens')}</span>
+                    {onchain.rows.length > 0 && <span className="faint" style={{ fontSize: 11 }}>{onchain.rows.length} دارایی</span>}
+                  </div>
+                  {onchain.loading && !onchain.rows.length ? (
+                    <div className="faint" style={{ fontSize: 12, textAlign: 'center', padding: 12 }}>…</div>
+                  ) : onchain.rows.length > 0 ? (
+                    <div className="stack" style={{ gap: 9 }}>
+                      {onchain.rows.map((r) => (
+                        <div key={r.symbol} className="wallet-token-row-modern">
+                          <TokenIcon token={{ symbol: r.symbol, address: r.address, native: r.native }} chainId={wallet.chainId} size={32} />
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <div className="row" style={{ gap: 6 }}>
+                              <span style={{ fontSize: 13.5, fontWeight: 800 }}>{r.symbol}</span>
+                              {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+                            </div>
+                            <div className="faint" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                          </span>
+                          <span style={{ textAlign: 'end', flexShrink: 0 }}>
+                            <div className="mono" style={{ fontSize: 13.5, fontWeight: 800 }}>{fmtQty(r.amount)}</div>
+                            <div className="faint mono" style={{ fontSize: 11 }}>{r.value != null ? fmtUsd(r.value) : '—'}</div>
+                          </span>
                         </div>
-                        <div className="faint" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
-                      </span>
-                      <span style={{ textAlign: 'end', flexShrink: 0 }}>
-                        <div className="mono" style={{ fontSize: 13.5, fontWeight: 800 }}>{fmtQty(r.amount)}</div>
-                        <div className="faint mono" style={{ fontSize: 11 }}>{r.value != null ? fmtUsd(r.value) : '—'}</div>
-                      </span>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="stack" style={{ gap: 9 }}>
-                  <p className="faint" style={{ fontSize: 12.5, textAlign: 'center', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px dashed var(--line)' }}>
-                    {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
-                  </p>
-                  {!onchain.error && (
-                    <button
-                      className="wal-util"
-                      style={{ justifyContent: 'center' }}
-                      onClick={() => navigate('/solana')}
-                    >
-                      {t('wallet.solanaHint')}
-                    </button>
+                  ) : (
+                    <div className="stack" style={{ gap: 9 }}>
+                      <p className="faint" style={{ fontSize: 12.5, textAlign: 'center', padding: 12, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px dashed var(--line)' }}>
+                        {onchain.error ? t('wallet.balancesFailed') : t('wallet.noOnchainTokens')}
+                      </p>
+                      {!onchain.error && (
+                        <button
+                          className="wal-util"
+                          style={{ justifyContent: 'center' }}
+                          onClick={() => navigate('/solana')}
+                        >
+                          {t('wallet.solanaHint')}
+                        </button>
+                      )}
+                    </div>
                   )}
-                </div>
+
+                  {/* Manage wallet: refresh / lock / disconnect + seed + backup */}
+                  <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14, padding: 14, borderRadius: 18 }}>
+                    <div className="wal-utils">
+                      <button className="wal-util" onClick={() => { wallet.refreshBalance?.(); onchain.refresh(); }}>
+                        {onchain.loading ? '…' : t('common.refresh')}
+                      </button>
+                      {wallet.mode === 'local' && !wallet.locked && (
+                        <button className="wal-util" onClick={wallet.lock}>{t('wallet.lock')}</button>
+                      )}
+                      {wallet.locked ? (
+                        <button className="wal-util" onClick={() => setConnectOpen(true)}>{t('wallet.unlock')}</button>
+                      ) : (
+                        <button className="wal-util wal-util-danger" onClick={wallet.disconnect}>{t('wallet.disconnect')}</button>
+                      )}
+                    </div>
+
+                    <a href={explorerAddr(wallet.chainId, wallet.address)} target="_blank" rel="noopener noreferrer" className="wal-explorer">
+                      {t('swap.viewOnExplorer')} ↗
+                    </a>
+
+                    {wallet.mode === 'local' && (
+                      <div className="wal-utils" style={{ marginTop: 8 }}>
+                        <button className="wal-util" onClick={() => setSeedSheet(true)}>{t('wallet.revealSeed')}</button>
+                        <button className="wal-util" onClick={() => { setBackupResult(null); setBackupErr(null); setBackupSheet(true); }}>{t('wallet.backupFile')}</button>
+                      </div>
+                    )}
+                  </motion.section>
+                </motion.section>
               )}
-            </motion.section>
-          )}
 
-          {/* ----------------- manage: refresh / lock / disconnect + seed + backup ----------------- */}
-          {wallet.address && (
-            <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-              <div className="wal-utils">
-                <button className="wal-util" onClick={() => { wallet.refreshBalance?.(); onchain.refresh(); }}>
-                  {onchain.loading ? '…' : t('common.refresh')}
-                </button>
-                {wallet.mode === 'local' && !wallet.locked && (
-                  <button className="wal-util" onClick={wallet.lock}>{t('wallet.lock')}</button>
-                )}
-                {wallet.locked ? (
-                  <button className="wal-util" onClick={() => setConnectOpen(true)}>{t('wallet.unlock')}</button>
-                ) : (
-                  <button className="wal-util wal-util-danger" onClick={wallet.disconnect}>{t('wallet.disconnect')}</button>
-                )}
-              </div>
-
-              <a href={explorerAddr(wallet.chainId, wallet.address)} target="_blank" rel="noopener noreferrer" className="wal-explorer">
-                {t('swap.viewOnExplorer')} ↗
-              </a>
-
-              {wallet.mode === 'local' && (
-                <div className="wal-utils" style={{ marginTop: 8 }}>
-                  <button className="wal-util" onClick={() => setSeedSheet(true)}>{t('wallet.revealSeed')}</button>
-                  <button className="wal-util" onClick={() => { setBackupResult(null); setBackupErr(null); setBackupSheet(true); }}>{t('wallet.backupFile')}</button>
-                </div>
+              {realTab === 'intel' && (
+                <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
+                  <Portfolio embedded onBack={() => setRealTab('assets')} />
+                </motion.div>
               )}
-            </motion.section>
-          )}
 
-          {wallet.address && (
-            <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>{t('intel.title')}</div>
-              <div className="mono" style={{ fontSize: 22, fontWeight: 900 }}>{fmtUsd(onchain.total)}</div>
-              <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>{t('intel.walletHint')}</p>
-              <div className="row" style={{ gap: 8, marginTop: 12 }}>
-                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/portfolio')}>{t('intel.open')}</button>
-                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/smart-wallet')}>{t('smart.open')}</button>
-              </div>
-            </motion.section>
+              {realTab === 'smart' && (
+                <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
+                  <SmartWallet embedded onBack={() => setRealTab('assets')} />
+                </motion.div>
+              )}
+            </motion.div>
           )}
 
           <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>

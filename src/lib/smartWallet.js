@@ -26,8 +26,8 @@ const SPEND_KEY = 'fbt-smart-wallet-spend-v1';
 
 export const DEFAULT_POLICY = {
   enabled: false,
-  dailyLimitUsd: 500,
-  perTxLimitUsd: 250,
+  dailyLimitUsd: 1000,
+  perTxLimitUsd: 500,
   allowlist: [],
   guardians: [],
   session: null,
