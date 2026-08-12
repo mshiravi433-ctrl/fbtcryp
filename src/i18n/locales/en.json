@@ -504,6 +504,7 @@
       "NO_ROUTE": "No route exists between these tokens.",
       "NO_LIQUIDITY": "This pool has no liquidity.",
       "QUOTE_FAILED": "Could not fetch a price. Check your connection.",
+      "QUOTE_NETWORK": "Couldn't reach the routing service. If this keeps happening, switch networks or turn on a VPN, then retry.",
       "QUOTE_EXPIRED": "The price moved. Try again.",
       "USER_REJECTED": "You rejected the transaction.",
       "INSUFFICIENT_GAS": "Not enough native coin to pay gas.",

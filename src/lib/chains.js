@@ -31,7 +31,27 @@ export const EVM_CHAINS = {
     name: 'BNB Smart Chain',
     short: 'BSC',
     native: { symbol: 'BNB', decimals: 18, coingeckoId: 'binancecoin' },
-    rpc: ['https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.defibit.io'],
+    /*
+     * Neutral community endpoints FIRST, Binance-hosted seeds last.
+     *
+     * The Binance seeds are the most battle-tested endpoints on the planet,
+     * but they are operated by Binance — whose domains are geo-filtered and
+     * blocked outright in some of our biggest markets (Iranian users cannot
+     * reach binance.org at all). A FallbackProvider tries these in order, so
+     * a user in a blocked region used to sit on a stall timeout for every
+     * single on-chain read — and when reads fail, the swap screen's direct
+     * path answered "no route". PublicNode, Ankr, 1RPC and ninicoin.io are
+     * independent operators with no such regional blocks; the Binance seeds
+     * stay at the tail as redundancy for everyone else.
+     */
+    rpc: [
+      'https://bsc-rpc.publicnode.com',
+      'https://rpc.ankr.com/bsc',
+      'https://1rpc.io/bnb',
+      'https://bsc-dataseed1.ninicoin.io',
+      'https://bsc-dataseed.binance.org',
+      'https://bsc-dataseed1.defibit.io'
+    ],
     explorer: 'https://bscscan.com',
     router: '0x10ED43C718714eb63d5aA57B78B54704E256024E', // PancakeSwap V2
     wrapped: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', // WBNB

@@ -33,7 +33,7 @@ import {
   executeAggregatorSwap,
   getAggregatorQuote
 } from './aggregator';
-import { getOpenOceanQuote, openOceanSupports } from './openocean';
+import { getOpenOceanQuote, openOceanSupports, executeOpenOceanSwap } from './openocean';
 import { getVeloraQuote, veloraSupports } from './velora';
 import { quoteAllSources } from './bestQuote';
 
@@ -112,6 +112,32 @@ export function suggestSlippage({ priceImpact = null, bothStable = false } = {})
 const STABLES = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDD', 'USDP', 'USD₮0']);
 
 export const isStableSymbol = (s) => STABLES.has(String(s ?? '').toUpperCase());
+
+/**
+ * Decide what to tell the user when no aggregator produced a usable quote.
+ *
+ * ─── WHY THE DISTINCTION MATTERS ────────────────────────────────────────────
+ * "No route between these two tokens" and "couldn't reach the routing
+ * service" demand opposite actions: the first is a fact about the pair, the
+ * second is a network problem (geo-blocked aggregator, ISP filtering — the
+ * exact failure Iranian customers hit) where retrying or switching networks
+ * genuinely helps. Reporting the network case as "no route" sends a user with
+ * a perfectly good pair into the wrong troubleshooting entirely.
+ *
+ * The classification is deliberately strict: we only claim a NETWORK problem
+ * when NO source answered at all and every single failure was a
+ * network-level one. If any source replied — even with "no route" — the
+ * pair verdict stands.
+ *
+ * @param {Array<Error>} opts.failures  rejection reasons from quoteAllSources
+ * @param {number}       opts.answered  how many sources returned any response
+ */
+export function classifyQuoteFailure({ failures = [], answered = 0 } = {}) {
+  if (answered === 0 && failures.length > 0 && failures.every((f) => f?.network === true)) {
+    return 'QUOTE_NETWORK';
+  }
+  return 'NO_ROUTE';
+}
 
 /**
  * Minimum native coin to leave behind for gas, per chain, when a user taps MAX.
@@ -242,11 +268,11 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
         sources.push(() => getVeloraQuote(common));
       }
 
-      const { best, checked, beatenBy } = await quoteAllSources(sources);
+      const { best, checked, beatenBy, failures, answered } = await quoteAllSources(sources);
 
       // Every source failed. Fall through to the same error handling the
       // single-source path always used.
-      if (!best) throw new Error('NO_ROUTE');
+      if (!best) throw new Error(classifyQuoteFailure({ failures, answered }));
 
       /*
        * `routesChecked` drives the "compared N routes" line in the UI, and
@@ -264,8 +290,9 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
       // The only exception is an explicit FEE_MODE=contract deployment, which
       // collects the fee through our own router below.
       if (!feeEnabled()) {
+        const code = err?.message === 'NO_ROUTE' || err?.message === 'QUOTE_NETWORK' ? err.message : 'QUOTE_FAILED';
         return {
-          error: err?.message === 'NO_ROUTE' ? 'NO_ROUTE' : 'QUOTE_FAILED',
+          error: code,
           retriable: true
         };
       }
@@ -326,6 +353,7 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
  * pass the quote in and we read it from there.
  */
 export function spenderFor(chainId, quote = null) {
+  if (quote?.source === 'openocean') return quote.spender;
   if (quote?.source === 'aggregator' && quote.routerAddress) return quote.routerAddress;
   return feeEnabled() ? FEE_ROUTER_ADDRESS : EVM_CHAINS[chainId].router;
 }
@@ -391,6 +419,23 @@ export async function executeSwap({
       quote,
       slippage: quote.slippage ?? DEFAULT_SLIPPAGE,
       deadlineMinutes,
+      expectFeeBps: FEE_BPS,
+      expectFeeReceiver: feeRecipientFor(chainId)
+    });
+  }
+
+  // OpenOcean is the second EXECUTABLE aggregator — the fallback that keeps
+  // swaps working when KyberSwap's API is unreachable from the user's
+  // network (see the file header in lib/openocean.js). Same fee discipline:
+  // the referrer fee is verified inside the calldata before signing.
+  if (quote.source === 'openocean') {
+    return executeOpenOceanSwap({
+      signer,
+      chainId,
+      fromToken,
+      toToken,
+      quote,
+      slippage: quote.slippage ?? DEFAULT_SLIPPAGE,
       expectFeeBps: FEE_BPS,
       expectFeeReceiver: feeRecipientFor(chainId)
     });

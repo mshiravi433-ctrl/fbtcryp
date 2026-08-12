@@ -454,6 +454,13 @@ export default function Swap() {
 
   /* ------------------------------- quoting ------------------------------- */
 
+  /*
+   * Bumped by the retry button. The quote effect depends on it, so a bump
+   * re-runs the whole quote — including the aggregator proxy fallback —
+   * without the user having to touch the amount field.
+   */
+  const [retryNonce, setRetryNonce] = useState(0);
+
   useEffect(() => {
     const n = Number(amount);
     if (!n || n <= 0 || !fromToken || !toToken || tokenKey(fromToken) === tokenKey(toToken)) {
@@ -491,7 +498,7 @@ export default function Swap() {
     }, 420); // debounce typing
 
     return () => clearTimeout(timer);
-  }, [amount, fromToken, toToken, effectiveSlippage, chainId, wallet, fromSym, toSym]);
+  }, [amount, fromToken, toToken, effectiveSlippage, chainId, wallet, fromSym, toSym, retryNonce]);
 
   // refresh the quote every 15s so it can't go stale under the user
   useEffect(() => {
@@ -499,6 +506,24 @@ export default function Swap() {
     const id = setInterval(() => setAmount((a) => a), 15000);
     return () => clearInterval(id);
   }, [quote]);
+
+  /**
+   * Manual re-quote after an error.
+   *
+   * The "no route / can't reach routing service" errors are retriable: a
+   * transient aggregator outage, a flaky connection, or a network that
+   * blocked the direct call (the proxy fallback in lib/aggregator.js and
+   * lib/openocean.js fires on the retry too). Before this button existed the
+   * user's only option was deleting and retyping the amount — which most
+   * never discovered, so they just saw a dead screen.
+   */
+  const retryQuote = () => {
+    haptic?.('select');
+    setQuote(null);
+    setImpact(null);
+    setQuoting(true);
+    setRetryNonce((n) => n + 1);
+  };
 
   /* -------------------------------- actions ------------------------------ */
 
@@ -733,6 +758,39 @@ export default function Swap() {
         slippage: effectiveSlippage
       });
       if (!fresh || fresh.error) throw new Error('QUOTE_EXPIRED');
+
+      /*
+       * The re-quote can legally come from a DIFFERENT executable router than
+       * the quote we just approved — KyberSwap and OpenOcean each pull tokens
+       * through their own contract, and whichever wins the re-quote is the
+       * one that executes. Approving one spender and executing the other
+       * would revert at the transfer step, after the user already paid gas.
+       * Only re-check when the source changed: the same source always means
+       * the same spender, so this never adds an extra approval to the common
+       * path.
+       */
+      if (fresh.source !== quote.source) {
+        const needFresh = await needsApproval({
+          provider,
+          chainId,
+          token: fromToken,
+          owner: wallet.address,
+          amountWei: fresh.amountInWei,
+          quote: fresh
+        });
+        if (needFresh) {
+          setTxState({ stage: 'approving' });
+          const approval = await approveToken({
+            signer,
+            chainId,
+            token: fromToken,
+            amountWei: fresh.amountInWei,
+            quote: fresh
+          });
+          setTxState({ stage: 'approving', hash: approval.hash });
+          await approval.wait();
+        }
+      }
 
       setTxState({ stage: 'signing' });
       /*
@@ -1255,7 +1313,14 @@ export default function Swap() {
         </AnimatePresence>
 
         {quote?.error && (
-          <p className="notice notice-danger" style={{ marginTop: 12 }}>{t(`swap.err.${quote.error}`)}</p>
+          <div className="stack" style={{ gap: 8, marginTop: 12 }}>
+            <p className="notice notice-danger">{t(`swap.err.${quote.error}`)}</p>
+            {quote.retriable && (
+              <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={retryQuote} disabled={quoting}>
+                {quoting ? t('swap.quoting') : t('common.retry')}
+              </button>
+            )}
+          </div>
         )}
         {highImpact && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.highImpact')}</p>}
         {insufficient && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.insufficient')}</p>}

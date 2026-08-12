@@ -51,7 +51,36 @@ export const aggregatorSupports = (chainId) => Boolean(NETWORK_SLUG[chainId]);
 /** Map our token shape to what the aggregator expects. */
 export const toAggAddress = (token) => (token.native ? NATIVE_SENTINEL : token.address);
 
-async function aggFetch(url, options = {}, timeout = 15000) {
+/**
+ * ─── THE SAME-ORIGIN PROXY FALLBACK ────────────────────────────────────────
+ * KyberSwap's API is called straight from the browser. For a user whose
+ * network cannot reach aggregator-api.kyberswap.com — geo-filtering, a
+ * hostile ISP, national censorship; Iranian customers hit all three — that
+ * call dies at the network layer and the whole swap screen answers "no route
+ * between these two tokens" even though the liquidity exists. The app's OWN
+ * origin is reachable by anyone who can open the app at all, so when a
+ * direct call fails at the NETWORK level (not with an authoritative
+ * no-route answer) we retry the identical request through our server
+ * (server/swapProxy.js), which forwards it from a datacenter.
+ *
+ * Only network-level failures trigger the retry. If the API answered "no
+ * route", a datacenter would get the same answer — retrying would just add
+ * latency.
+ */
+const PROXY_BASE = '/api/swap/kyber';
+
+/** True when a failure means "the network path is broken", not "no route". */
+function isNetworkFailure(err) {
+  if (!err) return false;
+  if (err.network === true) return true;
+  if (err.name === 'AbortError' || err instanceof TypeError) return true;
+  // 403 (geo-block), 429 (rate-limited), 5xx (upstream broken): retrying
+  // from a different network can genuinely succeed for all three.
+  if (err.status === 403 || err.status === 429 || (err.status >= 500 && err.status <= 599)) return true;
+  return false;
+}
+
+async function aggFetchOnce(url, options = {}, timeout = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
@@ -65,11 +94,42 @@ async function aggFetch(url, options = {}, timeout = 15000) {
       const msg = body?.message || `HTTP ${res.status}`;
       const err = new Error(msg);
       err.status = res.status;
+      if (res.status === 403 || res.status === 429 || res.status >= 500) err.network = true;
       throw err;
     }
     return body;
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const e = new Error('AGG_TIMEOUT');
+      e.network = true;
+      throw e;
+    }
+    if (err instanceof TypeError) err.network = true;
+    throw err;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch with the same-origin proxy as a network-level fallback.
+ *
+ * The proxied request carries the same query string (and body) as the direct
+ * one, so it is a retry, not a different request. If the proxy also fails,
+ * the ORIGINAL error is thrown — the proxy's failure says nothing about the
+ * user's network.
+ */
+async function aggFetch(url, options = {}, timeout = 15000, proxyPath = null) {
+  try {
+    return await aggFetchOnce(url, options, timeout);
+  } catch (err) {
+    if (!proxyPath || !isNetworkFailure(err)) throw err;
+    const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+    const proxied = await aggFetchOnce(`${PROXY_BASE}/${proxyPath}${q ? `?${q}` : ''}`, options, timeout + 2000).catch(
+      () => null
+    );
+    if (proxied) return proxied;
+    throw err;
   }
 }
 
@@ -110,7 +170,7 @@ export async function getAggregatorRoute({
     params.set('feeReceiver', feeReceiver);
   }
 
-  const body = await aggFetch(`${AGG_BASE}/${slug}/api/v1/routes?${params.toString()}`);
+  const body = await aggFetch(`${AGG_BASE}/${slug}/api/v1/routes?${params.toString()}`, {}, 15000, 'routes');
   const summary = body?.data?.routeSummary;
   if (!summary) throw new Error('NO_ROUTE');
 
@@ -183,7 +243,7 @@ export async function buildAggregatorTx({
       deadline: Math.floor(Date.now() / 1000) + deadlineMinutes * 60,
       source: CLIENT_ID
     })
-  });
+  }, 15000, 'build');
 
   const data = body?.data;
   if (!data?.data) throw new Error('BUILD_FAILED');

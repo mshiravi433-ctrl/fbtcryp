@@ -141,14 +141,29 @@ export function pickBestQuote(quotes) {
  * from the comparison.
  *
  * @param {Array<() => Promise>} sources  thunks, so nothing starts until here
+ * @returns {Promise<{best, alternatives, checked, beatenBy, failures, answered}>}
+ *   failures  the rejection reasons, so the caller can tell a genuine
+ *             "no route on this pair" from "every routing service was
+ *             unreachable" — the two need different messages (see
+ *             `classifyQuoteFailure` in lib/swap.js).
+ *   answered  how many sources returned ANY response (even an unusable one).
+ *             A source that answered at all is evidence the network path to
+ *             it works, which is what makes the distinction trustworthy.
  */
 export async function quoteAllSources(sources) {
   const settled = await Promise.allSettled(sources.map((fn) => fn()));
 
   const quotes = [];
+  const failures = [];
+  let answered = 0;
   for (const r of settled) {
-    if (r.status === 'fulfilled' && isUsableQuote(r.value)) quotes.push(r.value);
+    if (r.status === 'fulfilled') {
+      answered += 1;
+      if (isUsableQuote(r.value)) quotes.push(r.value);
+    } else {
+      failures.push(r.reason);
+    }
   }
 
-  return pickBestQuote(quotes);
+  return { ...pickBestQuote(quotes), failures, answered };
 }
