@@ -5,7 +5,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { FEE_BPS, FEE_RECIPIENT, EVM_CHAINS } from '../lib/chains';
 import { payoutTable } from '../lib/payout';
-import { IconChevronLeft, IconExternal, IconKey, IconLock, IconShield, IconCheckCircle, IconAlertTriangle } from '../components/Icons';
+import { IconChevronLeft, IconExternal, IconKey, IconLock, IconShield } from '../components/Icons';
 
 /**
  * SECURITY.
@@ -97,7 +97,7 @@ export default function Audit() {
             placeItems: 'center',
             flexShrink: 0
           }}>
-            <IconCheckCircle width={22} height={22} color="#10b981" />
+            <IconShield width={22} height={22} color="#10b981" />
           </div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 6, color: '#10b981' }}>{t('audit.nonCustodial')}</div>
