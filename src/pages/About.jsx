@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import { IconBuilding, IconChevronLeft, IconGlobe, IconMapPin, IconShield, IconUsers, IconAward } from '../components/Icons';
+import { IconBuilding, IconChevronLeft, IconGlobe, IconMapPin, IconShield } from '../components/Icons';
 
 export default function About() {
   const { t } = useTranslation();
@@ -12,7 +12,7 @@ export default function About() {
     { key: 'transparency', icon: IconShield, color: 'rgb-1' },
     { key: 'innovation', icon: IconShield, color: 'rgb-2' },
     { key: 'access', icon: IconGlobe, color: 'rgb-3' },
-    { key: 'security', icon: IconAward, color: 'rgb-4' }
+    { key: 'security', icon: IconShield, color: 'rgb-4' }
   ];
 
   const stats = [
