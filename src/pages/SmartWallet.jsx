@@ -199,7 +199,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
             className="btn btn-primary"
             style={{ marginTop: 12, borderRadius: 14, minHeight: 44 }}
             onClick={() => {
-              startSession({ minutes: 30, bonusUsd: 250 });
+              startSession({ minutes: 30, bonusUsd: 500 });
               haptic?.('success');
               refresh();
             }}
