@@ -34,7 +34,8 @@ import {
   syncWatches,
   updateOrder
 } from '../lib/orders';
-import { showLocalNotification, playSound, vibrate } from '../lib/notify';
+import { showLocalNotification } from '../lib/notify';
+import { playSound, vibrate } from '../lib/notify';
 import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -126,11 +127,9 @@ export default function Orders() {
       changed = true;
 
       // === PREMIUM NOTIFICATION FOR AUTO ORDERS ===
-      // Distinct sound + notification for filled auto orders
-      const { playSound, vibrate } = await import('../lib/notify');
-      
-      playSound('alert');                    // Special alert sound
-      vibrate([80, 60, 80, 60, 120], haptic); // Stronger vibration pattern
+      // Distinct alert sound + strong vibration for filled auto orders
+      playSound('alert');
+      vibrate([80, 60, 80, 60, 120], haptic);
 
       showLocalNotification(t('orders.notifyTitle'), {
         body: t('orders.notifyBody', {
