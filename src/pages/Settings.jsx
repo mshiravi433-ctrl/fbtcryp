@@ -52,6 +52,7 @@ import {
 } from '../lib/notify';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
 import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
+import { isIOS, isWebView, isStandalone } from '../lib/platform';
 import { clearAppCache, exportSettingsBackup } from '../lib/dataStorage';
 import {
   IconBell,
@@ -135,7 +136,11 @@ export default function Settings() {
 
   const patchNotif = (patch) => setNotif(setNotifySettings(patch));
 
+  const iosNeedPin = isIOS() && !isStandalone() && !isWebView() && typeof window !== 'undefined' && !window.Capacitor?.isNativePlatform?.();
+  const iosInWebView = isIOS() && isWebView();
+
   const askPermission = async () => {
+    if (iosInWebView) return; // in-app browsers on iOS can't grant push
     const result = await requestNotificationPermission();
     setPerm(result);
     if (result !== 'granted') return;
@@ -143,10 +148,11 @@ export default function Settings() {
     const mode = await pushMode(true);
     setPmode(mode);
 
-    // Always try to register push (native or web)
-    // This is the critical fix for Android APK + browser
     try {
-      await registerPushAnywhere();
+      const reg = await registerPushAnywhere();
+      if (reg?.ok === false && reg.reason === 'IOS_NEEDS_PIN') {
+        setPmode('local');
+      }
     } catch (e) {
       console.warn('Push registration failed:', e);
     }
@@ -154,10 +160,10 @@ export default function Settings() {
 
   // Auto-register push when permission is already granted (on app open)
   useEffect(() => {
-    if (perm === 'granted' && pmode === 'server') {
+    if (perm === 'granted' && pmode === 'server' && !iosInWebView && !iosNeedPin) {
       registerPushAnywhere().catch(() => {});
     }
-  }, [perm, pmode]);
+  }, [perm, pmode, iosInWebView, iosNeedPin]);
 
   /* ------------------------------ handlers ------------------------------ */
 
@@ -452,6 +458,17 @@ export default function Settings() {
             right={<Switch on={notif.news} onChange={() => patchNotif({ news: !notif.news })} />}
           />
 
+          {/* iOS-specific guidance: Apple only allows push for pinned PWAs */}
+          {(iosNeedPin || iosInWebView) && (
+            <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 6, marginBottom: 4 }}>
+              <InfoBox title="اعلان‌ها در آیفون" tone="warn" id="ios-notify">
+                <p style={{ fontSize: 12.5, lineHeight: 1.85, margin: 0 }}>
+                  {iosInWebView ? t('notify.iosWebView') : t('notify.iosNeedPin')}
+                </p>
+              </InfoBox>
+            </motion.div>
+          )}
+
           {/* Permission state, described exactly as it is. */}
           {!notificationsSupported() ? (
             <Row icon={IconInfo} label={t('notify.permission')} sub={t('notify.unsupported')} />
@@ -472,9 +489,11 @@ export default function Settings() {
             <Row
               icon={IconBell}
               label={t('notify.permission')}
-              sub={t('notify.dailySub')}
-              onClick={askPermission}
-              right={<span className="pill pill-rgb">{t('notify.permissionAsk')}</span>}
+              sub={iosNeedPin || iosInWebView ? t('notify.iosNeedPin') : t('notify.dailySub')}
+              onClick={iosNeedPin || iosInWebView ? undefined : askPermission}
+              right={iosNeedPin || iosInWebView
+                ? <span className="pill" style={{ background: 'rgba(255,179,0,.15)', color: '#ffb300' }}>iOS</span>
+                : <span className="pill pill-rgb">{t('notify.permissionAsk')}</span>}
             />
           )}
         </div>

@@ -72,3 +72,56 @@ export function isStandalone() {
       window.navigator?.standalone === true
   );
 }
+
+/**
+ * Are we inside a third-party WebView (Telegram/Instagram/Facebook in-app
+ * browser, Capacitor WebView, an app iframe)?
+ *
+ * WebViews have three consequences we actively work around:
+ *  1. No Web Push (PushManager), even on iOS 16.4+
+ *  2. Universal-link deep linking is often broken or intercepted
+ *  3. The Capacitor @capacitor/browser plugin is available natively
+ */
+export function isWebView() {
+  if (typeof window === 'undefined') return false;
+  if (window.Capacitor?.isNativePlatform?.()) return true;
+  const s = ua();
+  return (
+    /(FBAN|FBAV|Instagram|Twitter|Line\/|LinkedIn|SnapChat|TikTok)/.test(s) ||
+    // Telegram (WebView inside Telegram Mini App)
+    Boolean(window.Telegram?.WebApp) ||
+    // Generic WKWebView without Safari
+    (/iPhone|iPad|iPod/.test(s) && !/Safari/.test(s)) ||
+    // Android webview without Chrome
+    (/Android/.test(s) && /wv/.test(s))
+  );
+}
+
+/** iOS Safari version as a number, or 0. */
+export function iosSafariVersion() {
+  if (!isIOS()) return 0;
+  const m = ua().match(/Version\/(\d+)[\d.]*/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/**
+ * Can this browser show real push notifications with the app closed?
+ *
+ * iOS only supports Web Push in Safari ≥ 16.4, AND only when the site has been
+ * added to the home screen (navigator.standalone). Anywhere else on iOS —
+ * Chrome/Firefox, in-app browsers, normal Safari not added to home — push
+ * arrives only while the app is open, via local notifications.
+ */
+export function pushTrulySupported() {
+  if (typeof window === 'undefined') return false;
+  if (isNativeApp()) return true; // FCM/APNs via native layer
+  if (isIOS()) {
+    return isStandalone() && iosSafariVersion() >= 16 && 'PushManager' in window;
+  }
+  return 'Notification' in window && 'PushManager' in window && 'serviceWorker' in navigator;
+}
+
+/** Mirror native-app check here too, so platform.js is the single source. */
+export function isNativeApp() {
+  return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+}

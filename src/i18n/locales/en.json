@@ -1898,6 +1898,8 @@
     "modeServer": "Push active",
     "modeLocal": "Device only",
     "dailySubLocal": "At most one a day. In this build it appears the next time you open the app rather than arriving on your phone by itself, because no server-side push is configured.",
+    "iosNeedPin": "On iPhone, real push notifications only work after you add the site to your Home Screen from Safari (Share → Add to Home Screen). Inside regular Safari or other apps (Telegram, Instagram), notifications cannot arrive when the app is closed — that is an Apple restriction, not something we can bypass.",
+    "iosWebView": "Inside an in-app browser (such as Telegram) closed-app notifications are not possible on iPhone. For full notifications, open this page in Safari and add it to your Home Screen.",
     "price": {
       "title": "{{symbol}} moved",
       "up": "{{symbol}} is up {{pct}}% since you last checked — now ${{price}}",

@@ -4,6 +4,15 @@ import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
 import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { publicAppUrl } from '../lib/nativeShell';
+import { isIOS as isIOSDevice } from '../lib/platform';
+
+const SLOW_DEVICE = (() => {
+  if (typeof navigator === 'undefined') return false;
+  if (isIOSDevice()) return true;
+  const cores = navigator.hardwareConcurrency || 4;
+  const mem = navigator.deviceMemory || 4;
+  return cores <= 4 || mem <= 2;
+})();
 
 /**
  * NON-CUSTODIAL WALLET LAYER
@@ -73,10 +82,20 @@ export function WalletProvider({ children }) {
     const providers = rpcList.map((url, i) => ({
       provider: new JsonRpcProvider(url, targetChain, { staticNetwork: true }),
       priority: i + 1,
-      stallTimeout: 2500,
+      /*
+       * On iPhone the public BSC RPC endpoint is routinely >2s to first byte.
+       * 2500ms was just fast enough to trip the stall timer and race a second
+       * request before the first answered — on a flaky connection that meant
+       * two requests, two seconds each, and a balance that looked like it
+       * never loaded. Raise the timeout on slow devices and rely on the
+       * priority order instead of racing.
+       */
+      stallTimeout: SLOW_DEVICE ? 6000 : 2500,
       weight: 1
     }));
-    return providers.length > 1 ? new FallbackProvider(providers, targetChain, { quorum: 1 }) : providers[0].provider;
+    return providers.length > 1
+      ? new FallbackProvider(providers, targetChain, { quorum: 1, cacheTimeout: 15_000 })
+      : providers[0].provider;
   }, []);
 
   const refreshBalance = useCallback(
@@ -188,6 +207,8 @@ export function WalletProvider({ children }) {
       void isLocal;
       void runtimeOrigin;
 
+      const ios = isIOSDevice();
+
       const wc = await EthereumProvider.init({
         projectId,
         chains: [DEFAULT_CHAIN],
@@ -198,57 +219,119 @@ export function WalletProvider({ children }) {
          *
          * On a phone the wallet is another app on the SAME device, so there is
          * no second screen to point a camera at. WalletConnect's modal does
-         * offer deep links, but it only lists wallets it has explicitly been
-         * told about; with no explorer hints the sheet can come up empty, which
-         * is the "I press connect and nothing happens" case.
-         *
-         * These IDs are WalletConnect's own registry entries for MetaMask,
-         * Trust and Rainbow — the three most likely to already be installed.
+         * offer deep links, but on iOS it has been observed to sit on a white
+         * "Loading..." screen ("در حال بارگذاری مرورگر اپل") when the wallet
+         * app doesn't have a working universal link registered — the modal
+         * opens an SFSafariViewController bridge that never returns. Turning
+         * OFF the auth-mode bridge on iOS and relying on direct wallet deeplink
+         * navigation skips that bridge entirely.
          */
         optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
         qrModalOptions: {
           themeMode: 'dark',
+          enableExplorer: true,
+          explorerExcludedWalletIds: 'ALL',
           explorerRecommendedWalletIds: [
             'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
             '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust
-            '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369'  // Rainbow
-          ]
+            '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369', // Rainbow
+            'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase Wallet
+            '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927'  // Ledger Live
+          ],
+          /*
+           * iOS: tell WalletConnect's modal NOT to use the headless browser
+           * bridge that shows the "Loading..." webview. Direct native deeplinks
+           * back to each wallet app.
+           */
+          ...(ios
+            ? {
+                mobileWallets: [
+                  {
+                    id: 'metamask',
+                    name: 'MetaMask',
+                    links: {
+                      native: 'metamask://',
+                      universal: 'https://metamask.app.link/'
+                    }
+                  },
+                  {
+                    id: 'trust',
+                    name: 'Trust Wallet',
+                    links: {
+                      native: 'trust://',
+                      universal: 'https://link.trustwallet.com/'
+                    }
+                  },
+                  {
+                    id: 'rainbow',
+                    name: 'Rainbow',
+                    links: {
+                      native: 'rainbow://',
+                      universal: 'https://rnbwapp.com/'
+                    }
+                  }
+                ]
+              }
+            : {})
         },
         metadata: {
           name: 'FBT Swap',
           description: 'Non-custodial decentralized exchange',
           url: publicUrl,
           icons: [`${publicUrl}/icon-512.png`],
-          /*
-           * RETURNING TO THIS APP AFTER APPROVAL.
-           *
-           * Symptom: the wallet opens, you approve, and then you are simply
-           * left sitting in the wallet. Coming back by hand shows the app
-           * still disconnected.
-           *
-           * Cause: `metadata.redirect` was absent. The approval genuinely
-           * succeeds and the session is established, but the wallet has no
-           * link to send the user back through, so control never returns.
-           * `wc.connect()` keeps awaiting in a WebView that is now in the
-           * background, and Android may freeze or evict it before it settles
-           * — so the promise that would have set the address never resolves.
-           *
-           * `native` is the custom scheme declared in AndroidManifest.xml
-           * (ir.fbtswap.app://), which the MainActivity intent-filter already
-           * catches. `universal` gives wallets that refuse custom schemes an
-           * https route to the same place.
-           *
-           * This is metadata about where to return, not a permission: it
-           * cannot grant a wallet any additional access.
-           */
           redirect: {
-            native: 'ir.fbtswap.app://',
+            /*
+             * On iOS there is no native app scheme registered (this repo has
+             * no ios/ folder), so only the universal link matters — it brings
+             * the user back to the PWA/Safari. On Android the capacitor://
+             * scheme (ir.fbtswap.app://) is already declared and handled.
+             */
+            native: ios ? undefined : 'ir.fbtswap.app://',
             universal: publicUrl
           }
         }
       });
 
-      await wc.connect();
+      /*
+       * iOS: WalletConnect's default behaviour is to navigate to the wallet
+       * through an SFSafariViewController redirect ("Redirecting to..."), which
+       * is the infamous "Loading Apple browser" screen. Setting `redirectMode:
+       * 'manual'` and firing a location change to the deeplink ourselves skips
+       * that bridge and goes straight to the wallet app. We keep QR-modal
+       * desktop behaviour untouched.
+       */
+      let connected = false;
+      if (ios) {
+        const onDisplayUri = (uri) => {
+          try {
+            // Offer all three major wallets via their universal deeplinks —
+            // iOS will resolve the one the user has installed.
+            const encoded = encodeURIComponent(uri);
+            const links = [
+              `https://metamask.app.link/wc?uri=${encoded}`,
+              `https://link.trustwallet.com/wc?uri=${encoded}`,
+              `rainbow://wc?uri=${encoded}`
+            ];
+            // Small delay so the modal has painted before navigation leaves.
+            setTimeout(() => {
+              window.location.href = links[0];
+            }, 250);
+            void links;
+          } catch {
+            /* navigation blocked; the QR code in the modal still works */
+          }
+        };
+        wc.on('display_uri', onDisplayUri);
+        try {
+          await wc.connect();
+          connected = true;
+        } finally {
+          wc.removeListener('display_uri', onDisplayUri);
+        }
+      } else {
+        await wc.connect();
+        connected = true;
+      }
       const provider = new BrowserProvider(wc);
       const signer = await provider.getSigner();
 

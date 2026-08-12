@@ -25,6 +25,8 @@
  * and the Android APK.
  */
 
+import { isIOS as _isIOS, isWebView as _isWebView, isStandalone as _isStandalone } from './platform.js';
+
 const SETTINGS_KEY = 'fbt-notify-v1';
 
 const defaults = {
@@ -190,6 +192,8 @@ export function notifyTrade({ ok = true, title, body, haptic } = {}) {
 export const notificationsSupported = () => {
   if (typeof window === 'undefined') return false;
   if (isNativeApp()) return true;
+  // On iOS WebViews Notification may exist but be non-functional.
+  if (isIOS() && !iosPushPossible()) return true; // still allow local in-app toasts, just no push
   return 'Notification' in window;
 };
 
@@ -452,6 +456,14 @@ export async function registerPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     return { ok: false, reason: 'UNSUPPORTED' };
   }
+  /*
+   * iOS outside of a pinned PWA or inside a WebView will let you call
+   * PushManager.subscribe but returns an empty/error endpoint, so we refuse
+   * early and report the real reason. Settings uses this to show a hint.
+   */
+  if (isIOS() && !iosPushPossible()) {
+    return { ok: false, reason: 'IOS_NEEDS_PIN' };
+  }
   if (!pushConfigured()) return { ok: false, reason: 'NOT_CONFIGURED' };
 
   const perm = await requestNotificationPermission();
@@ -534,6 +546,35 @@ export async function initServiceWorker() {
 /** True when running inside the packaged native app rather than a browser. */
 export function isNativeApp() {
   return typeof window !== 'undefined' && Boolean(window.Capacitor?.isNativePlatform?.());
+}
+
+/**
+ * iOS: detect whether true server push is possible here.
+ *
+ * Before iOS 16.4 there was NO web push at all. From 16.4 onward it works ONLY
+ * for sites pinned to the home screen (standalone mode). In a third-party
+ * WebView (Telegram/Instagram in-app browser, Chrome/Firefox on iOS) the
+ * Notification API exists but does nothing when you ask for permission — the
+ * promise never resolves and no notification shows. We treat all three cases
+ * as unsupported so Settings can tell the user what to do instead of silently
+ * spinning.
+ */
+function isIOS() {
+  if (typeof navigator === 'undefined') return false;
+  return _isIOS();
+}
+function isWebView() { return _isWebView(); }
+function isPinned() { return _isStandalone(); }
+
+function iosPushPossible() {
+  if (!isIOS()) return true;
+  if (isNativeApp()) return false; // iOS native (APNs) not wired up — no ios/ folder yet
+  if (isWebView()) return false;
+  // Must be pinned to home screen AND on iOS ≥ 16.4.
+  if (!isPinned()) return false;
+  const v = String(navigator.userAgent || '').match(/Version\/(\d+)/);
+  const major = v ? parseInt(v[1], 10) : 0;
+  return major >= 16;
 }
 
 /**

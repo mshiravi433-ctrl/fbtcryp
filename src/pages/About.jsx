@@ -10,7 +10,7 @@ import {
   IconMapPin,
   IconShield
 } from '../components/Icons';
-import { EVM_CHAINS, EVM_CHAIN_ORDER, NATIVE_GAS_FLOOR } from '../lib/chains';
+import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
 import { usePriceMap } from '../hooks/useMarket';
 import { useAppStore } from '../store/useAppStore';
 import { fmtNum } from '../lib/format';
