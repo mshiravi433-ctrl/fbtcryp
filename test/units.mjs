@@ -147,6 +147,28 @@ import {
   ostiumFeeBps
 } from '../src/lib/ostium.js';
 import { DYDX_BUILDER_ADDRESS, DYDX_BUILDER_FEE_PPM, dydxFeeUsd, isDydxAddress } from '../src/lib/dydx.js';
+import { GOPLUS_CHAINS, goplusChainId, normalizeGoplus, scoreTokenRisk } from '../src/lib/tokenRisk.js';
+import { estimateSandwichRisk, privateRelayFor, simulateSwap, suggestPriorityFee } from '../src/lib/mev.js';
+import {
+  DEFAULT_POLICY,
+  activeSession,
+  checkPolicy,
+  loadPolicy,
+  recordSpend,
+  savePolicy
+} from '../src/lib/smartWallet.js';
+import {
+  buildIntelligence,
+  costBasis,
+  isStableSymbol,
+  recordLot,
+  taxCsv
+} from '../src/lib/portfolioIntel.js';
+import {
+  REBALANCE_MAX_DRIFT,
+  TWAP_MIN_SLICES,
+  TWAP_MIN_WINDOW_MIN
+} from '../src/lib/orders.js';
 
 export default async function run() {
   const rows = [];
@@ -4307,6 +4329,130 @@ export default async function run() {
     /* Number(null) is 0 and 0 is finite — the guard that has to come first. */
     t('a nonsense fee becomes zero, never NaN',
       ostiumFeeBps(null) === 0 && ostiumFeeBps(NaN) === 0 && ostiumFeeBps(-1) === 0);
+  }
+
+
+  /* ==================== DEX risk / MEV / wallet / terminal ================= */
+  {
+    t('GoPlus covers the chains we actually swap on',
+      goplusChainId(1) === '1' && goplusChainId(56) === '56' && Object.keys(GOPLUS_CHAINS).length >= 6);
+    t('an unknown chain is unsupported rather than guessed', goplusChainId(999) === null);
+
+    const hot = scoreTokenRisk(normalizeGoplus({
+      is_honeypot: '1',
+      cannot_sell_all: '1',
+      sell_tax: '25',
+      is_mintable: '1',
+      is_open_source: '0',
+      owner_change_balance: '1',
+      hidden_owner: '1',
+      top10_holder_rate: '0.8',
+      holder_count: '12',
+      dex: [{ liquidity: '2000' }]
+    }));
+    t('a honeypot is critical', hot.honeypot && hot.level === 'critical');
+    t('...and the rug score is high, not certain', hot.rugPull >= 70 && hot.rugPull <= 92);
+    t('...flags are keys, not sentences', hot.flags.every((f) => typeof f.id === 'string' && !/\s/.test(f.id)));
+
+    const clean = scoreTokenRisk(normalizeGoplus({
+      is_honeypot: '0',
+      sell_tax: '0',
+      buy_tax: '0',
+      is_mintable: '0',
+      is_open_source: '1',
+      top10_holder_rate: '0.18',
+      holder_count: '4000',
+      dex: [{ liquidity: '2500000' }]
+    }));
+    t('a deep, verified token scores low', clean.level === 'low' && clean.score < 28);
+    t('missing data is unknown, not safe', scoreTokenRisk(null).level === 'unknown' && scoreTokenRisk(null).unknown);
+
+    const sand = estimateSandwichRisk({ slippagePct: 5, priceImpact: 8, amountUsd: 50000 });
+    t('a wide, thin, large swap is sandwichable', sand.score >= 70 && sand.level === 'critical');
+    t('two stables at tight slippage are not', estimateSandwichRisk({ slippagePct: 0.1, bothStable: true }).level === 'low');
+    t('unknown inputs are not reported as zero risk', estimateSandwichRisk({}).level === 'unknown');
+    t('Ethereum has a private relay', privateRelayFor(1)?.rpc.startsWith('https://'));
+    t('BNB Chain does not invent one', privateRelayFor(56) === null);
+    t('a missing quote simulates to null', simulateSwap({}) === null);
+    const sim = simulateSwap({ amountOut: 100, minOut: 99, slippagePct: 1, chainId: 1 });
+    t('a real quote produces a simulation', sim.ready && sim.expectedOut === 100 && sim.privateRelay === true);
+    t('a priority tip is a positive number', suggestPriorityFee({ baseFeeGwei: 12 }).gwei > 0);
+
+    if (typeof globalThis.localStorage === 'undefined') {
+      const mem = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: (k) => mem.delete(k)
+      };
+    }
+    localStorage.removeItem('fbt-smart-wallet-v1');
+    localStorage.removeItem('fbt-smart-wallet-spend-v1');
+    t('policies start off', loadPolicy().enabled === false);
+    t('an off policy never blocks', checkPolicy({ usd: 99999 }).ok === true);
+    savePolicy({ enabled: true, dailyLimitUsd: 100, perTxLimitUsd: 40 });
+    t('a $50 spend is over the per-tx cap', checkPolicy({ usd: 50 }).code === 'OVER_TX_LIMIT');
+    t('a $30 spend is allowed', checkPolicy({ usd: 30 }).ok === true);
+    recordSpend(90);
+    t('crossing the daily cap is refused', checkPolicy({ usd: 20 }).code === 'OVER_DAILY_LIMIT');
+    t('NaN is refused, not passed', checkPolicy({ usd: NaN }).ok === false);
+    t('a default daily cap is $500', DEFAULT_POLICY.dailyLimitUsd === 500);
+    t('an expired session is not active', activeSession({ session: { expiresAt: Date.now() - 1 } }) === null);
+
+    localStorage.removeItem('fbt-portfolio-lots-v1');
+    t('USDT is a stable', isStableSymbol('usdt'));
+    t('BNB is not a stable', !isStableSymbol('BNB'));
+    recordLot({ symbol: 'BNB', side: 'buy', qty: 2, priceUsd: 600, feeUsd: 1, at: 1_000 });
+    recordLot({ symbol: 'BNB', side: 'sell', qty: 1, priceUsd: 700, feeUsd: 1, at: 2_000 });
+    const book = costBasis();
+    const bnb = book.find((r) => r.symbol === 'BNB');
+    t('average cost survives a partial sell', Math.abs(bnb.qty - 1) < 1e-9);
+    t('realised P&L is recorded', bnb.realised > 0);
+    const intel = buildIntelligence({
+      holdings: [{ symbol: 'BNB', value: 650, amount: 1 }],
+      lots: [
+        { symbol: 'BNB', side: 'buy', qty: 1, priceUsd: 600, feeUsd: 0, at: 1 }
+      ]
+    });
+    t('unrealised P&L is value minus cost', Math.abs(intel.unrealised - 50) < 1e-9);
+    t('a concentrated book is riskier than a balanced one', intel.topShare === 100 && intel.riskScore >= 40);
+    t('the tax CSV refuses to call itself a filing', /not-complete/.test(taxCsv()));
+    t('a bad lot is refused', recordLot({ symbol: 'X', side: 'buy', qty: 0, priceUsd: 1 }).error === 'BAD_LOT');
+
+    const twap = createOrder({
+      chainId: 56,
+      fromToken: { symbol: 'USDT' },
+      toToken: { symbol: 'BNB' },
+      amountIn: '100',
+      type: 'twap',
+      slices: 4,
+      windowMin: 60
+    });
+    t('a TWAP can be created', twap.order?.type === 'twap' && twap.order.totalRuns === 4);
+    t('the first TWAP slice is due now', evaluateOrder(twap.order, null).ready === true);
+    t('too few slices are rejected', validateOrder({
+      chainId: 56, fromToken: { symbol: 'A' }, toToken: { symbol: 'B' }, amountIn: '1',
+      type: 'twap', slices: TWAP_MIN_SLICES - 1, windowMin: TWAP_MIN_WINDOW_MIN
+    }) === 'BAD_SLICES');
+
+    const reb = createOrder({
+      chainId: 56,
+      fromToken: { symbol: 'BNB' },
+      toToken: { symbol: 'USDT' },
+      amountIn: '1',
+      type: 'rebalance',
+      targetRate: 700,
+      driftPct: 10
+    });
+    t('a 5% move does not rebalance', evaluateOrder(reb.order, 730).ready === false);
+    t('an 11% move does', evaluateOrder(reb.order, 780).ready === true);
+    t('an unknown price never rebalances', evaluateOrder(reb.order, null).ready === false);
+    t('an inverted drift is rejected', validateOrder({
+      chainId: 56, fromToken: { symbol: 'A' }, toToken: { symbol: 'B' }, amountIn: '1',
+      type: 'rebalance', targetRate: 700, driftPct: REBALANCE_MAX_DRIFT + 1
+    }) === 'BAD_DRIFT');
+    t('TWAP is not uploaded to the server', !WATCHED_TYPES.has('twap'));
+    t('rebalance IS watched in the background', WATCHED_TYPES.has('rebalance'));
   }
 
   return rows;

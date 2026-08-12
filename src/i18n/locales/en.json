@@ -38,7 +38,9 @@
     "shop": "Shop",
     "ostium": "Global Horizon",
     "dydx": "dYdX Orbit",
-    "derivatives": "Derivatives Hall"
+    "derivatives": "Derivatives Hall",
+    "portfolio": "Portfolio",
+    "smartWallet": "Smart Wallet"
   },
   "common": {
     "balance": "Balance",
@@ -458,7 +460,10 @@
     "payClaimLater": "Payment sent. It is still confirming — reopen this screen in a minute to activate.",
     "boardDraftSaved": "Saved. Choose a plan below to make it visible.",
     "boardLive": "Your advert is live",
-    "payUnderpaid": "That is below the cheapest plan"
+    "payUnderpaid": "That is below the cheapest plan",
+    "orderErr.BAD_SLICES": "Pick between 2 and 24 slices",
+    "orderErr.BAD_WINDOW": "Pick a window between 15 minutes and 7 days",
+    "orderErr.BAD_DRIFT": "Pick a drift between 2% and 50%"
   },
   "swap": {
     "title": "Swap",
@@ -730,7 +735,12 @@
     "custodyBody": "This is a non-custodial exchange. Trades execute directly between your wallet and the blockchain. Fanous Bazaar Pishgam has no access to your assets, cannot freeze or reverse a transaction, and cannot recover a lost seed phrase.",
     "riskDisclosure": "Trading crypto assets carries substantial risk, including total loss of capital. Prices are volatile and on-chain transactions are irreversible. Nothing in this app is financial advice. Only trade what you can afford to lose, and make sure you understand your local regulations.",
     "companyFull": "Fanous Bazaar Pishgam",
-    "companyShort": "Fanous Bazaar Pishgam"
+    "companyShort": "Fanous Bazaar Pishgam",
+    "stats": {
+      "chains": "Chains",
+      "users": "Users",
+      "languages": "Languages"
+    }
   },
   "contact": {
     "title": "Contact us",
@@ -749,7 +759,8 @@
       "instagram": "Instagram",
       "crunchbase": "Crunchbase",
       "email": "Email"
-    }
+    },
+    "socialTitle": "Social"
   },
   "terms": {
     "title": "Terms of Service",
@@ -2073,7 +2084,9 @@
       "dca": "New DCA plan",
       "trailing": "New trailing stop",
       "bracket": "New take-profit + stop-loss",
-      "ladder": "New step order"
+      "ladder": "New step order",
+      "twap": "New TWAP",
+      "rebalance": "New rebalance"
     },
     "manualNotice": "These are alerts, not automatic trades. This app never holds your keys, so nothing can swap on your behalf — when a target is hit we notify you and the swap is one tap away, already filled in. If your phone is off, the order waits.",
     "readyNow": "Ready now",
@@ -2083,7 +2096,11 @@
     "type": {
       "limit": "LIMIT",
       "dca": "DCA",
-      "trailing": "TRAILING"
+      "trailing": "TRAILING",
+      "twap": "TWAP",
+      "rebalance": "REBAL",
+      "bracket": "BRACKET",
+      "ladder": "LADDER"
     },
     "when": {
       "above": "Fires when 1 {{from}} ≥ {{rate}} {{to}}",
@@ -2169,7 +2186,16 @@
     "bracketRow": "Take profit {{tp}} · Stop loss {{sl}} {{quote}}",
     "ladderRow": "{{done}} of {{total}} steps done · next at {{next}}",
     "bannerTitle": "Auto Orders — market won't wait",
-    "bannerSub": "Limit, trailing, bracket, ladder & DCA — set once, auto-fill"
+    "bannerSub": "Limit, trailing, bracket, ladder & DCA — set once, auto-fill",
+    "newTwap": "TWAP",
+    "newRebalance": "Rebalance",
+    "twapRow": "{{done}} of {{total}} slices · {{window}} min window",
+    "rebalanceRow": "Balanced at {{target}} · drift {{drift}}%",
+    "twapSlices": "Number of slices",
+    "twapWindow": "Window (minutes)",
+    "twapNote": "The amount is split evenly across the window. Each slice is an alert you confirm — we never sign for you.",
+    "rebalanceDrift": "Drift that triggers a rebalance (%)",
+    "rebalanceNote": "Fires when the pair has moved this far from the rate you called balanced. One shot — after you swap, set a new one if you still want it watched."
   },
   "lock": {
     "title": "Locked",
@@ -3172,5 +3198,133 @@
     "spread": "Best bid/ask spread",
     "bidDepth": "Bid depth within 1%",
     "askDepth": "Ask depth within 1%"
+  },
+  "risk": {
+    "badge": "AI Risk · {{symbol}}",
+    "level": {
+      "low": "Low risk",
+      "medium": "Medium",
+      "high": "High risk",
+      "critical": "Critical",
+      "unknown": "Unknown"
+    },
+    "liquidity": "Liquidity",
+    "holders": "Top 10 holders",
+    "contract": "Contract risk",
+    "rug": "Rug probability",
+    "band": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "unknown": "—"
+    },
+    "honeypot": "This contract looks like a honeypot — you may not be able to sell.",
+    "unknown": "We could not complete a security scan. That is not a clean bill of health.",
+    "flag": {
+      "honeypot": "Honeypot / cannot sell",
+      "cannotBuy": "Buys are blocked",
+      "sellTaxHigh": "Sell tax {{pct}}%",
+      "sellTaxMed": "Sell tax {{pct}}%",
+      "sellTaxLow": "Sell tax {{pct}}%",
+      "buyTaxHigh": "Buy tax {{pct}}%",
+      "taxModifiable": "Tax can be changed by the owner",
+      "mintable": "Owner can mint more tokens",
+      "ownerChangeBalance": "Owner can change balances",
+      "hiddenOwner": "Hidden owner",
+      "selfDestruct": "Contract can self-destruct",
+      "pausable": "Transfers can be paused",
+      "blacklist": "Blacklist present",
+      "proxy": "Upgradeable proxy",
+      "closedSource": "Source not verified",
+      "cooldown": "Trading cooldown",
+      "holdersConcentrated": "Top 10 hold {{pct}}%",
+      "holdersTight": "Top 10 hold {{pct}}%",
+      "fewHolders": "Only {{n}} holders",
+      "lpUnlocked": "Liquidity is not locked",
+      "liqDust": "Liquidity about ${{usd}}",
+      "liqThin": "Liquidity about ${{usd}}",
+      "liqModest": "Liquidity about ${{usd}}",
+      "notListed": "Not listed on a DEX we can see",
+      "unsupportedChain": "No scanner for this network",
+      "noData": "No security data"
+    }
+  },
+  "mev": {
+    "title": "MEV protection",
+    "level": {
+      "low": "Low MEV",
+      "medium": "Watch",
+      "high": "High MEV",
+      "critical": "Sandwich risk",
+      "unknown": "Unknown"
+    },
+    "expected": "Expected out",
+    "minOut": "Minimum out",
+    "gas": "Gas (native)",
+    "sandwich": "Sandwich score",
+    "priority": "Suggested tip",
+    "privateTitle": "Private relay",
+    "privateSub": "Prefer {{name}} so this swap stays out of the public mempool",
+    "noRelay": "No public private-mempool relay on this chain yet. Tight slippage is still the best defence."
+  },
+  "smart": {
+    "title": "Smart Wallet",
+    "subtitle": "Spending limits, session keys and recovery contacts — enforced on this device before anything is signed.",
+    "whatTitle": "This is not a smart-contract wallet",
+    "whatBody": "Account abstraction would need a bundler we do not run. These policies gate the buttons in this app. Anyone with your seed can still spend from another wallet. Gas sponsorship is the existing gasless swap, not a second path.",
+    "enable": "Enforce limits",
+    "enableSub": "Block swaps and sends that break the rules below",
+    "today": "Spent today",
+    "remaining": "{{n}} left today",
+    "daily": "Daily limit (USD, stables)",
+    "perTx": "Per-transaction limit (USD)",
+    "example": "This wallet may spend at most $500 a day, in stablecoins we can price.",
+    "sessionTitle": "Session key",
+    "sessionBody": "A 30-minute window that raises the daily cap by $250. It expires on its own.",
+    "sessionUntil": "Open until {{t}}",
+    "endSession": "End session",
+    "startSession": "Start 30-minute session",
+    "guardiansTitle": "Social recovery contacts",
+    "guardiansBody": "People you trust. We cannot move funds for them — they are who you call if you lose the seed. Stored only on this device.",
+    "allowTitle": "Destination allow-list",
+    "allowBody": "When this list is not empty, sends may only go to these addresses.",
+    "gasTitle": "Gas sponsorship",
+    "gasBody": "If you have no native coin, use “Swap without gas” on the Swap screen. That is the sponsorship path — we do not invent a second one.",
+    "open": "Limits",
+    "err": {
+      "BAD_AMOUNT": "That amount is not a number we can check.",
+      "NOT_ALLOWLISTED": "That destination is not on your allow-list.",
+      "OVER_TX_LIMIT": "Above the per-transaction limit.",
+      "OVER_DAILY_LIMIT": "Above today’s remaining limit.",
+      "BAD_ADDRESS": "That is not a valid address.",
+      "DUPLICATE": "Already on the list.",
+      "TOO_MANY": "Five contacts is the maximum.",
+      "BAD_SESSION": "Pick a session between 1 minute and 24 hours."
+    }
+  },
+  "intel": {
+    "title": "Portfolio intelligence",
+    "subtitle": "P&L, allocation and risk from what this app has actually seen.",
+    "value": "Portfolio value",
+    "pnl": "P&L",
+    "cost": "Cost basis",
+    "risk": "Risk score",
+    "stables": "Stablecoins",
+    "best": "Best",
+    "worst": "Worst",
+    "whale": "Largest holding",
+    "allocation": "Asset allocation",
+    "empty": "Connect a wallet to see holdings.",
+    "partial": "Some lots have no cost basis — P&L on those rows is blank, not zero.",
+    "taxExport": "Download transaction CSV",
+    "taxTitle": "This is not a tax filing",
+    "taxBody": "The file lists swaps this app recorded. It is not a complete history of the wallet and it is not tax advice.",
+    "open": "Open dashboard",
+    "walletHint": "24h change, allocation and risk live on the dashboard.",
+    "band": {
+      "low": "Lower",
+      "medium": "Medium",
+      "high": "Higher"
+    }
   }
 }

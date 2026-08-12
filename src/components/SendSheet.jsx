@@ -8,6 +8,7 @@ import { EVM_CHAINS, TOKENS } from '../lib/chains';
 import { IconQr, IconCheck, IconExternal, IconWallet } from './Icons';
 import { IconSend } from './WalletArt';
 import TokenIcon from '../lib/tokenIcon';
+import { checkPolicy, recordSpend } from '../lib/smartWallet';
 
 /**
  * DIRECT SEND (the real OTC leg)
@@ -160,15 +161,33 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
   const overBalance = balanceText != null && Number(amount) > Number(balanceText);
   const canReview = addressLooksValid && amountValid && !overBalance;
 
+  const spendUsdGuess = () => {
+    if (token && ['USDT', 'USDC', 'DAI', 'FDUSD'].includes(token.symbol)) {
+      const n = Number(amount);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    }
+    return null;
+  };
+
   const doSend = async () => {
     setStage('sending');
     setError(null);
     try {
+      const usd = spendUsdGuess();
+      if (usd != null) {
+        const gate = checkPolicy({ usd, to: to.trim() });
+        if (!gate.ok) {
+          setError(gate.code);
+          setStage('confirm');
+          return;
+        }
+      }
       const signer = wallet.getSigner();
       if (!signer) throw new Error('NO_SIGNER');
       const tx = await sendToken({ signer, token, to: to.trim(), amount });
       setHash(tx.hash);
       setStage('done');
+      if (usd != null) recordSpend(usd);
       wallet.refreshBalance?.();
     } catch (e) {
       const msg = String(e?.message || '');
@@ -237,7 +256,15 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
 
             <p className="notice" style={{ marginTop: 12 }}>{t('send.irreversible')}</p>
 
-            {error && <p className="notice notice-danger" style={{ marginTop: 9 }}>{t(`send.err.${error}`)}</p>}
+            {error && (
+              <p className="notice notice-danger" style={{ marginTop: 9 }}>
+                {t(
+                  error === 'OVER_DAILY_LIMIT' || error === 'OVER_TX_LIMIT' || error === 'NOT_ALLOWLISTED'
+                    ? `smart.err.${error}`
+                    : `send.err.${error}`
+                )}
+              </p>
+            )}
 
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
               <button className="btn btn-ghost" style={{ flex: 1, minHeight: 48, borderRadius: 14 }} onClick={() => setStage('form')}>

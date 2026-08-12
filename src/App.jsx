@@ -87,6 +87,8 @@ const Orders = lazyRetry(() => import('./pages/Orders'));
 // only needed by users who actually open the Solana screen.
 const SolanaSwap = lazyRetry(() => import('./pages/SolanaSwap'));
 const Buy = lazyRetry(() => import('./pages/Buy'));
+const SmartWallet = lazyRetry(() => import('./pages/SmartWallet'));
+const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
@@ -274,6 +276,8 @@ function AnimatedRoutes() {
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/solana" element={<SolanaSwap />} />
             <Route path="/buy" element={<Buy />} />
+            <Route path="/smart-wallet" element={<SmartWallet />} />
+            <Route path="/portfolio" element={<Portfolio />} />
             <Route path="*" element={<Market />} />
           </Routes>
         </AnimatePresence>

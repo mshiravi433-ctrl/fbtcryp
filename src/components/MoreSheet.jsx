@@ -157,6 +157,8 @@ const GROUPS = [
         repeats what the user can already reach.
       */
       { to: '/learn', key: 'learn.title', Icon: IconInfo, hue: 'var(--rgb-9)' },
+      { to: '/portfolio', key: 'nav.portfolio', Icon: IconTrend, hue: 'var(--rgb-1)' },
+      { to: '/smart-wallet', key: 'nav.smartWallet', Icon: IconKey, hue: 'var(--rgb-8)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
       { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },
       { to: '/ecosystem', key: 'nav.ecosystem', Icon: IconGlobe, hue: 'var(--rgb-3)' },

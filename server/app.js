@@ -65,6 +65,7 @@ import {
   storeDurable
 } from './store.js';
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
+import { fetchTokenRisk } from './tokenRisk.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -822,6 +823,27 @@ app.get('/api/perp/markets', (_req, res) => serve(res, 300_000)(fetchPerpMarkets
  * caches per key. coinIndex.js does its own six-hour caching of the expensive
  * part, so each call here is a Map lookup.
  */
+/**
+ * TOKEN SECURITY — honeypot / tax / holders / liquidity.
+ *
+ * Proxied so the browser never talks to GoPlus (which tokens a user is about
+ * to buy is a shopping list) and so one cache serves every viewer of the same
+ * contract. Failures return { report: null } rather than 502: the swap screen
+ * must still work when a scanner is down.
+ */
+app.get('/api/token-risk', async (req, res) => {
+  try {
+    const out = await fetchTokenRisk(req.query.chainId, req.query.address);
+    if (out.error === 'UNSUPPORTED_CHAIN' || out.error === 'BAD_ADDRESS') {
+      return res.status(400).json(out);
+    }
+    res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
+    return res.json(out.report != null || out.raw != null ? out : { report: null, error: out.error || 'UPSTREAM' });
+  } catch (err) {
+    return res.json({ report: null, error: 'UPSTREAM', detail: String(err.message).slice(0, 200) });
+  }
+});
+
 app.get('/api/coin-id/:chainId', async (req, res) => {
   try {
     const out = await resolveIds(req.params.chainId, req.query.addresses);

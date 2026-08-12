@@ -44,6 +44,8 @@ import Bridge from '../src/pages/Bridge.jsx';
 import Docs from '../src/pages/Docs.jsx';
 import Developers from '../src/pages/Developers.jsx';
 import Audit from '../src/pages/Audit.jsx';
+import SmartWallet from '../src/pages/SmartWallet.jsx';
+import Portfolio from '../src/pages/Portfolio.jsx';
 import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
 import RadioPanel from '../src/components/RadioPanel.jsx';
 import FiatPanel from '../src/components/FiatPanel.jsx';
@@ -260,6 +262,8 @@ export async function run(container) {
    */
   await mount('Developers', <Developers />);
   await mount('Audit (security)', <Audit />);
+  await mount('SmartWallet', <SmartWallet />);
+  await mount('Portfolio', <Portfolio />);
 
   /*
    * The three components added or rebuilt alongside them. Mounted directly

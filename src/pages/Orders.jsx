@@ -14,8 +14,14 @@ import {
   DCA_INTERVALS,
   LADDER_MAX_STEPS,
   LADDER_MIN_STEPS,
+  REBALANCE_MAX_DRIFT,
+  REBALANCE_MIN_DRIFT,
   TRAIL_MAX_PCT,
   TRAIL_MIN_PCT,
+  TWAP_MAX_SLICES,
+  TWAP_MAX_WINDOW_MIN,
+  TWAP_MIN_SLICES,
+  TWAP_MIN_WINDOW_MIN,
   WATCHED_TYPES,
   addOrder,
   advanceOrder,
@@ -176,6 +182,7 @@ export default function Orders() {
           if (o.type === 'trailing') parts.push(o.trailPct);
           if (o.type === 'bracket') parts.push(o.takeProfitRate, o.stopLossRate);
           if (o.type === 'ladder') parts.push(o.rungsFilled, o.steps, o.startRate, o.endRate, o.direction);
+          if (o.type === 'rebalance') parts.push(o.targetRate, o.driftPct);
           return parts.join(':');
         })
         .join('|'),
@@ -383,6 +390,15 @@ export default function Orders() {
               <span className="faint mono">{t('orders.notYetTracking')}</span>
             )}
           </div>
+        ) : o.type === 'twap' ? (
+          <div className="ord-meta">
+            <span className="faint">{t('orders.twapRow', { done: o.runsDone, total: o.slices, window: o.windowMin })}</span>
+          </div>
+        ) : o.type === 'rebalance' ? (
+          <div className="ord-meta">
+            <span className="faint">{t('orders.rebalanceRow', { target: fmtQty(o.targetRate), drift: o.driftPct })}</span>
+            {Number.isFinite(rate) && <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>}
+          </div>
         ) : o.type === 'limit' ? (
           <div className="ord-meta">
             <span className="faint">
@@ -558,12 +574,14 @@ export default function Orders() {
           { id: 'bracket', Icon: IconShield, label: t('orders.newBracket'), sub: 'براکت', hue: 'var(--rgb-4)' },
           { id: 'ladder', Icon: IconPools, label: t('orders.newLadder'), sub: 'نردبانی', hue: 'var(--rgb-5)' },
           { id: 'dca', Icon: IconClock, label: t('orders.newDca'), sub: 'DCA', hue: 'var(--rgb-2)' },
+          { id: 'twap', Icon: IconClock, label: t('orders.newTwap'), sub: 'TWAP', hue: 'var(--rgb-6)' },
+          { id: 'rebalance', Icon: IconPools, label: t('orders.newRebalance'), sub: 'Rebal', hue: 'var(--rgb-8)' },
         ].map(({ id, Icon, label, sub, hue }) => (
           <motion.button
             key={id}
             className={`card ord-new-${id}`}
             whileTap={{ scale: 0.97 }}
-            /* setSheet('limit') setSheet('dca') setSheet('trailing') setSheet('bracket') setSheet('ladder') */
+            /* setSheet('limit') setSheet('dca') setSheet('trailing') setSheet('bracket') setSheet('ladder') setSheet('twap') setSheet('rebalance') */
             onClick={() => setSheet(id)}
             style={{
               flex: '0 0 140px',
@@ -685,6 +703,9 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
   const [ladderStart, setLadderStart] = useState('');
   const [ladderEnd, setLadderEnd] = useState('');
   const [ladderSteps, setLadderSteps] = useState('4');
+  const [twapSlices, setTwapSlices] = useState('4');
+  const [twapWindow, setTwapWindow] = useState('60');
+  const [rebalanceDrift, setRebalanceDrift] = useState('10');
 
   useEffect(() => {
     if (!kind || !tokens.length) return;
@@ -817,7 +838,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
           Only on the price-triggered forms. A DCA plan is a schedule, not a
           price decision, so there is nothing here for Autopilot to measure.
         */}
-        {kind !== 'dca' && (
+        {kind !== 'dca' && kind !== 'twap' && (
           <AutopilotPanel
             series={(watchedSeries ?? []).map((d) => d.p)}
             fromToken={fromToken}
@@ -1090,6 +1111,49 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
             <HistoryPanel series={(watchedSeries ?? []).map((d) => d.p)} days={90} compact />
             <p className="faint" style={{ lineHeight: 1.7 }}>{t('orders.ladderNote')}</p>
           </>
+        ) : kind === 'twap' ? (
+          <>
+            <label className="ord-field">
+              <span className="faint">{t('orders.twapSlices')}</span>
+              <input type="number" inputMode="numeric" value={twapSlices}
+                     onChange={(e) => setTwapSlices(e.target.value)}
+                     min={TWAP_MIN_SLICES} max={TWAP_MAX_SLICES} />
+            </label>
+            <label className="ord-field">
+              <span className="faint">{t('orders.twapWindow')}</span>
+              <input type="number" inputMode="numeric" value={twapWindow}
+                     onChange={(e) => setTwapWindow(e.target.value)}
+                     min={TWAP_MIN_WINDOW_MIN} max={TWAP_MAX_WINDOW_MIN} />
+            </label>
+            <p className="faint" style={{ lineHeight: 1.7 }}>{t('orders.twapNote')}</p>
+          </>
+        ) : kind === 'rebalance' ? (
+          <>
+            <label className="ord-field">
+              <span className="faint">{t('orders.watch')}</span>
+              <select value={priceOf} onChange={(e) => setPriceOf(e.target.value)}>
+                <option value="from">{t('orders.priceOfFrom', { sym: fromSym })}</option>
+                <option value="to">{t('orders.priceOfTo', { sym: toSym })}</option>
+              </select>
+            </label>
+            <label className="ord-field">
+              <span className="faint">{t('orders.targetRate', { base: baseSym, quote: quoteSym })}</span>
+              <input type="number" inputMode="decimal" value={target}
+                     onChange={(e) => setTarget(e.target.value)} placeholder="0.0" />
+            </label>
+            <label className="ord-field">
+              <span className="faint">{t('orders.rebalanceDrift')}</span>
+              <input type="number" inputMode="decimal" value={rebalanceDrift}
+                     onChange={(e) => setRebalanceDrift(e.target.value)}
+                     min={REBALANCE_MIN_DRIFT} max={REBALANCE_MAX_DRIFT} />
+            </label>
+            {liveRate != null && (
+              <p className="faint">
+                {t('orders.currentRate')} 1 {baseSym} = <span className="mono">{fmtQty(liveRate)}</span> {quoteSym}
+              </p>
+            )}
+            <p className="faint" style={{ lineHeight: 1.7 }}>{t('orders.rebalanceNote')}</p>
+          </>
         ) : kind === 'trailing' ? (
           <>
             {/*
@@ -1203,7 +1267,10 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
               stopLossRate: Number(stopLoss),
               startRate: Number(ladderStart),
               endRate: Number(ladderEnd),
-              steps: Number(ladderSteps)
+              steps: Number(ladderSteps),
+              slices: Number(twapSlices),
+              windowMin: Number(twapWindow),
+              driftPct: Number(rebalanceDrift)
             })
           }
         >

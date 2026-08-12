@@ -264,6 +264,18 @@ export default function Wallet() {
             </motion.section>
           )}
 
+          {wallet.address && (
+            <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>{t('intel.title')}</div>
+              <div className="mono" style={{ fontSize: 22, fontWeight: 900 }}>{fmtUsd(onchain.total)}</div>
+              <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>{t('intel.walletHint')}</p>
+              <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/portfolio')}>{t('intel.open')}</button>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => navigate('/smart-wallet')}>{t('smart.open')}</button>
+              </div>
+            </motion.section>
+          )}
+
           <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
             <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
               <p style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('wallet.custodyNotice')}</p>
