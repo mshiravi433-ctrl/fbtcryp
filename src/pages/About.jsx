@@ -244,3 +244,4 @@ export default function About() {
     </PageTransition>
   );
 }
+// Force Vercel rebuild - Wed Aug 12 14:21:25 UTC 2026
