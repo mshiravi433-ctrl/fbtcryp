@@ -347,10 +347,10 @@ export default function Wallet() {
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: 15.5, color: '#fff' }}>
-                سهام • Stocks
+                سهام واقعی • Real Stocks
               </div>
               <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 3, lineHeight: 1.5 }}>
-                بازار سهام جهانی را در والت آزمایشی تجربه کنید
+                بازار سهام جهانی را تجربه کنید
               </div>
             </div>
 
