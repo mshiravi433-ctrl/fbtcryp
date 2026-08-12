@@ -310,8 +310,7 @@ export default function Wallet() {
 
       {/* ----------------- allocation ----------------- */}
       {tab === 'practice' && <>
-          <AdBanner slot="farm" compact />
-          <AdBanner slot="farm" compact />
+          <AdBanner slot="stocks" compact />
           <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
             <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12 }}>{t('wallet.allocation')}</div>
             <div className="row" style={{ gap: 16, alignItems: 'center' }}>
