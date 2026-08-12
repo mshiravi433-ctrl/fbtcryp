@@ -45,6 +45,10 @@ import { PAYOUT_DIRECTORY } from '../lib/payout';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
+import TokenRiskCard from '../components/TokenRiskCard';
+import MevGuard from '../components/MevGuard';
+import { checkPolicy, recordSpend } from '../lib/smartWallet';
+import { recordLot } from '../lib/portfolioIntel';
 
 /**
  * Real on-chain swap screen.
@@ -323,6 +327,8 @@ export default function Swap() {
   const [txState, setTxState] = useState(null); // { stage, hash, error }
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [flipCount, setFlipCount] = useState(0);
+  const [policyBlock, setPolicyBlock] = useState(null);
+  const [mevProtect, setMevProtect] = useState(false);
   const still = useStill();
 
   const fromSym = fromToken?.symbol;
@@ -635,7 +641,33 @@ export default function Swap() {
    * it twice, and never take custody. The non-custodial property is unchanged
    * — what changes is only who pays the gas.
    */
+  const spendUsdGuess = () => {
+    /* Stables are 1:1. Anything else would need a price feed this screen
+       does not own — inventing one would enforce the limit against a lie. */
+    if (fromToken && ['USDT', 'USDC', 'DAI', 'FDUSD'].includes(fromToken.symbol)) {
+      const n = Number(amount);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    }
+    return null;
+  };
+
+  const enforcePolicy = () => {
+    const usd = spendUsdGuess();
+    if (usd == null) {
+      setPolicyBlock(null);
+      return true;
+    }
+    const gate = checkPolicy({ usd });
+    if (!gate.ok) {
+      setPolicyBlock(gate.code);
+      return false;
+    }
+    setPolicyBlock(null);
+    return true;
+  };
+
   const runGasless = async () => {
+    if (!enforcePolicy()) return;
     const signer = wallet.getSigner?.();
     if (!signer) return;
 
@@ -711,6 +743,20 @@ export default function Swap() {
       setTxState({ stage: 'success', gaslessHash: res?.tradeHash ?? null, gasless: true });
       /* A gasless swap is still a first swap. */
       useAppStore.getState().completeQuest('firstSwap');
+      const usd = spendUsdGuess();
+      if (usd != null) recordSpend(usd);
+      const got = Number(quote?.amountOut);
+      if (usd != null && Number.isFinite(got) && got > 0) {
+        recordLot({
+          symbol: toToken.symbol,
+          chainId,
+          side: 'buy',
+          qty: got,
+          priceUsd: usd / got,
+          feeUsd: usd * ((quote?.feeBps || 0) / 10000),
+          txHash: res?.tradeHash ?? null
+        });
+      }
       haptic?.('success');
       notifyTrade?.({ from: fromToken.symbol, to: toToken.symbol, amount });
     } catch (e) {
@@ -721,6 +767,7 @@ export default function Swap() {
 
   const runSwap = async () => {
     if (useGasless) return runGasless();
+    if (!enforcePolicy()) return;
 
     const signer = wallet.getSigner?.();
     if (!signer || !quote || quote.error) return;
@@ -837,6 +884,22 @@ export default function Swap() {
        * submission, so a reverted transaction cannot pay points.
        */
       if (ok) useAppStore.getState().completeQuest('firstSwap');
+      if (ok) {
+        const usd = spendUsdGuess();
+        if (usd != null) recordSpend(usd);
+        const got = Number(fresh.amountOut);
+        if (usd != null && Number.isFinite(got) && got > 0) {
+          recordLot({
+            symbol: toToken.symbol,
+            chainId,
+            side: 'buy',
+            qty: got,
+            priceUsd: usd / got,
+            feeUsd: usd * ((quote.feeBps || 0) / 10000),
+            txHash: tx.hash
+          });
+        }
+      }
 
       // Ring + vibrate the moment the trade settles. A swap can take a minute
       // to confirm and people put the phone down — a silent success is a
@@ -1324,6 +1387,23 @@ export default function Swap() {
         )}
         {highImpact && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.highImpact')}</p>}
         {insufficient && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('swap.insufficient')}</p>}
+        {policyBlock && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`smart.err.${policyBlock}`)}</p>
+        )}
+        {quote && !quote.error && (
+          <MevGuard
+            chainId={chainId}
+            slippagePct={effectiveSlippage}
+            priceImpact={impact}
+            amountUsd={spendUsdGuess()}
+            amountOut={quote.amountOut}
+            minOut={quote.minOut}
+            gasNative={gasCost}
+            bothStable={isStableSymbol(fromToken?.symbol) && isStableSymbol(toToken?.symbol)}
+            protectOn={mevProtect}
+            onProtectChange={() => setMevProtect((v) => !v)}
+          />
+        )}
 
         {/* Gas is paid in the chain's own coin, from the same wallet, and it
             is NOT covered by the platform fee. Saying which coin, per chain,
@@ -1434,6 +1514,12 @@ export default function Swap() {
             {t('swap.unverifiedWarning', { symbol: unverifiedTarget.symbol })}
           </p>
         )}
+
+        <TokenRiskCard
+          chainId={chainId}
+          address={toToken?.address}
+          symbol={toToken?.symbol}
+        />
 
         <button
           className="swap-cta"

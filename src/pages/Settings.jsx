@@ -635,6 +635,12 @@ export default function Settings() {
             right={<Switch on={s.twoFactorEnabled} onChange={startTwoFa} />}
           />
           <Row
+            icon={IconKey}
+            label={t('nav.smartWallet')}
+            sub={t('smart.enableSub')}
+            onClick={() => navigate('/smart-wallet')}
+          />
+          <Row
             icon={IconLock}
             label={t('settings.autoLock')}
             sub={s.autoLockMinutes === 0 ? t('settings.never') : t('settings.afterMinutes', { n: s.autoLockMinutes })}

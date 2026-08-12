@@ -45,7 +45,7 @@ const MAX_AGE = 45 * 86400000;
 
 /** The order types this watcher can evaluate. DCA is time-based and stays on
  *  the device, which also keeps the user's schedule off our servers. */
-const WATCH_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder']);
+const WATCH_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder', 'rebalance']);
 
 const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 64;
 const isSym = (v) => typeof v === 'string' && /^[A-Za-z0-9._-]{1,16}$/.test(v);
@@ -129,6 +129,13 @@ export async function putWatches(endpoint, items, lang = 'fa') {
         if (Number.isInteger(rung) && rung > 0) row.rung = rung;
         if (Number.isInteger(ofRungs) && ofRungs > 0) row.ofRungs = ofRungs;
       }
+    } else if (type === 'rebalance') {
+      const target = Number(it.targetRate);
+      const drift = Number(it.driftPct);
+      if (!Number.isFinite(target) || target <= 0) continue;
+      if (!Number.isFinite(drift) || drift < 2 || drift > 50) continue;
+      row.targetRate = target;
+      row.driftPct = drift;
     } else if (type === 'trailing') {
       const pct = Number(it.trailPct);
       /*
@@ -203,6 +210,13 @@ export function evaluateWatch(w, rate) {
        yet, by definition. */
     const hit = prevPeak !== null && rate <= stopAt;
     return { hit, at: stopAt, peak };
+  }
+
+  if (type === 'rebalance') {
+    const target = Number(w.targetRate);
+    if (!Number.isFinite(target) || target <= 0) return { hit: false };
+    const drift = (Math.abs(rate - target) / target) * 100;
+    return { hit: drift >= w.driftPct, at: rate };
   }
 
   if (type === 'bracket') {

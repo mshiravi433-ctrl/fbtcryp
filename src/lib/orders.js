@@ -67,7 +67,7 @@ export const MAX_ORDERS = 50;
  * a number, which is exactly what `evaluateOrder` already does, so neither
  * requires custody or any new trust assumption.
  */
-export const ORDER_TYPES = ['limit', 'dca', 'trailing', 'bracket', 'ladder'];
+export const ORDER_TYPES = ['limit', 'dca', 'trailing', 'bracket', 'ladder', 'twap', 'rebalance'];
 
 /**
  * How many rungs a ladder may have.
@@ -89,7 +89,17 @@ export const ORDER_TYPES = ['limit', 'dca', 'trailing', 'bracket', 'ladder'];
  * schedule, and sending it would hand the server a behavioural profile it does
  * not need to do its job.
  */
-export const WATCHED_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder']);
+export const WATCHED_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder', 'rebalance']);
+
+/** TWAP: how many slices, and how long the window may be. */
+export const TWAP_MIN_SLICES = 2;
+export const TWAP_MAX_SLICES = 24;
+export const TWAP_MIN_WINDOW_MIN = 15;
+export const TWAP_MAX_WINDOW_MIN = 7 * 24 * 60;
+
+/** Rebalance: drift from the last balanced rate, in percent. */
+export const REBALANCE_MIN_DRIFT = 2;
+export const REBALANCE_MAX_DRIFT = 50;
 
 export const LADDER_MIN_STEPS = 2;
 export const LADDER_MAX_STEPS = 8;
@@ -183,6 +193,27 @@ export function validateOrder(o) {
     if (!Number.isInteger(total) || total < 1 || total > 365) return 'BAD_RUNS';
   }
 
+  if (o.type === 'twap') {
+    const slices = Number(o.slices);
+    if (!Number.isInteger(slices) || slices < TWAP_MIN_SLICES || slices > TWAP_MAX_SLICES) {
+      return 'BAD_SLICES';
+    }
+    const windowMin = Number(o.windowMin);
+    if (!Number.isFinite(windowMin) || windowMin < TWAP_MIN_WINDOW_MIN || windowMin > TWAP_MAX_WINDOW_MIN) {
+      return 'BAD_WINDOW';
+    }
+  }
+
+  if (o.type === 'rebalance') {
+    const target = Number(o.targetRate);
+    const drift = Number(o.driftPct);
+    if (!Number.isFinite(target) || target <= 0) return 'BAD_TARGET';
+    if (!Number.isFinite(drift) || drift < REBALANCE_MIN_DRIFT || drift > REBALANCE_MAX_DRIFT) {
+      return 'BAD_DRIFT';
+    }
+    if (o.priceOf && o.priceOf !== 'from' && o.priceOf !== 'to') return 'BAD_PRICE_OF';
+  }
+
   return null;
 }
 
@@ -272,6 +303,33 @@ export function createOrder(input, now = Date.now()) {
          */
         rungsFilled: 0,
         totalRuns: steps,
+        expiresAt: now + (Number(input.expiryDays) || 30) * 86400000
+      }
+    };
+  }
+
+  if (input.type === 'twap') {
+    const slices = Number(input.slices);
+    const windowMin = Number(input.windowMin);
+    return {
+      order: {
+        ...base,
+        slices,
+        windowMin,
+        totalRuns: slices,
+        sliceGapMs: (windowMin * 60_000) / slices,
+        nextRunAt: now
+      }
+    };
+  }
+
+  if (input.type === 'rebalance') {
+    return {
+      order: {
+        ...base,
+        targetRate: Number(input.targetRate),
+        driftPct: Number(input.driftPct),
+        priceOf: input.priceOf === 'to' ? 'to' : 'from',
         expiresAt: now + (Number(input.expiryDays) || 30) * 86400000
       }
     };
@@ -497,6 +555,34 @@ export function evaluateOrder(order, rate, now = Date.now()) {
     };
   }
 
+  /*
+   * TWAP — time-weighted average price. Same honesty constraint as DCA: we
+   * cannot sign, so each slice is an alert. The difference is the schedule:
+   * N equal slices across a window the user named, not a calendar interval.
+   */
+  if (order.type === 'twap') {
+    if (order.runsDone >= order.totalRuns) return { ready: false, reason: 'COMPLETE' };
+    const due = now >= (order.nextRunAt ?? 0);
+    return { ready: due, reason: due ? 'DUE' : 'WAITING' };
+  }
+
+  /*
+   * REBALANCE — fire when the pair has drifted `driftPct` from the rate the
+   * user called balanced. Unknown price never fires (same as every other
+   * price-triggered type).
+   */
+  if (order.type === 'rebalance') {
+    if (order.expiresAt && now >= order.expiresAt) return { ready: false, reason: 'EXPIRED' };
+    if (!Number.isFinite(rate) || rate <= 0) return { ready: false, reason: 'NO_PRICE' };
+    const observed = order.priceOf === 'to' ? 1 / rate : rate;
+    if (!Number.isFinite(observed) || observed <= 0) return { ready: false, reason: 'NO_PRICE' };
+    const target = Number(order.targetRate);
+    if (!Number.isFinite(target) || target <= 0) return { ready: false, reason: 'WAITING' };
+    const drift = (Math.abs(observed - target) / target) * 100;
+    const hit = drift >= order.driftPct;
+    return { ready: hit, reason: hit ? 'DRIFT_HIT' : 'WAITING', drift, observed };
+  }
+
   // DCA is time-based, so a missing price does not block it: the user asked to
   // buy on a schedule regardless of price. That is the point of DCA.
   if (order.runsDone >= order.totalRuns) return { ready: false, reason: 'COMPLETE' };
@@ -509,7 +595,7 @@ export function evaluateOrder(order, rate, now = Date.now()) {
  * Pure: returns the next state rather than mutating.
  */
 export function advanceOrder(order, now = Date.now()) {
-  if (order.type === 'limit' || order.type === 'trailing') {
+  if (order.type === 'limit' || order.type === 'trailing' || order.type === 'rebalance') {
     return { ...order, status: 'filled', filledAt: now, runsDone: 1 };
   }
 
@@ -547,6 +633,10 @@ export function advanceOrder(order, now = Date.now()) {
   }
   const runsDone = order.runsDone + 1;
   const done = runsDone >= order.totalRuns;
+  const gap =
+    order.type === 'twap'
+      ? Number(order.sliceGapMs) || (Number(order.windowMin) * 60000) / (Number(order.slices) || 1)
+      : DCA_INTERVALS[order.interval];
   return {
     ...order,
     runsDone,
@@ -555,7 +645,7 @@ export function advanceOrder(order, now = Date.now()) {
     // Schedule from NOW, not from the previous due time. Scheduling from the
     // due time means a user who was offline for a week comes back to seven
     // overdue buys firing at once.
-    nextRunAt: done ? undefined : now + DCA_INTERVALS[order.interval]
+    nextRunAt: done ? undefined : now + gap
   };
 }
 
@@ -589,7 +679,7 @@ export function pauseOrder(order) {
 export function resumeOrder(order, now = Date.now()) {
   if (!order || order.status !== 'paused') return order;
   const next = { ...order, status: 'active' };
-  if (order.type === 'dca') next.nextRunAt = now;
+  if (order.type === 'dca' || order.type === 'twap') next.nextRunAt = now;
   /*
    * Reset the trailing peak on resume. Keeping a peak from before the pause
    * would compare today's price against a high that may be weeks stale and
@@ -799,7 +889,7 @@ export function orderNotionalUsd(order, priceMap) {
   if (!Number.isFinite(unit) || unit <= 0 || !Number.isFinite(amount) || amount <= 0) return null;
 
   const perRun = amount * unit;
-  if (order.type !== 'dca') return perRun;
+  if (order.type !== 'dca' && order.type !== 'twap') return perRun;
 
   const remaining = Math.max(0, (Number(order.totalRuns) || 0) - (Number(order.runsDone) || 0));
   return perRun * remaining;

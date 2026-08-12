@@ -19,6 +19,7 @@ import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
 import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
+import TokenRiskCard from '../components/TokenRiskCard';
 
 /**
  * Chain names for the resolved-venue line.
@@ -510,6 +511,14 @@ export default function CoinDetail() {
           {t('coin.practiceInstead')}
         </button>
       </motion.div>
+
+      {realSwap?.token?.address && (
+        <TokenRiskCard
+          chainId={realSwap.chainId}
+          address={realSwap.token.address}
+          symbol={realSwap.token.symbol}
+        />
+      )}
 
       <InfoBox title={t('common.notAdviceTitle')} tone="warn" id="coin-notadvice">
         <p>{t('common.notAdvice')}</p>
