@@ -5,7 +5,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { FEE_BPS, FEE_RECIPIENT, EVM_CHAINS } from '../lib/chains';
 import { payoutTable } from '../lib/payout';
-import { IconChevronLeft, IconExternal, IconKey, IconLock, IconShield } from '../components/Icons';
+import { IconChevronLeft, IconExternal, IconKey, IconLock, IconShield, IconCheckCircle, IconAlertTriangle } from '../components/Icons';
 
 /**
  * SECURITY.
@@ -77,13 +77,31 @@ export default function Audit() {
       <p className="prose-sm">{t('audit.intro')}</p>
 
       {/* ------------------------ the one that matters ------------------------ */}
-      <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show">
-        <div className="aurora" />
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-4)' }}><IconShield width={21} height={21} /></span>
+      <motion.section 
+        className="card" 
+        variants={riseIn} 
+        initial="hidden" 
+        animate="show"
+        style={{ 
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.08), transparent)',
+          border: '1px solid rgba(16,185,129,0.25)'
+        }}
+      >
+        <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ 
+            width: 42, 
+            height: 42, 
+            borderRadius: 999, 
+            background: 'rgba(16,185,129,0.2)',
+            display: 'grid',
+            placeItems: 'center',
+            flexShrink: 0
+          }}>
+            <IconCheckCircle width={22} height={22} color="#10b981" />
+          </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t('audit.nonCustodial')}</div>
-            <p className="prose-sm">{t('audit.nonCustodialBody')}</p>
+            <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 6, color: '#10b981' }}>{t('audit.nonCustodial')}</div>
+            <p className="prose-sm" style={{ lineHeight: 1.65 }}>{t('audit.nonCustodialBody')}</p>
           </div>
         </div>
       </motion.section>
