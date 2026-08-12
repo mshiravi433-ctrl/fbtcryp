@@ -739,7 +739,8 @@
     "stats": {
       "chains": "Chains",
       "users": "Users",
-      "languages": "Languages"
+      "languages": "Languages",
+      "coins": "Coins"
     }
   },
   "contact": {

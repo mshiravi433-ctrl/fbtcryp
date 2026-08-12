@@ -739,7 +739,8 @@
     "stats": {
       "chains": "شبکه",
       "users": "کاربر",
-      "languages": "زبان"
+      "languages": "زبان",
+      "coins": "ارز"
     }
   },
   "contact": {
