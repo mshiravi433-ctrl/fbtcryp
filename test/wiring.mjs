@@ -10049,6 +10049,18 @@ export default function run() {
     t('mobile products use a two-column grid and wide web grows to three',
       /repeat\(2, minmax\(0, 1fr\)\)/.test(modernShop) &&
       /repeat\(3, minmax\(0, 1fr\)\)/.test(modernShop));
+    /*
+     * iOS Safari computes an automatic intrinsic minimum for a lazy image
+     * differently from Chromium. The preview rail reset that minimum, while
+     * the full category grid did not — so tapping "see all" could collapse
+     * cards into lines or make their columns wider than the viewport.
+     */
+    t('the full category grid resets intrinsic item sizing for iPhone Safari',
+      /\.shop-grid > \*,[\s\S]{0,80}?\.shop-rail > \*[\s\S]{0,180}?min-width: 0/.test(modernShop) &&
+      /grid-auto-rows: max-content/.test(modernShop));
+    t('shop artwork keeps a visible stage while a lazy logo is unresolved',
+      /\.shop-shot \{[\s\S]{0,100}?min-height: 96px/.test(modernShop) &&
+      /\.shop-shot img \{[\s\S]{0,120}?height: auto/.test(modernShop));
     t('the storefront has integrated search, trust signals and a visual CTA',
       /shop-search/.test(page) && /shop-trust-row/.test(page) && /shop-promo-cta/.test(read('src/components/ShopPromo.jsx')));
 

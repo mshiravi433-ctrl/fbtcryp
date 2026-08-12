@@ -175,16 +175,45 @@
 .shop-grid,
 .shop-rail {
   display: grid;
+  width: 100%;
+  min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /*
+   * Keep row sizing content-driven. WebKit can otherwise resolve an implicit
+   * grid row from a percentage-sized image before it has resolved the card's
+   * aspect ratio. On iOS that briefly — and sometimes permanently — collapses
+   * a product card to a horizontal line when the full category view mounts.
+   */
+  grid-auto-rows: max-content;
+  align-items: start;
   gap: 11px;
   overflow: visible;
   margin: 0;
   padding: 0;
   scroll-snap-type: none;
 }
-.shop-rail > * { min-width: 0; width: 100%; flex: initial; }
+
+/*
+ * The preview rail already reset its children, but the full `.shop-grid`
+ * did not. Grid items have an automatic intrinsic minimum size; Safari gives
+ * that minimum to the lazy image and lets it override the minmax(0, 1fr)
+ * track. Reset BOTH kinds of product list so a tile is always measured from
+ * its assigned column, never from a not-yet-loaded logo.
+ */
+.shop-grid > *,
+.shop-rail > * {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  align-self: start;
+  flex: initial;
+}
 
 .shop-tile {
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
   border-radius: 21px;
   border-color: color-mix(in srgb, var(--line) 88%, transparent);
   background: color-mix(in srgb, var(--bg-raised) 96%, #fff 4%);
@@ -197,7 +226,11 @@
   transform: translateY(-2px);
 }
 .shop-tile:active { transform: scale(.975); }
-.shop-shot { aspect-ratio: 4 / 3; }
+.shop-shot {
+  height: auto;
+  min-height: 96px;
+  aspect-ratio: 4 / 3;
+}
 .shop-shot::before {
   content: '';
   position: absolute;
@@ -205,7 +238,13 @@
   background: radial-gradient(circle at 25% 0%, rgba(255,255,255,.18), transparent 48%), linear-gradient(to top, rgba(0,0,0,.08), transparent 48%);
   pointer-events: none;
 }
-.shop-shot img { width: 58%; height: 58%; filter: drop-shadow(0 8px 15px rgba(0,0,0,.16)); }
+.shop-shot img {
+  display: block;
+  width: 58%;
+  height: auto;
+  max-height: 64%;
+  filter: drop-shadow(0 8px 15px rgba(0,0,0,.16));
+}
 .shop-digital-badge {
   position: absolute;
   z-index: 2;
