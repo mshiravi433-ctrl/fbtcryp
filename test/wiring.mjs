@@ -11128,5 +11128,32 @@ export default function run() {
     }
   }
 
+  /* ---------------- signed solver commitments + transparency log -------- */
+  {
+    const serverApp = read('server/app.js');
+    const signatures = read('server/intentSignatures.js');
+    const transparency = read('server/intentTransparency.js');
+    const intentPage = read('src/pages/IntentOS.jsx');
+    const envExample = read('.env.example');
+
+    t('signed commitment submission and public solver/log discovery are all wired',
+      /\/api\/intents\/v1\/solvers/.test(serverApp) &&
+      /\/api\/intents\/v1\/commitments/.test(serverApp) &&
+      /\/api\/intents\/v1\/log\/:intentHash/.test(serverApp) &&
+      /appendSignedCommitment/.test(serverApp));
+    t('solver admission uses server-only Ed25519 public keys',
+      /INTENT_SOLVER_KEYS/.test(signatures) && /Ed25519/.test(signatures) &&
+      /INTENT_SOLVER_KEYS=/.test(envExample) && !/VITE_INTENT_SOLVER/.test(envExample));
+    t('financial transparency entries never use the mutable board store',
+      /allowOverwrite:\s*false/.test(transparency) &&
+      !/from ['"]\.\/store\.js['"]/.test(transparency) &&
+      /NONCE_REPLAY/.test(transparency));
+    t('network status honestly exposes solver count, durability and external-anchor state',
+      /registeredSolvers/.test(transparency) && /persistenceMode/.test(transparency) &&
+      /externallyAnchored:\s*false/.test(transparency) &&
+      /getIntentCapabilities/.test(intentPage) && /transparency\?\.durable/.test(intentPage) &&
+      /transparency\?\.externallyAnchored/.test(intentPage));
+  }
+
   return rows;
 }

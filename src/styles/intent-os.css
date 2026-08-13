@@ -435,6 +435,15 @@
 .ios-network-glyph i:nth-child(3) { bottom: 5px; left: 5px; }
 .ios-network-glyph i:nth-child(4) { bottom: 7px; right: 4px; }
 
+.ios-network-status { padding: 14px; border-color: rgba(255,190,92,.2) !important; background: linear-gradient(145deg, rgba(255,190,92,.055), rgba(255,255,255,.018)) !important; }
+.ios-network-status.is-online { border-color: rgba(101,245,188,.2) !important; background: linear-gradient(145deg, rgba(101,245,188,.055), rgba(66,232,255,.025)) !important; }
+.ios-network-status .ios-eyebrow, .ios-network-status strong { display: block; }
+.ios-network-status strong { margin-top: 4px; font-size: 11px; }
+.ios-network-status > p { margin: 11px 0 0; color: var(--text-3); font-size: 8.7px; line-height: 1.6; }
+.ios-network-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }
+.ios-network-metrics span { min-width: 0; padding: 8px; border-radius: 10px; background: rgba(0,0,0,.16); color: var(--text-3); font-size: 7.5px; overflow-wrap: anywhere; }
+.ios-network-metrics b { display: block; margin-bottom: 3px; color: var(--text-1); font: 700 8.5px/1.25 var(--font-mono); }
+
 .ios-network-api { padding: 10px !important; display: grid; gap: 6px; }
 .ios-network-api > div { display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: center; padding: 8px; border-radius: 10px; background: rgba(0,0,0,.2); }
 .ios-network-api span { color: var(--ios-mint); font: 700 8px/1 var(--font-mono); }

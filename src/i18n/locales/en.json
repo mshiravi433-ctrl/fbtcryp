@@ -3640,7 +3640,22 @@
       "roadmap": "Roadmap",
       "aiTitle": "AI proposes. Policy authorises.",
       "aiBody": "Models may explain or propose a structured intent. Deterministic limits, simulation, wallet signatures and smart contracts control every real execution.",
-      "safetyNotice": "Public bid submission remains closed until solver authentication, replay protection, quote commitments, bonding and dispute rules exist. Opening it earlier would add attack surface, not decentralisation."
+      "safetyNotice": "Signed commitment submission is evidence, not public execution. Executable bid and calldata routing remain closed until bonding, dispute rules, auction finality and settlement verification exist.",
+      "protocol": "SIGNED QUOTE PROTOCOL",
+      "checking": "Checking protocol status…",
+      "reachable": "Protocol discovery is reachable",
+      "unreachable": "Protocol status is unavailable",
+      "accepting": "Accepting signed quotes",
+      "readOnly": "Read-only / not configured",
+      "registered": "Registered solvers",
+      "signing": "Signature",
+      "durable": "Durable Blob",
+      "memory": "Process memory",
+      "storage": "Log storage",
+      "anchored": "Externally anchored",
+      "unanchored": "Not anchored",
+      "root": "Merkle root",
+      "commitmentNote": "Quote submissions require a registered Ed25519 public key. Merkle roots prove inclusion in the returned set, but are not independent timestamps or on-chain settlement proofs until externally anchored."
     }
   }
 }

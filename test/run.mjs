@@ -297,6 +297,14 @@ console.log('\n▸ auditing wiring (keys · routes · dead files)…');
   report('wiring', runWiring());
 }
 
+/* Real HTTP coverage for registry discovery, signature authentication,
+   immutable nonce admission, and public inclusion evidence. */
+console.log('\n▸ probing the signed solver commitment API…');
+{
+  const intentApiRows = (await import('./intent-api-probe.mjs')).default;
+  report('intent commitment API', intentApiRows);
+}
+
 /*
  * Native notification probe — runs the REAL notify.js with `Notification`
  * deleted and Capacitor injected, which is the one environment shape that

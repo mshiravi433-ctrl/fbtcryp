@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,7 @@ import {
   loadExecutionProofs,
   verifyExecutionProof
 } from '../lib/executionProof';
+import { getIntentCapabilities } from '../lib/intentNetwork';
 import '../styles/intent-os.css';
 
 const TABS = ['compose', 'memory', 'proofs', 'network'];
@@ -113,6 +114,7 @@ export default function IntentOS() {
   const [proofs, setProofs] = useState(() => loadExecutionProofs());
   const [verified, setVerified] = useState(null);
   const [compiled, setCompiled] = useState(null);
+  const [networkStatus, setNetworkStatus] = useState(null);
   const [draft, setDraft] = useState(() => ({
     kind: 'swap',
     chainId: loadIntentMemory().preferredChainId,
@@ -132,6 +134,14 @@ export default function IntentOS() {
 
   const activeTemplate = TEMPLATES.find((item) => item.kind === draft.kind);
   const savedDrafts = useMemo(() => saved.slice(0, 4), [saved]);
+
+  useEffect(() => {
+    let active = true;
+    getIntentCapabilities()
+      .then((value) => { if (active) setNetworkStatus({ ok: true, ...value }); })
+      .catch(() => { if (active) setNetworkStatus({ ok: false }); });
+    return () => { active = false; };
+  }, []);
 
   const patchDraft = (patch) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -565,8 +575,34 @@ export default function IntentOS() {
             <div><h2>{t('intentOS.network.title')}</h2><p>{t('intentOS.network.subtitle')}</p></div>
           </section>
 
+          <section className={`ios-network-status ${networkStatus?.ok ? 'is-online' : ''}`}>
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.protocol')}</span>
+                <strong>{networkStatus === null
+                  ? t('intentOS.network.checking')
+                  : networkStatus.ok
+                    ? t('intentOS.network.reachable')
+                    : t('intentOS.network.unreachable')}</strong>
+              </div>
+              <span className={`ios-status ${networkStatus?.transparency?.acceptingCommitments ? 'eligible' : 'unavailable'}`}>
+                {networkStatus?.transparency?.acceptingCommitments ? t('intentOS.network.accepting') : t('intentOS.network.readOnly')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.transparency?.registeredSolvers ?? '—'}</b>{t('intentOS.network.registered')}</span>
+              <span><b>Ed25519</b>{t('intentOS.network.signing')}</span>
+              <span><b>{networkStatus?.ok ? (networkStatus.transparency?.durable ? t('intentOS.network.durable') : t('intentOS.network.memory')) : '—'}</b>{t('intentOS.network.storage')}</span>
+              <span><b>{networkStatus?.ok ? (networkStatus.transparency?.externallyAnchored ? t('intentOS.network.anchored') : t('intentOS.network.unanchored')) : '—'}</b>{t('intentOS.network.root')}</span>
+            </div>
+            <p>{t('intentOS.network.commitmentNote')}</p>
+          </section>
+
           <section className="ios-network-api">
             <div><span>GET</span><code>/api/intents/v1/capabilities</code></div>
+            <div><span>GET</span><code>/api/intents/v1/solvers</code></div>
+            <div><span>POST</span><code>/api/intents/v1/commitments</code></div>
+            <div><span>GET</span><code>/api/intents/v1/log/:intentHash</code></div>
             <div><span>POST</span><code>/api/intents/v1/validate</code></div>
           </section>
 

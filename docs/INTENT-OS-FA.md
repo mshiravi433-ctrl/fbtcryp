@@ -276,13 +276,41 @@ Memory نباید بی‌اجازه از رفتار، «مجوز» نتیجه ب
 Intent OS محصول بالادستی است؛ Swap و Orders Adapterهای آن هستند، نه برعکس. ترتیب رشد:
 
 ```text
-Phase 1 — local compiler + risk + real quote trace + receipts       [انجام شده]
-Phase 2 — signed solver quotes + transparency log
-Phase 3 — bonded open solver network + outcome settlement
-Phase 4 — atomic same-chain workflows + cross-chain state machine
-Phase 5 — threshold-encrypted confidential intents
-Phase 6 — independent verifiers and standardisation
+Phase 1  — local compiler + risk + real quote trace + receipts       [انجام شده]
+Phase 2a — signed solver commitments + immutable transparency log    [انجام شده]
+Phase 2b — selection receipt + externally anchored auction close     [مرحله بعد]
+Phase 3  — bonded open solver network + outcome settlement
+Phase 4  — atomic same-chain workflows + cross-chain state machine
+Phase 5  — threshold-encrypted confidential intents
+Phase 6  — independent verifiers and standardisation
 ```
+
+### وضعیت دقیق Phase 2a
+
+اکنون هر Solver فقط در صورتی می‌تواند Quote ثبت کند که کلید عمومی Ed25519 آن در `INTENT_SOLVER_KEYS` تعریف شده باشد. امضا همهٔ مقادیر مالی، `intentHash`، `routeCommitment`، زنجیره، nonce، زمان صدور و انقضا را پوشش می‌دهد. کلید خصوصی در اختیار خود Solver می‌ماند و نباید در `VITE_*` یا مخزن قرار گیرد.
+
+```bash
+# تولید یک‌بارهٔ کلیدها
+node scripts/intent-solver.mjs keygen
+
+# ساخت نمونهٔ Quote
+node scripts/intent-solver.mjs example > quote.json
+
+# امضا در محیط خود Solver
+INTENT_SOLVER_PRIVATE_KEY='…' node scripts/intent-solver.mjs sign quote.json > signed.json
+```
+
+هر Quote پذیرفته‌شده در مسیر مستقل `intent/solver/nonce` نوشته می‌شود؛ overwrite مجاز نیست و nonce تکراری رد می‌شود. اگر `BLOB_READ_WRITE_TOKEN` وجود داشته باشد این ثبت پایدار است، وگرنه API و UI صریحاً حالت حافظهٔ موقت را اعلام می‌کنند. گزارش عمومی ریشهٔ Merkle قطعی و inclusion proof هر Quote را برمی‌گرداند.
+
+این پیاده‌سازی هنوز ادعاهای زیر را ندارد:
+
+- ریشهٔ Merkle هنوز آن‌چین یا نزد publisher مستقل anchor نشده است؛
+- ثبت‌شدن در log به معنی executable calldata یا settlement موفق نیست؛
+- Solverها bond ندارند و جریمهٔ failure اعمال نمی‌شود؛
+- Auction-close مستقل و اثبات completeness مجموعه هنوز وجود ندارد؛
+- هیچ کلید خصوصی Solver یا کاربر به FBT واگذار نمی‌شود.
+
+Endpointهای عمومی در `/api/intents/v1/capabilities`، `/solvers`، `/commitments` و `/log/:intentHash` مستند و در صفحهٔ Network با وضعیت واقعی registry و durability نمایش داده می‌شوند.
 
 ---
 

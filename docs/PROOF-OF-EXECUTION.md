@@ -57,34 +57,50 @@ A protocol-grade proof therefore requires at least one external authenticity mec
 
 The UI must not label the current digest as a ZK proof or signed attestation.
 
-## 5. Proposed solver quote commitment
+## 5. Implemented solver quote commitment and transparency log
+
+The server now accepts a bounded, versioned commitment:
 
 ```json
 {
   "schema": "fbt.solver-quote.v1",
-  "intentHash": "0x…",
-  "solverId": "did:key:…",
+  "intentHash": "0x…64 hex characters…",
+  "solverId": "market-maker-a",
   "chainId": 42161,
   "amountOut": "400000000000000000",
   "maxGas": "250000",
   "feeBps": 70,
   "slippageBps": 50,
   "executable": true,
+  "issuedAt": 1786579110,
   "validUntil": 1786579200,
-  "nonce": "0x…",
-  "routeCommitment": "0x…",
-  "signature": "0x…"
+  "nonce": "0x…16–64 random bytes…",
+  "routeCommitment": "0x…64 hex characters…",
+  "signature": "base64url Ed25519 signature"
 }
 ```
 
-The bid set should be committed as a Merkle tree before selection. A receipt then carries:
+The Ed25519 signature is over a domain-separated canonical JSON encoding of every field except `signature`. It therefore binds the exact intent hash, route commitment, solver, chain, output, gas, fee, slippage, executability, issue time, expiry and nonce. Quotes may live for at most five minutes and allow only bounded clock skew.
 
-- the root;
-- selected bid and inclusion proof;
-- excluded/failed solver status;
-- selection function version;
-- settlement transaction;
-- verifier signature or registry inclusion proof.
+Solver admission uses `INTENT_SOLVER_KEYS`, a server-side JSON registry containing **public keys only**. An inactive or unregistered solver is rejected; FBT does not accept anonymous quote claims or receive solver private keys. Solvers can generate keys and sign locally with `scripts/intent-solver.mjs`.
+
+Accepted statements are written under immutable per-intent/solver/nonce paths. Reusing that path returns `NONCE_REPLAY`. If Vercel Blob is configured, writes use `allowOverwrite:false`; otherwise the process-memory fallback is explicitly reported as non-durable and replay protection lasts only for that process lifetime. A Blob read failure returns `503` rather than presenting an empty or partial set. The log never uses the mutable last-writer-wins board store.
+
+The log deterministically sorts unique signed-commitment hashes and builds a domain-separated SHA-256 Merkle tree: leaves are `SHA-256(0x00 || canonical-signed-commitment)` and parents are `SHA-256(0x01 || left || right)`. Odd nodes are duplicated. The public response includes the current root and an inclusion proof for every entry. This supports independent recomputation of the returned set, but has two important limits:
+
+- the root can change while another valid quote is accepted for the intent;
+- the root is **not externally anchored**, so it is not an independent timestamp, completeness guarantee or on-chain settlement proof.
+
+Endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/intents/v1/capabilities` | Honest registry, durability and anchor status |
+| `GET` | `/api/intents/v1/solvers` | Active public solver identities and public keys |
+| `POST` | `/api/intents/v1/commitments` | Verify and append a signed commitment |
+| `GET` | `/api/intents/v1/log/:intentHash` | Root, entries and inclusion proofs |
+
+A future execution receipt still needs to carry the selected commitment and inclusion proof, selection-function version, settlement transaction, and an externally anchored root or verifier attestation.
 
 ## 6. Selection policy
 
@@ -140,4 +156,7 @@ Client verification recomputes the canonical SHA-256 digest. Full protocol verif
 - `src/lib/swap.js` — named solver requests and selection evidence
 - `src/lib/executionProof.js` — canonical receipt, hashing, storage and verification
 - `src/pages/Swap.jsx` — receipt creation after confirmed settlement
-- `src/pages/IntentOS.jsx` — proof archive, verification and JSON export
+- `src/pages/IntentOS.jsx` — proof archive, verification, JSON export and protocol status
+- `server/intentSignatures.js` — canonical commitments, Ed25519 signing and public registry
+- `server/intentTransparency.js` — immutable append, Merkle roots and inclusion proofs
+- `scripts/intent-solver.mjs` — solver-side key generation and signing CLI

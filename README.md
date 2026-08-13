@@ -27,12 +27,14 @@ FBT now includes a deterministic **Intent OS** control plane at `/#/intent`:
 structured outcome requests pass through local risk rules, capability-aware
 solver selection, user-signed execution and a content-addressed
 Proof-of-Execution receipt. Capabilities are discoverable at
-`GET /api/intents/v1/capabilities`; the API does not accept solver bids or
-execution calldata until authentication, replay protection, bonding and signed
-quote commitments are in place.
+`GET /api/intents/v1/capabilities`. Registered solvers can submit
+Ed25519-signed quote commitments to an immutable transparency log with
+replay-resistant nonces, deterministic Merkle roots and inclusion proofs. This
+is commitment evidence—not executable calldata, bonded settlement, a closed
+auction, or an externally anchored proof.
 
 - [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
-- [Proof-of-Execution receipt and protocol draft](docs/PROOF-OF-EXECUTION.md)
+- [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)
 
 ### Public guides
 

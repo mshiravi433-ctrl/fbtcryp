@@ -1,13 +1,11 @@
 /**
  * Public Intent/Solver protocol discovery.
  *
- * This endpoint does not accept money, signatures or executable calldata. It
- * publishes capabilities and validates the outer envelope so another DEX or
- * market maker can integrate against a versioned contract without scraping
- * the app. Solver bid submission stays closed until replay protection,
- * authentication, bonding and signed quote commitments exist — accepting
- * anonymous "bids" before those controls would create an execution oracle for
- * attackers, not a network.
+ * This module does not accept money or executable calldata. The API publishes
+ * capabilities, validates the outer envelope, and accepts only authenticated
+ * Ed25519 quote commitments from a configured public-key registry. Commitments
+ * enter an immutable transparency log; they are not settlement instructions,
+ * bonded guarantees, or permission for autonomous execution.
  */
 
 const CHAINS = [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144];
@@ -18,12 +16,17 @@ export const INTENT_CAPABILITIES = Object.freeze({
   protocol: 'fbt-intent/1.0',
   schema: 'fbt.intent.v1',
   proofSchema: 'fbt.execution-proof.v1',
+  commitmentSchema: 'fbt.solver-quote.v1',
   generatedBy: 'FBT Intent OS',
+  operatingMode: 'validation-discovery-and-signed-commitments',
   custody: false,
   chains: CHAINS,
   endpoints: {
     capabilities: '/api/intents/v1/capabilities',
     validate: '/api/intents/v1/validate',
+    solvers: '/api/intents/v1/solvers',
+    commitments: '/api/intents/v1/commitments',
+    log: '/api/intents/v1/log/{intentHash}',
     bids: null
   },
   stages: ['intent', 'risk', 'solver-market', 'simulation', 'execution', 'verification'],
@@ -50,6 +53,15 @@ export const INTENT_CAPABILITIES = Object.freeze({
       quoteCommitments: false
     }
   ],
+  protocolSecurity: {
+    solverSignatures: 'Ed25519',
+    immutableCommitmentEntries: true,
+    merkleLogRoots: true,
+    externalRootAnchor: false,
+    auctionCompletenessProof: false,
+    executionFromCommitments: false,
+    bondedSettlement: false
+  },
   unavailable: {
     confidentialIntents: true,
     atomicComposableWorkflows: true,

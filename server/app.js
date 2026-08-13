@@ -67,6 +67,8 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
+import { parseSolverRegistry, publicSolverRegistry } from './intentSignatures.js';
+import { appendSignedCommitment, readIntentLog, transparencyStatus } from './intentTransparency.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -204,20 +206,47 @@ app.get('/api/health', (_req, res) =>
 );
 
 /*
- * INTENT NETWORK DISCOVERY.
- * Read-only capabilities plus strict envelope validation. There is
- * intentionally no public bid/execution route yet: accepting solver calldata
- * before signed quote commitments, replay protection and bonding would turn a
- * protocol-shaped demo into a real fund-loss surface.
+ * INTENT NETWORK DISCOVERY + AUTHENTICATED COMMITMENTS.
+ * Discovery and logs are public. Submission authenticates a bounded quote with
+ * a registered Ed25519 key and stores evidence only—never executable calldata,
+ * spending authority, a bond claim, or permission to settle user funds.
  */
 app.get('/api/intents/v1/capabilities', (_req, res) => {
-  res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
-  res.json(INTENT_CAPABILITIES);
+  const registry = parseSolverRegistry();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  res.json({ ...INTENT_CAPABILITIES, transparency: transparencyStatus(registry) });
+});
+
+app.get('/api/intents/v1/solvers', (_req, res) => {
+  const registry = parseSolverRegistry();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  res.json({ algorithm: 'Ed25519', solvers: publicSolverRegistry(registry) });
 });
 
 app.post('/api/intents/v1/validate', (req, res) => {
   const result = validateIntentEnvelope(req.body);
   res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/intents/v1/commitments', async (req, res) => {
+  const registry = parseSolverRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
+  const result = await appendSignedCommitment(req.body, { registry });
+  if (result.ok) return res.status(201).json(result);
+  const status = result.code === 'UNREGISTERED_SOLVER' || result.code === 'SIGNATURE_MISMATCH'
+    ? 403
+    : result.code === 'NONCE_REPLAY' ? 409
+      : result.code === 'LOG_WRITE_FAILED' || result.code === 'LOG_READ_FAILED' ? 503 : 400;
+  return res.status(status).json({ error: result.code });
+});
+
+app.get('/api/intents/v1/log/:intentHash', async (req, res) => {
+  const result = await readIntentLog(req.params.intentHash);
+  if (result.error) return res.status(result.error === 'LOG_READ_FAILED' ? 503 : 400).json(result);
+  /* A log can grow until the intent expires, so intermediary caches must
+     revalidate rather than freezing an incomplete bid set. */
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(result);
 });
 
 /*

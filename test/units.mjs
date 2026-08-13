@@ -190,6 +190,19 @@ import {
   verifyExecutionProof
 } from '../src/lib/executionProof.js';
 import { validateIntentEnvelope } from '../server/intents.js';
+import {
+  generateSolverKeyPair,
+  signSolverCommitment,
+  verifySolverCommitment
+} from '../server/intentSignatures.js';
+import {
+  appendSignedCommitment,
+  merkleProof,
+  merkleRoot,
+  readIntentLog,
+  signedCommitmentHash,
+  verifyMerkleProof
+} from '../server/intentTransparency.js';
 
 export default async function run() {
   const rows = [];
@@ -4686,6 +4699,74 @@ export default async function run() {
     t('changing a receipt breaks digest verification', !(await verifyExecutionProof(tampered)).ok);
     t('proof scope refuses global optimality', proof.payload.claim.globalOptimality === false);
     t('unmeasured MEV savings remain null', proof.payload.decision.mevSavingsUsd === null);
+  }
+
+  {
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+    const keys = generateSolverKeyPair();
+    const solver = { id: 'unit-solver', name: 'Unit Solver', publicKey: keys.publicKey, active: true };
+    const registry = new Map([[solver.id, solver]]);
+    const unsigned = {
+      schema: 'fbt.solver-quote.v1',
+      intentHash: `0x${'de'.repeat(32)}`,
+      solverId: solver.id,
+      chainId: 42161,
+      amountOut: '400000000000000000',
+      maxGas: '250000',
+      feeBps: 70,
+      slippageBps: 50,
+      executable: true,
+      issuedAt: now,
+      validUntil: now + 90,
+      nonce: `0x${'ab'.repeat(16)}`,
+      routeCommitment: `0x${'cd'.repeat(32)}`
+    };
+    const signed = signSolverCommitment(unsigned, keys.privateKey);
+    t('registered Ed25519 solver commitments verify', verifySolverCommitment(signed, { registry, now: nowMs }).ok);
+    t('tampering a signed output invalidates its signature',
+      verifySolverCommitment({ ...signed, amountOut: '400000000000000001' }, { registry, now: nowMs }).code === 'SIGNATURE_MISMATCH');
+    t('unknown signed-commitment fields are refused rather than stored',
+      verifySolverCommitment({ ...signed, hiddenClaim: true }, { registry, now: nowMs }).code === 'UNKNOWN_FIELD');
+    t('an otherwise valid signed quote from an unregistered solver is refused',
+      verifySolverCommitment(signed, { registry: new Map(), now: nowMs }).code === 'UNREGISTERED_SOLVER');
+
+    const expired = signSolverCommitment({
+      ...unsigned,
+      issuedAt: now - 200,
+      validUntil: now - 100,
+      nonce: `0x${'ac'.repeat(16)}`
+    }, keys.privateKey);
+    t('expired solver commitments are refused', verifySolverCommitment(expired, { registry, now: nowMs }).code === 'QUOTE_EXPIRED');
+    const overlong = signSolverCommitment({
+      ...unsigned,
+      validUntil: now + 301,
+      nonce: `0x${'ae'.repeat(16)}`
+    }, keys.privateKey);
+    t('quote validity cannot exceed the five-minute protocol bound',
+      verifySolverCommitment(overlong, { registry, now: nowMs }).code === 'QUOTE_VALIDITY_TOO_LONG');
+
+    const appended = await appendSignedCommitment(signed, { registry, now: nowMs });
+    t('a signed commitment enters the immutable transparency log', appended.ok && appended.size === 1);
+    t('reusing a solver nonce is rejected as a replay',
+      (await appendSignedCommitment(signed, { registry, now: nowMs })).code === 'NONCE_REPLAY');
+
+    const signedTwo = signSolverCommitment({
+      ...unsigned,
+      amountOut: '399000000000000000',
+      nonce: `0x${'ad'.repeat(16)}`,
+      routeCommitment: `0x${'ce'.repeat(32)}`
+    }, keys.privateKey);
+    const appendedTwo = await appendSignedCommitment(signedTwo, { registry, now: nowMs });
+    const log = await readIntentLog(unsigned.intentHash);
+    const hashes = [signedCommitmentHash(signed), signedCommitmentHash(signedTwo)];
+    t('Merkle roots are deterministic regardless of input order',
+      merkleRoot(hashes) === merkleRoot([...hashes].reverse()) && appendedTwo.root === merkleRoot(hashes));
+    const inclusion = merkleProof(hashes, hashes[0]);
+    t('transparency inclusion proofs independently verify against the root',
+      verifyMerkleProof(hashes[0], inclusion, log.root));
+    t('a changed transparency leaf does not verify',
+      !verifyMerkleProof(`0x${'ff'.repeat(32)}`, inclusion, log.root));
   }
 
   return rows;
