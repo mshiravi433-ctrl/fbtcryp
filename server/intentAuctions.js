@@ -103,7 +103,10 @@ async function writeObject(path, value) {
   }
 }
 
-function coordinatorConfig() {
+/* Exported as the single source of coordinator identity: admission receipts
+   (Phase 2c) must come from exactly the same key that signs auction closes,
+   or watcher correlation would compare two different authorities. */
+export function coordinatorConfig() {
   const id = String(process.env.INTENT_COORDINATOR_ID || 'fbt-coordinator').toLowerCase();
   const privateKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY || '';
   if (!/^[a-z0-9][a-z0-9._-]{1,47}$/.test(id) || !privateKey) return null;
@@ -445,7 +448,7 @@ export async function readAuction(intentHash) {
   }
 }
 
-export function auctionProtocolStatus(anchorNetworks = 0) {
+export function auctionProtocolStatus(anchorNetworks = 0, registeredWatchers = 0) {
   const durable = blobConfigured();
   const coordinator = publicCoordinator();
   return {
@@ -457,7 +460,15 @@ export function auctionProtocolStatus(anchorNetworks = 0) {
     persistenceMode: durable ? 'vercel-blob-immutable' : 'process-memory-ephemeral',
     processAtomicAdmissionClose: true,
     crossInstanceTransactionalClose: false,
+    /* Phase 2c evidence model: the close object itself still never asserts
+       completeness; completeness is a per-auction verdict derived from
+       signed admission receipts by recomputable watcher reports. */
     auctionCompletenessProof: false,
+    signedAdmissionReceipts: Boolean(coordinator),
+    admissionReceiptSchema: 'fbt.admission-receipt.v1',
+    completenessWatchersRegistered: registeredWatchers,
+    completenessWatcherReports: 'fbt.completeness-report.v1',
+    perAuctionCompletenessEvidence: 'observed-admission-receipts-vs-sealed-close',
     externalAnchorVerificationConfigured: anchorNetworks > 0,
     configuredAnchorNetworks: anchorNetworks
   };

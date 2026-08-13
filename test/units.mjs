@@ -215,6 +215,16 @@ import {
   buildAnchorCalldata,
   verifyAnchorClaim
 } from '../server/intentAnchors.js';
+import {
+  issueAdmissionReceipt,
+  verifyAdmissionReceipt
+} from '../server/intentAdmissions.js';
+import {
+  buildCompletenessReport,
+  completenessSummary,
+  evaluateCompleteness,
+  verifyCompletenessReport
+} from '../server/intentWatcher.js';
 import { Interface } from 'ethers';
 
 export default async function run() {
@@ -4882,6 +4892,146 @@ export default async function run() {
       else process.env.INTENT_COORDINATOR_ID = oldCoordinatorId;
       if (oldCoordinatorKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
       else process.env.INTENT_COORDINATOR_PRIVATE_KEY = oldCoordinatorKey;
+    }
+  }
+
+  /* ------- Phase 2c: transactional admission + completeness watcher ------ */
+  {
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+    const cKeys = generateSolverKeyPair();
+    const sKeys = generateSolverKeyPair();
+    const wKeys = generateSolverKeyPair();
+    const intent2c = `0x${'f2'.repeat(32)}`;
+    const solver2c = { id: 'unit-solver-2c', name: 'Unit Solver 2C', publicKey: sKeys.publicKey, active: true };
+    const registry2c = new Map([[solver2c.id, solver2c]]);
+    const watcherRow = { id: 'unit-watcher', name: 'Unit Watcher', publicKey: wKeys.publicKey, active: true };
+    const watcherRegistry = new Map([[watcherRow.id, watcherRow]]);
+    const skew = 2000;
+
+    const prevCoordId = process.env.INTENT_COORDINATOR_ID;
+    const prevCoordKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator-2c';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = cKeys.privateKey;
+    try {
+      const mk = (nonce, out, rc) => signSolverCommitment({
+        schema: 'fbt.solver-quote.v1', intentHash: intent2c, solverId: solver2c.id,
+        chainId: 42161, amountOut: out, maxGas: '250000', feeBps: 70, slippageBps: 50,
+        executable: true, issuedAt: now, validUntil: now + 90,
+        nonce, routeCommitment: rc
+      }, sKeys.privateKey);
+      const c1 = mk(`0x${'a1'.repeat(16)}`, '500', `0x${'b1'.repeat(32)}`);
+      const c2 = mk(`0x${'a2'.repeat(16)}`, '400', `0x${'b2'.repeat(32)}`);
+      const ap1 = await appendSignedCommitment(c1, { registry: registry2c, now: nowMs });
+      const ap2 = await appendSignedCommitment(c2, { registry: registry2c, now: nowMs });
+      t('accepted commitments expose the facts a receipt needs',
+        ap1.ok && ap1.acceptedAt === nowMs && ap1.solverId === solver2c.id && ap2.ok);
+
+      const r1 = issueAdmissionReceipt({
+        intentHash: intent2c, entryHash: ap1.entryHash, acceptedAt: ap1.acceptedAt, solverId: solver2c.id
+      });
+      const r2 = issueAdmissionReceipt({
+        intentHash: intent2c, entryHash: ap2.entryHash, acceptedAt: ap2.acceptedAt, solverId: solver2c.id
+      });
+      t('a coordinator-signed admission receipt verifies',
+        verifyAdmissionReceipt(r1) && verifyAdmissionReceipt(r2));
+      t('receipt issuance is byte-deterministic (reclaimable from the stored row)',
+        JSON.stringify(issueAdmissionReceipt({
+          intentHash: intent2c, entryHash: ap1.entryHash, acceptedAt: ap1.acceptedAt, solverId: solver2c.id
+        })) === JSON.stringify(r1));
+      t('a tampered admission time invalidates the receipt',
+        !verifyAdmissionReceipt({ ...r1, acceptedAt: r1.acceptedAt + 1 }));
+      t('receipts cannot quietly upgrade their claims',
+        !verifyAdmissionReceipt({ ...r1, claims: { ...r1.claims, closeInclusionGuaranteed: true } }));
+      t('receipts refuse foreign intents when scoped',
+        !verifyAdmissionReceipt(r1, { intentHash: `0x${'f3'.repeat(32)}` }));
+      t('no coordinator key means no receipt, never an unsigned stand-in',
+        issueAdmissionReceipt({
+          intentHash: intent2c, entryHash: ap1.entryHash, acceptedAt: ap1.acceptedAt, solverId: solver2c.id
+        }, { coordinator: null }) === null);
+
+      const closed2c = await closeAuction({
+        schema: 'fbt.auction-close-request.v1', intentHash: intent2c,
+        policy: { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      }, { now: nowMs });
+      t('phase 2c test auction seals and closes over both logged quotes',
+        closed2c.ok && closed2c.close.logSize === 2);
+      const close2c = closed2c.close;
+
+      const complete = evaluateCompleteness(close2c, [r1, r2], { clockSkewMs: skew });
+      t('an intact sealed set evaluates as complete',
+        complete.ok && complete.verdict === 'complete' && complete.counts.eligible === 2);
+
+      const ghost = issueAdmissionReceipt({
+        intentHash: intent2c, entryHash: `0x${'01'.repeat(32)}`,
+        acceptedAt: close2c.sealedAt - 10000, solverId: solver2c.id
+      });
+      const fraud = evaluateCompleteness(close2c, [r1, r2, ghost], { clockSkewMs: skew });
+      t('a pre-seal receipted bid missing from the close is hard misconduct evidence',
+        fraud.verdict === 'misconduct-evident' && fraud.counts.omittedPreSeal === 1);
+
+      const boundary = issueAdmissionReceipt({
+        intentHash: intent2c, entryHash: `0x${'02'.repeat(32)}`,
+        acceptedAt: close2c.sealedAt, solverId: solver2c.id
+      });
+      const ambiguous = evaluateCompleteness(close2c, [r1, r2, boundary], { clockSkewMs: skew });
+      t('a receipt inside the cross-instance clock-skew window is honestly inconclusive',
+        ambiguous.verdict === 'inconclusive' && ambiguous.counts.ambiguousWindow === 1);
+
+      const afterClose = issueAdmissionReceipt({
+        intentHash: intent2c, entryHash: `0x${'03'.repeat(32)}`,
+        acceptedAt: close2c.closedAt + 5000, solverId: solver2c.id
+      });
+      const postClose = evaluateCompleteness(close2c, [r1, r2, afterClose], { clockSkewMs: skew });
+      t('a receipt minted after the close asks nothing of that close',
+        postClose.verdict === 'complete' && postClose.counts.postClose === 1);
+
+      t('zero observed receipts is unmonitored, never implicitly complete',
+        evaluateCompleteness(close2c, [], { clockSkewMs: skew }).verdict === 'unmonitored');
+      t('unreadable evidence can never push a verdict to complete',
+        evaluateCompleteness(close2c, [r1, { bogus: true }], { clockSkewMs: skew }).verdict === 'inconclusive');
+      t('evaluation against a forged close fails closed',
+        evaluateCompleteness({ ...close2c, logRoot: `0x${'99'.repeat(32)}` }, [r1], {}).code === 'INVALID_AUCTION_CLOSE');
+
+      const built = buildCompletenessReport({
+        close: close2c, receipts: [r1, r2],
+        watcher: watcherRow, privateKey: wKeys.privateKey, clockSkewMs: skew, now: nowMs
+      });
+      t('a signed watcher report builds with the deterministic verdict',
+        built.ok && built.report.verdict === 'complete' && built.report.watcher.id === watcherRow.id);
+      t('a correctly recomputing report verifies end-to-end for a registered watcher',
+        verifyCompletenessReport(built.report, { registry: watcherRegistry, close: close2c, requireRegistered: true }).ok);
+      t('an unregistered watcher cannot submit reports',
+        verifyCompletenessReport(built.report, { registry: new Map(), close: close2c, requireRegistered: true }).code === 'UNREGISTERED_WATCHER');
+      t('a different key under a registered watcher id counts as unregistered',
+        verifyCompletenessReport(built.report, {
+          registry: new Map([[watcherRow.id, { ...watcherRow, publicKey: sKeys.publicKey }]]),
+          close: close2c, requireRegistered: true
+        }).code === 'UNREGISTERED_WATCHER');
+      t('third parties verify reports offline with no registry at all',
+        verifyCompletenessReport(built.report, { close: close2c }).ok);
+      t('a tampered verdict is caught by deterministic recompute',
+        verifyCompletenessReport({ ...built.report, verdict: 'inconclusive' },
+          { registry: watcherRegistry, close: close2c, requireRegistered: true }).code === 'REPORT_RECOMPUTE_MISMATCH');
+      t('a report describing a different sealed set is refused',
+        verifyCompletenessReport({ ...built.report, closeSummary: { ...built.report.closeSummary, logSize: 3 } },
+          { registry: watcherRegistry, close: close2c, requireRegistered: true }).code === 'REPORT_CLOSE_MISMATCH');
+
+      t('completeness stays unmonitored without any watcher evidence',
+        completenessSummary([]).status === 'unmonitored');
+      t('a complete report upgrades the auction status to watcher-verified',
+        completenessSummary([built.report]).status === 'watcher-verified');
+      const misconductReport = buildCompletenessReport({
+        close: close2c, receipts: [ghost],
+        watcher: watcherRow, privateKey: wKeys.privateKey, clockSkewMs: skew, now: nowMs + 1000
+      }).report;
+      t('verified misconduct evidence dominates the auction status',
+        completenessSummary([built.report, misconductReport]).status === 'misconduct-reported');
+    } finally {
+      if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = prevCoordId;
+      if (prevCoordKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
     }
   }
 

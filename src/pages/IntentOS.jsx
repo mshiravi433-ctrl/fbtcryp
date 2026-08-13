@@ -616,7 +616,9 @@ export default function IntentOS() {
               <span><b>{networkStatus?.auctions?.coordinator?.id || '—'}</b>{t('intentOS.network.coordinator')}</span>
               <span><b>{networkStatus?.auctions?.configuredAnchorNetworks ?? '—'}</b>{t('intentOS.network.anchorNetworks')}</span>
               <span><b>{networkStatus?.auctions?.signedCloseReceipts ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.closeReceipt')}</span>
-              <span><b>{networkStatus?.auctions?.auctionCompletenessProof ? t('intentOS.network.proven') : t('intentOS.network.unproven')}</b>{t('intentOS.network.completeness')}</span>
+              <span><b>{networkStatus?.auctions?.signedAdmissionReceipts ? t('intentOS.network.signed') : networkStatus?.ok ? t('intentOS.network.unconfigured') : '—'}</b>{t('intentOS.network.admissionReceipts')}</span>
+              <span><b>{networkStatus?.watchers ? networkStatus.watchers.registeredWatchers : '—'}</b>{t('intentOS.network.watchers')}</span>
+              <span><b>{networkStatus?.auctions?.auctionCompletenessProof ? t('intentOS.network.proven') : t('intentOS.network.evidenceBased')}</b>{t('intentOS.network.completeness')}</span>
             </div>
             <p>{t('intentOS.network.auctionNote')}</p>
           </section>
@@ -629,6 +631,8 @@ export default function IntentOS() {
             <div><span>GET</span><code>/api/intents/v1/auctions/:intentHash</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/close</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/anchor</code></div>
+            <div><span>GET</span><code>/api/intents/v1/admissions/:intentHash/:entryHash</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/watcher-reports</code></div>
             <div><span>POST</span><code>/api/intents/v1/validate</code></div>
           </section>
 

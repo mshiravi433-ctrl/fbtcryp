@@ -68,7 +68,12 @@ import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, g
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { parseSolverRegistry, publicSolverRegistry } from './intentSignatures.js';
-import { appendSignedCommitment, readIntentLog, transparencyStatus } from './intentTransparency.js';
+import {
+  appendSignedCommitment,
+  readIntentLog,
+  readLogEntry,
+  transparencyStatus
+} from './intentTransparency.js';
 import {
   auctionProtocolStatus,
   auctionSealStatus,
@@ -85,6 +90,20 @@ import {
   verifyAnchorClaim
 } from './intentAnchors.js';
 import { withIntentLock } from './intentLocks.js';
+import {
+  admissionReceiptStatus,
+  issueAdmissionReceipt,
+  verifyAdmissionReceipt
+} from './intentAdmissions.js';
+import {
+  completenessSummary,
+  parseWatcherRegistry,
+  publicWatcherReport,
+  readWatcherReports,
+  storeWatcherReport,
+  verifyCompletenessReport,
+  watcherProtocolStatus
+} from './intentWatcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -200,6 +219,32 @@ setInterval(() => {
   for (const [k, v] of anchorHits) if (now > v.reset) anchorHits.delete(k);
 }, WINDOW_MS).unref?.();
 
+/* Watcher report submissions perform signature verification and one immutable
+   storage write each. Cheaper than anchor RPC checks but still budgeted, since
+   a public endpoint that writes storage is a cost amplifier without a cap. */
+const watcherHits = new Map();
+const WATCHER_MAX_PER_WINDOW = Number(process.env.INTENT_WATCHER_RATE_LIMIT || 20);
+app.use('/api/intents/v1/auctions', (req, res, next) => {
+  if (req.method !== 'POST' || !req.path.endsWith('/watcher-reports')) return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = watcherHits.get(key);
+  if (!rec || now > rec.reset) {
+    watcherHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > WATCHER_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'WATCHER_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of watcherHits) if (now > v.reset) watcherHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 /* -------------------------------- helpers -------------------------------- */
 
 /**
@@ -255,12 +300,15 @@ app.get('/api/health', (_req, res) =>
  */
 app.get('/api/intents/v1/capabilities', (_req, res) => {
   const registry = parseSolverRegistry();
+  const watcherRegistry = parseWatcherRegistry();
   const anchorNetworks = parseAnchorNetworks();
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
   res.json({
     ...INTENT_CAPABILITIES,
     transparency: transparencyStatus(registry),
-    auctions: auctionProtocolStatus(anchorNetworks.size)
+    auctions: auctionProtocolStatus(anchorNetworks.size, watcherRegistry.size),
+    admissions: admissionReceiptStatus(),
+    watchers: watcherProtocolStatus(watcherRegistry)
   });
 });
 
@@ -293,6 +341,24 @@ app.post('/api/intents/v1/commitments', async (req, res) => {
         return { ok: false, code: 'AUCTION_CLOSE_RACE', storedEntryHash: appended.entryHash };
       }
     }
+    /* Phase 2c transactional admission: a quote that is answered 201 is now
+       atomically bound to a coordinator-signed receipt minted from the stored
+       row, inside the same admission lock and after the post-write seal
+       re-check. The solver keeps this receipt; if the sealed close later
+       omits the entry, the receipt is censorship evidence. */
+    if (appended.ok) {
+      const receipt = issueAdmissionReceipt({
+        intentHash,
+        entryHash: appended.entryHash,
+        acceptedAt: appended.acceptedAt,
+        solverId: appended.solverId
+      });
+      return {
+        ...appended,
+        admissionReceipt: receipt,
+        admissionReceiptAvailable: Boolean(receipt)
+      };
+    }
     return appended;
   });
   if (result.ok) return res.status(201).json(result);
@@ -301,6 +367,35 @@ app.post('/api/intents/v1/commitments', async (req, res) => {
     : ['NONCE_REPLAY', 'AUCTION_CLOSED', 'AUCTION_CLOSE_RACE'].includes(result.code) ? 409
       : ['LOG_WRITE_FAILED', 'LOG_READ_FAILED', 'AUCTION_STORE_UNAVAILABLE', 'INVALID_STORED_SEAL'].includes(result.code) ? 503 : 400;
   return res.status(status).json({ error: result.code });
+});
+
+/*
+ * Deterministic admission-receipt reclaim. The receipt is a pure function of
+ * the immutable log row (intent · entry hash · admission time · solver) and
+ * the coordinator key, with deterministic Ed25519 signatures — so a solver
+ * that lost its 201 response can always re-derive the identical receipt, and
+ * watchtowers can mint the receipts of every logged entry. Cacheable forever:
+ * the bytes for a given (intentHash, entryHash) never change.
+ */
+app.get('/api/intents/v1/admissions/:intentHash/:entryHash', async (req, res) => {
+  const found = await readLogEntry(req.params.intentHash, req.params.entryHash);
+  if (found.error) {
+    const status = found.error === 'LOG_READ_FAILED' ? 503
+      : found.error === 'ADMISSION_NOT_FOUND' ? 404 : 400;
+    return res.status(status).json({ error: found.error });
+  }
+  const receipt = issueAdmissionReceipt({
+    intentHash: found.entry.commitment?.intentHash,
+    entryHash: found.entry.entryHash,
+    acceptedAt: found.entry.acceptedAt,
+    solverId: found.entry.commitment?.solverId
+  });
+  if (!receipt) return res.status(503).json({ error: 'ADMISSION_RECEIPTS_NOT_CONFIGURED' });
+  if (!verifyAdmissionReceipt(receipt)) {
+    return res.status(500).json({ error: 'ADMISSION_RECEIPT_FAILED' });
+  }
+  res.set('cache-control', 'public, max-age=31536000, immutable');
+  return res.json(receipt);
 });
 
 app.get('/api/intents/v1/log/:intentHash', async (req, res) => {
@@ -330,8 +425,75 @@ app.get('/api/intents/v1/auctions/:intentHash', async (req, res) => {
       .includes(result.error) ? 503 : 400;
     return res.status(status).json(result);
   }
+  /* Phase 2c live evidence: once closed, compose the verified watcher
+     reports into a per-auction completeness status. A watcher storage outage
+     degrades only this block — the signed close stays readable and honest. */
+  if (result.close) {
+    const listed = await readWatcherReports(result.intentHash, result.close);
+    if (listed.error) {
+      result.completeness = { status: 'watcher-store-unavailable', watcherReports: null };
+    } else {
+      result.completeness = completenessSummary(listed.reports);
+      result.watcherReports = listed.reports.map(publicWatcherReport);
+    }
+  }
   res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
   return res.json(result);
+});
+
+/*
+ * Watcher report submission (Phase 2c). The report must be signed by an
+ * active registered watcher key — but a signature alone proves nothing:
+ * before storing, the server RE-EVALUATES the embedded admission receipts
+ * against the stored signed close with the same deterministic rules every
+ * third party uses, so a report whose verdict or classifications do not
+ * recompute is rejected even with a valid key. Storage is immutable; one
+ * reportId can never be silently replaced.
+ */
+app.post('/api/intents/v1/auctions/:intentHash/watcher-reports', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseWatcherRegistry();
+  const checked = verifyCompletenessReport(req.body, {
+    registry,
+    close: state.close,
+    requireRegistered: true
+  });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_WATCHER', 'WATCHER_SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeWatcherReport(state.intentHash, checked.report);
+  if (!stored.ok) {
+    const status = ['WATCHER_STORE_UNAVAILABLE', 'WATCHER_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'WATCHER_REPORTS_FULL' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyReported ? 200 : 201).json({
+    ok: true,
+    alreadyReported: stored.alreadyReported,
+    reportId: checked.report.reportId,
+    verdict: checked.report.verdict,
+    counts: checked.report.counts
+  });
+});
+
+/* Full verified watcher reports for an auction, each re-verified against the
+   stored signed close (including deterministic re-evaluation) on every read. */
+app.get('/api/intents/v1/auctions/:intentHash/watcher-reports', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const listed = await readWatcherReports(state.intentHash, state.close);
+  if (listed.error) return res.status(503).json({ error: listed.error });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({
+    intentHash: state.intentHash,
+    closeId: state.close.closeId,
+    completeness: completenessSummary(listed.reports),
+    reports: listed.reports
+  });
 });
 
 app.post('/api/intents/v1/auctions/:intentHash/close', async (req, res) => {

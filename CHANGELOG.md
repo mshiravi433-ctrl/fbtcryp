@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.29.0 — Intent OS Phase 2c: transactional admission + independent completeness watcher
+
+Phase 2c closes the last honesty gap of the signed auction protocol documented
+in `docs/INTENT-OS-FA.md`: before this phase, a coordinator could verify a
+quote at admission and silently drop it from the sealed close, and nobody
+could prove it. Now omission is cryptographic evidence.
+
+- **Transactional admission receipts** (`server/intentAdmissions.js`,
+  `fbt.admission-receipt.v1`): every 201 from `POST /api/intents/v1/commitments`
+  now embeds a coordinator-signed receipt binding exactly
+  `intentHash · entryHash · acceptedAt · solverId`, minted inside the admission
+  lock after the post-write seal re-check. Receipts are deterministic (same
+  stored row + Ed25519 → same bytes), so they are **reclaimable** from the new
+  immutable `GET /api/intents/v1/admissions/{intentHash}/{entryHash}` and
+  watchtowers can re-derive them for every logged entry. A receipt never
+  claims execution, close inclusion, or fund authority.
+- **Independent completeness watcher protocol** (`server/intentWatcher.js`,
+  `fbt.completeness-report.v1`): registered watcher keys submit verdicts
+  comparing observed admission receipts to the signed close — `complete`,
+  `inconclusive`, `misconduct-evident`, `unmonitored`. A receipted bid from
+  before the seal window missing from the close (or marked late) is hard
+  misconduct evidence; receipts inside the ±skew boundary (`INTENT_WATCHER_SKEW_MS`,
+  default 2000ms) stay honestly inconclusive. The server **re-evaluates
+  deterministically** before storing: signature, close binding, per-receipt
+  classifications, counts and verdict must recompute or the report is
+  rejected even with a valid key. Storage is immutable; reportId replay is
+  idempotent.
+- **Live per-auction status**: `GET /api/intents/v1/auctions/:intentHash` now
+  surfaces `completeness` (`watcher-verified` / `misconduct-reported` /
+  `inconclusive` / `unmonitored`) plus the watcher report feed, re-verified
+  against the signed close on every read. The close's own
+  `auctionCompletenessProof` stays `false` by design — completeness is
+  per-auction watcher evidence, never a close-time claim.
+- **Offline watchtower CLI** (`scripts/intent-watchtower.mjs`):
+  `verify-receipt`, `verify`, `report`, `verify-report`, `collect` — full
+  verification of closes, receipts and reports without contacting FBT.
+- Client + UI: `intentNetwork` gains receipt/watcher getters; the Network tab
+  shows admission-receipt status, registered watcher count and the
+  evidence-based completeness model (fa + en). `.env.example` documents
+  `INTENT_WATCHER_KEYS`, `INTENT_WATCHER_RATE_LIMIT`, `INTENT_WATCHER_SKEW_MS`.
+- Tests: 26 new unit rows (receipt determinism, skew-boundary verdicts,
+  report recompute rejection, summary precedence) and 13 new HTTP probe rows
+  (byte-identical reclaim, 404 for non-admissions, idempotent replay, rogue
+  watcher refusal, end-to-end misconduct evidence on public state).
+
 ## 1.28.4 — swap "no route" bug fixed: OpenOcean executable, proxy fallback, Iran-friendly RPCs
 
 Reported: «در سواپ اصلی وقتی دوتا توکن را انتخاب کردی و مقدار را وارد کردی

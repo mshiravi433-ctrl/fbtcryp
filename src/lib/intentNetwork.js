@@ -36,3 +36,19 @@ export function getAuctionState(intentHash) {
   try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}`); }
   catch (error) { return Promise.reject(error); }
 }
+
+function checkedEntryHash(entryHash) {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(String(entryHash || ''))) throw new Error('BAD_ENTRY_HASH');
+  return String(entryHash).toLowerCase();
+}
+
+/* Deterministic coordinator-signed admission receipt for one logged entry. */
+export function getAdmissionReceipt(intentHash, entryHash) {
+  return get(`/intents/v1/admissions/${checkedIntentHash(intentHash)}/${checkedEntryHash(entryHash)}`);
+}
+
+/* Verified watcher reports + the derived per-auction completeness status. */
+export function getWatcherReports(intentHash) {
+  try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/watcher-reports`); }
+  catch (error) { return Promise.reject(error); }
+}
