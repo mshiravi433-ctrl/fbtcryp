@@ -227,3 +227,158 @@
 @media (prefers-reduced-motion: reduce) {
   .wallet-hero-aurora::before, .wallet-hero-aurora::after { animation: none; }
 }
+
+/* ── Tokenized-stocks discovery banner ─────────────────────────────────────
+   A semantic button replaces the old clickable div and its hard-coded mixed
+   Persian/English text. The clipped corner gives the card a distinct ticket/
+   market-panel silhouette without sacrificing a comfortable tap target. */
+.wallet-stocks-banner {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: 112px;
+  margin-top: 16px;
+  padding: 17px 18px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 231, 255, 0.2);
+  border-radius: 26px 26px 9px 26px;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(124, 77, 255, 0.26), transparent 36%),
+    linear-gradient(135deg, #10162b 0%, #171d35 58%, #12172b 100%);
+  box-shadow: 0 16px 36px rgba(2, 7, 23, 0.25), inset 0 1px rgba(255, 255, 255, 0.05);
+  color: #f7fbff;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.wallet-stocks-banner::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: auto -28px -54px auto;
+  width: 150px;
+  height: 110px;
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 50%;
+  transform: rotate(-16deg);
+}
+.wallet-stocks-banner:hover {
+  border-color: rgba(127, 231, 255, 0.38);
+  box-shadow: 0 19px 42px rgba(2, 7, 23, 0.3), 0 0 26px rgba(0, 229, 255, 0.07);
+  transform: translateY(-2px);
+}
+.wallet-stocks-banner:active { transform: translateY(0) scale(0.995); }
+.wallet-stocks-banner:focus-visible {
+  outline: 3px solid rgba(0, 229, 255, 0.42);
+  outline-offset: 3px;
+}
+.wallet-stocks-art {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 19px 19px 7px 19px;
+  background: linear-gradient(145deg, #18e3ed, #8064ff);
+  color: #07101e;
+  box-shadow: 0 10px 24px rgba(40, 207, 235, 0.2), inset 0 1px rgba(255,255,255,.5);
+}
+.wallet-stocks-building svg { width: 27px; height: 27px; stroke-width: 1.9; }
+.wallet-stocks-trend {
+  position: absolute;
+  inset-inline-end: -7px;
+  inset-block-end: -6px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #151b31;
+  border-radius: 50%;
+  background: #effcff;
+  color: #314ad6;
+  box-shadow: 0 5px 12px rgba(1, 5, 18, 0.28);
+}
+.wallet-stocks-trend svg { width: 14px; height: 14px; stroke-width: 2.2; }
+.wallet-stocks-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.wallet-stocks-eyebrow {
+  color: #70edf2;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+.wallet-stocks-copy strong {
+  font-size: clamp(15px, 4vw, 17px);
+  line-height: 1.3;
+  letter-spacing: -.012em;
+}
+.wallet-stocks-description {
+  max-width: 36ch;
+  color: #aebbd2;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.wallet-stocks-cta {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 11px;
+  background: rgba(255,255,255,.06);
+  color: #e4faff;
+  font-size: 11.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.wallet-stocks-cta svg { width: 15px; height: 15px; }
+:dir(rtl) .wallet-stocks-banner { border-radius: 26px 26px 26px 9px; }
+:dir(rtl) .wallet-stocks-art { border-radius: 19px 19px 19px 7px; }
+:dir(rtl) .wallet-stocks-cta svg { transform: rotate(180deg); }
+
+:root[data-theme='light'] .wallet-stocks-banner {
+  border-color: rgba(43, 93, 165, 0.15);
+  background:
+    radial-gradient(circle at 88% 18%, rgba(124, 77, 255, 0.12), transparent 37%),
+    linear-gradient(135deg, #f7fdff 0%, #f2f4ff 100%);
+  box-shadow: 0 14px 34px rgba(31, 46, 78, 0.1);
+  color: #151b31;
+}
+:root[data-theme='light'] .wallet-stocks-eyebrow { color: #3769a5; }
+:root[data-theme='light'] .wallet-stocks-description { color: #5d6980; }
+:root[data-theme='light'] .wallet-stocks-cta {
+  border-color: rgba(30, 56, 95, .1);
+  background: rgba(255,255,255,.65);
+  color: #27334d;
+}
+:root[data-theme='light'] .wallet-stocks-trend { border-color: #f3f7ff; }
+
+@media (max-width: 430px) {
+  .wallet-stocks-banner {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    gap: 12px;
+    min-height: 104px;
+    padding: 15px;
+  }
+  .wallet-stocks-art { width: 52px; height: 52px; }
+  .wallet-stocks-description { font-size: 11.5px; }
+  .wallet-stocks-cta > span { display: none; }
+  .wallet-stocks-cta { padding: 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wallet-stocks-banner { transition: none; }
+  .wallet-stocks-banner:hover { transform: none; }
+}

@@ -548,8 +548,8 @@ export default function Orders() {
             </svg>
           </motion.div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.3 }}>{t('orders.bannerTitle', { defaultValue: 'سفارش خودکار — بازار منتظر تو نمی‌ماند' })}</div>
-            <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 4 }}>{t('orders.bannerSub', { defaultValue: 'حد، تریلینگ، براکت، نردبانی و DCA — یک‌بار بساز، خودکار اجرا شو' })}</div>
+            <div style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.3 }}>{t('orders.bannerTitle')}</div>
+            <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 4 }}>{t('orders.bannerSub')}</div>
           </div>
         </div>
       </motion.section>
@@ -569,13 +569,13 @@ export default function Orders() {
         className="ord-rail"
       >
         {[
-          { id: 'limit', Icon: IconTrend, label: t('orders.newLimit'), sub: 'حد', hue: 'var(--rgb-1)' },
-          { id: 'trailing', Icon: IconTrend, label: t('orders.newTrailing'), sub: 'تریلینگ', hue: 'var(--rgb-3)' },
-          { id: 'bracket', Icon: IconShield, label: t('orders.newBracket'), sub: 'براکت', hue: 'var(--rgb-4)' },
-          { id: 'ladder', Icon: IconPools, label: t('orders.newLadder'), sub: 'نردبانی', hue: 'var(--rgb-5)' },
-          { id: 'dca', Icon: IconClock, label: t('orders.newDca'), sub: 'DCA', hue: 'var(--rgb-2)' },
-          { id: 'twap', Icon: IconClock, label: t('orders.newTwap'), sub: 'TWAP', hue: 'var(--rgb-6)' },
-          { id: 'rebalance', Icon: IconPools, label: t('orders.newRebalance'), sub: 'Rebal', hue: 'var(--rgb-8)' },
+          { id: 'limit', Icon: IconTrend, label: t('orders.newLimit'), sub: t('orders.type.limit'), hue: 'var(--rgb-1)' },
+          { id: 'trailing', Icon: IconTrend, label: t('orders.newTrailing'), sub: t('orders.type.trailing'), hue: 'var(--rgb-3)' },
+          { id: 'bracket', Icon: IconShield, label: t('orders.newBracket'), sub: t('orders.type.bracket'), hue: 'var(--rgb-4)' },
+          { id: 'ladder', Icon: IconPools, label: t('orders.newLadder'), sub: t('orders.type.ladder'), hue: 'var(--rgb-5)' },
+          { id: 'dca', Icon: IconClock, label: t('orders.newDca'), sub: t('orders.type.dca'), hue: 'var(--rgb-2)' },
+          { id: 'twap', Icon: IconClock, label: t('orders.newTwap'), sub: t('orders.type.twap'), hue: 'var(--rgb-6)' },
+          { id: 'rebalance', Icon: IconPools, label: t('orders.newRebalance'), sub: t('orders.type.rebalance'), hue: 'var(--rgb-8)' },
         ].map(({ id, Icon, label, sub, hue }) => (
           <motion.button
             key={id}

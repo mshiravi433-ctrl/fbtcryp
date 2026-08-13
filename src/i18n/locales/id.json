@@ -84,6 +84,13 @@
     "localSession": "Sesi lokal",
     "allTime": "sepanjang waktu",
     "allocation": "Alokasi",
+    "stocksBanner": {
+      "eyebrow": "Pasar on-chain",
+      "title": "Saham tertokenisasi",
+      "description": "Jelajahi token terverifikasi yang dirancang untuk melacak saham global.",
+      "cta": "Jelajahi",
+      "aria": "Jelajahi saham tertokenisasi"
+    },
     "cash": "Tunai",
     "positions": "Posisi",
     "staked": "Di-stake",
@@ -324,7 +331,10 @@
       "lang": "Bahasa lain"
     },
     "disclaimer": "Berita berasal dari media pihak ketiga dan setiap kartu mencantumkan sumbernya. Kami tidak mendukung atau menyunting isinya, dan tidak ada yang merupakan nasihat investasi.",
-    "generatedNotice": "Tidak ada sumber berita yang dapat dijangkau, jadi ringkasan ini dibuat dari data pasar — ini bukan jurnalisme."
+    "generatedNotice": "Tidak ada sumber berita yang dapat dijangkau, jadi ringkasan ini dibuat dari data pasar — ini bukan jurnalisme.",
+    "tab": {
+      "insights": "Intelijen"
+    }
   },
   "notify": {
     "title": "Notifikasi & suara",
@@ -433,5 +443,73 @@
       "iranLegal": "Bagaimana status hukum di Iran?"
     },
     "title": "Bantuan & dukungan"
+  },
+  "insights": {
+    "title": "Intelijen pasar",
+    "subtitle": "Ringkasan ringan pergerakan pasar 24 jam terverifikasi dan berita bertanda peristiwa.",
+    "liveWindow": "Jendela pasar 24 jam",
+    "updated": "Diperbarui {{ago}}",
+    "loading": "Memperbarui sumber langsung…",
+    "cryptoLeader": "Kinerja kripto tertinggi",
+    "cryptoLaggard": "Kinerja kripto terendah",
+    "cryptoSource": "Cakupan pasar kripto langsung · perubahan harga 24 jam",
+    "tokenizedLeader": "Saham tertokenisasi teratas",
+    "tokenizedSource": "Token xStock terverifikasi · perubahan 24 jam",
+    "equityUnavailable": "Feed saham tertokenisasi terverifikasi tidak tersedia",
+    "companyLeader": "Token perusahaan teratas",
+    "performanceNotProfit": "Kinerja harga pasar, bukan laba akuntansi.",
+    "retryEquities": "Coba lagi data saham terverifikasi",
+    "coverageTitle": "Cakupan tanpa angka rekaan",
+    "coverageSub": "Klaim tanpa sumber tetap ditandai tidak tersedia.",
+    "unavailable": "Tidak tersedia",
+    "countryFlow": "Arus masuk saham + kripto negara",
+    "countryUnavailable": "Tidak ada sumber terverifikasi yang menggabungkan arus modal saham dan kripto per negara.",
+    "companyProfit": "Perusahaan paling menguntungkan",
+    "profitUnavailable": "Pergerakan harga tidak membuktikan laba perusahaan. Diperlukan sumber akuntansi terverifikasi.",
+    "capitalOutflow": "Arus keluar tertinggi & terendah 24 jam",
+    "outflowUnavailable": "Perubahan harga dan kapitalisasi bukan arus keluar modal. Tidak ada sumber terverifikasi.",
+    "eventsTitle": "Radar peristiwa ekonomi & kripto",
+    "eventsSub": "Judul penerbit bertanda peristiwa, bukan kalender buatan.",
+    "publisherSource": "Penerbit",
+    "eventsEmpty": "Belum ada berita bertanda peristiwa dari sumber yang terhubung.",
+    "disclaimer": "Kinerja pasar bukan nasihat keuangan. Arus dan laba tanpa sumber tidak pernah diperkirakan.",
+    "header": {
+      "leader": "Pemimpin kripto 24j",
+      "laggard": "Kripto terendah 24j",
+      "company": "Token perusahaan 24j",
+      "event": "Peristiwa pasar"
+    },
+    "marketUnavailable": "Data pasar live tidak tersedia"
+  },
+  "orders": {
+    "title": "Order Otomatis",
+    "subtitle": "Atur sekali dan biarkan order memantau pasar untuk Anda.",
+    "bannerTitle": "Order Otomatis — pasar tidak menunggu",
+    "bannerSub": "Limit, trailing, bracket, bertahap & DCA — cukup atur sekali",
+    "newLimit": "Order limit",
+    "newTrailing": "Stop trailing",
+    "newBracket": "Ambil untung + stop-loss",
+    "newLadder": "Jual bertahap",
+    "newDca": "Rencana DCA",
+    "newTwap": "TWAP",
+    "newRebalance": "Seimbangkan ulang",
+    "type": {
+      "limit": "LIMIT",
+      "trailing": "TRAILING",
+      "bracket": "BRACKET",
+      "ladder": "BERTAHAP",
+      "dca": "DCA",
+      "twap": "TWAP",
+      "rebalance": "SEIMBANG"
+    },
+    "new": {
+      "limit": "Order limit baru",
+      "dca": "Rencana DCA baru",
+      "trailing": "Stop trailing baru",
+      "bracket": "Ambil untung + stop-loss baru",
+      "ladder": "Order bertahap baru",
+      "twap": "TWAP baru",
+      "rebalance": "Penyeimbangan baru"
+    }
   }
 }

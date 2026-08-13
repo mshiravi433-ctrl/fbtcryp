@@ -169,10 +169,45 @@ import {
   TWAP_MIN_SLICES,
   TWAP_MIN_WINDOW_MIN
 } from '../src/lib/orders.js';
+import { dailyRewardStatus, localDayNumber } from '../src/lib/dailyRewards.js';
+import { POINT_VALUES } from '../src/lib/ranks.js';
+import {
+  deriveMarketInsights,
+  headerInsightItems,
+  isEventStory
+} from '../src/lib/marketInsights.js';
 
 export default async function run() {
   const rows = [];
   const t = (name, ok) => rows.push([name, Boolean(ok)]);
+
+  /* ---------------- calendar daily rewards + repeatable swaps -------- */
+  {
+    // Date's numeric constructor deliberately creates LOCAL dates. These cases
+    // therefore keep testing the product promise in every CI timezone.
+    const day1Morning = new Date(2026, 0, 10, 9, 0).getTime();
+    const day1Night = new Date(2026, 0, 10, 23, 59).getTime();
+    const day2Early = new Date(2026, 0, 11, 0, 1).getTime();
+    const day3 = new Date(2026, 0, 12, 12, 0).getTime();
+
+    t('daily check-in blocks a second claim on the same local date',
+      dailyRewardStatus({ now: day1Night, lastClaim: day1Morning, streak: 4 }).canClaim === false);
+
+    const tomorrow = dailyRewardStatus({ now: day2Early, lastClaim: day1Night, streak: 4 });
+    t('the next local date continues the streak even two minutes later',
+      tomorrow.canClaim && tomorrow.nextStreak === 5);
+    t('daily reward includes the continued streak bonus',
+      tomorrow.reward === POINT_VALUES.dailyCheckin + 5 * POINT_VALUES.streakBonus);
+
+    const skipped = dailyRewardStatus({ now: day3, lastClaim: day1Night, streak: 4 });
+    t('skipping a local calendar date resets the next claim to day one',
+      skipped.canClaim && skipped.nextStreak === 1 && skipped.activeStreak === 0);
+    t('moving the clock behind last claim never opens another claim',
+      dailyRewardStatus({ now: day1Morning, lastClaim: day2Early, streak: 5 }).canClaim === false);
+    t('local day numbers ignore the time within a calendar date',
+      localDayNumber(day1Morning) === localDayNumber(day1Night));
+    t('every repeatable successful swap is worth exactly one point', POINT_VALUES.swap === 1);
+  }
 
   /* --------------------------- token search --------------------------- */
 
@@ -351,6 +386,75 @@ export default async function run() {
   t('digest is flagged as generated, not reported', digest.every((d) => d.digest === true));
   t('digest never fabricates a source URL', digest.every((d) => d.url === null));
   t('digest on empty market data is empty, not invented', digestFromMarket([], 'en').length === 0);
+
+  /* --------------------- source-aware market insights ------------------ */
+  {
+    const markets = [
+      { id: 'btc', symbol: 'BTC', name: 'Bitcoin', change24h: -2.5 },
+      { id: 'sol', symbol: 'SOL', name: 'Solana', change24h: '8.4' },
+      { id: 'eth', symbol: 'ETH', name: 'Ethereum', change24h: 1.2 },
+      { id: 'offline', symbol: 'DEMO', name: 'Generated demo row', change24h: 99, dataProvenance: 'offline' },
+      // These are absent data, not a verified 0% session.
+      { id: 'blank', symbol: 'BLANK', name: 'Blank', change24h: '' },
+      { id: 'null', symbol: 'NULL', name: 'Null', change24h: null },
+      { id: 'false', symbol: 'FALSE', name: 'False', change24h: false },
+      { id: 'array', symbol: 'ARRAY', name: 'Array', change24h: [] },
+      { id: 'bad', symbol: 'BAD', name: 'Bad', change24h: 'not-a-number' }
+    ];
+    const equities = [
+      { id: 'spy', symbol: 'SPYx', name: 'S&P 500 xStock', change24h: 12, assetKind: 'index' },
+      { id: 'aapl', symbol: 'AAPLx', name: 'Apple xStock', change24h: 4.1, assetKind: 'single' },
+      { id: 'tsla', symbol: 'TSLAx', name: 'Tesla xStock', change24h: -3.2, assetKind: 'single' }
+    ];
+    const news = [
+      { id: 'digest', title: 'FOMC digest', digest: true, at: 500 },
+      { id: 'old', title: 'Bitcoin halving conference announced', at: 100, source: 'Desk A' },
+      { id: 'new', title: 'Central bank rate decision', at: 300, source: 'Desk B' },
+      { id: 'plain', title: 'Bitcoin price moves higher', at: 400 }
+    ];
+
+    const insight = deriveMarketInsights({ markets, equities, news });
+    t('the 24-hour crypto leader is selected from finite sourced moves',
+      insight.cryptoLeader?.symbol === 'SOL');
+    t('generated offline market rows are never presented as live intelligence',
+      insight.cryptoLeader?.symbol !== 'DEMO' && insight.cryptoLaggard?.symbol !== 'DEMO');
+    t('the 24-hour crypto laggard is selected independently',
+      insight.cryptoLaggard?.symbol === 'BTC');
+    t('the tokenized-asset leader may be a sourced index token',
+      insight.tokenizedLeader?.symbol === 'SPYx');
+    t('the company card excludes index products',
+      insight.companyLeader?.symbol === 'AAPLx');
+    t('economic and crypto events are newest first',
+      insight.eventStories.map((row) => row.id).join(',') === 'new,old');
+    t('generated market digests never become sourced events', !isEventStory(news[0]));
+    t('ordinary price headlines are not relabelled as events', !isEventStory(news[3]));
+
+    t('country flow stays unavailable without a verified source',
+      insight.countryFlow.available === false && /COUNTRY_FLOW/.test(insight.countryFlow.reason));
+    t('capital outflow stays unavailable without a verified source',
+      insight.capitalOutflow.available === false && /FLOW_SOURCE/.test(insight.capitalOutflow.reason));
+    t('token price performance is not called company accounting profit',
+      insight.companyProfit.available === false && /ACCOUNTING_PROFIT/.test(insight.companyProfit.reason));
+
+    const header = headerInsightItems(insight);
+    t('the header receives leader, laggard, company and event candidates',
+      header.map((row) => row.kind).join(',') === 'leader,laggard,company,event');
+    t('header candidates keep the original sourced records',
+      header[0]?.item === insight.cryptoLeader && header[3]?.item === insight.eventStories[0]);
+
+    const one = deriveMarketInsights({ markets: [markets[0]] });
+    t('a one-asset market is not repeated as both leader and laggard',
+      headerInsightItems(one).filter((row) => /leader|laggard/.test(row.kind)).length === 1);
+    t('a genuinely reported numeric zero remains a valid flat session',
+      deriveMarketInsights({ markets: [{ id: 'flat', symbol: 'FLAT', name: 'Flat', change24h: 0 }] })
+        .cryptoLeader?.symbol === 'FLAT');
+    t('malformed feed payloads degrade to explicit empty states', (() => {
+      const empty = deriveMarketInsights({ markets: null, equities: 'bad', news: {} });
+      return empty.cryptoLeader === null && empty.companyLeader === null && empty.eventStories.length === 0;
+    })());
+    t('a null insight payload cannot crash derivation',
+      deriveMarketInsights(null).countryFlow.available === false);
+  }
 
   /* ------------------------------ promos ------------------------------ */
 

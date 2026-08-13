@@ -30,10 +30,11 @@
  *   2. navigator.share  — Web Share API. Works on Safari iOS, Chrome Android,
  *                         Edge and Samsung Internet, and opens the same native
  *                         sheet. This is the rung that makes iPhones work.
- *   3. Telegram WebApp  — only when we are genuinely running inside Telegram,
- *                         where openTelegramLink is the correct native action.
- *   4. In-app sheet     — desktop browsers and anything else: a list of
- *                         destinations the caller renders (see shareTargets).
+ *   3. In-app sheet     — Telegram WebViews without Web Share, desktop
+ *                         browsers and anything else: a list of destinations
+ *                         the caller renders (see shareTargets). Telegram's
+ *                         openTelegramLink has no completion callback, so it
+ *                         cannot honestly count as a completed share here.
  *
  * Every function returns a RESULT rather than throwing, because "the user
  * dismissed the share sheet" is not an error and must not surface a red toast.
@@ -60,7 +61,7 @@ export function canWebShare() {
  * promising a native sheet that does not exist does nothing at all.
  */
 export function canSystemShare() {
-  return isNativeShell() || canWebShare() || inTelegram();
+  return isNativeShell() || canWebShare();
 }
 
 /**
@@ -71,7 +72,7 @@ export function canSystemShare() {
  * @param {string} [opts.text]  message shown before the link
  * @param {string} [opts.title] sheet title, used by some targets
  * @returns {Promise<{ok:boolean, via:string, reason?:string}>}
- *          `via` is one of: native | web | telegram | none
+ *          `via` is one of: native | web | none
  *          `ok:false, reason:'DISMISSED'` means the user closed the sheet —
  *          the caller must NOT treat that as a failure.
  */
@@ -117,17 +118,15 @@ export async function shareLink({ url, text = '', title = 'FBT Swap' }) {
     }
   }
 
-  /* 3 ─ genuinely inside Telegram: its own share dialog is the right answer. */
-  if (inTelegram()) {
-    try {
-      window.Telegram.WebApp.openTelegramLink(telegramShareUrl(url, text));
-      return { ok: true, via: 'telegram' };
-    } catch {
-      /* fall through */
-    }
-  }
+  /*
+   * Telegram's openTelegramLink only confirms that its compose screen opened;
+   * closing that screen without sending is indistinguishable from a share.
+   * Therefore a Telegram WebView without Web Share deliberately falls through
+   * to our destination sheet. Selecting Telegram there is a second, explicit
+   * action, while merely tapping the primary Share button earns nothing.
+   */
 
-  /* 4 ─ nothing native: the caller shows shareTargets(). */
+  /* 3 ─ nothing confirmable: the caller shows shareTargets(). */
   return { ok: false, via: 'none', reason: 'NO_NATIVE' };
 }
 

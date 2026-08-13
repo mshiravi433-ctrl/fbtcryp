@@ -7,6 +7,7 @@ import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
 import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
+import MarketInsightsPanel from '../components/MarketInsightsPanel';
 import SegIndicator from '../components/SegIndicator';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
@@ -59,7 +60,7 @@ export default function News() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
-  const { data: coins } = useMarkets(60);
+  const { data: coins, loading: marketsLoading, updatedAt: marketsUpdatedAt } = useMarkets(60);
 
   const [feed, setFeed] = useState({ items: [], at: 0 });
   const [loading, setLoading] = useState(true);
@@ -168,15 +169,13 @@ export default function News() {
         </button>
       </motion.div>
 
-      <div className="segmented">
+      <div className="segmented news-mode-tabs">
         {/*
-          THREE tabs now: headlines, radio, calm music.
-
-          The third was asked for as «یک تب از اهنگ های ارامشبخش» and it is
-          last on purpose — someone opening the news screen wants news. The
-          order is also the order of urgency: what happened, what people are
-          saying about it, and then the one thing here that is about the
-          reader rather than the market.
+          Intelligence sits immediately after Radio as requested. Calm remains
+          last because it is about the reader rather than the market. All five
+          labels stay in one fixed strip on phones; CSS reduces only this
+          strip's type slightly rather than making the requested tab scroll out
+          of sight.
         */}
         {/*
           ─── THE COMMUNITY FEED MOVED HERE FROM P2P ───────────────────────
@@ -188,11 +187,12 @@ export default function News() {
           simply what people are saying about the headlines above it, which
           is what it actually is.
         */}
-        {['read', 'community', 'listen', 'calm'].map((k) => (
+        {['read', 'community', 'listen', 'insights', 'calm'].map((k) => (
           <button
             key={k}
             className={tab === k ? 'active' : ''}
             onClick={() => setTab(k)}
+            title={t(`news.tab.${k}`)}
             style={{ isolation: 'isolate' }}
           >
             {tab === k && <SegIndicator id="newstab" />}
@@ -223,6 +223,14 @@ export default function News() {
           the screen off. It is the honest version of the same request.
         */
         <RadioPanel />
+      ) : tab === 'insights' ? (
+        <MarketInsightsPanel
+          markets={coins ?? []}
+          newsItems={feed.items ?? []}
+          marketsLoading={marketsLoading}
+          marketsUpdatedAt={marketsUpdatedAt}
+          newsUpdatedAt={feed.at}
+        />
       ) : (
         <>
       <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">

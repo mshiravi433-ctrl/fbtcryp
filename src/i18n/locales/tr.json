@@ -84,6 +84,13 @@
     "localSession": "Yerel oturum",
     "allTime": "tüm zamanlar",
     "allocation": "Dağılım",
+    "stocksBanner": {
+      "eyebrow": "Zincir üstü piyasalar",
+      "title": "Tokenleştirilmiş hisseler",
+      "description": "Küresel hisseleri takip etmek için tasarlanmış doğrulanmış tokenleri keşfedin.",
+      "cta": "Keşfet",
+      "aria": "Tokenleştirilmiş hisseleri keşfet"
+    },
     "cash": "Nakit",
     "positions": "Pozisyonlar",
     "staked": "Stake edildi",
@@ -324,7 +331,10 @@
       "lang": "Diğer diller"
     },
     "disclaimer": "Başlıklar üçüncü taraf yayınlardan gelir ve her kartta kaynağı yazar. İçeriklerini onaylamaz veya düzenlemeyiz; hiçbiri yatırım tavsiyesi değildir.",
-    "generatedNotice": "Hiçbir haber kaynağına erişilemedi, bu nedenle bu özet piyasa verilerinden üretildi — gazetecilik değildir."
+    "generatedNotice": "Hiçbir haber kaynağına erişilemedi, bu nedenle bu özet piyasa verilerinden üretildi — gazetecilik değildir.",
+    "tab": {
+      "insights": "İstihbarat"
+    }
   },
   "notify": {
     "title": "Bildirimler ve ses",
@@ -433,5 +443,73 @@
       "iranLegal": "İran'daki yasal durum nedir?"
     },
     "title": "Yardım ve destek"
+  },
+  "insights": {
+    "title": "Piyasa istihbaratı",
+    "subtitle": "Doğrulanmış 24 saatlik piyasa hareketleri ve olay etiketli haberlerin hafif özeti.",
+    "liveWindow": "24 saatlik piyasa penceresi",
+    "updated": "{{ago}} güncellendi",
+    "loading": "Canlı kaynaklar güncelleniyor…",
+    "cryptoLeader": "En iyi kripto performansı",
+    "cryptoLaggard": "En düşük kripto performansı",
+    "cryptoSource": "Canlı kripto piyasası · 24 saatlik fiyat değişimi",
+    "tokenizedLeader": "En iyi tokenleştirilmiş hisse",
+    "tokenizedSource": "Doğrulanmış xStock tokeni · 24 saatlik değişim",
+    "equityUnavailable": "Doğrulanmış tokenleştirilmiş hisse akışı kullanılamıyor",
+    "companyLeader": "En iyi şirket tokeni",
+    "performanceNotProfit": "Piyasa fiyatı performansıdır, muhasebe kârı değildir.",
+    "retryEquities": "Doğrulanmış hisse verisini yeniden dene",
+    "coverageTitle": "Uydurma rakamlar olmadan kapsam",
+    "coverageSub": "Kaynağı olmayan iddialar açıkça kullanılamaz kalır.",
+    "unavailable": "Kullanılamıyor",
+    "countryFlow": "Ülkeye hisse + kripto girişi",
+    "countryUnavailable": "Ülke bazında hisse ve kripto sermaye akışını birleştiren doğrulanmış kaynak bağlı değil.",
+    "companyProfit": "En kârlı şirket",
+    "profitUnavailable": "Fiyat hareketi şirket kârını kanıtlamaz. Doğrulanmış muhasebe kaynağı gerekir.",
+    "capitalOutflow": "24 saatte en yüksek ve düşük çıkış",
+    "outflowUnavailable": "Fiyat ve piyasa değeri değişimi sermaye çıkışı değildir. Doğrulanmış kaynak bağlı değil.",
+    "eventsTitle": "Ekonomi ve kripto olay radarı",
+    "eventsSub": "Olay etiketli yayıncı başlıkları; üretilmiş takvim değil.",
+    "publisherSource": "Yayıncı",
+    "eventsEmpty": "Bağlı haber kaynaklarında güncel olay etiketli haber yok.",
+    "disclaimer": "Piyasa performansı finansal tavsiye değildir. Kaynaksız akış ve kâr rakamları tahmin edilmez.",
+    "header": {
+      "leader": "24s kripto lideri",
+      "laggard": "24s kripto gerileyeni",
+      "company": "24s şirket tokeni",
+      "event": "Piyasa olayı"
+    },
+    "marketUnavailable": "Canlı piyasa verisi kullanılamıyor"
+  },
+  "orders": {
+    "title": "Otomatik Emirler",
+    "subtitle": "Bir kez ayarlayın, piyasayı sizin için izlesin.",
+    "bannerTitle": "Otomatik Emirler — piyasa beklemez",
+    "bannerSub": "Limit, iz süren, çift, kademeli ve DCA — bir kez ayarla",
+    "newLimit": "Limit emri",
+    "newTrailing": "İz süren stop",
+    "newBracket": "Kâr al + zarar durdur",
+    "newLadder": "Kademeli satış",
+    "newDca": "DCA planı",
+    "newTwap": "TWAP",
+    "newRebalance": "Yeniden dengele",
+    "type": {
+      "limit": "LİMİT",
+      "trailing": "İZ SÜREN",
+      "bracket": "ÇİFT",
+      "ladder": "KADEMELİ",
+      "dca": "DCA",
+      "twap": "TWAP",
+      "rebalance": "DENGELE"
+    },
+    "new": {
+      "limit": "Yeni limit emri",
+      "dca": "Yeni DCA planı",
+      "trailing": "Yeni iz süren stop",
+      "bracket": "Yeni kâr al + zarar durdur",
+      "ladder": "Yeni kademeli emir",
+      "twap": "Yeni TWAP",
+      "rebalance": "Yeni dengeleme"
+    }
   }
 }

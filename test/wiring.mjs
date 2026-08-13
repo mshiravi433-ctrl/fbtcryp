@@ -6328,9 +6328,9 @@ export default function run() {
       t('...the client library calls the route', /\/calm/.test(code(read('src/lib/audio.js'))));
       t('...the panel exists', existsSync('src/components/CalmPanel.jsx'));
       t('...News imports it', /CalmPanel/.test(read('src/pages/News.jsx')));
-      /* Now the LAST of four tabs — the community feed was moved in ahead of it. */
+      /* Still last: market intelligence now sits immediately after Radio. */
       t('...and renders it behind its own tab',
-        /'listen', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
+        /'listen', 'insights', 'calm'/.test(code(read('src/pages/News.jsx'))) &&
         /tab === 'calm'/.test(code(read('src/pages/News.jsx'))));
 
       /*
@@ -8878,9 +8878,9 @@ export default function run() {
       /QUEST_POINTS/.test(store) && /POINT_VALUES\.firstSwap/.test(store));
 
     /* Each quest must fire from the real event, not from tapping the row. */
+    const swapSrc = code(read('src/pages/Swap.jsx'));
     t('the swap quest fires on a confirmed receipt',
-      /if \(ok\) useAppStore\.getState\(\)\.completeQuest\('firstSwap'\)/
-        .test(code(read('src/pages/Swap.jsx'))));
+      /if \(ok\) \{[\s\S]*?rewards\.completeQuest\('firstSwap'\)/.test(swapSrc));
     t('the wallet quest covers every connect path',
       /completeQuest\('connectWallet'\)/.test(code(read('src/context/WalletContext.jsx'))));
     t('the 2FA quest fires after the code is verified',
@@ -9614,7 +9614,7 @@ export default function run() {
     const p2p = code(read('src/pages/P2P.jsx'));
     const news = code(read('src/pages/News.jsx'));
     t('the feed is reachable as a News tab',
-      /'read', 'community', 'listen', 'calm'/.test(news));
+      /'read', 'community', 'listen', 'insights', 'calm'/.test(news));
     t('...and News actually renders the panel',
       /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
     t('...and P2P no longer mounts it',
@@ -10931,6 +10931,180 @@ export default function run() {
 
     t('the Solana screen honours side=sell in every handoff',
       (sol.match(/searchParams\.get\('side'\) === 'sell'/g) || []).length >= 2);
+  }
+
+  /* ---- 104. Calendar rewards, earned shares, per-swap point, wallet speed --- */
+  {
+    const ranks = read('src/lib/ranks.js');
+    const daily = read('src/lib/dailyRewards.js');
+    const store = read('src/store/useAppStore.js');
+    const earn = read('src/pages/Earn.jsx');
+    const evmSwap = read('src/pages/Swap.jsx');
+    const solSwap = read('src/pages/SolanaSwap.jsx');
+    const shareHook = read('src/hooks/useShare.js');
+    const shareLib = read('src/lib/share.js');
+    const shareSheet = read('src/components/ShareSheet.jsx');
+    const localWallet = read('src/lib/localWallet.js');
+    const walletContext = read('src/context/WalletContext.jsx');
+    const connectSheet = read('src/components/WalletConnectSheet.jsx');
+    const walletScreen = read('src/pages/Wallet.jsx');
+
+    t('daily claims compare local calendar dates instead of elapsed hours',
+      /getFullYear\(\)/.test(daily) && /getMonth\(\)/.test(daily) && /getDate\(\)/.test(daily));
+    t('the store is the only daily-claim mutation path used by Earn',
+      /dailyRewardStatus/.test(store) && /claimDailyReward\(Date\.now\(\)\)/.test(earn) &&
+      !/useAppStore\.setState\(\{ lastClaim/.test(earn));
+    t('the old rolling 20-hour daily rule is gone',
+      !/20\s*\*\s*3600000/.test(store) && !/20\s*\*\s*3600000/.test(earn));
+
+    t('the repeatable swap reward is exactly one point', /swap:\s*1\b/.test(ranks));
+    t('both accepted EVM success paths award the repeatable swap point',
+      (evmSwap.match(/awardPoints\('swap',\s*POINT_VALUES\.swap/g) || []).length === 2);
+    t('a successful Solana submission awards the same repeatable point',
+      /if \(signature\) \{[\s\S]*?awardPoints\('swap', POINT_VALUES\.swap/.test(solSwap));
+
+    const awaitShare = earn.indexOf('const result = await share(');
+    const shareAward = earn.indexOf("awardPoints('shareApp'", awaitShare);
+    t('share points are awarded only after awaiting a successful share result',
+      awaitShare >= 0 && shareAward > awaitShare && /if \(!result\?\.ok\) return;/.test(earn));
+    t('sharing no longer pays or completes an unverified referral',
+      !/awardPoints\('referral'/.test(earn) && !/completeQuest\('inviteFriend'/.test(earn));
+    t('fallback share promises resolve only on a choice/copy or dismissal',
+      /new Promise\(\(resolve\)/.test(shareHook) && /onShared: \(result\) => finishFallback/.test(shareHook) &&
+      /onShared\?\.\(\{ ok: true, via: 'copy' \}\)/.test(shareSheet));
+    t('opening Telegram compose is not misreported as a completed share',
+      !/\.openTelegramLink\(/.test(shareLib) && !/via: 'telegram'/.test(shareLib));
+
+    t('vault creation returns its already-derived memory-only signer',
+      /createVaultWithSigner/.test(localWallet) && /signer: provider \? wallet\.connect\(provider\) : wallet/.test(localWallet));
+    t('new-wallet onboarding attaches that signer without decrypting again',
+      /createVaultWithSigner\(phrase, password\)/.test(connectSheet) &&
+      /attachCreatedLocal\(signer\)/.test(connectSheet) &&
+      !/createVault\(phrase, password\)[\s\S]{0,100}unlockLocal/.test(connectSheet));
+    t('the created signer is verified against the persisted vault before attach',
+      /signerAddress\.toLowerCase\(\) !== vault\.address\.toLowerCase\(\)/.test(walletContext));
+    t('the wallet crypto chunk is preloaded while onboarding is open',
+      /if \(open\) void preloadWalletCrypto\(\)/.test(connectSheet));
+
+    t('the practice stocks banner is a semantic localized button',
+      /className="wallet-stocks-banner"/.test(walletScreen) &&
+      /t\('wallet\.stocksBanner\.title'\)/.test(walletScreen) &&
+      !/سهام واقعی|Real Stocks/.test(walletScreen));
+    for (const lang of ['en', 'fa', 'ar', 'es', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh']) {
+      const locale = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} localizes every stocks-banner string`,
+        ['eyebrow', 'title', 'description', 'cta', 'aria']
+          .every((key) => String(locale.wallet?.stocksBanner?.[key] || '').trim().length > 0));
+    }
+  }
+
+  /* ---- 105. Localized Auto Orders + source-aware market intelligence ------ */
+  {
+    const orders = read('src/pages/Orders.jsx');
+    const newsPage = read('src/pages/News.jsx');
+    const panel = read('src/components/MarketInsightsPanel.jsx');
+    const marketApi = read('src/lib/api.js');
+    const insights = read('src/lib/marketInsights.js');
+    const insightSession = read('src/lib/insightSession.js');
+    const marketProviders = read('server/providers.js');
+    const solanaAssetsServer = read('server/solanaAssets.js');
+    const header = read('src/components/Header.jsx');
+    const newsLib = read('src/lib/news.js');
+    const css = read('src/index.css');
+
+    t('News places market intelligence immediately after Radio and before Calm',
+      /\['read', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) &&
+      /tab === 'insights'[\s\S]*?<MarketInsightsPanel/.test(newsPage));
+    t('News keeps one feed request while the global header only reuses its cache',
+      (newsPage.match(/getNews\(/g) || []).length === 1 &&
+      !/getNews\(/.test(header) &&
+      /cachedHeadlines\(\)/.test(header) &&
+      /export function cachedHeadlines\(\)/.test(newsLib));
+
+    t('insight rankings reject absent and non-finite 24-hour values',
+      /typeof value !== 'number'/.test(insights) && /typeof value !== 'string'/.test(insights) &&
+      /String\(value\)\.trim\(\) !== ''/.test(insights) &&
+      /Number\.isFinite\(Number\(value\)\)/.test(insights));
+    t('the verified-equity server preserves an absent 24-hour move as null',
+      /function finiteOrNull\(value\)/.test(solanaAssetsServer) &&
+      /change24h:\s*finiteOrNull\(live\.stats24h\?\.priceChange\)/.test(solanaAssetsServer) &&
+      !/change24h:\s*Number\([^\n]+\)\s*\|\|\s*0/.test(solanaAssetsServer));
+    t('generated offline market rows carry provenance and cannot enter intelligence rankings',
+      /withProvenance\(offlineMarkets\(perPage\), 'offline'\)/.test(marketApi) &&
+      /withProvenance\([\s\S]*?'live'/.test(marketApi) &&
+      /dataProvenance === 'offline'/.test(insights) &&
+      /insights\.marketUnavailable/.test(panel));
+    t('missing crypto moves stay null through both live normalization paths',
+      (marketApi.match(/change24h:[^\n]+\?\? null/g) || []).length >= 2 &&
+      (marketProviders.match(/change24h:[^\n]+\?\? null/g) || []).length >= 2);
+    t('generated digests and ordinary price stories are filtered out of events',
+      /item\?\.digest/.test(insights) && /EVENT_TERMS/.test(insights) &&
+      /sourceCat === 'events'/.test(insights));
+    t('unsupported flow and accounting metrics remain explicit source gaps',
+      /NO_VERIFIED_COUNTRY_FLOW_SOURCE/.test(insights) &&
+      /NO_ACCOUNTING_PROFIT_SOURCE/.test(insights) &&
+      /NO_VERIFIED_FLOW_SOURCE/.test(insights) &&
+      /insights\.countryUnavailable/.test(panel) &&
+      /insights\.profitUnavailable/.test(panel) &&
+      /insights\.outflowUnavailable/.test(panel));
+    t('verified equity rows are session-only and never put in persistent storage',
+      /useSyncExternalStore/.test(insightSession) &&
+      !/(localStorage|sessionStorage)\.(getItem|setItem)|indexedDB\.(open|deleteDatabase)/.test(insightSession));
+    t('the lazy equity request ignores results after the panel unmounts',
+      /let cancelled = false/.test(panel) &&
+      (panel.match(/if \(cancelled\) return/g) || []).length >= 2 &&
+      /return \(\) => \{ cancelled = true; \}/.test(panel));
+
+    const stageCss = css.match(/\.header-brand-stage\s*\{[^}]*}/)?.[0] ?? '';
+    const layerCss = css.match(/\.header-brand-layer,\s*\.header-spotlight-layer\s*\{[^}]*}/)?.[0] ?? '';
+    t('brand and spotlight share one clipped fixed-height header stage',
+      /header-brand-stage[\s\S]*header-brand-layer[\s\S]*header-spotlight-layer/.test(header) &&
+      /position:\s*relative/.test(stageCss) && /height:\s*34px/.test(stageCss) &&
+      /overflow:\s*hidden/.test(stageCss) && /contain:\s*layout paint/.test(stageCss) &&
+      /position:\s*absolute/.test(layerCss) && /inset:\s*0/.test(layerCss));
+    t('header timing returns to the brand between one-minute insight cards',
+      /BRAND_MS = 2 \* 60 \* 1000/.test(header) &&
+      /SPOTLIGHT_MS = 60 \* 1000/.test(header) &&
+      /showSpotlight \? SPOTLIGHT_MS : BRAND_MS/.test(header));
+    t('header market polling is slow and does not add a news network request',
+      /3 \* 60 \* 1000/.test(header) && !/getNews/.test(header));
+    t('reduced-motion users keep a static brand with no spotlight transition',
+      /<BrandMark still=\{still\}/.test(header) &&
+      /animate=\{still \? \{ rotateY: 0 \}/.test(header) &&
+      /prefers-reduced-motion:\s*reduce[\s\S]*?header-brand-layer[\s\S]*?transition:\s*none/.test(css));
+    t('insight images decode asynchronously and fail back to lightweight icons',
+      /decoding="async"/.test(panel) && /onError=\{\(event\) => \{ event\.currentTarget\.hidden = true; \}\}/.test(panel) &&
+      /decoding="async"/.test(header) && /IconClock/.test(header) && /IconBuilding/.test(header));
+
+    const ordersCode = orders
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    t('all Auto Orders creation cards and sheet titles come from translations',
+      ['limit', 'trailing', 'bracket', 'ladder', 'dca', 'twap', 'rebalance']
+        .every((kind) => ordersCode.includes(`t('orders.type.${kind}')`)) &&
+      /t\(`orders\.new\.\$\{kind\}`\)/.test(ordersCode) &&
+      !/[\u0600-\u06ff]/.test(ordersCode));
+
+    const orderKeys = [
+      'title', 'subtitle', 'bannerTitle', 'bannerSub',
+      'newLimit', 'newTrailing', 'newBracket', 'newLadder', 'newDca', 'newTwap', 'newRebalance',
+      'type.limit', 'type.trailing', 'type.bracket', 'type.ladder', 'type.dca', 'type.twap', 'type.rebalance',
+      'new.limit', 'new.trailing', 'new.bracket', 'new.ladder', 'new.dca', 'new.twap', 'new.rebalance'
+    ];
+    const insightKeys = [
+      'news.tab.insights', 'insights.title', 'insights.cryptoLeader', 'insights.cryptoLaggard',
+      'insights.tokenizedLeader', 'insights.companyLeader', 'insights.countryFlow',
+      'insights.companyProfit', 'insights.capitalOutflow', 'insights.eventsTitle',
+      'insights.unavailable', 'insights.marketUnavailable', 'insights.disclaimer', 'insights.header.leader',
+      'insights.header.laggard', 'insights.header.company', 'insights.header.event'
+    ];
+    const valueAt = (root, path) => path.split('.').reduce((value, key) => value?.[key], root);
+    for (const lang of ['en', 'fa', 'ar', 'es', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh']) {
+      const locale = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      t(`${lang} localizes the visible Auto Orders and market-insight surfaces`,
+        [...orderKeys.map((key) => `orders.${key}`), ...insightKeys]
+          .every((key) => String(valueAt(locale, key) || '').trim().length > 0));
+    }
   }
 
   return rows;

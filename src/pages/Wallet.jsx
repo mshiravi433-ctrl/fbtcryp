@@ -27,6 +27,7 @@ import { useWalletBalances } from '../hooks/useWalletBalances';
 import TokenIcon from '../lib/tokenIcon';
 import Portfolio from './Portfolio';
 import SmartWallet from './SmartWallet';
+import { IconBuilding, IconChevronRight, IconTrend } from '../components/Icons';
 import '../styles/wallet-modern.css';
 
 const SLICE_COLORS = ['#00e5ff', '#7c4dff', '#ff2d95', '#00ff9d', '#ffb300', '#4dd0e1', '#b388ff'];
@@ -354,58 +355,32 @@ export default function Wallet() {
 
       {/* ----------------- allocation ----------------- */}
       {tab === 'practice' && <>
-          {/* ========== Premium Stocks Banner (Beautiful + Bilingual + SVG) ========== */}
-          <motion.div 
-            variants={riseIn} 
-            initial="hidden" 
+          {/* Tokenized-equity discovery: localized, keyboard-accessible and honest about the asset. */}
+          <motion.button
+            type="button"
+            className="wallet-stocks-banner"
+            variants={riseIn}
+            initial="hidden"
             animate="show"
             onClick={() => navigate('/stocks')}
-            style={{
-              marginTop: 16,
-              padding: '18px 20px',
-              borderRadius: 20,
-              background: 'linear-gradient(135deg, #0f172a 0%, #1e2937 100%)',
-              border: '1px solid rgba(148,163,184,0.15)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-              boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-            }}
+            aria-label={t('wallet.stocksBanner.aria')}
           >
-            <div style={{
-              width: 52,
-              height: 52,
-              borderRadius: 16,
-              background: 'linear-gradient(145deg, #00e5ff, #7c4dff)',
-              display: 'grid',
-              placeItems: 'center',
-              flexShrink: 0
-            }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 3v18h18" />
-                <path d="M7 15l4-4 3 3 5-5" />
-                <circle cx="19" cy="8" r="1.5" fill="#000" />
-              </svg>
-            </div>
+            <span className="wallet-stocks-art" aria-hidden="true">
+              <span className="wallet-stocks-building"><IconBuilding /></span>
+              <span className="wallet-stocks-trend"><IconTrend /></span>
+            </span>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 15.5, color: '#fff' }}>
-                سهام واقعی • Real Stocks
-              </div>
-              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 3, lineHeight: 1.5 }}>
-                بازار سهام جهانی را تجربه کنید
-              </div>
-            </div>
+            <span className="wallet-stocks-copy">
+              <span className="wallet-stocks-eyebrow">{t('wallet.stocksBanner.eyebrow')}</span>
+              <strong>{t('wallet.stocksBanner.title')}</strong>
+              <span className="wallet-stocks-description">{t('wallet.stocksBanner.description')}</span>
+            </span>
 
-            <div style={{ 
-              fontSize: 13, 
-              color: '#64748b', 
-              fontWeight: 600 
-            }}>
-              شروع →
-            </div>
-          </motion.div>
+            <span className="wallet-stocks-cta">
+              <span>{t('wallet.stocksBanner.cta')}</span>
+              <IconChevronRight aria-hidden="true" />
+            </span>
+          </motion.button>
           <motion.section className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
             <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12 }}>{t('wallet.allocation')}</div>
             <div className="row" style={{ gap: 16, alignItems: 'center' }}>
