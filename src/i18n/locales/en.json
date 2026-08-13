@@ -94,7 +94,8 @@
       "ai": "AI",
       "gaming": "Gaming"
     },
-    "sectorEmpty": "Nothing to show for this sector right now."
+    "sectorEmpty": "Nothing to show for this sector right now.",
+    "swapOnChain": "Swap {{symbol}} on the right network"
   },
   "coin": {
     "notFound": "Coin not found",
@@ -1069,7 +1070,11 @@
     "outlookLocal": "Indicator read",
     "aiMetaLocal": "Generated on this device straight from the indicators (RSI, MACD, Bollinger, moving averages, volatility). No language model is involved — every sentence comes from a number that was actually computed.",
     "disclaimerTitle": "What these indicators are — and what they cannot tell you",
-    "projectionTitle": "Weekly and monthly outlook"
+    "projectionTitle": "Weekly and monthly outlook",
+    "wholeMarket": "Whole market — at a glance",
+    "pickAsset": "Pick an asset",
+    "horizonWeek": "Weekly · 7 days",
+    "horizonMonth": "Monthly · 30 days"
   },
   "stocks": {
     "title": "Stocks",
@@ -1587,7 +1592,75 @@
       }
     },
     "notice": "Business enquiries only. For support with your own wallet or a transaction, use the Help screen instead.",
-    "website": "Website"
+    "website": "Website",
+    "cta": "Partnership request",
+    "atGlance": "At a glance",
+    "pickTopic": "Choose this topic",
+    "whyUs": "Why work with us",
+    "path": "How we work together",
+    "stat": {
+      "chains": {
+        "label": "Live networks",
+        "sub": "BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche · Linea · Sonic · Solana"
+      },
+      "fee": {
+        "label": "Transparent fee",
+        "sub": "Shown before you sign"
+      },
+      "open": {
+        "label": "Always open",
+        "sub": "No close, no middleman"
+      }
+    },
+    "benefit": {
+      "custody": {
+        "title": "Truly non-custodial",
+        "body": "We never hold the money — trades go from the user's wallet to the chain. No company wallet, no withdrawal queue."
+      },
+      "api": {
+        "title": "Fast integration",
+        "body": "Drop our market, price and swap-routing API into your product — real docs and a ready curl example."
+      },
+      "revenue": {
+        "title": "Clear revenue",
+        "body": "Builder fee on notional (0.10%) — shown to the user before they sign."
+      }
+    },
+    "step": {
+      "talk": {
+        "title": "Talk",
+        "desc": "Fill the form or email us — we read the topic, we do not send a template."
+      },
+      "offer": {
+        "title": "Offer",
+        "desc": "Based on your token, chain and volume we propose a technical path and fee."
+      },
+      "ship": {
+        "title": "Ship",
+        "desc": "Listing, liquidity depth or white-label — test on mainnet, then launch."
+      }
+    },
+    "form": {
+      "title": "Partnership form",
+      "intro": "Fill this in — an email opens in your mail app with the topic already selected. Nothing is stored on our servers.",
+      "topic": "Topic",
+      "company": "Company name *",
+      "companyPh": "e.g. Arta Coin",
+      "name": "Your name *",
+      "namePh": "Full name",
+      "email": "Work email *",
+      "phone": "Phone (optional)",
+      "phonePh": "+1…",
+      "message": "Message *",
+      "messagePh": "Briefly: your token, which network, volume, and what you need…",
+      "sending": "Preparing…",
+      "submit": "Send request — {{topic}}",
+      "footer": "This opens a message to our support inbox — we usually reply within one working day.",
+      "needFields": "Please complete company, name, email and message.",
+      "needEmail": "Enter a valid email.",
+      "ready": "Your request is ready to send in your email app.",
+      "mailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap business page"
+    }
   },
   "ads": {
     "swap": {
@@ -1728,7 +1801,13 @@
     "atTier": "You are {{tier}}",
     "topTier": "You have reached the highest tier.",
     "privateNote": "Your points are yours alone. Nothing here is published, nobody else can see your score, and it is not compared with anyone.",
-    "viewBoard": "See where your points came from"
+    "viewBoard": "See where your points came from",
+    "quickTitle": "Earn points fast",
+    "quick": {
+      "swap": "Swap +{{n}}",
+      "backup": "Backup +{{n}}",
+      "farm": "Farm +{{n}}"
+    }
   },
   "guide": {
     "title": "A short guide before you start",
@@ -2944,11 +3023,11 @@
     "pickCountryWhy": "Gift cards are tied to a country. Pick the one where you will redeem, not where you are — a card bought for the wrong country usually cannot be refunded.",
     "chooseOne": "Choose a country",
     "tab": {
-      "cards": "Cards & top-ups",
+      "cards": "Card",
       "flights": "Flights",
       "stays": "Stays",
       "money": "PayPal & Visa",
-      "topup": "Top-up & eSIM"
+      "topup": "Simcard"
     },
     "search": "Search {{country}} — brand, PayPal, gaming…",
     "all": "All",
@@ -3194,7 +3273,30 @@
       "BAD_SLIPPAGE": "Choose a valid slippage limit.",
       "NO_COLLATERAL": "This dYdX account has insufficient collateral. Fund it before placing an order.",
       "ORDER_FAILED": "dYdX rejected the order. Nothing is shown as filled."
-    }
+    },
+    "stepsTitle": "How it works",
+    "step1Title": "Connect wallet",
+    "step1Body": "Connect your EVM wallet and sign the dYdX onboarding message. The dYdX key stays in memory only.",
+    "step2Title": "Pick market and size",
+    "step2Body": "Choose a market (e.g. BTC-USD), side (long/short) and size. The continue button stays off until you enter a size — that is expected.",
+    "step3Title": "Review",
+    "step3Body": "Check notional and the 0.10% fee, then tap Review order.",
+    "step4Title": "Confirm",
+    "step4Body": "In the confirm sheet, read the risk and tap Confirm to send a real order on dYdX Chain.",
+    "step5Body": "After send, the transaction hash and open positions appear below. If collateral is short you will see “Insufficient collateral” — fund the dYdX account first.",
+    "needSize": "Wallet is connected. Enter a size (e.g. 0.01 BTC) to continue. The button stays disabled at zero so you cannot send an empty order.",
+    "connectHint": "Not connected yet — tap Connect dYdX first. If no wallet is linked, connect the wallet first.",
+    "orderType": {
+      "market": "Market",
+      "limit": "Limit"
+    },
+    "limitPrice": "Limit price (USD)",
+    "limitNote": "A limit order fills only when price reaches this number — the 0.10% fee is still charged on notional.",
+    "fundWhereTitle": "Where do I fund the account?",
+    "fundWhereBody": "Funding and depositing dYdX collateral is not done in this app — not here and not on our own website. USDC deposits, withdrawals and account management happen only on dydx.trade with the same wallet you connected. The app only builds the order and sends it to your wallet to sign; we never hold the money.",
+    "fundWhereHint": "Opens in a new tab — official site",
+    "orderKind": "Order type",
+    "limitAt": "Limit @ ${{price}}"
   },
   "derivatives": {
     "title": "Derivatives Hall",

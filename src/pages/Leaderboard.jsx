@@ -193,12 +193,12 @@ export default function Leaderboard({ embedded = false }) {
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 14 }}>
         <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff' }}>⚡</span>
-          سریع امتیاز بگیر
+          {t('rank.quickTitle')}
         </div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/swap'}>سواپ +{POINT_VALUES.firstSwap}</button>
-          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/wallet'}>بک‌آپ +{POINT_VALUES.backupWallet}</button>
-          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/farm'}>فارم +50</button>
+          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/swap'}>{t('rank.quick.swap', { n: POINT_VALUES.firstSwap })}</button>
+          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/wallet'}>{t('rank.quick.backup', { n: POINT_VALUES.backupWallet })}</button>
+          <button className="tag" style={{ flex: '1 1 120px', minHeight: 36, justifyContent: 'center', background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)' }} onClick={() => window.location.hash = '#/farm'}>{t('rank.quick.farm', { n: 50 })}</button>
         </div>
       </motion.section>
 
