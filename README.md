@@ -29,9 +29,12 @@ solver selection, user-signed execution and a content-addressed
 Proof-of-Execution receipt. Capabilities are discoverable at
 `GET /api/intents/v1/capabilities`. Registered solvers can submit
 Ed25519-signed quote commitments to an immutable transparency log with
-replay-resistant nonces, deterministic Merkle roots and inclusion proofs. This
-is commitment evidence—not executable calldata, bonded settlement, a closed
-auction, or an externally anchored proof.
+replay-resistant nonces, deterministic Merkle roots and inclusion proofs. An
+authenticated coordinator can produce a deterministic signed auction-close
+receipt, and an independently submitted EVM transaction can anchor that exact
+receipt when a contract network is configured. This remains evidence—not
+executable calldata, bonded settlement, or proof that no pre-seal bid was
+censored.
 
 - [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
 - [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)

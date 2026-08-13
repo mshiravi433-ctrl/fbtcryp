@@ -3655,7 +3655,20 @@
       "anchored": "Externally anchored",
       "unanchored": "Not anchored",
       "root": "Merkle root",
-      "commitmentNote": "Quote submissions require a registered Ed25519 public key. Merkle roots prove inclusion in the returned set, but are not independent timestamps or on-chain settlement proofs until externally anchored."
+      "commitmentNote": "Quote submissions require a registered Ed25519 public key. Merkle roots prove inclusion in the returned set, but are not independent timestamps or on-chain settlement proofs until externally anchored.",
+      "auctionProtocol": "SIGNED AUCTION CLOSE",
+      "closeReady": "Coordinator close is configured",
+      "closeUnavailable": "Coordinator close is not configured",
+      "anchorReady": "EVM anchor verification ready",
+      "anchorUnavailable": "No anchor network",
+      "coordinator": "Coordinator",
+      "anchorNetworks": "Anchor networks",
+      "signed": "Signed",
+      "closeReceipt": "Close receipt",
+      "proven": "Proven",
+      "unproven": "Not proven",
+      "completeness": "Auction completeness",
+      "auctionNote": "The close receipt deterministically selects from its sealed Merkle set and can be anchored by an independent EVM transaction. Blob sealing is not a cross-instance transaction, so the receipt explicitly does not claim censorship resistance or complete bid capture."
     }
   }
 }

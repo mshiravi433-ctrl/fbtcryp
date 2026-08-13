@@ -158,28 +158,18 @@ POST /api/intents/v1/validate
 - Canonical JSON + SHA-256
 - Verify و Download روی دستگاه
 
-### برای تبدیل شدن به استاندارد کامل
+### لایهٔ پروتکل فعلی و مسیر استاندارد کامل
 
-هر Solver باید پیش از Deadline این پیام را امضا کند:
+Solver اکنون `fbt.solver-quote.v1` را پیش از Deadline با Ed25519 امضا می‌کند؛ پیام علاوه بر مبلغ و Gas، Fee، Slippage، Chain، `intentHash`، `routeCommitment`، زمان صدور، انقضا و nonce را نیز می‌بندد. Bidها وارد Transparency log غیرقابل‌overwrite می‌شوند و رسید پایان Coordinator ریشه، Policy و انتخاب را امضا می‌کند.
 
-```json
-{
-  "intentHash": "0x…",
-  "solver": "did:key:…",
-  "quoteHash": "0x…",
-  "amountOut": "…",
-  "gasBound": "…",
-  "validUntil": 0,
-  "nonce": "…"
-}
-```
+ریشهٔ رسید بسته‌شده می‌تواند در قرارداد permissionless `IntentAuctionAnchor` ثبت و event آن مستقل از سرور بررسی شود. اما استاندارد کامل هنوز به این موارد نیاز دارد:
 
-سپس Merkle root تمام Bidها باید قبل یا هم‌زمان با Settlement در یکی از این دو محل Anchor شود:
+- Admission تراکنشی یا Watchtower مستقل برای اثبات completeness؛
+- اتصال رسید انتخاب به Settlement واقعی و مقدار دریافتی؛
+- Bond و dispute rule برای Quote غیرقابل‌اجرا؛
+- Verifier مستقل و امکان rotation امن کلید Coordinator.
 
-- قرارداد Proof Registry؛ یا
-- Transparency log عمومی append-only.
-
-بدون Anchor یا امضای مستقل Solver، SHA-256 فقط fingerprint محتواست؛ کسی که کل سند را عوض کند می‌تواند هش تازه هم بسازد.
+بدون امضای Solver، امضای Close یا Anchor مستقل، SHA-256 به‌تنهایی فقط fingerprint محتواست؛ کسی که کل سند را عوض کند می‌تواند هش تازه هم بسازد.
 
 ## ۲. Private Intent DEX
 
@@ -278,7 +268,8 @@ Intent OS محصول بالادستی است؛ Swap و Orders Adapterهای آن
 ```text
 Phase 1  — local compiler + risk + real quote trace + receipts       [انجام شده]
 Phase 2a — signed solver commitments + immutable transparency log    [انجام شده]
-Phase 2b — selection receipt + externally anchored auction close     [مرحله بعد]
+Phase 2b — signed selection close + verified optional EVM anchor      [انجام شده]
+Phase 2c — transactional admission + independent completeness watcher [مرحله بعد]
 Phase 3  — bonded open solver network + outcome settlement
 Phase 4  — atomic same-chain workflows + cross-chain state machine
 Phase 5  — threshold-encrypted confidential intents
@@ -304,13 +295,40 @@ INTENT_SOLVER_PRIVATE_KEY='…' node scripts/intent-solver.mjs sign quote.json >
 
 این پیاده‌سازی هنوز ادعاهای زیر را ندارد:
 
-- ریشهٔ Merkle هنوز آن‌چین یا نزد publisher مستقل anchor نشده است؛
+- هر ریشه به‌صورت پیش‌فرض anchor نشده؛ وضعیت فقط بعد از تراکنش تأییدشده تغییر می‌کند؛
 - ثبت‌شدن در log به معنی executable calldata یا settlement موفق نیست؛
 - Solverها bond ندارند و جریمهٔ failure اعمال نمی‌شود؛
-- Auction-close مستقل و اثبات completeness مجموعه هنوز وجود ندارد؛
+- Blob تراکنش اتمیک چندمسیره ندارد، پس completeness مجموعه هنوز اثبات نشده است؛
 - هیچ کلید خصوصی Solver یا کاربر به FBT واگذار نمی‌شود.
 
-Endpointهای عمومی در `/api/intents/v1/capabilities`، `/solvers`، `/commitments` و `/log/:intentHash` مستند و در صفحهٔ Network با وضعیت واقعی registry و durability نمایش داده می‌شوند.
+### وضعیت دقیق Phase 2b
+
+Endpoint بستن مزایده فقط با Bearer secret سروری `INTENT_AUCTION_CLOSE_TOKEN` فعال می‌شود. سپس کلید مستقل `INTENT_COORDINATOR_PRIVATE_KEY` یک رسید `fbt.auction-close.v1` را امضا می‌کند. این کلید فقط سند را امضا می‌کند؛ Wallet نیست و اجازهٔ انتقال دارایی یا اجرای calldata ندارد.
+
+Policy قطعی `MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1` ابتدا Chain، executability، زمان، سقف Fee و سقف Slippage را بررسی می‌کند. سپس بیشترین خروجی را انتخاب می‌کند و برای tie از Gas، Fee، Slippage و در آخر hash استفاده می‌کند. رسید شامل تمام rejection reasonها، ترتیب گزینه‌های مجاز، برنده، ریشه و اندازهٔ مجموعه و کلید عمومی Coordinator است.
+
+```bash
+# کلید Coordinator را مثل کلید Solver بساز، ولی هرگز privateKey را در VITE_* نگذار
+node scripts/intent-solver.mjs keygen
+
+# بستن توسط اپراتور
+curl -X POST "$FBT_URL/api/intents/v1/auctions/$INTENT_HASH/close" \
+  -H "authorization: Bearer $INTENT_AUCTION_CLOSE_TOKEN" \
+  -H 'content-type: application/json' \
+  --data-binary @close-request.json
+```
+
+برای لنگر بیرونی، `contracts/IntentAuctionAnchor.sol` هیچ Tokenی نگه نمی‌دارد و فقط event منتشر می‌کند. هر شخص می‌تواند calldata دقیق رسید را از endpoint عمومی یا CLI آفلاین بگیرد، با Wallet خودش تراکنش بفرستد و tx hash را برگرداند. سرور فقط زمانی `externallyAnchored: true` اعلام می‌کند که RPC تعریف‌شده در `INTENT_ANCHOR_NETWORKS`، آدرس Contract، event دقیق و حداقل confirmation را تأیید کند.
+
+```bash
+node scripts/intent-auction.mjs verify close.json
+node scripts/intent-auction.mjs calldata close.json 8453 0xYourAnchorContract
+node scripts/intent-auction.mjs verify-anchor close.json anchor-claim.json
+```
+
+محدودیت مهم: Anchor زمان و محتوای **مجموعهٔ بسته‌شده** را ثابت می‌کند، نه اینکه Coordinator پیش از Seal هیچ Bidی را سانسور نکرده است. برای این ادعا به transactional admission یا Watchtower مستقل در Phase 2c نیاز است.
+
+Endpointهای عمومی `/capabilities`، `/coordinator`، `/anchor-networks`، `/auctions/:intentHash` و endpointهای commitment/log وضعیت واقعی Coordinator، durability، anchor و completeness را نمایش می‌دهند.
 
 ---
 

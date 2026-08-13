@@ -89,7 +89,7 @@ Accepted statements are written under immutable per-intent/solver/nonce paths. R
 The log deterministically sorts unique signed-commitment hashes and builds a domain-separated SHA-256 Merkle tree: leaves are `SHA-256(0x00 || canonical-signed-commitment)` and parents are `SHA-256(0x01 || left || right)`. Odd nodes are duplicated. The public response includes the current root and an inclusion proof for every entry. This supports independent recomputation of the returned set, but has two important limits:
 
 - the root can change while another valid quote is accepted for the intent;
-- the root is **not externally anchored**, so it is not an independent timestamp, completeness guarantee or on-chain settlement proof.
+- the open-log root is **not externally anchored**; only a separately verified closed-auction anchor record can claim an external timestamp, and even that is not a completeness or settlement proof.
 
 Endpoints:
 
@@ -98,17 +98,66 @@ Endpoints:
 | `GET` | `/api/intents/v1/capabilities` | Honest registry, durability and anchor status |
 | `GET` | `/api/intents/v1/solvers` | Active public solver identities and public keys |
 | `POST` | `/api/intents/v1/commitments` | Verify and append a signed commitment |
-| `GET` | `/api/intents/v1/log/:intentHash` | Root, entries and inclusion proofs |
+| `GET` | `/api/intents/v1/log/:intentHash` | Open-log root, entries and inclusion proofs |
+| `GET` | `/api/intents/v1/coordinator` | Current public close-signing identity |
+| `GET` | `/api/intents/v1/auctions/:intentHash` | Seal, signed close and verified anchor state |
+| `POST` | `/api/intents/v1/auctions/:intentHash/close` | Authenticated immutable close |
+| `GET` | `/api/intents/v1/auctions/:intentHash/anchor-calldata/:chainId` | Exact non-custodial anchor call |
+| `POST` | `/api/intents/v1/auctions/:intentHash/anchor` | Verify and store a mined anchor event |
 
-A future execution receipt still needs to carry the selected commitment and inclusion proof, selection-function version, settlement transaction, and an externally anchored root or verifier attestation.
+## 6. Signed auction close and optional EVM anchor
 
-## 6. Selection policy
+An operator can close one intent only when both server-only controls are configured:
 
-The current code uses:
+- `INTENT_COORDINATOR_PRIVATE_KEY` signs the close receipt with Ed25519;
+- `INTENT_AUCTION_CLOSE_TOKEN` authenticates the close request.
+
+The token is authorization for the protocol operator endpoint, not authority over user funds. The coordinator key signs evidence only and is never used as a wallet key.
+
+Closing first writes an immutable `fbt.auction-seal.v1` object. The versioned `MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1` policy then rejects commitments that are on the wrong chain, non-executable, issued after close, expired, or outside the signed fee/slippage limits. Remaining entries are ranked by:
+
+1. greatest integral `amountOut`;
+2. lowest `maxGas`;
+3. lowest fee;
+4. lowest slippage;
+5. lexical entry hash as the final deterministic tie-break.
+
+The resulting `fbt.auction-close.v1` document binds the seal time, Merkle root and size, full policy, eligible order, rejection reasons, selected entry, coordinator identity, and explicit claim limits. Its `closeId` is a domain-separated SHA-256 digest and its Ed25519 signature can be checked with the public coordinator endpoint.
+
+Vercel Blob does not offer a transaction spanning the quote and seal paths. Process-local operations are serialized, and the immutable seal blocks observed later admissions, but separate serverless instances can race at the boundary. Therefore every receipt carries:
+
+```json
+{
+  "deterministicSelection": true,
+  "userFundsAuthorised": false,
+  "auctionCompletenessProven": false,
+  "externallyAnchored": false
+}
+```
+
+This is a real signed selection receipt, not yet a censorship-resistance or complete-bid-capture proof.
+
+### Independent EVM anchor
+
+`contracts/IntentAuctionAnchor.sol` is permissionless and cannot hold tokens or execute swaps. Anyone can request calldata from the API, submit it with their own wallet, and submit the transaction hash back. FBT marks an anchor verified only when a configured-chain RPC returns:
+
+- a successful receipt from the configured contract;
+- the exact `AuctionRootAnchored` event matching `closeId`, `intentHash`, root, size and close time;
+- at least the configured number of confirmations.
+
+An RPC URL and deployed contract are configured through server-only `INTENT_ANCHOR_NETWORKS`. With no configured network, capabilities report anchor verification unavailable. Even a verified on-chain event timestamps the signed set; it does not prove that an operator never censored a bid before sealing.
+
+A future execution receipt still needs to carry the selected commitment and inclusion proof, settlement transaction, and settlement verification. Bonding and dispute enforcement remain unimplemented.
+
+## 7. Selection policies
+
+The live swap adapter still uses its quote-round policy:
 
 ```text
 MAX_OUTPUT_EXECUTABLE_SAME_FEE_AND_SLIPPAGE
 ```
+
+The signed transparency auction uses `MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1` as specified above. These policies are intentionally named separately: the first ranks immediately executable aggregator responses, while the second produces a non-executing signed close receipt.
 
 Eligibility requirements:
 
@@ -125,7 +174,7 @@ MAX_NET_OUTPUT_USD_AFTER_ATTESTED_GAS
 
 only when every eligible bid uses a timestamped, common price source and an attested gas bound.
 
-## 7. MEV and privacy evidence
+## 8. MEV and privacy evidence
 
 A private-RPC recommendation is not transport attestation. A receipt may claim private settlement only if it can bind a cryptographic attestation to the exact transaction or bundle. Otherwise:
 
@@ -138,19 +187,20 @@ A private-RPC recommendation is not transport attestation. A receipt may claim p
 
 MEV savings remain `null` unless compared against a defensible counterfactual methodology. “No sandwich was observed” is not equivalent to “X dollars of MEV were saved.”
 
-## 8. Verification
+## 9. Verification
 
 Client verification recomputes the canonical SHA-256 digest. Full protocol verification should additionally:
 
-1. verify every solver signature;
-2. verify Merkle inclusion and bid-set root anchoring;
-3. re-run the selection function;
-4. verify the settlement transaction and receipt status;
-5. verify output against the selected bid's guaranteed minimum;
-6. verify expiry, nonce and chain binding;
-7. verify any transport or confidential-compute attestation.
+1. verify every solver signature and expiry/nonce/chain binding;
+2. verify every Merkle inclusion path against the sealed root;
+3. recompute `closeId` and verify the coordinator Ed25519 signature;
+4. re-run `MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1` and compare the selected hash;
+5. when claimed, verify the configured-contract anchor event and confirmations;
+6. verify the later settlement transaction and receipt status;
+7. verify output against the selected bid's guaranteed minimum;
+8. verify any transport or confidential-compute attestation.
 
-## 9. Relevant implementation
+## 10. Relevant implementation
 
 - `src/lib/bestQuote.js` — parallel quote race and compact trace
 - `src/lib/swap.js` — named solver requests and selection evidence
@@ -159,4 +209,8 @@ Client verification recomputes the canonical SHA-256 digest. Full protocol verif
 - `src/pages/IntentOS.jsx` — proof archive, verification, JSON export and protocol status
 - `server/intentSignatures.js` — canonical commitments, Ed25519 signing and public registry
 - `server/intentTransparency.js` — immutable append, Merkle roots and inclusion proofs
-- `scripts/intent-solver.mjs` — solver-side key generation and signing CLI
+- `server/intentAuctions.js` — immutable seals, deterministic selection and signed close receipts
+- `server/intentAnchors.js` — calldata construction and confirmed EVM-event verification
+- `contracts/IntentAuctionAnchor.sol` — permissionless non-custodial root timestamping
+- `scripts/intent-solver.mjs` — solver/coordinator Ed25519 key generation and solver signing CLI
+- `scripts/intent-auction.mjs` — offline close verification, anchor calldata and RPC anchor verification

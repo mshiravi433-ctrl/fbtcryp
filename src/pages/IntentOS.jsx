@@ -598,11 +598,37 @@ export default function IntentOS() {
             <p>{t('intentOS.network.commitmentNote')}</p>
           </section>
 
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.auctionProtocol')}</span>
+                <strong>{networkStatus?.auctions?.closeConfigured
+                  ? t('intentOS.network.closeReady')
+                  : t('intentOS.network.closeUnavailable')}</strong>
+              </div>
+              <span className={`ios-status ${networkStatus?.auctions?.externalAnchorVerificationConfigured ? 'eligible' : 'unavailable'}`}>
+                {networkStatus?.auctions?.externalAnchorVerificationConfigured
+                  ? t('intentOS.network.anchorReady')
+                  : t('intentOS.network.anchorUnavailable')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.auctions?.coordinator?.id || '—'}</b>{t('intentOS.network.coordinator')}</span>
+              <span><b>{networkStatus?.auctions?.configuredAnchorNetworks ?? '—'}</b>{t('intentOS.network.anchorNetworks')}</span>
+              <span><b>{networkStatus?.auctions?.signedCloseReceipts ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.closeReceipt')}</span>
+              <span><b>{networkStatus?.auctions?.auctionCompletenessProof ? t('intentOS.network.proven') : t('intentOS.network.unproven')}</b>{t('intentOS.network.completeness')}</span>
+            </div>
+            <p>{t('intentOS.network.auctionNote')}</p>
+          </section>
+
           <section className="ios-network-api">
             <div><span>GET</span><code>/api/intents/v1/capabilities</code></div>
             <div><span>GET</span><code>/api/intents/v1/solvers</code></div>
             <div><span>POST</span><code>/api/intents/v1/commitments</code></div>
             <div><span>GET</span><code>/api/intents/v1/log/:intentHash</code></div>
+            <div><span>GET</span><code>/api/intents/v1/auctions/:intentHash</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/close</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/anchor</code></div>
             <div><span>POST</span><code>/api/intents/v1/validate</code></div>
           </section>
 

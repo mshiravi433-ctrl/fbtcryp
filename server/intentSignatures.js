@@ -103,6 +103,30 @@ export function generateSolverKeyPair() {
   };
 }
 
+export function publicKeyFromPrivateKey(privateKey) {
+  const publicDer = createPublicKey(privateKeyObject(privateKey)).export({ format: 'der', type: 'spki' });
+  return b64url(publicDer.subarray(publicDer.length - ED25519_PUBLIC_BYTES));
+}
+
+export function signCanonicalPayload(domain, payload, privateKey) {
+  const message = JSON.stringify(canonicalValue({ domain, payload }));
+  return b64url(cryptoSign(null, Buffer.from(message), privateKeyObject(privateKey)));
+}
+
+export function verifyCanonicalSignature(domain, payload, signature, publicKey) {
+  try {
+    const message = JSON.stringify(canonicalValue({ domain, payload }));
+    return cryptoVerify(
+      null,
+      Buffer.from(message),
+      publicKeyObject(publicKey),
+      fromB64url(signature, ED25519_SIGNATURE_BYTES, 'BAD_SIGNATURE')
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function signSolverCommitment(commitment, privateKey) {
   const payload = Buffer.from(solverSigningPayload(commitment));
   return {

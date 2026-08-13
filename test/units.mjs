@@ -203,6 +203,19 @@ import {
   signedCommitmentHash,
   verifyMerkleProof
 } from '../server/intentTransparency.js';
+import {
+  AUCTION_POLICY,
+  closeAuction,
+  evaluateAuction,
+  readAuction,
+  verifyAuctionClose
+} from '../server/intentAuctions.js';
+import {
+  INTENT_ANCHOR_ABI,
+  buildAnchorCalldata,
+  verifyAnchorClaim
+} from '../server/intentAnchors.js';
+import { Interface } from 'ethers';
 
 export default async function run() {
   const rows = [];
@@ -4767,6 +4780,109 @@ export default async function run() {
       verifyMerkleProof(hashes[0], inclusion, log.root));
     t('a changed transparency leaf does not verify',
       !verifyMerkleProof(`0x${'ff'.repeat(32)}`, inclusion, log.root));
+
+    const policy = { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 };
+    const evaluated = evaluateAuction(log.entries, policy, now);
+    t('auction selection chooses maximum signed output inside the declared limits',
+      evaluated.selectedEntryHash === signedCommitmentHash(signed)
+        && evaluated.eligibleEntryHashes.length === 2);
+
+    const oldCoordinatorId = process.env.INTENT_COORDINATOR_ID;
+    const oldCoordinatorKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = keys.privateKey;
+    try {
+      const closed = await closeAuction({
+        schema: 'fbt.auction-close-request.v1',
+        intentHash: unsigned.intentHash,
+        policy
+      }, { now: nowMs });
+      t('auction closure creates a coordinator-signed deterministic receipt',
+        closed.ok && !closed.alreadyClosed && verifyAuctionClose(closed.close)
+          && closed.close.decision.selectedEntryHash === signedCommitmentHash(signed));
+      t('the signed close refuses claims of completeness or fund authority',
+        closed.close.claims.auctionCompletenessProven === false
+          && closed.close.claims.userFundsAuthorised === false
+          && closed.close.claims.externallyAnchored === false);
+      t('changing a signed close root invalidates its structural and signature verification',
+        !verifyAuctionClose({ ...closed.close, logRoot: `0x${'ef'.repeat(32)}` }));
+      const state = await readAuction(unsigned.intentHash);
+      t('the immutable auction state exposes its verified closed receipt',
+        state.status === 'closed' && state.close.closeId === closed.close.closeId && !state.externallyAnchored);
+
+      const anchorContract = `0x${'44'.repeat(20)}`;
+      const anchorer = `0x${'55'.repeat(20)}`;
+      const anchorNetworks = new Map([[8453, {
+        chainId: 8453,
+        name: 'Unit Base',
+        contract: anchorContract,
+        rpcUrl: 'https://rpc.invalid',
+        explorerBaseUrl: 'https://explorer.invalid',
+        minConfirmations: 2
+      }]]);
+      const calldata = buildAnchorCalldata(closed.close, 8453, anchorNetworks);
+      t('anchor calldata binds the exact signed close id, intent, root, size and time',
+        calldata.ok && calldata.to.toLowerCase() === anchorContract.toLowerCase() && calldata.data.startsWith('0x'));
+
+      const anchorInterface = new Interface(INTENT_ANCHOR_ABI);
+      const encodedEvent = anchorInterface.encodeEventLog(
+        anchorInterface.getEvent('AuctionRootAnchored'),
+        [
+          closed.close.closeId,
+          closed.close.intentHash,
+          closed.close.logRoot,
+          BigInt(closed.close.logSize),
+          BigInt(closed.close.closedAt),
+          anchorer
+        ]
+      );
+      const txHash = `0x${'66'.repeat(32)}`;
+      const anchor = await verifyAnchorClaim(closed.close, {
+        schema: 'fbt.auction-anchor-claim.v1', chainId: 8453, txHash
+      }, {
+        networks: anchorNetworks,
+        rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x65' : {
+          status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+          blockHash: `0x${'77'.repeat(32)}`,
+          logs: [{ address: anchorContract, topics: encodedEvent.topics, data: encodedEvent.data }]
+        },
+        now: nowMs
+      });
+      t('a confirmed configured-contract event verifies as an external anchor',
+        anchor.ok && anchor.anchor.confirmationsAtVerification === 2 && anchor.anchor.verified);
+      const earlyAnchor = await verifyAnchorClaim(closed.close, {
+        schema: 'fbt.auction-anchor-claim.v1', chainId: 8453, txHash
+      }, {
+        networks: anchorNetworks,
+        rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x64' : {
+          status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+          blockHash: `0x${'77'.repeat(32)}`,
+          logs: [{ address: anchorContract, topics: encodedEvent.topics, data: encodedEvent.data }]
+        }
+      });
+      t('an otherwise matching anchor waits for the configured confirmation threshold',
+        earlyAnchor.code === 'ANCHOR_NOT_FINAL' && earlyAnchor.confirmations === 1);
+      const wrongRootEvent = anchorInterface.encodeEventLog(
+        anchorInterface.getEvent('AuctionRootAnchored'),
+        [closed.close.closeId, closed.close.intentHash, `0x${'88'.repeat(32)}`,
+          BigInt(closed.close.logSize), BigInt(closed.close.closedAt), anchorer]
+      );
+      const mismatch = await verifyAnchorClaim(closed.close, {
+        schema: 'fbt.auction-anchor-claim.v1', chainId: 8453, txHash
+      }, {
+        networks: anchorNetworks,
+        rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x65' : {
+          status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+          logs: [{ address: anchorContract, topics: wrongRootEvent.topics, data: wrongRootEvent.data }]
+        }
+      });
+      t('an on-chain event for a different root is rejected', mismatch.code === 'ANCHOR_EVENT_MISMATCH');
+    } finally {
+      if (oldCoordinatorId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = oldCoordinatorId;
+      if (oldCoordinatorKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = oldCoordinatorKey;
+    }
   }
 
   return rows;

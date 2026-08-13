@@ -19,10 +19,20 @@ async function get(path, timeout = 6000) {
 
 export const getIntentCapabilities = () => get('/intents/v1/capabilities');
 export const getRegisteredSolvers = () => get('/intents/v1/solvers');
+export const getAuctionCoordinator = () => get('/intents/v1/coordinator');
+export const getAnchorNetworks = () => get('/intents/v1/anchor-networks');
+
+function checkedIntentHash(intentHash) {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(String(intentHash || ''))) throw new Error('BAD_INTENT_HASH');
+  return String(intentHash).toLowerCase();
+}
 
 export function getTransparencyLog(intentHash) {
-  if (!/^0x[a-fA-F0-9]{64}$/.test(String(intentHash || ''))) {
-    return Promise.reject(new Error('BAD_INTENT_HASH'));
-  }
-  return get(`/intents/v1/log/${String(intentHash).toLowerCase()}`);
+  try { return get(`/intents/v1/log/${checkedIntentHash(intentHash)}`); }
+  catch (error) { return Promise.reject(error); }
+}
+
+export function getAuctionState(intentHash) {
+  try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}`); }
+  catch (error) { return Promise.reject(error); }
 }
