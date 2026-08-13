@@ -252,9 +252,9 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
        * EXECUTABLE quote is allowed to win, so a better price we cannot
        * actually sign can never become the transaction — see lib/bestQuote.js.
        */
-      const sources = [() => getAggregatorQuote(common)];
+      const sources = [{ id: 'kyberswap', quote: () => getAggregatorQuote(common) }];
       if (openOceanSupports(chainId)) {
-        sources.push(() => getOpenOceanQuote(common));
+        sources.push({ id: 'openocean', quote: () => getOpenOceanQuote(common) });
       }
       /*
        * Velora (formerly ParaSwap) — a third opinion, added after testing
@@ -265,10 +265,10 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
        * cannot slow the quote down.
        */
       if (veloraSupports(chainId)) {
-        sources.push(() => getVeloraQuote(common));
+        sources.push({ id: 'velora', quote: () => getVeloraQuote(common) });
       }
 
-      const { best, checked, beatenBy, failures, answered } = await quoteAllSources(sources);
+      const { best, checked, beatenBy, failures, answered, trace } = await quoteAllSources(sources);
 
       // Every source failed. Fall through to the same error handling the
       // single-source path always used.
@@ -281,7 +281,34 @@ export async function getQuote({ provider, chainId, fromToken, toToken, amountIn
        * quietly knowing another venue was better is the kind of thing that
        * destroys trust the one time a user checks.
        */
-      return { ...best, routesChecked: checked, beatenBy };
+      return {
+        ...best,
+        routesChecked: checked,
+        beatenBy,
+        /*
+         * Compact evidence for Proof-of-Execution. It contains no calldata,
+         * wallet address or routeSummary — only comparable outputs,
+         * constraints, solver status and timings. The full aggregator body can
+         * be huge and can disclose more routing detail than a receipt needs.
+         */
+        selectedSolver: best.source === 'aggregator' ? 'kyberswap' : (best.source || 'direct-router'),
+        executionTrace: {
+          schema: 'fbt.quote-trace.v1',
+          observedAt: new Date().toISOString(),
+          selectionPolicy: 'MAX_OUTPUT_EXECUTABLE_SAME_FEE_AND_SLIPPAGE',
+          coverage: { requested: sources.length, answered, usable: checked },
+          constraints: {
+            chainId: Number(chainId),
+            from: fromToken.symbol,
+            to: toToken.symbol,
+            amountIn: String(amountIn),
+            feeBps: FEE_BPS,
+            slippagePct: Number(slippage)
+          },
+          selectedSolver: best.source === 'aggregator' ? 'kyberswap' : (best.source || 'direct-router'),
+          candidates: trace
+        }
+      };
     } catch (err) {
       // COMMERCIAL RULE: this product must never execute a swap that skips the
       // platform fee. If the aggregator can't quote, we surface the error

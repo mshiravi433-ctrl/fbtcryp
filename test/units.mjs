@@ -176,6 +176,20 @@ import {
   headerInsightItems,
   isEventStory
 } from '../src/lib/marketInsights.js';
+import {
+  DEFAULT_INTENT_MEMORY,
+  compileIntent,
+  isQuietTime,
+  loadIntentMemory,
+  normalizeIntent,
+  saveIntentMemory
+} from '../src/lib/intentOS.js';
+import {
+  canonicalJson,
+  createExecutionProof,
+  verifyExecutionProof
+} from '../src/lib/executionProof.js';
+import { validateIntentEnvelope } from '../server/intents.js';
 
 export default async function run() {
   const rows = [];
@@ -4500,7 +4514,7 @@ export default async function run() {
     recordSpend(90);
     t('crossing the daily cap is refused', checkPolicy({ usd: 20 }).code === 'OVER_DAILY_LIMIT');
     t('NaN is refused, not passed', checkPolicy({ usd: NaN }).ok === false);
-    t('a default daily cap is $500', DEFAULT_POLICY.dailyLimitUsd === 500);
+    t('the default daily cap matches the shipped $1000 policy', DEFAULT_POLICY.dailyLimitUsd === 1000);
     t('an expired session is not active', activeSession({ session: { expiresAt: Date.now() - 1 } }) === null);
 
     localStorage.removeItem('fbt-portfolio-lots-v1');
@@ -4557,6 +4571,121 @@ export default async function run() {
     }) === 'BAD_DRIFT');
     t('TWAP is not uploaded to the server', !WATCHED_TYPES.has('twap'));
     t('rebalance IS watched in the background', WATCHED_TYPES.has('rebalance'));
+  }
+
+  /* ---------------- Intent OS + Proof-of-Execution ---------------------- */
+  {
+    localStorage.removeItem('fbt-intent-memory-v1');
+    localStorage.removeItem('fbt-intents-v1');
+    localStorage.removeItem('fbt-execution-proofs-v1');
+
+    t('intent memory starts from a bounded policy',
+      loadIntentMemory().maxSlippagePct === DEFAULT_INTENT_MEMORY.maxSlippagePct);
+    const memory = saveIntentMemory({
+      ...DEFAULT_INTENT_MEMORY,
+      maxSlippagePct: 0.4,
+      maxPerIntentUsd: 2000,
+      quietHoursEnabled: false
+    });
+
+    const ready = compileIntent({
+      kind: 'swap', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '1000', amountUsd: 1000, maxSlippagePct: 0.3,
+      privacy: 'standard', deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('a policy-compliant swap compiles to review, never execution',
+      ready.status === 'ready-for-review' && ready.handoff.startsWith('/swap?'));
+    t('compiled intents always require the wallet signature',
+      ready.intent.constraints.requireUserSignature === true && ready.intent.constraints.custodyAllowed === false);
+
+    const over = compileIntent({
+      kind: 'swap', chainId: 1, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '2500', amountUsd: 2500, maxSlippagePct: 0.3,
+      privacy: 'standard', deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('memory spend limits block rather than warn',
+      over.blocked && over.checks.some((r) => r.id === 'OVER_SPEND_LIMIT' && r.level === 'block'));
+
+    const privateIntent = compileIntent({
+      kind: 'swap', chainId: 1, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3,
+      privacy: 'confidential', deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('confidential intent is not faked with a private RPC',
+      privateIntent.blocked && privateIntent.checks.some((r) => r.id === 'CONFIDENTIAL_TRANSPORT_UNAVAILABLE'));
+
+    const automation = compileIntent({
+      kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '500', amountUsd: 500, maxSlippagePct: 0.3, privacy: 'standard',
+      conditionType: 'priceBelow', conditionValue: 2500,
+      deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('a valid automation preserves its trigger but stops at manual signature',
+      automation.intent?.condition?.value === 2500 && automation.handoff === '/orders');
+    t('an automation without a target is refused', compileIntent({
+      kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '500', maxSlippagePct: 0.3, privacy: 'standard',
+      conditionType: 'priceBelow', conditionValue: 0, deadlineAt: Date.now() + 3600000
+    }, memory).error === 'BAD_CONDITION');
+
+    const workflow = compileIntent({
+      kind: 'workflow', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'WBTC',
+      amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3, privacy: 'standard',
+      deadlineAt: Date.now() + 3600000,
+      steps: [
+        { action: 'swap', asset: 'ETH' },
+        { action: 'bridge', asset: 'ETH' },
+        { action: 'deposit', asset: 'ETH' }
+      ]
+    }, memory);
+    t('a composite workflow stays draft-only until it is atomic', workflow.status === 'draft-only' && workflow.blocked);
+
+    const invalid = normalizeIntent({ kind: 'swap', chainId: 56, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: 1 }, memory);
+    t('same-token intents are refused', invalid.error === 'SAME_TOKEN');
+    t('overnight quiet hours cross midnight correctly',
+      isQuietTime({ ...memory, quietHoursEnabled: true, quietStart: 23, quietEnd: 7 }, new Date(2026, 0, 1, 1)));
+
+    const envelope = {
+      ...ready.intent,
+      constraints: { ...ready.intent.constraints, maxSlippagePct: 0.3, privacy: 'standard' }
+    };
+    t('the public solver protocol validates the same safe envelope', validateIntentEnvelope(envelope).ok);
+    t('the protocol refuses autonomous authority',
+      validateIntentEnvelope({ ...envelope, constraints: { ...envelope.constraints, requireUserSignature: false } }).code === 'UNSAFE_AUTHORITY');
+
+    t('canonical JSON is independent of key insertion order',
+      canonicalJson({ z: 1, a: { y: 2, x: 3 } }) === canonicalJson({ a: { x: 3, y: 2 }, z: 1 }));
+
+    const proof = await createExecutionProof({
+      txHash: `0x${'ab'.repeat(32)}`,
+      chainId: 42161,
+      fromToken: { symbol: 'USDC', address: `0x${'11'.repeat(20)}` },
+      toToken: { symbol: 'ETH', native: true },
+      amountIn: '1000',
+      deadlineMinutes: 20,
+      quote: {
+        source: 'aggregator', selectedSolver: 'kyberswap', amountOutWei: 400000000000000000n,
+        amountOut: 0.4, minOut: 0.398, feeBps: 70, slippage: 0.5, hops: 2,
+        executionTrace: {
+          observedAt: '2026-08-13T00:00:00.000Z',
+          selectionPolicy: 'MAX_OUTPUT_EXECUTABLE_SAME_FEE_AND_SLIPPAGE',
+          coverage: { requested: 2, answered: 2, usable: 2 },
+          candidates: [
+            { solver: 'kyberswap', status: 'quoted', executable: true, amountOutWei: '400000000000000000', amountOut: 0.4, feeBps: 70, slippage: 0.5 },
+            { solver: 'openocean', status: 'quoted', executable: true, amountOutWei: '399000000000000000', amountOut: 0.399, feeBps: 70, slippage: 0.5 }
+          ]
+        }
+      },
+      receipt: { status: 1, blockNumber: 123, gasUsed: 200000n },
+      createdAt: 1
+    });
+    const verifiedProof = await verifyExecutionProof(proof);
+    t('an execution receipt recomputes to the same SHA-256 digest', verifiedProof.ok);
+    const tampered = JSON.parse(JSON.stringify(proof));
+    tampered.payload.constraints.amountIn = '9999';
+    t('changing a receipt breaks digest verification', !(await verifyExecutionProof(tampered)).ok);
+    t('proof scope refuses global optimality', proof.payload.claim.globalOptimality === false);
+    t('unmeasured MEV savings remain null', proof.payload.decision.mevSavingsUsd === null);
   }
 
   return rows;

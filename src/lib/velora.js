@@ -26,7 +26,7 @@
  * fee still reported. That is the same shape as the KyberSwap and 0x
  * integrations and it is the only reason this is worth wiring.
  *
- * ─── QUOTE ONLY, LIKE OPENOCEAN ON EVM ──────────────────────────────────────
+ * ─── QUOTE ONLY (UNLIKE OPENOCEAN, WHICH NOW EXECUTES) ──────────────────────
  * This does not execute. It returns a comparable number so the user can be
  * told when another venue would have paid more, and so we can see whether
  * Velora ever wins before moving real money through a fourth signing path.

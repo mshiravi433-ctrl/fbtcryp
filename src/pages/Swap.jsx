@@ -50,6 +50,7 @@ import MevGuard from '../components/MevGuard';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
 import { POINT_VALUES } from '../lib/ranks';
+import { createExecutionProof } from '../lib/executionProof';
 
 /**
  * Real on-chain swap screen.
@@ -178,6 +179,10 @@ export default function Swap() {
    * a later refresh silently resets whatever the user has since typed.
    */
   const [searchParams, setSearchParams] = useSearchParams();
+  /* Preserve the originating Intent OS id before the prefill query is cleared.
+     It binds the eventual execution receipt back to the reviewed intent while
+     storing no wallet address or free-form note in the proof. */
+  const sourceIntentId = useRef(searchParams.get('intent'));
   const prefillDone = useRef(false);
 
   useEffect(() => {
@@ -862,6 +867,33 @@ export default function Swap() {
 
       const receipt = await tx.wait();
       const ok = receipt.status === 1;
+
+      /*
+       * Build the Proof-of-Execution receipt from the FRESH quote that was
+       * actually signed, not the preview quote that may have been replaced
+       * after approval. Failure to persist a local receipt must never turn a
+       * confirmed on-chain trade into a UI failure, so hashing/storage is a
+       * best-effort evidence layer around — not inside — settlement.
+       */
+      let executionProof = null;
+      if (ok) {
+        try {
+          executionProof = await createExecutionProof({
+            txHash: tx.hash,
+            chainId,
+            fromToken,
+            toToken,
+            amountIn: amount,
+            quote: fresh,
+            receipt,
+            deadlineMinutes: deadlineMin,
+            intentId: sourceIntentId.current
+          });
+        } catch {
+          executionProof = null;
+        }
+      }
+
       /*
        * Carry the RECEIPT DETAILS into the result state.
        *
@@ -881,7 +913,9 @@ export default function Swap() {
         paidSymbol: fromToken.symbol,
         got: fresh.amountOut,
         gotSymbol: toToken.symbol,
-        chainName: cfg?.name ?? null
+        chainName: cfg?.name ?? null,
+        proofId: executionProof?.id ?? null,
+        proofDigest: executionProof?.integrity?.digest ?? null
       });
 
       /*
@@ -2085,6 +2119,28 @@ export default function Swap() {
                   <p className="mono faint" style={{ fontSize: 10, marginTop: 8, wordBreak: 'break-all' }}>
                     {txState.gaslessHash}
                   </p>
+                )}
+
+                {txState.proofId && (
+                  <a
+                    href="#/intent?tab=proofs"
+                    className="card card-tight"
+                    style={{
+                      display: 'block', marginTop: 10, textAlign: 'start', textDecoration: 'none',
+                      borderColor: 'rgba(101,245,188,.24)', background: 'rgba(101,245,188,.055)'
+                    }}
+                  >
+                    <div className="row-between">
+                      <strong style={{ color: 'var(--text-1)', fontSize: 11.5 }}>{t('swap.proofReady')}</strong>
+                      <span className="pill pill-up" style={{ fontSize: 8 }}>{t('swap.proofVerified')}</span>
+                    </div>
+                    <p className="mono faint" style={{ fontSize: 9, margin: '7px 0 0', wordBreak: 'break-all' }}>
+                      {txState.proofId}
+                    </p>
+                    <p className="faint" style={{ fontSize: 9.5, margin: '5px 0 0', lineHeight: 1.55 }}>
+                      {t('swap.proofScope')}
+                    </p>
+                  </a>
                 )}
               </motion.div>
             )}

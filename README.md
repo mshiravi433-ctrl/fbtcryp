@@ -21,6 +21,19 @@ there—FBT Swap does not take deposits or hold a recovery phrase.
 | **Languages** | fa · en · ar fully translated; zh · hi · es · fr · ru · tr · ur · id · pt cover navigation, onboarding, the guide, the swap flow and every safety warning |
 | **Keys required to run** | None. See [docs/APIS-FA.md](docs/APIS-FA.md) for what each optional key buys |
 
+### Intent execution layer
+
+FBT now includes a deterministic **Intent OS** control plane at `/#/intent`:
+structured outcome requests pass through local risk rules, capability-aware
+solver selection, user-signed execution and a content-addressed
+Proof-of-Execution receipt. Capabilities are discoverable at
+`GET /api/intents/v1/capabilities`; the API does not accept solver bids or
+execution calldata until authentication, replay protection, bonding and signed
+quote commitments are in place.
+
+- [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
+- [Proof-of-Execution receipt and protocol draft](docs/PROOF-OF-EXECUTION.md)
+
 ### Public guides
 
 - [صرافی غیرمتمرکز و سواپ ارز دیجیتال](https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2)

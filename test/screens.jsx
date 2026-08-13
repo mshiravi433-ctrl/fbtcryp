@@ -46,6 +46,7 @@ import Developers from '../src/pages/Developers.jsx';
 import Audit from '../src/pages/Audit.jsx';
 import SmartWallet from '../src/pages/SmartWallet.jsx';
 import Portfolio from '../src/pages/Portfolio.jsx';
+import IntentOS from '../src/pages/IntentOS.jsx';
 import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
 import RadioPanel from '../src/components/RadioPanel.jsx';
 import FiatPanel from '../src/components/FiatPanel.jsx';
@@ -264,6 +265,7 @@ export async function run(container) {
   await mount('Audit (security)', <Audit />);
   await mount('SmartWallet', <SmartWallet />);
   await mount('Portfolio', <Portfolio />);
+  await mount('IntentOS', <IntentOS />);
 
   /*
    * The three components added or rebuilt alongside them. Mounted directly

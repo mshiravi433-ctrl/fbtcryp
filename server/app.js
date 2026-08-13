@@ -66,6 +66,7 @@ import {
 } from './store.js';
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
+import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -201,6 +202,23 @@ function serve(res, ttlMs) {
 app.get('/api/health', (_req, res) =>
   res.json({ ok: true, uptime: process.uptime(), cache: cacheStats(), bot: Boolean(BOT_TOKEN) })
 );
+
+/*
+ * INTENT NETWORK DISCOVERY.
+ * Read-only capabilities plus strict envelope validation. There is
+ * intentionally no public bid/execution route yet: accepting solver calldata
+ * before signed quote commitments, replay protection and bonding would turn a
+ * protocol-shaped demo into a real fund-loss surface.
+ */
+app.get('/api/intents/v1/capabilities', (_req, res) => {
+  res.set('cache-control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=1200');
+  res.json(INTENT_CAPABILITIES);
+});
+
+app.post('/api/intents/v1/validate', (req, res) => {
+  const result = validateIntentEnvelope(req.body);
+  res.status(result.ok ? 200 : 400).json(result);
+});
 
 /*
  * ─── INDEXNOW OWNERSHIP KEY, SERVED FROM THE API ────────────────────────────

@@ -6,11 +6,11 @@
  * ─── THE TWO RULES THAT MAKE THIS SAFE ──────────────────────────────────────
  *
  * 1. WE ONLY EVER EXECUTE A QUOTE WE CAN EXECUTE.
- *    A quote is only allowed to WIN if it is executable. OpenOcean is quoted
- *    but not executed (see lib/openocean.js), so it can never become the
- *    signed transaction. Showing a user a better price and then signing a
- *    different one would be the worst possible bug on this screen: they
- *    consented to a number that is not what happens.
+ *    A quote is only allowed to WIN if it is executable. KyberSwap and
+ *    OpenOcean have hardened signing paths; Velora is currently quote-only.
+ *    Showing a user Velora's better price and then signing a different route
+ *    would be the worst possible bug on this screen: they consented to a
+ *    number that is not what happens.
  *
  *    So a better-but-not-executable quote is used for exactly one thing —
  *    telling the user we checked, and by how much the winner led. It never
@@ -131,6 +131,26 @@ export function pickBestQuote(quotes) {
   };
 }
 
+/** A compact, JSON-safe row for a Proof-of-Execution quote trace. */
+function traceQuote(id, quote, latencyMs) {
+  const usable = isUsableQuote(quote);
+  return {
+    solver: String(id || quote?.source || 'unknown').slice(0, 64),
+    status: usable ? 'quoted' : 'unusable',
+    executable: usable ? quote.executable !== false : false,
+    amountOutWei: usable ? quote.amountOutWei.toString() : null,
+    amountOut: usable && Number.isFinite(Number(quote.amountOut)) ? Number(quote.amountOut) : null,
+    amountOutUsd: usable && Number.isFinite(Number(quote.amountOutUsd)) ? Number(quote.amountOutUsd) : null,
+    gasUsd: usable && Number.isFinite(Number(quote.gasUsd)) ? Number(quote.gasUsd) : null,
+    minOut: usable && Number.isFinite(Number(quote.minOut)) ? Number(quote.minOut) : null,
+    feeBps: usable && Number.isFinite(Number(quote.feeBps)) ? Number(quote.feeBps) : null,
+    slippage: usable && Number.isFinite(Number(quote.slippage)) ? Number(quote.slippage) : null,
+    hops: usable && Number.isFinite(Number(quote.hops)) ? Number(quote.hops) : null,
+    error: quote?.error ? String(quote.error).slice(0, 80) : null,
+    latencyMs: Math.max(0, Math.round(latencyMs))
+  };
+}
+
 /**
  * Run every quote source concurrently and pick a winner.
  *
@@ -140,8 +160,13 @@ export function pickBestQuote(quotes) {
  * function adds no waiting of its own. A source that rejects is simply absent
  * from the comparison.
  *
- * @param {Array<() => Promise>} sources  thunks, so nothing starts until here
- * @returns {Promise<{best, alternatives, checked, beatenBy, failures, answered}>}
+ * A source can be the legacy function form, or `{ id, quote }`. The named form
+ * is used by the live swap engine because a rejection contains no quote object
+ * from which to recover the solver name. Without the name, a proof would say
+ * only that "something failed", which is not an auditable route search.
+ *
+ * @param {Array<Function|{id:string,quote:Function}>} sources
+ * @returns {Promise<{best, alternatives, checked, beatenBy, failures, answered, trace}>}
  *   failures  the rejection reasons, so the caller can tell a genuine
  *             "no route on this pair" from "every routing service was
  *             unreachable" — the two need different messages (see
@@ -149,21 +174,62 @@ export function pickBestQuote(quotes) {
  *   answered  how many sources returned ANY response (even an unusable one).
  *             A source that answered at all is evidence the network path to
  *             it works, which is what makes the distinction trustworthy.
+ *   trace     compact evidence for every requested source, including failures.
  */
 export async function quoteAllSources(sources) {
-  const settled = await Promise.allSettled(sources.map((fn) => fn()));
+  const entries = (sources ?? []).map((source, index) => ({
+    id: typeof source === 'function' ? `solver-${index + 1}` : String(source?.id || `solver-${index + 1}`),
+    quote: typeof source === 'function' ? source : source?.quote
+  }));
+
+  const settled = await Promise.allSettled(entries.map(async (entry) => {
+    const startedAt = Date.now();
+    try {
+      if (typeof entry.quote !== 'function') throw new Error('BAD_SOLVER');
+      const value = await entry.quote();
+      return { value, latencyMs: Date.now() - startedAt };
+    } catch (reason) {
+      /* Preserve the individual duration through Promise.allSettled's rejected
+         branch. Measuring after all sources settle would give every fast
+         solver the slowest solver's latency and make the audit trace false. */
+      const timed = new Error(reason?.message || String(reason || 'QUOTE_FAILED'));
+      timed.originalReason = reason;
+      timed.quoteLatencyMs = Date.now() - startedAt;
+      throw timed;
+    }
+  }));
 
   const quotes = [];
   const failures = [];
+  const trace = [];
   let answered = 0;
-  for (const r of settled) {
+  settled.forEach((r, index) => {
     if (r.status === 'fulfilled') {
+      const { value, latencyMs } = r.value;
       answered += 1;
-      if (isUsableQuote(r.value)) quotes.push(r.value);
+      trace.push(traceQuote(entries[index].id, value, latencyMs));
+      if (isUsableQuote(value)) quotes.push(value);
     } else {
-      failures.push(r.reason);
+      const reason = r.reason?.originalReason ?? r.reason;
+      const latencyMs = r.reason?.quoteLatencyMs ?? 0;
+      failures.push(reason);
+      trace.push({
+        solver: entries[index].id.slice(0, 64),
+        status: 'rejected',
+        executable: false,
+        amountOutWei: null,
+        amountOut: null,
+        amountOutUsd: null,
+        gasUsd: null,
+        minOut: null,
+        feeBps: null,
+        slippage: null,
+        hops: null,
+        error: String(reason?.message || 'QUOTE_FAILED').slice(0, 80),
+        latencyMs: Math.max(0, Math.round(latencyMs))
+      });
     }
-  }
+  });
 
-  return { ...pickBestQuote(quotes), failures, answered };
+  return { ...pickBestQuote(quotes), failures, answered, trace };
 }

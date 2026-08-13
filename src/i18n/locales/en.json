@@ -40,7 +40,8 @@
     "dydx": "dYdX Orbit",
     "derivatives": "Derivatives Hall",
     "portfolio": "Portfolio",
-    "smartWallet": "Smart Wallet"
+    "smartWallet": "Smart Wallet",
+    "intentOS": "Intent OS"
   },
   "common": {
     "balance": "Balance",
@@ -584,7 +585,10 @@
     "gaslessSubmitted": "Your signature has been relayed. The transaction is submitted for you and settles in a moment — you do not need to keep this open.",
     "solanaSlippageNote": "Solana swaps use {{pct}}% — the same default as the EVM tab, so one setting covers both.",
     "solanaOnlyTitle": "Why fewer options here?",
-    "solanaOnlyBody": "Auto-slippage, the transaction deadline and expert mode are specific to the EVM path: auto-slippage is derived from an EVM price quote, the deadline is an argument to an EVM router, and expert mode skips the EVM review screen. None of them has an equivalent on Solana, so showing them here would be controls that do nothing — which is exactly the problem this screen just had."
+    "solanaOnlyBody": "Auto-slippage, the transaction deadline and expert mode are specific to the EVM path: auto-slippage is derived from an EVM price quote, the deadline is an argument to an EVM router, and expert mode skips the EVM review screen. None of them has an equivalent on Solana, so showing them here would be controls that do nothing — which is exactly the problem this screen just had.",
+    "proofReady": "Proof-of-Execution receipt created",
+    "proofVerified": "Hashed",
+    "proofScope": "Best executable response among usable quotes observed in that round — not a claim of global optimality."
   },
   "onboarding": {
     "skip": "Skip",
@@ -3374,5 +3378,269 @@
       "event": "Market event"
     },
     "marketUnavailable": "Live market data unavailable"
+  },
+  "intentOS": {
+    "eyebrow": "Financial intent control plane",
+    "title": "Declare the outcome. Keep control.",
+    "subtitle": "FBT turns an explicit financial goal into policy checks, solver candidates, a user-signed execution and a verifiable receipt — without giving AI unrestricted access to funds.",
+    "badge": {
+      "nonCustodial": "Non-custodial",
+      "policyBound": "Bound by policy",
+      "verifiable": "Verifiable receipts"
+    },
+    "pipelineTitle": "Intent execution pipeline",
+    "stage": {
+      "intent": "Intent",
+      "risk": "Risk",
+      "solvers": "Solvers",
+      "simulation": "Simulate",
+      "execution": "Execute",
+      "verification": "Verify"
+    },
+    "tab": {
+      "compose": "Compose",
+      "memory": "Memory",
+      "proofs": "Proofs",
+      "network": "Network"
+    },
+    "compose": {
+      "choose": "Choose an outcome",
+      "structured": "Money fields stay deterministic",
+      "localOnly": "Local draft",
+      "compile": "Compile through risk engine"
+    },
+    "template": {
+      "swap": {
+        "title": "Best-route swap",
+        "body": "Compare executable DEX routes under one fee and slippage policy."
+      },
+      "outcome": {
+        "title": "Outcome request",
+        "body": "Set a minimum receive amount and a deadline for competing solvers."
+      },
+      "automation": {
+        "title": "Rule-based intent",
+        "body": "Watch a condition, then require your review and signature."
+      },
+      "workflow": {
+        "title": "Composable workflow",
+        "body": "Model swap, bridge, deposit, borrow and send as one plan."
+      }
+    },
+    "field": {
+      "pay": "You provide",
+      "receive": "Desired outcome",
+      "fromToken": "Input token",
+      "toToken": "Output token",
+      "bestAvailable": "Best available",
+      "chain": "Starting network",
+      "deadline": "Deadline",
+      "hours": "{{n}} hours",
+      "usdValue": "Declared USD estimate",
+      "usdValueHint": "Context only. Policy checks trust this automatically only for stablecoin input.",
+      "slippage": "Maximum slippage (%)",
+      "privacy": "Privacy requirement",
+      "condition": "Trigger rule",
+      "targetPrice": "{{symbol}} target price",
+      "scheduleSignature": "The schedule prepares a review; it never signs in the background.",
+      "workflowAction": "Action {{n}}",
+      "workflowTarget": "Asset, chain or destination",
+      "addStep": "Add workflow step",
+      "removeStep": "Remove step",
+      "note": "Intent note (optional)",
+      "notePlaceholder": "Explain the outcome in your own words…",
+      "noteSafety": "The note is context only. Execution is compiled from the structured fields above."
+    },
+    "condition": {
+      "priceBelow": "Price falls below",
+      "priceAbove": "Price rises above",
+      "daily": "Every day",
+      "weekly": "Every week",
+      "monthly": "Every month"
+    },
+    "privacy": {
+      "standard": {
+        "title": "Standard",
+        "body": "Normal wallet broadcast. Token, amount and strategy may become public before or during settlement."
+      },
+      "relay": {
+        "title": "Private relay",
+        "body": "A private mempool can reduce public exposure, but this app cannot attest which RPC an external wallet used."
+      },
+      "confidential": {
+        "title": "Confidential",
+        "body": "Requires commit-reveal, an enclave or threshold encryption. No such transport is connected yet."
+      }
+    },
+    "action": {
+      "swap": "Swap",
+      "bridge": "Bridge",
+      "deposit": "Deposit",
+      "borrow": "Borrow",
+      "send": "Send"
+    },
+    "result": {
+      "title": "Compiled execution plan",
+      "ready-for-review": "Ready for review",
+      "draft-only": "Draft only",
+      "solverCandidates": "Solver and adapter coverage",
+      "reviewHandoff": "Open the user-signed review",
+      "draftOnly": "This outcome is saved as a local draft. FBT will not pretend an unavailable privacy, outcome or atomic-workflow adapter is live."
+    },
+    "solverStatus": {
+      "eligible": "Eligible",
+      "ineligible": "Not a match",
+      "unavailable": "Not connected",
+      "partial": "Partial",
+      "manual-signature": "Manual sign"
+    },
+    "solver": {
+      "fbt-evm-aggregator": {
+        "title": "DEX route solver",
+        "body": "Parallel live routes with same-fee, same-slippage comparison."
+      },
+      "fbt-order-watcher": {
+        "title": "Local rule watcher",
+        "body": "Watches price or time and asks you to sign; it never holds a key."
+      },
+      "fbt-cross-chain-adapter": {
+        "title": "Cross-chain adapter",
+        "body": "Prepares a separately signed bridge route; not one atomic workflow."
+      },
+      "external-outcome-market": {
+        "title": "Open outcome marketplace",
+        "body": "CEX, OTC, inventory and composite solver bids need bonded settlement."
+      },
+      "confidential-intent-transport": {
+        "title": "Confidential intent transport",
+        "body": "Threshold encryption or confidential compute is required before this can be called private."
+      }
+    },
+    "check": {
+      "SELF_CUSTODY": {
+        "title": "Self-custody preserved",
+        "body": "FBT receives no seed phrase and holds no user balance."
+      },
+      "USER_SIGNATURE_REQUIRED": {
+        "title": "Final signature stays with you",
+        "body": "No plan can bypass the wallet confirmation."
+      },
+      "PROOF_REQUESTED": {
+        "title": "Execution receipt policy",
+        "body": "A content-addressed receipt is requested after confirmed settlement."
+      },
+      "SLIPPAGE_ABOVE_MEMORY": {
+        "title": "Slippage exceeds your memory rule",
+        "body": "{{requested}}% requested; your maximum is {{maximum}}%."
+      },
+      "SLIPPAGE_WITHIN_MEMORY": {
+        "title": "Slippage is inside your rule",
+        "body": "Your stored maximum is {{maximum}}%."
+      },
+      "USD_VALUE_UNKNOWN": {
+        "title": "USD value is not verified",
+        "body": "The spend and privacy thresholds cannot be evaluated from a ticker alone."
+      },
+      "OVER_SPEND_LIMIT": {
+        "title": "Spend cap blocks this intent",
+        "body": "${{amountUsd}} is above your ${{maximum}} per-intent limit."
+      },
+      "SPEND_WITHIN_LIMIT": {
+        "title": "Spend is inside your limit",
+        "body": "Estimated value: ${{amountUsd}}."
+      },
+      "QUIET_HOURS": {
+        "title": "Quiet-hours rule is active",
+        "body": "Your memory says not to prepare executions at this local time."
+      },
+      "OUTSIDE_QUIET_HOURS": {
+        "title": "Outside quiet hours",
+        "body": "The local time rule permits review."
+      },
+      "CONFIDENTIAL_TRANSPORT_UNAVAILABLE": {
+        "title": "Confidential transport is unavailable",
+        "body": "No threshold-encrypted or confidential-compute solver channel is connected."
+      },
+      "PRIVATE_RELAY_NOT_ATTESTED": {
+        "title": "Private relay cannot be attested",
+        "body": "Ethereum has protect RPCs, but an external wallet chooses the broadcaster and returns no transport proof."
+      },
+      "PRIVATE_RELAY_UNAVAILABLE": {
+        "title": "No verified private relay on this network",
+        "body": "FBT will not label a normal broadcast as private."
+      },
+      "STANDARD_BROADCAST_DISCLOSED": {
+        "title": "Public-transport risk disclosed",
+        "body": "The transaction may be visible to validators and routing services."
+      },
+      "OUTCOME_SOLVER_NETWORK_UNAVAILABLE": {
+        "title": "Outcome market is not live yet",
+        "body": "No bonded CEX, OTC or inventory solver network is connected."
+      },
+      "WORKFLOW_NOT_ATOMIC": {
+        "title": "Workflow is not atomic",
+        "body": "{{steps}} steps can be modelled, but today they require separate reviews and signatures."
+      },
+      "AUTOMATION_REQUIRES_FINAL_SIGNATURE": {
+        "title": "Automation stops before spending",
+        "body": "The watcher can notify and prefill; it cannot sign or spend for you."
+      }
+    },
+    "error": {
+      "BAD_KIND": "Choose a supported intent type.",
+      "BAD_CHAIN": "Choose a supported starting network.",
+      "BAD_TOKENS": "Enter both token symbols.",
+      "SAME_TOKEN": "Input and output tokens must differ.",
+      "BAD_AMOUNT": "Enter an amount greater than zero.",
+      "BAD_OUTCOME": "An outcome request needs a positive minimum receive amount.",
+      "BAD_CONDITION": "Choose a valid trigger and target.",
+      "BAD_WORKFLOW": "A workflow needs two to eight valid actions."
+    },
+    "saved": {
+      "title": "Recent local drafts",
+      "local": "On this device",
+      "remove": "Remove draft"
+    },
+    "memory": {
+      "title": "Memory Wallet",
+      "subtitle": "Explicit preferences become enforceable local rules. FBT does not silently learn permission to spend.",
+      "preferredChain": "Preferred network",
+      "maxSlippage": "Maximum slippage (%)",
+      "privateAbove": "Require private handling above (USD)",
+      "maxSpend": "Maximum per intent (USD)",
+      "quietHours": "Quiet hours",
+      "quietBody": "Block plan hand-off between two local hours.",
+      "from": "From hour",
+      "to": "Until hour",
+      "requireProof": "Require execution receipt",
+      "requireProofBody": "Ask the execution path to save its route decision evidence.",
+      "save": "Save memory rules",
+      "localNotice": "These rules are stored on this device. They are policy for this app, not an on-chain account-abstraction contract and not permission for AI to move funds."
+    },
+    "proof": {
+      "title": "Proof-of-Execution receipts",
+      "subtitle": "Constraints, observed solver responses, route selection and confirmed transaction in one canonical document.",
+      "confirmed": "Confirmed",
+      "scope": "Best executable response among usable responses observed in that quote round — not a claim of global optimality.",
+      "verify": "Recompute digest",
+      "download": "Download JSON",
+      "empty": "No receipts yet",
+      "emptyBody": "A receipt is created after a supported EVM swap confirms on-chain.",
+      "openSwap": "Open swap",
+      "limit": "The SHA-256 digest is a reproducible content fingerprint, not an FBT signature or a zero-knowledge proof. Protocol authenticity requires signed solver commitments and an external anchor.",
+      "DIGEST_MATCH": "Digest matches the canonical receipt",
+      "DIGEST_MISMATCH": "Receipt content does not match its digest",
+      "BAD_PROOF": "This is not a valid FBT receipt",
+      "CRYPTO_UNAVAILABLE": "Secure hashing is unavailable in this browser"
+    },
+    "network": {
+      "title": "DEX-to-DEX execution network",
+      "subtitle": "A versioned discovery surface lets wallets, DEXs and market makers integrate as solver roles instead of hidden liquidity sources.",
+      "live": "Live",
+      "roadmap": "Roadmap",
+      "aiTitle": "AI proposes. Policy authorises.",
+      "aiBody": "Models may explain or propose a structured intent. Deterministic limits, simulation, wallet signatures and smart contracts control every real execution.",
+      "safetyNotice": "Public bid submission remains closed until solver authentication, replay protection, quote commitments, bonding and dispute rules exist. Opening it earlier would add attack surface, not decentralisation."
+    }
   }
 }
