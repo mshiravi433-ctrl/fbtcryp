@@ -258,6 +258,43 @@
   box-shadow: 0 0 0 3px rgba(0,229,255,0.10);
 }
 
+/* The dark ticket intentionally uses a smoked input well. Reusing that
+   rgba(0,0,0,.28) on the light theme produced a dirty grey price field, with
+   a second white input and border nested inside it. Use an opaque, softly
+   tinted surface in light mode and let the outer shell own the border. */
+:root[data-theme='light'] .swap-ticket {
+  border-color: rgba(51, 65, 85, 0.14);
+  background:
+    radial-gradient(110% 90% at 8% -10%, rgba(106, 58, 224, 0.08), transparent 55%),
+    #ffffff;
+  box-shadow: 0 14px 34px -22px rgba(15, 23, 42, 0.34);
+}
+
+:root[data-theme='light'] .swap-ticket .swap-field {
+  border-color: rgba(0, 131, 146, 0.20);
+  background:
+    linear-gradient(135deg, rgba(0, 131, 146, 0.045), rgba(106, 58, 224, 0.025)),
+    #ffffff;
+  box-shadow: 0 3px 12px -9px rgba(15, 23, 42, 0.32);
+}
+
+:root[data-theme='light'] .swap-ticket .swap-field:focus-within {
+  border-color: rgba(0, 131, 146, 0.52);
+  box-shadow: 0 0 0 3px rgba(0, 131, 146, 0.10);
+}
+
+:root[data-theme='light'] .swap-ticket .swap-field > input {
+  min-width: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme='light'] .swap-ticket .swap-field > input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .trade-summary-row {
   display: flex;
   align-items: center;
