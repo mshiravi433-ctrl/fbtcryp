@@ -126,6 +126,11 @@ const GROUPS = [
     id: 'earn',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
+      /* Intent OS now owns the raised centre button. Orders therefore needs a
+         direct discovery path again; it remains the specialised editor for
+         limit, DCA, TWAP and rebalance plans compiled by the OS. */
+      { to: '/orders', key: 'nav.orders', Icon: IconClock, hue: 'var(--rgb-1)' },
+      { to: '/portfolio', key: 'nav.portfolio', Icon: IconBriefcase, hue: 'var(--rgb-2)' },
       /* Points and ranking are one screen now — a score is only meaningful
          next to the standing it produces. */
       { to: '/rewards', key: 'rewards.title', Icon: IconTrophy, hue: 'var(--rgb-5)' },
@@ -139,13 +144,9 @@ const GROUPS = [
     items: [
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
-      /*
-        Auto Orders is NOT listed here: it is the raised centre button in the
-        bottom nav, which is the most prominent control on the screen. A menu
-        entry for it would be the same destination reachable two ways, and a
-        "More" list is worth reading only in proportion to how little of it
-        duplicates what is already on screen.
-      */
+      /* Auto Orders moved into the Earn group when Intent OS became the raised
+         centre action. Keeping this note here prevents a later refactor from
+         adding a second duplicate doorway in the More group. */
       /*
         NFTs are NOT listed here. The collection lives inside the real-wallet
         tab, where it belongs — an NFT is a thing you hold, so it sits with

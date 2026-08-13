@@ -271,9 +271,10 @@ export async function run(container) {
   const activeRule = rule('.nav-centre.active .nav-centre-drop {');
   t('the active state does not fight Framer for the transform', !/transform:/.test(activeRule));
 
-  /* The glyph must match where the button actually goes. A home icon on a
-     Buy button was already caught once; now it points at Automatic Orders. */
-  t('the centre button goes to automatic orders', /to: '\/orders'/.test(jsx));
+  /* The glyph must match where the button actually goes. Intent OS is now the
+     control plane; Automatic Orders remains a specialised screen reached from
+     the menu and from a compiled automation intent. */
+  t('the centre button goes to Intent OS', /to: '\/intent'/.test(jsx));
 
   await act(async () => root.unmount());
   return rows;

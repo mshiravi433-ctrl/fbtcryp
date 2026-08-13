@@ -89,6 +89,7 @@ const SolanaSwap = lazyRetry(() => import('./pages/SolanaSwap'));
 const Buy = lazyRetry(() => import('./pages/Buy'));
 const SmartWallet = lazyRetry(() => import('./pages/SmartWallet'));
 const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
+const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
@@ -278,6 +279,7 @@ function AnimatedRoutes() {
             <Route path="/buy" element={<Buy />} />
             <Route path="/smart-wallet" element={<SmartWallet />} />
             <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/intent" element={<IntentOS />} />
             <Route path="*" element={<Market />} />
           </Routes>
         </AnimatePresence>

@@ -27,7 +27,8 @@
       "markets": "Mercados",
       "earn": "Ganhar",
       "more": "Mais"
-    }
+    },
+    "intentOS": "Sistema de intents"
   },
   "common": {
     "balance": "Saldo",

@@ -41,11 +41,13 @@ const ITEMS = [
 ];
 
 /**
- * The centre action. Buy is the single thing we most want a new user to do,
- * and it is the one route that earns nothing until they reach it — so it gets
- * the most prominent control on the screen.
+ * The centre action is the product's control plane: an outcome is compiled
+ * through policy and solver checks, then handed to Swap or Orders for the
+ * user's signature. Automatic Orders remains reachable from inside Intent OS;
+ * promoting the operating system instead of one order type is what keeps the
+ * navigation aligned with the broader execution layer.
  */
-const CENTRE = { to: '/orders', key: 'nav.orders' };
+const CENTRE = { to: '/intent', key: 'nav.intentOS' };
 
 /**
  * The droplet.
@@ -97,10 +99,10 @@ function CentreAction({ active, still, label, onClick }) {
       />
       <span className="nav-centre-glyph" aria-hidden="true">
         {/*
-          Two thin arrows crossing — the universal "scheduled / recurring"
-          mark, and the same visual family as the swap icon already in the
-          bar. It points at Automatic Orders, which is where this button now
-          goes.
+          A centre node connected to three outcomes: the smallest readable
+          expression of Intent → policy → multiple execution paths. It points
+          at Intent OS rather than implying that the control is only a swap or
+          only a scheduled order.
 
           STROKED, not filled. On a small flat circle a light outline reads as
           more delicate than a filled glyph, which was the original request.
@@ -136,7 +138,11 @@ function CentreAction({ active, still, label, onClick }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M4 8h13l-3.2-3.2M20 16H7l3.2 3.2" />
+          <circle cx="12" cy="12" r="2.4" />
+          <circle cx="5" cy="6" r="1.6" />
+          <circle cx="19" cy="6" r="1.6" />
+          <circle cx="12" cy="20" r="1.6" />
+          <path d="M10.2 10.4 6.3 7.1m7.5 3.3 3.9-3.3M12 14.4v4" />
         </svg>
       </span>
     </motion.button>

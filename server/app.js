@@ -66,6 +66,25 @@ import {
 } from './store.js';
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
+import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
+import { parseSolverRegistry, publicSolverRegistry } from './intentSignatures.js';
+import { appendSignedCommitment, readIntentLog, transparencyStatus } from './intentTransparency.js';
+import {
+  auctionProtocolStatus,
+  auctionSealStatus,
+  authenticateAuctionClose,
+  closeAuction,
+  publicCoordinator,
+  readAuction,
+  storeAuctionAnchor
+} from './intentAuctions.js';
+import {
+  buildAnchorCalldata,
+  parseAnchorNetworks,
+  publicAnchorNetworks,
+  verifyAnchorClaim
+} from './intentAnchors.js';
+import { withIntentLock } from './intentLocks.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -155,6 +174,32 @@ setInterval(() => {
   for (const [k, v] of aiHits) if (now > v.reset) aiHits.delete(k);
 }, WINDOW_MS).unref?.();
 
+/* On-chain anchor verification spends uncached RPC quota. It is public because
+   the event is self-authenticating, but it gets the same small per-caller
+   budget as AI rather than the broad cached-data allowance. */
+const anchorHits = new Map();
+const ANCHOR_MAX_PER_WINDOW = Number(process.env.INTENT_ANCHOR_RATE_LIMIT || 10);
+app.use('/api/intents/v1/auctions', (req, res, next) => {
+  if (req.method !== 'POST' || !req.path.endsWith('/anchor')) return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = anchorHits.get(key);
+  if (!rec || now > rec.reset) {
+    anchorHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > ANCHOR_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'ANCHOR_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of anchorHits) if (now > v.reset) anchorHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 /* -------------------------------- helpers -------------------------------- */
 
 /**
@@ -201,6 +246,137 @@ function serve(res, ttlMs) {
 app.get('/api/health', (_req, res) =>
   res.json({ ok: true, uptime: process.uptime(), cache: cacheStats(), bot: Boolean(BOT_TOKEN) })
 );
+
+/*
+ * INTENT NETWORK DISCOVERY + AUTHENTICATED COMMITMENTS.
+ * Discovery and logs are public. Submission authenticates a bounded quote with
+ * a registered Ed25519 key and stores evidence only—never executable calldata,
+ * spending authority, a bond claim, or permission to settle user funds.
+ */
+app.get('/api/intents/v1/capabilities', (_req, res) => {
+  const registry = parseSolverRegistry();
+  const anchorNetworks = parseAnchorNetworks();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  res.json({
+    ...INTENT_CAPABILITIES,
+    transparency: transparencyStatus(registry),
+    auctions: auctionProtocolStatus(anchorNetworks.size)
+  });
+});
+
+app.get('/api/intents/v1/solvers', (_req, res) => {
+  const registry = parseSolverRegistry();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  res.json({ algorithm: 'Ed25519', solvers: publicSolverRegistry(registry) });
+});
+
+app.post('/api/intents/v1/validate', (req, res) => {
+  const result = validateIntentEnvelope(req.body);
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/intents/v1/commitments', async (req, res) => {
+  const registry = parseSolverRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
+  const intentHash = String(req.body?.intentHash || '').toLowerCase();
+  const result = await withIntentLock(intentHash, async () => {
+    if (/^0x[a-f0-9]{64}$/.test(intentHash)) {
+      const admission = await auctionSealStatus(intentHash);
+      if (!admission.ok) return { ok: false, code: admission.code };
+      if (admission.sealed) return { ok: false, code: 'AUCTION_CLOSED' };
+    }
+    const appended = await appendSignedCommitment(req.body, { registry });
+    if (appended.ok && /^0x[a-f0-9]{64}$/.test(intentHash)) {
+      const afterWrite = await auctionSealStatus(intentHash);
+      if (!afterWrite.ok) return { ok: false, code: afterWrite.code };
+      if (afterWrite.sealed) {
+        return { ok: false, code: 'AUCTION_CLOSE_RACE', storedEntryHash: appended.entryHash };
+      }
+    }
+    return appended;
+  });
+  if (result.ok) return res.status(201).json(result);
+  const status = result.code === 'UNREGISTERED_SOLVER' || result.code === 'SIGNATURE_MISMATCH'
+    ? 403
+    : ['NONCE_REPLAY', 'AUCTION_CLOSED', 'AUCTION_CLOSE_RACE'].includes(result.code) ? 409
+      : ['LOG_WRITE_FAILED', 'LOG_READ_FAILED', 'AUCTION_STORE_UNAVAILABLE', 'INVALID_STORED_SEAL'].includes(result.code) ? 503 : 400;
+  return res.status(status).json({ error: result.code });
+});
+
+app.get('/api/intents/v1/log/:intentHash', async (req, res) => {
+  const result = await readIntentLog(req.params.intentHash);
+  if (result.error) return res.status(result.error === 'LOG_READ_FAILED' ? 503 : 400).json(result);
+  /* A log can grow until the intent expires, so intermediary caches must
+     revalidate rather than freezing an incomplete bid set. */
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(result);
+});
+
+app.get('/api/intents/v1/coordinator', (_req, res) => {
+  const coordinator = publicCoordinator();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.status(coordinator ? 200 : 503).json(coordinator || { error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
+});
+
+app.get('/api/intents/v1/anchor-networks', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json({ networks: publicAnchorNetworks() });
+});
+
+app.get('/api/intents/v1/auctions/:intentHash', async (req, res) => {
+  const result = await readAuction(req.params.intentHash);
+  if (result.error) {
+    const status = ['AUCTION_STORE_UNAVAILABLE', 'INVALID_STORED_SEAL', 'INVALID_STORED_CLOSE', 'INVALID_STORED_ANCHOR']
+      .includes(result.error) ? 503 : 400;
+    return res.status(status).json(result);
+  }
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(result);
+});
+
+app.post('/api/intents/v1/auctions/:intentHash/close', async (req, res) => {
+  const auth = authenticateAuctionClose(req.get('authorization'));
+  if (!auth.ok) {
+    return res.status(auth.code === 'AUCTION_CLOSE_NOT_CONFIGURED' ? 503 : 401).json({ error: auth.code });
+  }
+  if (String(req.body?.intentHash || '').toLowerCase() !== String(req.params.intentHash).toLowerCase()) {
+    return res.status(400).json({ error: 'INTENT_HASH_MISMATCH' });
+  }
+  const result = await closeAuction(req.body);
+  if (result.ok) return res.status(result.alreadyClosed ? 200 : 201).json(result);
+  const status = [
+    'AUCTION_STORE_UNAVAILABLE', 'AUCTION_WRITE_FAILED', 'LOG_READ_FAILED',
+    'INVALID_STORED_SEAL', 'INVALID_STORED_CLOSE'
+  ].includes(result.code) ? 503 : ['AUCTION_ALREADY_SEALED'].includes(result.code) ? 409 : 400;
+  return res.status(status).json({ error: result.code });
+});
+
+app.get('/api/intents/v1/auctions/:intentHash/anchor-calldata/:chainId', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const result = buildAnchorCalldata(state.close, Number(req.params.chainId));
+  return res.status(result.ok ? 200 : 400).json(result.ok ? result : { error: result.code });
+});
+
+app.post('/api/intents/v1/auctions/:intentHash/anchor', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const verified = await verifyAnchorClaim(state.close, req.body);
+  if (!verified.ok) {
+    const status = verified.code === 'ANCHOR_RPC_UNAVAILABLE' ? 503
+      : ['ANCHOR_NOT_MINED', 'ANCHOR_NOT_FINAL'].includes(verified.code) ? 409 : 400;
+    return res.status(status).json({ error: verified.code, ...verified });
+  }
+  const stored = await storeAuctionAnchor(state.close, verified.anchor);
+  if (!stored.ok) {
+    const status = ['AUCTION_STORE_UNAVAILABLE', 'AUCTION_WRITE_FAILED', 'INVALID_STORED_ANCHOR']
+      .includes(stored.code) ? 503 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyAnchored ? 200 : 201).json(stored);
+});
 
 /*
  * ─── INDEXNOW OWNERSHIP KEY, SERVED FROM THE API ────────────────────────────

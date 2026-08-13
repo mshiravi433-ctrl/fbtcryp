@@ -176,6 +176,46 @@ import {
   headerInsightItems,
   isEventStory
 } from '../src/lib/marketInsights.js';
+import {
+  DEFAULT_INTENT_MEMORY,
+  compileIntent,
+  isQuietTime,
+  loadIntentMemory,
+  normalizeIntent,
+  saveIntentMemory
+} from '../src/lib/intentOS.js';
+import {
+  canonicalJson,
+  createExecutionProof,
+  verifyExecutionProof
+} from '../src/lib/executionProof.js';
+import { validateIntentEnvelope } from '../server/intents.js';
+import {
+  generateSolverKeyPair,
+  signSolverCommitment,
+  verifySolverCommitment
+} from '../server/intentSignatures.js';
+import {
+  appendSignedCommitment,
+  merkleProof,
+  merkleRoot,
+  readIntentLog,
+  signedCommitmentHash,
+  verifyMerkleProof
+} from '../server/intentTransparency.js';
+import {
+  AUCTION_POLICY,
+  closeAuction,
+  evaluateAuction,
+  readAuction,
+  verifyAuctionClose
+} from '../server/intentAuctions.js';
+import {
+  INTENT_ANCHOR_ABI,
+  buildAnchorCalldata,
+  verifyAnchorClaim
+} from '../server/intentAnchors.js';
+import { Interface } from 'ethers';
 
 export default async function run() {
   const rows = [];
@@ -4500,7 +4540,7 @@ export default async function run() {
     recordSpend(90);
     t('crossing the daily cap is refused', checkPolicy({ usd: 20 }).code === 'OVER_DAILY_LIMIT');
     t('NaN is refused, not passed', checkPolicy({ usd: NaN }).ok === false);
-    t('a default daily cap is $500', DEFAULT_POLICY.dailyLimitUsd === 500);
+    t('the default daily cap matches the shipped $1000 policy', DEFAULT_POLICY.dailyLimitUsd === 1000);
     t('an expired session is not active', activeSession({ session: { expiresAt: Date.now() - 1 } }) === null);
 
     localStorage.removeItem('fbt-portfolio-lots-v1');
@@ -4557,6 +4597,292 @@ export default async function run() {
     }) === 'BAD_DRIFT');
     t('TWAP is not uploaded to the server', !WATCHED_TYPES.has('twap'));
     t('rebalance IS watched in the background', WATCHED_TYPES.has('rebalance'));
+  }
+
+  /* ---------------- Intent OS + Proof-of-Execution ---------------------- */
+  {
+    localStorage.removeItem('fbt-intent-memory-v1');
+    localStorage.removeItem('fbt-intents-v1');
+    localStorage.removeItem('fbt-execution-proofs-v1');
+
+    t('intent memory starts from a bounded policy',
+      loadIntentMemory().maxSlippagePct === DEFAULT_INTENT_MEMORY.maxSlippagePct);
+    const memory = saveIntentMemory({
+      ...DEFAULT_INTENT_MEMORY,
+      maxSlippagePct: 0.4,
+      maxPerIntentUsd: 2000,
+      quietHoursEnabled: false
+    });
+
+    const ready = compileIntent({
+      kind: 'swap', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '1000', amountUsd: 1000, maxSlippagePct: 0.3,
+      privacy: 'standard', deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('a policy-compliant swap compiles to review, never execution',
+      ready.status === 'ready-for-review' && ready.handoff.startsWith('/swap?'));
+    t('compiled intents always require the wallet signature',
+      ready.intent.constraints.requireUserSignature === true && ready.intent.constraints.custodyAllowed === false);
+
+    const over = compileIntent({
+      kind: 'swap', chainId: 1, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '2500', amountUsd: 2500, maxSlippagePct: 0.3,
+      privacy: 'standard', deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('memory spend limits block rather than warn',
+      over.blocked && over.checks.some((r) => r.id === 'OVER_SPEND_LIMIT' && r.level === 'block'));
+
+    const privateIntent = compileIntent({
+      kind: 'swap', chainId: 1, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3,
+      privacy: 'confidential', deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('confidential intent is not faked with a private RPC',
+      privateIntent.blocked && privateIntent.checks.some((r) => r.id === 'CONFIDENTIAL_TRANSPORT_UNAVAILABLE'));
+
+    const automation = compileIntent({
+      kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '500', amountUsd: 500, maxSlippagePct: 0.3, privacy: 'standard',
+      conditionType: 'priceBelow', conditionValue: 2500,
+      deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('a valid automation preserves its trigger but stops at manual signature',
+      automation.intent?.condition?.value === 2500 && automation.handoff === '/orders');
+    t('an automation without a target is refused', compileIntent({
+      kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '500', maxSlippagePct: 0.3, privacy: 'standard',
+      conditionType: 'priceBelow', conditionValue: 0, deadlineAt: Date.now() + 3600000
+    }, memory).error === 'BAD_CONDITION');
+
+    const workflow = compileIntent({
+      kind: 'workflow', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'WBTC',
+      amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3, privacy: 'standard',
+      deadlineAt: Date.now() + 3600000,
+      steps: [
+        { action: 'swap', asset: 'ETH' },
+        { action: 'bridge', asset: 'ETH' },
+        { action: 'deposit', asset: 'ETH' }
+      ]
+    }, memory);
+    t('a composite workflow stays draft-only until it is atomic', workflow.status === 'draft-only' && workflow.blocked);
+
+    const invalid = normalizeIntent({ kind: 'swap', chainId: 56, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: 1 }, memory);
+    t('same-token intents are refused', invalid.error === 'SAME_TOKEN');
+    t('overnight quiet hours cross midnight correctly',
+      isQuietTime({ ...memory, quietHoursEnabled: true, quietStart: 23, quietEnd: 7 }, new Date(2026, 0, 1, 1)));
+
+    const envelope = {
+      ...ready.intent,
+      constraints: { ...ready.intent.constraints, maxSlippagePct: 0.3, privacy: 'standard' }
+    };
+    t('the public solver protocol validates the same safe envelope', validateIntentEnvelope(envelope).ok);
+    t('the protocol refuses autonomous authority',
+      validateIntentEnvelope({ ...envelope, constraints: { ...envelope.constraints, requireUserSignature: false } }).code === 'UNSAFE_AUTHORITY');
+
+    t('canonical JSON is independent of key insertion order',
+      canonicalJson({ z: 1, a: { y: 2, x: 3 } }) === canonicalJson({ a: { x: 3, y: 2 }, z: 1 }));
+
+    const proof = await createExecutionProof({
+      txHash: `0x${'ab'.repeat(32)}`,
+      chainId: 42161,
+      fromToken: { symbol: 'USDC', address: `0x${'11'.repeat(20)}` },
+      toToken: { symbol: 'ETH', native: true },
+      amountIn: '1000',
+      deadlineMinutes: 20,
+      quote: {
+        source: 'aggregator', selectedSolver: 'kyberswap', amountOutWei: 400000000000000000n,
+        amountOut: 0.4, minOut: 0.398, feeBps: 70, slippage: 0.5, hops: 2,
+        executionTrace: {
+          observedAt: '2026-08-13T00:00:00.000Z',
+          selectionPolicy: 'MAX_OUTPUT_EXECUTABLE_SAME_FEE_AND_SLIPPAGE',
+          coverage: { requested: 2, answered: 2, usable: 2 },
+          candidates: [
+            { solver: 'kyberswap', status: 'quoted', executable: true, amountOutWei: '400000000000000000', amountOut: 0.4, feeBps: 70, slippage: 0.5 },
+            { solver: 'openocean', status: 'quoted', executable: true, amountOutWei: '399000000000000000', amountOut: 0.399, feeBps: 70, slippage: 0.5 }
+          ]
+        }
+      },
+      receipt: { status: 1, blockNumber: 123, gasUsed: 200000n },
+      createdAt: 1
+    });
+    const verifiedProof = await verifyExecutionProof(proof);
+    t('an execution receipt recomputes to the same SHA-256 digest', verifiedProof.ok);
+    const tampered = JSON.parse(JSON.stringify(proof));
+    tampered.payload.constraints.amountIn = '9999';
+    t('changing a receipt breaks digest verification', !(await verifyExecutionProof(tampered)).ok);
+    t('proof scope refuses global optimality', proof.payload.claim.globalOptimality === false);
+    t('unmeasured MEV savings remain null', proof.payload.decision.mevSavingsUsd === null);
+  }
+
+  {
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+    const keys = generateSolverKeyPair();
+    const solver = { id: 'unit-solver', name: 'Unit Solver', publicKey: keys.publicKey, active: true };
+    const registry = new Map([[solver.id, solver]]);
+    const unsigned = {
+      schema: 'fbt.solver-quote.v1',
+      intentHash: `0x${'de'.repeat(32)}`,
+      solverId: solver.id,
+      chainId: 42161,
+      amountOut: '400000000000000000',
+      maxGas: '250000',
+      feeBps: 70,
+      slippageBps: 50,
+      executable: true,
+      issuedAt: now,
+      validUntil: now + 90,
+      nonce: `0x${'ab'.repeat(16)}`,
+      routeCommitment: `0x${'cd'.repeat(32)}`
+    };
+    const signed = signSolverCommitment(unsigned, keys.privateKey);
+    t('registered Ed25519 solver commitments verify', verifySolverCommitment(signed, { registry, now: nowMs }).ok);
+    t('tampering a signed output invalidates its signature',
+      verifySolverCommitment({ ...signed, amountOut: '400000000000000001' }, { registry, now: nowMs }).code === 'SIGNATURE_MISMATCH');
+    t('unknown signed-commitment fields are refused rather than stored',
+      verifySolverCommitment({ ...signed, hiddenClaim: true }, { registry, now: nowMs }).code === 'UNKNOWN_FIELD');
+    t('an otherwise valid signed quote from an unregistered solver is refused',
+      verifySolverCommitment(signed, { registry: new Map(), now: nowMs }).code === 'UNREGISTERED_SOLVER');
+
+    const expired = signSolverCommitment({
+      ...unsigned,
+      issuedAt: now - 200,
+      validUntil: now - 100,
+      nonce: `0x${'ac'.repeat(16)}`
+    }, keys.privateKey);
+    t('expired solver commitments are refused', verifySolverCommitment(expired, { registry, now: nowMs }).code === 'QUOTE_EXPIRED');
+    const overlong = signSolverCommitment({
+      ...unsigned,
+      validUntil: now + 301,
+      nonce: `0x${'ae'.repeat(16)}`
+    }, keys.privateKey);
+    t('quote validity cannot exceed the five-minute protocol bound',
+      verifySolverCommitment(overlong, { registry, now: nowMs }).code === 'QUOTE_VALIDITY_TOO_LONG');
+
+    const appended = await appendSignedCommitment(signed, { registry, now: nowMs });
+    t('a signed commitment enters the immutable transparency log', appended.ok && appended.size === 1);
+    t('reusing a solver nonce is rejected as a replay',
+      (await appendSignedCommitment(signed, { registry, now: nowMs })).code === 'NONCE_REPLAY');
+
+    const signedTwo = signSolverCommitment({
+      ...unsigned,
+      amountOut: '399000000000000000',
+      nonce: `0x${'ad'.repeat(16)}`,
+      routeCommitment: `0x${'ce'.repeat(32)}`
+    }, keys.privateKey);
+    const appendedTwo = await appendSignedCommitment(signedTwo, { registry, now: nowMs });
+    const log = await readIntentLog(unsigned.intentHash);
+    const hashes = [signedCommitmentHash(signed), signedCommitmentHash(signedTwo)];
+    t('Merkle roots are deterministic regardless of input order',
+      merkleRoot(hashes) === merkleRoot([...hashes].reverse()) && appendedTwo.root === merkleRoot(hashes));
+    const inclusion = merkleProof(hashes, hashes[0]);
+    t('transparency inclusion proofs independently verify against the root',
+      verifyMerkleProof(hashes[0], inclusion, log.root));
+    t('a changed transparency leaf does not verify',
+      !verifyMerkleProof(`0x${'ff'.repeat(32)}`, inclusion, log.root));
+
+    const policy = { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 };
+    const evaluated = evaluateAuction(log.entries, policy, now);
+    t('auction selection chooses maximum signed output inside the declared limits',
+      evaluated.selectedEntryHash === signedCommitmentHash(signed)
+        && evaluated.eligibleEntryHashes.length === 2);
+
+    const oldCoordinatorId = process.env.INTENT_COORDINATOR_ID;
+    const oldCoordinatorKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = keys.privateKey;
+    try {
+      const closed = await closeAuction({
+        schema: 'fbt.auction-close-request.v1',
+        intentHash: unsigned.intentHash,
+        policy
+      }, { now: nowMs });
+      t('auction closure creates a coordinator-signed deterministic receipt',
+        closed.ok && !closed.alreadyClosed && verifyAuctionClose(closed.close)
+          && closed.close.decision.selectedEntryHash === signedCommitmentHash(signed));
+      t('the signed close refuses claims of completeness or fund authority',
+        closed.close.claims.auctionCompletenessProven === false
+          && closed.close.claims.userFundsAuthorised === false
+          && closed.close.claims.externallyAnchored === false);
+      t('changing a signed close root invalidates its structural and signature verification',
+        !verifyAuctionClose({ ...closed.close, logRoot: `0x${'ef'.repeat(32)}` }));
+      const state = await readAuction(unsigned.intentHash);
+      t('the immutable auction state exposes its verified closed receipt',
+        state.status === 'closed' && state.close.closeId === closed.close.closeId && !state.externallyAnchored);
+
+      const anchorContract = `0x${'44'.repeat(20)}`;
+      const anchorer = `0x${'55'.repeat(20)}`;
+      const anchorNetworks = new Map([[8453, {
+        chainId: 8453,
+        name: 'Unit Base',
+        contract: anchorContract,
+        rpcUrl: 'https://rpc.invalid',
+        explorerBaseUrl: 'https://explorer.invalid',
+        minConfirmations: 2
+      }]]);
+      const calldata = buildAnchorCalldata(closed.close, 8453, anchorNetworks);
+      t('anchor calldata binds the exact signed close id, intent, root, size and time',
+        calldata.ok && calldata.to.toLowerCase() === anchorContract.toLowerCase() && calldata.data.startsWith('0x'));
+
+      const anchorInterface = new Interface(INTENT_ANCHOR_ABI);
+      const encodedEvent = anchorInterface.encodeEventLog(
+        anchorInterface.getEvent('AuctionRootAnchored'),
+        [
+          closed.close.closeId,
+          closed.close.intentHash,
+          closed.close.logRoot,
+          BigInt(closed.close.logSize),
+          BigInt(closed.close.closedAt),
+          anchorer
+        ]
+      );
+      const txHash = `0x${'66'.repeat(32)}`;
+      const anchor = await verifyAnchorClaim(closed.close, {
+        schema: 'fbt.auction-anchor-claim.v1', chainId: 8453, txHash
+      }, {
+        networks: anchorNetworks,
+        rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x65' : {
+          status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+          blockHash: `0x${'77'.repeat(32)}`,
+          logs: [{ address: anchorContract, topics: encodedEvent.topics, data: encodedEvent.data }]
+        },
+        now: nowMs
+      });
+      t('a confirmed configured-contract event verifies as an external anchor',
+        anchor.ok && anchor.anchor.confirmationsAtVerification === 2 && anchor.anchor.verified);
+      const earlyAnchor = await verifyAnchorClaim(closed.close, {
+        schema: 'fbt.auction-anchor-claim.v1', chainId: 8453, txHash
+      }, {
+        networks: anchorNetworks,
+        rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x64' : {
+          status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+          blockHash: `0x${'77'.repeat(32)}`,
+          logs: [{ address: anchorContract, topics: encodedEvent.topics, data: encodedEvent.data }]
+        }
+      });
+      t('an otherwise matching anchor waits for the configured confirmation threshold',
+        earlyAnchor.code === 'ANCHOR_NOT_FINAL' && earlyAnchor.confirmations === 1);
+      const wrongRootEvent = anchorInterface.encodeEventLog(
+        anchorInterface.getEvent('AuctionRootAnchored'),
+        [closed.close.closeId, closed.close.intentHash, `0x${'88'.repeat(32)}`,
+          BigInt(closed.close.logSize), BigInt(closed.close.closedAt), anchorer]
+      );
+      const mismatch = await verifyAnchorClaim(closed.close, {
+        schema: 'fbt.auction-anchor-claim.v1', chainId: 8453, txHash
+      }, {
+        networks: anchorNetworks,
+        rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x65' : {
+          status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+          logs: [{ address: anchorContract, topics: wrongRootEvent.topics, data: wrongRootEvent.data }]
+        }
+      });
+      t('an on-chain event for a different root is rejected', mismatch.code === 'ANCHOR_EVENT_MISMATCH');
+    } finally {
+      if (oldCoordinatorId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = oldCoordinatorId;
+      if (oldCoordinatorKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = oldCoordinatorKey;
+    }
   }
 
   return rows;

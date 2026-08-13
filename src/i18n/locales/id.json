@@ -27,7 +27,8 @@
       "markets": "Pasar",
       "earn": "Dapatkan",
       "more": "Lainnya"
-    }
+    },
+    "intentOS": "Sistem intent"
   },
   "common": {
     "balance": "Saldo",

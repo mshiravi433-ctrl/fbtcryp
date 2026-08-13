@@ -11128,5 +11128,57 @@ export default function run() {
     }
   }
 
+  /* ---------------- signed solver commitments + transparency log -------- */
+  {
+    const serverApp = read('server/app.js');
+    const signatures = read('server/intentSignatures.js');
+    const transparency = read('server/intentTransparency.js');
+    const auctions = read('server/intentAuctions.js');
+    const anchors = read('server/intentAnchors.js');
+    const anchorContract = read('contracts/IntentAuctionAnchor.sol');
+    const intentPage = read('src/pages/IntentOS.jsx');
+    const envExample = read('.env.example');
+
+    t('signed commitment submission and public solver/log discovery are all wired',
+      /\/api\/intents\/v1\/solvers/.test(serverApp) &&
+      /\/api\/intents\/v1\/commitments/.test(serverApp) &&
+      /\/api\/intents\/v1\/log\/:intentHash/.test(serverApp) &&
+      /appendSignedCommitment/.test(serverApp));
+    t('solver admission uses server-only Ed25519 public keys',
+      /INTENT_SOLVER_KEYS/.test(signatures) && /Ed25519/.test(signatures) &&
+      /INTENT_SOLVER_KEYS=/.test(envExample) && !/VITE_INTENT_SOLVER/.test(envExample));
+    t('financial transparency entries never use the mutable board store',
+      /allowOverwrite:\s*false/.test(transparency) &&
+      !/from ['"]\.\/store\.js['"]/.test(transparency) &&
+      /NONCE_REPLAY/.test(transparency));
+    t('network status honestly exposes solver count, durability and external-anchor state',
+      /registeredSolvers/.test(transparency) && /persistenceMode/.test(transparency) &&
+      /externallyAnchored:\s*false/.test(transparency) &&
+      /getIntentCapabilities/.test(intentPage) && /transparency\?\.durable/.test(intentPage) &&
+      /transparency\?\.externallyAnchored/.test(intentPage));
+    t('auction close is authenticated, coordinator-signed and exposed through public state',
+      /authenticateAuctionClose/.test(serverApp) && /\/auctions\/:intentHash\/close/.test(serverApp) &&
+      /signCanonicalPayload/.test(auctions) && /verifyAuctionClose/.test(auctions) &&
+      /AUCTION_CLOSED/.test(serverApp));
+    t('auction selection and capability claims explicitly refuse completeness and fund authority',
+      /MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1/.test(auctions) &&
+      /auctionCompletenessProven:\s*false/.test(auctions) &&
+      /userFundsAuthorised:\s*false/.test(auctions) &&
+      /crossInstanceTransactionalClose:\s*false/.test(auctions));
+    t('external anchor evidence is accepted only from a verified configured-contract EVM event',
+      /eth_getTransactionReceipt/.test(anchors) && /AuctionRootAnchored/.test(anchors) &&
+      /ANCHOR_EVENT_MISMATCH/.test(anchors) && /verifyAnchorClaim/.test(serverApp));
+    t('the anchor contract is permissionless evidence and cannot hold or execute user funds',
+      /contract IntentAuctionAnchor/.test(anchorContract) && /mapping\(bytes32 anchorKey => bool\)/.test(anchorContract) &&
+      /keccak256\(abi\.encode\(closeId, intentHash, logRoot, logSize, closedAt\)\)/.test(anchorContract) &&
+      !/(IERC20|transferFrom|delegatecall|selfdestruct)/.test(anchorContract));
+    t('auction coordinator and anchor RPC secrets stay server-only',
+      /INTENT_COORDINATOR_PRIVATE_KEY=/.test(envExample) && /INTENT_AUCTION_CLOSE_TOKEN=/.test(envExample) &&
+      /INTENT_ANCHOR_NETWORKS=/.test(envExample) && !/VITE_INTENT_(COORDINATOR|ANCHOR)/.test(envExample));
+    t('Intent OS reports close, anchor-network and completeness status',
+      /auctions\?\.closeConfigured/.test(intentPage) && /configuredAnchorNetworks/.test(intentPage) &&
+      /auctionCompletenessProof/.test(intentPage));
+  }
+
   return rows;
 }
