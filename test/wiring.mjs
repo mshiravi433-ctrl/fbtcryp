@@ -7497,6 +7497,27 @@ export default function run() {
       /data-theme='light'\] select \{/.test(css));
     t('...and an option list that is dark on the dark theme',
       /select option \{[\s\S]{0,120}color: #e8ecf4/.test(css));
+
+    /* Bridge adds a more specific select class after the global rule. A
+       `background` or `padding` shorthand there silently erased both the
+       custom chevron and the space reserved for it. */
+    const uncommentedCss = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const bridgeSelect = /\.brg-select\s*\{[^}]*\}/.exec(uncommentedCss)?.[0] ?? '';
+    t('bridge selects preserve the global chevron and its reserved space',
+      /background-color:\s*var\(--bg-raised\)/.test(bridgeSelect) &&
+      !/(?:^|[;\s])background\s*:/.test(bridgeSelect) &&
+      /padding-inline-end:\s*34px/.test(bridgeSelect));
+    t('bridge selects use an opaque, native-light surface in the light theme',
+      /:root\[data-theme='light'\] \.brg-select\s*\{[^}]*background-color:\s*#ffffff[^}]*color-scheme:\s*light/.test(uncommentedCss));
+
+    /* The swap stylesheet is route-scoped and therefore cannot be inferred
+       from index.css. Its dark smoked field must have an explicit light-mode
+       replacement rather than leaking black alpha onto a white ticket. */
+    const labCss = read('src/styles/lab-modern.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    t('the light swap amount field has a clean white-tinted surface',
+      /:root\[data-theme='light'\] \.swap-ticket \.swap-field\s*\{[^}]*background:[^}]*#ffffff/.test(labCss));
+    t('the light swap amount input does not draw a second grey box',
+      /:root\[data-theme='light'\] \.swap-ticket \.swap-field > input\s*\{[^}]*background:\s*transparent[^}]*border-color:\s*transparent[^}]*box-shadow:\s*none/.test(labCss));
   }
 
   /* ---- 81. price alerts, and Velora as a third keyless source ----------- */

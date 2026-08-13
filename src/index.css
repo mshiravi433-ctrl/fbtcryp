@@ -6859,10 +6859,18 @@ body { overflow-x: clip; }
   flex: 1 1 0;
   min-width: 0;
   min-height: 44px;
-  padding: 10px 12px;
+  padding-block: 10px;
+  padding-inline-start: 12px;
+  /* Keep the selected value clear of the custom chevron. The old `padding`
+     shorthand overrode the global select padding and let long Tron labels run
+     through the arrow, which looked like broken horizontal lines in RTL. */
+  padding-inline-end: 34px;
   border-radius: 11px;
   border: 1px solid var(--line);
-  background: var(--bg-raised);
+  /* Do not use the `background` shorthand here: it erases the custom select
+     arrow declared above. `background-color` changes only the surface. */
+  background-color: var(--bg-raised);
+  background-clip: padding-box;
   color: var(--text-1);
   font-family: inherit;
   font-size: 13px;
@@ -6876,8 +6884,22 @@ body { overflow-x: clip; }
   align-items: center;
   justify-content: center;
   max-width: 96px;
+  /* This is a read-only div, not a select, so it needs no chevron space. */
+  padding-inline: 12px;
   color: var(--text-2);
   font-family: var(--font-mono);
+}
+
+/* The light canvas has an animated grid behind the page. A translucent select
+   let that grid show through the native control (most visibly on the Tokens
+   and Tron tabs), while some WebViews also picked dark system form chrome.
+   Give the control an opaque light surface and an explicit light colour scheme;
+   dark mode keeps the existing glass treatment unchanged. */
+:root[data-theme='light'] .brg-select {
+  background-color: #ffffff;
+  border-color: rgba(51, 65, 85, 0.18);
+  box-shadow: 0 2px 9px -5px rgba(15, 23, 42, 0.28);
+  color-scheme: light;
 }
 
 .brg-amount {
