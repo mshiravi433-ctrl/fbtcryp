@@ -49,6 +49,7 @@ import TokenRiskCard from '../components/TokenRiskCard';
 import MevGuard from '../components/MevGuard';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
+import { POINT_VALUES } from '../lib/ranks';
 
 /**
  * Real on-chain swap screen.
@@ -741,8 +742,15 @@ export default function Swap() {
        * gone" at the worst moment. It is reported as a pending trade instead.
        */
       setTxState({ stage: 'success', gaslessHash: res?.tradeHash ?? null, gasless: true });
-      /* A gasless swap is still a first swap. */
-      useAppStore.getState().completeQuest('firstSwap');
+      /* Accepted by the gasless service: one repeatable point plus first-swap. */
+      const rewards = useAppStore.getState();
+      rewards.awardPoints('swap', POINT_VALUES.swap, {
+        network: 'evm',
+        chainId,
+        gasless: true,
+        tradeHash: res?.tradeHash ?? null
+      });
+      rewards.completeQuest('firstSwap');
       const usd = spendUsdGuess();
       if (usd != null) recordSpend(usd);
       const got = Number(quote?.amountOut);
@@ -883,8 +891,16 @@ export default function Swap() {
        * stayed un-ticked forever. Fired on a CONFIRMED receipt only, never on
        * submission, so a reverted transaction cannot pay points.
        */
-      if (ok) useAppStore.getState().completeQuest('firstSwap');
       if (ok) {
+        const rewards = useAppStore.getState();
+        rewards.awardPoints('swap', POINT_VALUES.swap, {
+          network: 'evm',
+          chainId,
+          gasless: false,
+          txHash: tx.hash
+        });
+        rewards.completeQuest('firstSwap');
+
         const usd = spendUsdGuess();
         if (usd != null) recordSpend(usd);
         const got = Number(fresh.amountOut);

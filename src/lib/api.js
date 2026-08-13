@@ -184,17 +184,25 @@ export function normalizeGlobal(g = {}) {
 /* -------------------------------------------------------------------------- */
 
 export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
+  const withProvenance = (rows, dataProvenance) =>
+    (Array.isArray(rows) ? rows : []).map((row) => ({ ...row, dataProvenance }));
+
   return resilient(`markets:${vs}:${page}:${perPage}`, {
     ttl: 30000,
-    backend: () => fetchJson(`${API_BASE}/markets?page=${page}&per_page=${perPage}&vs=${vs}`),
+    backend: async () => withProvenance(
+      await fetchJson(`${API_BASE}/markets?page=${page}&per_page=${perPage}&vs=${vs}`),
+      'live'
+    ),
     direct: async () => {
       const raw = await fetchJson(
         `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&order=market_cap_desc&per_page=${perPage}` +
           `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`
       );
-      return raw.map(normalizeCoin);
+      return withProvenance(raw.map(normalizeCoin), 'live');
     },
-    fallback: () => offlineMarkets(perPage)
+    // The deterministic snapshot keeps the ordinary market screen useful
+    // offline, but the Intelligence tab must never relabel it as a live fact.
+    fallback: () => withProvenance(offlineMarkets(perPage), 'offline')
   });
 }
 
@@ -264,7 +272,7 @@ export function normalizeCoin(c = {}) {
     image: c.image,
     price: c.current_price ?? 0,
     change1h: c.price_change_percentage_1h_in_currency ?? 0,
-    change24h: c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? 0,
+    change24h: c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? null,
     change7d: c.price_change_percentage_7d_in_currency ?? 0,
     mcap: c.market_cap ?? 0,
     volume: c.total_volume ?? 0,
@@ -331,7 +339,7 @@ export function getCoin(id, vs = 'usd') {
         image: raw.image?.large ?? raw.image?.small,
         price: md.current_price?.[vs] ?? 0,
         change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
-        change24h: md.price_change_percentage_24h ?? 0,
+        change24h: md.price_change_percentage_24h ?? null,
         change7d: md.price_change_percentage_7d ?? 0,
         mcap: md.market_cap?.[vs] ?? 0,
         volume: md.total_volume?.[vs] ?? 0,

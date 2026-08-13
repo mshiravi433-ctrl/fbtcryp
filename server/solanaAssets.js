@@ -86,6 +86,13 @@ export function issuerMatches(live, asset, kind) {
   return live.isVerified === true;
 }
 
+/** Preserve a genuinely reported finite value; absent data is not zero. */
+function finiteOrNull(value) {
+  if (value == null || String(value).trim() === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 /** Normalise one live record. Everything rounded; raw feeds carry false precision. */
 function shape(live, asset, kind) {
   return {
@@ -104,7 +111,14 @@ function shape(live, asset, kind) {
      */
     liquidity: Math.round(Number(live.liquidity) || 0),
     holders: Number(live.holderCount) || 0,
-    change24h: Number(live.stats24h?.priceChange) || 0,
+    change24h: finiteOrNull(live.stats24h?.priceChange),
+    /*
+     * Keep the curated asset classification. `kind` above tells the client
+     * that this is an equity token; `assetKind` distinguishes a company from
+     * an index so the intelligence screen never calls Nasdaq 100 a company.
+     */
+    ...(kind === 'equity' && asset.kind ? { assetKind: asset.kind } : {}),
+    ...(asset.privateCompany ? { privateCompany: true } : {}),
     /*
      * Present for equities AND commodities; the UI keys its freeze warning off
      * this. Gold carries exactly the same risk — Tether has frozen over $5bn

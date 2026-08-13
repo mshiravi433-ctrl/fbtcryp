@@ -291,6 +291,13 @@
     "netWorth": "Net worth",
     "allTime": "all time",
     "allocation": "Allocation",
+    "stocksBanner": {
+      "eyebrow": "On-chain markets",
+      "title": "Tokenized stocks",
+      "description": "Explore verified tokens designed to track global stocks.",
+      "cta": "Explore",
+      "aria": "Explore tokenized stocks"
+    },
     "cash": "Cash",
     "positions": "Positions",
     "staked": "Staked",
@@ -1841,7 +1848,8 @@
       "read": "Headlines",
       "community": "Community",
       "listen": "Radio",
-      "calm": "Calm"
+      "calm": "Calm",
+      "insights": "Intelligence"
     }
   },
   "notify": {
@@ -3329,5 +3337,42 @@
       "medium": "Medium",
       "high": "Higher"
     }
+  },
+  "insights": {
+    "title": "Market intelligence",
+    "subtitle": "A lightweight view of verified 24-hour market moves and event-tagged reporting.",
+    "liveWindow": "24-hour market window",
+    "updated": "Updated {{ago}}",
+    "loading": "Updating live sources…",
+    "cryptoLeader": "Top crypto performer",
+    "cryptoLaggard": "Lowest crypto performer",
+    "cryptoSource": "Live crypto market coverage · 24h price change",
+    "tokenizedLeader": "Top tokenized share",
+    "tokenizedSource": "Verified xStock token · 24h price change",
+    "equityUnavailable": "Verified tokenized-share feed unavailable",
+    "companyLeader": "Top company token",
+    "performanceNotProfit": "Market-price performance, not accounting profit.",
+    "retryEquities": "Retry verified share data",
+    "coverageTitle": "Coverage, without invented figures",
+    "coverageSub": "Unsupported live claims stay clearly unavailable.",
+    "unavailable": "Unavailable",
+    "countryFlow": "Country stock + crypto inflow",
+    "countryUnavailable": "No verified country-level source combining stock and crypto capital flow is connected.",
+    "companyProfit": "Most profitable company",
+    "profitUnavailable": "Price movement does not prove company profit. A verified accounting source is required.",
+    "capitalOutflow": "Highest & lowest 24h outflow",
+    "outflowUnavailable": "Price and market-cap changes are not capital outflow. No verified flow source is connected.",
+    "eventsTitle": "Economic & crypto event radar",
+    "eventsSub": "Event-tagged publisher headlines, not generated calendar entries.",
+    "publisherSource": "Publisher",
+    "eventsEmpty": "No current event-tagged stories are available from the connected news sources.",
+    "disclaimer": "Market performance is not financial advice. External headlines remain the publisher’s responsibility; unsupported flow and profit figures are never estimated.",
+    "header": {
+      "leader": "24h crypto leader",
+      "laggard": "24h crypto laggard",
+      "company": "24h company token",
+      "event": "Market event"
+    },
+    "marketUnavailable": "Live market data unavailable"
   }
 }

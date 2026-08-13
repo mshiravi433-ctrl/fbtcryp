@@ -18,7 +18,7 @@ import { copyText, shareTargets } from '../lib/share';
  * and pasting a link into whatever the user already has open is the one path
  * that works on every device on earth.
  */
-export default function ShareSheet({ open, onClose, url, text = '', title }) {
+export default function ShareSheet({ open, onClose, onShared, url, text = '', title }) {
   const { t } = useTranslation();
   const notify = useAppStore((s) => s.notify);
   const [copied, setCopied] = useState(false);
@@ -30,6 +30,7 @@ export default function ShareSheet({ open, onClose, url, text = '', title }) {
     notify(ok ? 'linkCopied' : 'copyFailed', ok ? 'success' : 'error');
     if (ok) {
       setCopied(true);
+      onShared?.({ ok: true, via: 'copy' });
       setTimeout(() => setCopied(false), 1800);
     }
   };
@@ -52,7 +53,7 @@ export default function ShareSheet({ open, onClose, url, text = '', title }) {
               href={s.href}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={onClose}
+              onClick={() => onShared?.({ ok: true, via: s.id })}
             >
               {/*
                 A coloured dot, not a brand logo. Shipping WhatsApp's and X's

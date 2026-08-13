@@ -84,6 +84,13 @@
     "localSession": "Sesión local",
     "allTime": "histórico",
     "allocation": "Distribución",
+    "stocksBanner": {
+      "eyebrow": "Mercados on-chain",
+      "title": "Acciones tokenizadas",
+      "description": "Explora tokens verificados diseñados para seguir acciones globales.",
+      "cta": "Explorar",
+      "aria": "Explorar acciones tokenizadas"
+    },
     "cash": "Efectivo",
     "positions": "Posiciones",
     "staked": "En staking",
@@ -324,7 +331,10 @@
       "lang": "Otros idiomas"
     },
     "disclaimer": "Los titulares provienen de medios de terceros y cada tarjeta indica su fuente. No respaldamos ni editamos su contenido, y nada de esto es asesoramiento de inversión.",
-    "generatedNotice": "No se pudo acceder a ninguna fuente de noticias, así que este resumen se generó a partir de datos de mercado: no es periodismo."
+    "generatedNotice": "No se pudo acceder a ninguna fuente de noticias, así que este resumen se generó a partir de datos de mercado: no es periodismo.",
+    "tab": {
+      "insights": "Inteligencia"
+    }
   },
   "notify": {
     "title": "Notificaciones y sonido",
@@ -433,5 +443,73 @@
       "iranLegal": "¿Cuál es la situación legal en Irán?"
     },
     "title": "Ayuda y soporte"
+  },
+  "insights": {
+    "title": "Inteligencia de mercado",
+    "subtitle": "Vista ligera de movimientos verificados de 24 horas y noticias etiquetadas como eventos.",
+    "liveWindow": "Ventana de mercado de 24 horas",
+    "updated": "Actualizado {{ago}}",
+    "loading": "Actualizando fuentes en vivo…",
+    "cryptoLeader": "Cripto con mejor rendimiento",
+    "cryptoLaggard": "Cripto con menor rendimiento",
+    "cryptoSource": "Cobertura cripto en vivo · cambio de precio 24 h",
+    "tokenizedLeader": "Mejor acción tokenizada",
+    "tokenizedSource": "Token xStock verificado · cambio de precio 24 h",
+    "equityUnavailable": "Fuente verificada de acciones tokenizadas no disponible",
+    "companyLeader": "Mejor token de empresa",
+    "performanceNotProfit": "Rendimiento de mercado, no beneficio contable.",
+    "retryEquities": "Reintentar datos verificados de acciones",
+    "coverageTitle": "Cobertura sin cifras inventadas",
+    "coverageSub": "Las afirmaciones sin fuente quedan claramente no disponibles.",
+    "unavailable": "No disponible",
+    "countryFlow": "Entrada nacional en acciones y cripto",
+    "countryUnavailable": "No hay una fuente verificada conectada que combine flujos de capital de acciones y cripto por país.",
+    "companyProfit": "Empresa más rentable",
+    "profitUnavailable": "El precio no demuestra beneficios. Se necesita una fuente contable verificada.",
+    "capitalOutflow": "Mayor y menor salida en 24 h",
+    "outflowUnavailable": "Los cambios de precio y capitalización no son salidas de capital. No hay una fuente verificada.",
+    "eventsTitle": "Radar de eventos económicos y cripto",
+    "eventsSub": "Titulares de editores etiquetados como eventos; no fechas generadas.",
+    "publisherSource": "Editor",
+    "eventsEmpty": "No hay ahora historias etiquetadas como eventos en las fuentes conectadas.",
+    "disclaimer": "El rendimiento del mercado no es asesoramiento financiero. No se estiman flujos ni beneficios sin fuente.",
+    "header": {
+      "leader": "Líder cripto 24 h",
+      "laggard": "Rezagado cripto 24 h",
+      "company": "Token empresa 24 h",
+      "event": "Evento de mercado"
+    },
+    "marketUnavailable": "Datos de mercado en vivo no disponibles"
+  },
+  "orders": {
+    "title": "Órdenes automáticas",
+    "subtitle": "Configúralas una vez y deja que vigilen el mercado por ti.",
+    "bannerTitle": "Órdenes automáticas — el mercado no espera",
+    "bannerSub": "Límite, dinámico, doble, escalonado y DCA — configura una vez",
+    "newLimit": "Orden límite",
+    "newTrailing": "Stop dinámico",
+    "newBracket": "Ganancia + stop-loss",
+    "newLadder": "Venta escalonada",
+    "newDca": "Plan DCA",
+    "newTwap": "TWAP",
+    "newRebalance": "Reequilibrar",
+    "type": {
+      "limit": "LÍMITE",
+      "trailing": "DINÁMICO",
+      "bracket": "DOBLE",
+      "ladder": "ESCALERA",
+      "dca": "DCA",
+      "twap": "TWAP",
+      "rebalance": "REEQUIL."
+    },
+    "new": {
+      "limit": "Nueva orden límite",
+      "dca": "Nuevo plan DCA",
+      "trailing": "Nuevo stop dinámico",
+      "bracket": "Nueva ganancia + stop-loss",
+      "ladder": "Nueva orden escalonada",
+      "twap": "Nuevo TWAP",
+      "rebalance": "Nuevo reequilibrio"
+    }
   }
 }

@@ -84,6 +84,13 @@
     "localSession": "Session locale",
     "allTime": "depuis le début",
     "allocation": "Répartition",
+    "stocksBanner": {
+      "eyebrow": "Marchés on-chain",
+      "title": "Actions tokenisées",
+      "description": "Découvrez des jetons vérifiés conçus pour suivre les actions mondiales.",
+      "cta": "Explorer",
+      "aria": "Explorer les actions tokenisées"
+    },
     "cash": "Liquidités",
     "positions": "Positions",
     "staked": "En staking",
@@ -324,7 +331,10 @@
       "lang": "Autres langues"
     },
     "disclaimer": "Les titres proviennent de médias tiers et chaque carte indique sa source. Nous n'approuvons ni ne modifions leur contenu, et rien de tout cela ne constitue un conseil en investissement.",
-    "generatedNotice": "Aucune source d'actualités n'était joignable ; ce résumé a donc été généré à partir des données de marché — ce n'est pas du journalisme."
+    "generatedNotice": "Aucune source d'actualités n'était joignable ; ce résumé a donc été généré à partir des données de marché — ce n'est pas du journalisme.",
+    "tab": {
+      "insights": "Intelligence"
+    }
   },
   "notify": {
     "title": "Notifications et son",
@@ -433,5 +443,73 @@
       "iranLegal": "Quelle est la situation légale en Iran ?"
     },
     "title": "Aide et support"
+  },
+  "insights": {
+    "title": "Intelligence de marché",
+    "subtitle": "Vue légère des mouvements vérifiés sur 24 h et des actualités identifiées comme événements.",
+    "liveWindow": "Fenêtre de marché de 24 heures",
+    "updated": "Mis à jour {{ago}}",
+    "loading": "Mise à jour des sources en direct…",
+    "cryptoLeader": "Meilleure performance crypto",
+    "cryptoLaggard": "Plus faible performance crypto",
+    "cryptoSource": "Marché crypto en direct · variation du prix sur 24 h",
+    "tokenizedLeader": "Meilleure action tokenisée",
+    "tokenizedSource": "Jeton xStock vérifié · variation sur 24 h",
+    "equityUnavailable": "Flux vérifié des actions tokenisées indisponible",
+    "companyLeader": "Meilleur jeton d’entreprise",
+    "performanceNotProfit": "Performance de marché, pas bénéfice comptable.",
+    "retryEquities": "Réessayer les données d’actions vérifiées",
+    "coverageTitle": "Couverture sans chiffres inventés",
+    "coverageSub": "Les affirmations sans source restent clairement indisponibles.",
+    "unavailable": "Indisponible",
+    "countryFlow": "Entrées actions + crypto par pays",
+    "countryUnavailable": "Aucune source vérifiée combinant les flux de capitaux actions et crypto par pays n’est connectée.",
+    "companyProfit": "Entreprise la plus rentable",
+    "profitUnavailable": "Le prix ne prouve pas le bénéfice. Une source comptable vérifiée est requise.",
+    "capitalOutflow": "Plus forte et plus faible sortie sur 24 h",
+    "outflowUnavailable": "Prix et capitalisation ne sont pas des sorties de capitaux. Aucune source vérifiée n’est connectée.",
+    "eventsTitle": "Radar des événements économiques et crypto",
+    "eventsSub": "Titres d’éditeurs identifiés comme événements, sans calendrier généré.",
+    "publisherSource": "Éditeur",
+    "eventsEmpty": "Aucun article événementiel actuel dans les sources connectées.",
+    "disclaimer": "La performance du marché n’est pas un conseil financier. Aucun flux ou bénéfice sans source n’est estimé.",
+    "header": {
+      "leader": "Leader crypto 24 h",
+      "laggard": "Retardataire crypto 24 h",
+      "company": "Jeton entreprise 24 h",
+      "event": "Événement de marché"
+    },
+    "marketUnavailable": "Données de marché en direct indisponibles"
+  },
+  "orders": {
+    "title": "Ordres automatiques",
+    "subtitle": "Réglez-les une fois et laissez-les surveiller le marché pour vous.",
+    "bannerTitle": "Ordres automatiques — le marché n’attend pas",
+    "bannerSub": "Limite, suiveur, double, échelonné et DCA — un seul réglage",
+    "newLimit": "Ordre limite",
+    "newTrailing": "Stop suiveur",
+    "newBracket": "Gain + stop-loss",
+    "newLadder": "Vente échelonnée",
+    "newDca": "Plan DCA",
+    "newTwap": "TWAP",
+    "newRebalance": "Rééquilibrer",
+    "type": {
+      "limit": "LIMITE",
+      "trailing": "SUIVEUR",
+      "bracket": "DOUBLE",
+      "ladder": "ÉCHELLES",
+      "dca": "DCA",
+      "twap": "TWAP",
+      "rebalance": "RÉÉQUIL."
+    },
+    "new": {
+      "limit": "Nouvel ordre limite",
+      "dca": "Nouveau plan DCA",
+      "trailing": "Nouveau stop suiveur",
+      "bracket": "Nouveau gain + stop-loss",
+      "ladder": "Nouvel ordre échelonné",
+      "twap": "Nouveau TWAP",
+      "rebalance": "Nouveau rééquilibrage"
+    }
   }
 }

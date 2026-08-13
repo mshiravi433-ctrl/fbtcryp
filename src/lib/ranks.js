@@ -24,7 +24,7 @@ export const TIERS = [
 export const POINT_VALUES = {
   referral: 250, // highest — a new user is worth far more than a tap
   firstSwap: 300,
-  swap: 40, // repeatable, scaled by volume elsewhere
+  swap: 1, // every confirmed swap, repeatable
   addLiquidity: 150,
   dailyCheckin: 15,
   streakBonus: 10, // × streak day

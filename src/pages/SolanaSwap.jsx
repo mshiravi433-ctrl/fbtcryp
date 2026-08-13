@@ -33,6 +33,8 @@ import {
 } from '../lib/solanaWallet';
 import { shortAddress, useWallet } from '../context/WalletContext';
 import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
+import { useAppStore } from '../store/useAppStore';
+import { POINT_VALUES } from '../lib/ranks';
 
 /**
  * SOLANA SWAP
@@ -502,6 +504,12 @@ export default function SolanaSwap({ embedded = false }) {
 
       if (signature) {
         setResult({ signature });
+        const rewards = useAppStore.getState();
+        rewards.awardPoints('swap', POINT_VALUES.swap, {
+          network: 'solana',
+          signature
+        });
+        rewards.completeQuest('firstSwap');
         setAmount('');
         setOrder(null);
         loadWalletBalances();

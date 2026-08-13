@@ -102,7 +102,25 @@ export const hasVault = () => Boolean(loadVault());
 
 /* ------------------------------ wallet ops ------------------------------- */
 
-const loadEthers = () => import('ethers');
+/*
+ * `ethers` is one of the largest lazy chunks in the app. Start fetching and
+ * parsing it while the password sheet is open so an iPhone does not pay that
+ * cost only after the final Create tap. A rejected load is not cached forever.
+ */
+let ethersPromise = null;
+function loadEthers() {
+  if (!ethersPromise) {
+    ethersPromise = import('ethers').catch((error) => {
+      ethersPromise = null;
+      throw error;
+    });
+  }
+  return ethersPromise;
+}
+
+export function preloadWalletCrypto() {
+  return loadEthers().then(() => true).catch(() => false);
+}
 
 /** Create a brand-new random mnemonic. Nothing is persisted yet. */
 export async function generateMnemonic() {
@@ -119,15 +137,35 @@ export async function validateMnemonic(phrase) {
   }
 }
 
-/** Encrypt a mnemonic under `password` and persist it. Returns the address. */
-export async function createVault(mnemonic, password) {
+/**
+ * Encrypt and persist a mnemonic while returning the signer we already built.
+ *
+ * Creation previously threw this signer away and immediately decrypted the new
+ * vault to build the exact same object again. That duplicate PBKDF2 pass was
+ * the largest avoidable delay on iPhone. The signer remains memory-only.
+ */
+export async function createVaultWithSigner(mnemonic, password, provider) {
   await yieldFrame();
   const { HDNodeWallet } = await loadEthers();
-  const wallet = HDNodeWallet.fromPhrase(mnemonic.trim());
-  const blob = await encryptSecret(mnemonic.trim(), password);
+  const phrase = mnemonic.trim();
+  // WebCrypto derives on its own implementation thread; let it overlap the
+  // synchronous HD-address derivation instead of putting the two waits in line.
+  const [blob, wallet] = await Promise.all([
+    encryptSecret(phrase, password),
+    Promise.resolve().then(() => HDNodeWallet.fromPhrase(phrase))
+  ]);
   const vault = { ...blob, address: wallet.address, createdAt: Date.now() };
   saveVault(vault);
-  return wallet.address;
+  return {
+    address: wallet.address,
+    signer: provider ? wallet.connect(provider) : wallet
+  };
+}
+
+/** Backward-compatible address-only API for callers that do not need a signer. */
+export async function createVault(mnemonic, password) {
+  const { address } = await createVaultWithSigner(mnemonic, password);
+  return address;
 }
 
 /**

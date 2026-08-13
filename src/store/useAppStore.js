@@ -15,6 +15,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { POINT_VALUES } from '../lib/ranks';
+import { dailyRewardStatus } from '../lib/dailyRewards';
 
 const START_BALANCE = 10000;
 const MAX_HISTORY = 200;
@@ -252,20 +253,32 @@ export const useAppStore = create(
       },
 
       /* ---------------- earn ---------------- */
-      claimDaily() {
-        const now = Date.now();
-        const last = get().lastClaim;
-        if (now - last < 20 * 3600000) {
+      /**
+       * Claim once per LOCAL calendar day and award reputation points.
+       *
+       * This used to be a separate 20/48-hour rolling timer that paid NX while
+       * Earn.jsx implemented a second timer that paid points. Apart from the
+       * two balances disagreeing, a claim late one evening could block the next
+       * calendar day and exact-hour boundaries could reset a valid streak.
+       * `dailyRewardStatus` is now the one calendar rule used by both state and
+       * UI: yesterday continues; a skipped date starts again at day one.
+       */
+      claimDaily(now = Date.now()) {
+        const status = dailyRewardStatus({
+          now,
+          lastClaim: get().lastClaim,
+          streak: get().streak
+        });
+        if (!status.canClaim) {
           get().notify('claimTooSoon', 'error');
           return false;
         }
-        const continuing = now - last < 48 * 3600000;
-        const streak = continuing ? get().streak + 1 : 1;
-        const reward = 50 + Math.min(streak, 7) * 25;
-        set({ lastClaim: now, streak });
-        get().credit(reward, 'dailyClaimed');
+
+        set({ lastClaim: now, streak: status.nextStreak });
+        get().awardPoints('dailyCheckin', status.reward, { streak: status.nextStreak });
         get().addXp(20);
-        return reward;
+        get().notify('pointsEarned', 'success');
+        return status.reward;
       },
 
       /**

@@ -393,3 +393,12 @@ export function newsIsStale() {
 export function topHeadline() {
   return readCache()?.items?.[0] ?? null;
 }
+
+/**
+ * Current in-device headlines for lightweight consumers such as the header.
+ * Reading the existing cache avoids starting a second RSS/API request from a
+ * component mounted on every route.
+ */
+export function cachedHeadlines() {
+  return readCache()?.items ?? [];
+}

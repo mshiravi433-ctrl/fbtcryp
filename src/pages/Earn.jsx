@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,7 @@ import { perksFor } from '../lib/perks';
 import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
 import { publicAppUrl } from '../lib/nativeShell';
+import { dailyRewardStatus } from '../lib/dailyRewards';
 
 /**
  * Earn.
@@ -213,12 +214,32 @@ export default function Earn({ embedded = false }) {
   const lastClaim = useAppStore((s) => s.lastClaim);
   const referrals = useAppStore((s) => s.referrals);
   const quests = useAppStore((s) => s.quests);
-  const awardPoints = useAppStore((s) => s.awardPoints);
-  const completeQuest = useAppStore((s) => s.completeQuest);
+  const claimDailyReward = useAppStore((s) => s.claimDaily);
   const ensureRefCode = useAppStore((s) => s.ensureRefCode);
   const username = useSettingsStore((s) => s.username);
 
   const [tab, setTab] = useState('real');
+  const [now, setNow] = useState(() => Date.now());
+
+  /*
+   * Crossing midnight must unlock the button even when this screen was left
+   * open. `Date.now()` inside render does not cause a render by itself, which
+   * is why the old 20-hour countdown could stay disabled until navigation.
+   */
+  useEffect(() => {
+    const refreshClock = () => setNow(Date.now());
+    const timer = setInterval(refreshClock, 60_000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshClock();
+    };
+    window.addEventListener('focus', refreshClock);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refreshClock);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   const refCode = useMemo(() => ensureRefCode(user?.id), [ensureRefCode, user?.id]);
   /*
@@ -241,9 +262,11 @@ export default function Earn({ embedded = false }) {
      constants, so nothing else can alter the result. */
   const perks = useMemo(() => perksFor(points), [points]);
 
-  const canClaim = Date.now() - lastClaim >= 20 * 3600000;
-  const hoursLeft = Math.max(0, Math.ceil((lastClaim + 20 * 3600000 - Date.now()) / 3600000));
-  const claimValue = POINT_VALUES.dailyCheckin + Math.min(streak, 7) * POINT_VALUES.streakBonus;
+  const daily = useMemo(
+    () => dailyRewardStatus({ now, lastClaim, streak }),
+    [now, lastClaim, streak]
+  );
+  const { canClaim, hoursLeft, reward: claimValue, activeStreak } = daily;
 
   const open = (url) => {
     haptic?.('light');
@@ -253,12 +276,29 @@ export default function Earn({ embedded = false }) {
 
   const claimDaily = () => {
     if (!canClaim) return;
-    const continuing = Date.now() - lastClaim < 48 * 3600000;
-    const nextStreak = continuing ? streak + 1 : 1;
-    useAppStore.setState({ lastClaim: Date.now(), streak: nextStreak });
-    awardPoints('dailyCheckin', POINT_VALUES.dailyCheckin + Math.min(nextStreak, 7) * POINT_VALUES.streakBonus);
+    const reward = claimDailyReward(Date.now());
+    if (reward !== false) {
+      setNow(Date.now());
+      haptic?.('success');
+    }
+  };
+
+  /**
+   * The click only opens a share UI; it is not an earned action. Wait until the
+   * OS reports a completed share, or until the user picks/copies a destination
+   * in our fallback sheet, before recording any points. Dismissing either sheet
+   * resolves with ok:false and changes nothing.
+   */
+  const shareInvite = async () => {
+    const result = await share({ url: inviteUrl, text: t('earn.shareText') });
+    if (!result?.ok) return;
+
+    const state = useAppStore.getState();
+    state.awardPoints('shareApp', POINT_VALUES.shareApp, { via: result.via });
+    // Sharing is not proof that a friend joined. The referral quest remains
+    // pending until a future verified-join event can complete it honestly.
+    state.notify('pointsEarned', 'success');
     haptic?.('success');
-    useAppStore.getState().notify('pointsEarned', 'success');
   };
 
   /*
@@ -570,14 +610,14 @@ export default function Earn({ embedded = false }) {
             <div className="row-between" style={{ marginBottom: 10 }}>
               <div>
                 <div style={{ fontWeight: 700 }}>{t('earn.dailyReward')}</div>
-                <div className="faint">{t('earn.streakDays', { n: streak })}</div>
+                <div className="faint">{t('earn.streakDays', { n: activeStreak })}</div>
               </div>
               <span className="pill pill-rgb">+{claimValue} {t('rank.pts')}</span>
             </div>
 
             <div className="row" style={{ gap: 5, marginBottom: 12 }}>
               {Array.from({ length: 7 }).map((_, i) => {
-                const done = i < Math.min(streak, 7);
+                const done = i < Math.min(activeStreak, 7);
                 return (
                   <motion.div
                     key={i}
@@ -634,10 +674,7 @@ export default function Earn({ embedded = false }) {
             <div className="btn-row" style={{ marginTop: 10 }}>
               <button
                 className="btn btn-primary"
-                onClick={() => {
-                  share({ url: inviteUrl, text: t('earn.shareText') });
-                  awardPoints('shareApp', POINT_VALUES.shareApp);
-                }}
+                onClick={() => shareInvite()}
               >
                 {t('earn.shareInvite')}
               </button>
@@ -691,9 +728,7 @@ export default function Earn({ embedded = false }) {
                     onClick={() => {
                       if (done) return;
                       if (q.id === 'inviteFriend') {
-                        share({ url: inviteUrl, text: t('earn.shareText') });
-                        completeQuest(q.id);
-                        awardPoints('referral', q.pts);
+                        void shareInvite();
                       } else if (q.to) {
                         navigate(q.to);
                       }

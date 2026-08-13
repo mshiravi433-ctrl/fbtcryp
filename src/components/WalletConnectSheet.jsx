@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import Sheet from './Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import {
-  createVault,
+  createVaultWithSigner,
   generateMnemonic,
   hasVault,
+  preloadWalletCrypto,
   passwordStrength,
   validateMnemonic
 } from '../lib/localWallet';
@@ -22,6 +23,11 @@ export default function WalletConnectSheet({ open, onClose }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const wallet = useWallet();
+
+  // Hide the large ethers chunk's fetch/parse time behind reading this sheet.
+  useEffect(() => {
+    if (open) void preloadWalletCrypto();
+  }, [open]);
 
   const [view, setView] = useState('choose'); // choose | create | backup | confirm | import | unlock
   const [mnemonic, setMnemonic] = useState('');
@@ -70,8 +76,9 @@ export default function WalletConnectSheet({ open, onClose }) {
     setBusy(true);
     setErr(null);
     try {
-      await createVault(phrase, password);
-      await wallet.unlockLocal(password);
+      const { signer } = await createVaultWithSigner(phrase, password);
+      const attached = await wallet.attachCreatedLocal(signer);
+      if (!attached) throw new Error('ATTACH_FAILED');
       haptic?.('success');
       close();
     } catch {

@@ -372,6 +372,37 @@ export function WalletProvider({ children }) {
     return true;
   }, [refreshBalance]);
 
+  /**
+   * Attach the memory-only signer returned while a new vault was encrypted.
+   * This avoids immediately decrypting that just-written vault (and therefore
+   * avoids a second PBKDF2 pass) while still checking it matches disk state.
+   */
+  const attachCreatedLocal = useCallback(
+    async (createdSigner) => {
+      const vault = loadVault();
+      if (!vault || !createdSigner) return false;
+      try {
+        const signerAddress = createdSigner.address || await createdSigner.getAddress();
+        if (signerAddress.toLowerCase() !== vault.address.toLowerCase()) return false;
+        const provider = await getReadProvider(DEFAULT_CHAIN);
+        const signer = createdSigner.provider ? createdSigner : createdSigner.connect(provider);
+        signerRef.current = signer;
+        setMode('local');
+        setAddress(signerAddress);
+        setChainId(DEFAULT_CHAIN);
+        setLocked(false);
+        setError(null);
+        // Balance RPC latency must not hold the creation sheet open.
+        void refreshBalance(signerAddress, DEFAULT_CHAIN);
+        return true;
+      } catch {
+        setError('UNLOCK_FAILED');
+        return false;
+      }
+    },
+    [getReadProvider, refreshBalance]
+  );
+
   const unlockLocal = useCallback(
     async (password) => {
       setError(null);
@@ -383,7 +414,8 @@ export function WalletProvider({ children }) {
         setAddress(signer.address);
         setChainId(DEFAULT_CHAIN);
         setLocked(false);
-        await refreshBalance(signer.address, DEFAULT_CHAIN);
+        // Unlock succeeds as soon as signing is ready; slow mobile RPC runs behind it.
+        void refreshBalance(signer.address, DEFAULT_CHAIN);
         return true;
       } catch (e) {
         setError(e.message === 'BAD_PASSWORD' ? 'BAD_PASSWORD' : 'UNLOCK_FAILED');
@@ -532,6 +564,7 @@ export function WalletProvider({ children }) {
       connectInjected,
       connectWalletConnect,
       attachLocal,
+      attachCreatedLocal,
       unlockLocal,
       lock,
       forgetLocalWallet,
@@ -554,6 +587,7 @@ export function WalletProvider({ children }) {
       connectInjected,
       connectWalletConnect,
       attachLocal,
+      attachCreatedLocal,
       unlockLocal,
       lock,
       forgetLocalWallet,

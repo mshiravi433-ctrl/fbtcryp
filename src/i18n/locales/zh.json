@@ -84,6 +84,13 @@
     "localSession": "本地会话",
     "allTime": "累计",
     "allocation": "资产分布",
+    "stocksBanner": {
+      "eyebrow": "链上市场",
+      "title": "代币化股票",
+      "description": "探索旨在追踪全球股票价格的已验证代币。",
+      "cta": "探索",
+      "aria": "探索代币化股票"
+    },
     "cash": "现金",
     "positions": "持仓",
     "staked": "质押中",
@@ -324,7 +331,10 @@
       "lang": "其他语言"
     },
     "disclaimer": "标题来自第三方媒体，每张卡片都注明来源。我们不认可也不编辑其内容，其中任何内容都不构成投资建议。",
-    "generatedNotice": "未能连接任何新闻源，因此本摘要由市场数据自动生成——它不是新闻报道。"
+    "generatedNotice": "未能连接任何新闻源，因此本摘要由市场数据自动生成——它不是新闻报道。",
+    "tab": {
+      "insights": "情报"
+    }
   },
   "notify": {
     "title": "通知与声音",
@@ -433,5 +443,73 @@
       "iranLegal": "在伊朗的法律状况如何？"
     },
     "title": "帮助与支持"
+  },
+  "insights": {
+    "title": "市场情报",
+    "subtitle": "轻量查看经核实的24小时市场变化和带有事件标签的报道。",
+    "liveWindow": "24小时市场窗口",
+    "updated": "更新于{{ago}}",
+    "loading": "正在更新实时来源…",
+    "cryptoLeader": "加密资产涨幅领先",
+    "cryptoLaggard": "加密资产表现最低",
+    "cryptoSource": "实时加密市场覆盖 · 24小时价格变化",
+    "tokenizedLeader": "表现最佳的代币化股票",
+    "tokenizedSource": "已验证 xStock 代币 · 24小时价格变化",
+    "equityUnavailable": "已验证代币化股票数据不可用",
+    "companyLeader": "表现最佳的公司代币",
+    "performanceNotProfit": "这是市场价格表现，不是会计利润。",
+    "retryEquities": "重试已验证股票数据",
+    "coverageTitle": "不编造数字的数据覆盖",
+    "coverageSub": "无可靠来源的实时说法会明确标记为不可用。",
+    "unavailable": "不可用",
+    "countryFlow": "国家股票与加密资金流入",
+    "countryUnavailable": "尚未接入按国家合并股票与加密资本流的可靠来源。",
+    "companyProfit": "最盈利的公司",
+    "profitUnavailable": "价格变化不能证明公司利润，需要可靠的会计数据来源。",
+    "capitalOutflow": "24小时最高与最低流出",
+    "outflowUnavailable": "价格和市值变化不等于资本流出，尚未接入可靠资金流来源。",
+    "eventsTitle": "经济与加密事件雷达",
+    "eventsSub": "来自发布方的事件标签标题，不生成日历日期。",
+    "publisherSource": "发布方",
+    "eventsEmpty": "当前连接的新闻来源中没有带事件标签的报道。",
+    "disclaimer": "市场表现不构成财务建议。外部标题由发布方负责，无来源的资金流和利润数据绝不估算。",
+    "header": {
+      "leader": "24小时加密领先",
+      "laggard": "24小时加密落后",
+      "company": "24小时公司代币",
+      "event": "市场事件"
+    },
+    "marketUnavailable": "实时市场数据不可用"
+  },
+  "orders": {
+    "title": "自动订单",
+    "subtitle": "设置一次，即可让它为你持续关注市场。",
+    "bannerTitle": "自动订单 — 市场不会等待",
+    "bannerSub": "限价、追踪、双向、阶梯与 DCA — 一次设置",
+    "newLimit": "限价单",
+    "newTrailing": "追踪止损",
+    "newBracket": "止盈 + 止损",
+    "newLadder": "阶梯卖出",
+    "newDca": "DCA 计划",
+    "newTwap": "TWAP",
+    "newRebalance": "再平衡",
+    "type": {
+      "limit": "限价",
+      "trailing": "追踪",
+      "bracket": "双向",
+      "ladder": "阶梯",
+      "dca": "DCA",
+      "twap": "TWAP",
+      "rebalance": "再平衡"
+    },
+    "new": {
+      "limit": "新建限价单",
+      "dca": "新建 DCA 计划",
+      "trailing": "新建追踪止损",
+      "bracket": "新建止盈 + 止损",
+      "ladder": "新建阶梯订单",
+      "twap": "新建 TWAP",
+      "rebalance": "新建再平衡"
+    }
   }
 }
