@@ -258,6 +258,29 @@
   box-shadow: 0 0 0 3px rgba(0,229,255,0.10);
 }
 
+/* Light theme: the dark inset well reads as a dirty grey slab on white.
+   Match the rest of the light surfaces — white field, ink border. */
+:root[data-theme='light'] .swap-ticket {
+  border-color: rgba(16, 20, 40, 0.10);
+  background:
+    radial-gradient(110% 90% at 8% -10%, color-mix(in srgb, var(--rgb-2) 10%, transparent), transparent 55%),
+    #ffffff;
+  box-shadow: 0 8px 24px -16px rgba(16, 20, 40, 0.22);
+}
+:root[data-theme='light'] .swap-ticket .swap-field {
+  border-color: rgba(16, 20, 40, 0.12);
+  background: #f4f6fb;
+}
+:root[data-theme='light'] .swap-ticket .swap-field:focus-within {
+  border-color: color-mix(in srgb, var(--ink-cyan) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-cyan) 14%, transparent);
+}
+:root[data-theme='light'] .lab-card {
+  border-color: rgba(16, 20, 40, 0.10);
+  background: #ffffff;
+  box-shadow: 0 8px 24px -16px rgba(16, 20, 40, 0.18);
+}
+
 .trade-summary-row {
   display: flex;
   align-items: center;

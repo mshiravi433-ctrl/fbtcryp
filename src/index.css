@@ -6862,7 +6862,11 @@ body { overflow-x: clip; }
   padding: 10px 12px;
   border-radius: 11px;
   border: 1px solid var(--line);
-  background: var(--bg-raised);
+  /* Color only — never the `background` shorthand. That reset
+     background-repeat to `repeat`, and the light-theme chevron SVG then
+     tiled across the field as stripes. Dark theme hid it because the
+     light-only background-image never applied. */
+  background-color: var(--bg-raised);
   color: var(--text-1);
   font-family: inherit;
   font-size: 13px;
@@ -6886,7 +6890,7 @@ body { overflow-x: clip; }
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: var(--bg-raised);
+  background-color: var(--bg-raised);
   color: var(--text-1);
   font-family: var(--font-mono);
   font-size: 20px;
