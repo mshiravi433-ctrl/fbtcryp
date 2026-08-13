@@ -33,6 +33,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     anchorNetworks: '/api/intents/v1/anchor-networks',
     anchorCalldata: '/api/intents/v1/auctions/{intentHash}/anchor-calldata/{chainId}',
     submitAnchor: '/api/intents/v1/auctions/{intentHash}/anchor',
+    admissionReceipt: '/api/intents/v1/admissions/{intentHash}/{entryHash}',
+    watcherReports: '/api/intents/v1/auctions/{intentHash}/watcher-reports',
     bids: null
   },
   stages: ['intent', 'risk', 'solver-market', 'simulation', 'execution', 'verification'],
@@ -67,8 +69,16 @@ export const INTENT_CAPABILITIES = Object.freeze({
     deterministicSelectionPolicy: 'MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1',
     optionalVerifiedEvmAnchors: true,
     externalRootAnchorByDefault: false,
+    /* A close receipt still never claims completeness at signing time; the
+       claim only ever exists per auction, as verified watcher evidence. */
     auctionCompletenessProof: false,
     crossInstanceTransactionalClose: false,
+    signedAdmissionReceipts: 'fbt.admission-receipt.v1',
+    transactionalAdmission: 'receipt-iff-logged-entry',
+    completenessWatcherReports: 'fbt.completeness-report.v1',
+    omissionAccountability: 'signed-receipt-before-seal-vs-signed-close',
+    admissionReceiptReclaim: true,
+    watcherReportsServerRecomputed: true,
     executionFromCommitments: false,
     bondedSettlement: false
   },

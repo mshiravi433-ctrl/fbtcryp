@@ -276,12 +276,37 @@ export async function appendSignedCommitment(commitment, {
     ok: true,
     accepted: true,
     entryHash,
+    /* Phase 2c: the admission route needs the stored admission time and
+       solver identity to mint the transactional admission receipt that
+       corresponds 1:1 to this immutable row. */
+    acceptedAt: now,
+    solverId: verified.solver.id,
     root: log.root,
     size: log.size,
     durable: log.durable,
     externallyAnchored: false,
     inclusionProof: entry?.inclusionProof || []
   };
+}
+
+/**
+ * Look up one immutable log row by intent + entry hash. Powers the
+ * deterministic admission-receipt reclaim endpoint: the receipt is a pure
+ * function of the stored row, so reading the row is equivalent to reading
+ * the receipt (same coordinator key permitting).
+ */
+export async function readLogEntry(intentHash, entryHash) {
+  const intent = safeIntent(intentHash);
+  const entry = /^0x[a-fA-F0-9]{64}$/.test(String(entryHash || ''))
+    ? String(entryHash).toLowerCase() : null;
+  if (!intent || !entry) return { error: 'BAD_LOOKUP' };
+  try {
+    const rows = await readRows(intent);
+    const row = rows.find((item) => item.entryHash.toLowerCase() === entry);
+    return row ? { entry: row } : { error: 'ADMISSION_NOT_FOUND' };
+  } catch {
+    return { error: 'LOG_READ_FAILED' };
+  }
 }
 
 export function transparencyStatus(registry = parseSolverRegistry()) {

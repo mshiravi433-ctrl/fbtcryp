@@ -3668,7 +3668,11 @@
       "proven": "Proven",
       "unproven": "Not proven",
       "completeness": "Auction completeness",
-      "auctionNote": "The close receipt deterministically selects from its sealed Merkle set and can be anchored by an independent EVM transaction. Blob sealing is not a cross-instance transaction, so the receipt explicitly does not claim censorship resistance or complete bid capture."
+      "auctionNote": "Every accepted quote returns a coordinator-signed admission receipt that any independent watcher can re-derive from the immutable log. After the close, watcher reports compare receipted admissions against the sealed set: omitting a pre-seal receipted bid is cryptographic misconduct evidence, while receipts inside the cross-instance clock-skew window stay honestly inconclusive.",
+      "admissionReceipts": "Admission receipts",
+      "watchers": "Independent watchers",
+      "unconfigured": "Not configured",
+      "evidenceBased": "Evidence-based"
     }
   }
 }

@@ -162,9 +162,9 @@ POST /api/intents/v1/validate
 
 Solver اکنون `fbt.solver-quote.v1` را پیش از Deadline با Ed25519 امضا می‌کند؛ پیام علاوه بر مبلغ و Gas، Fee، Slippage، Chain، `intentHash`، `routeCommitment`، زمان صدور، انقضا و nonce را نیز می‌بندد. Bidها وارد Transparency log غیرقابل‌overwrite می‌شوند و رسید پایان Coordinator ریشه، Policy و انتخاب را امضا می‌کند.
 
-ریشهٔ رسید بسته‌شده می‌تواند در قرارداد permissionless `IntentAuctionAnchor` ثبت و event آن مستقل از سرور بررسی شود. اما استاندارد کامل هنوز به این موارد نیاز دارد:
+ریشهٔ رسید بسته‌شده می‌تواند در قرارداد permissionless `IntentAuctionAnchor` ثبت و event آن مستقل از سرور بررسی شود. از Phase 2c هر پذیرش یک رسید تراکنشی امضاشده دارد و ناظران مستقل کامل‌بودن مجموعهٔ بسته‌شده را با گزارش قابل‌بازمحاسبه داوری می‌کنند. استاندارد کامل هنوز به این موارد نیاز دارد:
 
-- Admission تراکنشی یا Watchtower مستقل برای اثبات completeness؛
+- ~~Admission تراکنشی یا Watchtower مستقل برای اثبات completeness~~ — تحویل‌شده در Phase 2c (رسید `fbt.admission-receipt.v1` + گزارش `fbt.completeness-report.v1`)؛
 - اتصال رسید انتخاب به Settlement واقعی و مقدار دریافتی؛
 - Bond و dispute rule برای Quote غیرقابل‌اجرا؛
 - Verifier مستقل و امکان rotation امن کلید Coordinator.
@@ -269,8 +269,8 @@ Intent OS محصول بالادستی است؛ Swap و Orders Adapterهای آن
 Phase 1  — local compiler + risk + real quote trace + receipts       [انجام شده]
 Phase 2a — signed solver commitments + immutable transparency log    [انجام شده]
 Phase 2b — signed selection close + verified optional EVM anchor      [انجام شده]
-Phase 2c — transactional admission + independent completeness watcher [مرحله بعد]
-Phase 3  — bonded open solver network + outcome settlement
+Phase 2c — transactional admission + independent completeness watcher [انجام شده]
+Phase 3  — bonded open solver network + outcome settlement            [مرحله بعد]
 Phase 4  — atomic same-chain workflows + cross-chain state machine
 Phase 5  — threshold-encrypted confidential intents
 Phase 6  — independent verifiers and standardisation
@@ -298,7 +298,7 @@ INTENT_SOLVER_PRIVATE_KEY='…' node scripts/intent-solver.mjs sign quote.json >
 - هر ریشه به‌صورت پیش‌فرض anchor نشده؛ وضعیت فقط بعد از تراکنش تأییدشده تغییر می‌کند؛
 - ثبت‌شدن در log به معنی executable calldata یا settlement موفق نیست؛
 - Solverها bond ندارند و جریمهٔ failure اعمال نمی‌شود؛
-- Blob تراکنش اتمیک چندمسیره ندارد، پس completeness مجموعه هنوز اثبات نشده است؛
+- Blob تراکنش اتمیک چندمسیره ندارد؛ پس «تضمین لحظه‌ای» کامل‌بودن مجموعه در لحظهٔ Seal ممکن نیست — اما از Phase 2c حذف یک Bid دارای رسید پذیرش، مدرک رمزنگاری قابل‌استقلال‌اثباتی علیه Coordinator است؛
 - هیچ کلید خصوصی Solver یا کاربر به FBT واگذار نمی‌شود.
 
 ### وضعیت دقیق Phase 2b
@@ -326,9 +326,75 @@ node scripts/intent-auction.mjs calldata close.json 8453 0xYourAnchorContract
 node scripts/intent-auction.mjs verify-anchor close.json anchor-claim.json
 ```
 
-محدودیت مهم: Anchor زمان و محتوای **مجموعهٔ بسته‌شده** را ثابت می‌کند، نه اینکه Coordinator پیش از Seal هیچ Bidی را سانسور نکرده است. برای این ادعا به transactional admission یا Watchtower مستقل در Phase 2c نیاز است.
+محدودیت مهم: Anchor زمان و محتوای **مجموعهٔ بسته‌شده** را ثابت می‌کند، نه اینکه Coordinator پیش از Seal هیچ Bidی را سانسور نکرده است. این شکاف از Phase 2c با رسید پذیرش امضاشده و گزارش ناظر مستقل پوشیده شده است — بخش بعدی.
 
 Endpointهای عمومی `/capabilities`، `/coordinator`، `/anchor-networks`، `/auctions/:intentHash` و endpointهای commitment/log وضعیت واقعی Coordinator، durability، anchor و completeness را نمایش می‌دهند.
+
+### وضعیت دقیق Phase 2c
+
+Phase 2c دو مکانیزم تحویل می‌دهد: **پذیرش تراکنشی** و **ناظر مستقل کامل‌بودن**. نتیجهٔ ترکیب این دو: سانسور Bid پیش از Seal دیگر «غیرقابل‌اثبات» نیست؛ یا Coordinator آن را در Close شامل می‌کند، یا مدرک امضاشده‌ای علیه خودش صادر کرده است.
+
+#### ۱. رسید پذیرش تراکنشی (`fbt.admission-receipt.v1`)
+
+هر `POST /api/intents/v1/commitments` موفق (201) علاوه بر ثبت immutable، یک رسید Ed25519 امضاشده توسط همان کلید Coordinator برمی‌گرداند که دقیقاً چهار واقعیت را می‌بندد: `intentHash`، `entryHash`، `acceptedAt`، `solverId`. رسید داخل همان قفل پذیرش و پس از چک دوبارهٔ وضعیت Seal صادر می‌شود؛ پس پاسخ 201 یعنی «ورودی ثبت شد» و «رسید صادر شد» به‌صورت یک تراکنش واحد.
+
+رسیدها **قطعی‌اند**: هستهٔ رسید تابع خالص ورودی ذخیره‌شدهٔ لاگ است و امضای Ed25519 قطعی است، بنابراین:
+
+- Solver اگر پاسخ HTTP را از دست بدهد، همان رسید بایت‌به‌بایت از `GET /api/intents/v1/admissions/{intentHash}/{entryHash}` قابل‌بازیابی است؛
+- هر ناظر می‌تواند رسید هر ورودی لاگ را مستقل بازتولید و امضای آن را بدون هیچ Registryای بررسی کند.
+
+محدودیت صادقانه: بازتولید پس از چرخش کلید Coordinator با کلید **جدید** امضا می‌شود؛ رسیدهای اصلی صادرشده با کلید قدیمی پابرجا و قابل‌راستی‌آزمایی می‌مانند. و زمان `acceptedAt` ساعت مشاهدهٔ Coordinator است؛ کوچک‌نمایی زمان توسط Coordinator برای یک Bid منفرد قابل‌اثبات نیست، ولی در مقیاس با مقایسهٔ ساعت Solver آشکار می‌شود.
+
+#### ۲. گزارش ناظر کامل‌بودن (`fbt.completeness-report.v1`)
+
+ناظر مستقل — هر سازمانی با کلید ثبت‌شده در `INTENT_WATCHER_KEYS` — رسیدهای مشاهده‌شده را با Close امضاشده مقایسه می‌کند. قواعد رتبه‌بندی **قطعی**‌اند؛ با ورودی یکسان، هر ماشین همان نتیجه را می‌دهد:
+
+| وضعیت رسید نسبت به Close | رتبه‌بندی | معنا |
+|---|---|---|
+| در مجموعهٔ برنده/ردشدهٔ Close | `eligible` / `rejected` | سالم |
+| در فهرست مشاهدهٔ دیررس Close | `late-observed` | سالم |
+| `acceptedAt ≤ sealedAt − skew` ولی در Close نیست | `omitted-pre-seal` | **مدرک سخت سوءرفتار** |
+| Close آن را late خوانده ولی رسید پیش از پنجرهٔ skew است | `late-contradiction` | **مدرک سخت سوءرفتار** (دو امضای Coordinator ناسازگار) |
+| داخل پنجرهٔ `±skew` حول Seal یا بین Seal و Close | `ambiguous-window` | صادقانه نامشخص |
+| `acceptedAt > closedAt + skew` | `post-close` | سالم؛ پس از تصمیم |
+
+حکم گزارش: `misconduct-evident` ← `inconclusive` ← `complete`، و با صفر رسید `unmonitored` — صفر رسید هرگز «کامل» تلقی نمی‌شود. پنجرهٔ skew (پیش‌فرض ۲۰۰۰ms، قابل‌تنظیم با `INTENT_WATCHER_SKEW_MS`) مرز صادقانۀ ترتیب بین نمونه‌های مستقل سرور است: داخل آن پنجره، وقفه یا سانسور از هم تفکیک‌ناپذیرند.
+
+سرور پیش از ذخیره، هر گزارش را **بازمحاسبه** می‌کند: امضای Close، امضای هر رسید، رتبه‌بندی‌ها، شمارش‌ها و حکم باید با کلید ثبت‌شدهٔ ناظر دقیقاً بازتولید شوند؛ گزارشی که بازمحاسبه نشود حتی با امضای معتبر ذخیره نمی‌شود. ذخیره immutable است و reportId یکتا بازپخش idempotent دارد.
+
+#### ۳. واچ‌تاور آفلاین مستقل
+
+```bash
+# بررسی آفلاین یک رسید پذیرش
+node scripts/intent-watchtower.mjs verify-receipt receipt.json
+
+# محاسبه حکم کامل‌بودن بدون تماس با FBT
+node scripts/intent-watchtower.mjs verify close.json receipts.json
+
+# امضای گزارش به‌عنوان ناظر مستقل و ارسال
+INTENT_WATCHER_PRIVATE_KEY='…' INTENT_WATCHER_ID='watch-coop' \
+  node scripts/intent-watchtower.mjs report close.json receipts.json > report.json
+curl -X POST "$FBT_URL/api/intents/v1/auctions/$INTENT_HASH/watcher-reports" \
+  -H 'content-type: application/json' --data-binary @report.json
+
+# راستی‌آزمایی آفلاین گزارش ذخیره‌شده
+node scripts/intent-watchtower.mjs verify-report report.json close.json
+
+# جمع‌آوری شواهد از endpointهای عمومی (رسیدها derive سروری‌اند؛ ضعیف‌تر از
+# رسیدی که Solver در لحظهٔ پاسخ 201 گرفته است)
+node scripts/intent-watchtower.mjs collect https://your-fbt-host $INTENT_HASH out.json
+```
+
+#### ۴. وضعیت زندهٔ کامل‌بودن هر مزایده
+
+پاسخ `GET /api/intents/v1/auctions/:intentHash` پس از بستن، بلوک `completeness` را دارد: `unmonitored`، `watcher-verified`، `inconclusive` یا `misconduct-reported` — همراه با فهرست خلاصهٔ گزارش‌ها و فید کامل `/watcher-reports` که هر بار دوباره راستی‌آزمایی می‌شود. فیلدهای `auctionCompletenessProof` در خودِ Close و در capabilities عمداً `false` باقی می‌مانند: کامل‌بودن ادعای لحظهٔ امضای Close نیست؛ حکمی بعدی و مبتنی بر مدرکِ هر مزایده است.
+
+این پیاده‌سازی هنوز ادعاهای زیر را ندارد و Phase 3+ نیاز دارند:
+
+- رسید پذیرش ورود به مجموعهٔ بسته را «تضمین» نمی‌کند؛ سانسور را **قابل‌اثبات** می‌کند، نه غیرممکن؛
+- کلیدهای ناظر در env یک deployment تعریف می‌شوند — استقلال واقعی نیازمند اپراتور مستقلِ واقعی پشت هر کلید است، نه صرفاً فیلد Registry؛
+- ترتیب بین نمونه‌های سرورلس بر ساعت تکیه دارد، پس پنجرهٔ skew صادقانه نامشخص باقی می‌ماند؛
+- Watchtower کامل‌بودن را می‌سنجد، نه کیفیت Route یا Settlement را؛ Bond، dispute و تسویهٔ Outcome در Phase 3 است.
 
 ---
 
