@@ -94,11 +94,11 @@ export const SOLVER_CAPABILITIES = Object.freeze([
   {
     id: 'confidential-intent-transport',
     role: 'privacy-transport',
-    modes: ['swap', 'outcome', 'automation', 'workflow'],
-    settlement: 'commit-reveal-or-confidential-compute',
+    modes: ['swap'],
+    settlement: 'none',
     custody: false,
-    live: true,
-    detail: 'Commit-reveal hides a single-chain swap from the open bidding log until close. Threshold encryption is enabled only with real operator keys; TEE attestation is never claimed.'
+    live: false,
+    detail: 'Unavailable: requester authentication, durable private storage, close-bound reveal and frontend orchestration are not operational. Commit-reveal would not hide plaintext from FBT or provide metadata privacy, threshold encryption, TEE, or attestation.'
   }
 ]);
 
@@ -348,7 +348,7 @@ function solverRows(intent) {
  * Compile an intent into explicit risk checks and candidate solver adapters.
  * This function never sends, signs, quotes or mutates balances.
  */
-export function compileIntent(input, memoryInput = loadIntentMemory(), now = Date.now()) {
+export function compileIntent(input, memoryInput = loadIntentMemory(), now = Date.now(), runtime = {}) {
   const memory = sanitizeIntentMemory(memoryInput);
   const normalized = normalizeIntent(input, memory, now);
   if (normalized.error) return { error: normalized.error, checks: [], solvers: [] };
@@ -386,23 +386,24 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
   const memoryWantsPrivacy = intent.amountUsd != null
     && memory.privateAboveUsd > 0
     && intent.amountUsd >= memory.privateAboveUsd;
-  const requestedPrivacy = intent.constraints.privacy !== 'standard' || memoryWantsPrivacy;
+  const confidentialRequired = intent.constraints.privacy === 'confidential' || memoryWantsPrivacy;
 
-  if (requestedPrivacy || intent.constraints.privacy === 'confidential') {
-    /*
-     * Phase 5a commit-reveal: a SINGLE-CHAIN SWAP can travel through the
-     * commit-reveal transport (intent hidden from the open bidding log until
-     * close) and is genuinely confidential at that level. This is NOT
-     * threshold-encrypted compute and no TEE attestation exists — so any
-     * non-swap kind, or a claim of threshold/TEE, still blocks. Private RPC
-     * recommendations are never relabelled as confidential.
-     */
-    if (intent.kind === 'swap') {
+  if (confidentialRequired) {
+    /* Runtime capability is required in addition to intent shape. Missing or
+       stale capability data blocks; it can never mean "probably supported". */
+    if (intent.kind === 'swap' && runtime.confidentialAvailable === true) {
       checks.push(check('CONFIDENTIAL_COMMIT_REVEAL', 'pass'));
+      checks.push(check('PRIVACY_NOT_THRESHOLD_TEE', 'warn'));
+    } else if (intent.kind === 'swap') {
+      checks.push(check('CONFIDENTIAL_TRANSPORT_UNAVAILABLE', 'block'));
       checks.push(check('PRIVACY_NOT_THRESHOLD_TEE', 'warn'));
     } else {
       checks.push(check('THRESHOLD_TEE_UNAVAILABLE', 'block'));
     }
+  } else if (intent.constraints.privacy === 'relay') {
+    /* An external wallet does not return proof of which broadcaster it used.
+       Never relabel the ordinary Swap handoff as a verified private relay. */
+    checks.push(check('PRIVATE_RELAY_NOT_ATTESTED', 'block'));
   } else {
     checks.push(check('STANDARD_BROADCAST_DISCLOSED', 'warn'));
   }
@@ -441,7 +442,7 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
       chain: String(intent.chainId),
       intent: intent.id
     });
-    if (intent.constraints.privacy === 'confidential') params.set('privacy', 'confidential');
+    if (confidentialRequired) params.set('privacy', 'confidential');
     handoff = `/swap?${params.toString()}`;
   } else if (!blocked && intent.kind === 'outcome') {
     const params = new URLSearchParams({

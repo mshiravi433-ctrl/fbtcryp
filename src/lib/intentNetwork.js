@@ -18,6 +18,9 @@ async function get(path, timeout = 6000) {
 }
 
 export const getIntentCapabilities = () => get('/intents/v1/capabilities');
+/* Read-only discovery only. No confidential POST client is exported while the
+   authenticated commit/reveal workflow is unavailable. */
+export const getConfidentialIntentStatus = () => get('/intents/v1/confidential/operators', 8000);
 export const getRegisteredSolvers = () => get('/intents/v1/solvers');
 export const getAuctionCoordinator = () => get('/intents/v1/coordinator');
 export const getAnchorNetworks = () => get('/intents/v1/anchor-networks');

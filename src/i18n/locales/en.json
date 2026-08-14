@@ -476,6 +476,8 @@
   "swap": {
     "title": "Swap",
     "subtitle": "Real on-chain swaps via {{dex}}",
+    "confidentialUnavailable": "Confidential swap unavailable",
+    "confidentialUnavailableBody": "This Intent requested confidential handling, but authenticated commit–reveal, durable private storage, and close-bound reveal are not operational. FBT may see plaintext in a future commit–reveal design; metadata privacy, threshold encryption, TEE, and attestation are not provided. No public quote, approval, relay, signature, or transaction will be attempted from this screen.",
     "nonCustodialNotice": "Non-custodial: you sign every transaction from your own wallet and it broadcasts straight to the blockchain. This app never holds your funds and cannot reverse, freeze or recover a swap. The platform fee shown above is taken on-chain inside the same transaction you sign, and network gas is paid separately to the network itself.",
     "notConnected": "No wallet connected",
     "from": "From",
@@ -3474,9 +3476,10 @@
         "body": "A private mempool can reduce public exposure, but this app cannot attest which RPC an external wallet used."
       },
       "confidential": {
-        "title": "Confidential",
-        "body": "Requires commit-reveal, an enclave or threshold encryption. No such transport is connected yet."
-      }
+        "title": "Confidential (unavailable)",
+        "body": "Authenticated commit–reveal, durable private storage, and close-bound reveal are not operational. This is not a TEE, does not hide plaintext from FBT, provides no metadata privacy, and has no threshold encryption or attestation."
+      },
+      "confidentialNonSwap": "Confidential handling is limited to single-chain swaps and is unavailable for this intent type. Its secure transport prerequisites are also not operational."
     },
     "action": {
       "swap": "Swap",
@@ -3519,8 +3522,8 @@
         "body": "Single-chain outcomes use signed, bounded, bonded bids and a user-signed settlement. Cross-chain outcomes stay draft-only."
       },
       "confidential-intent-transport": {
-        "title": "Confidential intent transport",
-        "body": "Commit-reveal hides a single-chain swap from the open bidding log until close. Threshold encryption is enabled only with real operator keys; TEE is never claimed."
+        "title": "Confidential intent transport (unavailable)",
+        "body": "Requester authentication, durable private storage, close-bound reveal, and frontend orchestration are not operational. Commit–reveal does not hide plaintext from FBT or provide metadata privacy, threshold encryption, TEE, or attestation."
       },
       "fbt-single-chain-workflow": {
         "title": "Same-chain workflow batch",
@@ -3606,15 +3609,15 @@
       },
       "CONFIDENTIAL_COMMIT_REVEAL": {
         "title": "Commit–reveal transport",
-        "body": "A single-chain swap can hide its token, amount and strategy from the open bidding log until it closes. This is commit-reveal, not a TEE."
+        "body": "When every reported prerequisite is operational, a single-chain swap can keep its details out of the public bidding log until close. FBT may still see plaintext; this provides no metadata privacy, threshold encryption, TEE or attestation."
       },
       "PRIVACY_NOT_THRESHOLD_TEE": {
         "title": "Not threshold-encrypted compute",
-        "body": "Commit-reveal hides details until close, but it does not attest a confidential-compute enclave and metadata may still leak."
+        "body": "Commit–reveal does not hide plaintext from FBT or provide metadata privacy, threshold encryption, a confidential-compute enclave, or attestation."
       },
       "THRESHOLD_TEE_UNAVAILABLE": {
-        "title": "Threshold / TEE not available here",
-        "body": "Only a single-chain swap can use the commit-reveal transport. Threshold encryption is enabled only with real operator keys and TEE is never claimed."
+        "title": "Confidential transport unavailable",
+        "body": "Confidential non-swap intents are unavailable. Public operator keys alone do not make threshold encryption operational, and no TEE or attestation is claimed."
       },
       "OUTCOME_SINGLE_CHAIN_ATOMIC": {
         "title": "Single-chain outcome is reviewable",

@@ -11180,5 +11180,63 @@ export default function run() {
       /auctionCompletenessProof/.test(intentPage));
   }
 
+  /* ---------------- confidential intent fail-closed boundary ------------- */
+  {
+    const appCode = read('server/app.js');
+    const commitments = read('server/intentCommitment.js');
+    const confidential = read('server/intentConfidential.js');
+    const capabilities = read('server/intents.js');
+    const swap = read('src/pages/Swap.jsx');
+    const intentPage = read('src/pages/IntentOS.jsx');
+    const compiler = read('src/lib/intentOS.js');
+    const network = read('src/lib/intentNetwork.js');
+    const enLocale = JSON.parse(read('src/i18n/locales/en.json'));
+
+    const parserIndex = appCode.indexOf("app.use(express.json({ limit: '256kb' }))");
+    const commitRouteIndex = appCode.indexOf("app.post('/api/intents/v1/confidential/commit'");
+    const revealRouteIndex = appCode.indexOf("app.post('/api/intents/v1/confidential/reveal'");
+    t('disabled confidential writes are mounted before global body parsing',
+      commitRouteIndex > 0 && revealRouteIndex > 0
+        && commitRouteIndex < parserIndex && revealRouteIndex < parserIndex);
+    t('the browser client exposes discovery only and no confidential write fallback',
+      /getConfidentialIntentStatus/.test(network)
+        && !/(post|request)Confidential(Intent)?(Commit|Reveal)/.test(network)
+        && !/method:\s*['"]POST['"]/.test(network));
+    t('Swap preserves the exact confidential URL requirement while consuming only prefill keys',
+      /isConfidentialPrivacy\(searchParams\)/.test(swap)
+        && /new URLSearchParams\(searchParams\)/.test(swap)
+        && /for \(const key of \['from', 'to', 'amount', 'chain'\]\) next\.delete\(key\)/.test(swap)
+        && !/delete\(['"]privacy['"]\)/.test(swap));
+    t('Swap blocks quote, gasless, approval and execution paths for confidential handoffs',
+      /if \(confidentialRequested\) \{[\s\S]{0,220}quoteSeq\.current \+= 1/.test(swap)
+        && /const retryQuote = \(\) => \{\s*if \(confidentialRequested\) return;/.test(swap)
+        && /const runGasless = async \(\) => \{\s*if \(confidentialRequested\)/.test(swap)
+        && /const runSwap = async \(\) => \{\s*if \(confidentialRequested\)/.test(swap)
+        && /const canSwap = !confidentialRequested/.test(swap)
+        && /const gaslessOk = !confidentialRequested/.test(swap));
+    t('Intent OS confidential selection is single-swap and capability driven',
+      /draft\.kind === ['"]swap['"] && confidentialReadiness\.available/.test(intentPage)
+        && /disabled=\{disabled\}/.test(intentPage)
+        && /confidentialAvailable: confidentialSelectable/.test(intentPage)
+        && /runtime\.confidentialAvailable === true/.test(compiler));
+    t('commitment storage separates and authenticates records but has no insecure production adapter',
+      /privateRecord/.test(commitments)
+        && /publicCommitmentRecord/.test(commitments)
+        && /verifyIntentCommitment/.test(commitments)
+        && /UNAUTHENTICATED_REQUESTER/.test(commitments)
+        && /COMMITMENT_REPLAY/.test(commitments)
+        && /CONFIDENTIAL_PRIVATE_STORE_UNAVAILABLE/.test(commitments)
+        && !/blobCache/.test(commitments));
+    t('capabilities and English UI deny plaintext, metadata, threshold, TEE and attestation claims',
+      /confidentialAvailable:\s*false/.test(capabilities)
+        && /thresholdEncryption:\s*\{[\s\S]*configured:\s*false/.test(confidential)
+        && /hiddenFromFbt:\s*false/.test(confidential)
+        && /metadataPrivacy:\s*false/.test(confidential)
+        && /tee:\s*false/.test(confidential)
+        && /attestation:\s*false/.test(confidential)
+        && /does not hide plaintext from FBT/i.test(enLocale.intentOS.privacy.confidential.body)
+        && /no metadata privacy/i.test(enLocale.intentOS.privacy.confidential.body));
+  }
+
   return rows;
 }

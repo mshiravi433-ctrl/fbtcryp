@@ -1,22 +1,21 @@
 /**
- * Confidential intent threshold-encryption skeleton (Phase 5b).
+ * Offline confidential-envelope cryptographic primitives (Phase 5b).
  * ---------------------------------------------------------------------------
- * This is an HONEST SKELETON of threshold encryption — enough to be real and
- * testable, with every claim pinned in the record:
+ * These helpers make the envelope format testable, but they are NOT an
+ * operational threshold protocol:
  *
- *   - A public registry `INTENT_CONFIDENTIAL_OPERATOR_KEYS` of independent
- *     operator public keys. Capabilities flip `thresholdEncryption.configured`
- *     to true ONLY when real operator keys exist. No key, and no invented
- *     operator, is ever implied.
+ *   - `INTENT_CONFIDENTIAL_OPERATOR_KEYS` is only a public-key registry. Keys
+ *     do not prove independent services, authenticated share release, or
+ *     after-close orchestration, so capabilities stay unavailable even when
+ *     registry entries exist.
  *   - `fbt.confidential-envelope.v1` uses hybrid encryption: a random 256-bit
  *     AES-256-GCM data key encrypts the intent; the data key is split into
  *     N-of-N XOR shares, and each share is ECDH-wrapped to one operator with
  *     an ephemeral X25519 key.
- *   - Decryption is possible ONLY after the auction is closed (enforced at the
- *     route layer, and reflected in `canDecryptAfterClose`). The server
- *     reconstructs by collecting shares — declared honestly, never claimed as
- *     a TEE.
- *   - `tee` is ALWAYS false here. This is not attested confidential compute.
+ *   - No production route collects or reconstructs those shares. Callers of
+ *     the offline reconstruction helper must already possess every private
+ *     operator key; that is not threshold-service readiness.
+ *   - `tee` and `attestation` are ALWAYS false. This is not attested compute.
  *
  * Key-algorithm note: the operator registry holds X25519 public keys
  * (32-byte, strict base64url) because X25519 is the correct primitive for the
@@ -269,29 +268,54 @@ export function publicOperatorRegistry(registry = parseOperatorRegistry()) {
   }));
 }
 
-/** Capabilities block. thresholdEncryption is configured ONLY with real
-    operator keys; tee is ALWAYS false. */
+/**
+ * Capability status is operational, not aspirational. X25519 public keys only
+ * configure a registry; they do not create independent operator services,
+ * authenticated share release, close-bound decryption, or attestation.
+ */
 export function confidentialProtocolStatus({ operatorRegistry = parseOperatorRegistry() } = {}) {
   return {
+    available: false,
+    frontendIntegrated: false,
+    durablePrivateStorage: false,
+    requesterAuthentication: false,
+    earlyRevealProtection: false,
+    hiddenFromFbt: false,
+    metadataPrivacy: false,
+    tee: false,
+    attestation: false,
+    unavailableReason: 'CONFIDENTIAL_PREREQUISITES_UNAVAILABLE',
     envelopeSchema: CONFIDENTIAL_ENVELOPE_SCHEMA,
-    encryption: 'hybrid-aes256gcm-ecdh-x25519',
-    sharingScheme: 'n-of-n-xor',
+    encryptionPrimitive: 'hybrid-aes256gcm-ecdh-x25519',
+    sharingPrimitive: 'n-of-n-xor',
     operatorRegistry: 'INTENT_CONFIDENTIAL_OPERATOR_KEYS',
     thresholdEncryption: {
-      configured: operatorRegistry.size > 0,
+      configured: false,
+      registryConfigured: operatorRegistry.size > 0,
+      operational: false,
       registeredOperators: operatorRegistry.size,
-      algorithm: 'X25519-ECDH',
+      independentOperatorServices: false,
+      authenticatedShareRelease: false,
+      algorithm: 'X25519-ECDH primitives only',
       custody: false,
-      decryptAfterCloseOnly: true,
-      serverSideReconstruction: true,
+      decryptAfterCloseOnly: false,
+      serverSideReconstruction: false,
       tee: false,
       attestation: false
     },
     commitReveal: {
       schema: 'fbt.intent-commitment.v1',
-      preimageHolder: 'fbt-server',
+      available: false,
+      frontendIntegrated: false,
+      durablePrivateStorage: false,
+      requesterAuthentication: false,
+      earlyRevealProtection: false,
+      preimageHolder: 'none-operational',
       commitRevealMetadataPrivacy: false,
-      tee: false
+      hiddenFromFbt: false,
+      metadataPrivacy: false,
+      tee: false,
+      attestation: false
     }
   };
 }

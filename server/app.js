@@ -192,18 +192,8 @@ import {
   verifyOutcomeCompletenessReport
 } from './intentOutcome.js';
 import { verifyOutcomeBid } from './outcomeBids.js';
+import { intentCommitmentStatus } from './intentCommitment.js';
 import {
-  buildIntentCommitment,
-  buildIntentReveal,
-  intentCommitmentStatus,
-  readCommitment,
-  readCommitments,
-  storeIntentCommitment,
-  storeReveal,
-  verifyIntentReveal
-} from './intentCommitment.js';
-import {
-  buildConfidentialEnvelope,
   confidentialProtocolStatus,
   parseOperatorRegistry,
   publicOperatorRegistry
@@ -215,6 +205,27 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const app = express();
 app.disable('x-powered-by');
+
+/*
+ * ─── CONFIDENTIAL INTENT WRITES: REJECT BEFORE BODY PARSING ───────────────
+ * There is no authenticated, durable, close-bound confidential workflow yet.
+ * Register these exact routes before express.json so even malformed, oversized
+ * or attacker-controlled request bodies are never parsed as a fallback path.
+ */
+const rejectUnavailableConfidentialWrite = (_req, res) => res.status(503).json({
+  error: 'CONFIDENTIAL_MODE_UNAVAILABLE',
+  available: false,
+  retryable: false,
+  prerequisites: {
+    frontendIntegrated: false,
+    durablePrivateStorage: false,
+    requesterAuthentication: false,
+    earlyRevealProtection: false
+  }
+});
+app.post('/api/intents/v1/confidential/commit', rejectUnavailableConfidentialWrite);
+app.post('/api/intents/v1/confidential/reveal', rejectUnavailableConfidentialWrite);
+
 /*
  * 256kb instead of the usual 64kb: the KyberSwap route/build proxy forwards a
  * routeSummary, which grows with the number of pools in the route and can
@@ -428,14 +439,14 @@ setInterval(() => {
   for (const [k, v] of verificationHits) if (now > v.reset) verificationHits.delete(k);
 }, WINDOW_MS).unref?.();
 
-/* Outcome bids and confidential commit/reveal write immutable storage each.
-   They get the same small per-caller budget as watcher/settlement writes
-   rather than the broad cached-data allowance. */
+/* Outcome writes get the same small per-caller budget as watcher/settlement
+   writes rather than the broad cached-data allowance. Confidential writes are
+   rejected earlier, before body parsing, and never reach this middleware. */
 const outcomeHits = new Map();
 const OUTCOME_MAX_PER_WINDOW = Number(process.env.INTENT_OUTCOME_RATE_LIMIT || 20);
 app.use('/api/intents/v1', (req, res, next) => {
   if (req.method !== 'POST') return next();
-  const isOutcomePath = /^\/outcome\/bids$|\/outcome\/auctions\/.+\/(close|execution-claims|disputes|adjudicate|settlement-reports|watcher-reports)$|\/confidential\/(commit|reveal)$/.test(req.path);
+  const isOutcomePath = /^\/outcome\/bids$|\/outcome\/auctions\/.+\/(close|execution-claims|disputes|adjudicate|settlement-reports|watcher-reports)$/.test(req.path);
   if (!isOutcomePath) return next();
   const key = req.tgUser?.id ?? req.ip;
   const now = Date.now();
@@ -1672,12 +1683,11 @@ app.post('/api/intents/v1/outcome/auctions/:intentHash/settlement-reports', asyn
 });
 
 /*
- * ─── PHASE 5: CONFIDENTIAL INTENT TRANSPORT (COMMIT–REVEAL + THRESHOLD) ─────
- * The operator public-key registry is served publicly (public keys only). The
- * commit/reveal endpoints implement the commit–reveal transport. Threshold
- * envelope construction/decryption is a pure function exposed via the CLI and
- * unit tests; capabilities state configured:false until real operator keys
- * exist, and tee is always false.
+ * ─── CONFIDENTIAL INTENT TRANSPORT: FAIL-CLOSED ──────────────────────────
+ * No requester-authentication protocol, durable private preimage store, or
+ * close-bound frontend orchestration is deployed. The read-only discovery
+ * route reports those facts. POST routes reject before reading or validating
+ * requester-controlled preimages, solver ids, or transaction material.
  */
 app.get('/api/intents/v1/confidential/operators', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
@@ -1687,66 +1697,11 @@ app.get('/api/intents/v1/confidential/operators', (_req, res) => {
   });
 });
 
-app.post('/api/intents/v1/confidential/commit', async (req, res) => {
-  const registry = parseSolverRegistry();
-  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
-  const solver = registry.get(req.body?.solverId);
-  if (!solver || !solver.active) return res.status(403).json({ error: 'UNREGISTERED_SOLVER' });
-  /* Commit-reveal honesty: FBT holds the preimage (preimageHolder='fbt-server')
-     and signs the hash-only commitment with the coordinator. This hides the
-     intent from the open bidding log until close, but it is NOT hidden from
-     FBT and there is no TEE/threshold attestation. */
-  const coordinator = coordinatorConfig();
-  if (!coordinator) return res.status(503).json({ error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
-  const built = buildIntentCommitment(
-    {
-      intentHash: req.body.intentHash,
-      preimage: req.body.preimage,
-      solverId: req.body.solverId
-    },
-    coordinator.privateKey
-  );
-  if (!built.ok) return res.status(400).json({ error: built.code });
-  const stored = await storeIntentCommitment(built);
-  if (!stored.ok) {
-    const status = ['COMMITMENT_STORE_UNAVAILABLE', 'COMMITMENT_WRITE_FAILED'].includes(stored.code) ? 503
-      : stored.code === 'COMMITMENT_REPLAY' ? 409 : 400;
-    return res.status(status).json({ error: stored.code });
-  }
-  return res.status(201).json({ ok: true, commitment: built.commitment, preimageHolder: 'fbt-server', commitRevealMetadataPrivacy: false });
-});
-
-app.get('/api/intents/v1/confidential/commitments/:intentHash', async (req, res) => {
-  const result = await readCommitments(req.params.intentHash);
-  if (result.error) return res.status(result.error === 'BAD_INTENT_HASH' ? 400 : 503).json(result);
-  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
-  return res.json(result);
-});
-
-app.post('/api/intents/v1/confidential/reveal', async (req, res) => {
-  const { intentHash, commitmentId, preimage } = req.body ?? {};
-  const found = await readCommitment(intentHash, commitmentId);
-  if (found.error) return res.status(found.error === 'COMMITMENT_NOT_FOUND' ? 404 : 503).json({ error: found.error });
-  /* Reveal runs after bidding has closed; the server (preimage holder)
-     re-signs the reveal with the coordinator. Any solver/watcher can recompute
-     revealHashFor(preimage) and verify compliance against the committed hash. */
-  const coordinator = coordinatorConfig();
-  if (!coordinator) return res.status(503).json({ error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
-  const built = buildIntentReveal(
-    { commitment: found.commitment, preimage, solverId: found.commitment.solverId },
-    coordinator.privateKey
-  );
-  if (!built.ok) return res.status(400).json({ error: built.code });
-  const checked = verifyIntentReveal(built.reveal, found.commitment, { solverPublicKey: coordinator.publicKey });
-  if (!checked.ok) return res.status(400).json({ error: checked.code });
-  const stored = await storeReveal({ intentHash, commitmentId, reveal: built.reveal });
-  if (!stored.ok) {
-    const status = ['COMMITMENT_STORE_UNAVAILABLE', 'COMMITMENT_WRITE_FAILED'].includes(stored.code) ? 503
-      : stored.code === 'REVEAL_REPLAY' ? 409 : 400;
-    return res.status(status).json({ error: stored.code });
-  }
-  return res.status(201).json({ ok: true, reveal: built.reveal });
-});
+/* Historical public commitment records are not served. Earlier versions used
+   a public Blob writer for a combined commitment/preimage record, so even a
+   hash-only response would keep an unsafe storage path alive. */
+app.get('/api/intents/v1/confidential/commitments/:intentHash', (_req, res) =>
+  res.status(503).json({ error: 'CONFIDENTIAL_MODE_UNAVAILABLE', available: false }));
 
 /*
  * ─── INDEXNOW OWNERSHIP KEY, SERVED FROM THE API ────────────────────────────

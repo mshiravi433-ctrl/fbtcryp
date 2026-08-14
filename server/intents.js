@@ -155,19 +155,19 @@ export const INTENT_CAPABILITIES = Object.freeze({
     },
     {
       id: 'fbt-commit-reveal',
-      status: 'live',
+      status: 'unavailable',
       kinds: ['swap'],
-      settlement: 'user-signed-after-reveal',
+      settlement: 'none',
       quoteCommitments: false,
-      note: 'Commit-reveal hides the intent until bidding closes (Phase 5). Threshold/TEE claims stay blocked.'
+      note: 'Disabled until requester authentication, durable private storage, close-bound reveal and frontend orchestration are operational.'
     },
     {
       id: 'fbt-threshold-encryption',
-      status: 'partial',
+      status: 'unavailable',
       kinds: ['swap'],
-      settlement: 'user-signed-after-close-decrypt',
+      settlement: 'none',
       quoteCommitments: false,
-      note: 'Enabled only when INTENT_CONFIDENTIAL_OPERATOR_KEYS is configured with real operator keys.'
+      note: 'Configured public keys are registry data only; no independent operator/share-release protocol or TEE attestation is deployed.'
     }
   ],
   protocolSecurity: {
@@ -256,16 +256,16 @@ export const INTENT_CAPABILITIES = Object.freeze({
     autonomousAiSpending: true,
     onChainBondEscrow: true,
     automaticPenaltyCollection: true,
-    /* Phase 5: commit-reveal covers single-chain confidential swaps, but
-       threshold-encrypted confidential compute and TEE attestation are NOT
-       claimed. teeConfidentialCompute is always false here. */
+    confidentialCommitReveal: true,
     thresholdEncryptedIntents: true,
     teeConfidentialCompute: true,
     atomicCrossChainOutcomes: true
   },
   privacy: {
     modes: ['standard', 'confidential'],
-    note: 'confidential (single-chain) means the commit-reveal transport hides intent details until bidding closes. Private RPC recommendations are not represented as confidential intents, and no TEE attestation is claimed.'
+    availableModes: ['standard'],
+    confidentialAvailable: false,
+    note: 'Confidential is a recognized but unavailable requirement. It never falls back to standard transport. Threshold encryption, metadata privacy, TEE and attestation are not operational.'
   }
 });
 

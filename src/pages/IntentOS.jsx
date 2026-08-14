@@ -24,6 +24,7 @@ import {
   verifyExecutionProof
 } from '../lib/executionProof';
 import { getIntentCapabilities } from '../lib/intentNetwork';
+import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import '../styles/intent-os.css';
 
 const TABS = ['compose', 'memory', 'proofs', 'network'];
@@ -151,6 +152,11 @@ export default function IntentOS() {
 
   const activeTemplate = TEMPLATES.find((item) => item.kind === draft.kind);
   const savedDrafts = useMemo(() => saved.slice(0, 4), [saved]);
+  const confidentialReadiness = confidentialSwapReadiness(networkStatus);
+  const confidentialSelectable = draft.kind === 'swap' && confidentialReadiness.available;
+  const confidentialUnavailableReason = draft.kind !== 'swap'
+    ? t('intentOS.privacy.confidentialNonSwap')
+    : t('intentOS.privacy.confidential.body');
 
   useEffect(() => {
     let active = true;
@@ -202,7 +208,7 @@ export default function IntentOS() {
       ...draft,
       deadlineAt: Date.now() + Number(draft.deadlineHours || 2) * 60 * 60 * 1000,
       requireExecutionProof: memory.requireExecutionProof
-    }, memory);
+    }, memory, Date.now(), { confidentialAvailable: confidentialSelectable });
     setCompiled(result);
     if (!result.error) {
       const persisted = saveCompiledIntent(result);
@@ -391,13 +397,28 @@ export default function IntentOS() {
             <div className="ios-privacy-choice">
               <span>{t('intentOS.field.privacy')}</span>
               <div>
-                {['standard', 'relay', 'confidential'].map((mode) => (
-                  <button key={mode} className={draft.privacy === mode ? 'active' : ''} onClick={() => patchDraft({ privacy: mode })}>
-                    {t(`intentOS.privacy.${mode}.title`)}
-                  </button>
-                ))}
+                {['standard', 'relay', 'confidential'].map((mode) => {
+                  const disabled = mode === 'confidential' && !confidentialSelectable;
+                  return (
+                    <button
+                      key={mode}
+                      className={draft.privacy === mode ? 'active' : ''}
+                      disabled={disabled}
+                      aria-disabled={disabled}
+                      title={disabled ? confidentialUnavailableReason : undefined}
+                      onClick={() => { if (!disabled) patchDraft({ privacy: mode }); }}
+                    >
+                      {t(`intentOS.privacy.${mode}.title`)}
+                    </button>
+                  );
+                })}
               </div>
               <p>{t(`intentOS.privacy.${draft.privacy}.body`)}</p>
+              {!confidentialSelectable && draft.privacy !== 'confidential' && (
+                <p className="ios-privacy-unavailable" role="status">
+                  {confidentialUnavailableReason}
+                </p>
+              )}
             </div>
 
             {draft.kind === 'workflow' && (
