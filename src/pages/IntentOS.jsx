@@ -9,7 +9,9 @@ import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
 import {
   SOLVER_CAPABILITIES,
   WORKFLOW_ACTIONS,
+  WORKFLOW_REVERT_POLICIES,
   compileIntent,
+  isSingleChainWorkflowSteps,
   loadIntentMemory,
   loadIntents,
   removeIntent,
@@ -32,10 +34,20 @@ const TEMPLATES = [
   { id: 'workflow', icon: '⛓', kind: 'workflow' }
 ];
 
+const defaultWorkflowStep = (id, action, asset, target, chainId) => ({
+  id,
+  action,
+  asset,
+  target,
+  chainId,
+  minOutput: '',
+  maxInput: '',
+  revertPolicy: 'abort-all'
+});
+
 const DEFAULT_WORKFLOW = [
-  { id: 'swap', action: 'swap', asset: 'ETH', target: 'Buy ETH' },
-  { id: 'bridge', action: 'bridge', asset: 'ETH', target: 'Bridge to Arbitrum' },
-  { id: 'deposit', action: 'deposit', asset: 'ETH', target: 'Deposit into lending' }
+  defaultWorkflowStep('swap', 'swap', 'USDC', 'Swap USDC to ETH', 42161),
+  defaultWorkflowStep('deposit', 'deposit', 'ETH', 'Deposit into lending', 42161)
 ];
 
 function StageRail({ t }) {
@@ -81,6 +93,11 @@ function SolverRow({ solver, t }) {
 function ProofRow({ proof, t, onVerify }) {
   const payload = proof.payload || {};
   const selected = payload.decision?.selected;
+  const pair = payload.constraints
+    ? `${payload.constraints.from?.symbol || '—'} → ${payload.constraints.to?.symbol || '—'}`
+    : payload.workflow
+      ? `${payload.workflow.nodeCount || '—'} · ${payload.claim?.code || 'workflow'}`
+      : '—';
   return (
     <div className="ios-proof-card">
       <div className="row-between">
@@ -89,10 +106,10 @@ function ProofRow({ proof, t, onVerify }) {
       </div>
       <strong className="mono ios-proof-id">{proof.id}</strong>
       <div className="ios-proof-pair">
-        <span>{payload.constraints?.from?.symbol || '—'} → {payload.constraints?.to?.symbol || '—'}</span>
-        <span className="mono">{selected?.solver || '—'}</span>
+        <span>{pair}</span>
+        <span className="mono">{selected?.solver || payload.claim?.code || '—'}</span>
       </div>
-      <p>{t('intentOS.proof.scope')}</p>
+      <p>{payload.claim?.scope || t('intentOS.proof.scope')}</p>
       <div className="ios-proof-actions">
         <button className="btn btn-ghost btn-sm" onClick={() => onVerify(proof)}>{t('intentOS.proof.verify')}</button>
         <button className="btn btn-ghost btn-sm" onClick={() => downloadExecutionProof(proof)}>{t('intentOS.proof.download')}</button>
@@ -151,7 +168,9 @@ export default function IntentOS() {
   const chooseTemplate = (template) => {
     patchDraft({
       kind: template.kind,
-      ...(template.kind === 'workflow' ? { steps: DEFAULT_WORKFLOW } : {}),
+      ...(template.kind === 'workflow' ? {
+        steps: DEFAULT_WORKFLOW.map((step) => ({ ...step, chainId: draft.chainId }))
+      } : {}),
       ...(template.kind === 'outcome' ? { minReceive: draft.minReceive || '0.25' } : {})
     });
   };
@@ -163,12 +182,13 @@ export default function IntentOS() {
   const addWorkflowStep = () => {
     if (draft.steps.length >= 8) return;
     patchDraft({
-      steps: [...draft.steps, {
-        id: `step-${Date.now()}`,
-        action: 'send',
-        asset: draft.toSymbol,
-        target: ''
-      }]
+      steps: [...draft.steps, defaultWorkflowStep(
+        `step-${Date.now()}`,
+        'send',
+        draft.toSymbol,
+        '',
+        draft.chainId
+      )]
     });
   };
 
@@ -380,8 +400,11 @@ export default function IntentOS() {
 
             {draft.kind === 'workflow' && (
               <div className="ios-workflow">
+                {!isSingleChainWorkflowSteps(draft.steps, draft.chainId) && (
+                  <p className="ios-workflow-banner">{t('intentOS.compose.crossChainBanner')}</p>
+                )}
                 {draft.steps.map((step, index) => (
-                  <div key={step.id}>
+                  <div className="ios-workflow-step" key={step.id}>
                     <span>{index + 1}</span>
                     <select
                       value={step.action}
@@ -392,17 +415,56 @@ export default function IntentOS() {
                         <option key={action} value={action}>{t(`intentOS.action.${action}`)}</option>
                       ))}
                     </select>
-                    <input
-                      value={step.target}
-                      onChange={(event) => updateWorkflowStep(index, { target: event.target.value })}
-                      placeholder={t('intentOS.field.workflowTarget')}
-                    />
+                    <select
+                      value={step.chainId || draft.chainId}
+                      onChange={(event) => updateWorkflowStep(index, { chainId: Number(event.target.value) })}
+                      aria-label={t('intentOS.field.workflowChain')}
+                    >
+                      {EVM_CHAIN_ORDER.map((id) => (
+                        <option key={id} value={id}>{EVM_CHAINS[id]?.name || id}</option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       onClick={() => removeWorkflowStep(index)}
                       disabled={draft.steps.length <= 2}
                       aria-label={t('intentOS.field.removeStep')}
                     >×</button>
+                    <div className="ios-workflow-meta">
+                      <input
+                        value={step.asset || ''}
+                        onChange={(event) => updateWorkflowStep(index, { asset: event.target.value.toUpperCase() })}
+                        placeholder={t('intentOS.field.workflowAsset')}
+                        aria-label={t('intentOS.field.workflowAsset')}
+                      />
+                      <input
+                        value={step.minOutput || ''}
+                        onChange={(event) => updateWorkflowStep(index, { minOutput: event.target.value })}
+                        placeholder={t('intentOS.field.workflowMinOut')}
+                        aria-label={t('intentOS.field.workflowMinOut')}
+                      />
+                      <input
+                        value={step.maxInput || ''}
+                        onChange={(event) => updateWorkflowStep(index, { maxInput: event.target.value })}
+                        placeholder={t('intentOS.field.workflowMaxIn')}
+                        aria-label={t('intentOS.field.workflowMaxIn')}
+                      />
+                      <select
+                        value={step.revertPolicy || 'abort-all'}
+                        onChange={(event) => updateWorkflowStep(index, { revertPolicy: event.target.value })}
+                        aria-label={t('intentOS.field.workflowRevert')}
+                      >
+                        {WORKFLOW_REVERT_POLICIES.map((policy) => (
+                          <option key={policy} value={policy}>{t(`intentOS.revert.${policy}`)}</option>
+                        ))}
+                      </select>
+                      <input
+                        className="ios-workflow-target"
+                        value={step.target}
+                        onChange={(event) => updateWorkflowStep(index, { target: event.target.value })}
+                        placeholder={t('intentOS.field.workflowTarget')}
+                      />
+                    </div>
                   </div>
                 ))}
                 <button type="button" className="ios-add-step" onClick={addWorkflowStep} disabled={draft.steps.length >= 8}>
@@ -665,6 +727,31 @@ export default function IntentOS() {
               <span><b>{networkStatus?.settlement?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
             </div>
             <p>{t('intentOS.network.settlementNote')}</p>
+          </section>
+
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.workflowProtocol')}</span>
+                <strong>{networkStatus?.workflows?.singleChainAtomic
+                  ? t('intentOS.network.workflowReady')
+                  : t('intentOS.network.workflowUnavailable')}</strong>
+              </div>
+              <span className={`ios-status ${networkStatus?.workflows?.crossChainAtomic ? 'eligible' : 'unavailable'}`}>
+                {networkStatus?.workflows?.crossChainAtomic
+                  ? t('intentOS.network.crossChainAtomic')
+                  : t('intentOS.network.singleChain')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.workflows?.schema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
+              <span><b>{networkStatus?.workflows?.maxNodes ?? '—'}</b>{t('intentOS.network.maxNodes')}</span>
+              <span><b>{networkStatus?.workflows?.contract?.configured
+                ? (networkStatus.workflows.contract.address || t('intentOS.network.signed'))
+                : t('intentOS.network.unconfigured')}</b>{t('intentOS.network.workflowContract')}</span>
+              <span><b>{networkStatus?.workflows?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+            </div>
+            <p>{t('intentOS.network.workflowNote')}</p>
           </section>
 
           <section className="ios-network-api">

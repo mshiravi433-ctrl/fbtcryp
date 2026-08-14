@@ -139,6 +139,7 @@ import {
   storeSettlementReport,
   verifySettlementReport
 } from './intentSettlement.js';
+import { workflowProtocolStatus } from './intentWorkflow.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -381,7 +382,8 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
     settlement: settlementProtocolStatus({
       registeredVerifiers: verifierRegistry.size,
       graceSeconds: executionGraceSeconds()
-    })
+    }),
+    workflows: workflowProtocolStatus()
   });
 });
 

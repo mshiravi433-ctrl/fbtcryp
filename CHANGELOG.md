@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.32.0 — Intent OS Phase 4a: claim/dispute CLI + single-chain workflow DAG
+
+Phase 3 made outcomes claimable and independently checkable. Phase 4a adds
+the two missing settler commands and the first honest slice of composable
+workflows: a same-chain DAG that the user still signs.
+
+- **Settler CLI `claim` + `dispute`** (`scripts/intent-settler.mjs`): the
+  winning solver signs `fbt.execution-claim.v1` with
+  `INTENT_SOLVER_PRIVATE_KEY` (plus optional `INTENT_SOLVER_ID` /
+  `INTENT_SOLVER_NAME`); an independent verifier signs `fbt.dispute.v1` with
+  `INTENT_VERIFIER_PRIVATE_KEY`. Both call the existing server builders.
+  Private keys are never printed.
+- **Workflow schema** (`server/intentWorkflow.js`, `fbt.workflow.v1`): a
+  bounded DAG of 2–8 nodes (`swap|deposit|borrow|send|approve|bridge`) with
+  per-node chain, asset, minOutput, maxInput, deadline, allowedContracts,
+  revertPolicy and approvalScope, plus typed edges. Cycles, unknown actions
+  and mixed undeclared fields fail closed.
+- **Same-chain vs cross-chain honesty**: all nodes on one chain and no
+  `bridge` action compile to `ready-for-review` (`WORKFLOW_SINGLE_CHAIN_ATOMIC`,
+  `executable: false` — the user still signs). A second chain or any bridge
+  stays `draft-only` with `ATOMIC_CROSS_CHAIN_UNAVAILABLE`. The blanket
+  `ATOMIC_WORKFLOW_UNAVAILABLE` / `unavailable.atomicComposableWorkflows`
+  flags are replaced by `unavailable.atomicCrossChainWorkflows`.
+- **IntentWorkflowBatch** (`contracts/IntentWorkflowBatch.sol`):
+  `execute(workflowId, Call[], RevertPolicy)` with AbortAll / Continue /
+  SkipRemaining, leftover-ETH refund, no owner and no token rescue. The
+  contract does **not** verify call outputs. Calldata is a planned SHA-256
+  of each canonical node (`liveRouterCalldata: false`).
+- Capabilities gain the `workflows` block (`configured` only when
+  `INTENT_WORKFLOW_BATCH_ADDRESS` is a real public address). New live
+  adapter `fbt-single-chain-workflow` (settlement `user-signed-batch`).
+  Receipt schema `fbt.workflow-execution-proof.v1` claims
+  `SINGLE_CHAIN_BATCH_EXECUTED` with `globalAtomicity: false` and
+  `outputVerified: false`.
+- UI: Compose defaults to a same-chain swap+deposit DAG; per-step chain,
+  asset, min/max and revert policy; a banner when any step is a bridge or
+  another chain; Network tab workflow block (fa + en).
+- `.env.example` documents `INTENT_WORKFLOW_BATCH_ADDRESS` (public). Solver
+  and verifier private keys stay CLI-only and are never added as server env.
+
 ## 1.31.0 — Intent OS Phase 3b: outcome settlement reports + independent re-grading
 
 Phase 3a made outcomes claimable and adjudicable. Phase 3b makes both

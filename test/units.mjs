@@ -180,6 +180,7 @@ import {
   DEFAULT_INTENT_MEMORY,
   compileIntent,
   isQuietTime,
+  isSingleChainWorkflowSteps,
   loadIntentMemory,
   normalizeIntent,
   saveIntentMemory
@@ -187,7 +188,9 @@ import {
 import {
   canonicalJson,
   createExecutionProof,
-  verifyExecutionProof
+  createWorkflowExecutionProof,
+  verifyExecutionProof,
+  WORKFLOW_EXECUTION_PROOF_SCHEMA
 } from '../src/lib/executionProof.js';
 import { validateIntentEnvelope } from '../server/intents.js';
 import {
@@ -240,9 +243,24 @@ import {
   gradeExecution,
   minOutFor,
   readExecutionClaim,
+  solverConfigFromPrivateKey,
   storeExecutionClaim,
   verifyExecutionClaim
 } from '../server/intentExecution.js';
+import {
+  buildWorkflowBatchCalldata,
+  isSingleChainWorkflow,
+  MAX_WORKFLOW_NODES,
+  validateWorkflow,
+  WORKFLOW_SCHEMA,
+  workflowFromLegacySteps,
+  workflowIdFor,
+  workflowProtocolStatus
+} from '../server/intentWorkflow.js';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   buildDispute,
   parseVerifierRegistry,
@@ -4713,6 +4731,42 @@ export default async function run() {
       ]
     }, memory);
     t('a composite workflow stays draft-only until it is atomic', workflow.status === 'draft-only' && workflow.blocked);
+    t('a bridged workflow is blocked as ATOMIC_CROSS_CHAIN_UNAVAILABLE',
+      workflow.checks.some((r) => r.id === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE' && r.level === 'block'));
+
+    const sameChain = compileIntent({
+      kind: 'workflow', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3, privacy: 'standard',
+      deadlineAt: Date.now() + 3600000,
+      steps: [
+        { action: 'swap', asset: 'ETH', chainId: 42161 },
+        { action: 'deposit', asset: 'ETH', chainId: 42161 }
+      ]
+    }, memory);
+    t('a same-chain workflow compiles to review, never server execution',
+      sameChain.status === 'ready-for-review' && !sameChain.blocked
+        && String(sameChain.handoff || '').includes('workflow=1')
+        && sameChain.intent.constraints.requireUserSignature === true
+        && sameChain.intent.constraints.custodyAllowed === false);
+    t('the single-chain workflow solver is eligible only for same-chain plans',
+      sameChain.solvers.some((s) => s.id === 'fbt-single-chain-workflow' && s.status === 'eligible')
+        && workflow.solvers.some((s) => s.id === 'fbt-single-chain-workflow' && s.status === 'ineligible'));
+
+    const wfEnvelope = {
+      ...sameChain.intent,
+      constraints: { ...sameChain.intent.constraints, maxSlippagePct: 0.3, privacy: 'standard' }
+    };
+    const wfValid = validateIntentEnvelope(wfEnvelope);
+    t('the protocol accepts a same-chain workflow as reviewable, not executable',
+      wfValid.ok && wfValid.executable === false && wfValid.status === 'ready-for-review'
+        && wfValid.singleChainAtomic === true && wfValid.code === 'VALID');
+
+    const bridgedEnvelope = {
+      ...workflow.intent,
+      constraints: { ...workflow.intent.constraints, maxSlippagePct: 0.3, privacy: 'standard' }
+    };
+    t('a bridged envelope stays draft-only with ATOMIC_CROSS_CHAIN_UNAVAILABLE',
+      validateIntentEnvelope(bridgedEnvelope).code === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE');
 
     const invalid = normalizeIntent({ kind: 'swap', chainId: 56, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: 1 }, memory);
     t('same-token intents are refused', invalid.error === 'SAME_TOKEN');
@@ -5535,6 +5589,212 @@ export default async function run() {
       else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
     }
   }
+
+  /* ------- Phase 4a: single-chain workflow DAG + claim/dispute CLI ------ */
+  {
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    const node = (id, extra = {}) => ({
+      id,
+      action: extra.action || 'swap',
+      chainId: extra.chainId || 42161,
+      asset: extra.asset || 'ETH',
+      minOutput: extra.minOutput ?? '1',
+      maxInput: extra.maxInput ?? '2',
+      deadline: extra.deadline || deadline,
+      allowedContracts: extra.allowedContracts || [],
+      revertPolicy: extra.revertPolicy || 'abort-all',
+      approvalScope: extra.approvalScope || { mode: 'none' }
+    });
+    const dag = (nodes, edges) => ({ schema: WORKFLOW_SCHEMA, nodes, edges });
+
+    const good = dag(
+      [node('swap'), node('deposit', { action: 'deposit' })],
+      [{ from: 'swap', to: 'deposit', dependency: 'success', valueBinding: null }]
+    );
+    t('a two-node same-chain DAG validates', validateWorkflow(good).ok === true);
+    t('workflow ids are deterministic across insertion order',
+      workflowIdFor(good) === workflowIdFor(JSON.parse(JSON.stringify(good)))
+        && /^0x[a-f0-9]{64}$/.test(workflowIdFor(good)));
+
+    const cycled = dag(
+      [node('a'), node('b', { action: 'deposit' })],
+      [
+        { from: 'a', to: 'b', dependency: 'success', valueBinding: null },
+        { from: 'b', to: 'a', dependency: 'always', valueBinding: null }
+      ]
+    );
+    t('a cyclic DAG is refused', validateWorkflow(cycled).code === 'WORKFLOW_CYCLE');
+    t('a one-node plan is refused',
+      validateWorkflow(dag([node('only')], [])).code === 'BAD_WORKFLOW');
+    t('a nine-node plan exceeds the contract MAX_CALLS bound',
+      validateWorkflow(dag(
+        Array.from({ length: MAX_WORKFLOW_NODES + 1 }, (_, i) => node(`n${i + 1}`, {
+          action: i % 2 ? 'deposit' : 'swap'
+        })),
+        []
+      )).code === 'BAD_WORKFLOW');
+    t('an unknown action is refused rather than stored',
+      validateWorkflow(dag(
+        [node('swap'), node('x', { action: 'liquidate' })],
+        [{ from: 'swap', to: 'x', dependency: 'success', valueBinding: null }]
+      )).code === 'BAD_WORKFLOW_ACTION');
+
+    const built = buildWorkflowBatchCalldata(good);
+    t('same-chain calldata is a planned envelope, not a live router payload',
+      built.ok && built.liveRouterCalldata === false && built.verifiesCallOutputs === false
+        && built.custody === false && built.holdsTokens === false
+        && built.policy === 'abort-all' && built.callCount === 2
+        && typeof built.data === 'string' && built.data.startsWith('0x'));
+
+    const mixed = dag(
+      [node('swap', { revertPolicy: 'continue' }), node('deposit', { action: 'deposit', revertPolicy: 'abort-all' })],
+      [{ from: 'swap', to: 'deposit', dependency: 'success', valueBinding: null }]
+    );
+    t('mixed revert policies fall back to abort-all rather than guessing',
+      buildWorkflowBatchCalldata(mixed).policy === 'abort-all');
+
+    const bridged = dag(
+      [node('swap'), node('bridge', { action: 'bridge', chainId: 1 })],
+      [{ from: 'swap', to: 'bridge', dependency: 'success', valueBinding: null }]
+    );
+    t('cross-chain calldata is refused, not compiled',
+      buildWorkflowBatchCalldata(bridged).code === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
+        && isSingleChainWorkflow(bridged) === false);
+
+    const savedWorkflowAddr = process.env.INTENT_WORKFLOW_BATCH_ADDRESS;
+    delete process.env.INTENT_WORKFLOW_BATCH_ADDRESS;
+    t('workflow capabilities stay unconfigured without a public address',
+      workflowProtocolStatus().contract.configured === false
+        && workflowProtocolStatus().singleChainAtomic === true
+        && workflowProtocolStatus().crossChainAtomic === false
+        && workflowProtocolStatus().contract.verifiesCallOutputs === false
+        && workflowProtocolStatus().contract.custody === false);
+    process.env.INTENT_WORKFLOW_BATCH_ADDRESS = '0x1111111111111111111111111111111111111111';
+    t('a real public address flips configured:true without inventing custody',
+      workflowProtocolStatus().contract.configured === true
+        && workflowProtocolStatus().contract.address.toLowerCase() === '0x1111111111111111111111111111111111111111'
+        && workflowProtocolStatus().contract.holdsTokens === false);
+    process.env.INTENT_WORKFLOW_BATCH_ADDRESS = 'not-an-address';
+    t('a malformed address does not pretend the batcher is configured',
+      workflowProtocolStatus().contract.configured === false);
+    if (savedWorkflowAddr === undefined) delete process.env.INTENT_WORKFLOW_BATCH_ADDRESS;
+    else process.env.INTENT_WORKFLOW_BATCH_ADDRESS = savedWorkflowAddr;
+
+    const wfProof = await createWorkflowExecutionProof({
+      workflowId: workflowIdFor(good),
+      chainId: 42161,
+      nodeCount: 2,
+      revertPolicy: 'abort-all',
+      createdAt: 1
+    });
+    t('a workflow receipt claims a same-chain batch, not global atomicity',
+      wfProof.schema === WORKFLOW_EXECUTION_PROOF_SCHEMA
+        && wfProof.payload.claim.code === 'SINGLE_CHAIN_BATCH_EXECUTED'
+        && wfProof.payload.claim.globalAtomicity === false
+        && wfProof.payload.claim.outputVerified === false
+        && wfProof.payload.honesty.custody === false
+        && wfProof.payload.honesty.verifiesCallOutputs === false
+        && (await verifyExecutionProof(wfProof)).ok);
+    const tamperedWf = JSON.parse(JSON.stringify(wfProof));
+    tamperedWf.payload.claim.outputVerified = true;
+    t('changing a workflow receipt breaks digest verification',
+      !(await verifyExecutionProof(tamperedWf)).ok);
+
+    const sKeys4a = generateSolverKeyPair();
+    const savedSolverKey = process.env.INTENT_SOLVER_PRIVATE_KEY;
+    const savedSolverId = process.env.INTENT_SOLVER_ID;
+    process.env.INTENT_SOLVER_PRIVATE_KEY = sKeys4a.privateKey;
+    process.env.INTENT_SOLVER_ID = 'unit-solver-4a';
+    const derived = solverConfigFromPrivateKey();
+    t('solverConfigFromPrivateKey derives the public key without inventing an id',
+      derived && derived.id === 'unit-solver-4a' && derived.publicKey === sKeys4a.publicKey);
+    if (savedSolverKey === undefined) delete process.env.INTENT_SOLVER_PRIVATE_KEY;
+    else process.env.INTENT_SOLVER_PRIVATE_KEY = savedSolverKey;
+    if (savedSolverId === undefined) delete process.env.INTENT_SOLVER_ID;
+    else process.env.INTENT_SOLVER_ID = savedSolverId;
+
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+    const cKeys = generateSolverKeyPair();
+    const sKeys = generateSolverKeyPair();
+    const vKeys = generateSolverKeyPair();
+    const intent4a = `0x${'4a'.repeat(32)}`;
+    const solver4a = { id: 'unit-solver-4a', name: 'Unit Solver 4A', publicKey: sKeys.publicKey, active: true };
+    const verifier4a = { id: 'unit-verifier-4a', name: 'Unit Verifier 4A', publicKey: vKeys.publicKey, active: true };
+    const signed4a = signSolverCommitment({
+      schema: 'fbt.solver-quote.v1', intentHash: intent4a, solverId: solver4a.id,
+      chainId: 42161, amountOut: '400000000000000000', maxGas: '250000', feeBps: 70, slippageBps: 50,
+      executable: true, issuedAt: now, validUntil: now + 90,
+      nonce: `0x${'4a'.repeat(16)}`, routeCommitment: `0x${'4b'.repeat(32)}`
+    }, sKeys.privateKey);
+    await appendSignedCommitment(signed4a, { registry: new Map([[solver4a.id, solver4a]]), now: nowMs });
+
+    const prevCoordId = process.env.INTENT_COORDINATOR_ID;
+    const prevCoordKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator-4a';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = cKeys.privateKey;
+    const tmp = mkdtempSync(join(tmpdir(), 'fbt-phase4a-'));
+    try {
+      const closed4a = await closeAuction({
+        schema: 'fbt.auction-close-request.v1', intentHash: intent4a,
+        policy: { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      }, { now: nowMs });
+      t('phase 4a fixture auction seals for CLI claim/dispute', closed4a.ok && closed4a.close.logSize === 1);
+      const closePath = join(tmp, 'close.json');
+      const commitmentPath = join(tmp, 'commitment.json');
+      writeFileSync(closePath, JSON.stringify(closed4a.close));
+      writeFileSync(commitmentPath, JSON.stringify(signed4a));
+
+      const claimOut = execFileSync(process.execPath, [
+        'scripts/intent-settler.mjs', 'claim', closePath, commitmentPath,
+        '--outcome', 'filled',
+        '--tx', `0x${'c1'.repeat(32)}`,
+        '--received', '400500000000000000',
+        '--fee', '70',
+        '--executed-at', String(now)
+      ], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          INTENT_SOLVER_PRIVATE_KEY: sKeys.privateKey,
+          INTENT_SOLVER_ID: solver4a.id,
+          INTENT_SOLVER_NAME: solver4a.name
+        }
+      });
+      const claimed = JSON.parse(claimOut);
+      t('CLI claim builds a verifiable execution claim without printing the private key',
+        verifyExecutionClaim(claimed, { close: closed4a.close, commitment: signed4a }).ok
+          && claimed.outcome === 'filled'
+          && !claimOut.includes(sKeys.privateKey));
+
+      const disputeOut = execFileSync(process.execPath, [
+        'scripts/intent-settler.mjs', 'dispute', closePath,
+        '--kind', 'no-execution',
+        '--detail', 'no transaction observed',
+        '--observed-at', String(now + 1)
+      ], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          INTENT_VERIFIER_PRIVATE_KEY: vKeys.privateKey,
+          INTENT_VERIFIER_ID: verifier4a.id,
+          INTENT_VERIFIER_NAME: verifier4a.name
+        }
+      });
+      const disputed = JSON.parse(disputeOut);
+      t('CLI dispute builds a verifiable dispute without printing the private key',
+        verifyDispute(disputed, { close: closed4a.close }).ok
+          && disputed.kind === 'no-execution'
+          && !disputeOut.includes(vKeys.privateKey));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+      if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = prevCoordId;
+      if (prevCoordKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
+    }
+  }
+
 
   return rows;
 }
