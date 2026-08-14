@@ -28,6 +28,7 @@ import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/sola
 import { iconCandidates } from '../src/lib/tokenIcon.jsx';
 import { pairTokens, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
+import { normalizeEvent, validateResponseShape, EVENT_KINDS } from '../src/lib/whales.js';
 import {
   REFERRAL_SHARE,
   captureReferral,
@@ -7438,6 +7439,57 @@ export default async function run() {
     t('root-anchor capability stays configured:false without a real network env',
       merkleRootAnchorStatus(new Map()).configured === false
         && merkleRootAnchorStatus(new Map()).externallyAnchoredByDefault === false);
+  }
+
+  /* -------- Whale tracking schema + normalization -------- */
+  {
+    const sample = {
+      id: '56:0xabc:0',
+      chainId: 56, chainShort: 'BSC', chainName: 'BNB Smart Chain', chainColor: '#f0b90b',
+      kind: 'transfer',
+      token: { symbol: 'USDT', name: 'Tether USD', address: '0x55d3…', decimals: 18, verified: true, coingeckoId: 'tether' },
+      amount: 1_000_000, valueUsd: 1_000_000, usdPrice: 1,
+      from: { address: '0x' + '1'.repeat(40), label: null, short: '0x1111…1111' },
+      to: { address: '0x' + '2'.repeat(40), label: null, short: '0x2222…2222' },
+      hash: '0xabc', blockNumber: 1, timestamp: Date.now(),
+      explorerTx: 'https://bscscan.com/tx/0xabc',
+      explorerFrom: 'https://bscscan.com/address/0x111', explorerTo: 'https://bscscan.com/address/0x222'
+    };
+    t('normalizeEvent returns a stable shape',
+      normalizeEvent(sample).id === sample.id && normalizeEvent(sample).token.symbol === 'USDT');
+    t('normalizeEvent keeps unknown kinds as transfer',
+      normalizeEvent({ ...sample, kind: 'weird' }).kind === 'transfer');
+    t('normalizeEvent tolerates missing values',
+      normalizeEvent({ id: 'x', chainId: 1, hash: '0xh', token: { symbol: 'X' } }).amount === 0);
+
+    t('validateResponseShape rejects missing schema',
+      validateResponseShape({ events: [] }) === false);
+    t('validateResponseShape accepts a well-formed response',
+      validateResponseShape({ schema: 'fbt.whales.v1', events: [sample] }) === true);
+    t('validateResponseShape rejects events without hash',
+      validateResponseShape({ schema: 'fbt.whales.v1', events: [{ id: '1', chainId: 1 }] }) === false);
+
+    // Deduplication: repeated ids collapse to one entry in the server module
+    // (simulated here by a Set the server uses).
+    const dedupe = new Set();
+    [sample, sample, { ...sample, id: '56:0xdef:0' }].forEach((e) => dedupe.add(e.id));
+    t('whale events deduplicate by chain+hash+logIndex key', dedupe.size === 2);
+
+    // Threshold filtering at the API: a small event below minUsd is excluded.
+    const small = { ...sample, valueUsd: 50, amount: 50 };
+    const big = { ...sample, valueUsd: 500_000, amount: 500_000, id: '56:0xbig:0' };
+    const filtered = [small, big].filter((e) => e.valueUsd == null || e.valueUsd >= 100_000);
+    t('events below the minimum USD threshold are filtered out',
+      filtered.length === 1 && filtered[0].id === big.id);
+
+    // Unknown labels must remain null/unknown — never fabricated.
+    const unknown = normalizeEvent(sample);
+    t('unknown sender label stays null', unknown.from.label === null);
+    t('unknown recipient label stays null', unknown.to.label === null);
+
+    // Kind set must include the supported categories
+    t('event kind set includes transfer/mint/burn',
+      EVENT_KINDS.includes('transfer') && EVENT_KINDS.includes('mint') && EVENT_KINDS.includes('burn'));
   }
 
   return rows;

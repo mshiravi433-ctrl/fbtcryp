@@ -1,0 +1,121 @@
+/* Whale Tracking tab */
+.whales-panel { display: flex; flex-direction: column; gap: 12px; }
+.whales-controls { padding: 12px; border-radius: 18px; }
+
+.whale-list { margin-top: 2px; }
+
+.whale-card {
+  position: relative;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  overflow: hidden;
+  transition: border-color 0.2s ease, transform 0.18s ease;
+}
+.whale-card:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-1px); }
+:root[data-theme='light'] .whale-card {
+  background: rgba(255,255,255,0.8);
+  border-color: rgba(13,16,32,0.07);
+  box-shadow: 0 8px 22px rgba(13,16,32,0.05);
+}
+.whale-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(135deg, rgba(0,229,255,0.06), transparent 60%);
+  transition: opacity 0.2s;
+}
+.whale-card:hover::before { opacity: 1; }
+
+.whale-chain-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.whale-kind {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-2);
+}
+:root[data-theme='light'] .whale-kind {
+  background: rgba(13,16,32,0.05);
+  border-color: rgba(13,16,32,0.07);
+  color: var(--text-2);
+}
+.whale-kind-transfer { color: var(--text-2); }
+.whale-kind-mint { color: var(--up); border-color: color-mix(in srgb, var(--up) 35%, transparent); }
+.whale-kind-burn { color: var(--down); border-color: color-mix(in srgb, var(--down) 35%, transparent); }
+.whale-kind-inflow { color: var(--up); }
+.whale-kind-outflow { color: var(--down); }
+.whale-kind-contract { color: var(--rgb-2); }
+
+.whale-flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.whale-arrow {
+  color: var(--text-3);
+  font-size: 14px;
+  text-align: center;
+}
+
+.whale-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  min-width: 0;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+.whale-addr:hover { border-color: rgba(255,255,255,0.18); color: var(--text-1); background: rgba(255,255,255,0.07); }
+:root[data-theme='light'] .whale-addr {
+  background: rgba(13,16,32,0.03);
+  border-color: rgba(13,16,32,0.07);
+}
+:root[data-theme='light'] .whale-addr:hover { background: rgba(13,16,32,0.06); }
+.whale-addr.is-unknown .whale-addr-label { color: var(--text-3); }
+.whale-addr-label { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 8ch; }
+.whale-addr-hash { font-size: 10px; opacity: 0.7; white-space: nowrap; }
+.whale-addr-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+}
+
+.whale-addr:nth-child(1) { justify-self: start; }
+.whale-addr:last-child { justify-self: end; }
+:dir(rtl) .whale-arrow { transform: rotate(180deg); }
+
+.whales-empty { padding: 28px 14px; }
+
+.whales-stale { color: var(--rgb-5); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .whale-card { transition: none; }
+  .whale-card:hover { transform: none; }
+}

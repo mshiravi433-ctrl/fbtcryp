@@ -413,7 +413,30 @@
     "emptyBody": "Connect a wallet you already own to see your balances and swap. There is no signup, no email and no identity check.",
     "emptyReassure": "We never receive your recovery phrase or private key. Every transaction is signed by your own wallet.",
     "holdingsMore": "Your other holdings",
-    "custodyTitle": "Who controls this wallet?"
+    "custodyTitle": "Who controls this wallet?",
+    "notConnected": "Not connected",
+    "connectCta": "Connect to see your portfolio",
+    "portfolioTotal": "Total portfolio",
+    "coverageShort": "{{priced}}/{{total}} priced",
+    "network": "Network",
+    "allNetworks": "All networks",
+    "networks": "Networks",
+    "networksUnit": "networks",
+    "assetsUnit": "assets",
+    "active": "Active",
+    "chainUnavailable": "temporarily unavailable",
+    "assets": "Assets",
+    "searchAssets": "Search assets…",
+    "noAssets": "No assets found on connected chains",
+    "noAssetsChain": "No assets on this network above the dust threshold",
+    "switchErr": {
+      "REJECTED": "Switch was rejected",
+      "FAILED": "Could not switch network"
+    },
+    "localWallet": "On-device wallet",
+    "copyAddress": "Copy address",
+    "practiceMode": "Practice mode",
+    "practiceBody": "Virtual balance for learning — no real money at risk. Test trading, explore features, and get comfortable before connecting a real wallet."
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -1855,7 +1878,8 @@
       "community": "Community",
       "listen": "Radio",
       "calm": "Calm",
-      "insights": "Intelligence"
+      "insights": "Intelligence",
+      "whales": "Whales"
     }
   },
   "notify": {
@@ -3772,5 +3796,49 @@
       "continue": "Continue",
       "skip-remaining": "Skip remaining"
     }
+  },
+  "whales": {
+    "title": "Whale Tracking",
+    "subtitle": "Recent large on-chain transfers",
+    "loading": "Loading whale transactions…",
+    "refresh": "Refresh",
+    "updated": "Updated {{ago}}",
+    "stale": "stale",
+    "partial": "Some chains are unavailable; showing partial results",
+    "coverage": "{{priced}} of {{total}} events priced (estimates)",
+    "error": "Could not load whale transactions",
+    "errorBody": "Public RPCs may be rate-limited. Pull to retry.",
+    "rateLimited": "Rate limited",
+    "rateLimitedBody": "Slow down — the public feed limits how often we can poll.",
+    "empty": "No whale transactions match your filters",
+    "emptyBody": "Try a smaller threshold, a wider time window, or All networks.",
+    "retry": "Retry",
+    "searchToken": "Search by token",
+    "allChains": "All",
+    "threshold": {
+      "10k": "$10k+",
+      "100k": "$100k+",
+      "1m": "$1M+",
+      "10m": "$10M+"
+    },
+    "time": {
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "all": "All"
+    },
+    "kind": {
+      "transfer": "Transfer",
+      "mint": "Mint",
+      "burn": "Burn",
+      "inflow": "Inflow",
+      "outflow": "Outflow",
+      "contract": "Contract"
+    },
+    "unverified": "unverified",
+    "unknown": "Unknown",
+    "noPrice": "no price",
+    "estimated": "estimate",
+    "disclaimer": "Events are sourced from public RPCs and block explorers. Address labels are shown only when our curated registry recognises them; unknown senders and recipients stay \"Unknown\". Fiat values are estimates using current market prices."
   }
 }
