@@ -3753,7 +3753,13 @@
       "coordinatorRotation": "Coordinator key rotation",
       "rootAnchor": "Optional Merkle anchor",
       "operatorIndependence": "Organizational independence",
-      "verificationNote": "An expiring operator attestation proves control of a registered watcher/verifier key and key separation from FBT solvers/coordinator. It does not prove legal or organizational independence; that requires external operation and audit. Coordinator rotation is dual-signed by old and new keys, while historical receipts verify against their embedded key. Merkle roots become externally anchored only after an exact configured-contract event is verified."
+      "verificationNote": "An expiring operator attestation proves control of a registered watcher/verifier key and key separation from FBT solvers/coordinator. It does not prove legal or organizational independence; that requires external operation and audit. Coordinator rotation is dual-signed by old and new keys, while historical receipts verify against their embedded key. Merkle roots become externally anchored only after an exact configured-contract event is verified.",
+      "txVerification": "PER-LEG ON-CHAIN VERIFICATION",
+      "txVerificationConfigured": "Multi-RPC verification is configured",
+      "txVerificationUnconfigured": "Multi-RPC verification is not configured",
+      "txVerificationNote": "Phase 4c adds a derived verification layer: a party binds its on-chain address with its own pinned Ed25519 key (self-attested address control, no wallet signature, no funds authority), and a registered verifier reads each leg through at least two HTTPS RPC endpoints with distinct hostnames. The server re-reads the chain itself and stores only fully recomputable reports. Distinct hostnames are not proof of provider independence. Verifying two separate transactions never makes them atomic: custody, escrow, global atomicity and automatic settlement stay false, and the envelope stays draft-only under ATOMIC_CROSS_CHAIN_UNAVAILABLE.",
+      "txVerificationQuorum": "RPC quorum",
+      "txVerificationBindings": "Signed account bindings"
     },
     "revert": {
       "abort-all": "Abort all",

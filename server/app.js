@@ -148,6 +148,15 @@ import {
   storeCrossChainState
 } from './intentCrossChain.js';
 import {
+  crossChainVerificationStatus,
+  parseCrossChainRpcNetworks,
+  readAccountBindings,
+  readCrossChainStateWithVerification,
+  readTxVerificationReports,
+  storeAccountBinding,
+  storeTxVerificationReport
+} from './intentCrossChainVerification.js';
+import {
   independentVerificationStatus,
   parseOperatorAttestations,
   publicOperatorAttestations
@@ -505,7 +514,10 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       graceSeconds: executionGraceSeconds()
     }),
     workflows: workflowProtocolStatus(),
-    crossChain: crossChainProtocolStatus(),
+    crossChain: {
+      ...crossChainProtocolStatus(),
+      txVerification: crossChainVerificationStatus(parseCrossChainRpcNetworks())
+    },
     independentVerification,
     merkleRootAnchors: merkleRootAnchorStatus(merkleAnchorNetworks),
     outcome: outcomeProtocolStatus({
@@ -566,7 +578,12 @@ app.post('/api/intents/v1/cross-chain/states', async (req, res) => {
 });
 
 app.get('/api/intents/v1/cross-chain/states/:stateId', async (req, res) => {
-  const state = await readCrossChainState(req.params.stateId);
+  /* Phase 4c: the public state carries a DERIVED verification block
+     (bindings, reports, per-leg status). The stored fbt.cross-chain-state.v1
+     plan and fbt.cross-chain-leg-receipt.v1 receipts are returned exactly as
+     written — history is never rewritten, and receipts keep
+     onChainVerified:false because they are party claims, not chain reads. */
+  const state = await readCrossChainStateWithVerification(req.params.stateId);
   if (state.error) {
     const status = state.error === 'CROSS_CHAIN_STATE_NOT_FOUND' ? 404
       : state.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503;
@@ -587,6 +604,73 @@ app.post('/api/intents/v1/cross-chain/states/:stateId/receipts', async (req, res
     return res.status(status).json({ error: stored.code });
   }
   return res.status(stored.alreadyStored ? 200 : 201).json(stored.state);
+});
+
+/* Phase 4c: signed account bindings + independently recomputed multi-RPC
+   verification reports. A binding must be signed by the exact party key the
+   plan pins — placing an address in a request body proves nothing. A report
+   is stored ONLY after the server re-reads the chain through its own
+   configured endpoints and reproduces the exact signed verdict; a transient
+   RPC outcome answers retryable and stores nothing. */
+app.post('/api/intents/v1/cross-chain/states/:stateId/account-bindings', async (req, res) => {
+  const stored = await withIntentLock(String(req.params.stateId), () =>
+    storeAccountBinding(req.params.stateId, req.body));
+  if (!stored.ok) {
+    const status = ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'ACCOUNT_BINDING_CONFLICT' ? 409
+        : stored.code === 'CROSS_CHAIN_STATE_NOT_FOUND' ? 404
+          : ['ACCOUNT_BINDING_SIGNATURE_MISMATCH', 'BINDING_KEY_MISMATCH'].includes(stored.code) ? 403 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true,
+    alreadyStored: stored.alreadyStored,
+    binding: stored.binding
+  });
+});
+
+app.get('/api/intents/v1/cross-chain/states/:stateId/account-bindings', async (req, res) => {
+  const result = await readAccountBindings(req.params.stateId);
+  if (result.error) {
+    return res.status(result.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503).json({ error: result.error });
+  }
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({ schema: 'fbt.cross-chain-account-binding.v1', bindings: result.bindings });
+});
+
+app.post('/api/intents/v1/cross-chain/states/:stateId/verification-reports', async (req, res) => {
+  const stored = await withIntentLock(String(req.params.stateId), () =>
+    storeTxVerificationReport(req.params.stateId, req.body, {
+      registry: parseVerifierRegistry(),
+      networks: parseCrossChainRpcNetworks()
+    }));
+  if (!stored.ok) {
+    const transient = ['RPC_QUORUM_UNAVAILABLE', 'RPC_DISAGREEMENT', 'TX_NOT_FOUND', 'INSUFFICIENT_CONFIRMATIONS'];
+    const status = ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(stored.code) ? 503
+      : transient.includes(stored.code) ? 409
+        : stored.code === 'VERIFICATION_REPORT_CONFLICT' ? 409
+          : ['CROSS_CHAIN_STATE_NOT_FOUND', 'VERIFICATION_RECEIPT_NOT_FOUND', 'ACCOUNT_BINDING_NOT_FOUND'].includes(stored.code) ? 404
+            : ['VERIFICATION_SIGNATURE_MISMATCH', 'UNREGISTERED_VERIFIER'].includes(stored.code) ? 403
+              : stored.code === 'VERIFICATION_CHAIN_NOT_CONFIGURED' ? 503 : 400;
+    return res.status(status).json({
+      error: stored.code,
+      retryable: transient.includes(stored.code) || Boolean(stored.transient)
+    });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true,
+    alreadyStored: stored.alreadyStored,
+    report: stored.report
+  });
+});
+
+app.get('/api/intents/v1/cross-chain/states/:stateId/verification-reports', async (req, res) => {
+  const result = await readTxVerificationReports(req.params.stateId);
+  if (result.error) {
+    return res.status(result.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503).json({ error: result.error });
+  }
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({ schema: 'fbt.cross-chain-tx-verification.v1', reports: result.reports });
 });
 
 app.post('/api/intents/v1/commitments', async (req, res) => {

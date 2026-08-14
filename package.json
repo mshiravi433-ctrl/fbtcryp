@@ -1,7 +1,7 @@
 {
   "name": "fbt-swap",
   "private": true,
-  "version": "1.34.0",
+  "version": "1.35.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node --watch server/index.js\"",
@@ -13,6 +13,8 @@
     "serve": "npm run build && node server/index.js",
     "compile:contract": "node scripts/compile.mjs",
     "compile:workflow": "node scripts/compile-workflow.mjs",
+    "compile:merkle-anchor": "node scripts/compile-merkle-anchor.mjs",
+    "deploy:merkle-anchor": "node scripts/deploy-merkle-anchor.mjs",
     "deploy:feerouter": "node scripts/deploy-feerouter.mjs",
     "deploy:workflow": "node scripts/deploy-workflow.mjs",
     "test:feerouter": "node scripts/test-feerouter.mjs",
@@ -61,6 +63,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^10.0.4",
     "jsdom": "^30.0.0",
+    "solc": "0.8.24",
     "vite": "^5.4.1"
   },
   "engines": {
