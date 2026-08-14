@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.31.0 — Intent OS Phase 3b: outcome settlement reports + independent re-grading
+
+Phase 3a made outcomes claimable and adjudicable. Phase 3b makes both
+independently CHECKABLE: any registered verifier publishes a recomputable
+settlement report over the same embedded evidence the coordinator graded,
+connecting the selection receipt to the actual delivered amount — the last
+item of the Phase 3 promise «bonded open solver network + outcome
+settlement».
+
+- **Settlement reports** (`server/intentSettlement.js`,
+  `fbt.settlement-report.v1`): a report re-grades one sealed outcome from
+  embedded evidence (selected commitment, claim, disputes, adjudication) with
+  the shared deterministic engine, and publishes the settlement arithmetic —
+  `quotedMinOut`, `promisedOut`, `deliveredOut`, exact `shortfallUnits` and
+  `shortfallBps`. The evaluation time is embedded, so a stored report always
+  recomputes. Verdicts: `fulfilled` / `short-filled` / `failed` /
+  `unexecuted` / `pending` / `contested`.
+- **Adjudication cross-check**: if a report embeds a stored coordinator
+  adjudication whose verdict does not reproduce from the same evidence, the
+  report verdict becomes `adjudication-mismatch` — hard misconduct evidence,
+  like a censored admission receipt. `POST/GET
+  /api/intents/v1/auctions/:intentHash/settlement-reports`; the server
+  re-evaluates every report before storing (a verdict that does not
+  recompute is rejected even with a valid verifier key), storage is
+  immutable and reportId replay is idempotent.
+- **Live per-auction settlement status**: auction state gains the
+  `settlement` block (`unmonitored` → `fulfilled` / `pending` / `adverse` /
+  `adjudication-mismatch`), with scope honestly declared as
+  `observed-evidence-only`. An adjudication mismatch dominates every other
+  verdict; adverse verdicts dominate fulfilled; zero reports never reads as
+  settled.
+- **Offline settlement CLI** (`scripts/intent-settler.mjs`): `min-out`,
+  `verify-claim`, `grade`, `report` (signed with the verifier key),
+  `verify-report`, `collect` — full independent verification of claims,
+  grades and reports without contacting FBT.
+- Client + UI: `intentNetwork` gains the settlement-reports getter; the
+  Network tab shows the settlement protocol block — report schema, server
+  recompute, adjudication cross-check and the never-custody flag (fa + en).
+  Capabilities gain the `settlement` section with `configured`-honest
+  fields.
+- Tests: 24 new unit rows (settlement evaluation matrix, shortfall
+  arithmetic, adjudication cross-check, recompute/claims rejection, summary
+  precedence, storage idempotency) and 11 new HTTP probe rows (report
+  lifecycle, tamper and rogue-verifier refusals, end-to-end
+  adjudication-mismatch evidence dominating public state, consistent
+  `unexecuted` → `adverse` settlement).
+
 ## 1.30.0 — Intent OS Phase 3a: bonded solver registry + execution claims, disputes and deterministic penalty adjudication
 
 Phase 2c proved a sealed set was complete; it deliberately never answered

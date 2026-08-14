@@ -41,6 +41,7 @@ export const INTENT_CAPABILITIES = Object.freeze({
     disputes: '/api/intents/v1/auctions/{intentHash}/disputes',
     adjudication: '/api/intents/v1/auctions/{intentHash}/adjudication',
     adjudicate: '/api/intents/v1/auctions/{intentHash}/adjudicate',
+    settlementReports: '/api/intents/v1/auctions/{intentHash}/settlement-reports',
     bids: null
   },
   stages: ['intent', 'risk', 'solver-market', 'simulation', 'execution', 'settlement', 'verification'],
@@ -91,6 +92,9 @@ export const INTENT_CAPABILITIES = Object.freeze({
     executionClaims: 'fbt.execution-claim.v1',
     failureDisputes: 'fbt.dispute.v1',
     outcomeAdjudication: 'fbt.adjudication.v1',
+    settlementReports: 'fbt.settlement-report.v1',
+    settlementReportsServerRecomputed: true,
+    adjudicationCrossCheck: true,
     deterministicPenaltyGrading: true,
     bondPenaltyEnforcement: 'out-of-protocol',
     onChainBondCustody: false,

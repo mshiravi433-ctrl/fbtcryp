@@ -131,6 +131,14 @@ import {
   storeAdjudication,
   verifyAdjudication
 } from './intentAdjudication.js';
+import {
+  publicSettlementReport,
+  readSettlementReports,
+  settlementProtocolStatus,
+  settlementSummary,
+  storeSettlementReport,
+  verifySettlementReport
+} from './intentSettlement.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -369,6 +377,10 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
     execution: executionProtocolStatus({
       registeredVerifiers: verifierRegistry.size,
       graceSeconds: executionGraceSeconds()
+    }),
+    settlement: settlementProtocolStatus({
+      registeredVerifiers: verifierRegistry.size,
+      graceSeconds: executionGraceSeconds()
     })
   });
 });
@@ -520,11 +532,23 @@ app.get('/api/intents/v1/auctions/:intentHash', async (req, res) => {
       result.disputes = disputes.records.map(publicDispute);
       result.adjudication = adjudicationRecord?.adjudication || null;
       result.adjudicationVerified = adjudicationVerified;
+      /* Phase 3b live evidence: independent settlement reports re-grade the
+         outcome (promised vs delivered, adjudication cross-check) and derive
+         the per-auction settlement status. A settlement-store outage degrades
+         only this block. */
+      const settlementListed = await readSettlementReports(result.intentHash, result.close);
+      if (settlementListed.error) {
+        result.settlement = { status: 'settlement-store-unavailable' };
+      } else {
+        result.settlement = settlementSummary(settlementListed.reports);
+        result.settlementReports = settlementListed.reports.map(publicSettlementReport);
+      }
     } catch {
       result.execution = { storeUnavailable: true };
       result.disputes = null;
       result.adjudication = null;
       result.adjudicationVerified = null;
+      result.settlement = { status: 'settlement-store-unavailable' };
     }
   }
   res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
@@ -811,6 +835,66 @@ app.get('/api/intents/v1/auctions/:intentHash/adjudication', async (req, res) =>
   if (!rechecked.ok) return res.status(503).json({ error: 'INVALID_STORED_ADJUDICATION' });
   res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
   return res.json(record.adjudication);
+});
+
+/*
+ * ─── PHASE 3b: OUTCOME SETTLEMENT REPORTS ─────────────────────────────────
+ * Independent verifiers re-grade every execution outcome — promised vs
+ * delivered output, shortfall, and whether the coordinator's stored
+ * adjudication reproduces — and submit fbt.settlement-report.v1 verdicts.
+ * Like watcher reports, the server RE-EVALUATES deterministically before
+ * storing: a report whose verdict, shortfall or cross-check does not
+ * recompute is rejected even with a valid verifier key. Storage is
+ * immutable; one reportId can never be silently replaced.
+ */
+app.post('/api/intents/v1/auctions/:intentHash/settlement-reports', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseVerifierRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_VERIFIERS' });
+  const checked = verifySettlementReport(req.body, {
+    registry,
+    close: state.close,
+    requireRegistered: true
+  });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_VERIFIER', 'VERIFIER_SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeSettlementReport(state.intentHash, checked.report);
+  if (!stored.ok) {
+    const status = ['SETTLEMENT_STORE_UNAVAILABLE', 'SETTLEMENT_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'SETTLEMENT_REPORTS_FULL' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyReported ? 200 : 201).json({
+    ok: true,
+    alreadyReported: stored.alreadyReported,
+    reportId: checked.report.reportId,
+    verdict: checked.report.verdict,
+    adjudicationConsistent: checked.report.adjudicationConsistent,
+    promisedOut: checked.report.promisedOut,
+    deliveredOut: checked.report.deliveredOut,
+    shortfallBps: checked.report.shortfallBps
+  });
+});
+
+/* Full verified settlement reports for an auction, each re-verified against
+   the stored signed close (including deterministic re-evaluation) on read. */
+app.get('/api/intents/v1/auctions/:intentHash/settlement-reports', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const listed = await readSettlementReports(state.intentHash, state.close);
+  if (listed.error) return res.status(503).json({ error: listed.error });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({
+    intentHash: state.intentHash,
+    closeId: state.close.closeId,
+    settlement: settlementSummary(listed.reports),
+    reports: listed.reports
+  });
 });
 
 /*

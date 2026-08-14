@@ -14,6 +14,7 @@ import {
 } from '../server/intentExecution.js';
 import { buildDispute } from '../server/intentDisputes.js';
 import { verifyAdjudication } from '../server/intentAdjudication.js';
+import { buildSettlementReport } from '../server/intentSettlement.js';
 
 const rows = [];
 const t = (name, ok) => rows.push([name, Boolean(ok)]);
@@ -25,6 +26,7 @@ const previousWatcherRegistry = process.env.INTENT_WATCHER_KEYS;
 const previousVerifierRegistry = process.env.INTENT_VERIFIER_KEYS;
 const previousBonds = process.env.INTENT_SOLVER_BONDS;
 const previousGrace = process.env.INTENT_EXECUTION_GRACE_SECONDS;
+const previousSettlementRate = process.env.INTENT_SETTLEMENT_RATE_LIMIT;
 const keys = generateSolverKeyPair();
 const coordinatorKeys = generateSolverKeyPair();
 const watcherKeys = generateSolverKeyPair();
@@ -42,6 +44,11 @@ process.env.INTENT_SOLVER_BONDS = JSON.stringify([
   { solverId: solver.id, bondUsd: '50000', asset: 'USDC', terms: 'API probe bond' }
 ]);
 process.env.INTENT_EXECUTION_GRACE_SECONDS = '0';
+/* The probe walks the full claim/dispute/adjudication/report lifecycle for
+   several auctions, which legitimately exceeds the production per-caller
+   budget of 20/min — raise it for the probe rather than weakening the
+   production default. */
+process.env.INTENT_SETTLEMENT_RATE_LIMIT = '100';
 
 /* Dynamic import is deliberate: the public registry must be installed before
    the shared Express app (and its protocol modules) are evaluated. */
@@ -561,6 +568,143 @@ try {
     noVerifierDispute.response.status === 503 && noVerifierDispute.body.error === 'NO_REGISTERED_VERIFIERS');
   process.env.INTENT_VERIFIER_KEYS = savedVerifiers;
 
+  /* ------- Phase 3b: outcome settlement reports -------------------------- */
+  const settlementCaps = await request('/capabilities');
+  t('capabilities advertise the settlement report protocol honestly',
+    settlementCaps.body.settlement?.reportSchema === 'fbt.settlement-report.v1'
+      && settlementCaps.body.settlement?.registeredVerifiers === 1
+      && settlementCaps.body.settlement?.serverRecomputesBeforeStorage === true
+      && settlementCaps.body.settlement?.adjudicationCrossCheck === true
+      && settlementCaps.body.settlement?.offlineVerifier === 'scripts/intent-settler.mjs'
+      && settlementCaps.body.settlement?.onChainTxVerification === false
+      && settlementCaps.body.settlement?.custody === false);
+
+  const fulfilledSettlement = buildSettlementReport({
+    close: closed.body.close,
+    commitment,
+    claim: filledClaim.claim,
+    disputes: [dispute.dispute],
+    adjudication: adjudicationRead.body,
+    verifier,
+    privateKey: verifierKeys.privateKey,
+    graceSeconds: 0
+  });
+  t('a verifier builds a settlement report that cross-checks the stored adjudication',
+    fulfilledSettlement.ok
+      && fulfilledSettlement.report.verdict === 'fulfilled'
+      && fulfilledSettlement.report.adjudicationConsistent === true);
+
+  const settlementStored = await request(`/auctions/${intentHash}/settlement-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fulfilledSettlement.report)
+  });
+  t('a registered verifier settlement report stores after server-side recompute',
+    settlementStored.response.status === 201
+      && settlementStored.body.verdict === 'fulfilled'
+      && settlementStored.body.adjudicationConsistent === true
+      && settlementStored.body.promisedOut === '400000000000000000'
+      && settlementStored.body.deliveredOut === '400500000000000000'
+      && settlementStored.body.shortfallBps === 0);
+
+  const settlementReplay = await request(`/auctions/${intentHash}/settlement-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fulfilledSettlement.report)
+  });
+  t('re-submitting the same settlement reportId replays idempotently',
+    settlementReplay.response.status === 200 && settlementReplay.body.alreadyReported === true);
+
+  const tamperedSettlement = await request(`/auctions/${intentHash}/settlement-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...fulfilledSettlement.report, verdict: 'unexecuted' })
+  });
+  t('a signed settlement report whose verdict does not recompute is rejected',
+    tamperedSettlement.response.status === 400 && tamperedSettlement.body.error === 'REPORT_RECOMPUTE_MISMATCH');
+
+  const rogueSettlement = buildSettlementReport({
+    close: closed.body.close,
+    commitment,
+    claim: filledClaim.claim,
+    disputes: [dispute.dispute],
+    adjudication: adjudicationRead.body,
+    verifier: { id: 'rogue-verifier-2', publicKey: rogueSolverKeys.publicKey },
+    privateKey: rogueSolverKeys.privateKey,
+    graceSeconds: 0
+  });
+  const rogueSettlementStored = await request(`/auctions/${intentHash}/settlement-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(rogueSettlement.report)
+  });
+  t('a settlement report from an unregistered verifier is refused',
+    rogueSettlementStored.response.status === 403 && rogueSettlementStored.body.error === 'UNREGISTERED_VERIFIER');
+
+  const settlementFeed = await request(`/auctions/${intentHash}/settlement-reports`);
+  t('the public settlement feed derives the live per-auction settlement status',
+    settlementFeed.response.status === 200
+      && settlementFeed.body.settlement?.status === 'fulfilled'
+      && settlementFeed.body.reports?.length === 1);
+
+  /* The verifier observed a short fill while the coordinator's stored
+     adjudication (graded over the solver's filled claim) says fulfilled:
+     the report's deterministic cross-check surfaces an adjudication
+     mismatch as hard evidence, and it dominates the settlement status. */
+  const shortSettlement = buildSettlementReport({
+    close: closed.body.close,
+    commitment,
+    claim: buildExecutionClaim({
+      close: closed.body.close,
+      commitment,
+      outcome: 'filled',
+      txHash: `0x${randomBytes(32).toString('hex')}`,
+      amountReceived: '390000000000000000',
+      feeBpsCharged: 70,
+      executedAt
+    }, solver, keys.privateKey).claim,
+    disputes: [],
+    adjudication: adjudicationRead.body,
+    verifier,
+    privateKey: verifierKeys.privateKey,
+    graceSeconds: 0
+  });
+  const shortSettlementStored = await request(`/auctions/${intentHash}/settlement-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(shortSettlement.report)
+  });
+  t('a verifier-observed short fill that contradicts the stored adjudication is mismatch evidence',
+    shortSettlement.ok
+      && shortSettlement.report.verdict === 'adjudication-mismatch'
+      && shortSettlement.report.shortfallUnits === '10000000000000000'
+      && shortSettlement.report.shortfallBps === 250
+      && shortSettlementStored.response.status === 201);
+  const mismatchFeed = await request(`/auctions/${intentHash}/settlement-reports`);
+  t('an adjudication mismatch dominates the settlement status',
+    mismatchFeed.body.settlement?.status === 'adjudication-mismatch');
+
+  const settledState3b = await request(`/auctions/${intentHash}`);
+  t('auction state exposes the settlement block with evidence scope honesty',
+    settledState3b.body.settlement?.status === 'adjudication-mismatch'
+      && settledState3b.body.settlement?.scope === 'observed-evidence-only'
+      && settledState3b.body.settlementReports?.length === 2);
+
+  /* The unexecuted auction from Phase 3a gets its own consistent report:
+     the verifier's grade agrees with the stored adjudication. */
+  const unexAdjRead = await request(`/auctions/${unexIntent}/adjudication`);
+  const unexSettlement = buildSettlementReport({
+    close: unexClosed.body.close,
+    commitment: unexCommitment,
+    claim: null,
+    disputes: [],
+    adjudication: unexAdjRead.body,
+    verifier,
+    privateKey: verifierKeys.privateKey,
+    graceSeconds: 0
+  });
+  const unexSettlementStored = await request(`/auctions/${unexIntent}/settlement-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(unexSettlement.report)
+  });
+  const unexState = await request(`/auctions/${unexIntent}`);
+  t('an unexecuted outcome settles as adverse with a consistent adjudication cross-check',
+    unexSettlement.ok
+      && unexSettlement.report.verdict === 'unexecuted'
+      && unexSettlement.report.adjudicationConsistent === true
+      && unexSettlementStored.response.status === 201
+      && unexState.body.settlement?.status === 'adverse');
+
   const raceIntentHash = `0x${randomBytes(32).toString('hex')}`;
   const raceBase = signSolverCommitment({
     ...commitment,
@@ -620,6 +764,8 @@ try {
   else process.env.INTENT_SOLVER_BONDS = previousBonds;
   if (previousGrace === undefined) delete process.env.INTENT_EXECUTION_GRACE_SECONDS;
   else process.env.INTENT_EXECUTION_GRACE_SECONDS = previousGrace;
+  if (previousSettlementRate === undefined) delete process.env.INTENT_SETTLEMENT_RATE_LIMIT;
+  else process.env.INTENT_SETTLEMENT_RATE_LIMIT = previousSettlementRate;
 }
 
 export default rows;

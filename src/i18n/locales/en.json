@@ -3683,7 +3683,14 @@
       "verifiers": "Registered verifiers",
       "noCustody": "Never",
       "bondCustody": "FBT bond custody",
-      "bondNote": "Phase 3 bonds are public declarations in the server registry: each solver posts a bond statement (amount, asset, expiry) and the deterministic penalty table grades execution failures against the sealed close — full bond for unexecuted quotes, half for self-reported failures, zero for fulfilled outcomes. The winning solver signs an execution claim, independent verifiers may dispute it, and the coordinator signs a recomputable adjudication. All of it is evidence of accountability, never custody: collecting a declared penalty happens out of protocol."
+      "bondNote": "Phase 3 bonds are public declarations in the server registry: each solver posts a bond statement (amount, asset, expiry) and the deterministic penalty table grades execution failures against the sealed close — full bond for unexecuted quotes, half for self-reported failures, zero for fulfilled outcomes. The winning solver signs an execution claim, independent verifiers may dispute it, and the coordinator signs a recomputable adjudication. All of it is evidence of accountability, never custody: collecting a declared penalty happens out of protocol.",
+      "settlementProtocol": "OUTCOME SETTLEMENT",
+      "settlementReady": "Settlement reports are available",
+      "settlementUnavailable": "Settlement reports not configured",
+      "settlementSchema": "Settlement report schema",
+      "serverRecompute": "Server recomputes before storing",
+      "adjudicationCheck": "Adjudication cross-check",
+      "settlementNote": "Phase 3b settlement reports re-grade every execution outcome from the same embedded evidence the coordinator used: the promised output of the signed quote, the delivered amount from the signed claim, the exact shortfall, and whether the stored adjudication reproduces. An adjudication that does not recompute is misconduct evidence. Reports are deterministic — the server re-evaluates each one before storing — and never claim on-chain verification or custody."
     }
   }
 }

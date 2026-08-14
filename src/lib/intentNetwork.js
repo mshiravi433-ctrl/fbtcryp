@@ -65,3 +65,10 @@ export function getAdjudication(intentHash) {
   try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/adjudication`); }
   catch (error) { return Promise.reject(error); }
 }
+
+/* Phase 3b: independent verifier settlement reports + the derived per-auction
+   settlement status (promised vs delivered, adjudication cross-check). */
+export function getSettlementReports(intentHash) {
+  try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/settlement-reports`); }
+  catch (error) { return Promise.reject(error); }
+}

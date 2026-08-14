@@ -646,6 +646,27 @@ export default function IntentOS() {
             <p>{t('intentOS.network.bondNote')}</p>
           </section>
 
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.settlementProtocol')}</span>
+                <strong>{networkStatus?.settlement?.offlineVerifier
+                  ? t('intentOS.network.settlementReady')
+                  : t('intentOS.network.settlementUnavailable')}</strong>
+              </div>
+              <span className={`ios-status ${networkStatus?.settlement?.onChainTxVerification === false ? 'eligible' : 'unavailable'}`}>
+                {t('intentOS.network.evidenceBased')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.settlement?.reportSchema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
+              <span><b>{networkStatus?.settlement?.serverRecomputesBeforeStorage ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.serverRecompute')}</span>
+              <span><b>{networkStatus?.settlement?.adjudicationCrossCheck ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.adjudicationCheck')}</span>
+              <span><b>{networkStatus?.settlement?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+            </div>
+            <p>{t('intentOS.network.settlementNote')}</p>
+          </section>
+
           <section className="ios-network-api">
             <div><span>GET</span><code>/api/intents/v1/capabilities</code></div>
             <div><span>GET</span><code>/api/intents/v1/solvers</code></div>
@@ -660,6 +681,7 @@ export default function IntentOS() {
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/execution-claims</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/disputes</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/adjudicate</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/settlement-reports</code></div>
             <div><span>POST</span><code>/api/intents/v1/validate</code></div>
           </section>
 

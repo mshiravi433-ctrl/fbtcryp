@@ -255,6 +255,14 @@ import {
   storeAdjudication,
   verifyAdjudication
 } from '../server/intentAdjudication.js';
+import {
+  buildSettlementReport,
+  evaluateSettlement,
+  readSettlementReports,
+  settlementSummary,
+  storeSettlementReport,
+  verifySettlementReport
+} from '../server/intentSettlement.js';
 import { Interface } from 'ethers';
 
 export default async function run() {
@@ -5373,6 +5381,158 @@ export default async function run() {
       else process.env.INTENT_VERIFIER_KEYS = savedVerifiers;
       if (savedSolvers === undefined) delete process.env.INTENT_SOLVER_KEYS;
       else process.env.INTENT_SOLVER_KEYS = savedSolvers;
+    }
+  }
+
+  /* ------- Phase 3b: outcome settlement reports + independent re-grading ------ */
+  {
+    const cKeys = generateSolverKeyPair();
+    const sKeys = generateSolverKeyPair();
+    const vKeys = generateSolverKeyPair();
+    const intent3b = `0x${'3b'.repeat(32)}`;
+    const solver3b = { id: 'unit-solver-3b', name: 'Unit Solver 3B', publicKey: sKeys.publicKey, active: true };
+    const solverRegistry3b = new Map([[solver3b.id, solver3b]]);
+    const verifier3b = { id: 'unit-verifier-3b', name: 'Unit Verifier 3B', publicKey: vKeys.publicKey, active: true };
+    const verifierRegistry3b = new Map([[verifier3b.id, verifier3b]]);
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+
+    const signed3b = signSolverCommitment({
+      schema: 'fbt.solver-quote.v1', intentHash: intent3b, solverId: solver3b.id,
+      chainId: 42161, amountOut: '400000000000000000', maxGas: '250000', feeBps: 70, slippageBps: 50,
+      executable: true, issuedAt: now, validUntil: now + 90,
+      nonce: `0x${'b1'.repeat(16)}`, routeCommitment: `0x${'b2'.repeat(32)}`
+    }, sKeys.privateKey);
+    await appendSignedCommitment(signed3b, { registry: solverRegistry3b, now: nowMs });
+
+    const prevCoordId = process.env.INTENT_COORDINATOR_ID;
+    const prevCoordKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator-3b';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = cKeys.privateKey;
+    try {
+      const closed3b = await closeAuction({
+        schema: 'fbt.auction-close-request.v1', intentHash: intent3b,
+        policy: { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      }, { now: nowMs });
+      const close3b = closed3b.close;
+      const coordinator3b = {
+        id: 'unit-coordinator-3b', publicKey: cKeys.publicKey, privateKey: cKeys.privateKey
+      };
+
+      const filled3b = buildExecutionClaim({
+        close: close3b, commitment: signed3b, outcome: 'filled',
+        txHash: `0x${'a1'.repeat(32)}`, amountReceived: '400500000000000000',
+        feeBpsCharged: 70, executedAt: now
+      }, solver3b, sKeys.privateKey).claim;
+      const short3b = buildExecutionClaim({
+        close: close3b, commitment: signed3b, outcome: 'filled',
+        txHash: `0x${'a2'.repeat(32)}`, amountReceived: '390000000000000000',
+        feeBpsCharged: 70, executedAt: now
+      }, solver3b, sKeys.privateKey).claim;
+
+      const settled = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: filled3b, disputes: [],
+        adjudication: null, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('a fulfilled settlement re-grades as fulfilled with zero shortfall',
+        settled.ok && settled.verdict === 'fulfilled'
+          && settled.shortfallUnits === '0' && settled.shortfallBps === 0
+          && settled.deliveredOut === '400500000000000000'
+          && settled.quotedMinOut === '398000000000000000');
+
+      const shortSettled = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        adjudication: null, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('a short settlement measures the exact shortfall in units and bps',
+        shortSettled.ok && shortSettled.verdict === 'short-filled'
+          && shortSettled.shortfallUnits === '10000000000000000'
+          && shortSettled.shortfallBps === 250);
+
+      t('an open deadline still settles as pending, never adverse',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: null, disputes: [], adjudication: null, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .verdict === 'pending');
+      t('a passed deadline without a claim settles as unexecuted',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: null, disputes: [], adjudication: null, evaluatedAtSeconds: now + 500, graceSeconds: 300 })
+          .verdict === 'unexecuted');
+
+      const adjudication3b = buildAdjudication({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        bond: null, coordinator: coordinator3b, solverRegistry: solverRegistry3b, now: nowMs
+      }).adjudication;
+      const consistent = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        adjudication: adjudication3b, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('a settlement report cross-checks a reproducing adjudication',
+        consistent.ok && consistent.adjudicationConsistent === true && consistent.verdict === 'short-filled');
+      const mismatched = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: filled3b, disputes: [],
+        adjudication: adjudication3b, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('an adjudication that does not reproduce is misconduct evidence',
+        mismatched.ok && mismatched.adjudicationConsistent === false
+          && mismatched.verdict === 'adjudication-mismatch');
+
+      t('settlement evaluation fails closed on a forged close',
+        evaluateSettlement({ close: { ...close3b, logRoot: `0x${'99'.repeat(32)}` }, commitment: signed3b, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'INVALID_AUCTION_CLOSE');
+      t('settlement evaluation fails closed on a non-selected commitment',
+        evaluateSettlement({ close: close3b, commitment: { ...signed3b, amountOut: '1' }, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'BAD_COMMITMENT_BINDING');
+      t('settlement evaluation fails closed on a tampered claim',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: { ...filled3b, amountReceived: '1' }, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'BAD_EXECUTION_CLAIM');
+      t('settlement evaluation fails closed on a forged adjudication',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: short3b, adjudication: { ...adjudication3b, verdict: 'failed' }, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'BAD_ADJUDICATION');
+
+      const built3b = buildSettlementReport({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        adjudication: adjudication3b, verifier: verifier3b, privateKey: vKeys.privateKey,
+        graceSeconds: 300, evaluatedAt: nowMs
+      });
+      t('a verifier signs a submittable settlement report',
+        built3b.ok && built3b.report.verdict === 'short-filled' && built3b.report.adjudicationConsistent === true);
+      t('a correctly recomputing report verifies for a registered verifier',
+        verifySettlementReport(built3b.report, { registry: verifierRegistry3b, close: close3b, requireRegistered: true }).ok);
+      t('third parties verify settlement reports offline with no registry',
+        verifySettlementReport(built3b.report, { close: close3b }).ok);
+      t('an unregistered verifier cannot submit settlement reports',
+        verifySettlementReport(built3b.report, { registry: new Map(), close: close3b, requireRegistered: true }).code === 'UNREGISTERED_VERIFIER');
+      t('a tampered verdict is caught by deterministic recompute',
+        verifySettlementReport({ ...built3b.report, verdict: 'fulfilled' }, { close: close3b }).code === 'REPORT_RECOMPUTE_MISMATCH');
+      t('a tampered shortfall is caught by deterministic recompute',
+        verifySettlementReport({ ...built3b.report, shortfallBps: 999 }, { close: close3b }).code === 'REPORT_RECOMPUTE_MISMATCH');
+      t('a settlement report cannot claim on-chain verification',
+        verifySettlementReport({
+          ...built3b.report,
+          claims: { ...built3b.report.claims, onChainTxVerified: true }
+        }, { close: close3b }).code === 'REPORT_CLAIMS_MISMATCH');
+
+      t('settlement stays unmonitored without any verifier evidence',
+        settlementSummary([]).status === 'unmonitored');
+      t('a fulfilled report upgrades the settlement status to fulfilled',
+        settlementSummary([{ ...built3b.report, verdict: 'fulfilled' }]).status === 'fulfilled');
+      t('a pending report reads as pending, never settled',
+        settlementSummary([{ ...built3b.report, verdict: 'pending' }]).status === 'pending');
+      t('any adverse verdict dominates a fulfilled one',
+        settlementSummary([{ ...built3b.report, verdict: 'fulfilled' }, { ...built3b.report, verdict: 'unexecuted' }]).status === 'adverse');
+      t('an adjudication mismatch dominates every other verdict',
+        settlementSummary([{ ...built3b.report, verdict: 'fulfilled' }, { ...built3b.report, verdict: 'adjudication-mismatch' }]).status === 'adjudication-mismatch');
+
+      const stored3b = await storeSettlementReport(intent3b, built3b.report);
+      const stored3bAgain = await storeSettlementReport(intent3b, built3b.report);
+      t('settlement reports store immutably and replay idempotently',
+        stored3b.ok && stored3bAgain.ok && stored3bAgain.alreadyReported === true);
+      const listed3b = await readSettlementReports(intent3b, close3b);
+      t('stored settlement reports re-verify against the signed close on read',
+        listed3b.reports?.length === 1 && listed3b.reports[0].report.reportId === built3b.report.reportId);
+    } finally {
+      if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = prevCoordId;
+      if (prevCoordKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
     }
   }
 
