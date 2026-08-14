@@ -323,18 +323,29 @@ import {
   createCrossChainState,
   crossChainProtocolStatus,
   evaluateCrossChainState,
+  storeCrossChainReceipt,
+  storeCrossChainState,
   verifyCrossChainReceipt
 } from '../server/intentCrossChain.js';
 import {
   buildAccountBinding,
+  buildAccountBindingChallenge,
   buildTxVerificationReport,
   crossChainVerificationStatus,
+  defaultRpc,
   deriveLegVerificationStatus,
   observeLegAcrossRpcs,
   parseCrossChainRpcNetworks,
+  readAccountBindings,
+  readCrossChainStateWithVerification,
+  readTxVerificationReports,
   recomputeTxVerificationReport,
+  storeAccountBinding,
+  storeTxVerificationReport,
   verifyAccountBinding,
-  verifyTxVerificationReport
+  verifyLegOnChain,
+  verifyTxVerificationReport,
+  __overrideBlobForTests
 } from '../server/intentCrossChainVerification.js';
 import {
   buildOperatorAttestation,
@@ -348,7 +359,7 @@ import {
   merkleRootAnchorStatus,
   verifyMerkleRootAnchorClaim
 } from '../server/intentRootAnchors.js';
-import { Interface } from 'ethers';
+import { Interface, Wallet, hexlify, randomBytes } from 'ethers';
 
 export default async function run() {
   const rows = [];
@@ -6211,33 +6222,115 @@ export default async function run() {
       evaluateCrossChainState(state, []).ok
         && state.claims.onChainVerified === false && state.claims.atomic === false);
 
-    const fromAddress = `0x${'aa'.repeat(20)}`;
-    const toAddress = `0x${'bb'.repeat(20)}`;
+    const fromWallet = new Wallet(hexlify(randomBytes(32)));
+    const toWallet = new Wallet(hexlify(randomBytes(32)));
+    const impostorWallet = new Wallet(hexlify(randomBytes(32)));
+    const walletProofFor = async (wallet, { partyId, chainId, address, expiresAt, nonce = '' }, plan = state) => {
+      const challenge = buildAccountBindingChallenge({
+        state: plan, partyId, chainId, address, issuedAt: now, expiresAt, nonce
+      }, { now: now * 1000 });
+      if (!challenge.ok) return challenge;
+      return {
+        ok: true,
+        challenge: challenge.challenge,
+        proof: { scheme: 'EIP-191', nonce, signature: await wallet.signMessage(challenge.challenge.message) }
+      };
+    };
+
+    /* ------------------------- binding + EIP-191 ------------------------- */
+    const fromProof = await walletProofFor(fromWallet, {
+      partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address, expiresAt: now + 86400, nonce: 'unit-nonce-1'
+    });
+    const toProof = await walletProofFor(toWallet, {
+      partyId: 'p4c-counterparty', chainId: 42161, address: toWallet.address, expiresAt: now + 86400
+    });
+    t('the EIP-191 challenge deterministically binds domain, schema, state, party, chain, address, Ed25519 key, window and nonce',
+      fromProof.ok
+        && fromProof.challenge.domain === 'fbt.cross-chain-account-binding.v1/wallet-challenge'
+        && fromProof.challenge.message.includes('fbt.cross-chain-account-binding.v1')
+        && fromProof.challenge.message.includes(state.stateId)
+        && fromProof.challenge.message.includes('p4c-initiator')
+        && fromProof.challenge.message.includes(String(42161))
+        && fromProof.challenge.message.includes(fromProof.challenge.address)
+        && fromProof.challenge.message.includes(initiatorKeys.publicKey)
+        && fromProof.challenge.message.includes(String(now))
+        && fromProof.challenge.message.includes('unit-nonce-1'));
     const fromBinding = buildAccountBinding({
-      state, partyId: 'p4c-initiator', chainId: 42161, address: fromAddress, expiresAt: now + 86400
+      state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+      issuedAt: now, expiresAt: now + 86400, walletProof: fromProof.proof
     }, initiatorKeys.privateKey, { now: now * 1000 });
     const toBinding = buildAccountBinding({
-      state, partyId: 'p4c-counterparty', chainId: 42161, address: toAddress, expiresAt: now + 86400
+      state, partyId: 'p4c-counterparty', chainId: 42161, address: toWallet.address,
+      issuedAt: now, expiresAt: now + 86400, walletProof: toProof.proof
     }, counterpartyKeys.privateKey, { now: now * 1000 });
-    t('a party binds an on-chain address with its own pinned Ed25519 key',
+    t('a valid EIP-191 wallet proof upgrades the binding to verified wallet control',
       fromBinding.ok && toBinding.ok
-        && verifyAccountBinding(fromBinding.binding, { state, now: now * 1000 }).ok);
-    t('account bindings never claim wallet ownership, funds authority or custody',
-      fromBinding.binding.claims.addressControlSelfAttested === true
-        && fromBinding.binding.claims.walletSignatureVerified === false
+        && verifyAccountBinding(fromBinding.binding, { state, now: now * 1000 }).ok
+        && fromBinding.binding.claims.walletSignatureScheme === 'EIP-191'
+        && fromBinding.binding.claims.walletSignatureVerified === true
+        && fromBinding.binding.claims.addressControlSelfAttested === true
         && fromBinding.binding.claims.fundsAuthorityGranted === false
-        && fromBinding.binding.claims.custody === false);
+        && fromBinding.binding.claims.custody === false
+        && fromBinding.binding.walletProof.scheme === 'EIP-191');
+    const selfAttested = buildAccountBinding({
+      state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+      issuedAt: now, expiresAt: now + 86400
+    }, initiatorKeys.privateKey, { now: now * 1000 });
+    t('a binding without a wallet proof stays an honest self-attested assertion',
+      selfAttested.ok
+        && selfAttested.binding.walletProof === null
+        && selfAttested.binding.claims.walletSignatureScheme === null
+        && selfAttested.binding.claims.walletSignatureVerified === false
+        && verifyAccountBinding(selfAttested.binding, { state, now: now * 1000 }).ok);
+    t('an EIP-191 signature from a different wallet (wrong recovered address) is refused',
+      buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+        issuedAt: now, expiresAt: now + 86400,
+        walletProof: { scheme: 'EIP-191', nonce: '', signature: await impostorWallet.signMessage(fromProof.challenge.message) }
+      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'WALLET_PROOF_INVALID');
+    const tamperedWalletSig = `${fromProof.proof.signature.slice(0, -1)}${fromProof.proof.signature.endsWith('A') ? 'B' : 'A'}`;
+    t('a tampered wallet signature is refused',
+      buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+        issuedAt: now, expiresAt: now + 86400,
+        walletProof: { scheme: 'EIP-191', nonce: '', signature: tamperedWalletSig }
+      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'WALLET_PROOF_INVALID');
+    t('EIP-1271 (smart-contract wallets) is explicitly unsupported, not faked',
+      buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+        issuedAt: now, expiresAt: now + 86400,
+        walletProof: { scheme: 'EIP-1271', nonce: '', signature: fromProof.proof.signature }
+      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'WALLET_PROOF_SCHEME_UNSUPPORTED');
     t('an expired account binding is refused',
       verifyAccountBinding(fromBinding.binding, { state, now: (now + 90000) * 1000 }).code
         === 'ACCOUNT_BINDING_EXPIRED');
+    t('a binding issued beyond the clock-skew allowance is refused',
+      buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+        issuedAt: now + 1000, expiresAt: now + 86400
+      }, initiatorKeys.privateKey, { now: now * 1000 }).code === 'BAD_BINDING_WINDOW');
+    t('an unknown binding field fails closed',
+      verifyAccountBinding({ ...fromBinding.binding, extra: 1 }, { state, now: now * 1000 }).code
+        === 'UNKNOWN_ACCOUNT_BINDING_FIELD');
+    t('a non-canonical base64url party key is refused',
+      verifyAccountBinding({ ...fromBinding.binding, partyPublicKey: `${fromBinding.binding.partyPublicKey}=` },
+        { state, now: now * 1000 }).code === 'BINDING_KEY_MISMATCH');
+    t('a wrong partyId is refused',
+      verifyAccountBinding({ ...fromBinding.binding, partyId: 'p4c-nobody' }, { state, now: now * 1000 }).code
+        === 'UNKNOWN_BINDING_PARTY');
+    t('a wrong stateId is refused',
+      verifyAccountBinding({ ...fromBinding.binding, stateId: `0x${'ff'.repeat(32)}` }, { state, now: now * 1000 }).code
+        === 'BAD_ACCOUNT_BINDING_BINDING');
+    t('a chain outside the plan is refused',
+      verifyAccountBinding({ ...fromBinding.binding, chainId: 8453 }, { state, now: now * 1000 }).code
+        === 'BAD_BINDING_CHAIN');
     t('a binding signed by a key the state does not pin is refused',
       buildAccountBinding({
-        state, partyId: 'p4c-initiator', chainId: 42161, address: fromAddress, expiresAt: now + 86400
-      }, strangerKeys.privateKey).code === 'BINDING_KEY_MISMATCH');
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address, expiresAt: now + 86400
+      }, strangerKeys.privateKey, { now: now * 1000 }).code === 'BINDING_KEY_MISMATCH');
     t('tampering the bound address invalidates the binding',
-      !verifyAccountBinding({
-        ...fromBinding.binding, address: `0x${'CC'.repeat(20)}`.replace('CC'.repeat(20), 'cc'.repeat(20))
-      }, { state, now: now * 1000 }).ok);
+      !verifyAccountBinding({ ...fromBinding.binding, address: toWallet.address },
+        { state, now: now * 1000 }).ok);
 
     const sourceReceipt = buildCrossChainReceipt({
       state, leg: 'source-transfer', txHash: `0x${'31'.repeat(32)}`, signedAt: now
@@ -6245,7 +6338,7 @@ export default async function run() {
 
     const transferIface = new Interface(['event Transfer(address indexed from, address indexed to, uint256 value)']);
     const goodEvent = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
-      fromBinding.binding.address, toBinding.binding.address, 100000000n
+      fromWallet.address, toWallet.address, 100000000n
     ]);
     const blockHash = `0x${'44'.repeat(32)}`;
     const goodRpc = (overrides = {}) => async (_url, method) => {
@@ -6258,31 +6351,63 @@ export default async function run() {
       }
       if (method === 'eth_getTransactionByHash') {
         return overrides.tx !== undefined ? overrides.tx
-          : { from: fromBinding.binding.address, to: token.address, value: '0x0' };
+          : { from: fromWallet.address, to: token.address, value: '0x0', blockHash };
       }
       return null;
     };
     const networks = parseCrossChainRpcNetworks(JSON.stringify([
-      { chainId: 42161, name: 'Unit Arbitrum', rpcUrls: ['https://rpc-a.invalid', 'https://rpc-b.invalid'], minConfirmations: 3 }
+      {
+        chainId: 42161, name: 'Unit Arbitrum', quorum: 2, minConfirmations: 3,
+        providers: [
+          { id: 'unit-arb-a', rpcUrl: 'https://rpc-a.invalid' },
+          { id: 'unit-arb-b', rpcUrl: 'https://rpc-b.invalid' }
+        ]
+      }
     ]));
-    t('multi-RPC config requires two https endpoints on distinct hostnames',
+    t('multi-RPC config requires quorum >= 2, distinct hostnames, https and bounded providers',
       networks.size === 1
+        && networks.get(42161).quorum === 2
+        && networks.get(42161).providers.length === 2
         && parseCrossChainRpcNetworks(JSON.stringify([
-          { chainId: 42161, rpcUrls: ['https://one.invalid'] }
+          { chainId: 42161, quorum: 2, minConfirmations: 3, providers: [{ id: 'a', rpcUrl: 'https://one.invalid' }] }
         ])).size === 0
         && parseCrossChainRpcNetworks(JSON.stringify([
-          { chainId: 42161, rpcUrls: ['https://same.invalid/a', 'https://same.invalid/b'] }
+          { chainId: 42161, quorum: 2, providers: [{ id: 'a', rpcUrl: 'https://same.invalid/a' }, { id: 'b', rpcUrl: 'https://same.invalid/b' }] }
         ])).size === 0
         && parseCrossChainRpcNetworks(JSON.stringify([
-          { chainId: 42161, rpcUrls: ['http://a.invalid', 'https://b.invalid'] }
+          { chainId: 42161, quorum: 2, providers: [{ id: 'a', rpcUrl: 'http://a.invalid' }, { id: 'b', rpcUrl: 'https://b.invalid' }] }
+        ])).size === 0
+        && parseCrossChainRpcNetworks(JSON.stringify([
+          { chainId: 42161, quorum: 1, providers: [{ id: 'a', rpcUrl: 'https://a.invalid' }, { id: 'b', rpcUrl: 'https://b.invalid' }] }
+        ])).size === 0
+        && parseCrossChainRpcNetworks(JSON.stringify([
+          { chainId: 42161, quorum: 3, providers: [{ id: 'a', rpcUrl: 'https://a.invalid' }, { id: 'b', rpcUrl: 'https://b.invalid' }] }
+        ])).size === 0
+        && parseCrossChainRpcNetworks(JSON.stringify([
+          { chainId: 42161, quorum: 2, providers: [{ id: 'a', rpcUrl: 'https://user:pass@a.invalid' }, { id: 'b', rpcUrl: 'https://b.invalid' }] }
         ])).size === 0);
     const verificationCaps = crossChainVerificationStatus(networks);
     t('verification capabilities never leak an RPC URL and never claim provider independence',
       !JSON.stringify(verificationCaps).includes('invalid')
         && verificationCaps.rpcUrlsPublished === false
         && verificationCaps.providerIndependenceProven === false
-        && verificationCaps.multiRpcConfigured === true
+        && verificationCaps.configured === true
+        && verificationCaps.configuredChains === 1
+        && verificationCaps.minimumQuorum === 2
+        && verificationCaps.multiRpcRequired === true
+        && verificationCaps.serverRecomputesBeforeStorage === true
+        && verificationCaps.onChainTxVerification === true
+        && verificationCaps.walletProof === 'EIP-191'
+        && verificationCaps.eip1271Supported === false
+        && verificationCaps.atomic === false
+        && verificationCaps.custody === false
         && verificationCaps.chains[0].distinctRpcHosts === 2);
+    const unconfiguredCaps = crossChainVerificationStatus(new Map());
+    t('without a real RPC env the verification capability is honestly unconfigured',
+      unconfiguredCaps.configured === false
+        && unconfiguredCaps.configuredChains === 0
+        && unconfiguredCaps.onChainTxVerification === false
+        && unconfiguredCaps.multiRpcConfigured === false);
 
     const registry = new Map([[
       'p4c-verifier', { id: 'p4c-verifier', publicKey: verifierKeys.publicKey, active: true }
@@ -6294,12 +6419,23 @@ export default async function run() {
     t('a correct ERC-20 Transfer with quorum agreement verifies on-chain',
       report.ok && report.report.verdict === 'onchain-verified'
         && report.report.quorum.agreeing === 2
-        && report.report.claims.legOnChainVerified === true);
-    t('a verified leg report still pins non-atomic, no-custody claims',
+        && report.report.quorum.required === 2
+        && report.report.reasonCodes.length === 0
+        && report.report.receiptStatus === 'success'
+        && report.report.claims.multiRpcQuorumReached === true
+        && report.report.claims.walletBindingsVerified === true
+        && report.report.claims.transactionObservedOnChain === true);
+    t('a verified leg report still pins non-atomic, no-custody, no-escrow claims',
       report.report.claims.atomicSettlement === false
         && report.report.claims.globalAtomicity === false
         && report.report.claims.custody === false
-        && report.report.claims.providerIndependenceProven === false);
+        && report.report.claims.escrow === false
+        && report.report.claims.automaticSettlement === false
+        && report.report.claims.providerIndependenceProven === false
+        && report.report.claims.serverRecomputedBeforeStorage === false);
+    t('the signed report never embeds an RPC URL or endpoint identity',
+      !JSON.stringify(report.report).includes('invalid')
+        && !JSON.stringify(report.report).includes('unit-arb'));
     t('the server recomputes a signed report before accepting it',
       (await recomputeTxVerificationReport(report.report, {
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
@@ -6317,101 +6453,246 @@ export default async function run() {
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         registry: new Map(), now: now * 1000
       }).code === 'UNREGISTERED_VERIFIER');
+    t('a verifier key that does not match the registry is refused',
+      verifyTxVerificationReport(report.report, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry: new Map([['p4c-verifier', { id: 'p4c-verifier', publicKey: strangerKeys.publicKey, active: true }]]),
+        now: now * 1000
+      }).code === 'UNREGISTERED_VERIFIER');
     t('tampering the signed verdict breaks the report id',
       !verifyTxVerificationReport({ ...report.report, confirmations: 999 }, {
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         registry, now: now * 1000
       }).ok);
+    t('tampering an observation breaks the report signature',
+      !verifyTxVerificationReport({
+        ...report.report,
+        observations: report.report.observations.map((row, index) =>
+          index === 0 ? { ...row, blockHash: `0x${'ab'.repeat(32)}` } : row)
+      }, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry, now: now * 1000
+      }).ok);
+    t('a verification report tampering the signature fails closed',
+      verifyTxVerificationReport({
+        ...report.report,
+        signature: `${report.report.signature.slice(0, -1)}${report.report.signature.endsWith('A') ? 'B' : 'A'}`
+      }, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry, now: now * 1000
+      }).code === 'VERIFICATION_SIGNATURE_MISMATCH');
 
-    const wrongToken = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
-      fromBinding.binding.address, toBinding.binding.address, 100000000n
-    ]);
+    /* Deterministic rejections: wrong token contract, malformed event, event
+       from another contract, wrong sender/recipient/amount, ambiguous
+       duplicate events, failed receipt. */
     const failCases = [
       ['a failed receipt is a signed rejection, never verified', goodRpc({
-        receipt: { status: '0x0', blockNumber: '0xf0', blockHash, logs: [] }
-      }), 'verification-rejected', 'TX_RECEIPT_FAILED'],
+        receipt: { status: '0x0', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash, logs: [] }
+      }), 'TX_RECEIPT_FAILED'],
       ['a Transfer from the wrong token contract is rejected', goodRpc({
         receipt: {
-          status: '0x1', blockNumber: '0xf0', blockHash,
-          logs: [{ address: `0x${'dd'.repeat(20)}`, topics: wrongToken.topics, data: wrongToken.data }]
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [{ address: `0x${'dd'.repeat(20)}`, topics: goodEvent.topics, data: goodEvent.data }]
         }
-      }), 'verification-rejected', 'WRONG_TOKEN_CONTRACT'],
+      }), 'WRONG_TOKEN_CONTRACT'],
+      ['a Transfer-shaped event from another contract is never accepted', goodRpc({
+        receipt: {
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [
+            { address: `0x${'dd'.repeat(20)}`, topics: goodEvent.topics, data: goodEvent.data }
+          ]
+        }
+      }), 'WRONG_TOKEN_CONTRACT'],
+      ['a malformed Transfer log is rejected', goodRpc({
+        receipt: {
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [{ address: token.address, topics: [goodEvent.topics[0]], data: '0x1234' }]
+        }
+      }), 'MALFORMED_TRANSFER_EVENT'],
+      ['a wrong ERC-20 sender is rejected', goodRpc({
+        receipt: {
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [{
+            address: token.address,
+            ...(() => {
+              const bad = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
+                toWallet.address, toWallet.address, 100000000n
+              ]);
+              return { topics: bad.topics, data: bad.data };
+            })()
+          }]
+        }
+      }), 'WRONG_SENDER'],
       ['a wrong ERC-20 amount is rejected', goodRpc({
         receipt: {
-          status: '0x1', blockNumber: '0xf0', blockHash,
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
           logs: [{
             address: token.address,
             ...(() => {
               const bad = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
-                fromBinding.binding.address, toBinding.binding.address, 99999999n
+                fromWallet.address, toWallet.address, 99999999n
               ]);
               return { topics: bad.topics, data: bad.data };
             })()
           }]
         }
-      }), 'verification-rejected', 'WRONG_AMOUNT'],
+      }), 'WRONG_AMOUNT'],
       ['a wrong recipient is rejected', goodRpc({
         receipt: {
-          status: '0x1', blockNumber: '0xf0', blockHash,
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
           logs: [{
             address: token.address,
             ...(() => {
               const bad = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
-                fromBinding.binding.address, `0x${'ee'.repeat(20)}`, 100000000n
+                fromWallet.address, fromWallet.address, 100000000n
               ]);
               return { topics: bad.topics, data: bad.data };
             })()
           }]
         }
-      }), 'verification-rejected', 'WRONG_RECIPIENT']
+      }), 'WRONG_RECIPIENT'],
+      ['duplicate ambiguous Transfer events are not guessed as success', goodRpc({
+        receipt: {
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [
+            { address: token.address, topics: goodEvent.topics, data: goodEvent.data },
+            { address: token.address, topics: goodEvent.topics, data: goodEvent.data }
+          ]
+        }
+      }), 'AMBIGUOUS_TRANSFER_EVENT']
     ];
-    for (const [name, rpc, verdict, reason] of failCases) {
+    for (const [name, rpc, reason] of failCases) {
       const outcome = await buildTxVerificationReport({
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         verifier: { id: 'p4c-verifier' }, networks, rpc, registry, now: now * 1000
       }, verifierKeys.privateKey);
-      t(name, outcome.ok && outcome.report.verdict === verdict && outcome.report.rejectReason === reason);
+      t(name, outcome.ok && outcome.report.verdict === 'verification-rejected'
+        && outcome.report.reasonCodes[0] === reason
+        && outcome.report.claims.transactionObservedOnChain === true);
     }
 
+    /* Transient outcomes sign honest pending/disagreement snapshots. */
     const transientCases = [
-      ['insufficient confirmations refuse to finalize', goodRpc({ latest: '0xf1' }), 'INSUFFICIENT_CONFIRMATIONS'],
-      ['a missing transaction refuses to finalize', goodRpc({ receipt: null, tx: null }), 'TX_NOT_FOUND'],
-      ['a full provider outage refuses to finalize', async () => { throw new Error('down'); }, 'RPC_QUORUM_UNAVAILABLE']
+      ['insufficient confirmations sign an honest pending snapshot', goodRpc({ latest: '0xf1' }), 'confirmations-pending', 'INSUFFICIENT_CONFIRMATIONS'],
+      ['a missing transaction signs an honest unavailable snapshot', goodRpc({ receipt: null, tx: null }), 'verification-unavailable', 'TX_NOT_FOUND'],
+      ['a full provider outage signs an honest unavailable snapshot', async () => { throw new Error('down'); }, 'verification-unavailable', 'RPC_QUORUM_UNAVAILABLE']
     ];
-    for (const [name, rpc, code] of transientCases) {
+    for (const [name, rpc, verdict, code] of transientCases) {
       const outcome = await buildTxVerificationReport({
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         verifier: { id: 'p4c-verifier' }, networks, rpc, registry, now: now * 1000
       }, verifierKeys.privateKey);
-      t(name, !outcome.ok && outcome.code === code);
+      t(name, outcome.ok && outcome.report.verdict === verdict
+        && outcome.report.reasonCodes[0] === code
+        && outcome.report.claims.multiRpcQuorumReached === false
+        && outcome.report.claims.transactionObservedOnChain === false
+        && outcome.report.claims.walletBindingsVerified === true
+        && outcome.report.claims.atomicSettlement === false
+        && outcome.report.claims.globalAtomicity === false
+        && outcome.report.claims.custody === false
+        && outcome.report.claims.escrow === false
+        && outcome.report.claims.automaticSettlement === false
+        && verifyTxVerificationReport(outcome.report, {
+          state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+          registry, now: now * 1000
+        }).ok);
     }
     {
+      /* A pending snapshot is storable only while the outcome is still
+         non-final; once a final verdict reproduces, the snapshot is
+         superseded. */
+      const pendingReport = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: goodRpc({ latest: '0xf1' }), registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('a pending snapshot recomputes against the same pending chain state',
+        (await recomputeTxVerificationReport(pendingReport.report, {
+          state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+          registry, networks, rpc: goodRpc({ latest: '0xf1' }), now: now * 1000
+        })).ok);
+      t('a pending snapshot is superseded once the chain shows a final outcome',
+        (await recomputeTxVerificationReport(pendingReport.report, {
+          state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+          registry, networks, rpc: goodRpc(), now: now * 1000
+        })).code === 'VERIFICATION_SUPERSEDED');
       /* Block-hash disagreement between endpoints (reorg / drift). */
       const disagreeing = async (url, method) => {
         if (method === 'eth_blockNumber') return '0x100';
         if (method === 'eth_getTransactionByHash') {
-          return { from: fromBinding.binding.address, to: token.address, value: '0x0' };
+          return { from: fromWallet.address, to: token.address, value: '0x0', blockHash };
         }
         return {
-          status: '0x1', blockNumber: '0xf0',
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0',
           blockHash: url.includes('rpc-a') ? blockHash : `0x${'55'.repeat(32)}`,
           logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
         };
       };
-      const outcome = await buildTxVerificationReport({
+      const hashOutcome = await buildTxVerificationReport({
         state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
         verifier: { id: 'p4c-verifier' }, networks, rpc: disagreeing, registry, now: now * 1000
       }, verifierKeys.privateKey);
-      t('block-hash disagreement between RPCs fails closed', !outcome.ok && outcome.code === 'RPC_DISAGREEMENT');
+      t('block-hash disagreement between RPCs is reorg-detected and fails closed',
+        hashOutcome.ok && hashOutcome.report.verdict === 'reorg-detected'
+          && hashOutcome.report.reasonCodes[0] === 'REORG_DETECTED');
+      const blockNumberDisagreeing = async (url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (method === 'eth_getTransactionByHash') {
+          return { from: fromWallet.address, to: token.address, value: '0x0', blockHash };
+        }
+        return {
+          status: '0x1', transactionHash: sourceReceipt.txHash,
+          blockNumber: url.includes('rpc-a') ? '0xf0' : '0xf1',
+          blockHash,
+          logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+        };
+      };
+      const numberOutcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: blockNumberDisagreeing, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('the same tx on different block numbers is reorg-detected and fails closed',
+        numberOutcome.ok && numberOutcome.report.verdict === 'reorg-detected');
+      const statusDisagreeing = async (url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (method === 'eth_getTransactionByHash') {
+          return { from: fromWallet.address, to: token.address, value: '0x0', blockHash };
+        }
+        return {
+          status: url.includes('rpc-a') ? '0x1' : '0x0', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+        };
+      };
+      const statusOutcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: statusDisagreeing, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('receipt-status disagreement between RPCs is rpc-disagreement and fails closed',
+        statusOutcome.ok && statusOutcome.report.verdict === 'rpc-disagreement');
+      const txBlockMismatch = async (_url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (method === 'eth_getTransactionByHash') {
+          return { from: fromWallet.address, to: token.address, value: '0x0', blockHash: `0x${'66'.repeat(32)}` };
+        }
+        return {
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
+          logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+        };
+      };
+      const mismatchOutcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: txBlockMismatch, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('a transaction/receipt block mismatch on one endpoint is reorg-detected',
+        mismatchOutcome.ok && mismatchOutcome.report.verdict === 'reorg-detected');
       /* A reorg where one endpoint no longer sees the tx at all. */
       const reorged = async (url, method) => {
         if (method === 'eth_blockNumber') return '0x100';
         if (url.includes('rpc-b')) return null;
         if (method === 'eth_getTransactionByHash') {
-          return { from: fromBinding.binding.address, to: token.address, value: '0x0' };
+          return { from: fromWallet.address, to: token.address, value: '0x0', blockHash };
         }
         return {
-          status: '0x1', blockNumber: '0xf0', blockHash,
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash,
           logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
         };
       };
@@ -6420,7 +6701,7 @@ export default async function run() {
         verifier: { id: 'p4c-verifier' }, networks, rpc: reorged, registry, now: now * 1000
       }, verifierKeys.privateKey);
       t('a reorg where one endpoint loses the tx fails closed',
-        !reorgOutcome.ok && reorgOutcome.code === 'RPC_DISAGREEMENT');
+        reorgOutcome.ok && reorgOutcome.report.verdict === 'rpc-disagreement');
       /* One reachable RPC can never satisfy a quorum of two. */
       const oneUp = async (url, method) => {
         if (url.includes('rpc-b')) throw new Error('down');
@@ -6430,12 +6711,74 @@ export default async function run() {
         network: networks.get(42161),
         expected: {
           txHash: sourceReceipt.txHash, native: false, tokenAddress: token.address,
-          amount: '100000000', fromAddress: fromBinding.binding.address, toAddress: toBinding.binding.address
+          amount: '100000000', fromAddress: fromWallet.address, toAddress: toWallet.address
         },
         rpc: oneUp
       });
       t('one live RPC against a quorum of two fails closed',
         single.final === false && single.code === 'RPC_QUORUM_UNAVAILABLE');
+      /* Three providers, quorum two: two agreeing endpoints verify even when
+         the third is down. */
+      const threeNetworks = parseCrossChainRpcNetworks(JSON.stringify([
+        {
+          chainId: 42161, quorum: 2, minConfirmations: 3,
+          providers: [
+            { id: 'arb-a', rpcUrl: 'https://arb-a.invalid' },
+            { id: 'arb-b', rpcUrl: 'https://arb-b.invalid' },
+            { id: 'arb-c', rpcUrl: 'https://arb-c.invalid' }
+          ]
+        }
+      ]));
+      const twoOfThree = async (url, method) => {
+        if (url.includes('arb-c')) throw new Error('down');
+        return goodRpc()(url, method);
+      };
+      const quorumOfThree = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks: threeNetworks, rpc: twoOfThree, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('two agreeing providers of three satisfy a quorum of two',
+        quorumOfThree.ok && quorumOfThree.report.verdict === 'onchain-verified'
+          && quorumOfThree.report.quorum.agreeing === 2
+          && quorumOfThree.report.quorum.total === 3);
+    }
+    {
+      /* Bounded, strict defaultRpc transport: timeout, HTTP failure,
+         malformed JSON and oversized responses all fail closed. */
+      const realFetch = globalThis.fetch;
+      const fakeFetch = (handler) => {
+        globalThis.fetch = handler;
+        return () => { globalThis.fetch = realFetch; };
+      };
+      let restore = fakeFetch(async () => {
+        throw new Error('down');
+      });
+      let transportFailure = false;
+      try { await defaultRpc('https://rpc.invalid', 'eth_blockNumber', [], { timeoutMs: 200 }); } catch { transportFailure = true; }
+      restore();
+      t('an RPC transport failure is surfaced, never verified', transportFailure);
+      restore = fakeFetch(async () => ({ ok: false, status: 500 }));
+      let httpFailure = false;
+      try { await defaultRpc('https://rpc.invalid', 'eth_blockNumber', [], { timeoutMs: 200 }); } catch { httpFailure = true; }
+      restore();
+      t('an HTTP failure is surfaced, never verified', httpFailure);
+      restore = fakeFetch(async () => ({ ok: true, text: async () => 'not json at all' }));
+      let malformed = false;
+      try { await defaultRpc('https://rpc.invalid', 'eth_blockNumber', [], { timeoutMs: 200 }); } catch { malformed = true; }
+      restore();
+      t('a malformed JSON-RPC response is surfaced, never verified', malformed);
+      restore = fakeFetch(async () => ({ ok: true, text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: 'x'.repeat(600 * 1024) }) }));
+      let oversized = false;
+      try { await defaultRpc('https://rpc.invalid', 'eth_blockNumber', [], { timeoutMs: 200 }); } catch { oversized = true; }
+      restore();
+      t('an oversized RPC response is refused before parsing', oversized);
+      restore = fakeFetch((_url, opts) => new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => reject(new Error('aborted')));
+      }));
+      let timedOut = false;
+      try { await defaultRpc('https://rpc.invalid', 'eth_blockNumber', [], { timeoutMs: 150 }); } catch { timedOut = true; }
+      restore();
+      t('an RPC that exceeds its timeout fails closed', timedOut);
     }
 
     {
@@ -6444,22 +6787,39 @@ export default async function run() {
         state, previousReceipts: [sourceReceipt], leg: 'destination-transfer',
         txHash: `0x${'32'.repeat(32)}`, signedAt: now + 1
       }, counterpartyKeys.privateKey).receipt;
+      const nativeFromProof = await walletProofFor(toWallet, {
+        partyId: 'p4c-counterparty', chainId: 1, address: toWallet.address, expiresAt: now + 86400
+      });
+      const nativeToProof = await walletProofFor(fromWallet, {
+        partyId: 'p4c-initiator', chainId: 1, address: fromWallet.address, expiresAt: now + 86400
+      });
       const nativeFrom = buildAccountBinding({
-        state, partyId: 'p4c-counterparty', chainId: 1, address: toAddress, expiresAt: now + 86400
+        state, partyId: 'p4c-counterparty', chainId: 1, address: toWallet.address,
+        issuedAt: now, expiresAt: now + 86400, walletProof: nativeFromProof.proof
       }, counterpartyKeys.privateKey, { now: now * 1000 });
       const nativeTo = buildAccountBinding({
-        state, partyId: 'p4c-initiator', chainId: 1, address: fromAddress, expiresAt: now + 86400
+        state, partyId: 'p4c-initiator', chainId: 1, address: fromWallet.address,
+        issuedAt: now, expiresAt: now + 86400, walletProof: nativeToProof.proof
       }, initiatorKeys.privateKey, { now: now * 1000 });
       const nativeNetworks = parseCrossChainRpcNetworks(JSON.stringify([
-        { chainId: 1, name: 'Unit Mainnet', rpcUrls: ['https://eth-a.invalid', 'https://eth-b.invalid'], minConfirmations: 2 }
+        {
+          chainId: 1, quorum: 2, minConfirmations: 2,
+          providers: [
+            { id: 'eth-a', rpcUrl: 'https://eth-a.invalid' },
+            { id: 'eth-b', rpcUrl: 'https://eth-b.invalid' }
+          ]
+        }
       ]));
-      const nativeRpc = (value) => async (_url, method) => {
-        if (method === 'eth_blockNumber') return '0x100';
+      const nativeRpc = (overrides = {}) => async (_url, method) => {
+        if (method === 'eth_blockNumber') return overrides.latest ?? '0x100';
         if (method === 'eth_getTransactionReceipt') {
-          return { status: '0x1', transactionHash: destinationReceipt.txHash, blockNumber: '0xf0', blockHash, logs: [] };
+          return overrides.receipt ?? { status: '0x1', transactionHash: destinationReceipt.txHash, blockNumber: '0xf0', blockHash, logs: [] };
         }
         if (method === 'eth_getTransactionByHash') {
-          return { from: nativeFrom.binding.address, to: nativeTo.binding.address, value };
+          return overrides.tx ?? {
+            from: toWallet.address, to: fromWallet.address,
+            value: '0xc3663566a58000', blockHash
+          };
         }
         return null;
       };
@@ -6467,7 +6827,7 @@ export default async function run() {
         state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
         fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
         verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
-        rpc: nativeRpc('0xc3663566a58000'), registry, now: (now + 1) * 1000
+        rpc: nativeRpc(), registry, now: (now + 1) * 1000
       }, verifierKeys.privateKey);
       t('an exact native transfer verifies on-chain',
         goodNative.ok && goodNative.report.verdict === 'onchain-verified');
@@ -6475,11 +6835,58 @@ export default async function run() {
         state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
         fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
         verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
-        rpc: nativeRpc('0xc3663566a57fff'), registry, now: (now + 1) * 1000
+        rpc: nativeRpc({ tx: { from: toWallet.address, to: fromWallet.address, value: '0xc3663566a57fff', blockHash } }),
+        registry, now: (now + 1) * 1000
       }, verifierKeys.privateKey);
       t('a wrong native value is rejected',
         badNative.ok && badNative.report.verdict === 'verification-rejected'
-          && badNative.report.rejectReason === 'WRONG_AMOUNT');
+          && badNative.report.reasonCodes[0] === 'WRONG_AMOUNT');
+      const wrongNativeSender = await buildTxVerificationReport({
+        state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
+        fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
+        verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
+        rpc: nativeRpc({ tx: { from: fromWallet.address, to: fromWallet.address, value: '0xc3663566a58000', blockHash } }),
+        registry, now: (now + 1) * 1000
+      }, verifierKeys.privateKey);
+      t('a wrong native sender is rejected',
+        wrongNativeSender.ok && wrongNativeSender.report.verdict === 'verification-rejected'
+          && wrongNativeSender.report.reasonCodes[0] === 'WRONG_SENDER');
+      const wrongNativeRecipient = await buildTxVerificationReport({
+        state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
+        fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
+        verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
+        rpc: nativeRpc({ tx: { from: toWallet.address, to: toWallet.address, value: '0xc3663566a58000', blockHash } }),
+        registry, now: (now + 1) * 1000
+      }, verifierKeys.privateKey);
+      t('a wrong native recipient is rejected',
+        wrongNativeRecipient.ok && wrongNativeRecipient.report.verdict === 'verification-rejected'
+          && wrongNativeRecipient.report.reasonCodes[0] === 'WRONG_RECIPIENT');
+      const failedNative = await buildTxVerificationReport({
+        state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
+        fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
+        verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
+        rpc: nativeRpc({ receipt: { status: '0x0', transactionHash: destinationReceipt.txHash, blockNumber: '0xf0', blockHash, logs: [] } }),
+        registry, now: (now + 1) * 1000
+      }, verifierKeys.privateKey);
+      t('a failed native receipt is rejected',
+        failedNative.ok && failedNative.report.verdict === 'verification-rejected'
+          && failedNative.report.reasonCodes[0] === 'TX_RECEIPT_FAILED');
+      /* Self-attested bindings are never enough for onchain verification. */
+      const selfAttestedFrom = buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromWallet.address,
+        issuedAt: now, expiresAt: now + 86400
+      }, initiatorKeys.privateKey, { now: now * 1000 });
+      const selfAttestedTo = buildAccountBinding({
+        state, partyId: 'p4c-counterparty', chainId: 42161, address: toWallet.address,
+        issuedAt: now, expiresAt: now + 86400
+      }, counterpartyKeys.privateKey, { now: now * 1000 });
+      const noProof = await verifyLegOnChain({
+        state, receipt: sourceReceipt,
+        fromBinding: selfAttestedFrom.binding, toBinding: selfAttestedTo.binding,
+        networks, rpc: goodRpc(), now: now * 1000
+      });
+      t('a binding without a wallet proof can never reach onchain-verified',
+        !noProof.ok && noProof.code === 'WALLET_PROOF_REQUIRED');
       /* Even with BOTH legs verified, nothing became atomic. */
       const settled = evaluateCrossChainState(state, [sourceReceipt, destinationReceipt], {
         now: (now + 1) * 1000
@@ -6489,12 +6896,200 @@ export default async function run() {
           && settled.atomic === false && settled.custody === false);
     }
 
-    t('derived leg statuses expose the honest verification ladder',
-      deriveLegVerificationStatus({}).status === 'signed-only'
-        && deriveLegVerificationStatus({ networkConfigured: true }).status === 'verification-pending'
-        && deriveLegVerificationStatus({ attempt: 'RPC_DISAGREEMENT' }).status === 'rpc-disagreement'
-        && deriveLegVerificationStatus({ attempt: 'INSUFFICIENT_CONFIRMATIONS' }).status === 'confirmations-pending'
-        && deriveLegVerificationStatus({ reports: [report.report], networkConfigured: true }).status === 'onchain-verified');
+    /* ------------------- immutable storage + derived view ------------------- */
+    {
+      const storedState = await storeCrossChainState(state);
+      t('the Phase 4c state stores for binding/report exercises',
+        storedState.ok && storedState.state.stateId === state.stateId);
+      const storedReceipt = await storeCrossChainReceipt(state.stateId, sourceReceipt, { now: now * 1000 });
+      t('the source receipt stores without touching its historical bytes',
+        storedReceipt.ok && storedReceipt.receipt.claims.onChainVerified === false);
+      const storedB = await storeAccountBinding(state.stateId, fromBinding.binding);
+      t('a valid account binding stores immutably', storedB.ok && !storedB.alreadyStored);
+      const replayB = await storeAccountBinding(state.stateId, fromBinding.binding);
+      t('replaying a byte-identical binding is idempotent', replayB.ok && replayB.alreadyStored === true);
+      const driftedB = await storeAccountBinding(state.stateId, selfAttested.binding);
+      t('a drifted binding on the same binding slot conflicts, never overwrites',
+        driftedB.ok === false && driftedB.code === 'ACCOUNT_BINDING_CONFLICT');
+      const storedToB = await storeAccountBinding(state.stateId, toBinding.binding);
+      t('the counterparty binding stores too', storedToB.ok && !storedToB.alreadyStored);
+      const listedBindings = await readAccountBindings(state.stateId);
+      t('stored bindings read back exactly once with the embedded keys intact',
+        listedBindings.bindings?.length === 2
+          && listedBindings.bindings.some((row) => row.bindingId === fromBinding.binding.bindingId
+            && row.partyPublicKey === initiatorKeys.publicKey
+            && row.claims.walletSignatureVerified === true)
+          && listedBindings.bindings.some((row) => row.bindingId === toBinding.binding.bindingId
+            && row.partyPublicKey === counterpartyKeys.publicKey));
+
+      const storedReport = await storeTxVerificationReport(state.stateId, report.report, {
+        registry, networks, rpc: goodRpc(), now: now * 1000
+      });
+      t('a server-recomputed report stores immutably with the recomputation attestation',
+        storedReport.ok && !storedReport.alreadyStored
+          && storedReport.record?.serverRecomputedBeforeStorage === true);
+      const replayReport = await storeTxVerificationReport(state.stateId, report.report, {
+        registry, networks, rpc: goodRpc(), now: now * 1000
+      });
+      t('replaying a byte-identical report is idempotent',
+        replayReport.ok && replayReport.alreadyStored === true);
+      const tamperedReport = { ...report.report, claims: { ...report.report.claims, custody: true } };
+      const conflictReport = await storeTxVerificationReport(state.stateId, tamperedReport, {
+        registry, networks, rpc: goodRpc(), now: now * 1000
+      });
+      t('drift on the same verification id conflicts, never overwrites',
+        conflictReport.ok === false && conflictReport.code === 'VERIFICATION_REPORT_CONFLICT');
+      const listedReports = await readTxVerificationReports(state.stateId);
+      t('public reads re-verify the stored report with its embedded verifier key',
+        listedReports.records?.length === 1
+          && listedReports.records[0].serverRecomputedBeforeStorage === true
+          && listedReports.records[0].report.verificationId === report.report.verificationId);
+      t('registry rotation never deletes a historical verified report',
+        verifyTxVerificationReport(report.report, {
+          state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+          registry: new Map([['someone-else', { id: 'someone-else', publicKey: strangerKeys.publicKey, active: true }]]),
+          now: now * 1000
+        }).code === 'UNREGISTERED_VERIFIER'
+          && listedReports.records[0].report.verdict === 'onchain-verified');
+      /* Per-receipt report cap: the main report already occupies one slot,
+         two more store and the third alternative refuses. */
+      const capReports = [];
+      for (let i = 0; i < 3; i += 1) {
+        const altHash = `0x${(i + 5).toString(16).padStart(2, '0')}${'ab'.repeat(31)}`;
+        const altRpc = async (_url, method) => {
+          if (method === 'eth_blockNumber') return '0x100';
+          if (method === 'eth_getTransactionReceipt') {
+            return {
+              status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0', blockHash: altHash,
+              logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+            };
+          }
+          if (method === 'eth_getTransactionByHash') {
+            return { from: fromWallet.address, to: token.address, value: '0x0', blockHash: altHash };
+          }
+          return null;
+        };
+        const altReport = await buildTxVerificationReport({
+          state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+          verifier: { id: 'p4c-verifier' }, networks, rpc: altRpc, registry, now: now * 1000
+        }, verifierKeys.privateKey);
+        const storedAlt = await storeTxVerificationReport(state.stateId, altReport.report, {
+          registry, networks, rpc: altRpc, now: now * 1000
+        });
+        capReports.push(storedAlt);
+      }
+      t('the per-receipt report count is bounded',
+        capReports[0].ok && capReports[1].ok
+          && capReports[2].ok === false && capReports[2].code === 'VERIFICATION_REPORT_LIMIT');
+    }
+    {
+      /* Storage outage: never becomes a valid empty result, never verified. */
+      const outageState = createCrossChainState({
+        schema: 'fbt.cross-chain-state.v1',
+        createdAt: now + 2,
+        source: { chainId: 42161, token, amount: '200000000' },
+        destination: { chainId: 1, token: nativeToken, amount: '100000000000000000' },
+        parties: {
+          initiator: { id: 'outage-initiator', publicKey: initiatorKeys.publicKey },
+          counterparty: { id: 'outage-counterparty', publicKey: counterpartyKeys.publicKey }
+        },
+        timeout: { sourceSignatureBy: now + 600, destinationSignatureBy: now + 700, refundSignatureBy: now + 800 },
+        refund: {
+          chainId: 42161, token, amount: '200000000',
+          fromPartyId: 'outage-counterparty', toPartyId: 'outage-initiator',
+          mode: 'user-signed-transfer', automatic: false, enforceableByFbt: false
+        }
+      }, { now: (now + 2) * 1000 }).state;
+      await storeCrossChainState(outageState);
+      const outageReceipt = buildCrossChainReceipt({
+        state: outageState, leg: 'source-transfer', txHash: `0x${'51'.repeat(32)}`, signedAt: now + 2
+      }, initiatorKeys.privateKey).receipt;
+      await storeCrossChainReceipt(outageState.stateId, outageReceipt, { now: (now + 2) * 1000 });
+      const outageFromProof = await walletProofFor(fromWallet, {
+        partyId: 'outage-initiator', chainId: 42161, address: fromWallet.address, expiresAt: now + 86400
+      }, outageState);
+      const outageToProof = await walletProofFor(toWallet, {
+        partyId: 'outage-counterparty', chainId: 42161, address: toWallet.address, expiresAt: now + 86400
+      }, outageState);
+      const outageFrom = buildAccountBinding({
+        state: outageState, partyId: 'outage-initiator', chainId: 42161, address: fromWallet.address,
+        issuedAt: now, expiresAt: now + 86400, walletProof: outageFromProof.proof
+      }, initiatorKeys.privateKey, { now: now * 1000 }).binding;
+      const outageTo = buildAccountBinding({
+        state: outageState, partyId: 'outage-counterparty', chainId: 42161, address: toWallet.address,
+        issuedAt: now, expiresAt: now + 86400, walletProof: outageToProof.proof
+      }, counterpartyKeys.privateKey, { now: now * 1000 }).binding;
+      await storeAccountBinding(outageState.stateId, outageFrom);
+      await storeAccountBinding(outageState.stateId, outageTo);
+      const outageEvent = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
+        fromWallet.address, toWallet.address, 200000000n
+      ]);
+      const outageRpc = async (_url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (method === 'eth_getTransactionReceipt') {
+          return {
+            status: '0x1', transactionHash: outageReceipt.txHash, blockNumber: '0xf0', blockHash,
+            logs: [{ address: token.address, topics: outageEvent.topics, data: outageEvent.data }]
+          };
+        }
+        if (method === 'eth_getTransactionByHash') {
+          return { from: fromWallet.address, to: token.address, value: '0x0', blockHash };
+        }
+        return null;
+      };
+      const outageReport = await buildTxVerificationReport({
+        state: outageState, receipt: outageReceipt, fromBinding: outageFrom, toBinding: outageTo,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: outageRpc, registry, now: (now + 2) * 1000
+      }, verifierKeys.privateKey);
+      __overrideBlobForTests({
+        put: async () => { throw new Error('outage'); },
+        list: async () => { throw new Error('outage'); }
+      });
+      try {
+        const outageWrite = await storeTxVerificationReport(outageState.stateId, outageReport.report, {
+          registry, networks, rpc: outageRpc, now: (now + 2) * 1000
+        });
+        t('a blob outage refuses the write instead of pretending success',
+          outageWrite.ok === false
+            && ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(outageWrite.code));
+        const outageRead = await readCrossChainStateWithVerification(outageState.stateId, { now: (now + 2) * 1000 });
+        t('a blob outage on read is an error, never an empty valid result',
+          Boolean(outageRead.error) && !outageRead.bindings);
+      } finally {
+        __overrideBlobForTests(null);
+      }
+    }
+
+    /* ------------------------- derived leg statuses ------------------------ */
+    {
+      const proofBinding = fromBinding.binding;
+      const attestBinding = selfAttested.binding;
+      t('derived leg statuses expose the honest ten-step verification ladder',
+        deriveLegVerificationStatus({}).status === 'signed-only'
+          && deriveLegVerificationStatus({ networkConfigured: true }).status === 'binding-required'
+          && deriveLegVerificationStatus({ networkConfigured: true, fromBinding: attestBinding, toBinding: attestBinding }).status === 'wallet-proof-required'
+          && deriveLegVerificationStatus({ networkConfigured: true, fromBinding: proofBinding, toBinding: proofBinding }).status === 'verification-pending'
+          && deriveLegVerificationStatus({ attempt: 'RPC_DISAGREEMENT' }).status === 'rpc-disagreement'
+          && deriveLegVerificationStatus({ attempt: 'REORG_DETECTED' }).status === 'reorg-detected'
+          && deriveLegVerificationStatus({ attempt: 'RPC_QUORUM_UNAVAILABLE' }).status === 'verification-unavailable'
+          && deriveLegVerificationStatus({ attempt: 'INSUFFICIENT_CONFIRMATIONS' }).status === 'confirmations-pending'
+          && deriveLegVerificationStatus({
+            reports: [{ report: report.report }], networkConfigured: true
+          }).status === 'onchain-verified');
+      const withEverything = await readCrossChainStateWithVerification(state.stateId, { now: now * 1000 });
+      t('the public state derives bindings, records and per-leg status without rewriting receipts',
+        withEverything.state.stateId === state.stateId
+          && withEverything.accountBindings.length === 2
+          && withEverything.verificationReports.length >= 1
+          && withEverything.receipts.every((row) => row.claims.onChainVerified === false)
+          && withEverything.legVerification['source-transfer'].status === 'onchain-verified'
+          && withEverything.atomic === false
+          && withEverything.globalAtomicity === false
+          && withEverything.custody === false
+          && withEverything.escrow === false
+          && withEverything.automaticSettlement === false
+          && withEverything.refundEnforcedByFbt === false);
+    }
 
     const crossCaps4c = crossChainProtocolStatus();
     t('Phase 4c never upgrades the historical receipt schema or the atomic guard',
@@ -6504,23 +7099,42 @@ export default async function run() {
         && crossCaps4c.derivedLegVerificationSchema === 'fbt.cross-chain-tx-verification.v1');
 
     {
-      /* CLI: bind-account signs offline and never prints the private key. */
+      /* CLI: binding-challenge + bind-account with a public wallet signature;
+         private keys never reach stdout. */
       const tmp = mkdtempSync(join(tmpdir(), 'fbt-phase4c-'));
       try {
         const stateFile = join(tmp, 'state.json');
         writeFileSync(stateFile, JSON.stringify(state));
-        const cliOut = execFileSync(process.execPath, [
+        const challengeOut = execFileSync(process.execPath, [
+          'scripts/intent-cross-chain.mjs', 'binding-challenge', stateFile,
+          '--party', 'p4c-initiator', '--chain', '42161',
+          '--address', fromWallet.address, '--expires-at', String(now + 86400),
+          '--issued-at', String(now), '--nonce', 'cli-nonce'
+        ], {
+          encoding: 'utf8',
+          env: { ...process.env }
+        });
+        const cliChallenge = JSON.parse(challengeOut);
+        const cliWalletSignature = await fromWallet.signMessage(cliChallenge.message);
+        const cliBindOut = execFileSync(process.execPath, [
           'scripts/intent-cross-chain.mjs', 'bind-account', stateFile,
           '--party', 'p4c-initiator', '--chain', '42161',
-          '--address', fromAddress, '--expires-at', String(now + 86400)
+          '--address', fromWallet.address, '--expires-at', String(now + 86400),
+          '--issued-at', String(now), '--nonce', 'cli-nonce',
+          '--wallet-signature', cliWalletSignature
         ], {
           encoding: 'utf8',
           env: { ...process.env, INTENT_CROSS_CHAIN_PRIVATE_KEY: initiatorKeys.privateKey }
         });
-        const cliBinding = JSON.parse(cliOut);
-        t('the bind-account CLI signs offline without printing its private key',
-          verifyAccountBinding(cliBinding, { state, now: now * 1000 }).ok
-            && !cliOut.includes(initiatorKeys.privateKey));
+        const cliBinding = JSON.parse(cliBindOut);
+        t('the CLI builds the public challenge and binds with only the public wallet signature',
+          cliChallenge.domain === 'fbt.cross-chain-account-binding.v1/wallet-challenge'
+            && verifyAccountBinding(cliBinding, { state, now: now * 1000 }).ok
+            && cliBinding.claims.walletSignatureVerified === true
+            && !challengeOut.includes(initiatorKeys.privateKey)
+            && !cliBindOut.includes(initiatorKeys.privateKey)
+            && !cliBindOut.includes('rpc-a.invalid')
+            && !cliChallenge.message.includes(initiatorKeys.privateKey));
       } finally {
         rmSync(tmp, { recursive: true, force: true });
       }

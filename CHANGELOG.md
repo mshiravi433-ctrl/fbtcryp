@@ -4,52 +4,91 @@
 
 **Phase 4c — multi-RPC on-chain verification of cross-chain legs.**
 - New `fbt.cross-chain-account-binding.v1`: a party binds an on-chain address
-  to the SAME Ed25519 key pinned in `fbt.cross-chain-state.v1`, with issued/
-  expiry windows and strict claims: `addressControlSelfAttested:true`,
-  `walletSignatureVerified:false` (no EIP-191/EIP-712 check exists, so wallet
-  ownership is never claimed), `fundsAuthorityGranted:false`, `custody:false`.
-  An address arriving in an API body proves nothing; only the party key can
-  produce an acceptable binding.
+  to the SAME Ed25519 key pinned in `fbt.cross-chain-state.v1`
+  (`partyPublicKey`), with issued/expiry windows, a `walletProof` and strict
+  claims. An address arriving in an API body proves nothing; only the party
+  key can produce an acceptable binding.
+- Real EIP-191 wallet proofs for EOAs: `binding-challenge` builds a public,
+  deterministic challenge that binds domain + schema + stateId + partyId +
+  chainId + address + Ed25519 public key + issuedAt + expiresAt + nonce. The
+  wallet signs it with `personal_sign` in the user's own wallet (the private
+  key is NEVER requested or received); the server verifies with
+  `ethers.verifyMessage` and requires the recovered address to equal the
+  bound address. A verified proof sets `walletSignatureScheme:"EIP-191"` and
+  `walletSignatureVerified:true`; without it the binding stays a signed
+  self-assertion (`walletSignatureScheme:null`,
+  `walletSignatureVerified:false`) and a leg can never reach
+  `onchain-verified` (`wallet-proof-required`). EIP-1271 (smart-contract
+  wallets) is explicitly unsupported — `WALLET_PROOF_SCHEME_UNSUPPORTED`,
+  no fake fallback, `eip1271Supported:false` in capabilities.
 - New `fbt.cross-chain-tx-verification.v1`: a registered verifier reads each
-  leg through a quorum of ≥2 HTTPS RPC endpoints with distinct hostnames and
-  signs a bounded report pinned to `stateId`, `receiptId`, leg, exact
-  chain/token/amount, bound sender/recipient addresses, block number/hash,
-  receipt status, confirmations, per-endpoint observations and the quorum.
-  ERC-20 legs require a successful receipt with a `Transfer` event emitted by
-  EXACTLY the planned token contract carrying the exact from/to/amount;
-  native legs check transaction from/to/value plus receipt success.
-- Fail-closed everywhere: RPC disagreement, reorg/block-hash drift, failed
-  receipt, missing tx, insufficient confirmations, wrong token contract/
-  sender/recipient/amount, expired or mis-keyed binding, and one live RPC
-  against the quorum of two all refuse verification. Outages are never
-  converted into "verified" or a valid empty result.
+  leg through a per-network quorum (minimum 2) of HTTPS RPC endpoints with
+  distinct hostnames and signs a bounded report pinned to `stateId`,
+  `receiptId`, leg, exact chain/token/amount, bound sender/recipient
+  addresses and binding ids, block number/hash, receipt status,
+  confirmations, per-endpoint normalized observations, quorum, verdict,
+  reasonCodes and evaluatedAt. ERC-20 legs require a successful receipt with
+  a `Transfer` event emitted by EXACTLY the planned token contract carrying
+  the exact from/to/amount (a similar event from another contract, malformed
+  logs, and ambiguous duplicate events are never accepted;
+  fee-on-transfer/rebasing tokens surface as `WRONG_AMOUNT`); native legs
+  check transaction from/to/value plus receipt success.
+- Fail-closed everywhere: RPC disagreement, reorg (`REORG_DETECTED` for block
+  hash/number drift or tx/receipt block mismatch), failed receipt, missing
+  tx, insufficient confirmations, wrong token contract/sender/recipient/
+  amount, expired or mis-keyed binding, invalid wallet proof, and fewer than
+  the required agreeing endpoints all refuse verification. Outages answer
+  `verification-unavailable` and are never converted into "verified" or a
+  valid empty result. Bounded RPC transport: per-call timeout, 512KiB
+  response cap, strict receipt/log shape; raw responses are never stored.
 - The server stores a report ONLY after re-checking the verifier key against
-  the registry, re-verifying both bindings, re-reading the chain through its
-  own configured endpoints and reproducing the exact signed verdict
-  (`VERIFICATION_NOT_RECOMPUTABLE` otherwise). Transient outcomes answer
-  retryable and store nothing.
+  the registry, re-verifying both bindings and wallet proofs, re-reading the
+  chain through its own configured endpoints and reproducing the exact
+  signed verdict (`VERIFICATION_NOT_RECOMPUTABLE` otherwise). Stored records
+  carry `serverRecomputedBeforeStorage:true`. Pending/disagreement reports
+  are storable only as honest non-final snapshots (claims
+  `multiRpcQuorumReached:false`, `transactionObservedOnChain:false`) and are
+  superseded once a final outcome reproduces (`VERIFICATION_SUPERSEDED`).
 - Historical `fbt.cross-chain-state.v1` states and
   `fbt.cross-chain-leg-receipt.v1` receipts are untouched and keep verifying;
   receipts keep `onChainVerified:false` forever because they are party
   claims. Verification appears only in a DERIVED public block:
-  `legVerification` per leg (`signed-only`, `verification-pending`,
-  `rpc-disagreement`, `confirmations-pending`, `onchain-verified`,
-  `verification-rejected`) plus `accountBindings` / `verificationReports` and
-  `allSubmittedLegsOnChainVerified`. Even then `atomic`, `globalAtomicity`,
-  `custody`, `escrow`, `automaticSettlement` and `refundEnforcedByFbt` stay
-  false — two verified transactions are still two separate transactions —
-  and the envelope stays draft-only under `ATOMIC_CROSS_CHAIN_UNAVAILABLE`.
-- RPC endpoints live ONLY in server-side `INTENT_CROSS_CHAIN_RPC_NETWORKS`.
-  No URL appears in public responses, logs or `VITE_*`. Capabilities publish
-  `multiRpcConfigured`, `distinctRpcHosts` and — because distinct hostnames
-  are plumbing, not an audit — `providerIndependenceProven:false`. Nothing is
-  labelled "confidential".
-- New APIs: `POST/GET /cross-chain/states/{stateId}/account-bindings` and
-  `POST/GET /cross-chain/states/{stateId}/verification-reports`; the public
-  state endpoint now returns the derived verification view. CLI additions in
-  `scripts/intent-cross-chain.mjs`: `bind-account`, `verify-binding`,
+  `legVerification` per leg (`signed-only`, `binding-required`,
+  `wallet-proof-required`, `verification-pending`, `confirmations-pending`,
+  `rpc-disagreement`, `reorg-detected`, `verification-unavailable`,
+  `verification-rejected`, `onchain-verified`) plus `accountBindings` /
+  `verificationReports` and `allSubmittedLegsOnChainVerified`. Even then
+  `atomic`, `globalAtomicity`, `custody`, `escrow`, `automaticSettlement`
+  and `refundEnforcedByFbt` stay false — two verified transactions are still
+  two separate transactions — and the envelope stays draft-only under
+  `ATOMIC_CROSS_CHAIN_UNAVAILABLE`.
+- RPC endpoints live ONLY in server-side `INTENT_CROSS_CHAIN_RPC_NETWORKS`
+  (spec shape: chainId + quorum + minConfirmations + providers with id and
+  rpcUrl). No URL appears in public responses, logs or `VITE_*`. Capabilities
+  publish the new top-level `crossChainVerification` block
+  (`configured`, `bindingSchema`, `verificationSchema`, `walletProof`,
+  `multiRpcRequired:true`, `minimumQuorum:2`, `configuredChains`,
+  `providerIndependenceProven:false`, `serverRecomputesBeforeStorage:true`,
+  `onChainTxVerification`, `atomic:false`, `custody:false`) — without a real
+  env: `configured:false`, `configuredChains:0`, `onChainTxVerification:false`.
+  Because distinct hostnames are plumbing, not an audit,
+  `providerIndependenceProven` stays false; nothing is labelled
+  "confidential". A dedicated `INTENT_CROSS_CHAIN_VERIFICATION_RATE_LIMIT`
+  budgets the expensive RPC paths.
+- New APIs: `POST /cross-chain/states/{stateId}/account-binding-challenge`,
+  `POST/GET /cross-chain/states/{stateId}/account-bindings`,
+  `POST/GET /cross-chain/states/{stateId}/verification-reports`, and
+  receipt-scoped
+  `POST/GET /cross-chain/states/{stateId}/receipts/{receiptId}/verification-reports`.
+  CLI additions in `scripts/intent-cross-chain.mjs`: `binding-challenge`,
+  `bind-account` (optional public `--wallet-signature`), `verify-binding`,
   `verify-tx`, `sign-verification`, `verify-report` (party/verifier private
   keys and RPC URLs stay in the local env and are never printed).
+- New `docs/PHASE4C-ACTIVATE-FA.md` activation guide: schemas, binding
+  challenge, wallet signing without a private key, Ed25519 attestation, RPC
+  env template, Vercel setup, capabilities/report testing,
+  disagreement/reorg/pending handling, the non-atomic boundary and the
+  CLI-only variables that must never reach Vercel.
 
 **Phase 6 — honest operational completion, no fabricated green lights.**
 - `/operators` now documents precise blockers: any registered watcher/verifier

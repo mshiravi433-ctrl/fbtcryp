@@ -148,13 +148,15 @@ import {
   storeCrossChainState
 } from './intentCrossChain.js';
 import {
+  buildAccountBindingChallenge,
   crossChainVerificationStatus,
   parseCrossChainRpcNetworks,
   readAccountBindings,
   readCrossChainStateWithVerification,
   readTxVerificationReports,
   storeAccountBinding,
-  storeTxVerificationReport
+  storeTxVerificationReport,
+  verdictForTransientCode
 } from './intentCrossChainVerification.js';
 import {
   independentVerificationStatus,
@@ -398,6 +400,34 @@ setInterval(() => {
   for (const [k, v] of settlementHits) if (now > v.reset) settlementHits.delete(k);
 }, WINDOW_MS).unref?.();
 
+/* Phase 4c verification reports are the expensive RPC economy: each
+   submission triggers 3 RPC calls per configured provider, twice (verifier
+   observation + server recompute), so they get a dedicated budget from
+   INTENT_CROSS_CHAIN_VERIFICATION_RATE_LIMIT instead of the broad
+   cached-data allowance. */
+const verificationHits = new Map();
+const VERIFICATION_MAX_PER_WINDOW = Number(process.env.INTENT_CROSS_CHAIN_VERIFICATION_RATE_LIMIT || 10);
+app.use('/api/intents/v1/cross-chain', (req, res, next) => {
+  if (req.method !== 'POST' || !req.path.endsWith('/verification-reports')) return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = verificationHits.get(key);
+  if (!rec || now > rec.reset) {
+    verificationHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > VERIFICATION_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'VERIFICATION_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of verificationHits) if (now > v.reset) verificationHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 /* Outcome bids and confidential commit/reveal write immutable storage each.
    They get the same small per-caller budget as watcher/settlement writes
    rather than the broad cached-data allowance. */
@@ -518,6 +548,7 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       ...crossChainProtocolStatus(),
       txVerification: crossChainVerificationStatus(parseCrossChainRpcNetworks())
     },
+    crossChainVerification: crossChainVerificationStatus(parseCrossChainRpcNetworks()),
     independentVerification,
     merkleRootAnchors: merkleRootAnchorStatus(merkleAnchorNetworks),
     outcome: outcomeProtocolStatus({
@@ -611,7 +642,31 @@ app.post('/api/intents/v1/cross-chain/states/:stateId/receipts', async (req, res
    plan pins — placing an address in a request body proves nothing. A report
    is stored ONLY after the server re-reads the chain through its own
    configured endpoints and reproduces the exact signed verdict; a transient
-   RPC outcome answers retryable and stores nothing. */
+   RPC outcome is stored only as an honest non-final snapshot and an outage
+   stores nothing. */
+app.post('/api/intents/v1/cross-chain/states/:stateId/account-binding-challenge', async (req, res) => {
+  const current = await readCrossChainState(req.params.stateId);
+  if (current.error) {
+    const status = current.error === 'CROSS_CHAIN_STATE_NOT_FOUND' ? 404
+      : current.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503;
+    return res.status(status).json({ error: current.error });
+  }
+  const challenge = buildAccountBindingChallenge({
+    state: current.state,
+    partyId: req.body?.partyId,
+    chainId: Number(req.body?.chainId),
+    address: req.body?.address,
+    issuedAt: Number(req.body?.issuedAt ?? Math.floor(Date.now() / 1000)),
+    expiresAt: Number(req.body?.expiresAt),
+    nonce: req.body?.nonce ?? ''
+  });
+  if (!challenge.ok) return res.status(400).json({ error: challenge.code });
+  res.set('cache-control', 'no-store');
+  /* The challenge is fully public: domain + message for the party to sign
+     in their own wallet. No private key is ever requested or received. */
+  return res.json({ ok: true, challenge: challenge.challenge });
+});
+
 app.post('/api/intents/v1/cross-chain/states/:stateId/account-bindings', async (req, res) => {
   const stored = await withIntentLock(String(req.params.stateId), () =>
     storeAccountBinding(req.params.stateId, req.body));
@@ -619,7 +674,8 @@ app.post('/api/intents/v1/cross-chain/states/:stateId/account-bindings', async (
     const status = ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(stored.code) ? 503
       : stored.code === 'ACCOUNT_BINDING_CONFLICT' ? 409
         : stored.code === 'CROSS_CHAIN_STATE_NOT_FOUND' ? 404
-          : ['ACCOUNT_BINDING_SIGNATURE_MISMATCH', 'BINDING_KEY_MISMATCH'].includes(stored.code) ? 403 : 400;
+          : ['ACCOUNT_BINDING_SIGNATURE_MISMATCH', 'BINDING_KEY_MISMATCH', 'WALLET_PROOF_INVALID',
+            'WALLET_PROOF_SCHEME_UNSUPPORTED'].includes(stored.code) ? 403 : 400;
     return res.status(status).json({ error: stored.code });
   }
   return res.status(stored.alreadyStored ? 200 : 201).json({
@@ -638,30 +694,61 @@ app.get('/api/intents/v1/cross-chain/states/:stateId/account-bindings', async (r
   return res.json({ schema: 'fbt.cross-chain-account-binding.v1', bindings: result.bindings });
 });
 
-app.post('/api/intents/v1/cross-chain/states/:stateId/verification-reports', async (req, res) => {
-  const stored = await withIntentLock(String(req.params.stateId), () =>
-    storeTxVerificationReport(req.params.stateId, req.body, {
+const TRANSIENT_CODES_PUBLIC = ['RPC_QUORUM_UNAVAILABLE', 'RPC_DISAGREEMENT', 'REORG_DETECTED', 'TX_NOT_FOUND', 'INSUFFICIENT_CONFIRMATIONS'];
+
+const verificationAttemptStatus = (code) => {
+  if (verdictForTransientCode(code)) return verdictForTransientCode(code);
+  if (code === 'WALLET_PROOF_REQUIRED') return 'wallet-proof-required';
+  if (code === 'ACCOUNT_BINDING_NOT_FOUND') return 'binding-required';
+  if (code === 'VERIFICATION_CHAIN_NOT_CONFIGURED') return 'verification-unavailable';
+  return null;
+};
+
+async function submitVerificationReport(stateId, body) {
+  return withIntentLock(String(stateId), () =>
+    storeTxVerificationReport(stateId, body, {
       registry: parseVerifierRegistry(),
       networks: parseCrossChainRpcNetworks()
     }));
+}
+
+function answerVerificationReport(res, stored) {
   if (!stored.ok) {
-    const transient = ['RPC_QUORUM_UNAVAILABLE', 'RPC_DISAGREEMENT', 'TX_NOT_FOUND', 'INSUFFICIENT_CONFIRMATIONS'];
     const status = ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(stored.code) ? 503
-      : transient.includes(stored.code) ? 409
-        : stored.code === 'VERIFICATION_REPORT_CONFLICT' ? 409
+      : TRANSIENT_CODES_PUBLIC.includes(stored.code) || stored.code === 'VERIFICATION_SUPERSEDED' ? 409
+        : stored.code === 'VERIFICATION_REPORT_CONFLICT' || stored.code === 'VERIFICATION_REPORT_LIMIT' ? 409
           : ['CROSS_CHAIN_STATE_NOT_FOUND', 'VERIFICATION_RECEIPT_NOT_FOUND', 'ACCOUNT_BINDING_NOT_FOUND'].includes(stored.code) ? 404
             : ['VERIFICATION_SIGNATURE_MISMATCH', 'UNREGISTERED_VERIFIER'].includes(stored.code) ? 403
               : stored.code === 'VERIFICATION_CHAIN_NOT_CONFIGURED' ? 503 : 400;
+    const legStatus = verificationAttemptStatus(stored.code);
     return res.status(status).json({
       error: stored.code,
-      retryable: transient.includes(stored.code) || Boolean(stored.transient)
+      retryable: TRANSIENT_CODES_PUBLIC.includes(stored.code) || Boolean(stored.transient),
+      ...(legStatus ? { legVerification: { status: legStatus } } : {})
     });
   }
   return res.status(stored.alreadyStored ? 200 : 201).json({
     ok: true,
     alreadyStored: stored.alreadyStored,
-    report: stored.report
+    report: stored.report,
+    serverRecomputedBeforeStorage: true
   });
+}
+
+app.post('/api/intents/v1/cross-chain/states/:stateId/verification-reports', async (req, res) => {
+  return answerVerificationReport(res, await submitVerificationReport(req.params.stateId, req.body));
+});
+
+/* Receipt-scoped report routes: the receipt in the path must match the
+   receipt the signed report is attached to — roles are never taken from the
+   request body. */
+app.post('/api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports', async (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+    || !req.body.receiptId
+    || String(req.body.receiptId).toLowerCase() !== String(req.params.receiptId).toLowerCase()) {
+    return res.status(400).json({ error: 'VERIFICATION_RECEIPT_MISMATCH' });
+  }
+  return answerVerificationReport(res, await submitVerificationReport(req.params.stateId, req.body));
 });
 
 app.get('/api/intents/v1/cross-chain/states/:stateId/verification-reports', async (req, res) => {
@@ -670,7 +757,28 @@ app.get('/api/intents/v1/cross-chain/states/:stateId/verification-reports', asyn
     return res.status(result.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503).json({ error: result.error });
   }
   res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
-  return res.json({ schema: 'fbt.cross-chain-tx-verification.v1', reports: result.reports });
+  return res.json({
+    schema: 'fbt.cross-chain-tx-verification.v1',
+    recordSchema: 'fbt.cross-chain-tx-verification-record.v1',
+    reports: result.records
+  });
+});
+
+app.get('/api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports', async (req, res) => {
+  const result = await readTxVerificationReports(req.params.stateId);
+  if (result.error) {
+    return res.status(result.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503).json({ error: result.error });
+  }
+  const receiptId = String(req.params.receiptId).toLowerCase();
+  if (!/^0x[a-f0-9]{64}$/.test(receiptId)) return res.status(400).json({ error: 'BAD_CROSS_CHAIN_RECEIPT_ID' });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({
+    schema: 'fbt.cross-chain-tx-verification.v1',
+    recordSchema: 'fbt.cross-chain-tx-verification-record.v1',
+    receiptId,
+    reports: result.records.filter((row) =>
+      String(row.report?.receiptId || '').toLowerCase() === receiptId)
+  });
 });
 
 app.post('/api/intents/v1/commitments', async (req, res) => {

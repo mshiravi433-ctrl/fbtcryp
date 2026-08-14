@@ -17,7 +17,7 @@
 | ۳b | settlement report + re-grade مستقل | انجام‌شده | verifier واقعی | `onChainTxVerification:false` |
 | ۴a | DAG تک‌زنجیره + batch با امضای کاربر | انجام‌شده | آدرس واقعی batch برای `contract.configured:true` | calldata برنامه‌ای است؛ output verify ندارد |
 | **۴b** | **state machine میان‌زنجیره‌ای با امضای ترتیبی** | **انجام‌شده** | Blob برای دوام؛ کلیدهای دو طرف در هر state | **غیراتمیک، بدون escrow/custody؛ envelope هنوز draft-only** |
-| **۴c** | **راستی‌آزمایی واقعی چند-RPC هر پا + account binding امضاشده** | **انجام‌شده** | `INTENT_CROSS_CHAIN_RPC_NETWORKS` با ≥۲ endpoint HTTPS با hostname متفاوت در هر chain + verifier ثبت‌شده | **تأیید دو تراکنش جدا اتمیک نمی‌سازد؛ hostname متفاوت اثبات استقلال provider نیست؛ رسیدهای تاریخی بازنویسی نمی‌شوند** |
+| **۴c** | **راستی‌آزمایی واقعی چند-RPC هر پا + account binding امضاشده + اثبات کیف پول EIP-191** | **انجام‌شده** | `INTENT_CROSS_CHAIN_RPC_NETWORKS` (quorum ≥۲، endpointهای HTTPS با hostname متفاوت در هر chain) + verifier ثبت‌شده + `binding-challenge` | **تأیید دو تراکنش جدا اتمیک نمی‌سازد؛ hostname متفاوت اثبات استقلال provider نیست؛ رسیدهای تاریخی بازنویسی نمی‌شوند؛ EIP-1271 unsupported** |
 | ۵ | Outcome Marketplace + confidential transport | انجام‌شده | solver/bond/operator config واقعی | commit–reveal از FBT پنهان نیست؛ TEE ادعا نمی‌شود |
 | **۶** | **operator attestation، rotation Coordinator، root anchor** | **انجام‌شده** | attestation واقعی همهٔ ناظران؛ rotation دوامضاشده؛ قرارداد root anchor deployشده | **استقلال سازمانی قابل‌اثبات با رجیستری نیست؛ anchor completeness/settlement نیست** |
 
@@ -85,18 +85,29 @@ scripts/intent-cross-chain.mjs create|sign|verify-receipt|verify-state
 `onChainVerified:false` صحیح بود — و هنوز هم هست؛ رسید تاریخی هرگز تغییر
 نمی‌کند. فاز ۴c یک **لایهٔ مشتق‌شدهٔ جدا** اضافه می‌کند:
 
-1. **Binding امضاشدهٔ حساب.** هر طرف آدرس آن‌چین خودش را با همان کلید Ed25519
-   که در state pin شده امضا می‌کند (`stateId`، `partyId`، `chainId`، آدرس،
-   صدور/انقضا). گذاشتن آدرس در body درخواست کافی نیست. claims صادق‌اند:
-   `addressControlSelfAttested:true`، `walletSignatureVerified:false` (چون هیچ
-   بررسی EIP-191/EIP-712 انجام نمی‌شود، مالکیت کیف پول هرگز ادعا نمی‌شود)،
+1. **Binding امضاشدهٔ حساب + اثبات کیف پول EIP-191.** هر طرف آدرس آن‌چین خودش
+   را با همان کلید Ed25519 که در state pin شده امضا می‌کند (`stateId`،
+   `partyId`، `chainId`، آدرس، `partyPublicKey`، صدور/انقضا، `walletProof`).
+   گذاشتن آدرس در body درخواست کافی نیست. دستور `binding-challenge` چالش عمومی
+   و قطعی می‌سازد؛ کاربر آن را در کیف پول خودش با `personal_sign` امضا می‌کند
+   و فقط امضای عمومی برمی‌گردد (کلید خصوصی کیف پول هرگز دریافت نمی‌شود).
+   سرور با `ethers.verifyMessage` بازیابی می‌کند و آدرس باید دقیقاً یکی باشد.
+   با اثبات واقعی: `walletSignatureScheme:"EIP-191"` و
+   `walletSignatureVerified:true`. بدون اثبات، binding به‌صورت signed
+   assertion ذخیره می‌شود (`walletSignatureScheme:null`) و هرگز برای
+   `onchain-verified` کافی نیست. EIP-1271 صریحاً unsupported است و fallback
+   ساختگی ندارد. claims همیشه: `addressControlSelfAttested:true`،
    `fundsAuthorityGranted:false` و `custody:false`.
-2. **راستی‌آزمایی چند-RPC.** verifier ثبت‌شده هر پا را از حداقل دو endpoint
-   HTTPS با hostname متفاوت می‌خواند. برای ERC-20: receipt موفق، رخداد
-   `Transfer` دقیقاً از قرارداد token برنامه، و from/to/amount دقیق. برای
-   دارایی native: بررسی دقیق from/to/value تراکنش + receipt موفق. tx/block
-   hash باید بین quorum توافق داشته باشد و حداقل confirmation پیکربندی‌شده
-   رعایت شود.
+2. **راستی‌آزمایی چند-RPC.** verifier ثبت‌شده هر پا را از quorum حداقل دو
+   endpoint HTTPS با hostname متفاوت می‌خواند (per-network quorum، هرگز
+   بیشتر از تعداد providerها). برای ERC-20: receipt موفق، رخداد `Transfer`
+   دقیقاً از قرارداد token برنامه، و from/to/amount دقیق؛ رخداد مشابه از
+   قرارداد دیگر، لاگ malformed و رخدادهای مبهم تکراری رد می‌شوند و
+   fee-on-transfer/rebasing بدون policy صریح verified نمی‌شود. برای دارایی
+   native: بررسی دقیق from/to/value تراکنش + receipt موفق. tx/block hash باید
+   بین quorum توافق داشته باشد (`latestBlock - receiptBlock + 1`
+   overflow-safe) و حداقل confirmation پیکربندی‌شده رعایت شود؛ هر transport
+   زمان‌دار و با سقف اندازهٔ پاسخ و shape سخت‌گیرانه است.
 3. **بازمحاسبهٔ سروری.** سرور پیش از ذخیره، کلید verifier را با registry چک
    می‌کند، bindingها را دوباره verify می‌کند، خودش زنجیره را از endpointهای
    خودش دوباره می‌خواند و verdict/quorum/فکت‌ها را بازمحاسبه می‌کند. گزارشی که
@@ -104,17 +115,20 @@ scripts/intent-cross-chain.mjs create|sign|verify-receipt|verify-state
 
 ### fail-closed
 
-RPC disagreement، reorg/دریفت block-hash، receipt ناموفق، پیدا نشدن tx،
-confirmation ناکافی، قرارداد token/فرستنده/گیرنده/amount اشتباه، binding منقضی
-یا با کلید اشتباه، و فقط یک RPC زنده در برابر حد نصاب دو — همه رد می‌شوند.
-outage هرگز به «verified» یا نتیجهٔ خالی معتبر تبدیل نمی‌شود؛ پاسخ transient و
-retryable است و چیزی ذخیره نمی‌شود.
+RPC disagreement، reorg (`REORG_DETECTED`: drift block-hash، تراکنش روی
+blockهای متفاوت، یا اختلاف tx/receipt)، receipt ناموفق، پیدا نشدن tx،
+confirmation ناکافی، قرارداد token/فرستنده/گیرنده/amount اشتباه، رخداد
+اشتباه/malformed، binding منقضی یا با کلید اشتباه، wallet proof نامعتبر، و
+فقط یک RPC زنده در برابر حد نصاب دو — همه رد می‌شوند. outage پاسخ
+`verification-unavailable` می‌گیرد و هرگز به «verified» یا رد قطعی یا نتیجهٔ
+خالی معتبر تبدیل نمی‌شود؛ snapshot موقت فقط با claims صادقانه ذخیره می‌شود.
 
 ### وضعیت مشتق‌شدهٔ هر پا
 
 ```text
-signed-only → verification-pending → onchain-verified
-                    ↘ rpc-disagreement / confirmations-pending / verification-rejected
+signed-only → binding-required → wallet-proof-required → verification-pending
+  ↘ confirmations-pending / rpc-disagreement / reorg-detected / verification-unavailable
+  → verification-rejected / onchain-verified
 ```
 
 اگر همهٔ پاهای ثبت‌شده verified شوند `allSubmittedLegsOnChainVerified:true`
@@ -126,8 +140,10 @@ signed-only → verification-pending → onchain-verified
 ### API و CLI
 
 ```text
+POST     /api/intents/v1/cross-chain/states/:stateId/account-binding-challenge
 POST/GET /api/intents/v1/cross-chain/states/:stateId/account-bindings
 POST/GET /api/intents/v1/cross-chain/states/:stateId/verification-reports
+POST/GET /api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports
 GET      /api/intents/v1/cross-chain/states/:stateId   (اکنون با legVerification)
 
 scripts/intent-cross-chain.mjs bind-account|verify-binding|verify-tx|sign-verification|verify-report
@@ -257,14 +273,16 @@ curl -s "$FBT_URL/api/intents/v1/merkle-anchor-networks" | python3 -m json.tool
 ## چک فعال‌سازی فاز ۴c روی لایو
 
 ```bash
-curl -s "$FBT_URL/api/intents/v1/capabilities" | python3 -c "import json,sys; d=json.load(sys.stdin)['crossChain']['txVerification']; print(json.dumps(d, indent=2))"
+curl -s "$FBT_URL/api/intents/v1/capabilities" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d['crossChainVerification'], indent=2))"
 ```
 
-- بدون `INTENT_CROSS_CHAIN_RPC_NETWORKS`: `multiRpcConfigured:false` و همهٔ
-  پاها `signed-only` می‌مانند — این صادقانه است، نه نقص.
-- با env واقعی: `multiRpcConfigured:true`، تعداد endpoint و `distinctRpcHosts`
+- بدون `INTENT_CROSS_CHAIN_RPC_NETWORKS`: `configured:false`،
+  `configuredChains:0`، `onChainTxVerification:false` و همهٔ پاها
+  `signed-only` می‌مانند — این صادقانه است، نه نقص.
+- با env واقعی: `configured:true`، `configuredChains` و `distinctRpcHosts`
   منتشر می‌شود، اما هیچ URL برنمی‌گردد و `providerIndependenceProven:false`
-  می‌ماند.
+  می‌ماند. `walletProof:"EIP-191"` و `eip1271Supported:false` همیشه منتشر
+  می‌شوند.
 - `crossChain.atomic`، `crossChain.custody` و `onChainTxVerification` (سطح
   schema رسید تاریخی) در هر حالتی false هستند.
 
@@ -272,8 +290,8 @@ curl -s "$FBT_URL/api/intents/v1/capabilities" | python3 -c "import json,sys; d=
 
 1. **انجام شد در ۱.۳۵.۰:** راستی‌آزمایی RPC چندمنبعی txHashهای cross-chain به
    عنوان لایهٔ مشتق‌شده؛ رسید تاریخی همچنان `onChainVerified:false`.
-2. schema جداگانهٔ EIP-191/EIP-712 با verify واقعی امضای کیف پول؛ تا آن زمان
-   `walletSignatureVerified:false` و هیچ ادعای مالکیت wallet وجود ندارد.
+2. **انجام شد در ۱.۳۵.۰:** اثبات کیف پول EIP-191 با verify واقعی
+   (`ethers.verifyMessage`) روی چالش قطعی؛ EIP-1271 همچنان unsupported.
 3. escrow/state machine آن‌چین حسابرسی‌شده با custody و timeout/refund دقیق؛ تا
    آن زمان هیچ ادعای atomic cross-chain وجود ندارد.
 4. audit عملیاتی اپراتورهای مستقل و انتشار گزارش بیرونی؛ schema این واقعیت را

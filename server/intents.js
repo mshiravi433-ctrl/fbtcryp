@@ -91,7 +91,9 @@ export const INTENT_CAPABILITIES = Object.freeze({
     crossChainState: '/api/intents/v1/cross-chain/states/{stateId}',
     crossChainReceipts: '/api/intents/v1/cross-chain/states/{stateId}/receipts',
     crossChainAccountBindings: '/api/intents/v1/cross-chain/states/{stateId}/account-bindings',
+    crossChainAccountBindingChallenge: '/api/intents/v1/cross-chain/states/{stateId}/account-binding-challenge',
     crossChainVerificationReports: '/api/intents/v1/cross-chain/states/{stateId}/verification-reports',
+    crossChainReceiptVerificationReports: '/api/intents/v1/cross-chain/states/{stateId}/receipts/{receiptId}/verification-reports',
     operators: '/api/intents/v1/operators',
     merkleAnchorNetworks: '/api/intents/v1/merkle-anchor-networks',
     merkleRootAnchorCalldata: '/api/intents/v1/log/{intentHash}/root-anchor-calldata/{chainId}',
@@ -214,8 +216,12 @@ export const INTENT_CAPABILITIES = Object.freeze({
     crossChainAccountBindings: 'fbt.cross-chain-account-binding.v1',
     crossChainTxVerification: 'fbt.cross-chain-tx-verification.v1',
     crossChainVerifiedLegsRemainNonAtomic: true,
-    crossChainWalletSignatureVerification: false,
+    /* EIP-191 personal_sign proofs over a deterministic challenge are
+       really verified (ethers.verifyMessage). EIP-1271 is unsupported. */
+    crossChainWalletSignatureVerification: true,
+    crossChainWalletProofScheme: 'EIP-191',
     crossChainRpcProviderIndependenceProven: false,
+    crossChainServerRecomputesBeforeStorage: true,
     independentOperatorAttestations: 'fbt.operator-attestation.v1',
     operatorKeyControlCryptographicallyBound: true,
     organizationalIndependenceProvenByRegistry: false,

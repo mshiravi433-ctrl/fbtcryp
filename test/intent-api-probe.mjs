@@ -27,6 +27,7 @@ import {
 } from '../server/intentCrossChain.js';
 import { buildAccountBinding } from '../server/intentCrossChainVerification.js';
 import { buildOperatorAttestation } from '../server/intentOperators.js';
+import { Wallet, hexlify } from 'ethers';
 import {
   createCoordinatorRotationDraft,
   signCoordinatorRotation
@@ -1068,6 +1069,68 @@ try {
       && bindingList.body.bindings?.length === 1
       && bindingList.body.bindings[0].bindingId === goodBinding.bindingId);
 
+  /* ------- Phase 4c wallet proof: public challenge + EIP-191 signature ------- */
+  const walletOwner = new Wallet(hexlify(randomBytes(32)));
+  const challenge = await request(`/cross-chain/states/${crossStateId}/account-binding-challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      partyId: 'api-cross-counterparty',
+      chainId: 42161,
+      address: walletOwner.address,
+      expiresAt: crossNow + 86400,
+      nonce: 'probe-nonce'
+    })
+  });
+  t('POST /account-binding-challenge returns only the public deterministic EIP-191 message',
+    challenge.response.status === 200
+      && challenge.body.challenge?.domain === 'fbt.cross-chain-account-binding.v1/wallet-challenge'
+      && challenge.body.challenge?.message?.includes(crossStateId)
+      && challenge.body.challenge?.partyPublicKey === counterpartyKeys.publicKey
+      && !JSON.stringify(challenge.body).toLowerCase().includes('private'));
+  const walletSignature = await walletOwner.signMessage(challenge.body.challenge.message);
+  const provenBinding = buildAccountBinding({
+    state: createdCross.body.state,
+    partyId: 'api-cross-counterparty',
+    chainId: 42161,
+    address: walletOwner.address,
+    issuedAt: crossNow,
+    expiresAt: crossNow + 86400,
+    walletProof: { scheme: 'EIP-191', nonce: 'probe-nonce', signature: walletSignature }
+  }, counterpartyKeys.privateKey).binding;
+  const storedProven = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(provenBinding)
+  });
+  t('an EIP-191-verified binding stores with honest verified wallet-control claims',
+    storedProven.response.status === 201
+      && storedProven.body.binding?.claims?.walletSignatureScheme === 'EIP-191'
+      && storedProven.body.binding?.claims?.walletSignatureVerified === true
+      && storedProven.body.binding?.claims?.fundsAuthorityGranted === false
+      && storedProven.body.binding?.claims?.custody === false);
+  const forgedProof = {
+    ...provenBinding,
+    walletProof: {
+      ...provenBinding.walletProof,
+      signature: `${provenBinding.walletProof.signature.slice(0, -1)}${provenBinding.walletProof.signature.endsWith('A') ? 'B' : 'A'}`
+    }
+  };
+  const forgedProofAttempt = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(forgedProof)
+  });
+  t('a binding with a tampered wallet signature is refused as an invalid wallet proof',
+    forgedProofAttempt.response.status === 403
+      && forgedProofAttempt.body.error === 'WALLET_PROOF_INVALID');
+  const eip1271Attempt = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...provenBinding,
+      walletProof: { ...provenBinding.walletProof, scheme: 'EIP-1271' }
+    })
+  });
+  t('EIP-1271 smart-contract wallet proofs are explicitly unsupported',
+    eip1271Attempt.response.status === 403
+      && eip1271Attempt.body.error === 'WALLET_PROOF_SCHEME_UNSUPPORTED');
+
   const fakeReport = {
     schema: 'fbt.cross-chain-tx-verification.v1',
     stateId: crossStateId,
@@ -1083,6 +1146,18 @@ try {
   const verificationList = await request(`/cross-chain/states/${crossStateId}/verification-reports`);
   t('the verification report log stays empty rather than inventing success',
     verificationList.response.status === 200 && verificationList.body.reports?.length === 0);
+  const receiptScopedReports = await request(`/cross-chain/states/${crossStateId}/receipts/${sourceReceipt.receiptId}/verification-reports`);
+  t('GET receipt-scoped verification reports filters by the receipt',
+    receiptScopedReports.response.status === 200
+      && receiptScopedReports.body.receiptId === sourceReceipt.receiptId
+      && Array.isArray(receiptScopedReports.body.reports)
+      && receiptScopedReports.body.reports.length === 0);
+  const mismatchedScoped = await request(`/cross-chain/states/${crossStateId}/receipts/${destinationReceipt.receiptId}/verification-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fakeReport)
+  });
+  t('a receipt-scoped report whose body receiptId does not match the path is refused',
+    mismatchedScoped.response.status === 400
+      && mismatchedScoped.body.error === 'VERIFICATION_RECEIPT_MISMATCH');
   const verifiedState = await request(`/cross-chain/states/${crossStateId}`);
   t('the public state derives per-leg verification without touching stored receipts',
     verifiedState.response.status === 200
@@ -1102,6 +1177,24 @@ try {
       && caps4c.body.crossChain?.txVerification?.providerIndependenceProven === false
       && caps4c.body.crossChain?.atomic === false
       && caps4c.body.crossChain?.onChainTxVerification === false);
+  t('capabilities publish the crossChainVerification block honestly without env',
+    caps4c.response.status === 200
+      && caps4c.body.crossChainVerification?.available === true
+      && caps4c.body.crossChainVerification?.configured === false
+      && caps4c.body.crossChainVerification?.configuredChains === 0
+      && caps4c.body.crossChainVerification?.bindingSchema === 'fbt.cross-chain-account-binding.v1'
+      && caps4c.body.crossChainVerification?.verificationSchema === 'fbt.cross-chain-tx-verification.v1'
+      && caps4c.body.crossChainVerification?.walletProof === 'EIP-191'
+      && caps4c.body.crossChainVerification?.eip1271Supported === false
+      && caps4c.body.crossChainVerification?.multiRpcRequired === true
+      && caps4c.body.crossChainVerification?.minimumQuorum === 2
+      && caps4c.body.crossChainVerification?.providerIndependenceProven === false
+      && caps4c.body.crossChainVerification?.serverRecomputesBeforeStorage === true
+      && caps4c.body.crossChainVerification?.onChainTxVerification === false
+      && caps4c.body.crossChainVerification?.atomic === false
+      && caps4c.body.crossChainVerification?.custody === false
+      && caps4c.body.protocolSecurity?.crossChainWalletSignatureVerification === true
+      && caps4c.body.protocolSecurity?.crossChainAtomicity === false);
 
   const tmp4a = mkdtempSync(join(tmpdir(), 'fbt-probe-4a-'));
   try {

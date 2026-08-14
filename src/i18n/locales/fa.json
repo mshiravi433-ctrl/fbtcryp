@@ -3757,9 +3757,12 @@
       "txVerification": "راستی‌آزمایی آن‌چین هر پا",
       "txVerificationConfigured": "راستی‌آزمایی چند-RPC پیکربندی شده است",
       "txVerificationUnconfigured": "راستی‌آزمایی چند-RPC پیکربندی نشده است",
-      "txVerificationNote": "فاز ۴ث یک لایهٔ راستی‌آزمایی مشتق‌شده اضافه می‌کند: هر طرف آدرس آن‌چین خود را با همان کلید Ed25519 pinشده امضا می‌کند (خوداظهاری کنترل آدرس؛ بدون امضای کیف پول و بدون اختیار وجوه)، و راستی‌آزمای ثبت‌شده هر پا را از دست‌کم دو endpoint HTTPS با hostname متفاوت می‌خواند. سرور خودش زنجیره را دوباره می‌خواند و فقط گزارش کاملاً بازمحاسبه‌پذیر را ذخیره می‌کند. hostname متفاوت اثبات استقلال provider نیست. تأیید دو تراکنش جدا هرگز آن‌ها را اتمیک نمی‌کند: custody، escrow، اتمیک بودن جهانی و تسویهٔ خودکار false می‌مانند و envelope همچنان با ATOMIC_CROSS_CHAIN_UNAVAILABLE فقط پیش‌نویس است.",
-      "txVerificationQuorum": "حد نصاب RPC",
-      "txVerificationBindings": "اتصال‌های امضاشدهٔ حساب"
+      "txVerificationNote": "فاز ۴ث یک لایهٔ راستی‌آزمایی مشتق‌شده اضافه می‌کند. رسید امضاشده همچنان ادعای امضاشدهٔ طرف است (onChainVerified:false برای همیشه) و با «راستی‌آزمایی آن‌چین» یکی نیست. هر طرف آدرس آن‌چین خود را با همان کلید Ed25519 pinشده اتصال می‌دهد و می‌تواند اثبات کیف پول EIP-191 اضافه کند (امضای personal_sign روی چالش قطعی؛ آدرس بازیابی‌شده باید دقیقاً یکی باشد)؛ اتصال بدون این اثبات فقط خوداظهاری می‌ماند و هرگز به onchain-verified نمی‌رسد. راستی‌آزمای ثبت‌شده هر پا را از دست‌کم دو endpoint HTTPS با hostname متفاوت می‌خواند و سرور پیش از ذخیره، خودش زنجیره را دوباره می‌خواند. hostname متفاوت اثبات استقلال provider نیست؛ استقلال provider اثبات‌نشده اعلام می‌شود. تأیید دو تراکنش جدا هرگز آن‌ها را اتمیک نمی‌کند: custody، escrow، اتمیک بودن جهانی و تسویهٔ خودکار false می‌مانند و envelope همچنان با ATOMIC_CROSS_CHAIN_UNAVAILABLE فقط پیش‌نویس است. بدون پیکربندی واقعی INTENT_CROSS_CHAIN_RPC_NETWORKS این قابلیت unconfigured است.",
+      "txVerificationQuorum": "حد نصاب RPC (حداقل)",
+      "txVerificationBindings": "اتصال‌های امضاشدهٔ حساب",
+      "txVerificationSchema": "اسکیمای گزارش راستی‌آزمایی",
+      "txVerificationWalletProof": "طرح اثبات کیف پول",
+      "txVerificationProviderIndependence": "استقلال provider"
     },
     "revert": {
       "abort-all": "لغو همه",

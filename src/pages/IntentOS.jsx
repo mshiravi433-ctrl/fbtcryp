@@ -234,6 +234,8 @@ export default function IntentOS() {
     setSearchParams(next, { replace: true });
   };
 
+  const crossChainVerification = networkStatus?.crossChainVerification
+    ?? networkStatus?.crossChain?.txVerification ?? null;
   return (
     <PageTransition className="page ios-page">
       <motion.section className="ios-hero" variants={riseIn} initial="hidden" animate="show">
@@ -779,7 +781,7 @@ export default function IntentOS() {
             <div className="row-between">
               <div>
                 <span className="ios-eyebrow">{t('intentOS.network.txVerification')}</span>
-                <strong>{networkStatus?.crossChain?.txVerification?.multiRpcConfigured
+                <strong>{crossChainVerification?.configured
                   ? t('intentOS.network.txVerificationConfigured')
                   : t('intentOS.network.txVerificationUnconfigured')}</strong>
               </div>
@@ -788,10 +790,12 @@ export default function IntentOS() {
               </span>
             </div>
             <div className="ios-network-metrics">
-              <span><b>{networkStatus?.crossChain?.txVerification?.schema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
-              <span><b>{networkStatus?.crossChain?.txVerification?.accountBindingSchema ?? '—'}</b>{t('intentOS.network.txVerificationBindings')}</span>
-              <span><b>{networkStatus?.crossChain?.txVerification?.quorumRequired ?? '—'}</b>{t('intentOS.network.txVerificationQuorum')}</span>
-              <span><b>{networkStatus?.crossChain?.txVerification?.custody === false || networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+              <span><b>{crossChainVerification?.verificationSchema ?? crossChainVerification?.schema ?? '—'}</b>{t('intentOS.network.txVerificationSchema')}</span>
+              <span><b>{crossChainVerification?.bindingSchema ?? crossChainVerification?.accountBindingSchema ?? '—'}</b>{t('intentOS.network.txVerificationBindings')}</span>
+              <span><b>{crossChainVerification?.walletProof ?? '—'}</b>{t('intentOS.network.txVerificationWalletProof')}</span>
+              <span><b>{crossChainVerification?.minimumQuorum ?? crossChainVerification?.quorumRequired ?? '—'}</b>{t('intentOS.network.txVerificationQuorum')}</span>
+              <span><b>{t('intentOS.network.independenceNotProven')}</b>{t('intentOS.network.txVerificationProviderIndependence')}</span>
+              <span><b>{networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
             </div>
             <p>{t('intentOS.network.txVerificationNote')}</p>
           </section>
@@ -830,6 +834,9 @@ export default function IntentOS() {
             <div><span>GET</span><code>/api/intents/v1/bonds</code></div>
             <div><span>POST</span><code>/api/intents/v1/cross-chain/states</code></div>
             <div><span>POST</span><code>/api/intents/v1/cross-chain/states/:stateId/receipts</code></div>
+            <div><span>POST</span><code>/api/intents/v1/cross-chain/states/:stateId/account-binding-challenge</code></div>
+            <div><span>POST</span><code>/api/intents/v1/cross-chain/states/:stateId/account-bindings</code></div>
+            <div><span>POST</span><code>/api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports</code></div>
             <div><span>GET</span><code>/api/intents/v1/operators</code></div>
             <div><span>POST</span><code>/api/intents/v1/log/:intentHash/root-anchor</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/execution-claims</code></div>
