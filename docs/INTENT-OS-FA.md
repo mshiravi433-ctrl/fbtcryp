@@ -47,7 +47,7 @@ Intent
 | Swap | قابل تحویل به صفحه Swap | بازبینی و امضای کاربر الزامی است |
 | Outcome | Draft-only | تا اتصال Solverهای وثیقه‌دار اجرا نمی‌شود |
 | Automation | قابل تحویل به Orders | فقط پایش/اعلان؛ امضای نهایی با کاربر |
-| Workflow | Draft-only | مراحل مدل می‌شوند ولی اتمیک جا زده نمی‌شوند |
+| Workflow | تک‌زنجیره: آمادهٔ بازبینی / میان‌زنجیره: Draft-only | DAG تک‌زنجیره‌ای با امضای کاربر؛ پل یا زنجیرهٔ دوم اتمیک جا زده نمی‌شود |
 
 ### ۲. موتور Risk قطعی
 
@@ -64,8 +64,8 @@ Intent
 
 خروجی Risk Engine یکی از این دو حالت است:
 
-- `ready-for-review`: فقط اجازه رفتن به صفحه بازبینی؛ نه اجرا
-- `draft-only`: ذخیره محلی بدون دکمه اجرای گمراه‌کننده
+- `ready-for-review`: فقط اجازه رفتن به صفحه بازبینی؛ نه اجرا (سواپ، اتوماسیون، و گردش‌کار تک‌زنجیره‌ای)
+- `draft-only`: ذخیره محلی بدون دکمه اجرای گمراه‌کننده (بازار نتیجه، گردش‌کار میان‌زنجیره‌ای، حریم خصوصی متصل‌نشده)
 
 ### ۳. Memory Wallet بدون پروفایل‌سازی سرور
 
@@ -287,7 +287,8 @@ Phase 3a — declared solver bonds + execution claims + disputes +
            deterministic penalty adjudication                        [انجام شده]
 Phase 3b — outcome settlement reports + independent re-grading +
            offline settlement CLI                                    [انجام شده]
-Phase 4  — atomic same-chain workflows + cross-chain state machine
+Phase 4a — atomic same-chain workflows (user-signed batch, no output verify) [انجام شده]
+Phase 4b — cross-chain state machine
 Phase 5  — threshold-encrypted confidential intents
 Phase 6  — independent verifiers and standardisation
 ```
@@ -495,6 +496,11 @@ shortfall     = promisedOut − deliveredOut   (واحد توکن + bps)
 
 ```bash
 node scripts/intent-settler.mjs min-out commitment.json
+INTENT_SOLVER_PRIVATE_KEY='…' INTENT_SOLVER_ID='mm-a' \
+  node scripts/intent-settler.mjs claim close.json commitment.json \
+  --outcome filled --tx 0x… --received 400000000000000000 --fee 70
+INTENT_VERIFIER_PRIVATE_KEY='…' INTENT_VERIFIER_ID='verify-coop' \
+  node scripts/intent-settler.mjs dispute close.json --kind no-execution
 node scripts/intent-settler.mjs verify-claim claim.json close.json commitment.json
 node scripts/intent-settler.mjs grade close.json commitment.json --claim claim.json --adjudication adjudication.json
 INTENT_VERIFIER_PRIVATE_KEY='…' INTENT_VERIFIER_ID='verify-coop' \
@@ -509,6 +515,36 @@ node scripts/intent-settler.mjs collect https://your-fbt-host $INTENT_HASH out.j
 - مقدار «تحویل‌شده» از **ادعای امضاشدهٔ سالور** می‌آید، نه از رمزگشایی receipt آن‌چین — راستی‌آزمایان مستقل و کنترل متقاطع داوری، خطای ادعا را به مدرک تبدیل می‌کنند ولی ادعای کاذبِ یک‌جانبه را ناممکن نمی‌کنند؛
 - راستی‌آزمایان واقعاً مستقل هنوز به اپراتورهای واقعی پشت کلیدها بستگی دارند؛ Registry به‌تنهایی استقلال نمی‌سازد؛
 - `POST /bids` همچنان بسته است؛ شبکهٔ سالور تا آن موقع از مسیر امضاشدهٔ Quote → Close → Claim → Adjudication → Settlement Report کار می‌کند.
+
+### وضعیت دقیق Phase 4a — گردش‌کار تک‌زنجیره‌ای + دستورهای claim/dispute
+
+Phase 4a فقط **تک‌زنجیره** را باز می‌کند. Envelope بیرونی همان `fbt.intent.v1` با `kind: 'workflow'` است و گراف تودرتو `fbt.workflow.v1` (۲ تا ۸ گره، بدون دور) را حمل می‌کند. `steps[]` نمای سازگار قدیمی است و در سرور به DAG تبدیل می‌شود.
+
+#### ۱. همان زنجیره در برابر میان‌زنجیره
+
+- همهٔ گره‌ها روی یک `chainId` و بدون عمل `bridge` → Risk Engine `WORKFLOW_SINGLE_CHAIN_ATOMIC` می‌دهد، وضعیت `ready-for-review`، `executable: false`، `custodyAllowed: false`، `requireUserSignature: true`. Handoff به `/swap?...&workflow=1` است تا کاربر بازبینی و امضا کند.
+- هر پل یا زنجیرهٔ دوم → `draft-only` با کد `ATOMIC_CROSS_CHAIN_UNAVAILABLE`. پرچم قدیمی `unavailable.atomicComposableWorkflows` با `unavailable.atomicCrossChainWorkflows` عوض شده است.
+
+#### ۲. قرارداد `IntentWorkflowBatch`
+
+`execute(workflowId, Call[], RevertPolicy)` یک دستهٔ همان‌تراکنش با سیاست AbortAll / Continue / SkipRemaining است. ETH باقیمانده به فراخواننده برمی‌گردد. **مالک ندارد، rescue ندارد**؛ ERC-20 که اشتباهاً به آن فرستاده شود گیر می‌کند. قرارداد خروجی تماس را با `minOutput` یا postcondition نمی‌سنجد و `msg.sender` زیرتماس، خودِ دسته‌کننده است نه کاربر. کال‌دیتای ساخته‌شده هش SHA-256 برنامه‌ریزی‌شدهٔ هر گره است (`liveRouterCalldata: false`) نه payload زندهٔ روتر DEX.
+
+آدرس عمومی فقط از `INTENT_WORKFLOW_BATCH_ADDRESS` خوانده می‌شود. بدون آدرس معتبر، `capabilities.workflows.contract.configured` صادقانه `false` می‌ماند.
+
+#### ۳. رسید و قابلیت‌ها
+
+رسید `fbt.workflow-execution-proof.v1` ادعای `SINGLE_CHAIN_BATCH_EXECUTED` را با `globalAtomicity: false` و `outputVerified: false` امضا می‌کند — نه «اتمیک کل جهان». Capabilities بلوک `workflows` را منتشر می‌کند: `singleChainAtomic: true`، `crossChainAtomic: false`، `maxNodes: 8`. Adapter زندهٔ `fbt-single-chain-workflow` settlement را `user-signed-batch` اعلام می‌کند.
+
+#### ۴. CLI
+
+`scripts/intent-settler.mjs` حالا `claim` (با `INTENT_SOLVER_PRIVATE_KEY`) و `dispute` (با `INTENT_VERIFIER_PRIVATE_KEY`) را صدا می‌زند. هر دو builderهای سروری موجود را به کار می‌گیرند و کلید خصوصی را هرگز چاپ نمی‌کنند. این کلیدها فقط در secrets manager اپراتور می‌مانند — نه در مخزن، نه در `VITE_*`، نه در چت.
+
+محدودیت‌های صادقانهٔ Phase 4a:
+
+- گردش‌کار میان‌زنجیره‌ای هنوز اتمیک نیست (Phase 4b)؛
+- دسته‌کننده خروجی را راستی‌آزمایی نمی‌کند و کال‌دیتای زندهٔ DEX نمی‌سازد؛
+- سرور هرگز خرج نمی‌کند؛ `executable` روی envelope عمومی `false` می‌ماند؛
+- `POST /bids` همچنان بسته است.
 
 ---
 

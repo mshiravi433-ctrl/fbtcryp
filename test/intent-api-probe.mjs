@@ -1,4 +1,8 @@
 import { randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   generateSolverKeyPair,
   signSolverCommitment
@@ -12,7 +16,7 @@ import {
   buildExecutionClaim,
   verifyExecutionClaim
 } from '../server/intentExecution.js';
-import { buildDispute } from '../server/intentDisputes.js';
+import { buildDispute, verifyDispute } from '../server/intentDisputes.js';
 import { verifyAdjudication } from '../server/intentAdjudication.js';
 import { buildSettlementReport } from '../server/intentSettlement.js';
 
@@ -741,6 +745,135 @@ try {
         ? raceClose.body.close?.logSize === 2
           && raceClose.body.close?.decision?.selectedEntryHash === raceAdmission.body.entryHash
         : raceAdmission.response.status === 409 && raceClose.body.close?.logSize === 1));
+
+  /* ------- Phase 4a: workflow capabilities + validate + CLI claim/dispute ----- */
+  const caps4a = await request('/capabilities');
+  t('capabilities advertise single-chain workflows without claiming cross-chain atomicity',
+    caps4a.body.workflows?.schema === 'fbt.workflow.v1'
+      && caps4a.body.workflows?.singleChainAtomic === true
+      && caps4a.body.workflows?.crossChainAtomic === false
+      && caps4a.body.workflows?.maxNodes === 8
+      && caps4a.body.workflows?.liveRouterCalldata === false
+      && caps4a.body.workflows?.verifiesCallOutputs === false
+      && caps4a.body.workflows?.custody === false
+      && caps4a.body.workflows?.contract?.configured === false
+      && caps4a.body.workflows?.contract?.holdsTokens === false
+      && caps4a.body.unavailable?.atomicCrossChainWorkflows === true
+      && caps4a.body.unavailable?.atomicComposableWorkflows === undefined
+      && caps4a.body.endpoints?.bids === null);
+
+  const wfDeadline = Date.now() + 3600_000;
+  const sameChainValidate = await request('/validate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      schema: 'fbt.intent.v1',
+      kind: 'workflow',
+      chainId: 42161,
+      fromSymbol: 'USDC',
+      toSymbol: 'ETH',
+      amountIn: '100',
+      deadlineAt: wfDeadline,
+      constraints: {
+        maxSlippagePct: 0.3,
+        privacy: 'standard',
+        requireUserSignature: true,
+        custodyAllowed: false
+      },
+      steps: [
+        { id: 'swap', action: 'swap', chainId: 42161, asset: 'ETH', revertPolicy: 'abort-all' },
+        { id: 'deposit', action: 'deposit', chainId: 42161, asset: 'ETH', revertPolicy: 'abort-all' }
+      ]
+    })
+  });
+  t('POST /validate accepts a same-chain workflow as reviewable, never executable',
+    sameChainValidate.response.status === 200
+      && sameChainValidate.body.ok === true
+      && sameChainValidate.body.executable === false
+      && sameChainValidate.body.status === 'ready-for-review'
+      && sameChainValidate.body.singleChainAtomic === true
+      && sameChainValidate.body.code === 'VALID');
+
+  const crossChainValidate = await request('/validate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      schema: 'fbt.intent.v1',
+      kind: 'workflow',
+      chainId: 42161,
+      fromSymbol: 'USDC',
+      toSymbol: 'ETH',
+      amountIn: '100',
+      deadlineAt: wfDeadline,
+      constraints: {
+        maxSlippagePct: 0.3,
+        privacy: 'standard',
+        requireUserSignature: true,
+        custodyAllowed: false
+      },
+      steps: [
+        { id: 'swap', action: 'swap', chainId: 42161, asset: 'ETH', revertPolicy: 'abort-all' },
+        { id: 'bridge', action: 'bridge', chainId: 1, asset: 'ETH', revertPolicy: 'abort-all' }
+      ]
+    })
+  });
+  t('POST /validate keeps a bridged workflow draft-only',
+    crossChainValidate.response.status === 200
+      && crossChainValidate.body.ok === true
+      && crossChainValidate.body.executable === false
+      && crossChainValidate.body.status === 'draft-only'
+      && crossChainValidate.body.code === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
+      && crossChainValidate.body.singleChainAtomic === false);
+
+  const tmp4a = mkdtempSync(join(tmpdir(), 'fbt-probe-4a-'));
+  try {
+    const closePath = join(tmp4a, 'close.json');
+    const commitmentPath = join(tmp4a, 'commitment.json');
+    writeFileSync(closePath, JSON.stringify(closed.body.close));
+    writeFileSync(commitmentPath, JSON.stringify(commitment));
+    const executedAtCli = Math.floor(Date.now() / 1000);
+    const claimOut = execFileSync(process.execPath, [
+      'scripts/intent-settler.mjs', 'claim', closePath, commitmentPath,
+      '--outcome', 'filled',
+      '--tx', `0x${randomBytes(32).toString('hex')}`,
+      '--received', '400500000000000000',
+      '--fee', '70',
+      '--executed-at', String(executedAtCli)
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        INTENT_SOLVER_PRIVATE_KEY: keys.privateKey,
+        INTENT_SOLVER_ID: solver.id,
+        INTENT_SOLVER_NAME: solver.name
+      }
+    });
+    const cliClaim = JSON.parse(claimOut);
+    t('CLI claim against the sealed probe close verifies offline and never prints the key',
+      verifyExecutionClaim(cliClaim, { close: closed.body.close, commitment }).ok
+        && !claimOut.includes(keys.privateKey));
+
+    const disputeOut = execFileSync(process.execPath, [
+      'scripts/intent-settler.mjs', 'dispute', closePath,
+      '--kind', 'false-claim',
+      '--detail', 'probe observed a different fill',
+      '--observed-at', String(executedAtCli)
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        INTENT_VERIFIER_PRIVATE_KEY: verifierKeys.privateKey,
+        INTENT_VERIFIER_ID: verifier.id,
+        INTENT_VERIFIER_NAME: verifier.name
+      }
+    });
+    const cliDispute = JSON.parse(disputeOut);
+    t('CLI dispute against the sealed probe close verifies offline and never prints the key',
+      verifyDispute(cliDispute, { close: closed.body.close }).ok
+        && !disputeOut.includes(verifierKeys.privateKey));
+  } finally {
+    rmSync(tmp4a, { recursive: true, force: true });
+  }
 
   process.env.INTENT_SOLVER_KEYS = '';
   const unavailable = await post(commitment);

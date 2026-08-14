@@ -8,6 +8,12 @@
  * bonded guarantees, or permission for autonomous execution.
  */
 
+import {
+  isSingleChainWorkflow,
+  validateWorkflow,
+  workflowFromLegacySteps
+} from './intentWorkflow.js';
+
 const CHAINS = [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144];
 const KINDS = new Set(['swap', 'outcome', 'automation', 'workflow']);
 const PRIVACY = new Set(['standard', 'relay', 'confidential']);
@@ -49,7 +55,7 @@ export const INTENT_CAPABILITIES = Object.freeze({
     {
       id: 'fbt-evm-aggregator',
       status: 'live',
-      kinds: ['swap'],
+      kinds: ['swap', 'workflow'],
       settlement: 'user-signed-onchain',
       quoteCommitments: false
     },
@@ -58,6 +64,13 @@ export const INTENT_CAPABILITIES = Object.freeze({
       status: 'live',
       kinds: ['automation'],
       settlement: 'notification-then-user-signature',
+      quoteCommitments: false
+    },
+    {
+      id: 'fbt-single-chain-workflow',
+      status: 'live',
+      kinds: ['workflow'],
+      settlement: 'user-signed-batch',
       quoteCommitments: false
     },
     {
@@ -98,11 +111,14 @@ export const INTENT_CAPABILITIES = Object.freeze({
     deterministicPenaltyGrading: true,
     bondPenaltyEnforcement: 'out-of-protocol',
     onChainBondCustody: false,
-    onChainTxVerification: false
+    onChainTxVerification: false,
+    singleChainWorkflows: 'fbt.workflow.v1',
+    workflowBatchVerifiesOutputs: false,
+    workflowLiveRouterCalldata: false
   },
   unavailable: {
     confidentialIntents: true,
-    atomicComposableWorkflows: true,
+    atomicCrossChainWorkflows: true,
     cexOtcInventoryBids: true,
     autonomousAiSpending: true,
     onChainBondEscrow: true,
@@ -154,10 +170,21 @@ export function validateIntentEnvelope(body, now = Date.now()) {
   }
 
   if (body.kind === 'workflow') {
-    if (!Array.isArray(body.steps) || body.steps.length < 2 || body.steps.length > 8) {
-      return { ok: false, code: 'BAD_WORKFLOW' };
-    }
-    return { ok: true, executable: false, status: 'draft-only', code: 'ATOMIC_WORKFLOW_UNAVAILABLE' };
+    const deadlineSeconds = Math.floor(deadline / 1000);
+    const source = body.workflow && typeof body.workflow === 'object' && !Array.isArray(body.workflow)
+      ? body.workflow
+      : workflowFromLegacySteps(body.steps, { chainId: body.chainId, deadline: deadlineSeconds });
+    const checked = validateWorkflow(source);
+    if (!checked.ok) return { ok: false, code: checked.code || 'BAD_WORKFLOW', executable: false };
+    const single = isSingleChainWorkflow(checked.workflow);
+    return {
+      ok: true,
+      executable: false,
+      status: single ? 'ready-for-review' : 'draft-only',
+      code: single ? 'VALID' : 'ATOMIC_CROSS_CHAIN_UNAVAILABLE',
+      singleChainAtomic: single,
+      workflow: checked.workflow
+    };
   }
   if (body.kind === 'outcome') {
     return { ok: true, executable: false, status: 'draft-only', code: 'OUTCOME_MARKET_UNAVAILABLE' };

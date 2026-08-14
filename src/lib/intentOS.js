@@ -7,17 +7,20 @@
  * language may be stored as a note, but it is never the source of truth for an
  * execution.
  *
- * The current product can execute a same-chain swap, prepare a bridge, and
- * create locally watched orders. It cannot yet guarantee an outcome across
- * CEX/OTC/inventory solvers, atomically execute a multi-protocol workflow, or
- * hide a full intent from every participant. Those capabilities are described
- * as unavailable rather than simulated with invented quotes.
+ * The current product can execute a same-chain swap, prepare a bridge, create
+ * locally watched orders, and compile a same-chain workflow into a
+ * user-signed review (planned batch envelope — outputs are not verified
+ * on-chain). It cannot yet guarantee an outcome across CEX/OTC/inventory
+ * solvers, atomically execute a CROSS-CHAIN workflow, or hide a full intent
+ * from every participant. Those capabilities are described as unavailable
+ * rather than simulated with invented quotes.
  */
 
 export const INTENT_SCHEMA = 'fbt.intent.v1';
 export const INTENT_KINDS = ['swap', 'outcome', 'automation', 'workflow'];
 export const PRIVACY_MODES = ['standard', 'relay', 'confidential'];
-export const WORKFLOW_ACTIONS = ['swap', 'bridge', 'deposit', 'borrow', 'send'];
+export const WORKFLOW_ACTIONS = ['swap', 'bridge', 'deposit', 'borrow', 'send', 'approve'];
+export const WORKFLOW_REVERT_POLICIES = ['abort-all', 'continue', 'skip-remaining'];
 
 const MEMORY_KEY = 'fbt-intent-memory-v1';
 const INTENTS_KEY = 'fbt-intents-v1';
@@ -46,7 +49,7 @@ export const SOLVER_CAPABILITIES = Object.freeze([
   {
     id: 'fbt-evm-aggregator',
     role: 'solver',
-    modes: ['swap'],
+    modes: ['swap', 'workflow'],
     settlement: 'user-signed-onchain',
     custody: false,
     live: true,
@@ -62,13 +65,22 @@ export const SOLVER_CAPABILITIES = Object.freeze([
     detail: 'Conditions are watched, but the user still reviews and signs every real transaction.'
   },
   {
+    id: 'fbt-single-chain-workflow',
+    role: 'solver',
+    modes: ['workflow'],
+    settlement: 'user-signed-batch',
+    custody: false,
+    live: true,
+    detail: 'Same-chain planned batch: the user signs one review. Outputs are not verified on-chain and the batcher never holds funds.'
+  },
+  {
     id: 'fbt-cross-chain-adapter',
     role: 'solver',
     modes: ['workflow'],
     settlement: 'user-signed-bridge-handoff',
     custody: false,
     live: true,
-    detail: 'A bridge can be prepared as a separate signed action; a multi-step atomic workflow is not yet available.'
+    detail: 'A bridge can be prepared as a separate signed action; a cross-chain atomic workflow is not available.'
   },
   {
     id: 'external-outcome-market',
@@ -229,6 +241,7 @@ export function normalizeIntent(input = {}, memory = loadIntentMemory(), now = D
 
   let steps = [];
   if (kind === 'workflow') {
+    const deadlineSeconds = Math.floor(deadlineAt / 1000);
     steps = (Array.isArray(input.steps) ? input.steps : [])
       .slice(0, 8)
       .map((step, index) => ({
@@ -236,7 +249,14 @@ export function normalizeIntent(input = {}, memory = loadIntentMemory(), now = D
         action: WORKFLOW_ACTIONS.includes(step?.action) ? step.action : null,
         chainId: SUPPORTED_CHAINS.has(Number(step?.chainId)) ? Number(step.chainId) : chainId,
         asset: cleanSymbol(step?.asset || (index === 0 ? fromSymbol : toSymbol)),
-        target: cleanNote(step?.target)
+        target: cleanNote(step?.target),
+        precondition: cleanNote(step?.precondition),
+        postcondition: cleanNote(step?.postcondition),
+        minOutput: String(step?.minOutput || '').trim().slice(0, 40),
+        maxInput: String(step?.maxInput || '').trim().slice(0, 40),
+        deadline: Number.isSafeInteger(Number(step?.deadline)) ? Number(step.deadline) : deadlineSeconds,
+        revertPolicy: WORKFLOW_REVERT_POLICIES.includes(step?.revertPolicy) ? step.revertPolicy : 'abort-all',
+        allowedContracts: Array.isArray(step?.allowedContracts) ? step.allowedContracts.slice(0, 8) : []
       }));
     if (steps.length < 2 || steps.some((s) => !s.action)) return { error: 'BAD_WORKFLOW' };
   }
@@ -273,12 +293,27 @@ function check(id, level, detail = null) {
   return { id, level, detail };
 }
 
+/** Same-chain atomic candidate: one chainId and no bridge action. */
+export function isSingleChainWorkflowSteps(steps, envelopeChainId) {
+  if (!Array.isArray(steps) || steps.length < 2) return false;
+  if (steps.some((step) => step.action === 'bridge')) return false;
+  const chain = Number(steps[0]?.chainId || envelopeChainId);
+  return steps.every((step) => Number(step.chainId || envelopeChainId) === chain);
+}
+
 function solverRows(intent) {
+  const singleChain = intent.kind === 'workflow' && isSingleChainWorkflowSteps(intent.steps, intent.chainId);
   return SOLVER_CAPABILITIES.map((solver) => {
     if (!solver.live) return { ...solver, status: 'unavailable' };
     if (!solver.modes.includes(intent.kind)) return { ...solver, status: 'ineligible' };
 
     if (intent.kind === 'workflow') {
+      if (solver.id === 'fbt-single-chain-workflow' || solver.id === 'fbt-evm-aggregator') {
+        return { ...solver, status: singleChain ? 'eligible' : 'ineligible' };
+      }
+      if (solver.id === 'fbt-cross-chain-adapter') {
+        return { ...solver, status: singleChain ? 'ineligible' : 'partial' };
+      }
       return { ...solver, status: 'partial' };
     }
     if (intent.kind === 'automation') {
@@ -353,7 +388,12 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
     checks.push(check('OUTCOME_SOLVER_NETWORK_UNAVAILABLE', 'block'));
   }
   if (intent.kind === 'workflow') {
-    checks.push(check('WORKFLOW_NOT_ATOMIC', 'block', { steps: intent.steps.length }));
+    const single = isSingleChainWorkflowSteps(intent.steps, intent.chainId);
+    if (single) {
+      checks.push(check('WORKFLOW_SINGLE_CHAIN_ATOMIC', 'pass', { steps: intent.steps.length }));
+    } else {
+      checks.push(check('ATOMIC_CROSS_CHAIN_UNAVAILABLE', 'block', { steps: intent.steps.length }));
+    }
   }
   if (intent.kind === 'automation') {
     checks.push(check('AUTOMATION_REQUIRES_FINAL_SIGNATURE', 'warn'));
@@ -368,6 +408,16 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
       amount: intent.amountIn,
       chain: String(intent.chainId),
       intent: intent.id
+    });
+    handoff = `/swap?${params.toString()}`;
+  } else if (!blocked && intent.kind === 'workflow') {
+    const params = new URLSearchParams({
+      from: intent.fromSymbol,
+      to: intent.toSymbol,
+      amount: intent.amountIn,
+      chain: String(intent.chainId),
+      intent: intent.id,
+      workflow: '1'
     });
     handoff = `/swap?${params.toString()}`;
   } else if (!blocked && intent.kind === 'automation') {

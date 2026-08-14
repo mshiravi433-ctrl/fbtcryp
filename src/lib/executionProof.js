@@ -23,8 +23,10 @@
  */
 
 export const EXECUTION_PROOF_SCHEMA = 'fbt.execution-proof.v1';
+export const WORKFLOW_EXECUTION_PROOF_SCHEMA = 'fbt.workflow-execution-proof.v1';
 const STORAGE_KEY = 'fbt-execution-proofs-v1';
 const MAX_PROOFS = 50;
+const KNOWN_PROOF_SCHEMAS = new Set([EXECUTION_PROOF_SCHEMA, WORKFLOW_EXECUTION_PROOF_SCHEMA]);
 
 /** JSON-safe canonical value: sorted keys, finite numbers, BigInt as decimal. */
 export function canonicalValue(value) {
@@ -137,7 +139,7 @@ function saveRaw(rows) {
 }
 
 export function loadExecutionProofs() {
-  return loadRaw().filter((row) => row?.schema === EXECUTION_PROOF_SCHEMA).slice(0, MAX_PROOFS);
+  return loadRaw().filter((row) => KNOWN_PROOF_SCHEMAS.has(row?.schema)).slice(0, MAX_PROOFS);
 }
 
 export function getExecutionProof(id) {
@@ -251,8 +253,73 @@ export async function createExecutionProof({
   return proof;
 }
 
+/**
+ * Create a same-chain workflow receipt after a user-signed batch. The claim
+ * is narrower than a swap receipt: the batch ran in one transaction, outputs
+ * were NOT verified against minOutput/postconditions, and this is not
+ * cross-chain atomicity.
+ */
+export async function createWorkflowExecutionProof({
+  workflowId,
+  chainId,
+  nodeCount,
+  revertPolicy = 'abort-all',
+  txHash = null,
+  receipt = null,
+  intentId = null,
+  createdAt = Date.now()
+}) {
+  const payload = canonicalValue({
+    schema: WORKFLOW_EXECUTION_PROOF_SCHEMA,
+    intentId: intentId || null,
+    createdAt,
+    claim: {
+      code: 'SINGLE_CHAIN_BATCH_EXECUTED',
+      scope: 'User-signed same-transaction batch of planned node envelopes on one chain. Outputs are not verified against minOutput or postconditions.',
+      globalAtomicity: false,
+      outputVerified: false
+    },
+    workflow: {
+      workflowId: workflowId || null,
+      chainId: Number(chainId),
+      nodeCount: Number(nodeCount) || 0,
+      revertPolicy,
+      liveRouterCalldata: false
+    },
+    settlement: {
+      txHash: txHash ? String(txHash).toLowerCase() : null,
+      chainId: Number(chainId),
+      status: Number(receipt?.status) === 1 ? 'confirmed' : txHash ? 'unknown' : 'planned',
+      blockNumber: receipt?.blockNumber != null ? Number(receipt.blockNumber) : null,
+      gasUsed: receipt?.gasUsed != null ? String(receipt.gasUsed) : null
+    },
+    honesty: {
+      custody: false,
+      holdsTokens: false,
+      verifiesCallOutputs: false,
+      crossChainAtomic: false,
+      userSignatureRequired: true
+    }
+  });
+
+  const digest = await sha256Hex(payload);
+  const proof = {
+    schema: WORKFLOW_EXECUTION_PROOF_SCHEMA,
+    id: `wep_${digest.slice(0, 20)}`,
+    payload,
+    integrity: {
+      algorithm: 'SHA-256',
+      canonicalisation: 'sorted-key-json-v1',
+      digest
+    }
+  };
+  const rows = [proof, ...loadExecutionProofs().filter((row) => row.id !== proof.id)].slice(0, MAX_PROOFS);
+  saveRaw(rows);
+  return proof;
+}
+
 export async function verifyExecutionProof(proof) {
-  if (!proof || proof.schema !== EXECUTION_PROOF_SCHEMA || !proof.payload || !proof.integrity?.digest) {
+  if (!proof || !KNOWN_PROOF_SCHEMAS.has(proof.schema) || !proof.payload || !proof.integrity?.digest) {
     return { ok: false, code: 'BAD_PROOF' };
   }
   try {

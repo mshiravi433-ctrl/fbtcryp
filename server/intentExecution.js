@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto';
 import { blobConfigured } from './blobCache.js';
 import {
   canonicalValue,
+  publicKeyFromPrivateKey,
   signCanonicalPayload,
   verifyCanonicalSignature
 } from './intentSignatures.js';
@@ -446,4 +447,25 @@ export function executionProtocolStatus({ registeredVerifiers = 0, graceSeconds 
     penaltyEnforcement: 'out-of-protocol',
     custody: false
   };
+}
+
+/**
+ * CLI-only identity for `scripts/intent-settler.mjs claim`. The private key
+ * stays in the operator's secrets manager — never a VITE_* or server registry
+ * variable. Returns null rather than inventing an identity.
+ */
+export function solverConfigFromPrivateKey(privateKey = process.env.INTENT_SOLVER_PRIVATE_KEY || '') {
+  if (!privateKey) return null;
+  const id = String(process.env.INTENT_SOLVER_ID || 'independent-solver').toLowerCase();
+  if (!ID_RE.test(id)) return null;
+  try {
+    return {
+      id,
+      name: String(process.env.INTENT_SOLVER_NAME || id).replace(/[<>"'`\\]/g, '').slice(0, 80),
+      privateKey,
+      publicKey: publicKeyFromPrivateKey(privateKey)
+    };
+  } catch {
+    return null;
+  }
 }

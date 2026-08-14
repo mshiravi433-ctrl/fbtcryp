@@ -3407,7 +3407,8 @@
       "choose": "Choose an outcome",
       "structured": "Money fields stay deterministic",
       "localOnly": "Local draft",
-      "compile": "Compile through risk engine"
+      "compile": "Compile through risk engine",
+      "crossChainBanner": "A bridge or mixed-chain plan is not atomic. FBT will not pretend a cross-chain workflow can settle in one signed batch."
     },
     "template": {
       "swap": {
@@ -3424,7 +3425,7 @@
       },
       "workflow": {
         "title": "Composable workflow",
-        "body": "Model swap, bridge, deposit, borrow and send as one plan."
+        "body": "Model a same-chain DAG of swap, deposit, borrow, send and approve. A bridge or second chain stays draft-only."
       }
     },
     "field": {
@@ -3449,7 +3450,12 @@
       "removeStep": "Remove step",
       "note": "Intent note (optional)",
       "notePlaceholder": "Explain the outcome in your own words…",
-      "noteSafety": "The note is context only. Execution is compiled from the structured fields above."
+      "noteSafety": "The note is context only. Execution is compiled from the structured fields above.",
+      "workflowChain": "Step network",
+      "workflowAsset": "Asset",
+      "workflowMinOut": "Min output",
+      "workflowMaxIn": "Max input",
+      "workflowRevert": "Revert policy"
     },
     "condition": {
       "priceBelow": "Price falls below",
@@ -3477,7 +3483,8 @@
       "bridge": "Bridge",
       "deposit": "Deposit",
       "borrow": "Borrow",
-      "send": "Send"
+      "send": "Send",
+      "approve": "Approve"
     },
     "result": {
       "title": "Compiled execution plan",
@@ -3485,7 +3492,7 @@
       "draft-only": "Draft only",
       "solverCandidates": "Solver and adapter coverage",
       "reviewHandoff": "Open the user-signed review",
-      "draftOnly": "This outcome is saved as a local draft. FBT will not pretend an unavailable privacy, outcome or atomic-workflow adapter is live."
+      "draftOnly": "This outcome is saved as a local draft. FBT will not pretend an unavailable privacy, outcome or cross-chain atomic workflow is live."
     },
     "solverStatus": {
       "eligible": "Eligible",
@@ -3514,6 +3521,10 @@
       "confidential-intent-transport": {
         "title": "Confidential intent transport",
         "body": "Threshold encryption or confidential compute is required before this can be called private."
+      },
+      "fbt-single-chain-workflow": {
+        "title": "Same-chain workflow batch",
+        "body": "User-signed planned batch on one chain. Outputs are not verified on-chain and the batcher never holds funds."
       }
     },
     "check": {
@@ -3584,6 +3595,14 @@
       "AUTOMATION_REQUIRES_FINAL_SIGNATURE": {
         "title": "Automation stops before spending",
         "body": "The watcher can notify and prefill; it cannot sign or spend for you."
+      },
+      "WORKFLOW_SINGLE_CHAIN_ATOMIC": {
+        "title": "Same-chain workflow is reviewable",
+        "body": "{{steps}} steps share one chain and have no bridge. You still sign; outputs are not verified on-chain."
+      },
+      "ATOMIC_CROSS_CHAIN_UNAVAILABLE": {
+        "title": "Cross-chain atomic workflow is unavailable",
+        "body": "{{steps}} steps span more than one chain or include a bridge. They stay a draft, not one atomic settlement."
       }
     },
     "error": {
@@ -3690,7 +3709,20 @@
       "settlementSchema": "Settlement report schema",
       "serverRecompute": "Server recomputes before storing",
       "adjudicationCheck": "Adjudication cross-check",
-      "settlementNote": "Phase 3b settlement reports re-grade every execution outcome from the same embedded evidence the coordinator used: the promised output of the signed quote, the delivered amount from the signed claim, the exact shortfall, and whether the stored adjudication reproduces. An adjudication that does not recompute is misconduct evidence. Reports are deterministic — the server re-evaluates each one before storing — and never claim on-chain verification or custody."
+      "settlementNote": "Phase 3b settlement reports re-grade every execution outcome from the same embedded evidence the coordinator used: the promised output of the signed quote, the delivered amount from the signed claim, the exact shortfall, and whether the stored adjudication reproduces. An adjudication that does not recompute is misconduct evidence. Reports are deterministic — the server re-evaluates each one before storing — and never claim on-chain verification or custody.",
+      "workflowProtocol": "SAME-CHAIN WORKFLOW",
+      "workflowReady": "Single-chain planned batch is available",
+      "workflowUnavailable": "Workflow compiler is unavailable",
+      "singleChain": "Single-chain only",
+      "crossChainAtomic": "Cross-chain atomic",
+      "maxNodes": "Max nodes",
+      "workflowContract": "Batch contract",
+      "workflowNote": "Phase 4a compiles a same-chain DAG (fbt.workflow.v1) into a user-signed IntentWorkflowBatch envelope. Calldata is a planned hash of each node, not a live DEX router payload. The contract never holds tokens or keys, does not verify call outputs against minOutput, and a bridge or second chain stays draft-only (ATOMIC_CROSS_CHAIN_UNAVAILABLE)."
+    },
+    "revert": {
+      "abort-all": "Abort all",
+      "continue": "Continue",
+      "skip-remaining": "Skip remaining"
     }
   }
 }

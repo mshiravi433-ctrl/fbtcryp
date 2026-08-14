@@ -11,6 +11,15 @@
  *   # The signed quote's own minimum output:
  *   node scripts/intent-settler.mjs min-out commitment.json
  *
+ *   # Sign an execution claim as the winning solver (private key never printed):
+ *   INTENT_SOLVER_PRIVATE_KEY='…' INTENT_SOLVER_ID='mm-a' \
+ *     node scripts/intent-settler.mjs claim close.json commitment.json \
+ *     --outcome filled --tx 0x… --received 400000000000000000 --fee 70 --executed-at 1710000000
+ *
+ *   # Sign a dispute as an independent verifier (private key never printed):
+ *   INTENT_VERIFIER_PRIVATE_KEY='…' INTENT_VERIFIER_ID='verify-coop' \
+ *     node scripts/intent-settler.mjs dispute close.json --kind no-execution --detail 'no tx observed'
+ *
  *   # Verify a solver's execution claim offline:
  *   node scripts/intent-settler.mjs verify-claim claim.json close.json commitment.json
  *
@@ -39,8 +48,17 @@
 
 import fs from 'node:fs';
 import { verifyAuctionClose } from '../server/intentAuctions.js';
-import { minOutFor, verifyExecutionClaim } from '../server/intentExecution.js';
-import { verifyDispute, verifierConfigFromPrivateKey } from '../server/intentDisputes.js';
+import {
+  buildExecutionClaim,
+  minOutFor,
+  solverConfigFromPrivateKey,
+  verifyExecutionClaim
+} from '../server/intentExecution.js';
+import {
+  buildDispute,
+  verifyDispute,
+  verifierConfigFromPrivateKey
+} from '../server/intentDisputes.js';
 import {
   buildSettlementReport,
   evaluateSettlement,
@@ -64,8 +82,13 @@ const readDisputes = (file) => {
   return disputes;
 };
 
-/** Minimal flag parser: positional close + commitment, then optional
-    --claim / --disputes / --adjudication / --grace. */
+const FLAG_KEYS = new Set([
+  'claim', 'disputes', 'adjudication', 'grace',
+  'outcome', 'tx', 'received', 'fee', 'gas', 'executed-at',
+  'kind', 'detail', 'observed-at'
+]);
+
+/** Minimal flag parser: positionals, then --key value pairs from FLAG_KEYS. */
 const parseArgs = (args) => {
   const out = { positional: [] };
   for (let i = 0; i < args.length; i += 1) {
@@ -76,7 +99,7 @@ const parseArgs = (args) => {
     }
     const key = arg.slice(2);
     const next = args[i + 1];
-    if (!['claim', 'disputes', 'adjudication', 'grace'].includes(key) || !next || next.startsWith('--')) {
+    if (!FLAG_KEYS.has(key) || !next || next.startsWith('--')) {
       fail(`Missing value for ${arg}.`);
     }
     out[key] = next;
@@ -90,6 +113,8 @@ const [, , command, ...args] = process.argv;
 const usage = () => {
   console.error('Usage:');
   console.error('  intent-settler.mjs min-out <commitment.json>');
+  console.error('  intent-settler.mjs claim <close.json> <commitment.json> --outcome filled|short|reverted|expired [--tx <hash>] [--received <n>] [--fee <bps>] [--gas <wei>] [--executed-at <unix>]');
+  console.error('  intent-settler.mjs dispute <close.json> --kind no-execution|short-fill|false-claim|late-execution [--detail <text>] [--observed-at <unix>]');
   console.error('  intent-settler.mjs verify-claim <claim.json> <close.json> <commitment.json>');
   console.error('  intent-settler.mjs grade <close.json> <commitment.json> [--claim <f>] [--disputes <f>] [--adjudication <f>] [--grace <s>]');
   console.error('  intent-settler.mjs report <close.json> <commitment.json> [--claim <f>] [--disputes <f>] [--adjudication <f>] [--grace <s>]');
@@ -122,6 +147,66 @@ if (command === 'min-out' && args.length === 1) {
     slippageBps: commitment.slippageBps,
     quotedMinOut: minOut
   }, null, 2)}\n`);
+  process.exit(0);
+}
+
+if (command === 'claim' && args.length >= 2) {
+  const parsed = parseArgs(args);
+  if (parsed.positional.length < 2) usage();
+  const [closeFile, commitmentFile] = parsed.positional;
+  const close = readJson(closeFile, 'close receipt');
+  if (!verifyAuctionClose(close)) fail('INVALID_AUCTION_CLOSE', 1);
+  const commitment = readJson(commitmentFile, 'commitment');
+  const solver = solverConfigFromPrivateKey();
+  if (!solver) {
+    fail('INTENT_SOLVER_PRIVATE_KEY is required (optionally INTENT_SOLVER_ID / INTENT_SOLVER_NAME).');
+  }
+  const outcome = parsed.outcome;
+  if (!outcome) fail('--outcome filled|short|reverted|expired is required.');
+  const executedAt = parsed['executed-at'] != null
+    ? Number(parsed['executed-at'])
+    : (outcome === 'expired' ? null : Math.floor(Date.now() / 1000));
+  const feeBpsCharged = parsed.fee != null ? Number(parsed.fee) : null;
+  const built = buildExecutionClaim({
+    close,
+    commitment,
+    outcome,
+    txHash: parsed.tx || null,
+    amountReceived: parsed.received || null,
+    feeBpsCharged,
+    gasUsedWei: parsed.gas || null,
+    executedAt
+  }, { id: solver.id, publicKey: solver.publicKey }, solver.privateKey);
+  if (!built.ok) fail(built.code, 1);
+  process.stdout.write(`${JSON.stringify(built.claim, null, 2)}\n`);
+  process.exit(0);
+}
+
+if (command === 'dispute' && args.length >= 1) {
+  const parsed = parseArgs(args);
+  if (parsed.positional.length < 1) usage();
+  const close = readJson(parsed.positional[0], 'close receipt');
+  if (!verifyAuctionClose(close)) fail('INVALID_AUCTION_CLOSE', 1);
+  const verifier = verifierConfigFromPrivateKey();
+  if (!verifier) {
+    fail('INTENT_VERIFIER_PRIVATE_KEY is required (optionally INTENT_VERIFIER_ID / INTENT_VERIFIER_NAME).');
+  }
+  if (!parsed.kind) fail('--kind no-execution|short-fill|false-claim|late-execution is required.');
+  const observedAt = parsed['observed-at'] != null
+    ? Number(parsed['observed-at'])
+    : Math.floor(Date.now() / 1000);
+  const built = buildDispute({
+    close,
+    kind: parsed.kind,
+    observedAt,
+    detail: parsed.detail || null
+  }, {
+    id: verifier.id,
+    name: verifier.name,
+    publicKey: verifier.publicKey
+  }, verifier.privateKey);
+  if (!built.ok) fail(built.code, 1);
+  process.stdout.write(`${JSON.stringify(built.dispute, null, 2)}\n`);
   process.exit(0);
 }
 
