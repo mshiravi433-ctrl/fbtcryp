@@ -623,6 +623,29 @@ export default function IntentOS() {
             <p>{t('intentOS.network.auctionNote')}</p>
           </section>
 
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.bondProtocol')}</span>
+                <strong>{networkStatus?.bonds?.configured
+                  ? t('intentOS.network.bondsReady')
+                  : t('intentOS.network.bondsUnavailable')}</strong>
+              </div>
+              <span className={`ios-status ${networkStatus?.bonds?.bondedSolvers > 0 ? 'eligible' : 'unavailable'}`}>
+                {networkStatus?.bonds?.bondedSolvers > 0
+                  ? t('intentOS.network.bondedNetwork')
+                  : t('intentOS.network.unbondedNetwork')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.bonds?.configured ? networkStatus.bonds.bondedSolvers : '—'}</b>{t('intentOS.network.bonds')}</span>
+              <span><b>{networkStatus?.bonds?.configured ? networkStatus.bonds.minBondUsd : '—'}</b>{t('intentOS.network.minBond')}</span>
+              <span><b>{networkStatus?.execution?.registeredVerifiers ?? '—'}</b>{t('intentOS.network.verifiers')}</span>
+              <span><b>{networkStatus?.bonds?.onChainEscrow === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+            </div>
+            <p>{t('intentOS.network.bondNote')}</p>
+          </section>
+
           <section className="ios-network-api">
             <div><span>GET</span><code>/api/intents/v1/capabilities</code></div>
             <div><span>GET</span><code>/api/intents/v1/solvers</code></div>
@@ -633,6 +656,10 @@ export default function IntentOS() {
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/anchor</code></div>
             <div><span>GET</span><code>/api/intents/v1/admissions/:intentHash/:entryHash</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/watcher-reports</code></div>
+            <div><span>GET</span><code>/api/intents/v1/bonds</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/execution-claims</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/disputes</code></div>
+            <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/adjudicate</code></div>
             <div><span>POST</span><code>/api/intents/v1/validate</code></div>
           </section>
 

@@ -79,6 +79,7 @@ import {
   auctionSealStatus,
   authenticateAuctionClose,
   closeAuction,
+  coordinatorConfig,
   publicCoordinator,
   readAuction,
   storeAuctionAnchor
@@ -104,6 +105,32 @@ import {
   verifyCompletenessReport,
   watcherProtocolStatus
 } from './intentWatcher.js';
+import {
+  bondStatusFor,
+  bondsProtocolStatus,
+  parseBondRegistry,
+  publicBondBoard
+} from './intentBonds.js';
+import {
+  executionProtocolStatus,
+  readExecutionClaim,
+  storeExecutionClaim,
+  verifyExecutionClaim
+} from './intentExecution.js';
+import {
+  listDisputes,
+  parseVerifierRegistry,
+  publicDispute,
+  storeDispute,
+  verifyDispute
+} from './intentDisputes.js';
+import {
+  buildAdjudication,
+  executionGraceSeconds,
+  readAdjudication,
+  storeAdjudication,
+  verifyAdjudication
+} from './intentAdjudication.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -245,6 +272,34 @@ setInterval(() => {
   for (const [k, v] of watcherHits) if (now > v.reset) watcherHits.delete(k);
 }, WINDOW_MS).unref?.();
 
+/* Phase 3a execution claims, disputes and adjudications write one immutable
+   storage object each, so the public endpoints get the same small budget as
+   watcher reports rather than the broad cached-data allowance. */
+const settlementHits = new Map();
+const SETTLEMENT_MAX_PER_WINDOW = Number(process.env.INTENT_SETTLEMENT_RATE_LIMIT || 20);
+app.use('/api/intents/v1/auctions', (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const isSettlementPath = /\/execution-claims$|\/disputes$|\/adjudicate$|\/settlement-reports$/.test(req.path);
+  if (!isSettlementPath) return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = settlementHits.get(key);
+  if (!rec || now > rec.reset) {
+    settlementHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > SETTLEMENT_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'SETTLEMENT_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of settlementHits) if (now > v.reset) settlementHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 /* -------------------------------- helpers -------------------------------- */
 
 /**
@@ -301,6 +356,7 @@ app.get('/api/health', (_req, res) =>
 app.get('/api/intents/v1/capabilities', (_req, res) => {
   const registry = parseSolverRegistry();
   const watcherRegistry = parseWatcherRegistry();
+  const verifierRegistry = parseVerifierRegistry();
   const anchorNetworks = parseAnchorNetworks();
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
   res.json({
@@ -308,7 +364,12 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
     transparency: transparencyStatus(registry),
     auctions: auctionProtocolStatus(anchorNetworks.size, watcherRegistry.size),
     admissions: admissionReceiptStatus(),
-    watchers: watcherProtocolStatus(watcherRegistry)
+    watchers: watcherProtocolStatus(watcherRegistry),
+    bonds: bondsProtocolStatus({ solverRegistry: registry }),
+    execution: executionProtocolStatus({
+      registeredVerifiers: verifierRegistry.size,
+      graceSeconds: executionGraceSeconds()
+    })
   });
 });
 
@@ -436,6 +497,35 @@ app.get('/api/intents/v1/auctions/:intentHash', async (req, res) => {
       result.completeness = completenessSummary(listed.reports);
       result.watcherReports = listed.reports.map(publicWatcherReport);
     }
+    /* Phase 3a live evidence: the stored execution claim, disputes and
+       adjudication, each re-verified against the signed close on read. The
+       claim is correlated with the selected commitment from the immutable
+       log, so a stored claim by another solver can never pass as the
+       winner's outcome. */
+    try {
+      const entry = await readLogEntry(result.intentHash, result.close.decision.selectedEntryHash);
+      const commitment = entry.entry?.commitment || null;
+      const claim = await readExecutionClaim(result.close.closeId);
+      const claimVerified = claim ? verifyExecutionClaim(claim, { close: result.close, commitment }).ok : null;
+      const disputes = await listDisputes(result.close.closeId);
+      if (!disputes.ok) throw new Error(disputes.code);
+      for (const record of disputes.records) {
+        if (!verifyDispute(record.dispute, { close: result.close }).ok) throw new Error('INVALID_STORED_DISPUTE');
+      }
+      const adjudicationRecord = await readAdjudication(result.close.closeId);
+      const adjudicationVerified = adjudicationRecord
+        ? verifyAdjudication(adjudicationRecord.adjudication, { close: result.close }).ok
+        : null;
+      result.execution = { claim, claimVerified };
+      result.disputes = disputes.records.map(publicDispute);
+      result.adjudication = adjudicationRecord?.adjudication || null;
+      result.adjudicationVerified = adjudicationVerified;
+    } catch {
+      result.execution = { storeUnavailable: true };
+      result.disputes = null;
+      result.adjudication = null;
+      result.adjudicationVerified = null;
+    }
   }
   res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
   return res.json(result);
@@ -538,6 +628,189 @@ app.post('/api/intents/v1/auctions/:intentHash/anchor', async (req, res) => {
     return res.status(status).json({ error: stored.code });
   }
   return res.status(stored.alreadyAnchored ? 200 : 201).json(stored);
+});
+
+/*
+ * ─── PHASE 3a: DECLARED SOLVER BONDS ──────────────────────────────────────
+ * Public board over the INTENT_SOLVER_BONDS registry. Statements only: the
+ * protocol never receives bond funds, and the board says so rather than
+ * implying an escrow that does not exist.
+ */
+app.get('/api/intents/v1/bonds', (_req, res) => {
+  const registry = parseSolverRegistry();
+  const board = publicBondBoard(parseBondRegistry(), { solverRegistry: registry });
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  res.json({
+    ...bondsProtocolStatus({ solverRegistry: registry }),
+    bonds: board
+  });
+});
+
+/*
+ * ─── PHASE 3a: EXECUTION CLAIMS ───────────────────────────────────────────
+ * The winning solver signs what actually happened after the sealed close:
+ * tx hash, received amount, fee, timing. The claim is stored as evidence —
+ * it is never treated as machine-verified settlement and never moves funds.
+ */
+app.post('/api/intents/v1/auctions/:intentHash/execution-claims', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseSolverRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
+  const entry = await readLogEntry(state.intentHash, state.close.decision.selectedEntryHash);
+  if (entry.error) return res.status(503).json({ error: entry.error });
+  const checked = verifyExecutionClaim(req.body, {
+    close: state.close,
+    commitment: entry.entry.commitment,
+    registry,
+    requireRegistered: true
+  });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_SOLVER', 'SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeExecutionClaim(state.close.closeId, checked.claim);
+  if (!stored.ok) {
+    const status = ['EXECUTION_STORE_UNAVAILABLE', 'EXECUTION_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'EXECUTION_CLAIM_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true,
+    alreadyStored: stored.alreadyStored,
+    claimId: checked.claim.claimId,
+    outcome: checked.claim.outcome,
+    claims: checked.claim.claims
+  });
+});
+
+app.get('/api/intents/v1/auctions/:intentHash/execution-claim', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const claim = await readExecutionClaim(state.close.closeId);
+  if (!claim) return res.status(404).json({ error: 'EXECUTION_CLAIM_NOT_FOUND' });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(claim);
+});
+
+/*
+ * ─── PHASE 3a: VERIFIER DISPUTES ──────────────────────────────────────────
+ * Registered verifiers sign bounded challenges over the selected outcome.
+ * A dispute is an observation, never a verdict — the deterministic grading
+ * engine and the coordinator's adjudication resolve what it means.
+ */
+app.post('/api/intents/v1/auctions/:intentHash/disputes', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseVerifierRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_VERIFIERS' });
+  const checked = verifyDispute(req.body, { close: state.close, registry, requireRegistered: true });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_VERIFIER', 'SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeDispute(state.close.closeId, checked.dispute);
+  if (!stored.ok) {
+    const status = ['DISPUTE_STORE_UNAVAILABLE', 'DISPUTE_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'DISPUTE_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true,
+    alreadyStored: stored.alreadyStored,
+    disputeId: checked.dispute.disputeId,
+    kind: checked.dispute.kind
+  });
+});
+
+app.get('/api/intents/v1/auctions/:intentHash/disputes', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const listed = await listDisputes(state.close.closeId);
+  if (!listed.ok) return res.status(503).json({ error: listed.code });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({ intentHash: state.intentHash, closeId: state.close.closeId, disputes: listed.records.map(publicDispute) });
+});
+
+/*
+ * ─── PHASE 3a: OUTCOME ADJUDICATION ───────────────────────────────────────
+ * Operator action guarded by the same bearer secret as auction close. The
+ * coordinator re-reads the immutable evidence, grades it with the shared
+ * deterministic rules and signs the resulting penalty instruction. The
+ * record embeds every input, so anyone can recompute the grade. Refused
+ * while the execution window is still open (verdict would be 'pending').
+ */
+app.post('/api/intents/v1/auctions/:intentHash/adjudicate', async (req, res) => {
+  const auth = authenticateAuctionClose(req.get('authorization'));
+  if (!auth.ok) {
+    return res.status(auth.code === 'AUCTION_CLOSE_NOT_CONFIGURED' ? 503 : 401).json({ error: auth.code });
+  }
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const config = coordinatorConfig();
+  if (!config) return res.status(503).json({ error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
+  const entry = await readLogEntry(state.intentHash, state.close.decision.selectedEntryHash);
+  if (entry.error) return res.status(503).json({ error: entry.error });
+  const claim = await readExecutionClaim(state.close.closeId);
+  const disputes = await listDisputes(state.close.closeId);
+  if (!disputes.ok) return res.status(503).json({ error: disputes.code });
+
+  const existing = await readAdjudication(state.close.closeId);
+  if (existing) {
+    const rechecked = verifyAdjudication(existing.adjudication, { close: state.close });
+    return rechecked.ok
+      ? res.status(200).json({ ok: true, alreadyAdjudicated: true, adjudication: existing.adjudication })
+      : res.status(503).json({ error: 'INVALID_STORED_ADJUDICATION' });
+  }
+
+  const built = buildAdjudication({
+    close: state.close,
+    commitment: entry.entry.commitment,
+    claim,
+    disputes: disputes.records.map((record) => record.dispute),
+    bond: parseBondRegistry().get(entry.entry.commitment.solverId) || null,
+    coordinator: config,
+    solverRegistry: parseSolverRegistry(),
+    now: Date.now()
+  });
+  if (!built.ok) {
+    const status = built.code === 'EXECUTION_WINDOW_OPEN' ? 409
+      : ['BAD_EXECUTION_CLAIM', 'BAD_DISPUTE', 'BAD_COMMITMENT_BINDING'].includes(built.code) ? 503 : 400;
+    return res.status(status).json({ error: built.code });
+  }
+  const stored = await storeAdjudication(state.close.closeId, built.adjudication);
+  if (!stored.ok) {
+    const status = ['ADJUDICATION_STORE_UNAVAILABLE', 'ADJUDICATION_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'ADJUDICATION_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true,
+    alreadyStored: stored.alreadyStored,
+    adjudicationId: built.adjudication.adjudicationId,
+    verdict: built.adjudication.verdict,
+    penaltyBps: built.adjudication.penaltyBps,
+    penaltyUsd: built.adjudication.penaltyUsd,
+    bond: built.adjudication.bond,
+    claims: built.adjudication.claims
+  });
+});
+
+app.get('/api/intents/v1/auctions/:intentHash/adjudication', async (req, res) => {
+  const state = await readAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const record = await readAdjudication(state.close.closeId);
+  if (!record) return res.status(404).json({ error: 'ADJUDICATION_NOT_FOUND' });
+  const rechecked = verifyAdjudication(record.adjudication, { close: state.close });
+  if (!rechecked.ok) return res.status(503).json({ error: 'INVALID_STORED_ADJUDICATION' });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(record.adjudication);
 });
 
 /*

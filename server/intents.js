@@ -35,9 +35,15 @@ export const INTENT_CAPABILITIES = Object.freeze({
     submitAnchor: '/api/intents/v1/auctions/{intentHash}/anchor',
     admissionReceipt: '/api/intents/v1/admissions/{intentHash}/{entryHash}',
     watcherReports: '/api/intents/v1/auctions/{intentHash}/watcher-reports',
+    bonds: '/api/intents/v1/bonds',
+    executionClaim: '/api/intents/v1/auctions/{intentHash}/execution-claim',
+    submitExecutionClaim: '/api/intents/v1/auctions/{intentHash}/execution-claims',
+    disputes: '/api/intents/v1/auctions/{intentHash}/disputes',
+    adjudication: '/api/intents/v1/auctions/{intentHash}/adjudication',
+    adjudicate: '/api/intents/v1/auctions/{intentHash}/adjudicate',
     bids: null
   },
-  stages: ['intent', 'risk', 'solver-market', 'simulation', 'execution', 'verification'],
+  stages: ['intent', 'risk', 'solver-market', 'simulation', 'execution', 'settlement', 'verification'],
   adapters: [
     {
       id: 'fbt-evm-aggregator',
@@ -80,13 +86,23 @@ export const INTENT_CAPABILITIES = Object.freeze({
     admissionReceiptReclaim: true,
     watcherReportsServerRecomputed: true,
     executionFromCommitments: false,
-    bondedSettlement: false
+    bondedSettlement: false,
+    solverBonds: 'fbt.solver-bond.v1',
+    executionClaims: 'fbt.execution-claim.v1',
+    failureDisputes: 'fbt.dispute.v1',
+    outcomeAdjudication: 'fbt.adjudication.v1',
+    deterministicPenaltyGrading: true,
+    bondPenaltyEnforcement: 'out-of-protocol',
+    onChainBondCustody: false,
+    onChainTxVerification: false
   },
   unavailable: {
     confidentialIntents: true,
     atomicComposableWorkflows: true,
     cexOtcInventoryBids: true,
-    autonomousAiSpending: true
+    autonomousAiSpending: true,
+    onChainBondEscrow: true,
+    automaticPenaltyCollection: true
   },
   privacy: {
     modes: ['standard'],

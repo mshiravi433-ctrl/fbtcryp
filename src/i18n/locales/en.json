@@ -3640,7 +3640,7 @@
       "roadmap": "Roadmap",
       "aiTitle": "AI proposes. Policy authorises.",
       "aiBody": "Models may explain or propose a structured intent. Deterministic limits, simulation, wallet signatures and smart contracts control every real execution.",
-      "safetyNotice": "Signed commitment submission is evidence, not public execution. Executable bid and calldata routing remain closed until bonding, dispute rules, auction finality and settlement verification exist.",
+      "safetyNotice": "Signed commitment submission is evidence, not public execution. Executable bids and calldata routing remain closed: outcomes settle through user-signed transactions, and bonds, disputes and adjudications are declared, signed evidence with out-of-protocol enforcement — FBT never holds or moves bond funds.",
       "protocol": "SIGNED QUOTE PROTOCOL",
       "checking": "Checking protocol status…",
       "reachable": "Protocol discovery is reachable",
@@ -3672,7 +3672,18 @@
       "admissionReceipts": "Admission receipts",
       "watchers": "Independent watchers",
       "unconfigured": "Not configured",
-      "evidenceBased": "Evidence-based"
+      "evidenceBased": "Evidence-based",
+      "bondProtocol": "BONDED SOLVER NETWORK",
+      "bondsReady": "Declared solver bonds are configured",
+      "bondsUnavailable": "No declared solver bonds",
+      "bondedNetwork": "Bonded",
+      "unbondedNetwork": "Not bonded",
+      "bonds": "Bonded solvers",
+      "minBond": "Minimum bond (USD)",
+      "verifiers": "Registered verifiers",
+      "noCustody": "Never",
+      "bondCustody": "FBT bond custody",
+      "bondNote": "Phase 3 bonds are public declarations in the server registry: each solver posts a bond statement (amount, asset, expiry) and the deterministic penalty table grades execution failures against the sealed close — full bond for unexecuted quotes, half for self-reported failures, zero for fulfilled outcomes. The winning solver signs an execution claim, independent verifiers may dispute it, and the coordinator signs a recomputable adjudication. All of it is evidence of accountability, never custody: collecting a declared penalty happens out of protocol."
     }
   }
 }

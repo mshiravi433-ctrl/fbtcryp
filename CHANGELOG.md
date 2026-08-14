@@ -1,5 +1,68 @@
 # Changelog
 
+## 1.30.0 — Intent OS Phase 3a: bonded solver registry + execution claims, disputes and deterministic penalty adjudication
+
+Phase 2c proved a sealed set was complete; it deliberately never answered
+what happened AFTER the close. Phase 3a (first half of «bonded open solver
+network + outcome settlement») closes that gap with economics expressed as
+evidence, under the same honesty rules as the rest of the protocol: bonds are
+declared public statements, disputes are signed observations, penalties are
+deterministic grades — and FBT still holds nothing.
+
+- **Declared solver bonds** (`server/intentBonds.js`, `fbt.solver-bond.v1`):
+  `INTENT_SOLVER_BONDS` is a public-statement registry (solverId, amount,
+  asset, expiry, terms) with a public board at `GET /api/intents/v1/bonds`.
+  A solver is `bonded` only when the declaration is above the protocol
+  minimum (1000 USD), the solver is registered and the bond is unexpired.
+  The board and capabilities say `enforcement: 'out-of-protocol-declared'`,
+  `custody: false`, `onChainEscrow: false` — FBT never receives bond funds.
+- **Signed execution claims** (`server/intentExecution.js`,
+  `fbt.execution-claim.v1`): the winning solver signs what happened after the
+  sealed close — tx hash, received amount, fee, timing — bound to the close,
+  the selected entry and the winner's registry key. Claims pin their own
+  solver key, verify offline, and can never widen the quote: the graded
+  outcome is recomputed from the signed commitment's `amountOut` and
+  `slippageBps` (`minOutFor`), never from anything the claim asserts.
+  Claims honestly state `onChainVerified: false` — they are signed evidence,
+  not machine-verified settlement. One immutable claim slot per close;
+  idempotent replay, conflict on drift (`POST/GET
+  /api/intents/v1/auctions/:intentHash/execution-claim(s)`).
+- **Verifier disputes** (`server/intentDisputes.js`, `fbt.dispute.v1`):
+  `INTENT_VERIFIER_KEYS` registers independent verifier public keys (same
+  registry shape as solvers/watchers, no secrets). A dispute is a bounded
+  signed observation — `no-execution`, `short-fill`, `false-claim`,
+  `late-execution` — never a verdict by itself.
+- **Deterministic penalty adjudication** (`server/intentAdjudication.js`,
+  `fbt.adjudication.v1`): guarded by the same operator bearer secret as
+  close, the coordinator re-reads the immutable evidence, grades it with the
+  shared deterministic engine and signs the result. Penalty table:
+  `fulfilled` 0, self-reported short 25% of bond, caught short 50%,
+  self-reported failure 50%, mislabelled/late failure 100%, `unexecuted`
+  100%, `contested` 50%. Adjudication is refused while the execution window
+  is open (`EXECUTION_WINDOW_OPEN`, `INTENT_EXECUTION_GRACE_SECONDS`,
+  default 300s). The record embeds every input, so any third party can
+  recompute grade, penalty and bonding; `verifyAdjudication` rejects a
+  record whose grade does not reproduce, even with a valid signature.
+  Unbonded solvers get `bonded: false` and `penaltyUsd: null` — never an
+  invented penalty.
+- **Live per-auction execution state**: `GET /api/intents/v1/auctions/:intentHash`
+  now exposes the verified claim, disputes and adjudication (`execution`,
+  `disputes`, `adjudication`, `adjudicationVerified`), each re-verified
+  against the signed close on every read. Capabilities gain `bonds` and
+  `execution` blocks; everything flips to `configured: false` when the
+  registries are empty.
+- Client + UI: `intentNetwork` gains bond-board, execution-claim and
+  adjudication getters; the Network tab shows the bonded-network status,
+  minimum bond, registered verifiers and the never-custody flag (fa + en).
+  `.env.example` documents `INTENT_SOLVER_BONDS`, `INTENT_VERIFIER_KEYS`,
+  `INTENT_EXECUTION_GRACE_SECONDS`, `INTENT_SETTLEMENT_RATE_LIMIT`.
+- Tests: 48 new unit rows (bond registry honesty, min-out derivation, claim
+  and dispute signature/binding attacks, the full grading matrix, adjudication
+  recompute rejection, storage idempotency/conflicts) and 15 new HTTP probe
+  rows (public bond board, claim/dispute/adjudication lifecycle, tamper and
+  rogue-key refusals, window-open refusal, end-to-end `unexecuted` penalty at
+  the full declared bond, configured:false without registries).
+
 ## 1.29.0 — Intent OS Phase 2c: transactional admission + independent completeness watcher
 
 Phase 2c closes the last honesty gap of the signed auction protocol documented
