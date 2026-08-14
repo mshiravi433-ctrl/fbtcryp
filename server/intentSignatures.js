@@ -79,6 +79,15 @@ function publicKeyObject(rawPublicKey) {
   });
 }
 
+/** Strict canonical base64url + 32-byte Ed25519 public-key validation. */
+export function isValidEd25519PublicKey(rawPublicKey) {
+  try {
+    return publicKeyObject(rawPublicKey).asymmetricKeyType === 'ed25519';
+  } catch {
+    return false;
+  }
+}
+
 function privateKeyObject(privateKey) {
   let der;
   try {

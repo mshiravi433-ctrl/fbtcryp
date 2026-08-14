@@ -16,6 +16,7 @@
 | `INTENT_SOLVER_KEYS` | `[{"id":"mm-a","name":"Market Maker A","publicKey":"<base64url-32>"}]` | کلید عمومی سالور mm-a |
 | `INTENT_SOLVER_BONDS` | `[{"solverId":"mm-a","bondUsd":"100000","asset":"USDC","expiresAt":0,"terms":"MM desk A"}]` | وثیقهٔ اعلامی mm-a |
 | `INTENT_VERIFIER_KEYS` | `[{"id":"verify-coop","name":"Verifier Cooperative","publicKey":"<base64url-32>"}]` | کلید عمومی راستی‌آزمای فعال |
+| `INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS` | سند(های) عمومی `fbt.operator-attestation.v1` | اتصال امضاشدهٔ اپراتور به کلید؛ بدون آن Phase 6 configured نیست |
 | `INTENT_COORDINATOR_ID` | `fbt-coordinator` | شناسهٔ هماهنگ‌کننده |
 | `INTENT_COORDINATOR_PRIVATE_KEY` | `<base64url-pkcs8>` | کلید امضای Coordinator (فقط امضا) |
 | `INTENT_AUCTION_CLOSE_TOKEN` | رشتهای ≥ 32 کاراکتر | مجوز بستن/داوری اپراتور |
@@ -46,7 +47,8 @@ curl -s "$FBT_URL/api/intents/v1/bonds"
 ```
 
 - `bonds.bondedSolvers === 1` و ردیف mm-a با `bonded: true` → وثیقه اعلامی پذیرفته شده.
-- `execution.registeredVerifiers === 1` → راستی‌آزمای فعال هست.
+- `execution.registeredVerifiers === 1` → یک **کلید** راستی‌آزما ثبت است؛ این به‌تنهایی استقلال اپراتور را ثابت نمی‌کند.
+- `independentVerification.configured === true` فقط وقتی → تمام کلیدهای watcher/verifier attestation امضاشده و جدایی کلید دارند. حتی آن زمان `organizationalIndependenceProven === false` است، چون استقلال واقعی نیازمند اپراتوری/audit بیرونی است.
 - `bonds.onChainEscrow === false` و `bonds.custody === false` → صادقانه: وثیقه اعلام است، گرو واقعی نیست.
 
 ## ۴. حد صداقت

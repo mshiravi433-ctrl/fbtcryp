@@ -69,6 +69,11 @@ const { default: runUnits } = await import('./.out/units/units.js');
 report('units (tokens · payout · faq · news)', await runUnits());
 
 /* ------------------------------- 1. boot -------------------------------- */
+/* The repository intentionally does not track dist/. Build the shipped static
+   bundle here so `npm test` is self-contained in a fresh clone rather than
+   depending on somebody having run `npm run build` first. */
+console.log('▸ building shipped static bundle for boot checks…');
+npx(['vite', 'build', '--logLevel', 'error']);
 console.log('▸ building app as a classic script for jsdom…');
 npx(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);
 console.log('▸ running boot test with all external hosts unreachable…');

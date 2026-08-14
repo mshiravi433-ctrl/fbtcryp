@@ -475,6 +475,8 @@ export function executionProtocolStatus({ registeredVerifiers = 0, graceSeconds 
     disputeSchema: 'fbt.dispute.v1',
     adjudicationSchema: 'fbt.adjudication.v1',
     registeredVerifiers,
+    registryProvesOrganizationalIndependence: false,
+    operatorAttestationsRequiredForPhase6Status: true,
     graceSeconds,
     deterministicGrading: true,
     quotedMinOutBindsOutcome: true,

@@ -87,6 +87,13 @@ export const INTENT_CAPABILITIES = Object.freeze({
     adjudication: '/api/intents/v1/auctions/{intentHash}/adjudication',
     adjudicate: '/api/intents/v1/auctions/{intentHash}/adjudicate',
     settlementReports: '/api/intents/v1/auctions/{intentHash}/settlement-reports',
+    crossChainStates: '/api/intents/v1/cross-chain/states',
+    crossChainState: '/api/intents/v1/cross-chain/states/{stateId}',
+    crossChainReceipts: '/api/intents/v1/cross-chain/states/{stateId}/receipts',
+    operators: '/api/intents/v1/operators',
+    merkleAnchorNetworks: '/api/intents/v1/merkle-anchor-networks',
+    merkleRootAnchorCalldata: '/api/intents/v1/log/{intentHash}/root-anchor-calldata/{chainId}',
+    submitMerkleRootAnchor: '/api/intents/v1/log/{intentHash}/root-anchor',
     /* Outcome Marketplace (Phase 5) — authenticated signed outcome bids and
        their own auction lifecycle. The PUBLIC bid path stays closed. */
     outcomeBids: '/api/intents/v1/outcome/bids',
@@ -124,11 +131,15 @@ export const INTENT_CAPABILITIES = Object.freeze({
       quoteCommitments: false
     },
     {
-      id: 'fbt-cross-chain-adapter',
-      status: 'partial',
+      id: 'fbt-cross-chain-state',
+      status: 'live-evidence-only',
       kinds: ['workflow'],
-      settlement: 'separate-user-signed-bridge',
-      quoteCommitments: false
+      settlement: 'sequential-user-signed-transfers',
+      quoteCommitments: false,
+      atomic: false,
+      custody: false,
+      automaticSettlement: false,
+      note: 'Phase 4b stores verifiable source/destination/refund signatures. The intent envelope remains draft-only with ATOMIC_CROSS_CHAIN_UNAVAILABLE.'
     },
     {
       id: 'fbt-outcome-market',
@@ -190,12 +201,36 @@ export const INTENT_CAPABILITIES = Object.freeze({
     singleChainWorkflows: 'fbt.workflow.v1',
     workflowBatchVerifiesOutputs: false,
     workflowLiveRouterCalldata: false,
+    crossChainState: 'fbt.cross-chain-state.v1',
+    crossChainLegReceipts: 'fbt.cross-chain-leg-receipt.v1',
+    crossChainSequentialUserSignatures: true,
+    crossChainAtomicity: false,
+    crossChainCustody: false,
+    independentOperatorAttestations: 'fbt.operator-attestation.v1',
+    operatorKeyControlCryptographicallyBound: true,
+    organizationalIndependenceProvenByRegistry: false,
+    coordinatorKeyRotation: 'fbt.coordinator-key-rotation.v1',
+    coordinatorRotationDualSigned: true,
+    historicalCoordinatorReceiptsUseEmbeddedKeys: true,
+    optionalMerkleRootAnchors: 'fbt.merkle-root-manifest.v1',
+    merkleRootAnchoredByDefault: false,
     /* Outcome Marketplace specifics (honesty pinned). */
     outcomeAdmissionReceipts: 'fbt.outcome-admission-receipt.v1',
     outcomeCompletenessReports: 'fbt.outcome-completeness-report.v1',
     outcomeBondedOnlyAdmission: true,
     outcomeAutomaticSettlement: false,
     outcomeCustody: false
+  },
+  standards: {
+    canonicalization: 'recursive-lexicographic-json-v1',
+    signatures: 'Ed25519-strict-base64url',
+    crossChainStateSchema: 'fbt.cross-chain-state.v1',
+    crossChainReceiptSchema: 'fbt.cross-chain-leg-receipt.v1',
+    operatorAttestationSchema: 'fbt.operator-attestation.v1',
+    coordinatorRotationSchema: 'fbt.coordinator-key-rotation.v1',
+    coordinatorKeyringSchema: 'fbt.coordinator-keyring.v1',
+    merkleRootManifestSchema: 'fbt.merkle-root-manifest.v1',
+    merkleRootAnchorClaimSchema: 'fbt.merkle-root-anchor-claim.v1'
   },
   unavailable: {
     atomicCrossChainWorkflows: true,

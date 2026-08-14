@@ -288,9 +288,9 @@ Phase 3a — declared solver bonds + execution claims + disputes +
 Phase 3b — outcome settlement reports + independent re-grading +
            offline settlement CLI                                    [انجام شده]
 Phase 4a — atomic same-chain workflows (user-signed batch, no output verify) [انجام شده]
-Phase 4b — cross-chain state machine
-Phase 5  — threshold-encrypted confidential intents
-Phase 6  — independent verifiers and standardisation
+Phase 4b — sequential cross-chain signed state machine (non-atomic)     [انجام شده]
+Phase 5  — Outcome Marketplace + confidential intent transport          [انجام شده]
+Phase 6  — operator bindings + key rotation + optional root anchor       [انجام شده؛ فعال‌سازی وابسته به env واقعی]
 ```
 
 ### وضعیت دقیق Phase 2a
@@ -541,10 +541,142 @@ Phase 4a فقط **تک‌زنجیره** را باز می‌کند. Envelope بی
 
 محدودیت‌های صادقانهٔ Phase 4a:
 
-- گردش‌کار میان‌زنجیره‌ای هنوز اتمیک نیست (Phase 4b)؛
+- گردش‌کار میان‌زنجیره‌ای اتمیک نیست؛ فاز ۴ب فقط state machine شواهدِ امضای ترتیبی را اضافه کرده و عمداً این محدودیت را عوض نمی‌کند؛
 - دسته‌کننده خروجی را راستی‌آزمایی نمی‌کند و کال‌دیتای زندهٔ DEX نمی‌سازد؛
 - سرور هرگز خرج نمی‌کند؛ `executable` روی envelope عمومی `false` می‌ماند؛
 - `POST /bids` همچنان بسته است.
+
+### وضعیت دقیق Phase 4b — state machine میان‌زنجیره‌ای با امضای ترتیبی
+
+فاز ۴ب **تسویهٔ اتمیک** اضافه نمی‌کند. خروجی واقعی این فاز یک دفتر شواهد
+نسخه‌دار است تا دو طرف بتوانند پاهای جداگانه را با کلید خود امضا و مستقل از FBT
+راستی‌آزمایی کنند:
+
+- `fbt.cross-chain-state.v1`: `source` و `destination` هرکدام `chainId`، توکن
+  (`symbol/address/native/decimals`) و مبلغ صحیح در کوچک‌ترین واحد را دارند؛
+  `parties` کلید عمومی سخت‌گیرانهٔ Ed25519 دو طرف را pin می‌کند؛
+  `timeout.sourceSignatureBy`، `destinationSignatureBy` و `refundSignatureBy`
+  ترتیب و سقف زمانی را می‌بندند؛
+- `refund` دقیقاً بازگشت دارایی منبع از counterparty به initiator است، با
+  `mode: 'user-signed-transfer'`، `automatic:false` و
+  `enforceableByFbt:false`. بدون escrow، FBT نمی‌تواند counterparty را مجبور
+  به بازپرداخت کند؛
+- `fbt.cross-chain-leg-receipt.v1`: initiator ابتدا `source-transfer` را امضا
+  می‌کند. سپس counterparty یا `destination-transfer` را تا deadline مقصد امضا
+  می‌کند یا پس از آن `refund` را در پنجرهٔ بازپرداخت. رسید دوم به `receiptId`
+  رسید اول متصل است و هر دو exact chain/token/amount/txHash را پوشش می‌دهند؛
+- `txHash` در این نسخه **ادعای امضاشدهٔ طرف** است، نه نتیجهٔ RPC. بنابراین
+  `onChainVerified:false`، `custody:false`، `escrow:false`،
+  `automaticSettlement:false`، `atomic:false` و `globalAtomicity:false` داخل
+  خود state و receipt ثابت‌اند؛
+- ذخیره‌سازی state/receipt غیرقابل‌جایگزینی است. با Blob واقعی durable است؛
+  بدون Blob فقط process-memory و `configured:false` در capabilities. مرز race
+  چند instance نیز صادقانه `crossInstanceTransitionAtomicity:false` است.
+
+API عمومی:
+
+```text
+POST /api/intents/v1/cross-chain/states
+GET  /api/intents/v1/cross-chain/states/:stateId
+POST /api/intents/v1/cross-chain/states/:stateId/receipts
+```
+
+CLI آفلاین (کلید خصوصی فقط در محیط همان طرف):
+
+```bash
+node scripts/intent-cross-chain.mjs create plan.json > state.json
+INTENT_CROSS_CHAIN_PRIVATE_KEY='…' \
+  node scripts/intent-cross-chain.mjs sign state.json \
+  --leg source-transfer --tx 0x… > source-receipt.json
+INTENT_CROSS_CHAIN_PRIVATE_KEY='…' \
+  node scripts/intent-cross-chain.mjs sign state.json source-receipt.json \
+  --leg destination-transfer --tx 0x… > destination-receipt.json
+node scripts/intent-cross-chain.mjs verify-state \
+  state.json source-receipt.json destination-receipt.json
+```
+
+**گارد محصول تغییر نکرده است:** `fbt.intent.v1` و Risk Engine برای هر bridge یا
+زنجیرهٔ دوم همچنان `draft-only` و `ATOMIC_CROSS_CHAIN_UNAVAILABLE` می‌دهند؛
+`unavailable.atomicCrossChainWorkflows:true` صحیح باقی مانده است. state machine
+شواهد قابل‌راستی‌آزمایی می‌سازد، نه calldata خودکار، custody یا «اتمیک جهانی».
+
+### وضعیت دقیق Phase 6 — اپراتور مستقل، چرخش کلید و anchor ریشه
+
+#### ۱. اتصال رمزنگاری‌شدهٔ اپراتور به کلید ناظر/راستی‌آزما
+
+هر اپراتور بیرونی در secrets manager خودش یک
+`fbt.operator-attestation.v1` زمان‌دار را با همان کلید watcher/verifier امضا
+می‌کند. سند `operatorId/name/url`، نقش، `registryId`، کلید عمومی، زمان صدور و
+انقضا را می‌بندد. سرور فقط سند عمومی امضاشده را از
+`INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS` می‌خواند.
+
+`independentVerification.configured:true` فقط وقتی است که **تمام** کلیدهای فعال
+watcher/verifier attestation معتبر و منطبق داشته باشند و کلیدشان با کلیدهای
+Solver/Coordinator یکی نباشد. بااین‌حال:
+
+```text
+keyControlProven: true                       # قابل اثبات رمزنگاری
+organizationalIndependenceSelfAttested: true # گفتهٔ امضاشدهٔ اپراتور
+organizationalIndependenceProven: false      # همیشه؛ رجیستری چنین چیزی را ثابت نمی‌کند
+```
+
+استقلال واقعی یعنی سازمان، زیرساخت، secrets manager و فرایند مشاهده واقعاً
+بیرون FBT اداره و بیرون پروتکل audit شوند. ثبت یک کلید یا حتی attestation
+خوداظهاری به‌تنهایی استقلال سازمانی نمی‌سازد. `/api/intents/v1/operators` این
+مرز و bindingهای عمومی را منتشر می‌کند. ساخت/بررسی آفلاین:
+
+```bash
+INTENT_OBSERVER_PRIVATE_KEY='…' \
+  node scripts/intent-operator.mjs attest operator-input.json > attestation.json
+node scripts/intent-operator.mjs verify attestation.json
+```
+
+#### ۲. چرخش امن Coordinator
+
+`fbt.coordinator-key-rotation.v1` یک transition از `oldPublicKey` به
+`newPublicKey` است که **هر دو کلید** آن را امضا می‌کنند. فقط کلید فعال در
+`INTENT_COORDINATOR_PRIVATE_KEY` اسناد جدید را امضا می‌کند؛ کلیدهای بازنشسته در
+`fbt.coordinator-keyring.v1` با `signsNewDocuments:false` صرفاً برای راستی‌آزمایی
+منتشر می‌شوند. هر receipt/close تاریخی public key امضاکننده را داخل bytes
+امضاشدهٔ خودش دارد، پس با تعویض env همچنان مستقل راستی‌آزمایی می‌شود. اگر receipt
+پیش از rotation و close پس از آن باشد، گزارش completeness زنجیرهٔ دوامضاشده را
+همراه خود حمل و server آن را دوباره بررسی می‌کند.
+
+مراسم آفلاین است؛ کلید قدیم و جدید هرگز لازم نیست هم‌زمان روی سرور باشند:
+
+```bash
+node scripts/intent-coordinator.mjs draft OLD_PUBLIC NEW_PUBLIC > rotation.json
+INTENT_COORDINATOR_ROTATION_PRIVATE_KEY='…old…' \
+  node scripts/intent-coordinator.mjs sign-old rotation.json > old-signed.json
+INTENT_COORDINATOR_ROTATION_PRIVATE_KEY='…new…' \
+  node scripts/intent-coordinator.mjs sign-new old-signed.json > dual-signed.json
+node scripts/intent-coordinator.mjs verify dual-signed.json
+```
+
+فقط `dual-signed.json` عمومی در `INTENT_COORDINATOR_ROTATIONS` قرار می‌گیرد؛
+هیچ private key داخل JSON، مخزن، `VITE_*` یا چت نمی‌رود. بدون رکورد واقعی،
+`coordinatorRotationConfigured:false` باقی می‌ماند.
+
+#### ۳. انتشار اختیاری ریشهٔ Merkle
+
+`fbt.merkle-root-manifest.v1` از **تمام entryHashهای پاسخ log** دوباره محاسبه
+می‌شود و `intentHash + merkleRoot + logSize` را با `rootId` قطعی می‌بندد.
+قرارداد permissionless `IntentMerkleRootAnchor` فقط همین tuple را event می‌کند؛
+walletی در FBT وجود ندارد. هرکس calldata را ارسال می‌کند و FBT تنها پس از دیدن
+رخداد دقیق قرارداد پیکربندی‌شده و confirmation کافی، رکورد
+`fbt.merkle-root-anchor-record.v1` را ذخیره می‌کند.
+
+```text
+GET  /api/intents/v1/merkle-anchor-networks
+GET  /api/intents/v1/log/:intentHash/root-anchor-calldata/:chainId
+POST /api/intents/v1/log/:intentHash/root-anchor
+```
+
+ریشه با هر Quote جدید عوض می‌شود؛ anchor قدیمی هرگز به root جدید تعمیم داده
+نمی‌شود. بدون deployment واقعی در `INTENT_MERKLE_ANCHOR_NETWORKS`:
+`configured:false` و `externallyAnchored:false`. حتی با anchor معتبر، claims
+صریح‌اند: timestamp/set commitment بله؛ completeness، execution، settlement و
+custody خیر. CLI: `scripts/intent-root-anchor.mjs`.
 
 ---
 

@@ -17,6 +17,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { blobConfigured } from './blobCache.js';
 import {
   canonicalValue,
+  isValidEd25519PublicKey,
   publicKeyFromPrivateKey,
   signCanonicalPayload,
   verifyCanonicalSignature
@@ -28,7 +29,11 @@ export const AUCTION_CLOSE_REQUEST_SCHEMA = 'fbt.auction-close-request.v1';
 export const AUCTION_CLOSE_SCHEMA = 'fbt.auction-close.v1';
 export const AUCTION_POLICY = 'MAX_OUTPUT_WITHIN_SIGNED_LIMITS_V1';
 export const AUCTION_CLOSE_DOMAIN = 'fbt.auction-close.v1/signature';
+export const COORDINATOR_ROTATION_SCHEMA = 'fbt.coordinator-key-rotation.v1';
+export const COORDINATOR_ROTATION_DOMAIN = 'fbt.coordinator-key-rotation.v1/signature';
+export const COORDINATOR_KEYRING_SCHEMA = 'fbt.coordinator-keyring.v1';
 const CLOSE_ID_DOMAIN = 'fbt.auction-close.v1/id';
+const ROTATION_ID_DOMAIN = 'fbt.coordinator-key-rotation.v1/id';
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN || '';
 const PREFIX = 'intent-auction/v1/';
 const memory = new Map();
@@ -103,9 +108,10 @@ async function writeObject(path, value) {
   }
 }
 
-/* Exported as the single source of coordinator identity: admission receipts
-   (Phase 2c) must come from exactly the same key that signs auction closes,
-   or watcher correlation would compare two different authorities. */
+/* Exported as the single source of the ACTIVE coordinator identity. Every new
+   document is signed only with this key. Historical documents verify against
+   the public key embedded in their own signed bytes, so rotating this env key
+   never rewrites or invalidates an old receipt. */
 export function coordinatorConfig() {
   const id = String(process.env.INTENT_COORDINATOR_ID || 'fbt-coordinator').toLowerCase();
   const privateKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY || '';
@@ -117,9 +123,204 @@ export function coordinatorConfig() {
   }
 }
 
+const ROTATION_FIELDS = new Set([
+  'schema', 'coordinatorId', 'oldPublicKey', 'newPublicKey', 'activatedAt',
+  'claims', 'rotationId', 'oldSignature', 'newSignature'
+]);
+const ROTATION_CLAIM_FIELDS = new Set([
+  'oldKeyRetired', 'newKeySignsNewDocumentsOnly',
+  'historicalReceiptsRemainVerifiable', 'fundsAccess'
+]);
+
+function rotationCore(input) {
+  const { rotationId: _rotationId, oldSignature: _old, newSignature: _new, ...core } = input;
+  return core;
+}
+
+function rotationIdFor(core) {
+  return sha256Hex(`${ROTATION_ID_DOMAIN}\n${JSON.stringify(canonicalValue(core))}`);
+}
+
+/** Dual-signature authorization: both retiring and active keys endorse the transition. */
+export function verifyCoordinatorRotation(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some((key) => !ROTATION_FIELDS.has(key))
+    || input.schema !== COORDINATOR_ROTATION_SCHEMA
+    || !/^[a-z0-9][a-z0-9._-]{1,47}$/.test(String(input.coordinatorId || ''))
+    || !isValidEd25519PublicKey(input.oldPublicKey)
+    || !isValidEd25519PublicKey(input.newPublicKey)
+    || input.oldPublicKey === input.newPublicKey
+    || !Number.isSafeInteger(input.activatedAt)
+    || input.activatedAt <= 0
+    || input.activatedAt > Date.now() + 300000) return false;
+  const claims = input.claims;
+  if (!claims || typeof claims !== 'object' || Array.isArray(claims)
+    || Object.keys(claims).some((key) => !ROTATION_CLAIM_FIELDS.has(key))
+    || claims.oldKeyRetired !== true
+    || claims.newKeySignsNewDocumentsOnly !== true
+    || claims.historicalReceiptsRemainVerifiable !== true
+    || claims.fundsAccess !== false) return false;
+  const core = rotationCore(input);
+  if (!/^0x[a-fA-F0-9]{64}$/.test(String(input.rotationId || ''))
+    || rotationIdFor(core) !== input.rotationId) return false;
+  const payload = { ...core, rotationId: input.rotationId };
+  return verifyCanonicalSignature(
+    COORDINATOR_ROTATION_DOMAIN,
+    payload,
+    input.oldSignature,
+    input.oldPublicKey
+  ) && verifyCanonicalSignature(
+    COORDINATOR_ROTATION_DOMAIN,
+    payload,
+    input.newSignature,
+    input.newPublicKey
+  );
+}
+
+/** Unsigned public draft used by the offline two-key rotation ceremony. */
+export function createCoordinatorRotationDraft({
+  coordinatorId,
+  oldPublicKey,
+  newPublicKey,
+  activatedAt
+}) {
+  const core = {
+    schema: COORDINATOR_ROTATION_SCHEMA,
+    coordinatorId: String(coordinatorId || '').toLowerCase(),
+    oldPublicKey,
+    newPublicKey,
+    activatedAt: Number(activatedAt),
+    claims: {
+      oldKeyRetired: true,
+      newKeySignsNewDocumentsOnly: true,
+      historicalReceiptsRemainVerifiable: true,
+      fundsAccess: false
+    }
+  };
+  if (!/^[a-z0-9][a-z0-9._-]{1,47}$/.test(core.coordinatorId)
+    || !isValidEd25519PublicKey(oldPublicKey)
+    || !isValidEd25519PublicKey(newPublicKey)
+    || oldPublicKey === newPublicKey
+    || !Number.isSafeInteger(core.activatedAt)
+    || core.activatedAt <= 0
+    || core.activatedAt > Date.now() + 300000) return { ok: false, code: 'BAD_COORDINATOR_ROTATION' };
+  return { ok: true, rotation: { ...core, rotationId: rotationIdFor(core) } };
+}
+
+/** Add one side of a dual-signature rotation without exposing either key. */
+export function signCoordinatorRotation(rotation, privateKey, side) {
+  if (!['old', 'new'].includes(side)) return { ok: false, code: 'BAD_ROTATION_SIDE' };
+  const core = rotationCore(rotation || {});
+  const draft = createCoordinatorRotationDraft(core);
+  if (!draft.ok || rotation?.rotationId !== draft.rotation.rotationId) {
+    return { ok: false, code: 'BAD_COORDINATOR_ROTATION' };
+  }
+  let publicKey;
+  try { publicKey = publicKeyFromPrivateKey(privateKey); } catch {
+    return { ok: false, code: 'BAD_PRIVATE_KEY' };
+  }
+  const expected = side === 'old' ? rotation.oldPublicKey : rotation.newPublicKey;
+  if (publicKey !== expected) return { ok: false, code: 'COORDINATOR_ROTATION_KEY_MISMATCH' };
+  const payload = { ...core, rotationId: rotation.rotationId };
+  const signed = {
+    ...rotation,
+    [`${side}Signature`]: signCanonicalPayload(COORDINATOR_ROTATION_DOMAIN, payload, privateKey)
+  };
+  return {
+    ok: true,
+    rotation: signed,
+    complete: verifyCoordinatorRotation(signed)
+  };
+}
+
+/** Public, dual-signed rotation records only. Invalid env rows disappear. */
+export function parseCoordinatorRotations(raw = process.env.INTENT_COORDINATOR_ROTATIONS || '') {
+  if (!raw) return [];
+  try {
+    const rows = JSON.parse(raw);
+    if (!Array.isArray(rows)) return [];
+    const seen = new Set();
+    return rows.slice(0, 32).filter((row) => {
+      if (!verifyCoordinatorRotation(row) || seen.has(row.rotationId)) return false;
+      seen.add(row.rotationId);
+      return true;
+    }).sort((a, b) => a.activatedAt - b.activatedAt || a.rotationId.localeCompare(b.rotationId));
+  } catch {
+    return [];
+  }
+}
+
+/** True only when dual-signed records connect the two keys under one identity. */
+export function coordinatorKeysLinked(firstKey, secondKey, coordinatorId, rotations = parseCoordinatorRotations()) {
+  if (firstKey === secondKey) return true;
+  const graph = new Map();
+  for (const row of rotations) {
+    if (row.coordinatorId !== coordinatorId || !verifyCoordinatorRotation(row)) continue;
+    if (!graph.has(row.oldPublicKey)) graph.set(row.oldPublicKey, new Set());
+    if (!graph.has(row.newPublicKey)) graph.set(row.newPublicKey, new Set());
+    graph.get(row.oldPublicKey).add(row.newPublicKey);
+    graph.get(row.newPublicKey).add(row.oldPublicKey);
+  }
+  const queue = [firstKey];
+  const seen = new Set(queue);
+  while (queue.length) {
+    const key = queue.shift();
+    for (const next of graph.get(key) || []) {
+      if (next === secondKey) return true;
+      if (!seen.has(next)) { seen.add(next); queue.push(next); }
+    }
+  }
+  return false;
+}
+
 export function publicCoordinator() {
   const config = coordinatorConfig();
-  return config ? { id: config.id, publicKey: config.publicKey, algorithm: 'Ed25519' } : null;
+  if (!config) return null;
+  const all = parseCoordinatorRotations().filter((row) => row.coordinatorId === config.id);
+  /* Walk backwards only: a record whose new key eventually reaches the active
+     key is historical. An outgoing rotation from the still-active env key is
+     not mislabeled as a retired future keyring member. */
+  const historicalKeys = new Set([config.publicKey]);
+  const selected = new Map();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of all) {
+      if (!historicalKeys.has(row.newPublicKey) || selected.has(row.rotationId)) continue;
+      selected.set(row.rotationId, row);
+      historicalKeys.add(row.oldPublicKey);
+      changed = true;
+    }
+  }
+  const rotations = [...selected.values()].sort((a, b) =>
+    a.activatedAt - b.activatedAt || a.rotationId.localeCompare(b.rotationId));
+  const retired = [...historicalKeys]
+    .filter((publicKey) => publicKey !== config.publicKey)
+    .map((publicKey) => ({ publicKey, algorithm: 'Ed25519', status: 'retired', signsNewDocuments: false }));
+  const activatedAt = Number(process.env.INTENT_COORDINATOR_KEY_ACTIVATED_AT);
+  return {
+    id: config.id,
+    publicKey: config.publicKey,
+    algorithm: 'Ed25519',
+    keyStatus: 'active',
+    signsNewDocuments: true,
+    keyring: {
+      schema: COORDINATOR_KEYRING_SCHEMA,
+      active: {
+        publicKey: config.publicKey,
+        algorithm: 'Ed25519',
+        status: 'active',
+        signsNewDocuments: true,
+        activatedAt: Number.isSafeInteger(activatedAt) && activatedAt > 0 ? activatedAt : null
+      },
+      retired,
+      rotations,
+      rotationConfigured: rotations.length > 0,
+      dualSignedRotation: rotations.length > 0,
+      historicalVerification: 'embedded-public-key',
+      historicalReceiptsRemainVerifiable: true
+    }
+  };
 }
 
 export function closeAuthenticationConfigured() {
@@ -454,6 +655,11 @@ export function auctionProtocolStatus(anchorNetworks = 0, registeredWatchers = 0
   return {
     closeConfigured: closeAuthenticationConfigured(),
     coordinator,
+    coordinatorKeyringSchema: COORDINATOR_KEYRING_SCHEMA,
+    coordinatorRotationConfigured: Boolean(coordinator?.keyring?.rotationConfigured),
+    dualSignedCoordinatorRotation: Boolean(coordinator?.keyring?.dualSignedRotation),
+    historicalReceiptsRemainVerifiable: Boolean(coordinator?.keyring?.historicalReceiptsRemainVerifiable),
+    activeCoordinatorSignsNewDocumentsOnly: Boolean(coordinator?.signsNewDocuments),
     policy: AUCTION_POLICY,
     signedCloseReceipts: true,
     immutableSeals: true,

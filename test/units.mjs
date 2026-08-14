@@ -209,9 +209,14 @@ import {
 import {
   AUCTION_POLICY,
   closeAuction,
+  coordinatorKeysLinked,
+  createCoordinatorRotationDraft,
   evaluateAuction,
+  publicCoordinator,
   readAuction,
-  verifyAuctionClose
+  signCoordinatorRotation,
+  verifyAuctionClose,
+  verifyCoordinatorRotation
 } from '../server/intentAuctions.js';
 import {
   INTENT_ANCHOR_ABI,
@@ -313,6 +318,25 @@ import {
   xorCombine,
   xorSplit
 } from '../server/intentConfidential.js';
+import {
+  buildCrossChainReceipt,
+  createCrossChainState,
+  crossChainProtocolStatus,
+  evaluateCrossChainState,
+  verifyCrossChainReceipt
+} from '../server/intentCrossChain.js';
+import {
+  buildOperatorAttestation,
+  independentVerificationStatus,
+  verifyOperatorAttestation
+} from '../server/intentOperators.js';
+import {
+  MERKLE_ROOT_ANCHOR_ABI,
+  buildMerkleRootAnchorCalldata,
+  buildMerkleRootManifest,
+  merkleRootAnchorStatus,
+  verifyMerkleRootAnchorClaim
+} from '../server/intentRootAnchors.js';
 import { Interface } from 'ethers';
 
 export default async function run() {
@@ -6024,6 +6048,286 @@ export default async function run() {
     ]);
     t('with all operator private keys the envelope decrypts to the plaintext',
       full.ok && full.plaintext === plaintext && full.claims.tee === false);
+  }
+
+  /* ------- Phase 4b: sequential cross-chain state machine ------- */
+  {
+    const now = Math.floor(Date.now() / 1000);
+    const initiatorKeys = generateSolverKeyPair();
+    const counterpartyKeys = generateSolverKeyPair();
+    const token = {
+      symbol: 'USDC', address: `0x${'11'.repeat(20)}`, native: false, decimals: 6
+    };
+    const plan = {
+      schema: 'fbt.cross-chain-state.v1',
+      createdAt: now,
+      source: { chainId: 42161, token, amount: '100000000' },
+      destination: {
+        chainId: 1,
+        token: { symbol: 'USDT', address: `0x${'22'.repeat(20)}`, native: false, decimals: 6 },
+        amount: '99500000'
+      },
+      parties: {
+        initiator: { id: 'unit-initiator', publicKey: initiatorKeys.publicKey },
+        counterparty: { id: 'unit-counterparty', publicKey: counterpartyKeys.publicKey }
+      },
+      timeout: {
+        sourceSignatureBy: now + 60,
+        destinationSignatureBy: now + 120,
+        refundSignatureBy: now + 180
+      },
+      refund: {
+        chainId: 42161,
+        token,
+        amount: '100000000',
+        fromPartyId: 'unit-counterparty',
+        toPartyId: 'unit-initiator',
+        mode: 'user-signed-transfer',
+        automatic: false,
+        enforceableByFbt: false
+      }
+    };
+    const created = createCrossChainState(plan, { now: now * 1000 });
+    t('Phase 4b creates a bounded fbt.cross-chain-state.v1 plan',
+      created.ok && created.state.stateId.startsWith('0x')
+        && created.state.source.chainId !== created.state.destination.chainId);
+    t('the cross-chain state pins non-atomic, no-custody and no-escrow claims',
+      created.state.claims.atomic === false && created.state.claims.globalAtomicity === false
+        && created.state.claims.custody === false && created.state.claims.escrow === false
+        && created.state.claims.onChainVerified === false);
+    t('tampering a cross-chain amount breaks the deterministic state id',
+      !evaluateCrossChainState({
+        ...created.state,
+        source: { ...created.state.source, amount: '100000001' }
+      }).ok);
+
+    const source = buildCrossChainReceipt({
+      state: created.state,
+      leg: 'source-transfer',
+      txHash: `0x${'31'.repeat(32)}`,
+      signedAt: now
+    }, initiatorKeys.privateKey);
+    t('the initiator signs a verifiable source-leg receipt',
+      source.ok && verifyCrossChainReceipt(source.receipt, { state: created.state }).ok);
+    t('the counterparty key cannot impersonate the source signer',
+      buildCrossChainReceipt({
+        state: created.state,
+        leg: 'source-transfer',
+        txHash: `0x${'32'.repeat(32)}`,
+        signedAt: now
+      }, counterpartyKeys.privateKey).code === 'CROSS_CHAIN_SIGNER_KEY_MISMATCH');
+
+    const destination = buildCrossChainReceipt({
+      state: created.state,
+      previousReceipts: [source.receipt],
+      leg: 'destination-transfer',
+      txHash: `0x${'33'.repeat(32)}`,
+      signedAt: now + 1
+    }, counterpartyKeys.privateKey);
+    const settled = evaluateCrossChainState(created.state, [source.receipt, destination.receipt], {
+      now: (now + 1) * 1000
+    });
+    t('the second party signature settles only the sequential evidence state',
+      destination.ok && settled.ok && settled.status === 'settled-sequential'
+        && settled.atomic === false && settled.onChainVerified === false);
+
+    const refund = buildCrossChainReceipt({
+      state: created.state,
+      previousReceipts: [source.receipt],
+      leg: 'refund',
+      txHash: `0x${'34'.repeat(32)}`,
+      signedAt: now + 120
+    }, counterpartyKeys.privateKey);
+    t('after the destination deadline the explicit source-chain refund receipt verifies',
+      refund.ok && evaluateCrossChainState(created.state, [source.receipt, refund.receipt], {
+        now: (now + 120) * 1000
+      }).status === 'refunded-by-signed-claim');
+    t('destination and refund terminal receipts cannot both become one valid state',
+      evaluateCrossChainState(created.state, [source.receipt, destination.receipt, refund.receipt]).code
+        === 'BAD_CROSS_CHAIN_RECEIPT_SET');
+    const crossCaps = crossChainProtocolStatus();
+    t('cross-chain capabilities preserve the draft-only atomic guard',
+      crossCaps.available === true && crossCaps.atomic === false && crossCaps.custody === false
+        && crossCaps.envelopeStatus === 'draft-only'
+        && crossCaps.envelopeBlockCode === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE');
+
+    const tmp = mkdtempSync(join(tmpdir(), 'fbt-phase4b-'));
+    try {
+      const stateFile = join(tmp, 'state.json');
+      writeFileSync(stateFile, JSON.stringify(created.state));
+      const cliOut = execFileSync(process.execPath, [
+        'scripts/intent-cross-chain.mjs', 'sign', stateFile,
+        '--leg', 'source-transfer', '--tx', `0x${'35'.repeat(32)}`, '--signed-at', String(now)
+      ], {
+        encoding: 'utf8',
+        env: { ...process.env, INTENT_CROSS_CHAIN_PRIVATE_KEY: initiatorKeys.privateKey }
+      });
+      const cliReceipt = JSON.parse(cliOut);
+      t('the cross-chain CLI signs offline without printing its private key',
+        verifyCrossChainReceipt(cliReceipt, { state: created.state }).ok
+          && !cliOut.includes(initiatorKeys.privateKey));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  /* ------- Phase 6: independent operators, coordinator rotation, root anchors ------- */
+  {
+    const now = Math.floor(Date.now() / 1000);
+    const operatorKeys = generateSolverKeyPair();
+    const observer = { id: 'outside-verifier', publicKey: operatorKeys.publicKey, active: true };
+    const attested = buildOperatorAttestation({
+      operatorId: 'outside-operator',
+      operatorName: 'Outside Operator',
+      operatorUrl: 'https://operator.example',
+      role: 'verifier',
+      registryId: observer.id,
+      expiresAt: now + 86400
+    }, operatorKeys.privateKey, { now: now * 1000 });
+    t('an external operator cryptographically binds its own verifier key',
+      attested.ok && verifyOperatorAttestation(attested.attestation, { now: now * 1000 }).ok);
+    t('tampering operator metadata invalidates the attestation',
+      !verifyOperatorAttestation({
+        ...attested.attestation, operatorName: 'FBT pretending to be external'
+      }, { now: now * 1000 }).ok);
+    const independent = independentVerificationStatus({
+      verifierRegistry: new Map([[observer.id, observer]]),
+      attestations: [attested.attestation]
+    });
+    t('Phase 6 configures only fully signed, key-separated operator bindings',
+      independent.configured === true && independent.allObserverKeysAttested === true
+        && independent.keySeparationVerified === true);
+    t('operator capabilities never claim a registry proves organizational independence',
+      independent.organizationalIndependenceProven === false
+        && independent.independenceBasis === 'signed-operator-statement-not-corporate-independence-proof');
+    t('a bare verifier registry is not Phase 6 independent-operator configuration',
+      independentVerificationStatus({
+        verifierRegistry: new Map([[observer.id, observer]]), attestations: []
+      }).configured === false);
+    t('a verifier key reused by a solver fails independent key separation',
+      independentVerificationStatus({
+        verifierRegistry: new Map([[observer.id, observer]]),
+        solverRegistry: new Map([['same-key-solver', { id: 'same-key-solver', publicKey: operatorKeys.publicKey, active: true }]]),
+        attestations: [attested.attestation]
+      }).configured === false);
+
+    const oldKeys = generateSolverKeyPair();
+    const newKeys = generateSolverKeyPair();
+    let rotation = createCoordinatorRotationDraft({
+      coordinatorId: 'unit-rotating-coordinator',
+      oldPublicKey: oldKeys.publicKey,
+      newPublicKey: newKeys.publicKey,
+      activatedAt: Date.now()
+    });
+    rotation = signCoordinatorRotation(rotation.rotation, oldKeys.privateKey, 'old');
+    t('an old-key-only rotation draft is not accepted as complete',
+      rotation.ok && rotation.complete === false && !verifyCoordinatorRotation(rotation.rotation));
+    rotation = signCoordinatorRotation(rotation.rotation, newKeys.privateKey, 'new');
+    t('a coordinator rotation requires valid signatures from old and new keys',
+      rotation.ok && rotation.complete === true && verifyCoordinatorRotation(rotation.rotation)
+        && coordinatorKeysLinked(oldKeys.publicKey, newKeys.publicKey,
+          'unit-rotating-coordinator', [rotation.rotation]));
+
+    const receiptFacts = {
+      intentHash: `0x${'61'.repeat(32)}`,
+      entryHash: `0x${'62'.repeat(32)}`,
+      acceptedAt: Date.now(),
+      solverId: 'rotation-solver'
+    };
+    const oldReceipt = issueAdmissionReceipt(receiptFacts, {
+      coordinator: {
+        id: 'unit-rotating-coordinator', publicKey: oldKeys.publicKey, privateKey: oldKeys.privateKey
+      }
+    });
+    const newReceipt = issueAdmissionReceipt({ ...receiptFacts, entryHash: `0x${'63'.repeat(32)}` }, {
+      coordinator: {
+        id: 'unit-rotating-coordinator', publicKey: newKeys.publicKey, privateKey: newKeys.privateKey
+      }
+    });
+    t('historical and new coordinator receipts each remain pinned to their signing key',
+      verifyAdmissionReceipt(oldReceipt) && verifyAdmissionReceipt(newReceipt)
+        && oldReceipt.coordinator.publicKey === oldKeys.publicKey
+        && newReceipt.coordinator.publicKey === newKeys.publicKey);
+
+    const previousId = process.env.INTENT_COORDINATOR_ID;
+    const previousKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    const previousRotations = process.env.INTENT_COORDINATOR_ROTATIONS;
+    process.env.INTENT_COORDINATOR_ID = 'unit-rotating-coordinator';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = newKeys.privateKey;
+    process.env.INTENT_COORDINATOR_ROTATIONS = JSON.stringify([rotation.rotation]);
+    try {
+      const keyring = publicCoordinator();
+      t('public coordinator discovery exposes active-only signing plus retired verification keys',
+        keyring.publicKey === newKeys.publicKey && keyring.signsNewDocuments === true
+          && keyring.keyring.rotationConfigured === true
+          && keyring.keyring.retired.some((row) => row.publicKey === oldKeys.publicKey
+            && row.signsNewDocuments === false));
+    } finally {
+      if (previousId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = previousId;
+      if (previousKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = previousKey;
+      if (previousRotations === undefined) delete process.env.INTENT_COORDINATOR_ROTATIONS;
+      else process.env.INTENT_COORDINATOR_ROTATIONS = previousRotations;
+    }
+
+    const hashes = [`0x${'71'.repeat(32)}`, `0x${'72'.repeat(32)}`];
+    const log = {
+      schema: 'fbt.transparency-log.v1',
+      intentHash: `0x${'73'.repeat(32)}`,
+      root: merkleRoot(hashes),
+      size: hashes.length,
+      entries: hashes.map((entryHash) => ({ entryHash }))
+    };
+    const manifest = buildMerkleRootManifest(log);
+    t('a Phase 6 root manifest recomputes the exact log root and size',
+      manifest.ok && manifest.manifest.logSize === 2
+        && manifest.manifest.claims.completenessProven === false);
+    t('a changed returned root cannot produce an anchor manifest',
+      buildMerkleRootManifest({ ...log, root: `0x${'74'.repeat(32)}` }).code
+        === 'MERKLE_ROOT_RECOMPUTE_MISMATCH');
+    const contract = `0x${'75'.repeat(20)}`;
+    const anchorer = `0x${'76'.repeat(20)}`;
+    const networks = new Map([[8453, {
+      chainId: 8453,
+      name: 'Unit Base Root Anchor',
+      contract,
+      rpcUrl: 'https://rpc.invalid',
+      explorerBaseUrl: 'https://explorer.invalid',
+      minConfirmations: 2
+    }]]);
+    const calldata = buildMerkleRootAnchorCalldata(manifest.manifest, 8453, networks);
+    t('root-anchor calldata binds rootId, intent, root and log size',
+      calldata.ok && calldata.to.toLowerCase() === contract.toLowerCase());
+    const rootInterface = new Interface(MERKLE_ROOT_ANCHOR_ABI);
+    const event = rootInterface.encodeEventLog(rootInterface.getEvent('MerkleRootAnchored'), [
+      manifest.manifest.rootId,
+      manifest.manifest.intentHash,
+      manifest.manifest.merkleRoot,
+      BigInt(manifest.manifest.logSize),
+      anchorer
+    ]);
+    const txHash = `0x${'77'.repeat(32)}`;
+    const verifiedAnchor = await verifyMerkleRootAnchorClaim(manifest.manifest, {
+      schema: 'fbt.merkle-root-anchor-claim.v1',
+      rootId: manifest.manifest.rootId,
+      chainId: 8453,
+      txHash
+    }, {
+      networks,
+      rpc: async (_network, method) => method === 'eth_blockNumber' ? '0x65' : {
+        status: '0x1', transactionHash: txHash, blockNumber: '0x64',
+        blockHash: `0x${'78'.repeat(32)}`,
+        logs: [{ address: contract, topics: event.topics, data: event.data }]
+      },
+      now: Date.now()
+    });
+    t('only a confirmed exact contract event flips a Merkle root to externally anchored',
+      verifiedAnchor.ok && verifiedAnchor.anchor.externallyAnchored === true
+        && verifiedAnchor.anchor.claims.completenessProven === false);
+    t('root-anchor capability stays configured:false without a real network env',
+      merkleRootAnchorStatus(new Map()).configured === false
+        && merkleRootAnchorStatus(new Map()).externallyAnchoredByDefault === false);
   }
 
   return rows;

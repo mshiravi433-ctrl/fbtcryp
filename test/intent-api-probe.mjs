@@ -21,6 +21,15 @@ import { verifyAdjudication } from '../server/intentAdjudication.js';
 import { buildSettlementReport } from '../server/intentSettlement.js';
 import { signOutcomeBid } from '../server/outcomeBids.js';
 import { buildIntentCommitment, buildIntentReveal, verifyIntentReveal } from '../server/intentCommitment.js';
+import {
+  buildCrossChainReceipt,
+  verifyCrossChainReceipt
+} from '../server/intentCrossChain.js';
+import { buildOperatorAttestation } from '../server/intentOperators.js';
+import {
+  createCoordinatorRotationDraft,
+  signCoordinatorRotation
+} from '../server/intentAuctions.js';
 
 const rows = [];
 const t = (name, ok) => rows.push([name, Boolean(ok)]);
@@ -33,6 +42,9 @@ const previousVerifierRegistry = process.env.INTENT_VERIFIER_KEYS;
 const previousBonds = process.env.INTENT_SOLVER_BONDS;
 const previousGrace = process.env.INTENT_EXECUTION_GRACE_SECONDS;
 const previousSettlementRate = process.env.INTENT_SETTLEMENT_RATE_LIMIT;
+const previousOperatorAttestations = process.env.INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS;
+const previousCoordinatorRotations = process.env.INTENT_COORDINATOR_ROTATIONS;
+const previousMerkleAnchorNetworks = process.env.INTENT_MERKLE_ANCHOR_NETWORKS;
 const keys = generateSolverKeyPair();
 const coordinatorKeys = generateSolverKeyPair();
 const watcherKeys = generateSolverKeyPair();
@@ -40,12 +52,34 @@ const verifierKeys = generateSolverKeyPair();
 const solver = { id: 'api-probe-solver', name: 'API Probe Solver', publicKey: keys.publicKey };
 const watcher = { id: 'api-probe-watcher', name: 'API Probe Watcher', publicKey: watcherKeys.publicKey };
 const verifier = { id: 'api-probe-verifier', name: 'API Probe Verifier', publicKey: verifierKeys.publicKey };
+const setupNow = Math.floor(Date.now() / 1000);
+const watcherAttestation = buildOperatorAttestation({
+  operatorId: 'api-probe-watch-operator',
+  operatorName: 'API Probe Watch Operator',
+  operatorUrl: 'https://watcher.example',
+  role: 'watcher',
+  registryId: watcher.id,
+  expiresAt: setupNow + 86400
+}, watcherKeys.privateKey, { now: setupNow * 1000 }).attestation;
+const verifierAttestation = buildOperatorAttestation({
+  operatorId: 'api-probe-verify-operator',
+  operatorName: 'API Probe Verify Operator',
+  operatorUrl: 'https://verifier.example',
+  role: 'verifier',
+  registryId: verifier.id,
+  expiresAt: setupNow + 86400
+}, verifierKeys.privateKey, { now: setupNow * 1000 }).attestation;
 process.env.INTENT_SOLVER_KEYS = JSON.stringify([solver]);
 process.env.INTENT_COORDINATOR_ID = 'api-probe-coordinator';
 process.env.INTENT_COORDINATOR_PRIVATE_KEY = coordinatorKeys.privateKey;
 process.env.INTENT_AUCTION_CLOSE_TOKEN = 'unit-close-token-that-is-not-a-production-secret';
 process.env.INTENT_WATCHER_KEYS = JSON.stringify([watcher]);
 process.env.INTENT_VERIFIER_KEYS = JSON.stringify([verifier]);
+process.env.INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS = JSON.stringify([
+  watcherAttestation, verifierAttestation
+]);
+process.env.INTENT_COORDINATOR_ROTATIONS = '';
+process.env.INTENT_MERKLE_ANCHOR_NETWORKS = '';
 process.env.INTENT_SOLVER_BONDS = JSON.stringify([
   { solverId: solver.id, bondUsd: '50000', asset: 'USDC', terms: 'API probe bond' }
 ]);
@@ -85,6 +119,24 @@ try {
       && capabilities.body.transparency?.externallyAnchored === false
       && capabilities.body.auctions?.closeConfigured === true
       && capabilities.body.auctions?.auctionCompletenessProof === false);
+  t('Phase 4b/6 capabilities are explicit about non-atomic settlement and independence limits',
+    capabilities.body.crossChain?.available === true
+      && capabilities.body.crossChain?.atomic === false
+      && capabilities.body.crossChain?.custody === false
+      && capabilities.body.crossChain?.envelopeBlockCode === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
+      && capabilities.body.independentVerification?.configured === true
+      && capabilities.body.independentVerification?.allObserverKeysAttested === true
+      && capabilities.body.independentVerification?.organizationalIndependenceProven === false
+      && capabilities.body.merkleRootAnchors?.supported === true
+      && capabilities.body.merkleRootAnchors?.configured === false
+      && capabilities.body.merkleRootAnchors?.externallyAnchoredByDefault === false);
+
+  const operators = await request('/operators');
+  t('operator discovery publishes only signed public bindings, never a claim of proven independence',
+    operators.response.status === 200
+      && operators.body.attestations?.length === 2
+      && operators.body.signedOperatorBindings === 2
+      && operators.body.organizationalIndependenceProven === false);
 
   const discovered = await request('/solvers');
   t('public solver discovery exposes only the registered public identity',
@@ -92,6 +144,40 @@ try {
       && discovered.body.solvers?.length === 1
       && discovered.body.solvers[0].id === solver.id
       && discovered.body.solvers[0].publicKey === keys.publicKey);
+
+  const retiredCoordinatorKeys = generateSolverKeyPair();
+  let rotation = createCoordinatorRotationDraft({
+    coordinatorId: 'api-probe-coordinator',
+    oldPublicKey: retiredCoordinatorKeys.publicKey,
+    newPublicKey: coordinatorKeys.publicKey,
+    activatedAt: Date.now()
+  });
+  rotation = signCoordinatorRotation(rotation.rotation, retiredCoordinatorKeys.privateKey, 'old');
+  rotation = signCoordinatorRotation(rotation.rotation, coordinatorKeys.privateKey, 'new');
+  process.env.INTENT_COORDINATOR_ROTATIONS = JSON.stringify([rotation.rotation]);
+  const coordinatorDiscovery = await request('/coordinator');
+  t('coordinator discovery publishes a dual-signed keyring with retired keys verification-only',
+    coordinatorDiscovery.response.status === 200
+      && coordinatorDiscovery.body.publicKey === coordinatorKeys.publicKey
+      && coordinatorDiscovery.body.signsNewDocuments === true
+      && coordinatorDiscovery.body.keyring?.rotationConfigured === true
+      && coordinatorDiscovery.body.keyring?.retired?.some((row) =>
+        row.publicKey === retiredCoordinatorKeys.publicKey && row.signsNewDocuments === false));
+  const historicalReceipt = issueAdmissionReceipt({
+    intentHash: `0x${'91'.repeat(32)}`,
+    entryHash: `0x${'92'.repeat(32)}`,
+    acceptedAt: Date.now(),
+    solverId: solver.id
+  }, {
+    coordinator: {
+      id: 'api-probe-coordinator',
+      publicKey: retiredCoordinatorKeys.publicKey,
+      privateKey: retiredCoordinatorKeys.privateKey
+    }
+  });
+  t('a historical receipt remains independently valid after the active key rotates',
+    verifyAdmissionReceipt(historicalReceipt)
+      && historicalReceipt.coordinator.publicKey === retiredCoordinatorKeys.publicKey);
 
   const now = Math.floor(Date.now() / 1000);
   const intentHash = `0x${randomBytes(32).toString('hex')}`;
@@ -117,6 +203,18 @@ try {
       && accepted.body.accepted
       && accepted.body.durable === false
       && /^0x[a-f0-9]{64}$/.test(accepted.body.root));
+
+  const rootLog = await request(`/log/${intentHash}`);
+  t('a live log exposes an exact optional root manifest but stays unanchored without a verified event',
+    rootLog.response.status === 200
+      && rootLog.body.rootManifest?.schema === 'fbt.merkle-root-manifest.v1'
+      && rootLog.body.rootManifest?.merkleRoot === rootLog.body.root
+      && rootLog.body.externallyAnchored === false
+      && rootLog.body.rootAnchorStatus === 'not-anchored');
+  const noRootNetwork = await request(`/log/${intentHash}/root-anchor-calldata/8453`);
+  t('root anchor calldata fails configured:false instead of inventing a network',
+    noRootNetwork.response.status === 400
+      && noRootNetwork.body.error === 'MERKLE_ANCHOR_NETWORK_NOT_CONFIGURED');
 
   const replay = await post(commitment);
   t('the commitment endpoint reports a duplicate nonce as conflict',
@@ -827,6 +925,95 @@ try {
       && crossChainValidate.body.code === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
       && crossChainValidate.body.singleChainAtomic === false);
 
+  /* Phase 4b state API: separate party signatures, never atomic execution. */
+  const initiatorKeys = generateSolverKeyPair();
+  const counterpartyKeys = generateSolverKeyPair();
+  const crossNow = Math.floor(Date.now() / 1000);
+  const crossPlan = {
+    schema: 'fbt.cross-chain-state.v1',
+    createdAt: crossNow,
+    source: {
+      chainId: 42161,
+      token: { symbol: 'USDC', address: `0x${'81'.repeat(20)}`, native: false, decimals: 6 },
+      amount: '100000000'
+    },
+    destination: {
+      chainId: 1,
+      token: { symbol: 'USDT', address: `0x${'82'.repeat(20)}`, native: false, decimals: 6 },
+      amount: '99500000'
+    },
+    parties: {
+      initiator: { id: 'api-cross-initiator', publicKey: initiatorKeys.publicKey },
+      counterparty: { id: 'api-cross-counterparty', publicKey: counterpartyKeys.publicKey }
+    },
+    timeout: {
+      sourceSignatureBy: crossNow + 60,
+      destinationSignatureBy: crossNow + 120,
+      refundSignatureBy: crossNow + 180
+    },
+    refund: {
+      chainId: 42161,
+      token: { symbol: 'USDC', address: `0x${'81'.repeat(20)}`, native: false, decimals: 6 },
+      amount: '100000000',
+      fromPartyId: 'api-cross-counterparty',
+      toPartyId: 'api-cross-initiator',
+      mode: 'user-signed-transfer',
+      automatic: false,
+      enforceableByFbt: false
+    }
+  };
+  const createdCross = await request('/cross-chain/states', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(crossPlan)
+  });
+  t('POST /cross-chain/states stores an immutable non-atomic plan',
+    createdCross.response.status === 201
+      && createdCross.body.state?.schema === 'fbt.cross-chain-state.v1'
+      && createdCross.body.status === 'awaiting-source-signature'
+      && createdCross.body.atomic === false
+      && createdCross.body.custody === false);
+  const sourceReceipt = buildCrossChainReceipt({
+    state: createdCross.body.state,
+    leg: 'source-transfer',
+    txHash: `0x${'83'.repeat(32)}`,
+    signedAt: crossNow
+  }, initiatorKeys.privateKey).receipt;
+  const badSource = await request(`/cross-chain/states/${createdCross.body.state.stateId}/receipts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...sourceReceipt,
+      signature: `${sourceReceipt.signature.slice(0, -1)}${sourceReceipt.signature.endsWith('A') ? 'B' : 'A'}`
+    })
+  });
+  t('the state API refuses a forged party receipt',
+    badSource.response.status === 403 && badSource.body.error === 'CROSS_CHAIN_SIGNATURE_MISMATCH');
+  const storedSource = await request(`/cross-chain/states/${createdCross.body.state.stateId}/receipts`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sourceReceipt)
+  });
+  t('the first valid signature advances only to awaiting destination signature',
+    storedSource.response.status === 201
+      && storedSource.body.status === 'awaiting-destination-signature'
+      && storedSource.body.receipts?.length === 1);
+  const destinationReceipt = buildCrossChainReceipt({
+    state: createdCross.body.state,
+    previousReceipts: [sourceReceipt],
+    leg: 'destination-transfer',
+    txHash: `0x${'84'.repeat(32)}`,
+    signedAt: crossNow + 1
+  }, counterpartyKeys.privateKey).receipt;
+  const storedDestination = await request(`/cross-chain/states/${createdCross.body.state.stateId}/receipts`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(destinationReceipt)
+  });
+  t('the second valid signature yields sequential evidence, never an atomic/on-chain claim',
+    storedDestination.response.status === 201
+      && storedDestination.body.status === 'settled-sequential'
+      && storedDestination.body.complete === true
+      && storedDestination.body.atomic === false
+      && storedDestination.body.onChainVerified === false
+      && verifyCrossChainReceipt(destinationReceipt, {
+        state: createdCross.body.state, previousReceipts: [sourceReceipt]
+      }).ok);
+
   const tmp4a = mkdtempSync(join(tmpdir(), 'fbt-probe-4a-'));
   try {
     const closePath = join(tmp4a, 'close.json');
@@ -988,6 +1175,12 @@ try {
   else process.env.INTENT_EXECUTION_GRACE_SECONDS = previousGrace;
   if (previousSettlementRate === undefined) delete process.env.INTENT_SETTLEMENT_RATE_LIMIT;
   else process.env.INTENT_SETTLEMENT_RATE_LIMIT = previousSettlementRate;
+  if (previousOperatorAttestations === undefined) delete process.env.INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS;
+  else process.env.INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS = previousOperatorAttestations;
+  if (previousCoordinatorRotations === undefined) delete process.env.INTENT_COORDINATOR_ROTATIONS;
+  else process.env.INTENT_COORDINATOR_ROTATIONS = previousCoordinatorRotations;
+  if (previousMerkleAnchorNetworks === undefined) delete process.env.INTENT_MERKLE_ANCHOR_NETWORKS;
+  else process.env.INTENT_MERKLE_ANCHOR_NETWORKS = previousMerkleAnchorNetworks;
 }
 
 export default rows;

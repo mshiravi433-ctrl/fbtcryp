@@ -21,6 +21,8 @@ export const getIntentCapabilities = () => get('/intents/v1/capabilities');
 export const getRegisteredSolvers = () => get('/intents/v1/solvers');
 export const getAuctionCoordinator = () => get('/intents/v1/coordinator');
 export const getAnchorNetworks = () => get('/intents/v1/anchor-networks');
+export const getMerkleAnchorNetworks = () => get('/intents/v1/merkle-anchor-networks');
+export const getIndependentOperators = () => get('/intents/v1/operators');
 export const getBondBoard = () => get('/intents/v1/bonds');
 
 function checkedIntentHash(intentHash) {
@@ -35,6 +37,11 @@ export function getTransparencyLog(intentHash) {
 
 export function getAuctionState(intentHash) {
   try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}`); }
+  catch (error) { return Promise.reject(error); }
+}
+
+export function getCrossChainState(stateId) {
+  try { return get(`/intents/v1/cross-chain/states/${checkedIntentHash(stateId)}`); }
   catch (error) { return Promise.reject(error); }
 }
 

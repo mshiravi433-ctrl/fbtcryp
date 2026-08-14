@@ -754,6 +754,48 @@ export default function IntentOS() {
             <p>{t('intentOS.network.workflowNote')}</p>
           </section>
 
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.crossChainProtocol')}</span>
+                <strong>{networkStatus?.crossChain?.available
+                  ? t('intentOS.network.crossChainReady')
+                  : t('intentOS.network.crossChainUnavailable')}</strong>
+              </div>
+              <span className="ios-status unavailable">
+                {t('intentOS.network.nonAtomic')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.crossChain?.schema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
+              <span><b>{networkStatus?.crossChain?.receiptSchema ?? '—'}</b>{t('intentOS.network.receiptSchema')}</span>
+              <span><b>{networkStatus?.crossChain?.sequentialUserSignatures ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.sequentialSignatures')}</span>
+              <span><b>{networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+            </div>
+            <p>{t('intentOS.network.crossChainNote')}</p>
+          </section>
+
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.verificationProtocol')}</span>
+                <strong>{networkStatus?.independentVerification?.configured
+                  ? t('intentOS.network.verificationReady')
+                  : t('intentOS.network.verificationUnavailable')}</strong>
+              </div>
+              <span className="ios-status unavailable">
+                {t('intentOS.network.independenceNotProven')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.independentVerification?.signedOperatorBindings ?? '—'}</b>{t('intentOS.network.attestedKeys')}</span>
+              <span><b>{networkStatus?.auctions?.coordinatorRotationConfigured ? t('intentOS.network.signed') : t('intentOS.network.unconfigured')}</b>{t('intentOS.network.coordinatorRotation')}</span>
+              <span><b>{networkStatus?.merkleRootAnchors?.configured ? t('intentOS.network.anchorReady') : t('intentOS.network.unconfigured')}</b>{t('intentOS.network.rootAnchor')}</span>
+              <span><b>{networkStatus?.independentVerification?.organizationalIndependenceProven ? t('intentOS.network.proven') : t('intentOS.network.unproven')}</b>{t('intentOS.network.operatorIndependence')}</span>
+            </div>
+            <p>{t('intentOS.network.verificationNote')}</p>
+          </section>
+
           <section className="ios-network-api">
             <div><span>GET</span><code>/api/intents/v1/capabilities</code></div>
             <div><span>GET</span><code>/api/intents/v1/solvers</code></div>
@@ -765,6 +807,10 @@ export default function IntentOS() {
             <div><span>GET</span><code>/api/intents/v1/admissions/:intentHash/:entryHash</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/watcher-reports</code></div>
             <div><span>GET</span><code>/api/intents/v1/bonds</code></div>
+            <div><span>POST</span><code>/api/intents/v1/cross-chain/states</code></div>
+            <div><span>POST</span><code>/api/intents/v1/cross-chain/states/:stateId/receipts</code></div>
+            <div><span>GET</span><code>/api/intents/v1/operators</code></div>
+            <div><span>POST</span><code>/api/intents/v1/log/:intentHash/root-anchor</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/execution-claims</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/disputes</code></div>
             <div><span>POST</span><code>/api/intents/v1/auctions/:intentHash/adjudicate</code></div>
