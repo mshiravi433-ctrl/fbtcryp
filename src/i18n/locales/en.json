@@ -3515,12 +3515,12 @@
         "body": "Prepares a separately signed bridge route; not one atomic workflow."
       },
       "external-outcome-market": {
-        "title": "Open outcome marketplace",
-        "body": "CEX, OTC, inventory and composite solver bids need bonded settlement."
+        "title": "Outcome marketplace",
+        "body": "Single-chain outcomes use signed, bounded, bonded bids and a user-signed settlement. Cross-chain outcomes stay draft-only."
       },
       "confidential-intent-transport": {
         "title": "Confidential intent transport",
-        "body": "Threshold encryption or confidential compute is required before this can be called private."
+        "body": "Commit-reveal hides a single-chain swap from the open bidding log until close. Threshold encryption is enabled only with real operator keys; TEE is never claimed."
       },
       "fbt-single-chain-workflow": {
         "title": "Same-chain workflow batch",
@@ -3603,6 +3603,26 @@
       "ATOMIC_CROSS_CHAIN_UNAVAILABLE": {
         "title": "Cross-chain atomic workflow is unavailable",
         "body": "{{steps}} steps span more than one chain or include a bridge. They stay a draft, not one atomic settlement."
+      },
+      "CONFIDENTIAL_COMMIT_REVEAL": {
+        "title": "Commit–reveal transport",
+        "body": "A single-chain swap can hide its token, amount and strategy from the open bidding log until it closes. This is commit-reveal, not a TEE."
+      },
+      "PRIVACY_NOT_THRESHOLD_TEE": {
+        "title": "Not threshold-encrypted compute",
+        "body": "Commit-reveal hides details until close, but it does not attest a confidential-compute enclave and metadata may still leak."
+      },
+      "THRESHOLD_TEE_UNAVAILABLE": {
+        "title": "Threshold / TEE not available here",
+        "body": "Only a single-chain swap can use the commit-reveal transport. Threshold encryption is enabled only with real operator keys and TEE is never claimed."
+      },
+      "OUTCOME_SINGLE_CHAIN_ATOMIC": {
+        "title": "Single-chain outcome is reviewable",
+        "body": "The outcome settles on the same chain it is funded on. You review and sign; FBT never settles automatically or holds funds."
+      },
+      "OUTCOME_CROSS_CHAIN_UNAVAILABLE": {
+        "title": "Cross-chain outcome is not available",
+        "body": "An outcome that settles on a different chain stays a draft. There is no atomic cross-chain outcome adapter."
       }
     },
     "error": {

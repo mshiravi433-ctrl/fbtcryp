@@ -281,6 +281,38 @@ import {
   storeSettlementReport,
   verifySettlementReport
 } from '../server/intentSettlement.js';
+import {
+  OUTCOME_BID_SCHEMA,
+  signOutcomeBid,
+  validateOutcomeBid,
+  verifyOutcomeBid
+} from '../server/outcomeBids.js';
+import {
+  OUTCOME_POLICY,
+  appendOutcomeBid,
+  buildOutcomeCompletenessReport,
+  closeOutcomeAuction,
+  evaluateOutcomeAuction,
+  issueOutcomeAdmissionReceipt,
+  outcomeProtocolStatus,
+  verifyOutcomeAdmissionReceipt,
+  verifyOutcomeClose,
+  verifyOutcomeCompletenessReport
+} from '../server/intentOutcome.js';
+import {
+  buildIntentCommitment,
+  buildIntentReveal,
+  intentCommitmentStatus,
+  verifyIntentReveal
+} from '../server/intentCommitment.js';
+import {
+  buildConfidentialEnvelope,
+  generateOperatorKeyPair,
+  parseOperatorRegistry,
+  reconstructConfidentialEnvelope,
+  xorCombine,
+  xorSplit
+} from '../server/intentConfidential.js';
 import { Interface } from 'ethers';
 
 export default async function run() {
@@ -4703,8 +4735,22 @@ export default async function run() {
       amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3,
       privacy: 'confidential', deadlineAt: Date.now() + 3600000
     }, memory);
-    t('confidential intent is not faked with a private RPC',
-      privateIntent.blocked && privateIntent.checks.some((r) => r.id === 'CONFIDENTIAL_TRANSPORT_UNAVAILABLE'));
+    /* Phase 5a: a single-chain swap can travel through the commit-reveal
+       transport (intent hidden from the open bidding log until close). It is
+       NEVER a threshold/TEE claim, so the honest warning stays. */
+    t('a single-chain confidential swap uses commit-reveal, not a TEE',
+      !privateIntent.blocked && privateIntent.status === 'ready-for-review'
+        && privateIntent.checks.some((r) => r.id === 'CONFIDENTIAL_COMMIT_REVEAL' && r.level === 'pass')
+        && privateIntent.checks.some((r) => r.id === 'PRIVACY_NOT_THRESHOLD_TEE' && r.level === 'warn'));
+
+    const thresholdClaim = compileIntent({
+      kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
+      amountIn: '500', amountUsd: 500, maxSlippagePct: 0.3,
+      privacy: 'confidential', conditionType: 'priceBelow', conditionValue: 2500,
+      deadlineAt: Date.now() + 3600000
+    }, memory);
+    t('threshold/TEE privacy claims still block for non-swap kinds',
+      thresholdClaim.blocked && thresholdClaim.checks.some((r) => r.id === 'THRESHOLD_TEE_UNAVAILABLE' && r.level === 'block'));
 
     const automation = compileIntent({
       kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
@@ -5795,6 +5841,190 @@ export default async function run() {
     }
   }
 
+
+  /* ------- Phase 5: Outcome Marketplace (bounded outcome bids) ------- */
+  {
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+    const okKeys = generateSolverKeyPair();
+    const unbondedKeys = generateSolverKeyPair();
+    const okSolver = { id: 'unit-outcome-solver', publicKey: okKeys.publicKey, active: true };
+    const registry = new Map([
+      [okSolver.id, okSolver],
+      ['unit-outcome-unbonded', { id: 'unit-outcome-unbonded', publicKey: unbondedKeys.publicKey, active: true }]
+    ]);
+    const bonded = new Set([okSolver.id]);
+    const baseBid = (overrides = {}) => ({
+      schema: OUTCOME_BID_SCHEMA,
+      intentHash: `0x${'0b'.repeat(32)}`,
+      solverId: okSolver.id,
+      chainId: 42161,
+      settlementChainId: 42161,
+      guaranteedMinimum: '10000000000000000000',
+      totalMaxCost: '20000000000000000000000',
+      feeBps: 70,
+      slippageBps: 50,
+      partialFillPolicy: 'full-only',
+      expiry: now + 86400,
+      executable: true,
+      issuedAt: now,
+      validUntil: now + 90,
+      nonce: `0x${'b1'.repeat(16)}`,
+      routeCommitment: `0x${'c1'.repeat(32)}`,
+      ...overrides
+    });
+
+    const signedBid = signOutcomeBid(baseBid(), okKeys.privateKey);
+    t('a bounded outcome bid validates and verifies for a registered bonded solver',
+      validateOutcomeBid(signedBid, { now: nowMs }).ok
+        && verifyOutcomeBid(signedBid, { registry, bondedSolvers: bonded, now: nowMs }).ok);
+    t('an unbonded solver is refused even with a valid signature',
+      verifyOutcomeBid(signOutcomeBid(baseBid({ solverId: 'unit-outcome-unbonded' }), unbondedKeys.privateKey),
+        { registry, bondedSolvers: bonded, now: nowMs }).code === 'SOLVER_NOT_BONDED');
+    t('tampering the guaranteed minimum invalidates the outcome bid signature',
+      verifyOutcomeBid({ ...signedBid, guaranteedMinimum: '10000000000000000001' },
+        { registry, bondedSolvers: bonded, now: nowMs }).code === 'SIGNATURE_MISMATCH');
+    t('a non-supported settlement chain is refused before any signature work',
+      validateOutcomeBid(baseBid({ settlementChainId: 999 }), { now: nowMs }).code === 'BAD_SETTLEMENT_CHAIN');
+    t('an unbounded partial-fill policy is refused',
+      validateOutcomeBid(baseBid({ partialFillPolicy: 'partial-or-full' }), { now: nowMs }).code === 'BAD_PARTIAL_FILL');
+    t('unknown outcome-bid fields are refused rather than stored',
+      validateOutcomeBid(baseBid({ hiddenField: true }), { now: nowMs }).code === 'UNKNOWN_FIELD');
+    t('an outcome expiry too far in the future is refused',
+      validateOutcomeBid(baseBid({ expiry: now + 90 * 86400 }), { now: nowMs }).code === 'OUTCOME_EXPIRY_TOO_FAR');
+
+    /* Deterministic MAX_GUARANTEED_MINIMUM_V1 selection: highest guarantee
+       wins; tie → lowest totalMaxCost → fee → hash. */
+    const entries = (bid, entryHash) => [{ entryHash, bid }];
+    const winner = evaluateOutcomeAuction(
+      [
+        { entryHash: `0x${'aa'.repeat(32)}`, bid: baseBid({ guaranteedMinimum: '10000000000000000000', totalMaxCost: '50000000000000000000000', nonce: `0x${'aa'.repeat(16)}` }) },
+        { entryHash: `0x${'bb'.repeat(32)}`, bid: baseBid({ guaranteedMinimum: '11000000000000000000', totalMaxCost: '60000000000000000000000', nonce: `0x${'bb'.repeat(16)}` }) },
+        { entryHash: `0x${'cc'.repeat(32)}`, bid: baseBid({ guaranteedMinimum: '11000000000000000000', totalMaxCost: '50000000000000000000000', nonce: `0x${'cc'.repeat(16)}` }) }
+      ],
+      { id: OUTCOME_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 },
+      now
+    );
+    t('MAX_GUARANTEED_MINIMUM_V1 ranks by guarantee then lowest max cost',
+      winner.selectedEntryHash === `0x${'cc'.repeat(32)}`);
+
+    /* Admission + close + completeness watcher round-trip. */
+    const prevCoordId = process.env.INTENT_COORDINATOR_ID;
+    const prevCoordKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    const coordKeys = generateSolverKeyPair();
+    process.env.INTENT_COORDINATOR_ID = 'unit-outcome-coordinator';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = coordKeys.privateKey;
+    try {
+      const appended = await appendOutcomeBid(signedBid, { registry, bondedSolvers: bonded, now: nowMs });
+      t('a bonded outcome bid enters the immutable outcome log', appended.ok && appended.root);
+      const receipt = issueOutcomeAdmissionReceipt({
+        intentHash: baseBid().intentHash, entryHash: appended.entryHash,
+        acceptedAt: appended.acceptedAt, solverId: appended.solverId
+      });
+      t('a transactional outcome admission receipt is issued and verifies',
+        Boolean(receipt) && verifyOutcomeAdmissionReceipt(receipt, { intentHash: baseBid().intentHash }));
+      const closed = await closeOutcomeAuction({
+        schema: 'fbt.outcome-close-request.v1',
+        intentHash: baseBid().intentHash,
+        policy: { id: OUTCOME_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      }, { now: nowMs });
+      t('an outcome auction seals and closes deterministically', closed.ok && closed.close.logSize === 1);
+      const close = closed.close;
+      t('the outcome close never claims custody, funds authority or auto-settlement',
+        verifyOutcomeClose(close) && close.claims?.custody === false
+          && close.claims?.userFundsAuthorised === false && close.claims?.automaticSettlement === false);
+
+      const watcherKeys = generateSolverKeyPair();
+      const watcherRow = { id: 'unit-outcome-watcher', name: 'Unit Outcome Watcher', publicKey: watcherKeys.publicKey };
+      const builtReport = buildOutcomeCompletenessReport({
+        close, receipts: [receipt], watcher: watcherRow, privateKey: watcherKeys.privateKey, now: nowMs + 1000
+      });
+      t('an outcome completeness report verifies and recomputes',
+        builtReport.ok && verifyOutcomeCompletenessReport(builtReport.report, { close }).ok);
+      t('outcome capabilities derive penalties from the Phase 3 table and never custody',
+        outcomeProtocolStatus().deterministicPenaltyFromPhase3Table === true
+          && outcomeProtocolStatus().automaticSettlement === false
+          && outcomeProtocolStatus().custody === false
+          && outcomeProtocolStatus().publicBidEndpoint === 'closed');
+    } finally {
+      if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = prevCoordId;
+      if (prevCoordKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
+    }
+  }
+
+  /* ------- Phase 5: commit–reveal (honest, not a TEE) ------- */
+  {
+    const coordKeys = generateSolverKeyPair();
+    const solverId = 'unit-commit-solver';
+    const preimage = { from: 'USDC', to: 'ETH', amount: '1000', maxSlippagePct: 0.5 };
+    const commitment = buildIntentCommitment({
+      intentHash: `0x${'c5'.repeat(32)}`,
+      preimage,
+      solverId
+    }, coordKeys.privateKey);
+    t('a commit reveals only the hash before the deadline',
+      commitment.ok && commitment.commitment.revealHash
+        && commitment.commitment.preimageHolder === 'fbt-server'
+        && commitment.commitment.commitRevealMetadataPrivacy === false);
+    const reveal = buildIntentReveal({
+      commitment: commitment.commitment,
+      preimage,
+      solverId
+    }, coordKeys.privateKey);
+    t('a matching reveal verifies compliance against the committed hash',
+      reveal.ok && verifyIntentReveal(reveal.reveal, commitment.commitment,
+        { solverPublicKey: coordKeys.publicKey }).ok);
+    t('a reveal with a different preimage fails compliance verification',
+      buildIntentReveal({
+        commitment: commitment.commitment,
+        preimage: { ...preimage, amount: '9999' },
+        solverId
+      }, coordKeys.privateKey).code === 'REVEAL_MISMATCH');
+    t('commit-reveal capabilities never claim threshold or TEE',
+      intentCommitmentStatus().tee === false && intentCommitmentStatus().hiddenFromFbt === false
+        && intentCommitmentStatus().confidentialityLevel === 'commit-reveal');
+  }
+
+  /* ------- Phase 5: threshold-encryption skeleton (hybrid + N-of-N XOR) ------- */
+  {
+    const savedOps = process.env.INTENT_CONFIDENTIAL_OPERATOR_KEYS;
+    process.env.INTENT_CONFIDENTIAL_OPERATOR_KEYS = '';
+    const empty = parseOperatorRegistry();
+    t('threshold encryption is configured:false without real operator keys',
+      empty.size === 0 && empty);
+    process.env.INTENT_CONFIDENTIAL_OPERATOR_KEYS = savedOps;
+
+    /* Build a confidential envelope with REAL X25519 operator keys and prove
+       a full encrypt → decrypt round-trip, and that the missing-threshold
+       case fails honestly. */
+    const keyA = generateOperatorKeyPair();
+    const keyB = generateOperatorKeyPair();
+    const op1 = { id: 'op-a', name: 'Operator A', publicKey: keyA.publicKey };
+    const op2 = { id: 'op-b', name: 'Operator B', publicKey: keyB.publicKey };
+    const plaintext = '{"to":"0xabc","amount":"1"}';
+    const envelope = buildConfidentialEnvelope(plaintext, [op1, op2]);
+    t('a confidential envelope wraps with AES-256-GCM + ECDH and N-of-N XOR',
+      envelope.ok && envelope.envelope.sharesRequired === 2
+        && envelope.envelope.scheme === 'n-of-n-xor'
+        && envelope.envelope.claims.tee === false);
+    const secretBuf = Buffer.from('0123456789abcdef0123456789abcdef');
+    const shares = xorSplit(secretBuf, 3);
+    t('N-of-N XOR shares recombine to the original key',
+      xorCombine(shares).equals(secretBuf));
+    /* Without the operator private keys the envelope cannot be reconstructed —
+       that is the whole point; there are no secrets in the registry. */
+    const reconstruct = reconstructConfidentialEnvelope(envelope.envelope, []);
+    t('reconstruction requires the operator threshold (no secrets in the registry)',
+      !reconstruct.ok && reconstruct.code === 'MISSING_OPERATOR_SHARE');
+    const full = reconstructConfidentialEnvelope(envelope.envelope, [
+      { operatorId: 'op-a', privateKey: keyA.privateKey },
+      { operatorId: 'op-b', privateKey: keyB.privateKey }
+    ]);
+    t('with all operator private keys the envelope decrypts to the plaintext',
+      full.ok && full.plaintext === plaintext && full.claims.tee === false);
+  }
 
   return rows;
 }

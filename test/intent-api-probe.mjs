@@ -19,6 +19,8 @@ import {
 import { buildDispute, verifyDispute } from '../server/intentDisputes.js';
 import { verifyAdjudication } from '../server/intentAdjudication.js';
 import { buildSettlementReport } from '../server/intentSettlement.js';
+import { signOutcomeBid } from '../server/outcomeBids.js';
+import { buildIntentCommitment, buildIntentReveal, verifyIntentReveal } from '../server/intentCommitment.js';
 
 const rows = [];
 const t = (name, ok) => rows.push([name, Boolean(ok)]);
@@ -874,6 +876,93 @@ try {
   } finally {
     rmSync(tmp4a, { recursive: true, force: true });
   }
+
+  /* ------- Phase 5: Outcome Marketplace endpoints ------- */
+  const outcomeHash = `0x${randomBytes(32).toString('hex')}`;
+  const outcomeNow = Math.floor(Date.now() / 1000);
+  const signedOutcomeBid = signOutcomeBid({
+    schema: 'fbt.outcome-bid.v1',
+    intentHash: outcomeHash,
+    solverId: solver.id,
+    chainId: 42161,
+    settlementChainId: 42161,
+    guaranteedMinimum: '10000000000000000000',
+    totalMaxCost: '20000000000000000000000',
+    feeBps: 70,
+    slippageBps: 50,
+    partialFillPolicy: 'full-only',
+    expiry: outcomeNow + 86400,
+    executable: true,
+    issuedAt: outcomeNow,
+    validUntil: outcomeNow + 90,
+    nonce: `0x${randomBytes(16).toString('hex')}`,
+    routeCommitment: `0x${randomBytes(32).toString('hex')}`
+  }, keys.privateKey);
+
+  const outcomeBid = await request('/outcome/bids', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(signedOutcomeBid)
+  });
+  t('the outcome endpoint accepts a signed bid from a registered bonded solver',
+    outcomeBid.response.status === 201 && outcomeBid.body.accepted
+      && outcomeBid.body.admissionReceiptAvailable === true);
+
+  const singleChainOutcome = await request('/validate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      schema: 'fbt.intent.v1', kind: 'outcome', chainId: 42161,
+      fromSymbol: 'USDC', toSymbol: 'ETH', amountIn: '1000', deadlineAt: Date.now() + 3600000,
+      constraints: { custodyAllowed: false, requireUserSignature: true, privacy: 'standard', maxSlippagePct: 0.5 },
+      outcome: {
+        guaranteedMinimum: '10000000000000000000', totalMaxCost: '20000000000000000000000',
+        expiry: outcomeNow + 86400, settlementChainId: 42161, partialFillPolicy: 'full-only'
+      }
+    })
+  });
+  t('a single-chain outcome validates as reviewable, never executable',
+    singleChainOutcome.body.ok && singleChainOutcome.body.status === 'ready-for-review'
+      && singleChainOutcome.body.executable === false);
+
+  const crossChainOutcome = await request('/validate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      schema: 'fbt.intent.v1', kind: 'outcome', chainId: 42161,
+      fromSymbol: 'USDC', toSymbol: 'ETH', amountIn: '1000', deadlineAt: Date.now() + 3600000,
+      constraints: { custodyAllowed: false, requireUserSignature: true, privacy: 'standard', maxSlippagePct: 0.5 },
+      outcome: {
+        guaranteedMinimum: '10000000000000000000', totalMaxCost: '20000000000000000000000',
+        expiry: outcomeNow + 86400, settlementChainId: 1, partialFillPolicy: 'full-only'
+      }
+    })
+  });
+  t('a cross-chain outcome stays draft-only with OUTCOME_CROSS_CHAIN_UNAVAILABLE',
+    crossChainOutcome.body.code === 'OUTCOME_CROSS_CHAIN_UNAVAILABLE'
+      && crossChainOutcome.body.status === 'draft-only');
+
+  const outcomeCapabilities = await request('/capabilities');
+  t('outcome capabilities pin no custody, no auto-settlement and a closed public bid path',
+    outcomeCapabilities.body.outcome?.automaticSettlement === false
+      && outcomeCapabilities.body.outcome?.custody === false
+      && outcomeCapabilities.body.outcome?.publicBidEndpoint === 'closed'
+      && outcomeCapabilities.body.outcome?.deterministicPenaltyFromPhase3Table === true);
+
+  /* ------- Phase 5: commit-reveal + threshold capabilities ------- */
+  const revealHash = buildIntentCommitment({
+    intentHash: outcomeHash, preimage: { to: '0xabc', amount: '1' }, solverId: solver.id
+  }, coordinatorKeys.privateKey);
+  t('a commit reveals only the hash and declares the preimage holder honestly',
+    revealHash.ok && revealHash.commitment.preimageHolder === 'fbt-server'
+      && revealHash.commitment.commitRevealMetadataPrivacy === false);
+
+  const confidential = await request('/confidential/operators');
+  t('threshold encryption is configured:false with no real operator keys, and tee is always false',
+    confidential.response.status === 200
+      && confidential.body.thresholdEncryption?.configured === false
+      && confidential.body.thresholdEncryption?.tee === false
+      && confidential.body.thresholdEncryption?.registeredOperators === 0);
 
   process.env.INTENT_SOLVER_KEYS = '';
   const unavailable = await post(commitment);

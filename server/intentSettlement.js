@@ -29,9 +29,9 @@ import {
   signCanonicalPayload,
   verifyCanonicalSignature
 } from './intentSignatures.js';
-import { signedCommitmentHash } from './intentTransparency.js';
 import { verifyAuctionClose } from './intentAuctions.js';
 import {
+  commitmentLeafHash,
   gradeExecution,
   minOutFor,
   verifyExecutionClaim
@@ -82,7 +82,7 @@ export function evaluateSettlement({
 }) {
   if (!verifyAuctionClose(close)) return { ok: false, code: 'INVALID_AUCTION_CLOSE' };
   if (!commitment
-    || signedCommitmentHash(commitment) !== String(close.decision?.selectedEntryHash).toLowerCase()) {
+    || commitmentLeafHash(commitment) !== String(close.decision?.selectedEntryHash).toLowerCase()) {
     return { ok: false, code: 'BAD_COMMITMENT_BINDING' };
   }
   if (!Number.isSafeInteger(evaluatedAtSeconds)

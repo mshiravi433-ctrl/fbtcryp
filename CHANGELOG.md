@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.33.0 — Outcome Marketplace + Confidential Intent transport (Phase 5)
+
+Two honest slices on top of the Phase 3 bonded-solver machinery, each pinned
+so it never over-claims.
+
+**Outcome Marketplace (`fbt.outcome-bid.v1`).**
+- Signed, bounded outcome bids: `guaranteedMinimum`, `totalMaxCost`, `expiry`,
+  `settlementChainId` and `partialFillPolicy` are all validated server-side
+  before any signature or storage work. A solver can never widen a field the
+  protocol has not defined.
+- Outcome bids are admitted ONLY from a registered solver that is declared
+  **bonded** at admission time (`SOLVER_NOT_BONDED` otherwise). Each 201
+  admission is transactionally paired with a coordinator-signed
+  `fbt.outcome-admission-receipt.v1` and a replay-proof nonce.
+- Immutable outcome log + Merkle root + deterministic close under
+  `MAX_GUARANTEED_MINIMUM_V1` (highest `guaranteedMinimum`; tie → lowest
+  `totalMaxCost` → fee → hash). The public `POST /bids` path stays closed.
+- Independent completeness watcher reports
+  (`fbt.outcome-completeness-report.v1`) re-grade the sealed set against the
+  observed admission receipts with the same deterministic rules as Phase 2c.
+- Execution claims / disputes / adjudications / settlement reports are reused
+  for outcome bids via explicit schema branching (no module duplication): the
+  graded floor is the solver's declared `guaranteedMinimum`, the claim executes
+  on the bid's `settlementChainId`, and any failure penalty is DERIVED from the
+  deterministic Phase 3 penalty table — never a free value from the solver.
+- Envelope + Risk Engine: a **single-chain** outcome (funding chain ===
+  settlement chain) compiles to `ready-for-client-review` with user-signed
+  settlement and `executable: false`; a **cross-chain** outcome stays
+  `draft-only` (`OUTCOME_CROSS_CHAIN_UNAVAILABLE`). No automatic settlement and
+  no custody: `custody: false`, `automaticSettlement: false`.
+- New CLI `scripts/intent-outcome.mjs` (example / sign) + fa/en locale strings
+  + `.env.example` (`INTENT_OUTCOME_RATE_LIMIT`).
+
+**Confidential Intent transfer (Phase 5).**
+- Real commit–reveal (`fbt.intent-commitment.v1`): only a hash is placed in the
+  open log before the deadline; after close a reveal is verified by solvers /
+  watchers against the committed hash. Honesty pinned in every record:
+  `preimageHolder: 'fbt-server'` and `commitRevealMetadataPrivacy: false`.
+- Envelope + Risk Engine: a single-chain swap travelling through the
+  commit-reveal path may declare `privacy: 'confidential'` and reach
+  ready-for-client-review. Threshold/TEE claims still block
+  (`THRESHOLD_TEE_UNAVAILABLE`); Private RPC is never relabelled confidential.
+- Honest threshold-encryption skeleton (`fbt.confidential-envelope.v1`):
+  hybrid AES-256-GCM + X25519 ECDH key wrap with N-of-N XOR shares. Decryption
+  is only possible after close (enforced at the route layer). Operator public
+  keys come from `INTENT_CONFIDENTIAL_OPERATOR_KEYS` (X25519, strict
+  base64url); `capabilities.confidential.thresholdEncryption.configured` is
+  true ONLY when real operator keys exist, and `tee` is ALWAYS false.
+- `.env.example` documents `INTENT_CONFIDENTIAL_OPERATOR_KEYS`.
+
 ## 1.32.0 — Intent OS Phase 4a: claim/dispute CLI + single-chain workflow DAG
 
 Phase 3 made outcomes claimable and independently checkable. Phase 4a adds
