@@ -20,7 +20,7 @@ import { buildDispute, verifyDispute } from '../server/intentDisputes.js';
 import { verifyAdjudication } from '../server/intentAdjudication.js';
 import { buildSettlementReport } from '../server/intentSettlement.js';
 import { signOutcomeBid } from '../server/outcomeBids.js';
-import { buildIntentCommitment, buildIntentReveal, verifyIntentReveal } from '../server/intentCommitment.js';
+import { buildIntentCommitment } from '../server/intentCommitment.js';
 import {
   buildCrossChainReceipt,
   verifyCrossChainReceipt
@@ -1318,20 +1318,68 @@ try {
       && outcomeCapabilities.body.outcome?.publicBidEndpoint === 'closed'
       && outcomeCapabilities.body.outcome?.deterministicPenaltyFromPhase3Table === true);
 
-  /* ------- Phase 5: commit-reveal + threshold capabilities ------- */
+  /* ------- Confidential mode: honest capabilities + fail-closed routes ---- */
   const revealHash = buildIntentCommitment({
-    intentHash: outcomeHash, preimage: { to: '0xabc', amount: '1' }, solverId: solver.id
-  }, coordinatorKeys.privateKey);
-  t('a commit reveals only the hash and declares the preimage holder honestly',
-    revealHash.ok && revealHash.commitment.preimageHolder === 'fbt-server'
-      && revealHash.commitment.commitRevealMetadataPrivacy === false);
+    intentHash: outcomeHash,
+    auctionId: outcomeHash,
+    preimage: { to: '0xabc', amount: '1' },
+    solverId: solver.id
+  }, keys.privateKey);
+  t('commitment construction separates the public hash from the private preimage',
+    revealHash.ok && revealHash.commitment.preimageHolder === 'fbt-secure-private-store'
+      && revealHash.commitment.commitRevealMetadataPrivacy === false
+      && !Object.hasOwn(revealHash.commitment, 'preimage')
+      && revealHash.privateRecord.preimage.amount === '1');
 
   const confidential = await request('/confidential/operators');
-  t('threshold encryption is configured:false with no real operator keys, and tee is always false',
+  t('threshold keys are registry-only: confidential, threshold, TEE and attestation stay unavailable',
     confidential.response.status === 200
+      && confidential.body.available === false
       && confidential.body.thresholdEncryption?.configured === false
+      && confidential.body.thresholdEncryption?.operational === false
       && confidential.body.thresholdEncryption?.tee === false
-      && confidential.body.thresholdEncryption?.registeredOperators === 0);
+      && confidential.body.thresholdEncryption?.attestation === false
+      && confidential.body.thresholdEncryption?.registeredOperators === 0
+      && confidential.body.hiddenFromFbt === false
+      && confidential.body.metadataPrivacy === false);
+  t('capabilities expose every missing confidential prerequisite honestly',
+    capabilities.body.commitReveal?.available === false
+      && capabilities.body.commitReveal?.frontendIntegrated === false
+      && capabilities.body.commitReveal?.durablePrivateStorage === false
+      && capabilities.body.commitReveal?.requesterAuthentication === false
+      && capabilities.body.commitReveal?.earlyRevealProtection === false
+      && capabilities.body.commitReveal?.hiddenFromFbt === false
+      && capabilities.body.commitReveal?.metadataPrivacy === false
+      && capabilities.body.commitReveal?.tee === false
+      && capabilities.body.commitReveal?.attestation === false);
+
+  const confidentialCommit = await request('/confidential/commit', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ solverId: solver.id, preimage: { secret: 'must-not-be-read' } })
+  });
+  const confidentialReveal = await request('/confidential/reveal', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ preimage: { substituted: true }, auctionClosed: true })
+  });
+  t('commit and reveal reject deterministically without trusting identity, close, or client preimage fields',
+    confidentialCommit.response.status === 503
+      && confidentialCommit.body.error === 'CONFIDENTIAL_MODE_UNAVAILABLE'
+      && confidentialReveal.response.status === 503
+      && confidentialReveal.body.error === 'CONFIDENTIAL_MODE_UNAVAILABLE');
+  const oversizedConfidential = await request('/confidential/commit', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ preimage: 'x'.repeat(300 * 1024) })
+  });
+  t('confidential rejection runs before the global JSON body-size parser',
+    oversizedConfidential.response.status === 503
+      && oversizedConfidential.body.error === 'CONFIDENTIAL_MODE_UNAVAILABLE');
+  const historicalCommitment = await request(`/confidential/commitments/${outcomeHash}`);
+  t('historical public-blob commitment reads fail closed',
+    historicalCommitment.response.status === 503
+      && historicalCommitment.body.error === 'CONFIDENTIAL_MODE_UNAVAILABLE');
 
   process.env.INTENT_SOLVER_KEYS = '';
   const unavailable = await post(commitment);

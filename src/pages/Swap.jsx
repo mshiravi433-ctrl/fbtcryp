@@ -51,6 +51,7 @@ import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
 import { POINT_VALUES } from '../lib/ranks';
 import { createExecutionProof } from '../lib/executionProof';
+import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 
 /**
  * Real on-chain swap screen.
@@ -183,6 +184,10 @@ export default function Swap() {
      It binds the eventual execution receipt back to the reviewed intent while
      storing no wallet address or free-form note in the proof. */
   const sourceIntentId = useRef(searchParams.get('intent'));
+  /* Privacy is a security boundary, not one-time prefill state. Re-evaluate it
+     on every query-string change so SPA navigation from an already-mounted
+     ordinary Swap screen cannot retain an executable quote or Solana view. */
+  const confidentialRequested = isConfidentialPrivacy(searchParams);
   const prefillDone = useRef(false);
 
   useEffect(() => {
@@ -229,7 +234,9 @@ export default function Swap() {
     if (tk) setToToken(tk);
     if (amt && Number(amt) > 0) setAmount(String(amt));
 
-    setSearchParams({}, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    for (const key of ['from', 'to', 'amount', 'chain']) next.delete(key);
+    setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, curated, chainId, wallet]);
 
   /*
@@ -474,6 +481,16 @@ export default function Swap() {
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
+    /* A confidential handoff must never touch the ordinary public quote
+       engine. This happens before provider access and route discovery. */
+    if (confidentialRequested) {
+      quoteSeq.current += 1;
+      setQuote(null);
+      setImpact(null);
+      setGasCost(null);
+      setQuoting(false);
+      return undefined;
+    }
     const n = Number(amount);
     if (!n || n <= 0 || !fromToken || !toToken || tokenKey(fromToken) === tokenKey(toToken)) {
       setQuote(null);
@@ -510,7 +527,7 @@ export default function Swap() {
     }, 420); // debounce typing
 
     return () => clearTimeout(timer);
-  }, [amount, fromToken, toToken, effectiveSlippage, chainId, wallet, fromSym, toSym, retryNonce]);
+  }, [amount, fromToken, toToken, effectiveSlippage, chainId, wallet, fromSym, toSym, retryNonce, confidentialRequested]);
 
   // refresh the quote every 15s so it can't go stale under the user
   useEffect(() => {
@@ -530,6 +547,7 @@ export default function Swap() {
    * never discovered, so they just saw a dead screen.
    */
   const retryQuote = () => {
+    if (confidentialRequested) return;
     haptic?.('select');
     setQuote(null);
     setImpact(null);
@@ -673,6 +691,10 @@ export default function Swap() {
   };
 
   const runGasless = async () => {
+    if (confidentialRequested) {
+      setTxState({ stage: 'error', message: 'CONFIDENTIAL_MODE_UNAVAILABLE' });
+      return;
+    }
     if (!enforcePolicy()) return;
     const signer = wallet.getSigner?.();
     if (!signer) return;
@@ -779,6 +801,10 @@ export default function Swap() {
   };
 
   const runSwap = async () => {
+    if (confidentialRequested) {
+      setTxState({ stage: 'error', message: 'CONFIDENTIAL_MODE_UNAVAILABLE' });
+      return;
+    }
     if (useGasless) return runGasless();
     if (!enforcePolicy()) return;
 
@@ -1003,7 +1029,8 @@ export default function Swap() {
     quote?.amountInWei != null && fromRaw != null
       ? quote.amountInWei > fromRaw
       : Number(amount) > fromBal;
-  const canSwap = wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
+  const canSwap = !confidentialRequested
+    && wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
   const highImpact = impact != null && impact > 5;
 
 
@@ -1036,7 +1063,7 @@ export default function Swap() {
    * to it would quietly overcharge everyone who does have gas. It appears as
    * an option, and is RECOMMENDED only when the user genuinely cannot pay gas.
    */
-  const gaslessOk = gaslessEligible({ chainId, fromToken, toToken });
+  const gaslessOk = !confidentialRequested && gaslessEligible({ chainId, fromToken, toToken });
   const [useGasless, setUseGasless] = useState(false);
   const [gaslessQuote, setGaslessQuote] = useState(null);
   const [gaslessBusy, setGaslessBusy] = useState(false);
@@ -1084,6 +1111,9 @@ export default function Swap() {
    * dropdown. Two tabs is honest; one confused form is not.
    */
   const [chainTab, setChainTab] = useState('evm');
+  useEffect(() => {
+    if (confidentialRequested && chainTab !== 'evm') setChainTab('evm');
+  }, [confidentialRequested, chainTab]);
 
   return (
     <PageTransition>
@@ -1109,7 +1139,9 @@ export default function Swap() {
           <button
             key={k}
             className={chainTab === k ? 'active' : ''}
+            disabled={confidentialRequested && k !== 'evm'}
             onClick={() => {
+              if (confidentialRequested && k !== 'evm') return;
               haptic?.('select');
               setChainTab(k);
             }}
@@ -1126,9 +1158,9 @@ export default function Swap() {
         one — nesting them animates the same subtree twice and produces a
         visible double-fade every time the tab changes.
       */}
-      {chainTab === 'solana' && <SolanaSwap embedded />}
+      {!confidentialRequested && chainTab === 'solana' && <SolanaSwap embedded />}
 
-      {chainTab === 'evm' && (
+      {(confidentialRequested || chainTab === 'evm') && (
       <>
       {/*
         ─── THE POLICY EXPLANATION COLLAPSES; THE PER-TAP WARNINGS DO NOT ────
@@ -1330,6 +1362,13 @@ export default function Swap() {
             )}
           </div>
         </div>
+
+        {confidentialRequested && (
+          <div className="notice notice-danger" role="alert" style={{ marginTop: 12, lineHeight: 1.7 }}>
+            <strong>{t('swap.confidentialUnavailable')}</strong>
+            <div style={{ marginTop: 4 }}>{t('swap.confidentialUnavailableBody')}</div>
+          </div>
+        )}
 
         {/* quote details */}
         <AnimatePresence>
@@ -1576,6 +1615,7 @@ export default function Swap() {
           style={{ marginTop: 16 }}
           disabled={!canSwap}
           onClick={() => {
+            if (confidentialRequested) return;
             if (!wallet.isConnected) return setConnectOpen(true);
             /*
              * Expert mode skips the review sheet.
@@ -1597,7 +1637,9 @@ export default function Swap() {
             }
           }}
         >
-          {!wallet.isConnected ? t('wallet.connect') : quoting ? t('swap.quoting') : t('swap.review')}
+          {confidentialRequested
+            ? t('swap.confidentialUnavailable')
+            : !wallet.isConnected ? t('wallet.connect') : quoting ? t('swap.quoting') : t('swap.review')}
         </button>
       </motion.section>
 

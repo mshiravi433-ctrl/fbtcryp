@@ -186,6 +186,11 @@ import {
   saveIntentMemory
 } from '../src/lib/intentOS.js';
 import {
+  confidentialSwapReadiness,
+  isConfidentialPrivacy,
+  privacyModeFromSearch
+} from '../src/lib/confidentialIntent.js';
+import {
   canonicalJson,
   createExecutionProof,
   createWorkflowExecutionProof,
@@ -308,10 +313,14 @@ import {
   buildIntentCommitment,
   buildIntentReveal,
   intentCommitmentStatus,
+  publicCommitmentRecord,
+  storeIntentCommitment,
+  verifyIntentCommitment,
   verifyIntentReveal
 } from '../server/intentCommitment.js';
 import {
   buildConfidentialEnvelope,
+  confidentialProtocolStatus,
   generateOperatorKeyPair,
   parseOperatorRegistry,
   reconstructConfidentialEnvelope,
@@ -4763,8 +4772,9 @@ export default async function run() {
       amountIn: '1000', amountUsd: 1000, maxSlippagePct: 0.3,
       privacy: 'standard', deadlineAt: Date.now() + 3600000
     }, memory);
-    t('a policy-compliant swap compiles to review, never execution',
-      ready.status === 'ready-for-review' && ready.handoff.startsWith('/swap?'));
+    t('a policy-compliant standard swap still compiles to ordinary review, never execution',
+      ready.status === 'ready-for-review' && ready.handoff.startsWith('/swap?')
+        && !ready.handoff.includes('privacy=confidential'));
     t('compiled intents always require the wallet signature',
       ready.intent.constraints.requireUserSignature === true && ready.intent.constraints.custodyAllowed === false);
 
@@ -4776,18 +4786,40 @@ export default async function run() {
     t('memory spend limits block rather than warn',
       over.blocked && over.checks.some((r) => r.id === 'OVER_SPEND_LIMIT' && r.level === 'block'));
 
-    const privateIntent = compileIntent({
+    const privateInput = {
       kind: 'swap', chainId: 1, fromSymbol: 'USDC', toSymbol: 'ETH',
       amountIn: '100', amountUsd: 100, maxSlippagePct: 0.3,
       privacy: 'confidential', deadlineAt: Date.now() + 3600000
-    }, memory);
-    /* Phase 5a: a single-chain swap can travel through the commit-reveal
-       transport (intent hidden from the open bidding log until close). It is
-       NEVER a threshold/TEE claim, so the honest warning stays. */
-    t('a single-chain confidential swap uses commit-reveal, not a TEE',
-      !privateIntent.blocked && privateIntent.status === 'ready-for-review'
-        && privateIntent.checks.some((r) => r.id === 'CONFIDENTIAL_COMMIT_REVEAL' && r.level === 'pass')
-        && privateIntent.checks.some((r) => r.id === 'PRIVACY_NOT_THRESHOLD_TEE' && r.level === 'warn'));
+    };
+    const privateIntent = compileIntent(privateInput, memory);
+    t('a confidential swap fails closed without explicit runtime readiness',
+      privateIntent.blocked && privateIntent.handoff === null
+        && privateIntent.intent.constraints.privacy === 'confidential'
+        && privateIntent.checks.some((r) => r.id === 'CONFIDENTIAL_TRANSPORT_UNAVAILABLE' && r.level === 'block'));
+    const explicitlyReady = compileIntent(privateInput, memory, Date.now(), { confidentialAvailable: true });
+    t('only explicit confidential readiness creates a privacy-preserving handoff',
+      !explicitlyReady.blocked && explicitlyReady.handoff.includes('privacy=confidential')
+        && explicitlyReady.checks.some((r) => r.id === 'CONFIDENTIAL_COMMIT_REVEAL' && r.level === 'pass'));
+    t('confidential URL parsing is exact, duplicate-safe and never loses the requirement',
+      isConfidentialPrivacy('?privacy=confidential&from=USDC')
+        && isConfidentialPrivacy('?privacy=standard&privacy=confidential')
+        && isConfidentialPrivacy('?privacy=confidential&privacy=standard')
+        && privacyModeFromSearch('privacy=CONFIDENTIAL') === 'standard'
+        && privacyModeFromSearch('privacy=confidential-fallback') === 'standard');
+    const allReady = {
+      ok: true,
+      commitReveal: {
+        available: true,
+        frontendIntegrated: true,
+        durablePrivateStorage: true,
+        requesterAuthentication: true,
+        earlyRevealProtection: true
+      }
+    };
+    t('capability gating requires every confidential prerequisite positively',
+      confidentialSwapReadiness(allReady).available
+        && !confidentialSwapReadiness({ ...allReady, commitReveal: { ...allReady.commitReveal, durablePrivateStorage: false } }).available
+        && !confidentialSwapReadiness({ ok: true, commitReveal: { available: true } }).available);
 
     const thresholdClaim = compileIntent({
       kind: 'automation', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH',
@@ -4869,7 +4901,12 @@ export default async function run() {
       ...ready.intent,
       constraints: { ...ready.intent.constraints, maxSlippagePct: 0.3, privacy: 'standard' }
     };
-    t('the public solver protocol validates the same safe envelope', validateIntentEnvelope(envelope).ok);
+    t('the public solver protocol validates the same safe standard envelope', validateIntentEnvelope(envelope).ok);
+    t('the public solver protocol fails closed instead of downgrading confidential to standard',
+      validateIntentEnvelope({
+        ...envelope,
+        constraints: { ...envelope.constraints, privacy: 'confidential' }
+      }).code === 'PRIVACY_UNAVAILABLE');
     t('the protocol refuses autonomous authority',
       validateIntentEnvelope({ ...envelope, constraints: { ...envelope.constraints, requireUserSignature: false } }).code === 'UNSAFE_AUTHORITY');
 
@@ -6000,37 +6037,129 @@ export default async function run() {
     }
   }
 
-  /* ------- Phase 5: commit–reveal (honest, not a TEE) ------- */
+  /* ------- Confidential commitment primitives (deployment unavailable) --- */
   {
-    const coordKeys = generateSolverKeyPair();
+    const coordinatorKeys = generateSolverKeyPair();
+    const solverKeys = generateSolverKeyPair();
     const solverId = 'unit-commit-solver';
+    const intentHash = `0x${'c5'.repeat(32)}`;
     const preimage = { from: 'USDC', to: 'ETH', amount: '1000', maxSlippagePct: 0.5 };
     const commitment = buildIntentCommitment({
-      intentHash: `0x${'c5'.repeat(32)}`,
+      intentHash,
+      auctionId: intentHash,
       preimage,
       solverId
-    }, coordKeys.privateKey);
-    t('a commit reveals only the hash before the deadline',
-      commitment.ok && commitment.commitment.revealHash
-        && commitment.commitment.preimageHolder === 'fbt-server'
-        && commitment.commitment.commitRevealMetadataPrivacy === false);
-    const reveal = buildIntentReveal({
-      commitment: commitment.commitment,
+    }, solverKeys.privateKey);
+    const publicRecord = publicCommitmentRecord(commitment.commitment);
+    t('public commitment records contain a signed hash but no private preimage',
+      commitment.ok && publicRecord.ok && publicRecord.record.commitment.signature
+        && !JSON.stringify(publicRecord.record).includes('maxSlippagePct')
+        && publicRecord.record.commitment.preimageHolder === 'fbt-secure-private-store'
+        && commitment.privateRecord.preimage.amount === '1000');
+    t('requester-controlled data cannot be smuggled into public fields or the signature slot',
+      publicCommitmentRecord({ ...commitment.commitment, preimage }).code === 'BAD_COMMITMENT'
+        && publicCommitmentRecord({
+          ...commitment.commitment,
+          signature: { value: commitment.commitment.signature, preimage }
+        }).code === 'BAD_COMMITMENT');
+
+    const registry = new Map([[solverId, {
+      id: solverId, active: true, publicKey: solverKeys.publicKey
+    }]]);
+    const rogueCommitment = buildIntentCommitment({
+      intentHash,
+      auctionId: intentHash,
       preimage,
       solverId
-    }, coordKeys.privateKey);
-    t('a matching reveal verifies compliance against the committed hash',
-      reveal.ok && verifyIntentReveal(reveal.reveal, commitment.commitment,
-        { solverPublicKey: coordKeys.publicKey }).ok);
-    t('a reveal with a different preimage fails compliance verification',
+    }, generateSolverKeyPair().privateKey);
+    t('commit requester identity is authenticated by the registered Ed25519 key',
+      verifyIntentCommitment(commitment.commitment, { registry }).ok
+        && verifyIntentCommitment(commitment.commitment, { registry: new Map() }).code === 'UNAUTHENTICATED_REQUESTER'
+        && verifyIntentCommitment(rogueCommitment.commitment, { registry }).code === 'SIGNATURE_MISMATCH');
+    t('canonical intent, auction, nonce and deadline fields are commitment-id bound',
+      verifyIntentCommitment({ ...commitment.commitment, intentHash: `0x${'a1'.repeat(32)}` }, { registry }).code === 'BAD_COMMITMENT'
+        && verifyIntentCommitment({ ...commitment.commitment, auctionId: `0x${'a2'.repeat(32)}` }, { registry }).code === 'BAD_COMMITMENT'
+        && verifyIntentCommitment({ ...commitment.commitment, nonce: `0x${'a3'.repeat(16)}` }, { registry }).code === 'BAD_COMMITMENT'
+        && verifyIntentCommitment({ ...commitment.commitment, deadline: commitment.commitment.deadline + 1 }, { registry }).code === 'BAD_COMMITMENT');
+    t('commitment id and solver nonce replay indexes reject reuse',
+      verifyIntentCommitment(commitment.commitment, {
+        registry,
+        seenCommitmentIds: new Set([commitment.commitment.commitmentId])
+      }).code === 'COMMITMENT_REPLAY'
+        && verifyIntentCommitment(commitment.commitment, {
+          registry,
+          seenNonces: new Set([`${solverId}:${commitment.commitment.nonce}`])
+        }).code === 'COMMITMENT_REPLAY');
+    t('durable private storage fails closed even for an authenticated matching pair',
+      (await storeIntentCommitment(commitment, { registry })).code === 'CONFIDENTIAL_PRIVATE_STORE_UNAVAILABLE');
+    t('reveal is rejected before a trusted signed auction close exists',
       buildIntentReveal({
         commitment: commitment.commitment,
-        preimage: { ...preimage, amount: '9999' },
+        privateRecord: commitment.privateRecord,
+        auctionClose: null,
         solverId
-      }, coordKeys.privateKey).code === 'REVEAL_MISMATCH');
-    t('commit-reveal capabilities never claim threshold or TEE',
-      intentCommitmentStatus().tee === false && intentCommitmentStatus().hiddenFromFbt === false
-        && intentCommitmentStatus().confidentialityLevel === 'commit-reveal');
+      }, solverKeys.privateKey).code === 'AUCTION_NOT_CLOSED');
+    t('client preimage substitution is rejected rather than compared or stored',
+      buildIntentReveal({
+        commitment: commitment.commitment,
+        privateRecord: commitment.privateRecord,
+        auctionClose: null,
+        solverId,
+        preimage: { ...preimage, amount: '9999' }
+      }, solverKeys.privateKey).code === 'CLIENT_PREIMAGE_FORBIDDEN');
+    t('a mismatched server-side private record cannot be revealed',
+      buildIntentReveal({
+        commitment: commitment.commitment,
+        privateRecord: {
+          ...commitment.privateRecord,
+          preimage: { ...preimage, amount: '9999' }
+        },
+        auctionClose: null,
+        solverId
+      }, solverKeys.privateKey).code === 'REVEAL_MISMATCH');
+
+    const previousCoordinatorId = process.env.INTENT_COORDINATOR_ID;
+    const previousCoordinatorKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-confidential-coordinator';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = coordinatorKeys.privateKey;
+    try {
+      const closed = await closeAuction({
+        schema: 'fbt.auction-close-request.v1',
+        intentHash,
+        policy: { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      });
+      const reveal = buildIntentReveal({
+        commitment: commitment.commitment,
+        privateRecord: commitment.privateRecord,
+        auctionClose: closed.close,
+        solverId
+      }, solverKeys.privateKey);
+      t('only the server-stored preimage reveals after the trusted auction close',
+        closed.ok && reveal.ok && verifyIntentReveal(reveal.reveal, commitment.commitment, {
+          solverPublicKey: solverKeys.publicKey,
+          coordinatorPublicKey: coordinatorKeys.publicKey,
+          auctionClose: closed.close
+        }).ok);
+      t('a reveal cannot trust a self-declared coordinator key',
+        verifyIntentReveal(reveal.reveal, commitment.commitment, {
+          solverPublicKey: solverKeys.publicKey,
+          coordinatorPublicKey: generateSolverKeyPair().publicKey,
+          auctionClose: closed.close
+        }).code === 'AUCTION_NOT_CLOSED');
+    } finally {
+      if (previousCoordinatorId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = previousCoordinatorId;
+      if (previousCoordinatorKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = previousCoordinatorKey;
+    }
+
+    const status = intentCommitmentStatus();
+    t('commit-reveal capabilities are unavailable and never claim metadata, threshold or TEE privacy',
+      status.available === false && status.frontendIntegrated === false
+        && status.durablePrivateStorage === false && status.requesterAuthentication === false
+        && status.earlyRevealProtection === false && status.tee === false
+        && status.attestation === false && status.hiddenFromFbt === false
+        && status.metadataPrivacy === false && status.confidentialityLevel === 'unavailable');
   }
 
   /* ------- Phase 5: threshold-encryption skeleton (hybrid + N-of-N XOR) ------- */
@@ -6049,6 +6178,17 @@ export default async function run() {
     const keyB = generateOperatorKeyPair();
     const op1 = { id: 'op-a', name: 'Operator A', publicKey: keyA.publicKey };
     const op2 = { id: 'op-b', name: 'Operator B', publicKey: keyB.publicKey };
+    const primitiveStatus = confidentialProtocolStatus({
+      operatorRegistry: new Map([[op1.id, op1], [op2.id, op2]])
+    });
+    t('public operator keys configure only a registry, never operational threshold or TEE readiness',
+      primitiveStatus.available === false
+        && primitiveStatus.thresholdEncryption.registryConfigured === true
+        && primitiveStatus.thresholdEncryption.configured === false
+        && primitiveStatus.thresholdEncryption.operational === false
+        && primitiveStatus.thresholdEncryption.independentOperatorServices === false
+        && primitiveStatus.thresholdEncryption.tee === false
+        && primitiveStatus.thresholdEncryption.attestation === false);
     const plaintext = '{"to":"0xabc","amount":"1"}';
     const envelope = buildConfidentialEnvelope(plaintext, [op1, op2]);
     t('a confidential envelope wraps with AES-256-GCM + ECDH and N-of-N XOR',
