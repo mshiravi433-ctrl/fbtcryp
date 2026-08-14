@@ -225,6 +225,44 @@ import {
   evaluateCompleteness,
   verifyCompletenessReport
 } from '../server/intentWatcher.js';
+import {
+  MIN_BOND_USD,
+  PENALTY_BPS,
+  bondStatusFor,
+  bondsProtocolStatus,
+  parseBondRegistry,
+  penaltyBpsFor,
+  penaltyUsdFor,
+  publicBondBoard
+} from '../server/intentBonds.js';
+import {
+  buildExecutionClaim,
+  gradeExecution,
+  minOutFor,
+  readExecutionClaim,
+  storeExecutionClaim,
+  verifyExecutionClaim
+} from '../server/intentExecution.js';
+import {
+  buildDispute,
+  parseVerifierRegistry,
+  storeDispute,
+  verifyDispute
+} from '../server/intentDisputes.js';
+import {
+  buildAdjudication,
+  executionGraceSeconds,
+  storeAdjudication,
+  verifyAdjudication
+} from '../server/intentAdjudication.js';
+import {
+  buildSettlementReport,
+  evaluateSettlement,
+  readSettlementReports,
+  settlementSummary,
+  storeSettlementReport,
+  verifySettlementReport
+} from '../server/intentSettlement.js';
 import { Interface } from 'ethers';
 
 export default async function run() {
@@ -5027,6 +5065,469 @@ export default async function run() {
       }).report;
       t('verified misconduct evidence dominates the auction status',
         completenessSummary([built.report, misconductReport]).status === 'misconduct-reported');
+    } finally {
+      if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = prevCoordId;
+      if (prevCoordKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
+    }
+  }
+
+  /* ------- Phase 3a: bonded solvers + execution claims + disputes + adjudication ------ */
+  {
+    /* ---- declared bond registry (public statements, no secrets) ---- */
+    const savedBonds = process.env.INTENT_SOLVER_BONDS;
+    const savedGrace = process.env.INTENT_EXECUTION_GRACE_SECONDS;
+    const savedVerifiers = process.env.INTENT_VERIFIER_KEYS;
+    const savedSolvers = process.env.INTENT_SOLVER_KEYS;
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+
+    t('the minimum declared bond is a public protocol constant', MIN_BOND_USD === 1000);
+    t('fulfilled outcomes never pay a penalty', PENALTY_BPS.fulfilled === 0 && penaltyBpsFor('fulfilled', true) === 0);
+    t('unexecuted quotes cost the full declared bond', penaltyBpsFor('unexecuted', false) === 10000);
+    t('contested grades park at half the bond', penaltyBpsFor('contested', false) === 5000);
+    t('self-reporting a short fill halves the penalty',
+      penaltyBpsFor('short-filled', true) === 2500 && penaltyBpsFor('short-filled', false) === 5000);
+    t('self-reporting a failure halves the penalty',
+      penaltyBpsFor('failed', true) === 5000 && penaltyBpsFor('failed', false) === 10000);
+    t('a pending grade carries no penalty at all', penaltyBpsFor('pending', true) === null);
+    t('penalty usd is the integer floor of bond × bps',
+      penaltyUsdFor('10001', 5000) === '5000' && penaltyUsdFor('9999', 10000) === '9999');
+    t('a null penalty yields null usd, never a guessed zero', penaltyUsdFor('100000', null) === null);
+
+    process.env.INTENT_SOLVER_BONDS = JSON.stringify([
+      { solverId: 'unit-solver-3a', bondUsd: '50000', asset: 'USDC', terms: 'Unit bond' },
+      { solverId: 'small-solver', bondUsd: '500', asset: 'USDC' },
+      { solverId: 'expired-solver', bondUsd: '2000', asset: 'USDC', expiresAt: now - 100 },
+      { solverId: 'bad-bond', bondUsd: 'nope' }
+    ]);
+    const bondRegistry = parseBondRegistry();
+    t('the bond registry keeps every well-formed row', bondRegistry.size === 3);
+    t('a malformed bond row is dropped rather than fatal', !bondRegistry.has('bad-bond'));
+    t('garbage bond env parses to an empty registry', parseBondRegistry('not json').size === 0);
+
+    const solverRegistry3a = new Map([
+      ['unit-solver-3a', { id: 'unit-solver-3a', publicKey: 'x', active: true }],
+      ['expired-solver', { id: 'expired-solver', publicKey: 'x', active: true }]
+    ]);
+    const board = publicBondBoard(bondRegistry, { solverRegistry: solverRegistry3a, now: nowMs });
+    const byId = Object.fromEntries(board.map((row) => [row.solverId, row]));
+    t('bonded means registered, unexpired and above the minimum',
+      byId['unit-solver-3a'].bonded === true
+        && byId['small-solver'].bonded === false && byId['small-solver'].meetsMinimum === false
+        && byId['expired-solver'].bonded === false && byId['expired-solver'].expired === true);
+    t('an unregistered solver is never bonded', bondStatusFor({ bondUsd: '5000' }, { solverRegistry: new Map() }).bonded === false);
+    t('bond capabilities count only genuinely bonded solvers',
+      bondsProtocolStatus({ solverRegistry: solverRegistry3a }).bondedSolvers === 1);
+    t('bond capabilities never claim escrow or custody',
+      bondsProtocolStatus({}).onChainEscrow === false
+        && bondsProtocolStatus({}).custody === false
+        && bondsProtocolStatus({}).enforcement === 'out-of-protocol-declared');
+
+    /* ---- deterministic quoted minimum output ---- */
+    t('quoted min output is derived from the signed slippage, never the claim',
+      minOutFor({ amountOut: '400000000000000000', slippageBps: 50 }) === '398000000000000000');
+    t('min output floors, it never rounds a promise up',
+      minOutFor({ amountOut: '1000001', slippageBps: 5000 }) === '500000');
+    t('a malformed commitment has no min output', minOutFor({ amountOut: '0', slippageBps: 50 }) === null);
+
+    /* ---- signed commitments, close, claim, dispute, adjudication ---- */
+    const cKeys = generateSolverKeyPair();
+    const sKeys = generateSolverKeyPair();
+    const vKeys = generateSolverKeyPair();
+    const intent3a = `0x${'3a'.repeat(32)}`;
+    const solver3a = { id: 'unit-solver-3a', name: 'Unit Solver 3A', publicKey: sKeys.publicKey, active: true };
+    const solverRegistryOnly = new Map([[solver3a.id, solver3a]]);
+    const verifier3a = { id: 'unit-verifier-3a', name: 'Unit Verifier', publicKey: vKeys.publicKey, active: true };
+    const verifierRegistry3a = new Map([[verifier3a.id, verifier3a]]);
+
+    process.env.INTENT_SOLVER_KEYS = JSON.stringify([solver3a]);
+    process.env.INTENT_VERIFIER_KEYS = JSON.stringify([verifier3a]);
+    process.env.INTENT_EXECUTION_GRACE_SECONDS = '300';
+    t('execution grace parses from env', executionGraceSeconds() === 300);
+    process.env.INTENT_EXECUTION_GRACE_SECONDS = 'garbage';
+    t('a malformed grace value falls back to the 300s default', executionGraceSeconds() === 300);
+    process.env.INTENT_EXECUTION_GRACE_SECONDS = '0';
+    t('a bounded explicit grace is honoured', executionGraceSeconds() === 0);
+    t('the verifier registry parses like the solver registry',
+      parseVerifierRegistry().size === 1 && parseVerifierRegistry().get(verifier3a.id).publicKey === vKeys.publicKey);
+
+    const signed3a = signSolverCommitment({
+      schema: 'fbt.solver-quote.v1', intentHash: intent3a, solverId: solver3a.id,
+      chainId: 42161, amountOut: '400000000000000000', maxGas: '250000', feeBps: 70, slippageBps: 50,
+      executable: true, issuedAt: now, validUntil: now + 90,
+      nonce: `0x${'c1'.repeat(16)}`, routeCommitment: `0x${'d1'.repeat(32)}`
+    }, sKeys.privateKey);
+    const appended3a = await appendSignedCommitment(signed3a, { registry: solverRegistryOnly, now: nowMs });
+    t('phase 3a fixture quote enters the immutable log', appended3a.ok);
+
+    const prevCoordId = process.env.INTENT_COORDINATOR_ID;
+    const prevCoordKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator-3a';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = cKeys.privateKey;
+    try {
+      const closed3a = await closeAuction({
+        schema: 'fbt.auction-close-request.v1', intentHash: intent3a,
+        policy: { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      }, { now: nowMs });
+      t('phase 3a fixture auction seals and closes', closed3a.ok && closed3a.close.logSize === 1);
+      const close3a = closed3a.close;
+
+      const filledClaim = buildExecutionClaim({
+        close: close3a,
+        commitment: signed3a,
+        outcome: 'filled',
+        txHash: `0x${'e1'.repeat(32)}`,
+        amountReceived: '400500000000000000',
+        feeBpsCharged: 70,
+        gasUsedWei: '250000',
+        executedAt: now
+      }, solver3a, sKeys.privateKey);
+      t('a winning solver signs a filled execution claim',
+        filledClaim.ok && verifyExecutionClaim(filledClaim.claim, { close: close3a, commitment: signed3a }).ok);
+      t('the claim binds the sealed close, intent and selected entry',
+        filledClaim.claim.entryHash === close3a.decision.selectedEntryHash
+          && filledClaim.claim.closeId === close3a.closeId);
+      t('a tampered received amount invalidates the claim (id and signature both bind it)',
+        !verifyExecutionClaim({ ...filledClaim.claim, amountReceived: '400500000000000001' },
+          { close: close3a, commitment: signed3a }).ok);
+      t('unknown claim fields are refused rather than stored',
+        verifyExecutionClaim({ ...filledClaim.claim, hiddenClaim: true },
+          { close: close3a, commitment: signed3a }).code === 'UNKNOWN_CLAIM_FIELD');
+      t('a registered solver is required for submission, not just any signature',
+        verifyExecutionClaim(filledClaim.claim, { close: close3a, commitment: signed3a, registry: new Map(), requireRegistered: true })
+          .code === 'UNREGISTERED_SOLVER');
+      t('third parties verify claims offline with no registry',
+        verifyExecutionClaim(filledClaim.claim, { close: close3a, commitment: signed3a }).ok);
+      t('a claim cannot quietly claim on-chain verification',
+        verifyExecutionClaim({
+          ...filledClaim.claim,
+          claims: { ...filledClaim.claim.claims, onChainVerified: true }
+        }, { close: close3a, commitment: signed3a }).code === 'BAD_CLAIM_FLAGS');
+      t('an expired claim carries no tx or amount',
+        buildExecutionClaim({ close: close3a, commitment: signed3a, outcome: 'expired' }, solver3a, sKeys.privateKey).ok);
+      t('an expired claim with a tx hash is malformed',
+        buildExecutionClaim({ close: close3a, commitment: signed3a, outcome: 'expired', txHash: `0x${'e2'.repeat(32)}` },
+          solver3a, sKeys.privateKey).code === 'BAD_TX_HASH');
+      t('a claim targeting another close is refused',
+        verifyExecutionClaim(filledClaim.claim, {
+          close: { ...close3a, closeId: `0x${'f9'.repeat(32)}` }, commitment: signed3a
+        }).code === 'BAD_CLOSE_BINDING');
+
+      /* ---- the deterministic grading engine ---- */
+      const gradeFilled = gradeExecution({
+        commitment: signed3a, claim: filledClaim.claim, disputes: [], nowSeconds: now, graceSeconds: 300
+      });
+      t('a fill at or above the quoted min out grades fulfilled with zero penalty',
+        gradeFilled.verdict === 'fulfilled' && gradeFilled.penaltyBps === 0 && gradeFilled.selfReported === true);
+      const shortClaim = buildExecutionClaim({
+        close: close3a, commitment: signed3a, outcome: 'filled',
+        txHash: `0x${'e3'.repeat(32)}`, amountReceived: '390000000000000000', feeBpsCharged: 70, executedAt: now
+      }, solver3a, sKeys.privateKey).claim;
+      const gradeCaughtShort = gradeExecution({
+        commitment: signed3a, claim: shortClaim, disputes: [], nowSeconds: now, graceSeconds: 300
+      });
+      t('a fill below the quoted min out is a caught short fill at half the bond',
+        gradeCaughtShort.verdict === 'short-filled' && gradeCaughtShort.penaltyBps === 5000 && gradeCaughtShort.selfReported === false);
+      const selfShort = buildExecutionClaim({
+        close: close3a, commitment: signed3a, outcome: 'short',
+        txHash: `0x${'e4'.repeat(32)}`, amountReceived: '390000000000000000', feeBpsCharged: 70, executedAt: now
+      }, solver3a, sKeys.privateKey).claim;
+      const gradeSelfShort = gradeExecution({
+        commitment: signed3a, claim: selfShort, disputes: [], nowSeconds: now, graceSeconds: 300
+      });
+      t('a self-reported short fill quarters the bond',
+        gradeSelfShort.verdict === 'short-filled' && gradeSelfShort.penaltyBps === 2500 && gradeSelfShort.selfReported === true);
+      const revertedClaim = buildExecutionClaim({
+        close: close3a, commitment: signed3a, outcome: 'reverted', txHash: `0x${'e5'.repeat(32)}`, executedAt: now
+      }, solver3a, sKeys.privateKey).claim;
+      const gradeReverted = gradeExecution({
+        commitment: signed3a, claim: revertedClaim, disputes: [], nowSeconds: now, graceSeconds: 300
+      });
+      t('a self-reported revert grades failed at half the bond',
+        gradeReverted.verdict === 'failed' && gradeReverted.penaltyBps === 5000);
+      const lateClaim = buildExecutionClaim({
+        close: close3a, commitment: signed3a, outcome: 'filled',
+        txHash: `0x${'e6'.repeat(32)}`, amountReceived: '400500000000000000', feeBpsCharged: 70, executedAt: now + 400
+      }, solver3a, sKeys.privateKey).claim;
+      const gradeLate = gradeExecution({
+        commitment: signed3a, claim: lateClaim, disputes: [], nowSeconds: now, graceSeconds: 300
+      });
+      t('executing after the quote window is a caught failure, not a fill',
+        gradeLate.verdict === 'failed' && gradeLate.penaltyBps === 10000 && gradeLate.selfReported === false);
+      t('an open deadline without a claim grades pending, not guilty',
+        gradeExecution({ commitment: signed3a, claim: null, disputes: [], nowSeconds: now, graceSeconds: 300 })
+          .verdict === 'pending');
+      const gradeUnexecuted = gradeExecution({
+        commitment: signed3a, claim: null, disputes: [], nowSeconds: now + 500, graceSeconds: 300
+      });
+      t('a deadline passed without a claim grades unexecuted at the full bond',
+        gradeUnexecuted.verdict === 'unexecuted' && gradeUnexecuted.penaltyBps === 10000);
+
+      /* ---- disputes ---- */
+      const dispute = buildDispute({
+        close: close3a, kind: 'no-execution', observedAt: now + 1, detail: 'no transaction observed'
+      }, verifier3a, vKeys.privateKey);
+      t('a registered verifier signs a bounded dispute',
+        dispute.ok && verifyDispute(dispute.dispute, { close: close3a }).ok
+          && verifyDispute(dispute.dispute, { close: close3a, registry: verifierRegistry3a, requireRegistered: true }).ok);
+      t('a tampered dispute kind invalidates the dispute (id and signature both bind it)',
+        !verifyDispute({ ...dispute.dispute, kind: 'false-claim' }, { close: close3a }).ok);
+      t('an unregistered verifier cannot submit',
+        verifyDispute(dispute.dispute, { close: close3a, registry: new Map(), requireRegistered: true }).code === 'UNREGISTERED_VERIFIER');
+      t('a future-dated dispute observation is refused',
+        verifyDispute({ ...dispute.dispute, observedAt: now + 5000 }, { close: close3a }).code === 'BAD_OBSERVED_AT');
+      t('a dispute must target the sealed selection',
+        verifyDispute({ ...dispute.dispute, entryHash: `0x${'ab'.repeat(32)}` }, { close: close3a }).code === 'BAD_SELECTION_BINDING');
+
+      const falseClaimDispute = buildDispute({
+        close: close3a, kind: 'false-claim', observedAt: now + 2
+      }, verifier3a, vKeys.privateKey).dispute;
+      const gradeContested = gradeExecution({
+        commitment: signed3a, claim: filledClaim.claim, disputes: [falseClaimDispute], nowSeconds: now, graceSeconds: 300
+      });
+      t('a verifier contradiction parks the grade at contested, half the bond',
+        gradeContested.verdict === 'contested' && gradeContested.penaltyBps === 5000);
+
+      /* ---- adjudication ---- */
+      const bond3a = parseBondRegistry().get(solver3a.id);
+      const adjudicated = buildAdjudication({
+        close: close3a, commitment: signed3a, claim: filledClaim.claim, disputes: [],
+        bond: bond3a,
+        coordinator: { id: 'unit-coordinator-3a', publicKey: cKeys.publicKey, privateKey: cKeys.privateKey },
+        solverRegistry: solverRegistryOnly,
+        now: nowMs
+      });
+      t('the coordinator signs a recomputable adjudication',
+        adjudicated.ok && adjudicated.adjudication.verdict === 'fulfilled'
+          && adjudicated.adjudication.penaltyBps === 0 && adjudicated.adjudication.penaltyUsd === '0'
+          && adjudicated.adjudication.bond.bonded === true);
+      t('adjudication verification recomputes grade, penalty and bonding',
+        verifyAdjudication(adjudicated.adjudication, { close: close3a }).ok);
+      t('a tampered adjudication verdict fails the recompute check',
+        verifyAdjudication({ ...adjudicated.adjudication, verdict: 'failed' }, { close: close3a })
+          .code === 'ADJUDICATION_RECOMPUTE_MISMATCH');
+      t('an adjudication cannot claim custody or on-chain enforcement',
+        verifyAdjudication({
+          ...adjudicated.adjudication,
+          claims: { ...adjudicated.adjudication.claims, custody: true }
+        }, { close: close3a }).code === 'ADJUDICATION_CLAIMS_MISMATCH');
+      t('an adjudication from another close is refused',
+        !verifyAdjudication(adjudicated.adjudication, {
+          close: { ...close3a, intentHash: `0x${'f8'.repeat(32)}` }
+        }).ok);
+      const deterministicAgain = buildAdjudication({
+        close: close3a, commitment: signed3a, claim: filledClaim.claim, disputes: [],
+        bond: bond3a,
+        coordinator: { id: 'unit-coordinator-3a', publicKey: cKeys.publicKey, privateKey: cKeys.privateKey },
+        solverRegistry: solverRegistryOnly,
+        now: nowMs
+      });
+      t('adjudication bytes are deterministic for identical inputs',
+        JSON.stringify(adjudicated.adjudication) === JSON.stringify(deterministicAgain.adjudication));
+      const unbondedAdjudication = buildAdjudication({
+        close: close3a, commitment: signed3a, claim: filledClaim.claim, disputes: [],
+        bond: null,
+        coordinator: { id: 'unit-coordinator-3a', publicKey: cKeys.publicKey, privateKey: cKeys.privateKey },
+        solverRegistry: solverRegistryOnly,
+        now: nowMs
+      });
+      t('an unbonded solver gets a bonded:false record with no invented penalty',
+        unbondedAdjudication.ok && unbondedAdjudication.adjudication.bond.bonded === false
+          && unbondedAdjudication.adjudication.penaltyUsd === null);
+      t('adjudication refuses to grade an open execution window',
+        buildAdjudication({
+          close: close3a, commitment: signed3a, claim: null, disputes: [],
+          bond: bond3a,
+          coordinator: { id: 'unit-coordinator-3a', publicKey: cKeys.publicKey, privateKey: cKeys.privateKey },
+          solverRegistry: solverRegistryOnly,
+          now: nowMs
+        }).code === 'EXECUTION_WINDOW_OPEN');
+
+      /* ---- immutable storage: idempotent replay, conflict on drift ---- */
+      const storedClaim = await storeExecutionClaim(close3a.closeId, filledClaim.claim);
+      const storedClaimAgain = await storeExecutionClaim(close3a.closeId, filledClaim.claim);
+      t('execution claims store immutably and replay idempotently',
+        storedClaim.ok && storedClaimAgain.ok && storedClaimAgain.alreadyStored === true);
+      t('a different claim for the same close conflicts instead of overwriting',
+        (await storeExecutionClaim(close3a.closeId, shortClaim)).code === 'EXECUTION_CLAIM_CONFLICT');
+      t('the stored claim reads back byte-identical', (await readExecutionClaim(close3a.closeId))?.claimId === filledClaim.claim.claimId);
+
+      const storedDispute = await storeDispute(close3a.closeId, dispute.dispute);
+      t('disputes store immutably and replay idempotently',
+        storedDispute.ok && (await storeDispute(close3a.closeId, dispute.dispute)).alreadyStored === true);
+      t('a different dispute from the same verifier conflicts',
+        (await storeDispute(close3a.closeId, falseClaimDispute)).code === 'DISPUTE_CONFLICT');
+
+      const storedAdj = await storeAdjudication(close3a.closeId, adjudicated.adjudication);
+      t('adjudications store immutably and replay idempotently',
+        storedAdj.ok && (await storeAdjudication(close3a.closeId, adjudicated.adjudication)).alreadyStored === true);
+      const fakeCloseId = `0x${'77'.repeat(32)}`;
+      await storeAdjudication(fakeCloseId, adjudicated.adjudication);
+      t('a different adjudication for the same close conflicts, never overwrites',
+        (await storeAdjudication(fakeCloseId, { ...adjudicated.adjudication, verdict: 'failed' }))
+          .code === 'ADJUDICATION_CONFLICT');
+    } finally {
+      if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
+      else process.env.INTENT_COORDINATOR_ID = prevCoordId;
+      if (prevCoordKey === undefined) delete process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+      else process.env.INTENT_COORDINATOR_PRIVATE_KEY = prevCoordKey;
+      if (savedBonds === undefined) delete process.env.INTENT_SOLVER_BONDS;
+      else process.env.INTENT_SOLVER_BONDS = savedBonds;
+      if (savedGrace === undefined) delete process.env.INTENT_EXECUTION_GRACE_SECONDS;
+      else process.env.INTENT_EXECUTION_GRACE_SECONDS = savedGrace;
+      if (savedVerifiers === undefined) delete process.env.INTENT_VERIFIER_KEYS;
+      else process.env.INTENT_VERIFIER_KEYS = savedVerifiers;
+      if (savedSolvers === undefined) delete process.env.INTENT_SOLVER_KEYS;
+      else process.env.INTENT_SOLVER_KEYS = savedSolvers;
+    }
+  }
+
+  /* ------- Phase 3b: outcome settlement reports + independent re-grading ------ */
+  {
+    const cKeys = generateSolverKeyPair();
+    const sKeys = generateSolverKeyPair();
+    const vKeys = generateSolverKeyPair();
+    const intent3b = `0x${'3b'.repeat(32)}`;
+    const solver3b = { id: 'unit-solver-3b', name: 'Unit Solver 3B', publicKey: sKeys.publicKey, active: true };
+    const solverRegistry3b = new Map([[solver3b.id, solver3b]]);
+    const verifier3b = { id: 'unit-verifier-3b', name: 'Unit Verifier 3B', publicKey: vKeys.publicKey, active: true };
+    const verifierRegistry3b = new Map([[verifier3b.id, verifier3b]]);
+    const nowMs = Date.now();
+    const now = Math.floor(nowMs / 1000);
+
+    const signed3b = signSolverCommitment({
+      schema: 'fbt.solver-quote.v1', intentHash: intent3b, solverId: solver3b.id,
+      chainId: 42161, amountOut: '400000000000000000', maxGas: '250000', feeBps: 70, slippageBps: 50,
+      executable: true, issuedAt: now, validUntil: now + 90,
+      nonce: `0x${'b1'.repeat(16)}`, routeCommitment: `0x${'b2'.repeat(32)}`
+    }, sKeys.privateKey);
+    await appendSignedCommitment(signed3b, { registry: solverRegistry3b, now: nowMs });
+
+    const prevCoordId = process.env.INTENT_COORDINATOR_ID;
+    const prevCoordKey = process.env.INTENT_COORDINATOR_PRIVATE_KEY;
+    process.env.INTENT_COORDINATOR_ID = 'unit-coordinator-3b';
+    process.env.INTENT_COORDINATOR_PRIVATE_KEY = cKeys.privateKey;
+    try {
+      const closed3b = await closeAuction({
+        schema: 'fbt.auction-close-request.v1', intentHash: intent3b,
+        policy: { id: AUCTION_POLICY, chainId: 42161, maxFeeBps: 70, maxSlippageBps: 50 }
+      }, { now: nowMs });
+      const close3b = closed3b.close;
+      const coordinator3b = {
+        id: 'unit-coordinator-3b', publicKey: cKeys.publicKey, privateKey: cKeys.privateKey
+      };
+
+      const filled3b = buildExecutionClaim({
+        close: close3b, commitment: signed3b, outcome: 'filled',
+        txHash: `0x${'a1'.repeat(32)}`, amountReceived: '400500000000000000',
+        feeBpsCharged: 70, executedAt: now
+      }, solver3b, sKeys.privateKey).claim;
+      const short3b = buildExecutionClaim({
+        close: close3b, commitment: signed3b, outcome: 'filled',
+        txHash: `0x${'a2'.repeat(32)}`, amountReceived: '390000000000000000',
+        feeBpsCharged: 70, executedAt: now
+      }, solver3b, sKeys.privateKey).claim;
+
+      const settled = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: filled3b, disputes: [],
+        adjudication: null, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('a fulfilled settlement re-grades as fulfilled with zero shortfall',
+        settled.ok && settled.verdict === 'fulfilled'
+          && settled.shortfallUnits === '0' && settled.shortfallBps === 0
+          && settled.deliveredOut === '400500000000000000'
+          && settled.quotedMinOut === '398000000000000000');
+
+      const shortSettled = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        adjudication: null, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('a short settlement measures the exact shortfall in units and bps',
+        shortSettled.ok && shortSettled.verdict === 'short-filled'
+          && shortSettled.shortfallUnits === '10000000000000000'
+          && shortSettled.shortfallBps === 250);
+
+      t('an open deadline still settles as pending, never adverse',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: null, disputes: [], adjudication: null, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .verdict === 'pending');
+      t('a passed deadline without a claim settles as unexecuted',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: null, disputes: [], adjudication: null, evaluatedAtSeconds: now + 500, graceSeconds: 300 })
+          .verdict === 'unexecuted');
+
+      const adjudication3b = buildAdjudication({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        bond: null, coordinator: coordinator3b, solverRegistry: solverRegistry3b, now: nowMs
+      }).adjudication;
+      const consistent = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        adjudication: adjudication3b, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('a settlement report cross-checks a reproducing adjudication',
+        consistent.ok && consistent.adjudicationConsistent === true && consistent.verdict === 'short-filled');
+      const mismatched = evaluateSettlement({
+        close: close3b, commitment: signed3b, claim: filled3b, disputes: [],
+        adjudication: adjudication3b, evaluatedAtSeconds: now, graceSeconds: 300
+      });
+      t('an adjudication that does not reproduce is misconduct evidence',
+        mismatched.ok && mismatched.adjudicationConsistent === false
+          && mismatched.verdict === 'adjudication-mismatch');
+
+      t('settlement evaluation fails closed on a forged close',
+        evaluateSettlement({ close: { ...close3b, logRoot: `0x${'99'.repeat(32)}` }, commitment: signed3b, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'INVALID_AUCTION_CLOSE');
+      t('settlement evaluation fails closed on a non-selected commitment',
+        evaluateSettlement({ close: close3b, commitment: { ...signed3b, amountOut: '1' }, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'BAD_COMMITMENT_BINDING');
+      t('settlement evaluation fails closed on a tampered claim',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: { ...filled3b, amountReceived: '1' }, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'BAD_EXECUTION_CLAIM');
+      t('settlement evaluation fails closed on a forged adjudication',
+        evaluateSettlement({ close: close3b, commitment: signed3b, claim: short3b, adjudication: { ...adjudication3b, verdict: 'failed' }, evaluatedAtSeconds: now, graceSeconds: 300 })
+          .code === 'BAD_ADJUDICATION');
+
+      const built3b = buildSettlementReport({
+        close: close3b, commitment: signed3b, claim: short3b, disputes: [],
+        adjudication: adjudication3b, verifier: verifier3b, privateKey: vKeys.privateKey,
+        graceSeconds: 300, evaluatedAt: nowMs
+      });
+      t('a verifier signs a submittable settlement report',
+        built3b.ok && built3b.report.verdict === 'short-filled' && built3b.report.adjudicationConsistent === true);
+      t('a correctly recomputing report verifies for a registered verifier',
+        verifySettlementReport(built3b.report, { registry: verifierRegistry3b, close: close3b, requireRegistered: true }).ok);
+      t('third parties verify settlement reports offline with no registry',
+        verifySettlementReport(built3b.report, { close: close3b }).ok);
+      t('an unregistered verifier cannot submit settlement reports',
+        verifySettlementReport(built3b.report, { registry: new Map(), close: close3b, requireRegistered: true }).code === 'UNREGISTERED_VERIFIER');
+      t('a tampered verdict is caught by deterministic recompute',
+        verifySettlementReport({ ...built3b.report, verdict: 'fulfilled' }, { close: close3b }).code === 'REPORT_RECOMPUTE_MISMATCH');
+      t('a tampered shortfall is caught by deterministic recompute',
+        verifySettlementReport({ ...built3b.report, shortfallBps: 999 }, { close: close3b }).code === 'REPORT_RECOMPUTE_MISMATCH');
+      t('a settlement report cannot claim on-chain verification',
+        verifySettlementReport({
+          ...built3b.report,
+          claims: { ...built3b.report.claims, onChainTxVerified: true }
+        }, { close: close3b }).code === 'REPORT_CLAIMS_MISMATCH');
+
+      t('settlement stays unmonitored without any verifier evidence',
+        settlementSummary([]).status === 'unmonitored');
+      t('a fulfilled report upgrades the settlement status to fulfilled',
+        settlementSummary([{ ...built3b.report, verdict: 'fulfilled' }]).status === 'fulfilled');
+      t('a pending report reads as pending, never settled',
+        settlementSummary([{ ...built3b.report, verdict: 'pending' }]).status === 'pending');
+      t('any adverse verdict dominates a fulfilled one',
+        settlementSummary([{ ...built3b.report, verdict: 'fulfilled' }, { ...built3b.report, verdict: 'unexecuted' }]).status === 'adverse');
+      t('an adjudication mismatch dominates every other verdict',
+        settlementSummary([{ ...built3b.report, verdict: 'fulfilled' }, { ...built3b.report, verdict: 'adjudication-mismatch' }]).status === 'adjudication-mismatch');
+
+      const stored3b = await storeSettlementReport(intent3b, built3b.report);
+      const stored3bAgain = await storeSettlementReport(intent3b, built3b.report);
+      t('settlement reports store immutably and replay idempotently',
+        stored3b.ok && stored3bAgain.ok && stored3bAgain.alreadyReported === true);
+      const listed3b = await readSettlementReports(intent3b, close3b);
+      t('stored settlement reports re-verify against the signed close on read',
+        listed3b.reports?.length === 1 && listed3b.reports[0].report.reportId === built3b.report.reportId);
     } finally {
       if (prevCoordId === undefined) delete process.env.INTENT_COORDINATOR_ID;
       else process.env.INTENT_COORDINATOR_ID = prevCoordId;

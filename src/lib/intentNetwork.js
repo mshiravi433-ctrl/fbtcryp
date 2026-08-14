@@ -21,6 +21,7 @@ export const getIntentCapabilities = () => get('/intents/v1/capabilities');
 export const getRegisteredSolvers = () => get('/intents/v1/solvers');
 export const getAuctionCoordinator = () => get('/intents/v1/coordinator');
 export const getAnchorNetworks = () => get('/intents/v1/anchor-networks');
+export const getBondBoard = () => get('/intents/v1/bonds');
 
 function checkedIntentHash(intentHash) {
   if (!/^0x[a-fA-F0-9]{64}$/.test(String(intentHash || ''))) throw new Error('BAD_INTENT_HASH');
@@ -50,5 +51,24 @@ export function getAdmissionReceipt(intentHash, entryHash) {
 /* Verified watcher reports + the derived per-auction completeness status. */
 export function getWatcherReports(intentHash) {
   try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/watcher-reports`); }
+  catch (error) { return Promise.reject(error); }
+}
+
+/* Phase 3a: the winning solver's signed execution claim for a sealed close. */
+export function getExecutionClaim(intentHash) {
+  try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/execution-claim`); }
+  catch (error) { return Promise.reject(error); }
+}
+
+/* Phase 3a: the coordinator-signed outcome adjudication (penalty evidence). */
+export function getAdjudication(intentHash) {
+  try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/adjudication`); }
+  catch (error) { return Promise.reject(error); }
+}
+
+/* Phase 3b: independent verifier settlement reports + the derived per-auction
+   settlement status (promised vs delivered, adjudication cross-check). */
+export function getSettlementReports(intentHash) {
+  try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/settlement-reports`); }
   catch (error) { return Promise.reject(error); }
 }

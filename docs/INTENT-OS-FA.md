@@ -131,17 +131,30 @@ POST /api/intents/v1/validate
 
 اولی قابلیت‌ها و محدودیت‌ها را منتشر می‌کند. دومی Envelope بیرونی Intent را بدون گرفتن کلید، پول یا Calldata اعتبارسنجی می‌کند.
 
+پس از Phase 3a سطح عمومی این‌ها را هم دارد — همگی شواهد پس از بستن مزایده، نه Bid:
+
+```http
+GET  /api/intents/v1/bonds
+POST /api/intents/v1/auctions/{intentHash}/execution-claims
+POST /api/intents/v1/auctions/{intentHash}/disputes
+POST /api/intents/v1/auctions/{intentHash}/adjudicate   (فقط اپراتور، با Bearer)
+```
+
 عمداً endpoint عمومی Bid/Execution باز نشده است؛ چون پیش از آن باید این موارد وجود داشته باشد:
 
 - Solver authentication
 - Quote commitment امضاشده
 - Nonce و replay protection
-- Bond / stake
+- Bond / stake — از Phase 3a به‌صورت اعلام‌شده (بدون escrow آن‌چین)
 - Timeout و cancellation rules
-- Dispute mechanism
+- Dispute mechanism — از Phase 3a برای اجرای پس از انتخاب
 - Rate limit و anti-spam اقتصادی
 
 باز کردن `POST /bids` بدون این موارد شبکه Solver نیست؛ سطح حمله است.
+
+### ۷. وثیقهٔ اعلام‌شده و تسویهٔ نتیجه (Phase 3)
+
+از Phase 3 هر نتیجهٔ اجرا قابل ادعا و قابل راستی‌آزمایی است: سالور برنده ادعای اجرای امضاشده می‌دهد، راستی‌آزمای مستقل می‌تواند اعتراض کند، Coordinator داوری قطعی جریمه امضا می‌کند و گزارش‌های تسویهٔ مستقل، «وعده در برابر تحویل» را بازمحاسبه و کنترل متقاطع می‌کنند. وثیقه‌ها **اعلام عمومی**‌اند (بدون escrow آن‌چین و بدون نگهداری وجوه توسط FBT) — جزئیات در بخش‌های «وضعیت دقیق Phase 3a» و «وضعیت دقیق Phase 3b».
 
 ---
 
@@ -162,11 +175,11 @@ POST /api/intents/v1/validate
 
 Solver اکنون `fbt.solver-quote.v1` را پیش از Deadline با Ed25519 امضا می‌کند؛ پیام علاوه بر مبلغ و Gas، Fee، Slippage، Chain، `intentHash`، `routeCommitment`، زمان صدور، انقضا و nonce را نیز می‌بندد. Bidها وارد Transparency log غیرقابل‌overwrite می‌شوند و رسید پایان Coordinator ریشه، Policy و انتخاب را امضا می‌کند.
 
-ریشهٔ رسید بسته‌شده می‌تواند در قرارداد permissionless `IntentAuctionAnchor` ثبت و event آن مستقل از سرور بررسی شود. از Phase 2c هر پذیرش یک رسید تراکنشی امضاشده دارد و ناظران مستقل کامل‌بودن مجموعهٔ بسته‌شده را با گزارش قابل‌بازمحاسبه داوری می‌کنند. استاندارد کامل هنوز به این موارد نیاز دارد:
+ریشهٔ رسید بسته‌شده می‌تواند در قرارداد permissionless `IntentAuctionAnchor` ثبت و event آن مستقل از سرور بررسی شود. از Phase 2c هر پذیرش یک رسید تراکنشی امضاشده دارد و ناظران مستقل کامل‌بودن مجموعهٔ بسته‌شده را با گزارش قابل‌بازمحاسبه داوری می‌کنند. از Phase 3a سالور برنده ادعای اجرای امضاشده (`fbt.execution-claim.v1`) می‌دهد و Coordinator نتیجه را مقابل حداقل خروجی امضاشده قطعی داوری می‌کند. استاندارد کامل هنوز به این موارد نیاز دارد:
 
 - ~~Admission تراکنشی یا Watchtower مستقل برای اثبات completeness~~ — تحویل‌شده در Phase 2c (رسید `fbt.admission-receipt.v1` + گزارش `fbt.completeness-report.v1`)؛
-- اتصال رسید انتخاب به Settlement واقعی و مقدار دریافتی؛
-- Bond و dispute rule برای Quote غیرقابل‌اجرا؛
+- ~~اتصال رسید انتخاب به Settlement واقعی و مقدار دریافتی~~ — Phase 3a ادعای اجرای امضاشده را به مبلغ دریافتی وصل کرد؛ راستی‌آزمایی مستقل کیفیت آن Phase 3b است؛
+- ~~Bond و dispute rule برای Quote غیرقابل‌اجرا~~ — تحویل‌شده در Phase 3a (وثیقهٔ اعلام‌شده + داوری قطعی جریمه؛ وصول خارج از پروتکل)؛
 - Verifier مستقل و امکان rotation امن کلید Coordinator.
 
 بدون امضای Solver، امضای Close یا Anchor مستقل، SHA-256 به‌تنهایی فقط fingerprint محتواست؛ کسی که کل سند را عوض کند می‌تواند هش تازه هم بسازد.
@@ -211,7 +224,7 @@ Solver باید بتواند روش خود را پنهان نگه دارد ول�
 - collateral/bond
 - failure penalty
 
-تا وقتی Bond و Settlement Adapter وجود ندارد، Intent نوع Outcome فقط Draft است. نشان‌دادن سه Quote ساختگی به‌عنوان «رقابت Solverها» ممنوع است.
+Phase 3a/3b وثیقهٔ اعلام‌شده، داوری جریمه و گزارش تسویهٔ قابل‌بازمحاسبه را آوردند؛ ولی **Settlement Adapter واقعی** — مسیری که پول را به نتیجه برساند — هنوز وجود ندارد. پس Intent نوع Outcome همچنان فقط Draft است. نشان‌دادن سه Quote ساختگی به‌عنوان «رقابت Solverها» ممنوع است.
 
 ## ۴. DEX-to-DEX Network
 
@@ -270,7 +283,10 @@ Phase 1  — local compiler + risk + real quote trace + receipts       [انجا
 Phase 2a — signed solver commitments + immutable transparency log    [انجام شده]
 Phase 2b — signed selection close + verified optional EVM anchor      [انجام شده]
 Phase 2c — transactional admission + independent completeness watcher [انجام شده]
-Phase 3  — bonded open solver network + outcome settlement            [مرحله بعد]
+Phase 3a — declared solver bonds + execution claims + disputes +
+           deterministic penalty adjudication                        [انجام شده]
+Phase 3b — outcome settlement reports + independent re-grading +
+           offline settlement CLI                                    [انجام شده]
 Phase 4  — atomic same-chain workflows + cross-chain state machine
 Phase 5  — threshold-encrypted confidential intents
 Phase 6  — independent verifiers and standardisation
@@ -394,7 +410,105 @@ node scripts/intent-watchtower.mjs collect https://your-fbt-host $INTENT_HASH ou
 - رسید پذیرش ورود به مجموعهٔ بسته را «تضمین» نمی‌کند؛ سانسور را **قابل‌اثبات** می‌کند، نه غیرممکن؛
 - کلیدهای ناظر در env یک deployment تعریف می‌شوند — استقلال واقعی نیازمند اپراتور مستقلِ واقعی پشت هر کلید است، نه صرفاً فیلد Registry؛
 - ترتیب بین نمونه‌های سرورلس بر ساعت تکیه دارد، پس پنجرهٔ skew صادقانه نامشخص باقی می‌ماند؛
-- Watchtower کامل‌بودن را می‌سنجد، نه کیفیت Route یا Settlement را؛ Bond، dispute و تسویهٔ Outcome در Phase 3 است.
+- Watchtower کامل‌بودن را می‌سنجد، نه کیفیت Route یا Settlement را؛ Bond و dispute در Phase 3a آمده‌اند (اعلام‌شده، بدون نگهداری وجوه) و گزارش‌های مستقل تسویهٔ نتیجه در Phase 3b تحویل شده‌اند (بخش بعد).
+
+### وضعیت دقیق Phase 3a — شبکهٔ سالور وثیقه‌دار + ادعای اجرا، اختلاف و داوری جریمه
+
+Phase 3a نیمهٔ اول «bonded open solver network + outcome settlement» است: از این پس «Quote برنده اجرا نشد» یک وضعیت بی‌پاسخ نیست، بلکه یک مسیر قطعی داوری دارد. هر چهار بخش با همان قاعدهٔ صداقت قبلی کار می‌کنند: **FBT هیچ وجهی نگه نمی‌دارد**.
+
+#### ۱. وثیقهٔ اعلام‌شدهٔ سالورها (`fbt.solver-bond.v1`)
+
+`INTENT_SOLVER_BONDS` رجیستری بیانیه‌های عمومی وثیقه است — مبلغ، دارایی، انقضا، توضیح — بدون هیچ کلید یا رازی. بورد عمومی `GET /api/intents/v1/bonds` وضعیت صادقانهٔ هر ردیف را می‌دهد: سالور فقط وقتی `bonded` است که اعلامش بالاتر از حداقل پروتکل (۱۰۰۰ دلار) باشد، در رجیستری سالورها ثبت باشد و وثیقه منقضی نشده باشد. capabilities و بورد هر دو صریح‌اند: `enforcement: 'out-of-protocol-declared'`، `custody: false`، `onChainEscrow: false` — امضاهای پروتکل پول جابه‌جا نمی‌کنند و چنین ادعایی هم نمی‌کنند؛ وصول جریمهٔ اعلام‌شده کار لایهٔ تسویه است (قرارداد escrow، توافق، رجیستری اعتبار).
+
+#### ۲. ادعای اجرای امضاشده (`fbt.execution-claim.v1`)
+
+پس از بستن مزایده، **سالور برنده** امضا می‌کند که در عمل چه شد: هش تراکنش، زنجیره، مبلغ واقعاً دریافت‌شده، کارمزد، زمان اجرا — مقید به close، ورودی انتخاب‌شده و کلید رجیستری برنده. ادعا کلید عمومی سالور را خودش حمل می‌کند، پس بدون Registry هم آفلاین راستی‌آزمایی می‌شود. دو تضمین ساختاری:
+
+- **ادعا نمی‌تواند Quote را عریض‌تر کند:** خروجی حداقلی (`minOutFor`) از `amountOut` و `slippageBps` تعهد امضاشده بازمحاسبه می‌شود، نه از چیزی که ادعا دربارهٔ خودش می‌گوید؛
+- **ادعا راستی‌آزمایی آن‌چین ادعا نمی‌کند:** `onChainVerified: false` و `txInclusionCheck: 'not-performed'` داخل خود ادعا امضا می‌شوند — ادعا مدرک امضاشده است، نه تسویهٔ ماشین‌راستی‌آزمایی‌شده.
+
+هر close فقط یک شیار ادعای تغییرناپذیر دارد: بازپخش یکسان idempotent است و ادعای دومِ متفاوت conflict می‌گیرد، نه بازنویسی.
+
+#### ۳. اختلاف راستی‌آزمای مستقل (`fbt.dispute.v1`)
+
+`INTENT_VERIFIER_KEYS` کلیدهای عمومی راستی‌آزمایان مستقل را ثبت می‌کند (همان قالب رجیستری سالورها؛ بدون هیچ کلید خصوصی). اختلاف یک مشاهدهٔ امضاشده و کران‌دار است — `no-execution`، `short-fill`، `false-claim`، `late-execution` — و هرگز خودش رأی نیست؛ موتور درجه‌بندی قطعی معنی آن را تعیین می‌کند.
+
+#### ۴. داوری قطعی جریمه (`fbt.adjudication.v1`)
+
+با همان Bearer اپراتورِ بستن مزایده، Coordinator شواهد تغییرناپذیر را بازخوانی می‌کند، با موتور مشترک قطعی درجه‌بندی می‌کند و نتیجه را امضا می‌کند. جدول جریمه (نسبت به وثیقهٔ اعلام‌شده):
+
+| وضعیت | جریمه |
+|---|---|
+| `fulfilled` (دریافتی ≥ حداقل امضاشده) | ۰٪ |
+| `short-filled` خودگزارش‌شده | ۲۵٪ |
+| `short-filled` لو رفته (ادعای filled غلط) | ۵۰٪ |
+| `failed` خودگزارش‌شده (reverted/expired) | ۵۰٪ |
+| `failed` لو رفته (برچسب غلط یا اجرای پس از پنجره) | ۱۰۰٪ |
+| `unexecuted` (پس از مهلت، بدون ادعا) | ۱۰۰٪ |
+| `contested` (تناقض راستی‌آزمای ثبت‌شده) | ۵۰٪ |
+
+خودگزارشی شکست، جریمه را نصف می‌کند — انگیزهٔ اعتراف صادقانه بدون نیاز به اوراکل. تا وقتی پنجرهٔ اجرا باز است (`validUntil + INTENT_EXECUTION_GRACE_SECONDS`، پیش‌فرض ۳۰۰ ثانیه) داوری با `EXECUTION_WINDOW_OPEN` رد می‌شود؛ هیچ‌کس پیش از مهلت «گناهکار» اعلام نمی‌شود. سالور بدون وثیقه `bonded: false` و `penaltyUsd: null` می‌گیرد — جریمهٔ ساختگی هرگز ساخته نمی‌شود.
+
+رکورد داوری **همهٔ ورودی‌هایش را داخل خودش حمل می‌کند** (تعهد انتخاب‌شده، ادعا، اختلاف‌ها)، پس هر شخص ثالث `verifyAdjudication` را بازمحاسبه می‌کند: حکم، جریمه و bonded بودن باید دقیقاً بازتولید شوند؛ رکوردی که بازمحاسبه نشود حتی با امضای معتبر Coordinator رد می‌شود. داوری عکس لحظه‌ای است (غیرقابل‌بازنویسی)؛ ادعایی که بعد از آن برسد، به‌جای بازنویسی تاریخ، یک تناقض قابل‌راستی‌آزمایی می‌سازد — که گزارش‌های Phase 3b آن را ردیف می‌کنند.
+
+#### ۵. وضعیت زندهٔ اجرای هر مزایده
+
+`GET /api/intents/v1/auctions/:intentHash` حالا بلوک `execution` (ادعا + وضعیت راستی‌آزمایی)، فهرست `disputes` و `adjudication` (+`adjudicationVerified`) را برمی‌گرداند و هر بار مقابل Close امضاشده دوباره راستی‌آزمایی می‌شوند. capabilities بلوک‌های `bonds` و `execution` را منتشر می‌کند؛ با رجیستری خالی همه‌چیز صادقانه `configured: false` می‌شود.
+
+محدودیت‌های صادقانهٔ Phase 3a:
+
+- **وثیقه اعلام است، نه گرو واقعی:** پروتکل وجوه وثیقه را نگه نمی‌دارد، منتقل نمی‌کند و وصول جریمه را اجرا نمی‌کند؛ خروجی داوری یک دستورِ مدرک‌دارِ امضاشده است برای لایهٔ تسویهٔ خارج از پروتکل؛
+- ادعاها **راستی‌آزمایی آن‌چین** نمی‌شوند (بدون RPC و بدون رمزگشایی receipt) — کیفیت ادعاها از Phase 3b با گزارش‌های مستقلِ قابل‌بازمحاسبه پیگیری می‌شود، نه با ادعای کاذب آن‌چین؛
+- راستی‌آزمایان در env یک deployment ثبت می‌شوند — استقلال واقعی مثل ناظران، به اپراتور مستقل واقعی پشت هر کلید بستگی دارد؛
+- پولِ هیچ‌کس، از جمله وثیقه، هرگز در مسیر این endpointها جابه‌جا نمی‌شود.
+
+### وضعیت دقیق Phase 3b — گزارش تسویهٔ نتیجه + درجه‌بندی مجدد مستقل
+
+Phase 3b نیمهٔ دوم و پایانی فاز ۳ است: حالا **کیفیت اجرا و تسویه هم قابل ادعا و قابل راستی‌آزمایی است**، نه فقط کامل‌بودن مجموعه. گزارش تسویه (`fbt.settlement-report.v1`) همان کاری را برای نتیجهٔ اجرا می‌کند که گزارش کامل‌بودن برای مجموعهٔ بسته‌شده انجام می‌دهد — با یک تفاوت مهم: این‌جا مرجعِ درجه‌بندی فقط امضاها نیست، **حساب تسویه** است.
+
+#### ۱. حساب تسویه: وعده در برابر تحویل
+
+گزارش از روی همان شواهدِ داوری بازمحاسبه می‌شود و عددها را منتشر می‌کند:
+
+```text
+quotedMinOut  = floor(amountOut × (10000 − slippageBps) / 10000)   ← تعهد امضاشده
+promisedOut   = amountOut تعهد امضاشده
+deliveredOut  = amountReceived ادعای امضاشده
+shortfall     = promisedOut − deliveredOut   (واحد توکن + bps)
+```
+
+حکم قطعی: `fulfilled`، `short-filled`، `failed`، `unexecuted`، `pending`، `contested` — و زمان ارزیابی داخل خود گزارش امضا می‌شود، پس گزارش ذخیره‌شده همیشه بازتولید می‌شود؛ پنجرهٔ pending هیچ‌وقت به شواهدی تبدیل نمی‌شود که در زمان گزارش وجود نداشته است.
+
+#### ۲. کنترل متقاطع داوری (`adjudication-mismatch`)
+
+اگر گزارش، داوری ذخیره‌شدهٔ Coordinator را هم داخل خودش حمل کند و حکم آن داوری از همان شواهد بازتولید نشود، حکم گزارش `adjudication-mismatch` می‌شود: دو بیانیهٔ امضاشده — داوری و قواعد قطعی — با هم تناقض دارند، یعنی مدرک سخت سوءرفتار، دقیقاً هم‌ردهٔ رسید پذیرشی که از مجموعهٔ بسته حذف شده است. یک مثال واقعی: سالور ادعای `filled` می‌دهد و داوری بر آن اساس `fulfilled` امضا می‌شود؛ راستی‌آزمای مستقل ادعای امضاشدهٔ دیگری از همان سالور با مبلغ کمتر مشاهده کرده است — گزارشِ او `short-filled` بازمحاسبه می‌شود و تناقض را روی وضعیت عمومی مزایده می‌آورد.
+
+#### ۳. سرور پیش از ذخیره، بازمحاسبه می‌کند
+
+`POST /api/intents/v1/auctions/{intentHash}/settlement-reports` مثل گزارش‌های ناظر رفتار می‌کند: امضای راستی‌آزما کافی نیست؛ حکم، اعداد کسری و کنترل متقاطع باید دقیقاً از شواهد تعبیه‌شده بازتولید شوند وگرنه گزارش حتی با کلید معتبر رد می‌شود. ذخیره غیرقابل‌بازنویسی است و reportId یکتا بازپخش idempotent دارد. `GET …/settlement-reports` هر بار دوباره راستی‌آزمایی می‌کند.
+
+#### ۴. وضعیت زندهٔ تسویهٔ هر مزایده
+
+`GET /api/intents/v1/auctions/{intentHash}` حالا بلوک `settlement` دارد: `unmonitored` ← `fulfilled` / `pending` / `adverse` / `adjudication-mismatch`. اولویت محافظه‌کارانه است: mismatch بر همه غالب است، هر حکم adverse بر fulfilled غالب است و صفر گزارش هرگز «تسویه‌شده» خوانده نمی‌شود. دامنه صادقانه اعلام می‌شود: `observed-evidence-only` — فقط شواهدی که راستی‌آزمایان واقعاً دیده‌اند.
+
+#### ۵. CLI آفلاین مستقل
+
+```bash
+node scripts/intent-settler.mjs min-out commitment.json
+node scripts/intent-settler.mjs verify-claim claim.json close.json commitment.json
+node scripts/intent-settler.mjs grade close.json commitment.json --claim claim.json --adjudication adjudication.json
+INTENT_VERIFIER_PRIVATE_KEY='…' INTENT_VERIFIER_ID='verify-coop' \
+  node scripts/intent-settler.mjs report close.json commitment.json --claim claim.json > report.json
+node scripts/intent-settler.mjs verify-report report.json close.json
+node scripts/intent-settler.mjs collect https://your-fbt-host $INTENT_HASH out.json
+```
+
+محدودیت‌های صادقانهٔ Phase 3b — و کل Phase 3:
+
+- **تسویه یعنی «مدرک قطعی نتیجه»، نه انتقال خودکار وجوه:** پروتکل هیچ‌جا پول جابه‌جا نمی‌کند؛ نه در وثیقه، نه در وصول جریمه، نه در تسویه. `custody: false` و `onChainTxVerified: false` داخل خود رکوردها امضا می‌شوند؛
+- مقدار «تحویل‌شده» از **ادعای امضاشدهٔ سالور** می‌آید، نه از رمزگشایی receipt آن‌چین — راستی‌آزمایان مستقل و کنترل متقاطع داوری، خطای ادعا را به مدرک تبدیل می‌کنند ولی ادعای کاذبِ یک‌جانبه را ناممکن نمی‌کنند؛
+- راستی‌آزمایان واقعاً مستقل هنوز به اپراتورهای واقعی پشت کلیدها بستگی دارند؛ Registry به‌تنهایی استقلال نمی‌سازد؛
+- `POST /bids` همچنان بسته است؛ شبکهٔ سالور تا آن موقع از مسیر امضاشدهٔ Quote → Close → Claim → Adjudication → Settlement Report کار می‌کند.
 
 ---
 
