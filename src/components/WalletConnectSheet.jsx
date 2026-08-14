@@ -15,6 +15,42 @@ import {
 import { IconKey, IconLink, IconLock, IconPlus, IconWallet } from './Icons';
 
 /**
+ * EIP-6963 multi-provider discovery. Returns an array of {uuid, info, provider}
+ * from the page's announced wallets. Subscribe on mount; unsub on unmount.
+ */
+function useEip6963() {
+  const [providers, setProviders] = useState([]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const map = new Map();
+    const onAnnounce = (ev) => {
+      const { info, provider } = ev.detail || {};
+      if (!info?.uuid || !provider) return;
+      map.set(info.uuid, { info, provider });
+      setProviders(Array.from(map.values()));
+    };
+    window.addEventListener('eip6963:announceProvider', onAnnounce);
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+    return () => window.removeEventListener('eip6963:announceProvider', onAnnounce);
+  }, []);
+  return providers;
+}
+
+/** Friendly label for known EIP-6963 reverse-DNS names. */
+function providerName(info, t) {
+  if (!info) return t('wallet.injected');
+  const map = {
+    'io.metamask': 'MetaMask',
+    'com.trustwallet.app': 'Trust Wallet',
+    'me.rainbow': 'Rainbow',
+    'com.coinbase.wallet': 'Coinbase Wallet',
+    'org.uniswap.web': 'Uniswap',
+    'com.ledger': 'Ledger Live'
+  };
+  return map[info.rdns] || info.name || t('wallet.injected');
+}
+
+/**
  * Wallet onboarding. Deliberately ordered so the safest option is first and
  * visually dominant; the in-app wallet is presented with its real trade-offs
  * rather than as the friendly default.
@@ -37,6 +73,8 @@ export default function WalletConnectSheet({ open, onClose }) {
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+
+  const injected = useEip6963();
 
   const strength = passwordStrength(password);
 
@@ -133,7 +171,38 @@ export default function WalletConnectSheet({ open, onClose }) {
               <span className="pill pill-up" style={{ flexShrink: 0 }}>{t('wallet.recommended')}</span>
             </motion.button>
 
-            {typeof window !== 'undefined' && window.ethereum && (
+            {/*
+              Injected wallets: render one button per EIP-6963 announced provider,
+              falling back to a single window.ethereum button if no announcements
+              were made (older browsers / legacy dapp browsers).
+            */}
+            {injected.length > 0 ? (
+              injected.map((p) => (
+                <motion.button
+                  key={p.info.uuid}
+                  className="wallet-option"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => wallet.connectInjected(p.info.rdns).then((ok) => ok && close())}
+                  disabled={wallet.connecting}
+                >
+                  <span className="wallet-badge" style={p.info.icon ? {
+                    backgroundImage: `url(${p.info.icon})`,
+                    backgroundSize: '22px',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'center',
+                    fontSize: 0
+                  } : undefined}>
+                    {!p.info.icon && <IconWallet width={21} height={21} />}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
+                      {providerName(p.info, t)}
+                    </span>
+                    <span className="set-row-sub">{t('wallet.injectedDesc')}</span>
+                  </span>
+                </motion.button>
+              ))
+            ) : (typeof window !== 'undefined' && window.ethereum) ? (
               <motion.button
                 className="wallet-option"
                 whileTap={{ scale: 0.98 }}
@@ -144,11 +213,17 @@ export default function WalletConnectSheet({ open, onClose }) {
                   <IconWallet width={21} height={21} />
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>{t('wallet.injected')}</span>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
+                    {window.ethereum.isMetaMask
+                      ? 'MetaMask'
+                      : window.ethereum.isTrust
+                        ? 'Trust Wallet'
+                        : t('wallet.injected')}
+                  </span>
                   <span className="set-row-sub">{t('wallet.injectedDesc')}</span>
                 </span>
               </motion.button>
-            )}
+            ) : null}
 
             {hasVault() ? (
               <motion.button className="wallet-option" whileTap={{ scale: 0.98 }} onClick={() => setView('unlock')}>

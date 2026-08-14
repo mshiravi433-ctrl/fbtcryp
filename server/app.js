@@ -30,6 +30,7 @@ import { fetchAudio } from './audio.js';
 import { fetchCalm } from './calm.js';
 import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
+import { cachedWhales } from './whales.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
@@ -1811,6 +1812,46 @@ app.get('/api/search', (req, res) => {
  * decides how long to keep it, the server only decides how often to refetch.
  */
 app.get('/api/news', (_req, res) => serve(res, 1_800_000)(fetchNews, 'news'));
+
+/*
+ * WHALE TRACKING — recent large transfers across our supported chains.
+ *
+ * Real RPC/explorer data only. No fabricated events. The short TTL (60s)
+ * keeps the feed fresh without hammering public RPCs; CDN caching via
+ * s-maxage means most hits come from edge cache rather than origin.
+ *
+ * Query params:
+ *   minUsd  — minimum fiat value (default 100000)
+ *   chains  — comma-separated chain short codes (e.g. ETH,BSC,BASE)
+ *   q       — token symbol/name substring filter
+ *   since   — epoch ms, drop events older than this
+ *   vs      — fiat currency code (default usd), must be one CoinGecko prices
+ *   limit   — max events to return (default 40, cap 100)
+ */
+app.get('/api/news/whales', async (req, res) => {
+  const minUsd = Math.max(1000, Math.min(100_000_000, Number(req.query.minUsd) || 100_000));
+  const chains = String(req.query.chains || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const q = String(req.query.q || '').slice(0, 32);
+  const since = Math.max(0, Number(req.query.since) || 0);
+  const vs = String(req.query.vs || 'usd').slice(0, 8);
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 40));
+  try {
+    const { value, cached, stale } = await cachedWhales({ minUsd, chains, tokenQuery: q, since, vs, limit });
+    res.set('cache-control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=240');
+    if (stale) res.set('x-data-stale', '1');
+    if (cached) res.set('x-cache', 'HIT');
+    return res.json(value);
+  } catch (err) {
+    return res.status(502).json({
+      error: 'WHALES_UNAVAILABLE',
+      schema: 'fbt.whales.v1',
+      detail: String(err.message).slice(0, 160)
+    });
+  }
+});
 
 /*
  * CRYPTO RADIO — spoken news from real podcast feeds.

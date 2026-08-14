@@ -47,6 +47,14 @@ export function WalletProvider({ children }) {
   const signerRef = useRef(null);
   const eip1193Ref = useRef(null);
   const wcRef = useRef(null);
+  // EIP-6963 discovered injected providers. Map<uuid, { info, provider }>
+  const eip6963Ref = useRef(new Map());
+  const wcInitingRef = useRef(false);
+  const wcListenersRef = useRef(null);
+  const injectedListenersRef = useRef(null);
+  // Forwarding ref so callbacks defined early can call the latest disconnect()
+  // without creating a useCallback cycle through the deps array.
+  const disconnectRef = useRef(() => {});
 
   const chain = EVM_CHAINS[chainId] ?? EVM_CHAINS[DEFAULT_CHAIN];
 
@@ -113,33 +121,99 @@ export function WalletProvider({ children }) {
     [address, chainId, getReadProvider]
   );
 
-  /* ------------------------------- injected ------------------------------ */
+  /* ------------------------------- injected (EIP-6963 aware) -------------- */
 
-  const connectInjected = useCallback(async () => {
+  // Discover EIP-6963 providers on mount. Does NOT auto-connect; surfaces
+  // options for the connection sheet.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onAnnounce = (ev) => {
+      const { info, provider } = ev.detail || {};
+      if (!info || !provider || !info.uuid) return;
+      eip6963Ref.current.set(info.uuid, { info, provider });
+    };
+    window.addEventListener('eip6963:announceProvider', onAnnounce);
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+    return () => window.removeEventListener('eip6963:announceProvider', onAnnounce);
+  }, []);
+
+  const attachInjectedListeners = useCallback((eip) => {
+    if (!eip || !eip.on) return;
+    const onAccounts = (accs) => (accs?.length ? setAddress(accs[0]) : disconnectRef.current());
+    const onChain = (hex) => setChainId(Number(hex));
+    const onDisconnect = () => disconnectRef.current();
+    eip.on?.('accountsChanged', onAccounts);
+    eip.on?.('chainChanged', onChain);
+    eip.on?.('disconnect', onDisconnect);
+    injectedListenersRef.current = { onAccounts, onChain, onDisconnect };
+  }, []);
+
+  const detachInjectedListeners = useCallback(() => {
+    const listeners = injectedListenersRef.current;
+    const eip = eip1193Ref.current;
+    if (!listeners || !eip?.removeListener) { injectedListenersRef.current = null; return; }
+    try { eip.removeListener('accountsChanged', listeners.onAccounts); } catch { /* noop */ }
+    try { eip.removeListener('chainChanged', listeners.onChain); } catch { /* noop */ }
+    try { eip.removeListener('disconnect', listeners.onDisconnect); } catch { /* noop */ }
+    injectedListenersRef.current = null;
+  }, []);
+
+  /**
+   * Connect an injected provider. Prefer an explicit EIP-6963 provider when a
+   * wallet rdns is given (e.g. MetaMask, Trust); otherwise fall back to
+   * window.ethereum. Never assumes window.ethereum is MetaMask.
+   */
+  const connectInjected = useCallback(async (rdns) => {
     setError(null);
     setConnecting(true);
     try {
-      if (!window.ethereum) throw new Error('NO_INJECTED_WALLET');
+      // Clean up any prior listeners before reattaching.
+      detachInjectedListeners();
+
+      let target = window.ethereum;
+      // If there are multiple injected providers (EIP-6963) pick by rdns.
+      if (rdns && eip6963Ref.current.size > 0) {
+        for (const { info, provider } of eip6963Ref.current.values()) {
+          if (info.rdns === rdns) { target = provider; break; }
+        }
+      } else if (Array.isArray(window.ethereum?.providers) && window.ethereum.providers.length) {
+        // Prefer MetaMask by default when multiple providers compete and no
+        // explicit choice is given, but never assume the first is.
+        target = window.ethereum.providers.find((p) => p.isMetaMask && !p.isTrust)
+          || window.ethereum.providers.find((p) => p.isTrust)
+          || window.ethereum.providers[0];
+      }
+      if (!target) throw new Error('NO_INJECTED_WALLET');
+
       const { BrowserProvider } = await loadEthers();
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(target, 'any');
       const accounts = await provider.send('eth_requestAccounts', []);
+      if (!accounts?.[0]) throw new Error('NO_ACCOUNTS');
       const net = await provider.getNetwork();
 
-      eip1193Ref.current = window.ethereum;
+      eip1193Ref.current = target;
       signerRef.current = await provider.getSigner();
       setMode('injected');
       setAddress(accounts[0]);
       setChainId(Number(net.chainId));
       setLocked(false);
+      attachInjectedListeners(target);
       await refreshBalance(accounts[0], Number(net.chainId));
       return true;
     } catch (e) {
-      setError(e.message === 'NO_INJECTED_WALLET' ? 'NO_INJECTED_WALLET' : 'CONNECT_FAILED');
+      const msg = String(e?.message || '');
+      if (msg.includes('User rejected') || e?.code === 4001) {
+        setError('USER_REJECTED');
+      } else if (msg === 'NO_INJECTED_WALLET') {
+        setError('NO_INJECTED_WALLET');
+      } else {
+        setError('CONNECT_FAILED');
+      }
       return false;
     } finally {
       setConnecting(false);
     }
-  }, [refreshBalance]);
+  }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
 
   /* --------------------------- WalletConnect v2 -------------------------- */
 
@@ -152,8 +226,13 @@ export function WalletProvider({ children }) {
       setError('NO_WC_PROJECT_ID');
       return false;
     }
+    // Prevent double-init: EthereumProvider.init() creates a new session every
+    // time it runs, and rapid double-taps spawned two modals / two pairing URIs.
+    if (wcInitingRef.current) return false;
     setError(null);
     setConnecting(true);
+    wcInitingRef.current = true;
+    let wc;
     try {
       const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
       const { BrowserProvider } = await loadEthers();
@@ -209,7 +288,13 @@ export function WalletProvider({ children }) {
 
       const ios = isIOSDevice();
 
-      const wc = await EthereumProvider.init({
+      // If there's already a connected instance (stale session), disconnect it
+      // first so we never have two sessions fighting for the same state.
+      if (wcRef.current) {
+        try { await wcRef.current.disconnect(); } catch { /* noop */ }
+        wcRef.current = null;
+      }
+      wc = await EthereumProvider.init({
         projectId,
         chains: [DEFAULT_CHAIN],
         optionalChains: Object.keys(EVM_CHAINS).map(Number),
@@ -293,48 +378,60 @@ export function WalletProvider({ children }) {
       });
 
       /*
-       * iOS: WalletConnect's default behaviour is to navigate to the wallet
-       * through an SFSafariViewController redirect ("Redirecting to..."), which
-       * is the infamous "Loading Apple browser" screen. Setting `redirectMode:
-       * 'manual'` and firing a location change to the deeplink ourselves skips
-       * that bridge and goes straight to the wallet app. We keep QR-modal
-       * desktop behaviour untouched.
+       * Mobile deep links: encode the pairing URI EXACTLY ONCE. The prior
+       * double-encode (encodeURIComponent on a string already containing
+       * encoded components) was the cause of MetaMask reporting an invalid
+       * pairing URI on open. The user still lands in the modal's QR on
+       * desktop; only mobile gets the native deep-link.
        */
       let connected = false;
+      const wcListeners = { displayUri: null, disconnect: null, accountsChanged: null, chainChanged: null, sessionDelete: null };
+      const cleanupWcListeners = () => {
+        if (!wc) return;
+        try { wc.removeListener('display_uri', wcListeners.displayUri); } catch { /* noop */ }
+        try { wc.removeListener('disconnect', wcListeners.disconnect); } catch { /* noop */ }
+        try { wc.removeListener('accountsChanged', wcListeners.accountsChanged); } catch { /* noop */ }
+        try { wc.removeListener('chainChanged', wcListeners.chainChanged); } catch { /* noop */ }
+        try { wc.removeListener('session_delete', wcListeners.sessionDelete); } catch { /* noop */ }
+      };
       if (ios) {
-        const onDisplayUri = (uri) => {
+        wcListeners.displayUri = (uri) => {
           try {
-            // Offer all three major wallets via their universal deeplinks —
-            // iOS will resolve the one the user has installed.
+            if (!uri) return;
+            // Encode once; trust/metamask each decode their own query.
             const encoded = encodeURIComponent(uri);
-            const links = [
-              `https://metamask.app.link/wc?uri=${encoded}`,
-              `https://link.trustwallet.com/wc?uri=${encoded}`,
-              `rainbow://wc?uri=${encoded}`
-            ];
-            // Small delay so the modal has painted before navigation leaves.
+            // Small delay so the modal paints before navigation leaves.
             setTimeout(() => {
-              window.location.href = links[0];
-            }, 250);
-            void links;
+              // Prefer universal links so iOS can fall back to App Store
+              // if the wallet isn't installed. MetaMask first by default.
+              window.location.href = `https://metamask.app.link/wc?uri=${encoded}`;
+            }, 300);
           } catch {
-            /* navigation blocked; the QR code in the modal still works */
+            /* navigation blocked; QR still available */
           }
         };
-        wc.on('display_uri', onDisplayUri);
+        wc.on('display_uri', wcListeners.displayUri);
         try {
           await wc.connect();
           connected = true;
-        } finally {
-          wc.removeListener('display_uri', onDisplayUri);
+        } catch (err) {
+          cleanupWcListeners();
+          throw err;
         }
       } else {
-        await wc.connect();
-        connected = true;
+        try {
+          await wc.connect();
+          connected = true;
+        } catch (err) {
+          cleanupWcListeners();
+          throw err;
+        }
       }
-      const provider = new BrowserProvider(wc);
+      const provider = new BrowserProvider(wc, 'any');
       const signer = await provider.getSigner();
 
+      // Detach any prior injected listeners (they are for a different provider)
+      detachInjectedListeners();
       wcRef.current = wc;
       eip1193Ref.current = wc;
       signerRef.current = signer;
@@ -344,15 +441,22 @@ export function WalletProvider({ children }) {
       setLocked(false);
       await refreshBalance(await signer.getAddress(), Number(wc.chainId));
 
-      wc.on('disconnect', () => disconnect());
-      wc.on('accountsChanged', (accs) => (accs?.[0] ? setAddress(accs[0]) : disconnect()));
-      wc.on('chainChanged', (cid) => setChainId(Number(cid)));
+      wcListeners.disconnect = () => disconnectRef.current();
+      wcListeners.accountsChanged = (accs) => (accs?.[0] ? setAddress(accs[0]) : disconnectRef.current());
+      wcListeners.chainChanged = (cid) => setChainId(Number(cid));
+      wcListeners.sessionDelete = () => disconnectRef.current();
+      wc.on('disconnect', wcListeners.disconnect);
+      wc.on('accountsChanged', wcListeners.accountsChanged);
+      wc.on('chainChanged', wcListeners.chainChanged);
+      wc.on('session_delete', wcListeners.sessionDelete);
+      wcListenersRef.current = { cleanup: cleanupWcListeners };
       return true;
     } catch (e) {
-      setError(e?.message?.includes('User rejected') ? 'USER_REJECTED' : 'CONNECT_FAILED');
+      setError(e?.message?.includes('User rejected') || e?.code === 4001 ? 'USER_REJECTED' : 'CONNECT_FAILED');
       return false;
     } finally {
       setConnecting(false);
+      wcInitingRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshBalance]);
@@ -443,11 +547,12 @@ export function WalletProvider({ children }) {
   /* ------------------------------ disconnect ----------------------------- */
 
   const disconnect = useCallback(() => {
-    try {
-      wcRef.current?.disconnect?.();
-    } catch {
-      /* already gone */
-    }
+    // Clean up WalletConnect session listeners first
+    try { wcListenersRef.current?.cleanup?.(); } catch { /* noop */ }
+    wcListenersRef.current = null;
+    try { wcRef.current?.disconnect?.(); } catch { /* already gone */ }
+    // Clean up injected listeners
+    detachInjectedListeners();
     wcRef.current = null;
     eip1193Ref.current = null;
     signerRef.current = null;
@@ -457,7 +562,11 @@ export function WalletProvider({ children }) {
     setNativeBalance(null);
     setLocked(false);
     setError(null);
-  }, []);
+  }, [detachInjectedListeners]);
+
+  // Keep the forwarding ref current so listener callbacks (registered before
+  // `disconnect` is defined) always invoke the latest implementation.
+  disconnectRef.current = disconnect;
 
   /* --------------------------- network switching ------------------------- */
 
@@ -480,25 +589,36 @@ export function WalletProvider({ children }) {
     }
     try {
       await eip.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.hexId }] });
-      setChainId(targetId);
+      // chainChanged event will fire; let it update chainId rather than racing it
       return true;
     } catch (e) {
-      if (e.code === 4902) {
-        await eip.request({
-          method: 'wallet_addEthereumChain',
-          params: [
-            {
-              chainId: cfg.hexId,
-              chainName: cfg.name,
-              nativeCurrency: { name: cfg.native.symbol, symbol: cfg.native.symbol, decimals: cfg.native.decimals },
-              rpcUrls: cfg.rpc,
-              blockExplorerUrls: [cfg.explorer]
-            }
-          ]
-        });
-        setChainId(targetId);
-        return true;
+      const code = e?.code ?? e?.error?.code;
+      if (code === 4902) {
+        // Chain missing: propose adding it. Validate metadata from our own
+        // registry — never accept client-supplied RPC/explorer URLs.
+        try {
+          await eip.request({
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: cfg.hexId,
+                chainName: cfg.name,
+                nativeCurrency: {
+                  name: cfg.native.symbol,
+                  symbol: cfg.native.symbol,
+                  decimals: cfg.native.decimals
+                },
+                rpcUrls: cfg.rpc,
+                blockExplorerUrls: [cfg.explorer]
+              }
+            ]
+          });
+          return true;
+        } catch (addErr) {
+          return false;
+        }
       }
+      // 4001 = user rejected; -32002 = request already pending; both non-fatal
       return false;
     }
   }, [getReadProvider]);
@@ -526,18 +646,8 @@ export function WalletProvider({ children }) {
     if (address) useAppStore.getState().completeQuest('connectWallet');
   }, [address]);
 
-  useEffect(() => {
-    const eip = window.ethereum;
-    if (!eip || mode !== 'injected') return undefined;
-    const onAccounts = (accs) => (accs?.length ? setAddress(accs[0]) : disconnect());
-    const onChain = (hex) => setChainId(parseInt(hex, 16));
-    eip.on?.('accountsChanged', onAccounts);
-    eip.on?.('chainChanged', onChain);
-    return () => {
-      eip.removeListener?.('accountsChanged', onAccounts);
-      eip.removeListener?.('chainChanged', onChain);
-    };
-  }, [mode, disconnect]);
+  // Injected listeners are attached in connectInjected() via attachInjectedListeners()
+  // and removed in disconnect() via detachInjectedListeners(). No duplicate effect here.
 
   // periodic balance refresh while connected
   useEffect(() => {

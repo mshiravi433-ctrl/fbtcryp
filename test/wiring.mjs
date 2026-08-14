@@ -9635,6 +9635,7 @@ export default function run() {
     const p2p = code(read('src/pages/P2P.jsx'));
     const news = code(read('src/pages/News.jsx'));
     t('the feed is reachable as a News tab',
+      /'read', 'whales', 'community', 'listen', 'insights', 'calm'/.test(news) ||
       /'read', 'community', 'listen', 'insights', 'calm'/.test(news));
     t('...and News actually renders the panel',
       /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
@@ -11034,7 +11035,8 @@ export default function run() {
     const css = read('src/index.css');
 
     t('News places market intelligence immediately after Radio and before Calm',
-      /\['read', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) &&
+      (/\['read', 'whales', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage) ||
+       /\['read', 'community', 'listen', 'insights', 'calm'\]/.test(newsPage)) &&
       /tab === 'insights'[\s\S]*?<MarketInsightsPanel/.test(newsPage));
     t('News keeps one feed request while the global header only reuses its cache',
       (newsPage.match(/getNews\(/g) || []).length === 1 &&

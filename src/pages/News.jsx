@@ -8,7 +8,9 @@ import RadioPanel from '../components/RadioPanel';
 import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
+import WhaleTrackingPanel from '../components/WhaleTrackingPanel';
 import SegIndicator from '../components/SegIndicator';
+import '../styles/whales.css';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { getNews } from '../lib/news';
@@ -187,7 +189,7 @@ export default function News() {
           simply what people are saying about the headlines above it, which
           is what it actually is.
         */}
-        {['read', 'community', 'listen', 'insights', 'calm'].map((k) => (
+        {['read', 'whales', 'community', 'listen', 'insights', 'calm'].map((k) => (
           <button
             key={k}
             className={tab === k ? 'active' : ''}
@@ -201,7 +203,14 @@ export default function News() {
         ))}
       </div>
 
-      {tab === 'community' ? (
+      {tab === 'whales' ? (
+        /*
+          Whale Tracking — real large-transfer feed from our own /api/news/whales
+          endpoint. Server-side caching, no fabricated events, unknown labels
+          stay "Unknown". See components/WhaleTrackingPanel.jsx.
+        */
+        <WhaleTrackingPanel />
+      ) : tab === 'community' ? (
         /*
           Read-only Farcaster feed, hosted by the protocol rather than by us:
           no storage cost, no moderation duty — see components/CommunityPanel.jsx.
