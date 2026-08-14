@@ -140,6 +140,41 @@ import {
   verifySettlementReport
 } from './intentSettlement.js';
 import { workflowProtocolStatus } from './intentWorkflow.js';
+import {
+  appendOutcomeBid,
+  buildOutcomeCompletenessReport,
+  closeOutcomeAuction,
+  issueOutcomeAdmissionReceipt,
+  outcomeCompletenessSummary,
+  outcomeProtocolStatus,
+  outcomePublicCompletenessReport,
+  outcomeSealStatus,
+  readOutcomeAuction,
+  readOutcomeCompletenessReports,
+  readOutcomeLog,
+  readOutcomeLogEntry,
+  storeOutcomeCompletenessReport,
+  verifyOutcomeAdmissionReceipt,
+  verifyOutcomeClose,
+  verifyOutcomeCompletenessReport
+} from './intentOutcome.js';
+import { verifyOutcomeBid } from './outcomeBids.js';
+import {
+  buildIntentCommitment,
+  buildIntentReveal,
+  intentCommitmentStatus,
+  readCommitment,
+  readCommitments,
+  storeIntentCommitment,
+  storeReveal,
+  verifyIntentReveal
+} from './intentCommitment.js';
+import {
+  buildConfidentialEnvelope,
+  confidentialProtocolStatus,
+  parseOperatorRegistry,
+  publicOperatorRegistry
+} from './intentConfidential.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -309,6 +344,34 @@ setInterval(() => {
   for (const [k, v] of settlementHits) if (now > v.reset) settlementHits.delete(k);
 }, WINDOW_MS).unref?.();
 
+/* Outcome bids and confidential commit/reveal write immutable storage each.
+   They get the same small per-caller budget as watcher/settlement writes
+   rather than the broad cached-data allowance. */
+const outcomeHits = new Map();
+const OUTCOME_MAX_PER_WINDOW = Number(process.env.INTENT_OUTCOME_RATE_LIMIT || 20);
+app.use('/api/intents/v1', (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const isOutcomePath = /^\/outcome\/bids$|\/outcome\/auctions\/.+\/(close|execution-claims|disputes|adjudicate|settlement-reports|watcher-reports)$|\/confidential\/(commit|reveal)$/.test(req.path);
+  if (!isOutcomePath) return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = outcomeHits.get(key);
+  if (!rec || now > rec.reset) {
+    outcomeHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > OUTCOME_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'OUTCOME_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of outcomeHits) if (now > v.reset) outcomeHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 /* -------------------------------- helpers -------------------------------- */
 
 /**
@@ -383,7 +446,13 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       registeredVerifiers: verifierRegistry.size,
       graceSeconds: executionGraceSeconds()
     }),
-    workflows: workflowProtocolStatus()
+    workflows: workflowProtocolStatus(),
+    outcome: outcomeProtocolStatus({
+      solverRegistry: registry,
+      bondRegistry: parseBondRegistry()
+    }),
+    confidential: confidentialProtocolStatus({ operatorRegistry: parseOperatorRegistry() }),
+    commitReveal: intentCommitmentStatus({ operatorRegistrySize: parseOperatorRegistry().size })
   });
 });
 
@@ -897,6 +966,422 @@ app.get('/api/intents/v1/auctions/:intentHash/settlement-reports', async (req, r
     settlement: settlementSummary(listed.reports),
     reports: listed.reports
   });
+});
+
+/*
+ * ─── PHASE 5: OUTCOME MARKETPLACE ───────────────────────────────────────────
+ * Single-chain outcomes. Signed, bounded outcome bids enter an immutable log
+ * ONLY from a registered + declared-BONDED solver, with a transactional
+ * admission receipt and a replay-proof nonce. The public POST /bids path stays
+ * closed. After a deterministic MAX_GUARANTEED_MINIMUM_V1 close, the winning
+ * bid is re-graded with the SAME Phase 3 execution-claim / dispute /
+ * adjudication / settlement-report machinery (schema-branched for outcome
+ * bids); a failure penalty is DERIVED from the deterministic Phase 3 table.
+ * FBT never settles automatically and never holds funds.
+ */
+function bondedSolverIds() {
+  return new Set(
+    publicBondBoard(parseBondRegistry(), { solverRegistry: parseSolverRegistry() })
+      .filter((row) => row.bonded)
+      .map((row) => row.solverId)
+  );
+}
+
+app.get('/api/intents/v1/outcome/log/:intentHash', async (req, res) => {
+  const result = await readOutcomeLog(req.params.intentHash);
+  if (result.error) return res.status(result.error === 'LOG_READ_FAILED' ? 503 : 400).json(result);
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(result);
+});
+
+/* The authenticated signed outcome-bid submission path. POST /bids stays
+   closed; this is the only way a bid enters the outcome log. */
+app.post('/api/intents/v1/outcome/bids', async (req, res) => {
+  const registry = parseSolverRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
+  const intentHash = String(req.body?.intentHash || '').toLowerCase();
+  const result = await withIntentLock(intentHash, async () => {
+    if (/^0x[a-f0-9]{64}$/.test(intentHash)) {
+      const admission = await outcomeSealStatus(intentHash);
+      if (!admission.ok) return { ok: false, code: admission.code };
+      if (admission.sealed) return { ok: false, code: 'AUCTION_CLOSED' };
+    }
+    const appended = await appendOutcomeBid(req.body, {
+      registry,
+      bondedSolvers: bondedSolverIds()
+    });
+    if (appended.ok && /^0x[a-f0-9]{64}$/.test(intentHash)) {
+      const afterWrite = await outcomeSealStatus(intentHash);
+      if (!afterWrite.ok) return { ok: false, code: afterWrite.code };
+      if (afterWrite.sealed) {
+        return { ok: false, code: 'AUCTION_CLOSE_RACE', storedEntryHash: appended.entryHash };
+      }
+    }
+    if (appended.ok) {
+      const receipt = issueOutcomeAdmissionReceipt({
+        intentHash,
+        entryHash: appended.entryHash,
+        acceptedAt: appended.acceptedAt,
+        solverId: appended.solverId
+      });
+      return { ...appended, admissionReceipt: receipt, admissionReceiptAvailable: Boolean(receipt) };
+    }
+    return appended;
+  });
+  if (result.ok) return res.status(201).json(result);
+  const status = result.code === 'UNREGISTERED_SOLVER' || result.code === 'SOLVER_NOT_BONDED'
+    || result.code === 'SIGNATURE_MISMATCH' ? 403
+    : ['NONCE_REPLAY', 'AUCTION_CLOSED', 'AUCTION_CLOSE_RACE'].includes(result.code) ? 409
+      : ['LOG_WRITE_FAILED', 'LOG_READ_FAILED', 'OUTCOME_STORE_UNAVAILABLE', 'INVALID_STORED_SEAL'].includes(result.code) ? 503 : 400;
+  return res.status(status).json({ error: result.code });
+});
+
+app.get('/api/intents/v1/outcome/admissions/:intentHash/:entryHash', async (req, res) => {
+  const found = await readOutcomeLogEntry(req.params.intentHash, req.params.entryHash);
+  if (found.error) {
+    const status = found.error === 'LOG_READ_FAILED' ? 503
+      : found.error === 'OUTCOME_ADMISSION_NOT_FOUND' ? 404 : 400;
+    return res.status(status).json({ error: found.error });
+  }
+  const receipt = issueOutcomeAdmissionReceipt({
+    intentHash: found.entry.bid?.intentHash,
+    entryHash: found.entry.entryHash,
+    acceptedAt: found.entry.acceptedAt,
+    solverId: found.entry.bid?.solverId
+  });
+  if (!receipt) return res.status(503).json({ error: 'ADMISSION_RECEIPTS_NOT_CONFIGURED' });
+  if (!verifyOutcomeAdmissionReceipt(receipt)) return res.status(500).json({ error: 'ADMISSION_RECEIPT_FAILED' });
+  res.set('cache-control', 'public, max-age=31536000, immutable');
+  return res.json(receipt);
+});
+
+app.get('/api/intents/v1/outcome/auctions/:intentHash', async (req, res) => {
+  const result = await readOutcomeAuction(req.params.intentHash);
+  if (result.error) {
+    const status = ['OUTCOME_STORE_UNAVAILABLE', 'INVALID_STORED_SEAL', 'INVALID_STORED_CLOSE'].includes(result.error) ? 503 : 400;
+    return res.status(status).json(result);
+  }
+  if (result.close) {
+    const listed = await readOutcomeCompletenessReports(result.intentHash, result.close);
+    if (listed.error) {
+      result.completeness = { status: 'watcher-store-unavailable', watcherReports: null };
+    } else {
+      result.completeness = outcomeCompletenessSummary(listed.reports);
+      result.watcherReports = listed.reports.map(outcomePublicCompletenessReport);
+    }
+    try {
+      const entry = await readOutcomeLogEntry(result.intentHash, result.close.decision.selectedEntryHash);
+      const commitment = entry.entry?.bid || null;
+      const claim = await readExecutionClaim(result.close.closeId);
+      const claimVerified = claim ? verifyExecutionClaim(claim, { close: result.close, commitment }).ok : null;
+      const disputes = await listDisputes(result.close.closeId);
+      if (!disputes.ok) throw new Error(disputes.code);
+      for (const record of disputes.records) {
+        if (!verifyDispute(record.dispute, { close: result.close }).ok) throw new Error('INVALID_STORED_DISPUTE');
+      }
+      const adjudicationRecord = await readAdjudication(result.close.closeId);
+      const adjudicationVerified = adjudicationRecord
+        ? verifyAdjudication(adjudicationRecord.adjudication, { close: result.close }).ok : null;
+      result.execution = { claim, claimVerified };
+      result.disputes = disputes.records.map(publicDispute);
+      result.adjudication = adjudicationRecord?.adjudication || null;
+      result.adjudicationVerified = adjudicationVerified;
+      const settlementListed = await readSettlementReports(result.intentHash, result.close);
+      if (settlementListed.error) {
+        result.settlement = { status: 'settlement-store-unavailable' };
+      } else {
+        result.settlement = settlementSummary(settlementListed.reports);
+        result.settlementReports = settlementListed.reports.map(publicSettlementReport);
+      }
+    } catch {
+      result.execution = { storeUnavailable: true };
+      result.disputes = null;
+      result.adjudication = null;
+      result.adjudicationVerified = null;
+      result.settlement = { status: 'settlement-store-unavailable' };
+    }
+  }
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(result);
+});
+
+app.post('/api/intents/v1/outcome/auctions/:intentHash/close', async (req, res) => {
+  const auth = authenticateAuctionClose(req.get('authorization'));
+  if (!auth.ok) {
+    return res.status(auth.code === 'AUCTION_CLOSE_NOT_CONFIGURED' ? 503 : 401).json({ error: auth.code });
+  }
+  if (String(req.body?.intentHash || '').toLowerCase() !== String(req.params.intentHash).toLowerCase()) {
+    return res.status(400).json({ error: 'INTENT_HASH_MISMATCH' });
+  }
+  const result = await closeOutcomeAuction(req.body);
+  if (result.ok) return res.status(result.alreadyClosed ? 200 : 201).json(result);
+  const status = ['OUTCOME_STORE_UNAVAILABLE', 'OUTCOME_WRITE_FAILED', 'LOG_READ_FAILED',
+    'INVALID_STORED_SEAL', 'INVALID_STORED_CLOSE'].includes(result.code) ? 503
+    : result.code === 'AUCTION_ALREADY_SEALED' ? 409 : 400;
+  return res.status(status).json({ error: result.code });
+});
+
+app.post('/api/intents/v1/outcome/auctions/:intentHash/watcher-reports', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseWatcherRegistry();
+  const checked = verifyOutcomeCompletenessReport(req.body, {
+    registry, close: state.close, requireRegistered: true
+  });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_WATCHER', 'WATCHER_SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeOutcomeCompletenessReport(state.intentHash, checked.report);
+  if (!stored.ok) {
+    const status = ['OUTCOME_STORE_UNAVAILABLE', 'OUTCOME_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'OUTCOME_REPORTS_FULL' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyReported ? 200 : 201).json({
+    ok: true, alreadyReported: stored.alreadyReported,
+    reportId: checked.report.reportId, verdict: checked.report.verdict, counts: checked.report.counts
+  });
+});
+
+app.get('/api/intents/v1/outcome/auctions/:intentHash/watcher-reports', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const listed = await readOutcomeCompletenessReports(state.intentHash, state.close);
+  if (listed.error) return res.status(503).json({ error: listed.error });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({
+    intentHash: state.intentHash,
+    closeId: state.close.closeId,
+    completeness: outcomeCompletenessSummary(listed.reports),
+    reports: listed.reports
+  });
+});
+
+/* Outcome execution-claim / dispute / adjudication / settlement-report routes
+   reuse the Phase 3 modules (schema-branched for fbt.outcome-bid.v1). The
+   winning bid is read from the OUTCOME log, not the swap log. */
+app.post('/api/intents/v1/outcome/auctions/:intentHash/execution-claims', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseSolverRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
+  const entry = await readOutcomeLogEntry(state.intentHash, state.close.decision.selectedEntryHash);
+  if (entry.error) return res.status(503).json({ error: entry.error });
+  const checked = verifyExecutionClaim(req.body, {
+    close: state.close, commitment: entry.entry.bid, registry, requireRegistered: true
+  });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_SOLVER', 'SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeExecutionClaim(state.close.closeId, checked.claim);
+  if (!stored.ok) {
+    const status = ['EXECUTION_STORE_UNAVAILABLE', 'EXECUTION_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'EXECUTION_CLAIM_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true, alreadyStored: stored.alreadyStored, claimId: checked.claim.claimId,
+    outcome: checked.claim.outcome, claims: checked.claim.claims
+  });
+});
+
+app.get('/api/intents/v1/outcome/auctions/:intentHash/execution-claim', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const claim = await readExecutionClaim(state.close.closeId);
+  if (!claim) return res.status(404).json({ error: 'EXECUTION_CLAIM_NOT_FOUND' });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(claim);
+});
+
+app.post('/api/intents/v1/outcome/auctions/:intentHash/disputes', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseVerifierRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_VERIFIERS' });
+  const checked = verifyDispute(req.body, { close: state.close, registry, requireRegistered: true });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_VERIFIER', 'SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeDispute(state.close.closeId, checked.dispute);
+  if (!stored.ok) {
+    const status = ['DISPUTE_STORE_UNAVAILABLE', 'DISPUTE_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'DISPUTE_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true, alreadyStored: stored.alreadyStored, disputeId: checked.dispute.disputeId, kind: checked.dispute.kind
+  });
+});
+
+app.get('/api/intents/v1/outcome/auctions/:intentHash/disputes', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const listed = await listDisputes(state.close.closeId);
+  if (!listed.ok) return res.status(503).json({ error: listed.code });
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json({ intentHash: state.intentHash, closeId: state.close.closeId, disputes: listed.records.map(publicDispute) });
+});
+
+app.post('/api/intents/v1/outcome/auctions/:intentHash/adjudicate', async (req, res) => {
+  const auth = authenticateAuctionClose(req.get('authorization'));
+  if (!auth.ok) {
+    return res.status(auth.code === 'AUCTION_CLOSE_NOT_CONFIGURED' ? 503 : 401).json({ error: auth.code });
+  }
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const config = coordinatorConfig();
+  if (!config) return res.status(503).json({ error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
+  const entry = await readOutcomeLogEntry(state.intentHash, state.close.decision.selectedEntryHash);
+  if (entry.error) return res.status(503).json({ error: entry.error });
+  const claim = await readExecutionClaim(state.close.closeId);
+  const disputes = await listDisputes(state.close.closeId);
+  if (!disputes.ok) return res.status(503).json({ error: disputes.code });
+  const existing = await readAdjudication(state.close.closeId);
+  if (existing) {
+    const rechecked = verifyAdjudication(existing.adjudication, { close: state.close });
+    return rechecked.ok
+      ? res.status(200).json({ ok: true, alreadyAdjudicated: true, adjudication: existing.adjudication })
+      : res.status(503).json({ error: 'INVALID_STORED_ADJUDICATION' });
+  }
+  const built = buildAdjudication({
+    close: state.close,
+    commitment: entry.entry.bid,
+    claim,
+    disputes: disputes.records.map((record) => record.dispute),
+    bond: parseBondRegistry().get(entry.entry.bid.solverId) || null,
+    coordinator: config,
+    solverRegistry: parseSolverRegistry(),
+    now: Date.now()
+  });
+  if (!built.ok) {
+    const status = built.code === 'EXECUTION_WINDOW_OPEN' ? 409
+      : ['BAD_EXECUTION_CLAIM', 'BAD_DISPUTE', 'BAD_COMMITMENT_BINDING'].includes(built.code) ? 503 : 400;
+    return res.status(status).json({ error: built.code });
+  }
+  const stored = await storeAdjudication(state.close.closeId, built.adjudication);
+  if (!stored.ok) {
+    const status = ['ADJUDICATION_STORE_UNAVAILABLE', 'ADJUDICATION_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'ADJUDICATION_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json({
+    ok: true, alreadyStored: stored.alreadyStored, adjudicationId: built.adjudication.adjudicationId,
+    verdict: built.adjudication.verdict, penaltyBps: built.adjudication.penaltyBps,
+    penaltyUsd: built.adjudication.penaltyUsd, bond: built.adjudication.bond, claims: built.adjudication.claims
+  });
+});
+
+app.post('/api/intents/v1/outcome/auctions/:intentHash/settlement-reports', async (req, res) => {
+  const state = await readOutcomeAuction(req.params.intentHash);
+  if (state.error) return res.status(state.error === 'BAD_INTENT_HASH' ? 400 : 503).json(state);
+  if (!state.close) return res.status(409).json({ error: 'AUCTION_NOT_CLOSED' });
+  const registry = parseVerifierRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_VERIFIERS' });
+  const checked = verifySettlementReport(req.body, { registry, close: state.close, requireRegistered: true });
+  if (!checked.ok) {
+    const status = ['UNREGISTERED_VERIFIER', 'VERIFIER_SIGNATURE_MISMATCH'].includes(checked.code) ? 403 : 400;
+    return res.status(status).json({ error: checked.code });
+  }
+  const stored = await storeSettlementReport(state.intentHash, checked.report);
+  if (!stored.ok) {
+    const status = ['SETTLEMENT_STORE_UNAVAILABLE', 'SETTLEMENT_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'SETTLEMENT_REPORTS_FULL' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyReported ? 200 : 201).json({
+    ok: true, alreadyReported: stored.alreadyReported, reportId: checked.report.reportId,
+    verdict: checked.report.verdict, adjudicationConsistent: checked.report.adjudicationConsistent,
+    promisedOut: checked.report.promisedOut, deliveredOut: checked.report.deliveredOut,
+    shortfallBps: checked.report.shortfallBps
+  });
+});
+
+/*
+ * ─── PHASE 5: CONFIDENTIAL INTENT TRANSPORT (COMMIT–REVEAL + THRESHOLD) ─────
+ * The operator public-key registry is served publicly (public keys only). The
+ * commit/reveal endpoints implement the commit–reveal transport. Threshold
+ * envelope construction/decryption is a pure function exposed via the CLI and
+ * unit tests; capabilities state configured:false until real operator keys
+ * exist, and tee is always false.
+ */
+app.get('/api/intents/v1/confidential/operators', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  return res.json({
+    ...confidentialProtocolStatus({ operatorRegistry: parseOperatorRegistry() }),
+    operators: publicOperatorRegistry(parseOperatorRegistry())
+  });
+});
+
+app.post('/api/intents/v1/confidential/commit', async (req, res) => {
+  const registry = parseSolverRegistry();
+  if (!registry.size) return res.status(503).json({ error: 'NO_REGISTERED_SOLVERS' });
+  const solver = registry.get(req.body?.solverId);
+  if (!solver || !solver.active) return res.status(403).json({ error: 'UNREGISTERED_SOLVER' });
+  /* Commit-reveal honesty: FBT holds the preimage (preimageHolder='fbt-server')
+     and signs the hash-only commitment with the coordinator. This hides the
+     intent from the open bidding log until close, but it is NOT hidden from
+     FBT and there is no TEE/threshold attestation. */
+  const coordinator = coordinatorConfig();
+  if (!coordinator) return res.status(503).json({ error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
+  const built = buildIntentCommitment(
+    {
+      intentHash: req.body.intentHash,
+      preimage: req.body.preimage,
+      solverId: req.body.solverId
+    },
+    coordinator.privateKey
+  );
+  if (!built.ok) return res.status(400).json({ error: built.code });
+  const stored = await storeIntentCommitment(built);
+  if (!stored.ok) {
+    const status = ['COMMITMENT_STORE_UNAVAILABLE', 'COMMITMENT_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'COMMITMENT_REPLAY' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(201).json({ ok: true, commitment: built.commitment, preimageHolder: 'fbt-server', commitRevealMetadataPrivacy: false });
+});
+
+app.get('/api/intents/v1/confidential/commitments/:intentHash', async (req, res) => {
+  const result = await readCommitments(req.params.intentHash);
+  if (result.error) return res.status(result.error === 'BAD_INTENT_HASH' ? 400 : 503).json(result);
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(result);
+});
+
+app.post('/api/intents/v1/confidential/reveal', async (req, res) => {
+  const { intentHash, commitmentId, preimage } = req.body ?? {};
+  const found = await readCommitment(intentHash, commitmentId);
+  if (found.error) return res.status(found.error === 'COMMITMENT_NOT_FOUND' ? 404 : 503).json({ error: found.error });
+  /* Reveal runs after bidding has closed; the server (preimage holder)
+     re-signs the reveal with the coordinator. Any solver/watcher can recompute
+     revealHashFor(preimage) and verify compliance against the committed hash. */
+  const coordinator = coordinatorConfig();
+  if (!coordinator) return res.status(503).json({ error: 'AUCTION_CLOSE_NOT_CONFIGURED' });
+  const built = buildIntentReveal(
+    { commitment: found.commitment, preimage, solverId: found.commitment.solverId },
+    coordinator.privateKey
+  );
+  if (!built.ok) return res.status(400).json({ error: built.code });
+  const checked = verifyIntentReveal(built.reveal, found.commitment, { solverPublicKey: coordinator.publicKey });
+  if (!checked.ok) return res.status(400).json({ error: checked.code });
+  const stored = await storeReveal({ intentHash, commitmentId, reveal: built.reveal });
+  if (!stored.ok) {
+    const status = ['COMMITMENT_STORE_UNAVAILABLE', 'COMMITMENT_WRITE_FAILED'].includes(stored.code) ? 503
+      : stored.code === 'REVEAL_REPLAY' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(201).json({ ok: true, reveal: built.reveal });
 });
 
 /*

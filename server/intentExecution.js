@@ -28,6 +28,7 @@ import {
   verifyCanonicalSignature
 } from './intentSignatures.js';
 import { signedCommitmentHash } from './intentTransparency.js';
+import { signedOutcomeBidHash } from './intentOutcome.js';
 import { penaltyBpsFor } from './intentBonds.js';
 
 export const EXECUTION_CLAIM_SCHEMA = 'fbt.execution-claim.v1';
@@ -57,15 +58,32 @@ const positiveIntegerString = (value, maxLength = 78) =>
   && BigInt(value) > 0n;
 
 /**
- * The deterministic minimum output of a signed quote: what the solver
- * committed to deliver at its own declared slippage.
- * floor(amountOut × (10000 − slippageBps) / 10000).
+ * The deterministic minimum output a signed commitment promises. For a spot
+ * quote this is derived from amountOut and slippage:
+ *   floor(amountOut × (10000 − slippageBps) / 10000)
+ * For an OUTCOME BID (fbt.outcome-bid.v1) the solver states an explicit
+ * guaranteedMinimum — the floor it binds itself to deliver — which is the
+ * graded minimum directly. Schema branching keeps the rest of the grading
+ * engine shared between quote and outcome markets.
  */
 export function minOutFor(commitment) {
+  if (!commitment) return null;
+  if (commitment.schema === 'fbt.outcome-bid.v1') {
+    const guaranteed = String(commitment.guaranteedMinimum);
+    if (!/^[0-9]{1,78}$/.test(guaranteed) || BigInt(guaranteed) <= 0n) return null;
+    return guaranteed;
+  }
   const amount = BigInt(String(commitment?.amountOut));
   const slippage = Number(commitment?.slippageBps);
   if (amount <= 0n || !Number.isInteger(slippage) || slippage < 0 || slippage > 10000) return null;
   return ((amount * BigInt(10000 - slippage)) / 10000n).toString();
+}
+
+/** Immutable-log leaf hash of a commitment, dispatched on its schema. */
+export function commitmentLeafHash(commitment) {
+  if (!commitment) return null;
+  if (commitment.schema === 'fbt.outcome-bid.v1') return signedOutcomeBidHash(commitment);
+  return signedCommitmentHash(commitment);
 }
 
 /** Deterministic outcome label for a claim's raw facts. */
@@ -135,6 +153,17 @@ export function gradeExecution({
   } else {
     selfReported = true;
     reasons.push(claim.outcome === 'expired' ? 'SELF_REPORTED_EXPIRED' : 'SELF_REPORTED_REVERTED');
+  }
+
+  /* Outcome-specific context is recorded, never allowed to widen the grade:
+     for an outcome bid the graded floor is the solver's declared
+     guaranteedMinimum (via minOutFor), and the partial-fill policy only
+     explains the classification. A 'full-only' bid delivered below its
+     guaranteed floor is still a short-fill. */
+  if (commitment.schema === 'fbt.outcome-bid.v1') {
+    reasons.push(commitment.partialFillPolicy === 'full-only'
+      ? 'OUTCOME_FULL_FILL_REQUIRED'
+      : 'OUTCOME_PARTIAL_FILL_ALLOWED');
   }
 
   /* Executing after the signed quote window is a failure the solver cannot
@@ -297,11 +326,18 @@ export function verifyExecutionClaim(input, {
     return { ok: false, code: 'BAD_SELECTION_BINDING' };
   }
   if (commitment) {
-    if (signedCommitmentHash(commitment) !== String(close.decision.selectedEntryHash).toLowerCase()) {
+    /* Schema branching: an OUTCOME BID binds to its own immutable log leaf
+       (fbt.outcome-bid.v1) and executes on its declared SETTLEMENT chain,
+       which may differ from the auction chain. A spot quote binds to the
+       solver-quote log leaf and executes on the auction chain. */
+    const isOutcome = commitment.schema === 'fbt.outcome-bid.v1';
+    const leafHash = isOutcome ? signedOutcomeBidHash(commitment) : signedCommitmentHash(commitment);
+    if (leafHash !== String(close.decision.selectedEntryHash).toLowerCase()) {
       return { ok: false, code: 'BAD_COMMITMENT_BINDING' };
     }
     if (String(input.solverId) !== String(commitment.solverId)) return { ok: false, code: 'BAD_SELECTION_BINDING' };
-    if (input.chainId !== commitment.chainId || input.chainId !== close.policy?.chainId) {
+    const executionChain = isOutcome ? commitment.settlementChainId : commitment.chainId;
+    if (input.chainId !== executionChain) {
       return { ok: false, code: 'BAD_CHAIN' };
     }
   }

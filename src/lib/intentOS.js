@@ -86,10 +86,10 @@ export const SOLVER_CAPABILITIES = Object.freeze([
     id: 'external-outcome-market',
     role: 'solver-network',
     modes: ['outcome', 'workflow'],
-    settlement: 'solver-bonded',
+    settlement: 'user-signed-bonded-outcome',
     custody: false,
-    live: false,
-    detail: 'CEX, OTC, inventory and composite solver bids require the open solver protocol and bonded settlement.'
+    live: true,
+    detail: 'Single-chain outcomes are reviewable via signed bonded bids; the user signs settlement. Cross-chain outcomes stay draft-only.'
   },
   {
     id: 'confidential-intent-transport',
@@ -97,8 +97,8 @@ export const SOLVER_CAPABILITIES = Object.freeze([
     modes: ['swap', 'outcome', 'automation', 'workflow'],
     settlement: 'commit-reveal-or-confidential-compute',
     custody: false,
-    live: false,
-    detail: 'No confidential transport is connected; a private RPC alone does not hide token, amount and strategy from all parties.'
+    live: true,
+    detail: 'Commit-reveal hides a single-chain swap from the open bidding log until close. Threshold encryption is enabled only with real operator keys; TEE attestation is never claimed.'
   }
 ]);
 
@@ -223,6 +223,26 @@ export function normalizeIntent(input = {}, memory = loadIntentMemory(), now = D
   const minReceive = Number.isFinite(minReceiveInput) && minReceiveInput > 0 ? minReceiveInput : null;
   if (kind === 'outcome' && minReceive == null) return { error: 'BAD_OUTCOME' };
 
+  let outcome = null;
+  if (kind === 'outcome') {
+    const spec = input.outcome;
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return { error: 'BAD_OUTCOME' };
+    const guaranteedMinimum = String(spec.guaranteedMinimum || '').trim().slice(0, 40);
+    const totalMaxCost = String(spec.totalMaxCost || '').trim().slice(0, 40);
+    const settlementChainId = Number(spec.settlementChainId) || chainId;
+    const partialFillPolicy = ['full-only', 'partial-allowed'].includes(spec.partialFillPolicy)
+      ? spec.partialFillPolicy : 'full-only';
+    const expiry = Number.isSafeInteger(Number(spec.expiry)) ? Number(spec.expiry) : Math.floor(deadlineAt / 1000);
+    if (!/^[0-9]{1,40}$/.test(guaranteedMinimum) || BigInt(guaranteedMinimum) <= 0n) {
+      return { error: 'BAD_OUTCOME' };
+    }
+    if (!/^[0-9]{1,40}$/.test(totalMaxCost) || BigInt(totalMaxCost) <= 0n) {
+      return { error: 'BAD_OUTCOME' };
+    }
+    if (!SUPPORTED_CHAINS.has(settlementChainId)) return { error: 'BAD_OUTCOME' };
+    outcome = { guaranteedMinimum, totalMaxCost, settlementChainId, partialFillPolicy, expiry };
+  }
+
   let condition = null;
   if (kind === 'automation') {
     const type = ['priceAbove', 'priceBelow', 'daily', 'weekly', 'monthly'].includes(input.conditionType)
@@ -284,7 +304,8 @@ export function normalizeIntent(input = {}, memory = loadIntentMemory(), now = D
         custodyAllowed: false
       },
       condition,
-      steps
+      steps,
+      outcome
     }
   };
 }
@@ -367,25 +388,36 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
     && intent.amountUsd >= memory.privateAboveUsd;
   const requestedPrivacy = intent.constraints.privacy !== 'standard' || memoryWantsPrivacy;
 
-  if (intent.constraints.privacy === 'confidential') {
-    checks.push(check('CONFIDENTIAL_TRANSPORT_UNAVAILABLE', 'block'));
-  } else if (requestedPrivacy) {
+  if (requestedPrivacy || intent.constraints.privacy === 'confidential') {
     /*
-     * Ethereum has public private-mempool RPCs, but the connected external
-     * wallet chooses its broadcast transport. This app cannot cryptographically
-     * prove the wallet used that RPC, and a private RPC still reveals the full
-     * order to the relay. Calling that a Confidential Intent would be false.
+     * Phase 5a commit-reveal: a SINGLE-CHAIN SWAP can travel through the
+     * commit-reveal transport (intent hidden from the open bidding log until
+     * close) and is genuinely confidential at that level. This is NOT
+     * threshold-encrypted compute and no TEE attestation exists — so any
+     * non-swap kind, or a claim of threshold/TEE, still blocks. Private RPC
+     * recommendations are never relabelled as confidential.
      */
-    checks.push(check(
-      intent.chainId === 1 ? 'PRIVATE_RELAY_NOT_ATTESTED' : 'PRIVATE_RELAY_UNAVAILABLE',
-      'block'
-    ));
+    if (intent.kind === 'swap') {
+      checks.push(check('CONFIDENTIAL_COMMIT_REVEAL', 'pass'));
+      checks.push(check('PRIVACY_NOT_THRESHOLD_TEE', 'warn'));
+    } else {
+      checks.push(check('THRESHOLD_TEE_UNAVAILABLE', 'block'));
+    }
   } else {
     checks.push(check('STANDARD_BROADCAST_DISCLOSED', 'warn'));
   }
 
   if (intent.kind === 'outcome') {
-    checks.push(check('OUTCOME_SOLVER_NETWORK_UNAVAILABLE', 'block'));
+    /* Outcome Marketplace (Phase 5): a SINGLE-CHAIN outcome (funding chain ===
+       settlement chain) is reviewable by the user and settled with their own
+       signature; a CROSS-CHAIN outcome stays draft-only. */
+    const singleChain = intent.outcome
+      && Number(intent.outcome.settlementChainId) === Number(intent.chainId);
+    if (singleChain) {
+      checks.push(check('OUTCOME_SINGLE_CHAIN_ATOMIC', 'pass'));
+    } else {
+      checks.push(check('OUTCOME_CROSS_CHAIN_UNAVAILABLE', 'block'));
+    }
   }
   if (intent.kind === 'workflow') {
     const single = isSingleChainWorkflowSteps(intent.steps, intent.chainId);
@@ -408,6 +440,17 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
       amount: intent.amountIn,
       chain: String(intent.chainId),
       intent: intent.id
+    });
+    if (intent.constraints.privacy === 'confidential') params.set('privacy', 'confidential');
+    handoff = `/swap?${params.toString()}`;
+  } else if (!blocked && intent.kind === 'outcome') {
+    const params = new URLSearchParams({
+      from: intent.fromSymbol,
+      to: intent.toSymbol,
+      amount: intent.amountIn,
+      chain: String(intent.chainId),
+      intent: intent.id,
+      outcome: '1'
     });
     handoff = `/swap?${params.toString()}`;
   } else if (!blocked && intent.kind === 'workflow') {
