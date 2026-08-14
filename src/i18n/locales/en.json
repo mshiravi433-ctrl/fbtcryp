@@ -3757,9 +3757,12 @@
       "txVerification": "PER-LEG ON-CHAIN VERIFICATION",
       "txVerificationConfigured": "Multi-RPC verification is configured",
       "txVerificationUnconfigured": "Multi-RPC verification is not configured",
-      "txVerificationNote": "Phase 4c adds a derived verification layer: a party binds its on-chain address with its own pinned Ed25519 key (self-attested address control, no wallet signature, no funds authority), and a registered verifier reads each leg through at least two HTTPS RPC endpoints with distinct hostnames. The server re-reads the chain itself and stores only fully recomputable reports. Distinct hostnames are not proof of provider independence. Verifying two separate transactions never makes them atomic: custody, escrow, global atomicity and automatic settlement stay false, and the envelope stays draft-only under ATOMIC_CROSS_CHAIN_UNAVAILABLE.",
-      "txVerificationQuorum": "RPC quorum",
-      "txVerificationBindings": "Signed account bindings"
+      "txVerificationNote": "Phase 4c adds a derived verification layer. A signed receipt remains a party's signed claim (onChainVerified:false forever) — it is NOT on-chain verification. A party binds an on-chain address with its own pinned Ed25519 key, optionally adding an EIP-191 wallet proof (personal_sign over a deterministic challenge, recovered address must match); a binding without that proof stays self-attested only and can never reach onchain-verified. A registered verifier reads each leg through at least two HTTPS RPC endpoints on distinct hostnames and the server re-reads the chain itself before storing any recomputable report. Distinct hostnames are not proof of provider independence, so provider independence stays unproven. Verifying two separate transactions never makes them atomic: custody, escrow, global atomicity and automatic settlement stay false, and the envelope stays draft-only under ATOMIC_CROSS_CHAIN_UNAVAILABLE. Without a real INTENT_CROSS_CHAIN_RPC_NETWORKS configuration this feature is unconfigured.",
+      "txVerificationQuorum": "RPC quorum (minimum)",
+      "txVerificationBindings": "Signed account bindings",
+      "txVerificationSchema": "Verification report schema",
+      "txVerificationWalletProof": "Wallet proof scheme",
+      "txVerificationProviderIndependence": "Provider independence"
     },
     "revert": {
       "abort-all": "Abort all",

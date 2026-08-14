@@ -611,80 +611,125 @@ node scripts/intent-cross-chain.mjs verify-state \
 #### ۱. `fbt.cross-chain-account-binding.v1`
 
 طرف، آدرس آن‌چین خود را با همان کلید Ed25519 که در state pin شده امضا می‌کند:
-`stateId`، `partyId`، `chainId`، آدرس checksum شده، صدور/انقضا و claims صریح:
+`stateId`، `partyId`، `chainId`، آدرس checksum شده، `partyPublicKey`،
+صدور/انقضا، `walletProof` و claims صریح.
+
+**اثبات کیف پول EIP-191 (واقعی):** دستور `binding-challenge` چالش عمومی و
+قطعی می‌سازد که domain، schema، `stateId`، `partyId`، `chainId`، آدرس، کلید
+عمومی Ed25519، `issuedAt`، `expiresAt` و nonce را bind می‌کند. کاربر چالش را
+در کیف پول خودش با `personal_sign` امضا می‌کند و فقط امضای عمومی به CLI
+داده می‌شود؛ کلید خصوصی کیف پول هرگز دریافت نمی‌شود. سرور با
+`ethers.verifyMessage` امضا را بازیابی می‌کند و آدرس بازیابی‌شده باید دقیقاً
+با آدرس binding یکی باشد.
 
 ```json
 {
   "addressControlSelfAttested": true,
-  "walletSignatureVerified": false,
+  "walletSignatureScheme": "EIP-191",
+  "walletSignatureVerified": true,
   "fundsAuthorityGranted": false,
   "custody": false
 }
 ```
 
-`walletSignatureVerified` تا زمانی که schema جداگانهٔ EIP-191/EIP-712 با verify
-واقعی اضافه نشود false اجباری است — هیچ‌جا مالکیت کیف پول ادعا نمی‌شود. صرف
-قرار دادن آدرس در body درخواست API پذیرفته نمی‌شود؛ فقط امضای کلید همان party.
+بدون wallet proof، binding به‌صورت signed assertion ذخیره می‌شود و صادقانه
+`walletSignatureScheme:null` و `walletSignatureVerified:false` دارد — اما
+هرگز برای `onchain-verified` کافی نیست (وضعیت پا `wallet-proof-required`).
+EIP-1271 (کیف پول قرارداد هوشمند) صریحاً unsupported است
+(`WALLET_PROOF_SCHEME_UNSUPPORTED`) و fallback ساختگی وجود ندارد. صرف قرار
+دادن آدرس در body درخواست API پذیرفته نمی‌شود؛ فقط امضای کلید همان party.
 
 #### ۲. `fbt.cross-chain-tx-verification.v1`
 
-verifier ثبت‌شده (registry `INTENT_VERIFIER_KEYS`) هر پا را از حداقل دو
-endpoint HTTPS با hostname متفاوت می‌خواند و گزارش bounded امضا می‌کند که به
-`stateId`، `receiptId`، leg، chain/token/amount دقیق، آدرس‌های فرستنده/گیرنده
-از bindingهای امضاشده، block number/hash، receipt status، confirmations،
-observation هر RPC، quorum و هویت verifier متصل است.
+verifier ثبت‌شده (registry `INTENT_VERIFIER_KEYS`) هر پا را از quorum حداقل
+دو endpoint HTTPS با hostname متفاوت می‌خواند و گزارش bounded امضا می‌کند که
+به `stateId`، `receiptId`، leg، chain/token/amount دقیق، آدرس‌های
+فرستنده/گیرنده و binding idها، block number/hash، receipt status،
+confirmations، observation نرمال‌شدهٔ هر RPC، quorum، verdict، reasonCodes،
+`evaluatedAt` و هویت verifier متصل است. transport سخت‌گیرانه است: timeout
+محدود، سقف اندازهٔ پاسخ 512KiB، shape/لاگ strict؛ پاسخ خام و نامحدود ذخیره
+نمی‌شود.
 
 - **ERC-20:** receipt موفق + رخداد `Transfer` دقیقاً از قرارداد token برنامه +
   from/to/amount دقیق + توافق block hash بین quorum + حداقل confirmation.
+  رخداد مشابه از قرارداد دیگر پذیرفته نمی‌شود، لاگ malformed و چند رخداد
+  مبهم رد می‌شوند (`MALFORMED_TRANSFER_EVENT` / `AMBIGUOUS_TRANSFER_EVENT`)
+  و fee-on-transfer/rebasing بدون policy صریح هرگز verified نمی‌شود.
 - **Native:** بررسی دقیق from/to/value خود تراکنش + receipt موفق + block hash
   + confirmations.
+- **confirmations:** `latestBlock - receiptBlock + 1` (overflow-safe)؛ کمتر از
+  `minConfirmations` → `confirmations-pending`.
+- **reorg:** block hash عوض‌شده، تراکنش روی blockهای متفاوت یا اختلاف
+  tx/receipt در یک endpoint → `reorg-detected` و fail-closed.
 
-سرور پیش از ذخیره: کلید verifier را با registry چک می‌کند، bindingها را دوباره
-verify می‌کند، **خودش** زنجیره را از endpointهای خودش دوباره می‌خواند و verdict
-را بازمحاسبه می‌کند. گزارش غیرقابل‌بازتولید با `VERIFICATION_NOT_RECOMPUTABLE`
-رد می‌شود. ذخیره‌سازی immutable و idempotent است.
+سرور پیش از ذخیره: کلید verifier را با registry چک می‌کند، bindingها و wallet
+proofها را دوباره verify می‌کند، **خودش** زنجیره را از endpointهای خودش دوباره
+می‌خواند و verdict را بازمحاسبه می‌کند. گزارش غیرقابل‌بازتولید با
+`VERIFICATION_NOT_RECOMPUTABLE` رد می‌شود؛ رکورد ذخیره‌شده
+`serverRecomputedBeforeStorage:true` را attest می‌کند. snapshot موقت
+(pending/disagreement) فقط با claims صادقانه ذخیره می‌شود و با ظهور نتیجهٔ
+نهایی `VERIFICATION_SUPERSEDED` می‌گیرد. ذخیره‌سازی immutable و idempotent،
+سقف ۳ گزارش برای هر receipt، و خواندن عمومی همهٔ گزارش‌ها را با کلید embedded
+verifier بازراستی‌آزمایی می‌کند (چرخش registry گزارش تاریخی را حذف نمی‌کند).
 
 fail-closed: RPC disagreement، reorg/دریفت block-hash، receipt ناموفق، tx
 پیدانشده، confirmation ناکافی، token contract/فرستنده/گیرنده/amount اشتباه،
-binding منقضی یا کلید اشتباه، و یک RPC زنده در برابر حد نصاب دو. outage پاسخ
-transient/retryable می‌گیرد و هرگز «verified» یا نتیجهٔ خالی معتبر نمی‌شود.
+رخداد اشتباه یا malformed، binding منقضی یا کلید اشتباه، wallet proof
+نامعتبر، و کمتر از quorum توافق. outage پاسخ `verification-unavailable`
+می‌گیرد و هرگز «verified» یا رد قطعی یا نتیجهٔ خالی معتبر نمی‌شود.
 
 #### ۳. وضعیت مشتق‌شده و مرز صداقت
 
-هر پا یکی از این وضعیت‌ها را دارد: `signed-only`، `verification-pending`،
-`rpc-disagreement`، `confirmations-pending`، `onchain-verified`،
-`verification-rejected`. اگر همهٔ پاهای ثبت‌شده verified شوند
-`allSubmittedLegsOnChainVerified:true` می‌شود؛ اما `atomic`،
+هر پا یکی از این وضعیت‌ها را دارد: `signed-only`، `binding-required`،
+`wallet-proof-required`، `verification-pending`، `confirmations-pending`،
+`rpc-disagreement`، `reorg-detected`، `verification-unavailable`،
+`verification-rejected`، `onchain-verified`. اگر همهٔ پاهای ثبت‌شده verified
+شوند `allSubmittedLegsOnChainVerified:true` می‌شود؛ اما `atomic`،
 `globalAtomicity`، `custody`، `escrow`، `automaticSettlement` و
 `refundEnforcedByFbt` همچنان false — تأیید دو تراکنش جدا آن‌ها را اتمیک
 نمی‌کند — و envelope با `ATOMIC_CROSS_CHAIN_UNAVAILABLE` پیش‌نویس می‌ماند.
 
-RPCها فقط در env سروری `INTENT_CROSS_CHAIN_RPC_NETWORKS` هستند؛ هیچ URL در
-پاسخ عمومی، log یا `VITE_*` ظاهر نمی‌شود. capabilities فقط
-`multiRpcConfigured`، تعداد endpoint و `distinctRpcHosts` را منتشر می‌کند و
-همیشه `providerIndependenceProven:false` — hostname متفاوت اثبات استقلال
-provider نیست و RPC خصوصی «confidential» نامیده نمی‌شود.
+RPCها فقط در env سروری `INTENT_CROSS_CHAIN_RPC_NETWORKS` هستند (قالب: chainId،
+quorum، minConfirmations، providers با id/rpcUrl)؛ هیچ URL در پاسخ عمومی،
+log یا `VITE_*` ظاهر نمی‌شود. capabilities بلوک مستقل
+`crossChainVerification` را منتشر می‌کند (`configured`، `bindingSchema`،
+`verificationSchema`، `walletProof:"EIP-191"`، `eip1271Supported:false`،
+`multiRpcRequired:true`، `minimumQuorum:2`، `configuredChains`،
+`providerIndependenceProven:false`، `serverRecomputesBeforeStorage:true`،
+`onChainTxVerification`، `atomic:false`، `custody:false`) و بدون env واقعی:
+`configured:false`، `configuredChains:0`، `onChainTxVerification:false`.
+hostname متفاوت اثبات استقلال provider نیست و RPC خصوصی «confidential» نامیده
+نمی‌شود. سقف هزینهٔ RPC جداگانه است
+(`INTENT_CROSS_CHAIN_VERIFICATION_RATE_LIMIT`).
 
 #### API و CLI
 
 ```text
+POST     /api/intents/v1/cross-chain/states/:stateId/account-binding-challenge
 POST/GET /api/intents/v1/cross-chain/states/:stateId/account-bindings
 POST/GET /api/intents/v1/cross-chain/states/:stateId/verification-reports
+POST/GET /api/intents/v1/cross-chain/states/:stateId/receipts/:receiptId/verification-reports
 GET      /api/intents/v1/cross-chain/states/:stateId    ← + legVerification
 ```
 
 ```bash
-# طرف: binding امضاشده (کلید فقط در env محلی خودش)
+# طرف: چالش عمومی قطعی (بدون هیچ کلید خصوصی)
+node scripts/intent-cross-chain.mjs binding-challenge state.json \
+  --party initiator-id --chain 42161 --address 0x… --expires-at 1790000000 \
+  --nonce challenge-id > challenge.json
+# کاربر چالش را در کیف پول خودش با personal_sign امضا می‌کند (EIP-191)
+# و فقط امضای عمومی را به CLI می‌دهد؛ کلید خصوصی کیف پول هرگز دریافت نمی‌شود.
 INTENT_CROSS_CHAIN_PRIVATE_KEY='…' \
   node scripts/intent-cross-chain.mjs bind-account state.json \
-  --party initiator-id --chain 42161 --address 0x… --expires-at 1790000000 > binding.json
+  --party initiator-id --chain 42161 --address 0x… --expires-at 1790000000 \
+  --wallet-signature 0x… --nonce challenge-id > binding.json
 node scripts/intent-cross-chain.mjs verify-binding state.json binding.json
 
 # verifier: خواندن واقعی زنجیره + امضای گزارش
-INTENT_CROSS_CHAIN_RPC_NETWORKS='[{"chainId":42161,"rpcUrls":["https://…","https://…"],"minConfirmations":3}]' \
+INTENT_CROSS_CHAIN_RPC_NETWORKS='[{"chainId":42161,"quorum":2,"minConfirmations":3,"providers":[{"id":"arb-a","rpcUrl":"https://…"},{"id":"arb-b","rpcUrl":"https://…"}]}]' \
   node scripts/intent-cross-chain.mjs verify-tx state.json \
   --receipt receipt.json --from-binding from.json --to-binding to.json
-INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY='…' INTENT_CROSS_CHAIN_RPC_NETWORKS='…' \
+INTENT_VERIFIER_PRIVATE_KEY='…' INTENT_CROSS_CHAIN_RPC_NETWORKS='…' \
   node scripts/intent-cross-chain.mjs sign-verification state.json \
   --receipt receipt.json --from-binding from.json --to-binding to.json \
   --verifier-id verify-coop > report.json

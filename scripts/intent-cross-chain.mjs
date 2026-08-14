@@ -10,6 +10,7 @@ import {
 } from '../server/intentCrossChain.js';
 import {
   buildAccountBinding,
+  buildAccountBindingChallenge,
   buildTxVerificationReport,
   parseCrossChainRpcNetworks,
   verifyAccountBinding,
@@ -100,20 +101,49 @@ if (command === 'verify-state') {
 
 /* --------------------------- Phase 4c commands ---------------------------- */
 
+if (command === 'binding-challenge') {
+  const stateFile = args[0];
+  if (!stateFile) {
+    fail('Usage: intent-cross-chain.mjs binding-challenge <state.json> --party <partyId> --chain <chainId> --address <0x...> --expires-at <epochSeconds> [--issued-at <epochSeconds>] [--nonce <challengeId>]');
+  }
+  const result = buildAccountBindingChallenge({
+    state: readJson(stateFile, 'cross-chain state'),
+    partyId: option('--party'),
+    chainId: Number(option('--chain')),
+    address: option('--address'),
+    issuedAt: Number(option('--issued-at', Math.floor(Date.now() / 1000))),
+    expiresAt: Number(option('--expires-at')),
+    nonce: option('--nonce', '')
+  });
+  if (!result.ok) fail(result.code, 1);
+  /* Public challenge only: the party signs result.challenge.message with
+     personal_sign (EIP-191) in their own wallet and feeds the public
+     signature back to bind-account. The wallet private key is never
+     requested, never received, never printed. */
+  output(result.challenge);
+  process.exit(0);
+}
+
 if (command === 'bind-account') {
   const stateFile = args[0];
   if (!stateFile) {
-    fail('Usage: intent-cross-chain.mjs bind-account <state.json> --party <partyId> --chain <chainId> --address <0x...> --expires-at <epochSeconds>');
+    fail('Usage: intent-cross-chain.mjs bind-account <state.json> --party <partyId> --chain <chainId> --address <0x...> --expires-at <epochSeconds> [--wallet-signature <0x...>] [--nonce <challengeId>] [--issued-at <epochSeconds>]');
   }
   const privateKey = process.env.INTENT_CROSS_CHAIN_PRIVATE_KEY || '';
   if (!privateKey) fail('INTENT_CROSS_CHAIN_PRIVATE_KEY is required and must stay in the party secrets manager.');
+  const walletSignature = option('--wallet-signature');
   const result = buildAccountBinding({
     state: readJson(stateFile, 'cross-chain state'),
     partyId: option('--party'),
     chainId: Number(option('--chain')),
     address: option('--address'),
     issuedAt: Number(option('--issued-at', Math.floor(Date.now() / 1000))),
-    expiresAt: Number(option('--expires-at'))
+    expiresAt: Number(option('--expires-at')),
+    /* Only the PUBLIC EIP-191 signature over the public challenge is taken
+       as input — never a wallet private key. */
+    walletProof: walletSignature
+      ? { scheme: 'EIP-191', nonce: option('--nonce', ''), signature: walletSignature }
+      : null
   }, privateKey);
   if (!result.ok) fail(result.code, 1);
   output(result.binding);
@@ -178,10 +208,10 @@ if (command === 'verify-tx') {
 if (command === 'sign-verification') {
   const stateFile = args[0];
   if (!stateFile) {
-    fail('Usage: INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY=... INTENT_CROSS_CHAIN_RPC_NETWORKS=... intent-cross-chain.mjs sign-verification <state.json> --receipt <receipt.json> --from-binding <b.json> --to-binding <b.json> --verifier-id <id> [--prior <receipt.json>]');
+    fail('Usage: INTENT_VERIFIER_PRIVATE_KEY=... INTENT_CROSS_CHAIN_RPC_NETWORKS=... intent-cross-chain.mjs sign-verification <state.json> --receipt <receipt.json> --from-binding <b.json> --to-binding <b.json> --verifier-id <id> [--prior <receipt.json>]');
   }
-  const privateKey = process.env.INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY || '';
-  if (!privateKey) fail('INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY is required and must stay in the verifier secrets manager.');
+  const privateKey = process.env.INTENT_VERIFIER_PRIVATE_KEY || process.env.INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY || '';
+  if (!privateKey) fail('INTENT_VERIFIER_PRIVATE_KEY is required and must stay in the verifier secrets manager. It must never be set in Vercel or VITE_*.');
   const networks = parseCrossChainRpcNetworks();
   if (!networks.size) {
     fail('INTENT_CROSS_CHAIN_RPC_NETWORKS must configure at least two https endpoints with distinct hostnames per chain.');
@@ -223,12 +253,12 @@ if (command === 'verify-report') {
   if (!result.ok) fail(result.code, 1);
   output({
     ok: true,
-    reportId: result.report.reportId,
+    verificationId: result.report.verificationId,
     stateId: result.report.stateId,
     receiptId: result.report.receiptId,
     leg: result.report.leg,
     verdict: result.report.verdict,
-    rejectReason: result.report.rejectReason,
+    reasonCodes: result.report.reasonCodes,
     confirmations: result.report.confirmations,
     quorum: result.report.quorum,
     verifier: result.report.verifier,
@@ -256,13 +286,16 @@ fail([
   '  intent-cross-chain.mjs sign <state.json> [prior-receipt.json] --leg <leg> --tx <hash>',
   '  intent-cross-chain.mjs verify-receipt <state.json> <receipt.json> [prior-receipt.json]',
   '  intent-cross-chain.mjs verify-state <state.json> [receipt.json ...]',
-  '  intent-cross-chain.mjs bind-account <state.json> --party <id> --chain <chainId> --address <0x...> --expires-at <s>',
+  '  intent-cross-chain.mjs binding-challenge <state.json> --party <id> --chain <chainId> --address <0x...> --expires-at <s> [--nonce <id>]',
+  '  intent-cross-chain.mjs bind-account <state.json> --party <id> --chain <chainId> --address <0x...> --expires-at <s> [--wallet-signature <0x...>] [--nonce <id>]',
   '  intent-cross-chain.mjs verify-binding <state.json> <binding.json>',
   '  intent-cross-chain.mjs verify-tx <state.json> --receipt <r.json> --from-binding <b.json> --to-binding <b.json>',
   '  intent-cross-chain.mjs sign-verification <state.json> --receipt <r.json> --from-binding <b.json> --to-binding <b.json> --verifier-id <id>',
   '  intent-cross-chain.mjs verify-report <state.json> --report <v.json> --receipt <r.json> --from-binding <b.json> --to-binding <b.json>',
   '',
   'Private keys and RPC URLs live ONLY in the local environment',
-  '(INTENT_CROSS_CHAIN_PRIVATE_KEY, INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY,',
-  ' INTENT_CROSS_CHAIN_RPC_NETWORKS) and are never printed.'
+  '(INTENT_CROSS_CHAIN_PRIVATE_KEY, INTENT_VERIFIER_PRIVATE_KEY,',
+  ' INTENT_CROSS_CHAIN_RPC_NETWORKS) and are never printed. The wallet',
+  ' private key is NEVER requested: only the public EIP-191 signature',
+  ' over the public binding-challenge message is taken as input.'
 ].join('\n'));
