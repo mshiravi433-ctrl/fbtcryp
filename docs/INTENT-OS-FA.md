@@ -289,6 +289,7 @@ Phase 3b — outcome settlement reports + independent re-grading +
            offline settlement CLI                                    [انجام شده]
 Phase 4a — atomic same-chain workflows (user-signed batch, no output verify) [انجام شده]
 Phase 4b — sequential cross-chain signed state machine (non-atomic)     [انجام شده]
+Phase 4c — real multi-RPC per-leg tx verification + signed account bindings [انجام شده؛ فعال‌سازی وابسته به RPC env واقعی]
 Phase 5  — Outcome Marketplace + confidential intent transport          [انجام شده]
 Phase 6  — operator bindings + key rotation + optional root anchor       [انجام شده؛ فعال‌سازی وابسته به env واقعی]
 ```
@@ -600,6 +601,99 @@ node scripts/intent-cross-chain.mjs verify-state \
 `unavailable.atomicCrossChainWorkflows:true` صحیح باقی مانده است. state machine
 شواهد قابل‌راستی‌آزمایی می‌سازد، نه calldata خودکار، custody یا «اتمیک جهانی».
 
+### وضعیت دقیق Phase 4c — راستی‌آزمایی واقعی چند-RPC هر پا (۱.۳۵.۰)
+
+فاز ۴c ادعای غیراتمیک بودن را تغییر نمی‌دهد و هیچ receipt تاریخی را بازنویسی
+نمی‌کند. رسید `fbt.cross-chain-leg-receipt.v1` برای همیشه یک ادعای امضاشدهٔ طرف
+است و `onChainVerified:false` نگه می‌دارد. آنچه اضافه شد یک **لایهٔ مشتق‌شدهٔ
+مستقل** است:
+
+#### ۱. `fbt.cross-chain-account-binding.v1`
+
+طرف، آدرس آن‌چین خود را با همان کلید Ed25519 که در state pin شده امضا می‌کند:
+`stateId`، `partyId`، `chainId`، آدرس checksum شده، صدور/انقضا و claims صریح:
+
+```json
+{
+  "addressControlSelfAttested": true,
+  "walletSignatureVerified": false,
+  "fundsAuthorityGranted": false,
+  "custody": false
+}
+```
+
+`walletSignatureVerified` تا زمانی که schema جداگانهٔ EIP-191/EIP-712 با verify
+واقعی اضافه نشود false اجباری است — هیچ‌جا مالکیت کیف پول ادعا نمی‌شود. صرف
+قرار دادن آدرس در body درخواست API پذیرفته نمی‌شود؛ فقط امضای کلید همان party.
+
+#### ۲. `fbt.cross-chain-tx-verification.v1`
+
+verifier ثبت‌شده (registry `INTENT_VERIFIER_KEYS`) هر پا را از حداقل دو
+endpoint HTTPS با hostname متفاوت می‌خواند و گزارش bounded امضا می‌کند که به
+`stateId`، `receiptId`، leg، chain/token/amount دقیق، آدرس‌های فرستنده/گیرنده
+از bindingهای امضاشده، block number/hash، receipt status، confirmations،
+observation هر RPC، quorum و هویت verifier متصل است.
+
+- **ERC-20:** receipt موفق + رخداد `Transfer` دقیقاً از قرارداد token برنامه +
+  from/to/amount دقیق + توافق block hash بین quorum + حداقل confirmation.
+- **Native:** بررسی دقیق from/to/value خود تراکنش + receipt موفق + block hash
+  + confirmations.
+
+سرور پیش از ذخیره: کلید verifier را با registry چک می‌کند، bindingها را دوباره
+verify می‌کند، **خودش** زنجیره را از endpointهای خودش دوباره می‌خواند و verdict
+را بازمحاسبه می‌کند. گزارش غیرقابل‌بازتولید با `VERIFICATION_NOT_RECOMPUTABLE`
+رد می‌شود. ذخیره‌سازی immutable و idempotent است.
+
+fail-closed: RPC disagreement، reorg/دریفت block-hash، receipt ناموفق، tx
+پیدانشده، confirmation ناکافی، token contract/فرستنده/گیرنده/amount اشتباه،
+binding منقضی یا کلید اشتباه، و یک RPC زنده در برابر حد نصاب دو. outage پاسخ
+transient/retryable می‌گیرد و هرگز «verified» یا نتیجهٔ خالی معتبر نمی‌شود.
+
+#### ۳. وضعیت مشتق‌شده و مرز صداقت
+
+هر پا یکی از این وضعیت‌ها را دارد: `signed-only`، `verification-pending`،
+`rpc-disagreement`، `confirmations-pending`، `onchain-verified`،
+`verification-rejected`. اگر همهٔ پاهای ثبت‌شده verified شوند
+`allSubmittedLegsOnChainVerified:true` می‌شود؛ اما `atomic`،
+`globalAtomicity`، `custody`، `escrow`، `automaticSettlement` و
+`refundEnforcedByFbt` همچنان false — تأیید دو تراکنش جدا آن‌ها را اتمیک
+نمی‌کند — و envelope با `ATOMIC_CROSS_CHAIN_UNAVAILABLE` پیش‌نویس می‌ماند.
+
+RPCها فقط در env سروری `INTENT_CROSS_CHAIN_RPC_NETWORKS` هستند؛ هیچ URL در
+پاسخ عمومی، log یا `VITE_*` ظاهر نمی‌شود. capabilities فقط
+`multiRpcConfigured`، تعداد endpoint و `distinctRpcHosts` را منتشر می‌کند و
+همیشه `providerIndependenceProven:false` — hostname متفاوت اثبات استقلال
+provider نیست و RPC خصوصی «confidential» نامیده نمی‌شود.
+
+#### API و CLI
+
+```text
+POST/GET /api/intents/v1/cross-chain/states/:stateId/account-bindings
+POST/GET /api/intents/v1/cross-chain/states/:stateId/verification-reports
+GET      /api/intents/v1/cross-chain/states/:stateId    ← + legVerification
+```
+
+```bash
+# طرف: binding امضاشده (کلید فقط در env محلی خودش)
+INTENT_CROSS_CHAIN_PRIVATE_KEY='…' \
+  node scripts/intent-cross-chain.mjs bind-account state.json \
+  --party initiator-id --chain 42161 --address 0x… --expires-at 1790000000 > binding.json
+node scripts/intent-cross-chain.mjs verify-binding state.json binding.json
+
+# verifier: خواندن واقعی زنجیره + امضای گزارش
+INTENT_CROSS_CHAIN_RPC_NETWORKS='[{"chainId":42161,"rpcUrls":["https://…","https://…"],"minConfirmations":3}]' \
+  node scripts/intent-cross-chain.mjs verify-tx state.json \
+  --receipt receipt.json --from-binding from.json --to-binding to.json
+INTENT_CROSS_CHAIN_VERIFIER_PRIVATE_KEY='…' INTENT_CROSS_CHAIN_RPC_NETWORKS='…' \
+  node scripts/intent-cross-chain.mjs sign-verification state.json \
+  --receipt receipt.json --from-binding from.json --to-binding to.json \
+  --verifier-id verify-coop > report.json
+node scripts/intent-cross-chain.mjs verify-report state.json \
+  --report report.json --receipt receipt.json --from-binding from.json --to-binding to.json
+```
+
+هیچ private key و هیچ RPC URL هرگز چاپ نمی‌شود.
+
 ### وضعیت دقیق Phase 6 — اپراتور مستقل، چرخش کلید و anchor ریشه
 
 #### ۱. اتصال رمزنگاری‌شدهٔ اپراتور به کلید ناظر/راستی‌آزما
@@ -677,6 +771,21 @@ POST /api/intents/v1/log/:intentHash/root-anchor
 `configured:false` و `externallyAnchored:false`. حتی با anchor معتبر، claims
 صریح‌اند: timestamp/set commitment بله؛ completeness، execution، settlement و
 custody خیر. CLI: `scripts/intent-root-anchor.mjs`.
+
+از ۱.۳۵.۰ ابزار deployment کامل است (Solidity دقیقاً 0.8.24):
+
+```bash
+node scripts/compile-merkle-anchor.mjs
+DEPLOYER_PRIVATE_KEY=0x… RPC_URL=https://… CHAIN_ID=8453 \
+  node scripts/deploy-merkle-anchor.mjs          # deploy + verify bytecode/event
+RPC_URL=https://… CHAIN_ID=8453 \
+  node scripts/deploy-merkle-anchor.mjs verify 0xAddress   # فقط verify
+```
+
+deploy فقط با credential واقعی در environment امن اپراتور انجام می‌شود؛
+`DEPLOYER_PRIVATE_KEY` هرگز در مخزن، چت، log یا `VITE_*` قرار نمی‌گیرد و FBT آن
+را از کاربر نمی‌خواهد. بدون deployment واقعی، وضعیت `configured:false` صادقانه
+باقی می‌ماند.
 
 ---
 

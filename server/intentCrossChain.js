@@ -751,7 +751,14 @@ export function crossChainProtocolStatus() {
     custody: false,
     escrow: false,
     automaticSettlement: false,
+    /* Receipts stay signed party claims (onChainVerified:false forever).
+       Phase 4c adds a SEPARATE derived layer — fbt.cross-chain-tx-verification.v1
+       — that reads the chain through a multi-RPC quorum. Its status is
+       published under crossChain.txVerification; it never rewrites receipts
+       and never makes two transactions atomic. */
     onChainTxVerification: false,
+    derivedLegVerificationSchema: 'fbt.cross-chain-tx-verification.v1',
+    accountBindingSchema: 'fbt.cross-chain-account-binding.v1',
     refundEnforcedByFbt: false,
     crossInstanceTransitionAtomicity: false,
     envelopeStatus: 'draft-only',

@@ -326,6 +326,17 @@ import {
   verifyCrossChainReceipt
 } from '../server/intentCrossChain.js';
 import {
+  buildAccountBinding,
+  buildTxVerificationReport,
+  crossChainVerificationStatus,
+  deriveLegVerificationStatus,
+  observeLegAcrossRpcs,
+  parseCrossChainRpcNetworks,
+  recomputeTxVerificationReport,
+  verifyAccountBinding,
+  verifyTxVerificationReport
+} from '../server/intentCrossChainVerification.js';
+import {
   buildOperatorAttestation,
   independentVerificationStatus,
   verifyOperatorAttestation
@@ -6168,6 +6179,351 @@ export default async function run() {
           && !cliOut.includes(initiatorKeys.privateKey));
     } finally {
       rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  /* ------- Phase 4c: signed account bindings + multi-RPC leg verification ------- */
+  {
+    const now = Math.floor(Date.now() / 1000);
+    const initiatorKeys = generateSolverKeyPair();
+    const counterpartyKeys = generateSolverKeyPair();
+    const verifierKeys = generateSolverKeyPair();
+    const strangerKeys = generateSolverKeyPair();
+    const token = { symbol: 'USDC', address: `0x${'11'.repeat(20)}`, native: false, decimals: 6 };
+    const nativeToken = { symbol: 'ETH', native: true, decimals: 18 };
+    const state = createCrossChainState({
+      schema: 'fbt.cross-chain-state.v1',
+      createdAt: now,
+      source: { chainId: 42161, token, amount: '100000000' },
+      destination: { chainId: 1, token: nativeToken, amount: '55000000000000000' },
+      parties: {
+        initiator: { id: 'p4c-initiator', publicKey: initiatorKeys.publicKey },
+        counterparty: { id: 'p4c-counterparty', publicKey: counterpartyKeys.publicKey }
+      },
+      timeout: { sourceSignatureBy: now + 60, destinationSignatureBy: now + 120, refundSignatureBy: now + 180 },
+      refund: {
+        chainId: 42161, token, amount: '100000000',
+        fromPartyId: 'p4c-counterparty', toPartyId: 'p4c-initiator',
+        mode: 'user-signed-transfer', automatic: false, enforceableByFbt: false
+      }
+    }, { now: now * 1000 }).state;
+    t('Phase 4c leaves fbt.cross-chain-state.v1 backward compatible',
+      evaluateCrossChainState(state, []).ok
+        && state.claims.onChainVerified === false && state.claims.atomic === false);
+
+    const fromAddress = `0x${'aa'.repeat(20)}`;
+    const toAddress = `0x${'bb'.repeat(20)}`;
+    const fromBinding = buildAccountBinding({
+      state, partyId: 'p4c-initiator', chainId: 42161, address: fromAddress, expiresAt: now + 86400
+    }, initiatorKeys.privateKey, { now: now * 1000 });
+    const toBinding = buildAccountBinding({
+      state, partyId: 'p4c-counterparty', chainId: 42161, address: toAddress, expiresAt: now + 86400
+    }, counterpartyKeys.privateKey, { now: now * 1000 });
+    t('a party binds an on-chain address with its own pinned Ed25519 key',
+      fromBinding.ok && toBinding.ok
+        && verifyAccountBinding(fromBinding.binding, { state, now: now * 1000 }).ok);
+    t('account bindings never claim wallet ownership, funds authority or custody',
+      fromBinding.binding.claims.addressControlSelfAttested === true
+        && fromBinding.binding.claims.walletSignatureVerified === false
+        && fromBinding.binding.claims.fundsAuthorityGranted === false
+        && fromBinding.binding.claims.custody === false);
+    t('an expired account binding is refused',
+      verifyAccountBinding(fromBinding.binding, { state, now: (now + 90000) * 1000 }).code
+        === 'ACCOUNT_BINDING_EXPIRED');
+    t('a binding signed by a key the state does not pin is refused',
+      buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 42161, address: fromAddress, expiresAt: now + 86400
+      }, strangerKeys.privateKey).code === 'BINDING_KEY_MISMATCH');
+    t('tampering the bound address invalidates the binding',
+      !verifyAccountBinding({
+        ...fromBinding.binding, address: `0x${'CC'.repeat(20)}`.replace('CC'.repeat(20), 'cc'.repeat(20))
+      }, { state, now: now * 1000 }).ok);
+
+    const sourceReceipt = buildCrossChainReceipt({
+      state, leg: 'source-transfer', txHash: `0x${'31'.repeat(32)}`, signedAt: now
+    }, initiatorKeys.privateKey).receipt;
+
+    const transferIface = new Interface(['event Transfer(address indexed from, address indexed to, uint256 value)']);
+    const goodEvent = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
+      fromBinding.binding.address, toBinding.binding.address, 100000000n
+    ]);
+    const blockHash = `0x${'44'.repeat(32)}`;
+    const goodRpc = (overrides = {}) => async (_url, method) => {
+      if (method === 'eth_blockNumber') return overrides.latest ?? '0x100';
+      if (method === 'eth_getTransactionReceipt') {
+        return overrides.receipt !== undefined ? overrides.receipt : {
+          status: '0x1', transactionHash: sourceReceipt.txHash, blockNumber: '0xf0',
+          blockHash, logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+        };
+      }
+      if (method === 'eth_getTransactionByHash') {
+        return overrides.tx !== undefined ? overrides.tx
+          : { from: fromBinding.binding.address, to: token.address, value: '0x0' };
+      }
+      return null;
+    };
+    const networks = parseCrossChainRpcNetworks(JSON.stringify([
+      { chainId: 42161, name: 'Unit Arbitrum', rpcUrls: ['https://rpc-a.invalid', 'https://rpc-b.invalid'], minConfirmations: 3 }
+    ]));
+    t('multi-RPC config requires two https endpoints on distinct hostnames',
+      networks.size === 1
+        && parseCrossChainRpcNetworks(JSON.stringify([
+          { chainId: 42161, rpcUrls: ['https://one.invalid'] }
+        ])).size === 0
+        && parseCrossChainRpcNetworks(JSON.stringify([
+          { chainId: 42161, rpcUrls: ['https://same.invalid/a', 'https://same.invalid/b'] }
+        ])).size === 0
+        && parseCrossChainRpcNetworks(JSON.stringify([
+          { chainId: 42161, rpcUrls: ['http://a.invalid', 'https://b.invalid'] }
+        ])).size === 0);
+    const verificationCaps = crossChainVerificationStatus(networks);
+    t('verification capabilities never leak an RPC URL and never claim provider independence',
+      !JSON.stringify(verificationCaps).includes('invalid')
+        && verificationCaps.rpcUrlsPublished === false
+        && verificationCaps.providerIndependenceProven === false
+        && verificationCaps.multiRpcConfigured === true
+        && verificationCaps.chains[0].distinctRpcHosts === 2);
+
+    const registry = new Map([[
+      'p4c-verifier', { id: 'p4c-verifier', publicKey: verifierKeys.publicKey, active: true }
+    ]]);
+    const report = await buildTxVerificationReport({
+      state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+      verifier: { id: 'p4c-verifier' }, networks, rpc: goodRpc(), registry, now: now * 1000
+    }, verifierKeys.privateKey);
+    t('a correct ERC-20 Transfer with quorum agreement verifies on-chain',
+      report.ok && report.report.verdict === 'onchain-verified'
+        && report.report.quorum.agreeing === 2
+        && report.report.claims.legOnChainVerified === true);
+    t('a verified leg report still pins non-atomic, no-custody claims',
+      report.report.claims.atomicSettlement === false
+        && report.report.claims.globalAtomicity === false
+        && report.report.claims.custody === false
+        && report.report.claims.providerIndependenceProven === false);
+    t('the server recomputes a signed report before accepting it',
+      (await recomputeTxVerificationReport(report.report, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry, networks, rpc: goodRpc(), now: now * 1000
+      })).ok);
+    t('a signed but non-recomputable report is refused',
+      (await recomputeTxVerificationReport(report.report, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry, networks,
+        rpc: goodRpc({ receipt: { status: '0x1', blockNumber: '0xf0', blockHash: `0x${'99'.repeat(32)}`, logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }] } }),
+        now: now * 1000
+      })).code === 'VERIFICATION_NOT_RECOMPUTABLE');
+    t('an unregistered verifier cannot produce an acceptable report',
+      verifyTxVerificationReport(report.report, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry: new Map(), now: now * 1000
+      }).code === 'UNREGISTERED_VERIFIER');
+    t('tampering the signed verdict breaks the report id',
+      !verifyTxVerificationReport({ ...report.report, confirmations: 999 }, {
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        registry, now: now * 1000
+      }).ok);
+
+    const wrongToken = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
+      fromBinding.binding.address, toBinding.binding.address, 100000000n
+    ]);
+    const failCases = [
+      ['a failed receipt is a signed rejection, never verified', goodRpc({
+        receipt: { status: '0x0', blockNumber: '0xf0', blockHash, logs: [] }
+      }), 'verification-rejected', 'TX_RECEIPT_FAILED'],
+      ['a Transfer from the wrong token contract is rejected', goodRpc({
+        receipt: {
+          status: '0x1', blockNumber: '0xf0', blockHash,
+          logs: [{ address: `0x${'dd'.repeat(20)}`, topics: wrongToken.topics, data: wrongToken.data }]
+        }
+      }), 'verification-rejected', 'WRONG_TOKEN_CONTRACT'],
+      ['a wrong ERC-20 amount is rejected', goodRpc({
+        receipt: {
+          status: '0x1', blockNumber: '0xf0', blockHash,
+          logs: [{
+            address: token.address,
+            ...(() => {
+              const bad = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
+                fromBinding.binding.address, toBinding.binding.address, 99999999n
+              ]);
+              return { topics: bad.topics, data: bad.data };
+            })()
+          }]
+        }
+      }), 'verification-rejected', 'WRONG_AMOUNT'],
+      ['a wrong recipient is rejected', goodRpc({
+        receipt: {
+          status: '0x1', blockNumber: '0xf0', blockHash,
+          logs: [{
+            address: token.address,
+            ...(() => {
+              const bad = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [
+                fromBinding.binding.address, `0x${'ee'.repeat(20)}`, 100000000n
+              ]);
+              return { topics: bad.topics, data: bad.data };
+            })()
+          }]
+        }
+      }), 'verification-rejected', 'WRONG_RECIPIENT']
+    ];
+    for (const [name, rpc, verdict, reason] of failCases) {
+      const outcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t(name, outcome.ok && outcome.report.verdict === verdict && outcome.report.rejectReason === reason);
+    }
+
+    const transientCases = [
+      ['insufficient confirmations refuse to finalize', goodRpc({ latest: '0xf1' }), 'INSUFFICIENT_CONFIRMATIONS'],
+      ['a missing transaction refuses to finalize', goodRpc({ receipt: null, tx: null }), 'TX_NOT_FOUND'],
+      ['a full provider outage refuses to finalize', async () => { throw new Error('down'); }, 'RPC_QUORUM_UNAVAILABLE']
+    ];
+    for (const [name, rpc, code] of transientCases) {
+      const outcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t(name, !outcome.ok && outcome.code === code);
+    }
+    {
+      /* Block-hash disagreement between endpoints (reorg / drift). */
+      const disagreeing = async (url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (method === 'eth_getTransactionByHash') {
+          return { from: fromBinding.binding.address, to: token.address, value: '0x0' };
+        }
+        return {
+          status: '0x1', blockNumber: '0xf0',
+          blockHash: url.includes('rpc-a') ? blockHash : `0x${'55'.repeat(32)}`,
+          logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+        };
+      };
+      const outcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: disagreeing, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('block-hash disagreement between RPCs fails closed', !outcome.ok && outcome.code === 'RPC_DISAGREEMENT');
+      /* A reorg where one endpoint no longer sees the tx at all. */
+      const reorged = async (url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (url.includes('rpc-b')) return null;
+        if (method === 'eth_getTransactionByHash') {
+          return { from: fromBinding.binding.address, to: token.address, value: '0x0' };
+        }
+        return {
+          status: '0x1', blockNumber: '0xf0', blockHash,
+          logs: [{ address: token.address, topics: goodEvent.topics, data: goodEvent.data }]
+        };
+      };
+      const reorgOutcome = await buildTxVerificationReport({
+        state, receipt: sourceReceipt, fromBinding: fromBinding.binding, toBinding: toBinding.binding,
+        verifier: { id: 'p4c-verifier' }, networks, rpc: reorged, registry, now: now * 1000
+      }, verifierKeys.privateKey);
+      t('a reorg where one endpoint loses the tx fails closed',
+        !reorgOutcome.ok && reorgOutcome.code === 'RPC_DISAGREEMENT');
+      /* One reachable RPC can never satisfy a quorum of two. */
+      const oneUp = async (url, method) => {
+        if (url.includes('rpc-b')) throw new Error('down');
+        return goodRpc()(url, method);
+      };
+      const single = await observeLegAcrossRpcs({
+        network: networks.get(42161),
+        expected: {
+          txHash: sourceReceipt.txHash, native: false, tokenAddress: token.address,
+          amount: '100000000', fromAddress: fromBinding.binding.address, toAddress: toBinding.binding.address
+        },
+        rpc: oneUp
+      });
+      t('one live RPC against a quorum of two fails closed',
+        single.final === false && single.code === 'RPC_QUORUM_UNAVAILABLE');
+    }
+
+    {
+      /* Native-asset destination leg: exact from/to/value transaction checks. */
+      const destinationReceipt = buildCrossChainReceipt({
+        state, previousReceipts: [sourceReceipt], leg: 'destination-transfer',
+        txHash: `0x${'32'.repeat(32)}`, signedAt: now + 1
+      }, counterpartyKeys.privateKey).receipt;
+      const nativeFrom = buildAccountBinding({
+        state, partyId: 'p4c-counterparty', chainId: 1, address: toAddress, expiresAt: now + 86400
+      }, counterpartyKeys.privateKey, { now: now * 1000 });
+      const nativeTo = buildAccountBinding({
+        state, partyId: 'p4c-initiator', chainId: 1, address: fromAddress, expiresAt: now + 86400
+      }, initiatorKeys.privateKey, { now: now * 1000 });
+      const nativeNetworks = parseCrossChainRpcNetworks(JSON.stringify([
+        { chainId: 1, name: 'Unit Mainnet', rpcUrls: ['https://eth-a.invalid', 'https://eth-b.invalid'], minConfirmations: 2 }
+      ]));
+      const nativeRpc = (value) => async (_url, method) => {
+        if (method === 'eth_blockNumber') return '0x100';
+        if (method === 'eth_getTransactionReceipt') {
+          return { status: '0x1', transactionHash: destinationReceipt.txHash, blockNumber: '0xf0', blockHash, logs: [] };
+        }
+        if (method === 'eth_getTransactionByHash') {
+          return { from: nativeFrom.binding.address, to: nativeTo.binding.address, value };
+        }
+        return null;
+      };
+      const goodNative = await buildTxVerificationReport({
+        state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
+        fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
+        verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
+        rpc: nativeRpc('0xc3663566a58000'), registry, now: (now + 1) * 1000
+      }, verifierKeys.privateKey);
+      t('an exact native transfer verifies on-chain',
+        goodNative.ok && goodNative.report.verdict === 'onchain-verified');
+      const badNative = await buildTxVerificationReport({
+        state, receipt: destinationReceipt, previousReceipts: [sourceReceipt],
+        fromBinding: nativeFrom.binding, toBinding: nativeTo.binding,
+        verifier: { id: 'p4c-verifier' }, networks: nativeNetworks,
+        rpc: nativeRpc('0xc3663566a57fff'), registry, now: (now + 1) * 1000
+      }, verifierKeys.privateKey);
+      t('a wrong native value is rejected',
+        badNative.ok && badNative.report.verdict === 'verification-rejected'
+          && badNative.report.rejectReason === 'WRONG_AMOUNT');
+      /* Even with BOTH legs verified, nothing became atomic. */
+      const settled = evaluateCrossChainState(state, [sourceReceipt, destinationReceipt], {
+        now: (now + 1) * 1000
+      });
+      t('a fully verified sequential swap still reports atomic:false',
+        settled.ok && settled.status === 'settled-sequential'
+          && settled.atomic === false && settled.custody === false);
+    }
+
+    t('derived leg statuses expose the honest verification ladder',
+      deriveLegVerificationStatus({}).status === 'signed-only'
+        && deriveLegVerificationStatus({ networkConfigured: true }).status === 'verification-pending'
+        && deriveLegVerificationStatus({ attempt: 'RPC_DISAGREEMENT' }).status === 'rpc-disagreement'
+        && deriveLegVerificationStatus({ attempt: 'INSUFFICIENT_CONFIRMATIONS' }).status === 'confirmations-pending'
+        && deriveLegVerificationStatus({ reports: [report.report], networkConfigured: true }).status === 'onchain-verified');
+
+    const crossCaps4c = crossChainProtocolStatus();
+    t('Phase 4c never upgrades the historical receipt schema or the atomic guard',
+      crossCaps4c.onChainTxVerification === false
+        && crossCaps4c.atomic === false
+        && crossCaps4c.envelopeBlockCode === 'ATOMIC_CROSS_CHAIN_UNAVAILABLE'
+        && crossCaps4c.derivedLegVerificationSchema === 'fbt.cross-chain-tx-verification.v1');
+
+    {
+      /* CLI: bind-account signs offline and never prints the private key. */
+      const tmp = mkdtempSync(join(tmpdir(), 'fbt-phase4c-'));
+      try {
+        const stateFile = join(tmp, 'state.json');
+        writeFileSync(stateFile, JSON.stringify(state));
+        const cliOut = execFileSync(process.execPath, [
+          'scripts/intent-cross-chain.mjs', 'bind-account', stateFile,
+          '--party', 'p4c-initiator', '--chain', '42161',
+          '--address', fromAddress, '--expires-at', String(now + 86400)
+        ], {
+          encoding: 'utf8',
+          env: { ...process.env, INTENT_CROSS_CHAIN_PRIVATE_KEY: initiatorKeys.privateKey }
+        });
+        const cliBinding = JSON.parse(cliOut);
+        t('the bind-account CLI signs offline without printing its private key',
+          verifyAccountBinding(cliBinding, { state, now: now * 1000 }).ok
+            && !cliOut.includes(initiatorKeys.privateKey));
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
     }
   }
 

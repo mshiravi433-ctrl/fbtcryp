@@ -90,6 +90,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     crossChainStates: '/api/intents/v1/cross-chain/states',
     crossChainState: '/api/intents/v1/cross-chain/states/{stateId}',
     crossChainReceipts: '/api/intents/v1/cross-chain/states/{stateId}/receipts',
+    crossChainAccountBindings: '/api/intents/v1/cross-chain/states/{stateId}/account-bindings',
+    crossChainVerificationReports: '/api/intents/v1/cross-chain/states/{stateId}/verification-reports',
     operators: '/api/intents/v1/operators',
     merkleAnchorNetworks: '/api/intents/v1/merkle-anchor-networks',
     merkleRootAnchorCalldata: '/api/intents/v1/log/{intentHash}/root-anchor-calldata/{chainId}',
@@ -206,6 +208,14 @@ export const INTENT_CAPABILITIES = Object.freeze({
     crossChainSequentialUserSignatures: true,
     crossChainAtomicity: false,
     crossChainCustody: false,
+    /* Phase 4c: per-leg multi-RPC verification is a derived layer. It can
+       prove one transaction was mined with exact facts; it cannot make two
+       transactions atomic and it never grants custody or settlement power. */
+    crossChainAccountBindings: 'fbt.cross-chain-account-binding.v1',
+    crossChainTxVerification: 'fbt.cross-chain-tx-verification.v1',
+    crossChainVerifiedLegsRemainNonAtomic: true,
+    crossChainWalletSignatureVerification: false,
+    crossChainRpcProviderIndependenceProven: false,
     independentOperatorAttestations: 'fbt.operator-attestation.v1',
     operatorKeyControlCryptographicallyBound: true,
     organizationalIndependenceProvenByRegistry: false,
@@ -226,6 +236,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     signatures: 'Ed25519-strict-base64url',
     crossChainStateSchema: 'fbt.cross-chain-state.v1',
     crossChainReceiptSchema: 'fbt.cross-chain-leg-receipt.v1',
+    crossChainAccountBindingSchema: 'fbt.cross-chain-account-binding.v1',
+    crossChainTxVerificationSchema: 'fbt.cross-chain-tx-verification.v1',
     operatorAttestationSchema: 'fbt.operator-attestation.v1',
     coordinatorRotationSchema: 'fbt.coordinator-key-rotation.v1',
     coordinatorKeyringSchema: 'fbt.coordinator-keyring.v1',

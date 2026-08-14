@@ -25,6 +25,7 @@ import {
   buildCrossChainReceipt,
   verifyCrossChainReceipt
 } from '../server/intentCrossChain.js';
+import { buildAccountBinding } from '../server/intentCrossChainVerification.js';
 import { buildOperatorAttestation } from '../server/intentOperators.js';
 import {
   createCoordinatorRotationDraft,
@@ -1013,6 +1014,94 @@ try {
       && verifyCrossChainReceipt(destinationReceipt, {
         state: createdCross.body.state, previousReceipts: [sourceReceipt]
       }).ok);
+
+  /* ------- Phase 4c: signed account bindings + derived verification view ------- */
+  const crossStateId = createdCross.body.state.stateId;
+  const bindingAddress = `0x${'a1'.repeat(20)}`;
+  const goodBinding = buildAccountBinding({
+    state: createdCross.body.state,
+    partyId: 'api-cross-initiator',
+    chainId: 42161,
+    address: bindingAddress,
+    expiresAt: crossNow + 86400
+  }, initiatorKeys.privateKey).binding;
+  const unsignedBindingAttempt = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...goodBinding,
+      signature: `${goodBinding.signature.slice(0, -1)}${goodBinding.signature.endsWith('A') ? 'B' : 'A'}`
+    })
+  });
+  t('an account binding with a forged signature is refused — an address in a request body proves nothing',
+    unsignedBindingAttempt.response.status === 403
+      && unsignedBindingAttempt.body.error === 'ACCOUNT_BINDING_SIGNATURE_MISMATCH');
+  const storedBinding = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(goodBinding)
+  });
+  t('a party-key-signed account binding stores with honest self-attested claims',
+    storedBinding.response.status === 201
+      && storedBinding.body.binding?.claims?.addressControlSelfAttested === true
+      && storedBinding.body.binding?.claims?.walletSignatureVerified === false
+      && storedBinding.body.binding?.claims?.fundsAuthorityGranted === false
+      && storedBinding.body.binding?.claims?.custody === false);
+  const replayedBinding = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(goodBinding)
+  });
+  t('replaying the same binding is idempotent, not a second record',
+    replayedBinding.response.status === 200 && replayedBinding.body.alreadyStored === true);
+  const conflictingBinding = buildAccountBinding({
+    state: createdCross.body.state,
+    partyId: 'api-cross-initiator',
+    chainId: 42161,
+    address: `0x${'a2'.repeat(20)}`,
+    expiresAt: crossNow + 86400
+  }, initiatorKeys.privateKey).binding;
+  const bindingConflict = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(conflictingBinding)
+  });
+  t('a different binding for the same party+chain is a conflict, never an overwrite',
+    bindingConflict.response.status === 409 && bindingConflict.body.error === 'ACCOUNT_BINDING_CONFLICT');
+  const bindingList = await request(`/cross-chain/states/${crossStateId}/account-bindings`);
+  t('stored bindings read back exactly once',
+    bindingList.response.status === 200
+      && bindingList.body.bindings?.length === 1
+      && bindingList.body.bindings[0].bindingId === goodBinding.bindingId);
+
+  const fakeReport = {
+    schema: 'fbt.cross-chain-tx-verification.v1',
+    stateId: crossStateId,
+    receiptId: sourceReceipt.receiptId,
+    leg: 'source-transfer'
+  };
+  const unconfiguredVerification = await request(`/cross-chain/states/${crossStateId}/verification-reports`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(fakeReport)
+  });
+  t('a verification report cannot be stored without bindings and configured RPC quorum',
+    [400, 404, 503].includes(unconfiguredVerification.response.status)
+      && unconfiguredVerification.body.error !== undefined);
+  const verificationList = await request(`/cross-chain/states/${crossStateId}/verification-reports`);
+  t('the verification report log stays empty rather than inventing success',
+    verificationList.response.status === 200 && verificationList.body.reports?.length === 0);
+  const verifiedState = await request(`/cross-chain/states/${crossStateId}`);
+  t('the public state derives per-leg verification without touching stored receipts',
+    verifiedState.response.status === 200
+      && verifiedState.body.legVerification?.['source-transfer']?.status === 'signed-only'
+      && verifiedState.body.legVerification?.['destination-transfer']?.status === 'signed-only'
+      && verifiedState.body.allSubmittedLegsOnChainVerified === false
+      && verifiedState.body.receipts.every((row) => row.claims.onChainVerified === false)
+      && verifiedState.body.atomic === false
+      && verifiedState.body.custody === false
+      && verifiedState.body.refundEnforcedByFbt === false);
+  const caps4c = await request('/capabilities');
+  t('capabilities publish Phase 4c honestly: quorum config, no RPC URLs, no independence claim',
+    caps4c.response.status === 200
+      && caps4c.body.crossChain?.txVerification?.multiRpcConfigured === false
+      && caps4c.body.crossChain?.txVerification?.quorumRequired === 2
+      && caps4c.body.crossChain?.txVerification?.rpcUrlsPublished === false
+      && caps4c.body.crossChain?.txVerification?.providerIndependenceProven === false
+      && caps4c.body.crossChain?.atomic === false
+      && caps4c.body.crossChain?.onChainTxVerification === false);
 
   const tmp4a = mkdtempSync(join(tmpdir(), 'fbt-probe-4a-'));
   try {

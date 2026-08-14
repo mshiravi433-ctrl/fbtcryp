@@ -253,6 +253,21 @@ export function independentVerificationStatus({
   const allSeparated = bindings.length > 0
     && bindings.every((row) => row.keySeparatedFromFbtCoordinatorAndSolvers);
   const operatorIds = new Set(bindings.map((row) => row.operatorId).filter(Boolean));
+  /* Honest operational blockers: name exactly which registered key still has
+     no CURRENT signed attestation and the offline command that produces one.
+     A blocker is documentation for the real key owner — never something the
+     server can (or may) fabricate its way around. */
+  const blockers = bindings
+    .filter((row) => !row.cryptographicallyBound)
+    .map((row) => ({
+      role: row.role,
+      registryId: row.registryId,
+      blocker: 'NO_CURRENT_SIGNED_OPERATOR_ATTESTATION',
+      requiredDocument: OPERATOR_ATTESTATION_SCHEMA,
+      requiredSigner: 'the private key holder of this exact registry public key',
+      offlineCommand: 'INTENT_OBSERVER_PRIVATE_KEY=… node scripts/intent-operator.mjs attest <input.json>',
+      thenSet: 'INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS (public signed documents only)'
+    }));
   return {
     schema: OPERATOR_ATTESTATION_SCHEMA,
     configured: allBound && allSeparated,
@@ -267,8 +282,10 @@ export function independentVerificationStatus({
     independenceBasis: allBound
       ? 'signed-operator-statement-not-corporate-independence-proof'
       : 'unconfigured',
+    registryProvesOrganizationalIndependence: false,
     note: 'A registry and a valid signature prove key control, not organizational independence. Independent operation must be established and audited outside this protocol.',
     bindings,
+    blockers,
     cli: 'scripts/intent-operator.mjs'
   };
 }

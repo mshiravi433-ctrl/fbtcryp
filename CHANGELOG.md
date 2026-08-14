@@ -1,5 +1,88 @@
 # Changelog
 
+## 1.35.0 — Real cross-chain leg verification (Phase 4c) + honest Phase 6 operations
+
+**Phase 4c — multi-RPC on-chain verification of cross-chain legs.**
+- New `fbt.cross-chain-account-binding.v1`: a party binds an on-chain address
+  to the SAME Ed25519 key pinned in `fbt.cross-chain-state.v1`, with issued/
+  expiry windows and strict claims: `addressControlSelfAttested:true`,
+  `walletSignatureVerified:false` (no EIP-191/EIP-712 check exists, so wallet
+  ownership is never claimed), `fundsAuthorityGranted:false`, `custody:false`.
+  An address arriving in an API body proves nothing; only the party key can
+  produce an acceptable binding.
+- New `fbt.cross-chain-tx-verification.v1`: a registered verifier reads each
+  leg through a quorum of ≥2 HTTPS RPC endpoints with distinct hostnames and
+  signs a bounded report pinned to `stateId`, `receiptId`, leg, exact
+  chain/token/amount, bound sender/recipient addresses, block number/hash,
+  receipt status, confirmations, per-endpoint observations and the quorum.
+  ERC-20 legs require a successful receipt with a `Transfer` event emitted by
+  EXACTLY the planned token contract carrying the exact from/to/amount;
+  native legs check transaction from/to/value plus receipt success.
+- Fail-closed everywhere: RPC disagreement, reorg/block-hash drift, failed
+  receipt, missing tx, insufficient confirmations, wrong token contract/
+  sender/recipient/amount, expired or mis-keyed binding, and one live RPC
+  against the quorum of two all refuse verification. Outages are never
+  converted into "verified" or a valid empty result.
+- The server stores a report ONLY after re-checking the verifier key against
+  the registry, re-verifying both bindings, re-reading the chain through its
+  own configured endpoints and reproducing the exact signed verdict
+  (`VERIFICATION_NOT_RECOMPUTABLE` otherwise). Transient outcomes answer
+  retryable and store nothing.
+- Historical `fbt.cross-chain-state.v1` states and
+  `fbt.cross-chain-leg-receipt.v1` receipts are untouched and keep verifying;
+  receipts keep `onChainVerified:false` forever because they are party
+  claims. Verification appears only in a DERIVED public block:
+  `legVerification` per leg (`signed-only`, `verification-pending`,
+  `rpc-disagreement`, `confirmations-pending`, `onchain-verified`,
+  `verification-rejected`) plus `accountBindings` / `verificationReports` and
+  `allSubmittedLegsOnChainVerified`. Even then `atomic`, `globalAtomicity`,
+  `custody`, `escrow`, `automaticSettlement` and `refundEnforcedByFbt` stay
+  false — two verified transactions are still two separate transactions —
+  and the envelope stays draft-only under `ATOMIC_CROSS_CHAIN_UNAVAILABLE`.
+- RPC endpoints live ONLY in server-side `INTENT_CROSS_CHAIN_RPC_NETWORKS`.
+  No URL appears in public responses, logs or `VITE_*`. Capabilities publish
+  `multiRpcConfigured`, `distinctRpcHosts` and — because distinct hostnames
+  are plumbing, not an audit — `providerIndependenceProven:false`. Nothing is
+  labelled "confidential".
+- New APIs: `POST/GET /cross-chain/states/{stateId}/account-bindings` and
+  `POST/GET /cross-chain/states/{stateId}/verification-reports`; the public
+  state endpoint now returns the derived verification view. CLI additions in
+  `scripts/intent-cross-chain.mjs`: `bind-account`, `verify-binding`,
+  `verify-tx`, `sign-verification`, `verify-report` (party/verifier private
+  keys and RPC URLs stay in the local env and are never printed).
+
+**Phase 6 — honest operational completion, no fabricated green lights.**
+- `/operators` now documents precise blockers: any registered watcher/verifier
+  key without a CURRENT signed `fbt.operator-attestation.v1` is listed with
+  the exact offline command its real key owner must run. The server never
+  invents substitute keys or operators; without real attestations in the
+  environment, `independentVerification.configured` stays false, and
+  `registryProvesOrganizationalIndependence:false` /
+  `organizationalIndependenceProven:false` are published unconditionally.
+- Coordinator rotation remains gated on a REAL dual-signed
+  `fbt.coordinator-key-rotation.v1` record produced by the offline ceremony;
+  no ceremonial rotation is fabricated to flip the capability, so
+  `coordinatorRotationConfigured:false` remains the honest live answer until
+  one exists. Old keys verify history only; new keys sign new documents.
+- New `IntentMerkleRootAnchor` tooling compiled with Solidity 0.8.24:
+  `scripts/compile-merkle-anchor.mjs` (artifact with deployed bytecode) and
+  `scripts/deploy-merkle-anchor.mjs` (deploy + exact runtime-bytecode and
+  event-interface verification, plus a `verify <address>` mode). Deployment
+  runs only where a deployer credential and RPC already exist in the
+  operator's own environment; the key is never committed, printed or pasted
+  into chat. Without a real verified deployment,
+  `INTENT_MERKLE_ANCHOR_NETWORKS` stays empty and capabilities keep
+  `merkleRootAnchors.configured:false` / `externallyAnchored:false`.
+- fa/en Intent OS copy for the Phase 4c layer, `.env.example` documentation
+  separating code capability from operational configuration, and tests in
+  `test/units.mjs` + `test/intent-api-probe.mjs` covering: valid/expired/
+  wrong-key/tampered bindings, correct and wrong ERC-20 transfers, correct
+  and wrong native transfers, failed receipts, insufficient confirmations,
+  block-hash disagreement, reorgs, single-RPC vs quorum, provider outage,
+  unregistered verifiers, signed-but-non-recomputable reports, replay/
+  idempotency/conflict, RPC-URL and private-key non-disclosure, and the
+  non-atomic guarantee after full verification.
+
 ## 1.34.0 — Cross-chain signed state + independent verification standards (Phases 4b/6)
 
 **Phase 4b — honest cross-chain state machine.**

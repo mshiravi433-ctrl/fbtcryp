@@ -778,6 +778,27 @@ export default function IntentOS() {
           <section className="ios-auction-status">
             <div className="row-between">
               <div>
+                <span className="ios-eyebrow">{t('intentOS.network.txVerification')}</span>
+                <strong>{networkStatus?.crossChain?.txVerification?.multiRpcConfigured
+                  ? t('intentOS.network.txVerificationConfigured')
+                  : t('intentOS.network.txVerificationUnconfigured')}</strong>
+              </div>
+              <span className="ios-status unavailable">
+                {t('intentOS.network.nonAtomic')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.crossChain?.txVerification?.schema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
+              <span><b>{networkStatus?.crossChain?.txVerification?.accountBindingSchema ?? '—'}</b>{t('intentOS.network.txVerificationBindings')}</span>
+              <span><b>{networkStatus?.crossChain?.txVerification?.quorumRequired ?? '—'}</b>{t('intentOS.network.txVerificationQuorum')}</span>
+              <span><b>{networkStatus?.crossChain?.txVerification?.custody === false || networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+            </div>
+            <p>{t('intentOS.network.txVerificationNote')}</p>
+          </section>
+
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
                 <span className="ios-eyebrow">{t('intentOS.network.verificationProtocol')}</span>
                 <strong>{networkStatus?.independentVerification?.configured
                   ? t('intentOS.network.verificationReady')
