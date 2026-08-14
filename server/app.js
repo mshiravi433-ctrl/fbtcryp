@@ -141,6 +141,28 @@ import {
 } from './intentSettlement.js';
 import { workflowProtocolStatus } from './intentWorkflow.js';
 import {
+  createCrossChainState,
+  crossChainProtocolStatus,
+  readCrossChainState,
+  storeCrossChainReceipt,
+  storeCrossChainState
+} from './intentCrossChain.js';
+import {
+  independentVerificationStatus,
+  parseOperatorAttestations,
+  publicOperatorAttestations
+} from './intentOperators.js';
+import {
+  buildMerkleRootAnchorCalldata,
+  buildMerkleRootManifest,
+  merkleRootAnchorStatus,
+  parseMerkleAnchorNetworks,
+  publicMerkleAnchorNetworks,
+  readMerkleRootAnchor,
+  storeMerkleRootAnchor,
+  verifyMerkleRootAnchorClaim
+} from './intentRootAnchors.js';
+import {
   appendOutcomeBid,
   buildOutcomeCompletenessReport,
   closeOutcomeAuction,
@@ -269,8 +291,7 @@ setInterval(() => {
    budget as AI rather than the broad cached-data allowance. */
 const anchorHits = new Map();
 const ANCHOR_MAX_PER_WINDOW = Number(process.env.INTENT_ANCHOR_RATE_LIMIT || 10);
-app.use('/api/intents/v1/auctions', (req, res, next) => {
-  if (req.method !== 'POST' || !req.path.endsWith('/anchor')) return next();
+const limitAnchorVerification = (req, res, next) => {
   const key = req.tgUser?.id ?? req.ip;
   const now = Date.now();
   const rec = anchorHits.get(key);
@@ -284,6 +305,14 @@ app.use('/api/intents/v1/auctions', (req, res, next) => {
     return res.status(429).json({ error: 'ANCHOR_RATE_LIMITED' });
   }
   return next();
+};
+app.use('/api/intents/v1/auctions', (req, res, next) => {
+  if (req.method !== 'POST' || !req.path.endsWith('/anchor')) return next();
+  return limitAnchorVerification(req, res, next);
+});
+app.use('/api/intents/v1/log', (req, res, next) => {
+  if (req.method !== 'POST' || !req.path.endsWith('/root-anchor')) return next();
+  return limitAnchorVerification(req, res, next);
 });
 setInterval(() => {
   const now = Date.now();
@@ -325,6 +354,22 @@ app.use('/api/intents/v1/auctions', (req, res, next) => {
   if (req.method !== 'POST') return next();
   const isSettlementPath = /\/execution-claims$|\/disputes$|\/adjudicate$|\/settlement-reports$/.test(req.path);
   if (!isSettlementPath) return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = settlementHits.get(key);
+  if (!rec || now > rec.reset) {
+    settlementHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > SETTLEMENT_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'SETTLEMENT_RATE_LIMITED' });
+  }
+  return next();
+});
+app.use('/api/intents/v1/cross-chain', (req, res, next) => {
+  if (req.method !== 'POST') return next();
   const key = req.tgUser?.id ?? req.ip;
   const now = Date.now();
   const rec = settlementHits.get(key);
@@ -430,10 +475,23 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
   const watcherRegistry = parseWatcherRegistry();
   const verifierRegistry = parseVerifierRegistry();
   const anchorNetworks = parseAnchorNetworks();
+  const merkleAnchorNetworks = parseMerkleAnchorNetworks();
+  const operatorAttestations = parseOperatorAttestations();
+  const independentVerification = independentVerificationStatus({
+    watcherRegistry,
+    verifierRegistry,
+    solverRegistry: registry,
+    coordinator: publicCoordinator(),
+    attestations: operatorAttestations
+  });
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
   res.json({
     ...INTENT_CAPABILITIES,
-    transparency: transparencyStatus(registry),
+    transparency: {
+      ...transparencyStatus(registry),
+      optionalExternalRootAnchors: true,
+      externalRootAnchorConfigured: merkleAnchorNetworks.size > 0
+    },
     auctions: auctionProtocolStatus(anchorNetworks.size, watcherRegistry.size),
     admissions: admissionReceiptStatus(),
     watchers: watcherProtocolStatus(watcherRegistry),
@@ -447,6 +505,9 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       graceSeconds: executionGraceSeconds()
     }),
     workflows: workflowProtocolStatus(),
+    crossChain: crossChainProtocolStatus(),
+    independentVerification,
+    merkleRootAnchors: merkleRootAnchorStatus(merkleAnchorNetworks),
     outcome: outcomeProtocolStatus({
       solverRegistry: registry,
       bondRegistry: parseBondRegistry()
@@ -462,9 +523,70 @@ app.get('/api/intents/v1/solvers', (_req, res) => {
   res.json({ algorithm: 'Ed25519', solvers: publicSolverRegistry(registry) });
 });
 
+app.get('/api/intents/v1/operators', (_req, res) => {
+  const watcherRegistry = parseWatcherRegistry();
+  const verifierRegistry = parseVerifierRegistry();
+  const attestations = parseOperatorAttestations();
+  const status = independentVerificationStatus({
+    watcherRegistry,
+    verifierRegistry,
+    solverRegistry: parseSolverRegistry(),
+    coordinator: publicCoordinator(),
+    attestations
+  });
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  return res.json({ ...status, attestations: publicOperatorAttestations(attestations) });
+});
+
+app.get('/api/intents/v1/merkle-anchor-networks', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json({ networks: publicMerkleAnchorNetworks() });
+});
+
 app.post('/api/intents/v1/validate', (req, res) => {
   const result = validateIntentEnvelope(req.body);
   res.status(result.ok ? 200 : 400).json(result);
+});
+
+/* Phase 4b: immutable, non-atomic cross-chain plan + sequential party-signed
+   transfer evidence. Creating a plan grants no authority. Every transition
+   verifies against a party key pinned in fbt.cross-chain-state.v1. */
+app.post('/api/intents/v1/cross-chain/states', async (req, res) => {
+  const built = createCrossChainState(req.body);
+  if (!built.ok) return res.status(400).json({ error: built.code });
+  const stored = await withIntentLock(built.state.stateId, () => storeCrossChainState(built.state));
+  if (!stored.ok) {
+    const status = ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(stored.code)
+      ? 503 : stored.code === 'CROSS_CHAIN_STATE_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  const state = await readCrossChainState(built.state.stateId);
+  if (state.error) return res.status(503).json({ error: state.error });
+  return res.status(stored.alreadyStored ? 200 : 201).json(state);
+});
+
+app.get('/api/intents/v1/cross-chain/states/:stateId', async (req, res) => {
+  const state = await readCrossChainState(req.params.stateId);
+  if (state.error) {
+    const status = state.error === 'CROSS_CHAIN_STATE_NOT_FOUND' ? 404
+      : state.error === 'BAD_CROSS_CHAIN_STATE_ID' ? 400 : 503;
+    return res.status(status).json({ error: state.error, detail: state.detail });
+  }
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(state);
+});
+
+app.post('/api/intents/v1/cross-chain/states/:stateId/receipts', async (req, res) => {
+  const stored = await withIntentLock(String(req.params.stateId), () =>
+    storeCrossChainReceipt(req.params.stateId, req.body));
+  if (!stored.ok) {
+    const status = ['CROSS_CHAIN_STORE_UNAVAILABLE', 'CROSS_CHAIN_WRITE_FAILED'].includes(stored.code) ? 503
+      : ['CROSS_CHAIN_TRANSITION_CONFLICT'].includes(stored.code) ? 409
+        : stored.code === 'CROSS_CHAIN_STATE_NOT_FOUND' ? 404
+          : ['CROSS_CHAIN_SIGNATURE_MISMATCH', 'BAD_CROSS_CHAIN_SIGNER'].includes(stored.code) ? 403 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyStored ? 200 : 201).json(stored.state);
 });
 
 app.post('/api/intents/v1/commitments', async (req, res) => {
@@ -545,10 +667,60 @@ app.get('/api/intents/v1/admissions/:intentHash/:entryHash', async (req, res) =>
 app.get('/api/intents/v1/log/:intentHash', async (req, res) => {
   const result = await readIntentLog(req.params.intentHash);
   if (result.error) return res.status(result.error === 'LOG_READ_FAILED' ? 503 : 400).json(result);
+  /* Phase 6: an exact non-empty snapshot can be permissionlessly anchored.
+     A newer quote changes the root and therefore correctly returns a different
+     unanchored manifest; an old anchor is never stretched over a new set. */
+  const built = buildMerkleRootManifest(result);
+  if (built.ok) {
+    result.rootManifest = built.manifest;
+    const anchored = await readMerkleRootAnchor(built.manifest);
+    if (anchored.error) {
+      result.rootAnchor = null;
+      result.rootAnchorStatus = 'store-unavailable';
+    } else {
+      result.rootAnchor = anchored.anchor;
+      result.externallyAnchored = Boolean(anchored.anchor?.verified);
+      result.rootAnchorStatus = result.externallyAnchored ? 'verified' : 'not-anchored';
+    }
+  } else {
+    result.rootManifest = null;
+    result.rootAnchor = null;
+    result.externallyAnchored = false;
+    result.rootAnchorStatus = result.size === 0 ? 'empty-log' : 'manifest-invalid';
+  }
   /* A log can grow until the intent expires, so intermediary caches must
      revalidate rather than freezing an incomplete bid set. */
   res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
   return res.json(result);
+});
+
+app.get('/api/intents/v1/log/:intentHash/root-anchor-calldata/:chainId', async (req, res) => {
+  const log = await readIntentLog(req.params.intentHash);
+  if (log.error) return res.status(log.error === 'LOG_READ_FAILED' ? 503 : 400).json(log);
+  const built = buildMerkleRootManifest(log);
+  if (!built.ok) return res.status(400).json({ error: built.code });
+  const result = buildMerkleRootAnchorCalldata(built.manifest, Number(req.params.chainId));
+  return res.status(result.ok ? 200 : 400).json(result.ok ? result : { error: result.code });
+});
+
+app.post('/api/intents/v1/log/:intentHash/root-anchor', async (req, res) => {
+  const log = await readIntentLog(req.params.intentHash);
+  if (log.error) return res.status(log.error === 'LOG_READ_FAILED' ? 503 : 400).json(log);
+  const built = buildMerkleRootManifest(log);
+  if (!built.ok) return res.status(400).json({ error: built.code });
+  const verified = await verifyMerkleRootAnchorClaim(built.manifest, req.body);
+  if (!verified.ok) {
+    const status = verified.code === 'MERKLE_ANCHOR_RPC_UNAVAILABLE' ? 503
+      : ['MERKLE_ANCHOR_NOT_MINED', 'MERKLE_ANCHOR_NOT_FINAL'].includes(verified.code) ? 409 : 400;
+    return res.status(status).json({ error: verified.code, ...verified });
+  }
+  const stored = await storeMerkleRootAnchor(built.manifest, verified.anchor);
+  if (!stored.ok) {
+    const status = ['MERKLE_ANCHOR_STORE_UNAVAILABLE', 'MERKLE_ANCHOR_WRITE_FAILED', 'INVALID_STORED_MERKLE_ANCHOR']
+      .includes(stored.code) ? 503 : 400;
+    return res.status(status).json({ error: stored.code });
+  }
+  return res.status(stored.alreadyAnchored ? 200 : 201).json(stored);
 });
 
 app.get('/api/intents/v1/coordinator', (_req, res) => {

@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.34.0 — Cross-chain signed state + independent verification standards (Phases 4b/6)
+
+**Phase 4b — honest cross-chain state machine.**
+- New immutable `fbt.cross-chain-state.v1`: exact source/destination chain,
+  token and integer amount; initiator/counterparty Ed25519 identities; bounded
+  source, destination and refund windows; and an explicit source-chain refund
+  route. State IDs are deterministic SHA-256 commitments to the full plan.
+- New `fbt.cross-chain-leg-receipt.v1`: the initiator signs the source transfer;
+  the counterparty then signs either the destination transfer or, after the
+  destination timeout, the refund transfer. Every receipt binds the prior
+  receipt, exact transfer facts, transaction hash and party public key. The
+  server verifies and immutably stores each transition before deriving public
+  state (`awaiting-*`, `settled-sequential`, `refund-*`).
+- Honesty is signed into every state/receipt and capability:
+  `atomic:false`, `globalAtomicity:false`, `custody:false`, `escrow:false`,
+  `automaticSettlement:false`, `onChainVerified:false`. A receipt is a
+  verifiable party statement, not RPC transaction verification. FBT cannot
+  force settlement or refund.
+- The existing envelope/Risk Engine is intentionally unchanged: every bridge
+  or second chain remains `draft-only` with
+  `ATOMIC_CROSS_CHAIN_UNAVAILABLE`; `unavailable.atomicCrossChainWorkflows`
+  remains true. No global-atomic claim and no escrow contract were added.
+- Public API: `POST/GET /api/intents/v1/cross-chain/states[/:stateId]` and
+  `POST /cross-chain/states/:stateId/receipts`, with bounded writes and
+  immutable Blob persistence when actually configured. Offline CLI:
+  `scripts/intent-cross-chain.mjs` (`create`, `sign`, `verify-receipt`,
+  `verify-state`). Party private keys remain CLI-only.
+
+**Phase 6 — operator bindings, safe rotation and optional root publication.**
+- `fbt.operator-attestation.v1` is an expiring Ed25519 statement signed by the
+  watcher/verifier key itself. Phase 6 `configured:true` requires every active
+  observer key to have a current matching attestation and to be distinct from
+  solver/coordinator keys. This proves key control and registry binding only:
+  `organizationalIndependenceProven:false` is unconditional because a registry
+  cannot prove corporate independence. Real independent operation and audit
+  remain an off-protocol requirement. Public endpoint `/operators`; offline
+  `scripts/intent-operator.mjs`.
+- Safe Coordinator rotation uses dual-signed
+  `fbt.coordinator-key-rotation.v1` records: retiring and incoming keys both
+  authorize the transition. Only `INTENT_COORDINATOR_PRIVATE_KEY` signs new
+  documents; retired keys are verification-only in
+  `fbt.coordinator-keyring.v1`. Historical receipts/closes continue verifying
+  against their own embedded public key. Completeness reports can carry the
+  dual-signed rotation chain when admission and close span a rotation. Offline
+  ceremony: `scripts/intent-coordinator.mjs`.
+- Optional live-log root publication adds `fbt.merkle-root-manifest.v1`,
+  permissionless `IntentMerkleRootAnchor`, calldata/claim APIs and exact EVM
+  event + confirmation verification. `externallyAnchored` becomes true only
+  for the exact current root after a verified configured-contract event;
+  absent `INTENT_MERKLE_ANCHOR_NETWORKS`, `configured:false` and
+  `externallyAnchored:false`. An anchor timestamps a set commitment; it does
+  not prove completeness, execution, settlement or custody. Offline CLI:
+  `scripts/intent-root-anchor.mjs`.
+- Capabilities publish versioned schemas/standardisation, explicit operator
+  limits, keyring state and root-anchor configuration. New fa/en UI copy and
+  `.env.example` document public-only configuration; no private key is placed
+  in a registry, `VITE_*`, source, docs or logs.
+- Tests cover state/receipt tampering, signer/transition/refund rules, API state
+  lifecycle, attestation expiry/binding/key separation, dual-signature
+  rotation with historical receipt validity, root recomputation and exact
+  confirmed anchor events, plus CLI secret non-disclosure.
+
 ## 1.33.0 — Outcome Marketplace + Confidential Intent transport (Phase 5)
 
 Two honest slices on top of the Phase 3 bonded-solver machinery, each pinned

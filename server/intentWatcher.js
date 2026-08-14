@@ -35,7 +35,12 @@ import {
   signCanonicalPayload,
   verifyCanonicalSignature
 } from './intentSignatures.js';
-import { verifyAuctionClose } from './intentAuctions.js';
+import {
+  coordinatorKeysLinked,
+  parseCoordinatorRotations,
+  verifyAuctionClose,
+  verifyCoordinatorRotation
+} from './intentAuctions.js';
 import { verifyAdmissionReceipt } from './intentAdmissions.js';
 
 export const COMPLETENESS_REPORT_SCHEMA = 'fbt.completeness-report.v1';
@@ -95,10 +100,16 @@ function closeSets(close) {
   };
 }
 
-function classifyReceipt(receipt, close, sets, skewMs) {
+function classifyReceipt(receipt, close, sets, skewMs, coordinatorRotations) {
   const valid = verifyAdmissionReceipt(receipt, { intentHash: close.intentHash });
-  if (!valid) return 'invalid';
-  if (!same(receipt.coordinator?.publicKey, close.coordinator?.publicKey)) return 'invalid';
+  if (!valid || receipt.coordinator?.id !== close.coordinator?.id) return 'invalid';
+  if (!same(receipt.coordinator?.publicKey, close.coordinator?.publicKey)
+    && !coordinatorKeysLinked(
+      receipt.coordinator?.publicKey,
+      close.coordinator?.publicKey,
+      close.coordinator?.id,
+      coordinatorRotations
+    )) return 'invalid';
   const entry = String(receipt.entryHash).toLowerCase();
   const at = Number(receipt.acceptedAt);
   if (sets.eligible.has(entry)) return 'eligible';
@@ -125,10 +136,17 @@ const ROW_SORT = (a, b) => {
  * same classifications, counts and verdict on every machine; this is what
  * makes watcher reports reproducible rather than attestations of opinion.
  */
-export function evaluateCompleteness(close, receipts = [], { clockSkewMs = clockSkewAllowanceMs() } = {}) {
+export function evaluateCompleteness(close, receipts = [], {
+  clockSkewMs = clockSkewAllowanceMs(),
+  coordinatorRotations = parseCoordinatorRotations()
+} = {}) {
   if (!verifyAuctionClose(close)) return { ok: false, code: 'INVALID_AUCTION_CLOSE' };
   if (!Array.isArray(receipts)) return { ok: false, code: 'BAD_RECEIPTS' };
   if (receipts.length > MAX_REPORT_RECEIPTS) return { ok: false, code: 'TOO_MANY_RECEIPTS' };
+  if (!Array.isArray(coordinatorRotations) || coordinatorRotations.length > 32
+    || coordinatorRotations.some((row) => !verifyCoordinatorRotation(row))) {
+    return { ok: false, code: 'BAD_COORDINATOR_ROTATIONS' };
+  }
   const sets = closeSets(close);
   const seen = new Set();
   const rows = [];
@@ -147,7 +165,7 @@ export function evaluateCompleteness(close, receipts = [], { clockSkewMs = clock
     }
     if (key) seen.add(key);
     rows.push({
-      classification: classifyReceipt(receipt, close, sets, clockSkewMs),
+      classification: classifyReceipt(receipt, close, sets, clockSkewMs, coordinatorRotations),
       receiptId: receipt?.receiptId,
       entryHash: receipt?.entryHash,
       solverId: receipt?.solverId,
@@ -205,9 +223,10 @@ export function buildCompletenessReport({
   watcher,
   privateKey = null,
   clockSkewMs = clockSkewAllowanceMs(),
+  coordinatorRotations = parseCoordinatorRotations(),
   now = Date.now()
 } = {}) {
-  const evaluation = evaluateCompleteness(close, receipts, { clockSkewMs });
+  const evaluation = evaluateCompleteness(close, receipts, { clockSkewMs, coordinatorRotations });
   if (!evaluation.ok) return evaluation;
   if (!watcher
     || !ID_RE.test(String(watcher.id || ''))
@@ -229,6 +248,7 @@ export function buildCompletenessReport({
     },
     evaluatedAt: now,
     clockSkewAllowanceMs: clockSkewMs,
+    coordinatorRotations,
     receipts: evaluation.rows,
     counts: evaluation.counts,
     verdict: evaluation.verdict,
@@ -311,7 +331,11 @@ export function verifyCompletenessReport(report, {
 
   const embedded = Array.isArray(report.receipts) ? report.receipts.map((row) => row?.receipt) : null;
   if (!embedded || embedded.length > MAX_REPORT_RECEIPTS) return { ok: false, code: 'BAD_RECEIPTS' };
-  const recomputed = evaluateCompleteness(close, embedded, { clockSkewMs: report.clockSkewAllowanceMs });
+  const coordinatorRotations = report.coordinatorRotations ?? [];
+  const recomputed = evaluateCompleteness(close, embedded, {
+    clockSkewMs: report.clockSkewAllowanceMs,
+    coordinatorRotations
+  });
   if (!recomputed.ok) return { ok: false, code: recomputed.code };
   if (report.verdict !== recomputed.verdict
     || JSON.stringify(canonicalValue(report.counts)) !== JSON.stringify(canonicalValue(recomputed.counts))
@@ -524,6 +548,8 @@ export function watcherProtocolStatus(registry = parseWatcherRegistry()) {
   return {
     configured: watchers.length > 0,
     registeredWatchers: watchers.length,
+    registryProvesOrganizationalIndependence: false,
+    operatorAttestationsRequiredForPhase6Status: true,
     reportSchema: COMPLETENESS_REPORT_SCHEMA,
     receiptSchema: 'fbt.admission-receipt.v1',
     algorithm: 'Ed25519',

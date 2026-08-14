@@ -40,7 +40,12 @@ import {
 } from './intentSignatures.js';
 import { merkleRoot } from './intentTransparency.js';
 import { withIntentLock } from './intentLocks.js';
-import { coordinatorConfig } from './intentAuctions.js';
+import {
+  coordinatorConfig,
+  coordinatorKeysLinked,
+  parseCoordinatorRotations,
+  verifyCoordinatorRotation
+} from './intentAuctions.js';
 import { verifyOutcomeBid } from './outcomeBids.js';
 import {
   PENALTY_BPS,
@@ -632,10 +637,16 @@ export function outcomeClockSkewAllowanceMs() {
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 60000 ? Math.floor(parsed) : 2000;
 }
 
-function classifyOutcomeReceipt(receipt, close, sets, skewMs) {
+function classifyOutcomeReceipt(receipt, close, sets, skewMs, coordinatorRotations) {
   const valid = verifyOutcomeAdmissionReceipt(receipt, { intentHash: close.intentHash });
-  if (!valid) return 'invalid';
-  if (!same(receipt.coordinator?.publicKey, close.coordinator?.publicKey)) return 'invalid';
+  if (!valid || receipt.coordinator?.id !== close.coordinator?.id) return 'invalid';
+  if (!same(receipt.coordinator?.publicKey, close.coordinator?.publicKey)
+    && !coordinatorKeysLinked(
+      receipt.coordinator?.publicKey,
+      close.coordinator?.publicKey,
+      close.coordinator?.id,
+      coordinatorRotations
+    )) return 'invalid';
   const entry = String(receipt.entryHash).toLowerCase();
   const at = Number(receipt.acceptedAt);
   if (sets.eligible.has(entry)) return 'eligible';
@@ -646,10 +657,17 @@ function classifyOutcomeReceipt(receipt, close, sets, skewMs) {
   return 'ambiguous-window';
 }
 
-export function evaluateOutcomeCompleteness(close, receipts = [], { clockSkewMs = outcomeClockSkewAllowanceMs() } = {}) {
+export function evaluateOutcomeCompleteness(close, receipts = [], {
+  clockSkewMs = outcomeClockSkewAllowanceMs(),
+  coordinatorRotations = parseCoordinatorRotations()
+} = {}) {
   if (!verifyOutcomeClose(close)) return { ok: false, code: 'INVALID_AUCTION_CLOSE' };
   if (!Array.isArray(receipts)) return { ok: false, code: 'BAD_RECEIPTS' };
   if (receipts.length > MAX_REPORT_RECEIPTS) return { ok: false, code: 'TOO_MANY_RECEIPTS' };
+  if (!Array.isArray(coordinatorRotations) || coordinatorRotations.length > 32
+    || coordinatorRotations.some((row) => !verifyCoordinatorRotation(row))) {
+    return { ok: false, code: 'BAD_COORDINATOR_ROTATIONS' };
+  }
   const sets = outcomeCloseSets(close);
   const seen = new Set();
   const rows = [];
@@ -662,7 +680,7 @@ export function evaluateOutcomeCompleteness(close, receipts = [], { clockSkewMs 
     }
     if (key) seen.add(key);
     rows.push({
-      classification: classifyOutcomeReceipt(receipt, close, sets, clockSkewMs),
+      classification: classifyOutcomeReceipt(receipt, close, sets, clockSkewMs, coordinatorRotations),
       receiptId: receipt?.receiptId,
       entryHash: receipt?.entryHash,
       solverId: receipt?.solverId,
@@ -699,9 +717,10 @@ export function buildOutcomeCompletenessReport({
   watcher,
   privateKey = null,
   clockSkewMs = outcomeClockSkewAllowanceMs(),
+  coordinatorRotations = parseCoordinatorRotations(),
   now = Date.now()
 } = {}) {
-  const evaluation = evaluateOutcomeCompleteness(close, receipts, { clockSkewMs });
+  const evaluation = evaluateOutcomeCompleteness(close, receipts, { clockSkewMs, coordinatorRotations });
   if (!evaluation.ok) return evaluation;
   if (!watcher || !ID_RE.test(String(watcher.id || '')) || typeof watcher.publicKey !== 'string') {
     return { ok: false, code: 'BAD_WATCHER' };
@@ -720,6 +739,7 @@ export function buildOutcomeCompletenessReport({
     },
     evaluatedAt: now,
     clockSkewAllowanceMs: clockSkewMs,
+    coordinatorRotations,
     receipts: evaluation.rows,
     counts: evaluation.counts,
     verdict: evaluation.verdict,
@@ -781,7 +801,10 @@ export function verifyOutcomeCompletenessReport(report, { registry = null, close
   }
   const embedded = Array.isArray(report.receipts) ? report.receipts.map((row) => row?.receipt) : null;
   if (!embedded || embedded.length > MAX_REPORT_RECEIPTS) return { ok: false, code: 'BAD_RECEIPTS' };
-  const recomputed = evaluateOutcomeCompleteness(close, embedded, { clockSkewMs: report.clockSkewAllowanceMs });
+  const recomputed = evaluateOutcomeCompleteness(close, embedded, {
+    clockSkewMs: report.clockSkewAllowanceMs,
+    coordinatorRotations: report.coordinatorRotations ?? []
+  });
   if (!recomputed.ok) return { ok: false, code: recomputed.code };
   if (report.verdict !== recomputed.verdict
     || JSON.stringify(canonicalValue(report.counts)) !== JSON.stringify(canonicalValue(recomputed.counts))

@@ -496,6 +496,8 @@ export function settlementProtocolStatus({ registeredVerifiers = 0, graceSeconds
   return {
     reportSchema: SETTLEMENT_REPORT_SCHEMA,
     registeredVerifiers,
+    registryProvesOrganizationalIndependence: false,
+    operatorAttestationsRequiredForPhase6Status: true,
     graceSeconds,
     serverRecomputesBeforeStorage: true,
     adjudicationCrossCheck: true,
