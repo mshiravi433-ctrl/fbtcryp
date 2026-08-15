@@ -99,6 +99,8 @@ export const GOAL_SHAPE = {
  * @param {object}   p.toToken
  * @param {string|number} p.amountIn
  * @param {number}   p.chainId
+ * @param {object}   [p.tune]       optional order tune from lib/learning.js;
+ *                                  null ⇒ today's exact defaults
  *
  * @returns {{draft:object, why:object} | {refused:string, detail?:object}}
  *
@@ -106,13 +108,13 @@ export const GOAL_SHAPE = {
  * warning attached: a caller that forgets to check a warning flag would place
  * an order the module meant to refuse.
  */
-export function buildAutopilot({ goal, series, fromToken, toToken, amountIn, chainId }) {
+export function buildAutopilot({ goal, series, fromToken, toToken, amountIn, chainId, tune }) {
   if (!GOALS.includes(goal)) return { refused: REFUSALS.NO_HISTORY };
 
   const amount = Number(amountIn);
   if (!Number.isFinite(amount) || amount <= 0) return { refused: REFUSALS.BAD_AMOUNT };
 
-  const advice = adviseOrder(series);
+  const advice = adviseOrder(series, tune);
   if (!advice.ready) {
     return {
       refused: REFUSALS.NO_HISTORY,

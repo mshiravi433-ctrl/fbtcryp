@@ -350,8 +350,13 @@ const stanceFor = (score) =>
  * Build one horizon's verdict.
  *
  * @param {'short'|'long'} horizon
+ * @param {object}         args
+ * @param {object|null}    args.multipliers  optional per-layer weight
+ *        multipliers from the learning core, clamped to [0.85, 1.15] HERE as
+ *        well as in lib/learning.js — the hot path never trusts a remote
+ *        number. Null ⇒ today's exact behaviour.
  */
-function buildHorizon(horizon, { analysis, series, macro }) {
+function buildHorizon(horizon, { analysis, series, macro, multipliers }) {
   const bars = horizon === 'long' ? 30 : 7;
 
   const layers = {
@@ -360,6 +365,21 @@ function buildHorizon(horizon, { analysis, series, macro }) {
     structural: structuralLayer(series, horizon),
     macro: macroLayer(macro, horizon)
   };
+
+  /*
+   * THE ONLY THING THE LEARNING CORE MAY TOUCH: per-layer WEIGHTS, bounded.
+   * The stance vocabulary, the thresholds, the confidence ceiling and every
+   * sentence stay exactly as written below. A layer with no evidence (weight
+   * 0) stays weight 0 no matter what the model says.
+   */
+  if (multipliers) {
+    for (const key of Object.keys(layers)) {
+      const m = Number(multipliers[key]);
+      if (!Number.isFinite(m)) continue;
+      const w = layers[key].weight * Math.min(1.15, Math.max(0.85, m));
+      layers[key] = { ...layers[key], weight: w };
+    }
+  }
 
   const list = Object.values(layers);
   const totalWeight = list.reduce((a, l) => a + l.weight, 0);
@@ -465,9 +485,13 @@ function buildHorizon(horizon, { analysis, series, macro }) {
  * @param {number[]} args.btcSeries  BTC prices over the same window
  * @param {object}   args.coin       market row
  * @param {object}   args.global     global market stats
+ * @param {object}   [args.tune]     { layers: { short: {...}, long: {...} } }
+ *        optional per-layer weight multipliers from the learning core. When
+ *        absent, missing or malformed the engine uses today's hardcoded
+ *        weights — identical behaviour to before this feature existed.
  * @returns {{short, long, macro, facts, agree}|null}
  */
-export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, global = null } = {}) {
+export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, global = null, tune = null } = {}) {
   /*
    * ─── A DEFAULT PARAMETER DOES NOT CATCH `null` ──────────────────────────
    * This signature was `coin = {}`, which looks safe and is not: a default
@@ -500,8 +524,18 @@ export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, 
 
   const macro = macroContext({ coin, series: v, btcSeries, global });
 
-  const short = buildHorizon('short', { analysis, series: v, macro });
-  const long = buildHorizon('long', { analysis, series: v, macro });
+  const short = buildHorizon('short', {
+    analysis,
+    series: v,
+    macro,
+    multipliers: tune?.layers?.short
+  });
+  const long = buildHorizon('long', {
+    analysis,
+    series: v,
+    macro,
+    multipliers: tune?.layers?.long
+  });
 
   /*
    * DO THE TWO HORIZONS AGREE?

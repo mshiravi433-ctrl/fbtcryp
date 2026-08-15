@@ -693,6 +693,36 @@ export default function Settings() {
         </InfoBox>
       </motion.section>
 
+      {/* ---------------- privacy ---------------- */}
+      {/*
+        The learning core is STRICTLY opt-in. Everything the model can learn
+        is explained inside the collapsed box; the switch lives inside it, so
+        nobody enables it without having read what it shares. The record
+        carries no address, key, IP or user id — see lib/learning.js.
+      */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.privacySection')}</p>
+        <div className="set-group">
+          <InfoBox title={t('settings.telemetryTitle')} tone="info" id="set-telemetry">
+            <p>{t('settings.telemetryBody')}</p>
+            <div className="set-row" style={{ marginTop: 6 }}>
+              <span className="set-row-label">
+                <div>{t('settings.contributeTelemetry')}</div>
+                <div className="set-row-sub">{t('settings.contributeTelemetrySub')}</div>
+              </span>
+              <Switch
+                on={s.contributeTelemetry}
+                onChange={() => s.setContributeTelemetry(!s.contributeTelemetry)}
+                label={t('settings.contributeTelemetry')}
+              />
+            </div>
+            <p className="faint" style={{ marginTop: 10, lineHeight: 1.7, fontSize: 11.5 }}>
+              {t('settings.telemetryNote')}
+            </p>
+          </InfoBox>
+        </div>
+      </motion.section>
+
       {/* ---------------- networks ---------------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.networks')}</p>

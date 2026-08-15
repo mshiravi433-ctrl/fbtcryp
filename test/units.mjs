@@ -46,6 +46,40 @@ import { bpsToPercent, ooSwapParams, openOceanSupports, toOOAddress } from '../s
 import { betaToBtc, cyclePosition, macroContext, marketRegime } from '../src/lib/macro.js';
 import { CONFIDENCE_CEILING, verdict } from '../src/lib/verdict.js';
 import {
+  CONSENT_RE,
+  LAYER_MAX_MULT,
+  LAYER_MIN_MULT,
+  MAX_RECORD_BYTES,
+  bucketReturn,
+  bucketSign,
+  defaultParams,
+  directionOf,
+  paramsAreNoop,
+  sanitizeParams,
+  validateResolution,
+  validateSignal
+} from '../server/learning/schema.js';
+import {
+  attributionDeltas,
+  auc,
+  bayesianContrast,
+  computeStats,
+  fitLogistic,
+  mergeMultipliers,
+  parseLearningLines,
+  primaryResolution,
+  runTraining,
+  volatilityTune
+} from '../server/learning/train.js';
+import {
+  anonCoinId,
+  bucketReturn as clientBucketReturn,
+  layerTune,
+  orderTune,
+  weightsSnapshotId
+} from '../src/lib/learning.js';
+import { pruneParams, readBucketsWindow, rollAndPruneBuckets } from '../server/learning/store.js';
+import {
   baseRate,
   findLevels,
   historyFacts,
@@ -3029,6 +3063,303 @@ export default async function run() {
     const perCall = (Date.now() - started) / 20;
 
     t(`a year of daily bars verdicts in well under 40ms (${perCall.toFixed(1)}ms)`, perCall < 40);
+  }
+
+  /* ============ learning core: schema, training math, client tuning ====== */
+  /* The daily machine-learning loop (server/learning/* + src/lib/learning.js).
+     These tests pin the safety boundaries, not the numbers: the model may
+     only modulate layer weights and order defaults inside hard bounds, and
+     every fallback must equal "behave exactly as before". */
+  {
+    /* ----------------------------- schema ------------------------------ */
+    t('returns bucket exactly at the +5% edge', bucketReturn(5) === 'up5');
+    t('returns bucket exactly at the +2% edge', bucketReturn(2) === 'up2');
+    t('returns flat inside ±2%', bucketReturn(0.5) === 'flat');
+    t('returns bucket exactly at the -2% edge', bucketReturn(-2) === 'dn2');
+    t('returns bucket exactly at the -5% edge', bucketReturn(-5) === 'dn5');
+    t('the client bucket function matches the server bucket function',
+      ['-9', '-3.2', '0.5', '3.2', '7.2'].every((p) => clientBucketReturn(Number(p)) === bucketReturn(Number(p))));
+    t('directionOf maps the five stances to -1/0/+1',
+      directionOf('tailwind') === 1 && directionOf('mildUp') === 1
+        && directionOf('unclear') === 0 && directionOf('mildDown') === -1 && directionOf('headwind') === -1);
+    t('bucketSign maps up/down/flat buckets',
+      bucketSign('up5') === 1 && bucketSign('dn2') === -1 && bucketSign('flat') === 0);
+
+    const goodSignal = {
+      t: 's', c: 'a1b2c3d4', h: 'short', s: 'mildUp', p: 48, g: 'riskOn', w: 'hc', ts: Date.now()
+    };
+    const vSig = validateSignal(goodSignal);
+    t('a well-formed signal validates', Boolean(vSig));
+    t('a signal record stays well under 120 bytes',
+      Buffer.byteLength(JSON.stringify(vSig), 'utf8') < MAX_RECORD_BYTES);
+    t('a signal with a stance outside the vocabulary is rejected', validateSignal({ ...goodSignal, s: 'moon' }) === null);
+    t('a signal with confidence out of range is rejected', validateSignal({ ...goodSignal, p: 140 }) === null);
+    t('a signal with a bad coin hash is rejected', validateSignal({ ...goodSignal, c: 'zzzz' }) === null);
+    t('a signal with a future timestamp is rejected', validateSignal({ ...goodSignal, ts: Date.now() + 86400000 }) === null);
+    t('a weights snapshot of the form p<version> is accepted', validateSignal({ ...goodSignal, w: 'p42' }) !== null);
+
+    const goodRes = { t: 'r', c: 'a1b2c3d4', h: 'short', ts: Date.now() - 3 * 86400000, r: { 1: 'up2', 7: 'flat' } };
+    t('a well-formed resolution validates', Boolean(validateResolution(goodRes)));
+    t('a resolution with an unknown bucket is rejected', validateResolution({ ...goodRes, r: { 1: 'moon' } }) === null);
+    t('a resolution with no outcomes is rejected', validateResolution({ ...goodRes, r: {} }) === null);
+
+    t('the consent token format matches ct1:<32 hex>',
+      CONSENT_RE.test('ct1:0123456789abcdef0123456789abcdef') === true);
+    t('a missing or malformed consent token is rejected',
+      CONSENT_RE.test('') === false
+        && CONSENT_RE.test('ct1:short') === false
+        && CONSENT_RE.test('ct1:' + 'zz'.repeat(16)) === false
+        && CONSENT_RE.test('ct1:' + '0'.repeat(31)) === false);
+
+    const clamped = sanitizeParams({
+      layers: { short: { technical: 9, historical: 0, structural: 1, macro: 1.1 }, long: { technical: 1, historical: 1, structural: 1, macro: 0.99 } },
+      order: { trailMult: 5, ladderStepDiv: 0.1, stopBufferMult: -2 }
+    });
+    t('sanitizeParams clamps every multiplier into the hard bounds',
+      clamped.layers.short.technical === LAYER_MAX_MULT
+        && clamped.layers.short.historical === LAYER_MIN_MULT
+        && clamped.order.trailMult === 1.15
+        && clamped.order.ladderStepDiv === 2.4);
+    t('sanitizeParams returns null for non-objects', sanitizeParams('nope') === null && sanitizeParams(null) === null);
+    t('the no-op params are exactly the fallback',
+      paramsAreNoop(defaultParams()) && defaultParams().fallbackHardcoded === true);
+    t('a tuned params vector is no longer a no-op',
+      paramsAreNoop(sanitizeParams({ layers: { short: { technical: 1.1 }, long: {} }, order: {} })) === false);
+
+    /* ------------------------- training math --------------------------- */
+    const cal = fitLogistic([
+      { x: 20, y: 0.4 }, { x: 40, y: 0.5 }, { x: 60, y: 0.6 }, { x: 80, y: 0.72 }
+    ]);
+    t('a monotone calibration fits a positive slope', cal !== null && cal.k > 0);
+    t('a degenerate calibration (flat bins) refuses to fit',
+      fitLogistic([{ x: 50, y: 0.5 }, { x: 51, y: 0.51 }]) === null);
+
+    const perfect = auc([
+      { score: 10, label: 0 }, { score: 20, label: 0 }, { score: 30, label: 0 },
+      { score: 70, label: 1 }, { score: 80, label: 1 }, { score: 90, label: 1 }
+    ]);
+    t('AUC is 1.0 for perfect separation', perfect !== null && Math.abs(perfect - 1) < 1e-9);
+    const coinFlip = auc([
+      { score: 1, label: 1 }, { score: 2, label: 0 }, { score: 3, label: 0 }, { score: 4, label: 1 }
+    ]);
+    t('AUC is exactly 0.5 for non-discriminating scores', coinFlip === 0.5);
+
+    const contrast = bayesianContrast([
+      { hash: 'hc', n: 200, hits: 100, mults: null },
+      { hash: 'p1', n: 200, hits: 130, mults: { short: { technical: 1.15, historical: 1, structural: 1, macro: 1 }, long: { technical: 1, historical: 1, structural: 1, macro: 1 } } }
+    ]);
+    t('contrast steps the winning snapshot\u2019s layer upward',
+      contrast.short.technical > 1 && contrast.short.technical <= LAYER_MAX_MULT);
+    t('contrast leaves layers without evidence at 1.0',
+      contrast.long.macro === 1);
+    t('contrast refuses to move on thin samples',
+      bayesianContrast([{ hash: 'hc', n: 3, hits: 3, mults: null }]) === null);
+
+    const statsFor = (hits, n) => ({ byHorizon: { short: { n, hits }, long: { n: 0, hits: 0 } } });
+    const attr = attributionDeltas(statsFor(60, 100));
+    t('attribution stays inside ±0.08', Math.abs(attr.short.technical - 1) <= 0.08 + 1e-9);
+    t('attribution is zero without enough samples',
+      attributionDeltas(statsFor(1, 2)).short.technical === 1);
+    const merged = mergeMultipliers({ short: { technical: 1.3, historical: 1, structural: 1, macro: 1 } }, null);
+    t('mergeMultipliers clamps into the hard bounds',
+      merged.short.technical === LAYER_MAX_MULT);
+    const vt = volatilityTune(6, 3);
+    t('higher realized volatility widens the trail (bounded)',
+      vt.trailMult > 1 && vt.trailMult <= 1.15 && vt.ladderStepDiv > 3 && vt.ladderStepDiv <= 3.6);
+    const vtLow = volatilityTune(1.5, 3);
+    t('lower realized volatility tightens the trail (bounded)',
+      vtLow.trailMult < 1 && vtLow.trailMult >= 0.85 && vtLow.ladderStepDiv < 3 && vtLow.ladderStepDiv >= 2.4);
+    t('volatility tune with no data returns today\u2019s defaults',
+      volatilityTune(null, 3).trailMult === 1);
+
+    /* ------------------- parsing + window statistics ------------------- */
+    const ts = Date.now() - 5 * 86400000;
+    const joined = parseLearningLines([
+      JSON.stringify({ t: 's', c: 'a1b2c3d4', h: 'short', s: 'mildUp', p: 60, g: 'riskOn', w: 'hc', ts }),
+      JSON.stringify({ t: 'r', c: 'a1b2c3d4', h: 'short', ts, r: { 1: 'up2', 7: 'up5' } }),
+      JSON.stringify({ t: 's', c: 'a1b2c3d4', h: 'long', s: 'unclear', p: 20, g: 'riskOn', w: 'hc', ts }),
+      'not json'
+    ]);
+    t('parsing joins each signal with its resolutions', joined.length === 2 && joined[0].resolutions['7'] === 'up5');
+    t('a signal without resolutions stays unresolved', joined[1].resolutions['30'] == null);
+    t('the primary resolution falls back to a shorter span',
+      primaryResolution('short', { 1: 'flat' }) === 'flat');
+    const st = computeStats(joined);
+    t('unresolved and unclear records do not count as usable',
+      st.usable === 1 && st.byHorizon.short.n === 1 && st.byHorizon.short.hits === 1);
+
+    /* -------------------- end-to-end training (fake io) ---------------- */
+    const fakeIo = (seed = {}) => {
+      const blobs = new Map(Object.entries(seed));
+      return {
+        blobs,
+        read: async (k) => (blobs.has(k) ? blobs.get(k) : null),
+        write: async (k, text) => { blobs.set(k, text); return true; },
+        list: async (prefix) => [...blobs.keys()].filter((k) => k.startsWith(prefix)),
+        del: async (k) => { blobs.delete(k); return true; },
+        configured: () => true
+      };
+    };
+    const now = new Date('2026-08-15T03:17:00Z');
+    /* Confidence correlates with outcome (bins 4-6 up, 0-3 down) so the
+       logistic calibration is fit-able; 1d outcomes resolve everything. */
+    const seed = (count, { stance = 'mildUp', w = 'hc' } = {}) => {
+      const lines = [];
+      const base = now.getTime() - 40 * 86400000;
+      for (let i = 0; i < count; i += 1) {
+        const t = base + i * 3600000;
+        const conf = 30 + (i % 7) * 10;
+        const up = (i % 7) >= 4;
+        lines.push(JSON.stringify({ t: 's', c: 'a1b2c3d4', h: 'short', s: stance, p: conf, g: 'riskOn', w, ts: t }));
+        lines.push(JSON.stringify({ t: 'r', c: 'a1b2c3d4', h: 'short', ts: t, r: { 1: up ? 'up2' : 'dn2' } }));
+      }
+      return lines.join('\n') + '\n';
+    };
+
+    const thin = fakeIo({ 'learning/buckets.ndjson': seed(10) });
+    const thinRun = await runTraining({ now, io: thin });
+    t('training with too little data publishes a hardcoded fallback',
+      thinRun.fallbackHardcoded === true && thinRun.skipped === 'NOT_ENOUGH_DATA');
+    t('...and the published params are a no-op',
+      paramsAreNoop(JSON.parse(thin.blobs.get('learning/params-2026-08-15.json'))));
+    t('...and the manifest points at it',
+      JSON.parse(thin.blobs.get('learning/manifest.json')).paramsKey === 'learning/params-2026-08-15.json');
+
+    const rich = fakeIo({ 'learning/buckets.ndjson': seed(300) });
+    const richRun = await runTraining({ now, io: rich });
+    t('training with enough data publishes a real model',
+      richRun.ok === true && richRun.fallbackHardcoded === false && richRun.records >= 300);
+    const richParams = JSON.parse(rich.blobs.get('learning/params-2026-08-15.json'));
+    t('...whose multipliers stay inside the hard bounds',
+      Object.values(richParams.layers.short).every((m) => m >= 0.85 && m <= 1.15));
+    t('...with a positive calibration slope', richParams.calibration.k > 0);
+
+    const secondDay = new Date('2026-08-16T03:17:00Z');
+    const rich2 = fakeIo({ 'learning/buckets.ndjson': seed(300) });
+    const r1 = await runTraining({ now, io: rich2 });
+    const r2 = await runTraining({ now: secondDay, io: rich2 });
+    t('each daily run publishes a new immutable params file',
+      r1.version === 1 && r2.version === 2 && rich2.blobs.has('learning/params-2026-08-16.json'));
+
+    /* -------- the self-improvement loop: contrast across snapshots ------ */
+    /* Yesterday published an aggressive technical multiplier (p1). Records
+       show p1's signals beat the hardcoded baseline outright — so today's
+       run must step the technical multiplier toward p1, not away from it. */
+    const contIo = fakeIo();
+    contIo.blobs.set('learning/params-2026-08-14.json', JSON.stringify({
+      version: 1,
+      trainedAt: '2026-08-14T03:17:00Z',
+      layers: {
+        short: { technical: 1.15, historical: 1, structural: 1, macro: 1 },
+        long: { technical: 1, historical: 1, structural: 1, macro: 1 }
+      },
+      order: { trailMult: 1, ladderStepDiv: 3, stopBufferMult: 1 }
+    }));
+    {
+      const lines = [];
+      const base = now.getTime() - 40 * 86400000;
+      for (let i = 0; i < 300; i += 1) {
+        const t = base + i * 3600000;
+        const conf = 30 + (i % 7) * 10;
+        const ok = (i % 7) >= 4;
+        const w = ok ? 'p1' : 'hc'; // p1 wins every resolved case it touched
+        lines.push(JSON.stringify({ t: 's', c: 'a1b2c3d4', h: 'short', s: 'mildUp', p: conf, g: 'riskOn', w, ts: t }));
+        lines.push(JSON.stringify({ t: 'r', c: 'a1b2c3d4', h: 'short', ts: t, r: { 1: ok ? 'up2' : 'dn2' } }));
+      }
+      contIo.blobs.set('learning/buckets.ndjson', lines.join('\n') + '\n');
+    }
+    const contRun = await runTraining({ now, io: contIo });
+    const contParams = JSON.parse(contIo.blobs.get('learning/params-2026-08-15.json'));
+    t('contrast pulls the winning snapshot\u2019s multiplier toward it',
+      contRun.ok === true && contParams.layers.short.technical > 1);
+    t('...and layers without contrast evidence stay on the attribution seed',
+      contParams.layers.short.historical > 0.85 && contParams.layers.short.historical < 1);
+    t('...and untouched horizons stay at 1.0', contParams.layers.long.macro === 1);
+    t('...still inside the hard bounds', contParams.layers.short.technical <= 1.15);
+
+    /* ------------------ roll, prune and window filtering ---------------- */
+    const big = fakeIo({ 'learning/buckets.ndjson': 'x\n'.repeat(100000) });
+    const rolled = await rollAndPruneBuckets(now, big);
+    t('buckets.ndjson rolls to a dated file at 100K records',
+      rolled.rolled === true
+        && big.blobs.has('learning/buckets-20260815.ndjson')
+        && big.blobs.get('learning/buckets.ndjson') === '');
+
+    const pruneIo = fakeIo({
+      'learning/params-2026-01-01.json': '{}',
+      'learning/params-2026-07-01.json': '{}',
+      'learning/params-2026-08-15.json': '{}'
+    });
+    const removed = await pruneParams(90, now, pruneIo);
+    t('params older than 90 days are pruned inside the same run',
+      removed === 1 && !pruneIo.blobs.has('learning/params-2026-01-01.json')
+        && pruneIo.blobs.has('learning/params-2026-07-01.json'));
+
+    const winIo = fakeIo({
+      'learning/buckets.ndjson': 'a\nb\n',
+      'learning/buckets-20260801.ndjson': 'c\n',
+      'learning/buckets-20260101.ndjson': 'd\n'
+    });
+    const winLines = await readBucketsWindow(60, now, winIo);
+    t('the rolling window skips dated rolls older than N days',
+      winLines.length === 3 && !winLines.includes('d'));
+
+    /* ------------------------- client tuning --------------------------- */
+    t('anonCoinId is a deterministic 8-hex hash',
+      anonCoinId('bitcoin') === anonCoinId('bitcoin') && /^[0-9a-f]{8}$/.test(anonCoinId('bitcoin')));
+    t('anonCoinId differs across coins', anonCoinId('bitcoin') !== anonCoinId('ethereum'));
+    t('no model means hardcoded snapshot id', weightsSnapshotId(null) === 'hc');
+    t('an active model version names the snapshot', weightsSnapshotId({ model: true, params: { version: 7 } }) === 'p7');
+    t('layerTune is null without a model', layerTune(null) === null && layerTune({ model: false, params: {} }) === null);
+    const tun = layerTune({
+      model: true,
+      params: { layers: { short: { technical: 9, historical: 1, structural: 1, macro: 1 }, long: { technical: 1, historical: 1, structural: 1, macro: 0.9 } } }
+    });
+    t('layerTune clamps into the same hard bounds as the server',
+      tun.layers.short.technical === LAYER_MAX_MULT && tun.layers.long.macro === 0.9);
+    t('orderTune is null without a model', orderTune(null) === null);
+    const ot = orderTune({ model: true, params: { order: { trailMult: 3, ladderStepDiv: 0.1, stopBufferMult: 1 } } });
+    t('orderTune clamps order defaults into their bands',
+      ot.trailMult === 1.15 && ot.ladderStepDiv === 2.4 && ot.stopBufferMult === 1);
+  }
+
+  /* -------- the tuned verdict stays honest: words never change ---------- */
+  {
+    const mulberry32 = (a) => () => {
+      let t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const walk = (n, seed, drift = 0, vol = 0.02, start = 100) => {
+      const r = mulberry32(seed);
+      const out = [start];
+      for (let i = 1; i < n; i += 1) out.push(out[i - 1] * (1 + drift + (r() - 0.5) * vol * 2));
+      return out;
+    };
+    const series = walk(200, 77, 0.002, 0.03);
+    const analysis = analyze(series, { change24h: 1, change7d: 3, id: 'x', symbol: 'X' });
+    const baseArgs = {
+      analysis,
+      series,
+      btcSeries: walk(200, 78, 0.002, 0.02),
+      coin: { id: 'x', symbol: 'X', athChange: -35, volume: 1e6 },
+      global: { mcapChange: 1, btcDominance: 52 }
+    };
+    const base = verdict(baseArgs);
+    const tuned = verdict({ ...baseArgs, tune: { layers: { short: { technical: 1.15, historical: 1.1, structural: 0.9, macro: 0.85 }, long: { technical: 1, historical: 1, structural: 1, macro: 1.05 } } } });
+    const stances = ['tailwind', 'mildUp', 'unclear', 'mildDown', 'headwind'];
+    t('a tuned verdict still only emits the five stances',
+      stances.includes(tuned.short.stance) && stances.includes(tuned.long.stance));
+    t('tuning modulates the technical layer weight on the short horizon',
+      Math.abs(tuned.short.layers.technical.weight - base.short.layers.technical.weight) > 1e-9);
+    t('tuning never touches layers with no evidence',
+      (base.short.layers.historical.weight === 0) === (tuned.short.layers.historical.weight === 0));
+    t('a null tune reproduces the exact untuned verdict',
+      JSON.stringify(verdict({ ...baseArgs, tune: null }).short.layers) === JSON.stringify(base.short.layers));
+    t('out-of-bounds multipliers are clamped by the engine itself',
+      verdict({ ...baseArgs, tune: { layers: { short: { technical: 99 }, long: {} } } }).short.layers.technical.weight
+        === Math.min(1.15, base.short.layers.technical.weight * 1.15));
   }
 
   /* ============ curated Solana assets: LSTs and tokenized equities ======== */

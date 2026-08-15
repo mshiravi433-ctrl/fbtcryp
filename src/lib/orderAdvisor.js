@@ -33,10 +33,23 @@
  * coincidence with a sample size, not a level. Every function below returns
  * null when the evidence is thin, and null renders as "not enough history" —
  * which is a genuinely useful answer and the one most honest tools never give.
+ *
+ * ─── THE LEARNING CORE'S ONLY HANDS ON THIS MODULE ──────────────────────────
+ * Every suggestion accepts an optional `tune` ({ trailMult, stopBufferMult,
+ * ladderStepDiv }) produced by lib/learning.js. The tune may ONLY scale the
+ * volatility-derived numbers (trailing distance, stop buffer, ladder step
+ * divisor) and every value is re-clamped to the same bands orders.js already
+ * enforces — a tuned value the validator would reject is impossible by
+ * construction. No tune (or a null one) means today's exact numbers.
  */
 
 import { findLevels, levelRecord, maxDrawdown } from './history.js';
 import { LADDER_MAX_STEPS, LADDER_MIN_STEPS, TRAIL_MAX_PCT, TRAIL_MIN_PCT } from './orders.js';
+
+const safeMult = (tune, key, fallback) => {
+  const n = Number(tune?.[key]);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 /**
  * Minimum observations before this module will say anything at all.
@@ -134,7 +147,7 @@ export function anchorLevels(series) {
  * levels are supported, and suggesting one because the arithmetic produced it
  * would be the module doing harm politely.
  */
-export function suggestBracket(series) {
+export function suggestBracket(series, tune) {
   const v = clean(series);
   if (v.length < MIN_SAMPLES) return null;
 
@@ -147,7 +160,7 @@ export function suggestBracket(series) {
 
   const takeProfit = above.price;
   /* One ordinary day's move below the support, so noise cannot reach it. */
-  const stopLoss = below.price * (1 - typical / 100);
+  const stopLoss = below.price * (1 - (typical * safeMult(tune, 'stopBufferMult', 1)) / 100);
   if (!(takeProfit > price && stopLoss < price)) return null;
 
   const rewardPct = ((takeProfit - price) / price) * 100;
@@ -191,7 +204,7 @@ export function suggestBracket(series) {
  * rather than retyped — a duplicated constant is how the suggestion and the
  * validator drift apart until the app proposes a value its own form rejects.
  */
-export function suggestTrail(series) {
+export function suggestTrail(series, tune) {
   const typical = typicalMovePct(series);
   if (typical == null) return null;
   /*
@@ -206,7 +219,7 @@ export function suggestTrail(series) {
    */
   if (typical <= 0) return null;
 
-  const raw = typical * 3;
+  const raw = typical * 3 * safeMult(tune, 'trailMult', 1);
   const pct = Math.min(TRAIL_MAX_PCT, Math.max(TRAIL_MIN_PCT, raw));
 
   const dd = maxDrawdown(clean(series));
@@ -238,7 +251,7 @@ export function suggestTrail(series) {
  * rungs, and splitting a small move into many pieces just multiplies gas and
  * notifications for the same result.
  */
-export function suggestLadder(series) {
+export function suggestLadder(series, tune) {
   const v = clean(series);
   if (v.length < MIN_SAMPLES) return null;
 
@@ -252,7 +265,7 @@ export function suggestLadder(series) {
 
   const steps = Math.min(
     LADDER_MAX_STEPS,
-    Math.max(LADDER_MIN_STEPS, Math.round(spanPct / 3))
+    Math.max(LADDER_MIN_STEPS, Math.round(spanPct / safeMult(tune, 'ladderStepDiv', 3)))
   );
 
   return {
@@ -278,7 +291,7 @@ export function suggestLadder(series) {
  * withholding a good suggestion because a different one was unavailable helps
  * nobody.
  */
-export function adviseOrder(series) {
+export function adviseOrder(series, tune) {
   const v = clean(series);
   const ready = v.length >= MIN_SAMPLES;
 
@@ -287,8 +300,8 @@ export function adviseOrder(series) {
     samples: v.length,
     minSamples: MIN_SAMPLES,
     price: ready ? v[v.length - 1] : null,
-    bracket: ready ? suggestBracket(v) : null,
-    trailing: ready ? suggestTrail(v) : null,
-    ladder: ready ? suggestLadder(v) : null
+    bracket: ready ? suggestBracket(v, tune) : null,
+    trailing: ready ? suggestTrail(v, tune) : null,
+    ladder: ready ? suggestLadder(v, tune) : null
   };
 }

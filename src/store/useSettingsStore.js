@@ -75,6 +75,17 @@ export const useSettingsStore = create(
       // finished onboarding still sees the guide once.
       guideReadAt: 0,
 
+      /* ---------------- privacy ---------------- */
+      /*
+       * STRICTLY OPT-IN: the learning core only ever receives telemetry from
+       * users who enabled this here. The token is the consent proof sent
+       * with every submission — the server rejects anything without it (401).
+       * It is generated on THIS device, is never uploaded (exportSyncable
+       * and applyRemote both ignore it) and is wiped on opt-out.
+       */
+      contributeTelemetry: false,
+      telemetryToken: '',
+
       /* ---------------- sync ---------------- */
       cloudSync: false,
       lastSyncedAt: 0,
@@ -132,6 +143,28 @@ export const useSettingsStore = create(
       },
       acceptTerms() {
         set({ termsAcceptedAt: Date.now() });
+      },
+      /**
+       * Opt in/out of anonymous telemetry. Enabling mints a device-local
+       * consent token (`ct1:` + 32 hex) that the telemetry hook sends with
+       * every submission; disabling wipes it so no further record can be
+       * written. crypto.getRandomValues where available, Math.random as the
+       * jsdom/test fallback — this is consent evidence, not a secret.
+       */
+      setContributeTelemetry(on) {
+        if (!on) {
+          set({ contributeTelemetry: false, telemetryToken: '' });
+          return;
+        }
+        let hex = '';
+        try {
+          const buf = new Uint8Array(16);
+          crypto.getRandomValues(buf);
+          hex = [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
+        } catch {
+          for (let i = 0; i < 32; i += 1) hex += Math.floor(Math.random() * 16).toString(16);
+        }
+        set({ contributeTelemetry: true, telemetryToken: `ct1:${hex}` });
       },
       completeOnboarding() {
         set({ onboarded: true });

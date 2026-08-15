@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.36.0 — The learning core: daily, zero-cost, opt-in model calibration
+
+The signal engine now improves itself every day from other users' anonymized
+outcomes — without spending a single extra rial on hosting or AI APIs.
+
+**Backend (`server/learning/`) — runs entirely inside what the app already pays for.**
+- `schema.js` — the data model: `learning/buckets.ndjson` (append-only
+  anonymized outcomes, <120 bytes per record, rolls to
+  `learning/buckets-YYYYMMDD.ndjson` at 100K records), immutable
+  `learning/params-YYYY-MM-DD.json`, and a tiny `learning/manifest.json`
+  pointer `{ version, paramsKey, trainedAt, recordCount, calibrationAuc,
+  fallbackHardcoded }`. All model output is bounded: per-layer weight
+  multipliers live in [0.85, 1.15], order defaults in their own bands.
+- `train.js` — the daily closed-form trainer (no tfjs/ONNX/LLM/gradient
+  descent): logistic calibration of confidence (binned least-squares in logit
+  space), rank-sum AUC, a Beta-Bernoulli "contrast" term that steps each
+  layer's weight toward whichever weights-snapshot is empirically winning,
+  a bounded attribution seed for the first runs, and volatility-driven
+  trailing-stop / stop-buffer / ladder-step defaults. Runs in well under 2 s.
+- `store.js` / `params.js` — Vercel Blob is the parameter store + rolling
+  data window (no new KV/Redis/DB); published params are served FROM MEMORY
+  on the hot path (Blob at most once per cold start, never per request), and
+  params older than 90 days are pruned inside the same cron run.
+- New endpoints: `POST /api/telemetry/signal`, `POST /api/telemetry/resolve`
+  (both strictly opt-in — 401 without the device consent token), the
+  memory-served `GET /api/learning/params`, and the second Hobby cron slot
+  `GET /api/cron/train` (03:17 UTC, `vercel.json`).
+
+**Privacy — non-negotiable.**
+- `settings.contributeTelemetry` defaults to **false** and lives under
+  Settings › Privacy behind a collapsed "data contributes to model
+  improvements" box (en + fa via `scripts/add-i18n.mjs`). Enabling mints a
+  device-local consent token that every submission must carry; disabling
+  wipes it.
+- Records carry NO address, NO public key, NO IP, NO user identifier — only
+  a hash of the coin's public id, the read (stance, confidence, regime,
+  weights-snapshot id) and the outcome that later occurred. No fingerprinting.
+
+**Honesty — the words never change.**
+- The model may only modulate (a) per-layer verdict weights inside hard
+  bounds and (b) the volatility/trailing-pct/ladder-step defaults used by
+  orderAdvisor and autopilot. Stance sentences, thresholds, confidence
+  ceilings and levels are untouched by construction.
+- If the model is missing, stale, or not trained yet, the engine falls back
+  to today's hardcoded weights — identical behaviour. VerdictPanel shows a
+  faint "Calibrated on the last N outcomes — model v{date}" footnote when
+  tuned weights are in effect and keeps the full layer-weights breakdown.
+
 ## 1.35.0 — Real cross-chain leg verification (Phase 4c) + honest Phase 6 operations
 
 **Phase 4c — multi-RPC on-chain verification of cross-chain legs.**

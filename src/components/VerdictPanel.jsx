@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { CONFIDENCE_CEILING, verdict } from '../lib/verdict';
 import { fmtPrice } from '../lib/format';
+import {
+  layerTune,
+  loadLearningParams,
+  telemetryResolve,
+  telemetrySignal
+} from '../lib/learning';
 
 /**
  * THE VERDICT PANEL — the readable half of lib/verdict.js.
@@ -126,11 +132,58 @@ function HorizonCard({ read, t, formatReason }) {
 export default function VerdictPanel({ analysis, series, btcSeries, coin, global, compact = false }) {
   const { t } = useTranslation();
   const [showLayers, setShowLayers] = useState(false);
+  /*
+   * The learning core's published params, fetched once per session. While it
+   * is null (not yet loaded, or no model published) the verdict below uses
+   * today's hardcoded weights — identical behaviour to before.
+   */
+  const [learn, setLearn] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadLearningParams().then((d) => alive && setLearn(d));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const tune = useMemo(() => layerTune(learn), [learn]);
 
   const v = useMemo(
-    () => verdict({ analysis, series, btcSeries, coin, global }),
-    [analysis, series, btcSeries, coin, global]
+    () => verdict({ analysis, series, btcSeries, coin, global, tune }),
+    [analysis, series, btcSeries, coin, global, tune]
   );
+
+  /*
+   * TELEMETRY — strictly opt-in (lib/learning.js checks the setting and the
+   * consent token). Fire-and-forget; it can never block or change the UI.
+   */
+  useEffect(() => {
+    if (!v || !coin) return;
+    /*
+     * Resolve BEFORE signalling: a pending record from a previous visit is
+     * replaced by today's signal below, so its outcome must be submitted
+     * first or it would be lost.
+     */
+    telemetryResolve({ coin, series });
+    telemetrySignal({
+      coin,
+      horizon: 'short',
+      stance: v.short.stance,
+      confidence: v.short.confidence,
+      regime: v.macro?.regime?.regime,
+      series,
+      data: learn
+    });
+    telemetrySignal({
+      coin,
+      horizon: 'long',
+      stance: v.long.stance,
+      confidence: v.long.confidence,
+      regime: v.macro?.regime?.regime,
+      series,
+      data: learn
+    });
+  }, [v, learn, coin, series]);
 
   /*
    * Nothing rather than a placeholder, exactly like HistoryPanel. A spinner
@@ -187,6 +240,21 @@ export default function VerdictPanel({ analysis, series, btcSeries, coin, global
         <HorizonCard read={v.short} t={t} formatReason={formatReason} />
         <HorizonCard read={v.long} t={t} formatReason={formatReason} />
       </div>
+
+      {/*
+        Transparency footnote — only when the learning core's tuned weights
+        are actually in effect. The wording is a measurement statement, never
+        a promise: how many outcomes were calibrated on, and which model
+        version (the date it was trained) is doing the tuning.
+      */}
+      {learn?.model && learn?.params && (
+        <p className="faint verd-calib">
+          {t('verdict.calibrated', {
+            n: learn.manifest?.recordCount ?? learn.params.records ?? 0,
+            date: String(learn.params.trainedAt ?? '').slice(0, 10)
+          })}
+        </p>
+      )}
 
       {/* The sentence a user cannot derive by looking at two cards. */}
       <p className={`verd-agree verd-agree-${v.agree}`}>{t(`verdict.agree.${v.agree}`)}</p>

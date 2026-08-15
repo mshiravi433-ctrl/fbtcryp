@@ -6513,6 +6513,18 @@ body { overflow-x: clip; }
 .verd-agree-conflict { border-color: color-mix(in srgb, var(--ink-amber) 45%, transparent); }
 .verd-agree-aligned { border-color: color-mix(in srgb, var(--ink-cyan) 45%, transparent); }
 
+/*
+   The learning-core footnote: "Calibrated on the last N outcomes — model
+   v{date}". Deliberately the faintest thing on the panel — it is provenance,
+   not a selling point, and it must never compete with the stance sentence.
+*/
+.verd-calib {
+  margin-top: 8px;
+  font-size: 10.8px;
+  line-height: 1.7;
+  letter-spacing: 0.2px;
+}
+
 .verd-explain {
   font-size: 12.2px;
   line-height: 1.85;

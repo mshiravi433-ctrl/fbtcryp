@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { riseIn } from './PageTransition';
 import { fmtQty } from '../lib/format';
 import { GOALS, buildAutopilot } from '../lib/autopilot';
 import { ladderRungs } from '../lib/orders';
+import { loadLearningParams, orderTune } from '../lib/learning';
 
 /**
  * AUTOPILOT — pick a goal, get a finished order.
@@ -36,10 +37,23 @@ import { ladderRungs } from '../lib/orders';
 export default function AutopilotPanel({ series, fromToken, toToken, amountIn, chainId, onApply }) {
   const { t } = useTranslation();
   const [goal, setGoal] = useState('protect');
+  /*
+   * Learning-core order tune (trailing distance / stop buffer / ladder step
+   * divisor), loaded once per session; null ⇒ today's exact defaults.
+   */
+  const [learn, setLearn] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadLearningParams().then((d) => alive && setLearn(d));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const tune = useMemo(() => orderTune(learn), [learn]);
 
   const result = useMemo(
-    () => buildAutopilot({ goal, series, fromToken, toToken, amountIn, chainId }),
-    [goal, series, fromToken, toToken, amountIn, chainId]
+    () => buildAutopilot({ goal, series, fromToken, toToken, amountIn, chainId, tune }),
+    [goal, series, fromToken, toToken, amountIn, chainId, tune]
   );
 
   const rungs = useMemo(
