@@ -221,7 +221,7 @@ export function WalletProvider({ children }) {
     // WalletConnect project IDs are public identifiers, not secrets — they
     // are designed to ship in client bundles. Override via env if needed.
     const projectId =
-      import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID || '14bdc2642bb5f01972ffe799e43b978d';
+      import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID || 'fa5a48b9701971af51938be219d8bc48';
     if (!projectId) {
       setError('NO_WC_PROJECT_ID');
       return false;
