@@ -257,6 +257,16 @@ app's server in any of them:
 Set `VITE_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com) to enable the
 first mode. That ID is public by design — it is not a secret.
 
+The official FBT project ID is **`14bdc2642bb5f01972ffe799e43b978d`** and is
+already registered as the documented value in `.env.example` and as a hardcoded
+fallback in `src/context/WalletContext.jsx` (so a build with no env var still
+connects). For production, set `VITE_WALLETCONNECT_PROJECT_ID` explicitly in
+**Vercel → Project → Settings → Environment Variables** and in the CI workflow
+(`.github/workflows/build-apk.yml` passes `vars.VITE_WALLETCONNECT_PROJECT_ID`
+through) — the APK is built by CI, and Vite inlines `import.meta.env` at build
+time, so a value that only exists in Vercel would change the website while the
+Android app kept the compiled-in default.
+
 ### About the in-app wallet
 
 It generates a BIP-39 mnemonic in the browser and encrypts it with the user's

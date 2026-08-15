@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -127,7 +127,15 @@ export default function IntentOS() {
     const requested = searchParams.get('tab');
     return TABS.includes(requested) ? requested : 'compose';
   });
-  const [memory, setMemory] = useState(() => loadIntentMemory());
+  /*
+   * `loadIntentMemory()` is a localStorage JSON parse. It used to run THREE
+   * times during initial state setup — once for `memory`, then twice inside
+   * the `draft` initializer. Read it once via useRef(loadIntentMemory()) so
+   * state initializers share the same parsed object without re-parsing.
+   */
+  const intentMemoryAtBoot = useRef(loadIntentMemory());
+
+  const [memory, setMemory] = useState(() => intentMemoryAtBoot.current);
   const [saved, setSaved] = useState(() => loadIntents());
   const [proofs, setProofs] = useState(() => loadExecutionProofs());
   const [verified, setVerified] = useState(null);
@@ -135,14 +143,14 @@ export default function IntentOS() {
   const [networkStatus, setNetworkStatus] = useState(null);
   const [draft, setDraft] = useState(() => ({
     kind: 'swap',
-    chainId: loadIntentMemory().preferredChainId,
+    chainId: intentMemoryAtBoot.current.preferredChainId,
     fromSymbol: 'USDC',
     toSymbol: 'ETH',
     amountIn: '1000',
     amountUsd: '1000',
     minReceive: '',
     deadlineHours: 2,
-    maxSlippagePct: loadIntentMemory().maxSlippagePct,
+    maxSlippagePct: intentMemoryAtBoot.current.maxSlippagePct,
     privacy: 'standard',
     conditionType: 'priceBelow',
     conditionValue: '2500',
@@ -152,11 +160,20 @@ export default function IntentOS() {
 
   const activeTemplate = TEMPLATES.find((item) => item.kind === draft.kind);
   const savedDrafts = useMemo(() => saved.slice(0, 4), [saved]);
-  const confidentialReadiness = confidentialSwapReadiness(networkStatus);
+  /*
+   * Derived values that only change when their inputs change. Memoizing keeps
+   * the per-keystroke compose renders cheap: t() lookups and capability
+   * inspection do not re-run for every character typed into a field.
+   */
+  const confidentialReadiness = useMemo(() => confidentialSwapReadiness(networkStatus), [networkStatus]);
   const confidentialSelectable = draft.kind === 'swap' && confidentialReadiness.available;
-  const confidentialUnavailableReason = draft.kind !== 'swap'
-    ? t('intentOS.privacy.confidentialNonSwap')
-    : t('intentOS.privacy.confidential.body');
+  const confidentialUnavailableReason = useMemo(
+    () => draft.kind !== 'swap'
+      ? t('intentOS.privacy.confidentialNonSwap')
+      : t('intentOS.privacy.confidential.body'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draft.kind]
+  );
 
   useEffect(() => {
     let active = true;
@@ -240,8 +257,11 @@ export default function IntentOS() {
     setSearchParams(next, { replace: true });
   };
 
-  const crossChainVerification = networkStatus?.crossChainVerification
-    ?? networkStatus?.crossChain?.txVerification ?? null;
+  const crossChainVerification = useMemo(
+    () => networkStatus?.crossChainVerification
+      ?? networkStatus?.crossChain?.txVerification ?? null,
+    [networkStatus]
+  );
   return (
     <PageTransition className="page ios-page">
       <motion.section className="ios-hero" variants={riseIn} initial="hidden" animate="show">

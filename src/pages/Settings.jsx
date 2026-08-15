@@ -761,6 +761,10 @@ export default function Settings() {
               {t('settings.telemetryNote')}
             </p>
           </InfoBox>
+
+          <p className="faint" style={{ marginTop: 10, lineHeight: 1.7, fontSize: 11.5, padding: '0 2px' }}>
+            {t('settings.walletPrivacyLine')}
+          </p>
         </div>
       </motion.section>
 

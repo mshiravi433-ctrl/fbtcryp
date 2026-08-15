@@ -2,6 +2,51 @@
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
+/*
+ * Simple in-memory cache with TTL to avoid redundant discovery calls.
+ * The capabilities endpoint is public, changes infrequently, and is called
+ * from multiple components. A 60-second TTL means the Intent OS page never
+ * re-fetches on mount if the swap page already asked for it, and discovery
+ * calls are batched across tab switches.
+ */
+const cache = new Map();
+const CACHE_TTL = 60_000; // 60s — matches the server's s-maxage
+
+function cachedGet(path, timeout = 6000) {
+  const cached = cache.get(path);
+  if (cached && Date.now() - cached.at < CACHE_TTL) {
+    return Promise.resolve(cached.value);
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  return fetch(`${API_BASE}${path}`, {
+    signal: ctrl.signal,
+    headers: { accept: 'application/json' }
+  }).then((res) => {
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP_${res.status}`);
+    return res.json().then((value) => {
+      cache.set(path, { value, at: Date.now() });
+      return value;
+    });
+  }).catch((err) => {
+    clearTimeout(timer);
+    throw err;
+  });
+}
+
+export const getIntentCapabilities = () => cachedGet('/intents/v1/capabilities', 6000);
+export const getRegisteredSolvers = () => cachedGet('/intents/v1/solvers', 6000);
+export const getBondBoard = () => cachedGet('/intents/v1/bonds', 6000);
+export const getAuctionCoordinator = () => cachedGet('/intents/v1/coordinator', 6000);
+export const getAnchorNetworks = () => cachedGet('/intents/v1/anchor-networks', 6000);
+export const getMerkleAnchorNetworks = () => cachedGet('/intents/v1/merkle-anchor-networks', 6000);
+export const getIndependentOperators = () => cachedGet('/intents/v1/operators', 6000);
+export const getConfidentialIntentStatus = () => cachedGet('/intents/v1/confidential/operators', 8000);
+/* Read-only discovery only. No confidential POST client is exported while the
+   authenticated commit/reveal workflow is unavailable. */
+
+/* Uncached GET for non-cacheable intent data (log, auction, admission state). */
 async function get(path, timeout = 6000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -16,17 +61,6 @@ async function get(path, timeout = 6000) {
     clearTimeout(timer);
   }
 }
-
-export const getIntentCapabilities = () => get('/intents/v1/capabilities');
-/* Read-only discovery only. No confidential POST client is exported while the
-   authenticated commit/reveal workflow is unavailable. */
-export const getConfidentialIntentStatus = () => get('/intents/v1/confidential/operators', 8000);
-export const getRegisteredSolvers = () => get('/intents/v1/solvers');
-export const getAuctionCoordinator = () => get('/intents/v1/coordinator');
-export const getAnchorNetworks = () => get('/intents/v1/anchor-networks');
-export const getMerkleAnchorNetworks = () => get('/intents/v1/merkle-anchor-networks');
-export const getIndependentOperators = () => get('/intents/v1/operators');
-export const getBondBoard = () => get('/intents/v1/bonds');
 
 function checkedIntentHash(intentHash) {
   if (!/^0x[a-fA-F0-9]{64}$/.test(String(intentHash || ''))) throw new Error('BAD_INTENT_HASH');
