@@ -734,7 +734,13 @@
     "backupSettings": "Backup settings",
     "backupSettingsSub": "Download a JSON file of your watchlist, theme and personal preferences",
     "backup": "Backup",
-    "dataStorageNote": "Clearing cache never touches your wallet keys, password, or security settings — it only refreshes temporary market data."
+    "dataStorageNote": "Clearing cache never touches your wallet keys, password, or security settings — it only refreshes temporary market data.",
+    "privacySection": "Privacy",
+    "telemetryTitle": "Data contributes to model improvements",
+    "telemetryBody": "The signal engine gets better by learning from what actually happened after each read. Turning this on shares only anonymized outcomes with the daily training run — never your addresses, wallet keys, IP address, or any identifier.",
+    "contributeTelemetry": "Share anonymous signal outcomes",
+    "contributeTelemetrySub": "No addresses, no keys, no IPs, no user IDs",
+    "telemetryNote": "Each record is under 120 bytes: a hashed coin id, the read (stance, confidence, market regime, model version) and the outcome that later occurred. Nothing about you can be recovered from it, and the app behaves identically whether this is on or off."
   },
   "about": {
     "title": "About us",
@@ -2576,7 +2582,8 @@
     },
     "notPrediction": "This is not a prediction and there is no price target anywhere in it. Every number above is measured from what already happened: this asset's own history, its relationship with Bitcoin, and the state of the market. The future is allowed to ignore all of it. Never put in money you cannot afford to lose.",
     "noModel": "No language model wrote any of this. Every sentence is assembled from a number that was actually computed on your device, which is why it can never invent a fact, a level or a headline.",
-    "notEnough": "Not enough history for a full read on this asset yet."
+    "notEnough": "Not enough history for a full read on this asset yet.",
+    "calibrated": "Calibrated on the last {{n}} outcomes — model v{{date}}"
   },
   "bridge": {
     "title": "Bridge",

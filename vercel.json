@@ -70,6 +70,10 @@
     {
       "path": "/api/cron/daily",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/train",
+      "schedule": "17 3 * * *"
     }
   ]
 }

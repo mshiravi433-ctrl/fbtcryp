@@ -10,6 +10,19 @@ const NEW_EN = {
       whales: 'Whales'
     }
   },
+  settings: {
+    privacySection: 'Privacy',
+    telemetryTitle: 'Data contributes to model improvements',
+    telemetryBody:
+      'The signal engine gets better by learning from what actually happened after each read. Turning this on shares only anonymized outcomes with the daily training run — never your addresses, wallet keys, IP address, or any identifier.',
+    contributeTelemetry: 'Share anonymous signal outcomes',
+    contributeTelemetrySub: 'No addresses, no keys, no IPs, no user IDs',
+    telemetryNote:
+      'Each record is under 120 bytes: a hashed coin id, the read (stance, confidence, market regime, model version) and the outcome that later occurred. Nothing about you can be recovered from it, and the app behaves identically whether this is on or off.'
+  },
+  verdict: {
+    calibrated: 'Calibrated on the last {{n}} outcomes — model v{{date}}'
+  },
   whales: {
     title: 'Whale Tracking',
     subtitle: 'Recent large on-chain transfers',
@@ -82,6 +95,19 @@ const NEW_FA = {
     tab: {
       whales: 'نهنگ‌ها'
     }
+  },
+  settings: {
+    privacySection: 'حریم خصوصی',
+    telemetryTitle: 'داده‌ها به بهبود مدل کمک می‌کنند',
+    telemetryBody:
+      'موتور سیگنال با یادگیری از آنچه پس از هر خوانش واقعاً رخ داد بهتر می‌شود. با روشن‌کردن این گزینه فقط نتایج ناشناس با فرایند آموزش روزانه به اشتراک گذاشته می‌شود — هرگز آدرس، کلید کیف پول، آدرس IP یا هیچ شناسه‌ای.',
+    contributeTelemetry: 'اشتراک‌گذاری نتیجهٔ سیگنال‌های ناشناس',
+    contributeTelemetrySub: 'بدون آدرس، بدون کلید، بدون IP، بدون شناسهٔ کاربر',
+    telemetryNote:
+      'هر رکورد کمتر از ۱۲۰ بایت است: شناسهٔ هش‌شدهٔ سکه، خوانش (جهت، اطمینان، وضعیت بازار، نسخهٔ مدل) و نتیجه‌ای که بعداً رخ داد. هیچ اطلاعاتی دربارهٔ شما از آن قابل بازسازی نیست و اپ چه این گزینه روشن باشد چه خاموش، دقیقاً یکسان رفتار می‌کند.'
+  },
+  verdict: {
+    calibrated: 'کالیبره‌شده روی {{n}} نتیجهٔ اخیر — مدل v{{date}}'
   },
   whales: {
     title: 'ردیابی نهنگ‌ها',

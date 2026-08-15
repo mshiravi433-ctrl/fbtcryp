@@ -52,6 +52,10 @@ import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
+import { appendBuckets, learningConfigured } from './learning/store.js';
+import { CONSENT_RE, validateResolution, validateSignal } from './learning/schema.js';
+import { getServingParams, servingResponse, servingSnapshot, warmParamsCache } from './learning/params.js';
+import { runTraining } from './learning/train.js';
 import { activateListing, myListing, putListing, readBoard, removeListing, tierForAmount, txAlreadyUsed } from './board.js';
 import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
@@ -3127,6 +3131,20 @@ app.get('/api/cron/status', async (_req, res) => {
     },
     cronSecretSet: Boolean(process.env.CRON_SECRET),
     durableStorage: storeDurable(),
+    learning: {
+      configured: learningConfigured(),
+      snapshot: (() => {
+        const s = servingSnapshot();
+        if (!s?.manifest) return null;
+        return {
+          paramsKey: s.manifest.paramsKey,
+          trainedAt: s.manifest.trainedAt,
+          records: s.manifest.recordCount,
+          auc: s.manifest.calibrationAuc,
+          fallbackHardcoded: Boolean(s.manifest.fallbackHardcoded)
+        };
+      })()
+    },
     canSend: (webReady && subs > 0) || (fcmReady && fcm > 0)
   });
 });
@@ -3195,6 +3213,64 @@ async function sendDailyFcm() {
     { tag: 'fbt-daily' }
   );
 }
+
+/* ------------------------------ learning core ----------------------------- */
+/*
+ * THE DAILY MACHINE-LEARNING LOOP — zero extra spend, fully dynamic.
+ * See server/learning/* for the full design. Surfaces:
+ *
+ *   POST /api/telemetry/signal   — opt-in, anonymized signal record
+ *   POST /api/telemetry/resolve  — opt-in, observed outcome on a later visit
+ *   GET  /api/learning/params    — published params, served FROM MEMORY
+ *                                  (<1 ms hot path; Blob at most once per
+ *                                  cold start — never per request)
+ *   GET  /api/cron/train         — the second Hobby cron slot, 03:17 UTC
+ *
+ * The telemetry endpoints are STRICTLY opt-in: the Settings flow mints a
+ * device-local consent token (`ct1:` + 32 hex) when the user enables
+ * "contributeTelemetry" and the client sends it with every submission. The
+ * token is never persisted server-side; without it the endpoint answers 401.
+ * Records carry no address, no key, no IP, no user identifier.
+ */
+
+/** Consent proof — the only thing that can be checked without storing users. */
+function telemetryConsented(req) {
+  const token =
+    req.get('x-telemetry-consent') ??
+    (typeof req.body === 'object' && req.body ? req.body.consent : null) ??
+    '';
+  return typeof token === 'string' && CONSENT_RE.test(token);
+}
+
+app.post('/api/telemetry/signal', async (req, res) => {
+  if (!telemetryConsented(req)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  const rec = validateSignal(req.body);
+  if (!rec) return res.status(400).json({ error: 'BAD_SIGNAL' });
+  const out = await appendBuckets([rec]);
+  return res.status(202).json({ ok: true, stored: out.stored, batch: out.batch });
+});
+
+app.post('/api/telemetry/resolve', async (req, res) => {
+  if (!telemetryConsented(req)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  const rec = validateResolution(req.body);
+  if (!rec) return res.status(400).json({ error: 'BAD_RESOLUTION' });
+  const out = await appendBuckets([rec]);
+  return res.status(202).json({ ok: true, stored: out.stored, batch: out.batch });
+});
+
+app.get('/api/learning/params', async (_req, res) => {
+  const snapshot = await getServingParams();
+  res.setHeader('cache-control', 'public, max-age=300, s-maxage=300');
+  res.json(servingResponse(snapshot));
+});
+
+app.get('/api/cron/train', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const summary = await runTraining();
+  // The instance that just trained serves the new params from memory too.
+  if (summary.ok) warmParamsCache().catch(() => {});
+  res.json(summary);
+});
 
 /* ----------------------------- static frontend ---------------------------- */
 

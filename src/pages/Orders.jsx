@@ -48,6 +48,7 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import { useChart } from '../hooks/useMarket';
 import HistoryPanel from '../components/HistoryPanel';
 import { adviseOrder } from '../lib/orderAdvisor';
+import { loadLearningParams, orderTune } from '../lib/learning';
 import AutopilotPanel from '../components/AutopilotPanel';
 
 /**
@@ -781,9 +782,24 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
     onSwitchKind?.(draft.type);
   }, [onSwitchKind]);
 
+  /*
+   * Learning-core order tune (trailing distance / stop buffer / ladder step
+   * divisor), loaded once per session; null ⇒ today's exact defaults.
+   */
+  const [learnTune, setLearnTune] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadLearningParams()
+      .then((d) => alive && setLearnTune(orderTune(d)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const advice = useMemo(
-    () => adviseOrder((watchedSeries ?? []).map((d) => d.p)),
-    [watchedSeries]
+    () => adviseOrder((watchedSeries ?? []).map((d) => d.p), learnTune),
+    [watchedSeries, learnTune]
   );
 
   /*
