@@ -52,8 +52,11 @@
  */
 
 import {
+  ADVISOR_K_BOUNDS,
   ATTR_MAX_DELTA,
+  BANDIT_MULT_BOUNDS,
   BUCKET_MID,
+  DRIFT_MAX_DAILY,
   HORIZONS,
   LAYER_KEYS,
   LAYER_MAX_MULT,
@@ -61,6 +64,9 @@ import {
   MIN_SNAPSHOT,
   MIN_TRAIN,
   ORDER_BOUNDS,
+  REGIMES,
+  REGIME_MAX_STEP,
+  REGIME_MULT_BOUNDS,
   WINDOW_DAYS,
   bucketSign,
   defaultParams,
@@ -391,18 +397,355 @@ export function volatilityTune(medAbs1, baseline = 3) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* v2: server-resolved pipeline — closed-form Bayesian updates                */
+/* -------------------------------------------------------------------------- */
+/*
+ * Everything below is the second-generation trainer: it consumes the SAME
+ * joined records but produces the v2 parameter block (calibration2, bandit,
+ * regimeMult, advisorK) with an explicit held-out gate and a drift clamp.
+ * All of it is deterministic for a given (data, date): the RNG is seeded
+ * with a constant derived from the run date, so re-running the daily cron
+ * with the same inputs produces byte-identical params (idempotence
+ * guardrail). No gradient descent, no dependency, O(n).
+ */
+
+/** Deterministic PRNG — the standard mulberry32, seeded from the run date. */
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Seed constant derived from the run date (UTC), e.g. 20260815. */
+export function seedForDate(d = new Date()) {
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+}
+
+/**
+ * 1) LOGISTIC CALIBRATION via Newton–Raphson.
+ * Model: P(hit) = σ(a·x + b), x = logit(conf/100). 20 iterations of the
+ * exact 2×2 Newton step — on <2000 rows this is microseconds. Returns
+ * {a, b} or null when degenerate (all-hit / all-miss / singular Hessian).
+ */
+export function newtonCalibration(rows, iters = 20) {
+  const pts = (rows ?? [])
+    .filter((r) => Number.isFinite(r?.conf) && (r.hit === 0 || r.hit === 1))
+    .map((r) => ({ x: logit(clamp(r.conf, 1, 99) / 100), y: r.hit }));
+  if (pts.length < 20) return null;
+  const pos = pts.filter((p) => p.y === 1).length;
+  if (pos === 0 || pos === pts.length) return null;
+
+  let a = 1;
+  let b = 0;
+  for (let it = 0; it < iters; it += 1) {
+    // Gradient and Hessian of the log-likelihood.
+    let g0 = 0;
+    let g1 = 0;
+    let h00 = 0;
+    let h01 = 0;
+    let h11 = 0;
+    for (const { x, y } of pts) {
+      const p = sigmoid(a * x + b);
+      const w = p * (1 - p);
+      const d = y - p;
+      g0 += d * x;
+      g1 += d;
+      h00 += w * x * x;
+      h01 += w * x;
+      h11 += w;
+    }
+    const det = h00 * h11 - h01 * h01;
+    if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
+    a += (h11 * g0 - h01 * g1) / det;
+    b += (h00 * g1 - h01 * g0) / det;
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    a = clamp(a, 0.2, 5);
+    b = clamp(b, -3, 3);
+  }
+  return { a: round3(a), b: round3(b) };
+}
+
+/** Calibrated hit probability for a confidence 0..100 under {a,b}; identity
+ *  (conf/100) when the calibration is absent — i.e. today's engine. */
+export function calibratedP(conf, cal) {
+  const c = clamp(Number(conf) || 0, 1, 99) / 100;
+  if (!cal || !Number.isFinite(cal.a) || !Number.isFinite(cal.b)) return c;
+  return sigmoid(cal.a * logit(c) + cal.b);
+}
+
+/** Log-loss of probability predictions over held-out rows. Lower is better. */
+export function logLoss(rows, cal) {
+  const pts = (rows ?? []).filter((r) => Number.isFinite(r?.conf) && (r.hit === 0 || r.hit === 1));
+  if (!pts.length) return null;
+  let sum = 0;
+  for (const r of pts) {
+    const p = clamp(calibratedP(r.conf, cal), 1e-6, 1 - 1e-6);
+    sum += r.hit === 1 ? -Math.log(p) : -Math.log(1 - p);
+  }
+  return sum / pts.length;
+}
+
+/**
+ * 2) THOMPSON-SAMPLING BANDIT, per layer.
+ * For each resolved outcome a layer scores a hit when its sign agreed with
+ * the resolved return. The posterior Beta(10+hits, 10+misses) — the Beta(10,10)
+ * prior keeps early data from swinging the multiplier — is sampled once per
+ * run (normal approximation, seeded RNG → deterministic per day) and divided
+ * by the prior mean 0.5, then clamped to [0.4, 1.8]. The raw multiplier is
+ * PUBLISHED for the record but only ever applied through the [0.85, 1.15]
+ * layer band in applyParams — belt and braces.
+ *
+ * rows: [{ layerSigns: {technical:±1|0, ...}, outcome: ±1 }]
+ */
+export function banditUpdate(rows, rng = Math.random) {
+  const stats = {};
+  for (const k of LAYER_KEYS) stats[k] = { hits: 0, misses: 0 };
+  for (const r of rows ?? []) {
+    const out = r?.outcome;
+    if (out !== 1 && out !== -1) continue;
+    for (const k of LAYER_KEYS) {
+      const sign = r.layerSigns?.[k];
+      if (sign !== 1 && sign !== -1) continue;
+      if (sign === out) stats[k].hits += 1;
+      else stats[k].misses += 1;
+    }
+  }
+  const mult = {};
+  for (const k of LAYER_KEYS) {
+    const a = 10 + stats[k].hits;
+    const b = 10 + stats[k].misses;
+    const mean = a / (a + b);
+    const sd = Math.sqrt((a * b) / ((a + b) ** 2 * (a + b + 1)));
+    // Box–Muller draw from the seeded RNG — deterministic for a given day.
+    const u1 = Math.max(rng(), 1e-12);
+    const u2 = rng();
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    const draw = clamp(mean + z * sd, 0.01, 0.99);
+    mult[k] = round3(clamp(draw / 0.5, ...BANDIT_MULT_BOUNDS));
+  }
+  return { mult, stats };
+}
+
+/**
+ * 3) REGIME ADJUSTMENT with shrinkage toward 1.0.
+ * Average absolute calibration error per regime (|conf/100 − hit|); a regime
+ * where the engine is systematically overconfident earns a multiplier below
+ * 1. Max movement REGIME_MAX_STEP (0.1) per day so the model cannot flip
+ * overnight; hard band [0.7, 1.3].
+ *
+ * rows: [{ regime, conf, hit }]
+ */
+export function regimeAdjust(rows, prev = null) {
+  const by = {};
+  for (const g of REGIMES) by[g] = { n: 0, err: 0 };
+  for (const r of rows ?? []) {
+    const g = REGIMES.includes(r?.regime) ? r.regime : 'unknown';
+    if (!(r?.hit === 0 || r?.hit === 1) || !Number.isFinite(r?.conf)) continue;
+    by[g].n += 1;
+    by[g].err += Math.abs(clamp(r.conf, 0, 100) / 100 - r.hit);
+  }
+  const out = {};
+  for (const g of REGIMES) {
+    const prevMult = clamp(Number(prev?.[g]) || 1, ...REGIME_MULT_BOUNDS);
+    if (by[g].n < 30) {
+      // Thin data: shrink back toward 1.0, never further away.
+      const step = clamp(1 - prevMult, -REGIME_MAX_STEP, REGIME_MAX_STEP);
+      out[g] = round3(clamp(prevMult + step, ...REGIME_MULT_BOUNDS));
+      continue;
+    }
+    const mae = by[g].err / by[g].n;
+    // 0.35 is the base-rate error of an honest ~65%-hit engine; better than
+    // that earns a small boost, worse earns a small cut. 0.3 shrinkage.
+    const target = clamp(1 + (0.35 - mae), ...REGIME_MULT_BOUNDS);
+    const step = clamp(0.3 * (target - prevMult), -REGIME_MAX_STEP, REGIME_MAX_STEP);
+    out[g] = round3(clamp(prevMult + step, ...REGIME_MULT_BOUNDS));
+  }
+  return out;
+}
+
+/**
+ * 4) ADVISOR NUDGE — least squares (through the origin) between the
+ * engine's predicted trail distance and the realized max adverse move over
+ * the next 24h, then a strongly-shrunk k-factor:
+ *     k = clamp(0.8·k_prev + 0.2·k_ols, 0.7, 1.4)
+ *
+ * rows: [{ predictedTrail, realizedDrawdown }] (both in percent, positive)
+ */
+export function advisorFit(rows, prevK = 1) {
+  const pts = (rows ?? []).filter(
+    (r) => Number.isFinite(r?.predictedTrail) && r.predictedTrail > 0
+      && Number.isFinite(r?.realizedDrawdown) && r.realizedDrawdown >= 0
+  );
+  const prev = clamp(Number(prevK) || 1, ...ADVISOR_K_BOUNDS);
+  if (pts.length < 30) return prev;
+  let sxy = 0;
+  let sxx = 0;
+  for (const r of pts) {
+    sxy += r.predictedTrail * r.realizedDrawdown;
+    sxx += r.predictedTrail * r.predictedTrail;
+  }
+  if (sxx < 1e-9) return prev;
+  const ols = clamp(sxy / sxx, 0.2, 5);
+  return round3(clamp(0.8 * prev + 0.2 * ols, ...ADVISOR_K_BOUNDS));
+}
+
+/**
+ * DRIFT CLAMP — no numeric parameter may move by more than DRIFT_MAX_DAILY
+ * (15%) relative to the previous published vector in a single run. Applied
+ * leaf-by-leaf; clamped paths are returned so the report can log them.
+ */
+export function driftClamp(next, prev, maxFrac = DRIFT_MAX_DAILY) {
+  const clampedPaths = [];
+  const walk = (n, p, path) => {
+    if (n == null || typeof n !== 'object') return n;
+    const out = Array.isArray(n) ? [...n] : { ...n };
+    for (const [key, value] of Object.entries(out)) {
+      const prevVal = p?.[key];
+      if (typeof value === 'number' && typeof prevVal === 'number' && Number.isFinite(prevVal) && prevVal !== 0) {
+        const lo = prevVal - Math.abs(prevVal) * maxFrac;
+        const hi = prevVal + Math.abs(prevVal) * maxFrac;
+        if (value < lo || value > hi) {
+          out[key] = round3(clamp(value, lo, hi));
+          clampedPaths.push(`${path}${key}`);
+        }
+      } else if (value && typeof value === 'object') {
+        out[key] = walk(value, prevVal, `${path}${key}.`);
+      }
+    }
+    return out;
+  };
+  return { params: walk(next, prev, ''), clamped: clampedPaths };
+}
+
+/** Split rows deterministically into 80% train / 20% held-out. */
+export function splitRows(rows, rng) {
+  const shuffled = [...(rows ?? [])];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const cut = Math.max(1, Math.floor(shuffled.length * 0.8));
+  return { train: shuffled.slice(0, cut), hold: shuffled.slice(cut) };
+}
+
+/**
+ * The complete v2 pass over joined records. Returns
+ *   { fields: {calibration2, bandit, regimeMult, advisorK}, diag, published }
+ * — `published:false` (with the PREVIOUS fields echoed back) whenever the
+ * held-out diagnostics are worse than the null model. Honest fail-safe: the
+ * null model IS today's engine (identity calibration, all multipliers 1).
+ */
+export function trainV2(records, { prevParams = null, rng = Math.random } = {}) {
+  // Flatten joined records into scored rows.
+  const rows = [];
+  for (const rec of records ?? []) {
+    const dir = directionOf(rec.s);
+    const pk = primaryResolution(rec.h, rec.resolutions);
+    if (!pk || dir === 0) continue;
+    const sign = bucketSign(pk);
+    if (sign === 0) continue;
+    const layerSigns = {};
+    // Telemetry stores the composite stance, not per-layer scores; every
+    // layer that participates in the horizon is credited/blamed with the
+    // stance's own direction. Coarse, bounded, and honest about its limits —
+    // the [0.4,1.8] draw is then squeezed through the ±15% layer band anyway.
+    for (const k of LAYER_KEYS) layerSigns[k] = dir;
+    const ret1 = rec.resolutions['1'] != null ? Math.abs(BUCKET_MID[rec.resolutions['1']] ?? 0) : null;
+    rows.push({
+      conf: clamp(Number(rec.p) || 0, 0, 100),
+      hit: dir === sign ? 1 : 0,
+      regime: rec.g,
+      layerSigns,
+      outcome: sign,
+      predictedTrail: Number.isFinite(rec.raw) && rec.raw > 0 ? rec.raw : null,
+      realizedDrawdown: ret1
+    });
+  }
+
+  const prevFields = {
+    calibration2: prevParams?.calibration2 ?? { a: null, b: null },
+    bandit: prevParams?.bandit ?? { technical: 1, historical: 1, structural: 1, macro: 1 },
+    regimeMult: prevParams?.regimeMult ?? Object.fromEntries(REGIMES.map((g) => [g, 1])),
+    advisorK: prevParams?.advisorK ?? 1
+  };
+  if (rows.length < MIN_TRAIN) {
+    return { fields: prevFields, diag: { rows: rows.length, reason: 'NOT_ENOUGH_DATA' }, published: false };
+  }
+
+  const { train, hold } = splitRows(rows, rng);
+
+  const calibration2 = newtonCalibration(train, 20);
+  const { mult: bandit } = banditUpdate(train, rng);
+  const regimeMult = regimeAdjust(train, prevFields.regimeMult);
+  const advisorRows = train.filter((r) => r.predictedTrail != null && r.realizedDrawdown != null);
+  const advisorK = advisorFit(advisorRows, prevFields.advisorK);
+
+  // 5) DIAGNOSTICS on the held-out 20%: AUC + log-loss, both vs the null
+  // model. Worse on either axis → keep previous params, do NOT publish.
+  const holdPairs = hold.map((r) => ({ score: calibratedP(r.conf, calibration2), label: r.hit }));
+  const nullPairs = hold.map((r) => ({ score: r.conf, label: r.hit }));
+  const aucNew = auc(holdPairs);
+  const aucNull = auc(nullPairs);
+  const llNew = logLoss(hold, calibration2);
+  const llNull = logLoss(hold, null);
+  const eps = 1e-9;
+  const gatePassed = calibration2 != null
+    && aucNew != null && aucNull != null && llNew != null && llNull != null
+    && aucNew >= aucNull - eps
+    && llNew <= llNull + eps;
+
+  const diag = {
+    rows: rows.length,
+    train: train.length,
+    hold: hold.length,
+    auc: aucNew == null ? null : round3(aucNew),
+    aucNull: aucNull == null ? null : round3(aucNull),
+    logLoss: llNew == null ? null : round3(llNew),
+    logLossNull: llNull == null ? null : round3(llNull),
+    gatePassed
+  };
+  if (!gatePassed) {
+    return { fields: prevFields, diag: { ...diag, reason: 'WORSE_THAN_NULL' }, published: false };
+  }
+
+  const next = { calibration2, bandit, regimeMult, advisorK };
+  const { params: drifted, clamped } = driftClamp(next, prevFields);
+  return { fields: drifted, diag: { ...diag, driftClamped: clamped }, published: true };
+}
+
+/* -------------------------------------------------------------------------- */
 /* orchestration                                                              */
 /* -------------------------------------------------------------------------- */
+
+/** Budget: the trainer must finish well inside the 60s maxDuration. */
+export const TRAIN_BUDGET_MS = 20000;
+
+/** learning/reports/{date}.json — the diagnostics trail for each run. */
+export const reportKeyFor = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `learning/reports/${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}.json`;
+};
 
 /**
  * One daily training run. `io` is injectable for tests (see store.js).
  * NEVER throws — every failure path publishes/keeps a hardcoded fallback.
+ * Deterministic per (data, date): the v2 RNG is seeded from the run date.
  */
-export async function runTraining({ now = new Date(), io = blobIo } = {}) {
+export async function runTraining({ now = new Date(), io = blobIo, budgetMs = TRAIN_BUDGET_MS } = {}) {
   const started = Date.now();
+  const overBudget = () => Date.now() - started > budgetMs;
   try {
-    if (!io.configured()) {
-      return { skipped: 'NO_BLOB', fallbackHardcoded: true, ms: Date.now() - started };
+    if (!io.configured() || process.env.LEARNING_ENABLED === '0') {
+      return {
+        skipped: io.configured() ? 'DISABLED' : 'NO_BLOB',
+        fallbackHardcoded: true,
+        ms: Date.now() - started
+      };
     }
 
     const prevManifest = (await readManifest(io)) ?? {};
@@ -477,6 +820,26 @@ export async function runTraining({ now = new Date(), io = blobIo } = {}) {
       stopBufferMult: tune.stopBufferMult
     };
 
+    /*
+     * V2 PASS — deterministic (RNG seeded from the run date), gated on
+     * held-out diagnostics, drift-clamped against the previous vector. When
+     * the gate fails the PREVIOUS v2 fields ride along unchanged: honest
+     * fail-safe, the model can only ever publish something measured to be
+     * at least as good as today's engine.
+     */
+    const prevParams = prevManifest.paramsKey
+      ? sanitizeParams(await readParamsFile(prevManifest.paramsKey, io))
+      : null;
+    const rng = mulberry32(seedForDate(now));
+    const v2 = overBudget()
+      ? { fields: {
+          calibration2: prevParams?.calibration2 ?? { a: null, b: null },
+          bandit: prevParams?.bandit ?? { technical: 1, historical: 1, structural: 1, macro: 1 },
+          regimeMult: prevParams?.regimeMult ?? Object.fromEntries(REGIMES.map((g) => [g, 1])),
+          advisorK: prevParams?.advisorK ?? 1
+        }, diag: { reason: 'BUDGET_EXCEEDED' }, published: false }
+      : trainV2(records, { prevParams, rng });
+
     const params = {
       v: 1,
       version,
@@ -487,7 +850,8 @@ export async function runTraining({ now = new Date(), io = blobIo } = {}) {
       fallbackHardcoded: !canPublishModel,
       layers,
       order,
-      calibration: canPublishModel ? calibration : { k: null, b: null }
+      calibration: canPublishModel ? calibration : { k: null, b: null },
+      ...v2.fields
     };
 
     await writeParamsFile(paramsKey, params, io);
@@ -504,6 +868,24 @@ export async function runTraining({ now = new Date(), io = blobIo } = {}) {
       io
     );
 
+    // Diagnostics report — learning/reports/{date}.json. Best-effort: a
+    // failed report write never blocks the published params.
+    await io.write(
+      reportKeyFor(now),
+      JSON.stringify(
+        {
+          date: now.toISOString(),
+          version,
+          records: stats.usable,
+          calibrationAuc: calibrationAuc ? round3(calibrationAuc) : null,
+          v2: { published: v2.published, ...v2.diag },
+          ms: Date.now() - started
+        },
+        null,
+        2
+      ) + '\n'
+    ).catch?.(() => {});
+
     const pruned = await pruneParams(90, now, io);
     const { rolled } = await rollAndPruneBuckets(now, io);
 
@@ -514,6 +896,7 @@ export async function runTraining({ now = new Date(), io = blobIo } = {}) {
       records: stats.usable,
       calibrationAuc,
       fallbackHardcoded: !canPublishModel,
+      v2Published: v2.published,
       pruned,
       rolled,
       ms: Date.now() - started

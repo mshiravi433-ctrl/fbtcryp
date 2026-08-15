@@ -117,6 +117,26 @@ export default function Settings() {
   const [langOpen, setLangOpen] = useState(false);
   const [nameOpen, setNameOpen] = useState(false);
 
+  /*
+   * One-time telemetry prompt state. localStorage (not the store) because it
+   * is a per-device "have I seen this line" bit, never synced anywhere.
+   */
+  const [telemetryPromptVisible, setTelemetryPromptVisible] = useState(() => {
+    try {
+      return !localStorage.getItem('fbt-telemetry-prompt-seen');
+    } catch {
+      return false;
+    }
+  });
+  const dismissTelemetryPrompt = () => {
+    setTelemetryPromptVisible(false);
+    try {
+      localStorage.setItem('fbt-telemetry-prompt-seen', '1');
+    } catch {
+      /* private mode: the prompt shows again next session — harmless */
+    }
+  };
+
   // Notification prefs live outside the zustand store on purpose: lib/notify
   // is also called from a service worker context and from module scope before
   // React mounts, so localStorage is the only shared surface both can use.
@@ -703,6 +723,27 @@ export default function Settings() {
       <motion.section variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('settings.privacySection')}</p>
         <div className="set-group">
+          {/*
+            One-time prompt — a quiet inline line inside the privacy box,
+            NEVER a modal on first open. Dismissed forever with one tap;
+            stored in localStorage so it survives the session but is not
+            synced (the prompt is about this device's choice).
+          */}
+          {telemetryPromptVisible && !s.contributeTelemetry && (
+            <div className="card card-soft row-between" style={{ padding: '10px 12px', marginBottom: 8, borderRadius: 12 }}>
+              <span className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, flex: 1 }}>
+                {t('settings.telemetryPrompt')}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ minHeight: 30, padding: '4px 10px', fontSize: 11 }}
+                onClick={dismissTelemetryPrompt}
+              >
+                {t('common.close')}
+              </button>
+            </div>
+          )}
           <InfoBox title={t('settings.telemetryTitle')} tone="info" id="set-telemetry">
             <p>{t('settings.telemetryBody')}</p>
             <div className="set-row" style={{ marginTop: 6 }}>

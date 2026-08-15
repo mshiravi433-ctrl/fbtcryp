@@ -60,17 +60,36 @@ import {
   validateSignal
 } from '../server/learning/schema.js';
 import {
+  advisorFit,
   attributionDeltas,
   auc,
+  banditUpdate,
   bayesianContrast,
+  calibratedP,
   computeStats,
+  driftClamp,
   fitLogistic,
+  logLoss,
   mergeMultipliers,
+  mulberry32,
+  newtonCalibration,
   parseLearningLines,
   primaryResolution,
+  regimeAdjust,
   runTraining,
+  seedForDate,
+  trainV2,
   volatilityTune
 } from '../server/learning/train.js';
+import { validateEvent } from '../server/learning/schema.js';
+import {
+  hashCoinId,
+  ingestEvent,
+  readPending,
+  sweepPending
+} from '../server/learning/events.js';
+import { applyParams, paramsUsable } from '../server/learning/loader.js';
+import { cachedPriceUSD } from '../server/learning/prices.js';
 import {
   anonCoinId,
   bucketReturn as clientBucketReturn,
@@ -3321,6 +3340,315 @@ export default async function run() {
     const ot = orderTune({ model: true, params: { order: { trailMult: 3, ladderStepDiv: 0.1, stopBufferMult: 1 } } });
     t('orderTune clamps order defaults into their bands',
       ot.trailMult === 1.15 && ot.ladderStepDiv === 2.4 && ot.stopBufferMult === 1);
+  }
+
+  /* ===== learning core v2: server-resolved telemetry + Bayesian trainer === */
+  /* The second-generation loop: POST /api/learning/event → pending.json →
+     cron sweep from CACHED prices → trainV2 (Newton calibration, Thompson
+     bandit, regime shrinkage, advisor k) → drift-clamped, gate-checked
+     params. Every test here pins a safety boundary from the spec. */
+  {
+    const fakeIo = (seed = {}) => {
+      const blobs = new Map(Object.entries(seed));
+      return {
+        blobs,
+        read: async (k) => (blobs.has(k) ? blobs.get(k) : null),
+        write: async (k, text) => { blobs.set(k, text); return true; },
+        list: async (prefix) => [...blobs.keys()].filter((k) => k.startsWith(prefix)),
+        del: async (k) => { blobs.delete(k); return true; },
+        configured: () => true
+      };
+    };
+    const priceStoreWith = (entries, at = Date.now()) =>
+      new Map(Object.entries(entries).map(([id, price]) => [
+        `coin:${id}`, { value: { price }, at, expires: at + 60000 }
+      ]));
+
+    /* -------------------------- event schema --------------------------- */
+    const goodEvent = {
+      coinId: 'bitcoin', chainId: 1, horizon: 'short', predictedStance: 'mildUp',
+      predictedConfidence: 55, predictedRaw: 12.3, regime: 'riskOn',
+      layersHash: 'hc', clientTs: Date.now()
+    };
+    t('a well-formed learning event validates', Boolean(validateEvent(goodEvent)));
+    t('an event with an unknown stance is rejected', validateEvent({ ...goodEvent, predictedStance: 'moon' }) === null);
+    t('an event with out-of-range confidence is rejected', validateEvent({ ...goodEvent, predictedConfidence: 400 }) === null);
+    t('an event with a future timestamp is rejected', validateEvent({ ...goodEvent, clientTs: Date.now() + 86400000 }) === null);
+    t('an event with a malformed coin id is rejected', validateEvent({ ...goodEvent, coinId: 'UPPER CASE!!' }) === null);
+    t('an event cannot smuggle a resolved return — unknown keys are dropped by construction',
+      (() => {
+        const v = validateEvent({ ...goodEvent, resolvedReturn: 99, address: '0xdead', ip: '1.2.3.4' });
+        return v !== null && !('resolvedReturn' in v) && !('address' in v) && !('ip' in v);
+      })());
+    t('the server-side coin hash matches the client anonCoinId',
+      hashCoinId('bitcoin') === anonCoinId('bitcoin') && hashCoinId('ethereum') === anonCoinId('ethereum'));
+
+    /* --------------------- price cache: trusted only -------------------- */
+    {
+      const at = Date.now();
+      const store = priceStoreWith({ bitcoin: 50000 }, at);
+      t('cachedPriceUSD reads the coin cache', cachedPriceUSD('bitcoin', { store, now: at }) === 50000);
+      t('cachedPriceUSD misses honestly for unknown coins', cachedPriceUSD('dogecoin', { store, now: at }) === null);
+      const stale = priceStoreWith({ bitcoin: 50000 }, at - 7 * 3600 * 1000);
+      t('a price older than six hours is a miss, not a value', cachedPriceUSD('bitcoin', { store: stale, now: at }) === null);
+    }
+
+    /* ---------------- ingest → pending.json → sweep --------------------- */
+    {
+      const io = fakeIo();
+      const now = Date.now();
+      const store = priceStoreWith({ bitcoin: 50000 }, now);
+      const r1 = await ingestEvent(goodEvent, { io, now, priceStore: store });
+      t('ingest enriches with the CACHED price and queues a callback', r1.ok === true && r1.queued === 1);
+      const pend = await readPending(io);
+      t('the pending entry stores the server-side base price, never a client one',
+        pend.items.length === 1 && pend.items[0].basePx === 50000);
+      t('the short-horizon callback fires 24h after the event',
+        Math.abs(pend.items[0].fireAt - (now + 24 * 3600 * 1000)) < 1000);
+      const rLong = await ingestEvent({ ...goodEvent, horizon: 'long', clientTs: now + 1 }, { io, now, priceStore: store });
+      const pend2 = await readPending(io);
+      const longEntry = pend2.items.find((x) => x.h === 'long');
+      t('the long-horizon callback fires 7d after the event',
+        rLong.ok && Math.abs(longEntry.fireAt - (now + 7 * 24 * 3600 * 1000)) < 1000);
+      t('a same-day duplicate is deduped, not double-queued',
+        (await ingestEvent(goodEvent, { io, now, priceStore: store })).queued === 0);
+      t('an unpriceable coin is refused rather than guessed',
+        (await ingestEvent({ ...goodEvent, coinId: 'dogecoin' }, { io, now, priceStore: store })).error === 'NO_PRICE');
+
+      // Sweep 25h later with a 4% move — the SERVER computes the return.
+      const later = now + 25 * 3600 * 1000;
+      const appended = [];
+      const sw = await sweepPending({
+        io, now: later,
+        priceStore: priceStoreWith({ bitcoin: 52000 }, later),
+        append: async (recs) => { appended.push(...recs); return { stored: true }; }
+      });
+      t('the sweep resolves due callbacks from cached prices', sw.resolved === 1 && sw.pending === 1);
+      t('the resolved bucket is computed server-side (+4% → up2)',
+        appended.some((r) => r.t === 'r' && r.r?.['1'] === 'up2'));
+      t('the finalized signal carries the raw score for the advisor fit',
+        appended.some((r) => r.t === 's' && r.raw === 12.3));
+
+      // Cache miss at resolution time: keep within grace, then DROP.
+      const io2 = fakeIo();
+      await ingestEvent(goodEvent, { io: io2, now, priceStore: store });
+      const missKept = await sweepPending({ io: io2, now: later, priceStore: new Map(), append: async () => {} });
+      t('a price-cache miss keeps the sample inside the grace window', missKept.pending === 1 && missKept.resolved === 0);
+      const missDropped = await sweepPending({ io: io2, now: later + 4 * 86400000, priceStore: new Map(), append: async () => {} });
+      t('past the grace window the sample is DROPPED, never invented', missDropped.dropped === 1 && missDropped.pending === 0);
+
+      // Corrupt manifest never takes the pipeline down.
+      const io3 = fakeIo({ 'learning/pending.json': '{{{not json' });
+      const rec = await readPending(io3);
+      t('a corrupt pending manifest degrades to empty, not a crash', Array.isArray(rec.items) && rec.items.length === 0);
+    }
+
+    /* ------------------- Newton-Raphson calibration --------------------- */
+    {
+      // Synthetic linearly-separable-ish data: P(hit) really rises with conf.
+      const rng = mulberry32(1234);
+      const rows = [];
+      for (let i = 0; i < 800; i += 1) {
+        const conf = 5 + Math.floor(rng() * 90);
+        rows.push({ conf, hit: rng() < conf / 100 ? 1 : 0 });
+      }
+      const cal = newtonCalibration(rows);
+      t('Newton-Raphson fits a finite calibration on synthetic data',
+        cal !== null && Number.isFinite(cal.a) && Number.isFinite(cal.b) && cal.a > 0);
+      const pairs = rows.map((r) => ({ score: calibratedP(r.conf, cal), label: r.hit }));
+      const fitAuc = auc(pairs);
+      t(`calibration AUC beats 0.85 on separable data would be luck — this data is noisy-monotone, assert > 0.6 (${fitAuc?.toFixed(3)})`,
+        fitAuc !== null && fitAuc > 0.6);
+      // A genuinely separable set: conf<50 always miss, conf>50 always hit.
+      const sep = [];
+      for (let i = 0; i < 400; i += 1) {
+        const conf = 5 + Math.floor(mulberry32(i)() * 90);
+        sep.push({ conf, hit: conf > 50 ? 1 : 0 });
+      }
+      const sepCal = newtonCalibration(sep);
+      const sepAuc = auc(sep.map((r) => ({ score: calibratedP(r.conf, sepCal), label: r.hit })));
+      t(`logistic fit reaches AUC > 0.85 on a linearly separable set (${sepAuc?.toFixed(3)})`,
+        sepAuc !== null && sepAuc > 0.85);
+      t('calibration falls back to identity when absent', calibratedP(70, null) === 0.7);
+      t('log-loss of the fitted model beats the null on the training set',
+        logLoss(sep, sepCal) < logLoss(sep, null));
+      t('an all-hit degenerate set refuses to fit', newtonCalibration(sep.map((r) => ({ ...r, hit: 1 }))) === null);
+    }
+
+    /* ------------------- bandit update: monotonicity --------------------- */
+    {
+      const mkRows = (hits, misses) => [
+        ...Array.from({ length: hits }, () => ({ layerSigns: { technical: 1, historical: 0, structural: 0, macro: 0 }, outcome: 1 })),
+        ...Array.from({ length: misses }, () => ({ layerSigns: { technical: 1, historical: 0, structural: 0, macro: 0 }, outcome: -1 }))
+      ];
+      // Same seed both times: the only difference is the evidence.
+      const good = banditUpdate(mkRows(90, 10), mulberry32(99)).mult.technical;
+      const bad = banditUpdate(mkRows(10, 90), mulberry32(99)).mult.technical;
+      t('bandit multiplier is monotone in the evidence (more hits → bigger)', good > bad);
+      t('bandit multipliers stay inside [0.4, 1.8]',
+        good >= 0.4 && good <= 1.8 && bad >= 0.4 && bad <= 1.8);
+      const noEvidence = banditUpdate([], mulberry32(99)).mult;
+      t('a layer with no outcomes hovers near the prior (Beta(10,10) → ~1.0)',
+        Math.abs(noEvidence.historical - 1) < 0.45);
+      t('the seeded bandit draw is deterministic per day',
+        banditUpdate(mkRows(50, 50), mulberry32(7)).mult.technical
+          === banditUpdate(mkRows(50, 50), mulberry32(7)).mult.technical);
+    }
+
+    /* --------------------- regime shrinkage clamps ----------------------- */
+    {
+      const overconf = Array.from({ length: 100 }, () => ({ regime: 'riskOff', conf: 70, hit: 0 }));
+      const step1 = regimeAdjust(overconf, null);
+      t('a systematically overconfident regime earns a multiplier below 1', step1.riskOff < 1);
+      t('one daily run moves a regime multiplier at most 0.1', 1 - step1.riskOff <= 0.1 + 1e-9);
+      let prev = { riskOff: 1 };
+      for (let d = 0; d < 30; d += 1) prev = regimeAdjust(overconf, prev);
+      t('thirty hostile days still cannot push a regime outside [0.7, 1.3]',
+        prev.riskOff >= 0.7 && prev.riskOff <= 1.3);
+      t('a thin regime shrinks back toward 1.0, never away',
+        regimeAdjust([], { riskOn: 1.3 }).riskOn < 1.3);
+    }
+
+    /* --------------------- advisor k-factor bounds ----------------------- */
+    {
+      const rows = Array.from({ length: 100 }, (_, i) => ({ predictedTrail: 2 + (i % 5), realizedDrawdown: (2 + (i % 5)) * 3 }));
+      const k = advisorFit(rows, 1);
+      t('advisor k moves toward the OLS slope but stays clamped ≤ 1.4', k > 1 && k <= 1.4);
+      t('advisor k with thin data keeps the previous value', advisorFit([], 1.1) === 1.1);
+      t('advisor k clamps a hostile previous value into [0.7, 1.4]', advisorFit([], 9) === 1.4);
+    }
+
+    /* -------------------------- drift clamp ------------------------------ */
+    {
+      const { params: drifted, clamped } = driftClamp(
+        { bandit: { technical: 1.8 }, advisorK: 1.39 },
+        { bandit: { technical: 1.0 }, advisorK: 1.35 },
+        0.15
+      );
+      t('drift clamp caps any parameter at ±15% per day and logs the path',
+        drifted.bandit.technical === 1.15 && clamped.includes('bandit.technical'));
+      t('parameters inside the drift band pass through untouched',
+        drifted.advisorK === 1.39 && !clamped.includes('advisorK'));
+    }
+
+    /* -------------- trainV2: held-out gate is an honest fail-safe -------- */
+    {
+      const now = new Date('2026-08-15T03:17:00Z');
+      const base = now.getTime() - 40 * 86400000;
+      /*
+       * MISCALIBRATED synthetic data: the engine's stated confidence is
+       * systematically overconfident (true P(hit) is a squashed version of
+       * conf). The null model IS the stated confidence, so a correct
+       * logistic fit must beat it on the held-out slice — which is exactly
+       * the situation the gate exists to detect.
+       */
+      const sig = (x) => 1 / (1 + Math.exp(-x));
+      const lgt = (p) => Math.log(p / (1 - p));
+      const mkRecords = (n) => {
+        const r = mulberry32(5150);
+        return Array.from({ length: n }, (_, i) => {
+          const conf = 20 + Math.floor(r() * 60);
+          const trueP = sig(0.3 * lgt(conf / 100) - 0.8);
+          const hit = r() < trueP;
+          return {
+            t: 's', c: 'a1b2c3d4', h: 'short', s: 'mildUp', p: conf, g: 'riskOn', w: 'hc',
+            ts: base + i * 3600000, raw: 5,
+            resolutions: { 1: hit ? 'up2' : 'dn2' }
+          };
+        });
+      };
+      const rngA = mulberry32(seedForDate(now));
+      const good = trainV2(mkRecords(1500), { prevParams: null, rng: rngA });
+      t('trainV2 publishes when held-out AUC and log-loss beat the null model',
+        good.published === true && good.diag.gatePassed === true);
+      t('trainV2 reports held-out AUC and log-loss for the diagnostics file',
+        Number.isFinite(good.diag.auc) && Number.isFinite(good.diag.logLoss));
+      const thin = trainV2(mkRecords(20), { prevParams: null, rng: mulberry32(1) });
+      t('trainV2 refuses to publish on thin data and keeps the previous fields',
+        thin.published === false && thin.fields.advisorK === 1 && thin.fields.bandit.technical === 1);
+      t('trainV2 is deterministic for a given date seed',
+        JSON.stringify(trainV2(mkRecords(1500), { rng: mulberry32(seedForDate(now)) }).fields)
+          === JSON.stringify(trainV2(mkRecords(1500), { rng: mulberry32(seedForDate(now)) }).fields));
+    }
+
+    /* ------------- loader: applyParams + every fail-safe ------------------ */
+    {
+      const freshParams = {
+        version: 3, trainedAt: new Date().toISOString(), fallbackHardcoded: false,
+        layers: {
+          short: { technical: 1.1, historical: 1, structural: 1, macro: 1 },
+          long: { technical: 1, historical: 1, structural: 1, macro: 1 }
+        },
+        order: { trailMult: 1, ladderStepDiv: 3, stopBufferMult: 1 },
+        calibration2: { a: 1.2, b: 0.2 },
+        bandit: { technical: 1.4, historical: 1, structural: 1, macro: 1 },
+        regimeMult: { riskOn: 1.05 }, advisorK: 1
+      };
+      const v = {
+        short: { stance: 'mildUp', confidence: 40, layers: { technical: { weight: 0.5 }, historical: { weight: 0 }, structural: { weight: 0.3 }, macro: { weight: 0.2 } } },
+        long: { stance: 'unclear', confidence: 10, layers: {} },
+        macro: { regime: { regime: 'riskOn' } }
+      };
+      t('applyParams with null params returns the verdict UNCHANGED (same object)',
+        applyParams(v, null) === v);
+      t('applyParams with stale (>14d) params returns the verdict unchanged',
+        applyParams(v, { ...freshParams, trainedAt: '2020-01-01T00:00:00Z' }) === v);
+      t('applyParams with fallback params returns the verdict unchanged',
+        applyParams(v, { ...freshParams, fallbackHardcoded: true }) === v);
+      t('applyParams with garbage params returns the verdict unchanged',
+        applyParams(v, 'garbage') === v && applyParams(v, 42) === v);
+      const out = applyParams(v, freshParams);
+      t('applyParams returns a NEW object and never mutates the input',
+        out !== v && v.short.confidence === 40 && v.short.calibrated === undefined);
+      t('applyParams re-weights layers inside the hard band',
+        out.short.layers.technical.weight > 0.5 && out.short.layers.technical.weight <= 0.5 * 1.15 + 1e-9);
+      t('applyParams never re-weights a layer with no evidence',
+        out.short.layers.historical.weight === 0);
+      t('calibrated confidence stays within the engine ceiling',
+        out.short.confidence >= 0 && out.short.confidence <= 75 && out.long.confidence <= 65);
+      t('paramsUsable rejects the whole poisoned-blob family',
+        !paramsUsable(null) && !paramsUsable({}) && !paramsUsable({ ...freshParams, trainedAt: 'not a date' }));
+      // First-day kill switch: LEARNING_ENABLED=0 forces fallback serving.
+      {
+        const prev = process.env.LEARNING_ENABLED;
+        process.env.LEARNING_ENABLED = '0';
+        const killed = !paramsUsable(freshParams) && applyParams(v, freshParams) === v;
+        if (prev === undefined) delete process.env.LEARNING_ENABLED;
+        else process.env.LEARNING_ENABLED = prev;
+        t('LEARNING_ENABLED=0 forces the serving path into fallback', killed);
+      }
+      // Poisoned blob: absurd numbers are clamped at load time by the schema.
+      const poisoned = applyParams(v, {
+        ...freshParams,
+        bandit: { technical: 1e9, historical: -5, structural: 1, macro: 1 },
+        regimeMult: { riskOn: 99 },
+        calibration2: { a: 1e6, b: -1e6 }
+      });
+      t('a poisoned params blob cannot push a weight outside the ±15% band',
+        poisoned.short.layers.technical.weight <= 0.5 * 1.15 + 1e-9
+          && poisoned.short.confidence <= 75);
+    }
+
+    /* -------- sabotage: no learning module ⇒ verdict untouched ----------- */
+    {
+      /*
+       * The real sabotage (deleting server/learning/*.js) is exercised at the
+       * import layer by server/app.js's guarded dynamic import — a missing
+       * module resolves to null and every learning route answers its honest
+       * NOT_CONFIGURED shape. What must be pinned HERE is the contract that
+       * makes that safe: the verdict engine itself never imports the learning
+       * module, so its output with no tune is byte-identical to today's.
+       */
+      const series = Array.from({ length: 120 }, (_, i) => 100 + Math.sin(i / 7) * 6 + i * 0.1);
+      const a = analyze(series, { change24h: 1, change7d: 2, id: 'x', symbol: 'X' });
+      const args = { analysis: a, series, btcSeries: series, coin: { id: 'x' }, global: { mcapChange: 1, btcDominance: 52 } };
+      // Compare the two horizons only: facts.generatedAt is a Date.now()
+      // wall-clock stamp and may differ between the two calls by design.
+      const noTune = verdict({ ...args, tune: null });
+      const bare = verdict(args);
+      t('the verdict engine works with no learning module in the graph',
+        JSON.stringify({ s: noTune.short, l: noTune.long }) === JSON.stringify({ s: bare.short, l: bare.long }));
+    }
   }
 
   /* -------- the tuned verdict stays honest: words never change ---------- */

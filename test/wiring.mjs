@@ -11240,5 +11240,105 @@ export default function run() {
         && /no metadata privacy/i.test(enLocale.intentOS.privacy.confidential.body));
   }
 
+  /* ============ learning core v2: wiring + guardrails ==================== */
+  /*
+   * The spec's non-negotiables, pinned as file facts:
+   *   · no heavy ML dependency may ever ride in (tfjs / onnx / mediapipe);
+   *   · the telemetry hook is gated on the Settings opt-in flag;
+   *   · the params endpoint is edge-cached (s-maxage) and served from the
+   *     in-memory single-flight cache;
+   *   · the client telemetry payload can never carry address / pubkey / ip;
+   *   · the server, not the client, resolves outcomes (poisoning defence);
+   *   · the ceiling constants in the loader match the verdict engine's.
+   */
+  {
+    const pkg = JSON.parse(read('package.json'));
+    const allDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+    const heavy = allDeps.filter((d) => /tfjs|tensorflow|onnx|mediapipe|torch|keras/i.test(d));
+    t(`no heavy ML dependency was added (${heavy.join(', ') || 'clean'})`, heavy.length === 0);
+
+    const hook = read('src/hooks/telemetry.js');
+    const signals = read('src/pages/Signals.jsx');
+    const settings = read('src/pages/Settings.jsx');
+    const settingsStore = read('src/store/useSettingsStore.js');
+    const server = read('server/app.js');
+    const events = read('server/learning/events.js');
+    const loader = read('server/learning/loader.js');
+    const schema = read('server/learning/schema.js');
+    const verdictLib = read('src/lib/verdict.js');
+    const paramsHook = read('src/hooks/useLearningParams.js');
+    const panel = read('src/components/VerdictPanel.jsx');
+
+    t('the telemetry hook checks contributeTelemetry before doing any work',
+      /contributeTelemetry/.test(hook) && /telemetryToken/.test(hook));
+    t('the hook waits ≥5 seconds of stable prediction before firing',
+      /STABLE_MS\s*=\s*5000/.test(hook) && /setTimeout\(/.test(hook));
+    t('the hook re-checks the opt-in at fire time (a mid-timer opt-out wins)',
+      /useSettingsStore\.getState\(\)[\s\S]{0,120}contributeTelemetry[\s\S]{0,80}return/.test(hook));
+    t('Signals.jsx wires the hook behind the opt-in flag',
+      /useLearningTelemetry/.test(signals)
+        && /contributeTelemetry/.test(signals)
+        && /optedIn/.test(signals));
+    t('the hook is wired from Signals.jsx and nowhere else',
+      walk('src').filter((f) => /useLearningTelemetry/.test(read(f))
+        && !f.endsWith('hooks/telemetry.js')).length === 1);
+    t('the Settings privacy box has the opt-in toggle and one-time prompt (no modal)',
+      /setContributeTelemetry/.test(settings)
+        && /telemetryPrompt/.test(settings)
+        && /fbt-telemetry-prompt-seen/.test(settings));
+    t('the consent token never leaves the device via settings sync',
+      !/telemetryToken/.test(settingsStore.slice(settingsStore.indexOf('exportSyncable() {'))));
+
+    /* telemetry payload hygiene: no address / pubkey / ip can be sent */
+    t('the client telemetry payload carries no address, pubkey or ip field',
+      !/address|pubkey|publicKey|\bip\b/i.test(
+        hook.slice(hook.indexOf('postEvent('), hook.indexOf('markSent'))
+      ));
+    t('the event schema cannot represent an address, key or ip (allowlist of fields)',
+      /coinId,\s*\n?\s*chainId,\s*\n?\s*horizon/.test(schema)
+        && !/address|pubkey|publicKey/i.test(schema.slice(schema.indexOf('validateEvent'), schema.indexOf('recordToLine'))));
+
+    /* server: endpoint + rate limit + server-resolved outcomes */
+    t('POST /api/learning/event exists and reuses the Map-based 1 Hz limiter',
+      /app\.post\('\/api\/learning\/event'/.test(server)
+        && /learnEventHits/.test(server)
+        && /LEARNING_RATE_LIMITED/.test(server));
+    t('the params endpoint sets s-maxage for the edge cache',
+      /\/api\/learning\/params'[\s\S]{0,700}s-maxage=3600/.test(server));
+    t('the params endpoint serves from the in-memory single-flight cache',
+      /getServingParams/.test(server) && /servingResponse/.test(server));
+    t('the cron sweeps pending resolutions before training',
+      /sweepPending\(\)/.test(server)
+        && server.indexOf('sweepPending()') < server.indexOf('runTraining()'));
+    t('resolution prices come from the market cache; a miss drops the sample',
+      /cachedPriceUSD/.test(events) && /dropped/.test(events) && !/fetch\(/.test(events));
+    t('the learning module is imported through a guarded dynamic import (sabotage-safe)',
+      /import\('\.\/learning\/store\.js'\)/.test(server)
+        && /catch/.test(server.slice(server.indexOf('learningModPromise'), server.indexOf('learningSync')))
+        && !/^import .*learning\//m.test(server));
+    t('health reports the learning block without a new admin page',
+      /learning:\s*\{\s*\n?\s*enabled:/.test(server) && /optInCount/.test(server));
+    t('LEARNING_ENABLED=0 forces the trainer into fallback',
+      /LEARNING_ENABLED/.test(read('server/learning/train.js')));
+
+    /* loader honesty: ceilings mirrored, stale params ignored */
+    const ceilingSrc = /CONFIDENCE_CEILING\s*=\s*\{\s*short:\s*(\d+),\s*long:\s*(\d+)\s*\}/.exec(verdictLib);
+    const ceilingMirror = /VERDICT_CONFIDENCE_CEILING\s*=\s*\{\s*short:\s*(\d+),\s*long:\s*(\d+)\s*\}/.exec(schema);
+    t('the loader mirrors the exact verdict confidence ceilings',
+      Boolean(ceilingSrc && ceilingMirror)
+        && ceilingSrc[1] === ceilingMirror[1] && ceilingSrc[2] === ceilingMirror[2]);
+    t('applyParams treats >14-day-old params as absent',
+      /STALE_PARAMS_DAYS/.test(loader) && /return v/.test(loader));
+
+    /* client: tiny surface, non-blocking */
+    t('useLearningParams caches in sessionStorage and never blocks first render',
+      /sessionStorage/.test(paramsHook) && /useState\(\(\) =>/.test(paramsHook));
+    t('the calibration badge sits under the disclaimer and shows nothing while pending',
+      panel.indexOf('verd-disclaimer') < panel.indexOf('verd-calib')
+        && /learn\?\.model && learn\?\.params/.test(panel));
+    t('no new page was added for the learning feature',
+      !existsSync('src/pages/Learning.jsx') && !existsSync('src/pages/Calibration.jsx'));
+  }
+
   return rows;
 }

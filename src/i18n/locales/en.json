@@ -740,7 +740,8 @@
     "telemetryBody": "The signal engine gets better by learning from what actually happened after each read. Turning this on shares only anonymized outcomes with the daily training run — never your addresses, wallet keys, IP address, or any identifier.",
     "contributeTelemetry": "Share anonymous signal outcomes",
     "contributeTelemetrySub": "No addresses, no keys, no IPs, no user IDs",
-    "telemetryNote": "Each record is under 120 bytes: a hashed coin id, the read (stance, confidence, market regime, model version) and the outcome that later occurred. Nothing about you can be recovered from it, and the app behaves identically whether this is on or off."
+    "telemetryNote": "Each record is under 120 bytes: a hashed coin id, the read (stance, confidence, market regime, model version) and the outcome that later occurred. Nothing about you can be recovered from it, and the app behaves identically whether this is on or off.",
+    "telemetryPrompt": "New: the signal engine can now learn from anonymous outcomes. If you'd like to help it improve, you can opt in below — it's entirely optional and shares nothing about you."
   },
   "about": {
     "title": "About us",
@@ -2583,7 +2584,7 @@
     "notPrediction": "This is not a prediction and there is no price target anywhere in it. Every number above is measured from what already happened: this asset's own history, its relationship with Bitcoin, and the state of the market. The future is allowed to ignore all of it. Never put in money you cannot afford to lose.",
     "noModel": "No language model wrote any of this. Every sentence is assembled from a number that was actually computed on your device, which is why it can never invent a fact, a level or a headline.",
     "notEnough": "Not enough history for a full read on this asset yet.",
-    "calibrated": "Calibrated on the last {{n}} outcomes — model v{{date}}"
+    "calibrated": "Calibrated on {{n}} signals"
   },
   "bridge": {
     "title": "Bridge",

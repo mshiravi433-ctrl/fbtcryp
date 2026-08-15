@@ -5,10 +5,10 @@ import { CONFIDENCE_CEILING, verdict } from '../lib/verdict';
 import { fmtPrice } from '../lib/format';
 import {
   layerTune,
-  loadLearningParams,
   telemetryResolve,
   telemetrySignal
 } from '../lib/learning';
+import useLearningParams from '../hooks/useLearningParams';
 
 /**
  * THE VERDICT PANEL — the readable half of lib/verdict.js.
@@ -133,18 +133,13 @@ export default function VerdictPanel({ analysis, series, btcSeries, coin, global
   const { t } = useTranslation();
   const [showLayers, setShowLayers] = useState(false);
   /*
-   * The learning core's published params, fetched once per session. While it
-   * is null (not yet loaded, or no model published) the verdict below uses
-   * today's hardcoded weights — identical behaviour to before.
+   * The learning core's published params — via useLearningParams: session-
+   * cached, stale-while-revalidate, never blocks first render. While it is
+   * null (fetch pending, offline, or no model published) the verdict below
+   * uses today's hardcoded weights — identical behaviour to before, and the
+   * calibration badge simply does not appear.
    */
-  const [learn, setLearn] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    loadLearningParams().then((d) => alive && setLearn(d));
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const learn = useLearningParams();
 
   const tune = useMemo(() => layerTune(learn), [learn]);
 
@@ -241,21 +236,6 @@ export default function VerdictPanel({ analysis, series, btcSeries, coin, global
         <HorizonCard read={v.long} t={t} formatReason={formatReason} />
       </div>
 
-      {/*
-        Transparency footnote — only when the learning core's tuned weights
-        are actually in effect. The wording is a measurement statement, never
-        a promise: how many outcomes were calibrated on, and which model
-        version (the date it was trained) is doing the tuning.
-      */}
-      {learn?.model && learn?.params && (
-        <p className="faint verd-calib">
-          {t('verdict.calibrated', {
-            n: learn.manifest?.recordCount ?? learn.params.records ?? 0,
-            date: String(learn.params.trainedAt ?? '').slice(0, 10)
-          })}
-        </p>
-      )}
-
       {/* The sentence a user cannot derive by looking at two cards. */}
       <p className={`verd-agree verd-agree-${v.agree}`}>{t(`verdict.agree.${v.agree}`)}</p>
 
@@ -313,6 +293,26 @@ export default function VerdictPanel({ analysis, series, btcSeries, coin, global
         unless it is explicitly told not to.
       */}
       <p className="notice notice-danger verd-disclaimer">{t('verdict.notPrediction')}</p>
+
+      {/*
+        Calibration badge — 8pt, muted, UNDER the disclaimer, and only when a
+        real model is in effect. The trained-at date is the tooltip, not body
+        copy. While the params fetch is pending (or offline, or Blob is off)
+        this renders nothing at all: the badge is the entire UI footprint of
+        the learning feature, and its absence must be indistinguishable from
+        the feature not existing.
+      */}
+      {learn?.model && learn?.params && !learn.manifest?.fallbackHardcoded && (
+        <p
+          className="faint verd-calib"
+          title={String(learn.params.trainedAt ?? '').slice(0, 10)}
+        >
+          {t('verdict.calibrated', {
+            n: learn.manifest?.recordCount ?? learn.params.records ?? 0,
+            date: String(learn.params.trainedAt ?? '').slice(0, 10)
+          })}
+        </p>
+      )}
     </section>
   );
 }
