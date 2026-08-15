@@ -18,6 +18,15 @@
 import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
+/*
+ * server/app.js reads its rate budgets at module load, and the FIRST probe
+ * to import it wins for the whole process. Pin both here so the learning
+ * probe can exercise its own dedicated limiter (a small budget that trips
+ * fast) without the broad /api limiter 429ing the rest of the HTTP suites.
+ */
+process.env.RATE_LIMIT = process.env.RATE_LIMIT || '100000';
+process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT || '3';
+
 const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
 /** jsdom lacks a handful of globals React and framer-motion expect. */
@@ -308,6 +317,15 @@ console.log('\n▸ probing the signed solver commitment API…');
 {
   const intentApiRows = (await import('./intent-api-probe.mjs')).default;
   report('intent commitment API', intentApiRows);
+}
+
+/* Real HTTP coverage for the learning core: opt-in enforcement (401), the
+   dedicated event rate limiter (429), the in-memory params hot path (<1 ms),
+   and the honest not-configured shapes when Blob is off. */
+console.log('\n▸ probing the learning telemetry API…');
+{
+  const learningApiRows = (await import('./learning-api-probe.mjs')).default;
+  report('learning telemetry API', learningApiRows);
 }
 
 /*

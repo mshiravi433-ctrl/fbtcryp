@@ -6520,9 +6520,10 @@ body { overflow-x: clip; }
 */
 .verd-calib {
   margin-top: 8px;
-  font-size: 10.8px;
+  font-size: 8pt; /* the spec pins this: an 8pt muted badge under the disclaimer */
   line-height: 1.7;
   letter-spacing: 0.2px;
+  opacity: 0.75;
 }
 
 .verd-explain {

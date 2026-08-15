@@ -15,6 +15,10 @@ import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
 import SegIndicator from '../components/SegIndicator';
 import VerdictPanel from '../components/VerdictPanel';
+import { verdict } from '../lib/verdict';
+import { useLearningTelemetry } from '../hooks/telemetry';
+import useLearningParams from '../hooks/useLearningParams';
+import { useSettingsStore } from '../store/useSettingsStore';
 import '../styles/docs-modern.css';
 import '../styles/wallet-modern.css';
 
@@ -130,6 +134,28 @@ export default function Signals() {
   const weeklyProjection = useMemo(() => (analysis ? projectRange(analysis, 7) : null), [analysis]);
   const monthlyProjection = useMemo(() => (analysis ? projectRange(analysis, 30) : null), [analysis]);
   const sentiment = useMemo(() => marketSentiment(global), [global]);
+  /*
+   * LEARNING TELEMETRY — wired up from Signals.jsx ONLY, and gated twice:
+   * `optedIn` here (so the hook's inputs are null and it does zero work when
+   * the Settings privacy toggle is off) and again inside the hook itself.
+   * The verdict passed in is the SAME structure VerdictPanel renders
+   * (v.short.stance / v.short.confidence / v.macro regime); the hook fires
+   * once the panel has been visible ≥5s with a stable prediction.
+   */
+  const optedIn = useSettingsStore((s) => s.contributeTelemetry);
+  const learn = useLearningParams();
+  const verdictForTelemetry = useMemo(
+    () => (optedIn && analysis && !scanning
+      ? verdict({ analysis, series: priceSeries, btcSeries, coin, global })
+      : null),
+    [optedIn, analysis, scanning, priceSeries, btcSeries, coin, global]
+  );
+  useLearningTelemetry({
+    coin: optedIn ? coin : null,
+    v: verdictForTelemetry,
+    learn,
+    visible: Boolean(optedIn && analysis && !scanning)
+  });
   useEffect(() => { aiStatus().then(setAi); }, []);
   useEffect(() => {
     if (!global || !coins?.length) return;

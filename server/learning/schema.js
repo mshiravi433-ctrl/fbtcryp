@@ -114,15 +114,47 @@ export const ORDER_BOUNDS = {
 /** The client consent token format. `ct1:` + 32 hex chars, generated at opt-in. */
 export const CONSENT_RE = /^ct1:[0-9a-f]{32}$/;
 
+/* ----- second-generation bounds (server-resolved telemetry + trainer v2) -- */
+
+/** Raw Thompson-bandit layer multiplier band, BEFORE blending into layers. */
+export const BANDIT_MULT_BOUNDS = [0.4, 1.8];
+/** Per-regime confidence multipliers live here and nowhere else. */
+export const REGIME_MULT_BOUNDS = [0.7, 1.3];
+/** A regime multiplier may move at most this far in one daily run. */
+export const REGIME_MAX_STEP = 0.1;
+/** Advisor k-factor (trail vs realized-drawdown least squares) band. */
+export const ADVISOR_K_BOUNDS = [0.7, 1.4];
+/** No published parameter may move more than 15% in a single day. */
+export const DRIFT_MAX_DAILY = 0.15;
+/** Params older than this are ignored by the hot-path loader. */
+export const STALE_PARAMS_DAYS = 14;
+/** learning/pending.json is hard-capped so a flood cannot grow the blob. */
+export const PENDING_CAP = 20000;
+/** A due resolution older than this at sweep time is dropped, not stretched. */
+export const PENDING_GRACE_MS = 3 * 24 * 3600 * 1000;
+
+/**
+ * Confidence ceilings, mirrored from src/lib/verdict.js CONFIDENCE_CEILING.
+ * applyParams() must never emit a calibrated confidence above the engine's
+ * own honesty cap; the wiring tests assert the two stay in step.
+ */
+export const VERDICT_CONFIDENCE_CEILING = { short: 75, long: 65 };
+
 /* -------------------------------------------------------------------------- */
 /* params shape                                                               */
 /* -------------------------------------------------------------------------- */
 
-export const PARAMS_VERSION = 1;
+export const PARAMS_VERSION = 2;
 
 function noopLayers() {
   const one = { technical: 1, historical: 1, structural: 1, macro: 1 };
   return { short: { ...one }, long: { ...one } };
+}
+
+function noopRegimes() {
+  const out = {};
+  for (const g of REGIMES) out[g] = 1;
+  return out;
 }
 
 /** The no-op parameter vector — identical behaviour to today. */
@@ -137,7 +169,12 @@ export function defaultParams({ version = 0, trainedAt = null, records = 0 } = {
     fallbackHardcoded: true,
     layers: noopLayers(),
     order: { trailMult: 1, ladderStepDiv: 3, stopBufferMult: 1 },
-    calibration: { k: null, b: null }
+    calibration: { k: null, b: null },
+    /* v2 (server-resolved telemetry) — all no-ops by default */
+    calibration2: { a: null, b: null },
+    bandit: { technical: 1, historical: 1, structural: 1, macro: 1 },
+    regimeMult: noopRegimes(),
+    advisorK: 1
   };
 }
 
@@ -150,9 +187,17 @@ export function paramsAreNoop(params) {
     }
   }
   const o = params.order ?? {};
-  return Math.abs((o.trailMult ?? 1) - 1) <= eps
-    && Math.abs((o.stopBufferMult ?? 1) - 1) <= eps
-    && Math.abs((o.ladderStepDiv ?? 3) - 3) <= eps;
+  if (Math.abs((o.trailMult ?? 1) - 1) > eps
+    || Math.abs((o.stopBufferMult ?? 1) - 1) > eps
+    || Math.abs((o.ladderStepDiv ?? 3) - 3) > eps) return false;
+  for (const g of REGIMES) {
+    if (Math.abs((params.regimeMult?.[g] ?? 1) - 1) > eps) return false;
+  }
+  for (const k of LAYER_KEYS) {
+    if (Math.abs((params.bandit?.[k] ?? 1) - 1) > eps) return false;
+  }
+  if (Math.abs((params.advisorK ?? 1) - 1) > eps) return false;
+  return true;
 }
 
 const num = (v, d) => {
@@ -197,7 +242,31 @@ export function sanitizeParams(raw) {
       calibration: {
         k: raw.calibration?.k == null ? null : num(raw.calibration.k, 1),
         b: raw.calibration?.b == null ? null : num(raw.calibration.b, 0)
-      }
+      },
+      /*
+       * v2 fields. Every one is clamped to its declared band at load time —
+       * a poisoned Blob file cannot push a multiplier outside these walls no
+       * matter what bytes it contains (guardrail #8).
+       */
+      calibration2: {
+        a: raw.calibration2?.a == null ? null : clamp(num(raw.calibration2.a, 1), 0.2, 5),
+        b: raw.calibration2?.b == null ? null : clamp(num(raw.calibration2.b, 0), -3, 3)
+      },
+      bandit: (() => {
+        const out = {};
+        for (const k of LAYER_KEYS) {
+          out[k] = clamp(num(raw.bandit?.[k], 1), ...BANDIT_MULT_BOUNDS);
+        }
+        return out;
+      })(),
+      regimeMult: (() => {
+        const out = {};
+        for (const g of REGIMES) {
+          out[g] = clamp(num(raw.regimeMult?.[g], 1), ...REGIME_MULT_BOUNDS);
+        }
+        return out;
+      })(),
+      advisorK: clamp(num(raw.advisorK, 1), ...ADVISOR_K_BOUNDS)
     };
   } catch {
     return null;
@@ -258,6 +327,55 @@ export function validateResolution(body) {
   }
   if (!any) return null;
   return Object.freeze({ t: 'r', c, h, ts: Math.floor(at), r: out });
+}
+
+/**
+ * Validate a LEARNING EVENT — the second-generation telemetry payload for
+ * POST /api/learning/event. Unlike the signal/resolve pair the client NEVER
+ * sends an outcome here: the server enriches the event with the current
+ * price from its own market cache and resolves the forward return itself at
+ * +24h / +7d, which makes poisoning the model with fake outcomes impossible.
+ *
+ * Accepted shape:
+ *   { coinId, chainId?, horizon: 'short'|'long', predictedStance,
+ *     predictedConfidence, predictedRaw, regime, layersHash, clientTs, anonId? }
+ *
+ * Returns a frozen validated record or null. No address / pubkey / IP field
+ * is even representable — unknown keys are dropped by construction.
+ */
+export function validateEvent(body) {
+  if (!body || typeof body !== 'object') return null;
+  const coinId = String(body.coinId ?? '');
+  // The public CoinGecko id (lowercase slug) — a market-wide label, never a
+  // user fingerprint. Bounded to keep the pending manifest small.
+  if (!/^[a-z0-9-]{1,64}$/.test(coinId)) return null;
+  const chainId = body.chainId == null ? null : Number(body.chainId);
+  if (chainId != null && (!Number.isInteger(chainId) || chainId < 0 || chainId > 1e9)) return null;
+  if (!HORIZONS.includes(body.horizon)) return null;
+  if (!STANCES.includes(body.predictedStance)) return null;
+  const conf = Number(body.predictedConfidence);
+  if (!Number.isFinite(conf) || conf < 0 || conf > 100) return null;
+  const raw = Number(body.predictedRaw);
+  if (!Number.isFinite(raw) || raw < -1000 || raw > 1000) return null;
+  const regime = REGIMES.includes(body.regime) ? body.regime : 'unknown';
+  const layersHash = String(body.layersHash ?? '');
+  if (!SNAPSHOT_RE.test(layersHash)) return null;
+  const ts = Number(body.clientTs);
+  if (!Number.isFinite(ts) || ts < Date.now() - 48 * 3600 * 1000 || ts > Date.now() + 5 * 60 * 1000) return null;
+  const anonId = body.anonId == null ? null : String(body.anonId);
+  if (anonId != null && !/^[0-9a-f]{8,32}$/.test(anonId)) return null;
+  return Object.freeze({
+    coinId,
+    chainId,
+    horizon: body.horizon,
+    predictedStance: body.predictedStance,
+    predictedConfidence: Math.round(conf),
+    predictedRaw: Math.round(raw * 100) / 100,
+    regime,
+    layersHash,
+    clientTs: Math.floor(ts),
+    anonId
+  });
 }
 
 /** One line per record; every record must stay well under 120 bytes. */

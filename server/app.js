@@ -52,10 +52,44 @@ import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
-import { appendBuckets, learningConfigured } from './learning/store.js';
-import { CONSENT_RE, validateResolution, validateSignal } from './learning/schema.js';
-import { getServingParams, servingResponse, servingSnapshot, warmParamsCache } from './learning/params.js';
-import { runTraining } from './learning/train.js';
+/*
+ * LEARNING CORE — loaded through one guarded dynamic import instead of four
+ * static ones. The sabotage requirement is explicit: deleting
+ * server/learning/*.js must NOT break the server or the verdict — the app
+ * boots, every learning surface answers its honest "not configured" shape,
+ * params stay hardcoded and the badge simply never appears. A static import
+ * would turn that deletion into a crash at module load.
+ *
+ * The import is attempted once and memoized (null on failure), so the hot
+ * path pays a resolved-promise await and nothing else.
+ */
+let learningModPromise = null;
+function learningMod() {
+  if (!learningModPromise) {
+    learningModPromise = (async () => {
+      try {
+        const [store, schema, params, train, events, loader] = await Promise.all([
+          import('./learning/store.js'),
+          import('./learning/schema.js'),
+          import('./learning/params.js'),
+          import('./learning/train.js'),
+          import('./learning/events.js'),
+          import('./learning/loader.js')
+        ]);
+        return { ...store, ...schema, ...params, ...train, ...events, ...loader };
+      } catch (e) {
+        console.warn('[learning] module unavailable — running with hardcoded weights:', e?.message);
+        return null;
+      }
+    })();
+  }
+  return learningModPromise;
+}
+/** Sync facade for the diagnostic block below (filled once the import lands). */
+let learningSync = null;
+learningMod().then((m) => { learningSync = m; }).catch(() => {});
+const learningConfigured = () => Boolean(learningSync?.learningConfigured?.() ?? false);
+const servingSnapshot = () => (learningSync?.servingSnapshot ? learningSync.servingSnapshot() : null);
 import { activateListing, myListing, putListing, readBoard, removeListing, tierForAmount, txAlreadyUsed } from './board.js';
 import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
@@ -515,9 +549,30 @@ function serve(res, ttlMs) {
 
 /* --------------------------------- routes -------------------------------- */
 
-app.get('/api/health', (_req, res) =>
-  res.json({ ok: true, uptime: process.uptime(), cache: cacheStats(), bot: Boolean(BOT_TOKEN) })
-);
+app.get('/api/health', (_req, res) => {
+  /*
+   * Learning metrics ride on the existing health endpoint rather than a new
+   * admin page. Everything here is a synchronous in-memory read — the
+   * snapshot the loader already holds — so health stays as cheap as before.
+   */
+  const snap = servingSnapshot();
+  const m = snap?.manifest ?? null;
+  res.json({
+    ok: true,
+    uptime: process.uptime(),
+    cache: cacheStats(),
+    bot: Boolean(BOT_TOKEN),
+    learning: {
+      enabled: learningConfigured() && process.env.LEARNING_ENABLED !== '0',
+      version: m?.version ?? null,
+      trainedAt: m?.trainedAt ?? null,
+      recordCount: m?.recordCount ?? 0,
+      auc: m?.calibrationAuc ?? null,
+      optInCount: 0, // opt-in lives on-device by design; the server cannot count users
+      fallback: Boolean(m?.fallbackHardcoded ?? true)
+    }
+  });
+});
 
 /*
  * INTENT NETWORK DISCOVERY + AUTHENTICATED COMMITMENTS.
@@ -3234,42 +3289,121 @@ async function sendDailyFcm() {
  */
 
 /** Consent proof — the only thing that can be checked without storing users. */
-function telemetryConsented(req) {
+function telemetryConsented(req, mod) {
   const token =
     req.get('x-telemetry-consent') ??
     (typeof req.body === 'object' && req.body ? req.body.consent : null) ??
     '';
-  return typeof token === 'string' && CONSENT_RE.test(token);
+  return typeof token === 'string' && Boolean(mod?.CONSENT_RE?.test(token));
 }
 
 app.post('/api/telemetry/signal', async (req, res) => {
-  if (!telemetryConsented(req)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
-  const rec = validateSignal(req.body);
+  const mod = await learningMod();
+  if (!mod) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  if (!telemetryConsented(req, mod)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  const rec = mod.validateSignal(req.body);
   if (!rec) return res.status(400).json({ error: 'BAD_SIGNAL' });
-  const out = await appendBuckets([rec]);
+  const out = await mod.appendBuckets([rec]);
   return res.status(202).json({ ok: true, stored: out.stored, batch: out.batch });
 });
 
 app.post('/api/telemetry/resolve', async (req, res) => {
-  if (!telemetryConsented(req)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
-  const rec = validateResolution(req.body);
+  const mod = await learningMod();
+  if (!mod) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  if (!telemetryConsented(req, mod)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  const rec = mod.validateResolution(req.body);
   if (!rec) return res.status(400).json({ error: 'BAD_RESOLUTION' });
-  const out = await appendBuckets([rec]);
+  const out = await mod.appendBuckets([rec]);
   return res.status(202).json({ ok: true, stored: out.stored, batch: out.batch });
 });
 
+/*
+ * SECOND-GENERATION TELEMETRY — POST /api/learning/event.
+ *
+ * The client submits ONLY the prediction; the server enriches it with the
+ * current price from its own in-memory market cache at ingest time and
+ * registers two resolution callbacks (short → +24h, long → +7d) in the
+ * learning/pending.json manifest. The daily cron sweeps due entries and
+ * computes the bucketed forward return from CACHED prices — a cache miss
+ * drops the sample rather than inventing one. Because the client can never
+ * send a resolved return, poisoning the model with fake outcomes is
+ * structurally impossible.
+ *
+ * Rate limit: 1 Hz per caller, same Map-based limiter pattern as every
+ * other budgeted endpoint in this file.
+ */
+const learnEventHits = new Map();
+const LEARN_EVENT_MAX_PER_WINDOW = Number(process.env.LEARNING_EVENT_RATE_LIMIT || 60); // 60/min = 1 Hz
+
+app.post('/api/learning/event', async (req, res) => {
+  const key = req.tgUser?.id ?? req.ip;
+  const nowMs = Date.now();
+  const rec = learnEventHits.get(key);
+  if (!rec || nowMs > rec.reset) {
+    learnEventHits.set(key, { count: 1, reset: nowMs + WINDOW_MS });
+  } else {
+    rec.count += 1;
+    if (rec.count > LEARN_EVENT_MAX_PER_WINDOW) {
+      res.set('retry-after', String(Math.ceil((rec.reset - nowMs) / 1000)));
+      return res.status(429).json({ error: 'LEARNING_RATE_LIMITED' });
+    }
+  }
+
+  const mod = await learningMod();
+  if (!mod) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  // Consent first: a payload from a client that never opted in is rejected
+  // 401 regardless of whether Blob happens to be configured.
+  if (!telemetryConsented(req, mod)) return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  if (!mod.learningConfigured()) {
+    // Blob off → the whole learning feature is off; same shape as blobCache.
+    return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  }
+  const out = await mod.ingestEvent(req.body);
+  if (!out.ok) {
+    const status = out.error === 'BAD_EVENT' ? 400 : out.error === 'NOT_CONFIGURED' ? 503 : 202;
+    // NO_PRICE / WRITE_FAILED are 202: the client did nothing wrong and must
+    // not retry-loop; the sample is simply not taken.
+    return res.status(status).json({ ok: false, error: out.error });
+  }
+  return res.status(202).json({ ok: true, queued: out.queued });
+});
+
+setInterval(() => {
+  const nowMs = Date.now();
+  for (const [k, v] of learnEventHits) if (nowMs > v.reset) learnEventHits.delete(k);
+}, WINDOW_MS).unref?.();
+
 app.get('/api/learning/params', async (_req, res) => {
-  const snapshot = await getServingParams();
-  res.setHeader('cache-control', 'public, max-age=300, s-maxage=300');
-  res.json(servingResponse(snapshot));
+  const mod = await learningMod();
+  if (!mod || process.env.LEARNING_ENABLED === '0') {
+    // Module deleted (sabotage fallback) or first-day kill switch: same
+    // honest "no model" shape either way — the client badge stays hidden.
+    res.setHeader('cache-control', 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
+    return res.json({ model: false, params: null, manifest: null });
+  }
+  /*
+   * Served through the same in-memory single-flight cache as everything
+   * else (params.js sits on cache.js's memoryStore): after the one cold
+   * fetch this is a synchronous map read. s-maxage=3600 keeps the edge
+   * copy for an hour — params change once per day, and the manifest date
+   * inside the payload is what versions it for the client.
+   */
+  const snapshot = await mod.getServingParams();
+  res.setHeader('cache-control', 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
+  return res.json(mod.servingResponse(snapshot));
 });
 
 app.get('/api/cron/train', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
-  const summary = await runTraining();
-  // The instance that just trained serves the new params from memory too.
-  if (summary.ok) warmParamsCache().catch(() => {});
-  res.json(summary);
+  const mod = await learningMod();
+  if (!mod) return res.json({ skipped: 'NO_MODULE', fallbackHardcoded: true });
+  // 1) sweep due resolution callbacks (server-side outcomes from cached
+  //    prices), 2) train on the finalized window, 3) refresh the in-memory
+  //    params so the instance that trained also serves the new vector.
+  const sweep = await mod.sweepPending();
+  const summary = await mod.runTraining();
+  if (summary.ok) mod.warmParamsCache().catch(() => {});
+  res.json({ ...summary, sweep });
 });
 
 /* ----------------------------- static frontend ---------------------------- */
