@@ -117,6 +117,9 @@
     "unlockLocalDesc": "ट्रांज़ैक्शन साइन करने के लिए पासवर्ड डालें",
     "backupTitle": "अपना सीड फ़्रेज़ बैकअप करें",
     "connectFailed": "कनेक्शन विफल या अस्वीकृत।",
+    "wcOriginBlocked": "WalletConnect ने इस ऐप का पता अस्वीकार किया (origin not allowed)। WalletConnect डैशबोर्ड में Allowed Domains सूची खाली छोड़ें — Android ऐप https://localhost से जुड़ता है, केवल वेबसाइट लिखने से ऐप ब्लॉक हो जाता है।",
+    "wcRelayUnreachable": "WalletConnect रिले (relay.walletconnect.com) तक नहीं पहुँच सका। कुछ नेटवर्क इसे ब्लॉक करते हैं — दूसरा नेटवर्क या VPN आज़माकर फिर कोशिश करें।",
+    "wcExpired": "वॉलेट की मंज़ूरी से पहले कनेक्शन अनुरोध समाप्त हो गया। वॉलेट सूची खोलकर फिर से कोशिश करें।",
     "resetDesc": "आपका वर्चुअल बैलेंस, पोज़िशन, प्लान और इतिहास शुरुआती स्थिति में लौटा देता है।",
     "noWcProject": "WalletConnect चालू करने के लिए .env में VITE_WALLETCONNECT_PROJECT_ID सेट करें। cloud.reown.com पर मुफ़्त मिलता है।"
   },

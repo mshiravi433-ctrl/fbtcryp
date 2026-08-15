@@ -117,6 +117,9 @@
     "unlockLocalDesc": "输入密码以签名交易",
     "backupTitle": "备份你的助记词",
     "connectFailed": "连接失败或被拒绝。",
+    "wcOriginBlocked": "WalletConnect 拒绝了此应用的来源（origin not allowed）。请在 WalletConnect 控制台把 Allowed Domains 列表留空 — Android 应用从 https://localhost 连接，只列网站域名会屏蔽应用。",
+    "wcRelayUnreachable": "无法连接 WalletConnect 中继（relay.walletconnect.com）。部分网络会屏蔽它 — 换个网络或使用 VPN 后重试。",
+    "wcExpired": "钱包批准前连接请求已过期。请重新打开钱包列表再试一次。",
     "resetDesc": "把虚拟余额、持仓、计划和历史记录全部恢复到初始状态。",
     "noWcProject": "在 .env 中设置 VITE_WALLETCONNECT_PROJECT_ID 以启用 WalletConnect。可在 cloud.reown.com 免费获取。"
   },

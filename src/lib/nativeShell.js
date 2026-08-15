@@ -43,9 +43,17 @@ export function publicAppUrl(path = '/') {
    * Production identity is not a user preference. Only the canonical host (or
    * an explicit preview host for testing) may override it; the retired domain
    * is rejected rather than trusted merely because it came from an env var.
+   *
+   * The e2b preview exception is additionally gated on the page ACTUALLY
+   * running on an e2b host. Without that gate, a preview URL left behind in
+   * Vercel or the APK workflow would become the app's wallet-facing identity
+   * in production — a dead sandbox origin that wallets cannot fetch, which
+   * reads as "unknown/invalid site" in the connection prompt.
    */
+  const onE2b =
+    typeof window !== 'undefined' && /\.e2b\.app$/i.test(window.location?.hostname || '');
   const allowed = /^https:\/\/(?:www\.)?fbtswap\.ir(?=\/|$)/i.test(configured)
-    || /^https:\/\/[^/]+\.e2b\.app(?=\/|$)/i.test(configured);
+    || (onE2b && /^https:\/\/[^/]+\.e2b\.app(?=\/|$)/i.test(configured));
   const base = allowed ? configured : 'https://fbtswap.ir';
   return `${String(base).replace(/\/+$/, '')}${path}`;
 }

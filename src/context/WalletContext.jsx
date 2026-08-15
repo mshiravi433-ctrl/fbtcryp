@@ -3,8 +3,26 @@ import { useAppStore } from '../store/useAppStore';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
 import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { publicAppUrl } from '../lib/nativeShell';
+import { isNativeShell, publicAppUrl } from '../lib/nativeShell';
 import { isIOS as isIOSDevice } from '../lib/platform';
+
+/*
+ * WALLETCONNECT PROJECT ID — a constant in source, deliberately NOT an env var.
+ *
+ * This ID is public by design (it ships in every client bundle), so there is
+ * nothing to hide. What burned us was the opposite: THREE build pipelines
+ * (Vercel, the APK workflow, local dev) each read
+ * VITE_WALLETCONNECT_PROJECT_ID from their own copy of the environment, and a
+ * stale value in any one of them silently shipped an OLD project whose
+ * dashboard allowlist still named the retired lawpoetics.ir domain. The relay
+ * then refused or the wallet rejected the prompt, and nothing in the code
+ * could explain why, because the code was correct — the environment wasn't.
+ *
+ * Same rule as publicAppUrl(): production identity lives in source, where a
+ * change is reviewable and deploys atomically with the code that uses it.
+ * Registered at dashboard.walletconnect.com for fbtswap.ir.
+ */
+const WC_PROJECT_ID = 'f0e8ca24821402a6226b4b675172b294';
 
 const SLOW_DEVICE = (() => {
   if (typeof navigator === 'undefined') return false;
@@ -218,14 +236,7 @@ export function WalletProvider({ children }) {
   /* --------------------------- WalletConnect v2 -------------------------- */
 
   const connectWalletConnect = useCallback(async () => {
-    // WalletConnect project IDs are public identifiers, not secrets — they
-    // are designed to ship in client bundles. Override via env if needed.
-    const projectId =
-      import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID || 'f0e8ca24821402a6226b4b675172b294';
-    if (!projectId) {
-      setError('NO_WC_PROJECT_ID');
-      return false;
-    }
+    const projectId = WC_PROJECT_ID;
     // Prevent double-init: EthereumProvider.init() creates a new session every
     // time it runs, and rapid double-taps spawned two modals / two pairing URIs.
     if (wcInitingRef.current) return false;
@@ -354,12 +365,15 @@ export function WalletProvider({ children }) {
           icons: [`${publicUrl}/icon-512.png`],
           redirect: {
             /*
-             * On iOS there is no native app scheme registered (this repo has
-             * no ios/ folder), so only the universal link matters — it brings
-             * the user back to the PWA/Safari. On Android the capacitor://
-             * scheme (ir.fbtswap.app://) is already declared and handled.
+             * `native` must ONLY be set inside the packaged app. It was sent
+             * unconditionally, so a wallet approving a WEB session on Android
+             * would try to bounce back to ir.fbtswap.app:// — an intent that
+             * either fails (APK not installed) or yanks the user out of the
+             * browser tab they were connecting from. On iOS there is no app
+             * scheme registered at all (this repo has no ios/ folder), so
+             * only the universal link applies there in every case.
              */
-            native: ios ? undefined : 'ir.fbtswap.app://',
+            native: isNativeShell() && !ios ? 'ir.fbtswap.app://' : undefined,
             universal: publicUrl
           }
         }
@@ -440,7 +454,32 @@ export function WalletProvider({ children }) {
       wcListenersRef.current = { cleanup: cleanupWcListeners };
       return true;
     } catch (e) {
-      setError(e?.message?.includes('User rejected') || e?.code === 4001 ? 'USER_REJECTED' : 'CONNECT_FAILED');
+      /*
+       * Name the failure. Every WalletConnect breakage used to collapse into
+       * one generic CONNECT_FAILED string, which is why "Trust bounces back"
+       * and "MetaMask says invalid URL" reports arrived with zero context.
+       * The SDK's error messages are stable enough to classify:
+       *
+       *  - "origin not allowed" / 3000-class auth errors: the relay refused
+       *    THIS page's origin — the dashboard's Allowed Domains list does not
+       *    contain it (inside the APK the origin is https://localhost, which
+       *    is why that list must stay empty). Actionable, so say so.
+       *  - socket/network errors: the relay is unreachable — some Iranian
+       *    ISPs and corporate networks block relay.walletconnect.com.
+       *  - "expired": the pairing sat unapproved past its TTL.
+       */
+      const msg = String(e?.message || '');
+      if (msg.includes('User rejected') || e?.code === 4001) {
+        setError('USER_REJECTED');
+      } else if (/origin not allowed|unauthorized|project id/i.test(msg)) {
+        setError('WC_ORIGIN_BLOCKED');
+      } else if (/proposal expired|expired/i.test(msg)) {
+        setError('WC_EXPIRED');
+      } else if (/websocket|socket stalled|network|failed to publish|relay|timeout/i.test(msg)) {
+        setError('WC_RELAY_UNREACHABLE');
+      } else {
+        setError('CONNECT_FAILED');
+      }
       return false;
     } finally {
       setConnecting(false);

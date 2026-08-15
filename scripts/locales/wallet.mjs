@@ -93,6 +93,39 @@ export default {
     pt: 'Nenhuma carteira detetada no navegador. O navegador interno do Telegram não tem — use WalletConnect ou a carteira da app.'
   },
   'wallet.connectFailed': { zh: '连接失败或被拒绝。', hi: 'कनेक्शन विफल या अस्वीकृत।', es: 'La conexión falló o fue rechazada.', fr: 'Connexion échouée ou refusée.', ru: 'Подключение не удалось или было отклонено.', tr: 'Bağlantı başarısız oldu veya reddedildi.', ur: 'کنکشن ناکام یا مسترد۔', id: 'Koneksi gagal atau ditolak.', pt: 'A ligação falhou ou foi recusada.' },
+  'wallet.wcOriginBlocked': {
+    zh: 'WalletConnect 拒绝了此应用的来源（origin not allowed）。请在 WalletConnect 控制台把 Allowed Domains 列表留空 — Android 应用从 https://localhost 连接，只列网站域名会屏蔽应用。',
+    hi: 'WalletConnect ने इस ऐप का पता अस्वीकार किया (origin not allowed)। WalletConnect डैशबोर्ड में Allowed Domains सूची खाली छोड़ें — Android ऐप https://localhost से जुड़ता है, केवल वेबसाइट लिखने से ऐप ब्लॉक हो जाता है।',
+    es: 'WalletConnect rechazó la dirección de esta app (origin not allowed). En el panel de WalletConnect deja la lista Allowed Domains VACÍA: la app de Android se conecta desde https://localhost y una lista que solo nombre el sitio bloquea la app.',
+    fr: "WalletConnect a refusé l'adresse de cette app (origin not allowed). Dans le tableau de bord WalletConnect, laissez la liste Allowed Domains VIDE — l'app Android se connecte depuis https://localhost, une liste ne citant que le site bloque l'app.",
+    ru: 'WalletConnect отклонил адрес этого приложения (origin not allowed). В панели WalletConnect оставьте список Allowed Domains ПУСТЫМ — Android-приложение подключается с https://localhost, и список только с сайтом блокирует приложение.',
+    tr: 'WalletConnect bu uygulamanın adresini reddetti (origin not allowed). WalletConnect panosunda Allowed Domains listesini BOŞ bırakın — Android uygulaması https://localhost üzerinden bağlanır; yalnızca siteyi içeren liste uygulamayı engeller.',
+    ur: 'WalletConnect نے اس ایپ کا پتا مسترد کیا (origin not allowed)۔ WalletConnect ڈیش بورڈ میں Allowed Domains فہرست خالی چھوڑیں — اینڈرائیڈ ایپ https://localhost سے جڑتی ہے، صرف ویب سائٹ والی فہرست ایپ کو بلاک کر دیتی ہے۔',
+    id: 'WalletConnect menolak alamat aplikasi ini (origin not allowed). Di dasbor WalletConnect biarkan daftar Allowed Domains KOSONG — aplikasi Android terhubung dari https://localhost; daftar yang hanya memuat situs akan memblokir aplikasi.',
+    pt: 'O WalletConnect recusou o endereço desta app (origin not allowed). No painel do WalletConnect deixe a lista Allowed Domains VAZIA — a app Android liga-se a partir de https://localhost e uma lista só com o site bloqueia a app.'
+  },
+  'wallet.wcRelayUnreachable': {
+    zh: '无法连接 WalletConnect 中继（relay.walletconnect.com）。部分网络会屏蔽它 — 换个网络或使用 VPN 后重试。',
+    hi: 'WalletConnect रिले (relay.walletconnect.com) तक नहीं पहुँच सका। कुछ नेटवर्क इसे ब्लॉक करते हैं — दूसरा नेटवर्क या VPN आज़माकर फिर कोशिश करें।',
+    es: 'No se pudo alcanzar el relay de WalletConnect (relay.walletconnect.com). Algunas redes lo bloquean: prueba otra red o una VPN y vuelve a intentarlo.',
+    fr: "Impossible d'atteindre le relais WalletConnect (relay.walletconnect.com). Certains réseaux le bloquent — essayez un autre réseau ou un VPN, puis réessayez.",
+    ru: 'Не удалось связаться с релеем WalletConnect (relay.walletconnect.com). Некоторые сети его блокируют — попробуйте другую сеть или VPN и повторите.',
+    tr: 'WalletConnect aktarıcısına (relay.walletconnect.com) ulaşılamadı. Bazı ağlar bunu engeller — başka bir ağ veya VPN deneyip tekrar deneyin.',
+    ur: 'WalletConnect ریلے (relay.walletconnect.com) تک رسائی ممکن نہیں ہوئی۔ کچھ نیٹ ورک اسے بلاک کرتے ہیں — دوسرا نیٹ ورک یا VPN آزما کر دوبارہ کوشش کریں۔',
+    id: 'Tidak dapat menjangkau relay WalletConnect (relay.walletconnect.com). Sebagian jaringan memblokirnya — coba jaringan lain atau VPN, lalu ulangi.',
+    pt: 'Não foi possível contactar o relay do WalletConnect (relay.walletconnect.com). Algumas redes bloqueiam-no — tente outra rede ou uma VPN e volte a tentar.'
+  },
+  'wallet.wcExpired': {
+    zh: '钱包批准前连接请求已过期。请重新打开钱包列表再试一次。',
+    hi: 'वॉलेट की मंज़ूरी से पहले कनेक्शन अनुरोध समाप्त हो गया। वॉलेट सूची खोलकर फिर से कोशिश करें।',
+    es: 'La solicitud de conexión caducó antes de que la cartera la aprobara. Abre la lista de carteras e inténtalo de nuevo.',
+    fr: "La demande de connexion a expiré avant l'approbation du portefeuille. Rouvrez la liste des portefeuilles et réessayez.",
+    ru: 'Запрос на подключение истёк до одобрения кошельком. Откройте список кошельков и попробуйте снова.',
+    tr: 'Bağlantı isteği cüzdan onaylamadan önce süresi doldu. Cüzdan listesini açıp yeniden deneyin.',
+    ur: 'کنکشن کی درخواست والٹ کی منظوری سے پہلے ختم ہو گئی۔ والٹ فہرست کھول کر دوبارہ کوشش کریں۔',
+    id: 'Permintaan koneksi kedaluwarsa sebelum dompet menyetujuinya. Buka daftar dompet dan coba lagi.',
+    pt: 'O pedido de ligação expirou antes de a carteira o aprovar. Abra a lista de carteiras e tente novamente.'
+  },
   'wallet.resetDesc': {
     zh: '把虚拟余额、持仓、计划和历史记录全部恢复到初始状态。',
     hi: 'आपका वर्चुअल बैलेंस, पोज़िशन, प्लान और इतिहास शुरुआती स्थिति में लौटा देता है।',
