@@ -77,14 +77,19 @@ export default function run() {
   t('the env var always takes precedence',
     /import\.meta\.env\?\.VITE_WALLETCONNECT_PROJECT_ID \|\| '14bdc2642bb5f01972ffe799e43b978d'/.test(code));
 
-  /* ---- 7. iOS deep-link listener skips the bridge browser ---- */
-  const iosBlock = code.slice(
-    code.indexOf('if (ios) {'),
-    code.indexOf('} else {', code.indexOf('if (ios) {'))
-  );
-  t('iOS branch uses direct universal-link deep links', /metamask\.app\.link/.test(iosBlock));
-  t('iOS branch encodes the URI exactly once (single encodeURIComponent)',
-    /encodeURIComponent\(uri\)/.test(iosBlock) && !/encodeURIComponent\(encodeURIComponent/.test(iosBlock));
+  /* ---- 7. mobile deep links are wallet-agnostic (no MetaMask hardcode) ---- */
+  // Historical bug: on iOS a display_uri handler hard-navigated the page to
+  // metamask.app.link, which forced every iOS user into MetaMask (Trust and
+  // Rainbow could never be chosen) and navigated the page away mid-pairing.
+  // The modal (showQrModal: true) must own deep links for every wallet.
+  t('no display_uri handler navigates the page to MetaMask',
+    !/window\.location\.href\s*=/.test(code));
+  t('connect() runs exactly once (no iOS-only MetaMask branch)',
+    (code.match(/await wc\.connect\(\)/g) || []).length === 1);
+  t('the mobile wallet list includes Trust Wallet, not just MetaMask',
+    /id:\s*'trust'/.test(code) && /id:\s*'metamask'/.test(code));
+  t('the mobile wallet list supplies a universal link for Trust',
+    /link\.trustwallet\.com/.test(code));
 
   /* ---- 8. modal options exclude the explorer wallet list on iOS ---- */
   t('iOS modal disables the explorer wallet list', /explorerExcludedWalletIds: 'ALL'/.test(code));
