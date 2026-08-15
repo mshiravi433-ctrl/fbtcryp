@@ -741,7 +741,8 @@
     "contributeTelemetry": "Share anonymous signal outcomes",
     "contributeTelemetrySub": "No addresses, no keys, no IPs, no user IDs",
     "telemetryNote": "Each record is under 120 bytes: a hashed coin id, the read (stance, confidence, market regime, model version) and the outcome that later occurred. Nothing about you can be recovered from it, and the app behaves identically whether this is on or off.",
-    "telemetryPrompt": "New: the signal engine can now learn from anonymous outcomes. If you'd like to help it improve, you can opt in below — it's entirely optional and shares nothing about you."
+    "telemetryPrompt": "New: the signal engine can now learn from anonymous outcomes. If you'd like to help it improve, you can opt in below — it's entirely optional and shares nothing about you.",
+    "walletPrivacyLine": "Wallet connections use the WalletConnect relay. Your private keys, seed phrase and passwords never leave your device — they are never sent, stored or readable by us."
   },
   "about": {
     "title": "About us",

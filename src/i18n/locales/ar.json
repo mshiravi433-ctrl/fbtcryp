@@ -648,7 +648,8 @@
     "customRpc": "Custom RPC",
     "customRpcSub": "Use your own node",
     "customRpcHelp": "Override the default public RPC endpoints. Leave blank to use the defaults.",
-    "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust."
+    "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust.",
+    "walletPrivacyLine": "اتصالات المحفظة تستخدم مرحل WalletConnect. مفاتيحك الخاصة وعبارة الاسترداد وكلمات المرور لا تغادر جهازك أبداً — لا يتم إرسالها أو تخزينها أو قراءتها بواسطتنا."
   },
   "about": {
     "title": "من نحن",

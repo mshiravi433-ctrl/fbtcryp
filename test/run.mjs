@@ -67,7 +67,33 @@ console.error = (...a) => {
   realError(...a);
 };
 
-/* ------------------------------ 0. units -------------------------------- */
+/* ------------------------------ 0. intent OS client logic ------------------- */
+/* Pure logic suite first: the intent compiler, normalizer, memory store and
+   solver capabilities. Fast to run, no bundler or DOM needed. */
+console.log('▸ probing the intent compiler (pure logic, no DOM)…');
+{
+  const { default: runIntent } = await import('./intent-probe.mjs');
+  report('intent compiler', await runIntent());
+}
+
+/* ------------------------------ 0b. WalletConnect wiring -------------------- */
+/* Static analysis of WalletContext.jsx for the two historical bugs (localhost
+   origin, icon 404) and the project-id single-source-of-truth rule. */
+console.log('▸ checking WalletConnect wiring (no bundler, no DOM)…');
+{
+  const { default: runWcWiring } = await import('./walletconnect-wiring.mjs');
+  report('WalletConnect wiring', runWcWiring());
+}
+
+/* ------------------------------ 0c. WalletConnect behavior ------------------ */
+/* Structural tests of the connect/disconnect guards in WalletContext.jsx. */
+console.log('▸ checking WalletConnect behavior guards…');
+{
+  const { default: runWcConnect } = await import('./wc-connect-probe.mjs');
+  report('WalletConnect behavior', runWcConnect());
+}
+
+/* ------------------------------ 1. units -------------------------------- */
 /* Pure logic first: it is the fastest suite and the one whose failures point
    most precisely at a cause. Bundled with Vite so extensionless imports and
    `import.meta.env` resolve exactly as they do in the app. */
