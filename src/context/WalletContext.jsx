@@ -261,11 +261,6 @@ export function WalletProvider({ children }) {
        * is a public URL. VITE_PUBLIC_URL has no secret in it — this value is
        * shown to the user by their wallet and is meant to be public.
        */
-      const runtimeOrigin = window.location.origin;
-      const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|10\.|192\.168\.|\[::1\])/.test(runtimeOrigin)
-        || runtimeOrigin.startsWith('capacitor://')
-        || runtimeOrigin.startsWith('file://');
-
       /*
        * The fallback used to be https://fbtcryp.vercel.app, which no longer
        * resolves — that deployment is gone and now answers DEPLOYMENT_NOT_FOUND.
@@ -283,8 +278,6 @@ export function WalletProvider({ children }) {
          the retired lawpoetics.ir env value; using the runtime origin here
          made Solana and EVM prompts disagree about which site was connecting. */
       const publicUrl = publicAppUrl('/').replace(/\/$/, '');
-      void isLocal;
-      void runtimeOrigin;
 
       const ios = isIOSDevice();
 
@@ -300,16 +293,10 @@ export function WalletProvider({ children }) {
         optionalChains: Object.keys(EVM_CHAINS).map(Number),
         showQrModal: true,
         /*
-         * MOBILE: the QR modal alone is not enough.
-         *
-         * On a phone the wallet is another app on the SAME device, so there is
-         * no second screen to point a camera at. WalletConnect's modal does
-         * offer deep links, but on iOS it has been observed to sit on a white
-         * "Loading..." screen ("در حال بارگذاری مرورگر اپل") when the wallet
-         * app doesn't have a working universal link registered — the modal
-         * opens an SFSafariViewController bridge that never returns. Turning
-         * OFF the auth-mode bridge on iOS and relying on direct wallet deeplink
-         * navigation skips that bridge entirely.
+         * MOBILE: on a phone the wallet is another app on the SAME device, so
+         * there is no second screen to point a camera at. The modal therefore
+         * renders quick "open this wallet" buttons that deep-link into each
+         * wallet app; the QR code stays as the fallback for a second device.
          */
         optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
         qrModalOptions: {
@@ -324,9 +311,10 @@ export function WalletProvider({ children }) {
             '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927'  // Ledger Live
           ],
           /*
-           * iOS: tell WalletConnect's modal NOT to use the headless browser
-           * bridge that shows the "Loading..." webview. Direct native deeplinks
-           * back to each wallet app.
+           * iOS: give the modal the exact native + universal links for the
+           * wallets we surface, so tapping one opens that wallet directly
+           * (universal links also fall back to the App Store when the app is
+           * missing). Without this the modal falls back to explorer data.
            */
           ...(ios
             ? {
@@ -378,54 +366,54 @@ export function WalletProvider({ children }) {
       });
 
       /*
-       * Mobile deep links: encode the pairing URI EXACTLY ONCE. The prior
-       * double-encode (encodeURIComponent on a string already containing
-       * encoded components) was the cause of MetaMask reporting an invalid
-       * pairing URI on open. The user still lands in the modal's QR on
-       * desktop; only mobile gets the native deep-link.
+       * The WalletConnect SDK's SignClient runs our `metadata` through
+       * populateAppMetadata(), which OVERWRITES `metadata.url` with
+       * window.location.origin whenever the two hosts differ. Inside the
+       * packaged app that origin is `https://localhost`; on a preview host it
+       * is that preview URL. Either way the wallet (a separate app) cannot
+       * fetch the URL, so MetaMask rejects the request with its "Invalid URL"
+       * error and Trust simply fails to pair. Point the live sign client back
+       * at the public origin immediately before connecting — this is the value
+       * that actually lands in the session proposal the wallet renders.
+       */
+      try {
+        const signClient = wc?.signer?.client;
+        if (signClient?.metadata) {
+          signClient.metadata.url = publicUrl;
+          signClient.metadata.icons = [`${publicUrl}/icon-512.png`];
+        }
+      } catch {
+        /* non-fatal: fall back to the SDK-derived metadata */
+      }
+
+      /*
+       * Mobile deep links are handled by the WalletConnect modal itself
+       * (showQrModal: true). It builds the correct `metamask://wc` /
+       * `trust://wc` native links — and their https universal-link equivalents
+       * — and encodes the pairing URI exactly once.
+       *
+       * A previous version ALSO registered a display_uri handler that, on iOS,
+       * hard-navigated the page to metamask.app.link. That did two harmful
+       * things: it forced every iOS user into MetaMask (so Trust and Rainbow
+       * could never be selected), and it navigated the browser away
+       * mid-pairing, dropping the in-memory client. Let the modal own deep
+       * links on every platform instead.
        */
       let connected = false;
-      const wcListeners = { displayUri: null, disconnect: null, accountsChanged: null, chainChanged: null, sessionDelete: null };
+      const wcListeners = { disconnect: null, accountsChanged: null, chainChanged: null, sessionDelete: null };
       const cleanupWcListeners = () => {
         if (!wc) return;
-        try { wc.removeListener('display_uri', wcListeners.displayUri); } catch { /* noop */ }
         try { wc.removeListener('disconnect', wcListeners.disconnect); } catch { /* noop */ }
         try { wc.removeListener('accountsChanged', wcListeners.accountsChanged); } catch { /* noop */ }
         try { wc.removeListener('chainChanged', wcListeners.chainChanged); } catch { /* noop */ }
         try { wc.removeListener('session_delete', wcListeners.sessionDelete); } catch { /* noop */ }
       };
-      if (ios) {
-        wcListeners.displayUri = (uri) => {
-          try {
-            if (!uri) return;
-            // Encode once; trust/metamask each decode their own query.
-            const encoded = encodeURIComponent(uri);
-            // Small delay so the modal paints before navigation leaves.
-            setTimeout(() => {
-              // Prefer universal links so iOS can fall back to App Store
-              // if the wallet isn't installed. MetaMask first by default.
-              window.location.href = `https://metamask.app.link/wc?uri=${encoded}`;
-            }, 300);
-          } catch {
-            /* navigation blocked; QR still available */
-          }
-        };
-        wc.on('display_uri', wcListeners.displayUri);
-        try {
-          await wc.connect();
-          connected = true;
-        } catch (err) {
-          cleanupWcListeners();
-          throw err;
-        }
-      } else {
-        try {
-          await wc.connect();
-          connected = true;
-        } catch (err) {
-          cleanupWcListeners();
-          throw err;
-        }
+      try {
+        await wc.connect();
+        connected = true;
+      } catch (err) {
+        cleanupWcListeners();
+        throw err;
       }
       const provider = new BrowserProvider(wc, 'any');
       const signer = await provider.getSigner();
