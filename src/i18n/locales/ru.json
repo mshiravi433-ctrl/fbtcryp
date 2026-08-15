@@ -117,6 +117,9 @@
     "unlockLocalDesc": "Введите пароль для подписи транзакций",
     "backupTitle": "Сохраните seed-фразу",
     "connectFailed": "Подключение не удалось или было отклонено.",
+    "wcOriginBlocked": "WalletConnect отклонил адрес этого приложения (origin not allowed). В панели WalletConnect оставьте список Allowed Domains ПУСТЫМ — Android-приложение подключается с https://localhost, и список только с сайтом блокирует приложение.",
+    "wcRelayUnreachable": "Не удалось связаться с релеем WalletConnect (relay.walletconnect.com). Некоторые сети его блокируют — попробуйте другую сеть или VPN и повторите.",
+    "wcExpired": "Запрос на подключение истёк до одобрения кошельком. Откройте список кошельков и попробуйте снова.",
     "resetDesc": "Сбрасывает виртуальный баланс, позиции, планы и историю к начальному состоянию.",
     "noWcProject": "Задайте VITE_WALLETCONNECT_PROJECT_ID в .env, чтобы включить WalletConnect. Бесплатно на cloud.reown.com."
   },

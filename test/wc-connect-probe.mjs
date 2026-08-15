@@ -71,11 +71,11 @@ export default function run() {
   t('the wc.on(session_delete) listener is registered after connect() succeeds',
     code.indexOf('wc.on(\'session_delete\'') > code.indexOf('await wc.connect()'));
 
-  /* ---- 6. the projectId fallback is a valid string, not empty ---- */
-  t('the hardcoded projectId fallback is non-empty',
-    code.includes("'14bdc2642bb5f01972ffe799e43b978d'"));
-  t('the env var always takes precedence',
-    /import\.meta\.env\?\.VITE_WALLETCONNECT_PROJECT_ID \|\| '14bdc2642bb5f01972ffe799e43b978d'/.test(code));
+  /* ---- 6. the projectId is the source constant, never an env override ---- */
+  t('the WC_PROJECT_ID constant is set to the official project ID',
+    code.includes("const WC_PROJECT_ID = 'f0e8ca24821402a6226b4b675172b294'"));
+  t('no env var can override the project ID (stale Vercel/CI copies shipped retired projects)',
+    !/VITE_WALLETCONNECT_PROJECT_ID/.test(code));
 
   /* ---- 7. mobile deep links are wallet-agnostic (no MetaMask hardcode) ---- */
   // Historical bug: on iOS a display_uri handler hard-navigated the page to

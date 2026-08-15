@@ -117,6 +117,9 @@
     "unlockLocalDesc": "İşlemleri imzalamak için parolanızı girin",
     "backupTitle": "Kurtarma ifadenizi yedekleyin",
     "connectFailed": "Bağlantı başarısız oldu veya reddedildi.",
+    "wcOriginBlocked": "WalletConnect bu uygulamanın adresini reddetti (origin not allowed). WalletConnect panosunda Allowed Domains listesini BOŞ bırakın — Android uygulaması https://localhost üzerinden bağlanır; yalnızca siteyi içeren liste uygulamayı engeller.",
+    "wcRelayUnreachable": "WalletConnect aktarıcısına (relay.walletconnect.com) ulaşılamadı. Bazı ağlar bunu engeller — başka bir ağ veya VPN deneyip tekrar deneyin.",
+    "wcExpired": "Bağlantı isteği cüzdan onaylamadan önce süresi doldu. Cüzdan listesini açıp yeniden deneyin.",
     "resetDesc": "Sanal bakiyenizi, pozisyonlarınızı, planlarınızı ve geçmişinizi başlangıç durumuna döndürür.",
     "noWcProject": "WalletConnect için .env dosyanızda VITE_WALLETCONNECT_PROJECT_ID ayarlayın. cloud.reown.com adresinde ücretsiz."
   },

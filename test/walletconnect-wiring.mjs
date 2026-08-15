@@ -14,15 +14,16 @@
  *      icon-192.png and icon-512.png. Wallets fetch the icon URL to draw the
  *      connection dialog and treat a 404 as grounds to refuse.
  *
- * Also guarded here: the project ID must be a single source of truth (env var
- * first, one hardcoded fallback), and every place that mentions a WalletConnect
- * project ID must agree, so Solana/TON/dYdX prompts never disagree about the
- * site's identity.
+ * Also guarded here: the project ID must be a single source of truth — the
+ * WC_PROJECT_ID constant in source, never an env var (a stale Vercel/CI copy
+ * of VITE_WALLETCONNECT_PROJECT_ID once shipped a retired project) — and every
+ * place that mentions a WalletConnect project ID must agree, so Solana/TON/
+ * dYdX prompts never disagree about the site's identity.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const PROJECT_ID = '14bdc2642bb5f01972ffe799e43b978d';
+const PROJECT_ID = 'f0e8ca24821402a6226b4b675172b294';
 
 export default function run() {
   const rows = [];
@@ -62,19 +63,34 @@ export default function run() {
   // The old broken path must not reappear under any spelling.
   t('no WC icon points at the nonexistent /icon.png', !/\/icon\.png/.test(metadataBlock));
 
-  /* ---- 3. the project ID is one documented source of truth ---- */
+  /* ---- 3. the project ID is one source of truth, in SOURCE, not env ---- */
+  /*
+   * HISTORY: the ID used to be `import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID
+   * || '<fallback>'`. Three pipelines (Vercel, the APK workflow, local dev)
+   * each carried their own copy of that variable, and a stale copy in any one
+   * of them silently shipped an OLD WalletConnect project whose dashboard
+   * allowlist still named the retired lawpoetics.ir domain — wallets refused
+   * to connect while the code looked correct. The env override is therefore
+   * BANNED: the ID is the WC_PROJECT_ID constant and nothing else.
+   */
   const envExample = readFileSync('.env.example', 'utf8');
-  t('VITE_WALLETCONNECT_PROJECT_ID is documented in .env.example', /VITE_WALLETCONNECT_PROJECT_ID=/.test(envExample));
-  t('the documented .env.example value is the official project ID',
-    new RegExp(`VITE_WALLETCONNECT_PROJECT_ID=${PROJECT_ID}`).test(envExample));
-  t('WalletContext keeps the env override first', /import\.meta\.env\?\.VITE_WALLETCONNECT_PROJECT_ID \|\|/.test(code));
-  t('the hardcoded fallback equals the official project ID',
-    code.includes(`|| '${PROJECT_ID}'`));
-  // The value must never appear with a different ID anywhere else in client code.
-  const otherIds = [
-    ...code.matchAll(/['"]14bdc2642bb5f01972ffe799e43b978d['"]/g)
-  ].length;
-  t('the project ID appears exactly once as the fallback literal', otherIds === 1);
+  t('.env.example no longer sets VITE_WALLETCONNECT_PROJECT_ID (env override is retired)',
+    !/^\s*VITE_WALLETCONNECT_PROJECT_ID=/m.test(envExample));
+  t('.env.example documents that the ID lives in WalletContext.jsx',
+    /WC_PROJECT_ID/.test(envExample));
+  t('WalletContext never reads VITE_WALLETCONNECT_PROJECT_ID',
+    !/VITE_WALLETCONNECT_PROJECT_ID/.test(code));
+  t('the WC_PROJECT_ID constant equals the official project ID',
+    new RegExp(`const WC_PROJECT_ID = '${PROJECT_ID}';`).test(code));
+  t('the project ID appears exactly once in WalletContext',
+    (code.match(new RegExp(PROJECT_ID, 'g')) || []).length === 1);
+  /*
+   * NOTE on .github/workflows/build-apk.yml: it still exports
+   * VITE_WALLETCONNECT_PROJECT_ID from a repository variable, but that is now
+   * dead weight — the code assertion above proves nothing reads it. The line
+   * itself cannot be removed from this branch: the CI token has no `workflows`
+   * permission, so any push touching workflow files is rejected wholesale.
+   */
 
   /* ---- 4. no other wallet integration uses a different projectId ---- */
   const otherProjectIds = [];

@@ -256,8 +256,14 @@ export default function WalletConnectSheet({ open, onClose }) {
 
           <p className="notice notice-danger" style={{ marginTop: 14 }}>{t('wallet.localRisk')}</p>
 
-          {wallet.error === 'NO_WC_PROJECT_ID' && (
-            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.noWcProject')}</p>
+          {wallet.error === 'WC_ORIGIN_BLOCKED' && (
+            <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.wcOriginBlocked')}</p>
+          )}
+          {wallet.error === 'WC_RELAY_UNREACHABLE' && (
+            <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.wcRelayUnreachable')}</p>
+          )}
+          {wallet.error === 'WC_EXPIRED' && (
+            <p className="notice" style={{ marginTop: 10 }}>{t('wallet.wcExpired')}</p>
           )}
           {wallet.error === 'CONNECT_FAILED' && (
             <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('wallet.connectFailed')}</p>
