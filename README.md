@@ -257,7 +257,7 @@ app's server in any of them:
 Set `VITE_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com) to enable the
 first mode. That ID is public by design — it is not a secret.
 
-The official FBT project ID is **`fa5a48b9701971af51938be219d8bc48`** and is
+The official FBT project ID is **`f0e8ca24821402a6226b4b675172b294`** and is
 already registered as the documented value in `.env.example` and as a hardcoded
 fallback in `src/context/WalletContext.jsx` (so a build with no env var still
 connects). For production, set `VITE_WALLETCONNECT_PROJECT_ID` explicitly in
