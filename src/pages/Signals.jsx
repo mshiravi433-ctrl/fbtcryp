@@ -197,7 +197,7 @@ export default function Signals() {
             <div>
               <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7 }}>{t('signals.marketMood')}</div>
               <div style={{ fontWeight: 900, fontSize: 18, marginTop: 4 }}>{t(`signals.mood.${sentiment.label}`)}</div>
-              <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>کل بازار — یک نگاه</div>
+              <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>{t('signals.marketAtGlance')}</div>
             </div>
             <div style={{ width: 68, height: 68, borderRadius: '50%', display: 'grid', placeItems: 'center', background: `conic-gradient(${sentiment.score > 55 ? 'var(--up)' : sentiment.score < 45 ? 'var(--down)' : 'var(--rgb-5)'} ${sentiment.score}%, rgba(127,127,127,.13) 0)`, padding: 3 }}>
               <span style={{ width: 54, height: 54, borderRadius: '50%', background: 'var(--bg-panel-solid)', display: 'grid', placeItems: 'center', fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: 18, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)' }}>{sentiment.score}</span>
@@ -218,7 +218,7 @@ export default function Signals() {
       )}
 
       <motion.div className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, padding: 14 }}>
-        <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7, marginBottom: 10 }}>انتخاب دارایی</div>
+        <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7, marginBottom: 10 }}>{t('signals.chooseAsset')}</div>
         <div className="tag-scroll" style={{ gap: 8 }}>
           {(coins ?? []).slice(0, 14).map((c) => (
             <button key={c.id} className={`tag ${coinId === c.id ? 'active' : ''}`} onClick={() => { haptic?.('select'); setCoinId(c.id); }} style={{ minHeight: 34, padding: '7px 13px', fontSize: 12.5, borderRadius: 12 }}>{c.symbol}</button>
@@ -268,7 +268,7 @@ export default function Signals() {
             {HORIZONS.filter(h => h.days !== 1).map((h) => (
               <button key={h.key} className={horizon.key === h.key ? 'active' : ''} onClick={() => setHorizon(h)} style={{ isolation: 'isolate', flex: 1, minHeight: 36 }}>
                 {horizon.key === h.key && <SegIndicator id="hz-outlook" />}
-                {h.key === '7D' ? 'هفتگی ۷ روز' : 'ماهانه ۳۰ روز'}
+                {t(h.key === '7D' ? 'signals.horizon.weekly' : 'signals.horizon.monthly')}
               </button>
             ))}
           </div>

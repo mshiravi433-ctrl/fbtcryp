@@ -138,24 +138,22 @@ export default function Dydx() {
           <div className="glass-notice" style={{ borderColor: 'rgba(255,59,107,0.16)', background: 'rgba(255,59,107,0.08)' }}>{t('dydx.risk')}</div>
         </motion.div>
 
-        {/* راهنمای مراحل — داخل باکس بسته‌شونده، بعد از اتصال هم درست کنترل می‌کند */}
+        {/* Dismissible workflow guidance that reflects connection state. */}
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-          <InfoBox title="مراحل کار — چطور پیش می‌رود؟" tone="info" id="dydx-steps">
+          <InfoBox title={t('dydx.steps.title')} tone="info" id="dydx-steps">
             <ol style={{ margin: 0, paddingInlineStart: 18, display: 'grid', gap: 7, fontSize: 12.5, lineHeight: 1.9 }}>
-              <li><strong>اتصال کیف پول</strong> — کیف پول EVM را وصل کن و پیام آنبوردینگ dYdX را امضا کن. کلید dYdX فقط در حافظه می‌ماند.</li>
-              <li><strong>انتخاب بازار و اندازه</strong> — بازار (مثلاً BTC-USD)، جهت (لانگ/شورت) و اندازه را وارد کن. تا اندازه ننویسی دکمهٔ ادامه فعال نمی‌شود — این طبیعی است.</li>
-              <li><strong>بررسی</strong> — نوشنال و کارمزد (۰٫۱۰٪) را ببین و روی «بررسی سفارش» بزن.</li>
-              <li><strong>تأیید نهایی</strong> — در شیت تأیید، ریسک را بخوان و «تأیید» را بزن تا سفارش واقعی روی dYdX Chain برود.</li>
-              <li>بعد از ارسال، هش تراکنش و پوزیشن‌های باز پایین صفحه می‌آید. اگر موجودی کافی نباشد، پیام «وثیقه کافی نیست» می‌بینی — یعنی باید حساب dYdX را شارژ کنی.</li>
+              {['connect', 'marketSize', 'review', 'confirm', 'afterSubmit'].map((step) => (
+                <li key={step}>{t(`dydx.steps.${step}`)}</li>
+              ))}
             </ol>
             {dydxAddress && !canReview && (
               <p className="notice" style={{ marginTop: 10 }}>
-                کیف پول وصل است. برای ادامه، <strong>اندازه</strong> را وارد کن (مثلاً ۰٫۰۱ BTC). دکمه تا وقتی اندازه صفر است غیرفعال می‌ماند تا سفارش خالی نفرستی.
+                {t('dydx.steps.enterSize')}
               </p>
             )}
             {!dydxAddress && (
               <p className="faint" style={{ marginTop: 8, fontSize: 11.5 }}>
-                هنوز وصل نیستی — اول «اتصال dYdX» را بزن. اگر کیف پول وصل نیست، اول کیف پول را وصل کن.
+                {t('dydx.steps.notConnected')}
               </p>
             )}
           </InfoBox>
@@ -203,8 +201,8 @@ export default function Dydx() {
 
           <div className="segmented" style={{ marginBottom: 12 }}>
             {[
-              { id: 'market', label: 'مارکت' },
-              { id: 'limit', label: 'لیمیت' }
+              { id: 'market', label: t('dydx.order.market') },
+              { id: 'limit', label: t('dydx.order.limit') }
             ].map((o) => (
               <button key={o.id} className={orderType === o.id ? 'active' : ''} onClick={() => setOrderType(o.id)} style={{ isolation: 'isolate' }}>
                 {orderType === o.id && <SegIndicator id="dydx-otype" />}
@@ -215,9 +213,9 @@ export default function Dydx() {
 
           {orderType === 'limit' && (
             <>
-              <label className="field-label">قیمت لیمیت (USD)</label>
+              <label className="field-label">{t('dydx.order.limitPrice')}</label>
               <input type="number" inputMode="decimal" min="0" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder={market ? `$${market.oraclePrice.toFixed(2)}` : '0.00'} />
-              <p className="faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.7 }}>سفارش لیمیت فقط وقتی اجرا می‌شود که قیمت به این عدد برسد — کارمزد ۰٫۱۰٪ همچنان روی نوشنال گرفته می‌شود.</p>
+              <p className="faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.7 }}>{t('dydx.order.limitHint')}</p>
             </>
           )}
 
@@ -261,17 +259,17 @@ export default function Dydx() {
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18, width: '100%', boxSizing: 'border-box', borderColor: 'rgba(0,229,255,0.14)', background: 'linear-gradient(145deg, rgba(0,229,255,0.06), rgba(255,255,255,0.02))' }}>
         <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 9, background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.18)', color: 'var(--rgb-1)' }}><IconExternal width={15} height={15} /></span>
-          شارژ حساب کجاست؟
+          {t('dydx.fundingHelp.title')}
         </div>
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.9, margin: 0 }}>
-          شارژ و واریز وثیقهٔ dYdX <strong style={{ color: 'var(--text-1)' }}>داخل اپ انجام نمی‌شود</strong> — نه در اپ، نه در وب خودمان. واریز USDC، برداشت و مدیریت حساب فقط در <strong style={{ color: 'var(--text-1)' }}>سایت مبدا dydx.trade</strong> با همان کیف پولی که وصل کردی انجام می‌شود. اپ فقط سفارش را می‌سازد و برای امضا به کیف پولت می‌فرستد؛ هیچ پولی دست ما نمی‌ماند.
+          {t('dydx.fundingHelp.body')}
         </p>
         <button type="button" className="btn btn-primary" style={{ width: '100%', marginTop: 12, gap: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={openDydx}>
           <IconExternal width={15} height={15} />
           {t('dydx.fundAccount')}
         </button>
         <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, textAlign: 'center' }}>
-          باز شدن در تب جدید — سایت مبدا
+          {t('dydx.fundingHelp.newTab')}
         </p>
       </motion.section>
 
@@ -279,7 +277,7 @@ export default function Dydx() {
       <Sheet open={reviewing} onClose={() => !busy && setReviewing(false)} title={t('dydx.confirmTitle')}>
         <div className="card card-tight stack" style={{ gap: 8 }}>
           <div className="row-between"><span className="faint">{t('dydx.market')}</span><strong>{market?.ticker}</strong></div>
-          <div className="row-between"><span className="faint">نوع سفارش</span><strong>{orderType === 'limit' ? `لیمیت @ $${limitPrice}` : 'مارکت'}</strong></div>
+          <div className="row-between"><span className="faint">{t('dydx.order.type')}</span><strong>{orderType === 'limit' ? t('dydx.order.limitAt', { price: limitPrice }) : t('dydx.order.market')}</strong></div>
           <div className="row-between"><span className="faint">{t('dydx.direction')}</span><strong>{t(`dydx.${side}`)}</strong></div>
           <div className="row-between"><span className="faint">{t('dydx.notional')}</span><span className="mono">{fmtUsd(notional)}</span></div>
           <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>

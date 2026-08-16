@@ -367,9 +367,9 @@ export default function Market() {
                         e.stopPropagation();
                         navigate(swapUrl);
                       }}
-                      title={`${c.symbol} → سواپ در شبکه درست`}
+                      title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
                     >
-                      سواپ
+                      {t('market.swap')}
                     </button>
                   )}
                 </div>
@@ -402,7 +402,7 @@ export default function Market() {
                           style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
                           onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
                         >
-                          سواپ
+                          {t('market.swap')}
                         </button>
                       )}
                     </div>

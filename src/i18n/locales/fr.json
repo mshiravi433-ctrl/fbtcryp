@@ -223,7 +223,9 @@
       "losers": "Baisses",
       "favorites": "Favoris",
       "volume": "Volume"
-    }
+    },
+    "swap": "Swap",
+    "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network"
   },
   "coin": {
     "notFound": "Crypto introuvable",
@@ -310,6 +312,12 @@
       "bullish": "Haussier",
       "bearish": "Baissier",
       "neutral": "Neutre"
+    },
+    "marketAtGlance": "The whole market at a glance",
+    "chooseAsset": "Choose asset",
+    "horizon": {
+      "weekly": "Weekly · 7 days",
+      "monthly": "Monthly · 30 days"
     }
   },
   "news": {
@@ -405,7 +413,13 @@
     "yourRank": "Rang #{{n}}",
     "unranked": "Pas encore classé",
     "tiers": "Paliers",
-    "top": "Meilleurs traders"
+    "top": "Meilleurs traders",
+    "quick": {
+      "title": "Earn points quickly",
+      "swap": "Swap +{{points}}",
+      "backup": "Backup +{{points}}",
+      "farm": "Farm +{{points}}"
+    }
   },
   "trade": {
     "buy": "Acheter",
@@ -518,5 +532,109 @@
   },
   "bridge": {
     "emptyHint": "Saisissez un montant pour voir le meilleur itinéraire et ses frais."
+  },
+  "dydx": {
+    "steps": {
+      "title": "How it works",
+      "connect": "Connect your EVM wallet and sign the dYdX onboarding message. The dYdX key remains in memory only.",
+      "marketSize": "Choose a market (for example BTC-USD), direction, and size. Continue stays disabled until you enter a size.",
+      "review": "Review the notional and 0.10% fee, then select “Review order”.",
+      "confirm": "Read the risk notice in the confirmation sheet, then select “Confirm” to send the real order to dYdX Chain.",
+      "afterSubmit": "After submission, the transaction hash and open positions appear below. “Insufficient collateral” means you need to fund your dYdX account.",
+      "enterSize": "Your wallet is connected. Enter a size (for example 0.01 BTC). The button stays disabled at zero to prevent an empty order.",
+      "notConnected": "You are not connected yet. Select “Connect dYdX”; if your wallet is disconnected, connect it first."
+    },
+    "order": {
+      "market": "Market",
+      "limit": "Limit",
+      "limitPrice": "Limit price (USD)",
+      "limitHint": "A limit order executes only when the price reaches this value. The 0.10% fee still applies to the notional.",
+      "type": "Order type",
+      "limitAt": "Limit @ ${{price}}"
+    },
+    "fundingHelp": {
+      "title": "Where do I fund the account?",
+      "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds.",
+      "newTab": "Opens the official site in a new tab"
+    }
+  },
+  "biz": {
+    "requestPartnership": "Request a partnership",
+    "atGlance": "At a glance",
+    "selectTopic": "Select this topic",
+    "whyUs": "Why work with us",
+    "path": "Partnership path",
+    "stats": {
+      "networks": {
+        "value": "10",
+        "label": "Active networks",
+        "sub": "BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche · Linea · Sonic · Solana"
+      },
+      "fee": {
+        "value": "0.10%",
+        "label": "Transparent fee",
+        "sub": "Shown before signing"
+      },
+      "alwaysOpen": {
+        "value": "24/7",
+        "label": "Open market",
+        "sub": "No closing hours, no intermediary"
+      }
+    },
+    "benefits": {
+      "nonCustodial": {
+        "title": "Truly non-custodial",
+        "body": "We never hold the funds. Trades go directly between the user wallet and blockchain—no company wallet and no withdrawal queue."
+      },
+      "integration": {
+        "title": "Fast integration",
+        "body": "Add market data, pricing, and swap routing to your product with practical documentation and ready-to-use curl examples."
+      },
+      "revenue": {
+        "title": "Transparent revenue",
+        "body": "The 0.10% builder fee on notional is shown to the user before signing on every supported trading screen."
+      }
+    },
+    "steps": {
+      "conversation": {
+        "title": "Conversation",
+        "description": "Complete the form or email us directly. We read your actual requirements rather than sending a template."
+      },
+      "proposal": {
+        "title": "Proposal",
+        "description": "We suggest a technical route and fee structure based on your token, network, and volume."
+      },
+      "launch": {
+        "title": "Launch",
+        "description": "Listing, liquidity depth, or white label—tested on mainnet and prepared for launch."
+      }
+    },
+    "form": {
+      "title": "Partnership request form",
+      "description": "Complete the form and an email with your selected topic opens in your mail app. No form data is stored on our server.",
+      "topic": "Partnership topic",
+      "company": "Company name",
+      "companyPlaceholder": "For example, Arta Coin",
+      "name": "Your name",
+      "namePlaceholder": "Full name",
+      "workEmail": "Work email",
+      "phoneOptional": "Phone (optional)",
+      "phonePlaceholder": "Phone number",
+      "message": "Message",
+      "messagePlaceholder": "Briefly describe your token, network, volume, and what you need.",
+      "preparing": "Preparing…",
+      "submit": "Send request — {{topic}}",
+      "responseTime": "Submitting connects you directly to our support email. We usually respond within 24 business hours.",
+      "requiredError": "Complete the company, name, email, and message fields.",
+      "emailError": "Enter a valid email address.",
+      "ready": "Your request is ready to send by email.",
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+    }
+  },
+  "shop": {
+    "tab": {
+      "cards": "card",
+      "topup": "simcard"
+    }
   }
 }
