@@ -583,7 +583,21 @@ export default function run() {
      * the work moved somewhere that still runs. Assert it is still invoked so
      * the fix cannot degrade into a quiet feature removal.
      */
-    t('the watch cycle still runs from the daily cron', /runWatchCycle\(\)/.test(serverSrc));
+    t(
+      'the daily cron passes the push-routing callback to the watch cycle',
+      /runWatchCycle\(\s*sendWatchAlert\s*\)/.test(serverSrc)
+    );
+    /*
+     * And the callback itself must actually route to both transports — a
+     * helper that exists but is never used to send is the same silent dead
+     * end under a new name. (Matching the code, not prose: comments are
+     * stripped first.)
+     */
+    const serverCode = serverSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const sendFn = /async function sendWatchAlert[\s\S]*?\n\}/.exec(serverCode)?.[0] ?? '';
+    t('sendWatchAlert is defined', sendFn.length > 0);
+    t('sendWatchAlert routes web-push endpoints', /sendToEndpoint\(id\.value/.test(sendFn));
+    t('sendWatchAlert routes FCM (APK) devices', /fcmSendToToken\(id\.value/.test(sendFn));
   }
 
   /* ---- 13. a setting that changes nothing is a lie to the user ---------- */
