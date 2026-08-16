@@ -2607,6 +2607,7 @@
     "send": "Bridge",
     "sending": "Confirm in your wallet…",
     "connectFirst": "Connect a wallet to get a quote.",
+    "emptyHint": "Enter an amount to see the best route and its fees.",
     "sentTitle": "Sent",
     "sentBody": "The transaction is on-chain. Bridges take anywhere from seconds to several minutes — the funds will appear on the destination network when the relayer completes it. You can close this screen.",
     "track": "Track this transfer",

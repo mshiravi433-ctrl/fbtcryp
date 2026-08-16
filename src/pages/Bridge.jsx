@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -22,8 +22,6 @@ import {
 } from '../lib/dln';
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
-import ThorPanel from '../components/ThorPanel';
-import TronPanel from '../components/TronPanel';
 import SegIndicator from '../components/SegIndicator';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -51,6 +49,88 @@ import { useSettingsStore } from '../store/useSettingsStore';
  */
 
 const DEBOUNCE_MS = 500;
+
+/*
+ * The three tabs. `native` (THORChain) and `tron` are entirely different
+ * operations from the LI.FI token path — each pulls its own client library
+ * and its own set of rules — so they are loaded on demand rather than paid
+ * for on every visit to the bridge. Keeping them behind `lazy()` is the same
+ * decision the router already makes for every page; these are sub-pages.
+ */
+const ThorPanel = lazy(() => import('../components/ThorPanel'));
+const TronPanel = lazy(() => import('../components/TronPanel'));
+
+const MODES = ['tokens', 'native', 'tron'];
+const PROVIDERS = ['lifi', 'dln'];
+
+/*
+ * ─── WHY THESE TWO CARDS ARE MEMOISED ──────────────────────────────────────
+ * WalletContext polls the balance every 30s, and every poll re-renders any
+ * screen that reads `useWallet()`. These two sections are pure copy — they
+ * depend on nothing but the active language — so re-rendering them on every
+ * balance tick was wasted reconciliation for zero visual change. `memo` with
+ * no props means React keeps the previous element and never descends into it.
+ */
+const WhatBridge = memo(function WhatBridge() {
+  const { t } = useTranslation();
+  return (
+    <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
+      <div className="sheen" />
+      <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
+        <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}>
+          <IconSwap width={22} height={22} />
+        </span>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('bridge.whatTitle')}</div>
+          <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('bridge.whatBody')}</p>
+        </div>
+      </div>
+    </motion.section>
+  );
+});
+
+const RiskCard = memo(function RiskCard() {
+  const { t } = useTranslation();
+  return (
+    <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ color: 'var(--rgb-5)', flexShrink: 0 }}>
+          <IconShield width={19} height={19} />
+        </span>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('bridge.riskTitle')}</div>
+          <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{t('bridge.riskBody')}</p>
+        </div>
+      </div>
+    </motion.section>
+  );
+});
+
+/*
+ * A skeleton that matches the quote card it replaces, so the ticket does not
+ * jump in height when a quote lands. The generic `.skel` shimmer is reused so
+ * the loading state shares the app's existing motion language.
+ */
+function QuoteSkeleton({ marginTop = 10 }) {
+  return (
+    <div className="brg-quote" style={{ marginTop }} aria-hidden="true">
+      <div className="skel" style={{ height: 13, width: '42%' }} />
+      <div className="skel" style={{ height: 13, width: '64%' }} />
+      <div className="skel" style={{ height: 13, width: '52%' }} />
+    </div>
+  );
+}
+
+/* The fallback for the lazy tab panels — same skeleton language. */
+function PanelSkeleton() {
+  return (
+    <div className="card" style={{ marginTop: 12 }} aria-hidden="true">
+      <div className="skel" style={{ height: 44, marginBottom: 12 }} />
+      <div className="skel" style={{ height: 44, marginBottom: 12 }} />
+      <div className="skel" style={{ height: 52 }} />
+    </div>
+  );
+}
 
 export default function Bridge() {
   const { t } = useTranslation();
@@ -153,6 +233,14 @@ export default function Bridge() {
   /* ------------------------------- quoting ------------------------------- */
 
   const timerRef = useRef(null);
+  /*
+   * A sequence guard, in addition to the debounce. The debounce stops a
+   * keystroke storm; the guard stops the race the debounce cannot: a slow
+   * request for an OLD pair that finally resolves AFTER a newer request has
+   * already painted its quote. Without it the stale response overwrites the
+   * fresh one and the screen shows the wrong route for the selected pair.
+   */
+  const seq = useRef(0);
 
   /*
    * ─── THE OPTIONS THE SWAP SCREEN HAS AND THIS ONE DID NOT ───────────────
@@ -187,6 +275,7 @@ export default function Bridge() {
   const toAddressValid = toAddress === '' || /^0x[a-fA-F0-9]{40}$/.test(toAddress.trim());
 
   const fetchQuote = useCallback(async () => {
+    const mine = ++seq.current;
     setQuoteErr(null);
     setTxErr(null);
 
@@ -220,12 +309,14 @@ export default function Bridge() {
            as a literal and rejected. */
         ...(toAddress.trim() && toAddressValid ? { toAddress: toAddress.trim() } : {})
       });
+      if (seq.current !== mine) return;
       setQuote(q);
     } catch (e) {
+      if (seq.current !== mine) return;
       setQuote(null);
       setQuoteErr(e.code || 'QUOTE_FAILED');
     } finally {
-      setQuoting(false);
+      if (seq.current === mine) setQuoting(false);
     }
 
     /*
@@ -246,9 +337,10 @@ export default function Bridge() {
         dstChainId: toChain,
         dstChainTokenOut: toToken.address
       });
+      if (seq.current !== mine) return;
       setDln(d);
     } catch {
-      setDln(null);
+      if (seq.current === mine) setDln(null);
     }
   }, [wallet.isConnected, wallet.address, fromChain, toChain, fromToken, toToken, amount,
       slippage, toAddress, toAddressValid]);
@@ -407,8 +499,6 @@ export default function Bridge() {
     haptic?.('select');
   };
 
-  const chainName = (id) => BRIDGE_CHAINS.find((c) => c.id === id)?.name ?? String(id);
-
   return (
     <PageTransition>
       <motion.div variants={riseIn} initial="hidden" animate="show">
@@ -416,10 +506,12 @@ export default function Bridge() {
         <p className="muted">{t('bridge.subtitle')}</p>
       </motion.div>
 
-      <div className="segmented">
-        {['tokens', 'native', 'tron'].map((k) => (
+      <div className="segmented seg-lg" role="tablist">
+        {MODES.map((k) => (
           <button
             key={k}
+            role="tab"
+            aria-selected={mode === k}
             className={mode === k ? 'active' : ''}
             onClick={() => setMode(k)}
             style={{ isolation: 'isolate' }}
@@ -438,25 +530,18 @@ export default function Bridge() {
         fields that change meaning depending on a dropdown.
       */}
       {mode === 'tron' ? (
-        <TronPanel />
+        <Suspense fallback={<PanelSkeleton />}>
+          <TronPanel />
+        </Suspense>
       ) : mode === 'native' ? (
-        <ThorPanel />
+        <Suspense fallback={<PanelSkeleton />}>
+          <ThorPanel />
+        </Suspense>
       ) : (
         <>
 
       {/* what this is, before anything is tapped */}
-      <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
-        <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}>
-            <IconSwap width={22} height={22} />
-          </span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('bridge.whatTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('bridge.whatBody')}</p>
-          </div>
-        </div>
-      </motion.section>
+      <WhatBridge />
 
       {/* ------------------------------ ticket ------------------------------ */}
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
@@ -524,7 +609,7 @@ export default function Bridge() {
           <div className="brg-select brg-select-static">{toToken?.symbol ?? '—'}</div>
         </div>
 
-        {quoting && <p className="faint" style={{ marginTop: 10 }}>{t('bridge.quoting')}</p>}
+        {quoting && <QuoteSkeleton />}
 
         {/*
           ─── THE OPTIONS, FOLDED ────────────────────────────────────────────
@@ -574,6 +659,14 @@ export default function Bridge() {
           <p className="notice notice-danger" style={{ marginTop: 10 }}>
             {t(`bridge.err.${quoteErr}`, { defaultValue: t('bridge.err.QUOTE_FAILED') })}
           </p>
+        )}
+
+        {/* Empty state: connected, but no amount yet, so nothing to quote. */}
+        {!quoting && !quoteErr && !summary && wallet.isConnected && (
+          <div className="empty" style={{ padding: '18px 12px 6px', fontSize: 12 }}>
+            <span className="empty-icon">⇄</span>
+            {t('bridge.emptyHint')}
+          </div>
         )}
 
         {/*
@@ -632,7 +725,7 @@ export default function Bridge() {
             <div className="field-label" style={{ marginTop: 0 }}>{t('bridge.routesTitle')}</div>
 
             <div className="segmented">
-              {['lifi', 'dln'].map((k) => (
+              {PROVIDERS.map((k) => (
                 <button
                   key={k}
                   className={provider === k ? 'active' : ''}
@@ -754,17 +847,7 @@ export default function Bridge() {
         already intends to bridge; the risk that matters is the one they meet
         after tapping send, and that is what this covers.
       */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-5)', flexShrink: 0 }}>
-            <IconShield width={19} height={19} />
-          </span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('bridge.riskTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{t('bridge.riskBody')}</p>
-          </div>
-        </div>
-      </motion.section>
+      <RiskCard />
 
         </>
       )}

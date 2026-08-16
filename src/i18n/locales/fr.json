@@ -515,5 +515,8 @@
       "twap": "Nouveau TWAP",
       "rebalance": "Nouveau rééquilibrage"
     }
+  },
+  "bridge": {
+    "emptyHint": "Saisissez un montant pour voir le meilleur itinéraire et ses frais."
   }
 }
