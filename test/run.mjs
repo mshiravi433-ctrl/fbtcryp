@@ -370,6 +370,22 @@ console.log('\n▸ probing notifications with no web Notification API…');
 }
 
 /*
+ * ORDER-WATCH → PUSH DELIVERY PROBE.
+ *
+ * The server-side watcher that fires auto-order alerts with the app closed.
+ * Real bug: the daily cron ran runWatchCycle() with NO send callback, so a
+ * triggered order hit `send(...)` where send was undefined, threw, was
+ * caught, and the alert was silently dropped. This runs the real watch.js
+ * against a stubbed price feed and asserts delivery only happens when a send
+ * callback is wired, so the fix (and the wiring.mjs check) cannot regress.
+ */
+console.log('\n▸ probing order-watch push delivery…');
+{
+  const { default: runWatchPush } = await import('./watch-push-probe.mjs');
+  report('order-watch → push', await runWatchPush());
+}
+
+/*
  * QR CAMERA LIFECYCLE.
  *
  * Wiring check #32 proves the dependency array was written correctly. It

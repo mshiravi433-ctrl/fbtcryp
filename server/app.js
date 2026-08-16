@@ -2757,35 +2757,57 @@ app.post('/api/orders/unwatch', async (req, res) => {
   return res.json({ ok: true, ...(await clearWatches(endpoint)) });
 });
 
-/** Run one watch cycle. Cron-driven, guarded by the same secret. */
-app.get('/api/cron/watch', async (req, res) => {
-  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
-
+/**
+ * Deliver one order alert to the device it is addressed to, routing by that
+ * device's push transport.
+ *
+ * ─── WHY THIS IS SHARED AND NOT INLINE ──────────────────────────────────────
+ * The same callback is handed to runWatchCycle() from BOTH /api/cron/watch and
+ * the daily cron. When it lived inline in /api/cron/watch, the daily cron ran
+ * the watch cycle with NO callback at all — `send` was undefined, so every
+ * triggered order hit `send(...)` → `TypeError: send is not a function` →
+ * caught silently → `ok: false` → the alert was never pushed (and, because the
+ * cooldown only starts on a successful send, it re-triggered forever without
+ * ever delivering). The "app closed" order alert was therefore dead for every
+ * user, on both web push and FCM.
+ *
+ * One helper used by both callers makes that class of drift impossible again:
+ * if the routing logic is wrong it is wrong in one place, and a wiring check
+ * asserts both callers pass it.
+ *
+ * Returns a boolean (true = delivered) so runWatchCycle only starts a cooldown
+ * on a genuine send.
+ */
+async function sendWatchAlert(endpoint, lang, payload) {
   const { sendToEndpoint } = await import('./push.js');
   const { fcmSendToToken } = await import('./fcm.js');
   const { parseIdentity } = await import('./watch.js');
 
-  const out = await runWatchCycle(async (endpoint, lang, payload) => {
-    /*
-     * Route by transport. A packaged Android user has an fcm: identity and no
-     * web-push endpoint at all, so sending everything through web push made
-     * order alerts silently web-only.
-     */
-    const id = parseIdentity(endpoint);
-    if (!id) return false;
+  /*
+   * Route by transport. A packaged Android user has an fcm: identity and no
+   * web-push endpoint at all, so sending everything through web push made
+   * order alerts silently web-only.
+   */
+  const id = parseIdentity(endpoint);
+  if (!id) return false;
 
-    const message = {
-      title: ORDER_ALERT[lang]?.title ?? ORDER_ALERT.en.title,
-      body: (ORDER_ALERT[lang]?.body ?? ORDER_ALERT.en.body)
-        .replace('{base}', payload.base)
-        .replace('{quote}', payload.quote)
-        .replace('{rate}', String(payload.rate)),
-      url: '/#/orders',
-      tag: `fbt-order-${payload.id}`
-    };
+  const message = {
+    title: ORDER_ALERT[lang]?.title ?? ORDER_ALERT.en.title,
+    body: (ORDER_ALERT[lang]?.body ?? ORDER_ALERT.en.body)
+      .replace('{base}', payload.base)
+      .replace('{quote}', payload.quote)
+      .replace('{rate}', String(payload.rate)),
+    url: '/#/orders',
+    tag: `fbt-order-${payload.id}`
+  };
 
-    return id.kind === 'fcm' ? fcmSendToToken(id.value, message) : sendToEndpoint(id.value, message);
-  });
+  return id.kind === 'fcm' ? fcmSendToToken(id.value, message) : sendToEndpoint(id.value, message);
+}
+
+/** Run one watch cycle. Cron-driven, guarded by the same secret. */
+app.get('/api/cron/watch', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const out = await runWatchCycle(sendWatchAlert);
   return res.json(out);
 });
 
@@ -3239,13 +3261,23 @@ async function readFcmTokensSafe() {
  *
  * runWatchCycle sits in the same Promise.allSettled as the two sends: one
  * failing channel must not cancel the others.
+ *
+ * ─── THE `sendWatchAlert` ARGUMENT IS THE FIX, NOT A DETAIL ─────────────────
+ * runWatchCycle() is a pure evaluator: it decides WHICH orders triggered and
+ * then calls the injected `send` callback to actually deliver. This cron used
+ * to call it with NO callback, so every trigger reached `send(...)` where
+ * `send` was undefined, threw, was caught, and the alert was silently dropped
+ * — while the in-app sound/vibration kept working, which is exactly why this
+ * looked like "works open, never when closed". The callback routes to web push
+ * (VAPID) or FCM by the device's identity. A wiring check asserts it stays
+ * passed here so the fix cannot regress into a silent feature removal.
  */
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   const [web, fcm, watch] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
-    runWatchCycle()
+    runWatchCycle(sendWatchAlert)
   ]);
   res.json({
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
