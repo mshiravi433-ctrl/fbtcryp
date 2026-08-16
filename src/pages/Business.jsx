@@ -22,23 +22,16 @@ const OFFERS = [
   { id: 'integration', Icon: IconKey, hue: 'var(--rgb-5)', gradient: 'linear-gradient(135deg, #ffb300, #ff5a3a)' }
 ];
 
-const STATS = [
-  { value: '۱۰', label: 'شبکهٔ فعال', sub: 'BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche · Linea · Sonic · Solana' },
-  { value: '۰٫۱۰٪', label: 'کارمزد شفاف', sub: 'قبل از امضا نمایش داده می‌شود' },
-  { value: '۲۴/۷', label: 'بازار باز', sub: 'بدون تعطیلی، بدون واسطه' },
-];
+const STATS = ['networks', 'fee', 'alwaysOpen'];
 
 const BENEFITS = [
-  { title: 'غیرحضانتی واقعی', body: 'پول هیچ‌وقت دست ما نیست — معامله مستقیم بین کیف پول کاربر و بلاکچین. نه کیف پول شرکتی، نه صف برداشت.', Icon: IconShield, hue: 'var(--rgb-1)' },
-  { title: 'یکپارچه‌سازی سریع', body: 'API بازار، قیمت و مسیریابی سواپ را در محصول خودت بگذار — مستندات واقعی و نمونهٔ curl آماده.', Icon: IconKey, hue: 'var(--rgb-2)' },
-  { title: 'درآمد شفاف', body: 'کارمزد Builder روی نوشنال (۰٫۱۰٪) — قبل از امضا به کاربر نشان داده می‌شود،  روی هر سه صفحهٔ جدید.', Icon: IconTrend, hue: 'var(--rgb-4)' },
+  { id: 'nonCustodial', Icon: IconShield, hue: 'var(--rgb-1)' },
+  { id: 'integration', Icon: IconKey, hue: 'var(--rgb-2)' },
+  { id: 'revenue', Icon: IconTrend, hue: 'var(--rgb-4)' }
 ];
 
-const STEPS = [
-  { n: 1, title: 'گفتگو', desc: 'فرم زیر را پر کن یا مستقیم ایمیل بزن — موضوعت را می‌فهمیم، نه قالب می‌فرستیم.' },
-  { n: 2, title: 'پیشنهاد', desc: 'بر اساس توکن/شبکه/حجم‌ات، مسیر فنی و کارمزد را پیشنهاد می‌دهیم.' },
-  { n: 3, title: 'اجرا', desc: 'لیست شدن، عمق نقدینگی یا وایت‌لیبل — تست روی شبکهٔ اصلی و لانچ.' },
-];
+const STEPS = ['conversation', 'proposal', 'launch'];
+
 
 export default function Business() {
   const { t } = useTranslation();
@@ -60,12 +53,12 @@ export default function Business() {
   const submitBusiness = () => {
     // simple validation
     if (!form.company.trim() || !form.name.trim() || !form.email.trim() || !form.message.trim()) {
-      useAppStore.getState().notify('لطفاً نام شرکت، نام، ایمیل و پیام را کامل کن', 'error');
+      useAppStore.getState().notify(t('biz.form.requiredError'), 'error');
       haptic?.('error');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      useAppStore.getState().notify('ایمیل معتبر وارد کن', 'error');
+      useAppStore.getState().notify(t('biz.form.emailError'), 'error');
       haptic?.('error');
       return;
     }
@@ -73,7 +66,14 @@ export default function Business() {
     haptic?.('light');
     const subject = encodeURIComponent(`[Business] ${interest} — ${form.company}`);
     const body = encodeURIComponent(
-      `شرکت: ${form.company}\nنام: ${form.name}\nایمیل: ${form.email}\nتلفن: ${form.phone || '—'}\nموضوع: ${interest}\n\nپیام:\n${form.message}\n\n—\nاز صفحه بیزینس FBT Swap`
+      t('biz.form.emailBody', {
+        company: form.company,
+        name: form.name,
+        email: form.email,
+        phone: form.phone || '—',
+        topic: t(`biz.offer.${interest}.title`),
+        message: form.message
+      })
     );
     const mailto = `${SUPPORT_MAILTO}?subject=${subject}&body=${body}`;
     // open mail client
@@ -82,7 +82,7 @@ export default function Business() {
 
     setTimeout(() => {
       setSending(false);
-      useAppStore.getState().notify('درخواست‌تان آمادهٔ ارسال با ایمیل شد', 'success');
+      useAppStore.getState().notify(t('biz.form.ready'), 'success');
       haptic?.('success');
     }, 600);
   };
@@ -105,7 +105,7 @@ export default function Business() {
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.9, marginTop: 10 }}>{t('biz.intro')}</p>
         <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
           <button className="btn btn-primary" style={{ flex: '1 1 160px', minHeight: 44 }} onClick={() => document.getElementById('biz-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-            درخواست همکاری
+            {t('biz.requestPartnership')}
           </button>
           <button className="btn btn-ghost" style={{ flex: '1 1 140px', minHeight: 44 }} onClick={() => openLink(SITE_URL)}>
             <IconGlobe width={16} height={16} /> {SITE_URL.replace(/^https:\/\//, '')}
@@ -115,13 +115,13 @@ export default function Business() {
 
       {/* Stats — functional: credibility at a glance */}
       <motion.div className="stack" variants={stagger} initial="hidden" animate="show" style={{ gap: 0, marginTop: 16 }}>
-        <p className="section-label" style={{ marginBottom: 10 }}>در یک نگاه</p>
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('biz.atGlance')}</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {STATS.map((s) => (
-            <motion.div key={s.label} className="card" variants={riseIn} style={{ padding: 12, textAlign: 'center' }}>
-              <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: -0.3 }}>{s.value}</div>
-              <div style={{ fontWeight: 700, fontSize: 11.5, marginTop: 2 }}>{s.label}</div>
-              <div className="faint" style={{ fontSize: 10.5, marginTop: 4, lineHeight: 1.6 }}>{s.sub}</div>
+          {STATS.map((id) => (
+            <motion.div key={id} className="card" variants={riseIn} style={{ padding: 12, textAlign: 'center' }}>
+              <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: -0.3 }}>{t(`biz.stats.${id}.value`)}</div>
+              <div style={{ fontWeight: 700, fontSize: 11.5, marginTop: 2 }}>{t(`biz.stats.${id}.label`)}</div>
+              <div className="faint" style={{ fontSize: 10.5, marginTop: 4, lineHeight: 1.6 }}>{t(`biz.stats.${id}.sub`)}</div>
             </motion.div>
           ))}
         </div>
@@ -155,7 +155,7 @@ export default function Business() {
                       haptic?.('light');
                     }}
                   >
-                    انتخاب این موضوع <IconChevronLeft width={12} height={12} style={{ transform: 'rotate(180deg)' }} />
+                    {t('biz.selectTopic')} <IconChevronLeft width={12} height={12} style={{ transform: 'rotate(180deg)' }} />
                   </button>
                 </div>
               </div>
@@ -166,16 +166,16 @@ export default function Business() {
 
       {/* Benefits — why us */}
       <section style={{ marginTop: 18 }}>
-        <p className="section-label" style={{ marginBottom: 10 }}>چرا با ما</p>
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('biz.whyUs')}</p>
         <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
           {BENEFITS.map((b) => (
-            <motion.div key={b.title} className="card" variants={riseIn} style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'flex-start', width: '100%', boxSizing: 'border-box' }}>
+            <motion.div key={b.id} className="card" variants={riseIn} style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'flex-start', width: '100%', boxSizing: 'border-box' }}>
               <span className="docs-icon" style={{ '--card-hue': b.hue, width: 40, height: 40, borderRadius: 12 }}>
                 <b.Icon width={18} height={18} />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 13.5 }}>{b.title}</div>
-                <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, margin: '4px 0 0' }}>{b.body}</p>
+                <div style={{ fontWeight: 800, fontSize: 13.5 }}>{t(`biz.benefits.${b.id}.title`)}</div>
+                <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, margin: '4px 0 0' }}>{t(`biz.benefits.${b.id}.body`)}</p>
               </div>
             </motion.div>
           ))}
@@ -184,14 +184,14 @@ export default function Business() {
 
       {/* Steps — how to start */}
       <section style={{ marginTop: 18 }}>
-        <p className="section-label" style={{ marginBottom: 10 }}>مسیر همکاری</p>
+        <p className="section-label" style={{ marginBottom: 10 }}>{t('biz.path')}</p>
         <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
-          {STEPS.map((s) => (
-            <motion.div key={s.n} className="card" variants={riseIn} style={{ padding: 14, display: 'flex', gap: 14, alignItems: 'center', width: '100%', boxSizing: 'border-box' }}>
-              <span className="docs-step-num" style={{ minWidth: 30, height: 30, borderRadius: 10, fontSize: 13, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 900 }}>{s.n}</span>
+          {STEPS.map((id, index) => (
+            <motion.div key={id} className="card" variants={riseIn} style={{ padding: 14, display: 'flex', gap: 14, alignItems: 'center', width: '100%', boxSizing: 'border-box' }}>
+              <span className="docs-step-num" style={{ minWidth: 30, height: 30, borderRadius: 10, fontSize: 13, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 900 }}>{index + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 13.5 }}>{s.title}</div>
-                <div className="faint" style={{ fontSize: 12.3, lineHeight: 1.7, marginTop: 2 }}>{s.desc}</div>
+                <div style={{ fontWeight: 800, fontSize: 13.5 }}>{t(`biz.steps.${id}.title`)}</div>
+                <div className="faint" style={{ fontSize: 12.3, lineHeight: 1.7, marginTop: 2 }}>{t(`biz.steps.${id}.description`)}</div>
               </div>
             </motion.div>
           ))}
@@ -202,15 +202,15 @@ export default function Business() {
       <motion.section id="biz-form" className="docs-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18, '--card-hue': 'var(--rgb-1)', padding: 18 }}>
         <div style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="docs-icon" style={{ width: 36, height: 36, borderRadius: 10 }}><IconMail width={18} height={18} /></span>
-          فرم درخواست همکاری
+          {t('biz.form.title')}
         </div>
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, marginTop: 8 }}>
-          فرم را پر کن — با همان موضوع انتخاب‌شده، یک ایمیل آماده می‌شود و در برنامهٔ ایمیل‌ات باز می‌شود. هیچ داده‌ای در سرور ما ذخیره نمی‌شود.
+          {t('biz.form.description')}
         </p>
 
         <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
           <div style={{ display: 'grid', gap: 6 }}>
-            <label className="field-label">موضوع همکاری</label>
+            <label className="field-label">{t('biz.form.topic')}</label>
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               {OFFERS.map((o) => (
                 <button
@@ -228,32 +228,32 @@ export default function Business() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span className="field-label">نام شرکت *</span>
-              <input value={form.company} onChange={(e) => setField('company', e.target.value)} placeholder="مثلاً آرتا کوین" />
+              <span className="field-label">{t('biz.form.company')} *</span>
+              <input value={form.company} onChange={(e) => setField('company', e.target.value)} placeholder={t('biz.form.companyPlaceholder')} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span className="field-label">نام شما *</span>
-              <input value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="نام و نام خانوادگی" />
+              <span className="field-label">{t('biz.form.name')} *</span>
+              <input value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder={t('biz.form.namePlaceholder')} />
             </label>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span className="field-label">ایمیل کاری *</span>
+              <span className="field-label">{t('biz.form.workEmail')} *</span>
               <input type="email" inputMode="email" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="name@company.com" dir="ltr" />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span className="field-label">تلفن (اختیاری)</span>
-              <input type="tel" inputMode="tel" value={form.phone} onChange={(e) => setField('phone', e.target.value)} placeholder="۰۹۱۲..." />
+              <span className="field-label">{t('biz.form.phoneOptional')}</span>
+              <input type="tel" inputMode="tel" value={form.phone} onChange={(e) => setField('phone', e.target.value)} placeholder={t('biz.form.phonePlaceholder')} />
             </label>
           </div>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span className="field-label">پیام *</span>
+            <span className="field-label">{t('biz.form.message')} *</span>
             <textarea
               value={form.message}
               onChange={(e) => setField('message', e.target.value)}
-              placeholder="کوتاه بگو: توکن شما چیست، روی کدام شبکه، چه حجمی، و چه انتظاری داری..."
+              placeholder={t('biz.form.messagePlaceholder')}
               rows={4}
               style={{ resize: 'vertical', minHeight: 96 }}
             />
@@ -265,7 +265,7 @@ export default function Business() {
             onClick={submitBusiness}
             style={{ width: '100%', minHeight: 46, gap: 8 }}
           >
-            <IconMail width={16} height={16} /> {sending ? 'در حال آماده‌سازی...' : `ارسال درخواست — ${t(`biz.offer.${interest}.title`)}`}
+            <IconMail width={16} height={16} /> {sending ? t('biz.form.preparing') : t('biz.form.submit', { topic: t(`biz.offer.${interest}.title`) })}
           </button>
 
           <div className="row" style={{ gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -273,7 +273,7 @@ export default function Business() {
             <button className="tag" onClick={() => openUrl(SITE_URL)} style={{ gap: 6 }}><IconGlobe width={14} height={14} /> {SITE_URL.replace(/^https:\/\//, '')}</button>
           </div>
           <p className="faint" style={{ fontSize: 11, lineHeight: 1.7, textAlign: 'center', margin: 0 }}>
-            با ارسال، مستقیماً به ایمیل پشتیبانی ما وصل می‌شوی — پاسخ معمولاً ۲۴ ساعت کاری.
+            {t('biz.form.responseTime')}
           </p>
         </div>
       </motion.section>

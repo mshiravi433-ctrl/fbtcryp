@@ -167,6 +167,50 @@ export default function run() {
   t(`Persian covers at least 95% of keys (${enKeys.length - faMissing.length}/${enKeys.length})`,
     faMissing.length / enKeys.length < 0.05);
 
+  /* -------- 5b. localized page copy must not regress to Persian JSX ------- */
+  {
+    const localizedPages = ['Dydx', 'Market', 'Leaderboard', 'Business', 'Signals', 'Shop'];
+    const hardcodedPersian = localizedPages.filter((name) =>
+      /[\u0600-\u06ff]/.test(read(`src/pages/${name}.jsx`))
+    );
+    t(
+      `localized pages contain no hardcoded Persian${hardcodedPersian.length ? ` — found in: ${hardcodedPersian.join(', ')}` : ''}`,
+      hardcodedPersian.length === 0
+    );
+
+    const localizedPrefixes = [
+      'dydx.steps.', 'dydx.order.', 'dydx.fundingHelp.', 'rank.quick.',
+      'signals.horizon.', 'biz.stats.', 'biz.benefits.', 'biz.steps.', 'biz.form.'
+    ];
+    const localizedExactKeys = new Set([
+      'market.swap', 'market.swapOnCorrectNetwork', 'signals.marketAtGlance',
+      'signals.chooseAsset', 'biz.requestPartnership', 'biz.atGlance',
+      'biz.selectTopic', 'biz.whyUs', 'biz.path', 'shop.tab.cards', 'shop.tab.topup'
+    ]);
+    const requiredLocalizedKeys = enKeys.filter((key) =>
+      localizedExactKeys.has(key) || localizedPrefixes.some((prefix) => key.startsWith(prefix))
+    );
+    const localeKeyGaps = [];
+    for (const file of readdirSync('src/i18n/locales').filter((name) => name.endsWith('.json'))) {
+      const locale = JSON.parse(read(join('src/i18n/locales', file)));
+      for (const key of requiredLocalizedKeys) {
+        if (!hasKey(locale, key)) localeKeyGaps.push(`${file}:${key}`);
+      }
+    }
+    t(
+      `new page-copy keys exist in all 12 locales${localeKeyGaps.length ? ` — missing: ${localeKeyGaps.slice(0, 4).join(', ')}` : ''}`,
+      localeKeyGaps.length === 0 && readdirSync('src/i18n/locales').filter((name) => name.endsWith('.json')).length === 12
+    );
+
+    const intentCss = read('src/styles/intent-os.css');
+    t('Intent OS active tabs have a dark text override in light mode',
+      /:root\[data-theme='light'\] \.ios-tabs button\.active\s*\{[^}]*color:\s*#[0-9a-f]{6}/i.test(intentCss));
+    t('Intent OS active glow has a high-contrast light-mode override',
+      /:root\[data-theme='light'\] \.ios-tab-glow\s*\{[^}]*border-color:[^}]*background:/s.test(intentCss));
+    t('Intent OS token and preference fields have light-mode surfaces',
+      /:root\[data-theme='light'\] \.ios-token-flow > label,[\s\S]*:root\[data-theme='light'\] \.ios-field select/.test(intentCss));
+  }
+
   /* --------------------- 6. no false "we take no fee" -------------------- */
   /*
    * REAL BUG: the swap screen said "This app takes no fee" directly above a
@@ -10255,6 +10299,8 @@ export default function run() {
      */
     const icons = read('src/components/ShopIcons.jsx');
     t('the shop has five tabs', (page.match(/\{ id: '[a-z]+', Icon: Icon[A-Za-z]+ \}/g) ?? []).length === 5);
+    t('card and SIM card are separate, simply labelled shop tabs',
+      en.shop?.tab?.cards === 'card' && en.shop?.tab?.topup === 'simcard');
     t('...each carrying an icon component', /<Icon width=/.test(page));
     t('...drawn as real SVG paths', (icons.match(/<svg /g) ?? []).length >= 5);
     t('...that inherit the theme colour', /stroke: 'currentColor'/.test(icons) && !/fill="#/.test(icons));

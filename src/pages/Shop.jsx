@@ -32,12 +32,6 @@ import { PROMO_IMAGES, PROMO_SLIDES } from '../lib/shopImages';
  * a native <select> holding 233 countries, and a flat row of category tags.
  * The owner's review was blunt and every point of it was right:
  *
- *   «خیلی کوچیکه عکس ها را بگتر کن»            — everything too small
- *   «انتخاب کشورها حالت کشویی زشته»            — the dropdown is ugly
- *   «هر کتگوری چندتا ... و بیشتر بره به صفحه ان دسته»  — category previews
- *   «هر خط یک عکس و زیرش خیلی کوچک نباشه»      — one image per row
- *   «تبلیغات ... با عکس نه اینکه فقط نوشتاری باشه»     — picture adverts
- *   «برای هتل و بلیط ... وارد صفحه سایت میشه که همون ها را انتخاب کنی»
  *
  * ─── THE FLIGHT FORM WAS THE WORST OF IT, AND HE DIAGNOSED IT EXACTLY ───────
  * You filled in origin, destination and dates here, and then landed on their
@@ -49,8 +43,6 @@ import { PROMO_IMAGES, PROMO_SLIDES } from '../lib/shopImages';
  * pickers are React components that do not hydrate from query parameters, so
  * `?departure_date=` genuinely does nothing.
  *
- * His own alternative is the right answer: «اگر نمیتونی بیاری بهترین های مقصد
- * و مبدا را بزار». Real routes and cities, real photographs, one tap. What
  * DOES survive into their page is the PATH — verified live that
  * /en/flights/new_york-to-london opens with JFK and LHR already selected, and
  * /en/stays/ae/dubai opens on Dubai. So a tap lands somewhere already
@@ -99,7 +91,6 @@ function catLabel(t, id) {
 /**
  * The restrictions, as a folded list rather than one long paragraph.
  *
- * Asked for: «محدودیت ها را با باز شونده بنویس کاملتر کن» — fuller, and in a
  * collapsible. Five separate facts read far better than one block: the
  * country list, the region lock, refunds, delivery, and who actually takes
  * the money. Each is one line, which is the only way anybody reads them.
@@ -140,7 +131,6 @@ export default function Shop() {
 
   /*
    * ─── OPEN INSIDE THE APP ────────────────────────────────────────────────
-   * Asked for: «امکان داره در خود اپ باز شه بهتره بخصوص در اپ».
    *
    * `openUrl` was already in the codebase and this screen simply was not
    * using it — every shop link went out through window.open and kicked the
@@ -496,8 +486,6 @@ export default function Shop() {
             <>
               {/*
                 ─── CATEGORY PREVIEWS ───────────────────────────────────────
-                «هر کتگوری چندتا به صورت ورتیکال باشد و بیشتر بره به صفحه ان
-                دسته» — a few per category, and "more" opens that category.
               */}
               {categories.map((c) => {
                 const list = rows.filter((r) => inCat(r, c.id));
@@ -505,7 +493,6 @@ export default function Shop() {
                 return (
                   <section key={c.id}>
                     {/*
-                      «برای هر کتگوری پر رنگ تر باشه عنوانش» — these were 11px
                       grey uppercase labels that disappeared between the rails.
                       Now 16px at full contrast with an accent bar, so the eye
                       finds the section boundary while scrolling past.
