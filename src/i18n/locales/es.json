@@ -515,5 +515,8 @@
       "twap": "Nuevo TWAP",
       "rebalance": "Nuevo reequilibrio"
     }
+  },
+  "bridge": {
+    "emptyHint": "Introduce un importe para ver la mejor ruta y sus comisiones."
   }
 }

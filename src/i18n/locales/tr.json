@@ -515,5 +515,8 @@
       "twap": "Yeni TWAP",
       "rebalance": "Yeni dengeleme"
     }
+  },
+  "bridge": {
+    "emptyHint": "En iyi rotayı ve ücretleri görmek için bir tutar girin."
   }
 }

@@ -515,5 +515,8 @@
       "twap": "新建 TWAP",
       "rebalance": "新建再平衡"
     }
+  },
+  "bridge": {
+    "emptyHint": "输入金额以查看最佳路径和费用。"
   }
 }

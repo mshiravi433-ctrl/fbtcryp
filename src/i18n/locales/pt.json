@@ -515,5 +515,8 @@
       "twap": "Novo TWAP",
       "rebalance": "Novo reequilíbrio"
     }
+  },
+  "bridge": {
+    "emptyHint": "Introduza um valor para ver a melhor rota e as suas taxas."
   }
 }

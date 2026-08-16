@@ -409,4 +409,16 @@ export default {
     id: 'Belum ada yang mencatat skor. Lakukan satu pertukaran atau check-in harian dan nama Anda jadi yang pertama.',
     pt: 'Ainda ninguém publicou uma pontuação. Faça uma troca ou o registo diário e será o primeiro nome deste quadro.'
   },
+  /* -------------------------------- bridge ----------------------------- */
+  'bridge.emptyHint': {
+    zh: '输入金额以查看最佳路径和费用。',
+    hi: 'सर्वोत्तम मार्ग और शुल्क देखने के लिए राशि दर्ज करें।',
+    es: 'Introduce un importe para ver la mejor ruta y sus comisiones.',
+    fr: 'Saisissez un montant pour voir le meilleur itinéraire et ses frais.',
+    ru: 'Введите сумму, чтобы увидеть лучший маршрут и комиссии.',
+    tr: 'En iyi rotayı ve ücretleri görmek için bir tutar girin.',
+    ur: 'بہترین راستہ اور اس کی فیس دیکھنے کے لیے رقم درج کریں۔',
+    id: 'Masukkan jumlah untuk melihat rute terbaik dan biayanya.',
+    pt: 'Introduza um valor para ver a melhor rota e as suas taxas.'
+  },
 };

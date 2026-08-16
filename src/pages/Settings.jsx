@@ -730,17 +730,53 @@ export default function Settings() {
             synced (the prompt is about this device's choice).
           */}
           {telemetryPromptVisible && !s.contributeTelemetry && (
-            <div className="card card-soft row-between" style={{ padding: '10px 12px', marginBottom: 8, borderRadius: 12 }}>
-              <span className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, flex: 1 }}>
+            /*
+             * The prompt is a quiet inline line, never a modal. The text runs
+             * FULL-WIDTH below a small corner `×`, so a long Persian sentence
+             * wraps as a normal paragraph instead of being squeezed into a
+             * narrow flex column next to the close button (which is what made
+             * the box grow tall and the words break one under another).
+             */
+            <div
+              style={{
+                position: 'relative',
+                padding: '11px 13px',
+                marginBottom: 8,
+                borderRadius: 12,
+                border: '1px solid var(--line)',
+                background: 'var(--bg-raised)'
+              }}
+            >
+              <p
+                className="faint"
+                style={{ fontSize: 11.5, lineHeight: 1.85, margin: 0, paddingInlineEnd: 26, textWrap: 'pretty' }}
+              >
                 {t('settings.telemetryPrompt')}
-              </span>
+              </p>
               <button
                 type="button"
-                className="btn btn-ghost"
-                style={{ minHeight: 30, padding: '4px 10px', fontSize: 11 }}
+                aria-label={t('common.close')}
+                title={t('common.close')}
                 onClick={dismissTelemetryPrompt}
+                style={{
+                  position: 'absolute',
+                  top: 7,
+                  insetInlineEnd: 7,
+                  width: 26,
+                  height: 26,
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: 8,
+                  background: 'transparent',
+                  color: 'var(--text-3)',
+                  fontSize: 17,
+                  lineHeight: 1,
+                  cursor: 'pointer'
+                }}
               >
-                {t('common.close')}
+                ×
               </button>
             </div>
           )}

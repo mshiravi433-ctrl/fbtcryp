@@ -515,5 +515,8 @@
       "twap": "TWAP baru",
       "rebalance": "Penyeimbangan baru"
     }
+  },
+  "bridge": {
+    "emptyHint": "Masukkan jumlah untuk melihat rute terbaik dan biayanya."
   }
 }
