@@ -1,0 +1,108 @@
+/* ─── Swap flicker / input death / Android jump fixes ─────────────── */
+
+.swap-ticket {
+  /* Contain layout so backdrop-filter doesn't cause reflow of whole page */
+  contain: layout style;
+  /* Prevent transform creating containing block for fixed */
+  transform: none !important;
+}
+
+/* Isolated input: no border-box shift on focus */
+.swap-amount-input {
+  background: transparent;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 16px; /* 16px stops iOS zoom */
+  padding: 12px 4px;
+  min-height: 44px;
+  width: 100%;
+}
+.swap-amount-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Output field fixed height to avoid layout shift when skeleton <-> number */
+.swap-output-field {
+  min-height: 44px;
+}
+
+/* Quote box: no height animation, just opacity. Reserve space via min-height on wrapper */
+.swap-quote-wrap {
+  /* Keep layout stable: if no quote, zero height is okay because we don't want empty gap large,
+     but when quote appears we don't animate height, so no flicker */
+  transition: none;
+}
+.swap-quote-box {
+  animation: swap-quote-in 0.18s ease;
+}
+@keyframes swap-quote-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swap-quote-box { animation: none; }
+}
+
+/* Feedback area: keep min-height so error appearing doesn't shift CTA drastically */
+.swap-feedback-area {
+  min-height: 0;
+}
+
+/* Native: kill heavy effects */
+:root[data-native='true'] .swap-ticket {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-native='true'] .swap-ticket .lab-aurora,
+:root[data-native='true'] .swap-ticket .sheen {
+  display: none !important;
+}
+:root[data-native='true'] .swap-ticket::before {
+  display: none !important;
+}
+
+/* Also when reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .swap-ticket .lab-aurora,
+  .swap-ticket .sheen {
+    animation: none !important;
+    display: none !important;
+  }
+  .swap-ticket::before {
+    display: none !important;
+  }
+}
+
+/* Android keyboard: when input focused, hide bottom nav to avoid jump */
+body.swap-input-focused .bottom-nav,
+body.swap-input-focused .nav-centre,
+body.swap-input-focused .ap,
+body.swap-input-focused .radio-pill {
+  transform: translateY(140%) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: transform 0.22s ease, opacity 0.18s ease;
+}
+
+/* Prevent page scroll jump when keyboard opens: make app-shell not use dvh inside swap */
+body.swap-input-focused .app-shell {
+  min-height: 100% !important;
+}
+
+/* Ensure swap ticket doesn't use dvh */
+.swap-ticket {
+  min-height: 0;
+}
+
+/* Disable flip button rotate animation on native to save compositor */
+:root[data-native='true'] .swap-flip {
+  transition: none !important;
+}
+
+/* Skeleton must not cause width jump */
+.swap-ticket .skel {
+  width: 70px;
+}

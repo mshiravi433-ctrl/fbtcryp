@@ -11481,5 +11481,33 @@ export default function run() {
       /NEWS_TABS = \[[^\]]*'calm'/.test(read('src/pages/News.jsx')) && /tab === 'calm'/.test(read('src/pages/News.jsx')));
   }
 
+  /* ---- 106. swap flicker / input death / Android jump fix ---------------- */
+  {
+    const swap = read('src/pages/Swap.jsx');
+    const swapCss = read('src/styles/swap-fix.css');
+    const labCss = read('src/styles/lab-modern.css');
+    const indexCss = read('src/index.css');
+
+    // Input must be text with decimal mode, not number, to avoid Android re-layout
+    t('swap amount input uses type=\"text\" not number', /type=\"text\"/.test(swap) && /inputMode=\"decimal\"/.test(swap));
+    t('swap amount input is isolated memo component', /SwapAmountInput/.test(swap) && /memo\(function SwapAmountInput/.test(swap) || /const SwapAmountInput = memo/.test(swap));
+    // Debounce + abort pattern
+    t('swap quoting uses AbortController and debounce', /AbortController/.test(swap) && /380/.test(swap) && /quoteTimerRef/.test(swap));
+    t('swap quoting guards against race with seq', /quoteSeq/.test(swap) && /seq !== quoteSeq/.test(swap));
+    // No height:auto animation for quote box (was flicker source)
+    t('swap quote does not animate height:auto', !/height:\s*'auto'/.test(swap) || /swap-quote-box/.test(swap));
+    // Ticket is not motion.section with backdrop-filter heavy animation
+    t('swap ticket is plain section not motion.section', /<section className.*swap-ticket/.test(swap));
+    // Native disables heavy blur
+    t('swap fix css disables backdrop-filter on native', /\[data-native='true'\] \.swap-ticket/.test(swapCss) && /backdrop-filter:\s*none/.test(swapCss));
+    t('swap fix css hides aurora on native', /lab-aurora/.test(swapCss) && /display:\s*none/.test(swapCss));
+    // Android keyboard handling hides bottom nav
+    t('swap focuses hides bottom nav to avoid jump', /swap-input-focused/.test(swapCss) && /\.bottom-nav/.test(swapCss));
+    // AnimatedNumber respects reduced motion / native
+    t('swap output respects still/native for AnimatedNumber', /shouldAnimateNumbers/.test(swap) || /still/.test(swap));
+    // Min-height reserved for output
+    t('swap output has fixed min-height', /swap-output-field/.test(swap) && /minHeight/.test(swap) || /min-height/.test(swapCss));
+  }
+
   return rows;
 }
