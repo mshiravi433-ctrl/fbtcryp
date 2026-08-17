@@ -26,6 +26,15 @@ import { JSDOM, VirtualConsole } from 'jsdom';
  */
 process.env.RATE_LIMIT = process.env.RATE_LIMIT || '100000';
 process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT || '3';
+/*
+ * The same trap, one budget over: the intent probe walks the full
+ * claim/dispute/adjudication/cross-chain lifecycle and exceeds the
+ * production settlement budget of 20/min — which it raises to 100 BEFORE
+ * importing server/app.js. Now that the calm probe (0d) boots the shared
+ * app earlier in the process, the budget must be pinned HERE or whichever
+ * probe imports app.js first decides it for everyone.
+ */
+process.env.INTENT_SETTLEMENT_RATE_LIMIT = process.env.INTENT_SETTLEMENT_RATE_LIMIT || '100';
 
 const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -91,6 +100,24 @@ console.log('▸ checking WalletConnect behavior guards…');
 {
   const { default: runWcConnect } = await import('./wc-connect-probe.mjs');
   report('WalletConnect behavior', runWcConnect());
+}
+
+/* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
+/* Real HTTP against the real route with a stubbed archive.org: the bug was
+   an empty catalogue being cached for six hours while the panel rendered
+   nothing. Locks both ends of that failure. */
+console.log('▸ probing the calm music endpoint and filters…');
+{
+  const { default: calmRows } = await import('./calm-probe.mjs');
+  report('calm music', calmRows);
+}
+
+/* ------------------------------ 0e. safe refresh ---------------------------- */
+/* The refresh contract: single-flight, guard-respecting, storage-untouching. */
+console.log('▸ probing the safe-refresh contract…');
+{
+  const { default: refreshRows } = await import('./refresh-probe.mjs');
+  report('safe refresh', refreshRows);
 }
 
 /* ------------------------------ 1. units -------------------------------- */

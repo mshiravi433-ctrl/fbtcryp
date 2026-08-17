@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChart,
   getOhlc, getCoin, getGlobal, getMarkets, getTrending, searchCoins } from '../lib/api';
+import { onSoftRefresh } from '../lib/refresh';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { vsOf } from '../lib/currency';
 
@@ -42,10 +43,19 @@ export function usePoll(fn, deps = [], intervalMs = 30000) {
     };
     document.addEventListener('visibilitychange', onVisible);
 
+    /*
+     * Soft refresh: every mounted poll participates, through the SAME run()
+     * its interval uses. No reload, no remount, no second fetch beyond the
+     * one the user asked for — and a subscriber unmounting mid-cycle (route
+     * change) is safe because run() checks alive.
+     */
+    const offBus = onSoftRefresh(run);
+
     return () => {
       alive.current = false;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
+      offBus();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, intervalMs, run]);

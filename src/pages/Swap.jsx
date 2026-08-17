@@ -21,6 +21,7 @@ import {
   tokenKey
 } from '../lib/tokenLists';
 import { notifyTrade, primeAudio } from '../lib/notify';
+import { holdRefreshGuard } from '../lib/refresh';
 import {
   DEFAULT_DEADLINE_MIN,
   DEFAULT_SLIPPAGE,
@@ -343,6 +344,26 @@ export default function Swap() {
   const [policyBlock, setPolicyBlock] = useState(null);
   const [mevProtect, setMevProtect] = useState(false);
   const still = useStill();
+
+  /*
+   * REFRESH GUARD — a swap between "preparing" and "pending" owns the screen:
+   * a refresh (or worse, a reload) at that moment could strand an approval or
+   * leave the user unable to tell whether they signed. While any of those
+   * stages is active the header Refresh button is disabled and any
+   * programmatic refresh request is refused (lib/refresh.js).
+   *
+   * Guard by STAGE, not by try/finally in the async flows: the flows re-enter
+   * through quoting → signing → pending on the same attempt, and a ref-counted
+   * effect survives re-renders without releasing early.
+   */
+  const txGuardBusy = Boolean(
+    txState && ['preparing', 'quoting', 'signing', 'approving', 'pending'].includes(txState.stage)
+  );
+  useEffect(() => {
+    if (!txGuardBusy) return undefined;
+    const guard = holdRefreshGuard('swap-tx');
+    return () => guard.release();
+  }, [txGuardBusy]);
 
   const fromSym = fromToken?.symbol;
   const toSym = toToken?.symbol;

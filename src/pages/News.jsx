@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
@@ -14,6 +14,7 @@ import '../styles/whales.css';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { getNews } from '../lib/news';
+import { onSoftRefresh } from '../lib/refresh';
 import { timeAgo } from '../lib/format';
 import { IconChevronLeft, IconExternal, IconNews } from '../components/Icons';
 import { AnimatedBell, AnimatedSearch, useStill } from '../components/AnimatedIcon';
@@ -52,6 +53,13 @@ const DESK_CATEGORIES = ['all', 'regional', 'policy', 'events', 'future', 'lang'
 const TOPIC_CATEGORIES = ['bitcoin', 'ethereum', 'defi'];
 const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
 
+/*
+ * The six top-level tabs, in render order. Shared between the button row and
+ * the ?tab= deep link so a URL like #/news?tab=calm cannot open a tab that
+ * does not exist, and the row and the URL cannot drift apart.
+ */
+const NEWS_TABS = ['read', 'whales', 'community', 'listen', 'insights', 'calm'];
+
 const CATEGORY_TERMS = {
   bitcoin: ['bitcoin', 'btc', 'satoshi', 'halving'],
   ethereum: ['ethereum', 'eth', 'vitalik', 'layer 2', 'l2'],
@@ -80,7 +88,36 @@ export default function News() {
    * A tab makes it one tap and, more usefully, makes it discoverable: the
    * label is visible before any scrolling happens.
    */
-  const [tab, setTab] = useState('read');
+  /*
+   * The active tab is mirrored into the URL search (?tab=calm) so a refresh —
+   * including the hard WebView reload the Android app can be given — returns
+   * the user to the tab they were reading, and so a shared link to the radio
+   * or the calm music lands there instead of on headlines.
+   *
+   * HashRouter keeps this query inside the hash (#/news?tab=calm), which is
+   * exactly what survives a reload intact.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTabState] = useState(() => {
+    const fromUrl = searchParams.get('tab');
+    return NEWS_TABS.includes(fromUrl) ? fromUrl : 'read';
+  });
+  const setTab = useCallback(
+    (next) => {
+      if (!NEWS_TABS.includes(next)) return;
+      setTabState(next);
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next === 'read') p.delete('tab');
+          else p.set('tab', next);
+          return p;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
   const [notifyOn, setNotifyOn] = useState(() => getNotifySettings().news);
   // Bumped on each toggle so the bell re-rings, confirming the tap.
   const [ring, setRing] = useState(0);
@@ -102,6 +139,17 @@ export default function News() {
     load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i18n.language]);
+
+  /*
+   * Soft refresh. The header Refresh button re-runs the headline fetch with
+   * the cache forced off — no reload, no remount, and the active tab (and
+   * any playing audio, owned by RadioDock above the router) is untouched.
+   * `load` closes over the current coins/language, so the subscription reads
+   * a stable ref rather than re-subscribing on every render.
+   */
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => onSoftRefresh(() => loadRef.current(true)), []);
 
   const items = useMemo(() => {
     let out = feed.items ?? [];
@@ -189,7 +237,7 @@ export default function News() {
           simply what people are saying about the headlines above it, which
           is what it actually is.
         */}
-        {['read', 'whales', 'community', 'listen', 'insights', 'calm'].map((k) => (
+        {NEWS_TABS.map((k) => (
           <button
             key={k}
             className={tab === k ? 'active' : ''}

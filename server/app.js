@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { withCache, cacheStats, memoryStore } from './cache.js';
-import { blobConfigured, withPersistentCache } from './blobCache.js';
+import { blobConfigured, blobSet, withPersistentCache } from './blobCache.js';
 import {
   fetchChart,
   fetchCoinDetail,
@@ -27,7 +27,7 @@ import {
 } from './providers.js';
 import { telegramAuth } from './telegramAuth.js';
 import { fetchAudio } from './audio.js';
-import { fetchCalm } from './calm.js';
+import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
 import { cachedWhales } from './whales.js';
@@ -1971,19 +1971,82 @@ app.get('/api/audio', async (_req, res) => {
  * public-domain music catalogue from 2008 does not change at all, so there is
  * nothing to gain from asking more often.
  */
-app.get('/api/calm', async (_req, res) => {
+app.get('/api/calm', async (req, res) => {
   try {
+    /*
+     * ?force=1 — bypass the long-lived READ (not the write).
+     *
+     * Exists for one incident shape: an empty `{items: []}` generation was
+     * cached for six hours and the tab went dark for everyone until expiry.
+     * The refresh button and the Retry affordance pass it so "try again" can
+     * actually reach the upstream instead of re-serving a poisoned cache.
+     */
+    const force = req.query.force === '1';
+
+    /*
+     * An EMPTY catalogue is never cached.
+     *
+     * `fetchCalm` degrades per-mood with allSettled, so a full archive.org
+     * outage used to produce a VALID-looking `{ items: [], moodsOk: 0 }` —
+     * which withPersistentCache then pinned to memory AND Blob for six
+     * hours. The fix is upstream-shaped: throw here, before either cache
+     * layer sees it, so the next request regenerates and the client receives
+     * a real 502 it can show as an error with a Retry button, instead of an
+     * honest-looking empty state that hides a failure.
+     */
+    const produce = async () => {
+      const value = await fetchCalm();
+      if (!calmResultIsUsable(value)) {
+        throw new Error(`CALM_EMPTY: 0 tracks (moods ${value?.moodsOk ?? 0}/${value?.moodsTotal ?? '?'})`);
+      }
+      return value;
+    };
+
+    const TTL = 6 * 3600_000;
+    const CACHE_HEADERS = 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400';
+    /* Write back BOTH tiers so the next reader gets the fix as well. The blob
+       write is fire-and-forget, exactly as withPersistentCache does it: a
+       cache write must never fail the request it caches. */
+    const writeBack = (value) => {
+      memoryStore?.set('calm', { value, expires: Date.now() + TTL, at: Date.now() });
+      blobSet('calm', value, TTL).catch(() => {});
+    };
+
+    if (force) {
+      const value = await produce();
+      writeBack(value);
+      res.set('cache-control', CACHE_HEADERS);
+      res.set('x-cache', 'BYPASS');
+      return res.json(value);
+    }
+
     const { value, cached, tier } = await withPersistentCache(
       'calm',
-      6 * 3600_000,
-      fetchCalm,
+      TTL,
+      produce,
       memoryStore
     );
-    res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
+
+    /*
+     * A POISONED legacy entry: the pre-fix code cached empty catalogues for
+     * six hours (Blob survives deploys), which is what emptied the tab for
+     * everyone. A cached-but-empty answer must be regenerated once on read,
+     * not loyally re-served — deploys do not flush Blob, so this check is
+     * the only thing that evicts it.
+     */
+    if (!calmResultIsUsable(value)) {
+      const fresh = await produce();
+      writeBack(fresh);
+      res.set('cache-control', CACHE_HEADERS);
+      res.set('x-cache', 'REGENERATED');
+      return res.json(fresh);
+    }
+
+    res.set('cache-control', CACHE_HEADERS);
     if (cached) res.set('x-cache', tier.toUpperCase());
     return res.json(value);
   } catch (err) {
-    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+    return res.status(502).json({ error: 'CALM_UNAVAILABLE', detail: String(err.message).slice(0, 200) });
   }
 });
 

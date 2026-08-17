@@ -499,7 +499,10 @@
     "payUnderpaid": "That is below the cheapest plan",
     "orderErr.BAD_SLICES": "Pick between 2 and 24 slices",
     "orderErr.BAD_WINDOW": "Pick a window between 15 minutes and 7 days",
-    "orderErr.BAD_DRIFT": "Pick a drift between 2% and 50%"
+    "orderErr.BAD_DRIFT": "Pick a drift between 2% and 50%",
+    "walletSessionRestored": "Wallet session restored",
+    "walletSessionExpired": "Wallet session ended",
+    "refreshFailed": "Refresh failed — try again"
   },
   "swap": {
     "title": "Swap",
@@ -2897,7 +2900,9 @@
     "why2": "The two most expensive habits in trading are selling in a panic and buying out of frustration. Neither is a mistake of analysis; both are what happens when you decide while your pulse is up. If a few minutes of quiet stops one impulsive trade, this tab has paid for itself many times over.",
     "why3": "So this is not entertainment. Put it on before you open a position, not instead of reading the chart. Nothing here is advice, and music will not tell you what a market is going to do.",
     "source": "Open the source page",
-    "credit": "Every track is Public Domain, CC BY or CC BY-SA — freely reusable, with the artist named on each row as the licence requires. Streamed from the Internet Archive's own servers; we host nothing and change nothing."
+    "credit": "Every track is Public Domain, CC BY or CC BY-SA — freely reusable, with the artist named on each row as the licence requires. Streamed from the Internet Archive's own servers; we host nothing and change nothing.",
+    "error": "Couldn't load the calm music. Check your connection and try again.",
+    "empty": "No calm tracks right now — new items appear as the catalogue refreshes."
   },
   "thor": {
     "whatTitle": "What a native swap is, and how it differs from bridging",
@@ -3961,5 +3966,9 @@
     "noPrice": "no price",
     "estimated": "estimate",
     "disclaimer": "Events are sourced from public RPCs and block explorers. Address labels are shown only when our curated registry recognises them; unknown senders and recipients stay \"Unknown\". Fiat values are estimates using current market prices."
+  },
+  "refresh": {
+    "refreshing": "Refreshing…",
+    "busyHint": "Finish or cancel the current wallet action first"
   }
 }

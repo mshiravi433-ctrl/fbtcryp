@@ -5,6 +5,8 @@ import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { isNativeShell, publicAppUrl } from '../lib/nativeShell';
 import { isIOS as isIOSDevice } from '../lib/platform';
+import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
+import { wcEvent } from '../lib/wcTrace';
 
 /*
  * WALLETCONNECT PROJECT ID — a constant in source, deliberately NOT an env var.
@@ -73,6 +75,13 @@ export function WalletProvider({ children }) {
   // Forwarding ref so callbacks defined early can call the latest disconnect()
   // without creating a useCallback cycle through the deps array.
   const disconnectRef = useRef(() => {});
+  /**
+   * Render-time mirror of `address` for event handlers that must not close
+   * over a stale copy (the visibilitychange session-restore path). Same
+   * pattern as disconnectRef.
+   */
+  const addressRef = useRef(null);
+  addressRef.current = address;
 
   const chain = EVM_CHAINS[chainId] ?? EVM_CHAINS[DEFAULT_CHAIN];
 
@@ -184,6 +193,9 @@ export function WalletProvider({ children }) {
   const connectInjected = useCallback(async (rdns) => {
     setError(null);
     setConnecting(true);
+    /* Same contract as the WalletConnect path: refresh/reload stays frozen
+       while a wallet approval screen may be up. */
+    const connectGuard = holdRefreshGuard('injected-connect');
     try {
       // Clean up any prior listeners before reattaching.
       detachInjectedListeners();
@@ -230,175 +242,256 @@ export function WalletProvider({ children }) {
       return false;
     } finally {
       setConnecting(false);
+      connectGuard.release();
     }
   }, [attachInjectedListeners, detachInjectedListeners, refreshBalance]);
 
   /* --------------------------- WalletConnect v2 -------------------------- */
 
+  /**
+   * The init config shared by connect AND session restore.
+   *
+   * Both paths MUST initialise with byte-identical metadata, chains and modal
+   * options: a session restored with different metadata than it was created
+   * with is exactly the kind of identity drift wallets (Trust especially)
+   * re-verify against, and a mismatch there is a source of the wallet-side
+   * re-prompts and silent session drops this context keeps hunting.
+   */
+  const buildWcInitConfig = useCallback(() => {
+    /* One canonical identity for every wallet prompt. publicAppUrl rejects
+       the retired lawpoetics.ir env value; using the runtime origin here
+       made Solana and EVM prompts disagree about which site was connecting. */
+    const publicUrl = publicAppUrl('/').replace(/\/$/, '');
+    const ios = isIOSDevice();
+    return {
+      projectId: WC_PROJECT_ID,
+      chains: [DEFAULT_CHAIN],
+      optionalChains: Object.keys(EVM_CHAINS).map(Number),
+      showQrModal: true,
+      /* MOBILE: on a phone the wallet is another app on the SAME device, so
+         there is no second screen to point a camera at. The modal therefore
+         renders quick "open this wallet" buttons that deep-link into each
+         wallet app; the QR code stays as the fallback for a second device. */
+      optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
+      qrModalOptions: {
+        themeMode: 'dark',
+        enableExplorer: true,
+        explorerExcludedWalletIds: 'ALL',
+        explorerRecommendedWalletIds: [
+          'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+          '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust
+          '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369', // Rainbow
+          'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase Wallet
+          '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927'  // Ledger Live
+        ],
+        /*
+         * iOS: give the modal the exact native + universal links for the
+         * wallets we surface, so tapping one opens that wallet directly
+         * (universal links also fall back to the App Store when the app is
+         * missing). Without this the modal falls back to explorer data.
+         */
+        ...(ios
+          ? {
+              mobileWallets: [
+                {
+                  id: 'metamask',
+                  name: 'MetaMask',
+                  links: {
+                    native: 'metamask://',
+                    universal: 'https://metamask.app.link/'
+                  }
+                },
+                {
+                  id: 'trust',
+                  name: 'Trust Wallet',
+                  links: {
+                    native: 'trust://',
+                    universal: 'https://link.trustwallet.com/'
+                  }
+                },
+                {
+                  id: 'rainbow',
+                  name: 'Rainbow',
+                  links: {
+                    native: 'rainbow://',
+                    universal: 'https://rnbwapp.com/'
+                  }
+                }
+              ]
+            }
+          : {})
+      },
+      metadata: {
+        name: 'FBT Swap',
+        description: 'Non-custodial decentralized exchange',
+        url: publicUrl,
+        icons: [`${publicUrl}/icon-512.png`],
+        redirect: {
+          /*
+           * `native` must ONLY be set inside the packaged app. It was sent
+           * unconditionally, so a wallet approving a WEB session on Android
+           * would try to bounce back to ir.fbtswap.app:// — an intent that
+           * either fails (APK not installed) or yanks the user out of the
+           * browser tab they were connecting from. On iOS there is no app
+           * scheme registered at all (this repo has no ios/ folder), so
+           * only the universal link applies there in every case.
+           */
+          native: isNativeShell() && !ios ? 'ir.fbtswap.app://' : undefined,
+          universal: publicUrl
+        }
+      }
+    };
+  }, []);
+
+  /**
+   * Repair the SignClient's metadata in place.
+   *
+   * The SDK runs our metadata through populateAppMetadata(), which OVERWRITES
+   * `metadata.url` with window.location.origin whenever the two hosts differ.
+   * Inside the packaged app that origin is `https://localhost`; on a preview
+   * host it is that preview URL. Either way the wallet (a separate app)
+   * cannot fetch the URL, so MetaMask rejects with "Invalid URL" and Trust
+   * simply fails to pair. Point the live sign client back at the public
+   * origin — this is the value that lands in the session proposal the wallet
+   * renders. Idempotent, so both connect and restore call it.
+   */
+  const repairSignClientMetadata = useCallback((wc) => {
+    try {
+      const publicUrl = publicAppUrl('/').replace(/\/$/, '');
+      const signClient = wc?.signer?.client;
+      if (signClient?.metadata) {
+        signClient.metadata.url = publicUrl;
+        signClient.metadata.icons = [`${publicUrl}/icon-512.png`];
+      }
+    } catch {
+      /* non-fatal: fall back to the SDK-derived metadata */
+    }
+  }, []);
+
+  /**
+   * Register the WC provider listeners exactly ONCE per provider instance.
+   *
+   * Every handler is instance-scoped: it checks `wcRef.current === wc` BEFORE
+   * touching state, so a STALE provider (the one we replaced during a
+   * reconnect, or an init from a previous session restore racing a fresh
+   * connect) can never wipe the live connection. The "Trust Wallet
+   * disconnects itself a few minutes later" class of bug lives precisely in
+   * handlers that don't do this check.
+   *
+   * accountsChanged policy, per transport:
+   *   • injected (EIP-1193): [] means "the user revoked this site" — clear.
+   *   • WalletConnect: an empty array is emitted spuriously by some wallets
+   *     while they re-derive accounts (Trust does this around chain moves).
+   *     It is NOT authoritative — session_delete/session_expire are. So a
+   *     transient [] must not tear the session down.
+   */
+  const attachWcListeners = useCallback((wc) => {
+    const onDisconnect = () => {
+      wcEvent('disconnect');
+      if (wcRef.current !== wc) return;
+      disconnectRef.current();
+    };
+    const onAccountsChanged = (accs) => {
+      if (wcRef.current !== wc) return;
+      if (accs?.[0]) setAddress(accs[0]);
+      /* transient empty accountsChanged on WC: keep the session */
+    };
+    const onChainChanged = (cid) => {
+      if (wcRef.current !== wc) return;
+      setChainId(Number(cid));
+      wcEvent('chain_changed', Number(cid));
+    };
+    const onSessionDelete = () => {
+      wcEvent('session_delete');
+      if (wcRef.current !== wc) return;
+      disconnectRef.current();
+    };
+    const onSessionExpire = () => {
+      wcEvent('session_expire');
+      if (wcRef.current !== wc) return;
+      /* The session really ended at the wallet/relay layer — say so instead
+         of quietly reverting to "Connect wallet". */
+      try { useAppStore.getState().notify('walletSessionExpired', 'info'); } catch { /* toasts are optional */ }
+      disconnectRef.current();
+    };
+    const onSessionEvent = () => {
+      if (wcRef.current !== wc) return;
+      wcEvent('session_event');
+    };
+    const onDisplayUri = () => wcEvent('display_uri');
+    const onProposal = () => wcEvent('session_proposal');
+    /* A relay drop is transient: TRACE it, never translate it into a session
+       teardown. Only session_delete / session_expire / explicit disconnect
+       may clear a connection — that is the whole policy. */
+    const onRelayConnect = () => wcEvent('relay_connect');
+    const onRelayDisconnect = () => wcEvent('relay_disconnect');
+
+    wc.on('disconnect', onDisconnect);
+    wc.on('accountsChanged', onAccountsChanged);
+    wc.on('chainChanged', onChainChanged);
+    wc.on('session_delete', onSessionDelete);
+    wc.signer?.client?.on?.('session_expire', onSessionExpire);
+    wc.signer?.client?.on?.('session_event', onSessionEvent);
+    wc.signer?.client?.on?.('display_uri', onDisplayUri);
+    wc.signer?.client?.on?.('session_proposal', onProposal);
+    wc.signer?.client?.core?.relayer?.on?.('relayer_connect', onRelayConnect);
+    wc.signer?.client?.core?.relayer?.on?.('relayer_disconnect', onRelayDisconnect);
+
+    return () => {
+      try { wc.removeListener('disconnect', onDisconnect); } catch { /* noop */ }
+      try { wc.removeListener('accountsChanged', onAccountsChanged); } catch { /* noop */ }
+      try { wc.removeListener('chainChanged', onChainChanged); } catch { /* noop */ }
+      try { wc.removeListener('session_delete', onSessionDelete); } catch { /* noop */ }
+      try { wc.signer?.client?.off?.('session_expire', onSessionExpire); } catch { /* noop */ }
+      try { wc.signer?.client?.off?.('session_event', onSessionEvent); } catch { /* noop */ }
+      try { wc.signer?.client?.off?.('display_uri', onDisplayUri); } catch { /* noop */ }
+      try { wc.signer?.client?.off?.('session_proposal', onProposal); } catch { /* noop */ }
+      try { wc.signer?.client?.core?.relayer?.off?.('relayer_connect', onRelayConnect); } catch { /* noop */ }
+      try { wc.signer?.client?.core?.relayer?.off?.('relayer_disconnect', onRelayDisconnect); } catch { /* noop */ }
+    };
+  }, []);
+
   const connectWalletConnect = useCallback(async () => {
-    const projectId = WC_PROJECT_ID;
     // Prevent double-init: EthereumProvider.init() creates a new session every
     // time it runs, and rapid double-taps spawned two modals / two pairing URIs.
     if (wcInitingRef.current) return false;
     setError(null);
     setConnecting(true);
     wcInitingRef.current = true;
+    /* Hold the refresh guard for the WHOLE pairing attempt: a refresh while
+       the wallet's approval screen is up would strand the pairing, and a WebView
+       reload at that moment is how sessions die before they exist. */
+    const connectGuard = holdRefreshGuard('wc-connect');
     let wc;
     try {
       const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
       const { BrowserProvider } = await loadEthers();
 
       /*
-       * WALLETCONNECT METADATA — why this is not just window.location.origin.
-       *
-       * Symptom: tapping Connect opened MetaMask, which then refused with an
-       * invalid-URL error instead of showing an approval prompt.
-       *
-       * Two causes, both here:
-       *
-       *  1. `icons` pointed at `/icon.png`, which does not exist — the files
-       *     are icon-192.png and icon-512.png. Wallets fetch this URL to draw
-       *     the connection dialog and reject metadata whose icon 404s.
-       *
-       *  2. Inside the packaged Android app the page is served from
-       *     `https://localhost`, so `window.location.origin` was literally
-       *     "https://localhost". A wallet is a SEPARATE app: that origin means
-       *     the wallet's own device, where nothing is listening. It cannot be
-       *     fetched and cannot be shown to the user as "who is asking for
-       *     permission", so the request is rejected outright.
-       *
-       * The dapp URL must therefore be a publicly reachable origin. We use the
-       * deployed site, falling back to the live origin only when that really
-       * is a public URL. VITE_PUBLIC_URL has no secret in it — this value is
-       * shown to the user by their wallet and is meant to be public.
+       * WALLETCONNECT METADATA — why this is not just window.location.origin:
+       * inside the packaged app the origin is https://localhost, which a wallet
+       * (a SEPARATE app) cannot fetch, so the request is rejected outright; and
+       * an icon URL that 404s is rejected likewise. The canonical URL is built
+       * once in buildWcInitConfig() (publicAppUrl), shared by connect AND
+       * session restore so the two can never drift.
        */
-      /*
-       * The fallback used to be https://fbtcryp.vercel.app, which no longer
-       * resolves — that deployment is gone and now answers DEPLOYMENT_NOT_FOUND.
-       *
-       * That matters more than a dead link: wallets FETCH this URL and its
-       * icon to draw "who is asking to connect". A metadata URL that 404s is
-       * grounds for the wallet to reject the request outright, so if
-       * VITE_PUBLIC_URL were ever unset in a packaged build, every connection
-       * attempt would fail with no obvious cause.
-       *
-       * Pointing at the live domain means the fallback is at least a real
-       * site. VITE_PUBLIC_URL still overrides it for other deployments.
-       */
-      /* One canonical identity for every wallet prompt. publicAppUrl rejects
-         the retired lawpoetics.ir env value; using the runtime origin here
-         made Solana and EVM prompts disagree about which site was connecting. */
-      const publicUrl = publicAppUrl('/').replace(/\/$/, '');
 
-      const ios = isIOSDevice();
-
-      // If there's already a connected instance (stale session), disconnect it
-      // first so we never have two sessions fighting for the same state.
+      // If there's already a connected instance (stale session), remove its
+      // listeners BEFORE disconnecting it: the old instance's 'disconnect'
+      // event must not be allowed to wipe the NEW state this flow is about
+      // to set. Instance-scoped handlers (attachWcListeners) are the second
+      // line of defence; removing them first is the deterministic one.
       if (wcRef.current) {
+        try { wcListenersRef.current?.cleanup?.(); } catch { /* noop */ }
+        wcListenersRef.current = null;
         try { await wcRef.current.disconnect(); } catch { /* noop */ }
         wcRef.current = null;
       }
-      wc = await EthereumProvider.init({
-        projectId,
-        chains: [DEFAULT_CHAIN],
-        optionalChains: Object.keys(EVM_CHAINS).map(Number),
-        showQrModal: true,
-        /*
-         * MOBILE: on a phone the wallet is another app on the SAME device, so
-         * there is no second screen to point a camera at. The modal therefore
-         * renders quick "open this wallet" buttons that deep-link into each
-         * wallet app; the QR code stays as the fallback for a second device.
-         */
-        optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
-        qrModalOptions: {
-          themeMode: 'dark',
-          enableExplorer: true,
-          explorerExcludedWalletIds: 'ALL',
-          explorerRecommendedWalletIds: [
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-            '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust
-            '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369', // Rainbow
-            'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase Wallet
-            '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927'  // Ledger Live
-          ],
-          /*
-           * iOS: give the modal the exact native + universal links for the
-           * wallets we surface, so tapping one opens that wallet directly
-           * (universal links also fall back to the App Store when the app is
-           * missing). Without this the modal falls back to explorer data.
-           */
-          ...(ios
-            ? {
-                mobileWallets: [
-                  {
-                    id: 'metamask',
-                    name: 'MetaMask',
-                    links: {
-                      native: 'metamask://',
-                      universal: 'https://metamask.app.link/'
-                    }
-                  },
-                  {
-                    id: 'trust',
-                    name: 'Trust Wallet',
-                    links: {
-                      native: 'trust://',
-                      universal: 'https://link.trustwallet.com/'
-                    }
-                  },
-                  {
-                    id: 'rainbow',
-                    name: 'Rainbow',
-                    links: {
-                      native: 'rainbow://',
-                      universal: 'https://rnbwapp.com/'
-                    }
-                  }
-                ]
-              }
-            : {})
-        },
-        metadata: {
-          name: 'FBT Swap',
-          description: 'Non-custodial decentralized exchange',
-          url: publicUrl,
-          icons: [`${publicUrl}/icon-512.png`],
-          redirect: {
-            /*
-             * `native` must ONLY be set inside the packaged app. It was sent
-             * unconditionally, so a wallet approving a WEB session on Android
-             * would try to bounce back to ir.fbtswap.app:// — an intent that
-             * either fails (APK not installed) or yanks the user out of the
-             * browser tab they were connecting from. On iOS there is no app
-             * scheme registered at all (this repo has no ios/ folder), so
-             * only the universal link applies there in every case.
-             */
-            native: isNativeShell() && !ios ? 'ir.fbtswap.app://' : undefined,
-            universal: publicUrl
-          }
-        }
-      });
+      wc = await EthereumProvider.init(buildWcInitConfig());
+      wcEvent('init');
 
-      /*
-       * The WalletConnect SDK's SignClient runs our `metadata` through
-       * populateAppMetadata(), which OVERWRITES `metadata.url` with
-       * window.location.origin whenever the two hosts differ. Inside the
-       * packaged app that origin is `https://localhost`; on a preview host it
-       * is that preview URL. Either way the wallet (a separate app) cannot
-       * fetch the URL, so MetaMask rejects the request with its "Invalid URL"
-       * error and Trust simply fails to pair. Point the live sign client back
-       * at the public origin immediately before connecting — this is the value
-       * that actually lands in the session proposal the wallet renders.
-       */
-      try {
-        const signClient = wc?.signer?.client;
-        if (signClient?.metadata) {
-          signClient.metadata.url = publicUrl;
-          signClient.metadata.icons = [`${publicUrl}/icon-512.png`];
-        }
-      } catch {
-        /* non-fatal: fall back to the SDK-derived metadata */
-      }
+      /* populateAppMetadata() overwrite repair — see repairSignClientMetadata(). */
+      repairSignClientMetadata(wc);
 
       /*
        * Mobile deep links are handled by the WalletConnect modal itself
@@ -413,22 +506,12 @@ export function WalletProvider({ children }) {
        * mid-pairing, dropping the in-memory client. Let the modal own deep
        * links on every platform instead.
        */
-      let connected = false;
-      const wcListeners = { disconnect: null, accountsChanged: null, chainChanged: null, sessionDelete: null };
-      const cleanupWcListeners = () => {
-        if (!wc) return;
-        try { wc.removeListener('disconnect', wcListeners.disconnect); } catch { /* noop */ }
-        try { wc.removeListener('accountsChanged', wcListeners.accountsChanged); } catch { /* noop */ }
-        try { wc.removeListener('chainChanged', wcListeners.chainChanged); } catch { /* noop */ }
-        try { wc.removeListener('session_delete', wcListeners.sessionDelete); } catch { /* noop */ }
-      };
       try {
         await wc.connect();
-        connected = true;
       } catch (err) {
-        cleanupWcListeners();
         throw err;
       }
+      wcEvent('session_settled');
       const provider = new BrowserProvider(wc, 'any');
       const signer = await provider.getSigner();
 
@@ -443,15 +526,8 @@ export function WalletProvider({ children }) {
       setLocked(false);
       await refreshBalance(await signer.getAddress(), Number(wc.chainId));
 
-      wcListeners.disconnect = () => disconnectRef.current();
-      wcListeners.accountsChanged = (accs) => (accs?.[0] ? setAddress(accs[0]) : disconnectRef.current());
-      wcListeners.chainChanged = (cid) => setChainId(Number(cid));
-      wcListeners.sessionDelete = () => disconnectRef.current();
-      wc.on('disconnect', wcListeners.disconnect);
-      wc.on('accountsChanged', wcListeners.accountsChanged);
-      wc.on('chainChanged', wcListeners.chainChanged);
-      wc.on('session_delete', wcListeners.sessionDelete);
-      wcListenersRef.current = { cleanup: cleanupWcListeners };
+      /* Instance-scoped, exactly-once listeners — see attachWcListeners(). */
+      wcListenersRef.current = { cleanup: attachWcListeners(wc) };
       return true;
     } catch (e) {
       /*
@@ -469,7 +545,19 @@ export function WalletProvider({ children }) {
        *  - "expired": the pairing sat unapproved past its TTL.
        */
       const msg = String(e?.message || '');
-      if (msg.includes('User rejected') || e?.code === 4001) {
+      wcEvent('connect_failed');
+      if (
+        msg.includes('User rejected') ||
+        e?.code === 4001 ||
+        /*
+         * The AppKit modal was CLOSED mid-pairing (user tapped the dimmed
+         * backdrop). The SDK rejects with "Connection request reset. Please
+         * try again." — that is a cancellation, not a failure, and presenting
+         * it as a red "connection failed" invited exactly the mystified
+         * re-taps that made the modal look like it was flickering.
+         */
+        /connection request reset/i.test(msg)
+      ) {
         setError('USER_REJECTED');
       } else if (/origin not allowed|unauthorized|project id/i.test(msg)) {
         setError('WC_ORIGIN_BLOCKED');
@@ -484,9 +572,134 @@ export function WalletProvider({ children }) {
     } finally {
       setConnecting(false);
       wcInitingRef.current = false;
+      connectGuard.release();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshBalance]);
+  }, [attachWcListeners, buildWcInitConfig, repairSignClientMetadata, detachInjectedListeners, refreshBalance]);
+
+  /* ------------------------ WalletConnect session restore ----------------- */
+
+  /**
+   * Re-attach a persisted WalletConnect session WITHOUT a new pairing.
+   *
+   * ─── THE BUG THIS FIXES ────────────────────────────────────────────────
+   * init() only ever ran from the Connect button, so anything that restarted
+   * the WebView — page refresh, Android killing and resuming the app, a hard
+   * refresh after a chunk 404 — left the wallet session in localStorage but
+   * the app showing "not connected". Returning to the app looked EXACTLY like
+   * "Trust Wallet disconnected me by itself". The disconnect was never sent by
+   * the wallet; the app simply never picked the session back up.
+   *
+   * ─── THE COST DISCIPLINE ───────────────────────────────────────────────
+   * EthereumProvider.init() opens a relay WebSocket. Doing that for EVERY
+   * visitor (most of whom have never connected a wallet) would spend the
+   * project's relay quota on nothing. So localStorage is probed FIRST: the
+   * SignClient persists sessions under `wc@2:client:0.3//session`; when that
+   * key is absent or empty, restore is a no-op that never touches the
+   * network. The probe is a peek at a KEY NAME and an array length — no URI,
+   * no topic, no account is read into memory here.
+   *
+   * Single-flight through the same wcInitingRef as connect(), so a restore
+   * and a tap can never race into two SignClients (the double-modal bug).
+   *
+   * The probe scans KEY NAMES for `wc@2:client:` + `//session` rather than
+   * hardcoding the store's schema version (`0.3`): an SDK upgrade that bumps
+   * it must not silently turn restore into a permanent no-op. Only key NAMES
+   * and an array LENGTH are ever read — never a topic, URI or account.
+   */
+  const restoreWcSession = useCallback(async ({ announce = false } = {}) => {
+    if (typeof window === 'undefined') return false;
+    if (wcInitingRef.current || wcRef.current) return false;
+
+    let hasStoredSession = false;
+    try {
+      const ls = window.localStorage;
+      if (!ls) return false;
+      for (let i = 0; i < ls.length; i += 1) {
+        const key = ls.key(i) || '';
+        if (key.startsWith('wc@2:client:') && key.endsWith('//session')) {
+          const raw = ls.getItem(key);
+          const sessions = raw ? JSON.parse(raw) : null;
+          if (Array.isArray(sessions) && sessions.length > 0) {
+            hasStoredSession = true;
+            break;
+          }
+        }
+      }
+    } catch {
+      return false; /* storage unavailable or corrupt — fail quiet, do not init */
+    }
+    if (!hasStoredSession) return false;
+
+    wcInitingRef.current = true;
+    try {
+      const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+      const { BrowserProvider } = await loadEthers();
+      const wc = await EthereumProvider.init(buildWcInitConfig());
+      repairSignClientMetadata(wc);
+
+      /* init() loads persisted sessions internally; if the wallet already
+         deleted or expired it, there is nothing to restore. */
+      if (!wc.session) {
+        wcEvent('restore_none');
+        return false;
+      }
+
+      const provider = new BrowserProvider(wc, 'any');
+      const signer = await provider.getSigner().catch(() => null);
+      if (!signer) return false;
+
+      detachInjectedListeners();
+      wcRef.current = wc;
+      eip1193Ref.current = wc;
+      signerRef.current = signer;
+      setMode('wc');
+      setAddress(await signer.getAddress());
+      setChainId(Number(wc.chainId));
+      setLocked(false);
+      /* Exactly-once, instance-scoped — the same contract as connect(). */
+      wcListenersRef.current = { cleanup: attachWcListeners(wc) };
+      wcEvent('session_restored');
+      if (announce) {
+        try { useAppStore.getState().notify('walletSessionRestored', 'success'); } catch { /* toasts are optional */ }
+      }
+      /* Balance must never keep the UI disconnected-looking; run behind. */
+      void refreshBalance(await signer.getAddress(), Number(wc.chainId));
+      return true;
+    } catch {
+      /* A relay hiccup here must never surface as a connect error — restore
+         is opportunistic; the explicit Connect button remains the real path. */
+      return false;
+    } finally {
+      wcInitingRef.current = false;
+    }
+  }, [attachWcListeners, buildWcInitConfig, detachInjectedListeners, refreshBalance, repairSignClientMetadata]);
+
+  /*
+   * Run restore once on mount, and again whenever the app returns to the
+   * FOREGROUND with no wallet attached — the Trust-bounce path: the user taps
+   * Connect, Android switches to Trust for the approval, and on return the
+   * WebView may have restarted entirely. A fresh relay socket is NOT opened
+   * unless a session is actually on disk (see the probe inside).
+   */
+  useEffect(() => {
+    /* Quiet on cold start — a toast on every app open is noise. The announce
+       variant belongs to the two user-visible moments: returning from the
+       wallet app, and an explicit Refresh. */
+    void restoreWcSession({ announce: false });
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && !addressRef.current) {
+        void restoreWcSession({ announce: true });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ------------------------------ local vault ---------------------------- */
 
@@ -574,6 +787,7 @@ export function WalletProvider({ children }) {
   /* ------------------------------ disconnect ----------------------------- */
 
   const disconnect = useCallback(() => {
+    wcEvent('local_disconnect');
     // Clean up WalletConnect session listeners first
     try { wcListenersRef.current?.cleanup?.(); } catch { /* noop */ }
     wcListenersRef.current = null;
@@ -685,6 +899,27 @@ export function WalletProvider({ children }) {
     return () => clearInterval(id);
   }, [address, refreshBalance]);
 
+  /*
+   * Soft refresh: the header button re-reads the native balance through the
+   * SAME refreshBalance the interval uses. Nothing is remounted and,
+   * crucially, the WalletConnect session is not touched — verifying that
+   * property is why this is a subscription rather than a reload.
+   *
+   * If no wallet is attached at all, try the session restore once instead —
+   * the same thing the foreground watcher does.
+   */
+  useEffect(() => {
+    const off = onSoftRefresh(() =>
+      addressRef.current ? refreshBalance() : restoreWcSession({ announce: true })
+    );
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Injected listeners are attached in connectInjected() via attachInjectedListeners()
+  // and removed in disconnect() via detachInjectedListeners(). No duplicate effect here.
+
+
   const value = useMemo(
     () => ({
       mode,
@@ -700,6 +935,7 @@ export function WalletProvider({ children }) {
       hasLocalVault: Boolean(loadVault()),
       connectInjected,
       connectWalletConnect,
+      restoreWcSession,
       attachLocal,
       attachCreatedLocal,
       unlockLocal,
@@ -723,6 +959,7 @@ export function WalletProvider({ children }) {
       locked,
       connectInjected,
       connectWalletConnect,
+      restoreWcSession,
       attachLocal,
       attachCreatedLocal,
       unlockLocal,

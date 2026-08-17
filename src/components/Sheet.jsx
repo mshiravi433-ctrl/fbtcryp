@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
+import { useStill } from './AnimatedIcon';
 import { IconX } from './Icons';
 
 /**
@@ -27,6 +28,13 @@ import { IconX } from './Icons';
  * element.)
  */
 export default function Sheet({ open, onClose, children, title, size = 'md' }) {
+  /*
+   * prefers-reduced-motion (and the in-app reduce-motion setting): the dialog
+   * appears/disappears instantly. A drop shadow that springs is a nicety; for
+   * someone with a vestibular condition it is a reason to leave.
+   */
+  const still = useStill();
+
   useEffect(() => {
     if (!open) return undefined;
     const unlock = lockBodyScroll();
@@ -47,12 +55,19 @@ export default function Sheet({ open, onClose, children, title, size = 'md' }) {
     <AnimatePresence>
       {open && (
         <>
+          {/*
+           * The backdrop is a SIBLING of the panel layer, not its parent:
+           * clicks inside the panel can therefore never reach the backdrop's
+           * onClick. The layer itself is pointer-events:none with the panel
+           * re-armed (see index.css), so only a click on genuinely-empty
+           * viewport area counts as a dismiss.
+           */}
           <motion.div
             className="sheet-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: still ? 0 : 0.18 }}
             onClick={onClose}
           />
           <div className="sheet-layer">
@@ -60,10 +75,10 @@ export default function Sheet({ open, onClose, children, title, size = 'md' }) {
               className={`sheet sheet-${size}`}
               role="dialog"
               aria-modal="true"
-              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              initial={still ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+              exit={still ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 8 }}
+              transition={still ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32 }}
             >
               {title && (
                 <div className="sheet-title">

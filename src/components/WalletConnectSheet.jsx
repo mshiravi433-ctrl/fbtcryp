@@ -73,6 +73,24 @@ export default function WalletConnectSheet({ open, onClose }) {
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  /*
+   * True while a WalletConnect pairing is in flight.
+   *
+   * ─── WHY THE SHEET WITHDRAWS DURING PAIRING ─────────────────────────────
+   * showQrModal:true makes the SDK open the AppKit/Reown modal on top — with
+   * its OWN full-screen blurred backdrop and its OWN scroll lock. Leaving
+   * this sheet open underneath meant two competing modals, two backdrops and
+   * two scroll locks alive at once, which on the Android WebView composited
+   * into the reported "grey box flickering like a fluorescent tube", the
+   * half-rendered panel, and taps landing on the wrong layer.
+   *
+   * So while the wallet flow owns the screen, this sheet is closed ONCE, in a
+   * controlled way (exit animation, lock released), and the AppKit modal is
+   * the only modal alive. If pairing fails (user cancelled, origin blocked,
+   * relay unreachable) the sheet re-opens to NAME the failure; on success it
+   * stays closed.
+   */
+  const [wcFlowActive, setWcFlowActive] = useState(false);
 
   const injected = useEip6963();
 
@@ -89,8 +107,28 @@ export default function WalletConnectSheet({ open, onClose }) {
   };
 
   const close = () => {
+    setWcFlowActive(false);
     reset();
     onClose?.();
+  };
+
+  /*
+   * One tap = one pairing attempt. The sheet itself is disabled via
+   * `wallet.connecting`, and connectWalletConnect() has its own init
+   * single-flight (wcInitingRef) — this state exists to manage VISIBILITY,
+   * not to gate the flow.
+   */
+  const startWalletConnect = () => {
+    if (wallet.connecting) return;
+    setWcFlowActive(true);
+    wallet
+      .connectWalletConnect()
+      .then((ok) => {
+        setWcFlowActive(false);
+        if (ok) close();
+        /* on failure the sheet re-opens with the named error already set */
+      })
+      .catch(() => setWcFlowActive(false));
   };
 
   const startCreate = async () => {
@@ -146,7 +184,14 @@ export default function WalletConnectSheet({ open, onClose }) {
   };
 
   return (
-    <Sheet open={open} onClose={close}>
+    /*
+     * `open && !wcFlowActive`: exactly one modal is alive at a time. The exit
+     * and re-enter animations are handled by AnimatePresence inside Sheet, so
+     * a quick close→open cannot produce two panels — React re-keys nothing,
+     * and a re-open mid-exit animates the SAME element back instead of
+     * mounting a second one.
+     */
+    <Sheet open={open && !wcFlowActive} onClose={close}>
       {/* ------------------------------ choose ------------------------------ */}
       {view === 'choose' && (
         <>
@@ -158,7 +203,7 @@ export default function WalletConnectSheet({ open, onClose }) {
               className="wallet-option"
               data-featured="true"
               whileTap={{ scale: 0.98 }}
-              onClick={() => wallet.connectWalletConnect().then((ok) => ok && close())}
+              onClick={startWalletConnect}
               disabled={wallet.connecting}
             >
               <span className="wallet-badge">

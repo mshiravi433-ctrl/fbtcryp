@@ -68,7 +68,10 @@
     "linkCopied": "Enlace de invitación copiado",
     "handleCopied": "Usuario copiado",
     "addressCopied": "Dirección copiada",
-    "pointsEarned": "Puntos ganados"
+    "pointsEarned": "Puntos ganados",
+    "walletSessionRestored": "Sesión de billetera restaurada",
+    "walletSessionExpired": "La sesión de la billetera ha terminado",
+    "refreshFailed": "Error al actualizar — inténtalo de nuevo"
   },
   "wallet": {
     "connect": "Conectar cartera",
@@ -345,7 +348,8 @@
     "disclaimer": "Los titulares provienen de medios de terceros y cada tarjeta indica su fuente. No respaldamos ni editamos su contenido, y nada de esto es asesoramiento de inversión.",
     "generatedNotice": "No se pudo acceder a ninguna fuente de noticias, así que este resumen se generó a partir de datos de mercado: no es periodismo.",
     "tab": {
-      "insights": "Inteligencia"
+      "insights": "Inteligencia",
+      "calm": "Calma"
     }
   },
   "notify": {
@@ -636,5 +640,13 @@
       "cards": "card",
       "topup": "simcard"
     }
+  },
+  "calm": {
+    "error": "No se pudo cargar la música tranquila. Revisa tu conexión e inténtalo de nuevo.",
+    "empty": "No hay pistas de relajación por ahora; aparecen nuevas cuando se actualiza el catálogo."
+  },
+  "refresh": {
+    "refreshing": "Actualizando…",
+    "busyHint": "Termina o cancela primero la acción de billetera actual"
   }
 }

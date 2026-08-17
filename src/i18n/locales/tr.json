@@ -68,7 +68,10 @@
     "linkCopied": "Davet bağlantısı kopyalandı",
     "handleCopied": "Kullanıcı adı kopyalandı",
     "addressCopied": "Adres kopyalandı",
-    "pointsEarned": "Puan kazanıldı"
+    "pointsEarned": "Puan kazanıldı",
+    "walletSessionRestored": "Cüzdan oturumu geri yüklendi",
+    "walletSessionExpired": "Cüzdan oturumu sona erdi",
+    "refreshFailed": "Yenileme başarısız — tekrar deneyin"
   },
   "wallet": {
     "connect": "Cüzdan bağla",
@@ -345,7 +348,8 @@
     "disclaimer": "Başlıklar üçüncü taraf yayınlardan gelir ve her kartta kaynağı yazar. İçeriklerini onaylamaz veya düzenlemeyiz; hiçbiri yatırım tavsiyesi değildir.",
     "generatedNotice": "Hiçbir haber kaynağına erişilemedi, bu nedenle bu özet piyasa verilerinden üretildi — gazetecilik değildir.",
     "tab": {
-      "insights": "İstihbarat"
+      "insights": "İstihbarat",
+      "calm": "Sakinlik"
     }
   },
   "notify": {
@@ -636,5 +640,13 @@
       "cards": "card",
       "topup": "simcard"
     }
+  },
+  "calm": {
+    "error": "Rahatlatıcı müzik yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.",
+    "empty": "Şu anda sakinleştirici parça yok — katalog yenilenince yenileri görünür."
+  },
+  "refresh": {
+    "refreshing": "Yenileniyor…",
+    "busyHint": "Önce devam eden cüzdan işlemini bitirin veya iptal edin"
   }
 }

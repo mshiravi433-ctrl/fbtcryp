@@ -195,12 +195,18 @@ export default function MoreSheet({ open, onClose }) {
   const go = (to) => {
     haptic?.('light');
     setPressed(to);
-    // Let the tap feedback land before the route swaps under the finger.
-    // 90ms is below the ~100ms threshold where a delay becomes perceptible as
-    // lag, but long enough for the press state to be seen.
+    /*
+     * Let the tap feedback land, then CLOSE FIRST and navigate one frame
+     * later. The old order (navigate → onClose in the same tick) swapped the
+     * route underneath a drawer whose exit animation had not started, so the
+     * drawer, the page transition and the scroll-lock release all fought in
+     * the same frame — visible as the menu's stutter on slower phones.
+     * Closing first means exactly one panel and one backdrop exist at every
+     * instant, and the outgoing page never morphs beneath the drawer.
+     */
     setTimeout(() => {
-      navigate(to);
       onClose?.();
+      requestAnimationFrame(() => navigate(to));
     }, 90);
   };
 
@@ -218,7 +224,10 @@ export default function MoreSheet({ open, onClose }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.16 }}
+            transition={{ duration: still ? 0 : 0.16 }}
+            /* Sibling-of-panel, as in Sheet: taps inside the panel cannot
+               bubble to here, so onClose fires exactly once, only for a real
+               backdrop tap. */
             onClick={onClose}
           />
           <div className="more-layer">

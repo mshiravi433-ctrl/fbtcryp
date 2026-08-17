@@ -1,3 +1,4 @@
+import { apiBase } from './apiBase';
 /**
  * CRYPTO NEWS FEED
  * ---------------------------------------------------------------------------
@@ -30,7 +31,6 @@ const DAY = 24 * 60 * 60 * 1000;
 const MAX_AGE = 3 * DAY;
 const MAX_ITEMS = 60;
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 /**
  * CATEGORIES
@@ -284,7 +284,7 @@ export async function getNews({ force = false, coins = [], lang = 'en' } = {}) {
 
   // 1. our backend
   try {
-    const data = await jget(`${API_BASE}/news?lang=${encodeURIComponent(lang)}`);
+    const data = await jget(`${apiBase()}/news?lang=${encodeURIComponent(lang)}`);
     if (Array.isArray(data?.items)) collected.push(...data.items);
   } catch {
     /* no backend deployed */

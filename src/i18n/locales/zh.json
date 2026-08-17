@@ -68,7 +68,10 @@
     "linkCopied": "邀请链接已复制",
     "handleCopied": "用户名已复制",
     "addressCopied": "地址已复制",
-    "pointsEarned": "获得积分"
+    "pointsEarned": "获得积分",
+    "walletSessionRestored": "钱包会话已恢复",
+    "walletSessionExpired": "钱包会话已结束",
+    "refreshFailed": "刷新失败 — 请重试"
   },
   "wallet": {
     "connect": "连接钱包",
@@ -345,7 +348,8 @@
     "disclaimer": "标题来自第三方媒体，每张卡片都注明来源。我们不认可也不编辑其内容，其中任何内容都不构成投资建议。",
     "generatedNotice": "未能连接任何新闻源，因此本摘要由市场数据自动生成——它不是新闻报道。",
     "tab": {
-      "insights": "情报"
+      "insights": "情报",
+      "calm": "静心"
     }
   },
   "notify": {
@@ -636,5 +640,13 @@
       "cards": "card",
       "topup": "simcard"
     }
+  },
+  "calm": {
+    "error": "无法加载静心音乐。请检查网络连接后重试。",
+    "empty": "暂时没有静心的曲目 — 目录刷新后会显示新内容。"
+  },
+  "refresh": {
+    "refreshing": "正在刷新…",
+    "busyHint": "请先完成或取消当前的钱包操作"
   }
 }

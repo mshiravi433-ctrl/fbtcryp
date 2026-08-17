@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
+import { clearHardReloadFlag } from './lib/refresh.js';
 import './i18n';
 import './index.css';
 
@@ -126,6 +127,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // Tell the HTML watchdog we made it, then fade out the pre-mount black screen.
 requestAnimationFrame(() => {
   window.__FBT_BOOTED__ = true;
+  /*
+   * The hard-reload loop guard (lib/refresh.js) is one-shot per incident:
+   * reaching a successful first paint proves the reload fixed the incident,
+   * so the guard can be cleared and the NEXT incident may reload once again.
+   */
+  clearHardReloadFlag();
   const boot = document.getElementById('boot');
   if (!boot) return;
   boot.style.opacity = '0';

@@ -68,7 +68,10 @@
     "linkCopied": "Link de convite copiado",
     "handleCopied": "Utilizador copiado",
     "addressCopied": "Endereço copiado",
-    "pointsEarned": "Pontos ganhos"
+    "pointsEarned": "Pontos ganhos",
+    "walletSessionRestored": "Sessão da carteira restaurada",
+    "walletSessionExpired": "A sessão da carteira terminou",
+    "refreshFailed": "Falha ao atualizar — tente novamente"
   },
   "wallet": {
     "connect": "Ligar carteira",
@@ -345,7 +348,8 @@
     "disclaimer": "Os títulos vêm de meios terceiros e cada cartão indica a sua fonte. Não subscrevemos nem editamos o seu conteúdo, e nada disto é aconselhamento de investimento.",
     "generatedNotice": "Nenhuma fonte de notícias estava acessível, por isso este resumo foi gerado a partir de dados de mercado — não é jornalismo.",
     "tab": {
-      "insights": "Inteligência"
+      "insights": "Inteligência",
+      "calm": "Calma"
     }
   },
   "notify": {
@@ -636,5 +640,13 @@
       "cards": "card",
       "topup": "simcard"
     }
+  },
+  "calm": {
+    "error": "Não foi possível carregar a música relaxante. Verifique sua conexão e tente de novo.",
+    "empty": "Nenhuma faixa relaxante no momento — novas faixas aparecem quando o catálogo atualiza."
+  },
+  "refresh": {
+    "refreshing": "Atualizando…",
+    "busyHint": "Conclua ou cancele primeiro a ação de carteira em andamento"
   }
 }

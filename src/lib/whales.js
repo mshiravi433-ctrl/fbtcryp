@@ -1,3 +1,4 @@
+import { apiBase } from './apiBase';
 /**
  * Whale tracking client.
  *
@@ -6,7 +7,6 @@
  * wedged upstream never blocks UI.
  */
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 const DEFAULT_OPTS = {
   minUsd: 100_000,
@@ -84,7 +84,7 @@ export async function fetchWhales(opts = {}, signal) {
   if (params.vs) qs.set('vs', params.vs);
   qs.set('limit', String(params.limit));
 
-  const url = `${API_BASE}/news/whales?${qs.toString()}`;
+  const url = `${apiBase()}/news/whales?${qs.toString()}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   let outerSignal;
