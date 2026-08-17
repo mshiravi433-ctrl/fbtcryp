@@ -1,12 +1,21 @@
 import { motion } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AnimatedSettings, useStill } from './AnimatedIcon';
-import { IconBuilding, IconClock, IconTrend } from './Icons';
+import { IconBuilding, IconClock, IconRefresh, IconTrend } from './Icons';
 import { usePoints } from '../hooks/usePoints';
 import { usePoll } from '../hooks/useMarket';
-import { getMarkets } from '../lib/api';
+import { clearApiCache, getMarkets } from '../lib/api';
+import { invalidateCalmCache } from '../lib/audio';
+import {
+  isRefreshing,
+  onRefreshStateChange,
+  refreshBlocked,
+  requestSoftRefresh
+} from '../lib/refresh';
+import { useWallet } from '../context/WalletContext';
+import { useTelegram } from '../context/TelegramContext';
 import { vsOf } from '../lib/currency';
 import { fmtPct } from '../lib/format';
 import { cachedHeadlines } from '../lib/news';
@@ -84,6 +93,44 @@ export default function Header() {
   const [showSpotlight, setShowSpotlight] = useState(false);
   const [spotlightIndex, setSpotlightIndex] = useState(0);
   const { tier } = usePoints();
+  const { haptic } = useTelegram();
+  const wallet = useWallet();
+
+  /*
+   * ─── SAFE SOFT REFRESH ──────────────────────────────────────────────────
+   * One button, one contract (lib/refresh.js). It re-fetches the app's DATA
+   * and nothing else: no reload, no remount, no second SignClient, no storage
+   * wipe — so a WalletConnect session, a pending signature and the current
+   * route all survive it untouched.
+   *
+   * The button disables itself while a guard is held (wallet connect in
+   * flight, a swap being signed or submitted) rather than swallowing the tap,
+   * and the state is read through a versioned snapshot so it cannot tear.
+   * Multiple taps during the spin coalesce into the one in-flight cycle.
+   */
+  const refreshSnap = useSyncExternalStore(
+    onRefreshStateChange,
+    () => `${isRefreshing()}|${refreshBlocked()}`,
+    () => 'false|false'
+  );
+  const [refreshingNow, guardedNow] = refreshSnap.split('|');
+  const refreshing = refreshingNow === 'true';
+  const refreshDisabled = refreshing || guardedNow === 'true' || Boolean(wallet.connecting);
+
+  const doSoftRefresh = () => {
+    if (refreshDisabled) return;
+    haptic?.('light');
+    void requestSoftRefresh({
+      invalidate: () => {
+        clearApiCache();
+        invalidateCalmCache();
+      }
+    }).then((ran) => {
+      if (ran === false) return; /* a guard appeared between render and click */
+      /* Failed subscribers resolve settled-rejected, not thrown, so reaching
+         here only proves the cycle RAN; per-panel Retry handles real failure. */
+    });
+  };
 
   const currency = useSettingsStore((state) => state.currency);
   const vs = vsOf(currency);
@@ -178,6 +225,27 @@ export default function Header() {
       </motion.div>
 
       <div className="row" style={{ gap: 8 }}>
+        <motion.button
+          className="icon-btn"
+          onClick={doSoftRefresh}
+          disabled={refreshDisabled}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          aria-label={t('common.refresh')}
+          aria-busy={refreshing}
+          title={
+            guardedNow === 'true' || wallet.connecting
+              ? t('refresh.busyHint')
+              : refreshing
+                ? t('refresh.refreshing')
+                : t('common.refresh')
+          }
+          data-refreshing={refreshing ? 'true' : 'false'}
+        >
+          <IconRefresh width={17} height={17} className={refreshing && !still ? 'refresh-spin' : undefined} />
+        </motion.button>
+
         {/* Medal only: a points number beside the brand would look like a
             custodial balance. The points screen explains the tier on tap. */}
         <motion.button

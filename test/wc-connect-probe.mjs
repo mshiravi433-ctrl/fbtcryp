@@ -61,15 +61,42 @@ export default function run() {
   t('disconnectRef is kept in sync with the latest disconnect implementation',
     /disconnectRef\.current = disconnect;/.test(code));
 
-  /* ---- 5. WC listeners are attached after connect, not before ---- */
-  t('the wc.on(disconnect) listener is registered after connect() succeeds',
-    code.indexOf('wc.on(\'disconnect\'') > code.indexOf('await wc.connect()'));
-  t('the wc.on(accountsChanged) listener is registered after connect() succeeds',
-    code.indexOf('wc.on(\'accountsChanged\'') > code.indexOf('await wc.connect()'));
-  t('the wc.on(chainChanged) listener is registered after connect() succeeds',
-    code.indexOf('wc.on(\'chainChanged\'') > code.indexOf('await wc.connect()'));
-  t('the wc.on(session_delete) listener is registered after connect() succeeds',
-    code.indexOf('wc.on(\'session_delete\'') > code.indexOf('await wc.connect()'));
+  /* ---- 5. WC listeners are attached AFTER connect, exactly once, and are
+     scoped to THEIR provider instance ----
+     The old wiring attached four handlers inline; the new one centralises in
+     attachWcListeners() and — the part that stops "Trust disconnects itself
+     later" — every handler ignores events from a stale provider instance. */
+  t('attachWcListeners exists as the single registration point',
+    /const attachWcListeners = useCallback/.test(code));
+  t('listeners are attached only after connect() succeeds',
+    code.indexOf('attachWcListeners(wc)') > code.indexOf('await wc.connect()'));
+  t('every WC handler is instance-scoped (stale providers cannot wipe state)',
+    (code.match(/wcRef\.current !== wc/g) || []).length >= 5);
+  t('session_expire is listened to (a real expiry, not a guessed one)',
+    /'session_expire', onSessionExpire/.test(code));
+  t('relay drop/reconnect are traced, never treated as teardown',
+    /'relayer_disconnect', onRelayDisconnect/.test(code) && /'relayer_connect', onRelayConnect/.test(code));
+
+  /* ---- 5b. the empty accountsChanged policy ----
+     For WalletConnect an empty accountsChanged is a SPURIOUS event some
+     wallets (Trust) emit mid-chain-switch; it used to call disconnect() and
+     is exactly the "disconnects by itself minutes later" report. Only the
+     injected transport keeps the EIP-1193 semantics ([] = revoked). */
+  const attachBlock = code.slice(
+    code.indexOf('const attachWcListeners'),
+    code.indexOf('return () => {', code.indexOf('const attachWcListeners'))
+  );
+  t('WC accountsChanged no longer tears the session down on a transient empty array',
+    !attachBlock.includes(': disconnectRef.current()')
+      && !/accs\?\.\[0\] \? setAddress\(accs\[0\]\) : disconnectRef/.test(attachBlock));
+  t('WC accountsChanged still updates the address when one arrives',
+    attachBlock.includes('setAddress(accs[0])'));
+  const injectedAttach = code.slice(
+    code.indexOf('const attachInjectedListeners'),
+    code.indexOf('};', code.indexOf('const attachInjectedListeners'))
+  );
+  t('injected accountsChanged keeps real EIP-1193 semantics ([] = revoked)',
+    /accs\?\.length \? setAddress\(accs\[0\]\) : disconnectRef\.current\(\)/.test(injectedAttach));
 
   /* ---- 6. the projectId is the source constant, never an env override ---- */
   t('the WC_PROJECT_ID constant is set to the official project ID',
@@ -95,6 +122,65 @@ export default function run() {
   t('iOS modal disables the explorer wallet list', /explorerExcludedWalletIds: 'ALL'/.test(code));
   t('iOS modal supplies explicit mobile wallet deep links',
     /mobileWallets: \[/.test(code));
+
+  /* ---- 9. session restore: the "Trust disconnected me" fix ----
+     A persisted WC session used to be picked up only from the Connect
+     button. Anything that restarted the WebView — refresh, Android resuming
+     a killed process, returning from the wallet's approval screen — left a
+     LIVE session on disk and a UI showing "not connected", which users read
+     as the wallet dropping them. The restore must be localStorage-probed
+     (no relay socket for users who never connected), single-flighted with
+     the SAME ref as connect (never two SignClients), and must never open
+     the QR modal by itself. */
+  /* NB: restored from the UNSTRIPPED source — the line-comment stripper above
+     would otherwise eat '//session' inside the storage-key string literal. */
+  const restoreBlock = walletSrc.slice(
+    walletSrc.indexOf('const restoreWcSession'),
+    walletSrc.indexOf('const attachLocal', walletSrc.indexOf('const restoreWcSession'))
+  );
+  t('restoreWcSession exists', restoreBlock.length > 200);
+  t('restore probes the persisted session keys BEFORE paying for init()',
+    restoreBlock.includes('wc@2:client:') && restoreBlock.includes('//session')
+      && restoreBlock.indexOf('localStorage') < restoreBlock.indexOf('EthereumProvider.init('));
+  t('the probe tracks the storage-prefix, not a hardcoded store schema version',
+    restoreBlock.includes("key.startsWith('wc@2:client:')"));
+  t('restore bails out when no session is on disk', /!hasStoredSession\) return false/.test(restoreBlock));
+  t('restore is single-flighted through the same guard as connect()',
+    restoreBlock.includes('wcInitingRef.current = true') && restoreBlock.includes('wcInitingRef.current = false'));
+  t('restore NEVER initiates a pairing (no connect() call inside it)',
+    !/wc\.connect\(/.test(restoreBlock));
+  t('restore re-attaches through the identical init config as connect (no identity drift)',
+    restoreBlock.includes('buildWcInitConfig()'));
+  t('restore registers the same exactly-once instance-scoped listeners',
+    restoreBlock.includes('attachWcListeners(wc)'));
+  t('restore runs on mount and on foreground return', /visibilitychange/.test(code)
+    && /restoreWcSession/.test(code));
+
+  /* ---- 10. the modal-cancel is NOT an error ---- */
+  t('closing the AppKit modal is a cancellation (USER_REJECTED), not a scary CONNECT_FAILED',
+    /\/connection request reset\/i\.test\(msg\)[\s\S]{0,200}?setError\('USER_REJECTED'\)/.test(code));
+
+  /* ---- 11. refresh guards around pairing ---- */
+  t('the pairing attempt holds the refresh guard for its whole life',
+    code.indexOf("holdRefreshGuard('wc-connect')") < code.indexOf('await wc.connect()')
+      && /connectGuard\.release\(\)/.test(code));
+
+  /* ---- 12. the trace carries no secrets ---- */
+  const trace = readFileSync('src/lib/wcTrace.js', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  t('the WC trace never stores URIs, topics, accounts or keys',
+    !/symKey|pairingTopic|\buri\b|accounts|address/.test(trace));
+  const wcCalls = code.match(/wcEvent\(['"][a-z_]+['"][^;]*\)/g) || [];
+  t('every traced event is a name (plus a number/boolean fact), nothing sensitive',
+    wcCalls.length >= 5 && wcCalls.every((c) =>
+      /^wcEvent\(['"][a-z_]+['"](, (\d+|true|false|Number\([a-z]+\)))?\)$/.test(c)));
+
+  /* ---- 13. the internal sheet must withdraw while the wallet modal owns the screen ---- */
+  const sheet = readFileSync('src/components/WalletConnectSheet.jsx', 'utf8');
+  t('the internal sheet closes in a controlled way while the AppKit modal is up',
+    /open && !wcFlowActive/.test(sheet));
+  t('the sheet re-opens with the named error when pairing fails',
+    /startWalletConnect[\s\S]{0,500}\.then\(\(ok\) =>/.test(sheet));
 
   return rows;
 }

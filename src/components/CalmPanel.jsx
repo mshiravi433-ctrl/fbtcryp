@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { riseIn, stagger } from './PageTransition';
 import InfoBox from './InfoBox';
 import { getCalm, fmtDuration } from '../lib/audio';
+import { onSoftRefresh } from '../lib/refresh';
 import { openUrl } from '../lib/browser';
 import { useRadioStore } from '../store/useRadioStore';
 import { IconExternal } from './Icons';
@@ -32,15 +33,43 @@ import { IconExternal } from './Icons';
  * navigate to the swap screen. That is also why `server/calm.js` returns items
  * in the podcast item shape: a second track type would have meant a second
  * player, and two players means two things playing at once.
+ *
+ * ─── THE THREE STATES ARE NOW DISTINCT, AND THE BUG THAT DELETED THE MUSIC ──
+ * This panel used to `return null` in BOTH failure modes — a fetch error AND
+ * a genuinely empty list. Combined with a server that cached an empty
+ * response for six hours, one archive.org outage emptied the tab for every
+ * visitor with no message and no way to retry. The removal was never a
+ * removal; it was a swallowed error.
+ *
+ * Now: loading is a skeleton, an error is a sentence plus a Retry button that
+ * re-fetches for real, and the empty state only appears when the server
+ * says — successfully — that today there is nothing to list.
  */
 export default function CalmPanel() {
   const { t } = useTranslation();
 
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
+  /* A second spinner-path while re-fetching with data already on screen:
+     the list stays, only the Retry button shows progress. */
+  const [retrying, setRetrying] = useState(false);
 
   const current = useRadioStore((s) => s.track);
   const toggleTrack = useRadioStore((s) => s.toggleTrack);
+
+  const load = useCallback(async (force = false) => {
+    setFailed(false);
+    if (data) setRetrying(true);
+    try {
+      const d = await getCalm({ force });
+      setData(d);
+    } catch {
+      setFailed(true);
+    } finally {
+      setRetrying(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   useEffect(() => {
     let alive = true;
@@ -52,23 +81,11 @@ export default function CalmPanel() {
     };
   }, []);
 
-  if (failed) return null;
+  /* Soft refresh (the header button) re-fetches through the same code path
+     as Retry — one contract, no reload, nothing else disturbed. */
+  useEffect(() => onSoftRefresh(() => getCalm({ force: true }).then(setData).catch(() => {})), []);
 
-  if (!data) {
-    return (
-      <section style={{ marginTop: 4 }}>
-        <p className="section-label">{t('calm.title')}</p>
-        <div className="stack" style={{ gap: 9, marginTop: 8 }}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="skel" style={{ height: 62 }} />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  const items = data.items ?? [];
-  if (!items.length) return null;
+  const items = data?.items ?? [];
 
   return (
     <section style={{ marginTop: 4 }}>
@@ -79,6 +96,65 @@ export default function CalmPanel() {
         <p>{t('calm.why2')}</p>
         <p>{t('calm.why3')}</p>
       </InfoBox>
+
+      {!data && !failed && (
+        /* LOADING — the skeleton, unchanged. */
+        <div className="stack" style={{ gap: 9, marginTop: 10 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skel" style={{ height: 62 }} />
+          ))}
+        </div>
+      )}
+
+      {failed && (
+        /* ERROR — said out loud, with a way back. */
+        <div className="empty" role="alert">
+          <span className="empty-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18V6l10-2v11.5" />
+              <circle cx="6.5" cy="18" r="2.5" />
+              <circle cx="16.5" cy="15.5" r="2.5" />
+            </svg>
+          </span>
+          <p className="prose-sm" style={{ textAlign: 'center' }}>{t('calm.error')}</p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ width: 'auto', marginTop: 8 }}
+            disabled={retrying}
+            onClick={() => load(true)}
+          >
+            {retrying ? t('common.loading') : t('common.retry')}
+          </button>
+        </div>
+      )}
+
+      {data && items.length === 0 && !failed && (
+        /*
+         * GENUINELY EMPTY — the server answered fine and had nothing today.
+         * Kept honest: this is the ONLY state this message is allowed to
+         * describe, distinct from the error state above it.
+         */
+        <div className="empty">
+          <span className="empty-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18V6l10-2v11.5" />
+              <circle cx="6.5" cy="18" r="2.5" />
+              <circle cx="16.5" cy="15.5" r="2.5" />
+            </svg>
+          </span>
+          <p className="prose-sm" style={{ textAlign: 'center' }}>{t('calm.empty')}</p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ width: 'auto', marginTop: 8 }}
+            disabled={retrying}
+            onClick={() => load(true)}
+          >
+            {retrying ? t('common.loading') : t('common.retry')}
+          </button>
+        </div>
+      )}
 
       <motion.div
         className="stack"

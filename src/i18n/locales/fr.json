@@ -68,7 +68,10 @@
     "linkCopied": "Lien d'invitation copié",
     "handleCopied": "Identifiant copié",
     "addressCopied": "Adresse copiée",
-    "pointsEarned": "Points gagnés"
+    "pointsEarned": "Points gagnés",
+    "walletSessionRestored": "Session de portefeuille restaurée",
+    "walletSessionExpired": "La session du portefeuille a expiré",
+    "refreshFailed": "Échec de l'actualisation — réessayez"
   },
   "wallet": {
     "connect": "Connecter le portefeuille",
@@ -345,7 +348,8 @@
     "disclaimer": "Les titres proviennent de médias tiers et chaque carte indique sa source. Nous n'approuvons ni ne modifions leur contenu, et rien de tout cela ne constitue un conseil en investissement.",
     "generatedNotice": "Aucune source d'actualités n'était joignable ; ce résumé a donc été généré à partir des données de marché — ce n'est pas du journalisme.",
     "tab": {
-      "insights": "Intelligence"
+      "insights": "Intelligence",
+      "calm": "Calme"
     }
   },
   "notify": {
@@ -636,5 +640,13 @@
       "cards": "card",
       "topup": "simcard"
     }
+  },
+  "calm": {
+    "error": "Impossible de charger la musique relaxante. Vérifiez votre connexion et réessayez.",
+    "empty": "Aucun morceau relaxant pour le moment — de nouveaux apparaissent à l'actualisation du catalogue."
+  },
+  "refresh": {
+    "refreshing": "Actualisation…",
+    "busyHint": "Terminez ou annulez d'abord l'action de portefeuille en cours"
   }
 }

@@ -265,9 +265,16 @@ export default function BottomNav() {
           data-more="true"
           data-open={moreOpen}
           whileTap={{ scale: 0.9 }}
+          /*
+           * Toggle, not set(true). A second tap while the drawer is open
+           * closes it (the convention a menu button implies), and rapid
+           * open→close→open re-enters the SAME AnimatePresence child rather
+           * than mounting a duplicate panel mid-exit.
+           */
+          aria-expanded={moreOpen}
           onClick={() => {
             haptic?.('light');
-            setMoreOpen(true);
+            setMoreOpen((v) => !v);
           }}
         >
           {activeGlow === '__more' && (

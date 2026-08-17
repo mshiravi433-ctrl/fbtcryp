@@ -203,7 +203,7 @@ export function calmSubjectOk(subject) {
 }
 
 /** Search one mood, restricted to commercially usable licences. */
-async function searchMood(mood) {
+async function searchMoodOnce(mood) {
   /*
    * The licence clause is part of the QUERY, so the expensive metadata
    * lookups below are only ever spent on items that already qualify. Filtering
@@ -235,6 +235,45 @@ async function searchMood(mood) {
   return (data?.response?.docs ?? []).filter(
     (d) => d?.identifier && licenceOk(d.licenseurl) && calmSubjectOk(d.subject)
   );
+}
+
+/**
+ * One mood search with a SINGLE bounded retry.
+ *
+ * Archive.org runs on donated bandwidth and drops or stalls a share of
+ * requests — from some datacentre egress IPs it is worse. When every mood
+ * timed out in the same minute, `fetchCalm` returned a VALID-looking
+ * `{ items: [], moodsOk: 0 }`, the cache then pinned that emptiness in place
+ * for six hours, and the calm tab rendered as if the music had been deleted.
+ * That is precisely the reported bug: nothing was deleted; every upstream
+ * call silently lost its race and the empty answer was cached as data.
+ *
+ * One retry with a short sleep is the right bound: it converts the common
+ * single-stall failure into a success, and it cannot retry-storm a charity
+ * (two requests per mood per cycle, worst case six, still minutes apart).
+ * Retrying forever would be easier and wrong.
+ */
+async function searchMood(mood) {
+  try {
+    return await searchMoodOnce(mood);
+  } catch (err) {
+    await new Promise((r) => setTimeout(r, 700));
+    return searchMoodOnce(mood).catch(() => {
+      /* Re-throw the ORIGINAL error shape: allSettled upstream treats both
+         the same; this comment exists so a future reader does not "tidy" the
+         retry away and reintroduce the six-hour empty tab. */
+      throw err;
+    });
+  }
+}
+
+/**
+ * A producer result that is a GENUINE absence of music, distinguishable from
+ * "every upstream call failed". Used by the route to decide between caching
+ * the answer and refusing it: only a real catalogue is allowed to be cached.
+ */
+export function calmResultIsUsable(result) {
+  return Array.isArray(result?.items) && result.items.length > 0;
 }
 
 /**

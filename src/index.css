@@ -5578,6 +5578,35 @@ input, select, textarea { font-size: 16px !important; }
   background: rgba(0, 0, 0, 0.8);
 }
 
+/*
+ * The More drawer gives every tile an inline `backdrop-filter: blur(10px)`.
+ * Eighteen simultaneous backdrop blurs inside an animating panel is precisely
+ * the "menu flickers like a fluorescent tube" report on the Android WebView:
+ * each frame of the panel's motion re-samples eighteen backdrops.
+ *
+ * On native the tiles keep their gradient and their border — the blur was
+ * invisible through those anyway. `!important` is required (used nowhere else
+ * in this file on purpose): the blur is set INLINE on the element, and only
+ * an important declaration beats an inline style.
+ */
+:root[data-native='true'] .more-tile {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* The header Refresh button's spin while a cycle is in flight. One loop, no
+   glow, no layout change — and it stops dead for reduced-motion users (the
+   component also skips the class entirely in that case, this is the belt). */
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
+}
+.refresh-spin {
+  animation: refresh-spin 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-spin { animation: none; }
+}
+
 /* Splash social row */
 .splash-socials {
   display: flex;

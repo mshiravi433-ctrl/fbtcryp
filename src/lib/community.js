@@ -1,3 +1,4 @@
+import { apiBase } from './apiBase';
 /**
  * COMMUNITY FEED — client.
  * ---------------------------------------------------------------------------
@@ -12,7 +13,6 @@
  * client, which is what the link on each row is for.
  */
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 /** Where a reader goes to reply or to make an account. */
 export const FARCASTER_HOME = 'https://farcaster.xyz';
@@ -31,7 +31,7 @@ export async function fetchCommunity(channel = 'crypto', limit = 20) {
   const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
     const res = await fetch(
-      `${API_BASE}/community?channel=${encodeURIComponent(channel)}&limit=${limit}`,
+      `${apiBase()}/community?channel=${encodeURIComponent(channel)}&limit=${limit}`,
       { signal: ctrl.signal, headers: { accept: 'application/json' } }
     );
     if (!res.ok) return { rows: [], live: false };

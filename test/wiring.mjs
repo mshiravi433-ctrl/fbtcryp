@@ -9702,7 +9702,8 @@ export default function run() {
     t('...and the P2P tab strip is back to three tabs',
       /\['otc', 'fiat', 'board'\]/.test(p2p));
     t('...and OTC is still the default P2P tab', /useState\('otc'\)/.test(p2p));
-    t('...and Headlines is still the default News tab', /useState\('read'\)/.test(news));
+    t('...and Headlines is still the default News tab',
+      /NEWS_TABS\.includes\(fromUrl\) \? fromUrl : 'read'/.test(news));
   }
 
   /* ---- 97. cancelling, the deleted sentence, and a cheap neon border ----- */
@@ -11398,6 +11399,76 @@ export default function run() {
         && /learn\?\.model && learn\?\.params/.test(panel));
     t('no new page was added for the learning feature',
       !existsSync('src/pages/Learning.jsx') && !existsSync('src/pages/Calibration.jsx'));
+  }
+
+  /* ----------------------- modal & panel discipline ----------------------- */
+  /*
+   * The flicker reports (WalletConnect sheet, the More drawer) all reduce to
+   * a handful of INVARIANTS that look incidental when read and are the whole
+   * contract when broken:
+   *
+   *   - backdrop and panel are SIBLINGS; the layer is pointer-events:none and
+   *     the panel re-arms pointer events. That is the precise reason a tap
+   *     inside a panel cannot fire the backdrop's onClose. jsdom cannot see
+   *     compositing, but it CAN see the stylesheet — pin the contract here.
+   *   - CSS z-index stacking is pinned by the modal-stacking suite in
+   *     run.mjs, which reads the same file, so they cannot drift silently.
+   */
+  {
+    const css = read('src/index.css');
+    const layerRule = /\.sheet-layer\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const sheetRule = /\.sheet\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const moreLayerRule = /\.more-layer\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const morePanelRule = /\.more-panel\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+
+    const pe = (body) => (/pointer-events:\s*(none|auto)/.exec(body) || [])[1];
+    t('sheet layer passes clicks through (backdrop-only dismiss works)',
+      pe(layerRule) === 'none');
+    t('sheet panel re-arms pointer events', pe(sheetRule) === 'auto');
+    t('more layer passes clicks through', pe(moreLayerRule) === 'none');
+    t('more panel re-arms pointer events', pe(morePanelRule) === 'auto');
+
+    /* The native-blur kill: eighteen per-tile backdrop blurs inside an
+       animated panel was the More-menu flicker on the Android WebView. The
+       inline style needs an important override — the exact mechanism the
+       clumsy version of this fix would (wrongly) drop. */
+    t('native: the More tiles drop their per-tile backdrop blur',
+      /:root\[data-native='true'\] \.more-tile\s*\{[^}]*backdrop-filter:\s*none !important/.test(css));
+    t('native: the sheet backdrop is flat (no full-screen blurred overlay)',
+      /:root\[data-native='true'\] \.sheet-backdrop\s*\{[^}]*backdrop-filter:\s*none/.test(css));
+
+    /* Interaction order in MoreSheet: close first, navigate one frame later.
+       The reverse swapped the route underneath an exiting drawer. */
+    const more = read('src/components/MoreSheet.jsx');
+    t('MoreSheet closes the drawer BEFORE navigating', (() => {
+      const goStart = more.indexOf('const go = ');
+      const closeAt = more.indexOf('onClose?.()', goStart);
+      const navAt = more.indexOf('navigate(to)', goStart);
+      return goStart > 0 && closeAt > 0 && navAt > closeAt;
+    })());
+    t('MoreSheet honours reduced motion on its backdrop',
+      /duration: still \? 0 : 0\.16/.test(more));
+
+    const nav = read('src/components/BottomNav.jsx');
+    t('the More button toggles (re-tap closes, no double mounting)',
+      /setMoreOpen\(\(v\) => !v\)/.test(nav));
+
+    const sheet = read('src/components/Sheet.jsx');
+    t('Sheet honours reduced motion (instant, not a dropped animation)',
+      /useStill\(\)/.test(sheet) && /still \?/.test(sheet));
+  }
+
+  /* ----------------------- refresh & calm i18n (all 12) -------------------- */
+  {
+    for (const loc of readdirSync('src/i18n/locales')) {
+      const j = JSON.parse(read(`src/i18n/locales/${loc}`));
+      t(`${loc}: calm error/empty states translated`, Boolean(j.calm?.error && j.calm?.empty));
+      t(`${loc}: refresh affordances translated`, Boolean(j.refresh?.refreshing && j.refresh?.busyHint));
+      t(`${loc}: wallet session toasts translated`,
+        Boolean(j.toast?.walletSessionRestored && j.toast?.walletSessionExpired && j.toast?.refreshFailed));
+    }
+    t('the calm tab still exists in the News tab list',
+      /NEWS_TABS = \[[^\]]*'calm'/.test(read('src/pages/News.jsx')) && /tab === 'calm'/.test(read('src/pages/News.jsx')));
   }
 
   return rows;

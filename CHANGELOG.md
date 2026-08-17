@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.37.0 — WalletConnect lifecycle, the calm tab, and a safe Refresh
+
+Five related incidents, fixed at their causes; nothing is hidden or suppressed.
+
+**WalletConnect on Android — modal choreography and the missing session.**
+- The internal wallet sheet now WITHDRAWS (`WalletConnectSheet`, one controlled
+  exit) while the AppKit modal owns pairing: two modal stacks, two scroll locks
+  and two full-screen blurred backdrops no longer composite on top of each
+  other, which on the Android WebView was the "flickering grey box". A failure
+  re-opens the sheet with the failure NAMED (the modal-cancel is now
+  correctly `USER_REJECTED`, not a scary `CONNECT_FAILED`).
+- `restoreWcSession()` re-attaches a persisted WC session on cold start and on
+  foreground return without a new pairing — the "Trust disconnected me"
+  report. The probe reads only key names + an array length in localStorage.
+- Session-handling policy: transient `accountsChanged: []` no longer tears a
+  WC session down; relay drop/reconnect is traced, never treated as teardown;
+  every handler is instance-scoped so a replaced provider can never wipe the
+  live connection; listeners attach exactly once per instance.
+- `src/lib/wcTrace.js` — a ring buffer of WC lifecycle events (names +
+  timestamps only, never URIs/topics/accounts), dev-console only.
+- Metadata lives in ONE function shared by connect and restore
+  (`buildWcInitConfig`), still canonical `https://fbtswap.ir`, icon +
+  redirect rules unchanged and pinned by tests.
+
+**The Calm tab music "disappearing".** Never a deletion — `/api/calm` cached
+an EMPTY catalogue (archive.org outage) for six hours, and the panel
+`return null`ed on both error and empty. Now: the route refuses to cache an
+empty catalogue (502 `CALM_UNAVAILABLE`), a poisoned legacy entry is evicted
+on read, `?force=1` bypasses the read for Retry/refresh, the per-mood search
+gets one bounded retry, and the panel has distinct loading / error+Retry /
+honest-empty states. The APK additionally used to call `https://localhost/api/...`
+for this and the other News tabs: they now resolve through `src/lib/apiBase.js`
+(canonical origin in the native shell, relative on the web).
+
+**The More menu.** Close-then-navigate ordering (no more route swap beneath
+an exiting drawer), the nav More button toggles instead of re-opening on top,
+and the per-tile `backdrop-filter: blur(10px)` is dropped on native — the
+eighteen simultaneous blurs inside an animating panel were the menu flicker.
+
+**Safe Refresh.** A header Refresh button running a soft cycle through
+`src/lib/refresh.js`: invalidates the API + calm caches, re-runs every
+`usePoll`, News, Calm and the wallet balance — no reload, no remount, no new
+SignClient, no storage writes. Guards make it a no-op during wallet pairing
+and across every swap stage (preparing…pending). `hardReload()` exists as a
+guarded recovery export (one-shot per incident, storage-untouched). News tabs
+deep-link (`#/news?tab=calm`) so any refresh returns to the same tab.
+
+Tests: new `test/calm-probe.mjs` (37 checks incl. real HTTP against the route
+with a stubbed archive.org) and `test/refresh-probe.mjs` (30 checks);
+`test/wc-connect-probe.mjs` grew to 46 structural checks; `test/wiring.mjs`
+pins the modal pointer/z-index contract, the native blur kill, and the new
+i18n keys across all twelve locales.
+
 ## 1.36.0 — The learning core: daily, zero-cost, opt-in model calibration
 
 The signal engine now improves itself every day from other users' anonymized

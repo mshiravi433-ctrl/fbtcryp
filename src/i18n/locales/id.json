@@ -68,7 +68,10 @@
     "linkCopied": "Tautan undangan disalin",
     "handleCopied": "Nama disalin",
     "addressCopied": "Alamat disalin",
-    "pointsEarned": "Poin didapat"
+    "pointsEarned": "Poin didapat",
+    "walletSessionRestored": "Sesi dompet dipulihkan",
+    "walletSessionExpired": "Sesi dompet berakhir",
+    "refreshFailed": "Penyegaran gagal — coba lagi"
   },
   "wallet": {
     "connect": "Hubungkan dompet",
@@ -345,7 +348,8 @@
     "disclaimer": "Berita berasal dari media pihak ketiga dan setiap kartu mencantumkan sumbernya. Kami tidak mendukung atau menyunting isinya, dan tidak ada yang merupakan nasihat investasi.",
     "generatedNotice": "Tidak ada sumber berita yang dapat dijangkau, jadi ringkasan ini dibuat dari data pasar — ini bukan jurnalisme.",
     "tab": {
-      "insights": "Intelijen"
+      "insights": "Intelijen",
+      "calm": "Tenang"
     }
   },
   "notify": {
@@ -636,5 +640,13 @@
       "cards": "card",
       "topup": "simcard"
     }
+  },
+  "calm": {
+    "error": "Musik tenang gagal dimuat. Periksa koneksi lalu coba lagi.",
+    "empty": "Belum ada lagu tenang saat ini — lagu baru muncul saat katalog diperbarui."
+  },
+  "refresh": {
+    "refreshing": "Menyegarkan…",
+    "busyHint": "Selesaikan atau batalkan dulu aksi dompet yang sedang berjalan"
   }
 }
