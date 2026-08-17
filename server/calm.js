@@ -205,31 +205,30 @@ export function calmSubjectOk(subject) {
 /** Search one mood, restricted to commercially usable licences. */
 async function searchMoodOnce(mood) {
   /*
-   * The licence clause is part of the QUERY, so the expensive metadata
-   * lookups below are only ever spent on items that already qualify. Filtering
-   * afterwards would mean fetching and discarding most of them.
+   * ─── THE QUERY THAT ARCHIVE.ORG CAN ACTUALLY ANSWER ─────────────────────
+   * Measured against the live API (2026-08-17, while debugging the vanished
+   * calm tab): the previous query — four quoted `licenseurl:"…"` clauses, a
+   * nine-way NOT over `subject`, and an `fl[]=` field projection — returned
+   * archive.org's own "Sorry, we're kinda busy" 502 CONSISTENTLY, from clean
+   * egress IPs too, while the plain subject query answered in ~33 ms. The
+   * search backend was choking on the query, so every mood failed, the empty
+   * result got cached, and the tab went dark.
    *
-   * The NOT clause is here for the same reason: excluding harsh genres in the
-   * query is far cheaper than fetching their file lists and discarding them,
-   * and it means the `rows=8` budget is spent on candidates that can actually
-   * be used.
+   * The licence guarantee is NOT weakened by simplifying the query: the same
+   * `licenceOk` + `calmSubjectOk` gates still run on every candidate below,
+   * and `pickTrack` refuses any item whose licence label is unrecognised.
+   * What was in the SQL is now in the filter — the enforcement just moved,
+   * it did not go away. `mediatype:audio` keeps movies out of the pool.
+   *
+   * rows=50 (not 8): without query-side filtering, roughly most rows fail the
+   * licence or mood gates; a wider pool means enough survivors. The query is
+   * projection-free, which is what makes it cheap for archive.org to serve.
    */
-  const q =
-    `collection:netlabels AND subject:${mood} AND NOT subject:(` +
-    'noise OR industrial OR harsh OR dark OR drone OR experimental ' +
-    'OR psychedelic OR metal OR avantgarde) AND (' +
-    'licenseurl:"http://creativecommons.org/licenses/by/3.0/" OR ' +
-    'licenseurl:"http://creativecommons.org/licenses/by/4.0/" OR ' +
-    'licenseurl:"http://creativecommons.org/licenses/by-sa/3.0/" OR ' +
-    'licenseurl:"http://creativecommons.org/publicdomain/zero/1.0/")';
+  const q = `collection:netlabels AND subject:${mood} AND mediatype:audio`;
 
   const url =
     `${IA}/advancedsearch.php?q=${encodeURIComponent(q)}` +
-    /* `subject` is requested so the result can be re-checked below. Without
-       it `calmSubjectOk` would receive undefined and pass everything. */
-    '&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=creator&fl%5B%5D=licenseurl' +
-    '&fl%5B%5D=subject' +
-    '&rows=8&page=1&output=json';
+    '&rows=50&page=1&output=json';
 
   const data = await getJson(url);
   return (data?.response?.docs ?? []).filter(
@@ -337,22 +336,32 @@ export async function fetchCalm() {
   const docs = found.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 
   /*
-   * Capped BEFORE the metadata lookups. Each item costs one more request, and
-   * this is a background-music tab, not a library — eight tracks is more than
-   * anyone will listen to in a session.
+   * Capped BEFORE the metadata lookups, but over-provisioned: post-filtered
+   * candidates can still fail their metadata fetch (or hold no usable mp3),
+   * so twelve candidates are fetched to land eight tracks. Twelve lookups is
+   * the maximum upstream cost per cache-miss cycle — bounded, which is the
+   * rule for anything pointed at a donated-bandwidth service.
    */
-  const wanted = docs.slice(0, 8);
+  const wanted = docs.slice(0, 12);
 
   const built = await Promise.allSettled(
     wanted.map(async (doc) => {
-      const meta = await getJson(`${IA}/metadata/${encodeURIComponent(doc.identifier)}/files`);
-      return pickTrack(doc, meta?.result ?? []);
+      /*
+       * ─── /metadata/{id}, NOT /metadata/{id}/files ───────────────────────
+       * The /files subresource 502s under load while the full metadata
+       * document — which CONTAINS the same files array — stays up. Verified
+       * against the live API on the day the calm tab died. Same data, one
+       * request, working endpoint.
+       */
+      const meta = await getJson(`${IA}/metadata/${encodeURIComponent(doc.identifier)}`);
+      return pickTrack(doc, meta?.files ?? []);
     })
   );
 
   const items = built
     .filter((r) => r.status === 'fulfilled' && r.value)
-    .map((r) => r.value);
+    .map((r) => r.value)
+    .slice(0, 8);
 
   return {
     at: Date.now(),

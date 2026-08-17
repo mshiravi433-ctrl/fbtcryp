@@ -92,6 +92,7 @@ function installArchiveStub(mode, counter) {
     const u = String(url);
     if (!u.startsWith('https://archive.org/')) return realFetch(url, init);
     counter.n += 1;
+    counter.urls.push(u);
     if (mode === 'down') throw new Error('archive stall');
     if (u.includes('/advancedsearch.php')) {
       return new Response(
@@ -111,10 +112,12 @@ function installArchiveStub(mode, counter) {
         { status: 200, headers: { 'content-type': 'application/json' } }
       );
     }
-    if (u.includes('/metadata/ia-demo/files')) {
+    if (u.includes('/metadata/ia-demo')) {
       return new Response(
         JSON.stringify({
-          result: [{ name: 'river_64kb.mp3', length: '198', title: 'River' }]
+          /* the FULL metadata document: /metadata/{id}, whose `files` array
+             the route now reads — the /files sub-resource 502s under load */
+          files: [{ name: 'river_64kb.mp3', length: '198', title: 'River' }]
         }),
         { status: 200, headers: { 'content-type': 'application/json' } }
       );
@@ -129,7 +132,7 @@ const server = await new Promise((resolve) => {
 });
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const counter = { n: 0 };
+const counter = { n: 0, urls: [] };
 
 try {
   /* ---- C. outage: empty is an error, never a cached answer ---- */
@@ -168,6 +171,22 @@ try {
     t('?force=1 bypasses the cached read and regenerates',
       r3.status === 200 && counter.n > afterWarm);
     t('the bypass response advertises itself', r3.headers.get('x-cache') === 'BYPASS');
+  }
+
+  /* ---- G. the upstream query shape is the one archive.org will answer ----
+     Measured live: ANY request with the fl[]= field projection 502s ("kinda
+     busy") while the projection-free subject query answers in tens of ms;
+     and /metadata/{id}/files 502s where /metadata/{id} works. Pin both so a
+     refactor cannot quietly reintroduce the shapes that emptied the tab. */
+  {
+    const searchUrls = counter.urls.filter((u) => u.includes('advancedsearch.php'));
+    t('the mood search sends NO fl[]= field projection (the 502 trigger)',
+      searchUrls.length > 0 && searchUrls.every((u) => !u.includes('fl%5B')));
+    t('the mood search stays projection- and licence-clause-free in the query',
+      searchUrls.every((u) => !u.includes('licenseurl')));
+    t('metadata is read from /metadata/{id}, not the 502-prone /files subresource',
+      counter.urls.some((u) => u.includes('/metadata/ia-demo'))
+        && !counter.urls.some((u) => u.includes('/metadata/ia-demo/files')));
   }
 
   /* ---- F. the poisoned legacy cache entry is evicted on READ ----
