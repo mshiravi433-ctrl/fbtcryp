@@ -220,15 +220,17 @@ async function searchMoodOnce(mood) {
    * What was in the SQL is now in the filter — the enforcement just moved,
    * it did not go away. `mediatype:audio` keeps movies out of the pool.
    *
-   * rows=50 (not 8): without query-side filtering, roughly most rows fail the
-   * licence or mood gates; a wider pool means enough survivors. The query is
-   * projection-free, which is what makes it cheap for archive.org to serve.
+   * rows=25 is the calibrated ceiling, measured: rows=50 is itself 502ed by
+   * the overloaded backend while rows=25 answers in ~28 ms. Without
+   * query-side filtering, roughly most rows fail the licence or mood gates;
+   * 25 still leaves a pool, and a thin pool at a bad moment recovers on the
+   * next cycle rather than being cached empty (see server/app.js).
    */
   const q = `collection:netlabels AND subject:${mood} AND mediatype:audio`;
 
   const url =
     `${IA}/advancedsearch.php?q=${encodeURIComponent(q)}` +
-    '&rows=50&page=1&output=json';
+    '&rows=25&page=1&output=json';
 
   const data = await getJson(url);
   return (data?.response?.docs ?? []).filter(
