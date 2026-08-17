@@ -24,15 +24,25 @@ Five related incidents, fixed at their causes; nothing is hidden or suppressed.
   (`buildWcInitConfig`), still canonical `https://fbtswap.ir`, icon +
   redirect rules unchanged and pinned by tests.
 
-**The Calm tab music "disappearing".** Never a deletion — `/api/calm` cached
-an EMPTY catalogue (archive.org outage) for six hours, and the panel
-`return null`ed on both error and empty. Now: the route refuses to cache an
-empty catalogue (502 `CALM_UNAVAILABLE`), a poisoned legacy entry is evicted
-on read, `?force=1` bypasses the read for Retry/refresh, the per-mood search
-gets one bounded retry, and the panel has distinct loading / error+Retry /
-honest-empty states. The APK additionally used to call `https://localhost/api/...`
-for this and the other News tabs: they now resolve through `src/lib/apiBase.js`
-(canonical origin in the native shell, relative on the web).
+**The Calm tab music "disappearing".** Never a deletion — TWO stacked
+upstream failures, both proven against the live archive.org API on the day of
+the fix: (1) the search query itself was too heavy — four quoted
+`licenseurl:"…"` clauses plus a nine-way NOT plus an `fl[]=` field projection
+is answered by archive.org's backend with a ConSISTENT "kinda busy" 502,
+while the projection-free subject query answers in ~33 ms (verified); the
+licence/mood gates now run where they were already duplicated — on the
+results, with identical legal posture (`licenceOk`, `calmSubjectOk`,
+`pickTrack` unchanged). (2) `/metadata/{id}/files` 502s under load while the
+full `/metadata/{id}` document — which contains the same `files` array —
+stays up. And the original amplifier: the route cached an EMPTY catalogue for
+six hours while the panel `return null`ed on both error and empty. Now: empty
+is never cached (502 `CALM_UNAVAILABLE`), a poisoned legacy entry is evicted
+on read, `?force=1` bypasses the read for Retry/refresh, each mood search
+gets one bounded retry, twelve candidates land up to eight tracks, and the
+panel has distinct loading / error+Retry / honest-empty states. The APK
+additionally used to call `https://localhost/api/...` for this and the other
+News tabs: they now resolve through `src/lib/apiBase.js` (canonical origin in
+the native shell, relative on the web).
 
 **The More menu.** Close-then-navigate ordering (no more route swap beneath
 an exiting drawer), the nav More button toggles instead of re-opening on top,

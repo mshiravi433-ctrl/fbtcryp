@@ -8640,18 +8640,28 @@ export default function run() {
      * ("Humanhater"). Both legitimately ambient-tagged; neither remotely calm.
      */
     const calm = code(read('server/calm.js'));
-    t('harsh genres are excluded from the calm search',
-      /NOT subject:\(/.test(calm) && /harsh/.test(calm));
     /*
-     * Re-checked on the RESULT too, because the query and the returned
-     * metadata are not guaranteed to agree and `subject` can arrive as a bare
-     * string rather than an array.
+     * ─── THE QUERY ARCHIVE.ORG WILL ANSWER ────────────────────────────────
+     * Measured live while the tab was dark: any query carrying the fl[]=
+     * field projection (or the stacked licence/NOT clauses) is 502ed by
+     * archive.org's search backend — even rows=8 — while the projection-free
+     * subject query answers in ~33 ms. Harsh-genre and licence filtering did
+     * NOT disappear: they moved to the per-result gates, which is where they
+     * were already duplicated anyway. These assertions pin the working shape.
      */
-    t('...and re-checked on each result', /calmSubjectOk\(d\.subject\)/.test(calm));
-    /* Without requesting `subject` the re-check receives undefined and passes
-       everything, which would make it decoration. */
-    t('...with the subject field actually requested',
-      /fl%5B%5D=subject/.test(calm));
+    t('harsh genres are excluded from the calm results (result-side gate)',
+      /calmSubjectOk\(d\.subject\)/.test(calm) && /HARSH_SUBJECTS/.test(calm));
+    t('the query carries NO fl[]= projection or stacked licence clause (the 502 trigger)',
+      !/fl%5B/.test(calm) && !/NOT subject:\(/.test(calm) && !/licenseurl:\"/.test(calm));
+    /* Without `subject` in the doc the re-check receives undefined and passes
+       everything — the projection-free query still returns it natively. */
+    t('...and each candidate is re-checked for licence AND harshness',
+      /licenceOk\(d\.licenseurl\) && calmSubjectOk\(d\.subject\)/.test(calm));
+    /* The /files sub-resource 502s under load; the full metadata doc works. */
+    t('metadata comes from /metadata/{id} (its files array), not the /files subresource',
+      /metadata\/\$\{encodeURIComponent\(doc\.identifier\)\}`/.test(calm)
+        && /meta\?\.files/.test(calm)
+        && !/identifier\)\}\/files`/.test(calm));
 
     /*
      * ─── THE DECIMALS BUG THE TRON SCREEN EXPOSED ───────────────────────────
