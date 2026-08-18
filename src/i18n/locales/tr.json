@@ -124,7 +124,8 @@
     "wcRelayUnreachable": "WalletConnect aktarıcısına (relay.walletconnect.com) ulaşılamadı. Bazı ağlar bunu engeller — başka bir ağ veya VPN deneyip tekrar deneyin.",
     "wcExpired": "Bağlantı isteği cüzdan onaylamadan önce süresi doldu. Cüzdan listesini açıp yeniden deneyin.",
     "resetDesc": "Sanal bakiyenizi, pozisyonlarınızı, planlarınızı ve geçmişinizi başlangıç durumuna döndürür.",
-    "noWcProject": "WalletConnect için .env dosyanızda VITE_WALLETCONNECT_PROJECT_ID ayarlayın. cloud.reown.com adresinde ücretsiz."
+    "noWcProject": "WalletConnect için .env dosyanızda VITE_WALLETCONNECT_PROJECT_ID ayarlayın. cloud.reown.com adresinde ücretsiz.",
+    "showAllNetworks": "Tüm ağları göster"
   },
   "settings": {
     "title": "Ayarlar",
@@ -462,7 +463,29 @@
       "connect": "Cüzdanımı nasıl bağlarım?",
       "realMoney": "Hangi bölümler gerçek para kullanıyor?",
       "notFound": "Neden bazen \"coin bulunamadı\" diyor?",
-      "iranLegal": "İran'daki yasal durum nedir?"
+      "iranLegal": "İran'daki yasal durum nedir?",
+      "wcSecurityRisk": "Cüzdan neden bu site için \"güvenlik riski\" uyarısı gösteriyor?",
+      "wcNoProjectId": "WalletConnect proje kimliği olmadan çalışır mı?",
+      "wcReconnect": "Bağlantıyı kestikten hemen sonra neden bir cüzdan uygulaması açılıp hata veriyor?",
+      "tokenMissing": "Token bakiyem (örneğin Bitcoin) neden görünmüyor?",
+      "portfolio": "Portföy ne gösterir ve bir ağ neden kullanılamıyor olur?",
+      "intentOS": "Intent OS nedir ve dolan bir niyet geri alınabilir mi?",
+      "smartWallet": "Uygulama içi Akıllı Cüzdan nedir ve nasıl yedeklerim?",
+      "p2p": "P2P emaneti nasıl çalışır ve nasıl güvende kalırım?",
+      "ordersAutomation": "Otomatik emirler nasıl çalışır?",
+      "signals": "Sinyaller nedir ve fiyatları öngörebilir mi?",
+      "bridge": "Ağlar arasında token nasıl taşırım?",
+      "buyCrypto": "Kartla kripto nasıl alırım?",
+      "farmYield": "Farm ve Earn getirileri garanti mi?",
+      "rewardsPoints": "Ödüller, puanlar ve sıralama nedir?",
+      "derivatives": "Türev ekranları ne kadar riskli?",
+      "nft": "NFT'ler bir yatırım mıdır?",
+      "solana": "Solana diğer ağlardan nasıl farklıdır?",
+      "stocks": "Tokenize hisseler şirketin sahibi olduğum anlamına mı gelir?",
+      "newsMarket": "Piyasa verileri ve haberler nereden geliyor?",
+      "aboutFbt": "FBT Swap nedir ve denetlendi mi?",
+      "support": "Destekle nasıl iletişime geçerim veya hata bildiririm?",
+      "securitySettings": "Güvenlik ayarları neleri kontrol eder?"
     },
     "title": "Yardım ve destek"
   },
@@ -650,5 +673,142 @@
     "busyHint": "Önce devam eden cüzdan işlemini bitirin veya iptal edin",
     "pullToRefresh": "Yenilemek için aşağı çekin",
     "releaseToRefresh": "Yenilemek için bırakın"
+  },
+  "docs": {
+    "level": {
+      "beginner": "Başlangıç",
+      "intermediate": "Orta",
+      "pro": "Profesyonel"
+    },
+    "intentos": {
+      "title": "Intent OS",
+      "sub": "Ne istediğinizi söyleyin, rotayı o bulsun",
+      "step1": "İşleminizi sade kelimelerle yazın: ne taşınacak, nereden, nereye, hangi koşulla.",
+      "step2": "Derlenen emri kontrol edin — rota, limit fiyat ve {{fee}}% platform ücreti imzadan önce gösterilir.",
+      "step3": "Harcama iznini bir kez onaylayın; piyasa niyetinizle eşleşene kadar çözücü hiçbir şey imzalamaz.",
+      "step4": "Orders'ta izleyin ve dolmadan önce istediğiniz an iptal edin; dolan emir kesindir ve zincir üzerindedir.",
+      "step5": "Niyeti oluşturan cüzdanda gaz için biraz yerel coin tutun — yürütme ağ ücreti öder.",
+      "pitfall": "Dolan bir niyet gerçek bir zincir üstü işlemdir, taslak değil: miktar veya yöndeki yazım hatası eşleştikten sonra geri alınamaz."
+    },
+    "smartwallet": {
+      "title": "Akıllı Cüzdan",
+      "sub": "Uygulama içi cüzdan, gerçek sınırlarıyla",
+      "step1": "Cüzdan sekmesinden cüzdanı oluşturun ve 12 kelimelik ifadeyi kâğıda, çevrimdışı yazın.",
+      "step2": "Güçlü bir parola seçin — kasayı yalnızca bu cihazda şifreler, asla sunucuda değil.",
+      "step3": "Her cüzdan gibi alın, gönderin ve takas edin; özel anahtar cihazdan asla çıkmaz.",
+      "step4": "Ayarlar'dan şifreli yedek dosyasını ikinci kopya olarak dışa aktarın, ifadeden ayrı tutun.",
+      "pitfall": "İfade, cüzdanın KENDİSİDİR. Uygulamayı silerseniz veya ifadeyi kaybederseniz fonlar geri alınamaz — destek dahil kimse sıfırlayamaz."
+    },
+    "portfolio": {
+      "title": "Portföy",
+      "sub": "Tüm ağlarınız, tek ekran",
+      "step1": "Bir cüzdan bağlayın — Portföy, ağ değiştirmeden desteklenen tüm ağları okur.",
+      "step2": "Üstten bir ağla veya Tüm ağlar ile filtreleyin; görüntü para birimi Ayarlar'dadır.",
+      "step3": "Her satır miktarı ve değerini gösterir; toplam, yanıt veren ağların toplamıdır.",
+      "step4": "Bir ağda 'kullanılamıyor' görünüyorsa herkese açık RPC yanıt vermemiştir — yenileyin; fonlarınız kaybolmadı.",
+      "pitfall": "'Kaybolan' bir coin genelde başka ağdadır: WBTC Ethereum/Arbitrum'da, cbBTC Base'de, BTCB BSC'de. Yanlış ağa göndermek onu kalıcı olarak kaybettirir."
+    },
+    "p2p": {
+      "title": "P2P Pazarı",
+      "sub": "Emanet korumalı, kişiden kişiye işlem",
+      "step1": "Alım veya satımı, tutarı ve ödeme yönteminizi seçin.",
+      "step2": "Tamamlama puanı yüksek bir karşı taraf seçin ve açmadan önce şartlarını okuyun.",
+      "step3": "Emanet adımlarını aynen izleyin: itibari para onaylanana kadar kripto kilitli kalır.",
+      "step4": "Yalnızca para gerçekten hesabınıza geçince serbest bırakın — ekran görüntüsüne veya söze göre değil.",
+      "pitfall": "İşlemi emanet sohbeti dışına taşımak veya erken serbest bırakmak isteyen herkes dolandırıcıdır. Bildirin ve durun."
+    },
+    "orders": {
+      "title": "Emirler ve Otomasyon",
+      "sub": "Fiyatınızı belirleyin, sonra uzaklaşın",
+      "step1": "Orders'ı açın, pariteyi ve yönü seçin: alım veya satım.",
+      "step2": "Tetik fiyatını ve tutarı belirleyin — emir, piyasa ona ulaşana kadar bekler.",
+      "step3": "Dolduğu veya başarısız olduğu anı öğrenmek için bildirimleri açık tutun.",
+      "step4": "Tetiklenmeden önce istediğiniz an iptal edin; açık emir ücretsizdir.",
+      "pitfall": "Emir fiyat garantisi değildir: hızlı harekette kaymayla dolar — kaybetmeyi göze aldığınız parayla emir koyun."
+    },
+    "why": {
+      "title": "FBT Swap neden farklı",
+      "sub": "Başkalarının yapmadığını yapıyoruz",
+      "step1": "En iyi fiyat rotası: takasınız zincirdeki tüm DEX'lerde aynı anda fiyatlanır, tek borsada değil. Oynak bir paritede bu fark çoğu ücretten büyüktür.",
+      "step2": "Tek uygulamada on ağ — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic ve Solana. İşlemden önce tokenınızın bulunduğu ağı seçin.",
+      "step3": "Gerçekten saklamasız: kayıt yok, KYC yok, yatırma adresi yok. Fonlarınız asla bizde durmaz.",
+      "step4": "Dürüst güven oranlarıyla yerleşik AI analizi — sinyal belirsiz olduğunda kesinlik uydurmak yerine bunu söyler.",
+      "step5": "Tek ve net ücret: imzadan önce gösterilen {{fee}}% takas ücreti. Gizli fark yok, aylık ücret yok.",
+      "pitfall": "Reklam edilen kuru değil, \"alınacak minimum\" rakamını karşılaştırın. Bazı uygulamalar harika bir kur gösterip üstüne geniş fark alır. Bizimki gerçekten alacağınız rakamdır."
+    },
+    "strategy": {
+      "title": "Uygulamadan daha fazlasını almak",
+      "sub": "Sahip olduğunuzu büyütmenin pratik yolları",
+      "step1": "Bir stablecoin havuzuyla başlayın. USDT/USDC paritesi neredeyse hiç oynamaz; çok küçük geçici kayıpla işlem ücreti toplarsınız.",
+      "step2": "Yüksek hacimli saatlerde takas yapın. Derin likidite daha az fiyat etkisi demektir — büyük işlemlerde bu, ücretten çok daha önemlidir.",
+      "step3": "Girmeden önce Sinyaller ekranına bakın. Güven %40'ın altındaysa grafik gerçekten bir şey söylemiyordur — beklemek de bir pozisyondur.",
+      "step4": "Arkadaşlarınızı davet edin. Yönlendirmeler sıralamada en hızlı yoldur ve her yeni yatırımcı havuzları derinleştirir.",
+      "step5": "Kullandığınız her ağda gaz parası bulundurun. İşlem ortasında bitmesi, ödediğiniz ücreti çöpe atar.",
+      "pitfall": "Bulabildiğiniz en yüksek APR'nin peşinden koşmak, DeFi'de çoğu kişinin para kaybetme şeklidir. Anladığınız sabit %8, tokenını satamadığınız %900'lük havuzu yener."
+    },
+    "start": {
+      "title": "Başlarken",
+      "sub": "Cüzdan kurulumu ve ilk adımlar",
+      "step1": "Bir cüzdan kurun — mobilde en kolayı Trust Wallet veya MetaMask.",
+      "step2": "12 kelimelik kurtarma ifadenizi kâğıda yazın. Asla fotoğraflamayın, sohbette saklamayın.",
+      "step3": "Cüzdana BNB Smart Chain ekleyin, ardından gaz için az miktarda BNB gönderin.",
+      "step4": "FBT Swap'ı açın, Cüzdanı bağla'ya dokunun ve bağlantıyı onaylayın.",
+      "pitfall": "Bir borsadan çekerken her zaman BEP20 ağını seçin. Yanlış ağ, paranızı kimsenin geri alamayacağı bir yere gönderir — ne biz ne borsa."
+    },
+    "swap": {
+      "title": "Token takası",
+      "sub": "Bir tokenı diğeriyle değiştirmek",
+      "step1": "Ödediğiniz tokenı ve istediğiniz tokenı seçin.",
+      "step2": "Bir tutar girin — fiyat kendiliğinden güncellenir.",
+      "step3": "Kuru, alınacak minimumu ve {{fee}}% platform ücretini kontrol edin.",
+      "step4": "İncele'ye dokunun; ilk kullanımsa tokenı onaylayın.",
+      "step5": "Cüzdanda onaylayın ve işlemin tamamlanmasını bekleyin.",
+      "pitfall": "Onaylamadan önce \"fiyat etkisi\" rakamına bakın. %5'in üzeri yeterli alıcı olmadığı ve değer kaybedeceğiniz anlamına gelir. Daha küçük tutar veya başka token deneyin."
+    },
+    "farm": {
+      "title": "Likidite ve farming",
+      "sub": "Tokenlarınızdan getiri kazanmak",
+      "step1": "Bir şey yatırmadan önce geçici kaybı anlayın.",
+      "step2": "Bir havuz seçin — stablecoin pariteleri en düşük risklidir.",
+      "step3": "İki tokenı eşit değerde yatırın ve LP tokenı alın.",
+      "step4": "Ek ödül için LP tokenlarını stake edin.",
+      "pitfall": "Yılda binlerce yüzde ilan eden bir havuz görürseniz heyecanlanmayın. Bu neredeyse her zaman kazandığınız tokenın alıcısı olmadığı ve satamayacağınız anlamına gelir."
+    },
+    "signals": {
+      "title": "AI sinyalleri",
+      "sub": "Analiz ekranını okumak",
+      "step1": "Gösterge RSI, MACD, Bollinger bantları ve hareketli ortalamaları tek skorda birleştirir.",
+      "step2": "Güven, bu göstergelerin ne kadar uyuştuğunu gösterir — düşük güven belirsiz grafik demektir.",
+      "step3": "AI görünümü güncel haber bağlamını ekler ve görünümü geçersiz kılacak şeyi söyler.",
+      "pitfall": "Hiçbir analiz geleceği bilmez. \"Güçlü alım\"da bile fiyat düşebilir. Onu baktığınız birkaç şeyden biri olarak görün, uyulacak emir olarak değil."
+    },
+    "trade": {
+      "title": "Pratik ticaret",
+      "sub": "Sanal kredilerle öğrenmek",
+      "step1": "Trade, Invest ve Predict ekranları gerçek para değil, sanal NX kredisi kullanır.",
+      "step2": "Fiyatlar gerçek ve canlıdır, bu yüzden pratik gerçekçidir.",
+      "step3": "Swap ekranında bir şey riske atmadan önce emir mekaniğini öğrenmek için kullanın.",
+      "pitfall": "Burada gördüğünüz kâr gerçek para değildir ve çekilemez. Burada birkaç kez kazanmak, gerçek fonlarla aynısının olacağı anlamına gelmez — gerçek piyasaların duyguları vardır, bunun yok."
+    },
+    "dydx": {
+      "title": "dYdX Orbit — fonlama yalnızca kaynağında",
+      "sub": "Sadece dydx.trade üzerinden yatırın",
+      "step1": "Hisse Senetleri sekmesinden dYdX Orbit'i açın ve dYdX'e Bağlan'a dokunun — aynı EVM cüzdanıyla başlangıç mesajını imzalayın. dYdX anahtarı yalnızca bellekte kalır.",
+      "step2": "\"Fonlama nerede?\" kartına dokunun — Telegram'da tg.openLink ile, web'de yeni sekmede açar; ikisi de dydx.trade'e gider.",
+      "step3": "Kaynak sitede aynı cüzdanı bağlayın ve USDC yatırın — küçük bir testle başlayın, doğru ağı seçin (dYdX Chain).",
+      "step4": "Uygulamada/web'de piyasayı (örn. BTC-USD), yönü ve büyüklüğü seçin — Emri incele'ye dokunun ve kavramsal tutar üzerinden %0.10 yapıcı ücretini görün.",
+      "step5": "Onaylayın — emir BuilderCode (%0.10) ile imzalanır ve dYdX Chain'e gönderilir. İşlem karması ve açık pozisyonlar aşağıda görünür.",
+      "pitfall": "Fonlama uygulamanın içinde değildir — burada yalnızca bağlantı ve emir var. Yanlış ağa yatırılan fon geri alınamaz ve tohum ifadenizi asla girmeyin."
+    },
+    "security": {
+      "title": "Güvende kalmak",
+      "sub": "Fonlarınızı korumak",
+      "step1": "Tohum ifadeniz tek yedektir. Kâğıtta, çevrimdışı, asla bir siteye yazılmaz.",
+      "step2": "Cihaz düzeyinde koruma için Ayarlar'da biyometrik kilit ve iki faktörü etkinleştirin.",
+      "step3": "Bilinmeyen tokenları takas etmeden önce sözleşme adreslerini kendiniz doğrulayın.",
+      "step4": "Her yeni özellikte küçük bir test işlemiyle başlayın.",
+      "step5": "Büyük tutarları uygulama içi cüzdanda değil, ayrı bir donanım cüzdanında tutun.",
+      "pitfall": "Hiçbir meşru kişi 12 kurtarma kelimenizi istemez. Ne desteğimiz, ne grup yöneticisi, ne bir site. İsteyen paranızı çalmaya çalışıyordur. Hemen engelleyin."
+    }
   }
 }

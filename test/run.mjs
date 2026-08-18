@@ -111,6 +111,26 @@ console.log('▸ probing the WalletConnect connect timeout (the "spins forever" 
   report('WalletConnect connect timeout', await runWcTimeout());
 }
 
+/* ------------------------------ 0c-3. WC storage hygiene ------------------- */
+/* Runtime probe: purgeWcStorage removes exactly the SDK/AppKit connection
+   artifacts — the stale deep-link choice and persisted session that made the
+   next connect skip the modal and open a wallet app with a dead pairing. */
+console.log('▸ probing WalletConnect storage hygiene (stale deep-link/session cleanup)…');
+{
+  const { default: runWcStorage } = await import('./wc-storage-probe.mjs');
+  report('WalletConnect storage hygiene', runWcStorage());
+}
+
+/* ------------------------------ 0c-4. WC chain resolution ------------------ */
+/* Runtime probe: the connected chain must come from the session the wallet
+   approved, not the SDK's required-chain default — the difference between
+   showing the user's real tokens and hiding them on the wrong network. */
+console.log('▸ probing WalletConnect chain resolution (Trust-on-Ethereum reports 56)…');
+{
+  const { default: runWcChain } = await import('./wc-chain-probe.mjs');
+  report('WalletConnect chain resolution', runWcChain());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered

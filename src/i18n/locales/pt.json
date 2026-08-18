@@ -124,7 +124,8 @@
     "wcRelayUnreachable": "Não foi possível contactar o relay do WalletConnect (relay.walletconnect.com). Algumas redes bloqueiam-no — tente outra rede ou uma VPN e volte a tentar.",
     "wcExpired": "O pedido de ligação expirou antes de a carteira o aprovar. Abra a lista de carteiras e tente novamente.",
     "resetDesc": "Repõe o saldo virtual, posições, planos e histórico para o estado inicial.",
-    "noWcProject": "Defina VITE_WALLETCONNECT_PROJECT_ID no seu .env para ativar o WalletConnect. Gratuito em cloud.reown.com."
+    "noWcProject": "Defina VITE_WALLETCONNECT_PROJECT_ID no seu .env para ativar o WalletConnect. Gratuito em cloud.reown.com.",
+    "showAllNetworks": "Mostrar todas as redes"
   },
   "settings": {
     "title": "Definições",
@@ -462,7 +463,29 @@
       "connect": "Como ligo a minha carteira?",
       "realMoney": "Que partes usam dinheiro real?",
       "notFound": "Porque diz às vezes \"moeda não encontrada\"?",
-      "iranLegal": "Qual é a situação legal no Irão?"
+      "iranLegal": "Qual é a situação legal no Irão?",
+      "wcSecurityRisk": "Por que a carteira mostra um aviso de \"risco de segurança\" para este site?",
+      "wcNoProjectId": "O WalletConnect funciona sem um ID de projeto?",
+      "wcReconnect": "Por que um app de carteira abre e falha logo depois que eu desconecto?",
+      "tokenMissing": "Por que o saldo do meu token (como Bitcoin) não aparece?",
+      "portfolio": "O que o Portfólio mostra e por que uma rede fica indisponível?",
+      "intentOS": "O que é o Intent OS e uma intenção executada é reversível?",
+      "smartWallet": "O que é a Carteira Inteligente do app e como faço backup?",
+      "p2p": "Como funciona a custódia P2P e como fico seguro?",
+      "ordersAutomation": "Como funcionam as ordens automatizadas?",
+      "signals": "O que são os Sinais e eles preveem preços?",
+      "bridge": "Como movo tokens entre redes?",
+      "buyCrypto": "Como compro cripto com cartão?",
+      "farmYield": "Os rendimentos de Farm e Earn são garantidos?",
+      "rewardsPoints": "O que são recompensas, pontos e o ranking?",
+      "derivatives": "Quão arriscadas são as telas de derivativos?",
+      "nft": "NFTs são investimento?",
+      "solana": "Como a Solana difere das outras redes?",
+      "stocks": "Ações tokenizadas significam que sou dono da empresa?",
+      "newsMarket": "De onde vêm os dados de mercado e as notícias?",
+      "aboutFbt": "O que é o FBT Swap e ele é auditado?",
+      "support": "Como falo com o suporte ou reporto um bug?",
+      "securitySettings": "O que os ajustes de segurança controlam?"
     },
     "title": "Ajuda e suporte"
   },
@@ -650,5 +673,142 @@
     "busyHint": "Conclua ou cancele primeiro a ação de carteira em andamento",
     "pullToRefresh": "Puxe para baixo para atualizar",
     "releaseToRefresh": "Solte para atualizar"
+  },
+  "docs": {
+    "level": {
+      "beginner": "Iniciante",
+      "intermediate": "Intermediário",
+      "pro": "Pro"
+    },
+    "intentos": {
+      "title": "Intent OS",
+      "sub": "Diga o que quer; ele acha a rota",
+      "step1": "Descreva sua operação com palavras simples: o que mover, de onde, para onde e sob qual condição.",
+      "step2": "Confira a ordem compilada — rota, preço-limite e taxa da plataforma de {{fee}}% aparecem antes de qualquer assinatura.",
+      "step3": "Aprove a permissão de gasto uma vez; o solver só assina quando o mercado corresponde à sua intenção.",
+      "step4": "Acompanhe em Orders e cancele a qualquer momento antes de executar; uma ordem executada é definitiva e on-chain.",
+      "step5": "Mantenha moeda nativa para gás na carteira que criou a intenção — a execução paga taxas de rede.",
+      "pitfall": "Uma intenção executada é uma operação real on-chain, não um rascunho: um erro de valor ou direção não pode ser desfeito."
+    },
+    "smartwallet": {
+      "title": "Carteira Inteligente",
+      "sub": "A carteira do app, com seus limites reais",
+      "step1": "Crie a carteira na aba Carteira e escreva a frase de 12 palavras no papel, offline.",
+      "step2": "Escolha uma senha forte — ela criptografa o cofre apenas neste dispositivo, nunca em um servidor.",
+      "step3": "Receba, envie e troque como em qualquer carteira; a chave privada nunca sai do dispositivo.",
+      "step4": "Exporte o backup criptografado em Ajustes como segunda cópia, longe da frase.",
+      "pitfall": "A frase É a carteira. Apague o app ou perca a frase e os fundos são irrecuperáveis — ninguém, nem o suporte, pode redefini-los."
+    },
+    "portfolio": {
+      "title": "Portfólio",
+      "sub": "Todas as suas redes, uma tela",
+      "step1": "Conecte uma carteira — o Portfólio lê todas as redes suportadas sem trocar de rede.",
+      "step2": "Filtre por rede ou Todas as redes no topo; a moeda de exibição é definida em Ajustes.",
+      "step3": "Cada linha mostra a quantidade e o valor; o total soma as redes que responderam.",
+      "step4": "Uma rede 'indisponível' significa que o RPC público dela não respondeu — atualize; seus fundos não sumiram.",
+      "pitfall": "Uma moeda que 'sumiu' costuma estar em outra rede: WBTC na Ethereum/Arbitrum, cbBTC na Base, BTCB na BSC. Enviar na rede errada a perde para sempre."
+    },
+    "p2p": {
+      "title": "Mercado P2P",
+      "sub": "Negocie com pessoas, protegido por custódia",
+      "step1": "Escolha comprar ou vender, o valor e seu método de pagamento.",
+      "step2": "Escolha uma contraparte com alto índice de conclusão e leia os termos antes de abrir.",
+      "step3": "Siga os passos da custódia à risca: a cripto fica travada enquanto o pagamento em moeda fiduciária é confirmado.",
+      "step4": "Libere apenas quando o dinheiro estiver de fato na sua conta — nunca por print nem pela palavra do outro.",
+      "pitfall": "Quem pedir para negociar fora do chat da custódia, ou liberar antes, é golpista. Denuncie e pare."
+    },
+    "orders": {
+      "title": "Ordens & Automação",
+      "sub": "Defina seu preço e vá embora",
+      "step1": "Abra Orders e escolha o par e a direção: comprar ou vender.",
+      "step2": "Defina o preço de gatilho e o valor — a ordem espera o mercado chegar lá.",
+      "step3": "Deixe as notificações ativas para saber quando ela executa ou falha.",
+      "step4": "Cancele a qualquer momento antes do gatilho; uma ordem aberta não custa nada.",
+      "pitfall": "Uma ordem não garante o preço: em movimentos rápidos ela executa com derrapagem — use um valor que você possa perder."
+    },
+    "why": {
+      "title": "Por que o FBT Swap é diferente",
+      "sub": "O que fazemos que os outros não fazem",
+      "step1": "Rota de melhor preço: sua troca é cotada em todos os DEX da rede ao mesmo tempo, não em um só. Em pares voláteis, essa diferença costuma superar qualquer taxa.",
+      "step2": "Dez redes em um app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic e Solana. Escolha a rede que tem seu token antes de negociar.",
+      "step3": "De verdade sem custódia: sem cadastro, sem KYC, sem endereço de depósito. Seus fundos nunca ficam conosco.",
+      "step4": "Análise de IA integrada, com números de confiança honestos — ela diz quando o sinal está confuso em vez de inventar certeza.",
+      "step5": "Uma taxa clara: {{fee}}% por troca, mostrada antes de assinar. Sem markup escondido, sem custo mensal.",
+      "pitfall": "Compare o \"mínimo recebido\", não a taxa anunciada. Alguns apps mostram uma taxa ótima e cobram um spread largo por cima. O nosso é o número que você realmente recebe."
+    },
+    "strategy": {
+      "title": "Tirar mais do app",
+      "sub": "Formas práticas de fazer crescer o que você tem",
+      "step1": "Comece com um pool de stablecoins. Pares USDT/USDC quase não se movem, então você coleta taxas com perda impermanente mínima.",
+      "step2": "Troque em horários de alto volume. Mais liquidez significa menos impacto no preço — em ordens grandes isso importa mais que a taxa.",
+      "step3": "Veja a tela de Sinais antes de entrar. Abaixo de 40% de confiança, o gráfico não diz nada: esperar também é uma posição.",
+      "step4": "Convide amigos. Indicações são o caminho mais rápido no ranking, e cada novo trader aprofunda os pools.",
+      "step5": "Mantenha moeda de gás em cada rede que usar. Ficar sem ela no meio da transação joga fora a taxa já paga.",
+      "pitfall": "Perseguir o maior APR que encontrar é como a maioria perde dinheiro em DeFi. 8% estáveis que você entende valem mais que um pool de 900% cujo token você não consegue vender."
+    },
+    "start": {
+      "title": "Primeiros passos",
+      "sub": "Configuração da carteira e primeiros passos",
+      "step1": "Instale uma carteira — Trust Wallet ou MetaMask são as mais fáceis no celular.",
+      "step2": "Escreva sua frase de recuperação de 12 palavras no papel. Nunca a fotografe nem a guarde em chats.",
+      "step3": "Adicione a BNB Smart Chain na carteira e envie um pouco de BNB para o gás.",
+      "step4": "Abra o FBT Swap, toque em Conectar carteira e aprove a conexão.",
+      "pitfall": "Ao sacar de uma exchange, escolha sempre a rede BEP20. A rede errada manda seu dinheiro para um lugar que ninguém recupera — nem nós, nem a exchange."
+    },
+    "swap": {
+      "title": "Trocando tokens",
+      "sub": "Trocar um token por outro",
+      "step1": "Escolha o token com que paga e o que deseja.",
+      "step2": "Digite um valor — a cotação atualiza sozinha.",
+      "step3": "Confira a taxa, o mínimo recebido e a taxa de plataforma de {{fee}}%.",
+      "step4": "Toque em Revisar e aprove o token se for a primeira vez.",
+      "step5": "Confirme na carteira e aguarde a transação liquidar.",
+      "pitfall": "Veja o \"impacto no preço\" antes de confirmar. Acima de 5% significa que faltam compradores e você perderá valor. Tente um valor menor ou outro token."
+    },
+    "farm": {
+      "title": "Liquidez e farming",
+      "sub": "Ganhando rendimento com seus tokens",
+      "step1": "Entenda a perda impermanente antes de depositar qualquer coisa.",
+      "step2": "Escolha um pool — pares de stablecoin são os de menor risco.",
+      "step3": "Deposite os dois tokens em valor igual e receba tokens LP.",
+      "step4": "Faça staking dos LP para ganhar recompensas extras.",
+      "pitfall": "Se um pool anuncia milhares de por cento ao ano, não se empolgue. Quase sempre significa que o token que você ganha não tem compradores e você não vai conseguir vendê-lo."
+    },
+    "signals": {
+      "title": "Sinais de IA",
+      "sub": "Lendo a tela de análise",
+      "step1": "O medidor combina RSI, MACD, bandas de Bollinger e médias móveis em uma nota só.",
+      "step2": "A confiança mostra o quanto esses indicadores concordam — pouca confiança significa gráfico confuso.",
+      "step3": "A visão da IA acrescenta o contexto das notícias recentes e diz o que invalidaria a leitura.",
+      "pitfall": "Nenhuma análise conhece o futuro. Mesmo em \"compra forte\" o preço pode cair. Trate como mais um dado, não como uma ordem a seguir."
+    },
+    "trade": {
+      "title": "Trading de prática",
+      "sub": "Aprender com créditos virtuais",
+      "step1": "As telas Trade, Invest e Predict usam créditos NX virtuais, não dinheiro real.",
+      "step2": "Os preços são reais e ao vivo, então a prática é realista.",
+      "step3": "Use para aprender a mecânica das ordens antes de arriscar algo no Swap.",
+      "pitfall": "O lucro visto aqui não é dinheiro real e não pode ser sacado. Ganhar algumas vezes aqui não significa que o mesmo acontecerá com fundos reais — mercados reais têm emoções, isto não."
+    },
+    "dydx": {
+      "title": "dYdX Orbit — financiamento só na origem",
+      "sub": "Deposite apenas em dydx.trade",
+      "step1": "Abra o dYdX Orbit na aba Ações e toque em Conectar dYdX — assine a mensagem de integração com a mesma carteira EVM. A chave dYdX fica só na memória.",
+      "step2": "Toque no cartão \"Onde está o financiamento?\" — no Telegram abre via tg.openLink, na web em nova aba, ambos para dydx.trade.",
+      "step3": "No site de origem conecte a mesma carteira e deposite USDC — comece com um teste pequeno e escolha a rede certa (dYdX Chain).",
+      "step4": "De volta no app/web, escolha o mercado (ex.: BTC-USD), lado e tamanho — toque em Revisar ordem e veja a taxa de construtor de 0.10% sobre o nocional.",
+      "step5": "Confirme — a ordem é assinada com o BuilderCode (0.10%) e enviada à dYdX Chain. O hash e as posições abertas aparecem abaixo.",
+      "pitfall": "O financiamento não fica dentro do app — aqui só conexão e ordens. Depósito na rede errada é irreversível, e nunca digite sua frase-semente."
+    },
+    "security": {
+      "title": "Ficando seguro",
+      "sub": "Protegendo seus fundos",
+      "step1": "Sua frase-semente é o único backup. No papel, offline, nunca digitada em um site.",
+      "step2": "Ative o desbloqueio biométrico e o dois fatores em Ajustes para proteger o dispositivo.",
+      "step3": "Verifique você mesmo os endereços de contrato antes de trocar tokens desconhecidos.",
+      "step4": "Comece com uma transação de teste pequena ao usar qualquer recurso novo.",
+      "step5": "Guarde valores grandes em uma carteira de hardware separada, não na carteira do app.",
+      "pitfall": "Ninguém legítimo jamais pedirá suas 12 palavras de recuperação. Nem nosso suporte, nem admin de grupo, nem site algum. Quem pede está tentando roubar seu dinheiro. Bloqueie na hora."
+    }
   }
 }

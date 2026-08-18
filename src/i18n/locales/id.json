@@ -124,7 +124,8 @@
     "wcRelayUnreachable": "Tidak dapat menjangkau relay WalletConnect (relay.walletconnect.com). Sebagian jaringan memblokirnya — coba jaringan lain atau VPN, lalu ulangi.",
     "wcExpired": "Permintaan koneksi kedaluwarsa sebelum dompet menyetujuinya. Buka daftar dompet dan coba lagi.",
     "resetDesc": "Mengembalikan saldo virtual, posisi, rencana, dan riwayat ke keadaan awal.",
-    "noWcProject": "Atur VITE_WALLETCONNECT_PROJECT_ID di .env untuk mengaktifkan WalletConnect. Gratis di cloud.reown.com."
+    "noWcProject": "Atur VITE_WALLETCONNECT_PROJECT_ID di .env untuk mengaktifkan WalletConnect. Gratis di cloud.reown.com.",
+    "showAllNetworks": "Tampilkan semua jaringan"
   },
   "settings": {
     "title": "Pengaturan",
@@ -462,7 +463,29 @@
       "connect": "Bagaimana menghubungkan dompet?",
       "realMoney": "Bagian mana yang memakai uang nyata?",
       "notFound": "Kenapa kadang muncul \"koin tidak ditemukan\"?",
-      "iranLegal": "Bagaimana status hukum di Iran?"
+      "iranLegal": "Bagaimana status hukum di Iran?",
+      "wcSecurityRisk": "Mengapa dompet menampilkan peringatan \"risiko keamanan\" untuk situs ini?",
+      "wcNoProjectId": "Bisakah WalletConnect bekerja tanpa ID proyek?",
+      "wcReconnect": "Kenapa aplikasi dompet terbuka dan gagal tepat setelah saya memutuskan?",
+      "tokenMissing": "Kenapa saldo token saya (seperti Bitcoin) tidak muncul?",
+      "portfolio": "Apa yang ditampilkan Portofolio, dan kenapa suatu jaringan tidak tersedia?",
+      "intentOS": "Apa itu Intent OS dan apakah intent yang terisi bisa dibatalkan?",
+      "smartWallet": "Apa itu Dompet Pintar dalam aplikasi dan bagaimana mencadangkannya?",
+      "p2p": "Bagaimana escrow P2P bekerja dan bagaimana tetap aman?",
+      "ordersAutomation": "Bagaimana cara kerja order otomatis?",
+      "signals": "Apa itu Sinyal dan bisakah memprediksi harga?",
+      "bridge": "Bagaimana memindahkan token antar jaringan?",
+      "buyCrypto": "Bagaimana membeli kripto dengan kartu?",
+      "farmYield": "Apakah imbal hasil Farm dan Earn dijamin?",
+      "rewardsPoints": "Apa itu hadiah, poin, dan papan peringkat?",
+      "derivatives": "Seberapa berisiko layar-layar derivatif?",
+      "nft": "Apakah NFT itu investasi?",
+      "solana": "Apa bedanya Solana dengan jaringan lain?",
+      "stocks": "Apakah saham tokenisasi berarti saya memiliki perusahaan?",
+      "newsMarket": "Dari mana data pasar dan berita berasal?",
+      "aboutFbt": "Apa itu FBT Swap dan apakah sudah diaudit?",
+      "support": "Bagaimana menghubungi dukungan atau melaporkan bug?",
+      "securitySettings": "Apa yang dikontrol pengaturan keamanan?"
     },
     "title": "Bantuan & dukungan"
   },
@@ -650,5 +673,142 @@
     "busyHint": "Selesaikan atau batalkan dulu aksi dompet yang sedang berjalan",
     "pullToRefresh": "Tarik ke bawah untuk menyegarkan",
     "releaseToRefresh": "Lepaskan untuk menyegarkan"
+  },
+  "docs": {
+    "level": {
+      "beginner": "Pemula",
+      "intermediate": "Menengah",
+      "pro": "Pro"
+    },
+    "intentos": {
+      "title": "Intent OS",
+      "sub": "Katakan apa yang Anda mau, rutenya ditemukan",
+      "step1": "Tulis transaksi Anda dengan bahasa sederhana: apa yang dipindah, dari mana, ke mana, dengan syarat apa.",
+      "step2": "Periksa order yang tersusun — rute, harga batas, dan biaya platform {{fee}}% tampil sebelum ada yang ditandatangani.",
+      "step3": "Setujui izin belanja sekali; solver tidak menandatangani apa pun sampai pasar cocok dengan intent Anda.",
+      "step4": "Pantau di Orders dan batalkan kapan pun sebelum terisi; order yang terisi bersifat final dan on-chain.",
+      "step5": "Simpan koin asli untuk gas di dompet pembuat intent — eksekusi tetap membayar biaya jaringan.",
+      "pitfall": "Intent yang terisi adalah transaksi on-chain sungguhan, bukan draf: salah ketik jumlah atau arah tidak bisa dibatalkan setelah cocok."
+    },
+    "smartwallet": {
+      "title": "Dompet Pintar",
+      "sub": "Dompet dalam aplikasi, dengan batas nyatanya",
+      "step1": "Buat dompet dari tab Dompet dan tulis frasa 12 kata di kertas, secara offline.",
+      "step2": "Pilih kata sandi yang kuat — ia mengenkripsi vault hanya di perangkat ini, tidak pernah di server.",
+      "step3": "Terima, kirim, dan swap seperti dompet mana pun; kunci privat tidak pernah keluar dari perangkat.",
+      "step4": "Ekspor file cadangan terenkripsi dari Pengaturan sebagai salinan kedua, terpisah dari frasa.",
+      "pitfall": "Frasa ADALAH dompetnya. Hapus aplikasi atau hilangkan frasa, dana tidak bisa dipulihkan — siapa pun, termasuk dukungan, tidak bisa meresetnya."
+    },
+    "portfolio": {
+      "title": "Portofolio",
+      "sub": "Semua jaringan Anda, satu layar",
+      "step1": "Hubungkan dompet — Portofolio membaca semua jaringan yang didukung tanpa berpindah jaringan.",
+      "step2": "Saring per jaringan atau Semua jaringan di atas; mata uang tampilan diatur di Pengaturan.",
+      "step3": "Setiap baris menunjukkan jumlah dan nilainya; total menjumlahkan jaringan yang menjawab.",
+      "step4": "Jaringan 'tidak tersedia' berarti RPC publiknya tidak menjawab — ketuk segarkan; dana Anda tidak hilang.",
+      "pitfall": "Koin yang 'hilang' biasanya ada di jaringan lain: WBTC di Ethereum/Arbitrum, cbBTC di Base, BTCB di BSC. Mengirim di jaringan yang salah menghilangkannya selamanya."
+    },
+    "p2p": {
+      "title": "Pasar P2P",
+      "sub": "Bertransaksi dengan orang, dilindungi escrow",
+      "step1": "Pilih beli atau jual, jumlah, dan metode pembayaran Anda.",
+      "step2": "Pilih lawan transaksi dengan skor penyelesaian tinggi dan baca syaratnya sebelum membuka order.",
+      "step3": "Ikuti langkah escrow dengan tepat: kripto terkunci selama pembayaran fiat dikonfirmasi.",
+      "step4": "Lepaskan hanya saat uangnya benar-benar masuk ke akun Anda — bukan dari tangkapan layar atau janji.",
+      "pitfall": "Siapa pun yang meminta transaksi di luar chat escrow, atau rilis lebih awal, adalah penipu. Laporkan dan berhenti."
+    },
+    "orders": {
+      "title": "Order & Otomasi",
+      "sub": "Tetapkan harga Anda, lalu pergi",
+      "step1": "Buka Orders dan pilih pasangan serta arah: beli atau jual.",
+      "step2": "Tetapkan harga pemicu dan jumlah — order menunggu sampai pasar mencapainya.",
+      "step3": "Nyalakan notifikasi agar tahu saat terisi atau gagal.",
+      "step4": "Batalkan kapan saja sebelum terpicu; order terbuka tidak memakan biaya.",
+      "pitfall": "Order bukan jaminan harga: saat pasar bergerak cepat, ia terisi dengan slippage — pakailah dana yang rela hilang."
+    },
+    "why": {
+      "title": "Kenapa FBT Swap berbeda",
+      "sub": "Yang kami lakukan, yang lain tidak",
+      "step1": "Rute harga terbaik: swap Anda dikutip di semua DEX pada chain sekaligus, bukan satu bursa. Pada pasangan yang volatil, selisihnya sering lebih besar dari biaya mana pun.",
+      "step2": "Sepuluh jaringan swap dalam satu aplikasi — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, dan Solana. Pilih jaringan tempat token Anda berada sebelum trading.",
+      "step3": "Benar-benar non-kustodian: tanpa daftar, tanpa KYC, tanpa alamat deposit. Dana Anda tidak pernah ada di akun kami.",
+      "step4": "Analisis AI bawaan dengan angka keyakinan yang jujur — ia memberi tahu saat sinyalnya tidak jelas alih-alih mengarang kepastian.",
+      "step5": "Satu biaya yang jelas: {{fee}}% per swap, ditampilkan sebelum tanda tangan. Tanpa markup tersembunyi, tanpa biaya bulanan.",
+      "pitfall": "Bandingkan angka \"minimum diterima\", bukan kurs yang diiklankan. Beberapa aplikasi menampilkan kurs hebat lalu mengambil spread lebar di atasnya. Angka kami adalah yang benar-benar Anda terima."
+    },
+    "strategy": {
+      "title": "Mendapatkan lebih banyak dari aplikasi",
+      "sub": "Cara praktis menumbuhkan yang Anda miliki",
+      "step1": "Mulai dengan pool stablecoin. Pasangan USDT/USDC nyaris tidak bergerak, jadi Anda memungut biaya perdagangan dengan kerugian tidak permanen yang sangat kecil.",
+      "step2": "Swap pada jam volume tinggi. Likuiditas lebih dalam berarti dampak harga lebih kecil — pada order besar ini jauh lebih penting daripada biaya.",
+      "step3": "Cek layar Signals sebelum masuk. Jika keyakinan di bawah 40%, grafik memang tidak berkata apa-apa — menunggu juga sebuah posisi.",
+      "step4": "Undang teman. Referral adalah jalan tercepat ke puncak leaderboard, dan setiap trader baru memperdalam pool.",
+      "step5": "Simpan uang gas di setiap chain yang Anda pakai. Kehabisan di tengah transaksi membuang biaya yang sudah dibayar.",
+      "pitfall": "Mengejar APR tertinggi adalah cara kebanyakan orang kehilangan uang di DeFi. 8% stabil yang Anda pahami mengalahkan pool 900% yang tokennya tidak bisa dijual."
+    },
+    "start": {
+      "title": "Memulai",
+      "sub": "Pengaturan dompet dan langkah pertama",
+      "step1": "Pasang dompet — Trust Wallet atau MetaMask paling mudah di ponsel.",
+      "step2": "Tulis frasa pemulihan 12 kata di kertas. Jangan pernah memotretnya atau menyimpannya di chat.",
+      "step3": "Tambahkan BNB Smart Chain di dompet, lalu kirim sedikit BNB untuk gas.",
+      "step4": "Buka FBT Swap, ketuk Hubungkan dompet, dan setujui koneksinya.",
+      "pitfall": "Saat menarik dari bursa, selalu pilih jaringan BEP20. Salah memilih jaringan membuat uang Anda pergi ke tempat yang tak bisa diambil siapa pun — bukan kami, bukan bursanya."
+    },
+    "swap": {
+      "title": "Menukar token",
+      "sub": "Menukar satu token dengan token lain",
+      "step1": "Pilih token yang Anda bayarkan dan token yang Anda inginkan.",
+      "step2": "Masukkan jumlah — kuotasi diperbarui otomatis.",
+      "step3": "Periksa kurs, minimum diterima, dan biaya platform {{fee}}%.",
+      "step4": "Ketuk Tinjau, lalu setujui token jika ini pertama kali Anda menggunakannya.",
+      "step5": "Konfirmasi di dompet dan tunggu transaksi selesai.",
+      "pitfall": "Periksa angka \"dampak harga\" sebelum konfirmasi. Di atas 5% berarti pembeli tidak cukup dan Anda akan kehilangan nilai. Coba jumlah lebih kecil atau token lain."
+    },
+    "farm": {
+      "title": "Likuiditas & farming",
+      "sub": "Mendapatkan imbal hasil dari token Anda",
+      "step1": "Pahami kerugian tidak permanen sebelum menyetor apa pun.",
+      "step2": "Pilih pool — pasangan stablecoin paling rendah risikonya.",
+      "step3": "Setor kedua token dengan nilai sama dan terima token LP.",
+      "step4": "Stake token LP untuk imbalan tambahan.",
+      "pitfall": "Kalau ada pool mengiklankan ribuan persen setahun, jangan tergiur. Hampir selalu berarti token yang Anda hasilkan tidak punya pembeli dan tidak akan bisa dijual."
+    },
+    "signals": {
+      "title": "Sinyal AI",
+      "sub": "Membaca layar analisis",
+      "step1": "Pengukur menggabungkan RSI, MACD, pita Bollinger, dan rata-rata bergerak menjadi satu skor.",
+      "step2": "Keyakinan menunjukkan seberapa sepakat indikator-indikator itu — keyakinan rendah berarti grafik tidak jelas.",
+      "step3": "Pandangan AI menambahkan konteks berita terbaru dan menyebutkan apa yang menggugurkan pandangan itu.",
+      "pitfall": "Tidak ada analisis yang tahu masa depan. Bahkan pada \"beli kuat\" harga bisa turun. Perlakukan sebagai salah satu hal yang Anda lihat, bukan perintah."
+    },
+    "trade": {
+      "title": "Trading latihan",
+      "sub": "Belajar dengan kredit virtual",
+      "step1": "Layar Trade, Invest, dan Predict memakai kredit NX virtual, bukan uang sungguhan.",
+      "step2": "Harganya nyata dan langsung, jadi latihannya realistis.",
+      "step3": "Gunakan untuk mempelajari mekanisme order sebelum mempertaruhkan apa pun di layar Swap.",
+      "pitfall": "Keuntungan di sini bukan uang asli dan tidak bisa ditarik. Menang beberapa kali di sini tidak berarti hal yang sama terjadi dengan dana asli — pasar sungguhan punya emosi, ini tidak."
+    },
+    "dydx": {
+      "title": "dYdX Orbit — pendanaan hanya di asalnya",
+      "sub": "Setor hanya di dydx.trade",
+      "step1": "Buka dYdX Orbit dari tab Stocks dan ketuk Sambungkan dYdX — tanda tangani pesan orientasi dengan dompet EVM yang sama. Kunci dYdX hanya ada di memori.",
+      "step2": "Ketuk kartu \"Di mana pendanaannya?\" — di Telegram terbuka lewat tg.openLink, di web di tab baru, keduanya ke dydx.trade.",
+      "step3": "Di situs asal, hubungkan dompet yang sama dan setor USDC — mulai dengan tes kecil, pilih jaringan yang benar (dYdX Chain).",
+      "step4": "Kembali di aplikasi/web, pilih pasar (mis. BTC-USD), arah, dan ukuran — ketuk Tinjau order dan lihat biaya builder 0.10% dari nosional.",
+      "step5": "Konfirmasi — order ditandatangani dengan BuilderCode (0.10%) dan dikirim ke dYdX Chain. Hash transaksi dan posisi terbuka muncul di bawah.",
+      "pitfall": "Pendanaan tidak ada di dalam aplikasi — hanya koneksi dan order. Setoran di jaringan yang salah tidak bisa dibatalkan, dan jangan pernah memasukkan frasa seed Anda."
+    },
+    "security": {
+      "title": "Tetap aman",
+      "sub": "Melindungi dana Anda",
+      "step1": "Frasa seed Anda adalah satu-satunya cadangan. Di kertas, offline, tidak pernah diketik di situs mana pun.",
+      "step2": "Aktifkan buka kunci biometrik dan dua faktor di Pengaturan untuk perlindungan tingkat perangkat.",
+      "step3": "Verifikasi sendiri alamat kontrak token sebelum menukar token yang tidak dikenal.",
+      "step4": "Mulai dengan transaksi uji kecil saat menggunakan fitur baru apa pun.",
+      "step5": "Simpan jumlah besar di dompet perangkat keras terpisah, bukan di dompet dalam aplikasi.",
+      "pitfall": "Tidak ada pihak yang sah yang akan meminta 12 kata pemulihan Anda. Bukan dukungan kami, bukan admin grup, bukan situs mana pun. Yang memintanya sedang mencoba mencuri uang Anda. Blokir segera."
+    }
   }
 }

@@ -75,9 +75,10 @@ function providerLabel(wallet, t) {
   switch (wallet.mode) {
     case 'wc': return 'WalletConnect';
     case 'injected': {
-      const prov = wallet.provider;
-      const info = prov?.info;
-      if (info?.name) return info.name;
+      /* The EIP-6963 info of the provider we actually attached (exposed as
+         wallet.injectedInfo). Fall back to the legacy window.ethereum flags
+         only when no announcement was matched — never guess a brand. */
+      if (wallet.injectedInfo?.name) return wallet.injectedInfo.name;
       const eth = window.ethereum;
       if (eth?.isMetaMask) return 'MetaMask';
       if (eth?.isTrust) return 'Trust Wallet';
@@ -302,7 +303,7 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
   );
 }
 
-function AssetList({ portfolio, selectedChain, t, currency }) {
+function AssetList({ portfolio, selectedChain, onSelect, t, currency }) {
   const [q, setQ] = useState('');
   const rows = useMemo(() => {
     let list = portfolio.rows || [];
@@ -313,6 +314,15 @@ function AssetList({ portfolio, selectedChain, t, currency }) {
     }
     return list;
   }, [portfolio.rows, selectedChain, q]);
+  /* True when the CURRENT filter is empty but the wallet holds assets on
+     other networks — the "my Bitcoin is missing" case, where the answer is
+     one tap away, not a bug. */
+  const hasElsewhere = useMemo(
+    () => !portfolio.loading && rows.length === 0 && !q.trim()
+      && selectedChain !== 'all'
+      && (portfolio.rows || []).some((r) => r.chainId !== selectedChain),
+    [portfolio.loading, portfolio.rows, rows.length, selectedChain, q]
+  );
 
   return (
     <section className="wallet-pie-card wal-card" style={{ padding: 14, borderRadius: 18 }}>
@@ -344,6 +354,15 @@ function AssetList({ portfolio, selectedChain, t, currency }) {
       ) : !rows.length ? (
         <div className="wal-empty-asset">
           {selectedChain === 'all' ? t('wallet.noAssets') : t('wallet.noAssetsChain')}
+          {hasElsewhere && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 10 }}
+              onClick={() => onSelect?.('all')}
+            >
+              {t('wallet.showAllNetworks')}
+            </button>
+          )}
         </div>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
@@ -619,6 +638,7 @@ export default function Wallet() {
               <AssetList
                 portfolio={portfolio}
                 selectedChain={selectedChain}
+                onSelect={handleSelectChain}
                 t={t}
                 currency={currency}
               />

@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.39.0 — WalletConnect identity, chain-sync and stale-session fixes; docs for every level
+
+**The fake "Security risk / flagged unsafe by multiple security providers"
+screen.** Root cause was in the app, not a blacklist: `repairSignClientMetadata()`
+mutated `wc.signer.client.metadata`, but in sign-client 2.23.10 the Core has no
+`metadata` property — the repair was a silent no-op and `populateAppMetadata()`
+overwrote the configured identity with the page origin. Inside the APK that
+origin is `https://localhost`, and wallet security scanners flag a dapp that
+claims to be localhost. The repair now targets `wc.signer.metadata` (the object
+the proposal is actually serialized from), verifies its own result and records
+`metadata_repaired`/`metadata_repair_failed` in the event trace. Domain
+verification on the WalletConnect dashboard remains an owner-only step —
+runbook in `docs/WALLETCONNECT-VERIFY-FA.md`.
+
+**Trust Wallet balances "missing" (e.g. Bitcoin).** The SDK reports the
+REQUIRED chain after connect (BNB Chain, 56) regardless of the network the
+wallet actually approved, so the Wallet tab filtered to BSC and WBTC on
+Ethereum vanished — and Swap/Bridge/Send built requests tagged `eip155:56`
+against a session the wallet approved on another chain. The real chain is now
+derived from the approved session (`src/lib/wcChain.js`), both React state and
+the SDK's internal chainId are aligned with it, and `chainChanged` events are
+parsed defensively (hex / CAIP-2 / numeric).
+
+**WalletConnect dead after disconnecting the in-app wallet.** Disconnects
+nulled refs but left the SDK/AppKit localStorage artifacts behind
+(`wc@2:client:*//session`, `WALLETCONNECT_DEEPLINK_CHOICE`, recent-wallet
+keys). The next `init()` resurrected the old session, AppKit answered
+`isConnected()=true` and refused to open the modal, and the stored mobile
+deep-link funnelled the user into a wallet app with a dead pairing.
+`src/lib/wcStorage.js` purges exactly those connection artifacts on every
+disconnect/forget and before every explicit connect; entering local mode
+releases a live WalletConnect session; a local vault wins the cold-start race
+against the async session restore.
+
+**Docs + offline FAQ at every level.** Five new Docs sections (IntentOS,
+Smart Wallet, Portfolio, P2P, Orders) with beginner/intermediate/pro badges on
+all fourteen sections and complete 12-language translations (the ten locales
+that previously fell back to English now carry the full docs). Twenty-two new
+offline-FAQ entries with en/fa/ar keywords and answers, including the
+"WalletConnect without a project ID" question, plus `help.q` titles in all
+twelve locales. No new pages were added.
+
+**Unreported bugs fixed in the same audit:** send/swap/bridge request-chain
+mismatch (same chainId lie), cold-start vault-vs-session race, dual-connection
+state leak when creating/unlocking the vault while WalletConnect was live, and
+the Wallet page mislabelling EIP-6963 wallets as MetaMask/Trust. Details in
+`docs/PRELAUNCH-AUDIT-2026-08-18-FA.md`.
+
 ## 1.38.0 — WalletConnect actually connects, and pull-to-refresh replaces the header button
 
 **The "spins forever" / "fail connection" bug — an unbounded relay wait.**

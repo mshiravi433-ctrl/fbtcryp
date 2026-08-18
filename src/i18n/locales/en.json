@@ -441,7 +441,8 @@
     "localWallet": "On-device wallet",
     "copyAddress": "Copy address",
     "practiceMode": "Practice mode",
-    "practiceBody": "Virtual balance for learning — no real money at risk. Test trading, explore features, and get comfortable before connecting a real wallet."
+    "practiceBody": "Virtual balance for learning — no real money at risk. Test trading, explore features, and get comfortable before connecting a real wallet.",
+    "showAllNetworks": "Show all networks"
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -1219,7 +1220,29 @@
       "chains": "Which networks are supported?",
       "connect": "How do I connect my wallet?",
       "notFound": "Why does it sometimes say \"coin not found\"?",
-      "iranLegal": "What is the legal position in Iran?"
+      "iranLegal": "What is the legal position in Iran?",
+      "wcSecurityRisk": "Why does the wallet show a \"security risk\" warning for this site?",
+      "wcNoProjectId": "Can WalletConnect work without a project ID?",
+      "wcReconnect": "Why does a wallet app open and fail right after I disconnect?",
+      "tokenMissing": "Why isn't my token balance (like Bitcoin) showing?",
+      "portfolio": "What does the Portfolio show, and why is a chain unavailable?",
+      "intentOS": "What is Intent OS and is a filled intent reversible?",
+      "smartWallet": "What is the in-app Smart Wallet and how do I back it up?",
+      "p2p": "How does P2P escrow work and how do I stay safe?",
+      "ordersAutomation": "How do automated orders work?",
+      "signals": "What are the Signals and can they predict prices?",
+      "bridge": "How do I move tokens between networks?",
+      "buyCrypto": "How do I buy crypto with a card?",
+      "farmYield": "Are Farm and Earn yields guaranteed?",
+      "rewardsPoints": "What are rewards, points and the leaderboard?",
+      "derivatives": "How risky are the derivatives screens?",
+      "nft": "Are NFTs an investment?",
+      "solana": "How is Solana different from the other networks?",
+      "stocks": "Do tokenized stocks mean I own the company?",
+      "newsMarket": "Where do market data and news come from?",
+      "aboutFbt": "What is FBT Swap and is it audited?",
+      "support": "How do I contact support or report a bug?",
+      "securitySettings": "What do the security settings control?"
     },
     "contactUs": "Contact us",
     "contactUsSub": "Telegram and email support",
@@ -1344,6 +1367,57 @@
       "step4": "Back in the app/web pick market (e.g. BTC-USD), side and size — tap Review order and see the 0.10% builder fee on notional.",
       "step5": "Confirm — order is signed with BuilderCode (0.10%) and sent to dYdX Chain. Tx hash and open positions appear below.",
       "pitfall": "Funding is not inside the app — only connect and order are here. Deposit on the wrong network is not reversible and never enter your seed phrase."
+    },
+    "level": {
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "pro": "Pro"
+    },
+    "intentos": {
+      "title": "Intent OS",
+      "sub": "Tell it what you want; it finds the route",
+      "step1": "Describe your trade in plain words: what to move, from where, to where, and under what condition.",
+      "step2": "Check the compiled order — route, limit price and the {{fee}}% platform fee are all shown before anything is signed.",
+      "step3": "Approve the spending allowance once; the solver signs nothing until the market matches your intent.",
+      "step4": "Track it in Orders and cancel anytime before it fills; a filled intent is final and on-chain.",
+      "step5": "Keep a little native coin for gas in the wallet that created the intent — execution still pays network fees.",
+      "pitfall": "A filled intent is a real on-chain trade, not a draft: a typo in the amount or direction cannot be undone after it matches."
+    },
+    "smartwallet": {
+      "title": "Smart Wallet",
+      "sub": "The in-app wallet, with its real limits",
+      "step1": "Create the in-app wallet from the Wallet tab and write the 12-word phrase on paper, offline.",
+      "step2": "Choose a strong password — it encrypts the vault on this device only, never on a server.",
+      "step3": "Receive, send and swap with it like any wallet; the private key never leaves the device.",
+      "step4": "Export the encrypted backup file from Settings as a second copy, kept apart from the phrase.",
+      "pitfall": "The phrase IS the wallet. Delete the app or lose the phrase and the funds are unrecoverable — nobody, including support, can reset it."
+    },
+    "portfolio": {
+      "title": "Portfolio",
+      "sub": "Every chain you hold, one screen",
+      "step1": "Connect a wallet — the Portfolio reads every supported chain without switching networks.",
+      "step2": "Filter by a chain or All networks at the top; your display currency is set in Settings.",
+      "step3": "Each row shows the amount and its value; the total sums the chains that answered.",
+      "step4": "A chain showing \"unavailable\" means its public RPC did not answer — tap refresh; your funds are not gone.",
+      "pitfall": "A coin that \"disappeared\" is usually on another network: WBTC lives on Ethereum/Arbitrum, cbBTC on Base, BTCB on BSC. Sending it on the wrong chain loses it permanently."
+    },
+    "p2p": {
+      "title": "P2P Market",
+      "sub": "Trade with people, protected by escrow",
+      "step1": "Pick buy or sell, the amount and your payment method.",
+      "step2": "Choose a counterparty with a high completion score and read the order's terms before opening it.",
+      "step3": "Follow the escrow steps exactly: the crypto stays locked while the fiat payment is confirmed.",
+      "step4": "Release only when the money is truly in your own account — never on a screenshot or the counterparty's word.",
+      "pitfall": "Anyone who asks to move the trade outside the escrow chat, or to release early, is running a scam. Report and stop."
+    },
+    "orders": {
+      "title": "Orders & Automation",
+      "sub": "Set your price, then walk away",
+      "step1": "Open Orders and choose the pair and direction: buy or sell.",
+      "step2": "Set the trigger price and amount — the order waits until the market reaches it.",
+      "step3": "Keep notifications on so you learn the moment it fills or fails.",
+      "step4": "Cancel anytime before it triggers; an open order costs nothing.",
+      "pitfall": "An order is not a price guarantee: in a fast move it fills with slippage, so size it with money you can afford to lose."
     }
   },
   "audit": {
