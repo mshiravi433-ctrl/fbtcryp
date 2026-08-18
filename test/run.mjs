@@ -102,6 +102,15 @@ console.log('▸ checking WalletConnect behavior guards…');
   report('WalletConnect behavior', runWcConnect());
 }
 
+/* ------------------------------ 0c-2. WC "spins forever" regression --------- */
+/* Runtime probe (not a grep): proves a blocked-relay connect attempt is
+   bounded by a real timeout instead of spinning for 60-90+ seconds. */
+console.log('▸ probing the WalletConnect connect timeout (the "spins forever" fix)…');
+{
+  const { default: runWcTimeout } = await import('./wc-timeout-probe.mjs');
+  report('WalletConnect connect timeout', await runWcTimeout());
+}
+
 /* ------------------------------ 0d. calm music (HTTP + filters) ------------ */
 /* Real HTTP against the real route with a stubbed archive.org: the bug was
    an empty catalogue being cached for six hours while the panel rendered

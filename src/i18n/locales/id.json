@@ -647,6 +647,8 @@
   },
   "refresh": {
     "refreshing": "Menyegarkan…",
-    "busyHint": "Selesaikan atau batalkan dulu aksi dompet yang sedang berjalan"
+    "busyHint": "Selesaikan atau batalkan dulu aksi dompet yang sedang berjalan",
+    "pullToRefresh": "Tarik ke bawah untuk menyegarkan",
+    "releaseToRefresh": "Lepaskan untuk menyegarkan"
   }
 }

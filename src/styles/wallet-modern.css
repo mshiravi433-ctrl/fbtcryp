@@ -228,6 +228,47 @@
   .wallet-hero-aurora::before, .wallet-hero-aurora::after { animation: none; }
 }
 
+/*
+ * ─── NATIVE: THE WALLET SCREEN "FLICKERS LIKE A FLUORESCENT TUBE" ──────────
+ * Reported specifically during/around WalletConnect pairing: the wallet
+ * screen and the grey wallet-picker sheet flicker on Android. The mechanism
+ * is the SAME one already fixed for `.sheet-backdrop` and `.more-tile`
+ * (see the NATIVE section further down in index.css) but this file
+ * reintroduced it for the Wallet screen specifically and was never gated:
+ *
+ *   1. `.wallet-hero-modern` (the panel THIS screen opens on, directly above
+ *      the Connect button) carries `backdrop-filter: blur(20px)`. Behind it
+ *      sit the three infinitely-drifting `.rgb-orb` layers from
+ *      RgbBackground — themselves already frozen on native (`.rgb-still`),
+ *      but a backdrop-filter still re-samples whatever is behind it EVERY
+ *      COMPOSITOR FRAME regardless of whether that content is animating,
+ *      because scrolling/resizing/any repaint anywhere in the stacking
+ *      context invalidates the sampled backdrop.
+ *   2. `.wallet-hero-aurora` ADDS two of its own independently-looping
+ *      `filter: blur(60px)` layers UNDER that backdrop-filter (z-index: -1),
+ *      so opening this screen is nested blur-of-blur: the exact "an animated
+ *      blur containing more blurs that all have to be recomputed every
+ *      frame" cost already documented and fixed once for PageTransition and
+ *      the sheet backdrop, reintroduced here by a later redesign.
+ *
+ * Same fix as those two: drop the backdrop-filter and freeze the aurora
+ * loop on native. The panel is opaque enough without it (its own gradient
+ * background already reads as a surface), and the WalletConnect approval
+ * sheet that opens ON TOP of this screen is what actually needs to render
+ * without competing for the same GPU budget.
+ */
+:root[data-native='true'] .wallet-hero-modern,
+:root[data-native='true'] .wallet-token-row-modern,
+:root[data-native='true'] .wallet-pie-card,
+:root[data-native='true'] .wallet-action-modern {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-native='true'] .wallet-hero-aurora::before,
+:root[data-native='true'] .wallet-hero-aurora::after {
+  animation: none;
+}
+
 /* ── Tokenized-stocks discovery banner ─────────────────────────────────────
    A semantic button replaces the old clickable div and its hard-coded mixed
    Persian/English text. The clipped corner gives the card a distinct ticket/

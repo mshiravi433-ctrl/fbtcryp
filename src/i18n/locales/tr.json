@@ -647,6 +647,8 @@
   },
   "refresh": {
     "refreshing": "Yenileniyor…",
-    "busyHint": "Önce devam eden cüzdan işlemini bitirin veya iptal edin"
+    "busyHint": "Önce devam eden cüzdan işlemini bitirin veya iptal edin",
+    "pullToRefresh": "Yenilemek için aşağı çekin",
+    "releaseToRefresh": "Yenilemek için bırakın"
   }
 }

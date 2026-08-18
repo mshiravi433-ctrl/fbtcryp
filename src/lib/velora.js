@@ -61,6 +61,72 @@ export const toVeloraAddress = (token) => (token.native ? VELORA_NATIVE : token.
 const TIMEOUT_MS = 3000;
 
 /**
+ * ─── THE SAME-ORIGIN PROXY FALLBACK (missing until now) ────────────────────
+ * KyberSwap and OpenOcean both retry a network-level failure through the
+ * app's own origin (server/swapProxy.js) — Velora never did, so a user whose
+ * network cannot reach api.velora.xyz simply never saw it in the comparison,
+ * which for a QUOTE-ONLY source is silent and invisible: the swap still
+ * works off KyberSwap/OpenOcean, so nothing ever LOOKED broken, but exactly
+ * the network conditions most likely to filter Kyber/OpenOcean (Iranian
+ * mobile networks) filter this too, and those are the users this third
+ * opinion was added FOR.
+ */
+const PROXY_BASE = '/api/swap/velora';
+
+/** True when a failure means "the network path is broken", not "no route". */
+function isNetworkFailure(err) {
+  if (!err) return false;
+  if (err.network === true) return true;
+  if (err.name === 'AbortError' || err instanceof TypeError) return true;
+  if (err.status === 403 || err.status === 429 || (err.status >= 500 && err.status <= 599)) return true;
+  return false;
+}
+
+async function veloraFetchOnce(url, timeout) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json' } });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.priceRoute) {
+      const err = new Error(body?.error || `VELORA_HTTP_${res.status}`);
+      err.status = res.status;
+      if (res.status === 403 || res.status === 429 || res.status >= 500) err.network = true;
+      throw err;
+    }
+    return body.priceRoute;
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const e = new Error('VELORA_TIMEOUT');
+      e.network = true;
+      throw e;
+    }
+    if (err instanceof TypeError) err.network = true;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch with the same-origin proxy as a network-level fallback — see the
+ * file header. Only fires when the direct call failed at the network layer;
+ * the proxied attempt sends the SAME query string, so it is a retry, not a
+ * different request.
+ */
+async function veloraFetchPrices(params) {
+  const direct = `${BASE}/prices?${params}`;
+  try {
+    return await veloraFetchOnce(direct, TIMEOUT_MS);
+  } catch (err) {
+    if (!isNetworkFailure(err)) throw err;
+    const proxied = await veloraFetchOnce(`${PROXY_BASE}/prices?${params}`, TIMEOUT_MS + 2000).catch(() => null);
+    if (proxied) return proxied;
+    throw err;
+  }
+}
+
+/**
  * Our project name, sent as `partner`.
  *
  * Lower case and unhyphenated to match the LI.FI integrator id, which had to
@@ -120,22 +186,7 @@ export async function getVeloraQuote({
     params.set('takeSurplus', 'true');
   }
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  let data;
-  try {
-    const res = await fetch(`${BASE}/prices?${params}`, {
-      signal: ctrl.signal,
-      headers: { accept: 'application/json' }
-    });
-    const body = await res.json().catch(() => null);
-    if (!res.ok || !body?.priceRoute) {
-      throw new Error(body?.error || `VELORA_HTTP_${res.status}`);
-    }
-    data = body.priceRoute;
-  } finally {
-    clearTimeout(timer);
-  }
+  const data = await veloraFetchPrices(params);
 
   /*
    * `destAmountAfterFee` when a fee was requested, `destAmount` otherwise.

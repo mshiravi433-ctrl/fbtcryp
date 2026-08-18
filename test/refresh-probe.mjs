@@ -14,9 +14,12 @@
  *   5. the guard releases cleanly and refreshing works again;
  *   6. hardReload with no window refuses rather than throws.
  *
- * Structural (source): the button exists and disables itself under guard, the
- * wallet connect flow and the swap transaction path HOLD the guard, and no
- * new unguarded location.reload() has crept in.
+ * Structural (source): the header Refresh button is GONE (replaced by
+ * pull-to-refresh — PullToRefresh.jsx — per the redesign: no reload button in
+ * the header, drag-to-refresh instead, required on native/PWA, harmless on
+ * web), the pull gesture disables itself under guard exactly like the old
+ * button did, the wallet connect flow and the swap transaction path HOLD the
+ * guard, and no new unguarded location.reload() has crept in.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -88,15 +91,50 @@ const refresh = await import('../src/lib/refresh.js');
 const read = (p) => readFileSync(p, 'utf8');
 
 {
+  /*
+   * ─── THE HEADER REFRESH BUTTON MUST NEVER COME BACK ─────────────────────
+   * Requested explicitly: remove the header refresh icon-button; replace it
+   * with pull-to-refresh. Both halves are pinned here so neither can drift
+   * back without this test noticing.
+   */
   const header = read('src/components/Header.jsx');
-  t('the header renders the refresh button with an i18n aria-label',
-    /aria-label=\{t\('common\.refresh'\)\}/.test(header));
-  t('the button disables itself while a guard is held or a cycle runs',
-    /refreshDisabled/.test(header) && /disabled=\{refreshDisabled\}/.test(header));
-  t('the button reflects wallet.connecting (signing/connecting safety)',
-    /wallet\.connecting/.test(header));
-  t('the button invalidates the API memo and the calm cache', /clearApiCache/.test(header) && /invalidateCalmCache/.test(header));
-  t('the spin class honours reduced motion via the still gate', /refresh-spin/.test(header) && /!still/.test(header));
+  /* Strip comments before searching: the header now documents in prose WHY
+     the button moved to PullToRefresh, and that prose names the very
+     functions the check must prove are no longer IMPORTED. */
+  const headerCode = header.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  t('the header no longer renders a refresh icon-button',
+    !/aria-label=\{t\('common\.refresh'\)\}/.test(headerCode) && !/onClick=\{doSoftRefresh\}/.test(headerCode));
+  t('the header no longer imports the refresh contract directly (moved to PullToRefresh)',
+    !/requestSoftRefresh/.test(headerCode) && !/onRefreshStateChange/.test(headerCode));
+
+  const ptr = read('src/components/PullToRefresh.jsx');
+  t('pull-to-refresh exists and wraps the routed content',
+    ptr.length > 500 && /export default function PullToRefresh/.test(ptr));
+  t('pull-to-refresh runs the SAME requestSoftRefresh contract the old button ran',
+    /requestSoftRefresh\(\{/.test(ptr));
+  t('...through the same invalidate hook (api cache + calm cache)',
+    /clearApiCache/.test(ptr) && /invalidateCalmCache/.test(ptr));
+  t('a guard being held suppresses the pull gesture, same safety as the old disabled button',
+    /refreshBlocked\(\)/.test(ptr) && /blocked/.test(ptr));
+  t('an open sheet suppresses the pull gesture too (no refresh fighting a modal)',
+    /isScrollLocked\(\)/.test(ptr));
+  t('the drag is bounded (rubber-band ceiling), not an unbounded pull',
+    /MAX_PULL_PX/.test(ptr));
+  t('the refresh icon honours reduced motion via the still gate, same as the old button',
+    /refresh-spin/.test(ptr) && /reducedMotion/.test(ptr));
+  t('release-to-refresh and pull-to-refresh copy is localized, not hardcoded',
+    /t\('refresh\.releaseToRefresh'\)/.test(ptr) && /t\('refresh\.pullToRefresh'\)/.test(ptr));
+
+  /*
+   * ─── NATIVE/PWA ONLY, WEB MUST NOT BREAK ────────────────────────────────
+   * "در وب لازم نیست ولی در PWA حتماً می‌خواهد" — required on native/PWA,
+   * a no-op elsewhere. The component must gate its OWN listener attachment
+   * on isNativeShell() rather than relying on a CSS media query, because a
+   * desktop browser resized narrow is not a phone and must not intercept a
+   * downward mouse drag as a refresh gesture.
+   */
+  t('the pull gesture only attaches inside the packaged app / installed PWA',
+    /isNativeShell/.test(ptr) && /isStandalone/.test(ptr) && /if \(!native\) return children;/.test(ptr));
 
   const wallet = read('src/context/WalletContext.jsx');
   t('the WalletConnect pairing attempt holds a refresh guard',

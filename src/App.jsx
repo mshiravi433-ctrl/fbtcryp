@@ -7,6 +7,7 @@ import { WalletProvider } from './context/WalletContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
+import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
 import RadioDock from './components/RadioDock';
@@ -423,7 +424,9 @@ export default function App() {
       <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div className="app-shell">
           <Header />
-          <AnimatedRoutes />
+          <PullToRefresh>
+            <AnimatedRoutes />
+          </PullToRefresh>
           <BottomNav />
         </div>
         {/*

@@ -111,17 +111,32 @@ export default function run() {
   // The modal (showQrModal: true) must own deep links for every wallet.
   t('no display_uri handler navigates the page to MetaMask',
     !/window\.location\.href\s*=/.test(code));
+  /*
+   * `wc.connect()` is wrapped in a bounded timeout (withTimeout) so an
+   * unreachable relay cannot spin forever — see WC_CONNECT_TIMEOUT_MS. The
+   * invariant that matters is unchanged: exactly one call, no iOS-only
+   * MetaMask branch.
+   */
   t('connect() runs exactly once (no iOS-only MetaMask branch)',
-    (code.match(/await wc\.connect\(\)/g) || []).length === 1);
+    (code.match(/wc\.connect\(\)/g) || []).length === 1);
+  t('the connect call is bounded by a timeout (no infinite spin on a blocked relay)',
+    /withTimeout\(wc\.connect\(\), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(code));
   t('the mobile wallet list includes Trust Wallet, not just MetaMask',
     /id:\s*'trust'/.test(code) && /id:\s*'metamask'/.test(code));
   t('the mobile wallet list supplies a universal link for Trust',
     /link\.trustwallet\.com/.test(code));
 
-  /* ---- 8. modal options exclude the explorer wallet list on iOS ---- */
-  t('iOS modal disables the explorer wallet list', /explorerExcludedWalletIds: 'ALL'/.test(code));
-  t('iOS modal supplies explicit mobile wallet deep links',
-    /mobileWallets: \[/.test(code));
+  /* ---- 8. the modal never depends on the explorer API for deep links ---- */
+  t('the modal disables the explorer wallet list', /explorerExcludedWalletIds: 'ALL'/.test(code));
+  /*
+   * Previously iOS-only. Android was left depending on api.web3modal.org to
+   * resolve wallet deep links at pairing time — a third-party network call
+   * that Iranian networks filtering WalletConnect infrastructure can also
+   * block, producing "the wallet list shows but tapping does nothing".
+   * Supplying the links ourselves on EVERY platform removes that dependency.
+   */
+  t('mobile wallet deep links are supplied unconditionally (not gated behind an iOS check)',
+    /mobileWallets: \[/.test(code) && !/\.\.\.\(ios\s*\?/.test(code));
 
   /* ---- 9. session restore: the "Trust disconnected me" fix ----
      A persisted WC session used to be picked up only from the Connect
@@ -162,7 +177,7 @@ export default function run() {
 
   /* ---- 11. refresh guards around pairing ---- */
   t('the pairing attempt holds the refresh guard for its whole life',
-    code.indexOf("holdRefreshGuard('wc-connect')") < code.indexOf('await wc.connect()')
+    code.indexOf("holdRefreshGuard('wc-connect')") < code.indexOf('wc.connect()')
       && /connectGuard\.release\(\)/.test(code));
 
   /* ---- 12. the trace carries no secrets ---- */

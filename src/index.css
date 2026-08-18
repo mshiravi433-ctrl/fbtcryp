@@ -5594,7 +5594,8 @@ input, select, textarea { font-size: 16px !important; }
   -webkit-backdrop-filter: none !important;
 }
 
-/* The header Refresh button's spin while a cycle is in flight. One loop, no
+/* The refresh icon's spin while a cycle is in flight — the pull-to-refresh
+   pill (PullToRefresh.jsx), which replaced the header button. One loop, no
    glow, no layout change — and it stops dead for reduced-motion users (the
    component also skips the class entirely in that case, this is the belt). */
 @keyframes refresh-spin {
@@ -5605,6 +5606,65 @@ input, select, textarea { font-size: 16px !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .refresh-spin { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   PULL-TO-REFRESH (native/PWA only — see PullToRefresh.jsx for why the web
+   never mounts this at all: a normal mobile browser already has its own
+   native gesture, and stacking ours under it would double-trigger).
+
+   The Capacitor WebView has NO refresh affordance of its own — no pull, no
+   F5, no reload button (which is exactly why one used to live in the header
+   and had to be removed per the redesign). This is what replaced it.
+   --------------------------------------------------------------------------- */
+.ptr-root {
+  position: relative;
+  isolation: isolate;
+}
+
+.ptr-indicator {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 25; /* under the sticky .top-bar (30), above page content */
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.ptr-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(10, 11, 18, 0.88);
+  border: 1px solid var(--line-strong);
+  color: var(--text-2);
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  margin-inline: auto;
+}
+
+.ptr-pill[data-ready='true'] {
+  color: var(--rgb-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+}
+
+/* The text label sits centred under the pill; kept out of layout flow via
+   the parent's absolute positioning, so it never nudges the header. */
+.ptr-label {
+  display: block;
+  text-align: center;
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .ptr-pill {
+  background: #fff;
+  box-shadow: 0 6px 16px -8px rgba(15, 23, 42, 0.35);
 }
 
 /* Splash social row */

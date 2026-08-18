@@ -1,5 +1,64 @@
 # Changelog
 
+## 1.38.0 — WalletConnect actually connects, and pull-to-refresh replaces the header button
+
+**The "spins forever" / "fail connection" bug — an unbounded relay wait.**
+`wc.connect()` / `EthereumProvider.init()` had no outer timeout of their own.
+Inside the SDK, `Relayer.connect()` retries the relay socket up to 5 times
+with growing backoff BEFORE it ever rejects — on a network that blocks
+`relay.walletconnect.com` outright (the Iranian case), that meant 60-90+
+seconds of a spinner with zero feedback before an unlabelled failure, which
+read exactly like "the app is broken". `src/lib/wcTimeout.js`
+(`withTimeout`, 20s) now bounds both the connect and the session-restore
+path; on timeout the abandoned SignClient/modal instance is disconnected so
+it cannot outlive the attempt and confuse the next tap, and the failure is
+classified as the existing actionable `WC_RELAY_UNREACHABLE` message
+(switch network / VPN) instead of a bare `CONNECT_FAILED`.
+
+**Wallet deep links no longer depend on a third WalletConnect-operated API.**
+`mobileWallets` (explicit `metamask://` / `trust://` / `rainbow://` + universal
+links) was iOS-only; Android fell back to resolving deep links from
+`api.web3modal.org` at pairing time — a dependency that can be filtered
+alongside the relay, producing "the wallet list shows but tapping does
+nothing". Supplied on every platform now, removing that dependency entirely
+for the three wallets the app promotes.
+
+**The wallet screen "flickers like a fluorescent tube".** The same mechanism
+already fixed once for the sheet backdrop and the More menu — a
+`backdrop-filter` re-sampling a drifting animated background every
+compositor frame, nested under its own looping `filter: blur()` aurora
+layers — was reintroduced by `wallet-modern.css` for the Wallet screen
+specifically (the screen the Connect button lives on) and never gated for
+native. Both are now frozen/dropped under `:root[data-native='true']`,
+matching the existing pattern.
+
+**Velora gets the same reachability fallback Kyber/OpenOcean already had.**
+A same-origin proxy retry (`server/swapProxy.js` → `/api/swap/velora/prices`)
+for users whose network cannot reach `api.velora.xyz` directly — previously
+missing, and invisible because Velora is quote-only: losing it silently
+dropped a price comparison rather than breaking anything visible, for
+exactly the users (Iranian networks already filtering Kyber/OpenOcean) this
+third opinion exists for.
+
+**The header Refresh button is gone; pull-to-refresh replaces it.**
+`src/components/PullToRefresh.jsx` wraps the routed content and runs the
+IDENTICAL `requestSoftRefresh()` contract (`lib/refresh.js`: no reload, no
+remount, no new SignClient, guard-respecting, single-flight) on a downward
+drag. It only attaches its touch listeners inside the packaged Capacitor app
+or an installed/home-screen PWA (`isNativeShell() || isStandalone()`) —
+where there was previously no refresh affordance at all — and is a complete
+no-op on the web, where the browser's own pull-to-refresh / F5 already work
+and must not be double-triggered underneath a second gesture. A currently
+open sheet or a held refresh guard (wallet pairing, a swap in flight)
+suppresses the drag entirely, same safety the old disabled button had.
+
+Tests: `test/wc-timeout-probe.mjs` (new, 11 checks — a runtime probe proving
+a promise that never resolves is actually bounded, not just a grep),
+`test/wc-connect-probe.mjs` grew to 47, `test/refresh-probe.mjs` re-pins the
+button's removal and the new pull gesture's safety contract, `test/units.mjs`
+and `test/wiring.mjs` cover the Velora proxy and the native wallet-screen
+blur fix.
+
 ## 1.37.0 — WalletConnect lifecycle, the calm tab, and a safe Refresh
 
 Five related incidents, fixed at their causes; nothing is hidden or suppressed.

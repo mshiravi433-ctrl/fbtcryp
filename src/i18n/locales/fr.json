@@ -647,6 +647,8 @@
   },
   "refresh": {
     "refreshing": "Actualisation…",
-    "busyHint": "Terminez ou annulez d'abord l'action de portefeuille en cours"
+    "busyHint": "Terminez ou annulez d'abord l'action de portefeuille en cours",
+    "pullToRefresh": "Tirez vers le bas pour actualiser",
+    "releaseToRefresh": "Relâchez pour actualiser"
   }
 }

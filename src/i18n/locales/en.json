@@ -3969,6 +3969,8 @@
   },
   "refresh": {
     "refreshing": "Refreshing…",
-    "busyHint": "Finish or cancel the current wallet action first"
+    "busyHint": "Finish or cancel the current wallet action first",
+    "pullToRefresh": "Pull down to refresh",
+    "releaseToRefresh": "Release to refresh"
   }
 }
