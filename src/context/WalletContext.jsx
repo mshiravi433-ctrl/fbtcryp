@@ -8,6 +8,8 @@ import { isIOS as isIOSDevice } from '../lib/platform';
 import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { wcEvent } from '../lib/wcTrace';
 import { WC_CONNECT_TIMEOUT_MS, withTimeout } from '../lib/wcTimeout';
+import { purgeWcStorage } from '../lib/wcStorage';
+import { chainFromWcSession, parseChainId } from '../lib/wcChain';
 
 /*
  * WALLETCONNECT PROJECT ID — a constant in source, deliberately NOT an env var.
@@ -76,6 +78,10 @@ const loadEthers = () => import('ethers');
 
 export function WalletProvider({ children }) {
   const [mode, setMode] = useState(null); // 'injected' | 'wc' | 'local'
+  /* Which injected wallet we attached (EIP-6963 info, never the provider
+     object itself — state must stay JSON-clean). Drives the provider label
+     on the Wallet page; null for wc/local modes. */
+  const [injectedInfo, setInjectedInfo] = useState(null);
   const [address, setAddress] = useState(null);
   const [chainId, setChainId] = useState(null);
   const [nativeBalance, setNativeBalance] = useState(null);
@@ -222,10 +228,11 @@ export function WalletProvider({ children }) {
       detachInjectedListeners();
 
       let target = window.ethereum;
+      let matchedInfo = null;
       // If there are multiple injected providers (EIP-6963) pick by rdns.
       if (rdns && eip6963Ref.current.size > 0) {
         for (const { info, provider } of eip6963Ref.current.values()) {
-          if (info.rdns === rdns) { target = provider; break; }
+          if (info.rdns === rdns) { target = provider; matchedInfo = info; break; }
         }
       } else if (Array.isArray(window.ethereum?.providers) && window.ethereum.providers.length) {
         // Prefer MetaMask by default when multiple providers compete and no
@@ -245,6 +252,7 @@ export function WalletProvider({ children }) {
       eip1193Ref.current = target;
       signerRef.current = await provider.getSigner();
       setMode('injected');
+      setInjectedInfo(matchedInfo);
       setAddress(accounts[0]);
       setChainId(Number(net.chainId));
       setLocked(false);
@@ -386,20 +394,45 @@ export function WalletProvider({ children }) {
    * Inside the packaged app that origin is `https://localhost`; on a preview
    * host it is that preview URL. Either way the wallet (a separate app)
    * cannot fetch the URL, so MetaMask rejects with "Invalid URL" and Trust
-   * simply fails to pair. Point the live sign client back at the public
-   * origin — this is the value that lands in the session proposal the wallet
-   * renders. Idempotent, so both connect and restore call it.
+   * fails the pairing — and Trust's security scanner, seeing a dapp that
+   * claims to be `https://localhost`, shows exactly the red "Security risk /
+   * the domain is flagged unsafe by multiple security providers" screen the
+   * WalletConnect page kept reporting. Point the live sign client back at
+   * the public origin — this is the value that lands in the session proposal
+   * the wallet renders.
+   *
+   * ─── WHY THE OLD REPAIR DID NOTHING ──────────────────────────────────────
+   * It mutated `wc.signer.client.metadata`. Verified against the installed
+   * @walletconnect/sign-client@2.23.10: the SignClient stores its metadata on
+   * ITSELF (`this.metadata = populateAppMetadata(...)` in the constructor) and
+   * the engine serializes the proposal from `this.client.metadata` where
+   * `this.client` is the SIGN CLIENT, not the Core — `wc.signer.client` is the
+   * Core, which has NO `metadata` property at all. The guard
+   * `if (signClient?.metadata)` therefore never fired: the "repair" was a
+   * silent no-op and every session proposed from the APK still carried
+   * `https://localhost` as the dapp identity.
+   *
+   * The Core branch is kept defensively (an SDK upgrade that moves metadata
+   * back onto the Core must not resurrect the bug), and the result is
+   * verified and traced so a future SDK shape change fails LOUDLY in the
+   * event trace instead of silently in front of the user.
    */
   const repairSignClientMetadata = useCallback((wc) => {
+    const publicUrl = publicAppUrl('/').replace(/\/$/, '');
     try {
-      const publicUrl = publicAppUrl('/').replace(/\/$/, '');
-      const signClient = wc?.signer?.client;
+      const signClient = wc?.signer;
       if (signClient?.metadata) {
         signClient.metadata.url = publicUrl;
         signClient.metadata.icons = [`${publicUrl}/icon-512.png`];
       }
+      if (wc?.signer?.client?.metadata) {
+        wc.signer.client.metadata.url = publicUrl;
+        wc.signer.client.metadata.icons = [`${publicUrl}/icon-512.png`];
+      }
+      return signClient?.metadata?.url === publicUrl;
     } catch {
       /* non-fatal: fall back to the SDK-derived metadata */
+      return false;
     }
   }, []);
 
@@ -433,8 +466,13 @@ export function WalletProvider({ children }) {
     };
     const onChainChanged = (cid) => {
       if (wcRef.current !== wc) return;
-      setChainId(Number(cid));
-      wcEvent('chain_changed', Number(cid));
+      /* Wallets emit chain ids as numbers, hex strings and CAIP-2 strings
+         depending on transport and version; Number('eip155:1') is NaN and a
+         NaN chain id silently breaks every balance read downstream. */
+      const n = parseChainId(cid);
+      if (n == null) return;
+      setChainId(n);
+      wcEvent('chain_changed', Number(n));
     };
     const onSessionDelete = () => {
       wcEvent('session_delete');
@@ -516,17 +554,53 @@ export function WalletProvider({ children }) {
       // event must not be allowed to wipe the NEW state this flow is about
       // to set. Instance-scoped handlers (attachWcListeners) are the second
       // line of defence; removing them first is the deterministic one.
+      // The disconnect itself is bounded: a dead relay must never make the
+      // next Connect wait on a goodbye message the peer will never receive.
       if (wcRef.current) {
         try { wcListenersRef.current?.cleanup?.(); } catch { /* noop */ }
         wcListenersRef.current = null;
-        try { await wcRef.current.disconnect(); } catch { /* noop */ }
+        try { await withTimeout(wcRef.current.disconnect().catch(() => {}), 4_000, 'WC_TEARDOWN_TIMEOUT'); } catch { /* noop */ }
         wcRef.current = null;
+      }
+      /*
+       * EXPLICIT CONNECT = CLEAN SLATE.
+       * The SDK's own storage writes are asynchronous, so relying on
+       * disconnect() above to have finished clearing the persisted session
+       * keys, the AppKit deep-link choice and the recent-wallet keys is a
+       * race that periodically loses — and when it loses, init() below
+       * resurrects the old session, AppKit answers isConnected() = true and
+       * refuses to open the modal, while the stored mobile deep-link still
+       * funnels the user into the wallet app with a pairing that no longer
+       * exists. Purging the connection keys synchronously, right here, is
+       * what makes the next attempt "exactly like the first time" (see
+       * lib/wcStorage.js).
+       */
+      {
+        const purged = purgeWcStorage();
+        wcEvent('storage_purged', Number(purged));
       }
       wc = await EthereumProvider.init(buildWcInitConfig());
       wcEvent('init');
 
       /* populateAppMetadata() overwrite repair — see repairSignClientMetadata(). */
-      repairSignClientMetadata(wc);
+      wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
+
+      /*
+       * init() also loads a persisted session when one is on disk. The purge
+       * above should have removed it, but a concurrent tab can still race one
+       * back in — and an explicit Connect means a NEW pairing, so a resurrected
+       * session must be dropped before it can make AppKit skip the modal.
+       */
+      if (wc.session) {
+        try {
+          await withTimeout(
+            Promise.resolve(wc.disconnect()).catch(() => {}),
+            4_000,
+            'WC_PRESESSION_TEARDOWN'
+          );
+        } catch { /* noop */ }
+        wcEvent('stale_session_dropped');
+      }
 
       /*
        * Mobile deep links are handled by the WalletConnect modal itself
@@ -552,6 +626,27 @@ export function WalletProvider({ children }) {
       const provider = new BrowserProvider(wc, 'any');
       const signer = await provider.getSigner();
 
+      /*
+       * THE CHAIN THE SDK REPORTS IS NOT THE CHAIN THE WALLET IS ON.
+       * connect() ends with setChainIds(this.rpc.chains), and rpc.chains is
+       * the REQUIRED chain we passed to init() — DEFAULT_CHAIN — no matter
+       * which network the wallet approved. Trust connected while on Ethereum
+       * therefore reports 56, the Wallet tab filters its asset list to BSC,
+       * and the user's WBTC on Ethereum is "missing". Derive the honest chain
+       * from the session the wallet actually approved, and align BOTH the
+       * React state and the SDK's internal chainId (which tags every RPC
+       * request with `eip155:<id>`) — see lib/wcChain.js.
+       */
+      const sessionChain = chainFromWcSession(wc);
+      const cid = sessionChain != null && EVM_CHAINS[sessionChain] ? sessionChain : DEFAULT_CHAIN;
+      if (wc.chainId !== cid) {
+        try {
+          wc.chainId = cid;
+          wc.persist?.();
+          wcEvent('chain_synced', Number(cid));
+        } catch { /* the SDK shape changed — state below is still honest */ }
+      }
+
       // Detach any prior injected listeners (they are for a different provider)
       detachInjectedListeners();
       wcRef.current = wc;
@@ -559,9 +654,9 @@ export function WalletProvider({ children }) {
       signerRef.current = signer;
       setMode('wc');
       setAddress(await signer.getAddress());
-      setChainId(Number(wc.chainId));
+      setChainId(cid);
       setLocked(false);
-      await refreshBalance(await signer.getAddress(), Number(wc.chainId));
+      await refreshBalance(await signer.getAddress(), cid);
 
       /* Instance-scoped, exactly-once listeners — see attachWcListeners(). */
       wcListenersRef.current = { cleanup: attachWcListeners(wc) };
@@ -702,7 +797,7 @@ export function WalletProvider({ children }) {
        * never turn "returning to the app" into a silent multi-second stall.
        */
       wc = await withTimeout(EthereumProvider.init(buildWcInitConfig()), WC_CONNECT_TIMEOUT_MS, 'WC_RESTORE_TIMEOUT');
-      repairSignClientMetadata(wc);
+      wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
 
       /* init() loads persisted sessions internally; if the wallet already
          deleted or expired it, there is nothing to restore. */
@@ -718,13 +813,36 @@ export function WalletProvider({ children }) {
         return false;
       }
 
+      /*
+       * COMMIT GUARD: restore is async, so a wallet attached while it was in
+       * flight (the local vault auto-attach runs synchronously on mount) must
+       * not be overwritten by a slower session resume. The user's latest
+       * explicit choice wins; the resumed provider is torn down instead.
+       */
+      if (addressRef.current) {
+        try { wc?.disconnect?.(); } catch { /* noop */ }
+        wcEvent('restore_skipped_local');
+        return false;
+      }
+
+      /* Same honest-chain resolution as connect() — see lib/wcChain.js. */
+      const sessionChain = chainFromWcSession(wc);
+      const cid = sessionChain != null && EVM_CHAINS[sessionChain] ? sessionChain : DEFAULT_CHAIN;
+      if (wc.chainId !== cid) {
+        try {
+          wc.chainId = cid;
+          wc.persist?.();
+          wcEvent('chain_synced', Number(cid));
+        } catch { /* SDK shape changed — state below is still honest */ }
+      }
+
       detachInjectedListeners();
       wcRef.current = wc;
       eip1193Ref.current = wc;
       signerRef.current = signer;
       setMode('wc');
       setAddress(await signer.getAddress());
-      setChainId(Number(wc.chainId));
+      setChainId(cid);
       setLocked(false);
       /* Exactly-once, instance-scoped — the same contract as connect(). */
       wcListenersRef.current = { cleanup: attachWcListeners(wc) };
@@ -733,7 +851,7 @@ export function WalletProvider({ children }) {
         try { useAppStore.getState().notify('walletSessionRestored', 'success'); } catch { /* toasts are optional */ }
       }
       /* Balance must never keep the UI disconnected-looking; run behind. */
-      void refreshBalance(await signer.getAddress(), Number(wc.chainId));
+      void refreshBalance(await signer.getAddress(), cid);
       return true;
     } catch {
       /* A relay hiccup here must never surface as a connect error — restore
@@ -757,10 +875,16 @@ export function WalletProvider({ children }) {
    * unless a session is actually on disk (see the probe inside).
    */
   useEffect(() => {
-    /* Quiet on cold start — a toast on every app open is noise. The announce
-       variant belongs to the two user-visible moments: returning from the
-       wallet app, and an explicit Refresh. */
-    void restoreWcSession({ announce: false });
+    /* A LOCAL VAULT WINS ON COLD START: restore is async while the vault
+       auto-attach is synchronous, so without this skip the slower resume
+       would overwrite the vault. The stored WC session is left on disk, and
+       the commit guard inside restoreWcSession() backstops the foreground
+       path. */
+    if (!loadVault()) {
+      /* Quiet on cold start — the announce variant belongs to the two
+         user-visible moments: returning from the wallet app, and Refresh. */
+      void restoreWcSession({ announce: false });
+    }
     const onVisible = () => {
       if (document.visibilityState === 'visible' && !addressRef.current) {
         void restoreWcSession({ announce: true });
@@ -776,6 +900,37 @@ export function WalletProvider({ children }) {
   }, []);
 
   /* ------------------------------ local vault ---------------------------- */
+
+  /**
+   * Tear down a live WalletConnect provider WITHOUT touching wallet state:
+   * detach its listeners, tell the peer the session is over (bounded — a
+   * dead relay must never stall a mode switch), and purge the SDK/AppKit
+   * connection artifacts so the next init starts from a clean slate.
+   * Fire-and-forget friendly: every await inside is bounded, and the
+   * instance-scoped listener checks mean a late 'disconnect' event from the
+   * dying instance can never wipe the state the caller is about to set.
+   */
+  const releaseWc = useCallback(async (purge = true) => {
+    try { wcListenersRef.current?.cleanup?.(); } catch { /* noop */ }
+    wcListenersRef.current = null;
+    const wc = wcRef.current;
+    wcRef.current = null;
+    if (wc) {
+      try {
+        await withTimeout(
+          Promise.resolve(wc.disconnect?.()).catch(() => {}),
+          4_000,
+          'WC_TEARDOWN_TIMEOUT'
+        );
+      } catch { /* the peer may already be gone */ }
+    }
+    if (purge) {
+      try {
+        const purged = purgeWcStorage();
+        wcEvent('storage_purged', Number(purged));
+      } catch { /* storage unavailable — nothing to purge */ }
+    }
+  }, []);
 
   /** Attach a locally-stored wallet in LOCKED state (address only, no signer). */
   const attachLocal = useCallback(() => {
@@ -804,6 +959,17 @@ export function WalletProvider({ children }) {
         if (signerAddress.toLowerCase() !== vault.address.toLowerCase()) return false;
         const provider = await getReadProvider(DEFAULT_CHAIN);
         const signer = createdSigner.provider ? createdSigner : createdSigner.connect(provider);
+        /*
+         * Only after the vault has PROVED it matches disk state: entering
+         * local mode is an explicit mode switch, so a live WalletConnect
+         * session must be torn down here — otherwise its still-attached
+         * listeners keep updating address/chain state and the UI flips back
+         * and forth between the WC account and the new vault. A failed
+         * attach must NOT tear anything down (the failure path changes no
+         * mode). Fire-and-forget: the teardown is bounded and can never
+         * overwrite the state being set below.
+         */
+        void releaseWc();
         signerRef.current = signer;
         setMode('local');
         setAddress(signerAddress);
@@ -818,7 +984,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [getReadProvider, refreshBalance]
+    [getReadProvider, refreshBalance, releaseWc]
   );
 
   const unlockLocal = useCallback(
@@ -827,6 +993,10 @@ export function WalletProvider({ children }) {
       try {
         const provider = await getReadProvider(DEFAULT_CHAIN);
         const signer = await unlockVault(password, provider);
+        /* Same mode-switch teardown as attachCreatedLocal() — and only AFTER
+           the password has proven correct: a BAD_PASSWORD must leave an
+           existing WalletConnect connection exactly as it was. */
+        void releaseWc();
         signerRef.current = signer;
         setMode('local');
         setAddress(signer.address);
@@ -840,7 +1010,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [getReadProvider, refreshBalance]
+    [getReadProvider, refreshBalance, releaseWc]
   );
 
   /** Drop the in-memory signer but keep the encrypted vault on disk. */
@@ -849,29 +1019,47 @@ export function WalletProvider({ children }) {
     setLocked(true);
   }, []);
 
+  /**
+   * Delete the encrypted vault AND release every live connection.
+   *
+   * The old implementation cleared signerRef/mode/address/locked/nativeBalance
+   * and left everything WalletConnect-shaped alone — so a WC session (or a
+   * half-finished pairing) that predated the local wallet kept its refs, its
+   * listeners and its localStorage artifacts, and the next Connect walked
+   * straight into them. Delegating to disconnect() makes "forget the in-app
+   * wallet" and "disconnect" leave the EXACT same clean slate, so the next
+   * WalletConnect attempt behaves like the very first one.
+   */
   const forgetLocalWallet = useCallback(() => {
     clearVault();
-    signerRef.current = null;
-    setMode(null);
-    setAddress(null);
-    setLocked(false);
-    setNativeBalance(null);
+    disconnectRef.current();
   }, []);
 
   /* ------------------------------ disconnect ----------------------------- */
 
   const disconnect = useCallback(() => {
     wcEvent('local_disconnect');
-    // Clean up WalletConnect session listeners first
+    // Clean up WalletConnect session listeners first, then tell the peer the
+    // session is over (bounded: a dead relay must never stall the UI) and
+    // purge the SDK/AppKit storage artifacts — the stored deep-link choice,
+    // the recent-wallet keys and the persisted session are exactly the
+    // residue that made a later Connect skip the modal and open a wallet app
+    // with a dead pairing. See releaseWc()/lib/wcStorage.js.
     try { wcListenersRef.current?.cleanup?.(); } catch { /* noop */ }
     wcListenersRef.current = null;
-    try { wcRef.current?.disconnect?.(); } catch { /* already gone */ }
+    const wc = wcRef.current;
+    wcRef.current = null;
+    if (wc) {
+      withTimeout(Promise.resolve(wc.disconnect?.()).catch(() => {}), 4_000, 'WC_TEARDOWN_TIMEOUT')
+        .catch(() => { /* fire-and-forget; the purge below is synchronous */ });
+    }
+    try { purgeWcStorage(); } catch { /* storage unavailable */ }
     // Clean up injected listeners
     detachInjectedListeners();
-    wcRef.current = null;
     eip1193Ref.current = null;
     signerRef.current = null;
     setMode(null);
+    setInjectedInfo(null);
     setAddress(null);
     setChainId(null);
     setNativeBalance(null);
@@ -997,6 +1185,7 @@ export function WalletProvider({ children }) {
   const value = useMemo(
     () => ({
       mode,
+      injectedInfo,
       address,
       chainId: chainId ?? DEFAULT_CHAIN,
       chain,
@@ -1024,6 +1213,7 @@ export function WalletProvider({ children }) {
     }),
     [
       mode,
+      injectedInfo,
       address,
       chainId,
       chain,

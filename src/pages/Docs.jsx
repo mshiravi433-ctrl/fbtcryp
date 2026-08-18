@@ -6,7 +6,8 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import {
   IconChevronLeft, IconChevronRight, IconExternal, IconSwap,
-  IconPools, IconWallet, IconActivity, IconShield, IconTrend
+  IconPools, IconWallet, IconActivity, IconShield, IconTrend,
+  IconSparkle, IconFingerprint, IconGlobe, IconUser, IconClock
 } from '../components/Icons';
 import '../styles/docs-modern.css';
 
@@ -17,31 +18,40 @@ import '../styles/docs-modern.css';
  * mistake people actually make there. The "pitfall" line matters more than the
  * steps — most losses come from not knowing what can go wrong, not from being
  * unable to find a button.
+ *
+ * Every section carries a `level` (beginner / intermediate / pro) so someone
+ * starting from zero knows the order to follow:
+ *   security → start → swap → farm/staking → signals/trade →
+ *   then the professional instruments (dydx, intentos, derivatives).
  */
 
 const youtube = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
 
 const SECTIONS = [
-  { id: 'why', Icon: IconTrend, steps: 5, hue: 'var(--rgb-1)' },
-  { id: 'strategy', Icon: IconPools, steps: 5, hue: 'var(--rgb-2)' },
-  {
-    id: 'start',
-    Icon: IconWallet,
-    steps: 4,
-    hue: 'var(--rgb-4)',
-    en: youtube('how to use metamask beginner')
-  },
+  { id: 'security', Icon: IconShield, steps: 5, level: 'beginner', hue: 'var(--rgb-3)', en: youtube('crypto wallet security seed phrase') },
+  { id: 'start', Icon: IconWallet, steps: 4, level: 'beginner', hue: 'var(--rgb-4)', en: youtube('how to use metamask beginner') },
+  { id: 'why', Icon: IconTrend, steps: 5, level: 'beginner', hue: 'var(--rgb-1)' },
+  { id: 'strategy', Icon: IconPools, steps: 5, level: 'beginner', hue: 'var(--rgb-2)' },
   {
     id: 'swap',
     Icon: IconSwap,
     steps: 5,
+    level: 'beginner',
     hue: 'var(--rgb-1)',
     en: youtube('how to swap tokens dex beginner')
+  },
+  {
+    id: 'portfolio',
+    Icon: IconGlobe,
+    steps: 4,
+    level: 'beginner',
+    hue: 'var(--rgb-4)'
   },
   {
     id: 'farm',
     Icon: IconPools,
     steps: 4,
+    level: 'intermediate',
     hue: 'var(--rgb-5)',
     en: youtube('liquidity pool impermanent loss explained')
   },
@@ -49,23 +59,47 @@ const SECTIONS = [
     id: 'signals',
     Icon: IconActivity,
     steps: 3,
+    level: 'intermediate',
     hue: 'var(--rgb-3)',
     en: youtube('rsi macd explained beginners')
   },
-  { id: 'trade', Icon: IconTrend, steps: 3, hue: 'var(--rgb-2)' },
+  { id: 'trade', Icon: IconTrend, steps: 3, level: 'intermediate', hue: 'var(--rgb-2)' },
+  {
+    id: 'smartwallet',
+    Icon: IconFingerprint,
+    steps: 4,
+    level: 'intermediate',
+    hue: 'var(--rgb-4)'
+  },
+  {
+    id: 'p2p',
+    Icon: IconUser,
+    steps: 4,
+    level: 'intermediate',
+    hue: 'var(--rgb-5)'
+  },
+  {
+    id: 'orders',
+    Icon: IconClock,
+    steps: 4,
+    level: 'intermediate',
+    hue: 'var(--rgb-2)'
+  },
+  {
+    id: 'intentos',
+    Icon: IconSparkle,
+    steps: 5,
+    level: 'pro',
+    hue: 'var(--rgb-1)',
+    en: youtube('intent based trading explained')
+  },
   {
     id: 'dydx',
     Icon: IconTrend,
     steps: 5,
+    level: 'pro',
     hue: 'var(--rgb-1)',
     en: youtube('dydx how to deposit fund account tutorial dydx.trade')
-  },
-  {
-    id: 'security',
-    Icon: IconShield,
-    steps: 5,
-    hue: 'var(--rgb-3)',
-    en: youtube('crypto wallet security seed phrase')
   }
 ];
 
@@ -99,7 +133,7 @@ export default function Docs({ embedded = false }) {
       </motion.section>
 
       <motion.div className="docs-grid" variants={stagger} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-        {SECTIONS.map(({ id, Icon, steps, hue, en }) => {
+        {SECTIONS.map(({ id, Icon, steps, hue, en, level }) => {
           const isOpen = openId === id;
           return (
             <motion.div
@@ -122,7 +156,10 @@ export default function Docs({ embedded = false }) {
                   <Icon width={20} height={20} />
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span className="docs-card-title">{t(`docs.${id}.title`)}</span>
+                  <span className="row" style={{ gap: 7, alignItems: 'center' }}>
+                    <span className="docs-card-title">{t(`docs.${id}.title`)}</span>
+                    {level && <span className={`docs-level-badge docs-level-${level}`}>{t(`docs.level.${level}`)}</span>}
+                  </span>
                   <span className="docs-card-sub" style={{ display: 'block' }}>{t(`docs.${id}.sub`)}</span>
                 </span>
                 <motion.span

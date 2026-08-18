@@ -11545,5 +11545,82 @@ export default function run() {
     t('swap output has fixed min-height', /swap-output-field/.test(swap) && /minHeight/.test(swap) || /min-height/.test(swapCss));
   }
 
+  /* ---- 107. docs coverage: every feature section, levelled, in 12 locales ---- */
+  {
+    const docs = read('src/pages/Docs.jsx');
+    const locales = readdirSync('src/i18n/locales').filter((n) => n.endsWith('.json'));
+    const dicts = {};
+    for (const f of locales) dicts[f.replace('.json', '')] = JSON.parse(read(join('src/i18n/locales', f)));
+    const ids = [...docs.matchAll(/id: '([a-zA-Z0-9]+)'/g)].map((m) => m[1]);
+    const steps = {};
+    for (const id of ids) {
+      const m = docs.slice(docs.indexOf(`id: '${id}'`), docs.indexOf(`id: '${id}'`) + 400).match(/steps: (\d+)/);
+      if (m) steps[id] = Number(m[1]);
+    }
+
+    t('Docs still covers the original nine sections plus the new feature guides',
+      ['why', 'strategy', 'start', 'swap', 'farm', 'signals', 'trade', 'dydx', 'security'].every((i) => ids.includes(i))
+        && ['intentos', 'smartwallet', 'portfolio', 'p2p', 'orders'].every((i) => ids.includes(i)));
+    t('every Docs section declares a beginner/intermediate/pro level',
+      ids.every((id) => new RegExp(`id: '${id}'[\\s\\S]{0,300}level: '(beginner|intermediate|pro)'`).test(docs)));
+
+    let missing = [];
+    for (const id of ids) {
+      const n = steps[id] || 4;
+      const keys = ['title', 'sub', 'pitfall', ...Array.from({ length: n }, (_, i) => `step${i + 1}`)];
+      for (const loc of Object.keys(dicts)) {
+        for (const k of keys) {
+          if (typeof dicts[loc]?.docs?.[id]?.[k] !== 'string' || !dicts[loc].docs[id][k].trim()) {
+            missing.push(`${loc}:docs.${id}.${k}`);
+          }
+        }
+      }
+    }
+    t(`every Docs section string exists in all ${Object.keys(dicts).length} locales${missing.length ? ` — missing ${missing.slice(0, 3).join(', ')}…` : ''}`,
+      missing.length === 0);
+    t('the level labels exist in English and Persian', hasKey(dicts.en, 'docs.level.beginner')
+      && hasKey(dicts.fa, 'docs.level.beginner') && hasKey(dicts.en, 'docs.level.pro') && hasKey(dicts.fa, 'docs.level.pro'));
+    t('the Docs screen renders the level badge', /docs-level-badge/.test(docs) && /docs\.level\./.test(docs));
+    t('the Wallet empty state offers "show all networks" for cross-chain holdings',
+      hasKey(dicts.en, 'wallet.showAllNetworks') && hasKey(dicts.fa, 'wallet.showAllNetworks')
+        && /wallet\.showAllNetworks/.test(read('src/pages/Wallet.jsx')));
+
+    /* FAQ must grow with the docs, with real en/fa/ar keyword sets. */
+    const faq = read('src/lib/faqLocal.js');
+    const kbIds = [...faq.matchAll(/id: '([a-zA-Z0-9]+)'/g)].map((m) => m[1]);
+    const requiredFaq = ['wcSecurityRisk', 'wcNoProjectId', 'wcReconnect', 'tokenMissing', 'portfolio',
+      'intentOS', 'smartWallet', 'p2p', 'ordersAutomation', 'signals', 'bridge', 'buyCrypto',
+      'farmYield', 'rewardsPoints', 'derivatives', 'nft', 'solana', 'stocks', 'newsMarket', 'aboutFbt', 'support', 'securitySettings'];
+    t('the offline FAQ grew to cover the new features and the WalletConnect issues',
+      requiredFaq.every((id) => kbIds.includes(id)));
+    const faqEntry = (id) => {
+      const start = faq.indexOf(`id: '${id}'`);
+      return faq.slice(start, faq.indexOf('\n  },', start));
+    };
+    let badFaq = [];
+    for (const id of requiredFaq) {
+      const body = faqEntry(id);
+      for (const lang of ['en', 'fa', 'ar']) {
+        if (!new RegExp(`${lang}:\\s*\\[[^\\]]+\\]`).test(body)) badFaq.push(`${id}.k.${lang}`);
+        const am = body.match(new RegExp(`${lang}:\\s*'([^']{30,})'`));
+        if (!am || !am[1].trim()) badFaq.push(`${id}.a.${lang}`);
+      }
+    }
+    t(`every new FAQ entry has keyword sets and real answers in en/fa/ar${badFaq.length ? ` — ${badFaq.slice(0, 3).join(', ')}…` : ''}`,
+      badFaq.length === 0);
+    t('the new FAQ entries are in the ordered suggestion list (FAQ_ORDER)',
+      requiredFaq.every((id) => read('src/lib/faqLocal.js').includes(`'${id}'`)));
+
+    /* Owner-facing WalletConnect verification runbook exists and is honest
+       about what is code and what is dashboard-only. */
+    const verifyDoc = existsSync('docs/WALLETCONNECT-VERIFY-FA.md') ? read('docs/WALLETCONNECT-VERIFY-FA.md') : '';
+    t('the WalletConnect verification runbook exists for the owner', verifyDoc.length > 200);
+    t('the runbook names the project id and the dashboard-only steps',
+      verifyDoc.includes('f0e8ca24821402a6226b4b675172b294') && verifyDoc.includes('cloud.reown.com')
+        && verifyDoc.includes('Allowed Domains'));
+    t('the runbook documents the code-side repair (localhost identity bug)',
+      verifyDoc.includes('wc.signer.metadata') && verifyDoc.includes('https://localhost'));
+  }
+
   return rows;
 }

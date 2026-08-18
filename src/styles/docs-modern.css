@@ -212,3 +212,35 @@
 @media (prefers-reduced-motion: reduce) {
   .derivatives-aurora::before, .derivatives-aurora::after, .docs-hero::before { animation: none; }
 }
+
+/* Level badge on each doc card: beginner / intermediate / pro. */
+.docs-level-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.docs-level-beginner {
+  color: #00c2a8;
+  background: rgba(0, 194, 168, 0.1);
+  border: 1px solid rgba(0, 194, 168, 0.28);
+}
+.docs-level-intermediate {
+  color: #ffb300;
+  background: rgba(255, 179, 0, 0.1);
+  border: 1px solid rgba(255, 179, 0, 0.28);
+}
+.docs-level-pro {
+  color: #8c7bff;
+  background: rgba(140, 123, 255, 0.12);
+  border: 1px solid rgba(140, 123, 255, 0.32);
+}
+:root[data-theme='light'] .docs-level-beginner { color: #007a68; background: rgba(0, 122, 104, 0.08); }
+:root[data-theme='light'] .docs-level-intermediate { color: #8a5a00; background: rgba(138, 90, 0, 0.08); }
+:root[data-theme='light'] .docs-level-pro { color: #5746c9; background: rgba(87, 70, 201, 0.08); }

@@ -197,5 +197,66 @@ export default function run() {
   t('the sheet re-opens with the named error when pairing fails',
     /startWalletConnect[\s\S]{0,500}\.then\(\(ok\) =>/.test(sheet));
 
+  /* ---- 14. the metadata repair targets the REAL metadata object ----
+     THE FAKE "SECURITY RISK" MESSAGE. In sign-client 2.x the SignClient keeps
+     metadata on ITSELF (`this.metadata = populateAppMetadata(...)`), and the
+     proposal is serialized from `this.client.metadata` where `this.client` is
+     the SIGN CLIENT — while `wc.signer.client` is the CORE, which has NO
+     metadata property. The old repair mutated `wc.signer.client.metadata`
+     (always undefined) so it silently did nothing, and the session proposal
+     from the APK carried `https://localhost` as the dapp identity — which is
+     exactly what Trust Wallet's security scanner flags. The repair must touch
+     `wc.signer.metadata` FIRST. */
+  const repairBlock = walletSrc.slice(
+    walletSrc.indexOf('const repairSignClientMetadata'),
+    walletSrc.indexOf('};', walletSrc.indexOf('const repairSignClientMetadata'))
+  );
+  t('the metadata repair mutates the SignClient itself (wc.signer.metadata), not only the Core',
+    /wc\?\.signer\b/.test(repairBlock) && /signClient\.metadata\.url = publicUrl/.test(repairBlock));
+  t('the old dead target (core-only metadata) is no longer the sole repair path',
+    !/wc\?\.signer\?\.client;[^}]*metadata/.test(repairBlock));
+  t('the repair keeps the Core branch as a defensive fallback for future SDK shapes',
+    /wc\?\.signer\?\.client\?\.metadata/.test(repairBlock));
+  t('the repair verifies its own result and reports it',
+    /return signClient\?\.metadata\?\.url === publicUrl/.test(repairBlock)
+      && /metadata_repaired/.test(walletSrc) && /metadata_repair_failed/.test(walletSrc));
+
+  /* ---- 15. disconnect / forget leave a CLEAN SLATE ----
+     The next Connect must behave like the very first one: no stale session,
+     no stored mobile deep-link choice, no recent-wallet residue. */
+  t('disconnect purges the SDK/AppKit storage artifacts', /purgeWcStorage\(\)/.test(disconnectBlock));
+  t('the WC disconnect during teardown is bounded (a dead relay cannot stall the UI)',
+    /WC_TEARDOWN_TIMEOUT/.test(disconnectBlock));
+  const forgetBlock = code.slice(
+    code.indexOf('const forgetLocalWallet'),
+    code.indexOf('};', code.indexOf('const forgetLocalWallet'))
+  );
+  t('forgetLocalWallet delegates to the same full disconnect teardown',
+    forgetBlock.includes('clearVault()') && forgetBlock.includes('disconnectRef.current()'));
+  t('an explicit Connect purges storage BEFORE init (never resurrects a stale session)',
+    code.indexOf('purgeWcStorage()') < code.indexOf('EthereumProvider.init(')
+      && code.indexOf('purgeWcStorage()') > code.indexOf('const connectWalletConnect'));
+  t('an explicit Connect drops a session resurrected by init() (fresh pairing, modal can open)',
+    /if \(wc\.session\) \{[\s\S]{0,400}wc\.disconnect\(\)/.test(code));
+  t('entering local mode releases a live WalletConnect session (no dual-connection state leak)',
+    /void releaseWc\(\);/.test(code) && /const releaseWc = useCallback/.test(code));
+
+  /* ---- 16. the connected chain comes from the SESSION, not the SDK's lie ---- */
+  t('connect() resolves the honest chain from the approved session',
+    /chainFromWcSession\(wc\)/.test(code)
+      && code.indexOf('chainFromWcSession(wc)') < code.indexOf('setChainId(cid)'));
+  t('the SDK internal chainId is aligned with the real chain (request namespace matches the session)',
+    /wc\.chainId = cid/.test(code));
+  t('restore() resolves the chain the same way (no drift between the two paths)',
+    restoreBlock.includes('chainFromWcSession(wc)') && restoreBlock.includes('setChainId(cid)'));
+  t('chainChanged events are parsed defensively (hex, CAIP-2 and numeric spellings)',
+    /parseChainId\(cid\)/.test(code));
+
+  /* ---- 17. restore never hijacks a wallet that attached while it was in flight ---- */
+  t('restore re-checks for an attached wallet before committing state',
+    /if \(addressRef\.current\) \{[\s\S]{0,300}restore_skipped_local/.test(walletSrc));
+  t('a local vault on disk wins the cold start (no restore overwrite of the in-app wallet)',
+    /if \(!loadVault\(\)\) \{\s*\/\*[\s\S]{0,400}void restoreWcSession\(\{ announce: false \}\);/.test(walletSrc));
+
   return rows;
 }

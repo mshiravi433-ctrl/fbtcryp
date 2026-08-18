@@ -385,7 +385,8 @@
     "emptyTitle": "لا توجد محفظة متصلة",
     "emptyBody": "اربط محفظة تملكها بالفعل لعرض أرصدتك والمبادلة. لا تسجيل ولا بريد إلكتروني ولا تحقق من الهوية.",
     "emptyReassure": "لا نستلم أبداً عبارة الاسترداد أو المفتاح الخاص. كل معاملة توقّعها محفظتك بنفسها.",
-    "custodyTitle": "من يتحكم بهذه المحفظة؟"
+    "custodyTitle": "من يتحكم بهذه المحفظة؟",
+    "showAllNetworks": "عرض كل الشبكات"
   },
   "toast": {
     "insufficientBalance": "الرصيد غير كافٍ",
@@ -1031,7 +1032,29 @@
       "chains": "ما الشبكات المدعومة؟",
       "connect": "كيف أربط محفظتي؟",
       "notFound": "لماذا تظهر أحياناً «العملة غير موجودة»؟",
-      "iranLegal": "ما الوضع القانوني في إيران؟"
+      "iranLegal": "ما الوضع القانوني في إيران؟",
+      "wcSecurityRisk": "لماذا تعرض المحفظة تحذير \"خطر أمني\" لهذا الموقع؟",
+      "wcNoProjectId": "هل يعمل WalletConnect بدون معرف مشروع؟",
+      "wcReconnect": "لماذا يفتح تطبيق المحفظة ويفشل فوراً بعد الفصل؟",
+      "tokenMissing": "لماذا لا يظهر رصيد عملتي (مثل البيتكوين)؟",
+      "portfolio": "ماذا تعرض المحفظة الإجمالية ولماذا تكون بعض الشبكات غير متاحة؟",
+      "intentOS": "ما هو نظام النوايا وهل يمكن التراجع عن نية منفذة؟",
+      "smartWallet": "ما هي المحفظة الذكية داخل التطبيق وكيف أنسخها احتياطياً؟",
+      "p2p": "كيف يعمل ضمان P2P وكيف أبقى آمناً؟",
+      "ordersAutomation": "كيف تعمل الأوامر الآلية؟",
+      "signals": "ما هي الإشارات وهل يمكنها توقع الأسعار؟",
+      "bridge": "كيف أنقل العملات بين الشبكات؟",
+      "buyCrypto": "كيف أشتري العملات بالبطاقة؟",
+      "farmYield": "هل عوائد المزرعة والكسب مضمونة؟",
+      "rewardsPoints": "ما هي المكافآت والنقاط ولوحة الصدارة؟",
+      "derivatives": "ما مدى خطورة شاشات المشتقات؟",
+      "nft": "هل رموز NFT استثمار؟",
+      "solana": "كيف تختلف سولانا عن الشبكات الأخرى؟",
+      "stocks": "هل الأسهم المرمزة تعني أنني أملك الشركة؟",
+      "newsMarket": "من أين تأتي بيانات السوق والأخبار؟",
+      "aboutFbt": "ما هو FBT Swap وهل تم تدقيقه؟",
+      "support": "كيف أتواصل مع الدعم أو أبلغ عن خطأ؟",
+      "securitySettings": "ماذا تتحكم فيه إعدادات الأمان؟"
     },
     "contactUs": "اتصل بنا",
     "contactUsSub": "دعم تيليجرام والبريد",
@@ -1073,81 +1096,142 @@
     "watchVideo": "Watch a tutorial",
     "videoNote": "تفتح أزرار الفيديو بحثاً في آبارات أو يوتيوب. أنتجها معلّمون مستقلون — لم نصنعها ولا نتحكم في محتواها.",
     "start": {
-      "title": "Getting started",
-      "sub": "Wallet setup and first steps",
-      "step1": "Install a wallet — Trust Wallet or MetaMask are the easiest on mobile.",
-      "step2": "Write your 12-word recovery phrase on paper. Never photograph it or store it in a chat.",
-      "step3": "Add BNB Smart Chain in the wallet, then send a small amount of BNB for gas fees.",
-      "step4": "Open FBT Swap, tap Connect wallet and approve the connection.",
-      "pitfall": "When withdrawing from an exchange, always pick the 'BEP20' network. Choose the wrong one and your money goes somewhere nobody can retrieve it — not us, not the exchange."
+      "title": "البداية",
+      "sub": "إعداد المحفظة والخطوات الأولى",
+      "step1": "ثبّت محفظة — Trust Wallet أو MetaMask هما الأسهل على الجوال.",
+      "step2": "اكتب عبارة الاسترداد ذات الـ ١٢ كلمة على ورق. لا تصوّرها أبداً ولا تحفظها في محادثة.",
+      "step3": "أضف شبكة BNB Smart Chain في المحفظة ثم أرسل مبلغاً صغيراً من BNB للغاز.",
+      "step4": "افتح FBT Swap واضغط \"ربط المحفظة\" ووافق على الاتصال.",
+      "pitfall": "عند السحب من منصة تداول، اختر دائماً شبكة BEP20. الاختيار الخاطئ يرسل أموالك إلى مكان لا يستطيع أحد استرجاعه — لا نحن ولا المنصة."
     },
     "swap": {
-      "title": "Swapping tokens",
-      "sub": "Trading one token for another",
-      "step1": "Pick the token you're paying with and the one you want.",
-      "step2": "Enter an amount — the quote updates automatically.",
-      "step3": "Check the rate, minimum received and the {{fee}}% platform fee.",
-      "step4": "Tap Review, then approve the token if this is your first time using it.",
-      "step5": "Confirm in your wallet and wait for the transaction to settle.",
-      "pitfall": "Check the 'price impact' number before you confirm. Above 5% means there aren't enough buyers for this trade and you'll lose value. Try a smaller amount or a different token."
+      "title": "تبادل العملات",
+      "sub": "مبادلة عملة بأخرى",
+      "step1": "اختر العملة التي تدفع بها والعملة التي تريدها.",
+      "step2": "أدخل مبلغاً — يتحدث العرض تلقائياً.",
+      "step3": "راجع السعر والحد الأدنى المستلم ورسوم المنصة {{fee}}٪.",
+      "step4": "اضغط مراجعة ثم وافق على العملة إذا كانت أول مرة تستخدمها.",
+      "step5": "أكّد في محفظتك وانتظر اكتمال المعاملة.",
+      "pitfall": "راجع رقم \"تأثير السعر\" قبل التأكيد. فوق 5٪ يعني نقص المشترين وستخسر قيمة. جرّب مبلغاً أصغر أو عملة أخرى."
     },
     "farm": {
-      "title": "Liquidity & farming",
-      "sub": "Earning yield on your tokens",
-      "step1": "Understand impermanent loss before depositing anything.",
-      "step2": "Choose a pool — stablecoin pairs are lowest risk.",
-      "step3": "Deposit both tokens in equal value and receive LP tokens.",
-      "step4": "Stake the LP tokens to earn additional rewards.",
-      "pitfall": "If you see a pool advertising thousands of percent a year, don't get excited. It almost always means the token you earn has no buyers later and you won't be able to sell it."
+      "title": "السيولة والتعدين",
+      "sub": "كسب عائد على عملاتك",
+      "step1": "افهم الخسارة غير الدائمة قبل إيداع أي شيء.",
+      "step2": "اختر مجمعاً — أزواج العملات المستقرة هي الأقل خطراً.",
+      "step3": "أودع الرمزين بقيمة متساوية واستلم رموز LP.",
+      "step4": "جمّد رموز LP لكسب مكافآت إضافية.",
+      "pitfall": "إذا رأيت مجمعاً يعلن آلاف النسب سنوياً فلا تتحمس. هذا يعني غالباً أن العملة التي تكسبها بلا مشترين ولن تستطيع بيعها."
     },
     "signals": {
-      "title": "AI signals",
-      "sub": "Reading the analysis screen",
-      "step1": "The gauge combines RSI, MACD, Bollinger bands and moving averages into one score.",
-      "step2": "Confidence shows how much those indicators agree — low confidence means the chart is unclear.",
-      "step3": "The AI outlook adds recent news context and states what would invalidate the view.",
-      "pitfall": "No analysis knows the future. Even on a 'strong buy' the price can fall. Treat it as one of several things you look at, not an instruction to follow."
+      "title": "إشارات الذكاء الاصطناعي",
+      "sub": "قراءة شاشة التحليل",
+      "step1": "يجمع المؤشر RSI وMACD وخطوط بولينجر والمتوسطات المتحركة في درجة واحدة.",
+      "step2": "الثقة تُظهر مدى اتفاق هذه المؤشرات — الثقة المنخفضة تعني أن الرسم غير واضح.",
+      "step3": "تضيف نظرة AI سياق الأخبار الأخيرة وتذكر ما يُبطل الرأي.",
+      "pitfall": "لا تحليل يعرف المستقبل. حتى مع \"شراء قوي\" قد ينخفض السعر. عاملها كأحد عدة أمور تنظر إليها، لا كأمر يجب اتباعه."
     },
     "trade": {
-      "title": "Practice trading",
-      "sub": "Learning with virtual credits",
-      "step1": "The Trade, Invest and Predict screens use virtual NX credits, not real money.",
-      "step2": "Prices are real and live, so the practice is realistic.",
-      "step3": "Use it to learn order mechanics before risking anything on the Swap screen.",
-      "pitfall": "The profit you see here isn't real money and can't be withdrawn. Winning a few times here doesn't mean the same will happen with real funds — real markets have emotions attached, this doesn't."
+      "title": "التداول التجريبي",
+      "sub": "التعلم برصيد افتراضي",
+      "step1": "شاشات Trade وInvest وPredict تستخدم رصيد NX افتراضياً، لا أموالاً حقيقية.",
+      "step2": "الأسعار حقيقية ومباشرة، لذا التجربة واقعية.",
+      "step3": "استخدمها لتعلم آليات الأوامر قبل المخاطرة بأي شيء في شاشة التبادل.",
+      "pitfall": "الربح هنا ليس مالاً حقيقياً ولا يمكن سحبه. الفوز عدة مرات لا يعني تكراره بأموال حقيقية — الأسواق الحقيقية مرتبطة بالعواطف، وهذه ليست كذلك."
     },
     "security": {
-      "title": "Staying safe",
-      "sub": "Protecting your funds",
-      "step1": "Your seed phrase is the only backup. Written on paper, stored offline, never typed into a website.",
-      "step2": "Enable biometric unlock and two-factor in Settings for device-level protection.",
-      "step3": "Verify token contract addresses independently before swapping unknown tokens.",
-      "step4": "Start with a small test transaction when using any new feature.",
-      "step5": "Keep large holdings in a separate hardware wallet, not in an in-app wallet.",
-      "pitfall": "Nobody legitimate will ever ask for your 12 recovery words. Not our support, not a group admin, not any website. Anyone who asks is trying to take your money. Block them immediately."
+      "title": "البقاء آمناً",
+      "sub": "حماية أموالك",
+      "step1": "عبارة الاسترداد هي النسخة الاحتياطية الوحيدة. مكتوبة على ورق، محفوظة دون اتصال، ولا تُكتب في أي موقع أبداً.",
+      "step2": "فعّل فتح القفل البيومتري والتحقق بخطوتين في الإعدادات لحماية على مستوى الجهاز.",
+      "step3": "تحقق من عناوين عقود العملات بنفسك قبل تبادل عملات غير معروفة.",
+      "step4": "ابدأ بمعاملة اختبار صغيرة عند استخدام أي ميزة جديدة.",
+      "step5": "احتفظ بالمبالغ الكبيرة في محفظة عتادية منفصلة، لا في محفظة داخل التطبيق.",
+      "pitfall": "لن يطلب أحد شرعي كلمات الاسترداد الـ ١٢ أبداً. لا دعمنا ولا مدير مجموعة ولا أي موقع. من يطلبها يحاول سرقة أموالك. احظره فوراً."
     },
     "why": {
-      "title": "Why فانوس بازار بيشغام is different",
-      "sub": "What we do that other apps don't",
-      "step1": "Best-price routing: your swap is quoted across every DEX on the chain at once, not just one exchange. On a volatile pair that difference is often larger than any fee.",
-      "step2": "Ten swap networks in one app — BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. Choose the network that holds your token before trading.",
-      "step3": "Truly non-custodial: no signup, no KYC, no deposit address. Your funds never sit in our account, so there is no withdrawal queue and nothing to freeze.",
-      "step4": "AI analysis built in, with honest confidence figures — it tells you when the signal is unclear instead of inventing certainty to look smart.",
-      "step5": "One clear fee: {{fee}}% per swap, shown before you sign. No spread markup, no hidden withdrawal charge, no monthly cost.",
-      "pitfall": "Compare the 'minimum received' figure, not the advertised rate. Some apps show a great headline rate then take a wide spread on top. Ours is the number you actually get."
+      "title": "لماذا يختلف FBT Swap",
+      "sub": "ما نفعله ولا يفعله الآخرون",
+      "step1": "توجيه لأفضل سعر: يُعرض تبادلك عبر كل بورصات السلسلة دفعة واحدة، لا بورصة واحدة. على زوج متقلب يكون الفرق أكبر من أي رسوم.",
+      "step2": "عشر شبكات تبادل في تطبيق واحد — BNB Chain وإيثريوم وبوليجون وأربيتروم وبيس وأوبتيميزم وأفالانش ولينيا وسونيك وسولانا. اختر الشبكة التي تحمل عملتك قبل التداول.",
+      "step3": "غير احتجازي فعلاً: لا تسجيل ولا KYC ولا عنوان إيداع. أموالك لا تبقى في حسابنا، فلا طوابير سحب ولا تجميد.",
+      "step4": "تحليل AI مدمج بأرقام ثقة صادقة — يقول لك متى تكون الإشارة غير واضحة بدل اختراع يقين.",
+      "step5": "رسوم واحدة واضحة: {{fee}}٪ لكل تبادل تظهر قبل التوقيع. لا هامش مخفي ولا رسوم سحب.",
+      "pitfall": "قارن رقم \"الحد الأدنى المستلم\" لا السعر المعلن. بعض التطبيقات تعرض سعراً رائعاً ثم تضيف هامشاً واسعاً. رقمنا هو ما ستحصل عليه فعلاً."
     },
     "strategy": {
-      "title": "Getting more out of the app",
-      "sub": "Practical ways to grow what you have",
-      "step1": "Start with a stablecoin pool. USDT/USDC pairs barely move against each other, so you collect trading fees with very little impermanent loss.",
-      "step2": "Swap during high-volume hours. Deeper liquidity means less price impact, which matters far more on large trades than the fee does.",
-      "step3": "Check the Signals screen before entering. If confidence is under 40% the chart genuinely isn't saying anything — waiting is a position too.",
-      "step4": "Invite friends. Referrals are the fastest way up the leaderboard, and each new trader deepens the pools everyone uses.",
-      "step5": "Keep gas money on each chain you use. Running out mid-transaction wastes the fee you already paid.",
-      "pitfall": "Chasing the highest APR you can find is how most people lose money in DeFi. A steady 8% you understand beats a 900% pool whose token you can't sell."
+      "title": "تحقيق أقصى استفادة من التطبيق",
+      "sub": "طرق عملية لتنمية ما لديك",
+      "step1": "ابدأ بمجمع عملات مستقرة. زوج USDT/USDC لا يتحرك تقريباً، فتجمع رسوم التداول بخسارة غير دائمة ضئيلة.",
+      "step2": "بادل في ساعات الذروة. السيولة الأعمق تعني تأثير سعر أقل، وهذا أهم بكثير من الرسوم في الصفقات الكبيرة.",
+      "step3": "راجع شاشة الإشارات قبل الدخول. إذا كانت الثقة تحت 40٪ فالرسم لا يقول شيئاً — والانتظار موقف أيضاً.",
+      "step4": "ادعُ أصدقاءك. الإحالات أسرع طريق لصدارة اللوحة، وكل متداول جديد يعمّق المجمعات.",
+      "step5": "احتفظ بعملة الغاز على كل شبكة تستخدمها. النفاد في منتصف المعاملة يضيع الرسوم المدفوعة.",
+      "pitfall": "مطاردة أعلى عائد هي الطريقة التي يخسر بها معظم الناس في DeFi. نسبة 8٪ ثابتة تفهمها أفضل من مجمع 900٪ لا تستطيع بيع عملته."
     },
     "watchFa": "فيديو (فارسي)",
-    "watchEn": "فيديو (إنجليزي)"
+    "watchEn": "فيديو (إنجليزي)",
+    "level": {
+      "beginner": "مبتدئ",
+      "intermediate": "متوسط",
+      "pro": "محترف"
+    },
+    "intentos": {
+      "title": "نظام النوايا",
+      "sub": "اكتب ما تريد وهو يجد الطريق",
+      "step1": "اكتب صفقتك بلغة بسيطة: ماذا تنقل، ومن أين، وإلى أين، وبأي شرط.",
+      "step2": "راجع الأمر المُجمَّع: المسار وسعر الحد ورسوم المنصة {{fee}}٪ تظهر قبل أي توقيع.",
+      "step3": "وافق على إذن الإنفاق مرة واحدة؛ لا يوقّع المنفذ شيئاً حتى يطابق السوق نيتك.",
+      "step4": "تابعه في Orders وألغِه قبل التنفيذ في أي وقت؛ الأمر المنفذ نهائي وعلى السلسلة.",
+      "step5": "احتفظ ببعض العملة الأصلية للغاز في المحفظة التي أنشأت النية — التنفيذ يدفع رسوم الشبكة.",
+      "pitfall": "النية المنفذة صفقة حقيقية على السلسلة وليست مسودة: خطأ في المبلغ أو الاتجاه لا يمكن التراجع عنه بعد المطابقة."
+    },
+    "smartwallet": {
+      "title": "المحفظة الذكية",
+      "sub": "محفظة داخل التطبيق بحدودها الحقيقية",
+      "step1": "أنشئ المحفظة من تبويب المحفظة واكتب العبارة المؤلفة من ١٢ كلمة على ورق ودون اتصال.",
+      "step2": "اختر كلمة مرور قوية — تشفّر الخزنة على هذا الجهاز فقط، لا على أي خادم.",
+      "step3": "استقبل وأرسل وبدّل بها كأي محفظة؛ المفتاح الخاص لا يغادر الجهاز أبداً.",
+      "step4": "صدّر ملف النسخة الاحتياطية المشفر من الإعدادات كنسخة ثانية واحفظه بعيداً عن العبارة.",
+      "pitfall": "العبارة هي المحفظة. حذف التطبيق أو فقدان العبارة يعني ضياع الأموال نهائياً — لا يمكن لأحد، حتى الدعم، إعادة تعيينها."
+    },
+    "portfolio": {
+      "title": "المحفظة الإجمالية",
+      "sub": "كل شبكاتك في شاشة واحدة",
+      "step1": "اربط المحفظة — تُقرأ جميع الشبكات المدعومة دون تبديل الشبكة.",
+      "step2": "رشّح بشبكة أو بكل الشبكات من الأعلى؛ عملة العرض من الإعدادات.",
+      "step3": "كل صف يعرض الكمية وقيمتها؛ الإجمالي هو مجموع الشبكات التي استجابت.",
+      "step4": "إذا أظهرت شبكة «غير متاح» فذلك يعني أن RPC العام لم يستجب — حدّث الصفحة؛ أموالك لم تذهب.",
+      "pitfall": "العملة التي «اختفت» عادة على شبكة أخرى: WBTC على إيثريوم/أربيتروم، وcbBTC على بيس، وBTCB على BSC. الإرسال على الشبكة الخطأ يضيعها نهائياً."
+    },
+    "p2p": {
+      "title": "سوق P2P",
+      "sub": "تداول مع أشخاص بحماية الضمان",
+      "step1": "اختر الشراء أو البيع والمبلغ وطريقة الدفع.",
+      "step2": "اختر طرفاً بدرجة إنجاز عالية واقرأ شروط العرض قبل فتحه.",
+      "step3": "اتبع خطوات الضمان بدقة: تُقفل العملة المشفرة حتى يتأكد الدفع النقدي.",
+      "step4": "حرّر فقط عندما يصل المال فعلاً إلى حسابك — لا بِلقطة شاشة ولا بكلام الطرف الآخر.",
+      "pitfall": "من يطلب إكمال الصفقة خارج محادثة الضمان أو الإفراج المبكر محتال. أبلغ وتوقف."
+    },
+    "orders": {
+      "title": "الأوامر والأتمتة",
+      "sub": "حدد سعرك ثم انصرف",
+      "step1": "افتح Orders واختر الزوج والاتجاه: شراء أو بيع.",
+      "step2": "حدد سعر التفعيل والمبلغ — ينتظر الأمر حتى يصل السوق إليه.",
+      "step3": "أبقِ الإشعارات مفعلة لتعرف لحظة التنفيذ أو الفشل.",
+      "step4": "ألغِ في أي وقت قبل التفعيل؛ الأمر المفتوح لا يكلف شيئاً.",
+      "pitfall": "الأمر ليس ضماناً للسعر: في الحركة السريعة يُنفذ مع انزلاق، فضع فيه مالاً تتحمل خسارته."
+    },
+    "dydx": {
+      "title": "dYdX Orbit — التمويل من المصدر فقط",
+      "sub": "الإيداع على dydx.trade فقط",
+      "step1": "افتح dYdX Orbit من تبويب الأسهم واضغط اتصال dYdX — وقّع رسالة البداية بنفس محفظة EVM. مفتاح dYdX يبقى في الذاكرة فقط.",
+      "step2": "اضغط بطاقة \"أين التمويل؟\" — في تيليجرام تفتح عبر tg.openLink، وعلى الويب في تبويب جديد، وكلاهما إلى dydx.trade.",
+      "step3": "على الموقع الأصلي اربط نفس المحفظة وأودع USDC — ابدأ باختبار صغير واختر الشبكة الصحيحة (dYdX Chain).",
+      "step4": "عد إلى التطبيق واختر السوق (مثل BTC-USD) والجهة والحجم — اضغط مراجعة وشاهد رسوم البناء 0.10% على القيمة.",
+      "step5": "أكّد — يُوقّع الأمر برمز البناء (0.10%) ويُرسل إلى dYdX Chain. يظهر هاش المعاملة والمراكز المفتوحة بالأسفل.",
+      "pitfall": "التمويل ليس داخل التطبيق — الاتصال والأوامر فقط هنا. الإيداع على شبكة خاطئة لا يمكن التراجع عنه، ولا تُدخل عبارة الاسترداد أبداً."
+    }
   },
   "audit": {
     "title": "الأمان",
