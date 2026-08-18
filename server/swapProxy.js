@@ -10,14 +10,22 @@
  *
  * The app's OWN origin is reachable by anyone who can open the app at all —
  * that is the one network guarantee we actually have. So the client retries
- * a failed direct call through these routes (lib/aggregator.js and
- * lib/openocean.js), and this module forwards the IDENTICAL request from a
- * datacenter where the aggregators are reachable.
+ * a failed direct call through these routes (lib/aggregator.js,
+ * lib/openocean.js and lib/velora.js), and this module forwards the
+ * IDENTICAL request from a datacenter where the aggregators are reachable.
+ *
+ * Velora's proxy exists for the same reason as the other two even though it
+ * only ever QUOTES (never executes, see lib/velora.js) — a price-comparison
+ * source that silently goes dark for exactly the users whose network is
+ * already filtered is still worth keeping alive, and Iranian customers are
+ * disproportionately the ones who would otherwise never see it win a
+ * comparison at all.
  *
  * ─── SECURITY BOUNDARIES ────────────────────────────────────────────────────
- * • No open proxy. Only four fixed upstream shapes exist, each with a
- *   chain-id -> slug allowlist; a caller cannot make this server fetch an
- *   arbitrary URL (no SSRF).
+ * • No open proxy. Only five fixed upstream shapes exist, each with a
+ *   chain-id -> slug allowlist (Velora's is a network-id passthrough, since
+ *   its API takes the numeric chain id directly, not a slug); a caller
+ *   cannot make this server fetch an arbitrary URL (no SSRF).
  * • The upstream host is always a compile-time constant. The only caller
  *   input is the query string / JSON body, forwarded verbatim.
  * • An upstream that fails or times out returns 502/504 with an opaque
@@ -34,6 +42,7 @@
 
 const KYBER_BASE = 'https://aggregator-api.kyberswap.com';
 const OO_BASE = 'https://open-api.openocean.finance/v4';
+const VELORA_BASE = 'https://api.velora.xyz';
 
 /** KyberSwap chain id -> network slug. Must mirror lib/aggregator.js. */
 const KYBER_SLUG = {
@@ -59,8 +68,12 @@ const OO_SLUG = {
   43114: 'avax'
 };
 
+/** Chains Velora supports. Must mirror the SUPPORTED set in lib/velora.js. */
+const VELORA_CHAINS = new Set([1, 56, 137, 42161, 10, 8453, 43114]);
+
 export const kyberSlug = (chainId) => KYBER_SLUG[Number(chainId)] ?? null;
 export const ooSlug = (chainId) => OO_SLUG[Number(chainId)] ?? null;
+export const veloraChainOk = (chainId) => VELORA_CHAINS.has(Number(chainId));
 
 /** Identifies our app upstream. Same value the client sends directly. */
 const CLIENT_ID = 'fbt-swap';
@@ -91,6 +104,18 @@ export function ooUpstreamUrl(kind, params = {}) {
   const q = new URLSearchParams(params);
   q.delete('chainId');
   return `${OO_BASE}/${slug}/${kind}?${q.toString()}`;
+}
+
+/**
+ * Build the upstream URL for a Velora price request. Velora's API takes the
+ * numeric chain id directly as `network` (already present in `params`), so
+ * unlike Kyber/OpenOcean there is no slug translation — only the allowlist
+ * check, which is what actually prevents an arbitrary upstream host.
+ */
+export function veloraUpstreamUrl(params = {}) {
+  if (!veloraChainOk(params.network)) throw new Error('CHAIN_UNSUPPORTED');
+  const q = new URLSearchParams(params);
+  return `${VELORA_BASE}/prices?${q.toString()}`;
 }
 
 async function upstream({ url, method = 'GET', body = null, headers = {} }) {
@@ -166,6 +191,17 @@ export async function proxyOoSwap(params = {}) {
   let url;
   try {
     url = ooUpstreamUrl('swap', params);
+  } catch {
+    return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
+  }
+  return upstream({ url });
+}
+
+/** GET /prices — Velora's quote-only price comparison. */
+export async function proxyVeloraPrices(params = {}) {
+  let url;
+  try {
+    url = veloraUpstreamUrl(params);
   } catch {
     return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
   }

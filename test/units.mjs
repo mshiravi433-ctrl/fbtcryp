@@ -159,7 +159,7 @@ import { analyze } from '../src/lib/ai.js';
 import { backtest, confidenceFrom, signalAt } from '../src/lib/backtest.js';
 import { classifyQuoteFailure, formatUnitsExact, NATIVE_GAS_FLOOR } from '../src/lib/swap.js';
 import { EVM_CHAINS, EVM_CHAIN_ORDER, FEE_BPS, FEE_BPS_MAX, FEE_BPS_DEFAULT } from '../src/lib/chains.js';
-import { kyberSlug, kyberUpstreamUrl, ooSlug, ooUpstreamUrl } from '../server/swapProxy.js';
+import { kyberSlug, kyberUpstreamUrl, ooSlug, ooUpstreamUrl, veloraChainOk, veloraUpstreamUrl } from '../server/swapProxy.js';
 import {
   DCA_INTERVALS,
   TRAIL_MAX_PCT,
@@ -2318,6 +2318,28 @@ export default async function run() {
     })());
     t('chainId never reaches the upstream', !kyberUpstreamUrl('routes', { chainId: '56', tokenIn: '0x1' }).includes('chainId'));
     t('every supported EVM chain has a kyber slug', EVM_CHAIN_ORDER.every((id) => kyberSlug(id)));
+
+    /*
+     * ─── VELORA'S PROXY (previously missing) ────────────────────────────────
+     * Kyber and OpenOcean both had a same-origin reachability fallback;
+     * Velora (a quote-only third opinion) never did, which silently dropped
+     * it from the comparison for exactly the users whose network already
+     * filters Kyber/OpenOcean. Same allowlist discipline as the other two —
+     * an unsupported chain must be refused, never forwarded.
+     */
+    t('velora prices forward params verbatim with no slug translation (numeric network id)',
+      veloraUpstreamUrl({ network: '56', srcToken: '0xEeee', destToken: '0x55d3' }) ===
+        'https://api.velora.xyz/prices?network=56&srcToken=0xEeee&destToken=0x55d3');
+    t('an unsupported chain on velora is refused, not forwarded', (() => {
+      try {
+        veloraUpstreamUrl({ network: '999' });
+        return false;
+      } catch {
+        return true;
+      }
+    })());
+    t('veloraChainOk agrees with the chains lib/velora.js actually supports',
+      [1, 56, 137, 42161, 10, 8453, 43114].every((id) => veloraChainOk(id)) && !veloraChainOk(999));
   }
 
   /* ---------------------- RPC endpoints per chain ------------------------- */

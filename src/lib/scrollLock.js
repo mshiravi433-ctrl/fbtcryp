@@ -82,3 +82,15 @@ export function releaseAllScrollLocks() {
     restore = null;
   }
 }
+
+/**
+ * Is ANY sheet/modal currently holding the body-scroll lock?
+ *
+ * Pull-to-refresh reads this so a downward drag that starts while a sheet
+ * (WalletConnect's own included) is open cannot ALSO trigger a refresh
+ * cycle underneath it — two competing gestures on top of each other is
+ * exactly the kind of double-motion this whole audit was about removing.
+ */
+export function isScrollLocked() {
+  return locks > 0;
+}

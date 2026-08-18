@@ -647,6 +647,8 @@
   },
   "refresh": {
     "refreshing": "Actualizando…",
-    "busyHint": "Termina o cancela primero la acción de billetera actual"
+    "busyHint": "Termina o cancela primero la acción de billetera actual",
+    "pullToRefresh": "Desliza hacia abajo para actualizar",
+    "releaseToRefresh": "Suelta para actualizar"
   }
 }

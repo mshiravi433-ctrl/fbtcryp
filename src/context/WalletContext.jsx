@@ -7,6 +7,7 @@ import { isNativeShell, publicAppUrl } from '../lib/nativeShell';
 import { isIOS as isIOSDevice } from '../lib/platform';
 import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { wcEvent } from '../lib/wcTrace';
+import { WC_CONNECT_TIMEOUT_MS, withTimeout } from '../lib/wcTimeout';
 
 /*
  * WALLETCONNECT PROJECT ID — a constant in source, deliberately NOT an env var.
@@ -52,6 +53,26 @@ const SLOW_DEVICE = (() => {
 const WalletContext = createContext(null);
 
 const loadEthers = () => import('ethers');
+
+/*
+ * ─── THE "SPINS FOREVER" BUG ────────────────────────────────────────────────
+ * `wc.connect()` never had an outer timeout. Inside the SDK, `Relayer.connect()`
+ * retries the relay socket up to 5 times with an increasing backoff
+ * (`sleep(attempt * 1000ms)` between attempts) BEFORE it ever rejects — on a
+ * network that blocks `relay.walletconnect.com` outright (the Iranian case),
+ * that is 5 stalled socket attempts, each waiting out its own internal
+ * `Socket stalled when trying to connect` timeout (15s), before the promise
+ * this file awaits ever settles. That is 60-90+ seconds of a spinner with
+ * zero feedback — which reads exactly like "it just spins".
+ *
+ * `withTimeout` / `WC_CONNECT_TIMEOUT_MS` (lib/wcTimeout.js — a standalone
+ * module so it is unit-testable without mounting React or a real WC client)
+ * bounds our own wait. When it fires we do not touch the SDK's internal
+ * socket (it keeps retrying on its own schedule and is simply abandoned —
+ * see the `wc?.disconnect?.()` cleanup below), but the USER gets their
+ * screen back immediately with an actionable `WC_RELAY_UNREACHABLE` message
+ * instead of an endless spinner.
+ */
 
 export function WalletProvider({ children }) {
   const [mode, setMode] = useState(null); // 'injected' | 'wc' | 'local'
@@ -285,41 +306,55 @@ export function WalletProvider({ children }) {
           '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927'  // Ledger Live
         ],
         /*
-         * iOS: give the modal the exact native + universal links for the
-         * wallets we surface, so tapping one opens that wallet directly
-         * (universal links also fall back to the App Store when the app is
-         * missing). Without this the modal falls back to explorer data.
+         * ON EVERY MOBILE PLATFORM, NOT JUST iOS: give the modal the exact
+         * native + universal links for the wallets we surface, so tapping
+         * one opens that wallet directly instead of depending on
+         * `api.web3modal.org` to resolve a deep link at pairing time.
+         *
+         * ─── WHY THIS WAS iOS-ONLY AND WHY THAT WAS WRONG ────────────────
+         * Without an explicit `mobileWallets` entry, the modal falls back to
+         * fetching wallet metadata (including its deep-link template) from
+         * the WalletConnect explorer API. That is a THIRD-PARTY network
+         * dependency sitting directly in the connect path — reachable most
+         * places, but Iranian mobile networks that filter WalletConnect's
+         * infrastructure can filter this alongside the relay. The reported
+         * "sometimes the wallet list appears but tapping Trust/MetaMask does
+         * nothing" is exactly this failure mode: the LIST can render from a
+         * cached/partial response while the actual deep-link template never
+         * arrives, so the tap has nothing to open.
+         *
+         * Supplying the links ourselves removes that dependency entirely for
+         * the three wallets we actually promote — the tap works even if
+         * every WalletConnect-operated API (not just the relay) is blocked.
+         * `explorerExcludedWalletIds: 'ALL'` already means nothing else is
+         * offered, so this list is exhaustive for what a user can pick.
          */
-        ...(ios
-          ? {
-              mobileWallets: [
-                {
-                  id: 'metamask',
-                  name: 'MetaMask',
-                  links: {
-                    native: 'metamask://',
-                    universal: 'https://metamask.app.link/'
-                  }
-                },
-                {
-                  id: 'trust',
-                  name: 'Trust Wallet',
-                  links: {
-                    native: 'trust://',
-                    universal: 'https://link.trustwallet.com/'
-                  }
-                },
-                {
-                  id: 'rainbow',
-                  name: 'Rainbow',
-                  links: {
-                    native: 'rainbow://',
-                    universal: 'https://rnbwapp.com/'
-                  }
-                }
-              ]
+        mobileWallets: [
+          {
+            id: 'metamask',
+            name: 'MetaMask',
+            links: {
+              native: 'metamask://',
+              universal: 'https://metamask.app.link/'
             }
-          : {})
+          },
+          {
+            id: 'trust',
+            name: 'Trust Wallet',
+            links: {
+              native: 'trust://',
+              universal: 'https://link.trustwallet.com/'
+            }
+          },
+          {
+            id: 'rainbow',
+            name: 'Rainbow',
+            links: {
+              native: 'rainbow://',
+              universal: 'https://rnbwapp.com/'
+            }
+          }
+        ]
       },
       metadata: {
         name: 'FBT Swap',
@@ -506,11 +541,13 @@ export function WalletProvider({ children }) {
        * mid-pairing, dropping the in-memory client. Let the modal own deep
        * links on every platform instead.
        */
-      try {
-        await wc.connect();
-      } catch (err) {
-        throw err;
-      }
+      /*
+       * Bounded wait — see WC_CONNECT_TIMEOUT_MS above. This is what turns an
+       * unreachable relay from "spins forever" into a named, actionable
+       * failure the user can act on (switch network / VPN) within seconds
+       * rather than minutes.
+       */
+      await withTimeout(wc.connect(), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT');
       wcEvent('session_settled');
       const provider = new BrowserProvider(wc, 'any');
       const signer = await provider.getSigner();
@@ -546,6 +583,15 @@ export function WalletProvider({ children }) {
        */
       const msg = String(e?.message || '');
       wcEvent('connect_failed');
+      /*
+       * Our own bounded wait fired: the SDK's internal retry loop is still
+       * spinning on a relay it cannot reach, but the USER is not left
+       * staring at it. Treat exactly like a confirmed-unreachable relay, and
+       * make sure the abandoned instance cannot outlive this attempt (see
+       * the cleanup block below) — otherwise a retry a moment later would
+       * find `wcRef.current` unset but the SDK's own zombie socket and
+       * dangling modal still alive underneath it.
+       */
       if (
         msg.includes('User rejected') ||
         e?.code === 4001 ||
@@ -563,11 +609,22 @@ export function WalletProvider({ children }) {
         setError('WC_ORIGIN_BLOCKED');
       } else if (/proposal expired|expired/i.test(msg)) {
         setError('WC_EXPIRED');
-      } else if (/websocket|socket stalled|network|failed to publish|relay|timeout/i.test(msg)) {
+      } else if (
+        msg === 'WC_CONNECT_TIMEOUT' ||
+        /websocket|socket stalled|network|failed to publish|relay|timeout|no internet connection/i.test(msg)
+      ) {
         setError('WC_RELAY_UNREACHABLE');
       } else {
         setError('CONNECT_FAILED');
       }
+      /*
+       * Never leave a half-connected instance behind. On a plain rejection
+       * the SDK already tore its own state down, but on OUR timeout the
+       * SDK's socket is still retrying in the background — closing the
+       * modal and disconnecting here prevents that zombie instance from
+       * outliving the attempt and confusing the next tap.
+       */
+      try { wc?.disconnect?.(); } catch { /* already gone, or never finished initialising */ }
       return false;
     } finally {
       setConnecting(false);
@@ -632,10 +689,19 @@ export function WalletProvider({ children }) {
     if (!hasStoredSession) return false;
 
     wcInitingRef.current = true;
+    let wc;
     try {
       const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
       const { BrowserProvider } = await loadEthers();
-      const wc = await EthereumProvider.init(buildWcInitConfig());
+      /*
+       * Bounded restore, same reasoning as connect(): init()'s own relay
+       * socket open runs unawaited internally, but getSigner() below can
+       * still round-trip the relay for a session already on disk. On a
+       * blocked relay that must fail quiet within seconds — this path is
+       * opportunistic (the explicit Connect button is the real one) and must
+       * never turn "returning to the app" into a silent multi-second stall.
+       */
+      wc = await withTimeout(EthereumProvider.init(buildWcInitConfig()), WC_CONNECT_TIMEOUT_MS, 'WC_RESTORE_TIMEOUT');
       repairSignClientMetadata(wc);
 
       /* init() loads persisted sessions internally; if the wallet already
@@ -646,8 +712,11 @@ export function WalletProvider({ children }) {
       }
 
       const provider = new BrowserProvider(wc, 'any');
-      const signer = await provider.getSigner().catch(() => null);
-      if (!signer) return false;
+      const signer = await withTimeout(provider.getSigner(), WC_CONNECT_TIMEOUT_MS, 'WC_RESTORE_TIMEOUT').catch(() => null);
+      if (!signer) {
+        try { wc?.disconnect?.(); } catch { /* noop */ }
+        return false;
+      }
 
       detachInjectedListeners();
       wcRef.current = wc;
@@ -668,7 +737,12 @@ export function WalletProvider({ children }) {
       return true;
     } catch {
       /* A relay hiccup here must never surface as a connect error — restore
-         is opportunistic; the explicit Connect button remains the real path. */
+         is opportunistic; the explicit Connect button remains the real path.
+         But an abandoned instance (our own timeout fired) must not linger:
+         a wcRef never set here, plus a zombie socket left alive underneath,
+         is exactly the state that made a LATER explicit Connect look broken
+         for reasons nobody could see from the UI. */
+      try { if (wcRef.current !== wc) wc?.disconnect?.(); } catch { /* noop */ }
       return false;
     } finally {
       wcInitingRef.current = false;

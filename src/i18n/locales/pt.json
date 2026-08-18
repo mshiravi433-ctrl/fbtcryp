@@ -647,6 +647,8 @@
   },
   "refresh": {
     "refreshing": "Atualizando…",
-    "busyHint": "Conclua ou cancele primeiro a ação de carteira em andamento"
+    "busyHint": "Conclua ou cancele primeiro a ação de carteira em andamento",
+    "pullToRefresh": "Puxe para baixo para atualizar",
+    "releaseToRefresh": "Solte para atualizar"
   }
 }

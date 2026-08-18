@@ -46,7 +46,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
-import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap } from './swapProxy.js';
+import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
 import { timingSafeEqual } from 'node:crypto';
@@ -2717,6 +2717,12 @@ app.get('/api/swap/oo/quote', async (req, res) => {
 
 app.get('/api/swap/oo/swap', async (req, res) => {
   const r = await proxyOoSwap(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/* Velora — quote-only, same reachability fallback (see lib/velora.js). */
+app.get('/api/swap/velora/prices', async (req, res) => {
+  const r = await proxyVeloraPrices(req.query);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 

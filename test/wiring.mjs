@@ -7674,6 +7674,26 @@ export default function run() {
     /* The integrator name must match LI.FI's, or analytics split in two. */
     t("...under the same partner name as everywhere else",
       /VELORA_PARTNER = 'fbtswap'/.test(velCode));
+
+    /*
+     * ─── VELORA GETS THE SAME REACHABILITY FALLBACK AS KYBER/OPENOCEAN ──────
+     * Both other aggregators retry a network-level failure through the app's
+     * own origin. Velora never did — a silent gap for exactly the network
+     * conditions (Iranian mobile filtering) this whole audit is about, made
+     * worse by being invisible: a quote-only source going dark changes
+     * nothing the user can SEE, so nobody would ever report it as broken.
+     */
+    t('velora retries a network-level failure through the same-origin proxy',
+      /PROXY_BASE = '\/api\/swap\/velora'/.test(velCode) && /isNetworkFailure/.test(velCode));
+    t('...and the proxied request carries the identical query string',
+      /veloraFetchOnce\(`\$\{PROXY_BASE\}\/prices\?\$\{params\}`/.test(velCode));
+
+    const swapProxy = read('server/swapProxy.js');
+    t('the server exposes a Velora proxy route with its own chain allowlist',
+      /export function veloraUpstreamUrl/.test(swapProxy) && /veloraChainOk/.test(swapProxy));
+    const app = read('server/app.js');
+    t('server/app.js wires the Velora proxy route',
+      /proxyVeloraPrices/.test(app) && /'\/api\/swap\/velora\/prices'/.test(app));
   }
 
   /* ---- 82. UTEX, and the shape of the API audit ------------------------- */
@@ -11446,6 +11466,22 @@ export default function run() {
       /:root\[data-native='true'\] \.more-tile\s*\{[^}]*backdrop-filter:\s*none !important/.test(css));
     t('native: the sheet backdrop is flat (no full-screen blurred overlay)',
       /:root\[data-native='true'\] \.sheet-backdrop\s*\{[^}]*backdrop-filter:\s*none/.test(css));
+
+    /*
+     * ─── THE WALLET SCREEN "FLICKERS LIKE A FLUORESCENT TUBE" ───────────────
+     * Reported specifically around WalletConnect pairing: opening /wallet
+     * (the screen the Connect button lives on) flickers on Android. The
+     * cause was the SAME mechanism as the sheet/More-menu fixes above,
+     * reintroduced by wallet-modern.css and never gated for native: a
+     * backdrop-filter on `.wallet-hero-modern` sampling the drifting RGB
+     * background behind it every compositor frame, PLUS two of its own
+     * independently-looping `filter: blur()` aurora layers underneath.
+     */
+    const walletModernCss = read('src/styles/wallet-modern.css');
+    t('native: the wallet hero/asset/action cards drop their backdrop blur',
+      /:root\[data-native='true'\] \.wallet-hero-modern,[\s\S]{0,300}backdrop-filter:\s*none !important/.test(walletModernCss));
+    t('native: the wallet hero aurora loop is frozen, not just reduced-motion',
+      /:root\[data-native='true'\] \.wallet-hero-aurora::before,[\s\S]{0,150}animation:\s*none/.test(walletModernCss));
 
     /* Interaction order in MoreSheet: close first, navigate one frame later.
        The reverse swapped the route underneath an exiting drawer. */
