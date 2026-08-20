@@ -810,5 +810,15 @@
       "step5": "大额资产放在单独的硬件钱包里，而不是应用内钱包。",
       "pitfall": "任何正规方都不会要你的 12 个助记词。不是我们的客服，不是群管理员，不是任何网站。索要的人就是在偷你的钱。立即拉黑。"
     }
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }

@@ -810,5 +810,15 @@
       "step5": "Gardez les grosses sommes dans un portefeuille matériel séparé, pas dans l'app.",
       "pitfall": "Personne de légitime ne demandera jamais vos 12 mots. Ni notre support, ni un admin de groupe, ni un site. Quiconque les demande essaie de voler votre argent. Bloquez-le immédiatement."
     }
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }

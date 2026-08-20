@@ -810,5 +810,15 @@
       "step5": "Guarda los importes grandes en una cartera hardware aparte, no en la de la app.",
       "pitfall": "Nadie legítimo te pedirá jamás las 12 palabras. Ni nuestro soporte, ni un admin de grupo, ni una web. Quien las pide intenta robarte. Bloquéalo de inmediato."
     }
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }

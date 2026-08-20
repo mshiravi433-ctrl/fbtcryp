@@ -810,5 +810,15 @@
       "step5": "बड़ी रकम ऐप-वॉलेट में नहीं, अलग हार्डवेयर वॉलेट में रखें।",
       "pitfall": "कोई भी सच्चा व्यक्ति कभी आपके 12 रिकवरी शब्द नहीं माँगेगा। न हमारा सपोर्ट, न ग्रुप एडमिन, न कोई वेबसाइट। जो माँगे वह आपका पैसा चुराना चाहता है। तुरंत ब्लॉक करें।"
     }
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }

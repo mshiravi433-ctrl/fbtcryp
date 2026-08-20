@@ -61,6 +61,7 @@ import {
   SimulationCard
 } from '../components/IntentTimeline';
 import { reportIntentObservation } from '../lib/intentObservation';
+import { extractActualOutput, outputDeltaBps } from '../lib/intentReceipt';
 import { classifyFailure } from '../lib/intentRecovery';
 import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 import { isNativeShell } from '../lib/nativeShell';
@@ -798,6 +799,26 @@ export default function Swap() {
       const ok = receipt.status === 1;
       if (ok) exec.markCompleted(); else exec.markFailed('RECEIPT_FAILED');
 
+      const predictedWei = fresh.amountOutWei != null ? String(fresh.amountOutWei) : null;
+      const extracted = ok
+        ? extractActualOutput({
+            logs: receipt?.logs,
+            toToken,
+            recipient: wallet.address,
+            chainId
+          })
+        : { actualOutputWei: null, source: null, reason: 'RECEIPT_FAILED', transfersCounted: 0 };
+      const actualWei = extracted.actualOutputWei;
+      const actualDelta = outputDeltaBps(predictedWei, actualWei);
+      let actualFormatted = null;
+      if (actualWei != null && Number.isInteger(toToken?.decimals)) {
+        try {
+          actualFormatted = Number(formatUnitsExact(BigInt(actualWei), toToken.decimals));
+        } catch {
+          actualFormatted = null;
+        }
+      }
+
       let executionProof = null;
       if (ok) {
         try {
@@ -811,16 +832,15 @@ export default function Swap() {
             receipt,
             deadlineMinutes: deadlineMin,
             intentId: sourceIntentId.current,
-            /* v2 evidence: lifecycle, route policy, the exact simulation and
-               the predicted-vs-actual gas delta. Absent for a plain swap with
-               no preflight, which still produces the v1 receipt. */
             executionCore: exec.simulation
               ? exec.proofEvidence({
                   txHash: tx.hash,
                   receipt,
                   approvalTxHash: approvalHashForProof,
                   confirmationLatencyMs: Date.now() - submittedAt,
-                  predictedOutput: fresh.amountOutWei != null ? String(fresh.amountOutWei) : null
+                  predictedOutput: predictedWei,
+                  actualOutput: actualWei,
+                  actualOutputSource: extracted.source
                 })
               : null
           });
@@ -836,6 +856,10 @@ export default function Swap() {
         paidSymbol: fromToken.symbol,
         got: fresh.amountOut,
         gotSymbol: toToken.symbol,
+        estimatedOut: fresh.amountOut,
+        actualOut: actualFormatted,
+        actualExtracted: actualWei != null,
+        outputDeltaBps: actualDelta,
         chainName: cfg?.name ?? null,
         proofId: executionProof?.id ?? null,
         proofDigest: executionProof?.integrity?.digest ?? null
@@ -893,7 +917,7 @@ export default function Swap() {
         gasErrorBps: exec.simulation?.gasEstimate && receipt?.gasUsed
           ? ((Number(receipt.gasUsed) - Number(exec.simulation.gasEstimate)) / Number(exec.simulation.gasEstimate)) * 10_000
           : null,
-        outputErrorBps: null,
+        outputErrorBps: actualDelta,
         confirmationLatencyMs: Date.now() - submittedAt,
         failureCode: ok ? 'NONE' : 'RECEIPT_FAILED',
         outcome: ok ? 'completed' : 'failed',
@@ -1706,9 +1730,12 @@ export default function Swap() {
                 <span className="mono" style={{ fontWeight: 700 }}>{amount} {fromToken.symbol}</span>
               </div>
               <div className="row-between">
-                <span className="faint">{t('swap.youReceive')}</span>
+                <span className="faint">{t('exec.receipt.estimated')}</span>
                 <span className="mono up" style={{ fontWeight: 700 }}>≈{fmtQty(quote.amountOut)} {toToken.symbol}</span>
               </div>
+              <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.65, margin: 0 }}>
+                {t('exec.receipt.reviewHint')}
+              </p>
               <div className="row-between">
                 <span className="faint">{t('swap.minReceived')}</span>
                 <span className="mono">{fmtQty(quote.minOut)} {toToken.symbol}</span>
@@ -1808,11 +1835,32 @@ export default function Swap() {
                       </span>
                     </div>
                     <div className="row-between">
-                      <span className="faint">{t('swap.youReceive')}</span>
-                      <span className="mono up" style={{ fontSize: 13, fontWeight: 700 }}>
-                        {fmtQty(Number(txState.got))} {txState.gotSymbol}
+                      <span className="faint">{t('exec.receipt.estimated')}</span>
+                      <span className="mono" style={{ fontSize: 13 }}>
+                        ≈{fmtQty(Number(txState.estimatedOut ?? txState.got))} {txState.gotSymbol}
                       </span>
                     </div>
+                    <div className="row-between">
+                      <span className="faint">{t('exec.receipt.actual')}</span>
+                      <span className="mono up" style={{ fontSize: 13, fontWeight: 700 }}>
+                        {txState.actualExtracted
+                          ? `${fmtQty(Number(txState.actualOut))} ${txState.gotSymbol}`
+                          : t('exec.receipt.unavailable')}
+                      </span>
+                    </div>
+                    {txState.actualExtracted && txState.outputDeltaBps != null && (
+                      <div className="row-between">
+                        <span className="faint">{t('exec.receipt.delta')}</span>
+                        <span className={`mono ${txState.outputDeltaBps < 0 ? 'down' : 'up'}`} style={{ fontSize: 12 }}>
+                          {txState.outputDeltaBps > 0 ? '+' : ''}{txState.outputDeltaBps} bps
+                        </span>
+                      </div>
+                    )}
+                    {!txState.actualExtracted && (
+                      <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.65, margin: 0 }}>
+                        {t('exec.receipt.unavailableHint')}
+                      </p>
+                    )}
                     {txState.chainName && (
                       <div className="row-between">
                         <span className="faint">{t('swap.network')}</span>

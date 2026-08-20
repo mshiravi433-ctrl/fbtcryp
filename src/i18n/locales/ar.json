@@ -2679,5 +2679,15 @@
     "busyHint": "أنهِ أو ألغِ إجراء المحفظة الحالي أولًا",
     "pullToRefresh": "اسحب للأسفل للتحديث",
     "releaseToRefresh": "حرّر للتحديث"
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }

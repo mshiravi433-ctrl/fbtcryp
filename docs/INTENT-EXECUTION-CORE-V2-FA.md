@@ -43,10 +43,11 @@ Intent
 | `server/app.js` | `POST /api/intents/v1/observations` + rate limit اختصاصی |
 | `server/intents.js` | بلوک `executionCore` در Capabilities |
 | `src/lib/executionProof.js` | Execution Proof v2 با حفظ سازگاری v1 |
+| `src/lib/intentReceipt.js` | استخراج خروجی واقعی از لاگ رسید — `fbt.intent-receipt.v1` |
 
 تست‌ها:
 
-`test/intent-lifecycle-probe.mjs` · `test/intent-simulation-probe.mjs` · `test/intent-route-policy-probe.mjs` · `test/intent-recovery-probe.mjs` · `test/intent-observation-probe.mjs` (به‌علاوهٔ بخش جدید در `test/wiring.mjs`)
+`test/intent-lifecycle-probe.mjs` · `test/intent-simulation-probe.mjs` · `test/intent-route-policy-probe.mjs` · `test/intent-recovery-probe.mjs` · `test/intent-observation-probe.mjs` · `test/intent-receipt-probe.mjs` (به‌علاوهٔ بخش Execution Core در `test/wiring.mjs`)
 
 ---
 
@@ -169,6 +170,7 @@ Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از all
 * `fbt.execution-proof.v2` وقتی تولید می‌شود که شواهد Execution Core موجود باشد و این‌ها را اضافه می‌کند: schema/version و وضعیت نهایی lifecycle، policy انتخاب مسیر و claim آن، مسیرهای ردشده و فیلدهای ناقص، route/quote fingerprint، نتیجهٔ simulation دقیق و شمارهٔ بلاک، hash تراکنش انتخاب‌شده، gas واقعی، دلتای پیش‌بینی/واقعیت، رویدادهای Recovery و بلوک `claimLimits`.
 * ارجاع تراکنش Approval **فقط** در receipt محلی است و در payload observation وجود ندارد.
 * `actualOutput` تنها زمانی پر می‌شود که از receipt/log قابل استخراج باشد؛ در غیر این صورت `null` است و ادعا نمی‌شود.
+* **استخراج خروجی واقعی (این فاز):** `extractActualOutput` جمعِ همهٔ `Transfer`های ERC-20 به گیرنده روی همان قرارداد توکن خروجی را برمی‌گرداند، یا برای خروجی native جمعِ لاگ‌های `Withdrawal` قرارداد wrapped-native. دلتای موجودی استفاده نمی‌شود. اگر لاگ نباشد یا شکل خراب باشد، `actualOutputWei` و `source` هر دو `null` می‌مانند — هرگز صفر و هرگز مقدار پیش‌بینی‌شده جایگزین نمی‌شود. `outputDeltaBps = ((actual − predicted) / predicted) × 10000` فقط وقتی هر دو مقدار موجودند محاسبه می‌شود و همان عدد (به‌صورت باکت) وارد Observation می‌شود، نه مقدار خام.
 * Verification دوباره canonical JSON می‌سازد، دوباره SHA-256 می‌گیرد و در نسخهٔ v2 اتصال fingerprintها را هم بررسی می‌کند.
 
 ادعا نمی‌شود: بهترین Route کل جهان، MEV saved بدون counterfactual، private relay بدون attestation، atomic cross-chain، ZK proof، guaranteed execution بر پایهٔ `eth_call`.
@@ -220,6 +222,6 @@ Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از all
 ## ۱۲. اجرای تست‌ها
 
 ```bash
-npm test          # همهٔ Suiteها، شامل پنج probe جدید Execution Core
+npm test          # همهٔ Suiteها، شامل probeهای Execution Core و استخراج خروجی رسید
 npm run build     # production build
 ```

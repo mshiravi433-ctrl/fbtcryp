@@ -810,5 +810,15 @@
       "step5": "Guarde valores grandes em uma carteira de hardware separada, não na carteira do app.",
       "pitfall": "Ninguém legítimo jamais pedirá suas 12 palavras de recuperação. Nem nosso suporte, nem admin de grupo, nem site algum. Quem pede está tentando roubar seu dinheiro. Bloqueie na hora."
     }
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }
