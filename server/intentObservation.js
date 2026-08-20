@@ -16,10 +16,12 @@
  * single instance can report a count for diagnostics; it is never presented as
  * storage and never survives a cold start.
  *
- * ─── NO MODEL ───────────────────────────────────────────────────────────────
- * Nothing here trains anything. /api/learning/params stays `model:false` until
- * a real dataset and a real trainer exist. Collecting honest observations now
- * is what makes that possible later; pretending to optimise today would not.
+ * ─── MODEL LIVES ELSEWHERE ──────────────────────────────────────────────────
+ * This module only collects. Training is server/learning/execObservation.js,
+ * which consumes the day-bucket dataset and publishes an empirical description
+ * (`fbt.intent-execution-model.v1`). `modelTrained` is reported from that
+ * serving snapshot — never assumed true here. It is not a classifier, not an
+ * LLM, and it claims no MEV / atomicity / escrow / route optimisation.
  */
 
 import { blobConfigured, blobGet, blobSet } from './blobCache.js';
@@ -213,14 +215,17 @@ export async function storeObservation(value, { io = null } = {}) {
 }
 
 /** Honest capability/status block for /api/intents/v1/capabilities. */
-export function observationProtocolStatus() {
+export function observationProtocolStatus({ modelTrained = false } = {}) {
   return {
     schema: OBSERVATION_SCHEMA,
     endpoint: '/api/intents/v1/observations',
+    modelEndpoint: '/api/intents/v1/execution-observation-model',
+    modelSchema: 'fbt.intent-execution-model.v1',
     optInRequired: true,
     durableStorageConfigured: observationStorageConfigured(),
-    /* This is the whole honesty of the phase in one flag. */
-    modelTrained: false,
+    /* True only when the empirical trainer has enough real observations.
+       Never a claim that we optimise routes with ML. */
+    modelTrained: Boolean(modelTrained),
     mlOptimizationClaimed: false,
     acceptsWalletAddress: false,
     acceptsTxHash: false,
