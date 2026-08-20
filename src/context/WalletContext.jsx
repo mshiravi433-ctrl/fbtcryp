@@ -115,8 +115,18 @@ export function WalletProvider({ children }) {
 
   /* ----------------------------- read helpers ---------------------------- */
 
-  const getReadProvider = useCallback(async (targetChain = DEFAULT_CHAIN) => {
-    const { JsonRpcProvider, FallbackProvider } = await loadEthers();
+  /**
+   * Build the individual read-only JsonRpcProviders for a chain, in priority
+   * order. Shared by the fail-over wrapper (getReadProvider) and the raw list
+   * handed to the multi-RPC preflight quorum (getReadProviders), so the two
+   * can never drift about which endpoints exist or their order.
+   *
+   * https only. An http endpoint would be blocked by the WebView's
+   * usesCleartextTraffic=false anyway, and downgrading a wallet's RPC to
+   * plaintext is worth refusing outright rather than failing obscurely.
+   */
+  const buildReadProviders = useCallback(async (targetChain = DEFAULT_CHAIN) => {
+    const { JsonRpcProvider } = await loadEthers();
     const cfg = EVM_CHAINS[targetChain];
 
     /*
@@ -131,10 +141,6 @@ export function WalletProvider({ children }) {
      * Placed ahead of the defaults rather than replacing them: a private node
      * that goes down would otherwise take the whole app with it, and
      * FallbackProvider already fails over on a stall.
-     *
-     * https only. An http endpoint would be blocked by the WebView's
-     * usesCleartextTraffic=false anyway, and downgrading a wallet's RPC to
-     * plaintext is worth refusing outright rather than failing obscurely.
      */
     const custom = useSettingsStore.getState().customEvmRpc;
     const rpcList =
@@ -142,9 +148,11 @@ export function WalletProvider({ children }) {
         ? [custom.trim(), ...cfg.rpc]
         : cfg.rpc;
 
-    const providers = rpcList.map((url, i) => ({
-      provider: new JsonRpcProvider(url, targetChain, { staticNetwork: true }),
-      priority: i + 1,
+    return rpcList.map((url, i) => {
+      const provider = new JsonRpcProvider(url, targetChain, { staticNetwork: true });
+      /* Keep the priority metadata on a non-enumerable side-channel so the
+         provider stays JSON-clean in devtools/snapshots. */
+      Object.defineProperty(provider, '__rpcPriority', { value: i + 1, enumerable: false });
       /*
        * On iPhone the public BSC RPC endpoint is routinely >2s to first byte.
        * 2500ms was just fast enough to trip the stall timer and race a second
@@ -153,13 +161,36 @@ export function WalletProvider({ children }) {
        * never loaded. Raise the timeout on slow devices and rely on the
        * priority order instead of racing.
        */
-      stallTimeout: SLOW_DEVICE ? 6000 : 2500,
-      weight: 1
-    }));
-    return providers.length > 1
-      ? new FallbackProvider(providers, targetChain, { quorum: 1, cacheTimeout: 15_000 })
-      : providers[0].provider;
+      Object.defineProperty(provider, '__stallTimeout', { value: SLOW_DEVICE ? 6000 : 2500, enumerable: false });
+      return provider;
+    });
   }, []);
+
+  const getReadProvider = useCallback(async (targetChain = DEFAULT_CHAIN) => {
+    const { FallbackProvider } = await loadEthers();
+    const providers = await buildReadProviders(targetChain);
+    return providers.length > 1
+      ? new FallbackProvider(
+          providers.map((provider, i) => ({
+            provider,
+            priority: i + 1,
+            stallTimeout: SLOW_DEVICE ? 6000 : 2500,
+            weight: 1
+          })),
+          targetChain,
+          { quorum: 1, cacheTimeout: 15_000 }
+        )
+      : providers[0].provider;
+  }, [buildReadProviders]);
+
+  /**
+   * The raw, independent read nodes for a chain — the inputs to the multi-RPC
+   * preflight quorum, where the exact bytes are simulated on several nodes and
+   * `RPC_DISAGREEMENT` is only reported on a genuine passed-vs-reverted split.
+   */
+  const getReadProviders = useCallback(async (targetChain = DEFAULT_CHAIN) => {
+    return buildReadProviders(targetChain);
+  }, [buildReadProviders]);
 
   const refreshBalance = useCallback(
     async (addr = address, cid = chainId ?? DEFAULT_CHAIN) => {
@@ -1209,6 +1240,7 @@ export function WalletProvider({ children }) {
       switchChain,
       refreshBalance,
       getReadProvider,
+      getReadProviders,
       getSigner: () => signerRef.current,
       clearError: () => setError(null)
     }),
@@ -1233,7 +1265,8 @@ export function WalletProvider({ children }) {
       disconnect,
       switchChain,
       refreshBalance,
-      getReadProvider
+      getReadProvider,
+      getReadProviders
     ]
   );
 

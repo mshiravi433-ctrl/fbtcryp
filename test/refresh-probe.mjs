@@ -146,8 +146,8 @@ const read = (p) => readFileSync(p, 'utf8');
     /onSoftRefresh/.test(wallet) && /refreshBalance/.test(wallet));
 
   const swap = read('src/pages/Swap.jsx');
-  t('Swap guards ALL sensitive stages (preparing…pending)', /holdRefreshGuard\('swap-tx'\)/.test(swap)
-    && /\['preparing', 'quoting', 'signing', 'approving', 'pending'\]/.test(swap));
+  t('Swap guards ALL sensitive stages (preparing…pending, incl. replaced)', /holdRefreshGuard\('swap-tx'\)/.test(swap)
+    && /\['preparing', 'quoting', 'signing', 'approving', 'pending', 'replaced'\]/.test(swap));
 
   const poll = read('src/hooks/useMarket.js');
   t('every usePoll hook joins soft refresh through the same shared cycle', /onSoftRefresh\(run\)/.test(poll));

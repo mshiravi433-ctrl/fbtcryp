@@ -44,6 +44,7 @@ export const OBSERVATION_SIMULATION_STATUSES = Object.freeze([
   'insufficient-balance',
   'reverted',
   'rpc-unavailable',
+  'rpc-disagreement',
   'quote-expired',
   'chain-mismatch',
   'account-mismatch',

@@ -255,6 +255,13 @@ export const INTENT_CAPABILITIES = Object.freeze({
     transactionSchema: 'fbt.intent-transaction.v1',
     executionProofSchema: 'fbt.execution-proof.v2',
     exactClientRpcPreflightSupported: true,
+    /* The exact bytes are re-simulated on several independent read RPC nodes
+       and RPC_DISAGREEMENT is only reported on a genuine passed-vs-reverted
+       split (an unreachable node is never counted as a vote). */
+    multiRpcPreflightQuorum: true,
+    /* A replaced transaction is named, shown and followed to completion
+       instead of collapsing into a generic failure. */
+    replacementTxTracking: true,
     serverExecutesTransactions: false,
     userSignatureRequired: true,
     autonomousSpending: false,

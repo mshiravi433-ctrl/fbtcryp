@@ -132,6 +132,13 @@ export default async function run() {
     t(`simulation ${status} maps to ${code}`, rec.failureCodeForSimulation(status) === code);
   }
   t('a passed simulation needs no recovery', rec.failureCodeForSimulation('passed') === null);
+  t('a multi-RPC disagreement maps to RPC_DISAGREEMENT',
+    rec.failureCodeForSimulation('rpc-disagreement') === 'RPC_DISAGREEMENT');
+  const disagreementPlan = rec.planRecovery('RPC_DISAGREEMENT');
+  t('an RPC disagreement switches node and re-runs the preflight',
+    disagreementPlan.actions.includes('SWITCH_READ_RPC')
+    && disagreementPlan.actions.includes('RETRY_PREFLIGHT'));
+  t('an RPC disagreement never re-broadcasts', disagreementPlan.resubmits === false);
 
   /* ------------------ plans compose with the state machine ------------------ */
   const now = 1_780_000_000_000;
