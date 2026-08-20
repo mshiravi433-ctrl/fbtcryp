@@ -254,18 +254,15 @@ app's server in any of them:
 | **Injected** | `window.ethereum` | Desktop browsers, wallet in-app browsers. |
 | **In-app wallet** | 12-word seed generated on-device, AES-GCM encrypted | Small amounts only — see the warning below. |
 
-Set `VITE_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com) to enable the
-first mode. That ID is public by design — it is not a secret.
+The official FBT Reown/WalletConnect project ID is
+**`8e36eccabebf5a4567f4e974fafd6b20`**. It is public by design and is pinned as
+the single `WC_PROJECT_ID` constant in `src/context/WalletContext.jsx`; the web,
+local and APK builds therefore cannot silently select different projects.
+`VITE_WALLETCONNECT_PROJECT_ID` is retired and is deliberately ignored.
 
-The official FBT project ID is **`f0e8ca24821402a6226b4b675172b294`** and is
-already registered as the documented value in `.env.example` and as a hardcoded
-fallback in `src/context/WalletContext.jsx` (so a build with no env var still
-connects). For production, set `VITE_WALLETCONNECT_PROJECT_ID` explicitly in
-**Vercel → Project → Settings → Environment Variables** and in the CI workflow
-(`.github/workflows/build-apk.yml` passes `vars.VITE_WALLETCONNECT_PROJECT_ID`
-through) — the APK is built by CI, and Vite inlines `import.meta.env` at build
-time, so a value that only exists in Vercel would change the website while the
-Android app kept the compiled-in default.
+The Reown **Dashboard API Secret is different**: it is private, is not required
+by the current app, and must never be placed in a `VITE_*` variable, source
+code, a client bundle or GitHub Actions Variables.
 
 ### About the in-app wallet
 

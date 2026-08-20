@@ -25,15 +25,16 @@ Trust Wallet rates a WalletConnect session via WalletConnect Verify:
    `metadata.url`. Inside the APK this used to disagree (`https://localhost`
    vs `fbtswap.ir`) until the repair above; verify on a device that the
    approval sheet now says **fbtswap.ir**.
-2. **Reown project registration** — the dashboard project
-   (`f0e8ca24821402a6226b4b675172b294`, dashboard.reown.com) must:
-   - have **fbtswap.ir** (and `www.fbtswap.ir` if it is ever used) added under
-     *Domains/Verified domain*;
-   - the *Allowed Domains* list either empty (dev-friendly, and REQUIRED for
-     the packaged app, whose origin is `https://localhost`) or containing the
-     production domain. An allowlist naming only a retired domain is a
-     historical cause of rejected pairings here (see WC_PROJECT_ID history in
-     `WalletContext.jsx`).
+2. **Reown project registration** — dashboard project
+   `8e36eccabebf5a4567f4e974fafd6b20` currently has the identities required by
+   both distributions:
+   - verified web origins: **`https://fbtswap.ir`** and
+     **`https://localhost`** (the latter is the Capacitor WebView origin);
+   - verified Android application/bundle ID: **`ir.fbtswap.app`**.
+   Keep those entries together on this project. An allowlist naming only the
+   website or a retired domain can reject APK pairings because the relay sees
+   the packaged page's origin as `https://localhost`. The wallet-facing
+   `metadata.url` must nevertheless remain `https://fbtswap.ir`.
 3. **Threat feeds** — if the warning is red ("Security risk", "website
    blocked"), the domain is likely in a phishing/reputation feed (Blockaid or
    the WalletConnect Data Lake). This cannot be fixed in code and must not be

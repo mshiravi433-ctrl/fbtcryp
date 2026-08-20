@@ -120,7 +120,7 @@
     "unlockLocalDesc": "İşlemleri imzalamak için parolanızı girin",
     "backupTitle": "Kurtarma ifadenizi yedekleyin",
     "connectFailed": "Bağlantı başarısız oldu veya reddedildi.",
-    "wcOriginBlocked": "WalletConnect bu uygulamanın adresini reddetti (origin not allowed). WalletConnect panosunda Allowed Domains listesini BOŞ bırakın — Android uygulaması https://localhost üzerinden bağlanır; yalnızca siteyi içeren liste uygulamayı engeller.",
+    "wcOriginBlocked": "WalletConnect bu uygulamanın origin değerini reddetti. Reown panelinde Allowed Domains alanında https://fbtswap.ir ve https://localhost, App IDs alanında ir.fbtswap.app bulunduğunu doğrulayın.",
     "wcRelayUnreachable": "WalletConnect aktarıcısına (relay.walletconnect.com) ulaşılamadı. Bazı ağlar bunu engeller — başka bir ağ veya VPN deneyip tekrar deneyin.",
     "wcExpired": "Bağlantı isteği cüzdan onaylamadan önce süresi doldu. Cüzdan listesini açıp yeniden deneyin.",
     "resetDesc": "Sanal bakiyenizi, pozisyonlarınızı, planlarınızı ve geçmişinizi başlangıç durumuna döndürür.",

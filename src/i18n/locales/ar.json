@@ -289,7 +289,7 @@
     "wrongNetwork": "شبكة خاطئة",
     "noProvider": "لم يتم العثور على محفظة. هذا المتصفح لا يحتوي على إضافة محفظة — على الهاتف، افتح التطبيق من داخل متصفح محفظتك، أو اتصل عبر WalletConnect.",
     "connectFailed": "فشل الاتصال أو تم رفضه.",
-    "wcOriginBlocked": "رفض WalletConnect عنوان هذا التطبيق (origin غير مسموح). في لوحة تحكم WalletConnect اترك قائمة Allowed Domains فارغة تماماً — تطبيق أندرويد يتصل من https://localhost وأي قائمة تذكر الموقع فقط ستحجب التطبيق.",
+    "wcOriginBlocked": "رفض WalletConnect عنوان هذا التطبيق (origin غير مسموح). في لوحة Reown تأكد من أن Allowed Domains تتضمن https://fbtswap.ir و https://localhost، وأن App IDs تتضمن ir.fbtswap.app.",
     "wcRelayUnreachable": "تعذّر الوصول إلى مرحّل WalletConnect ‏(relay.walletconnect.com). بعض الشبكات تحجبه — جرّب شبكة أخرى أو VPN ثم أعد المحاولة.",
     "wcExpired": "انتهت صلاحية طلب الاتصال قبل موافقة المحفظة. افتح قائمة المحافظ وحاول مجدداً.",
     "custodyNotice": "حفظ ذاتي. مفاتيحك تبقى في محفظتك — لا نحتفظ بأصولك ولا يمكننا تجميدها أو عكس معاملة. استخدم «استلام» للحصول على عنوانك. لن نراسلك أولاً ولن نطلب منك إرسال عملات إلى أي عنوان.",

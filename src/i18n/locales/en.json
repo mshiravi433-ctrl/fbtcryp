@@ -319,7 +319,7 @@
     "wrongNetwork": "Wrong network",
     "noProvider": "No wallet detected. This browser has no wallet extension — on a phone, open the app from inside your wallet's own browser, or connect with WalletConnect.",
     "connectFailed": "Connection failed or was rejected.",
-    "wcOriginBlocked": "WalletConnect refused this app's address (origin not allowed). In the WalletConnect dashboard, open the project's settings and leave the Allowed Domains list EMPTY — the Android app connects from https://localhost, so any allowlist that names only the website blocks the app.",
+    "wcOriginBlocked": "WalletConnect refused this app's address (origin not allowed). In the Reown dashboard, confirm Allowed Domains includes https://fbtswap.ir and https://localhost, and App IDs includes ir.fbtswap.app.",
     "wcRelayUnreachable": "Could not reach the WalletConnect relay (relay.walletconnect.com). Some networks and ISPs block it — try another network or a VPN, then try again.",
     "wcExpired": "The connection request expired before the wallet approved it. Open the wallet list and try again.",
     "custodyNotice": "Self-custody. Your keys stay in your own wallet — Fanous Bazaar Pishgam never holds your assets, cannot freeze them and cannot reverse a transaction. Use Receive to get your own address. We will never message you first or ask you to send crypto to an address: anyone doing so is impersonating us.",

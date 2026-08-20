@@ -25,9 +25,10 @@ import { chainFromWcSession, parseChainId } from '../lib/wcChain';
  *
  * Same rule as publicAppUrl(): production identity lives in source, where a
  * change is reviewable and deploys atomically with the code that uses it.
- * Registered at dashboard.walletconnect.com for fbtswap.ir.
+ * Registered at dashboard.reown.com for https://fbtswap.ir,
+ * https://localhost and the Android app ID ir.fbtswap.app.
  */
-const WC_PROJECT_ID = 'f0e8ca24821402a6226b4b675172b294';
+const WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
 
 const SLOW_DEVICE = (() => {
   if (typeof navigator === 'undefined') return false;

@@ -23,7 +23,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const PROJECT_ID = 'f0e8ca24821402a6226b4b675172b294';
+const PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20';
 
 export default function run() {
   const rows = [];

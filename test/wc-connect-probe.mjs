@@ -100,7 +100,7 @@ export default function run() {
 
   /* ---- 6. the projectId is the source constant, never an env override ---- */
   t('the WC_PROJECT_ID constant is set to the official project ID',
-    code.includes("const WC_PROJECT_ID = 'f0e8ca24821402a6226b4b675172b294'"));
+    code.includes("const WC_PROJECT_ID = '8e36eccabebf5a4567f4e974fafd6b20'"));
   t('no env var can override the project ID (stale Vercel/CI copies shipped retired projects)',
     !/VITE_WALLETCONNECT_PROJECT_ID/.test(code));
 

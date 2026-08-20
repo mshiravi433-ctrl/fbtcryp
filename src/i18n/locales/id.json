@@ -120,7 +120,7 @@
     "unlockLocalDesc": "Masukkan kata sandi untuk menandatangani",
     "backupTitle": "Cadangkan frasa pemulihan",
     "connectFailed": "Koneksi gagal atau ditolak.",
-    "wcOriginBlocked": "WalletConnect menolak alamat aplikasi ini (origin not allowed). Di dasbor WalletConnect biarkan daftar Allowed Domains KOSONG — aplikasi Android terhubung dari https://localhost; daftar yang hanya memuat situs akan memblokir aplikasi.",
+    "wcOriginBlocked": "WalletConnect menolak origin aplikasi ini. Di dasbor Reown, pastikan Allowed Domains berisi https://fbtswap.ir dan https://localhost, serta App IDs berisi ir.fbtswap.app.",
     "wcRelayUnreachable": "Tidak dapat menjangkau relay WalletConnect (relay.walletconnect.com). Sebagian jaringan memblokirnya — coba jaringan lain atau VPN, lalu ulangi.",
     "wcExpired": "Permintaan koneksi kedaluwarsa sebelum dompet menyetujuinya. Buka daftar dompet dan coba lagi.",
     "resetDesc": "Mengembalikan saldo virtual, posisi, rencana, dan riwayat ke keadaan awal.",
