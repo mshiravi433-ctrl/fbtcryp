@@ -105,6 +105,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     outcomeClose: '/api/intents/v1/outcome/auctions/{intentHash}/close',
     outcomeAdmissions: '/api/intents/v1/outcome/admissions/{intentHash}/{entryHash}',
     outcomeWatcherReports: '/api/intents/v1/outcome/auctions/{intentHash}/watcher-reports',
+    /* Execution Core v2 — privacy-safe execution observation ingest. */
+    executionObservations: '/api/intents/v1/observations',
     /* Phase 5 — confidential intent transport. */
     intentCommitments: '/api/intents/v1/confidential/commit',
     intentReveals: '/api/intents/v1/confidential/reveal',
@@ -236,6 +238,37 @@ export const INTENT_CAPABILITIES = Object.freeze({
     outcomeBondedOnlyAdmission: true,
     outcomeAutomaticSettlement: false,
     outcomeCustody: false
+  },
+  /*
+   * EXECUTION CORE v2 — the client-side execution path.
+   *
+   * `exactClientRpcPreflightSupported: true` means ONLY that the code path
+   * exists and is wired into the swap review. It is not a claim about any
+   * individual intent: every intent carries its own passed/failed simulation
+   * result, and a failed one is never hidden or upgraded.
+   */
+  executionCore: {
+    lifecycleSchema: 'fbt.intent-lifecycle.v1',
+    simulationSchema: 'fbt.intent-simulation.v1',
+    recoverySchema: 'fbt.intent-recovery.v1',
+    observationSchema: 'fbt.intent-execution-observation.v1',
+    transactionSchema: 'fbt.intent-transaction.v1',
+    executionProofSchema: 'fbt.execution-proof.v2',
+    exactClientRpcPreflightSupported: true,
+    serverExecutesTransactions: false,
+    userSignatureRequired: true,
+    autonomousSpending: false,
+    stateDiffSimulation: false,
+    privateRelayAttested: false,
+    outputGuaranteeProven: false,
+    atomicCrossChainExecution: false,
+    routePolicies: [
+      'MAX_NET_OUTPUT_USD_AFTER_COMPARABLE_GAS_V1',
+      'MAX_OUTPUT_WITHIN_SAME_ASSUMPTIONS_V2'
+    ],
+    recoveryNeverResubmits: true,
+    routeChangeRequiresNewSignature: true,
+    simulationBoundToRouteFingerprint: true
   },
   standards: {
     canonicalization: 'recursive-lexicographic-json-v1',

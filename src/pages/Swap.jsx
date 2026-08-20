@@ -53,6 +53,15 @@ import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
 import { POINT_VALUES } from '../lib/ranks';
 import { createExecutionProof } from '../lib/executionProof';
+import useIntentExecution from '../hooks/useIntentExecution';
+import {
+  IntentTimeline,
+  RecoveryCard,
+  RoutePolicyCard,
+  SimulationCard
+} from '../components/IntentTimeline';
+import { reportIntentObservation } from '../lib/intentObservation';
+import { classifyFailure } from '../lib/intentRecovery';
 import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 import { isNativeShell } from '../lib/nativeShell';
 
@@ -585,6 +594,30 @@ export default function Swap() {
     return true;
   };
 
+  /*
+   * ─── EXECUTION CORE v2 ────────────────────────────────────────────────────
+   * Lifecycle, exact transaction build, real eth_call/estimateGas preflight,
+   * deterministic route policy and recovery — all pure modules, wired here.
+   *
+   * An INTENT-ORIGINATED swap (?intent=…) is held to the strict gate: no
+   * signature request without a passing preflight bound to the exact bytes.
+   * An ordinary swap keeps its existing flow and simply SHOWS the preflight,
+   * including when it fails.
+   */
+  const exec = useIntentExecution({
+    intentId: sourceIntentId.current,
+    chainId,
+    account: wallet.address ?? null,
+    quote: quote && !quote.error ? quote : null,
+    fromToken,
+    toToken,
+    amount,
+    slippage: effectiveSlippage,
+    deadlineMinutes: deadlineMin,
+    getReadProvider: wallet.getReadProvider,
+    active: reviewing && !txState
+  });
+
   const runGasless = async () => {
     if (confidentialRequested) {
       setTxState({ stage: 'error', message: 'CONFIDENTIAL_MODE_UNAVAILABLE' });
@@ -676,6 +709,7 @@ export default function Swap() {
     if (!signer || !quote || quote.error) return;
 
     setTxState({ stage: 'preparing' });
+    let approvalHashForApprovalStage = null;
     try {
       const provider = await wallet.getReadProvider(chainId);
       const mustApprove = await needsApproval({
@@ -697,6 +731,7 @@ export default function Swap() {
           quote
         });
         setTxState({ stage: 'approving', hash: approval.hash });
+        approvalHashForApprovalStage = approval.hash;
         await approval.wait();
       }
 
@@ -731,14 +766,37 @@ export default function Swap() {
       }
 
       setTxState({ stage: 'signing' });
-      const tx = await executeSwap({
-        signer, chainId, fromToken, toToken, quote: fresh, deadlineMinutes: deadlineMin
-      });
+      /*
+       * ─── THE GATE ─────────────────────────────────────────────────────────
+       * An intent-originated swap may only be signed through the Execution
+       * Core: exact transaction → real eth_call/estimateGas → user signature,
+       * with the simulation bound to the same route and quote fingerprints.
+       * A stale preflight is rebuilt and re-simulated rather than waved
+       * through, and a route that changed after review stops here and asks
+       * for a new review instead of signing something else.
+       *
+       * An ordinary swap keeps the legacy path so nothing regresses; its
+       * preflight is still shown in Review and its failure is not hidden.
+       */
+      let tx;
+      const approvalHashForProof = approvalHashForApprovalStage;
+      const submittedAt = Date.now();
+      if (exec.enforced) {
+        const sent = await exec.submit({ signer });
+        if (!sent.ok) throw new Error(sent.code || 'SIMULATION_REQUIRED');
+        tx = sent;
+      } else {
+        tx = await executeSwap({
+          signer, chainId, fromToken, toToken, quote: fresh, deadlineMinutes: deadlineMin
+        });
+      }
       setTxState({ stage: 'pending', hash: tx.hash });
       haptic?.('medium');
+      exec.markConfirming();
 
       const receipt = await tx.wait();
       const ok = receipt.status === 1;
+      if (ok) exec.markCompleted(); else exec.markFailed('RECEIPT_FAILED');
 
       let executionProof = null;
       if (ok) {
@@ -752,7 +810,19 @@ export default function Swap() {
             quote: fresh,
             receipt,
             deadlineMinutes: deadlineMin,
-            intentId: sourceIntentId.current
+            intentId: sourceIntentId.current,
+            /* v2 evidence: lifecycle, route policy, the exact simulation and
+               the predicted-vs-actual gas delta. Absent for a plain swap with
+               no preflight, which still produces the v1 receipt. */
+            executionCore: exec.simulation
+              ? exec.proofEvidence({
+                  txHash: tx.hash,
+                  receipt,
+                  approvalTxHash: approvalHashForProof,
+                  confirmationLatencyMs: Date.now() - submittedAt,
+                  predictedOutput: fresh.amountOutWei != null ? String(fresh.amountOutWei) : null
+                })
+              : null
           });
         } catch {
           executionProof = null;
@@ -806,6 +876,30 @@ export default function Swap() {
           : t('notify.tradeFailBody')
       });
 
+      /*
+       * OPT-IN OBSERVATION. Buckets and enums only — no address, tx hash,
+       * calldata, recipient or note can reach the server, and a telemetry
+       * failure cannot affect the swap (see lib/intentObservation.js).
+       */
+      reportIntentObservation({
+        intentKind: 'swap',
+        chainId,
+        routePolicy: exec.decision?.policy,
+        solver: fresh.selectedSolver || fresh.source,
+        quoteCount: fresh.routesChecked ?? 1,
+        hopCount: fresh.hops ?? 0,
+        simulationStatus: exec.simulation?.status ?? 'not-run',
+        gasEstimate: exec.simulation?.gasEstimate ?? null,
+        gasErrorBps: exec.simulation?.gasEstimate && receipt?.gasUsed
+          ? ((Number(receipt.gasUsed) - Number(exec.simulation.gasEstimate)) / Number(exec.simulation.gasEstimate)) * 10_000
+          : null,
+        outputErrorBps: null,
+        confirmationLatencyMs: Date.now() - submittedAt,
+        failureCode: ok ? 'NONE' : 'RECEIPT_FAILED',
+        outcome: ok ? 'completed' : 'failed',
+        policyVersion: exec.lifecycle?.policyVersion ?? 'fbt.intent-lifecycle-policy.v1'
+      });
+
       if (receipt.status === 1) {
         setAmount('');
         setQuote(null);
@@ -818,8 +912,26 @@ export default function Swap() {
         /user rejected|ACTION_REJECTED/i.test(msg) ? 'USER_REJECTED'
         : /insufficient funds/i.test(msg) ? 'INSUFFICIENT_GAS'
         : /QUOTE_EXPIRED/.test(msg) ? 'QUOTE_EXPIRED'
+        : /SIMULATION_REQUIRED|SIMULATION_STALE/.test(msg) ? 'SIMULATION_REQUIRED'
+        : /TERMS_CHANGED|ROUTE_CHANGED/.test(msg) ? 'ROUTE_CHANGED'
+        : /APPROVAL_REQUIRED/.test(msg) ? 'APPROVAL_REQUIRED'
         : /INSUFFICIENT_OUTPUT_AMOUNT/i.test(msg) ? 'SLIPPAGE'
         : 'TX_FAILED';
+      /* Deterministic recovery, from the table — never an ad-hoc retry. */
+      exec.markFailed(classifyFailure(e));
+      reportIntentObservation({
+        intentKind: 'swap',
+        chainId,
+        routePolicy: exec.decision?.policy,
+        solver: quote?.selectedSolver || quote?.source,
+        quoteCount: quote?.routesChecked ?? 1,
+        hopCount: quote?.hops ?? 0,
+        simulationStatus: exec.simulation?.status ?? 'not-run',
+        gasEstimate: exec.simulation?.gasEstimate ?? null,
+        failureCode: classifyFailure(e),
+        outcome: code === 'USER_REJECTED' ? 'cancelled' : 'failed',
+        policyVersion: exec.lifecycle?.policyVersion ?? 'fbt.intent-lifecycle-policy.v1'
+      });
       setTxState({ stage: 'error', error: code, detail: msg.slice(0, 140) });
       if (code !== 'USER_REJECTED') {
         notifyTrade({ ok: false, haptic, title: t('notify.tradeFailTitle'), body: t(`swap.err.${code}`) });
@@ -1617,18 +1729,53 @@ export default function Swap() {
               </div>
             </div>
 
+            {/* Execution Core: real lifecycle, exact preflight, route policy. */}
+            <div className="stack" style={{ gap: 10, marginTop: 12 }}>
+              {exec.lifecycle && <IntentTimeline record={exec.lifecycle} />}
+              <SimulationCard
+                simulation={exec.simulation}
+                busy={exec.simulating}
+                quoteGasNative={gasCost != null ? fmtQty(gasCost) : null}
+                nativeSymbol={cfg?.native?.symbol ?? ''}
+              />
+              <RoutePolicyCard decision={exec.decision} />
+              {exec.recovery && (
+                <RecoveryCard
+                  plan={exec.recovery}
+                  busy={exec.simulating}
+                  /* Retry re-runs the PREFLIGHT. It never re-broadcasts a
+                     transaction and never silently swaps in another route. */
+                  onRetry={() => exec.preflight()}
+                />
+              )}
+            </div>
+
             <p className="notice" style={{ marginTop: 12 }}>{t('swap.reviewNotice')}</p>
 
             <div className="row" style={{ gap: 10, marginTop: 12 }}>
               <button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button>
               <button
                 className="btn btn-primary"
+                /* An intent-originated swap cannot be signed until the exact
+                   preflight passes. A plain swap keeps its existing behaviour. */
+                disabled={exec.enforced && (exec.simulating || exec.simulation?.status !== 'passed')}
                 onClick={() => {
                   primeAudio();
+                  /* Terms moved after the review: the first press re-approves
+                     the CHANGED terms the banner just named, and only a second,
+                     deliberate press signs them. */
+                  if (exec.needsReauthorisation) {
+                    exec.acknowledgeChange();
+                    return;
+                  }
                   runSwap();
                 }}
               >
-                {t('swap.confirmSwap')}
+                {exec.enforced && exec.simulating
+                  ? t('exec.sim.status.running')
+                  : exec.needsReauthorisation
+                    ? t('exec.action.REQUEST_NEW_SIGNATURE')
+                    : t('swap.confirmSwap')}
               </button>
             </div>
           </>

@@ -556,7 +556,10 @@
       "USER_REJECTED": "You rejected the transaction.",
       "INSUFFICIENT_GAS": "Not enough native coin to pay gas.",
       "SLIPPAGE": "Price moved beyond your slippage tolerance.",
-      "TX_FAILED": "Transaction failed."
+      "TX_FAILED": "Transaction failed.",
+      "SIMULATION_REQUIRED": "The on-chain preflight has not passed yet, so nothing was signed.",
+      "ROUTE_CHANGED": "The route changed after you reviewed it. Review the new terms and sign again.",
+      "APPROVAL_REQUIRED": "This token needs an approval first. You sign it in your own wallet."
     },
     "platformFee": "Platform fee ({{pct}}%)",
     "bestOf": "best of {{n}} route(s)",
@@ -4046,5 +4049,118 @@
     "busyHint": "Finish or cancel the current wallet action first",
     "pullToRefresh": "Pull down to refresh",
     "releaseToRefresh": "Release to refresh"
+  },
+  "exec": {
+    "timeline": {
+      "title": "Execution timeline"
+    },
+    "status": {
+      "CREATED": "Created",
+      "VALIDATING": "Validating",
+      "VALIDATED": "Validated",
+      "QUOTING": "Quoted",
+      "OPTIMIZING": "Optimized",
+      "SIMULATING": "Simulated",
+      "AWAITING_APPROVAL": "Approval required",
+      "AWAITING_SIGNATURE": "Awaiting signature",
+      "SUBMITTED": "Submitted",
+      "CONFIRMING": "Confirming",
+      "COMPLETED": "Completed",
+      "RECOVERABLE": "Recoverable",
+      "FAILED": "Failed",
+      "EXPIRED": "Expired",
+      "CANCELLED": "Cancelled"
+    },
+    "reauthorisation": "Something you approved changed ({{fields}}). Review it again and sign the new terms.",
+    "term": {
+      "chainId": "network",
+      "amountIn": "amount",
+      "fromSymbol": "token you pay",
+      "toSymbol": "token you receive",
+      "recipientRef": "recipient",
+      "slippagePct": "slippage",
+      "minOut": "minimum received",
+      "routeFingerprint": "route",
+      "TERMS": "terms",
+      "NOT_REVIEWED": "not reviewed yet"
+    },
+    "sim": {
+      "title": "On-chain preflight",
+      "quoteEstimate": "Quote-only estimate",
+      "exactPreflight": "Exact RPC preflight",
+      "gasUnits": "{{n}} gas",
+      "block": "Simulated at block",
+      "revert": "Revert code",
+      "none": "—",
+      "disclaimer": "A successful eth_call means the transaction did not revert against one block on one node. It is not a guarantee of execution, output, ordering or MEV protection. No state diff and no private-relay attestation are available.",
+      "status": {
+        "passed": "Passed",
+        "running": "Simulating",
+        "not-run": "Not run",
+        "approval-required": "Approval required",
+        "insufficient-balance": "Insufficient balance",
+        "reverted": "Would revert",
+        "rpc-unavailable": "RPC unavailable",
+        "quote-expired": "Quote expired",
+        "chain-mismatch": "Wrong network",
+        "account-mismatch": "Wrong account"
+      }
+    },
+    "policy": {
+      "title": "Route policy",
+      "MAX_NET_OUTPUT_USD_AFTER_COMPARABLE_GAS_V1": "Net output after comparable gas",
+      "MAX_OUTPUT_WITHIN_SAME_ASSUMPTIONS_V2": "Best output under identical assumptions",
+      "claim": "Best executable output among comparable responses observed in this quote round — not a claim about every venue on earth.",
+      "missing": "Not comparable: {{fields}}"
+    },
+    "reject": {
+      "NOT_EXECUTABLE": "quote-only, cannot be signed",
+      "NO_OUTPUT": "no output",
+      "QUOTE_ERROR": "quote failed",
+      "QUOTE_EXPIRED": "expired",
+      "FEE_MISMATCH": "different fee",
+      "SLIPPAGE_MISMATCH": "different slippage",
+      "CHAIN_MISMATCH": "different network",
+      "PAIR_MISMATCH": "different pair",
+      "INTEGRITY_FAILED": "integrity check failed",
+      "CRITICAL_RISK": "critical risk"
+    },
+    "recovery": {
+      "needsSignature": "This needs a fresh review and a new signature. Nothing is sent without you.",
+      "noResend": "Retrying only re-reads the chain. It never re-sends a transaction.",
+      "working": "Working…",
+      "QUOTE_EXPIRED": "The quote expired",
+      "ROUTE_CHANGED": "The route changed",
+      "RPC_UNAVAILABLE": "The node did not answer",
+      "RPC_DISAGREEMENT": "Nodes disagreed",
+      "APPROVAL_REQUIRED": "Token approval required",
+      "APPROVAL_REJECTED": "You rejected the approval",
+      "ALLOWANCE_CHANGED": "The allowance changed",
+      "INSUFFICIENT_BALANCE": "Not enough balance",
+      "GAS_ESTIMATE_CHANGED": "The gas estimate changed",
+      "CHAIN_CHANGED": "The network changed",
+      "ACCOUNT_CHANGED": "The account changed",
+      "SIMULATION_REVERTED": "The simulation reverted",
+      "TRANSACTION_REJECTED": "You rejected the transaction",
+      "TRANSACTION_DROPPED": "The transaction was dropped",
+      "TRANSACTION_REPLACED": "The transaction was replaced",
+      "RECEIPT_FAILED": "The transaction failed on-chain",
+      "CONFIRMATION_TIMEOUT": "Confirmation is taking too long",
+      "MIN_OUTPUT_AT_RISK": "The minimum output is at risk",
+      "UNKNOWN_FAILURE": "Unknown failure"
+    },
+    "action": {
+      "REQUOTE": "Get a fresh quote",
+      "RETRY_PREFLIGHT": "Run the preflight again",
+      "SWITCH_READ_RPC": "Try another node",
+      "REQUEST_NETWORK_SWITCH": "Switch network",
+      "REQUEST_ACCOUNT_RECONNECT": "Reconnect wallet",
+      "REQUEST_APPROVAL": "Approve token",
+      "REQUEST_NEW_SIGNATURE": "Review and sign again",
+      "TRACK_REPLACEMENT": "Track the replacement",
+      "MARK_RECOVERABLE": "Review",
+      "MARK_FAILED": "Close",
+      "MARK_EXPIRED": "Close"
+    }
   }
 }

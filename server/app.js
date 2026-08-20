@@ -106,6 +106,12 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
+import {
+  OBSERVATION_CONSENT_RE,
+  observationProtocolStatus,
+  storeObservation,
+  validateObservation
+} from './intentObservation.js';
 import { parseSolverRegistry, publicSolverRegistry } from './intentSignatures.js';
 import {
   appendSignedCommitment,
@@ -626,6 +632,7 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       solverRegistry: registry,
       bondRegistry: parseBondRegistry()
     }),
+    executionObservations: observationProtocolStatus(),
     confidential: confidentialProtocolStatus({ operatorRegistry: parseOperatorRegistry() }),
     commitReveal: intentCommitmentStatus({ operatorRegistrySize: parseOperatorRegistry().size })
   });
@@ -661,6 +668,55 @@ app.post('/api/intents/v1/validate', (req, res) => {
   const result = validateIntentEnvelope(req.body);
   res.status(result.ok ? 200 : 400).json(result);
 });
+
+/*
+ * EXECUTION CORE v2 — privacy-safe execution observation ingest.
+ *
+ * Opt-in only, bounded payload, strict allowlist, and FAIL CLOSED when no
+ * durable store is configured. Nothing here trains a model: this phase only
+ * collects honest, aggregate-friendly outcomes so a later phase CAN. The
+ * payload carries no address, tx hash, calldata, recipient, note, exact
+ * balance or session identifier — see server/intentObservation.js.
+ */
+const observationHits = new Map();
+const OBSERVATION_MAX_PER_WINDOW = Number(process.env.INTENT_OBSERVATION_RATE_LIMIT || 30);
+
+app.post('/api/intents/v1/observations', async (req, res) => {
+  const key = req.tgUser?.id ?? req.ip;
+  const nowMs = Date.now();
+  const bucket = observationHits.get(key);
+  if (!bucket || nowMs > bucket.reset) {
+    observationHits.set(key, { count: 1, reset: nowMs + WINDOW_MS });
+  } else {
+    bucket.count += 1;
+    if (bucket.count > OBSERVATION_MAX_PER_WINDOW) {
+      res.set('retry-after', String(Math.ceil((bucket.reset - nowMs) / 1000)));
+      return res.status(429).json({ error: 'OBSERVATION_RATE_LIMITED' });
+    }
+  }
+
+  const consent = req.get('x-telemetry-consent') ?? '';
+  if (!OBSERVATION_CONSENT_RE.test(String(consent))) {
+    return res.status(401).json({ error: 'OPT_IN_REQUIRED' });
+  }
+
+  const checked = validateObservation(req.body, nowMs);
+  if (!checked.ok) return res.status(400).json({ error: checked.code });
+
+  const stored = await storeObservation(checked.value);
+  if (!stored.ok) {
+    /* NOT_CONFIGURED is a 503 (we cannot keep it), everything else is a 202:
+       the client did nothing wrong and must never retry-loop over telemetry. */
+    const status = stored.code === 'NOT_CONFIGURED' ? 503 : 202;
+    return res.status(status).json({ ok: false, error: stored.code });
+  }
+  return res.status(202).json({ ok: true, stored: stored.stored });
+});
+
+setInterval(() => {
+  const nowMs = Date.now();
+  for (const [k, v] of observationHits) if (nowMs > v.reset) observationHits.delete(k);
+}, WINDOW_MS).unref?.();
 
 /* Phase 4b: immutable, non-atomic cross-chain plan + sequential party-signed
    transfer evidence. Creating a plan grants no authority. Every transition

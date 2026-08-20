@@ -24,6 +24,14 @@ import {
   verifyExecutionProof
 } from '../lib/executionProof';
 import { getIntentCapabilities } from '../lib/intentNetwork';
+import {
+  ensureLifecycle,
+  expireIfDue,
+  getLifecycle,
+  saveLifecycle,
+  transition
+} from '../lib/intentLifecycle';
+import { IntentTimeline } from '../components/IntentTimeline';
 import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import '../styles/intent-os.css';
 
@@ -140,6 +148,10 @@ export default function IntentOS() {
   const [proofs, setProofs] = useState(() => loadExecutionProofs());
   const [verified, setVerified] = useState(null);
   const [compiled, setCompiled] = useState(null);
+  /* The real lifecycle for the intent on screen (fbt.intent-lifecycle.v1).
+     It is created here at compile time and continued by the swap screen, so
+     the timeline is never a decorative mock. */
+  const [lifecycle, setLifecycle] = useState(null);
   const [networkStatus, setNetworkStatus] = useState(null);
   const [draft, setDraft] = useState(() => ({
     kind: 'swap',
@@ -227,10 +239,33 @@ export default function IntentOS() {
       requireExecutionProof: memory.requireExecutionProof
     }, memory, Date.now(), { confidentialAvailable: confidentialSelectable });
     setCompiled(result);
-    if (!result.error) {
-      const persisted = saveCompiledIntent(result);
-      if (persisted.rows) setSaved(persisted.rows);
+    if (result.error) {
+      setLifecycle(null);
+      return;
     }
+    const persisted = saveCompiledIntent(result);
+    if (persisted.rows) setSaved(persisted.rows);
+
+    /*
+     * Start the lifecycle at compile time. A BLOCKED intent stays CREATED —
+     * validation is something the compiler grants, not something the UI
+     * assumes — and only a clean compile reaches VALIDATED.
+     */
+    let record = ensureLifecycle({
+      intentId: result.intent.id,
+      deadlineAt: result.intent.deadlineAt,
+      origin: 'intent-os'
+    });
+    const validating = transition(record, 'VALIDATING', { reasonCode: 'COMPILED' });
+    record = validating.ok ? validating.record : record;
+    if (!result.blocked) {
+      const validated = transition(record, 'VALIDATED', { reasonCode: 'RISK_CHECKS_PASSED' });
+      record = validated.ok ? validated.record : record;
+    } else {
+      const failed = transition(record, 'FAILED', { reasonCode: 'RISK_CHECK_BLOCKED' });
+      record = failed.ok ? failed.record : record;
+    }
+    setLifecycle(saveLifecycle(record));
   };
 
   const persistMemory = () => {
@@ -555,6 +590,8 @@ export default function IntentOS() {
                     {compiled.checks.map((row, index) => <CheckRow key={`${row.id}-${index}`} row={row} t={t} />)}
                   </div>
 
+                  {lifecycle && <IntentTimeline record={lifecycle} />}
+
                   <h3>{t('intentOS.result.solverCandidates')}</h3>
                   <div className="ios-solver-list">
                     {compiled.solvers.map((solver) => <SolverRow key={solver.id} solver={solver} t={t} />)}
@@ -582,7 +619,11 @@ export default function IntentOS() {
                 <div key={row.intent.id}>
                   <span>
                     <strong>{row.intent.fromSymbol} → {row.intent.toSymbol}</strong>
-                    <small>{t(`intentOS.template.${row.intent.kind}.title`, { defaultValue: row.intent.kind })}</small>
+                    <small>
+                      {t(`intentOS.template.${row.intent.kind}.title`, { defaultValue: row.intent.kind })}
+                      {' · '}
+                      {t(`exec.status.${(expireIfDue(getLifecycle(row.intent.id)) || {}).status || 'CREATED'}`)}
+                    </small>
                   </span>
                   <button onClick={() => setSaved(removeIntent(row.intent.id))} aria-label={t('intentOS.saved.remove')}>×</button>
                 </div>
