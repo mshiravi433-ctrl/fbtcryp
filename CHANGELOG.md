@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Three-stage order/intent OS notifications
+
+Auto-orders and Intent OS now emit three OS-shade alerts (pending /
+target reached / position closed), each with its own colour, vibrate
+pattern and in-app chime — distinct from the daily promo. Delivery is
+web-push or FCM to the registering device so the shade still updates
+when the site or APK is closed. The Hobby cron remains once a day for
+background price checks; opening the app still fires `ready` immediately.
+
 ## Unreleased — APK FCM tokens actually reach the server
 
 The packaged Android WebView serves from `https://localhost`, so

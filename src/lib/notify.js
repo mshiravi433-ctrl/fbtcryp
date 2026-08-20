@@ -117,6 +117,23 @@ export function playSound(kind = 'success') {
     partial(ctx, 880, t + 0.16, 0.22, 0.1);
     return;
   }
+  /* Order/intent stages — MUST sound unlike success / promo / generic alert. */
+  if (kind === 'pending') {
+    partial(ctx, 523.25, t, 0.28, 0.12);
+    partial(ctx, 659.25, t + 0.22, 0.32, 0.1);
+    return;
+  }
+  if (kind === 'ready') {
+    partial(ctx, 784, t, 0.16, 0.16);
+    partial(ctx, 1046.5, t + 0.14, 0.22, 0.16);
+    partial(ctx, 1318.5, t + 0.3, 0.45, 0.14);
+    return;
+  }
+  if (kind === 'closed') {
+    partial(ctx, 440, t, 0.35, 0.14);
+    partial(ctx, 330, t + 0.2, 0.5, 0.12);
+    return;
+  }
   // success: C6 -> E6 -> G6, each with a bright partial an octave up
   [
     [1046.5, 0],

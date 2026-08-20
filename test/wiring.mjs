@@ -591,6 +591,24 @@ export default function run() {
       unrouted.length === 0
     );
     t(`a meaningful number of API paths were checked (${called.size})`, called.size >= 15);
+    t('POST /api/push/event delivers a staged order/intent alert to one device',
+      serverSrc.includes("app.post('/api/push/event'") && /buildStageAlert/.test(serverSrc));
+    t('watch alerts use the staged builder rather than promo copy',
+      /buildStageAlert/.test(read('server/app.js')) && existsSync('server/orderAlerts.js'));
+    t('order and intent stages have three distinct colours',
+      /#FFB300/.test(read('server/orderAlerts.js'))
+      && /#00C853/.test(read('server/orderAlerts.js'))
+      && /#FF1744/.test(read('server/orderAlerts.js')));
+    t('in-app stage chimes differ from success/error/alert',
+      /kind === 'pending'/.test(read('src/lib/notify.js'))
+      && /kind === 'ready'/.test(read('src/lib/notify.js'))
+      && /kind === 'closed'/.test(read('src/lib/notify.js')));
+    t('creating an auto-order fires the pending stage',
+      /stage: 'pending'/.test(read('src/pages/Orders.jsx')));
+    t('a target hit fires the ready stage',
+      /stage: 'ready'/.test(read('src/pages/Orders.jsx')));
+    t('closing an auto-order fires the closed stage',
+      /stage: 'closed'/.test(read('src/pages/Orders.jsx')));
     t('notify.js talks to the API through apiBase() (never localhost in the APK)',
       /apiBase\(\)/.test(read('src/lib/notify.js')) && !/const API_BASE =/.test(read('src/lib/notify.js')));
     t('orders.js mirrors watches through apiBase()',
@@ -701,8 +719,10 @@ export default function run() {
     const serverCode = serverSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     const sendFn = /async function sendWatchAlert[\s\S]*?\n\}/.exec(serverCode)?.[0] ?? '';
     t('sendWatchAlert is defined', sendFn.length > 0);
-    t('sendWatchAlert routes web-push endpoints', /sendToEndpoint\(id\.value/.test(sendFn));
-    t('sendWatchAlert routes FCM (APK) devices', /fcmSendToToken\(id\.value/.test(sendFn));
+    t('deliverStagePush routes both web-push and FCM',
+      /async function deliverStagePush/.test(serverCode) && /sendToEndpoint/.test(serverCode) && /fcmSendToToken/.test(serverCode));
+    t('sendWatchAlert routes web-push endpoints', /sendToEndpoint\(id\.value/.test(sendFn) || /deliverStagePush/.test(sendFn));
+    t('sendWatchAlert routes FCM (APK) devices', /fcmSendToToken\(id\.value/.test(sendFn) || /deliverStagePush/.test(sendFn));
   }
 
   /* ---- 13. a setting that changes nothing is a lie to the user ---------- */

@@ -266,14 +266,24 @@ export async function fcmSendToToken(deviceToken, payload) {
         message: {
           token: deviceToken,
           notification: { title: payload.title, body: payload.body },
-          data: { url: payload.url || '/', tag: payload.tag || 'fbt' },
+          data: {
+            url: payload.url || '/',
+            tag: payload.tag || 'fbt',
+            stage: payload.stage || '',
+            color: payload.color || '#7c4dff'
+          },
           android: {
             // High priority: a price alert is time-sensitive, and normal
             // priority lets Android hold it until the next maintenance window,
             // by which point the price has moved.
             priority: 'high',
             ttl: '3600s',
-            notification: { tag: payload.tag || 'fbt', icon: 'ic_launcher', color: '#7c4dff' }
+            notification: {
+              tag: payload.tag || 'fbt',
+              icon: 'ic_launcher',
+              color: payload.color || '#7c4dff',
+              sound: payload.sound === 'ready' ? 'default' : 'default'
+            }
           }
         }
       })

@@ -21,6 +21,7 @@ import {
   tokenKey
 } from '../lib/tokenLists';
 import { notifyTrade, primeAudio } from '../lib/notify';
+import { dispatchStageAlert } from '../lib/stagePush';
 import { holdRefreshGuard } from '../lib/refresh';
 import {
   DEFAULT_DEADLINE_MIN,
@@ -611,6 +612,7 @@ export default function Swap() {
    * An ordinary swap keeps its existing flow and simply SHOWS the preflight,
    * including when it fails.
    */
+  const intentReadySent = useRef(false);
   const exec = useIntentExecution({
     intentId: sourceIntentId.current,
     chainId,
@@ -625,6 +627,20 @@ export default function Swap() {
     getReadProviders: wallet.getReadProviders,
     active: reviewing && !txState
   });
+
+  useEffect(() => {
+    if (!sourceIntentId.current || intentReadySent.current) return;
+    if (exec.simulation?.status !== 'passed') return;
+    intentReadySent.current = true;
+    dispatchStageAlert({
+      stage: 'ready',
+      kind: 'intent',
+      base: fromToken?.symbol,
+      quote: toToken?.symbol,
+      id: sourceIntentId.current,
+      haptic
+    }).catch(() => {});
+  }, [exec.simulation?.status, fromToken?.symbol, toToken?.symbol, haptic]);
 
   const runGasless = async () => {
     if (confidentialRequested) {
@@ -1501,6 +1517,16 @@ export default function Swap() {
             if (confidentialRequested) return;
             if (!wallet.isConnected) return setConnectOpen(true);
             setReviewing(true);
+            if (sourceIntentId.current) {
+              dispatchStageAlert({
+                stage: 'pending',
+                kind: 'intent',
+                base: fromToken?.symbol,
+                quote: toToken?.symbol,
+                id: sourceIntentId.current,
+                haptic
+              }).catch(() => {});
+            }
             if (useSettingsStore.getState().expertMode) {
               runSwap();
               return;
