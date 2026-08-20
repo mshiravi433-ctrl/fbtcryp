@@ -14,7 +14,7 @@ Intent
 → Quoting               (quote race: KyberSwap / OpenOcean / Velora)
 → Deterministic Optimization   (intentRoutePolicy.js — جدید)
 → Exact Transaction Build      (intentTransaction.js — جدید)
-→ Exact RPC Preflight          (intentSimulation.js — جدید، eth_call + estimateGas واقعی)
+→ Exact RPC Preflight          (intentSimulation.js — جدید، eth_call + estimateGas واقعی + Multi-RPC Quorum)
 → User Approval / Signature    (کیف پول خود کاربر)
 → Submission                   (فقط از مسیر sendIntentTransaction)
 → Confirmation                 (receipt)
@@ -47,7 +47,7 @@ Intent
 
 تست‌ها:
 
-`test/intent-lifecycle-probe.mjs` · `test/intent-simulation-probe.mjs` · `test/intent-route-policy-probe.mjs` · `test/intent-recovery-probe.mjs` · `test/intent-observation-probe.mjs` · `test/intent-receipt-probe.mjs` (به‌علاوهٔ بخش Execution Core در `test/wiring.mjs`)
+`test/intent-lifecycle-probe.mjs` · `test/intent-simulation-probe.mjs` (شامل Multi-RPC quorum) · `test/intent-route-policy-probe.mjs` · `test/intent-recovery-probe.mjs` · `test/intent-observation-probe.mjs` · `test/intent-receipt-probe.mjs` · `test/intent-replacement-probe.mjs` (به‌علاوهٔ بخش Execution Core در `test/wiring.mjs` و بخش replacement در `test/refresh-probe.mjs`)
 
 ---
 
@@ -107,7 +107,9 @@ Intent
 * **از state override جعلی برای ساختن allowance استفاده نمی‌شود**؛ فقط یک حالت صریح `experimentalStateOverride` وجود دارد که خروجی را با mode ‏`unsupported-experimental-state-override` برچسب می‌زند.
 * Simulation به fingerprintها bind است؛ با تغییر route/quote یا با گذشت زمان stale می‌شود.
 
-در UI دو ردیف جدا نمایش داده می‌شود: «تخمین صرفاً بر پایه Quote» و «شبیه‌سازی دقیق RPC» — به‌همراه شمارهٔ بلاک، gas و کد revert در صورت وجود.
+**Multi-RPC Quorum (این فاز):** `simulateIntentTransactionQuorum()` همان بایت‌های دقیق را روی چند نود مستقلِ read-only نیز شبیه‌سازی می‌کند. فقط یک اختلاف واقعیِ passed-vs-reverted باعث `rpc-disagreement` می‌شود؛ نودی که جواب نمی‌دهد رأی محسوب نمی‌شود و هرگز اختلاف نمی‌سازد. وقتی همهٔ نودها هم‌نظر باشند، همان نتیجهٔ اصلی با بلوک `quorum` (تعداد نودهای هم‌نظر) برمی‌گردد تا proof بتواند بگوید چند نود توافق داشتند. صداقت تغییری نکرده: حتی quorumِ یکپارچه، مجموعه‌ای از مشاهدات `eth_call` است، نه تضمین اجرا/خروجی/ترتیب/MEV.
+
+در UI دو ردیف جدا نمایش داده می‌شود: «تخمین صرفاً بر پایه Quote» و «شبیه‌سازی دقیق RPC» — به‌همراه شمارهٔ بلاک، gas و کد revert در صورت وجود. وضعیت `rpc-disagreement` به‌صورت «گره‌ها اختلاف نظر دارند» نمایش داده می‌شود.
 
 **قاعدهٔ ارسال:** برای Swapهایی که از Intent OS آمده‌اند (`?intent=…`)، دکمهٔ تأیید تا پیش از `passed` شدن simulation غیرفعال است. Swap معمولی رفتار قبلی خود را حفظ می‌کند اما نتیجهٔ simulation (از جمله شکست) در Review نمایش داده می‌شود و پنهان نمی‌شود.
 
@@ -146,6 +148,8 @@ Intent
 * کد ناشناخته fail-closed است (`FAILED`).
 * پیام‌ها code-based و ترجمه‌پذیرند (`exec.recovery.*` در `en` و `fa`).
 
+**Replacement-tx UI tracking (این فاز):** وقتی کاربر یا کیف پولش تراکنشِ در انتظار را جایگزین کند — speed-up/repriced، cancel یا تراکنش دیگری روی همان nonce — `wait()` در ethers v6 با خطای `TRANSACTION_REPLACED` reject می‌شود که hash جایگزین، دلیل و (معمولاً) receipt آن را حمل می‌کند. صفحهٔ Swap حالا این را به‌جای یک شکستِ کلی، نام می‌برد، نمایش می‌دهد و دنبال می‌کند: recovery به‌صورت قطعی به `CONFIRMING` می‌رود و اکشن `TRACK_REPLACEMENT` ثبت می‌شود (هرگز re-broadcast نمی‌شود)، UI در stage «تراکنش جایگزین شد» hash جدید را با لینک اکسپلورر نشان می‌دهد، و تا settle شدنِ hash جایگزین آن را دنبال می‌کند (اگر ethers receipt را نداده باشد، با polling). هیچ hash ای اختراع نمی‌شود: اگر خطا hash نداشته باشد، به recovery عادی می‌افتد؛ اگر دنبال‌کردن timeout شود، `CONFIRMATION_TIMEOUT` گزارش می‌شود نه حدس. ماژول `src/lib/intentReplacement.js` خالص و با `provider`/`sleep` تزریقی قابل تست است.
+
 ---
 
 ## ۸. Privacy-Safe Execution Observation
@@ -153,6 +157,8 @@ Intent
 `fbt.intent-execution-observation.v1` — فقط با opt-in فعلی telemetry و توکن رضایت دستگاه (`ct1:` + ۳۲ hex).
 
 Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از allowlist), quoteCount, hopCount, simulationStatus, gasEstimateBucket, gasErrorBpsBucket, outputErrorBpsBucket, confirmationLatencyBucket, failureCode, outcome, policyVersion, dayBucket`.
+
+از این فاز `simulationStatus` شامل `rpc-disagreement` نیز می‌شود و `failureCode` مربوطه همان `RPC_DISAGREEMENT` است — اختلاف چند نود فقط وقتی ثبت می‌شود که واقعاً رخ داده باشد.
 
 هرگز ارسال نمی‌شود: آدرس کیف پول، tx hash، calldata، آدرس قرارداد توکن، IP در payload، seed/key/signature، موجودی دقیق، recipient، user ID، topic/session واکنکت، متن آزاد کاربر.
 
@@ -188,6 +194,8 @@ Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از all
   "recoverySchema": "fbt.intent-recovery.v1",
   "observationSchema": "fbt.intent-execution-observation.v1",
   "exactClientRpcPreflightSupported": true,
+  "multiRpcPreflightQuorum": true,
+  "replacementTxTracking": true,
   "serverExecutesTransactions": false,
   "userSignatureRequired": true,
   "autonomousSpending": false,
@@ -212,9 +220,9 @@ Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از all
 * **اثبات enforce شدن min output در قرارداد انجام نمی‌شود**؛ `outputGuaranteeProven` همیشه `false` است.
 * **MEV Protection تضمین‌شده نیست**؛ هیچ private relay attested وجود ندارد.
 * **مدل Learning ساخته نشد**؛ فقط Observation جمع می‌شود و بدون دادهٔ کافی `model:false` می‌ماند.
-* **Multi-RPC quorum برای preflight پیاده نشده**؛ کد `RPC_DISAGREEMENT` در جدول Recovery وجود دارد اما مقایسهٔ چند نود در این فاز اجرا نمی‌شود (scaffold است، live نیست).
+* **Multi-RPC quorum** حالا در preflight live است: همان بایت‌ها روی چند نود اجرا می‌شود و `RPC_DISAGREEMENT` فقط بعد از اختلاف واقعی ثبت می‌شود؛ ولی هنوز روی همهٔ مسیرهای preflight به‌صورت سختگیرانه اجباری نیست (به‌عنوان توانایی در review اجرا می‌شود، نه gate مستقل).
 * **مسیر Direct-router و Gasless** از Exact Transaction Builder پشتیبانی نمی‌شوند (`UNSUPPORTED_SOURCE`) و رفتار قبلی خود را دارند.
-* **پیگیری خودکار تراکنش جایگزین‌شده (replacement) در UI پیاده نشده**؛ کد و plan آن وجود دارد ولی ردیابی زندهٔ hash جایگزین در صفحهٔ Swap اضافه نشده است.
+* **پیگیری تراکنش جایگزین‌شده در UI** حالا پیاده است (hash را نمایش و دنبال می‌کند)؛ اما اگر کیف پول hash جایگزین را در اختیار خطا نگذارد و نتوان آن را از زنجیره استخراج کرد، به recovery عادی/`CONFIRMATION_TIMEOUT` می‌افتد و hash ساخته‌شده‌ای نشان داده نمی‌شود.
 * سرور همچنان **هیچ کلید خصوصی، Seed یا Session Key** ندارد و هیچ تراکنشی امضا یا ارسال نمی‌کند.
 
 ---

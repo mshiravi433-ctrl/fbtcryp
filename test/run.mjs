@@ -120,6 +120,12 @@ console.log('▸ probing actual output extraction from receipt logs…');
   report('intent receipt output', await runReceipt());
 }
 
+console.log('▸ probing replaced-transaction tracking…');
+{
+  const { default: runReplacement } = await import('./intent-replacement-probe.mjs');
+  report('intent replacement tracking', await runReplacement());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

@@ -63,6 +63,12 @@ import {
 import { reportIntentObservation } from '../lib/intentObservation';
 import { extractActualOutput, outputDeltaBps } from '../lib/intentReceipt';
 import { classifyFailure } from '../lib/intentRecovery';
+import {
+  hasReplacementReceipt,
+  replacementHashFromError,
+  replacementReasonOf,
+  trackReplacement
+} from '../lib/intentReplacement';
 import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 import { isNativeShell } from '../lib/nativeShell';
 
@@ -298,7 +304,7 @@ export default function Swap() {
   const shouldAnimateNumbers = !still && !isNative;
 
   const txGuardBusy = Boolean(
-    txState && ['preparing', 'quoting', 'signing', 'approving', 'pending'].includes(txState.stage)
+    txState && ['preparing', 'quoting', 'signing', 'approving', 'pending', 'replaced'].includes(txState.stage)
   );
   useEffect(() => {
     if (!txGuardBusy) return undefined;
@@ -616,6 +622,7 @@ export default function Swap() {
     slippage: effectiveSlippage,
     deadlineMinutes: deadlineMin,
     getReadProvider: wallet.getReadProvider,
+    getReadProviders: wallet.getReadProviders,
     active: reviewing && !txState
   });
 
@@ -795,7 +802,69 @@ export default function Swap() {
       haptic?.('medium');
       exec.markConfirming();
 
-      const receipt = await tx.wait();
+      /*
+       * ─── REPLACEMENT TRACKING ──────────────────────────────────────────────
+       * If the user (or their wallet) replaces this pending transaction —
+       * speed-up, cancel, or another tx on the same nonce — ethers `wait()`
+       * rejects with a TRANSACTION_REPLACED error carrying the replacement
+       * hash and (usually) its receipt. Instead of collapsing into a generic
+       * failure we NAME the replacement, SHOW it, and FOLLOW it to completion.
+       * No replacement hash is ever invented: if the error carries none we
+       * fall through to normal recovery.
+       */
+      let receipt;
+      let replacementHash = null;
+      try {
+        receipt = await tx.wait();
+      } catch (waitErr) {
+        if (classifyFailure(waitErr) !== 'TRANSACTION_REPLACED') throw waitErr;
+        replacementHash = replacementHashFromError(waitErr);
+        if (!replacementHash) throw waitErr; // nothing to follow — honest fallback
+
+        /* Deterministic recovery: TRANSACTION_REPLACED moves the lifecycle to
+           CONFIRMING and records TRACK_REPLACEMENT. Never re-broadcasts. */
+        exec.markFailed('TRANSACTION_REPLACED');
+
+        setTxState({
+          stage: 'replaced',
+          hash: replacementHash,
+          originalHash: tx.hash,
+          replacementReason: replacementReasonOf(waitErr)
+        });
+
+        /* Follow it: ethers usually hands us the mined replacement receipt
+           already; otherwise poll the replacement hash until it settles. */
+        if (hasReplacementReceipt(waitErr)) {
+          receipt = waitErr.receipt;
+        } else {
+          const followed = await trackReplacement({ provider, replacementHash });
+          if (!followed.ok || !followed.receipt) {
+            exec.markFailed('CONFIRMATION_TIMEOUT');
+            reportIntentObservation({
+              intentKind: 'swap', chainId,
+              routePolicy: exec.decision?.policy,
+              solver: fresh.selectedSolver || fresh.source,
+              quoteCount: fresh.routesChecked ?? 1,
+              hopCount: fresh.hops ?? 0,
+              simulationStatus: exec.simulation?.status ?? 'not-run',
+              gasEstimate: exec.simulation?.gasEstimate ?? null,
+              failureCode: 'CONFIRMATION_TIMEOUT',
+              outcome: 'failed',
+              policyVersion: exec.lifecycle?.policyVersion ?? 'fbt.intent-lifecycle-policy.v1'
+            });
+            setTxState({ stage: 'error', error: 'CONFIRMATION_TIMEOUT' });
+            notifyTrade({
+              ok: false, haptic,
+              title: t('notify.tradeFailTitle'),
+              body: t('swap.err.CONFIRMATION_TIMEOUT')
+            });
+            return;
+          }
+          receipt = followed.receipt;
+        }
+        tx = { ...tx, hash: replacementHash };
+        haptic?.('medium');
+      }
       const ok = receipt.status === 1;
       if (ok) exec.markCompleted(); else exec.markFailed('RECEIPT_FAILED');
 
@@ -1810,11 +1879,30 @@ export default function Swap() {
 
         {txState && (
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            {['preparing', 'approving', 'quoting', 'signing', 'pending'].includes(txState.stage) && (
+            {['preparing', 'approving', 'quoting', 'signing', 'pending', 'replaced'].includes(txState.stage) && (
               <>
                 <div className="spinner" style={{ margin: '0 auto 14px', width: 30, height: 30 }} />
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>{t(`swap.stage.${txState.stage}`)}</div>
-                <p className="faint">{t('swap.dontClose')}</p>
+                <p className="faint">
+                  {txState.stage === 'replaced'
+                    ? t('swap.trackingReplacement', {
+                        reason: txState.replacementReason
+                          ? t(`swap.replacementReason.${txState.replacementReason}`)
+                          : t('swap.replacementReason.generic')
+                      })
+                    : t('swap.dontClose')}
+                </p>
+                {txState.stage === 'replaced' && txState.hash && (
+                  <a
+                    href={explorerTx(chainId, txState.hash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mono faint"
+                    style={{ fontSize: 9.5, display: 'block', marginTop: 8, wordBreak: 'break-all', color: 'var(--rgb-1)' }}
+                  >
+                    {t('swap.replacementHash')}: {txState.hash}
+                  </a>
+                )}
               </>
             )}
 

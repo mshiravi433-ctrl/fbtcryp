@@ -545,7 +545,8 @@
       "approving": "Approving token…",
       "quoting": "Refreshing price…",
       "signing": "Waiting for signature…",
-      "pending": "Transaction pending…"
+      "pending": "Transaction pending…",
+      "replaced": "Transaction replaced"
     },
     "err": {
       "NO_ROUTE": "No route exists between these tokens.",
@@ -559,7 +560,8 @@
       "TX_FAILED": "Transaction failed.",
       "SIMULATION_REQUIRED": "The on-chain preflight has not passed yet, so nothing was signed.",
       "ROUTE_CHANGED": "The route changed after you reviewed it. Review the new terms and sign again.",
-      "APPROVAL_REQUIRED": "This token needs an approval first. You sign it in your own wallet."
+      "APPROVAL_REQUIRED": "This token needs an approval first. You sign it in your own wallet.",
+      "CONFIRMATION_TIMEOUT": "The replacement is taking too long to confirm."
     },
     "platformFee": "Platform fee ({{pct}}%)",
     "bestOf": "best of {{n}} route(s)",
@@ -625,7 +627,15 @@
     "solanaOnlyBody": "Auto-slippage, the transaction deadline and expert mode are specific to the EVM path: auto-slippage is derived from an EVM price quote, the deadline is an argument to an EVM router, and expert mode skips the EVM review screen. None of them has an equivalent on Solana, so showing them here would be controls that do nothing — which is exactly the problem this screen just had.",
     "proofReady": "Proof-of-Execution receipt created",
     "proofVerified": "Hashed",
-    "proofScope": "Best executable response among usable quotes observed in that round — not a claim of global optimality."
+    "proofScope": "Best executable response among usable quotes observed in that round — not a claim of global optimality.",
+    "trackingReplacement": "The wallet replaced this transaction ({{reason}}). Following the new one to completion.",
+    "replacementReason": {
+      "repriced": "same swap, higher gas",
+      "cancelled": "a cancel",
+      "replaced": "a replacement",
+      "generic": "a replacement"
+    },
+    "replacementHash": "New transaction"
   },
   "onboarding": {
     "skip": "Skip",
@@ -4103,7 +4113,8 @@
         "rpc-unavailable": "RPC unavailable",
         "quote-expired": "Quote expired",
         "chain-mismatch": "Wrong network",
-        "account-mismatch": "Wrong account"
+        "account-mismatch": "Wrong account",
+        "rpc-disagreement": "Nodes disagreed"
       }
     },
     "policy": {

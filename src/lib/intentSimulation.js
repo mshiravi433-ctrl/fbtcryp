@@ -35,6 +35,7 @@ export const SIMULATION_STATUSES = Object.freeze([
   'insufficient-balance',
   'reverted',
   'rpc-unavailable',
+  'rpc-disagreement',
   'quote-expired',
   'chain-mismatch',
   'account-mismatch'
@@ -291,6 +292,145 @@ export async function simulateIntentTransaction({
   });
 }
 
+/**
+ * MULTI-RPC PREFLIGHT QUORUM — fbt.intent-simulation.v1 (multi-node)
+ * ---------------------------------------------------------------------------
+ * Run the SAME exact bytes against several independent read-only RPC nodes and
+ * only report `rpc-disagreement` when they genuinely contradict each other
+ * (one passes, another reverts). A node that simply fails to answer is NOT a
+ * vote — it is never counted as a disagreement.
+ *
+ * The full preflight (chain · account · balance · allowance · eth_call ·
+ * estimateGas) runs on the primary node and keeps its authoritative verdict.
+ * The quorum then independently re-runs the on-chain `eth_call` of the exact
+ * bytes on every other node. When they all agree, the primary result is
+ * returned unchanged (with a `quorum` block attached so the proof can state
+ * how many nodes agreed). When a real passed-vs-reverted split appears, the
+ * status becomes `rpc-disagreement` and recovery maps it to RPC_DISAGREEMENT.
+ *
+ * Honesty is unchanged: even an all-agree quorum is a set of eth_call
+ * observations, not an execution, output, ordering or MEV guarantee.
+ *
+ * @param {object} opts
+ * @param {object[]} opts.providers  independent read-only providers (>=1)
+ * @param {object} opts.request      IntentTransactionRequest (exact bytes)
+ * @param {object} [opts.erc20]
+ * @param {string} [opts.account]
+ * @param {number} [opts.chainId]
+ * @param {number} [opts.primaryIndex=0]
+ */
+export async function simulateIntentTransactionQuorum({
+  providers,
+  request,
+  erc20 = null,
+  account = null,
+  chainId = null,
+  intentId = null,
+  amountInWei = null,
+  now = Date.now(),
+  experimentalStateOverride = false,
+  primaryIndex = 0
+}) {
+  const list = Array.isArray(providers) ? providers.filter(Boolean) : [];
+  const mode = experimentalStateOverride ? 'unsupported-experimental-state-override' : SIMULATION_MODE;
+  if (!request || request.schema !== 'fbt.intent-transaction.v1') {
+    return result({ intentId, request, status: 'rpc-unavailable', now, mode, revertCode: 'BAD_REQUEST' });
+  }
+  if (!list.length) {
+    return result({ intentId, request, status: 'rpc-unavailable', now, mode, revertCode: 'NO_PROVIDER' });
+  }
+
+  const primary = list[primaryIndex] ?? list[0];
+
+  /* The full, authority-rich preflight on the primary node. */
+  const verdict = await simulateIntentTransaction({
+    provider: primary,
+    request,
+    erc20,
+    account,
+    chainId,
+    intentId,
+    amountInWei,
+    now,
+    experimentalStateOverride
+  });
+
+  /*
+   * Quorum only refines the on-chain bytes verdict. If the primary never got
+   * to the node, or was gated earlier (approval / balance / chain / account /
+   * quote-expired), there is nothing to compare byte-for-byte yet.
+   */
+  if (verdict.status !== 'passed' && verdict.status !== 'reverted') return verdict;
+
+  const tx = {
+    from: request.from,
+    to: request.to,
+    data: request.data,
+    value: toBig(request.value) ?? 0n
+  };
+
+  const outcomes = [{ providerIndex: primaryIndex, status: verdict.status, revertCode: verdict.revertCode }];
+
+  for (let i = 0; i < list.length; i += 1) {
+    if (i === primaryIndex) continue;
+    const provider = list[i];
+    let outcome = { providerIndex: i, status: null, revertCode: null };
+    try {
+      await provider.call(tx);
+      outcome.status = 'passed';
+    } catch (err) {
+      if (isRpcFailure(err)) outcome.status = 'rpc-unavailable';
+      else {
+        outcome.status = 'reverted';
+        outcome.revertCode = decodeRevert(revertDataOf(err)) || 'REVERT:UNDECODABLE';
+      }
+    }
+    outcomes.push(outcome);
+  }
+
+  const votes = outcomes.filter((o) => o.status === 'passed' || o.status === 'reverted');
+  const passed = votes.filter((o) => o.status === 'passed').length;
+  const reverted = votes.filter((o) => o.status === 'reverted').length;
+  const unavailable = outcomes.filter((o) => o.status === 'rpc-unavailable').length;
+
+  /* Only a genuine passed-vs-reverted split is disagreement. */
+  const realDisagreement = passed > 0 && reverted > 0;
+
+  const quorum = {
+    providersChecked: list.length,
+    passed,
+    reverted,
+    unavailable,
+    agreed: realDisagreement ? false : true,
+    outcomes: outcomes.map(({ providerIndex, status, revertCode }) => ({
+      providerIndex,
+      status,
+      revertCode: revertCode ?? null
+    }))
+  };
+
+  if (realDisagreement) {
+    return {
+      ...verdict,
+      status: 'rpc-disagreement',
+      revertCode: 'RPC_DISAGREEMENT',
+      evidence: {
+        ...(verdict.evidence ?? {}),
+        quorum
+      }
+    };
+  }
+
+  /* All answering nodes agree → keep the primary verdict, attach the quorum. */
+  return {
+    ...verdict,
+    evidence: {
+      ...(verdict.evidence ?? {}),
+      quorum
+    }
+  };
+}
+
 /** A simulation is only valid for the exact request it was produced from. */
 export function simulationMatches(simulation, request) {
   if (!simulation || !request) return false;
@@ -337,6 +477,7 @@ export function simulationSummary(simulation) {
     simulatedAt: simulation.simulatedAt,
     routeFingerprint: simulation.routeFingerprint,
     quoteFingerprint: simulation.quoteFingerprint,
-    claims: simulation.claims
+    claims: simulation.claims,
+    quorum: simulation.evidence?.quorum ?? null
   };
 }

@@ -295,6 +295,7 @@ export function failureCodeForSimulation(status) {
     case 'insufficient-balance': return 'INSUFFICIENT_BALANCE';
     case 'reverted': return 'SIMULATION_REVERTED';
     case 'rpc-unavailable': return 'RPC_UNAVAILABLE';
+    case 'rpc-disagreement': return 'RPC_DISAGREEMENT';
     case 'quote-expired': return 'QUOTE_EXPIRED';
     case 'chain-mismatch': return 'CHAIN_CHANGED';
     case 'account-mismatch': return 'ACCOUNT_CHANGED';

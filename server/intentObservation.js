@@ -43,6 +43,7 @@ const SIMULATION_STATUSES = new Set([
   'insufficient-balance',
   'reverted',
   'rpc-unavailable',
+  'rpc-disagreement',
   'quote-expired',
   'chain-mismatch',
   'account-mismatch',

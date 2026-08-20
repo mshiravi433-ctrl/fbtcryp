@@ -245,6 +245,12 @@ export default function run() {
       !/'txHash'|'walletAddress'|'calldata'|'recipient'/.test(
         observation.slice(observation.indexOf('OBSERVATION_FIELDS'), observation.indexOf('export function gasBucket'))
       ));
+    t('the swap follows a replaced transaction hash in the UI',
+      swap.includes('trackReplacement') && swap.includes('replacementHashFromError') && swap.includes("stage: 'replaced'"));
+    t('the hook runs the exact bytes across multiple RPC nodes',
+      hook.includes('simulateIntentTransactionQuorum') && hook.includes('getReadProviders'));
+    t('the wallet exposes the raw read nodes for the quorum',
+      read('src/context/WalletContext.jsx').includes('getReadProviders'));
 
     const capabilities = read('server/intents.js');
     t('capabilities publishes the execution core block honestly',
@@ -253,6 +259,9 @@ export default function run() {
       && capabilities.includes('autonomousSpending: false')
       && capabilities.includes('stateDiffSimulation: false')
       && capabilities.includes('privateRelayAttested: false'));
+    t('capabilities advertises the multi-RPC quorum and replacement tracking',
+      capabilities.includes('multiRpcPreflightQuorum: true')
+      && capabilities.includes('replacementTxTracking: true'));
   }
 
   /* --------------------- 6. no false "we take no fee" -------------------- */

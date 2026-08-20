@@ -289,6 +289,66 @@ export default async function run() {
   t('the summary carries no calldata', !summaryText.includes('0xabcdef'));
   t('the summary carries no address', !/0x[0-9a-fA-F]{40}/.test(summaryText));
 
+  /* ------------------------- multi-RPC preflight quorum --------------------- */
+  const quorumOptions = {
+    request: REQUEST,
+    account: REQUEST.from,
+    chainId: 42161,
+    intentId: 'in_quorum_1',
+    now
+  };
+
+  /* All nodes agree it passes → the primary passed verdict is returned, and
+     the quorum block says how many nodes agreed. */
+  const agreePass = await sim.simulateIntentTransactionQuorum({
+    providers: [mockProvider(), mockProvider()],
+    ...quorumOptions
+  });
+  t('a unanimous quorum keeps the passed verdict', agreePass.status === 'passed');
+  t('a unanimous quorum records how many nodes agreed',
+    agreePass.evidence?.quorum?.providersChecked === 2
+    && agreePass.evidence?.quorum?.agreed === true
+    && agreePass.evidence?.quorum?.passed === 2);
+
+  /* A real passed-vs-reverted split is RPC_DISAGREEMENT, not a pass. */
+  const disagree = await sim.simulateIntentTransactionQuorum({
+    providers: [
+      mockProvider(),
+      mockProvider({ callImpl: async () => { throw revertError(encodeErrorString('BLOCKED')); } })
+    ],
+    ...quorumOptions
+  });
+  t('a passed-vs-reverted split is reported as rpc-disagreement',
+    disagree.status === 'rpc-disagreement' && disagree.revertCode === 'RPC_DISAGREEMENT');
+  t('a genuine disagreement marks the quorum as not agreed',
+    disagree.evidence?.quorum?.agreed === false
+    && disagree.evidence?.quorum?.passed === 1
+    && disagree.evidence?.quorum?.reverted === 1);
+
+  /* An unreachable node is NOT a vote — it cannot manufacture a disagreement. */
+  const withDownNode = await sim.simulateIntentTransactionQuorum({
+    providers: [
+      mockProvider(),
+      mockProvider({ callImpl: async () => { throw rpcError('timeout of 5000ms exceeded'); } })
+    ],
+    ...quorumOptions
+  });
+  t('a silent/unreachable node is not counted as disagreement',
+    withDownNode.status === 'passed' && withDownNode.evidence?.quorum?.unavailable === 1);
+
+  /* A single node falls back to plain single-provider behaviour. */
+  const single = await sim.simulateIntentTransactionQuorum({
+    providers: [mockProvider()],
+    ...quorumOptions
+  });
+  t('a single-node quorum degrades to the single-node verdict', single.status === 'passed');
+
+  /* Quorum never reaches a send path. */
+  const quorumProviders = [mockProvider(), mockProvider()];
+  await sim.simulateIntentTransactionQuorum({ providers: quorumProviders, ...quorumOptions });
+  t('a quorum never touches a send path',
+    !quorumProviders.some((p) => p.calls.includes('sendTransaction') || p.calls.includes('broadcastTransaction')));
+
   /* ----------------------- the send path is a separate module --------------- */
   const tx = await import('../src/lib/intentTransaction.js');
   const sendWithoutSim = await tx.sendIntentTransaction({

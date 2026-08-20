@@ -35,7 +35,12 @@ import {
   isTransactionRequestExpired,
   sendIntentTransaction
 } from '../lib/intentTransaction';
-import { erc20Reader, simulateIntentTransaction, simulationIsFresh } from '../lib/intentSimulation';
+import {
+  erc20Reader,
+  simulateIntentTransaction,
+  simulateIntentTransactionQuorum,
+  simulationIsFresh
+} from '../lib/intentSimulation';
 import { candidatesFromQuoteTrace, scoreRoutes } from '../lib/intentRoutePolicy';
 import { classifyFailure, failureCodeForSimulation, planRecovery } from '../lib/intentRecovery';
 import { outputDeltaBps } from '../lib/intentReceipt';
@@ -80,6 +85,7 @@ export default function useIntentExecution({
   slippage = 0.5,
   deadlineMinutes = 20,
   getReadProvider = null,
+  getReadProviders = null,
   active = false
 }) {
   const [lifecycle, setLifecycle] = useState(null);
@@ -199,19 +205,38 @@ export default function useIntentExecution({
 
       requestRef.current = built.request;
       const provider = await getReadProvider(chainId);
+
+      /*
+       * MULTI-RPC QUORUM: when the wallet can hand over the individual read
+       * nodes (not just the fail-over wrapper), the exact bytes are also
+       * re-simulated on the others and `rpc-disagreement` is only reported
+       * when they genuinely contradict the primary. Otherwise the single-node
+       * preflight is used unchanged.
+       */
+      const nodes = getReadProviders ? (await getReadProviders(chainId).catch(() => null)) : null;
       const reader = fromToken?.native
         ? null
         : await erc20Reader({ provider, tokenAddress: fromToken?.address }).catch(() => null);
 
-      const result = await simulateIntentTransaction({
-        provider,
-        request: built.request,
-        erc20: reader,
-        account,
-        chainId,
-        intentId,
-        amountInWei: quote.amountInWei?.toString?.() ?? null
-      });
+      const result = nodes && nodes.length > 1
+        ? await simulateIntentTransactionQuorum({
+            providers: nodes,
+            request: built.request,
+            erc20: reader,
+            account,
+            chainId,
+            intentId,
+            amountInWei: quote.amountInWei?.toString?.() ?? null
+          })
+        : await simulateIntentTransaction({
+            provider,
+            request: built.request,
+            erc20: reader,
+            account,
+            chainId,
+            intentId,
+            amountInWei: quote.amountInWei?.toString?.() ?? null
+          });
       setSimulation(result);
 
       if (enforced && record) {
@@ -264,7 +289,7 @@ export default function useIntentExecution({
       setSimulating(false);
     }
   }, [
-    quote, account, getReadProvider, chainId, fromToken, toToken, slippage, deadlineMinutes,
+    quote, account, getReadProvider, getReadProviders, chainId, fromToken, toToken, slippage, deadlineMinutes,
     lifecycle, enforced, intentId, amount, advance
   ]);
 

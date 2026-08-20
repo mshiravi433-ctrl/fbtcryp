@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased — Intent Execution Core v2: multi-RPC quorum, replacement-tx tracking, durable observations
+
+**Durable observation storage (priority 1).** `POST /api/intents/v1/observations`
+persists each accepted observation to the day-bucket Blob store when Blob is
+configured and still fails CLOSED (`503 NOT_CONFIGURED`) otherwise. The payload
+schema (`fbt.intent-execution-observation.v1`) is unchanged; no address, amount,
+tx hash or free text is ever written to logs, git or the bundle, and no ML is
+claimed until the dataset actually exists. `simulationStatus` now also carries
+`rpc-disagreement` (with `failureCode: RPC_DISAGREEMENT`).
+
+**Multi-RPC preflight quorum (priority 3).** The exact bytes are re-simulated
+on several independent read-only RPC nodes (`simulateIntentTransactionQuorum`).
+`RPC_DISAGREEMENT` is only reported on a genuine passed-vs-reverted split; an
+unreachable node is never counted as a vote. The wallet now exposes the raw read
+nodes (`getReadProviders`) alongside the fail-over wrapper, and capabilities
+advertise `multiRpcPreflightQuorum: true`.
+
+**Replacement-tx UI tracking (priority 2).** A replaced pending transaction is
+now named, shown and followed to completion in the swap UI instead of collapsing
+into a generic failure. ethers v6 `TRANSACTION_REPLACED` (repriced / cancelled /
+replaced) yields the replacement hash + reason + receipt; the UI shows a
+"replaced" stage with an explorer link to the new hash, and `trackReplacement`
+polls it to settlement. No hash is ever invented — a missing hash falls back to
+normal recovery, and a follow that times out reports `CONFIRMATION_TIMEOUT`.
+New module `src/lib/intentReplacement.js`; capabilities advertise
+`replacementTxTracking: true`.
+
 ## Unreleased — Reown project rotation
 
 - Rotated every WalletConnect integration and wiring guard to Reown project
