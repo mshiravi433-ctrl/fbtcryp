@@ -555,3 +555,37 @@
 @media (prefers-reduced-motion: reduce) {
   .ios-page * { scroll-behavior: auto !important; }
 }
+
+/* ─── Execution Core v2: lifecycle timeline, preflight, policy, recovery ──── */
+.ios-exec-timeline,
+.ios-exec-sim,
+.ios-exec-policy,
+.ios-exec-recovery {
+  display: grid;
+  gap: 6px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .022);
+  text-align: start;
+}
+.ios-exec-recovery { border-color: rgba(255, 211, 107, .28); background: rgba(255, 211, 107, .06); }
+.ios-exec-steps { list-style: none; display: grid; gap: 4px; margin: 4px 0 0; padding: 0; }
+.ios-exec-step { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: var(--text-3); }
+.ios-exec-step .ios-exec-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1px solid var(--line); background: transparent; flex: none;
+}
+.ios-exec-step.done { color: var(--text-2); }
+.ios-exec-step.done .ios-exec-dot { background: var(--ios-mint, #65f5bc); border-color: rgba(101, 245, 188, .5); }
+.ios-exec-step.current { color: var(--text-1); font-weight: 700; }
+.ios-exec-step.current .ios-exec-dot { background: #ffd36b; border-color: rgba(255, 211, 107, .6); }
+.ios-exec-step.failed .ios-exec-dot { background: var(--ios-red, #ff5d7d); border-color: rgba(255, 93, 125, .6); }
+.ios-exec-rejected { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; }
+.ios-exec-rejected li { display: flex; justify-content: space-between; gap: 8px; font-size: 9.5px; }
+:root[data-theme='light'] .ios-exec-timeline,
+:root[data-theme='light'] .ios-exec-sim,
+:root[data-theme='light'] .ios-exec-policy {
+  border-color: rgba(35, 62, 91, .18);
+  background: #f7f9fc;
+}

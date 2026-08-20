@@ -211,6 +211,48 @@ export default function run() {
       /:root\[data-theme='light'\] \.ios-token-flow > label,[\s\S]*:root\[data-theme='light'\] \.ios-field select/.test(intentCss));
   }
 
+  /* ------------------ 5c. execution core v2 is really wired -------------- */
+  /*
+   * The pure modules are tested by their own probes. What only a wiring check
+   * can prove is that the SCREEN uses them: a perfect state machine nobody
+   * calls is not a lifecycle, and a preflight the confirm button ignores is
+   * not a gate.
+   */
+  {
+    const swap = read('src/pages/Swap.jsx');
+    const hook = read('src/hooks/useIntentExecution.js');
+    const observation = read('src/lib/intentObservation.js');
+
+    t('the swap screen uses the execution core hook',
+      swap.includes("from '../hooks/useIntentExecution'") && swap.includes('useIntentExecution({'));
+    t('the review sheet renders the real lifecycle timeline', swap.includes('<IntentTimeline record={exec.lifecycle}'));
+    t('the review sheet separates the exact preflight from the quote estimate',
+      swap.includes('<SimulationCard') && swap.includes('quoteGasNative='));
+    t('the review sheet shows the route selection policy', swap.includes('<RoutePolicyCard'));
+    t('an intent-originated swap cannot be confirmed without a passing preflight',
+      /disabled=\{exec\.enforced && \(exec\.simulating \|\| exec\.simulation\?\.status !== 'passed'\)\}/.test(swap));
+    t('an intent-originated swap signs through the gated submit path',
+      swap.includes('exec.submit({ signer })'));
+    t('the retry button re-runs the preflight rather than re-sending',
+      swap.includes('onRetry={() => exec.preflight()}'));
+    t('the hook sends only through sendIntentTransaction',
+      hook.includes('sendIntentTransaction') && !/signer\.sendTransaction/.test(hook));
+    t('the exact transaction request is held in a ref, never in state',
+      hook.includes('const requestRef = useRef(null)') && !hook.includes('setRequest('));
+    t('the observation payload cannot carry an address, hash or calldata',
+      !/'txHash'|'walletAddress'|'calldata'|'recipient'/.test(
+        observation.slice(observation.indexOf('OBSERVATION_FIELDS'), observation.indexOf('export function gasBucket'))
+      ));
+
+    const capabilities = read('server/intents.js');
+    t('capabilities publishes the execution core block honestly',
+      capabilities.includes("lifecycleSchema: 'fbt.intent-lifecycle.v1'")
+      && capabilities.includes('serverExecutesTransactions: false')
+      && capabilities.includes('autonomousSpending: false')
+      && capabilities.includes('stateDiffSimulation: false')
+      && capabilities.includes('privateRelayAttested: false'));
+  }
+
   /* --------------------- 6. no false "we take no fee" -------------------- */
   /*
    * REAL BUG: the swap screen said "This app takes no fee" directly above a

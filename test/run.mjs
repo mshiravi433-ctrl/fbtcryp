@@ -85,6 +85,35 @@ console.log('▸ probing the intent compiler (pure logic, no DOM)…');
   report('intent compiler', await runIntent());
 }
 
+/* --------------------- 0a. intent execution core v2 ------------------------ */
+/* Pure logic, no DOM and no network: the lifecycle state machine, the exact
+   RPC preflight (against a mock provider), the deterministic route policy and
+   the recovery table. These are the modules that stand between "the user
+   approved this" and "the wallet signed that", so they run early and fast. */
+console.log('▸ probing the intent lifecycle state machine…');
+{
+  const { default: runLifecycle } = await import('./intent-lifecycle-probe.mjs');
+  report('intent lifecycle', await runLifecycle());
+}
+
+console.log('▸ probing the exact RPC preflight simulation (mock provider, no network)…');
+{
+  const { default: runSimulation } = await import('./intent-simulation-probe.mjs');
+  report('intent simulation', await runSimulation());
+}
+
+console.log('▸ probing deterministic route scoring v2…');
+{
+  const { default: runRoutePolicy } = await import('./intent-route-policy-probe.mjs');
+  report('intent route policy', await runRoutePolicy());
+}
+
+console.log('▸ probing the recovery engine…');
+{
+  const { default: runRecovery } = await import('./intent-recovery-probe.mjs');
+  report('intent recovery', await runRecovery());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */
@@ -399,6 +428,15 @@ console.log('\n▸ probing the signed solver commitment API…');
 {
   const intentApiRows = (await import('./intent-api-probe.mjs')).default;
   report('intent commitment API', intentApiRows);
+}
+
+/* Real HTTP + strict-validation coverage for privacy-safe execution
+   observation: opt-in enforcement, unknown/address/tx-hash/free-text
+   rejection, fail-closed storage, and the honest capabilities block. */
+console.log('\n▸ probing privacy-safe intent execution observation…');
+{
+  const observationRows = (await import('./intent-observation-probe.mjs')).default;
+  report('intent execution observation', observationRows);
 }
 
 /* Real HTTP coverage for the learning core: opt-in enforcement (401), the

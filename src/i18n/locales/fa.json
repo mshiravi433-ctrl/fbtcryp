@@ -556,7 +556,10 @@
       "USER_REJECTED": "تراکنش را رد کردی.",
       "INSUFFICIENT_GAS": "ارز پایه برای کارمزد کافی نیست.",
       "SLIPPAGE": "قیمت بیشتر از حد لغزش تو حرکت کرد.",
-      "TX_FAILED": "تراکنش ناموفق بود."
+      "TX_FAILED": "تراکنش ناموفق بود.",
+      "SIMULATION_REQUIRED": "شبیه‌سازی روی زنجیره هنوز موفق نشده، بنابراین چیزی امضا نشد.",
+      "ROUTE_CHANGED": "مسیر بعد از بازبینی شما تغییر کرد. شرایط جدید را ببینید و دوباره امضا کنید.",
+      "APPROVAL_REQUIRED": "این توکن ابتدا نیاز به Approval دارد؛ آن را در کیف پول خودتان امضا می‌کنید."
     },
     "platformFee": "کارمزد پلتفرم ({{pct}}٪)",
     "bestOf": "بهترین از {{n}} مسیر",
@@ -4046,5 +4049,118 @@
     "busyHint": "اول تراکنش یا اتصال کیف پول فعلی را تمام کن",
     "pullToRefresh": "برای تازه‌سازی، صفحه را بکش پایین",
     "releaseToRefresh": "برای تازه‌سازی رها کن"
+  },
+  "exec": {
+    "timeline": {
+      "title": "خط زمانی اجرا"
+    },
+    "status": {
+      "CREATED": "ساخته‌شده",
+      "VALIDATING": "در حال اعتبارسنجی",
+      "VALIDATED": "اعتبارسنجی‌شده",
+      "QUOTING": "قیمت‌گیری‌شده",
+      "OPTIMIZING": "بهینه‌شده",
+      "SIMULATING": "شبیه‌سازی‌شده",
+      "AWAITING_APPROVAL": "نیازمند Approval",
+      "AWAITING_SIGNATURE": "در انتظار امضا",
+      "SUBMITTED": "ارسال‌شده",
+      "CONFIRMING": "در حال تأیید",
+      "COMPLETED": "کامل‌شده",
+      "RECOVERABLE": "قابل بازیابی",
+      "FAILED": "ناموفق",
+      "EXPIRED": "منقضی",
+      "CANCELLED": "لغوشده"
+    },
+    "reauthorisation": "چیزی که تأیید کرده بودید تغییر کرد ({{fields}}). دوباره بازبینی کنید و شرایط جدید را امضا کنید.",
+    "term": {
+      "chainId": "شبکه",
+      "amountIn": "مقدار",
+      "fromSymbol": "توکن پرداختی",
+      "toSymbol": "توکن دریافتی",
+      "recipientRef": "گیرنده",
+      "slippagePct": "لغزش",
+      "minOut": "حداقل دریافتی",
+      "routeFingerprint": "مسیر",
+      "TERMS": "شرایط",
+      "NOT_REVIEWED": "هنوز بازبینی نشده"
+    },
+    "sim": {
+      "title": "شبیه‌سازی پیش از ارسال روی زنجیره",
+      "quoteEstimate": "تخمین صرفاً بر پایه Quote",
+      "exactPreflight": "شبیه‌سازی دقیق RPC",
+      "gasUnits": "{{n}} گس",
+      "block": "شبیه‌سازی در بلاک",
+      "revert": "کد Revert",
+      "none": "—",
+      "disclaimer": "موفق‌بودن eth_call یعنی تراکنش روی یک بلاک و یک نود ریورت نکرد؛ این تضمین اجرا، خروجی، ترتیب یا محافظت MEV نیست. State diff و گواهی Private Relay در دسترس نیست.",
+      "status": {
+        "passed": "موفق",
+        "running": "در حال شبیه‌سازی",
+        "not-run": "اجرا نشده",
+        "approval-required": "نیازمند Approval",
+        "insufficient-balance": "موجودی ناکافی",
+        "reverted": "ریورت می‌شود",
+        "rpc-unavailable": "RPC در دسترس نیست",
+        "quote-expired": "Quote منقضی شد",
+        "chain-mismatch": "شبکه نادرست",
+        "account-mismatch": "حساب نادرست"
+      }
+    },
+    "policy": {
+      "title": "سیاست انتخاب مسیر",
+      "MAX_NET_OUTPUT_USD_AFTER_COMPARABLE_GAS_V1": "خروجی خالص پس از گس قابل‌مقایسه",
+      "MAX_OUTPUT_WITHIN_SAME_ASSUMPTIONS_V2": "بیشترین خروجی با فرض‌های یکسان",
+      "claim": "بهترین خروجی قابل‌اجرا میان پاسخ‌های قابل‌مقایسهٔ همین دور قیمت‌گیری — نه ادعایی دربارهٔ همهٔ صرافی‌های دنیا.",
+      "missing": "قابل مقایسه نیست: {{fields}}"
+    },
+    "reject": {
+      "NOT_EXECUTABLE": "فقط Quote، قابل امضا نیست",
+      "NO_OUTPUT": "بدون خروجی",
+      "QUOTE_ERROR": "خطای Quote",
+      "QUOTE_EXPIRED": "منقضی",
+      "FEE_MISMATCH": "کارمزد متفاوت",
+      "SLIPPAGE_MISMATCH": "لغزش متفاوت",
+      "CHAIN_MISMATCH": "شبکهٔ متفاوت",
+      "PAIR_MISMATCH": "جفت‌ارز متفاوت",
+      "INTEGRITY_FAILED": "خطای یکپارچگی",
+      "CRITICAL_RISK": "ریسک بحرانی"
+    },
+    "recovery": {
+      "needsSignature": "این مورد نیازمند بازبینی تازه و امضای جدید است. بدون شما چیزی ارسال نمی‌شود.",
+      "noResend": "تلاش دوباره فقط زنجیره را دوباره می‌خواند و هرگز تراکنش را دوباره ارسال نمی‌کند.",
+      "working": "در حال انجام…",
+      "QUOTE_EXPIRED": "Quote منقضی شد",
+      "ROUTE_CHANGED": "مسیر تغییر کرد",
+      "RPC_UNAVAILABLE": "نود پاسخ نداد",
+      "RPC_DISAGREEMENT": "نودها اختلاف داشتند",
+      "APPROVAL_REQUIRED": "Approval توکن لازم است",
+      "APPROVAL_REJECTED": "Approval را رد کردید",
+      "ALLOWANCE_CHANGED": "Allowance تغییر کرد",
+      "INSUFFICIENT_BALANCE": "موجودی کافی نیست",
+      "GAS_ESTIMATE_CHANGED": "تخمین گس تغییر کرد",
+      "CHAIN_CHANGED": "شبکه تغییر کرد",
+      "ACCOUNT_CHANGED": "حساب تغییر کرد",
+      "SIMULATION_REVERTED": "شبیه‌سازی ریورت شد",
+      "TRANSACTION_REJECTED": "تراکنش را رد کردید",
+      "TRANSACTION_DROPPED": "تراکنش حذف شد",
+      "TRANSACTION_REPLACED": "تراکنش جایگزین شد",
+      "RECEIPT_FAILED": "تراکنش روی زنجیره ناموفق بود",
+      "CONFIRMATION_TIMEOUT": "تأیید بیش از حد طول کشید",
+      "MIN_OUTPUT_AT_RISK": "حداقل خروجی در معرض خطر است",
+      "UNKNOWN_FAILURE": "خطای ناشناخته"
+    },
+    "action": {
+      "REQUOTE": "دریافت Quote تازه",
+      "RETRY_PREFLIGHT": "اجرای دوبارهٔ شبیه‌سازی",
+      "SWITCH_READ_RPC": "امتحان نود دیگر",
+      "REQUEST_NETWORK_SWITCH": "تغییر شبکه",
+      "REQUEST_ACCOUNT_RECONNECT": "اتصال دوبارهٔ کیف پول",
+      "REQUEST_APPROVAL": "Approve توکن",
+      "REQUEST_NEW_SIGNATURE": "بازبینی و امضای دوباره",
+      "TRACK_REPLACEMENT": "پیگیری تراکنش جایگزین",
+      "MARK_RECOVERABLE": "بازبینی",
+      "MARK_FAILED": "بستن",
+      "MARK_EXPIRED": "بستن"
+    }
   }
 }
