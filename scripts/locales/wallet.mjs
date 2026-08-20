@@ -94,15 +94,15 @@ export default {
   },
   'wallet.connectFailed': { zh: '连接失败或被拒绝。', hi: 'कनेक्शन विफल या अस्वीकृत।', es: 'La conexión falló o fue rechazada.', fr: 'Connexion échouée ou refusée.', ru: 'Подключение не удалось или было отклонено.', tr: 'Bağlantı başarısız oldu veya reddedildi.', ur: 'کنکشن ناکام یا مسترد۔', id: 'Koneksi gagal atau ditolak.', pt: 'A ligação falhou ou foi recusada.' },
   'wallet.wcOriginBlocked': {
-    zh: 'WalletConnect 拒绝了此应用的来源（origin not allowed）。请在 WalletConnect 控制台把 Allowed Domains 列表留空 — Android 应用从 https://localhost 连接，只列网站域名会屏蔽应用。',
-    hi: 'WalletConnect ने इस ऐप का पता अस्वीकार किया (origin not allowed)। WalletConnect डैशबोर्ड में Allowed Domains सूची खाली छोड़ें — Android ऐप https://localhost से जुड़ता है, केवल वेबसाइट लिखने से ऐप ब्लॉक हो जाता है।',
-    es: 'WalletConnect rechazó la dirección de esta app (origin not allowed). En el panel de WalletConnect deja la lista Allowed Domains VACÍA: la app de Android se conecta desde https://localhost y una lista que solo nombre el sitio bloquea la app.',
-    fr: "WalletConnect a refusé l'adresse de cette app (origin not allowed). Dans le tableau de bord WalletConnect, laissez la liste Allowed Domains VIDE — l'app Android se connecte depuis https://localhost, une liste ne citant que le site bloque l'app.",
-    ru: 'WalletConnect отклонил адрес этого приложения (origin not allowed). В панели WalletConnect оставьте список Allowed Domains ПУСТЫМ — Android-приложение подключается с https://localhost, и список только с сайтом блокирует приложение.',
-    tr: 'WalletConnect bu uygulamanın adresini reddetti (origin not allowed). WalletConnect panosunda Allowed Domains listesini BOŞ bırakın — Android uygulaması https://localhost üzerinden bağlanır; yalnızca siteyi içeren liste uygulamayı engeller.',
-    ur: 'WalletConnect نے اس ایپ کا پتا مسترد کیا (origin not allowed)۔ WalletConnect ڈیش بورڈ میں Allowed Domains فہرست خالی چھوڑیں — اینڈرائیڈ ایپ https://localhost سے جڑتی ہے، صرف ویب سائٹ والی فہرست ایپ کو بلاک کر دیتی ہے۔',
-    id: 'WalletConnect menolak alamat aplikasi ini (origin not allowed). Di dasbor WalletConnect biarkan daftar Allowed Domains KOSONG — aplikasi Android terhubung dari https://localhost; daftar yang hanya memuat situs akan memblokir aplikasi.',
-    pt: 'O WalletConnect recusou o endereço desta app (origin not allowed). No painel do WalletConnect deixe a lista Allowed Domains VAZIA — a app Android liga-se a partir de https://localhost e uma lista só com o site bloqueia a app.'
+    zh: 'WalletConnect 拒绝了此应用的来源。请在 Reown 控制台确认 Allowed Domains 包含 https://fbtswap.ir 和 https://localhost，且 App IDs 包含 ir.fbtswap.app。',
+    hi: 'WalletConnect ने इस ऐप का origin अस्वीकार किया। Reown डैशबोर्ड में जाँचें कि Allowed Domains में https://fbtswap.ir और https://localhost तथा App IDs में ir.fbtswap.app शामिल हों।',
+    es: 'WalletConnect rechazó el origen de esta app. En el panel de Reown, confirma que Allowed Domains incluya https://fbtswap.ir y https://localhost, y que App IDs incluya ir.fbtswap.app.',
+    fr: "WalletConnect a refusé l’origine de cette app. Dans le tableau de bord Reown, vérifiez que Allowed Domains contient https://fbtswap.ir et https://localhost, et que App IDs contient ir.fbtswap.app.",
+    ru: 'WalletConnect отклонил origin приложения. В панели Reown проверьте, что Allowed Domains содержит https://fbtswap.ir и https://localhost, а App IDs — ir.fbtswap.app.',
+    tr: 'WalletConnect bu uygulamanın origin değerini reddetti. Reown panelinde Allowed Domains alanında https://fbtswap.ir ve https://localhost, App IDs alanında ir.fbtswap.app bulunduğunu doğrulayın.',
+    ur: 'WalletConnect نے اس ایپ کا origin مسترد کیا۔ Reown ڈیش بورڈ میں یقینی بنائیں کہ Allowed Domains میں https://fbtswap.ir اور https://localhost، اور App IDs میں ir.fbtswap.app شامل ہوں۔',
+    id: 'WalletConnect menolak origin aplikasi ini. Di dasbor Reown, pastikan Allowed Domains berisi https://fbtswap.ir dan https://localhost, serta App IDs berisi ir.fbtswap.app.',
+    pt: 'O WalletConnect recusou a origem desta app. No painel Reown, confirme que Allowed Domains inclui https://fbtswap.ir e https://localhost, e que App IDs inclui ir.fbtswap.app.'
   },
   'wallet.wcRelayUnreachable': {
     zh: '无法连接 WalletConnect 中继（relay.walletconnect.com）。部分网络会屏蔽它 — 换个网络或使用 VPN 后重试。',

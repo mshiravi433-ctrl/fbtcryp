@@ -2,7 +2,7 @@
 
 > «Security risk / The domain is flagged unsafe by multiple security providers,
 > leave immediately to protect your assets»
-> تاریخ: ۲۰۲۶-۰۸-۱۸ · پروژه WalletConnect: `f0e8ca24821402a6226b4b675172b294`
+> به‌روزرسانی: ۲۰۲۶-۰۸-۲۰ · پروژه WalletConnect: `8e36eccabebf5a4567f4e974fafd6b20`
 
 ---
 
@@ -41,25 +41,34 @@ overwrite می‌کند — مقدار `https://localhost` (در APK) یا آد�
 flag شدن پیدا نشد. پس مشکل از لیست سیاه نبود — از هویت نادرست dapp بود که
 اسکنرها آن را خطرناک تشخیص می‌دادند.
 
-## ۲) کاری که فقط owner باید در داشبورد انجام دهد
+## ۲) وضعیت داشبورد پروژهٔ جدید
 
-این بخش از کد قابل انجام نیست — دسترسی `cloud.reown.com` لازم است:
+این بخش خارج از کد است و در **https://dashboard.reown.com**، قسمت
+**Allowed Domains / App IDs** مدیریت می‌شود. برای پروژهٔ
+`8e36eccabebf5a4567f4e974fafd6b20` وضعیت اعلام‌شده در ۲۰۲۶-۰۸-۲۰:
 
-1. وارد **https://cloud.reown.com** شوید → پروژه `f0e8ca24821402a6226b4b675172b294`.
-2. **Verify API:** در تب Verify، دامنه `https://fbtswap.ir` را ثبت و attestation
-   آن را تأیید کنید. این همان چیزی است که نشان سبز «Verified» را در پروپوزال
-   کیف پول فعال می‌کند. (ثبت attestation سمت کلاینت ممکن نیست چون به کلید
-   سرور نیاز دارد — این بخشی از پروژه است نه از باندل کلاینت.)
-3. **Allowed Domains (هشدار مهم):** این لیست باید **خالی بماند**. origin واقعی
-   APK اندروید `https://localhost` است؛ اگر دامنه‌ای در این لیست ثبت شود، رله
-   درخواست APK را رد می‌کند و اتصال داخل اپ می‌میرد. (همین الان هم در کد
-   توضیح داده شده — `WC_ORIGIN_BLOCKED` برای همین حالت است.)
-4. اگر بعد از انتشارِ فیکس باز هم پیام قرمز روی دامنه واقعی دیده شد، یعنی
-   دامنه در لیست یکی از سرویس‌های امنیتی کیف پول flag شده. مسیر اعتراض:
-   - MetaMask: PR به whitelist ریپوی `MetaMask/eth-phishing-detect`
-     (https://github.com/MetaMask/eth-phishing-detect)
-   - Trust Wallet: فرم اعتراض Blockaid / تیکت رسمی تراست
-   - PhishFort: فرم اعتراض در phishfort.com
+1. دامنهٔ وب **`https://fbtswap.ir`** ثبت/تأیید شده است.
+2. origin اپ Capacitor یعنی **`https://localhost`** ثبت/تأیید شده است.
+3. شناسهٔ اپ اندروید **`ir.fbtswap.app`** ثبت/تأیید شده است.
+
+این سه مقدار را کنار هم نگه دارید: رله درخواست وب را از دامنهٔ واقعی و درخواست
+APK را از origin داخلی WebView می‌بیند، ولی metadata نمایشی هر دو مسیر عمداً
+`https://fbtswap.ir` است. اعمال تغییرات allowlist در رله ممکن است تا ۱۵ دقیقه
+طول بکشد.
+
+**Dashboard API Secret خصوصی است.** این پروژه در کد فعلی هیچ endpoint سروری
+از Dashboard API را مصرف نمی‌کند، پس Secret نباید در سورس، فایل env عمومی،
+متغیر `VITE_*` یا GitHub Variables ذخیره شود. اگر روزی API سروری اضافه شد، آن
+مقدار فقط در Secret Store سمت سرور قرار می‌گیرد و هرگز به مرورگر/APK ارسال
+نمی‌شود.
+
+اگر بعد از انتشارِ فیکس باز هم پیام قرمز روی دامنه واقعی دیده شد، ممکن است
+دامنه در لیست یکی از سرویس‌های امنیتی کیف پول flag شده باشد. مسیر اعتراض:
+
+- MetaMask: PR به whitelist ریپوی `MetaMask/eth-phishing-detect`
+  (https://github.com/MetaMask/eth-phishing-detect)
+- Trust Wallet: فرم اعتراض Blockaid / تیکت رسمی تراست
+- PhishFort: فرم اعتراض در phishfort.com
 
 ## ۳) چرا «بدون projectId» گزینه نیست
 

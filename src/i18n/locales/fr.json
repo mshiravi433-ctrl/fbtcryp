@@ -120,7 +120,7 @@
     "unlockLocalDesc": "Saisissez votre mot de passe pour signer",
     "backupTitle": "Sauvegardez votre phrase de récupération",
     "connectFailed": "Connexion échouée ou refusée.",
-    "wcOriginBlocked": "WalletConnect a refusé l'adresse de cette app (origin not allowed). Dans le tableau de bord WalletConnect, laissez la liste Allowed Domains VIDE — l'app Android se connecte depuis https://localhost, une liste ne citant que le site bloque l'app.",
+    "wcOriginBlocked": "WalletConnect a refusé l’origine de cette app. Dans le tableau de bord Reown, vérifiez que Allowed Domains contient https://fbtswap.ir et https://localhost, et que App IDs contient ir.fbtswap.app.",
     "wcRelayUnreachable": "Impossible d'atteindre le relais WalletConnect (relay.walletconnect.com). Certains réseaux le bloquent — essayez un autre réseau ou un VPN, puis réessayez.",
     "wcExpired": "La demande de connexion a expiré avant l'approbation du portefeuille. Rouvrez la liste des portefeuilles et réessayez.",
     "resetDesc": "Remet votre solde virtuel, vos positions, vos plans et votre historique à l'état initial.",

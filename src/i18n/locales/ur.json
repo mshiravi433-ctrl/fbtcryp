@@ -123,7 +123,7 @@
     "localRisk": "ایپ والٹ خفیہ کلید ٹیلیگرام WebView میں رکھتا ہے — نہ سیکیور اینکلیو، نہ ہارڈویئر تنہائی۔ چھوٹی رقم کے لیے ٹھیک ہے، مگر جو رقم کھونا تکلیف دے وہ WalletConnect کے ذریعے MetaMask/Trust یا ہارڈویئر والٹ میں رکھیں۔",
     "noProvider": "براؤزر میں کوئی والٹ نہیں ملا۔ ٹیلیگرام کے اندرونی براؤزر میں والٹ نہیں ہوتا — WalletConnect یا ایپ والٹ استعمال کریں۔",
     "connectFailed": "کنکشن ناکام یا مسترد۔",
-    "wcOriginBlocked": "WalletConnect نے اس ایپ کا پتا مسترد کیا (origin not allowed)۔ WalletConnect ڈیش بورڈ میں Allowed Domains فہرست خالی چھوڑیں — اینڈرائیڈ ایپ https://localhost سے جڑتی ہے، صرف ویب سائٹ والی فہرست ایپ کو بلاک کر دیتی ہے۔",
+    "wcOriginBlocked": "WalletConnect نے اس ایپ کا origin مسترد کیا۔ Reown ڈیش بورڈ میں یقینی بنائیں کہ Allowed Domains میں https://fbtswap.ir اور https://localhost، اور App IDs میں ir.fbtswap.app شامل ہوں۔",
     "wcRelayUnreachable": "WalletConnect ریلے (relay.walletconnect.com) تک رسائی ممکن نہیں ہوئی۔ کچھ نیٹ ورک اسے بلاک کرتے ہیں — دوسرا نیٹ ورک یا VPN آزما کر دوبارہ کوشش کریں۔",
     "wcExpired": "کنکشن کی درخواست والٹ کی منظوری سے پہلے ختم ہو گئی۔ والٹ فہرست کھول کر دوبارہ کوشش کریں۔",
     "resetDesc": "آپ کا ورچوئل بیلنس، پوزیشنز، پلانز اور تاریخ ابتدائی حالت پر واپس لے آتا ہے۔",

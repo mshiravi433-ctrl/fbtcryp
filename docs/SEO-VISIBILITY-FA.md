@@ -96,7 +96,7 @@ DappRadar برای بررسی معمولاً نام، URL، لوگو، توضی�
 
 ### 6) WalletConnect Explorer
 
-**داشبورد:** <https://dashboard.walletconnect.com/>
+**داشبورد:** <https://dashboard.reown.com/>
 
 در Project موجود، بخش **Explorer** را تکمیل و Submit کن:
 

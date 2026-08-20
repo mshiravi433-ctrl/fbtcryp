@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Reown project rotation
+
+- Rotated every WalletConnect integration and wiring guard to Reown project
+  `8e36eccabebf5a4567f4e974fafd6b20`.
+- Recorded the verified web origins (`https://fbtswap.ir`,
+  `https://localhost`) and Android app ID (`ir.fbtswap.app`) in the security
+  runbooks and corrected the origin-blocked guidance in every locale.
+- Kept the Dashboard API Secret out of source and client configuration; the
+  current app does not consume the private Dashboard API.
+
 ## 1.39.0 — WalletConnect identity, chain-sync and stale-session fixes; docs for every level
 
 **The fake "Security risk / flagged unsafe by multiple security providers"
