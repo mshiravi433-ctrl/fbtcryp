@@ -38,6 +38,7 @@ import {
 import { erc20Reader, simulateIntentTransaction, simulationIsFresh } from '../lib/intentSimulation';
 import { candidatesFromQuoteTrace, scoreRoutes } from '../lib/intentRoutePolicy';
 import { classifyFailure, failureCodeForSimulation, planRecovery } from '../lib/intentRecovery';
+import { outputDeltaBps } from '../lib/intentReceipt';
 import { FEE_BPS, feeRecipientFor } from '../lib/chains';
 
 const SIM_MAX_AGE_MS = 45_000;
@@ -385,12 +386,12 @@ export default function useIntentExecution({
     txHash,
     actualGasUsed: receipt?.gasUsed != null ? String(receipt.gasUsed) : null,
     actualOutput,
-    actualOutputSource: actualOutput != null ? 'receipt-log' : null,
+    actualOutputSource: actualOutput != null ? (actualOutputSource || null) : null,
     predictedOutput,
     gasDeltaBps: simulation?.gasEstimate && receipt?.gasUsed
       ? Math.round(((Number(receipt.gasUsed) - Number(simulation.gasEstimate)) / Number(simulation.gasEstimate)) * 10_000)
       : null,
-    outputDeltaBps: null,
+    outputDeltaBps: actualOutput != null ? outputDeltaBps(predictedOutput, actualOutput) : null,
     confirmationLatencyMs,
     recoveryEvents: recoveryLog.current.map((plan) => ({
       code: plan.code,

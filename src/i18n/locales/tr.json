@@ -810,5 +810,15 @@
       "step5": "Büyük tutarları uygulama içi cüzdanda değil, ayrı bir donanım cüzdanında tutun.",
       "pitfall": "Hiçbir meşru kişi 12 kurtarma kelimenizi istemez. Ne desteğimiz, ne grup yöneticisi, ne bir site. İsteyen paranızı çalmaya çalışıyordur. Hemen engelleyin."
     }
+  },
+  "exec": {
+    "receipt": {
+      "estimated": "Quote estimate",
+      "actual": "Received (from receipt)",
+      "delta": "Difference vs estimate",
+      "unavailable": "Not extractable from receipt",
+      "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
+      "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
   }
 }

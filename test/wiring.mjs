@@ -239,6 +239,8 @@ export default function run() {
       hook.includes('sendIntentTransaction') && !/signer\.sendTransaction/.test(hook));
     t('the exact transaction request is held in a ref, never in state',
       hook.includes('const requestRef = useRef(null)') && !hook.includes('setRequest('));
+    t('the swap extracts actual output from receipt logs',
+      swap.includes('extractActualOutput') && swap.includes('outputErrorBps: actualDelta'));
     t('the observation payload cannot carry an address, hash or calldata',
       !/'txHash'|'walletAddress'|'calldata'|'recipient'/.test(
         observation.slice(observation.indexOf('OBSERVATION_FIELDS'), observation.indexOf('export function gasBucket'))

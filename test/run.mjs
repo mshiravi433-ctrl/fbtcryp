@@ -114,6 +114,12 @@ console.log('▸ probing the recovery engine…');
   report('intent recovery', await runRecovery());
 }
 
+console.log('▸ probing actual output extraction from receipt logs…');
+{
+  const { default: runReceipt } = await import('./intent-receipt-probe.mjs');
+  report('intent receipt output', await runReceipt());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */
