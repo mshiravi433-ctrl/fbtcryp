@@ -43,6 +43,8 @@
  * money moves fully unit-testable, which is where the bugs would be expensive.
  */
 
+import { apiBase } from './apiBase.js';
+
 const STORAGE_KEY = 'fbt-orders-v1';
 
 /** Hard ceiling on stored orders — a runaway loop must not fill localStorage. */
@@ -758,8 +760,6 @@ export function removeOrder(id) {
 /* server-side watching                                                       */
 /* -------------------------------------------------------------------------- */
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
-
 /**
  * Mirror the active LIMIT orders to the server so it can alert while the app
  * is closed.
@@ -851,7 +851,7 @@ export async function syncWatches(orders) {
        */
       .filter((it) => it.type !== 'ladder' || Number.isFinite(it.targetRate));
 
-    await fetch(`${API_BASE}/orders/watch`, {
+    await fetch(`${apiBase()}/orders/watch`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

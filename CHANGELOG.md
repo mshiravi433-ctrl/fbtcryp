@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — APK FCM tokens actually reach the server
+
+The packaged Android WebView serves from `https://localhost`, so
+`notify.js` and `orders.js` posting to a relative `/api` never hit
+`fbtswap.ir`. Both now go through `apiBase()`. Settings no longer claims
+push is active without a real token/subscription. The news bell POSTs
+registration instead of only flipping a local flag. After a successful
+register, existing auto-orders are mirrored so they do not have to be
+re-saved. Headline-by-headline news push is still not a thing — that
+channel is the daily promo cron (Hobby: once a day).
+
 ## Unreleased — Execution-observation empirical model
 
 The durable `intent-observations:<dayBucket>` dataset is now consumed. A new

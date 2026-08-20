@@ -45,6 +45,7 @@ import {
   playSound,
   primeAudio,
   pushMode,
+  pushReallySubscribed,
   registerPushAnywhere,
   requestNotificationPermission,
   setNotifySettings,
@@ -496,10 +497,10 @@ export default function Settings() {
             <Row
               icon={IconInfo}
               label={t('notify.permission')}
-              sub={pmode === 'server' ? t('notify.pushOn') : t('notify.pushLocal')}
+              sub={pmode === 'server' && pushReallySubscribed() ? t('notify.pushOn') : t('notify.pushLocal')}
               right={
-                <span className={`pill ${pmode === 'server' ? 'pill-up' : 'pill-rgb'}`}>
-                  {pmode === 'server' ? t('notify.modeServer') : t('notify.modeLocal')}
+                <span className={`pill ${pmode === 'server' && pushReallySubscribed() ? 'pill-up' : 'pill-rgb'}`}>
+                  {pmode === 'server' && pushReallySubscribed() ? t('notify.modeServer') : t('notify.modeLocal')}
                 </span>
               }
             />

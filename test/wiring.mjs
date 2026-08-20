@@ -579,8 +579,8 @@ export default function run() {
     // template interpolates — those are path params, matched by :param above.
     const called = new Set();
     for (const f of files) {
-      for (const m of read(f).matchAll(/\$\{API_BASE\}\/([^`'"?]*)/g)) {
-        const clean = m[1].replace(/\$\{[^}]*\}/g, 'X').replace(/\/+$/, '');
+      for (const m of read(f).matchAll(/\$\{(?:API_BASE|apiBase\(\))\}\/([^`'"?]*)/g)) {
+        const clean = m[1].replace(/\$\{[^}]*$/, '').replace(/\$\{[^}]*\}/g, 'X').replace(/\/+$/, '');
         if (clean) called.add(clean);
       }
     }
@@ -591,6 +591,14 @@ export default function run() {
       unrouted.length === 0
     );
     t(`a meaningful number of API paths were checked (${called.size})`, called.size >= 15);
+    t('notify.js talks to the API through apiBase() (never localhost in the APK)',
+      /apiBase\(\)/.test(read('src/lib/notify.js')) && !/const API_BASE =/.test(read('src/lib/notify.js')));
+    t('orders.js mirrors watches through apiBase()',
+      /apiBase\(\)/.test(read('src/lib/orders.js')) && !/const API_BASE =/.test(read('src/lib/orders.js')));
+    t('successful push registration re-syncs existing watches',
+      /syncWatches\(loadOrders\(\)\)/.test(read('src/lib/notify.js')));
+    t('the news bell registers push instead of only flipping a local flag',
+      /registerPushAnywhere/.test(read('src/pages/News.jsx')));
 
     /*
      * And the mirror image: a handler imported but never mounted. This is the
