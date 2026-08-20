@@ -451,6 +451,12 @@ console.log('\n▸ probing privacy-safe intent execution observation…');
   report('intent execution observation', observationRows);
 }
 
+console.log('\n▸ probing the execution-observation empirical trainer…');
+{
+  const execObsRows = (await import('./exec-observation-model-probe.mjs')).default;
+  report('execution-observation model', execObsRows);
+}
+
 /* Real HTTP coverage for the learning core: opt-in enforcement (401), the
    dedicated event rate limiter (429), the in-memory params hot path (<1 ms),
    and the honest not-configured shapes when Blob is off. */

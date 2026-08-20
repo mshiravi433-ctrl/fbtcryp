@@ -40,14 +40,15 @@ Intent
 | `src/hooks/useIntentExecution.js` | اتصال ماژول‌های خالص به صفحهٔ Swap |
 | `src/components/IntentTimeline.jsx` | Timeline، کارت Simulation، کارت Policy، کارت Recovery |
 | `server/intentObservation.js` | اعتبارسنجی سخت‌گیرانه و ذخیرهٔ fail-closed |
-| `server/app.js` | `POST /api/intents/v1/observations` + rate limit اختصاصی |
+| `server/learning/execObservation.js` | trainer تجربی روی دیتاست `intent-observations:*` — `fbt.intent-execution-model.v1` |
+| `server/app.js` | `POST /api/intents/v1/observations` + `GET /api/intents/v1/execution-observation-model` + cron روزانه |
 | `server/intents.js` | بلوک `executionCore` در Capabilities |
 | `src/lib/executionProof.js` | Execution Proof v2 با حفظ سازگاری v1 |
 | `src/lib/intentReceipt.js` | استخراج خروجی واقعی از لاگ رسید — `fbt.intent-receipt.v1` |
 
 تست‌ها:
 
-`test/intent-lifecycle-probe.mjs` · `test/intent-simulation-probe.mjs` (شامل Multi-RPC quorum) · `test/intent-route-policy-probe.mjs` · `test/intent-recovery-probe.mjs` · `test/intent-observation-probe.mjs` · `test/intent-receipt-probe.mjs` · `test/intent-replacement-probe.mjs` (به‌علاوهٔ بخش Execution Core در `test/wiring.mjs` و بخش replacement در `test/refresh-probe.mjs`)
+`test/intent-lifecycle-probe.mjs` · `test/intent-simulation-probe.mjs` (شامل Multi-RPC quorum) · `test/intent-route-policy-probe.mjs` · `test/intent-recovery-probe.mjs` · `test/intent-observation-probe.mjs` · `test/exec-observation-model-probe.mjs` · `test/intent-receipt-probe.mjs` · `test/intent-replacement-probe.mjs` (به‌علاوهٔ بخش Execution Core در `test/wiring.mjs` و بخش replacement در `test/refresh-probe.mjs`)
 
 ---
 
@@ -166,7 +167,7 @@ Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از all
 * endpoint نسخه‌دار و دارای rate limit اختصاصی است (`INTENT_OBSERVATION_RATE_LIMIT`، پیش‌فرض ۳۰/دقیقه).
 * بدون storage durable، پاسخ `503 NOT_CONFIGURED` است (fail closed).
 * خطای telemetry هرگز اجرای Swap را خراب نمی‌کند (fire-and-forget، همهٔ خطاها بلعیده می‌شوند).
-* **در این فاز هیچ مدل ML ساخته نشد.** `/api/learning/params` بدون دیتاست همچنان `model:false` برمی‌گرداند و `executionObservations.modelTrained` در Capabilities برابر `false` است.
+* **مدل تجربی مشاهدات اجرا** در `server/learning/execObservation.js` دیتاست durableِ `intent-observations:<dayBucket>` را مصرف می‌کند و `fbt.intent-execution-model.v1` را منتشر می‌کند: نرخ تکمیل، نرخ per-route (chain × policy × solver) با شمارش نمونه، بسامد کدهای خطا و توزیع باکت‌های gas/output/latency. **طبقه‌بند، LLM، بهینه‌سازی مسیر، MEV، atomic یا escrow ادعا نمی‌شود.** `modelTrained` فقط با ≥۵۰ رکورد و حداقل یک مسیر با ≥۵ نمونه `true` است؛ بدون داده fail-closed می‌ماند. این مدل جدا از `/api/learning/params` (وزن‌های verdict) است و `mlOptimizationClaimed` همچنان `false` است.
 
 ---
 
@@ -219,7 +220,7 @@ Payload **فقط** شامل: `intentKind, chainId, routePolicy, solver (از all
 * **State diff simulation وجود ندارد**؛ فقط `eth_call` + `estimateGas`.
 * **اثبات enforce شدن min output در قرارداد انجام نمی‌شود**؛ `outputGuaranteeProven` همیشه `false` است.
 * **MEV Protection تضمین‌شده نیست**؛ هیچ private relay attested وجود ندارد.
-* **مدل Learning ساخته نشد**؛ فقط Observation جمع می‌شود و بدون دادهٔ کافی `model:false` می‌ماند.
+* **مدل Learning وزن‌های verdict** (`/api/learning/params`) جداست و بدون دیتاست `learning/event` همچنان `model:false` است. مدل تجربی مشاهدات اجرا (`GET /api/intents/v1/execution-observation-model`) فقط وقتی `modelTrained:true` می‌شود که دادهٔ کافی persist شده باشد؛ بهینه‌سازی ML ادعا نمی‌شود (`mlOptimizationClaimed:false`).
 * **Multi-RPC quorum** حالا در preflight live است: همان بایت‌ها روی چند نود اجرا می‌شود و `RPC_DISAGREEMENT` فقط بعد از اختلاف واقعی ثبت می‌شود؛ ولی هنوز روی همهٔ مسیرهای preflight به‌صورت سختگیرانه اجباری نیست (به‌عنوان توانایی در review اجرا می‌شود، نه gate مستقل).
 * **مسیر Direct-router و Gasless** از Exact Transaction Builder پشتیبانی نمی‌شوند (`UNSUPPORTED_SOURCE`) و رفتار قبلی خود را دارند.
 * **پیگیری تراکنش جایگزین‌شده در UI** حالا پیاده است (hash را نمایش و دنبال می‌کند)؛ اما اگر کیف پول hash جایگزین را در اختیار خطا نگذارد و نتوان آن را از زنجیره استخراج کرد، به recovery عادی/`CONFIRMATION_TIMEOUT` می‌افتد و hash ساخته‌شده‌ای نشان داده نمی‌شود.

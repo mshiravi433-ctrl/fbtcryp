@@ -107,6 +107,7 @@ export const INTENT_CAPABILITIES = Object.freeze({
     outcomeWatcherReports: '/api/intents/v1/outcome/auctions/{intentHash}/watcher-reports',
     /* Execution Core v2 — privacy-safe execution observation ingest. */
     executionObservations: '/api/intents/v1/observations',
+    executionObservationModel: '/api/intents/v1/execution-observation-model',
     /* Phase 5 — confidential intent transport. */
     intentCommitments: '/api/intents/v1/confidential/commit',
     intentReveals: '/api/intents/v1/confidential/reveal',

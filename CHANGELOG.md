@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — Execution-observation empirical model
+
+The durable `intent-observations:<dayBucket>` dataset is now consumed. A new
+trainer (`server/learning/execObservation.js`) publishes
+`fbt.intent-execution-model.v1`: completion rate, per-route rates
+(chain × policy × solver) with sample counts, failure-code frequencies, and
+gas / output-error / latency bucket distributions. It is not a classifier, not
+an LLM, and it claims no MEV protection, atomicity, escrow or route
+optimisation. `modelTrained` is true only with ≥50 records and at least one
+route with ≥5 samples; otherwise the endpoint and capabilities stay
+fail-closed. Served from memory at `GET /api/intents/v1/execution-observation-model`;
+the existing `/api/cron/train` job trains both this model and the verdict
+params. `mlOptimizationClaimed` remains `false`. `/api/learning/params` is a
+separate surface and still reports `model:false` without its own dataset.
+
 ## Unreleased — Intent Execution Core v2: multi-RPC quorum, replacement-tx tracking, durable observations
 
 **Durable observation storage (priority 1).** `POST /api/intents/v1/observations`

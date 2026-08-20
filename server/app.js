@@ -68,15 +68,16 @@ function learningMod() {
   if (!learningModPromise) {
     learningModPromise = (async () => {
       try {
-        const [store, schema, params, train, events, loader] = await Promise.all([
+        const [store, schema, params, train, events, loader, execObservation] = await Promise.all([
           import('./learning/store.js'),
           import('./learning/schema.js'),
           import('./learning/params.js'),
           import('./learning/train.js'),
           import('./learning/events.js'),
-          import('./learning/loader.js')
+          import('./learning/loader.js'),
+          import('./learning/execObservation.js')
         ]);
-        return { ...store, ...schema, ...params, ...train, ...events, ...loader };
+        return { ...store, ...schema, ...params, ...train, ...events, ...loader, ...execObservation };
       } catch (e) {
         console.warn('[learning] module unavailable — running with hardcoded weights:', e?.message);
         return null;
@@ -87,7 +88,12 @@ function learningMod() {
 }
 /** Sync facade for the diagnostic block below (filled once the import lands). */
 let learningSync = null;
-learningMod().then((m) => { learningSync = m; }).catch(() => {});
+learningMod().then((m) => {
+  learningSync = m;
+  /* Warm the execution-observation snapshot once per process — Blob at most
+     once, same contract as the verdict params loader. */
+  m?.getExecServingParams?.().catch(() => {});
+}).catch(() => {});
 const learningConfigured = () => Boolean(learningSync?.learningConfigured?.() ?? false);
 const servingSnapshot = () => (learningSync?.servingSnapshot ? learningSync.servingSnapshot() : null);
 import { activateListing, myListing, putListing, readBoard, removeListing, tierForAmount, txAlreadyUsed } from './board.js';
@@ -632,7 +638,9 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       solverRegistry: registry,
       bondRegistry: parseBondRegistry()
     }),
-    executionObservations: observationProtocolStatus(),
+    executionObservations: observationProtocolStatus({
+      modelTrained: Boolean(learningSync?.execServingSnapshot?.()?.model?.modelTrained)
+    }),
     confidential: confidentialProtocolStatus({ operatorRegistry: parseOperatorRegistry() }),
     commitReveal: intentCommitmentStatus({ operatorRegistrySize: parseOperatorRegistry().size })
   });
@@ -673,10 +681,11 @@ app.post('/api/intents/v1/validate', (req, res) => {
  * EXECUTION CORE v2 — privacy-safe execution observation ingest.
  *
  * Opt-in only, bounded payload, strict allowlist, and FAIL CLOSED when no
- * durable store is configured. Nothing here trains a model: this phase only
- * collects honest, aggregate-friendly outcomes so a later phase CAN. The
- * payload carries no address, tx hash, calldata, recipient, note, exact
- * balance or session identifier — see server/intentObservation.js.
+ * durable store is configured. The ingest itself trains nothing; the daily
+ * cron publishes an empirical description of the stored observations at
+ * GET /api/intents/v1/execution-observation-model. The payload carries no
+ * address, tx hash, calldata, recipient, note, exact balance or session
+ * identifier — see server/intentObservation.js.
  */
 const observationHits = new Map();
 const OBSERVATION_MAX_PER_WINDOW = Number(process.env.INTENT_OBSERVATION_RATE_LIMIT || 30);
@@ -3530,6 +3539,23 @@ setInterval(() => {
   for (const [k, v] of learnEventHits) if (nowMs > v.reset) learnEventHits.delete(k);
 }, WINDOW_MS).unref?.();
 
+app.get('/api/intents/v1/execution-observation-model', async (_req, res) => {
+  const empty = {
+    schema: 'fbt.intent-execution-model.v1',
+    modelTrained: false,
+    trainedAt: null,
+    model: null
+  };
+  const mod = await learningMod();
+  if (!mod?.getExecServingParams) {
+    res.setHeader('cache-control', 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
+    return res.json(empty);
+  }
+  const snapshot = await mod.getExecServingParams();
+  res.setHeader('cache-control', 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
+  return res.json(mod.execServingResponse(snapshot));
+});
+
 app.get('/api/learning/params', async (_req, res) => {
   const mod = await learningMod();
   if (!mod || process.env.LEARNING_ENABLED === '0') {
@@ -3559,8 +3585,12 @@ app.get('/api/cron/train', async (req, res) => {
   //    params so the instance that trained also serves the new vector.
   const sweep = await mod.sweepPending();
   const summary = await mod.runTraining();
+  const execObservation = typeof mod.runExecObservationTraining === 'function'
+    ? await mod.runExecObservationTraining()
+    : { skipped: 'NO_MODULE', modelTrained: false };
   if (summary.ok) mod.warmParamsCache().catch(() => {});
-  res.json({ ...summary, sweep });
+  if (execObservation?.ok) mod.warmExecParamsCache?.().catch(() => {});
+  res.json({ ...summary, sweep, execObservation });
 });
 
 /* ----------------------------- static frontend ---------------------------- */

@@ -11464,6 +11464,17 @@ export default function run() {
       /learning:\s*\{\s*\n?\s*enabled:/.test(server) && /optInCount/.test(server));
     t('LEARNING_ENABLED=0 forces the trainer into fallback',
       /LEARNING_ENABLED/.test(read('server/learning/train.js')));
+    t('the execution-observation trainer rides the same guarded learning import',
+      server.includes("import('./learning/execObservation.js')"));
+    t('the daily train cron also trains the execution-observation model',
+      server.includes('runExecObservationTraining()')
+        && server.indexOf('runTraining()') < server.indexOf('runExecObservationTraining()'));
+    t('the empirical execution-observation model is served from memory',
+      server.includes("app.get('/api/intents/v1/execution-observation-model'")
+        && server.includes('getExecServingParams')
+        && server.includes('execServingResponse'));
+    t('observation capabilities still refuse an ML-optimisation claim',
+      /mlOptimizationClaimed: false/.test(read('server/intentObservation.js')));
 
     /* loader honesty: ceilings mirrored, stale params ignored */
     const ceilingSrc = /CONFIDENCE_CEILING\s*=\s*\{\s*short:\s*(\d+),\s*long:\s*(\d+)\s*\}/.exec(verdictLib);

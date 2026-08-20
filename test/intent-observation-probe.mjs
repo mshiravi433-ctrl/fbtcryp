@@ -225,12 +225,26 @@ const post = (body, headers = {}) =>
     && body.executionObservations?.acceptsWalletAddress === false);
   t('the observations endpoint is published',
     body.endpoints?.executionObservations === '/api/intents/v1/observations');
+  t('the execution-observation model endpoint is published',
+    body.endpoints?.executionObservationModel === '/api/intents/v1/execution-observation-model'
+    && body.executionObservations?.modelEndpoint === '/api/intents/v1/execution-observation-model'
+    && body.executionObservations?.modelSchema === 'fbt.intent-execution-model.v1'
+    && body.executionObservations?.mlOptimizationClaimed === false);
 }
 {
   /* No dataset yet → the learning surface must still say model:false. */
   const res = await fetch(`${base}/api/learning/params`);
   const body = await res.json();
   t('with no trained model /api/learning/params still reports model:false', body.model === false);
+}
+{
+  const res = await fetch(`${base}/api/intents/v1/execution-observation-model`);
+  const body = await res.json();
+  t('without observations the empirical model endpoint reports modelTrained:false',
+    res.status === 200
+    && body.schema === 'fbt.intent-execution-model.v1'
+    && body.modelTrained === false
+    && /s-maxage=3600/.test(res.headers.get('cache-control') ?? ''));
 }
 
 server.close();
