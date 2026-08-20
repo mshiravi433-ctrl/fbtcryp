@@ -20,8 +20,8 @@ import { IconChevronLeft, IconExternal, IconNews } from '../components/Icons';
 import { AnimatedBell, AnimatedSearch, useStill } from '../components/AnimatedIcon';
 import {
   getNotifySettings,
-  notificationPermission,
   requestNotificationPermission,
+  registerPushAnywhere,
   setNotifySettings
 } from '../lib/notify';
 
@@ -194,7 +194,10 @@ export default function News() {
     const next = !notifyOn;
     setNotifySettings({ news: next });
     setNotifyOn(next);
-    if (next) setRing((n) => n + 1);
+    if (next) {
+      setRing((n) => n + 1);
+      registerPushAnywhere().catch(() => {});
+    }
   };
 
   return (

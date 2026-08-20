@@ -2912,30 +2912,27 @@ app.post('/api/orders/unwatch', async (req, res) => {
  * Returns a boolean (true = delivered) so runWatchCycle only starts a cooldown
  * on a genuine send.
  */
-async function sendWatchAlert(endpoint, lang, payload) {
+async function deliverStagePush(endpoint, message) {
   const { sendToEndpoint } = await import('./push.js');
   const { fcmSendToToken } = await import('./fcm.js');
   const { parseIdentity } = await import('./watch.js');
-
-  /*
-   * Route by transport. A packaged Android user has an fcm: identity and no
-   * web-push endpoint at all, so sending everything through web push made
-   * order alerts silently web-only.
-   */
   const id = parseIdentity(endpoint);
   if (!id) return false;
-
-  const message = {
-    title: ORDER_ALERT[lang]?.title ?? ORDER_ALERT.en.title,
-    body: (ORDER_ALERT[lang]?.body ?? ORDER_ALERT.en.body)
-      .replace('{base}', payload.base)
-      .replace('{quote}', payload.quote)
-      .replace('{rate}', String(payload.rate)),
-    url: '/#/orders',
-    tag: `fbt-order-${payload.id}`
-  };
-
   return id.kind === 'fcm' ? fcmSendToToken(id.value, message) : sendToEndpoint(id.value, message);
+}
+
+async function sendWatchAlert(endpoint, lang, payload) {
+  const { buildStageAlert } = await import('./orderAlerts.js');
+  const message = buildStageAlert({
+    stage: payload.stage || 'ready',
+    kind: payload.kind || 'order',
+    lang,
+    base: payload.base,
+    quote: payload.quote,
+    rate: payload.rate,
+    id: payload.id
+  });
+  return deliverStagePush(endpoint, message);
 }
 
 /** Run one watch cycle. Cron-driven, guarded by the same secret. */
@@ -2957,12 +2954,6 @@ app.get('/api/orders/watch/status', async (_req, res) => {
  * it. Falls back to English for the nine partial locales rather than shipping
  * a machine translation of a message about someone's money.
  */
-const ORDER_ALERT = {
-  en: { title: 'Your order is ready', body: '1 {base} reached {rate} {quote}. Open the app to swap.' },
-  fa: { title: 'سفارشت آماده است', body: '۱ {base} به {rate} {quote} رسید. برای سواپ اپ را باز کن.' },
-  ar: { title: 'أمرك جاهز', body: '1 {base} وصل إلى {rate} {quote}. افتح التطبيق للتبادل.' }
-};
-
 /* --------------------------------- NFTs ----------------------------------- */
 /*
  * Read-only viewer. Nothing here can move an asset — it is a GET against an
@@ -3216,6 +3207,27 @@ app.post('/api/push/unsubscribe', async (req, res) => {
  * A Capacitor WebView has no Push API at all, so an APK user can never receive
  * VAPID web push. FCM is the only channel that reaches them.
  */
+app.post('/api/push/event', async (req, res) => {
+  const { endpoint, stage, kind, base, quote, rate, id, lang } = req.body ?? {};
+  const { buildStageAlert, STAGES } = await import('./orderAlerts.js');
+  if (!STAGES.includes(stage)) return res.status(400).json({ ok: false, error: 'BAD_STAGE' });
+  try {
+    const message = buildStageAlert({
+      stage,
+      kind: kind === 'intent' ? 'intent' : 'order',
+      lang: String(lang || 'fa').slice(0, 5),
+      base,
+      quote,
+      rate,
+      id
+    });
+    const ok = await deliverStagePush(endpoint, message);
+    return res.json({ ok });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: String(e.message).slice(0, 80) });
+  }
+});
+
 app.post('/api/push/fcm', async (req, res) => {
   const { token, lang } = req.body ?? {};
   try {

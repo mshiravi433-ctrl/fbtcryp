@@ -26,6 +26,7 @@
  */
 
 import { isIOS as _isIOS, isWebView as _isWebView, isStandalone as _isStandalone } from './platform.js';
+import { apiBase } from './apiBase.js';
 
 const SETTINGS_KEY = 'fbt-notify-v1';
 
@@ -114,6 +115,23 @@ export function playSound(kind = 'success') {
   if (kind === 'alert') {
     partial(ctx, 880, t, 0.18, 0.12);
     partial(ctx, 880, t + 0.16, 0.22, 0.1);
+    return;
+  }
+  /* Order/intent stages — MUST sound unlike success / promo / generic alert. */
+  if (kind === 'pending') {
+    partial(ctx, 523.25, t, 0.28, 0.12);
+    partial(ctx, 659.25, t + 0.22, 0.32, 0.1);
+    return;
+  }
+  if (kind === 'ready') {
+    partial(ctx, 784, t, 0.16, 0.16);
+    partial(ctx, 1046.5, t + 0.14, 0.22, 0.16);
+    partial(ctx, 1318.5, t + 0.3, 0.45, 0.14);
+    return;
+  }
+  if (kind === 'closed') {
+    partial(ctx, 440, t, 0.35, 0.14);
+    partial(ctx, 330, t + 0.2, 0.5, 0.12);
     return;
   }
   // success: C6 -> E6 -> G6, each with a bright partial an octave up
@@ -372,8 +390,6 @@ export function maybeSendDailyPromo(resolve) {
 const VAPID_PUBLIC_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_VAPID_PUBLIC_KEY) || '';
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
-
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -435,7 +451,7 @@ export async function pushMode(force = false) {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
-    const res = await fetch(`${API_BASE}/push/status`, { signal: ctrl.signal });
+    const res = await fetch(`${apiBase()}/push/status`, { signal: ctrl.signal });
     clearTimeout(timer);
     const data = res.ok ? await res.json() : null;
     cachedPushMode = data?.configured ? 'server' : 'local';
@@ -479,7 +495,7 @@ export async function registerPush() {
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       }));
 
-    await fetch(`${API_BASE}/push/subscribe`, {
+    await fetch(`${apiBase()}/push/subscribe`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ subscription: sub, lang: document.documentElement.lang || 'fa' })
@@ -496,7 +512,7 @@ export async function unregisterPush() {
     const reg = await navigator.serviceWorker?.ready;
     const sub = await reg?.pushManager.getSubscription();
     if (sub) {
-      await fetch(`${API_BASE}/push/unsubscribe`, {
+      await fetch(`${apiBase()}/push/unsubscribe`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ endpoint: sub.endpoint })
@@ -618,7 +634,7 @@ export async function registerNativePush() {
 
     if (!token) return { ok: false, reason: 'NO_TOKEN' };
 
-    const res = await fetch(`${API_BASE}/push/fcm`, {
+    const res = await fetch(`${apiBase()}/push/fcm`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token, lang: document.documentElement.lang || 'fa' })
@@ -646,7 +662,23 @@ export async function registerNativePush() {
  * invisible until someone reports that notifications never arrive.
  */
 export async function registerPushAnywhere() {
-  return isNativeApp() ? registerNativePush() : registerPush();
+  const result = isNativeApp() ? await registerNativePush() : await registerPush();
+  if (result?.ok) {
+    try {
+      const { loadOrders, syncWatches } = await import('./orders.js');
+      await syncWatches(loadOrders());
+    } catch {
+      /* watches are best-effort; the token is already on the server */
+    }
+  }
+  return result;
+}
+
+/** True only when this device actually handed the server an endpoint. */
+export function pushReallySubscribed() {
+  const s = getNotifySettings();
+  if (isNativeApp()) return Boolean(s.fcmToken);
+  return Boolean(s.pushSubscribed);
 }
 
 /** The identifier the server watches against, whichever transport is in use. */

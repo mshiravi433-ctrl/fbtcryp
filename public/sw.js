@@ -80,13 +80,17 @@ self.addEventListener('push', (event) => {
   }
 
   const title = payload.title || 'FBT Swap';
+  const vibrate = Array.isArray(payload.vibrate) && payload.vibrate.length
+    ? payload.vibrate
+    : [40, 60, 40];
   const options = {
     body: payload.body || '',
     icon: payload.icon || '/icon-192.png',
     badge: '/icon-192.png',
     tag: payload.tag || 'fbt',
-    data: { url: payload.url || '/' },
-    vibrate: [40, 60, 40],
+    data: { url: payload.url || '/', stage: payload.stage || '', color: payload.color || '' },
+    vibrate,
+    requireInteraction: payload.stage === 'ready',
     dir: 'auto'
   };
   event.waitUntil(self.registration.showNotification(title, options));

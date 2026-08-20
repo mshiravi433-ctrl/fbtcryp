@@ -40,8 +40,7 @@ import {
   syncWatches,
   updateOrder
 } from '../lib/orders';
-import { showLocalNotification } from '../lib/notify';
-import { playSound, vibrate } from '../lib/notify';
+import { dispatchStageAlert } from '../lib/stagePush';
 import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -133,19 +132,15 @@ export default function Orders() {
       if (!ready || !shouldNotify(cur, now)) return cur;
       changed = true;
 
-      // === PREMIUM NOTIFICATION FOR AUTO ORDERS ===
-      // Distinct alert sound + strong vibration for filled auto orders
-      playSound('alert');
-      vibrate([80, 60, 80, 60, 120], haptic);
-
-      showLocalNotification(t('orders.notifyTitle'), {
-        body: t('orders.notifyBody', {
-          from: cur.fromToken.symbol,
-          to: cur.toToken.symbol,
-          amount: cur.amountIn
-        }),
-        tag: `fbt-order-${cur.id}`
-      });
+      dispatchStageAlert({
+        stage: 'ready',
+        kind: 'order',
+        base: cur.fromToken.symbol,
+        quote: cur.toToken.symbol,
+        rate: res.at ?? cur.targetRate,
+        id: cur.id,
+        haptic
+      }).catch(() => {});
       return { ...cur, lastNotifiedAt: now };
     });
     if (changed) {
@@ -251,6 +246,14 @@ export default function Orders() {
     setOrders(res.orders);
     setSheet(null);
     notify('orderCreated', 'success');
+    dispatchStageAlert({
+      stage: 'pending',
+      kind: 'order',
+      base: order.fromToken.symbol,
+      quote: order.toToken.symbol,
+      id: order.id,
+      haptic
+    }).catch(() => {});
   };
 
   /**
@@ -265,6 +268,14 @@ export default function Orders() {
    */
   const execute = (order) => {
     haptic?.('light');
+    dispatchStageAlert({
+      stage: 'closed',
+      kind: 'order',
+      base: order.fromToken.symbol,
+      quote: order.toToken.symbol,
+      id: order.id,
+      haptic
+    }).catch(() => {});
     setOrders(updateOrder(order.id, advanceOrder(order)));
     const params = new URLSearchParams({
       from: order.fromToken.symbol,
@@ -277,6 +288,17 @@ export default function Orders() {
 
   const cancel = (id) => {
     haptic?.('light');
+    const gone = orders.find((o) => o.id === id);
+    if (gone) {
+      dispatchStageAlert({
+        stage: 'closed',
+        kind: 'order',
+        base: gone.fromToken?.symbol,
+        quote: gone.toToken?.symbol,
+        id,
+        haptic
+      }).catch(() => {});
+    }
     setOrders(removeOrder(id));
   };
 
