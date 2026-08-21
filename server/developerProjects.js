@@ -15,4 +15,5 @@ export function validateProjectInput(input = {}) {
 }
 export async function listProjects(owner) { if (!blobConfigured()) return { ok: false, code: 'PROJECT_STORE_UNAVAILABLE' }; const rows = await storeGet(key(owner), []); return { ok: true, projects: Array.isArray(rows) ? rows : [] }; }
 export async function createProject(owner, input) { if (!blobConfigured()) return { ok: false, code: 'PROJECT_STORE_UNAVAILABLE' }; const valid = validateProjectInput(input); if (!valid.ok) return valid; const current = await listProjects(owner); if (!current.ok) return current; if (current.projects.some((p) => p.name.toLowerCase() === valid.value.name.toLowerCase())) return { ok: false, code: 'DUPLICATE_PROJECT' }; const projects = [valid.value, ...current.projects].slice(0, 20); await storeSet(key(owner), projects); return { ok: true, project: valid.value }; }
+export async function ownedProject(owner, projectId) { const result = await listProjects(owner); if (!result.ok) return result; return { ok: true, project: result.projects.find((p) => p.id === projectId) || null }; }
 export const projectScopes = () => [...SCOPES];

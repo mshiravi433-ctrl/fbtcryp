@@ -52,7 +52,8 @@ import { revenueReadiness } from './readiness.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
 import { catalogList, catalogError } from './ecosystemCatalog.js';
 import { environmentList } from './environments.js';
-import { listProjects, createProject, projectScopes } from './developerProjects.js';
+import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
+import { createApiKey, revokeApiKey } from './developerKeys.js';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { PROJECT_SCHEMA } from './developerProjects.js';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -581,6 +582,25 @@ app.post('/api/developer/projects', async (req, res) => {
   const result = await createProject(req.tgUser.id, req.body);
   if (!result.ok) return projectError(res, result.code, result.code === 'DUPLICATE_PROJECT' ? 'A project with this name already exists' : result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer project storage is not configured' : 'Project input is invalid', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
   return res.status(201).json({ data: result.project, meta: { schema: PROJECT_SCHEMA, dataStatus: 'live' } });
+});
+
+app.post('/api/developer/projects/:id/keys', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const owned = await ownedProject(req.tgUser.id, req.params.id);
+  if (!owned.ok) return projectError(res, owned.code, 'Developer project storage is not configured', 503);
+  if (!owned.project) return projectError(res, 'PROJECT_NOT_FOUND', 'Project not found', 404);
+  const result = await createApiKey(req.tgUser.id, owned.project, req.body);
+  if (!result.ok) return projectError(res, result.code, result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'Requested scopes are not allowed', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  return res.status(201).json({ data: { ...result.record, secret: result.secret }, meta: { schema: 'fbt.api-key.v1', warning: 'The secret is shown once and cannot be recovered.' } });
+});
+app.post('/api/developer/projects/:id/keys/:keyId/revoke', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const owned = await ownedProject(req.tgUser.id, req.params.id);
+  if (!owned.ok) return projectError(res, owned.code, 'Developer project storage is not configured', 503);
+  if (!owned.project) return projectError(res, 'PROJECT_NOT_FOUND', 'Project not found', 404);
+  const result = await revokeApiKey(req.tgUser.id, owned.project, req.params.keyId);
+  if (!result.ok) return projectError(res, result.code, result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'Key not found', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 404);
+  return res.json({ data: { revoked: true }, meta: { schema: 'fbt.api-key-revocation.v1' } });
 });
 
 app.get('/api/environments', (_req, res) => {
