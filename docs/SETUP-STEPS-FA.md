@@ -74,7 +74,7 @@
 
 **۱.** برو به `console.firebase.google.com`
 
-**۲.** روی پروژهٔ **`fbt-room-a46fc`** بزن
+**۲.** روی پروژهٔ **`fbtswap-36b13`** بزن
 
 **۳.** بالا سمت چپ، کنار نوشتهٔ «Project Overview»، یک **چرخ‌دنده ⚙️** هست.
 رویش بزن ← از منو **Project settings** را انتخاب کن
@@ -150,10 +150,10 @@ k7Qm2xR9vT4nB8wL5pZ3hJ6yD1sF0g
 
 **۱.** برو به `console.cloud.google.com/iam-admin/serviceaccounts`
 
-**۲.** بالای صفحه یک انتخابگر پروژه هست. **`fbt-room-a46fc`** را انتخاب کن
+**۲.** بالای صفحه یک انتخابگر پروژه هست. **`fbtswap-36b13`** را انتخاب کن
 
 **۳.** در لیست روی این بزن:
-`firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com`
+`firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com`
 
 **۴.** تب **KEYS** را بزن
 
@@ -171,10 +171,10 @@ k7Qm2xR9vT4nB8wL5pZ3hJ6yD1sF0g
 ```json
 {
   "type": "service_account",
-  "project_id": "fbt-room-a46fc",
+  "project_id": "fbtswap-36b13",
   "private_key_id": "dd3e2f8a0523ec5103df0d304abfff716e70d976",
   "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCs1Cmll2reCapg\n...چندین خط...\n-----END PRIVATE KEY-----\n",
-  "client_email": "firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com",
+  "client_email": "firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com",
   "client_id": "..."
 }
 ```
@@ -195,7 +195,7 @@ k7Qm2xR9vT4nB8wL5pZ3hJ6yD1sF0g
 
 | Key | Value |
 |---|---|
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` |
 | `FIREBASE_CLIENT_EMAIL` | مقدار `client_email` — کل آدرس ایمیل |
 | `FIREBASE_PRIVATE_KEY` | مقدار `private_key` — **کل رشتهٔ بلند** |
 

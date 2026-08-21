@@ -200,9 +200,9 @@ Production / Preview / Development** خورده باشد. بعد **Save**.
 **کلید سرویس‌اکانت را نمی‌شود «عوض کرد»؛ فقط می‌شود حذفش کرد و یکی نو ساخت.**
 
 **۱.** برو به `console.cloud.google.com/iam-admin/serviceaccounts`
-پروژهٔ `fbt-room-a46fc` را انتخاب کن.
+پروژهٔ `fbtswap-36b13` را انتخاب کن.
 
-**۲.** روی `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` بزن ← تب **KEYS**.
+**۲.** روی `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` بزن ← تب **KEYS**.
 
 **۳.** کلیدی که `dd3e2f8a...` شروع می‌شود را پیدا کن و **حذفش کن**. این همانی است که لو رفته.
 
@@ -213,7 +213,7 @@ Production / Preview / Development** خورده باشد. بعد **Save**.
 
 | Key | از کجای فایل JSON |
 |---|---|
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` |
 | `FIREBASE_CLIENT_EMAIL` | مقدار `client_email` |
 | `FIREBASE_PRIVATE_KEY` | مقدار `private_key` — **کل رشته**، از `-----BEGIN` تا `-----END`، با همان `\n`ها |
 

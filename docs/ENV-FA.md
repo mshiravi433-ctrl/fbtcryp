@@ -71,9 +71,9 @@ node make-keys.mjs
 
 کلید قبلی را در چت فرستادی، پس دیگر امن نیست. اول همان را حذف کن:
 
-<https://console.cloud.google.com/iam-admin/serviceaccounts?project=fbt-room-a46fc>
+<https://console.cloud.google.com/iam-admin/serviceaccounts?project=fbtswap-36b13>
 
-۱. روی `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` کلیک کن
+۱. روی `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` کلیک کن
 ۲. تب **KEYS**
 ۳. کلیدی که شناسه‌اش با `dd3e2f8a` شروع می‌شود → آیکون سطل زباله → **DELETE**
 ۴. **ADD KEY** → **Create new key** → نوع **JSON** → **CREATE**
@@ -87,10 +87,10 @@ node make-keys.mjs
 ```json
 {
   "type": "service_account",
-  "project_id": "fbt-room-a46fc",
+  "project_id": "fbtswap-36b13",
   "private_key_id": "...",
   "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQ...\n-----END PRIVATE KEY-----\n",
-  "client_email": "firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com",
+  "client_email": "firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com",
   ...
 }
 ```
@@ -99,7 +99,7 @@ node make-keys.mjs
 
 | متغیر Vercel | کدام فیلد JSON |
 |---|---|
-| `FIREBASE_PROJECT_ID` | مقدار `project_id` → `fbt-room-a46fc` |
+| `FIREBASE_PROJECT_ID` | مقدار `project_id` → `fbtswap-36b13` |
 | `FIREBASE_CLIENT_EMAIL` | مقدار `client_email` |
 | `FIREBASE_PRIVATE_KEY` | مقدار `private_key` |
 

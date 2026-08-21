@@ -62,11 +62,10 @@ export const fcmConfigured = () =>
  * he cannot reach.
  *
  * Worse, writing the rotation guide turned up a real ambiguity: this repo
- * names TWO Firebase projects. `.env.example` carries `fbt-cryp` for the
- * browser SDK, while every server-side doc says `fbt-room-a46fc`. Those may
- * legitimately be two projects, or one of them may be stale — but if the new
- * key is created under the wrong one, FCM breaks with an opaque `invalid_grant`
- * and the guide would be blamed before the project id was.
+ * names TWO Firebase projects. The Android package is configured for
+ * `fbtswap-36b13`, while older setup notes referred to the retired `fbt-room-a46fc`. If a key is created
+ * under that retired project, FCM breaks with an opaque `invalid_grant` or
+ * project mismatch and the guide would be blamed before the project id was.
  *
  * So this echoes the project id being used. That is safe: a Firebase project
  * id is public by construction — it appears in the client bundle already, in

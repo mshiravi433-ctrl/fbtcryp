@@ -37,15 +37,15 @@ https://vercel.com/dashboard  →  fbtcryp-kkxi  →  Settings
 
 🔗 **https://console.cloud.google.com/iam-admin/serviceaccounts**
 
-۱. پروژهٔ **`fbt-room-a46fc`** را انتخاب کن
-۲. روی `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` بزن
+۱. پروژهٔ **`fbtswap-36b13`** را انتخاب کن
+۲. روی `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` بزن
 ۳. تب **KEYS** → کلید `dd3e2f8a...` → **حذف**
 ۴. **ADD KEY → Create new key → JSON** → فایل دانلود می‌شود
 ۵. فایل را با ویرایشگر متن باز کن و این سه را در ورسل بگذار:
 
 | Key | مقدار |
 |---|---|
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` |
 | `FIREBASE_CLIENT_EMAIL` | مقدار `client_email` |
 | `FIREBASE_PRIVATE_KEY` | مقدار `private_key` — **کل رشته** با همان `\n`ها، دست‌کاری نکن |
 

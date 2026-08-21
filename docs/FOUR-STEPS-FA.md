@@ -51,12 +51,12 @@ cron → cronSecretSet: false                                       ← ست ن�
 
 ## 🔗 لینک
 
-**https://console.cloud.google.com/iam-admin/serviceaccounts?project=fbt-room-a46fc**
+**https://console.cloud.google.com/iam-admin/serviceaccounts?project=fbtswap-36b13**
 
 ## قدم‌ها
 
-1. اگر پروژه انتخاب نشده، بالای صفحه **`fbt-room-a46fc`** را انتخاب کن
-2. روی ردیف `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` بزن
+1. اگر پروژه انتخاب نشده، بالای صفحه **`fbtswap-36b13`** را انتخاب کن
+2. روی ردیف `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` بزن
 3. تب **KEYS**
 4. کلیدی که با `dd3e2f8a` شروع می‌شود ← **🗑 Delete** ← تأیید
    *(چون در چت لو رفته و دسترسی کامل ادمین می‌دهد)*
@@ -88,8 +88,8 @@ cron → cronSecretSet: false                                       ← ست ن�
 
 | Key | Value |
 |---|---|
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` |
-| `FIREBASE_CLIENT_EMAIL` | `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` |
+| `FIREBASE_CLIENT_EMAIL` | `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` |
 
 ---
 
@@ -99,9 +99,9 @@ cron → cronSecretSet: false                                       ← ست ن�
 
 ## 🔗 لینک
 
-**https://console.firebase.google.com/project/fbt-room-a46fc/settings/cloudmessaging**
+**https://console.firebase.google.com/project/fbtswap-36b13/settings/cloudmessaging**
 
-*(اگر باز نشد: `console.firebase.google.com` ← پروژهٔ `fbt-room-a46fc` ←
+*(اگر باز نشد: `console.firebase.google.com` ← پروژهٔ `fbtswap-36b13` ←
 ⚙️ کنار «Project Overview» ← **Project settings** ← تب **Cloud Messaging**)*
 
 ## قدم‌ها
@@ -222,8 +222,8 @@ cron → cronSecretSet: false                                       ← ست ن�
 
 | # | Key | Value از کجا | لینک |
 |---|---|---|---|
-| ۱ | `FIREBASE_PRIVATE_KEY` | فایل JSON نو ← `private_key` | [Google Cloud](https://console.cloud.google.com/iam-admin/serviceaccounts?project=fbt-room-a46fc) |
-| ۲ | `VITE_VAPID_PUBLIC_KEY` | ستون **Key pair** | [Firebase](https://console.firebase.google.com/project/fbt-room-a46fc/settings/cloudmessaging) |
+| ۱ | `FIREBASE_PRIVATE_KEY` | فایل JSON نو ← `private_key` | [Google Cloud](https://console.cloud.google.com/iam-admin/serviceaccounts?project=fbtswap-36b13) |
+| ۲ | `VITE_VAPID_PUBLIC_KEY` | ستون **Key pair** | [Firebase](https://console.firebase.google.com/project/fbtswap-36b13/settings/cloudmessaging) |
 | ۳ | `VAPID_PRIVATE_KEY` | ستون **Private key** | همان لینک بالا |
 | ۴ | `CRON_SECRET` | خودت تایپ کن، ۳۰ کاراکتر | — |
 
