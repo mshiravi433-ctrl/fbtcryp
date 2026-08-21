@@ -10,7 +10,16 @@ import crypto from 'node:crypto';
  * the resulting `user.id` as the only authenticated identity.
  */
 export function verifyInitData(initData, botToken, { maxAgeSeconds = 86400 } = {}) {
-  if (!initData || !botToken) return { ok: false, reason: 'MISSING_INPUT' };
+  /*
+   * Normalize ONLY the bot token, never the initData. Environment stores
+   * (Vercel, dotenv, copy-paste) routinely smuggle a trailing newline or
+   * surrounding spaces into secrets, and any such byte changes the HMAC key
+   * — producing a BAD_SIGNATURE that is indistinguishable from a forged
+   * request. The initData itself must stay byte-exact: it is the payload
+   * Telegram signed.
+   */
+  const token = typeof botToken === 'string' ? botToken.trim() : '';
+  if (!initData || !token) return { ok: false, reason: 'MISSING_INPUT' };
 
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
@@ -24,7 +33,7 @@ export function verifyInitData(initData, botToken, { maxAgeSeconds = 86400 } = {
     .sort()
     .join('\n');
 
-  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
   const computed = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
   // constant-time compare

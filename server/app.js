@@ -285,7 +285,14 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+/*
+ * trim(): a trailing newline or stray space stored alongside the secret in the
+ * environment changes the HMAC key and turns every valid initData into
+ * BAD_SIGNATURE. verifyInitData trims defensively too, but normalizing here
+ * keeps botId parsing and the diagnose endpoint consistent with what the
+ * middleware actually verifies against.
+ */
+const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
 
 const app = express();
 app.disable('x-powered-by');

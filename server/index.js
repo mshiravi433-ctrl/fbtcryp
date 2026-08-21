@@ -17,7 +17,10 @@ import { startBot } from './bot.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT || 8787);
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+// trim() for the same reason as server/app.js: env stores smuggle newlines
+// into secrets, and local polling must use the exact same token bytes the API
+// verifies initData against.
+const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const WEBAPP_URL = process.env.WEBAPP_URL || '';
 
 /* ----------------------------- static frontend ---------------------------- */
