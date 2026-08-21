@@ -681,5 +681,18 @@ console.log('\n▸ measuring light-theme contrast…');
   report('light-theme contrast', rows);
 }
 
+/* --------------------------- ecosystem safety --------------------------- */
+{
+  const { validateAgent, validateStrategy, validateIntentGraph } = await import('../server/ecosystemSchemas.js');
+  report('ecosystem safety schemas', [
+    ['agent with withdrawal permission is rejected', !validateAgent({ schema: 'fbt.agent.v1', id: 'x-agent', permissions: { withdrawFunds: true }, supportedChains: [], executionMode: 'manual' }).ok],
+    ['agent automatic execution is rejected', !validateAgent({ schema: 'fbt.agent.v1', id: 'x-agent', permissions: { executeWithoutUser: true }, supportedChains: [], executionMode: 'manual' }).ok],
+    ['strategy automatic execution is rejected', !validateStrategy({ schema: 'fbt.strategy.v1', id: 'x-strategy', policy: { maxAmountUsd: 10, maxSlippageBps: 50, allowedChains: [1] }, action: { automaticExecution: true } }).ok],
+    ['strategy requires bounded policy', !validateStrategy({ schema: 'fbt.strategy.v1', id: 'x-strategy', policy: { allowedChains: [] } }).ok],
+    ['cyclic intent graph is rejected', !validateIntentGraph({ schema: 'fbt.intent-graph.v1', nodes: [{ id: 'a' }, { id: 'b' }], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'a' }] }).ok],
+    ['valid graph is accepted', validateIntentGraph({ schema: 'fbt.intent-graph.v1', nodes: [{ id: 'a' }, { id: 'b' }], edges: [{ from: 'a', to: 'b' }] }).ok]
+  ]);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);
