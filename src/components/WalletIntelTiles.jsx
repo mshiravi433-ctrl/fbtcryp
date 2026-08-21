@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import SecurityCenterCard from './SecurityCenterCard';
 import { fmtUsd } from '../lib/format';
-import { IconChevronRight } from './Icons';
+import { IconChevronRight, IconSparkle, IconTrend } from './Icons';
 
 /**
  * INTELLIGENCE | P&L | RISK — the three tiles under the hero.
@@ -9,6 +9,10 @@ import { IconChevronRight } from './Icons';
  * Intelligence opens the embedded Portfolio dashboard; P&L shows unrealized
  * and realized from the local lot ledger (honest `—` when absent); Risk is
  * the Security Center sheet. All of it lives on /wallet — no menu entries.
+ *
+ * All three share one structure (icon + title/subtitle + chevron) so the row
+ * stays equal-height in every language and theme instead of the earlier mix
+ * of an icon box on one tile and bare text on the other two.
  */
 export default function WalletIntelTiles({ intel = null, onIntel, onPnl }) {
   const { t } = useTranslation();
@@ -24,28 +28,32 @@ export default function WalletIntelTiles({ intel = null, onIntel, onPnl }) {
 
   return (
     <div className="wallet-intel-row">
-      <button type="button" className="wallet-pie-card wal-intel-tile" onClick={onIntel}>
-        <span className="wal-intel-tile-head">
-          <strong style={{ fontSize: 12.5 }}>{t('wallet.intel.tile')}</strong>
-          <IconChevronRight width={13} height={13} />
+      <button type="button" className="wallet-pie-card wal-sec-card" onClick={onIntel}>
+        <span className="row" style={{ gap: 10, flex: 1, minWidth: 0 }}>
+          <span className="wal-sec-ico"><IconSparkle width={18} height={18} /></span>
+          <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
+            <strong style={{ fontSize: 13, display: 'block' }}>{t('wallet.intel.tile')}</strong>
+            <small className="faint" style={{ display: 'block', fontSize: 10.5, marginTop: 2, lineHeight: 1.5 }}>{t('wallet.intel.tileHint')}</small>
+          </span>
         </span>
-        <span className="faint" style={{ fontSize: 10.5, lineHeight: 1.6, display: 'block' }}>
-          {t('wallet.intel.tileHint')}
-        </span>
+        <IconChevronRight width={14} height={14} />
       </button>
 
-      <button type="button" className="wallet-pie-card wal-intel-tile" onClick={onPnl}>
-        <span className="wal-intel-tile-head">
-          <strong style={{ fontSize: 12.5 }}>{t('wallet.pnl.title')}</strong>
-          <IconChevronRight width={13} height={13} />
+      <button type="button" className="wallet-pie-card wal-sec-card" onClick={onPnl}>
+        <span className="row" style={{ gap: 10, flex: 1, minWidth: 0 }}>
+          <span className="wal-sec-ico"><IconTrend width={18} height={18} /></span>
+          <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
+            <strong style={{ fontSize: 13, display: 'block' }}>{t('wallet.pnl.title')}</strong>
+            <small className="mono" style={{ display: 'block', fontSize: 12, fontWeight: 900, marginTop: 2, color: hasCost && pnlUp(unreal) ? 'var(--up)' : hasCost ? 'var(--down)' : undefined }}>
+              {hasCost ? `${unreal >= 0 ? '+' : ''}${fmtUsd(unreal)}` : '—'}
+            </small>
+            <small className="faint" style={{ display: 'block', fontSize: 9.5, marginTop: 1 }}>
+              {t('wallet.pnl.unrealized')}
+              {hasLots && <span className={pnlUp(realised) ? 'up' : 'down'} style={{ marginInlineStart: 6 }}>{realised >= 0 ? '+' : ''}{fmtUsd(realised)}</span>}
+            </small>
+          </span>
         </span>
-        <span className="mono" style={{ fontSize: 12.5, fontWeight: 900, color: hasCost && pnlUp(unreal) ? 'var(--up)' : hasCost ? 'var(--down)' : undefined }}>
-          {hasCost ? `${unreal >= 0 ? '+' : ''}${fmtUsd(unreal)}` : <span className="faint" style={{ fontWeight: 600, fontSize: 10.5 }}>— {t('wallet.notIndexed')}</span>}
-        </span>
-        <span className="faint" style={{ fontSize: 9.5, display: 'block', marginTop: 3 }}>
-          {t('wallet.pnl.unrealized')}
-          {hasLots && <span className={pnlUp(realised) ? 'up' : 'down'} style={{ marginInlineStart: 6 }}>{realised >= 0 ? '+' : ''}{fmtUsd(realised)}</span>}
-        </span>
+        <IconChevronRight width={14} height={14} />
       </button>
 
       <SecurityCenterCard />

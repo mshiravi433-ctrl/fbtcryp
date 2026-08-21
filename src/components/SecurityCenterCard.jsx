@@ -88,7 +88,7 @@ export default function SecurityCenterCard() {
           <div className="wallet-pie-card" style={{ padding: 14, borderRadius: 16 }}>
             <Row label={t('wallet.security.connection')}>
               {wallet.mode === 'wc' ? t('wallet.security.wcSession') : wallet.mode === 'local' ? t('wallet.mode.local') : t('wallet.security.injected')}
-              {connected && <span className="pill pill-up" style={{ fontSize: 9, marginInlineStart: 6 }}>{t('wallet.active')}</span>}
+              {connected && <span className="pill pill-up" style={{ fontSize: 9, marginInlineStart: 6 }}>{t('wallet.active.title')}</span>}
               {wallet.locked && <span className="pill" style={{ fontSize: 9, marginInlineStart: 6 }}>🔒 {t('wallet.lock')}</span>}
             </Row>
             <Row label={t('wallet.security.twoFactor')}>

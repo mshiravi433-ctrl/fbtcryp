@@ -153,29 +153,29 @@ export default function Developers() {
 
       <p className="prose-sm">{t('dev.intro')}</p>
       <section className="card" style={{ marginTop: 12 }}>
-        <p className="section-label">FBT Network ecosystem</p>
-        <p className="prose-sm">Read-only discovery surfaces are embedded here. No agent, strategy or liquidity listing is executable in this phase.</p>
+        <p className="section-label">{t('dev.ecosystem')}</p>
+        <p className="prose-sm">{t('dev.ecosystemBody')}</p>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {['Agents', 'Strategies', 'Liquidity', 'Connect', 'SDK', 'Environments', 'Reputation', 'Revenue'].map((item) => <span className="pill pill-neutral" key={item}>{item}</span>)}
+          {['agents', 'strategies', 'liquidity', 'connect', 'sdk', 'environments', 'reputation', 'revenue'].map((item) => <span className="pill pill-neutral" key={item}>{t(`dev.pill.${item}`)}</span>)}
         </div>
-        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Not configured · Automatic execution unavailable · Withdraw funds: never available</small>
+        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.notConfigured')}</small>
       </section>
       <section className="card" style={{ marginTop: 12 }}>
-        <p className="section-label">Projects</p>
-        <p className="prose-sm">Create a local sandbox draft. This does not create an account, API key, webhook, or production project.</p>
+        <p className="section-label">{t('dev.projects')}</p>
+        <p className="prose-sm">{t('dev.projectsBody')}</p>
         <div className="row" style={{ gap: 8 }}>
-          <input className="input" value={projectName} maxLength={48} placeholder="Project name" onChange={(e) => { setProjectName(e.target.value); setProjectError(null); }} aria-label="Project name" />
-          <button className="btn btn-primary" type="button" onClick={() => { const result = createSandboxProject({ name: projectName, environment: 'sandbox', scopes: PROJECT_SCOPES }); if (!result.ok) setProjectError(result.code); else { setProjects(result.projects); setProjectName(''); setProjectError(null); } }}>Create draft</button>
+          <input className="input" value={projectName} maxLength={48} placeholder={t('dev.projectName')} onChange={(e) => { setProjectName(e.target.value); setProjectError(null); }} aria-label={t('dev.projectName')} />
+          <button className="btn btn-primary" type="button" onClick={() => { const result = createSandboxProject({ name: projectName, environment: 'sandbox', scopes: PROJECT_SCOPES }); if (!result.ok) setProjectError(result.code); else { setProjects(result.projects); setProjectName(''); setProjectError(null); } }}>{t('dev.createDraft')}</button>
         </div>
-        {projectError && <small role="alert">Unavailable: {projectError}</small>}
-        {projects.length === 0 ? <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>No local sandbox projects yet.</small> : <div className="stack" style={{ marginTop: 10, gap: 8 }}>{projects.map((p) => <div className="row-between" key={p.id}><span><b>{p.name}</b><small style={{ display: 'block' }}>{p.environment} · {p.scopes.length} read-only scopes</small></span><span className="pill pill-neutral">{p.status}</span></div>)}</div>}
+        {projectError && <small role="alert">{t('dev.projectUnavailable', { code: projectError })}</small>}
+        {projects.length === 0 ? <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.noProjects')}</small> : <div className="stack" style={{ marginTop: 10, gap: 8 }}>{projects.map((p) => <div className="row-between" key={p.id}><span><b>{p.name}</b><small style={{ display: 'block' }}>{p.environment} · {t('dev.scopes', { count: p.scopes.length })}</small></span><span className="pill pill-neutral">{p.status}</span></div>)}</div>}
       </section>
       <section className="card" style={{ marginTop: 12 }}>
-        <p className="section-label">Environments</p>
+        <p className="section-label">{t('dev.environments')}</p>
         <div className="stack" style={{ gap: 8 }}>
           {(environments || [{ name: 'sandbox', status: 'checking' }, { name: 'testnet', status: 'not_configured' }, { name: 'mainnet', status: 'not_configured' }]).map((env) => <div className="row-between" key={env.name}><b>{env.name}</b><span className="pill pill-neutral">{env.status}</span></div>)}
         </div>
-        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Environment discovery only. No funds, signer or transaction access is granted.</small>
+        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.environmentsNote')}</small>
       </section>
 
       {/* ------------------------- start here ------------------------- */}
