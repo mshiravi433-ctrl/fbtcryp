@@ -50,10 +50,35 @@ import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVelo
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
-import { catalogList, catalogError } from './ecosystemCatalog.js';
+import { catalogList, catalogError, CATALOG_SCHEMAS } from './ecosystemCatalog.js';
+import {
+  LIFECYCLE,
+  REGISTRY_LIMITATIONS,
+  createRegistryEntry,
+  listOwnerRegistry,
+  listReviewQueue,
+  registryCounts,
+  screenRegistryInput,
+  transitionRegistryEntry,
+  updateRegistryEntry
+} from './ecosystemRegistry.js';
+import {
+  CERTIFICATION_LIMITATIONS,
+  CERTIFICATION_TYPES,
+  EVIDENCE_TYPES,
+  certificationsConfigured,
+  certifierLabel,
+  issueCertification,
+  listCertifications,
+  revokeCertification,
+  sweepCertifications
+} from './ecosystemCertifications.js';
+import { REPUTATION_LIMITATIONS, getReputation, getReputationSnapshot } from './ecosystemReputation.js';
+import { openApiDocument } from './openapi.js';
+import { PORTFOLIO_LIMITATIONS, readPortfolioAgent, savePortfolioAgent } from './portfolioAgents.js';
 import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
-import { createApiKey, revokeApiKey } from './developerKeys.js';
+import { apiKeyScopes, authenticateApiKey, createApiKey, hasScope, looksLikeApiKey, revokeApiKey } from './developerKeys.js';
 import { SCHEMAS } from './phase2Schemas.js';
 import { claimIdempotency, saveIdempotency } from './idempotency.js';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
@@ -577,7 +602,10 @@ app.get('/api/developer/projects', async (req, res) => {
   if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
   const result = await listProjects(req.tgUser.id);
   if (!result.ok) return projectError(res, result.code, 'Developer project storage is not configured', 503);
-  return res.json({ data: result.projects, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: 'live', scopes: projectScopes() } });
+  /* `keyScopes` is what an API key may actually carry, so an integrator can
+     see that `manage_listings` is the only state-changing scope in existence
+     and that nothing here can sign, execute or withdraw. */
+  return res.json({ data: result.projects, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: 'live', scopes: projectScopes(), keyScopes: apiKeyScopes(), keyAuth: { header: 'Authorization: Bearer <secret>', manageScope: 'manage_listings' } } });
 });
 app.post('/api/developer/projects', async (req, res) => {
   if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
@@ -618,15 +646,377 @@ app.post('/api/developer/projects/:id/keys/:keyId/revoke', async (req, res) => {
   return res.json(response);
 });
 
-app.get('/api/reputation/:id', (req, res) => res.json({ data: null, meta: { schema: SCHEMAS.reputation, dataStatus: 'unavailable', subjectId: String(req.params.id).slice(0, 64), limitations: ['No privacy-safe observed reputation store is configured.'] } }));
-app.get('/api/portfolio/agent', (req, res) => { if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401); return res.json({ data: null, meta: { schema: SCHEMAS.portfolioAgent, dataStatus: 'unavailable', limitations: ['Portfolio Agent is approval-only and no durable agent configuration exists.'] } }); });
+/*
+ * OBSERVED REPUTATION. Derived from the opt-in, bucketed execution
+ * observations this API already collects — there is no endpoint that accepts a
+ * reputation, because a reputation you can POST is an advertisement. Under
+ * five decided samples the answer is `insufficient_data` with both the count
+ * and the rate null: a "100% success (1 sample)" badge is worse than none.
+ */
+app.get('/api/reputation/:id', async (req, res) => {
+  const subjectId = String(req.params.id).slice(0, 64);
+  const result = await getReputation(subjectId);
+  if (!result.ok) return ecosystemFail(res, result.code);
+  res.set('cache-control', 'public, max-age=120, s-maxage=120, stale-while-revalidate=600');
+  return res.json({
+    data: result.dataStatus === 'live' ? result.data : null,
+    meta: {
+      schema: SCHEMAS.reputation,
+      dataStatus: result.dataStatus,
+      subjectId,
+      generatedAt: result.generatedAt ?? null,
+      limitations: result.dataStatus === 'live'
+        ? [...REPUTATION_LIMITATIONS]
+        : ['No privacy-safe observed reputation store is configured.']
+    }
+  });
+});
+
+/*
+ * PORTFOLIO AGENT. A saved allocation target with rebalance bounds, and
+ * nothing else: `validatePortfolioAgent` refuses withdrawFunds and
+ * executeWithoutUser and pins `mode: 'approval_required'`, and no scheduler,
+ * job or signer reads this record. It describes what the user wants; the user
+ * still approves and signs every resulting intent.
+ */
+app.get('/api/portfolio/agent', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const result = await readPortfolioAgent(req.tgUser.id);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: result.data,
+    meta: {
+      schema: SCHEMAS.portfolioAgent,
+      dataStatus: result.dataStatus,
+      approvalOnly: true,
+      limitations: result.dataStatus === 'live'
+        ? [...PORTFOLIO_LIMITATIONS]
+        : ['Portfolio Agent is approval-only and no durable agent configuration exists.']
+    }
+  });
+});
+app.post('/api/portfolio/agent', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const claim = await claimIdempotency(req.tgUser.id, 'portfolio-agent-save', req.get('idempotency-key'), JSON.stringify(req.body || {}));
+  if (!claim.ok) return ecosystemFail(res, claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'REGISTRY_STORE_UNAVAILABLE' : claim.code);
+  if (claim.replay) return res.json(claim.result);
+  const result = await savePortfolioAgent(req.tgUser.id, req.body);
+  if (!result.ok) return ecosystemFail(res, result.code);
+  const response = { data: result.data, meta: { schema: SCHEMAS.portfolioAgent, dataStatus: 'live', approvalOnly: true, limitations: [...PORTFOLIO_LIMITATIONS] } };
+  await saveIdempotency(claim, response);
+  return res.status(201).json(response);
+});
 app.get('/api/environments', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(environmentList());
 });
-app.get('/api/ecosystem/agents', (_req, res) => res.json(catalogList('agent')));
-app.get('/api/ecosystem/strategies', (_req, res) => res.json(catalogList('strategy')));
-app.get('/api/ecosystem/liquidity', (_req, res) => res.json(catalogList('liquidity')));
+/*
+ * A TIGHTER BUDGET FOR REGISTRY WRITES.
+ *
+ * Every ecosystem write is a durable Blob read-modify-write, so the broad
+ * /api allowance (120/min, sized for cached market data) is the wrong shape:
+ * it lets one account rewrite the catalog two hundred times a minute and pay
+ * for it in someone else's latency. Reads are untouched — discovery stays as
+ * cheap and as cacheable as it was.
+ *
+ * Keyed by the authenticated identity when there is one, IP otherwise, so a
+ * shared NAT cannot be used to starve a signed-in owner.
+ */
+const ecosystemWriteHits = new Map();
+const ECOSYSTEM_WRITE_MAX_PER_WINDOW = Number(process.env.ECOSYSTEM_WRITE_RATE_LIMIT || 12);
+app.use('/api/ecosystem', (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const key = req.tgUser?.id ?? req.get('authorization') ?? req.ip;
+  const now = Date.now();
+  const rec = ecosystemWriteHits.get(key);
+  if (!rec || now > rec.reset) {
+    ecosystemWriteHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > ECOSYSTEM_WRITE_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json(catalogError('ECOSYSTEM_WRITE_RATE_LIMITED', 'Too many registry writes; retry after the window resets', true));
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, rec] of ecosystemWriteHits) if (now > rec.reset) ecosystemWriteHits.delete(key);
+}, WINDOW_MS).unref?.();
+
+/*
+ * ECOSYSTEM REGISTRY — public reads, authenticated writes, zero authority.
+ *
+ * Reads are open and cacheable. Writes require a verified Telegram identity
+ * (req.tgUser.id, the only authenticated identity this API has), are bounded
+ * by the same durable idempotency the developer-project routes use, and pass
+ * through server/ecosystemSchemas.js validators that reject withdrawFunds,
+ * executeWithoutUser and action.automaticExecution. Nothing registered here
+ * can sign, execute, settle or hold funds — there is deliberately no route
+ * that would let it.
+ */
+const ECOSYSTEM_STATUS = { AUTH_REQUIRED: 401, API_KEY_INVALID: 401, API_KEY_REVOKED: 401, SCOPE_NOT_ALLOWED: 403, CERTIFIER_NOT_AUTHORIZED: 403, CERTIFIER_NOT_CONFIGURED: 503, REGISTRY_STORE_UNAVAILABLE: 503, IDEMPOTENCY_KEY_REQUIRED: 400, IDEMPOTENCY_CONFLICT: 409, ENTRY_NOT_FOUND: 404, CERTIFICATION_NOT_FOUND: 404, NOT_ENTRY_OWNER: 403, ENTRY_ID_TAKEN: 409, DUPLICATE_ENTRY: 409, REGISTRY_LIMIT_REACHED: 409, REGISTRY_FULL: 409, TYPE_NOT_WRITABLE: 405, INVALID_CURSOR: 400, INVALID_TRANSITION: 409, INVALID_STATUS: 400, ENTRY_NOT_EDITABLE: 409, CERTIFICATION_REQUIRED: 409, CERTIFICATION_STALE: 409 };
+const ECOSYSTEM_MESSAGES = {
+  AUTH_REQUIRED: 'Telegram authentication is required',
+  REGISTRY_STORE_UNAVAILABLE: 'The durable ecosystem registry is not configured',
+  IDEMPOTENCY_KEY_REQUIRED: 'A valid idempotency key is required',
+  IDEMPOTENCY_CONFLICT: 'This idempotency key was used with a different payload',
+  ENTRY_NOT_FOUND: 'Listing not found',
+  NOT_ENTRY_OWNER: 'This listing belongs to another account',
+  ENTRY_ID_TAKEN: 'This listing id is already registered',
+  DUPLICATE_ENTRY: 'You already registered a listing with this id',
+  REGISTRY_LIMIT_REACHED: 'This account reached its listing limit',
+  REGISTRY_FULL: 'The registry reached its listing limit',
+  TYPE_NOT_WRITABLE: 'This catalog is read-only',
+  FORBIDDEN_PERMISSION: 'Withdrawal and execute-without-user permissions are never accepted',
+  FORBIDDEN_CAPABILITY: 'Custody, settlement and auto-quote capabilities are never accepted',
+  AUTOMATIC_EXECUTION_FORBIDDEN: 'Automatic execution is never accepted; every action requires user approval',
+  INVALID_CURSOR: 'The pagination cursor is unknown or malformed',
+  API_KEY_INVALID: 'The API key is unknown or malformed',
+  API_KEY_REVOKED: 'This API key was revoked',
+  SCOPE_NOT_ALLOWED: 'This API key does not hold the required scope',
+  CERTIFIER_NOT_AUTHORIZED: 'This account is not an allowlisted certification issuer',
+  CERTIFIER_NOT_CONFIGURED: 'No certification issuer is configured, so nothing can be certified or published',
+  CERTIFICATION_NOT_FOUND: 'Certification not found',
+  CERTIFICATION_REQUIRED: 'Publishing requires an active certification from an allowlisted reviewer',
+  CERTIFICATION_STALE: 'The listing changed after it was certified; submit it for review again',
+  ENTRY_NOT_EDITABLE: 'A published or revoked listing cannot be edited; revoke it first',
+  INVALID_TRANSITION: 'That lifecycle transition is not allowed',
+  INVALID_STATUS: 'Unknown lifecycle status',
+  EVIDENCE_REQUIRED: 'An active certification requires checkable evidence'
+};
+const ecosystemFail = (res, code) => res
+  .status(ECOSYSTEM_STATUS[code] || 400)
+  .json(catalogError(code, ECOSYSTEM_MESSAGES[code] || 'The registry rejected this listing as invalid or unsafe', code === 'REGISTRY_STORE_UNAVAILABLE'));
+
+const ecosystemRead = (type) => async (req, res) => {
+  const payload = await catalogList(type, { cursor: req.query.cursor, limit: req.query.limit });
+  if (payload.meta.error) return ecosystemFail(res, payload.meta.error);
+  res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=120');
+  return res.json(payload);
+};
+
+/*
+ * WHO IS CALLING — Telegram session OR developer API key.
+ *
+ * Until now a developer API key was issued, hashed and then never checked by
+ * anything: keys existed, revocation existed, and neither had an effect
+ * because no middleware turned a Bearer token back into an identity. This is
+ * that middleware.
+ *
+ * A key is a SECOND way to be the same owner, never a way to be more: the
+ * identity it produces carries the project's scopes, and every state-changing
+ * route demands `manage_listings`. Reads stay public and need no key at all.
+ * A malformed, unknown or revoked key is 401 with the same shape, so probing
+ * cannot distinguish "wrong" from "revoked".
+ */
+async function ecosystemIdentity(req) {
+  const bearer = (req.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (bearer) {
+    /* A bearer that is not even shaped like a key is a 401, not a 503: the
+       store being down says nothing about a token that could never be valid. */
+    if (!looksLikeApiKey(bearer)) return { ok: false, code: 'API_KEY_INVALID' };
+    const auth = await authenticateApiKey(bearer);
+    if (!auth.ok) return { ok: false, code: auth.code === 'PROJECT_STORE_UNAVAILABLE' ? 'REGISTRY_STORE_UNAVAILABLE' : auth.code };
+    return { ok: true, owner: auth.identity.owner, via: 'api-key', scopes: auth.identity.scopes, identity: auth.identity };
+  }
+  if (req.tgUser?.id) return { ok: true, owner: String(req.tgUser.id), via: 'telegram', scopes: null, identity: null };
+  return { ok: false, code: 'AUTH_REQUIRED' };
+}
+
+/* One write path for every registry mutation: identify the caller, screen the
+   payload, claim the idempotency key, run the operation, then persist the
+   response so a retry replays instead of duplicating. */
+async function ecosystemWrite(type, operation, req, res, run, { screen = false, scope = 'manage_listings' } = {}) {
+  const who = await ecosystemIdentity(req);
+  if (!who.ok) return ecosystemFail(res, who.code);
+  /* A Telegram session is the human who owns the account; an API key is a
+     delegated credential and must hold the scope for what it is doing. */
+  if (who.via === 'api-key' && !hasScope(who.identity, scope)) return ecosystemFail(res, 'SCOPE_NOT_ALLOWED');
+  /* Validate BEFORE spending an idempotency key or touching storage: an unsafe
+     listing is refused identically whether or not a durable registry exists. */
+  if (screen) {
+    const screened = screenRegistryInput(type, req.body);
+    if (!screened.ok) return ecosystemFail(res, screened.code);
+  }
+  const claim = await claimIdempotency(who.owner, operation, req.get('idempotency-key'), JSON.stringify(req.body || {}));
+  if (!claim.ok) return ecosystemFail(res, claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'REGISTRY_STORE_UNAVAILABLE' : claim.code);
+  if (claim.replay) return res.json(claim.result);
+  const result = await run(who.owner);
+  if (!result.ok) return ecosystemFail(res, result.code);
+  const response = { data: result.entry, meta: { schema: CATALOG_SCHEMAS[type], dataStatus: 'live', lifecycle: result.entry?.status || 'draft', limitations: [...REGISTRY_LIMITATIONS] } };
+  await saveIdempotency(claim, response);
+  return res.status(result.created ? 201 : 200).json(response);
+}
+
+app.get('/api/ecosystem/agents', ecosystemRead('agent'));
+app.get('/api/ecosystem/strategies', ecosystemRead('strategy'));
+app.get('/api/ecosystem/liquidity', ecosystemRead('liquidity'));
+
+/* An owner's own drafts and submissions, which the public catalog never
+   shows. Owner-scoped by construction: the identity comes from the session or
+   the key, never from a query parameter. */
+const ecosystemMine = (type) => async (req, res) => {
+  const who = await ecosystemIdentity(req);
+  if (!who.ok) return ecosystemFail(res, who.code);
+  if (who.via === 'api-key' && !hasScope(who.identity, 'manage_listings')) return ecosystemFail(res, 'SCOPE_NOT_ALLOWED');
+  const result = await listOwnerRegistry(type, who.owner);
+  if (!result.ok) return ecosystemFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: result.data, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: result.dataStatus, resourceSchema: CATALOG_SCHEMAS[type], lifecycle: Object.keys(LIFECYCLE), certificationConfigured: certificationsConfigured(), limitations: [...REGISTRY_LIMITATIONS] } });
+};
+app.get('/api/ecosystem/mine/agents', ecosystemMine('agent'));
+app.get('/api/ecosystem/mine/strategies', ecosystemMine('strategy'));
+
+app.post('/api/ecosystem/agents', (req, res) => ecosystemWrite('agent', 'ecosystem-agent-create', req, res, (owner) => createRegistryEntry('agent', owner, req.body), { screen: true }));
+app.post('/api/ecosystem/agents/:id', (req, res) => ecosystemWrite('agent', `ecosystem-agent-update:${req.params.id}`, req, res, (owner) => updateRegistryEntry('agent', owner, req.params.id, req.body), { screen: true }));
+app.post('/api/ecosystem/strategies', (req, res) => ecosystemWrite('strategy', 'ecosystem-strategy-create', req, res, (owner) => createRegistryEntry('strategy', owner, req.body), { screen: true }));
+app.post('/api/ecosystem/strategies/:id', (req, res) => ecosystemWrite('strategy', `ecosystem-strategy-update:${req.params.id}`, req, res, (owner) => updateRegistryEntry('strategy', owner, req.params.id, req.body), { screen: true }));
+
+/*
+ * LIFECYCLE. `publish` is the interesting one: it is the only route that can
+ * put a row in the public catalog, and it refuses unless an allowlisted
+ * reviewer has issued an active certification for that exact listing, no older
+ * than the listing's own content. Owners move their listings; they cannot
+ * bless them.
+ */
+const lifecycleRoute = (type, action, status) => (req, res) => ecosystemWrite(
+  type,
+  `ecosystem-${type}-${action}:${req.params.id}`,
+  req,
+  res,
+  (owner) => transitionRegistryEntry(type, owner, req.params.id, status)
+);
+/* Written out one route per line rather than generated in a loop: the
+   developer page advertises these paths and test/wiring.mjs proves every
+   advertised path is really registered by grepping for the literal. A clever
+   loop would hide them from that check — which is the check that stops the
+   docs promising an endpoint nobody implemented. */
+app.post('/api/ecosystem/agents/:id/submit', lifecycleRoute('agent', 'submit', 'submitted'));
+app.post('/api/ecosystem/agents/:id/publish', lifecycleRoute('agent', 'publish', 'published'));
+app.post('/api/ecosystem/agents/:id/revoke', lifecycleRoute('agent', 'revoke', 'revoked'));
+app.post('/api/ecosystem/agents/:id/delete', lifecycleRoute('agent', 'delete', 'deleted'));
+app.post('/api/ecosystem/agents/:id/draft', lifecycleRoute('agent', 'draft', 'draft'));
+app.post('/api/ecosystem/strategies/:id/submit', lifecycleRoute('strategy', 'submit', 'submitted'));
+app.post('/api/ecosystem/strategies/:id/publish', lifecycleRoute('strategy', 'publish', 'published'));
+app.post('/api/ecosystem/strategies/:id/revoke', lifecycleRoute('strategy', 'revoke', 'revoked'));
+app.post('/api/ecosystem/strategies/:id/delete', lifecycleRoute('strategy', 'delete', 'deleted'));
+app.post('/api/ecosystem/strategies/:id/draft', lifecycleRoute('strategy', 'draft', 'draft'));
+/* Liquidity stays read-only on purpose: with no RFQ settlement and no custody
+   there is nothing a self-service listing could honestly claim, so the write
+   path answers 405 rather than storing an unbacked promise. */
+app.post('/api/ecosystem/liquidity', (req, res) => ecosystemWrite('liquidity', 'ecosystem-liquidity-create', req, res, () => Promise.resolve({ ok: false, code: 'TYPE_NOT_WRITABLE' }), { screen: true }));
+
+/*
+ * CERTIFICATIONS — the only source of a "verified" badge.
+ *
+ * Issuing requires a Telegram account named in ECOSYSTEM_CERTIFIERS
+ * (`id:Label,...`). Unset means nobody can issue, which means nothing can be
+ * published: an unconfigured review pipeline yields an empty catalog rather
+ * than a self-certified one. API keys cannot issue at all — a delegated
+ * credential must not be able to vouch for its own owner's listing.
+ */
+app.get('/api/ecosystem/certifications', async (req, res) => {
+  const result = await listCertifications({ subjectId: req.query.subjectId || null, subjectType: req.query.subjectType || null });
+  if (!result.ok) return ecosystemFail(res, result.code);
+  res.set('cache-control', 'public, max-age=30, s-maxage=30');
+  return res.json({ data: result.data, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: result.dataStatus, resourceSchema: CATALOG_SCHEMAS.certification, issuerConfigured: certificationsConfigured(), limitations: [...CERTIFICATION_LIMITATIONS] } });
+});
+
+async function certifierWrite(req, res, operation, run) {
+  if (!req.tgUser?.id) return ecosystemFail(res, 'AUTH_REQUIRED');
+  if (!certificationsConfigured()) return ecosystemFail(res, 'CERTIFIER_NOT_CONFIGURED');
+  if (!certifierLabel(req.tgUser.id)) return ecosystemFail(res, 'CERTIFIER_NOT_AUTHORIZED');
+  const claim = await claimIdempotency(req.tgUser.id, operation, req.get('idempotency-key'), JSON.stringify(req.body || {}));
+  if (!claim.ok) return ecosystemFail(res, claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'REGISTRY_STORE_UNAVAILABLE' : claim.code);
+  if (claim.replay) return res.json(claim.result);
+  const result = await run();
+  if (!result.ok) return ecosystemFail(res, result.code);
+  const response = { data: result.certification, meta: { schema: CATALOG_SCHEMAS.certification, dataStatus: 'live', limitations: [...CERTIFICATION_LIMITATIONS] } };
+  await saveIdempotency(claim, response);
+  return res.status(201).json(response);
+}
+app.post('/api/ecosystem/certifications', (req, res) => certifierWrite(req, res, 'certification-issue', () => issueCertification(req.tgUser.id, req.body)));
+app.post('/api/ecosystem/certifications/:id/revoke', (req, res) => certifierWrite(req, res, `certification-revoke:${req.params.id}`, () => revokeCertification(req.tgUser.id, req.params.id)));
+
+/*
+ * Is the caller a reviewer? The client needs this to decide whether to render
+ * a reviewer console at all — but it is a CONVENIENCE, not the control: every
+ * issuing route re-checks the allowlist server-side, so a client that renders
+ * the console anyway still cannot certify anything.
+ */
+app.get('/api/ecosystem/certifier', (req, res) => {
+  if (!req.tgUser?.id) return ecosystemFail(res, 'AUTH_REQUIRED');
+  const label = certifierLabel(req.tgUser.id);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      configured: certificationsConfigured(),
+      isCertifier: Boolean(label),
+      label: label || null,
+      /*
+       * The caller's OWN id, echoed back to the caller only. This is the one
+       * thing an operator cannot find anywhere else: to switch certification
+       * on they must put their Telegram id in ECOSYSTEM_CERTIFIERS, and
+       * without this they are left guessing or pasting someone else's.
+       */
+      callerId: String(req.tgUser.id),
+      envVar: 'ECOSYSTEM_CERTIFIERS',
+      certificationTypes: [...CERTIFICATION_TYPES],
+      evidenceTypes: [...EVIDENCE_TYPES]
+    },
+    meta: { schema: 'fbt.certifier-status.v1', dataStatus: 'live' }
+  });
+});
+
+/* The queue of listings waiting for a decision. Reviewer-only, and it never
+   includes who submitted them. */
+app.get('/api/ecosystem/review/queue', async (req, res) => {
+  if (!req.tgUser?.id) return ecosystemFail(res, 'AUTH_REQUIRED');
+  if (!certificationsConfigured()) return ecosystemFail(res, 'CERTIFIER_NOT_CONFIGURED');
+  if (!certifierLabel(req.tgUser.id)) return ecosystemFail(res, 'CERTIFIER_NOT_AUTHORIZED');
+  const result = await listReviewQueue();
+  if (!result.ok) return ecosystemFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: result.data, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: result.dataStatus, limitations: [...CERTIFICATION_LIMITATIONS] } });
+});
+
+/*
+ * Operational truth for the registry: how many listings are in each state,
+ * whether a reviewer is configured, whether storage is durable. Public because
+ * every number here is already derivable from the public catalog, and because
+ * "why is the catalog empty" should be answerable without a login.
+ */
+/*
+ * A MACHINE-READABLE CONTRACT for the surface an integrator can actually use.
+ *
+ * Deliberately scoped to the ecosystem/developer/trust endpoints rather than
+ * every market proxy: a spec that lists a hundred routes nobody maintains is
+ * how documentation starts lying. test/wiring.mjs proves every path in here is
+ * really registered, so this file cannot drift into fiction.
+ */
+app.get('/api/openapi.json', (_req, res) => {
+  res.set('cache-control', 'public, max-age=300, s-maxage=300');
+  return res.json(openApiDocument({ certificationIssuerConfigured: certificationsConfigured(), durableStore: blobConfigured() }));
+});
+
+app.get('/api/ecosystem/status', async (_req, res) => {
+  const [counts, certifications] = await Promise.all([registryCounts(), listCertifications({})]);
+  const active = certifications.data.filter((row) => row.status === 'active').length;
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json({
+    data: {
+      dataStatus: counts.dataStatus,
+      durableStore: blobConfigured(),
+      certificationIssuerConfigured: certificationsConfigured(),
+      lifecycle: Object.keys(LIFECYCLE),
+      listings: counts.counts,
+      certifications: { dataStatus: certifications.dataStatus, active, total: certifications.data.length }
+    },
+    meta: { schema: 'fbt.ecosystem-status.v1', generatedAt: new Date().toISOString(), dataStatus: counts.dataStatus, limitations: [...REGISTRY_LIMITATIONS] }
+  });
+});
 
 app.get('/api/network/overview', (req, res) => {
   const window = validWindow(req.query.window);
@@ -648,6 +1038,13 @@ app.get('/api/health', (_req, res) => {
     uptime: process.uptime(),
     cache: cacheStats(),
     bot: Boolean(BOT_TOKEN),
+    /* Config flags only — no store reads. /api/ecosystem/status has the counts. */
+    ecosystem: {
+      durableStore: blobConfigured(),
+      certificationIssuerConfigured: certificationsConfigured(),
+      writesEnabled: blobConfigured(),
+      publishRequiresCertification: true
+    },
     learning: {
       enabled: learningConfigured() && process.env.LEARNING_ENABLED !== '0',
       version: m?.version ?? null,
@@ -3494,15 +3891,33 @@ async function readFcmTokensSafe() {
  */
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
-  const [web, fcm, watch] = await Promise.allSettled([
+  /*
+   * Registry maintenance rides on the existing daily slot rather than asking
+   * for a third Vercel cron (Hobby allows two).
+   *
+   *   · sweepCertifications — reads already treat an expired certificate as
+   *     expired; this makes the stored row say so, instead of leaving
+   *     `active` rows that only look wrong to whoever reads the blob directly.
+   *   · reputation snapshot — recomputed here so the first visitor of the day
+   *     does not pay for a thirty-bucket walk on the request path.
+   *
+   * Both are settled, never awaited into the failure path: a registry chore
+   * must not be able to stop the daily notifications from going out.
+   */
+  const [web, fcm, watch, certs, reputation] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
-    runWatchCycle(sendWatchAlert)
+    runWatchCycle(sendWatchAlert),
+    sweepCertifications(),
+    getReputationSnapshot({ force: true })
   ]);
+  const settled = (result, shape) => result.status === 'fulfilled' ? shape(result.value) : { error: String(result.reason).slice(0, 120) };
   res.json({
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
     fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
-    watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) }
+    watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
+    certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
+    reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 }))
   });
 });
 

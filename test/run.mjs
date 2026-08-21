@@ -35,6 +35,25 @@ process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT ||
  * probe imports app.js first decides it for everyone.
  */
 process.env.INTENT_SETTLEMENT_RATE_LIMIT = process.env.INTENT_SETTLEMENT_RATE_LIMIT || '100';
+/*
+ * Same module-load trap, one door over: server/app.js captures the Telegram
+ * bot token ONCE and hands it to the auth middleware, so whichever probe
+ * imports app.js first decides whether an authenticated request is even
+ * possible for the rest of the process. The ecosystem-registry probe needs to
+ * prove that its write routes reject withdrawFunds/automaticExecution FOR AN
+ * AUTHENTICATED CALLER (an anonymous 401 would prove nothing), so a throwaway
+ * token is pinned here and the probe signs real initData with it. It is not a
+ * secret and never leaves the process: nothing in the suite starts the bot.
+ */
+process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '0000000000:test-only-token-not-a-real-bot';
+/*
+ * Registry writes have their own, much smaller budget than the broad /api one
+ * (12/min in production). The probe walks every write route to prove none of
+ * them 404s, which is more requests than a real caller makes in a minute, so
+ * the budget is raised just enough to let the walk through — and the probe
+ * then bursts past it on an isolated key to prove the limiter still bites.
+ */
+process.env.ECOSYSTEM_WRITE_RATE_LIMIT = process.env.ECOSYSTEM_WRITE_RATE_LIMIT || '25';
 
 const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -452,6 +471,16 @@ console.log('\n▸ probing the signed solver commitment API…');
   report('intent commitment API', intentApiRows);
 }
 
+/* Real HTTP + module coverage for the authenticated agent/strategy registry:
+   ownership, the honest live/unavailable split, the read-side fail-closed pass
+   and — the point of the suite — write routes that refuse withdrawFunds,
+   executeWithoutUser and automatic execution for an AUTHENTICATED caller. */
+console.log('\n\u25b8 probing the authenticated ecosystem registry\u2026');
+{
+  const registryRows = (await import('./ecosystem-registry-probe.mjs')).default;
+  report('ecosystem registry', registryRows);
+}
+
 /* Real HTTP + strict-validation coverage for privacy-safe execution
    observation: opt-in enforcement, unknown/address/tx-hash/free-text
    rejection, fail-closed storage, and the honest capabilities block. */
@@ -700,6 +729,91 @@ console.log('\n▸ measuring light-theme contrast…');
     ['project without scope is rejected', !validateProject({ name: 'x', environment: 'sandbox', scopes: [] }).ok],
     ['sandbox draft is local and created', created.ok && created.project.ownerRef === 'local-device'],
     ['draft has no key or signer fields', created.ok && !('apiKey' in created.project) && !('signer' in created.project)]
+  ]);
+  /*
+   * The catalog TABS are wired to the real endpoint and stay read-only.
+   * Static assertions, because the failure they guard against is a future
+   * edit: an "install", "run" or "enable" button on a listing would turn a
+   * self-reported directory into an execution surface, and the honesty note
+   * printed next to it into a lie.
+   */
+  const { readFileSync: readSrc } = await import('node:fs');
+  const intentOsSource = readSrc('src/pages/IntentOS.jsx', 'utf8');
+  const catalogClient = readSrc('src/lib/ecosystemCatalog.js', 'utf8');
+  const localeFiles = ['en', 'fa', 'ar'].map((code) => JSON.parse(readSrc(`src/i18n/locales/${code}.json`, 'utf8')));
+  const catalogKeys = [
+    ['agents', 'loading'], ['agents', 'errorTitle'], ['agents', 'total'], ['agents', 'unverified'],
+    ['agents', 'listNote'], ['agents', 'emptyLiveBody'], ['strategies', 'loading'], ['strategies', 'maxAmount'],
+    ['strategies', 'maxSlippage'], ['strategies', 'trigger'], ['strategies', 'listNote'], ['strategies', 'emptyLiveBody'],
+    ['catalog', 'certified'], ['catalog', 'certifiedBy'], ['catalog', 'observed'], ['catalog', 'noReputation'],
+    ['catalog', 'showEvidence'], ['catalog', 'evidenceNone'], ['catalog', 'issuedBy'], ['catalog', 'openEvidence']
+  ];
+  /*
+   * The developer/reviewer consoles are the first screens that can CHANGE
+   * registry state, so the static checks here are about what they must never
+   * grow: a client-side trust decision, a write from the public catalog
+   * module, or a control that runs a listing.
+   */
+  const consoleClient = readSrc('src/lib/developerConsole.js', 'utf8');
+  const devConsole = readSrc('src/components/DeveloperConsole.jsx', 'utf8');
+  const reviewerConsole = readSrc('src/components/ReviewerConsole.jsx', 'utf8');
+  const session = readSrc('src/lib/telegramSession.js', 'utf8');
+  report('developer + reviewer console', [
+    ['the console sends the signed initData, never initDataUnsafe',
+      /x-telegram-init-data/.test(session)
+        /* comments explain WHY initDataUnsafe is refused; the code must not use it */
+        && !/initDataUnsafe/.test(session.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''))],
+    ['no session means no request instead of a guaranteed 401',
+      /if \(!headers\) return \{ ok: false, code: 'AUTH_REQUIRED'/.test(consoleClient)],
+    ['every mutation carries a fresh idempotency key', /'idempotency-key': idempotencyKey\(\)/.test(consoleClient)],
+    ['the console never posts a status, permission or verification field',
+      !/status:\s*'(published|submitted)'/.test(consoleClient) && !/verification:/.test(consoleClient) && !/withdrawFunds/.test(consoleClient)],
+    ['lifecycle moves go through the server state machine', /moveListing\(type, row\.id/.test(devConsole)],
+    ['the console has no run, execute or sign control',
+      !/(execute|runListing|signListing|withdraw)\s*\(/i.test(devConsole)],
+    ['a published-but-invisible listing explains itself', /blockedReason/.test(devConsole)],
+    ['the reviewer console renders nothing for a non-reviewer',
+      /if \(!status\.isCertifier\) return null;/.test(reviewerConsole)],
+    ['the setup card appears only while no reviewer is configured',
+      /if \(!status\.configured\) \{/.test(reviewerConsole)],
+    ['the reviewer console requires checkable evidence', /evidenceHint/.test(reviewerConsole) && /buildEvidence/.test(reviewerConsole)],
+    ['evidence is only accepted as an https link or a sha256 digest',
+      /\[a-f0-9\]\{64\}/.test(consoleClient) && /sha256/.test(consoleClient)],
+    ['console copy is translated in en, fa and ar',
+      localeFiles.every((locale) => ['title', 'signedOut', 'refused', 'listings'].every((key) => typeof locale?.dev?.console?.[key] === 'string')
+        && ['title', 'body', 'evidenceHint'].every((key) => typeof locale?.dev?.review?.[key] === 'string'))],
+    ['the consoles hold no hardcoded Persian or Arabic string',
+      !/[\u0600-\u06ff]/.test(devConsole) && !/[\u0600-\u06ff]/.test(reviewerConsole)]
+  ]);
+
+  report('ecosystem catalog UI', [
+    ['the agents/strategies tabs fetch the real catalog', /fetchCatalog\(/.test(intentOsSource) && /TAB_CATALOG/.test(intentOsSource)],
+    ['listings render through the read-only catalog section', /<CatalogSection/.test(intentOsSource)],
+    ['an unavailable registry still shows the honest empty state', /state === 'unavailable'/.test(intentOsSource) && /emptyBody/.test(intentOsSource)],
+    ['a live but empty registry says something different from unavailable', /emptyLiveBody/.test(intentOsSource)],
+    ['no listing carries an execute, sign or install control',
+      !/(onClick|onSubmit)=\{[^}]*(execute|runStrategy|signListing|install|enableAgent)/i.test(intentOsSource)],
+    ['the catalog client never writes', !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(catalogClient)],
+    ['the catalog client derives verified from a server-issued certification',
+      /status !== 'certified'/.test(catalogClient) && /verified: Boolean\(certified\)/.test(catalogClient)],
+    ['the catalog client drops an under-sampled reputation', /sampleSize < 5/.test(catalogClient)],
+    ['the certified badge is rendered from the derived certification only',
+      /entry\.certification/.test(intentOsSource) && /catalog\.certifiedBy/.test(intentOsSource)],
+    ['an uncertified listing still renders as unverified', /\$\{ns\}\.unverified/.test(intentOsSource)],
+    ['the catalog pages with the server cursor instead of inventing one',
+      /cursor=\$\{encodeURIComponent\(cursor\)\}/.test(catalogClient) && /onLoadMore/.test(intentOsSource)],
+    ['a failed page keeps the rows already on screen', /pageError/.test(intentOsSource)],
+    ['an operator with no reviewer configured is shown the exact fix',
+      /setupTitle/.test(reviewerConsole) && /status\.callerId/.test(reviewerConsole)],
+    ['a badge can be checked: the card opens the certification evidence',
+      /fetchCertifications/.test(intentOsSource) && /EvidenceDrawer/.test(intentOsSource)],
+    ['evidence links are proved https before they are rendered',
+      /httpsOnly/.test(catalogClient) && /protocol === 'https:'/.test(catalogClient)],
+    ['an evidence link opens with noreferrer and noopener', /rel="noreferrer noopener"/.test(intentOsSource)],
+    ['catalog copy is translated in en, fa and ar',
+      localeFiles.every((locale) => catalogKeys.every(([group, key]) => typeof locale?.intentOS?.[group]?.[key] === 'string'))],
+    ['the catalog page holds no hardcoded Persian or Arabic string',
+      !/[\u0600-\u06ff]/.test(intentOsSource)]
   ]);
   const { validatePortfolioAgent, validateRevenueEvent, validateCertification, reputationRelationship } = await import('../server/phase2Schemas.js');
   report('phase 2/3 fail-closed schemas', [
