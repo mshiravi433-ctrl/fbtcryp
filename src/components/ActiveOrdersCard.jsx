@@ -74,7 +74,7 @@ export default function ActiveOrdersCard() {
               <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
                 <strong style={{ fontSize: 12 }}>{typeLabel(o.type)}</strong>
                 <small className="faint" style={{ display: 'block', fontSize: 10.5 }}>
-                  {o.fromToken} → {o.toToken}
+                  {o.fromToken?.symbol ?? o.fromToken} → {o.toToken?.symbol ?? o.toToken}
                   {o.targetRate ? ` · ${o.targetRate}` : ''}
                 </small>
               </span>
