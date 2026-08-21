@@ -7,7 +7,13 @@ import { isNativeShell, publicAppUrl } from '../lib/nativeShell';
 import { isIOS as isIOSDevice } from '../lib/platform';
 import { holdRefreshGuard, onSoftRefresh } from '../lib/refresh';
 import { wcEvent } from '../lib/wcTrace';
-import { WC_CONNECT_TIMEOUT_MS, withTimeout } from '../lib/wcTimeout';
+import {
+  WC_CONNECT_TIMEOUT_MS,
+  withTimeout,
+  WC_PRIMARY_RELAY_TIMEOUT_MS,
+  WC_RELAY_URLS,
+  isRelayClassError
+} from '../lib/wcTimeout';
 import { purgeWcStorage } from '../lib/wcStorage';
 import { chainFromWcSession, parseChainId } from '../lib/wcChain';
 
@@ -75,6 +81,16 @@ const loadEthers = () => import('ethers');
  * see the `wc?.disconnect?.()` cleanup below), but the USER gets their
  * screen back immediately with an actionable `WC_RELAY_UNREACHABLE` message
  * instead of an endless spinner.
+ *
+ * ─── THE SECOND LAYER: RELAY FAILOVER ─────────────────────────────────────
+ * Naming the failure is not fixing it. WalletConnect operates a second
+ * relay hostname (`relay.walletconnect.org`) officially documented as the
+ * answer to \"the default relay endpoint is blocked\" (docs.reown.com FAQ).
+ * `initWcProvider()` below walks WC_RELAY_URLS: primary gets an 8s fuse,
+ * the fallback gets the full budget. On an SNI/DNS-filtered network (the
+ * shape Iranian ISP blocking actually takes) pairing now SUCCEEDS via the
+ * fallback instead of only failing politely — and a network that blocks
+ * both hostnames still lands on the same named error, sooner than before.
  */
 
 export function WalletProvider({ children }) {
@@ -419,6 +435,68 @@ export function WalletProvider({ children }) {
   }, []);
 
   /**
+   * Initialise an EthereumProvider against the first reachable relay.
+   *
+   * ─── WHY THIS EXISTS ────────────────────────────────────────────────────
+   * `EthereumProvider.init()` opens the relay WebSocket itself — and it was
+   * the one WalletConnect await with NO outer bound: `wc.connect()` had
+   * withTimeout, init() did not, so on a network blocking
+   * relay.walletconnect.com the "bounded" connect could still stall at
+   * 60-90s inside the SDK's own retry loop before our timer ever started.
+   * (Verified in this codebase's own incident history: the relay socket
+   * opens during SignClient → Core start, i.e. inside init().)
+   *
+   * ─── WHAT IT DOES ───────────────────────────────────────────────────────
+   * Walks WC_RELAY_URLS (lib/wcTimeout.js documents why the list exists):
+   * the PRIMARY relay gets WC_PRIMARY_RELAY_TIMEOUT_MS (8s), the FALLBACK
+   * gets WC_CONNECT_TIMEOUT_MS (20s). Fallback only retries relay-class
+   * failures — a user cancel or an origin/project rejection is rethrown
+   * at once (relay-switching cannot fix those; isRelayClassError() keeps
+   * them out).
+   *
+   * ─── ORPHAN CLEANUP ─────────────────────────────────────────────────────
+   * withTimeout abandons — it cannot cancel — the in-flight init(). If that
+   * abandoned promise resolves LATER (the network recovered mid-attempt),
+   * a live provider with a zombie socket would be left that no ref points
+   * at: the exact state this context keeps exorcising. Any attempt we did
+   * not await to completion is disconnected the moment it settles.
+   *
+   * Shared by connect() AND restore() so the two paths can never disagree
+   * about which relay a revived session talks to — the same byte-identical
+   * init contract buildWcInitConfig() already guarantees.
+   */
+  const initWcProvider = useCallback(async (EthereumProvider, baseConfig) => {
+    let lastError = null;
+    for (let i = 0; i < WC_RELAY_URLS.length; i += 1) {
+      const isLast = i === WC_RELAY_URLS.length - 1;
+      const budget = isLast ? WC_CONNECT_TIMEOUT_MS : WC_PRIMARY_RELAY_TIMEOUT_MS;
+      wcEvent(i ? 'relay_fallback_try' : 'relay_try', Number(i));
+      let orphaned = true;
+      try {
+        const attempt = Promise.resolve(
+          EthereumProvider.init({ ...baseConfig, relayUrl: WC_RELAY_URLS[i] })
+        );
+        attempt.then((ghost) => {
+          if (orphaned) {
+            try { ghost?.disconnect?.(); } catch { /* zombie nothing-op */ }
+          }
+        }, () => { /* a late REJECTION needs no cleanup — nothing opened */ });
+        // eslint-disable-next-line no-await-in-loop -- sequential failover is the point
+        const wcInstance = await withTimeout(attempt, budget, 'WC_INIT_TIMEOUT');
+        orphaned = false;
+        wcEvent(i ? 'relay_fallback_ok' : 'relay_ok', Number(i));
+        return wcInstance;
+      } catch (e) {
+        lastError = e;
+        wcEvent(i ? 'relay_fallback_failed' : 'relay_failed', Number(i));
+        if (!isLast && isRelayClassError(e)) continue;
+        throw e;
+      }
+    }
+    throw lastError; /* unreachable (the last attempt always throws), but explicit */
+  }, []);
+
+  /**
    * Repair the SignClient's metadata in place.
    *
    * The SDK runs our metadata through populateAppMetadata(), which OVERWRITES
@@ -611,7 +689,7 @@ export function WalletProvider({ children }) {
         const purged = purgeWcStorage();
         wcEvent('storage_purged', Number(purged));
       }
-      wc = await EthereumProvider.init(buildWcInitConfig());
+      wc = await initWcProvider(EthereumProvider, buildWcInitConfig());
       wcEvent('init');
 
       /* populateAppMetadata() overwrite repair — see repairSignClientMetadata(). */
@@ -738,6 +816,7 @@ export function WalletProvider({ children }) {
         setError('WC_EXPIRED');
       } else if (
         msg === 'WC_CONNECT_TIMEOUT' ||
+        msg === 'WC_INIT_TIMEOUT' ||
         /websocket|socket stalled|network|failed to publish|relay|timeout|no internet connection/i.test(msg)
       ) {
         setError('WC_RELAY_UNREACHABLE');
@@ -759,7 +838,7 @@ export function WalletProvider({ children }) {
       connectGuard.release();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attachWcListeners, buildWcInitConfig, repairSignClientMetadata, detachInjectedListeners, refreshBalance]);
+  }, [attachWcListeners, buildWcInitConfig, initWcProvider, repairSignClientMetadata, detachInjectedListeners, refreshBalance]);
 
   /* ------------------------ WalletConnect session restore ----------------- */
 
@@ -821,14 +900,16 @@ export function WalletProvider({ children }) {
       const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
       const { BrowserProvider } = await loadEthers();
       /*
-       * Bounded restore, same reasoning as connect(): init()'s own relay
-       * socket open runs unawaited internally, but getSigner() below can
+       * Bounded restore with the SAME relay failover as connect(): every
+       * init attempt is capped by initWcProvider, and getSigner() below can
        * still round-trip the relay for a session already on disk. On a
-       * blocked relay that must fail quiet within seconds — this path is
-       * opportunistic (the explicit Connect button is the real one) and must
-       * never turn "returning to the app" into a silent multi-second stall.
+       * network blocking the primary relay the fallback is what turns
+       * "returning to the app" from a quiet dead session into a restored
+       * one; on a network blocking both, it fails quiet within seconds —
+       * this path is opportunistic (the explicit Connect button is the real
+       * one) and must never stall a resume either way.
        */
-      wc = await withTimeout(EthereumProvider.init(buildWcInitConfig()), WC_CONNECT_TIMEOUT_MS, 'WC_RESTORE_TIMEOUT');
+      wc = await initWcProvider(EthereumProvider, buildWcInitConfig());
       wcEvent(repairSignClientMetadata(wc) ? 'metadata_repaired' : 'metadata_repair_failed');
 
       /* init() loads persisted sessions internally; if the wallet already
@@ -897,7 +978,7 @@ export function WalletProvider({ children }) {
     } finally {
       wcInitingRef.current = false;
     }
-  }, [attachWcListeners, buildWcInitConfig, detachInjectedListeners, refreshBalance, repairSignClientMetadata]);
+  }, [attachWcListeners, buildWcInitConfig, initWcProvider, detachInjectedListeners, refreshBalance, repairSignClientMetadata]);
 
   /*
    * Run restore once on mount, and again whenever the app returns to the

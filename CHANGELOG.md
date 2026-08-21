@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased — WalletConnect relay failover (wss://relay.walletconnect.org)
+
+The "relay unreachable" report was real and network-side: pairing hard-
+depended on the default relay hostname `wss://relay.walletconnect.com`,
+which some ISPs filter (SNI/DNS). The project id is valid (verified against
+the WalletConnect explorer), the SDK is current (2.23.10), and no CSP blocks
+the socket — the path to that one hostname was simply closed.
+
+A new `initWcProvider()` helper in `WalletContext` now walks
+`WC_RELAY_URLS` (lib/wcTimeout.js): the primary relay gets a short 8s fuse
+(`WC_PRIMARY_RELAY_TIMEOUT_MS`), then the officially documented fallback
+`wss://relay.walletconnect.org` gets the full 20s budget. On a network that
+blocks only the default hostname, pairing now succeeds in ~8s instead of
+only failing politely; a network blocking both still lands on the named
+`WC_RELAY_UNREACHABLE` error — far sooner than the SDK's 60-90s retry loop.
+Two latent stalls are fixed along the way: `EthereumProvider.init()` opens
+the relay socket itself and had NO outer bound (only `wc.connect()` was
+timed), and an init attempt abandoned by our timeout left a zombie socket
+behind — late-settling attempts now self-disconnect. Session restore uses
+the same failover, so returning to the app revives sessions over the
+fallback relay instead of silently dying on the primary. Non-relay
+failures (user cancel, origin/project rejection) are never retried.
+Docs: docs/WALLETCONNECT-FIX-FA.md (Persian) gained the full walkthrough.
+
 ## Unreleased — Three-stage order/intent OS notifications
 
 Auto-orders and Intent OS now emit three OS-shade alerts (pending /
