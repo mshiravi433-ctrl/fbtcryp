@@ -1,45 +1,37 @@
 {
   "project_info": {
-    "project_number": "353454762754",
-    "project_id": "fbt-room-a46fc",
-    "storage_bucket": "fbt-room-a46fc.firebasestorage.app"
+    "project_number": "232682194047",
+    "firebase_url": "https://fbtswap-36b13-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "fbtswap-36b13",
+    "storage_bucket": "fbtswap-36b13.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:353454762754:android:ff2e16f0af75d19324b01b",
-        "android_client_info": {
-          "package_name": "ir.fbt.swap"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDxvqfPOMaZZpzVMrlImoubWjT-NUXVvoI"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:353454762754:android:c68893d34d871cc924b01b",
+        "mobilesdk_app_id": "1:232682194047:android:5820992e9ec08292942b4a",
         "android_client_info": {
           "package_name": "ir.fbtswap.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "232682194047-r9ro2sjcv9pc3vtp4v0cjfvfhjsrn7v6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDxvqfPOMaZZpzVMrlImoubWjT-NUXVvoI"
+          "current_key": "AIzaSyAt4FMjaG7l078tP-y5zCoCsXW6hp0rLXY"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "232682194047-r9ro2sjcv9pc3vtp4v0cjfvfhjsrn7v6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
