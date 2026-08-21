@@ -25,7 +25,7 @@ import {
   fetchSimplePrices,
   fetchTrending,
 } from './providers.js';
-import { telegramAuth } from './telegramAuth.js';
+import { telegramAuth, verifyInitData } from './telegramAuth.js';
 import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
@@ -319,6 +319,38 @@ app.post('/api/intents/v1/confidential/reveal', rejectUnavailableConfidentialWri
 app.use(express.json({ limit: '256kb' }));
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(telegramAuth(BOT_TOKEN)); // optional — populates req.tgUser when present
+
+/*
+ * Telegram Mini App authentication diagnosis. This endpoint intentionally
+ * reports only metadata about the received initData: the bot id is public,
+ * while the bot token and all field values remain server-side secrets. It does
+ * not authenticate the caller or change the optional middleware's fail-open
+ * behaviour; it explains why a protected route later answered AUTH_REQUIRED.
+ */
+app.get('/api/telegram/diagnose', (req, res) => {
+  const initData = req.get('x-telegram-init-data') || req.query.initData || '';
+  const botId = BOT_TOKEN.includes(':') ? BOT_TOKEN.split(':')[0] : null;
+  const params = new URLSearchParams(typeof initData === 'string' ? initData : '');
+  const authDate = Number(params.get('auth_date') || 0);
+  const verified = initData ? verifyInitData(initData, BOT_TOKEN) : { ok: false, reason: 'NO_INIT_DATA_SENT' };
+
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      botTokenConfigured: Boolean(BOT_TOKEN),
+      botId,
+      initDataReceived: Boolean(initData),
+      initDataLength: String(initData).length,
+      hashPresent: params.has('hash'),
+      fields: [...params.keys()].sort(),
+      authDateAgeSeconds: authDate ? Math.max(0, Math.floor(Date.now() / 1000) - authDate) : null,
+      verified: verified.ok === true,
+      reason: verified.ok ? 'OK' : verified.reason,
+      userId: verified.ok ? String(verified.user?.id ?? '') : null
+    },
+    meta: { schema: 'fbt.telegram-diagnose.v1' }
+  });
+});
 
 /* ------------------------------ rate limiting ----------------------------- */
 

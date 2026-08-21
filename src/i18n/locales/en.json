@@ -1643,6 +1643,7 @@
       "news": "Aggregated headlines from 13 desks in 7 languages",
       "audio": "Latest episodes from crypto news podcasts, with direct audio URLs",
       "health": "Is the server alive",
+      "telegramDiagnose": "Telegram Mini App signature metadata; never returns the bot token",
       "aiStatus": "Whether an AI model is configured",
       "bridgeStatus": "Whether cross-chain bridging is configured",
       "fiatStatus": "Whether buying with money is switched on",
@@ -1698,6 +1699,12 @@
       "signedOut": "Open the app inside Telegram to manage projects, API keys and listings. There is no session here, so nothing is loaded rather than showing you an empty account.",
       "done": "Done.",
       "refused": "The server refused this: {{code}}",
+      "auth": {
+        "NO_INIT_DATA_SENT": "This page did not receive Telegram's signed session. Open Developers from the bot's Mini App, not a regular Telegram browser page.",
+        "BAD_SIGNATURE": "Telegram sent a session, but the server could not verify it. Check that the Menu Button opens this Mini App from the same bot whose token is configured on the server, then try again.",
+        "EXPIRED": "This Telegram session is old. Fully close the Mini App and open it again from the bot's Menu Button.",
+        "UNKNOWN": "The Telegram session could not be checked. Reopen the Mini App from the bot's Menu Button and try again."
+      },
       "projects": "Sandbox projects",
       "createProject": "Create",
       "noProjects": "No server-side project yet.",

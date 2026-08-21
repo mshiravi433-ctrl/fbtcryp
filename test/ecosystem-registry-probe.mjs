@@ -365,6 +365,36 @@ const post = (path, body, { auth = true, key = `probe-${Math.random().toString(3
   });
 
 try {
+  /* Telegram diagnosis is deliberately metadata-only: it gives the operator
+     the reason for an AUTH_REQUIRED without exposing the bot token or any
+     user field values. */
+  {
+    const absent = await fetch(base + '/api/telegram/diagnose', { headers: { accept: 'application/json' } });
+    const absentBody = await absent.json();
+    t('Telegram diagnosis names a missing header as NO_INIT_DATA_SENT',
+      absent.status === 200 && absentBody.data?.reason === 'NO_INIT_DATA_SENT' && absentBody.data?.verified === false);
+
+    const signed = await fetch(base + '/api/telegram/diagnose', {
+      headers: { accept: 'application/json', 'x-telegram-init-data': initData(4242) }
+    });
+    const signedBody = await signed.json();
+    t('Telegram diagnosis verifies a signed initData and returns the user id',
+      signed.status === 200 && signedBody.data?.verified === true && signedBody.data?.reason === 'OK' && signedBody.data?.userId === '4242');
+
+    const forgedParams = new URLSearchParams(initData(4242));
+    forgedParams.set('hash', '0'.repeat(64));
+    const forged = await fetch(base + '/api/telegram/diagnose', {
+      headers: { accept: 'application/json', 'x-telegram-init-data': forgedParams.toString() }
+    });
+    const forgedBody = await forged.json();
+    t('Telegram diagnosis names a forged hash as BAD_SIGNATURE',
+      forged.status === 200 && forgedBody.data?.verified === false && forgedBody.data?.reason === 'BAD_SIGNATURE');
+
+    const diagnosisText = JSON.stringify(signedBody);
+    t('Telegram diagnosis never returns the bot token or hidden token fields',
+      !diagnosisText.includes(BOT_TOKEN) && !/(botToken|telegramBotToken|token)\s*:/i.test(diagnosisText));
+  }
+
   /* Reads are public and honest. */
   for (const [path, schema] of [
     ['/api/ecosystem/agents', 'fbt.agent.v1'],

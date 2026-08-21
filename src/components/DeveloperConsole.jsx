@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { hasTelegramSession } from '../lib/telegramSession';
 import {
   buildListingPayload,
+  diagnoseTelegramAuth,
   createProject,
   createProjectKey,
   listMyListings,
@@ -38,6 +39,9 @@ const ACTIONS = { draft: ['submitted'], submitted: ['published', 'draft'], publi
 const ACTION_BY_STATUS = { submitted: 'submit', published: 'publish', revoked: 'revoke', draft: 'draft', deleted: 'delete' };
 
 const emptyForm = { id: '', name: '', description: '', chains: '1', executionMode: 'simulation-only', trigger: 'price', maxAmountUsd: '250', maxSlippageBps: '50' };
+const AUTH_DIAGNOSIS_REASONS = new Set(['NO_INIT_DATA_SENT', 'BAD_SIGNATURE', 'EXPIRED']);
+const isAuthFailure = (code) => code === 'AUTH_REQUIRED' || AUTH_DIAGNOSIS_REASONS.has(code);
+const safeAuthReason = (reason) => AUTH_DIAGNOSIS_REASONS.has(reason) ? reason : 'UNKNOWN';
 
 function Row({ children }) {
   return <div className="row-between" style={{ gap: 10, padding: '8px 0', borderTop: '1px solid var(--line)' }}>{children}</div>;
@@ -53,9 +57,11 @@ export default function DeveloperConsole() {
   const [type, setType] = useState('agent');
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
-  /* One place for the last server refusal, rendered as its literal code: a
-     developer needs SCOPE_NOT_ALLOWED, not "something went wrong". */
+  /* One place for the last server refusal. Auth failures are diagnosed and
+     translated below; other server codes stay visible because they are useful
+     to a developer and are not confused with the Telegram session problem. */
   const [notice, setNotice] = useState(null);
+  const [authReason, setAuthReason] = useState(null);
 
   const refresh = useCallback(async () => {
     if (!session) return;
@@ -65,6 +71,15 @@ export default function DeveloperConsole() {
       agent: agents.ok ? agents.data || [] : { error: agents.code },
       strategy: strategies.ok ? strategies.data || [] : { error: strategies.code }
     });
+
+    const authFailure = [projectResult, agents, strategies].find((result) => !result.ok && isAuthFailure(result.code));
+    if (authFailure) {
+      const diagnosis = await diagnoseTelegramAuth();
+      setAuthReason(safeAuthReason(diagnosis.data?.reason || authFailure.code));
+      setNotice({ level: 'danger', auth: true });
+    } else {
+      setAuthReason(null);
+    }
   }, [session]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -74,10 +89,25 @@ export default function DeveloperConsole() {
     setNotice(null);
     const result = await fn();
     setBusy(false);
-    if (!result.ok) setNotice({ level: 'danger', code: result.code });
-    else setNotice({ level: 'success', code: 'OK' });
+    if (!result.ok && isAuthFailure(result.code)) {
+      const diagnosis = await diagnoseTelegramAuth();
+      setAuthReason(safeAuthReason(diagnosis.data?.reason || result.code));
+      setNotice({ level: 'danger', auth: true });
+    } else if (!result.ok) {
+      setNotice({ level: 'danger', code: result.code });
+    } else {
+      setAuthReason(null);
+      setNotice({ level: 'success', code: 'OK' });
+    }
     await refresh();
     return result;
+  };
+
+  const retryAuth = async () => {
+    setBusy(true);
+    setNotice(null);
+    await refresh();
+    setBusy(false);
   };
 
   if (!session) {
@@ -97,7 +127,15 @@ export default function DeveloperConsole() {
       <p className="section-label">{t('dev.console.title')}</p>
       <p className="prose-sm">{t('dev.console.body')}</p>
 
-      {notice && (
+      {notice?.auth && (
+        <div className="notice notice-danger" role="alert">
+          <p style={{ margin: 0 }}>{t(`dev.console.auth.${authReason || 'UNKNOWN'}`)}</p>
+          <button className="btn btn-ghost btn-sm" type="button" disabled={busy} style={{ marginTop: 8 }} onClick={retryAuth}>
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
+      {notice && !notice.auth && (
         <p className={notice.level === 'danger' ? 'notice notice-danger' : 'notice'} role="status">
           {notice.code === 'OK' ? t('dev.console.done') : t('dev.console.refused', { code: notice.code })}
         </p>
@@ -124,7 +162,7 @@ export default function DeveloperConsole() {
         </button>
       </div>
 
-      {projects?.error && <small role="alert">{t('dev.console.refused', { code: projects.error })}</small>}
+      {projects?.error && !isAuthFailure(projects.error) && <small role="alert">{t('dev.console.refused', { code: projects.error })}</small>}
       {Array.isArray(projects) && projects.length === 0 && <small style={{ display: 'block', marginTop: 8, opacity: .75 }}>{t('dev.console.noProjects')}</small>}
       {Array.isArray(projects) && projects.map((project) => (
         <Row key={project.id}>
@@ -174,7 +212,7 @@ export default function DeveloperConsole() {
         ))}
       </div>
 
-      {listingError && <small role="alert">{t('dev.console.refused', { code: listingError })}</small>}
+      {listingError && !isAuthFailure(listingError) && <small role="alert">{t('dev.console.refused', { code: listingError })}</small>}
       {!listingError && rows.length === 0 && <small style={{ display: 'block', marginTop: 8, opacity: .75 }}>{t('dev.console.noListings')}</small>}
 
       {rows.map((row) => (

@@ -95,6 +95,7 @@ const GROUPS = [
     id: 'status',
     endpoints: [
       { m: 'GET', p: '/api/health', d: 'health' },
+      { m: 'GET', p: '/api/telegram/diagnose', d: 'telegramDiagnose' },
       { m: 'GET', p: '/api/ai/status', d: 'aiStatus' },
       { m: 'GET', p: '/api/bridge/status', d: 'bridgeStatus' },
       { m: 'GET', p: '/api/fiat/status', d: 'fiatStatus' },
