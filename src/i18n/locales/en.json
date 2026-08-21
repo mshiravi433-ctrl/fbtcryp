@@ -4173,7 +4173,17 @@
       "withdraw": "Withdraw funds",
       "never": "Never",
       "notStated": "Not stated",
-      "retry": "Try again"
+      "retry": "Try again",
+      "certified": "Certified",
+      "certifiedBy": "Certified by {{issuer}}",
+      "certificationType": {
+        "api_verified": "API verified",
+        "sandbox_reviewed": "Sandbox reviewed",
+        "security_reviewed": "Security reviewed",
+        "identity_verified": "Identity verified"
+      },
+      "observed": "{{rate}}% completed across {{samples}} observed executions in {{days}} days",
+      "noReputation": "Not enough observed executions to report a success rate"
     }
   },
   "whales": {

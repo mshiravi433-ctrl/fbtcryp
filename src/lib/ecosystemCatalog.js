@@ -7,10 +7,16 @@
  *      registry is configured" from "the registry answered with zero rows",
  *      and so does the returned `status`, so the UI can say the honest thing
  *      instead of implying nobody has registered anything.
- *   2. Nothing is verified. Every row is normalised through a whitelist and
- *      `verified` is hardcoded false — a compromised or future server that
- *      starts sending `verification.status: 'verified'` still renders as
- *      self-reported until a real review pipeline exists.
+ *   2. Verified means CERTIFIED BY A REVIEWER, and nothing else. A row is
+ *      shown as verified only when the server says
+ *      `verification.status === 'certified'` and names at least one issuer —
+ *      the badge is derived server-side from a certification store the
+ *      submitter cannot write. Any other value, including a bare
+ *      `verified: true` from a future or compromised payload, renders as
+ *      self-reported.
+ *   3. Reputation is observed or absent. A summary is kept only when the
+ *      server marks it `observed`; a sample count under the server's floor
+ *      arrives as `insufficient_data` and no number is displayed.
  *   3. No writes and no execution. There is deliberately no create/update/run
  *      export here: an unused writer is one import away from becoming a
  *      feature nobody reviewed.
@@ -21,6 +27,8 @@ const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AP
 const PATHS = { agent: '/ecosystem/agents', strategy: '/ecosystem/strategies', liquidity: '/ecosystem/liquidity' };
 const EXECUTION_MODES = new Set(['manual', 'simulation-only']);
 const TRIGGERS = new Set(['price', 'time', 'portfolio_drift', 'gas']);
+const CERTIFICATION_TYPES = new Set(['api_verified', 'sandbox_reviewed', 'security_reviewed', 'identity_verified']);
+const CONFIDENCE = new Set(['low', 'medium', 'high']);
 
 const text = (value) => {
   if (typeof value === 'string') return value.trim() ? { en: value.trim() } : null;
@@ -45,12 +53,48 @@ export function localizedValue(value, lang, fallback = null) {
   return value[lang] || value[String(lang).split('-')[0]] || value.en || Object.values(value)[0] || fallback;
 }
 
+/** Verified ⇔ the server derived an active certification for this listing. */
+function certification(value) {
+  if (!value || value.status !== 'certified') return null;
+  const types = (Array.isArray(value.types) ? value.types : []).filter((type) => CERTIFICATION_TYPES.has(type));
+  const issuers = (Array.isArray(value.issuers) ? value.issuers : [])
+    .filter((issuer) => typeof issuer === 'string' && issuer.trim())
+    .map((issuer) => issuer.trim().slice(0, 48));
+  /* An issuer nobody can name is not a certification worth a badge. */
+  if (!types.length || !issuers.length) return null;
+  return { types, issuers, issuedAt: num(value.issuedAt), expiresAt: num(value.expiresAt) };
+}
+
+/** Observed or nothing: an under-sampled score is dropped, not rounded up. */
+function reputation(value) {
+  if (!value || value.status !== 'observed') return null;
+  const sampleSize = num(value.sampleSize);
+  const successRate = num(value.successRate);
+  if (!Number.isFinite(sampleSize) || sampleSize < 5 || !Number.isFinite(successRate)) return null;
+  return {
+    sampleSize: Math.round(sampleSize),
+    successRate: Math.min(Math.max(successRate, 0), 1),
+    confidence: CONFIDENCE.has(value.confidence) ? value.confidence : 'low',
+    windowDays: num(value.windowDays)
+  };
+}
+
 function normalize(kind, row) {
   if (!row || typeof row !== 'object') return null;
   const id = typeof row.id === 'string' ? row.id.slice(0, 64) : null;
   const name = text(row.name);
   if (!id || !name) return null;
-  const base = { id, name, description: text(row.description), verified: false, updatedAt: num(row.updatedAt) };
+  const certified = certification(row.verification);
+  const base = {
+    id,
+    name,
+    description: text(row.description),
+    /* Never read from the row itself — only from the derived block above. */
+    verified: Boolean(certified),
+    certification: certified,
+    reputation: reputation(row.reputation),
+    updatedAt: num(row.updatedAt)
+  };
 
   if (kind === 'agent') {
     return {

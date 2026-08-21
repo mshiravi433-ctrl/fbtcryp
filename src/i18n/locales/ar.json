@@ -2720,7 +2720,17 @@
       "withdraw": "سحب الأموال",
       "never": "أبداً",
       "notStated": "غير محدد",
-      "retry": "أعد المحاولة"
+      "retry": "أعد المحاولة",
+      "certified": "موثّق",
+      "certifiedBy": "موثّق من {{issuer}}",
+      "certificationType": {
+        "api_verified": "توثيق API",
+        "sandbox_reviewed": "مراجعة الصندوق الرملي",
+        "security_reviewed": "مراجعة أمنية",
+        "identity_verified": "توثيق الهوية"
+      },
+      "observed": "{{rate}}٪ مكتملة عبر {{samples}} تنفيذاً مرصوداً خلال {{days}} يوماً",
+      "noReputation": "عدد عمليات التنفيذ المرصودة غير كافٍ للإبلاغ عن نسبة النجاح"
     },
     "agents": {
       "eyebrow": "كتالوج المنظومة",

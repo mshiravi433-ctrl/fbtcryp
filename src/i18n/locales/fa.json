@@ -4173,7 +4173,17 @@
       "withdraw": "برداشت وجه",
       "never": "هرگز",
       "notStated": "اعلام‌نشده",
-      "retry": "تلاش دوباره"
+      "retry": "تلاش دوباره",
+      "certified": "گواهی‌شده",
+      "certifiedBy": "گواهی‌شده توسط {{issuer}}",
+      "certificationType": {
+        "api_verified": "تأیید API",
+        "sandbox_reviewed": "بازبینی سندباکس",
+        "security_reviewed": "بازبینی امنیتی",
+        "identity_verified": "احراز هویت"
+      },
+      "observed": "{{rate}}٪ تکمیل‌شده در {{samples}} اجرای مشاهده‌شده طی {{days}} روز",
+      "noReputation": "تعداد اجراهای مشاهده‌شده برای اعلام نرخ موفقیت کافی نیست"
     }
   },
   "whales": {

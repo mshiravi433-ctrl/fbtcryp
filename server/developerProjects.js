@@ -3,7 +3,12 @@ import { blobConfigured } from './blobCache.js';
 import { storeGet, storeSet } from './store.js';
 export const PROJECT_SCHEMA = 'fbt.developer-project.v1';
 const NAME = /^[\w .-]{1,48}$/u;
-const SCOPES = new Set(['read_network', 'create_intent', 'request_quote', 'request_simulation']);
+/*
+ * Scopes a project may hold. `manage_listings` is the only state-changing one
+ * and it reaches exactly one surface: the self-reported ecosystem catalog.
+ * There is deliberately no scope that can sign, execute, settle or withdraw.
+ */
+const SCOPES = new Set(['read_network', 'create_intent', 'request_quote', 'request_simulation', 'manage_listings']);
 const key = (owner) => `developer-projects:v1:${String(owner)}`;
 export function validateProjectInput(input = {}) {
   const name = String(input.name || '').trim();

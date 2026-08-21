@@ -146,16 +146,45 @@ function CatalogFact({ label, value }) {
   return <span className="ios-catalog-fact"><b>{value}</b><small>{label}</small></span>;
 }
 
+/*
+ * The badge has exactly two states and they mean different things:
+ * `certified` — a named reviewer issued a certification the server checked
+ * this request, for this content; anything else — self-reported. The client
+ * never upgrades a listing on its own, and the issuer is always shown, because
+ * "verified" without "by whom" is just a colour.
+ */
 function CatalogCard({ ns, entry, lang, t, facts }) {
   const description = localizedValue(entry.description, lang, null);
+  const cert = entry.certification;
+  const rep = entry.reputation;
   return (
     <article className="ios-catalog-card">
       <div className="row-between">
         <strong>{localizedValue(entry.name, lang, entry.id)}</strong>
-        <span className="ios-status unavailable">{t(`intentOS.${ns}.unverified`)}</span>
+        <span className={`ios-status ${cert ? 'eligible' : 'unavailable'}`}>
+          {cert ? t('intentOS.catalog.certified') : t(`intentOS.${ns}.unverified`)}
+        </span>
       </div>
       <span className="mono ios-catalog-id">{entry.id}</span>
       {description ? <p>{description}</p> : null}
+      {cert ? (
+        <p className="ios-catalog-trust">
+          {t('intentOS.catalog.certifiedBy', { issuer: cert.issuers.join(' · ') })}
+          {' · '}
+          {cert.types.map((type) => t(`intentOS.catalog.certificationType.${type}`)).join(' · ')}
+        </p>
+      ) : null}
+      {rep ? (
+        <p className="ios-catalog-trust">
+          {t('intentOS.catalog.observed', {
+            rate: Math.round(rep.successRate * 100),
+            samples: rep.sampleSize,
+            days: rep.windowDays || 30
+          })}
+        </p>
+      ) : (
+        <p className="ios-catalog-trust ios-catalog-muted">{t('intentOS.catalog.noReputation')}</p>
+      )}
       <div className="ios-catalog-facts">
         {facts.map((fact) => <CatalogFact key={fact.label} label={fact.label} value={fact.value} />)}
       </div>

@@ -736,7 +736,8 @@ console.log('\n▸ measuring light-theme contrast…');
   const catalogKeys = [
     ['agents', 'loading'], ['agents', 'errorTitle'], ['agents', 'total'], ['agents', 'unverified'],
     ['agents', 'listNote'], ['agents', 'emptyLiveBody'], ['strategies', 'loading'], ['strategies', 'maxAmount'],
-    ['strategies', 'maxSlippage'], ['strategies', 'trigger'], ['strategies', 'listNote'], ['strategies', 'emptyLiveBody']
+    ['strategies', 'maxSlippage'], ['strategies', 'trigger'], ['strategies', 'listNote'], ['strategies', 'emptyLiveBody'],
+    ['catalog', 'certified'], ['catalog', 'certifiedBy'], ['catalog', 'observed'], ['catalog', 'noReputation']
   ];
   report('ecosystem catalog UI', [
     ['the agents/strategies tabs fetch the real catalog', /fetchCatalog\(/.test(intentOsSource) && /TAB_CATALOG/.test(intentOsSource)],
@@ -746,7 +747,12 @@ console.log('\n▸ measuring light-theme contrast…');
     ['no listing carries an execute, sign or install control',
       !/(onClick|onSubmit)=\{[^}]*(execute|runStrategy|signListing|install|enableAgent)/i.test(intentOsSource)],
     ['the catalog client never writes', !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(catalogClient)],
-    ['the catalog client hardcodes verified to false', /verified: false/.test(catalogClient)],
+    ['the catalog client derives verified from a server-issued certification',
+      /status !== 'certified'/.test(catalogClient) && /verified: Boolean\(certified\)/.test(catalogClient)],
+    ['the catalog client drops an under-sampled reputation', /sampleSize < 5/.test(catalogClient)],
+    ['the certified badge is rendered from the derived certification only',
+      /entry\.certification/.test(intentOsSource) && /catalog\.certifiedBy/.test(intentOsSource)],
+    ['an uncertified listing still renders as unverified', /\$\{ns\}\.unverified/.test(intentOsSource)],
     ['catalog copy is translated in en, fa and ar',
       localeFiles.every((locale) => catalogKeys.every(([group, key]) => typeof locale?.intentOS?.[group]?.[key] === 'string'))],
     ['the catalog page holds no hardcoded Persian or Arabic string',

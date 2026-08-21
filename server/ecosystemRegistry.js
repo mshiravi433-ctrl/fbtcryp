@@ -34,6 +34,21 @@
  * that must survive a poisoned or hand-edited blob. Reads therefore re-run the
  * validator on every stored row and drop anything that no longer passes.
  *
+ * LIFECYCLE (stage 3)
+ * ---------------------------------------------------------------------------
+ * `draft → submitted → published → revoked`, plus `draft → deleted`. Only the
+ * owner moves an entry, only `published` rows appear in the public catalog,
+ * and nothing is ever hard-deleted: a removed listing keeps its record (and
+ * its id) so the trail survives and the id cannot be inherited by someone
+ * else. Publishing additionally requires an ACTIVE CERTIFICATION issued by an
+ * allowlisted reviewer (server/ecosystemCertifications.js) — a listing can
+ * never publish itself into being trusted.
+ *
+ * Editing is only allowed while `draft` or `submitted`, and an edit always
+ * returns the entry to `draft`. Certification is granted to content that was
+ * reviewed, so content changed after the review is not that content: the
+ * badge is withheld whenever `updatedAt` is newer than the certificate.
+ *
  * The `store` parameter (last argument, defaulted) is the same seam
  * `src/lib/developerProjects.js` uses for its storage: tests inject an
  * in-memory implementation instead of mocking the module graph.
@@ -42,6 +57,8 @@
 import { blobConfigured } from './blobCache.js';
 import { storeGet, storeSet } from './store.js';
 import { validateAgent, validateLiquidityProvider, validateStrategy } from './ecosystemSchemas.js';
+import { certifiedSubjects } from './ecosystemCertifications.js';
+import { observedReputations } from './ecosystemReputation.js';
 
 /** Registry types. `writable: false` means read-only: no POST route exists. */
 export const REGISTRY_TYPES = Object.freeze({
@@ -57,10 +74,28 @@ export const REGISTRY_TYPES = Object.freeze({
 });
 
 export const REGISTRY_LIMITATIONS = Object.freeze([
-  'Listings are self-reported and are never presented as verified.',
+  'Listings are self-reported; only a certification issued by an allowlisted reviewer is shown as verified.',
+  'A listing appears in the public catalog only while that certification is active and covers its current content.',
   'No listing can sign, execute, settle or withdraw funds.',
   'Execution always requires an explicit user signature in the wallet.'
 ]);
+
+/*
+ * The lifecycle. `deleted` and `revoked` are terminal on purpose: re-listing
+ * means submitting again and being reviewed again, which is the only way the
+ * certified badge can stay meaningful.
+ */
+export const LIFECYCLE = Object.freeze({
+  draft: Object.freeze(['submitted', 'deleted']),
+  submitted: Object.freeze(['published', 'draft']),
+  published: Object.freeze(['revoked']),
+  /* A revoked listing can be reworked and resubmitted, but it goes back
+     through review: `draft` is the only way out, never straight to public. */
+  revoked: Object.freeze(['draft']),
+  deleted: Object.freeze([])
+});
+export const PUBLIC_STATUS = 'published';
+const EDITABLE = new Set(['draft', 'submitted']);
 
 const MAX_ROWS = 200;          // per registry type
 const MAX_ROWS_PER_OWNER = 20; // per Telegram account, per type
@@ -172,20 +207,62 @@ function buildRecord(type, owner, value, previous = null) {
       ...projected.value,
       ownerId: String(owner),
       ownerRef: 'telegram-user',
-      status: 'listed',
-      /* Self-reported, always. There is no review pipeline to claim otherwise. */
+      /* Every write lands in `draft`. An edit to a submitted entry returns it
+         here too: the reviewer must see what they are certifying. */
+      status: 'draft',
+      /* Self-reported, always. Only an active certification issued by an
+         allowlisted reviewer can add a verified badge, and that is derived at
+         read time from a different store — never written into the listing. */
       verification: { status: 'unverified', method: 'self_reported', reviewedAt: null },
       limitations: [...REGISTRY_LIMITATIONS],
       createdAt: previous?.createdAt || at,
+      /*
+       * Two clocks on purpose. `contentUpdatedAt` moves only when the listing
+       * itself changes, which is what a certificate is about; `updatedAt` also
+       * moves on a lifecycle step. Without the split, publishing would bump
+       * `updatedAt` past the certificate that just authorised it and instantly
+       * mark its own badge stale.
+       */
+      contentUpdatedAt: at,
       updatedAt: at
     }
   };
 }
 
-/** Public shape: ownership identifiers never leave the server. */
-export function publicEntry(row) {
+/**
+ * Public shape: ownership identifiers never leave the server, and the trust
+ * block is DERIVED here from stores the submitter cannot write.
+ *
+ * `certified` requires an active certification whose `issuedAt` is not older
+ * than the listing's `updatedAt`: a listing edited after its review is no
+ * longer the thing that was reviewed.
+ */
+export const contentTimestamp = (row) => row?.contentUpdatedAt ?? row?.updatedAt ?? 0;
+
+/** True when this certification actually covers this row's current content. */
+export const certifiedFor = (row, certification) => Boolean(certification) && (certification.issuedAt || 0) >= contentTimestamp(row);
+
+export function publicEntry(row, { certification = null, reputation = null } = {}) {
   const { ownerId, ...rest } = row || {};
-  return { ...rest, ownerRef: 'telegram-user', verification: { status: 'unverified', method: 'self_reported', reviewedAt: null } };
+  const fresh = certification && (certification.issuedAt || 0) >= contentTimestamp(row);
+  return {
+    ...rest,
+    ownerRef: 'telegram-user',
+    verification: fresh
+      ? { status: 'certified', method: 'reviewer_certified', types: [...certification.types], issuers: [...certification.issuers], issuedAt: certification.issuedAt, expiresAt: certification.expiresAt ?? null }
+      : {
+        status: 'unverified',
+        method: 'self_reported',
+        reviewedAt: null,
+        /* Say WHY when a certificate exists but no longer applies, instead of
+           silently downgrading to "unverified" and looking like a bug. */
+        ...(certification ? { staleCertification: true } : {})
+      },
+    /* Observed, aggregate-only, and absent unless there is enough of it. */
+    reputation: reputation && reputation.status === 'observed'
+      ? { status: 'observed', sampleSize: reputation.sampleSize, successRate: reputation.successRate, confidence: reputation.confidence, windowDays: reputation.windowDays, source: reputation.source }
+      : { status: 'insufficient_data', sampleSize: null, successRate: null, confidence: 'none' }
+  };
 }
 
 /**
@@ -194,7 +271,7 @@ export function publicEntry(row) {
  * permission (poisoned blob, manual edit, older schema) is dropped, not fixed.
  */
 function publishable(type, row) {
-  if (!row || typeof row !== 'object' || row.status !== 'listed') return null;
+  if (!row || typeof row !== 'object' || row.status !== PUBLIC_STATUS) return null;
   const validated = REGISTRY_TYPES[type].validate(row);
   if (!validated.ok) return null;
   const projected = projectEntry(type, validated.value);
@@ -214,7 +291,7 @@ async function readRows(type, store) {
  * (even with zero rows), 'unavailable' means no durable registry is configured
  * and the empty array is an absence of storage, not an absence of listings.
  */
-export async function listRegistry(type, { cursor = null, limit = DEFAULT_LIMIT } = {}, store = durableStore) {
+export async function listRegistry(type, { cursor = null, limit = DEFAULT_LIMIT, trust = null } = {}, store = durableStore) {
   if (!REGISTRY_TYPES[type]) return { ok: false, code: 'UNKNOWN_REGISTRY_TYPE', dataStatus: 'unavailable', data: [], cursor: null, hasMore: false };
   if (!store.durable()) return { ok: true, dataStatus: 'unavailable', data: [], cursor: null, hasMore: false };
 
@@ -224,17 +301,65 @@ export async function listRegistry(type, { cursor = null, limit = DEFAULT_LIMIT 
     .filter(Boolean)
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
+  /* Two store reads for the whole page, not one per row. Both default to the
+     real stores and both answer with an empty Map when unconfigured, so an
+     unreviewed, unobserved deployment simply shows an empty catalog. */
+  const certified = trust?.certified ?? await certifiedSubjects();
+  const reputations = trust?.reputation ?? await observedReputations();
+
+  /*
+   * THE PUBLIC CATALOG IS "PUBLISHED **AND** CURRENTLY CERTIFIED".
+   *
+   * Checking the certificate only at publish time would make revocation
+   * cosmetic: a reviewer could withdraw a certification and the listing would
+   * keep sitting in the catalog wearing the badge until someone noticed.
+   * Re-checking here means an expired or revoked certificate — or content
+   * edited after the review — removes the row on the very next read.
+   */
+  const visible = rows.filter((row) => certifiedFor(row, certified.get(row.id)));
+
   let start = 0;
   if (cursor !== null && cursor !== undefined && cursor !== '') {
     if (!CURSOR.test(String(cursor))) return { ok: false, code: 'INVALID_CURSOR', dataStatus: 'live', data: [], cursor: null, hasMore: false };
-    const index = rows.findIndex((row) => row.id === String(cursor));
+    const index = visible.findIndex((row) => row.id === String(cursor));
     if (index < 0) return { ok: false, code: 'INVALID_CURSOR', dataStatus: 'live', data: [], cursor: null, hasMore: false };
     start = index + 1;
   }
 
-  const page = rows.slice(start, start + size);
-  const hasMore = start + size < rows.length;
-  return { ok: true, dataStatus: 'live', data: page.map(publicEntry), cursor: hasMore ? page[page.length - 1]?.id || null : null, hasMore };
+  const page = visible.slice(start, start + size);
+  const hasMore = start + size < visible.length;
+  const decorate = (row) => publicEntry(row, { certification: certified.get(row.id) || null, reputation: reputations.get(row.id) || null });
+  return { ok: true, dataStatus: 'live', data: page.map(decorate), cursor: hasMore ? page[page.length - 1]?.id || null : null, hasMore };
+}
+
+/**
+ * Everything this owner has, in every state except `deleted`.
+ *
+ * Drafts and submissions are invisible to the public catalog, so without this
+ * an owner could not see what they had filed. It is owner-scoped by
+ * construction — there is no parameter that widens it.
+ */
+export async function listOwnerRegistry(type, owner, store = durableStore, { certified: injected = null } = {}) {
+  if (!REGISTRY_TYPES[type]) return fail('UNKNOWN_REGISTRY_TYPE');
+  if (!store.durable()) return fail('REGISTRY_STORE_UNAVAILABLE');
+  const certified = injected ?? await certifiedSubjects();
+  const rows = (await readRows(type, store))
+    .filter((row) => String(row?.ownerId) === String(owner) && row?.status !== 'deleted')
+    .sort((a, b) => (b?.updatedAt || 0) - (a?.updatedAt || 0))
+    .map((row) => {
+      const certification = certified.get(row.id) || null;
+      const covered = certifiedFor(row, certification);
+      return {
+        ...publicEntry(row, { certification }),
+        status: row.status,
+        /* Exactly what the owner needs to know: can I publish, and if I am
+           published why is nobody seeing me. */
+        publishable: (LIFECYCLE[row.status] || []).includes('published') && covered,
+        visibleInCatalog: row.status === PUBLIC_STATUS && covered,
+        blockedReason: row.status !== PUBLIC_STATUS ? null : covered ? null : certification ? 'CERTIFICATION_STALE' : 'CERTIFICATION_REQUIRED'
+      };
+    });
+  return { ok: true, dataStatus: 'live', data: rows };
 }
 
 /** Owner-scoped read used by the update/unlist routes (mirrors ownedProject). */
@@ -259,6 +384,8 @@ async function writeRegistry(type, owner, input, { previous = null, rows }, stor
   if (!record.ok) return record;
   const next = [record.value, ...rows.filter((row) => row?.id !== record.value.id)].slice(0, MAX_ROWS);
   await store.set(REGISTRY_TYPES[type].storeKey, next);
+  /* A freshly written record is a draft, so it is deliberately returned
+     without a trust lookup: there is nothing yet that could be certified. */
   return { ok: true, entry: publicEntry(record.value), created: !previous };
 }
 
@@ -302,6 +429,13 @@ export async function updateRegistryEntry(type, owner, id, input = {}, store = d
   if (!meta.writable) return fail('TYPE_NOT_WRITABLE');
   const owned = await ownedEntry(type, owner, id, store);
   if (!owned.ok) return owned;
+  /*
+   * A published listing cannot be edited in place. Editing what a reviewer
+   * certified, while it keeps sitting in the public catalog with the badge, is
+   * the single most valuable attack this registry can offer; revoking first
+   * makes the swap visible.
+   */
+  if (!EDITABLE.has(owned.entry.status)) return fail('ENTRY_NOT_EDITABLE');
   return writeRegistry(type, owner, { ...input, id: owned.entry.id }, { previous: owned.entry, rows: owned.rows }, store);
 }
 
@@ -310,16 +444,47 @@ export async function updateRegistryEntry(type, owner, id, input = {}, store = d
  * relist it, and a released id cannot be grabbed by someone else to inherit a
  * listing users may have seen before.
  */
-export async function unlistRegistryEntry(type, owner, id, store = durableStore) {
+/**
+ * Move one listing along the lifecycle.
+ *
+ * Everything that could make a listing look trustworthy is checked here:
+ *   · only the owner may move it (`ownedEntry`);
+ *   · only a transition the state machine declares is allowed;
+ *   · `published` additionally requires an ACTIVE certification issued by an
+ *     allowlisted reviewer, and one that is not older than the content — see
+ *     `publicEntry` for the same freshness rule applied to the badge.
+ *
+ * `certified` is injectable so tests (and a future reviewer console) can run
+ * the gate without reaching for the real certification store.
+ */
+export async function transitionRegistryEntry(type, owner, id, next, { store = durableStore, certified = null, now = Date.now() } = {}) {
   const meta = REGISTRY_TYPES[type];
   if (!meta) return fail('UNKNOWN_REGISTRY_TYPE');
   if (!meta.writable) return fail('TYPE_NOT_WRITABLE');
+  if (!Object.prototype.hasOwnProperty.call(LIFECYCLE, next)) return fail('INVALID_STATUS');
   const owned = await ownedEntry(type, owner, id, store);
   if (!owned.ok) return owned;
-  const entry = { ...owned.entry, status: 'unlisted', updatedAt: Date.now() };
+  const current = owned.entry.status;
+  if (!(LIFECYCLE[current] || []).includes(next)) return fail('INVALID_TRANSITION');
+
+  let certification = null;
+  if (next === 'published') {
+    const map = certified ?? await certifiedSubjects({ now });
+    certification = map.get(owned.entry.id) || null;
+    if (!certification) return fail('CERTIFICATION_REQUIRED');
+    if ((certification.issuedAt || 0) < contentTimestamp(owned.entry)) return fail('CERTIFICATION_STALE');
+  }
+
+  const entry = { ...owned.entry, status: next, updatedAt: now, [`${next}At`]: now };
   await store.set(meta.storeKey, owned.rows.map((row) => (row?.id === entry.id ? entry : row)));
-  return { ok: true, entry: publicEntry(entry), created: false };
+  return { ok: true, entry: { ...publicEntry(entry, { certification }), status: next }, created: false };
 }
+
+/** Convenience wrappers so the routes read like the lifecycle they enforce. */
+export const submitRegistryEntry = (type, owner, id, options = {}) => transitionRegistryEntry(type, owner, id, 'submitted', options);
+export const publishRegistryEntry = (type, owner, id, options = {}) => transitionRegistryEntry(type, owner, id, 'published', options);
+export const revokeRegistryEntry = (type, owner, id, options = {}) => transitionRegistryEntry(type, owner, id, 'revoked', options);
+export const deleteRegistryEntry = (type, owner, id, options = {}) => transitionRegistryEntry(type, owner, id, 'deleted', options);
 
 /** In-memory store implementation — for tests and local probes only. */
 export function memoryRegistryStore(seed = {}) {
