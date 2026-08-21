@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { publicAppUrl } from '../lib/nativeShell';
+import { createSandboxProject, loadProjectDrafts, PROJECT_SCOPES } from '../lib/developerProjects';
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -115,6 +116,9 @@ export default function Developers() {
   const { haptic } = useTelegram();
   const [openGroup, setOpenGroup] = useState('market');
   const [environments, setEnvironments] = useState(null);
+  const [projects, setProjects] = useState(() => loadProjectDrafts());
+  const [projectName, setProjectName] = useState('');
+  const [projectError, setProjectError] = useState(null);
   useEffect(() => { let active = true; fetch('/api/environments', { headers: { accept: 'application/json' } }).then((r) => r.ok ? r.json() : null).then((x) => { if (active) setEnvironments(x?.data || null); }).catch(() => { if (active) setEnvironments(null); }); return () => { active = false; }; }, []);
 
   /*
@@ -150,6 +154,16 @@ export default function Developers() {
           {['Agents', 'Strategies', 'Liquidity', 'Connect', 'SDK', 'Environments', 'Reputation', 'Revenue'].map((item) => <span className="pill pill-neutral" key={item}>{item}</span>)}
         </div>
         <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Not configured · Automatic execution unavailable · Withdraw funds: never available</small>
+      </section>
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">Projects</p>
+        <p className="prose-sm">Create a local sandbox draft. This does not create an account, API key, webhook, or production project.</p>
+        <div className="row" style={{ gap: 8 }}>
+          <input className="input" value={projectName} maxLength={48} placeholder="Project name" onChange={(e) => { setProjectName(e.target.value); setProjectError(null); }} aria-label="Project name" />
+          <button className="btn btn-primary" type="button" onClick={() => { const result = createSandboxProject({ name: projectName, environment: 'sandbox', scopes: PROJECT_SCOPES }); if (!result.ok) setProjectError(result.code); else { setProjects(result.projects); setProjectName(''); setProjectError(null); } }}>Create draft</button>
+        </div>
+        {projectError && <small role="alert">Unavailable: {projectError}</small>}
+        {projects.length === 0 ? <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>No local sandbox projects yet.</small> : <div className="stack" style={{ marginTop: 10, gap: 8 }}>{projects.map((p) => <div className="row-between" key={p.id}><span><b>{p.name}</b><small style={{ display: 'block' }}>{p.environment} · {p.scopes.length} read-only scopes</small></span><span className="pill pill-neutral">{p.status}</span></div>)}</div>}
       </section>
       <section className="card" style={{ marginTop: 12 }}>
         <p className="section-label">Environments</p>

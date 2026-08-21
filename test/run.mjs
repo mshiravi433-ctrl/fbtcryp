@@ -692,6 +692,15 @@ console.log('\n▸ measuring light-theme contrast…');
     ['cyclic intent graph is rejected', !validateIntentGraph({ schema: 'fbt.intent-graph.v1', nodes: [{ id: 'a' }, { id: 'b' }], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'a' }] }).ok],
     ['valid graph is accepted', validateIntentGraph({ schema: 'fbt.intent-graph.v1', nodes: [{ id: 'a' }, { id: 'b' }], edges: [{ from: 'a', to: 'b' }] }).ok]
   ]);
+  const { validateProject, createSandboxProject } = await import('../src/lib/developerProjects.js');
+  const storage = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const created = createSandboxProject({ name: 'Demo', environment: 'sandbox', scopes: ['read_network'] }, storage);
+  report('sandbox project boundary', [
+    ['mainnet project is rejected', !validateProject({ name: 'x', environment: 'mainnet', scopes: ['read_network'] }).ok],
+    ['project without scope is rejected', !validateProject({ name: 'x', environment: 'sandbox', scopes: [] }).ok],
+    ['sandbox draft is local and created', created.ok && created.project.ownerRef === 'local-device'],
+    ['draft has no key or signer fields', created.ok && !('apiKey' in created.project) && !('signer' in created.project)]
+  ]);
 }
 
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
