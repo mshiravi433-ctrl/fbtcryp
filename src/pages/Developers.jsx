@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -114,6 +114,8 @@ export default function Developers() {
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [openGroup, setOpenGroup] = useState('market');
+  const [environments, setEnvironments] = useState(null);
+  useEffect(() => { let active = true; fetch('/api/environments', { headers: { accept: 'application/json' } }).then((r) => r.ok ? r.json() : null).then((x) => { if (active) setEnvironments(x?.data || null); }).catch(() => { if (active) setEnvironments(null); }); return () => { active = false; }; }, []);
 
   /*
    * A REAL host, resolved the same way share links are. The old page printed
@@ -148,6 +150,13 @@ export default function Developers() {
           {['Agents', 'Strategies', 'Liquidity', 'Connect', 'SDK', 'Environments', 'Reputation', 'Revenue'].map((item) => <span className="pill pill-neutral" key={item}>{item}</span>)}
         </div>
         <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Not configured · Automatic execution unavailable · Withdraw funds: never available</small>
+      </section>
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">Environments</p>
+        <div className="stack" style={{ gap: 8 }}>
+          {(environments || [{ name: 'sandbox', status: 'checking' }, { name: 'testnet', status: 'not_configured' }, { name: 'mainnet', status: 'not_configured' }]).map((env) => <div className="row-between" key={env.name}><b>{env.name}</b><span className="pill pill-neutral">{env.status}</span></div>)}
+        </div>
+        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Environment discovery only. No funds, signer or transaction access is granted.</small>
       </section>
 
       {/* ------------------------- start here ------------------------- */}
