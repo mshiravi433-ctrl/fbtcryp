@@ -1,3 +1,32 @@
+## Unreleased — Registry lifecycle, real API keys, certification and observed reputation
+
+- Listings gained a lifecycle (`draft → submitted → published → revoked`,
+  plus `draft → deleted` and `revoked → draft`). Only the owner moves an
+  entry, only `published` rows can reach the public catalog, nothing is
+  hard-deleted, and editing a published or revoked entry is refused rather
+  than silently changing what a reviewer certified.
+- Developer API keys are verified for the first time: a hash → owner index,
+  `authenticateApiKey()`, throttled `lastUsedAt`, and revocation that takes
+  effect. `Authorization: Bearer fbt_sandbox_…` authenticates as the same
+  owner and no more; every state-changing route requires the new
+  `manage_listings` scope. No scope can sign, execute, settle or withdraw.
+- Certifications (`ecosystem-certifications:v1`) are the only source of a
+  verified badge. They are issued only by accounts in `ECOSYSTEM_CERTIFIERS`,
+  store the reviewer's public label rather than their account id, and require
+  evidence that is an https link or a sha256 digest. Publishing requires an
+  active certification, and the catalog re-checks it on every read, so
+  revoking a certificate removes the listing immediately.
+- `GET /api/reputation/:id` is no longer a stub: it aggregates the existing
+  opt-in, bucketed execution observations. No endpoint accepts a reputation;
+  under five decided samples the count and rate are null; no address, tx hash
+  or identity is stored or exposed.
+- `GET/POST /api/portfolio/agent` stores an approval-only allocation target
+  with no scheduler, job or signer able to act on it.
+- Intent OS cards show the certifying reviewer's name or stay unverified, and
+  an observed success rate only when there is enough of it (en/fa/ar).
+- No automatic execution, custody, RFQ settlement or mainnet onboarding was
+  added; stage 5 (real agent execution) remains deliberately out of scope.
+
 ## Unreleased — Authenticated ecosystem registry (agents / strategies)
 
 The Agent and Strategy catalogs were an empty stub: `catalogList()` returned
