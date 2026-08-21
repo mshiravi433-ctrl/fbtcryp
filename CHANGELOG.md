@@ -1,3 +1,12 @@
+## Unreleased — FBT Network ecosystem safety layer
+
+- Added read-only Agent, Strategy and Liquidity catalog boundaries with honest unavailable states.
+- Added authenticated sandbox Developer Projects and scoped, one-time API keys with hash-only storage.
+- Added durable idempotency for project creation, API key creation and revocation.
+- Added fail-closed validators for agents, strategies, portfolio agents, intent graphs, certification and reputation evidence.
+- Added sandbox-only local project drafts and embedded Agent/Strategy tabs in Intent OS; no new page or automatic execution path was introduced.
+- No custody, signer, withdrawal, payout, billing, mainnet onboarding, fake metrics or fabricated reputation was added.
+
 ## Unreleased — Notifications
 
 - Fix FCM token rotation by keeping a native registration listener active and re-syncing order watches after a new token is registered.

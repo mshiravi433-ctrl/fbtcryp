@@ -681,5 +681,35 @@ console.log('\n▸ measuring light-theme contrast…');
   report('light-theme contrast', rows);
 }
 
+/* --------------------------- ecosystem safety --------------------------- */
+{
+  const { validateAgent, validateStrategy, validateIntentGraph } = await import('../server/ecosystemSchemas.js');
+  report('ecosystem safety schemas', [
+    ['agent with withdrawal permission is rejected', !validateAgent({ schema: 'fbt.agent.v1', id: 'x-agent', permissions: { withdrawFunds: true }, supportedChains: [], executionMode: 'manual' }).ok],
+    ['agent automatic execution is rejected', !validateAgent({ schema: 'fbt.agent.v1', id: 'x-agent', permissions: { executeWithoutUser: true }, supportedChains: [], executionMode: 'manual' }).ok],
+    ['strategy automatic execution is rejected', !validateStrategy({ schema: 'fbt.strategy.v1', id: 'x-strategy', policy: { maxAmountUsd: 10, maxSlippageBps: 50, allowedChains: [1] }, action: { automaticExecution: true } }).ok],
+    ['strategy requires bounded policy', !validateStrategy({ schema: 'fbt.strategy.v1', id: 'x-strategy', policy: { allowedChains: [] } }).ok],
+    ['cyclic intent graph is rejected', !validateIntentGraph({ schema: 'fbt.intent-graph.v1', nodes: [{ id: 'a' }, { id: 'b' }], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'a' }] }).ok],
+    ['valid graph is accepted', validateIntentGraph({ schema: 'fbt.intent-graph.v1', nodes: [{ id: 'a' }, { id: 'b' }], edges: [{ from: 'a', to: 'b' }] }).ok]
+  ]);
+  const { validateProject, createSandboxProject } = await import('../src/lib/developerProjects.js');
+  const storage = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const created = createSandboxProject({ name: 'Demo', environment: 'sandbox', scopes: ['read_network'] }, storage);
+  report('sandbox project boundary', [
+    ['mainnet project is rejected', !validateProject({ name: 'x', environment: 'mainnet', scopes: ['read_network'] }).ok],
+    ['project without scope is rejected', !validateProject({ name: 'x', environment: 'sandbox', scopes: [] }).ok],
+    ['sandbox draft is local and created', created.ok && created.project.ownerRef === 'local-device'],
+    ['draft has no key or signer fields', created.ok && !('apiKey' in created.project) && !('signer' in created.project)]
+  ]);
+  const { validatePortfolioAgent, validateRevenueEvent, validateCertification, reputationRelationship } = await import('../server/phase2Schemas.js');
+  report('phase 2/3 fail-closed schemas', [
+    ['portfolio agent cannot withdraw', !validatePortfolioAgent({ schema: 'fbt.portfolio-agent.v1', allocations: [{ asset: 'ETH' }], permissions: { withdrawFunds: true }, rebalance: { maxTradeUsd: 10, maxSlippageBps: 50 } }).ok],
+    ['portfolio agent requires approval mode', validatePortfolioAgent({ schema: 'fbt.portfolio-agent.v1', allocations: [{ asset: 'ETH' }], permissions: {}, rebalance: { maxTradeUsd: 10, maxSlippageBps: 50 } }).value?.rebalance.mode === 'approval_required'],
+    ['revenue is unavailable without accounting', validateRevenueEvent({ schema: 'fbt.revenue-event.v1', projectId: 'p', status: 'unavailable' }).ok],
+    ['active certification requires evidence array', !validateCertification({ schema: 'fbt.certification.v1', subjectId: 'a', certificationType: 'api_verified', issuer: 'fbt', issuedAt: 1, status: 'active' }).ok],
+    ['small reputation samples are insufficient', reputationRelationship({ sampleSize: 2 }).status === 'insufficient_data']
+  ]);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);

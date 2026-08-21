@@ -92,6 +92,7 @@ const SmartWallet = lazyRetry(() => import('./pages/SmartWallet'));
 const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 
+
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
  * Four screens that host existing pages as tabs. The originals are untouched
@@ -281,6 +282,7 @@ function AnimatedRoutes() {
             <Route path="/smart-wallet" element={<SmartWallet />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/intent" element={<IntentOS />} />
+
             <Route path="*" element={<Market />} />
           </Routes>
         </AnimatePresence>

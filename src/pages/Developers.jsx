@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { publicAppUrl } from '../lib/nativeShell';
+import { createSandboxProject, loadProjectDrafts, PROJECT_SCOPES } from '../lib/developerProjects';
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -96,7 +97,12 @@ const GROUPS = [
       { m: 'GET', p: '/api/bridge/status', d: 'bridgeStatus' },
       { m: 'GET', p: '/api/fiat/status', d: 'fiatStatus' },
       { m: 'GET', p: '/api/solana/status', d: 'solanaStatus' },
-      { m: 'GET', p: '/api/gasless/status', d: 'gaslessStatus' }
+      { m: 'GET', p: '/api/gasless/status', d: 'gaslessStatus' },
+      { m: 'GET', p: '/api/environments', d: 'environments' },
+      { m: 'GET', p: '/api/ecosystem/agents', d: 'agentsCatalog' },
+      { m: 'GET', p: '/api/ecosystem/strategies', d: 'strategiesCatalog' },
+      { m: 'GET', p: '/api/ecosystem/liquidity', d: 'liquidityCatalog' },
+      { m: 'GET', p: '/api/network/overview?window=24h', d: 'networkOverview' }
     ]
   }
 ];
@@ -114,6 +120,11 @@ export default function Developers() {
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [openGroup, setOpenGroup] = useState('market');
+  const [environments, setEnvironments] = useState(null);
+  const [projects, setProjects] = useState(() => loadProjectDrafts());
+  const [projectName, setProjectName] = useState('');
+  const [projectError, setProjectError] = useState(null);
+  useEffect(() => { let active = true; fetch('/api/environments', { headers: { accept: 'application/json' } }).then((r) => r.ok ? r.json() : null).then((x) => { if (active) setEnvironments(x?.data || null); }).catch(() => { if (active) setEnvironments(null); }); return () => { active = false; }; }, []);
 
   /*
    * A REAL host, resolved the same way share links are. The old page printed
@@ -141,6 +152,31 @@ export default function Developers() {
       </motion.div>
 
       <p className="prose-sm">{t('dev.intro')}</p>
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">FBT Network ecosystem</p>
+        <p className="prose-sm">Read-only discovery surfaces are embedded here. No agent, strategy or liquidity listing is executable in this phase.</p>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {['Agents', 'Strategies', 'Liquidity', 'Connect', 'SDK', 'Environments', 'Reputation', 'Revenue'].map((item) => <span className="pill pill-neutral" key={item}>{item}</span>)}
+        </div>
+        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Not configured · Automatic execution unavailable · Withdraw funds: never available</small>
+      </section>
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">Projects</p>
+        <p className="prose-sm">Create a local sandbox draft. This does not create an account, API key, webhook, or production project.</p>
+        <div className="row" style={{ gap: 8 }}>
+          <input className="input" value={projectName} maxLength={48} placeholder="Project name" onChange={(e) => { setProjectName(e.target.value); setProjectError(null); }} aria-label="Project name" />
+          <button className="btn btn-primary" type="button" onClick={() => { const result = createSandboxProject({ name: projectName, environment: 'sandbox', scopes: PROJECT_SCOPES }); if (!result.ok) setProjectError(result.code); else { setProjects(result.projects); setProjectName(''); setProjectError(null); } }}>Create draft</button>
+        </div>
+        {projectError && <small role="alert">Unavailable: {projectError}</small>}
+        {projects.length === 0 ? <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>No local sandbox projects yet.</small> : <div className="stack" style={{ marginTop: 10, gap: 8 }}>{projects.map((p) => <div className="row-between" key={p.id}><span><b>{p.name}</b><small style={{ display: 'block' }}>{p.environment} · {p.scopes.length} read-only scopes</small></span><span className="pill pill-neutral">{p.status}</span></div>)}</div>}
+      </section>
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">Environments</p>
+        <div className="stack" style={{ gap: 8 }}>
+          {(environments || [{ name: 'sandbox', status: 'checking' }, { name: 'testnet', status: 'not_configured' }, { name: 'mainnet', status: 'not_configured' }]).map((env) => <div className="row-between" key={env.name}><b>{env.name}</b><span className="pill pill-neutral">{env.status}</span></div>)}
+        </div>
+        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Environment discovery only. No funds, signer or transaction access is granted.</small>
+      </section>
 
       {/* ------------------------- start here ------------------------- */}
       <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show">

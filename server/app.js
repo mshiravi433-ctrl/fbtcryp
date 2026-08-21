@@ -49,7 +49,15 @@ import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
-import { timingSafeEqual } from 'node:crypto';
+import { networkOverview, validWindow, networkError } from './networkOverview.js';
+import { catalogList, catalogError } from './ecosystemCatalog.js';
+import { environmentList } from './environments.js';
+import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
+import { createApiKey, revokeApiKey } from './developerKeys.js';
+import { SCHEMAS } from './phase2Schemas.js';
+import { claimIdempotency, saveIdempotency } from './idempotency.js';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { PROJECT_SCHEMA } from './developerProjects.js';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
 /*
@@ -560,6 +568,72 @@ function serve(res, ttlMs) {
 }
 
 /* --------------------------------- routes -------------------------------- */
+
+/* FBT Network 2.0: aggregate, read-only analytics. This deliberately reports
+ * empty when no durable observation source is configured; it never treats
+ * client state, demo data or configured provider names as network activity. */
+const projectError = (res, code, message, status = 400) => res.status(status).json({ error: { code, message, retryable: code === 'PROJECT_STORE_UNAVAILABLE', requestId: randomUUID() } });
+app.get('/api/developer/projects', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const result = await listProjects(req.tgUser.id);
+  if (!result.ok) return projectError(res, result.code, 'Developer project storage is not configured', 503);
+  return res.json({ data: result.projects, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: 'live', scopes: projectScopes() } });
+});
+app.post('/api/developer/projects', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const fingerprint = JSON.stringify(req.body || {});
+  const claim = await claimIdempotency(req.tgUser.id, 'project-create', req.get('idempotency-key'), fingerprint);
+  if (!claim.ok) return projectError(res, claim.code, claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer project storage is not configured' : 'A valid idempotency key is required', claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  if (claim.replay) return res.status(200).json(claim.result);
+  const result = await createProject(req.tgUser.id, req.body);
+  if (!result.ok) return projectError(res, result.code, result.code === 'DUPLICATE_PROJECT' ? 'A project with this name already exists' : result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer project storage is not configured' : 'Project input is invalid', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  const response = { data: result.project, meta: { schema: PROJECT_SCHEMA, dataStatus: 'live' } }; await saveIdempotency(claim, response);
+  return res.status(201).json(response);
+});
+
+app.post('/api/developer/projects/:id/keys', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const keyClaim = await claimIdempotency(req.tgUser.id, `key-create:${req.params.id}`, req.get('idempotency-key'), JSON.stringify(req.body || {}));
+  if (!keyClaim.ok) return projectError(res, keyClaim.code, keyClaim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'A valid idempotency key is required', keyClaim.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  if (keyClaim.replay) return projectError(res, 'KEY_SECRET_UNAVAILABLE', 'The API key secret was already shown and cannot be recovered', 409);
+  const owned = await ownedProject(req.tgUser.id, req.params.id);
+  if (!owned.ok) return projectError(res, owned.code, 'Developer project storage is not configured', 503);
+  if (!owned.project) return projectError(res, 'PROJECT_NOT_FOUND', 'Project not found', 404);
+  const result = await createApiKey(req.tgUser.id, owned.project, req.body);
+  if (!result.ok) return projectError(res, result.code, result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'Requested scopes are not allowed', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  const response = { data: { ...result.record, secret: result.secret }, meta: { schema: 'fbt.api-key.v1', warning: 'The secret is shown once and cannot be recovered.' } }; await saveIdempotency(keyClaim, { data: result.record, meta: response.meta });
+  return res.status(201).json(response);
+});
+app.post('/api/developer/projects/:id/keys/:keyId/revoke', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const revokeClaim = await claimIdempotency(req.tgUser.id, `key-revoke:${req.params.id}:${req.params.keyId}`, req.get('idempotency-key'), req.params.keyId);
+  if (!revokeClaim.ok) return projectError(res, revokeClaim.code, revokeClaim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'A valid idempotency key is required', revokeClaim.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  if (revokeClaim.replay) return res.json(revokeClaim.result);
+  const owned = await ownedProject(req.tgUser.id, req.params.id);
+  if (!owned.ok) return projectError(res, owned.code, 'Developer project storage is not configured', 503);
+  if (!owned.project) return projectError(res, 'PROJECT_NOT_FOUND', 'Project not found', 404);
+  const result = await revokeApiKey(req.tgUser.id, owned.project, req.params.keyId);
+  if (!result.ok) return projectError(res, result.code, result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'Key not found', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 404);
+  const response = { data: { revoked: true }, meta: { schema: 'fbt.api-key-revocation.v1' } }; await saveIdempotency(revokeClaim, response);
+  return res.json(response);
+});
+
+app.get('/api/reputation/:id', (req, res) => res.json({ data: null, meta: { schema: SCHEMAS.reputation, dataStatus: 'unavailable', subjectId: String(req.params.id).slice(0, 64), limitations: ['No privacy-safe observed reputation store is configured.'] } }));
+app.get('/api/portfolio/agent', (req, res) => { if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401); return res.json({ data: null, meta: { schema: SCHEMAS.portfolioAgent, dataStatus: 'unavailable', limitations: ['Portfolio Agent is approval-only and no durable agent configuration exists.'] } }); });
+app.get('/api/environments', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json(environmentList());
+});
+app.get('/api/ecosystem/agents', (_req, res) => res.json(catalogList('agent')));
+app.get('/api/ecosystem/strategies', (_req, res) => res.json(catalogList('strategy')));
+app.get('/api/ecosystem/liquidity', (_req, res) => res.json(catalogList('liquidity')));
+
+app.get('/api/network/overview', (req, res) => {
+  const window = validWindow(req.query.window);
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  if (!window) return res.status(400).json(networkError('INVALID_WINDOW', 'window must be one of 1h, 24h, 7d or 30d', false));
+  return res.json(networkOverview({ window }));
+});
 
 app.get('/api/health', (_req, res) => {
   /*
