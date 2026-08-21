@@ -55,6 +55,7 @@ import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
 import { createApiKey, revokeApiKey } from './developerKeys.js';
 import { SCHEMAS } from './phase2Schemas.js';
+import { claimIdempotency, saveIdempotency } from './idempotency.js';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { PROJECT_SCHEMA } from './developerProjects.js';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -580,9 +581,14 @@ app.get('/api/developer/projects', async (req, res) => {
 });
 app.post('/api/developer/projects', async (req, res) => {
   if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const fingerprint = JSON.stringify(req.body || {});
+  const claim = await claimIdempotency(req.tgUser.id, 'project-create', req.get('idempotency-key'), fingerprint);
+  if (!claim.ok) return projectError(res, claim.code, claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer project storage is not configured' : 'A valid idempotency key is required', claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  if (claim.replay) return res.status(200).json(claim.result);
   const result = await createProject(req.tgUser.id, req.body);
   if (!result.ok) return projectError(res, result.code, result.code === 'DUPLICATE_PROJECT' ? 'A project with this name already exists' : result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer project storage is not configured' : 'Project input is invalid', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
-  return res.status(201).json({ data: result.project, meta: { schema: PROJECT_SCHEMA, dataStatus: 'live' } });
+  const response = { data: result.project, meta: { schema: PROJECT_SCHEMA, dataStatus: 'live' } }; await saveIdempotency(claim, response);
+  return res.status(201).json(response);
 });
 
 app.post('/api/developer/projects/:id/keys', async (req, res) => {
