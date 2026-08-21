@@ -54,6 +54,29 @@ async function call(path, { method = 'GET', body = null } = {}) {
   }
 }
 
+/**
+ * The optional auth middleware intentionally collapses an invalid Mini App
+ * session into AUTH_REQUIRED for protected routes. Ask the metadata-only
+ * diagnostic route for the precise reason before showing a human message.
+ * This request is allowed without a session so NO_INIT_DATA_SENT is diagnosed
+ * too; the endpoint never returns initData values or the bot token.
+ */
+export async function diagnoseTelegramAuth() {
+  const headers = telegramAuthHeaders() || { accept: 'application/json' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}/telegram/diagnose`, { headers, signal: controller.signal });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, status: res.status, code: `HTTP_${res.status}` };
+    return { ok: true, status: res.status, data: payload?.data ?? null, meta: payload?.meta ?? null };
+  } catch (err) {
+    return { ok: false, code: err?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK', status: 0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ----------------------------- projects & keys ---------------------------- */
 
 export const listProjects = () => call('/developer/projects');

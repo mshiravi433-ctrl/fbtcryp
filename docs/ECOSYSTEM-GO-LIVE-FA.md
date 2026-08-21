@@ -25,6 +25,35 @@ curl -s https://fbtswap.ir/api/ecosystem/status | jq
 
 ---
 
+## گام ۰.۵ — تلگرام را وصل کن
+
+این مرحله برای خطای `AUTH_REQUIRED` داخل Mini App حیاتی است: `initData` باید
+با **همان رباتی** امضا شده باشد که توکنش در Vercel تنظیم شده است.
+
+۱. اول در `https://fbtswap.ir/api/health` فیلد `"bot"` را چک کن. مقدار `true`
+یعنی `TELEGRAM_BOT_TOKEN` در محیط دیپلوی تنظیم شده است؛ `false` یعنی هیچ
+نشست Mini Appای نمی‌تواند روی سرور تأیید شود.
+۲. در [@BotFather](https://t.me/BotFather) برای ربات توکن بگیر. اگر توکن قبلی
+در چت یا جای عمومی لو رفته، همان‌جا با `/revoke` باطلش کن و فقط توکن جدید را
+استفاده کن.
+۳. در **Vercel → پروژه → Settings → Environment Variables** متغیر
+`TELEGRAM_BOT_TOKEN` را در محیط درست بگذار، سپس **Redeploy** کن. متغیر در زمان
+بوت خوانده می‌شود و با ذخیره‌کردن بدون دیپلوی عوض نمی‌شود.
+۴. در BotFather مسیر **`/mybots → Bot Settings → Menu Button`** را باز کن و
+آدرس `https://fbtswap.ir` را به‌عنوان Web App URL بگذار. اپ را باید از همین
+Menu Button باز کنی؛ بازکردن یک لینک معمولی در مرورگر داخلی تلگرام،
+`initData` امضاشدهٔ Mini App را تضمین نمی‌کند.
+
+روی Vercel پردازهٔ polling ربات اجرا نمی‌شود و برای Mini App هم لازم نیست.
+Mini App فقط `initData` را می‌فرستد و سرور امضای آن را با توکن بررسی می‌کند؛
+polling برای پاسخ‌دادن به پیام‌های ربات است، نه برای احراز هویت Web App.
+
+برای علت دقیق، بدون هدر به `/api/telegram/diagnose` برو و سپس همان درخواست را
+از داخل Mini App با هدر واقعی `x-telegram-init-data` تکرار کن. این endpoint
+هیچ توکنی برنمی‌گرداند و فقط وضعیت امضا، عمر نشست و `botId` عمومی را نشان می‌دهد.
+
+---
+
 ## گام ۱ — آیدی تلگرام خودت را بگیر
 
 اپ را **داخل تلگرام** باز کن → صفحهٔ Developers. اگر بازبینی پیکربندی نشده
@@ -117,6 +146,7 @@ Intent OS → تب Agents باید همان کارت را با نشان «گوا
 | `ENTRY_NOT_EDITABLE` (۴۰۹) | ویرایش لیستینگ منتشرشده | اول ابطال |
 | `SCOPE_NOT_ALLOWED` (۴۰۳) | کلید API اسکوپ `manage_listings` ندارد | کلید تازه با آن اسکوپ |
 | `ECOSYSTEM_WRITE_RATE_LIMITED` (۴۲۹) | بیش از ۱۲ نوشتن در دقیقه | `retry-after` را رعایت کن |
+| `AUTH_REQUIRED` داخل تلگرام | نشست Mini App تأیید نشده؛ علت دقیق را از diagnose بگیر | **گام ۰.۵** |
 
 ## چیزی که هنوز عمداً ساخته نشده
 
