@@ -52,7 +52,9 @@ import { revenueReadiness } from './readiness.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
 import { catalogList, catalogError } from './ecosystemCatalog.js';
 import { environmentList } from './environments.js';
-import { timingSafeEqual } from 'node:crypto';
+import { listProjects, createProject, projectScopes } from './developerProjects.js';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { PROJECT_SCHEMA } from './developerProjects.js';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
 /*
@@ -567,6 +569,20 @@ function serve(res, ttlMs) {
 /* FBT Network 2.0: aggregate, read-only analytics. This deliberately reports
  * empty when no durable observation source is configured; it never treats
  * client state, demo data or configured provider names as network activity. */
+const projectError = (res, code, message, status = 400) => res.status(status).json({ error: { code, message, retryable: code === 'PROJECT_STORE_UNAVAILABLE', requestId: randomUUID() } });
+app.get('/api/developer/projects', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const result = await listProjects(req.tgUser.id);
+  if (!result.ok) return projectError(res, result.code, 'Developer project storage is not configured', 503);
+  return res.json({ data: result.projects, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: 'live', scopes: projectScopes() } });
+});
+app.post('/api/developer/projects', async (req, res) => {
+  if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const result = await createProject(req.tgUser.id, req.body);
+  if (!result.ok) return projectError(res, result.code, result.code === 'DUPLICATE_PROJECT' ? 'A project with this name already exists' : result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer project storage is not configured' : 'Project input is invalid', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  return res.status(201).json({ data: result.project, meta: { schema: PROJECT_SCHEMA, dataStatus: 'live' } });
+});
+
 app.get('/api/environments', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(environmentList());
