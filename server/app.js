@@ -56,19 +56,24 @@ import {
   REGISTRY_LIMITATIONS,
   createRegistryEntry,
   listOwnerRegistry,
+  listReviewQueue,
+  registryCounts,
   screenRegistryInput,
   transitionRegistryEntry,
   updateRegistryEntry
 } from './ecosystemRegistry.js';
 import {
   CERTIFICATION_LIMITATIONS,
+  CERTIFICATION_TYPES,
+  EVIDENCE_TYPES,
   certificationsConfigured,
   certifierLabel,
   issueCertification,
   listCertifications,
-  revokeCertification
+  revokeCertification,
+  sweepCertifications
 } from './ecosystemCertifications.js';
-import { REPUTATION_LIMITATIONS, getReputation } from './ecosystemReputation.js';
+import { REPUTATION_LIMITATIONS, getReputation, getReputationSnapshot } from './ecosystemReputation.js';
 import { PORTFOLIO_LIMITATIONS, readPortfolioAgent, savePortfolioAgent } from './portfolioAgents.js';
 import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
@@ -840,17 +845,28 @@ app.post('/api/ecosystem/strategies/:id', (req, res) => ecosystemWrite('strategy
  * than the listing's own content. Owners move their listings; they cannot
  * bless them.
  */
-for (const [type, path] of [['agent', 'agents'], ['strategy', 'strategies']]) {
-  for (const [action, status] of [['submit', 'submitted'], ['publish', 'published'], ['revoke', 'revoked'], ['delete', 'deleted']]) {
-    app.post(`/api/ecosystem/${path}/:id/${action}`, (req, res) => ecosystemWrite(
-      type,
-      `ecosystem-${type}-${action}:${req.params.id}`,
-      req,
-      res,
-      (owner) => transitionRegistryEntry(type, owner, req.params.id, status)
-    ));
-  }
-}
+const lifecycleRoute = (type, action, status) => (req, res) => ecosystemWrite(
+  type,
+  `ecosystem-${type}-${action}:${req.params.id}`,
+  req,
+  res,
+  (owner) => transitionRegistryEntry(type, owner, req.params.id, status)
+);
+/* Written out one route per line rather than generated in a loop: the
+   developer page advertises these paths and test/wiring.mjs proves every
+   advertised path is really registered by grepping for the literal. A clever
+   loop would hide them from that check — which is the check that stops the
+   docs promising an endpoint nobody implemented. */
+app.post('/api/ecosystem/agents/:id/submit', lifecycleRoute('agent', 'submit', 'submitted'));
+app.post('/api/ecosystem/agents/:id/publish', lifecycleRoute('agent', 'publish', 'published'));
+app.post('/api/ecosystem/agents/:id/revoke', lifecycleRoute('agent', 'revoke', 'revoked'));
+app.post('/api/ecosystem/agents/:id/delete', lifecycleRoute('agent', 'delete', 'deleted'));
+app.post('/api/ecosystem/agents/:id/draft', lifecycleRoute('agent', 'draft', 'draft'));
+app.post('/api/ecosystem/strategies/:id/submit', lifecycleRoute('strategy', 'submit', 'submitted'));
+app.post('/api/ecosystem/strategies/:id/publish', lifecycleRoute('strategy', 'publish', 'published'));
+app.post('/api/ecosystem/strategies/:id/revoke', lifecycleRoute('strategy', 'revoke', 'revoked'));
+app.post('/api/ecosystem/strategies/:id/delete', lifecycleRoute('strategy', 'delete', 'deleted'));
+app.post('/api/ecosystem/strategies/:id/draft', lifecycleRoute('strategy', 'draft', 'draft'));
 /* Liquidity stays read-only on purpose: with no RFQ settlement and no custody
    there is nothing a self-service listing could honestly claim, so the write
    path answers 405 rather than storing an unbacked promise. */
@@ -888,6 +904,57 @@ async function certifierWrite(req, res, operation, run) {
 app.post('/api/ecosystem/certifications', (req, res) => certifierWrite(req, res, 'certification-issue', () => issueCertification(req.tgUser.id, req.body)));
 app.post('/api/ecosystem/certifications/:id/revoke', (req, res) => certifierWrite(req, res, `certification-revoke:${req.params.id}`, () => revokeCertification(req.tgUser.id, req.params.id)));
 
+/*
+ * Is the caller a reviewer? The client needs this to decide whether to render
+ * a reviewer console at all — but it is a CONVENIENCE, not the control: every
+ * issuing route re-checks the allowlist server-side, so a client that renders
+ * the console anyway still cannot certify anything.
+ */
+app.get('/api/ecosystem/certifier', (req, res) => {
+  if (!req.tgUser?.id) return ecosystemFail(res, 'AUTH_REQUIRED');
+  const label = certifierLabel(req.tgUser.id);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: { configured: certificationsConfigured(), isCertifier: Boolean(label), label: label || null, certificationTypes: [...CERTIFICATION_TYPES], evidenceTypes: [...EVIDENCE_TYPES] },
+    meta: { schema: 'fbt.certifier-status.v1', dataStatus: 'live' }
+  });
+});
+
+/* The queue of listings waiting for a decision. Reviewer-only, and it never
+   includes who submitted them. */
+app.get('/api/ecosystem/review/queue', async (req, res) => {
+  if (!req.tgUser?.id) return ecosystemFail(res, 'AUTH_REQUIRED');
+  if (!certificationsConfigured()) return ecosystemFail(res, 'CERTIFIER_NOT_CONFIGURED');
+  if (!certifierLabel(req.tgUser.id)) return ecosystemFail(res, 'CERTIFIER_NOT_AUTHORIZED');
+  const result = await listReviewQueue();
+  if (!result.ok) return ecosystemFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: result.data, pagination: { cursor: null, hasMore: false }, meta: { schema: 'fbt.resource-list.v1', generatedAt: new Date().toISOString(), dataStatus: result.dataStatus, limitations: [...CERTIFICATION_LIMITATIONS] } });
+});
+
+/*
+ * Operational truth for the registry: how many listings are in each state,
+ * whether a reviewer is configured, whether storage is durable. Public because
+ * every number here is already derivable from the public catalog, and because
+ * "why is the catalog empty" should be answerable without a login.
+ */
+app.get('/api/ecosystem/status', async (_req, res) => {
+  const [counts, certifications] = await Promise.all([registryCounts(), listCertifications({})]);
+  const active = certifications.data.filter((row) => row.status === 'active').length;
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json({
+    data: {
+      dataStatus: counts.dataStatus,
+      durableStore: blobConfigured(),
+      certificationIssuerConfigured: certificationsConfigured(),
+      lifecycle: Object.keys(LIFECYCLE),
+      listings: counts.counts,
+      certifications: { dataStatus: certifications.dataStatus, active, total: certifications.data.length }
+    },
+    meta: { schema: 'fbt.ecosystem-status.v1', generatedAt: new Date().toISOString(), dataStatus: counts.dataStatus, limitations: [...REGISTRY_LIMITATIONS] }
+  });
+});
+
 app.get('/api/network/overview', (req, res) => {
   const window = validWindow(req.query.window);
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
@@ -908,6 +975,13 @@ app.get('/api/health', (_req, res) => {
     uptime: process.uptime(),
     cache: cacheStats(),
     bot: Boolean(BOT_TOKEN),
+    /* Config flags only — no store reads. /api/ecosystem/status has the counts. */
+    ecosystem: {
+      durableStore: blobConfigured(),
+      certificationIssuerConfigured: certificationsConfigured(),
+      writesEnabled: blobConfigured(),
+      publishRequiresCertification: true
+    },
     learning: {
       enabled: learningConfigured() && process.env.LEARNING_ENABLED !== '0',
       version: m?.version ?? null,
@@ -3754,15 +3828,33 @@ async function readFcmTokensSafe() {
  */
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
-  const [web, fcm, watch] = await Promise.allSettled([
+  /*
+   * Registry maintenance rides on the existing daily slot rather than asking
+   * for a third Vercel cron (Hobby allows two).
+   *
+   *   · sweepCertifications — reads already treat an expired certificate as
+   *     expired; this makes the stored row say so, instead of leaving
+   *     `active` rows that only look wrong to whoever reads the blob directly.
+   *   · reputation snapshot — recomputed here so the first visitor of the day
+   *     does not pay for a thirty-bucket walk on the request path.
+   *
+   * Both are settled, never awaited into the failure path: a registry chore
+   * must not be able to stop the daily notifications from going out.
+   */
+  const [web, fcm, watch, certs, reputation] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
-    runWatchCycle(sendWatchAlert)
+    runWatchCycle(sendWatchAlert),
+    sweepCertifications(),
+    getReputationSnapshot({ force: true })
   ]);
+  const settled = (result, shape) => result.status === 'fulfilled' ? shape(result.value) : { error: String(result.reason).slice(0, 120) };
   res.json({
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
     fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
-    watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) }
+    watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
+    certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
+    reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 }))
   });
 });
 

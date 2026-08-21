@@ -29,6 +29,8 @@ import {
   createRegistryEntry,
   listOwnerRegistry,
   listRegistry,
+  listReviewQueue,
+  registryCounts,
   memoryRegistryStore,
   publishRegistryEntry,
   revokeRegistryEntry,
@@ -42,7 +44,8 @@ import {
   certifiedSubjects,
   issueCertification,
   listCertifications,
-  revokeCertification
+  revokeCertification,
+  sweepCertifications
 } from '../server/ecosystemCertifications.js';
 import { authenticateApiKey, createApiKey, hasScope, memoryKeyStore, revokeApiKey } from '../server/developerKeys.js';
 import { buildReputationSnapshot } from '../server/ecosystemReputation.js';
@@ -245,6 +248,35 @@ const STRATEGY = {
   const certList = await listCertifications({ subjectId: 'probe-agent' }, certStore);
   t('certifications are readable per subject', certList.ok && certList.data.length >= 1);
   t('a revoked certification stays in the record for the trail', certList.data.some((row) => row.status === 'revoked'));
+
+  /* ---- reviewer queue and operational counts ---- */
+  {
+    const queueStore = memoryRegistryStore();
+    await createRegistryEntry('agent', 3001, { ...AGENT, id: 'queued-agent' }, queueStore);
+    await createRegistryEntry('agent', 3002, { ...AGENT, id: 'private-draft' }, queueStore);
+    await submitRegistryEntry('agent', 3001, 'queued-agent', { store: queueStore });
+    const queue = await listReviewQueue({}, queueStore);
+    t('the review queue holds only submitted listings', queue.ok && queue.data.length === 1 && queue.data[0].id === 'queued-agent');
+    t('the review queue never exposes who submitted a listing', !JSON.stringify(queue.data).includes('ownerId') && !JSON.stringify(queue.data).includes('3001'));
+    const counts = await registryCounts(queueStore);
+    t('registry counts report each lifecycle state', counts.counts.agent.draft === 1 && counts.counts.agent.submitted === 1);
+    t('registry counts report unavailable without a durable store',
+      (await registryCounts({ durable: () => false, get: async (_k, f = null) => f, set: async () => {} })).dataStatus === 'unavailable');
+  }
+
+  /* ---- expiry sweep: stored rows must agree with what readers are told ---- */
+  {
+    const map = new Map();
+    const expiryStore = { durable: () => true, get: async (k, f = null) => (map.has(k) ? map.get(k) : f), set: async (k, v) => { map.set(k, v); return v; } };
+    map.set('ecosystem-certifications:v1', [
+      { schema: 'fbt.certification.v1', id: 'cert_old', subjectId: 'probe-agent', subjectType: 'agent', certificationType: 'sandbox_reviewed', issuer: 'Probe Review', issuedAt: Date.now() - 200_000, expiresAt: Date.now() - 1000, status: 'active', evidence },
+      { schema: 'fbt.certification.v1', id: 'cert_live', subjectId: 'other-agent', subjectType: 'agent', certificationType: 'sandbox_reviewed', issuer: 'Probe Review', issuedAt: Date.now() - 1000, expiresAt: Date.now() + 200_000, status: 'active', evidence }
+    ]);
+    t('an expired certification is not counted as active', !(await certifiedSubjects({}, expiryStore)).has('probe-agent'));
+    const swept = await sweepCertifications({}, expiryStore);
+    t('the sweep marks expired certifications in storage', swept.ok && swept.expired === 1 && swept.active === 1);
+    t('the sweep leaves a live certification alone', (await certifiedSubjects({}, expiryStore)).has('other-agent'));
+  }
 
   /* ---- API keys: issued, verified, scoped, revocable ---- */
   const keyStore = memoryKeyStore();
@@ -458,6 +490,29 @@ try {
 
     const mine = await fetch(base + '/api/ecosystem/mine/agents', { headers: { accept: 'application/json', 'x-telegram-init-data': initData(4242) } });
     t('the owner listing endpoint fails closed without a durable registry', mine.status === 503);
+  }
+
+  /* Operational status is public; the reviewer surfaces are not. */
+  {
+    const status = await fetch(base + '/api/ecosystem/status', { headers: { accept: 'application/json' } });
+    const body = await status.json();
+    t('GET /api/ecosystem/status is public and states its configuration',
+      status.status === 200 && typeof body.data?.durableStore === 'boolean' && body.data?.publishRequiresCertification !== false);
+    t('the status endpoint names the lifecycle it enforces', Array.isArray(body.data?.lifecycle) && body.data.lifecycle.includes('published'));
+
+    const health = await (await fetch(base + '/api/health')).json();
+    t('health reports the registry configuration without reading the store',
+      health.ecosystem?.publishRequiresCertification === true && typeof health.ecosystem?.certificationIssuerConfigured === 'boolean');
+  }
+  for (const path of ['/api/ecosystem/certifier', '/api/ecosystem/review/queue']) {
+    const res = await fetch(base + path, { headers: { accept: 'application/json' } });
+    t(`GET ${path} without authentication is 401`, res.status === 401);
+  }
+  if (BOT_TOKEN) {
+    const who = await (await fetch(base + '/api/ecosystem/certifier', { headers: { accept: 'application/json', 'x-telegram-init-data': initData(4242) } })).json();
+    t('an ordinary account is told it is not a reviewer', who.data?.isCertifier === false);
+    const queue = await fetch(base + '/api/ecosystem/review/queue', { headers: { accept: 'application/json', 'x-telegram-init-data': initData(4242) } });
+    t('an ordinary account cannot read the review queue', queue.status === 403);
   }
 
   /* There is no execution surface to find. */

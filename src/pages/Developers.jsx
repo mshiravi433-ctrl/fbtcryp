@@ -7,6 +7,8 @@ import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { publicAppUrl } from '../lib/nativeShell';
 import { createSandboxProject, loadProjectDrafts, PROJECT_SCOPES } from '../lib/developerProjects';
+import DeveloperConsole from '../components/DeveloperConsole';
+import ReviewerConsole from '../components/ReviewerConsole';
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -102,6 +104,13 @@ const GROUPS = [
       { m: 'GET', p: '/api/ecosystem/agents', d: 'agentsCatalog' },
       { m: 'GET', p: '/api/ecosystem/strategies', d: 'strategiesCatalog' },
       { m: 'GET', p: '/api/ecosystem/liquidity', d: 'liquidityCatalog' },
+      { m: 'GET', p: '/api/ecosystem/status', d: 'ecosystemStatus' },
+      { m: 'GET', p: '/api/ecosystem/certifications?subjectId=', d: 'certifications' },
+      { m: 'GET', p: '/api/reputation/:id', d: 'reputation' },
+      { m: 'POST', p: '/api/ecosystem/agents', d: 'createAgent' },
+      { m: 'POST', p: '/api/ecosystem/agents/:id/submit', d: 'submitListing' },
+      { m: 'POST', p: '/api/ecosystem/agents/:id/publish', d: 'publishListing' },
+      { m: 'GET', p: '/api/ecosystem/mine/agents', d: 'myListings' },
       { m: 'GET', p: '/api/network/overview?window=24h', d: 'networkOverview' }
     ]
   }
@@ -170,6 +179,9 @@ export default function Developers() {
         {projectError && <small role="alert">{t('dev.projectUnavailable', { code: projectError })}</small>}
         {projects.length === 0 ? <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.noProjects')}</small> : <div className="stack" style={{ marginTop: 10, gap: 8 }}>{projects.map((p) => <div className="row-between" key={p.id}><span><b>{p.name}</b><small style={{ display: 'block' }}>{p.environment} · {t('dev.scopes', { count: p.scopes.length })}</small></span><span className="pill pill-neutral">{p.status}</span></div>)}</div>}
       </section>
+      <DeveloperConsole />
+      <ReviewerConsole />
+
       <section className="card" style={{ marginTop: 12 }}>
         <p className="section-label">{t('dev.environments')}</p>
         <div className="stack" style={{ gap: 8 }}>

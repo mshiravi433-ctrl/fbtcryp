@@ -1,3 +1,26 @@
+## Unreleased — Developer and reviewer consoles, registry operations
+
+- The registry stopped being curl-only. `src/components/DeveloperConsole.jsx`
+  creates real server-side projects and API keys (secret shown once, in
+  memory), lists the owner's drafts/submissions/published listings with the
+  reason a published one is invisible, and drives the lifecycle through the
+  server's state machine. There is no run, sign or execute control.
+- `src/components/ReviewerConsole.jsx` renders only for accounts in
+  `ECOSYSTEM_CERTIFIERS` (checked again on every write server-side): a review
+  queue that deliberately does not say who submitted a listing, certification
+  issuing with checkable evidence, and revocation.
+- New endpoints: `GET /api/ecosystem/certifier`, `GET /api/ecosystem/review/queue`
+  (reviewer-only) and public `GET /api/ecosystem/status` with per-state listing
+  counts, active certification count and the configuration flags that explain
+  an empty catalog. `/api/health` gained a config-only `ecosystem` block.
+- The existing daily cron now sweeps expired certifications into storage and
+  rebuilds the reputation snapshot, so no visitor pays for a thirty-bucket
+  walk on the request path. Both are settled and cannot break notifications.
+- Client auth has one home: `src/lib/telegramSession.js` sends the signed
+  `initData` and never `initDataUnsafe`; with no session the console asks the
+  user to open Telegram instead of firing requests that would 401.
+- Console strings added to en, fa and ar.
+
 ## Unreleased — Registry lifecycle, real API keys, certification and observed reputation
 
 - Listings gained a lifecycle (`draft → submitted → published → revoked`,

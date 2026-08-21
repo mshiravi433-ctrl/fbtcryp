@@ -1648,7 +1648,14 @@
       "fiatStatus": "Whether buying with money is switched on",
       "solanaStatus": "Solana routing and fee configuration",
       "gaslessStatus": "Whether gasless swaps are available",
-      "coinVenue": "Which chains a coin can actually be traded on here, resolved from its own contract addresses"
+      "coinVenue": "Which chains a coin can actually be traded on here, resolved from its own contract addresses",
+      "ecosystemStatus": "Registry counts, lifecycle states and whether a reviewer is configured.",
+      "certifications": "Certifications issued for a subject, with their evidence and status.",
+      "reputation": "Observed, aggregate-only reputation. Fewer than five decided samples returns no numbers.",
+      "createAgent": "Register an agent listing. Telegram auth or an API key with manage_listings; starts as a draft.",
+      "submitListing": "Send your draft for review. Owner only.",
+      "publishListing": "Publish a reviewed listing. Requires an active certification from an allowlisted reviewer.",
+      "myListings": "Your own drafts, submissions and published listings, including why one is not visible."
     },
     "fairUse": "Fair use, stated plainly",
     "fairUseBody": "This data costs upstream quota shared by every user. Cache what you fetch, poll no faster than the tiers above, and identify your client in the user-agent so we can contact you rather than block you. No paid tier exists — if you need more, self-host. It is free and takes three commands.",
@@ -1681,7 +1688,78 @@
     "noProjects": "No local sandbox projects yet.",
     "scopes": "{{count}} read-only scopes",
     "environments": "Environments",
-    "environmentsNote": "Environment discovery only. No funds, signer or transaction access is granted."
+    "environmentsNote": "Environment discovery only. No funds, signer or transaction access is granted.",
+    "console": {
+      "title": "Developer console",
+      "body": "Manage the projects, API keys and catalog listings that belong to your Telegram account. Everything here is enforced server-side; nothing can sign, execute or withdraw.",
+      "signedOut": "Open the app inside Telegram to manage projects, API keys and listings. There is no session here, so nothing is loaded rather than showing you an empty account.",
+      "done": "Done.",
+      "refused": "The server refused this: {{code}}",
+      "projects": "Sandbox projects",
+      "createProject": "Create",
+      "noProjects": "No server-side project yet.",
+      "newKey": "New API key",
+      "secretOnce": "Copy this secret now. Only its hash is stored, so it cannot be shown again.",
+      "hideSecret": "Hide",
+      "listings": "My listings",
+      "noListings": "Nothing filed yet under this account.",
+      "newListing": "New draft",
+      "createListing": "Create draft",
+      "note": "A draft is private. Submitting sends it for review, and publishing needs an active certification from an allowlisted reviewer — a listing can never approve itself.",
+      "type": {
+        "agent": "Agents",
+        "strategy": "Strategies"
+      },
+      "status": {
+        "draft": "Draft",
+        "submitted": "In review",
+        "published": "Published",
+        "revoked": "Revoked",
+        "deleted": "Deleted"
+      },
+      "blocked": {
+        "CERTIFICATION_REQUIRED": "Published but not visible: no active certification covers this listing.",
+        "CERTIFICATION_STALE": "Published but not visible: the listing changed after it was certified."
+      },
+      "action": {
+        "submit": "Submit for review",
+        "publish": "Publish",
+        "revoke": "Revoke",
+        "draft": "Back to draft",
+        "delete": "Delete"
+      },
+      "field": {
+        "id": "Listing id (a-z, digits, dashes)",
+        "name": "Name",
+        "description": "What it does",
+        "chains": "Chain ids, comma separated"
+      }
+    },
+    "review": {
+      "title": "Reviewer console",
+      "body": "You are an allowlisted certification issuer ({{issuer}}). A certification is the only thing that can publish a listing, and revoking one removes it from the catalog immediately.",
+      "queue": "Waiting for review",
+      "emptyQueue": "Nothing is waiting for a decision.",
+      "prefill": "Certify this one",
+      "issue": "Issue a certification",
+      "subjectId": "Subject id",
+      "subjectType": "Subject type",
+      "certificationType": "Certification type",
+      "evidenceType": "Evidence type",
+      "evidenceValue": "https link or sha256 digest",
+      "evidenceHint": "Evidence must be checkable: an https link or a 64-character sha256 digest. Free text is refused.",
+      "issueButton": "Issue certification",
+      "revoke": "Revoke a certification",
+      "certificationId": "Certification id (cert_...)",
+      "revokeButton": "Revoke",
+      "note": "Submitters are not shown: you review the listing, not the account. Your public label is stored on the certification, never your Telegram id.",
+      "evidence": {
+        "sandbox_test_run": "Sandbox test run",
+        "code_review": "Code review",
+        "documentation": "Documentation",
+        "signed_attestation": "Signed attestation"
+      }
+    }
   },
   "eco": {
     "title": "Ecosystem",

@@ -486,6 +486,47 @@ export const publishRegistryEntry = (type, owner, id, options = {}) => transitio
 export const revokeRegistryEntry = (type, owner, id, options = {}) => transitionRegistryEntry(type, owner, id, 'revoked', options);
 export const deleteRegistryEntry = (type, owner, id, options = {}) => transitionRegistryEntry(type, owner, id, 'deleted', options);
 
+/**
+ * The review queue: everything waiting for a decision, across all owners.
+ *
+ * This is the one read that is deliberately NOT owner-scoped, so it is gated
+ * at the route by the certifier allowlist. It still goes through
+ * `publicEntry`, so a reviewer sees the listing exactly as the public would —
+ * and never sees who submitted it. Reviewing the account instead of the
+ * artefact is how a review pipeline quietly becomes a favour pipeline.
+ */
+export async function listReviewQueue({ types = ['agent', 'strategy'], limit = 50 } = {}, store = durableStore) {
+  if (!store.durable()) return fail('REGISTRY_STORE_UNAVAILABLE');
+  const out = [];
+  for (const type of types) {
+    if (!REGISTRY_TYPES[type]) continue;
+    for (const row of await readRows(type, store)) {
+      if (row?.status !== 'submitted') continue;
+      /* Re-validate before showing it to a human: a row that would be dropped
+         on read must not be reviewable either. */
+      const validated = REGISTRY_TYPES[type].validate(row);
+      if (!validated.ok) continue;
+      out.push({ ...publicEntry(row), type, status: row.status, submittedAt: row.submittedAt ?? row.updatedAt ?? null, contentUpdatedAt: contentTimestamp(row) });
+    }
+  }
+  return { ok: true, dataStatus: 'live', data: out.sort((a, b) => (a.submittedAt || 0) - (b.submittedAt || 0)).slice(0, limit) };
+}
+
+/** Cheap operational counts: how many listings sit in each lifecycle state. */
+export async function registryCounts(store = durableStore) {
+  if (!store.durable()) return { ok: true, dataStatus: 'unavailable', counts: null };
+  const counts = {};
+  for (const type of Object.keys(REGISTRY_TYPES)) {
+    const byStatus = {};
+    for (const row of await readRows(type, store)) {
+      const status = typeof row?.status === 'string' ? row.status : 'unknown';
+      byStatus[status] = (byStatus[status] || 0) + 1;
+    }
+    counts[type] = byStatus;
+  }
+  return { ok: true, dataStatus: 'live', counts };
+}
+
 /** In-memory store implementation — for tests and local probes only. */
 export function memoryRegistryStore(seed = {}) {
   const map = new Map(Object.entries(seed));

@@ -202,6 +202,27 @@ export async function certifiedSubjects({ now = Date.now() } = {}, store = durab
   return out;
 }
 
+/**
+ * Durable expiry sweep, for the daily cron.
+ *
+ * Reads already treat an expired certification as expired, so this changes no
+ * behaviour — it makes the stored record match what every reader is already
+ * being told, instead of leaving rows that say `active` forever and hoping the
+ * next person to touch the data remembers the read-time rule.
+ */
+export async function sweepCertifications({ now = Date.now() } = {}, store = durableStore) {
+  if (!store.durable()) return { ok: false, code: 'REGISTRY_STORE_UNAVAILABLE' };
+  const rows = await readRows(store);
+  let expired = 0;
+  const next = rows.map((row) => {
+    if (row?.status !== 'active' || activeNow(row, now)) return row;
+    expired += 1;
+    return { ...row, status: 'expired', expiredAt: now };
+  });
+  if (expired) await store.set(CERTIFICATION_STORE_KEY, next);
+  return { ok: true, expired, total: rows.length, active: next.filter((row) => activeNow(row, now)).length };
+}
+
 /** Single-subject check used by the publish gate. */
 export async function hasActiveCertification(subjectId, options = {}, store = durableStore) {
   const map = await certifiedSubjects(options, store);

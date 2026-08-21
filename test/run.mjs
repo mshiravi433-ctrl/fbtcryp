@@ -739,6 +739,42 @@ console.log('\n▸ measuring light-theme contrast…');
     ['strategies', 'maxSlippage'], ['strategies', 'trigger'], ['strategies', 'listNote'], ['strategies', 'emptyLiveBody'],
     ['catalog', 'certified'], ['catalog', 'certifiedBy'], ['catalog', 'observed'], ['catalog', 'noReputation']
   ];
+  /*
+   * The developer/reviewer consoles are the first screens that can CHANGE
+   * registry state, so the static checks here are about what they must never
+   * grow: a client-side trust decision, a write from the public catalog
+   * module, or a control that runs a listing.
+   */
+  const consoleClient = readSrc('src/lib/developerConsole.js', 'utf8');
+  const devConsole = readSrc('src/components/DeveloperConsole.jsx', 'utf8');
+  const reviewerConsole = readSrc('src/components/ReviewerConsole.jsx', 'utf8');
+  const session = readSrc('src/lib/telegramSession.js', 'utf8');
+  report('developer + reviewer console', [
+    ['the console sends the signed initData, never initDataUnsafe',
+      /x-telegram-init-data/.test(session)
+        /* comments explain WHY initDataUnsafe is refused; the code must not use it */
+        && !/initDataUnsafe/.test(session.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''))],
+    ['no session means no request instead of a guaranteed 401',
+      /if \(!headers\) return \{ ok: false, code: 'AUTH_REQUIRED'/.test(consoleClient)],
+    ['every mutation carries a fresh idempotency key', /'idempotency-key': idempotencyKey\(\)/.test(consoleClient)],
+    ['the console never posts a status, permission or verification field',
+      !/status:\s*'(published|submitted)'/.test(consoleClient) && !/verification:/.test(consoleClient) && !/withdrawFunds/.test(consoleClient)],
+    ['lifecycle moves go through the server state machine', /moveListing\(type, row\.id/.test(devConsole)],
+    ['the console has no run, execute or sign control',
+      !/(execute|runListing|signListing|withdraw)\s*\(/i.test(devConsole)],
+    ['a published-but-invisible listing explains itself', /blockedReason/.test(devConsole)],
+    ['the reviewer console renders nothing for a non-reviewer',
+      /if \(!session \|\| !status\?\.isCertifier\) return null;/.test(reviewerConsole)],
+    ['the reviewer console requires checkable evidence', /evidenceHint/.test(reviewerConsole) && /buildEvidence/.test(reviewerConsole)],
+    ['evidence is only accepted as an https link or a sha256 digest',
+      /\[a-f0-9\]\{64\}/.test(consoleClient) && /sha256/.test(consoleClient)],
+    ['console copy is translated in en, fa and ar',
+      localeFiles.every((locale) => ['title', 'signedOut', 'refused', 'listings'].every((key) => typeof locale?.dev?.console?.[key] === 'string')
+        && ['title', 'body', 'evidenceHint'].every((key) => typeof locale?.dev?.review?.[key] === 'string'))],
+    ['the consoles hold no hardcoded Persian or Arabic string',
+      !/[\u0600-\u06ff]/.test(devConsole) && !/[\u0600-\u06ff]/.test(reviewerConsole)]
+  ]);
+
   report('ecosystem catalog UI', [
     ['the agents/strategies tabs fetch the real catalog', /fetchCatalog\(/.test(intentOsSource) && /TAB_CATALOG/.test(intentOsSource)],
     ['listings render through the read-only catalog section', /<CatalogSection/.test(intentOsSource)],
