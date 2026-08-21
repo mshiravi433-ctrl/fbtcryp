@@ -35,7 +35,7 @@ import { IntentTimeline } from '../components/IntentTimeline';
 import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import '../styles/intent-os.css';
 
-const TABS = ['compose', 'memory', 'proofs', 'network', 'agents', 'strategies'];
+const TABS = ['compose', 'memory', 'proofs', 'agents', 'strategies', 'network'];
 const TEMPLATES = [
   { id: 'swap', icon: '↗', kind: 'swap' },
   { id: 'outcome', icon: '◎', kind: 'outcome' },
@@ -736,15 +736,15 @@ export default function IntentOS() {
 
       {tab === 'agents' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <section className="ios-network-hero"><div><span className="ios-eyebrow">ECOSYSTEM CATALOG</span><h2>Agents</h2><p>Read-only discovery. No agent can sign, execute or withdraw funds in this phase.</p></div></section>
-          <section className="ios-empty-proof"><span>◇</span><h3>No agents listed yet</h3><p>Registry data is unavailable until an authenticated durable project registry is configured.</p><small>Automatic execution: unavailable · User approval: required · Withdraw funds: never permitted</small></section>
+          <section className="ios-network-hero"><div><span className="ios-eyebrow">{t('intentOS.agents.eyebrow')}</span><h2>{t('intentOS.agents.title')}</h2><p>{t('intentOS.agents.body')}</p></div></section>
+          <section className="ios-empty-proof"><span>◇</span><h3>{t('intentOS.agents.emptyTitle')}</h3><p>{t('intentOS.agents.emptyBody')}</p><small>{t('intentOS.agents.emptyNote')}</small></section>
         </motion.div>
       )}
 
       {tab === 'strategies' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <section className="ios-network-hero"><div><span className="ios-eyebrow">STRATEGY SDK</span><h2>Strategies</h2><p>Draft and simulation previews only. Strategies never access a signer.</p></div></section>
-          <section className="ios-empty-proof"><span>◇</span><h3>No published strategies</h3><p>Use the bounded client SDK to create a draft. Simulation is available only when the existing Intent flow has evidence.</p><small>Simulation only · User approval required · Automatic execution unavailable</small></section>
+          <section className="ios-network-hero"><div><span className="ios-eyebrow">{t('intentOS.strategies.eyebrow')}</span><h2>{t('intentOS.strategies.title')}</h2><p>{t('intentOS.strategies.body')}</p></div></section>
+          <section className="ios-empty-proof"><span>◇</span><h3>{t('intentOS.strategies.emptyTitle')}</h3><p>{t('intentOS.strategies.emptyBody')}</p><small>{t('intentOS.strategies.emptyNote')}</small></section>
         </motion.div>
       )}
 

@@ -228,7 +228,7 @@ function WalHero({
           {/* Utility / wallet management row */}
           <div className="wal-utils">
             <button className="wal-util" onClick={onRefresh}>{portfolio.loading ? '…' : t('common.refresh')}</button>
-            <button className="wal-util" onClick={() => onExplorer(wallet.address)}>{t('swap.viewOnExplorer')} ↗</button>
+            <button className="wal-util" onClick={() => onExplorer(wallet.address)} title={t('swap.viewOnExplorer')} aria-label={t('swap.viewOnExplorer')}><IconGlobe width={15} height={15} /></button>
             {wallet.mode === 'local' && !wallet.locked && (
               <button className="wal-util" onClick={wallet.lock}>{t('wallet.lock')}</button>
             )}
@@ -331,7 +331,7 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
               <span style={{ flex: 1, minWidth: 0 }}>
                 <strong>
                   {c.chainShort}
-                  {isActive && <span className="wal-badge-live">{t('wallet.active')}</span>}
+                  {isActive && <span className="wal-badge-live">{t('wallet.active.title')}</span>}
                 </strong>
                 <small>
                   {c.error

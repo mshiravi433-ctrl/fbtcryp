@@ -1659,7 +1659,29 @@
     "sourcePrivateSub": "Request access for a review or a partnership",
     "keysTitle": "About API keys",
     "keysBody": "If you self-host, keys go in server-side environment variables only. Never in a VITE_ variable — those are compiled into the browser bundle and into the Android APK, where anyone can read them out in minutes. The one exception is a genuinely public identifier such as a referral code.",
-    "noSla": "There is no uptime guarantee and no support contract on this API. It is the same backend the app uses, offered as-is. If your product cannot tolerate it going down, run your own copy."
+    "noSla": "There is no uptime guarantee and no support contract on this API. It is the same backend the app uses, offered as-is. If your product cannot tolerate it going down, run your own copy.",
+    "ecosystem": "FBT Network ecosystem",
+    "ecosystemBody": "Read-only discovery surfaces are embedded here. No agent, strategy or liquidity listing is executable in this phase.",
+    "pill": {
+      "agents": "Agents",
+      "strategies": "Strategies",
+      "liquidity": "Liquidity",
+      "connect": "Connect",
+      "sdk": "SDK",
+      "environments": "Environments",
+      "reputation": "Reputation",
+      "revenue": "Revenue"
+    },
+    "notConfigured": "Not configured · Automatic execution unavailable · Withdraw funds: never available",
+    "projects": "Projects",
+    "projectsBody": "Create a local sandbox draft. This does not create an account, API key, webhook, or production project.",
+    "projectName": "Project name",
+    "createDraft": "Create draft",
+    "projectUnavailable": "Unavailable: {{code}}",
+    "noProjects": "No local sandbox projects yet.",
+    "scopes": "{{count}} read-only scopes",
+    "environments": "Environments",
+    "environmentsNote": "Environment discovery only. No funds, signer or transaction access is granted."
   },
   "eco": {
     "title": "Ecosystem",
@@ -3727,7 +3749,9 @@
       "compose": "Compose",
       "memory": "Memory",
       "proofs": "Proofs",
-      "network": "Network"
+      "network": "Network",
+      "agents": "Agent",
+      "strategies": "Strategy"
     },
     "compose": {
       "choose": "Choose an outcome",
@@ -4095,6 +4119,22 @@
       "abort-all": "Abort all",
       "continue": "Continue",
       "skip-remaining": "Skip remaining"
+    },
+    "agents": {
+      "eyebrow": "ECOSYSTEM CATALOG",
+      "title": "Agents",
+      "body": "Read-only discovery. No agent can sign, execute or withdraw funds in this phase.",
+      "emptyTitle": "No agents listed yet",
+      "emptyBody": "Registry data is unavailable until an authenticated durable project registry is configured.",
+      "emptyNote": "Automatic execution: unavailable · User approval: required · Withdraw funds: never permitted"
+    },
+    "strategies": {
+      "eyebrow": "STRATEGY SDK",
+      "title": "Strategies",
+      "body": "Draft and simulation previews only. Strategies never access a signer.",
+      "emptyTitle": "No published strategies",
+      "emptyBody": "Use the bounded client SDK to create a draft. Simulation is available only when the existing Intent flow has evidence.",
+      "emptyNote": "Simulation only · User approval required · Automatic execution unavailable"
     }
   },
   "whales": {
