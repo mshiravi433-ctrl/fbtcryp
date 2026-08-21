@@ -18,6 +18,19 @@ export function validateStrategy(input = {}) {
   if (!chains(policy.allowedChains || [])) return { ok: false, code: 'ALLOWED_CHAINS_REQUIRED' };
   return { ok: true, value: { ...input, action: { ...(input.action || {}), type: 'create_intent', automaticExecution: false }, policy: { ...policy, requiresUserApproval: true } } };
 }
+/*
+ * Liquidity providers are listed, never trusted. This phase has no RFQ
+ * settlement and no custody, so a listing that claims to hold user funds,
+ * settle them, or quote without a user in the loop is rejected outright rather
+ * than stored with a caveat nobody reads.
+ */
+export function validateLiquidityProvider(input = {}) {
+  if (!input || input.schema !== 'fbt.liquidity-provider.v1' || !ID.test(String(input.id || ''))) return { ok: false, code: 'INVALID_LIQUIDITY_PROVIDER' };
+  const c = input.capabilities || {};
+  if (c.custody === true || c.settlesUserFunds === true || c.autoQuote === true) return { ok: false, code: 'FORBIDDEN_CAPABILITY' };
+  if (!chains(input.supportedChains || [])) return { ok: false, code: 'INVALID_CHAINS' };
+  return { ok: true, value: { ...input, capabilities: { ...c, custody: false, settlesUserFunds: false, autoQuote: false }, rfqSettlement: 'unavailable' } };
+}
 export function validateIntentGraph(graph = {}) {
   if (graph.schema !== 'fbt.intent-graph.v1' || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return { ok: false, code: 'INVALID_GRAPH' };
   if (graph.nodes.length > 24 || graph.edges.length > 48 || Number(graph.constraints?.maxDepth || 8) > 8) return { ok: false, code: 'GRAPH_LIMIT_EXCEEDED' };

@@ -4126,7 +4126,19 @@
       "body": "Read-only discovery. No agent can sign, execute or withdraw funds in this phase.",
       "emptyTitle": "No agents listed yet",
       "emptyBody": "Registry data is unavailable until an authenticated durable project registry is configured.",
-      "emptyNote": "Automatic execution: unavailable · User approval: required · Withdraw funds: never permitted"
+      "emptyNote": "Automatic execution: unavailable · User approval: required · Withdraw funds: never permitted",
+      "loading": "Reading the registry…",
+      "errorTitle": "Registry unreachable",
+      "errorBody": "The agent catalog could not be loaded, so nothing is claimed about it right now.",
+      "emptyLiveBody": "The registry is live and no agent has been listed yet.",
+      "total": "{{total}} listed · unverified",
+      "unverified": "Unverified",
+      "execution": "Execution",
+      "mode": {
+        "manual": "Manual signature",
+        "simulation-only": "Simulation only"
+      },
+      "listNote": "Listings are self-reported and read-only. No agent can sign, execute or withdraw funds — every action still needs your own signature."
     },
     "strategies": {
       "eyebrow": "STRATEGY SDK",
@@ -4134,7 +4146,34 @@
       "body": "Draft and simulation previews only. Strategies never access a signer.",
       "emptyTitle": "No published strategies",
       "emptyBody": "Use the bounded client SDK to create a draft. Simulation is available only when the existing Intent flow has evidence.",
-      "emptyNote": "Simulation only · User approval required · Automatic execution unavailable"
+      "emptyNote": "Simulation only · User approval required · Automatic execution unavailable",
+      "loading": "Reading the registry…",
+      "errorTitle": "Registry unreachable",
+      "errorBody": "The strategy catalog could not be loaded, so nothing is claimed about it right now.",
+      "emptyLiveBody": "The registry is live and no strategy has been published yet.",
+      "total": "{{total}} listed · unverified",
+      "unverified": "Unverified",
+      "trigger": "Trigger",
+      "triggerType": {
+        "price": "Price",
+        "time": "Schedule",
+        "portfolio_drift": "Portfolio drift",
+        "gas": "Gas",
+        "manual": "Manual"
+      },
+      "maxAmount": "Max amount",
+      "maxSlippage": "Max slippage",
+      "automatic": "Automatic execution",
+      "listNote": "Listings are self-reported and read-only. A strategy never reaches a signer: it can only propose an intent that you approve and sign yourself."
+    },
+    "catalog": {
+      "chains": "Chains",
+      "approval": "User approval",
+      "required": "Required",
+      "withdraw": "Withdraw funds",
+      "never": "Never",
+      "notStated": "Not stated",
+      "retry": "Try again"
     }
   },
   "whales": {

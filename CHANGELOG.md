@@ -1,3 +1,40 @@
+## Unreleased — Authenticated ecosystem registry (agents / strategies)
+
+The Agent and Strategy catalogs were an empty stub: `catalogList()` returned
+`data: []` with `dataStatus: 'unavailable'` and never looked at storage, and
+the two Intent OS tabs rendered a static empty state without fetching
+anything. Both halves are now real.
+
+- `server/ecosystemRegistry.js` reads and writes the durable Blob-backed store
+  used by developer projects, under versioned keys `ecosystem-agents:v1`,
+  `ecosystem-strategies:v1` and `ecosystem-liquidity:v1`, with per-record
+  `ownerId` ownership that never leaves the server.
+- `catalogList()` now reports the truth: `live` when a durable registry
+  answered (even with zero rows) and `unavailable` when none is configured,
+  with cursor pagination and the resource schema unchanged.
+- Authenticated writes: `POST /api/ecosystem/{agents,strategies}` plus
+  owner-only `/:id` (edit) and `/:id/unlist`, each requiring Telegram
+  authentication and a durable idempotency key, mirroring the developer
+  project routes. Liquidity stays read-only (405): with no RFQ settlement and
+  no custody, a self-service listing could not claim anything honest.
+- Fail-closed on both sides of storage. Writes are screened by
+  `validateAgent` / `validateStrategy` **before** an idempotency key is
+  claimed, so `withdrawFunds`, `executeWithoutUser` and
+  `action.automaticExecution` are refused whether or not the store is up; only
+  the validated output — projected onto a field whitelist — is persisted, and
+  reads re-validate every stored row and drop anything that no longer passes.
+- Nothing is ever presented as verified: `verification.status` is forced to
+  `unverified` on write and again on read, and the client hardcodes
+  `verified: false`.
+- Intent OS Agents/Strategies tabs fetch the catalog on open and render
+  read-only cards (name, description, chains, execution mode / policy bounds,
+  unverified badge) with four honest states — loading, error, unavailable and
+  live. No run, sign, install or enable control exists.
+- Added `test/ecosystem-registry-probe.mjs` (module + real HTTP) and an
+  `ecosystem catalog UI` suite; docs in `docs/ECOSYSTEM-REGISTRY-FA.md`.
+- No custody, signer, automatic execution, withdrawal, RFQ settlement or
+  mainnet onboarding was added.
+
 ## Unreleased — FBT Network ecosystem safety layer
 
 - Added read-only Agent, Strategy and Liquidity catalog boundaries with honest unavailable states.

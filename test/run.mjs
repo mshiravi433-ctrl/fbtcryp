@@ -35,6 +35,17 @@ process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT ||
  * probe imports app.js first decides it for everyone.
  */
 process.env.INTENT_SETTLEMENT_RATE_LIMIT = process.env.INTENT_SETTLEMENT_RATE_LIMIT || '100';
+/*
+ * Same module-load trap, one door over: server/app.js captures the Telegram
+ * bot token ONCE and hands it to the auth middleware, so whichever probe
+ * imports app.js first decides whether an authenticated request is even
+ * possible for the rest of the process. The ecosystem-registry probe needs to
+ * prove that its write routes reject withdrawFunds/automaticExecution FOR AN
+ * AUTHENTICATED CALLER (an anonymous 401 would prove nothing), so a throwaway
+ * token is pinned here and the probe signs real initData with it. It is not a
+ * secret and never leaves the process: nothing in the suite starts the bot.
+ */
+process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '0000000000:test-only-token-not-a-real-bot';
 
 const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -452,6 +463,16 @@ console.log('\n▸ probing the signed solver commitment API…');
   report('intent commitment API', intentApiRows);
 }
 
+/* Real HTTP + module coverage for the authenticated agent/strategy registry:
+   ownership, the honest live/unavailable split, the read-side fail-closed pass
+   and — the point of the suite — write routes that refuse withdrawFunds,
+   executeWithoutUser and automatic execution for an AUTHENTICATED caller. */
+console.log('\n\u25b8 probing the authenticated ecosystem registry\u2026');
+{
+  const registryRows = (await import('./ecosystem-registry-probe.mjs')).default;
+  report('ecosystem registry', registryRows);
+}
+
 /* Real HTTP + strict-validation coverage for privacy-safe execution
    observation: opt-in enforcement, unknown/address/tx-hash/free-text
    rejection, fail-closed storage, and the honest capabilities block. */
@@ -700,6 +721,36 @@ console.log('\n▸ measuring light-theme contrast…');
     ['project without scope is rejected', !validateProject({ name: 'x', environment: 'sandbox', scopes: [] }).ok],
     ['sandbox draft is local and created', created.ok && created.project.ownerRef === 'local-device'],
     ['draft has no key or signer fields', created.ok && !('apiKey' in created.project) && !('signer' in created.project)]
+  ]);
+  /*
+   * The catalog TABS are wired to the real endpoint and stay read-only.
+   * Static assertions, because the failure they guard against is a future
+   * edit: an "install", "run" or "enable" button on a listing would turn a
+   * self-reported directory into an execution surface, and the honesty note
+   * printed next to it into a lie.
+   */
+  const { readFileSync: readSrc } = await import('node:fs');
+  const intentOsSource = readSrc('src/pages/IntentOS.jsx', 'utf8');
+  const catalogClient = readSrc('src/lib/ecosystemCatalog.js', 'utf8');
+  const localeFiles = ['en', 'fa', 'ar'].map((code) => JSON.parse(readSrc(`src/i18n/locales/${code}.json`, 'utf8')));
+  const catalogKeys = [
+    ['agents', 'loading'], ['agents', 'errorTitle'], ['agents', 'total'], ['agents', 'unverified'],
+    ['agents', 'listNote'], ['agents', 'emptyLiveBody'], ['strategies', 'loading'], ['strategies', 'maxAmount'],
+    ['strategies', 'maxSlippage'], ['strategies', 'trigger'], ['strategies', 'listNote'], ['strategies', 'emptyLiveBody']
+  ];
+  report('ecosystem catalog UI', [
+    ['the agents/strategies tabs fetch the real catalog', /fetchCatalog\(/.test(intentOsSource) && /TAB_CATALOG/.test(intentOsSource)],
+    ['listings render through the read-only catalog section', /<CatalogSection/.test(intentOsSource)],
+    ['an unavailable registry still shows the honest empty state', /state === 'unavailable'/.test(intentOsSource) && /emptyBody/.test(intentOsSource)],
+    ['a live but empty registry says something different from unavailable', /emptyLiveBody/.test(intentOsSource)],
+    ['no listing carries an execute, sign or install control',
+      !/(onClick|onSubmit)=\{[^}]*(execute|runStrategy|signListing|install|enableAgent)/i.test(intentOsSource)],
+    ['the catalog client never writes', !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(catalogClient)],
+    ['the catalog client hardcodes verified to false', /verified: false/.test(catalogClient)],
+    ['catalog copy is translated in en, fa and ar',
+      localeFiles.every((locale) => catalogKeys.every(([group, key]) => typeof locale?.intentOS?.[group]?.[key] === 'string'))],
+    ['the catalog page holds no hardcoded Persian or Arabic string',
+      !/[\u0600-\u06ff]/.test(intentOsSource)]
   ]);
   const { validatePortfolioAgent, validateRevenueEvent, validateCertification, reputationRelationship } = await import('../server/phase2Schemas.js');
   report('phase 2/3 fail-closed schemas', [

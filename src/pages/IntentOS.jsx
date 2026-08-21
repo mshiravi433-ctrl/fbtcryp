@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -33,9 +33,12 @@ import {
 } from '../lib/intentLifecycle';
 import { IntentTimeline } from '../components/IntentTimeline';
 import { confidentialSwapReadiness } from '../lib/confidentialIntent';
+import { fetchCatalog, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
 const TABS = ['compose', 'memory', 'proofs', 'agents', 'strategies', 'network'];
+/* Which registry each tab reads. Only these two tabs fetch a catalog. */
+const TAB_CATALOG = { agents: 'agent', strategies: 'strategy' };
 const TEMPLATES = [
   { id: 'swap', icon: '↗', kind: 'swap' },
   { id: 'outcome', icon: '◎', kind: 'outcome' },
@@ -127,8 +130,135 @@ function ProofRow({ proof, t, onVerify }) {
   );
 }
 
+/* ---------------------- ecosystem catalog (read-only) --------------------- */
+/*
+ * These cards are DISPLAY ONLY, and that is a product decision rather than an
+ * unfinished screen. The registry stores self-reported metadata that nobody
+ * reviewed; the moment a card grows a "run", "install" or "enable" button, the
+ * "no automatic execution, no signer" promise printed on the same screen stops
+ * being true. Every listing therefore renders as unverified, with its bounds
+ * spelled out, and nothing else.
+ */
+const chainLabel = (id) => EVM_CHAINS[id]?.short || EVM_CHAINS[id]?.name || `#${id}`;
+const chainSummary = (ids, t) => (Array.isArray(ids) && ids.length ? ids.slice(0, 4).map(chainLabel).join(' · ') : t('intentOS.catalog.notStated'));
+
+function CatalogFact({ label, value }) {
+  return <span className="ios-catalog-fact"><b>{value}</b><small>{label}</small></span>;
+}
+
+function CatalogCard({ ns, entry, lang, t, facts }) {
+  const description = localizedValue(entry.description, lang, null);
+  return (
+    <article className="ios-catalog-card">
+      <div className="row-between">
+        <strong>{localizedValue(entry.name, lang, entry.id)}</strong>
+        <span className="ios-status unavailable">{t(`intentOS.${ns}.unverified`)}</span>
+      </div>
+      <span className="mono ios-catalog-id">{entry.id}</span>
+      {description ? <p>{description}</p> : null}
+      <div className="ios-catalog-facts">
+        {facts.map((fact) => <CatalogFact key={fact.label} label={fact.label} value={fact.value} />)}
+      </div>
+    </article>
+  );
+}
+
+function AgentCard({ entry, lang, t }) {
+  return (
+    <CatalogCard
+      ns="agents"
+      entry={entry}
+      lang={lang}
+      t={t}
+      facts={[
+        { label: t('intentOS.agents.execution'), value: t(`intentOS.agents.mode.${entry.executionMode}`) },
+        { label: t('intentOS.catalog.chains'), value: chainSummary(entry.supportedChains, t) },
+        { label: t('intentOS.catalog.approval'), value: t('intentOS.catalog.required') },
+        { label: t('intentOS.catalog.withdraw'), value: t('intentOS.catalog.never') }
+      ]}
+    />
+  );
+}
+
+function StrategyCard({ entry, lang, t }) {
+  const policy = entry.policy || {};
+  return (
+    <CatalogCard
+      ns="strategies"
+      entry={entry}
+      lang={lang}
+      t={t}
+      facts={[
+        { label: t('intentOS.strategies.trigger'), value: entry.trigger ? t(`intentOS.strategies.triggerType.${entry.trigger}`) : t('intentOS.strategies.triggerType.manual') },
+        { label: t('intentOS.strategies.maxAmount'), value: policy.maxAmountUsd === null || policy.maxAmountUsd === undefined ? t('intentOS.catalog.notStated') : `$${policy.maxAmountUsd}` },
+        { label: t('intentOS.strategies.maxSlippage'), value: policy.maxSlippageBps === null || policy.maxSlippageBps === undefined ? t('intentOS.catalog.notStated') : `${policy.maxSlippageBps} bps` },
+        { label: t('intentOS.catalog.chains'), value: chainSummary(policy.allowedChains, t) },
+        { label: t('intentOS.catalog.approval'), value: t('intentOS.catalog.required') },
+        { label: t('intentOS.strategies.automatic'), value: t('intentOS.catalog.never') }
+      ]}
+    />
+  );
+}
+
+/**
+ * One honest state machine for both catalog tabs:
+ *   loading      — the request is in flight
+ *   error        — the request failed; we claim nothing about the registry
+ *   unavailable  — no durable registry is configured (the pre-existing copy)
+ *   live + empty — the registry answered and nobody has listed anything yet
+ *   live + rows  — the listings, unverified
+ */
+function CatalogSection({ ns, catalog, lang, t, onRetry }) {
+  const state = catalog?.state || 'loading';
+  if (state === 'loading') {
+    return <section className="ios-empty-proof"><span>◇</span><h3>{t(`intentOS.${ns}.loading`)}</h3></section>;
+  }
+  if (state === 'error') {
+    return (
+      <section className="ios-empty-proof">
+        <span>◇</span>
+        <h3>{t(`intentOS.${ns}.errorTitle`)}</h3>
+        <p>{t(`intentOS.${ns}.errorBody`)}</p>
+        <button className="btn btn-ghost btn-sm" onClick={onRetry}>{t('intentOS.catalog.retry')}</button>
+      </section>
+    );
+  }
+  if (state === 'unavailable') {
+    return (
+      <section className="ios-empty-proof">
+        <span>◇</span>
+        <h3>{t(`intentOS.${ns}.emptyTitle`)}</h3>
+        <p>{t(`intentOS.${ns}.emptyBody`)}</p>
+        <small>{t(`intentOS.${ns}.emptyNote`)}</small>
+      </section>
+    );
+  }
+  const items = catalog?.items || [];
+  if (!items.length) {
+    return (
+      <section className="ios-empty-proof">
+        <span>◇</span>
+        <h3>{t(`intentOS.${ns}.emptyTitle`)}</h3>
+        <p>{t(`intentOS.${ns}.emptyLiveBody`)}</p>
+        <small>{t(`intentOS.${ns}.emptyNote`)}</small>
+      </section>
+    );
+  }
+  return (
+    <>
+      <div className="ios-catalog-list">
+        <span className="ios-eyebrow">{t(`intentOS.${ns}.total`, { total: items.length })}</span>
+        {items.map((entry) => (ns === 'agents'
+          ? <AgentCard key={entry.id} entry={entry} lang={lang} t={t} />
+          : <StrategyCard key={entry.id} entry={entry} lang={lang} t={t} />))}
+      </div>
+      <p className="ios-honesty-note">{t(`intentOS.${ns}.listNote`)}</p>
+    </>
+  );
+}
+
 export default function IntentOS() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(() => {
@@ -153,6 +283,15 @@ export default function IntentOS() {
      the timeline is never a decorative mock. */
   const [lifecycle, setLifecycle] = useState(null);
   const [networkStatus, setNetworkStatus] = useState(null);
+  /*
+   * Ecosystem catalogs are fetched lazily, once, and only for the tab being
+   * viewed: the compose tab is the hot path and must not pay for two extra
+   * requests nobody asked for. `catalogRequested` is a ref rather than state
+   * so a re-render cannot re-issue an in-flight request; a failed attempt
+   * clears its flag so the Retry button can try again.
+   */
+  const [catalogs, setCatalogs] = useState({ agent: null, strategy: null });
+  const catalogRequested = useRef({});
   /*
    * The wallet's Optimize button prefills a real draft via ?from=&to=&chain=
    * (never signs anything — this is the compose screen). Symbols are accepted
@@ -214,6 +353,22 @@ export default function IntentOS() {
       .catch(() => { if (active) setNetworkStatus({ ok: false }); });
     return () => { active = false; };
   }, []);
+
+  /* Load the agent/strategy registry when its tab is opened. */
+  const loadCatalog = useCallback((kind, { force = false } = {}) => {
+    if (!kind || (!force && catalogRequested.current[kind])) return;
+    catalogRequested.current[kind] = true;
+    setCatalogs((current) => ({ ...current, [kind]: { state: 'loading', items: [] } }));
+    fetchCatalog(kind).then((result) => {
+      /* A failed fetch is reported as an error, never as an empty registry —
+         "nobody has listed anything" and "we could not ask" are different
+         claims and the user is told which one happened. */
+      if (result.status === 'error') catalogRequested.current[kind] = false;
+      setCatalogs((current) => ({ ...current, [kind]: { state: result.status, items: result.items } }));
+    });
+  }, []);
+
+  useEffect(() => { loadCatalog(TAB_CATALOG[tab]); }, [tab, loadCatalog]);
 
   const patchDraft = (patch) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -737,14 +892,26 @@ export default function IntentOS() {
       {tab === 'agents' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <section className="ios-network-hero"><div><span className="ios-eyebrow">{t('intentOS.agents.eyebrow')}</span><h2>{t('intentOS.agents.title')}</h2><p>{t('intentOS.agents.body')}</p></div></section>
-          <section className="ios-empty-proof"><span>◇</span><h3>{t('intentOS.agents.emptyTitle')}</h3><p>{t('intentOS.agents.emptyBody')}</p><small>{t('intentOS.agents.emptyNote')}</small></section>
+          <CatalogSection
+            ns="agents"
+            catalog={catalogs.agent}
+            lang={i18n.language}
+            t={t}
+            onRetry={() => loadCatalog('agent', { force: true })}
+          />
         </motion.div>
       )}
 
       {tab === 'strategies' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <section className="ios-network-hero"><div><span className="ios-eyebrow">{t('intentOS.strategies.eyebrow')}</span><h2>{t('intentOS.strategies.title')}</h2><p>{t('intentOS.strategies.body')}</p></div></section>
-          <section className="ios-empty-proof"><span>◇</span><h3>{t('intentOS.strategies.emptyTitle')}</h3><p>{t('intentOS.strategies.emptyBody')}</p><small>{t('intentOS.strategies.emptyNote')}</small></section>
+          <CatalogSection
+            ns="strategies"
+            catalog={catalogs.strategy}
+            lang={i18n.language}
+            t={t}
+            onRetry={() => loadCatalog('strategy', { force: true })}
+          />
         </motion.div>
       )}
 

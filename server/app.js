@@ -50,7 +50,14 @@ import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVelo
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
-import { catalogList, catalogError } from './ecosystemCatalog.js';
+import { catalogList, catalogError, CATALOG_SCHEMAS } from './ecosystemCatalog.js';
+import {
+  REGISTRY_LIMITATIONS,
+  createRegistryEntry,
+  screenRegistryInput,
+  unlistRegistryEntry,
+  updateRegistryEntry
+} from './ecosystemRegistry.js';
 import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
 import { createApiKey, revokeApiKey } from './developerKeys.js';
@@ -624,9 +631,81 @@ app.get('/api/environments', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(environmentList());
 });
-app.get('/api/ecosystem/agents', (_req, res) => res.json(catalogList('agent')));
-app.get('/api/ecosystem/strategies', (_req, res) => res.json(catalogList('strategy')));
-app.get('/api/ecosystem/liquidity', (_req, res) => res.json(catalogList('liquidity')));
+/*
+ * ECOSYSTEM REGISTRY — public reads, authenticated writes, zero authority.
+ *
+ * Reads are open and cacheable. Writes require a verified Telegram identity
+ * (req.tgUser.id, the only authenticated identity this API has), are bounded
+ * by the same durable idempotency the developer-project routes use, and pass
+ * through server/ecosystemSchemas.js validators that reject withdrawFunds,
+ * executeWithoutUser and action.automaticExecution. Nothing registered here
+ * can sign, execute, settle or hold funds — there is deliberately no route
+ * that would let it.
+ */
+const ECOSYSTEM_STATUS = { AUTH_REQUIRED: 401, REGISTRY_STORE_UNAVAILABLE: 503, IDEMPOTENCY_KEY_REQUIRED: 400, IDEMPOTENCY_CONFLICT: 409, ENTRY_NOT_FOUND: 404, NOT_ENTRY_OWNER: 403, ENTRY_ID_TAKEN: 409, DUPLICATE_ENTRY: 409, REGISTRY_LIMIT_REACHED: 409, REGISTRY_FULL: 409, TYPE_NOT_WRITABLE: 405, INVALID_CURSOR: 400 };
+const ECOSYSTEM_MESSAGES = {
+  AUTH_REQUIRED: 'Telegram authentication is required',
+  REGISTRY_STORE_UNAVAILABLE: 'The durable ecosystem registry is not configured',
+  IDEMPOTENCY_KEY_REQUIRED: 'A valid idempotency key is required',
+  IDEMPOTENCY_CONFLICT: 'This idempotency key was used with a different payload',
+  ENTRY_NOT_FOUND: 'Listing not found',
+  NOT_ENTRY_OWNER: 'This listing belongs to another account',
+  ENTRY_ID_TAKEN: 'This listing id is already registered',
+  DUPLICATE_ENTRY: 'You already registered a listing with this id',
+  REGISTRY_LIMIT_REACHED: 'This account reached its listing limit',
+  REGISTRY_FULL: 'The registry reached its listing limit',
+  TYPE_NOT_WRITABLE: 'This catalog is read-only',
+  FORBIDDEN_PERMISSION: 'Withdrawal and execute-without-user permissions are never accepted',
+  FORBIDDEN_CAPABILITY: 'Custody, settlement and auto-quote capabilities are never accepted',
+  AUTOMATIC_EXECUTION_FORBIDDEN: 'Automatic execution is never accepted; every action requires user approval',
+  INVALID_CURSOR: 'The pagination cursor is unknown or malformed'
+};
+const ecosystemFail = (res, code) => res
+  .status(ECOSYSTEM_STATUS[code] || 400)
+  .json(catalogError(code, ECOSYSTEM_MESSAGES[code] || 'The registry rejected this listing as invalid or unsafe', code === 'REGISTRY_STORE_UNAVAILABLE'));
+
+const ecosystemRead = (type) => async (req, res) => {
+  const payload = await catalogList(type, { cursor: req.query.cursor, limit: req.query.limit });
+  if (payload.meta.error) return ecosystemFail(res, payload.meta.error);
+  res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=120');
+  return res.json(payload);
+};
+
+/* One write path for every registry mutation: authenticate, claim the
+   idempotency key, run the caller's operation, then persist the response so a
+   retry replays instead of duplicating. */
+async function ecosystemWrite(type, operation, req, res, run, { screen = false } = {}) {
+  if (!req.tgUser?.id) return ecosystemFail(res, 'AUTH_REQUIRED');
+  /* Validate BEFORE spending an idempotency key or touching storage: an unsafe
+     listing is refused identically whether or not a durable registry exists. */
+  if (screen) {
+    const screened = screenRegistryInput(type, req.body);
+    if (!screened.ok) return ecosystemFail(res, screened.code);
+  }
+  const claim = await claimIdempotency(req.tgUser.id, operation, req.get('idempotency-key'), JSON.stringify(req.body || {}));
+  if (!claim.ok) return ecosystemFail(res, claim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'REGISTRY_STORE_UNAVAILABLE' : claim.code);
+  if (claim.replay) return res.json(claim.result);
+  const result = await run();
+  if (!result.ok) return ecosystemFail(res, result.code);
+  const response = { data: result.entry, meta: { schema: CATALOG_SCHEMAS[type], dataStatus: 'live', verification: 'unverified', limitations: [...REGISTRY_LIMITATIONS] } };
+  await saveIdempotency(claim, response);
+  return res.status(result.created ? 201 : 200).json(response);
+}
+
+app.get('/api/ecosystem/agents', ecosystemRead('agent'));
+app.get('/api/ecosystem/strategies', ecosystemRead('strategy'));
+app.get('/api/ecosystem/liquidity', ecosystemRead('liquidity'));
+
+app.post('/api/ecosystem/agents', (req, res) => ecosystemWrite('agent', 'ecosystem-agent-create', req, res, () => createRegistryEntry('agent', req.tgUser.id, req.body), { screen: true }));
+app.post('/api/ecosystem/agents/:id', (req, res) => ecosystemWrite('agent', `ecosystem-agent-update:${req.params.id}`, req, res, () => updateRegistryEntry('agent', req.tgUser.id, req.params.id, req.body), { screen: true }));
+app.post('/api/ecosystem/agents/:id/unlist', (req, res) => ecosystemWrite('agent', `ecosystem-agent-unlist:${req.params.id}`, req, res, () => unlistRegistryEntry('agent', req.tgUser.id, req.params.id)));
+app.post('/api/ecosystem/strategies', (req, res) => ecosystemWrite('strategy', 'ecosystem-strategy-create', req, res, () => createRegistryEntry('strategy', req.tgUser.id, req.body), { screen: true }));
+app.post('/api/ecosystem/strategies/:id', (req, res) => ecosystemWrite('strategy', `ecosystem-strategy-update:${req.params.id}`, req, res, () => updateRegistryEntry('strategy', req.tgUser.id, req.params.id, req.body), { screen: true }));
+app.post('/api/ecosystem/strategies/:id/unlist', (req, res) => ecosystemWrite('strategy', `ecosystem-strategy-unlist:${req.params.id}`, req, res, () => unlistRegistryEntry('strategy', req.tgUser.id, req.params.id)));
+/* Liquidity stays read-only on purpose: with no RFQ settlement and no custody
+   there is nothing a self-service listing could honestly claim, so the write
+   path answers 405 rather than storing an unbacked promise. */
+app.post('/api/ecosystem/liquidity', (req, res) => ecosystemWrite('liquidity', 'ecosystem-liquidity-create', req, res, () => Promise.resolve({ ok: false, code: 'TYPE_NOT_WRITABLE' }), { screen: true }));
 
 app.get('/api/network/overview', (req, res) => {
   const window = validWindow(req.query.window);
