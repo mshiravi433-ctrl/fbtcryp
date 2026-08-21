@@ -16,7 +16,13 @@
  * bounds a promise that never resolves, measures how long that takes, and
  * proves a promise that resolves in time is unaffected.
  */
-import { WC_CONNECT_TIMEOUT_MS, withTimeout } from '../src/lib/wcTimeout.js';
+import {
+  WC_CONNECT_TIMEOUT_MS,
+  WC_PRIMARY_RELAY_TIMEOUT_MS,
+  WC_RELAY_URLS,
+  isRelayClassError,
+  withTimeout
+} from '../src/lib/wcTimeout.js';
 
 export default async function run() {
   const rows = [];
@@ -58,18 +64,58 @@ export default async function run() {
 
   /* ---- 5. the exported constant is the one actually wired into WalletContext ---- */
   const wallet = (await import('node:fs')).readFileSync('src/context/WalletContext.jsx', 'utf8');
+  const walletCode = wallet.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   t('WalletContext imports the shared timeout helper (single source of truth)',
-    /import \{ WC_CONNECT_TIMEOUT_MS, withTimeout \} from '\.\.\/lib\/wcTimeout'/.test(wallet));
+    /import \{[\s\S]{0,200}\bWC_CONNECT_TIMEOUT_MS\b[\s\S]{0,200}\bwithTimeout\b[\s\S]{0,200}\} from '\.\.\/lib\/wcTimeout'/.test(wallet));
   t('connectWalletConnect wraps wc.connect() in the bounded timeout',
     /withTimeout\(wc\.connect\(\), WC_CONNECT_TIMEOUT_MS, 'WC_CONNECT_TIMEOUT'\)/.test(wallet));
-  t('restoreWcSession wraps EthereumProvider.init() in the same bounded timeout',
-    /withTimeout\(EthereumProvider\.init\(buildWcInitConfig\(\)\), WC_CONNECT_TIMEOUT_MS, 'WC_RESTORE_TIMEOUT'\)/.test(wallet));
+  t('EthereumProvider.init() is bounded too — via the shared initWcProvider failover helper',
+    /const initWcProvider = useCallback/.test(walletCode)
+      && walletCode.includes('initWcProvider(EthereumProvider, buildWcInitConfig())'));
+  t('restoreWcSession goes through the same bounded failover init as connect()',
+    walletCode.indexOf('const restoreWcSession') > -1
+      && walletCode.slice(walletCode.indexOf('const restoreWcSession')).includes('initWcProvider(EthereumProvider, buildWcInitConfig())'));
   t('a timed-out connect attempt disconnects the abandoned instance (no zombie socket/modal)',
     /catch \(e\) \{[\s\S]{0,3000}wc\?\.disconnect\?\.\(\)/.test(wallet));
   t('the timeout classifies as the actionable WC_RELAY_UNREACHABLE error, not a bare CONNECT_FAILED',
-    /WC_CONNECT_TIMEOUT[\s\S]{0,40}\|\|[\s\S]{0,200}WC_RELAY_UNREACHABLE|msg === 'WC_CONNECT_TIMEOUT'/.test(wallet));
+    /WC_CONNECT_TIMEOUT[\s\S]{0,120}\|\|[\s\S]{0,200}WC_RELAY_UNREACHABLE|msg === 'WC_CONNECT_TIMEOUT'/.test(wallet));
   t('the timeout window is generous enough for a slow-but-working relay (not just fast networks)',
     WC_CONNECT_TIMEOUT_MS >= 15_000 && WC_CONNECT_TIMEOUT_MS <= 30_000);
+
+  /* ---- 6. relay failover: the ".com is blocked" answer ----
+     The official fallback for "the default relay endpoint is blocked" is
+     relayUrl: wss://relay.walletconnect.org (docs.reown.com FAQ). The app
+     used to hard-depend on the default relay alone, which is exactly the
+     WC_RELAY_UNREACHABLE report on filtered networks. */
+  t('two relay hostnames are configured, the SDK default first',
+    Array.isArray(WC_RELAY_URLS) && WC_RELAY_URLS.length === 2
+      && WC_RELAY_URLS[0] === 'wss://relay.walletconnect.com'
+      && WC_RELAY_URLS[1] === 'wss://relay.walletconnect.org');
+  t('every relay URL is a secure websocket URL',
+    WC_RELAY_URLS.every((u) => /^wss:\/\/[a-z0-9.-]+$/.test(u)));
+  t('the relay hostnames are actually distinct (a fallback that equals the primary is no fallback)',
+    new Set(WC_RELAY_URLS).size === WC_RELAY_URLS.length);
+  t('WalletContext hands the relayUrl to EthereumProvider',
+    walletCode.includes('relayUrl: WC_RELAY_URLS[i]'));
+  t('an abandoned init attempt is disconnected when it settles late (no zombie provider)',
+    walletCode.includes('ghost?.disconnect?.()'));
+  t('the primary relay gets a short fuse so failover happens in seconds, not minutes',
+    WC_PRIMARY_RELAY_TIMEOUT_MS >= 5_000 && WC_PRIMARY_RELAY_TIMEOUT_MS <= 12_000);
+  t('primary + fallback together stay a bounded wait, never the SDK\u2019s 60-90s stall',
+    WC_PRIMARY_RELAY_TIMEOUT_MS + WC_CONNECT_TIMEOUT_MS <= 45_000);
+
+  /* ---- 7. the failover classifier mirrors the error classifier ---- */
+  t('a socket/relay failure IS retried on the next relay',
+    isRelayClassError(new Error('WC_INIT_TIMEOUT'))
+      && isRelayClassError(new Error('Socket stalled when trying to connect'))
+      && isRelayClassError(new Error('WebSocket connection closed abnormally with code: 3000')));
+  t('a user-cancel is NEVER retried (retrying would re-open a modal they dismissed)',
+    !isRelayClassError(new Error('User rejected methods.'))
+      && !isRelayClassError(new Error('Connection request reset. Please try again.'))
+      && !isRelayClassError(Object.assign(new Error('rejected'), { code: 4001 })));
+  t('an origin/project rejection is NOT retried (the fallback relay would reject identically)',
+    !isRelayClassError(new Error('Unauthorized: origin not allowed'))
+      && !isRelayClassError(new Error('Invalid project id')));
 
   return rows;
 }

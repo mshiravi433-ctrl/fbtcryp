@@ -19,6 +19,66 @@
 export const WC_CONNECT_TIMEOUT_MS = 20_000;
 
 /**
+ * RELAY ENDPOINTS, IN TRY ORDER.
+ * ---------------------------------------------------------------------------
+ * `EthereumProvider.init()` was called without a `relayUrl`, so every
+ * pairing went to the SDK default `wss://relay.walletconnect.com` ONLY. On
+ * networks whose operator filters THAT hostname (the Iranian ISP case the
+ * WC_RELAY_UNREACHABLE message names) the socket can never open — even
+ * though WalletConnect operates a SECOND relay hostname for exactly this
+ * situation: the official docs answer \"the default relay endpoint is
+ * blocked\" with `relayUrl: 'wss://relay.walletconnect.org'`
+ * (docs.reown.com/advanced/faq).
+ *
+ * The connect/restore flows therefore walk this list with
+ * `initWcProvider()` in WalletContext.jsx: the primary gets a short fuse
+ * (below), the fallback gets the full WC_CONNECT_TIMEOUT_MS. Filtering that
+ * blocks one hostname (SNI/DNS based — the common shape) is answered in
+ * ~8s with a working socket instead of a ~28s failure; a network that
+ * blocks BOTH still gets the same named error, just sooner than the SDK's
+ * own multi-retry stall (60-90s+) ever answered.
+ *
+ * Both hostnames front the same WalletConnect relay pool — pairing state is
+ * not partitioned by which hostname carried it.
+ */
+export const WC_RELAY_URLS = [
+  'wss://relay.walletconnect.com',
+  'wss://relay.walletconnect.org'
+];
+
+/**
+ * How long the PRIMARY relay gets to open before the fallback is tried.
+ * Short on purpose: a blocked socket is discovered by this timer, not by
+ * the SDK's own 5-attempt backoff loop. Long enough for a slow-but-working
+ * primary on a mobile network.
+ */
+export const WC_PRIMARY_RELAY_TIMEOUT_MS = 8_000;
+
+/**
+ * Is this error one of the relay-unreachable class?
+ *
+ * The SAME sentence the connect catch-block in WalletContext.jsx already
+ * uses to name WC_RELAY_UNREACHABLE decides here whether trying the next
+ * relay hostname in WC_RELAY_URLS is worth doing at all. It deliberately
+ * does NOT match:
+ *
+ *  - \"User rejected\" / 4001 / \"connection request reset\" — the user
+ *    cancelled; retrying on another relay would re-open a modal they just
+ *    dismissed.
+ *  - \"origin not allowed\" / project-id errors — the fallback relay would
+ *    reject the same origin the same way, costing 20s for nothing.
+ */
+export function isRelayClassError(error) {
+  const msg = String(error?.message || '');
+  return (
+    msg === 'WC_CONNECT_TIMEOUT'
+    || msg === 'WC_RESTORE_TIMEOUT'
+    || msg === 'WC_INIT_TIMEOUT'
+    || /websocket|socket stalled|network|failed to publish|relay|timeout|no internet connection/i.test(msg)
+  );
+}
+
+/**
  * Race `promise` against a timer. On timeout, rejects with an Error whose
  * `.message` is `code` — the caller's classifier (WalletContext's
  * connect/restore catch blocks) already recognises `WC_CONNECT_TIMEOUT` /

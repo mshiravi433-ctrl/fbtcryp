@@ -29,8 +29,10 @@ export default function run() {
   // twice when the user taps Connect rapidly.
   t('wcInitingRef guards against double init',
     /if \(wcInitingRef\.current\) return false;/.test(walletSrc));
+  /* init() now lives inside initWcProvider (the relay-failover helper); the
+     guard must still be set before the flow reaches any init attempt. */
   t('wcInitingRef is set BEFORE the init() call',
-    code.indexOf('wcInitingRef.current = true') < code.indexOf('EthereumProvider.init('));
+    code.indexOf('wcInitingRef.current = true') < code.indexOf('await initWcProvider('));
   t('wcInitingRef is reset in the finally block',
     /finally\s*\{[\s\S]{0,100}wcInitingRef\.current = false/.test(code));
 
@@ -156,7 +158,7 @@ export default function run() {
   t('restoreWcSession exists', restoreBlock.length > 200);
   t('restore probes the persisted session keys BEFORE paying for init()',
     restoreBlock.includes('wc@2:client:') && restoreBlock.includes('//session')
-      && restoreBlock.indexOf('localStorage') < restoreBlock.indexOf('EthereumProvider.init('));
+      && restoreBlock.indexOf('localStorage') < restoreBlock.indexOf('await initWcProvider('));
   t('the probe tracks the storage-prefix, not a hardcoded store schema version',
     restoreBlock.includes("key.startsWith('wc@2:client:')"));
   t('restore bails out when no session is on disk', /!hasStoredSession\) return false/.test(restoreBlock));
@@ -234,7 +236,7 @@ export default function run() {
   t('forgetLocalWallet delegates to the same full disconnect teardown',
     forgetBlock.includes('clearVault()') && forgetBlock.includes('disconnectRef.current()'));
   t('an explicit Connect purges storage BEFORE init (never resurrects a stale session)',
-    code.indexOf('purgeWcStorage()') < code.indexOf('EthereumProvider.init(')
+    code.indexOf('purgeWcStorage()') < code.indexOf('await initWcProvider(')
       && code.indexOf('purgeWcStorage()') > code.indexOf('const connectWalletConnect'));
   t('an explicit Connect drops a session resurrected by init() (fresh pairing, modal can open)',
     /if \(wc\.session\) \{[\s\S]{0,400}wc\.disconnect\(\)/.test(code));
