@@ -38,15 +38,15 @@ allRemainingAreCodeComplete: true
 **کلید سرویس‌اکانت را نمی‌شود عوض کرد — فقط می‌شود حذف کرد و نو ساخت.**
 
 ۱. 🔗 https://console.cloud.google.com/iam-admin/serviceaccounts
-۲. پروژهٔ **`fbt-room-a46fc`** را انتخاب کن
-۳. روی `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` بزن ← تب **KEYS**
+۲. پروژهٔ **`fbtswap-36b13`** را انتخاب کن
+۳. روی `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` بزن ← تب **KEYS**
 ۴. کلیدی که با `dd3e2f8a` شروع می‌شود ← **حذف**
 ۵. **ADD KEY ← Create new key ← JSON** ← فایل دانلود می‌شود
 ۶. در ورسل این سه را ست کن (از داخل همان فایل):
 
 | Key در ورسل | از کجای فایل |
 |---|---|
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` |
 | `FIREBASE_CLIENT_EMAIL` | مقدار `client_email` |
 | `FIREBASE_PRIVATE_KEY` | مقدار `private_key` — **کل رشته** با همان `\n`ها، دست‌کاری نکن |
 

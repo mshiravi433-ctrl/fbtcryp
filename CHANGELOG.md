@@ -1,3 +1,9 @@
+## Unreleased — Notifications
+
+- Fix FCM token rotation by keeping a native registration listener active and re-syncing order watches after a new token is registered.
+- Route native notification taps to validated internal order, intent, and swap routes.
+- Clarify the live Firebase project as `fbtswap-36b13` and document the end-to-end notification audit.
+
 # Changelog
 
 ## Unreleased — WalletConnect relay failover (wss://relay.walletconnect.org)

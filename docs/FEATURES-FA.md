@@ -447,7 +447,7 @@ https://<اپ-تو>.vercel.app/api/orders/watch/status
 
 برای FCM روی اندروید، فایل **`google-services.json`** لازم است:
 
-۱. <https://console.firebase.google.com> ← پروژهٔ `fbt-room-a46fc`
+۱. <https://console.firebase.google.com> ← پروژهٔ `fbtswap-36b13`
 ۲. **Project settings** ← بخش **Your apps**
 ۳. اگر اپ اندروید ثبت نشده: **Add app** ← Android ← نام پکیج `ir.fbt.swap`
 ۴. `google-services.json` را دانلود کن

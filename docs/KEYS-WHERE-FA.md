@@ -27,7 +27,7 @@
 | `VAPID_PRIVATE_KEY` | همان صفحه، ستون بغلی | ورسل |
 | `VAPID_SUBJECT` | ایمیل خودت | ورسل |
 | `CRON_SECRET` | خودت می‌سازی (پایین توضیح دادم) | ورسل |
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` | ورسل |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` | ورسل |
 | `FIREBASE_CLIENT_EMAIL` | فایل JSON سرویس‌اکانت | ورسل |
 | `FIREBASE_PRIVATE_KEY` | همان فایل JSON | ورسل |
 | `ALCHEMY_API_KEY` | داشبورد Alchemy | ورسل |
@@ -63,7 +63,7 @@ vercel.com  ←  پروژهٔ fbtcryp-kkxi  ←  Settings  ←  Environment Vari
 
 **۱.** برو به `console.firebase.google.com`
 
-**۲.** پروژهٔ **`fbt-room-a46fc`** را باز کن
+**۲.** پروژهٔ **`fbtswap-36b13`** را باز کن
 
 **۳.** بالا سمت چپ، کنار «Project Overview»، روی **چرخ‌دنده ⚙️** بزن ← **Project settings**
 
@@ -135,9 +135,9 @@ vercel.com  ←  پروژهٔ fbtcryp-kkxi  ←  Settings  ←  Environment Vari
 
 **۱.** برو به `console.cloud.google.com/iam-admin/serviceaccounts`
 
-**۲.** بالای صفحه، پروژهٔ **`fbt-room-a46fc`** را انتخاب کن
+**۲.** بالای صفحه، پروژهٔ **`fbtswap-36b13`** را انتخاب کن
 
-**۳.** روی `firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com` بزن
+**۳.** روی `firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com` بزن
 
 **۴.** تب **KEYS**
 
@@ -155,10 +155,10 @@ vercel.com  ←  پروژهٔ fbtcryp-kkxi  ←  Settings  ←  Environment Vari
 ```json
 {
   "type": "service_account",
-  "project_id": "fbt-room-a46fc",
+  "project_id": "fbtswap-36b13",
   "private_key_id": "...",
   "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADAN...\n-----END PRIVATE KEY-----\n",
-  "client_email": "firebase-adminsdk-fbsvc@fbt-room-a46fc.iam.gserviceaccount.com",
+  "client_email": "firebase-adminsdk-fbsvc@fbtswap-36b13.iam.gserviceaccount.com",
   ...
 }
 ```
@@ -167,7 +167,7 @@ vercel.com  ←  پروژهٔ fbtcryp-kkxi  ←  Settings  ←  Environment Vari
 
 | Key در ورسل | از کجای فایل |
 |---|---|
-| `FIREBASE_PROJECT_ID` | `fbt-room-a46fc` |
+| `FIREBASE_PROJECT_ID` | `fbtswap-36b13` |
 | `FIREBASE_CLIENT_EMAIL` | مقدار `client_email` |
 | `FIREBASE_PRIVATE_KEY` | مقدار `private_key` |
 

@@ -33,7 +33,7 @@ import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { SPECULATION_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
-import { initServiceWorker, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
+import { initServiceWorker, initNativePushListeners, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
 import { clearAway, watchAutoLock } from './lib/autoLock';
 import { captureReferral } from './lib/referral';
@@ -329,6 +329,9 @@ export default function App() {
   useEffect(() => {
     initTheme();
     initServiceWorker();
+    // Keep FCM token rotation and notification taps alive for the whole app.
+    // Capacitor emits both events outside React's render lifecycle.
+    initNativePushListeners();
     prefetchLikelyRoutes();
     /*
      * Record `?ref=` before anything can navigate away.

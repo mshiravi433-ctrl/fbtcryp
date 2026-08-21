@@ -32,7 +32,7 @@ https://github.com/mshiravi433-ctrl/fbtcryp/releases/latest
 بعداً بی‌هشدار قطع شود.
 
 ۱. برو به **https://console.firebase.google.com**
-۲. پروژهٔ **`fbt-room-a46fc`**
+۲. پروژهٔ **`fbtswap-36b13`**
 ۳. ⚙️ **Project settings**
 ۴. پایین صفحه، بخش **Your apps** → دکمهٔ **Add app** → آیکون **Android**
 ۵. در فیلد Android package name بنویس:

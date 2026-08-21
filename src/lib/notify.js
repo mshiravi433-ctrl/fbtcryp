@@ -599,11 +599,83 @@ function iosPushPossible() {
  * Returns the same {ok, reason} shape as registerPush() so callers can treat
  * the two transports identically.
  */
+let nativePushPlugin = null;
+let nativePushListenersReady = false;
+let nativeRegistrationListener = null;
+let nativeActionListener = null;
+let nativeErrorListener = null;
+let nativeTokenWaiters = [];
+
+const NATIVE_ROUTES = new Set(['/orders', '/intent', '/swap']);
+
+function safeNativeRoute(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = new URL(value, 'https://fbtswap.app');
+    if (parsed.origin !== 'https://fbtswap.app') return null;
+    const path = parsed.hash.startsWith('#/') ? parsed.hash.slice(1).split('?')[0] : parsed.pathname;
+    return NATIVE_ROUTES.has(path) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sendNativeToken(token) {
+  if (!token) return false;
+  try {
+    const res = await fetch(`${apiBase()}/push/fcm`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, lang: document.documentElement.lang || 'fa' })
+    });
+    if (!res.ok) return false;
+    setNotifySettings({ pushSubscribed: true, fcmToken: token });
+    try {
+      const { loadOrders, syncWatches } = await import('./orders.js');
+      await syncWatches(loadOrders());
+    } catch { /* token registration must not fail because watch sync is best-effort */ }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Install long-lived FCM listeners once per app lifetime. */
+export async function initNativePushListeners() {
+  if (!isNativeApp() || nativePushListenersReady) return null;
+  try {
+    nativePushPlugin = nativePushPlugin || (await import('@capacitor/push-notifications')).PushNotifications;
+    nativeRegistrationListener = await nativePushPlugin.addListener('registration', ({ value }) => {
+      nativeTokenWaiters.splice(0).forEach(({ resolve }) => resolve(value));
+      sendNativeToken(value);
+    });
+    nativeErrorListener = await nativePushPlugin.addListener('registrationError', (error) => {
+      nativeTokenWaiters.splice(0).forEach(({ reject }) => reject(new Error(String(error?.error || 'REGISTRATION_FAILED'))));
+    });
+    nativeActionListener = await nativePushPlugin.addListener('pushNotificationActionPerformed', ({ notification }) => {
+      const route = safeNativeRoute(notification?.data?.url);
+      if (route) window.location.hash = route.slice(1);
+    });
+    nativePushListenersReady = true;
+    return () => {
+      nativeRegistrationListener?.remove?.();
+      nativeErrorListener?.remove?.();
+      nativeActionListener?.remove?.();
+      nativeTokenWaiters = [];
+      nativePushListenersReady = false;
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function registerNativePush() {
   if (!isNativeApp()) return { ok: false, reason: 'NOT_NATIVE' };
 
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications');
+    nativePushPlugin = PushNotifications;
+    await initNativePushListeners();
 
     // Android 13+ made notifications a runtime permission. Without this the OS
     // silently drops every notification and the app looks broken rather than
@@ -618,30 +690,25 @@ export async function registerNativePush() {
     // with a timeout — a registration that never resolves would hang the
     // settings toggle forever with no explanation.
     const token = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('TIMEOUT')), 15000);
-
-      PushNotifications.addListener('registration', (t) => {
-        clearTimeout(timer);
-        resolve(t.value);
+      const timer = setTimeout(() => {
+        nativeTokenWaiters = nativeTokenWaiters.filter((waiter) => waiter.resolve !== resolve);
+        reject(new Error('TIMEOUT'));
+      }, 15000);
+      nativeTokenWaiters.push({
+        resolve: (value) => { clearTimeout(timer); resolve(value); },
+        reject
       });
-      PushNotifications.addListener('registrationError', (e) => {
+      const registration = PushNotifications.register();
+      registration?.catch?.((e) => {
         clearTimeout(timer);
-        reject(new Error(String(e?.error || 'REGISTRATION_FAILED')));
+        nativeTokenWaiters = nativeTokenWaiters.filter((waiter) => waiter.resolve !== resolve);
+        reject(new Error(String(e?.message || 'REGISTRATION_FAILED')));
       });
-
-      PushNotifications.register();
     });
 
     if (!token) return { ok: false, reason: 'NO_TOKEN' };
 
-    const res = await fetch(`${apiBase()}/push/fcm`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token, lang: document.documentElement.lang || 'fa' })
-    });
-    if (!res.ok) return { ok: false, reason: 'SERVER_REJECTED' };
-
-    setNotifySettings({ pushSubscribed: true, fcmToken: token });
+    if (!(await sendNativeToken(token))) return { ok: false, reason: 'SERVER_REJECTED' };
     return { ok: true, token };
   } catch (e) {
     const msg = String(e?.message || e);
