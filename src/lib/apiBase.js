@@ -23,7 +23,7 @@
  *   2. The canonical production origin, when running inside the native shell
  *   3. '/api' — same-origin, the ordinary web case (Vercel rewrites handle it)
  */
-import { isNativeShell, publicAppUrl } from './nativeShell';
+import { isNativeShell, publicAppUrl } from './nativeShell.js';
 
 export function apiBase() {
   const configured =

@@ -1758,6 +1758,36 @@ select option {
 /* the drag handle only made sense on a bottom sheet */
 .sheet .sheet-handle { display: none; }
 
+/*
+ * BOTTOM-ANCHORED SHEETS (used by the wallet command center).
+ * The app's classic Sheet is a centered dialog; the new wallet detail sheets
+ * slide from the bottom over the wallet content, as bottom sheets do. The
+ * layer stays above the bottom nav (201 > 40) so it overlays content without
+ * fighting the nav's z-index. Default anchor remains 'center' — nothing
+ * existing changes.
+ */
+.sheet-layer-bottom {
+  align-items: flex-end;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+}
+.sheet-layer-bottom .sheet-bottom {
+  max-height: min(86vh, 720px);
+  border-radius: 24px 24px 0 0;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+}
+.sheet-layer-bottom .sheet-bottom::before {
+  content: '';
+  display: block;
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  margin: 2px auto 14px;
+  flex-shrink: 0;
+}
+:root[data-theme='light'] .sheet-bottom { background: #ffffff; }
+
+
 .sheet-title {
   flex: 0 0 auto;
   display: flex;

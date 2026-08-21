@@ -173,6 +173,7 @@ export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date
   const snaps = recordSnapshot(total, now) || readJson(SNAP_KEY, []);
   const ch24 = changeSince(snaps, 86400000, now);
   const ch7 = changeSince(snaps, 7 * 86400000, now);
+  const ch30 = changeSince(snaps, 30 * 86400000, now);
 
   const book = costBasis(lots);
   const bySym = Object.fromEntries(book.map((b) => [b.symbol, b]));
@@ -234,6 +235,7 @@ export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date
     total,
     change24h: ch24,
     change7d: ch7,
+    change30d: ch30,
     realised,
     unrealised,
     pnl: realised + unrealised,

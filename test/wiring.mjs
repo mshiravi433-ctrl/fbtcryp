@@ -124,7 +124,8 @@ export default function run() {
      * to it.
      */
     '/solana',                  // -> tab inside /swap
-    '/ostium', '/dydx', '/derivatives' // -> derivatives / stocks tabs
+    '/ostium', '/dydx', '/derivatives', // -> derivatives / stocks tabs
+    '/portfolio'                // -> Intelligence tile inside /wallet
   ]);
 
   const orphans = routes.filter(
@@ -1985,8 +1986,15 @@ export default function run() {
      */
     const w = read('src/pages/Wallet.jsx');
     t('holdings render a token icon', /<TokenIcon/.test(w));
-    t('holdings show the token name, not only the ticker', /\{r\.name\}/.test(w));
-    t('holdings show the quantity', /fmtQty\(r\.amount\)/.test(w));
+    /*
+     * The asset list was upgraded to cross-chain UNIFIED rows: the same
+     * symbol on several networks merges into one row built from a `g` group
+     * object (g.name / g.totalAmount), with per-chain balances in the detail
+     * sheet. The assertion follows the structure — the name and quantity
+     * must still be on the row.
+     */
+    t('holdings show the token name, not only the ticker', /\{g\.name\}|\{r\.name\}/.test(w));
+    t('holdings show the quantity', /fmtQty\(g\.totalAmount\)|fmtQty\(r\.amount\)/.test(w));
   }
 
   /* ---- 22. the NFT call must not use paid-plan parameters ---------------- */
@@ -2893,11 +2901,51 @@ export default function run() {
       /var\(--wal-pad\)/.test(valueRule) && !/-18px/.test(valueRule)
     );
 
-    /* No inline width hacks fighting the stylesheet. */
+    /* No inline width hacks fighting the stylesheet. The wallet's Buy action
+       moved into the shared action row (WalletActionRow) with the rest of the
+       six actions, so the class check now points at the row component. */
+    const actionRow = read('src/components/WalletActionRow.jsx');
     t(
       'the buy button is a real class, not an inline width override',
-      /wal-buy/.test(wallet) && !/btn-sm"\s*\n\s*style=\{\{ width: '100%' \}\}/.test(wallet)
+      /wal-action-\$\{a\.tint\}/.test(actionRow) && /tint: 'buy'/.test(actionRow)
+        && !/btn-sm"\s*\n\s*style=\{\{ width: '100%' \}\}/.test(wallet)
     );
+  }
+
+  /* ---- 37b. wallet command center: all new UI lives on /wallet ---------- */
+  /*
+   * FBT Smart Wallet 2.0: the wallet screen is the single hub. No new menu
+   * items anywhere; /portfolio leaves the More menu but keeps its route and
+   * stays reachable (the Intelligence tile embeds it).
+   */
+  {
+    const more = read('src/components/MoreSheet.jsx');
+    const app = read('src/App.jsx');
+    const wallet = read('src/pages/Wallet.jsx');
+    const bottomNav = read('src/components/BottomNav.jsx');
+
+    t('the More menu no longer lists /portfolio', !/to: '\/portfolio'/.test(more));
+    t('the /portfolio route still exists in App.jsx', /path="\/portfolio"/.test(app));
+    t('the wallet embeds the Portfolio dashboard (Intelligence tile)',
+      wallet.includes('<Portfolio embedded') && /intelSheet/.test(wallet));
+    t('the wallet has one equal-sized action row incl. Optimize',
+      wallet.includes('<WalletActionRow') && /wallet-optimize/.test(read('src/components/WalletActionRow.jsx')));
+    t('Optimize only navigates to the Intent OS compose screen (never signs)',
+      /navigate\(`\/intent\?tab=compose/.test(wallet) && !/optimize.*sign/i.test(wallet));
+    t('the unified cross-chain asset list feeds the token detail sheet',
+      wallet.includes('<AssetList') && wallet.includes('<TokenDetailSheet') && /groupHoldings/.test(wallet));
+    t('the ACTIVE card reads real local orders and intents',
+      /ActiveOrdersCard/.test(wallet) && /loadOrders\(\)/.test(read('src/components/ActiveOrdersCard.jsx'))
+        && /loadIntents\(\)/.test(read('src/components/ActiveOrdersCard.jsx')));
+    t('the Security Center is a wallet sheet, not a menu page',
+      /WalletIntelTiles/.test(wallet) && /SecurityCenterCard/.test(read('src/components/WalletIntelTiles.jsx'))
+        && /wallet\.security\.title/.test(read('src/components/SecurityCenterCard.jsx')));
+    t('the bottom nav gained no new tab', !/portfolio/.test(bottomNav) && !/security/.test(bottomNav));
+    t('the wallet tab strip is still exactly real | practice',
+      /wal-tab-strip/.test(wallet) && (wallet.match(/\['real', 'practice'\]/g) || []).length >= 1);
+    t('the wallet sheets support the bottom anchor used by the new sheets',
+      /anchor === 'bottom'/.test(read('src/components/Sheet.jsx'))
+        && /anchor="bottom"/.test(read('src/components/TokenDetailSheet.jsx')));
   }
 
   /* ---- 37. the full build must still exist and be reachable ------------- */

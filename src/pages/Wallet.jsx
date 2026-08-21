@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import HardwareWalletCard from '../components/HardwareWalletCard';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -13,18 +12,27 @@ import { useTelegram } from '../context/TelegramContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import SendSheet from '../components/SendSheet';
 import ReceiveSheet from '../components/ReceiveSheet';
+import WalletActionRow from '../components/WalletActionRow';
+import WalletIntelTiles from '../components/WalletIntelTiles';
+import WalletPnl from '../components/WalletPnl';
+import ActiveOrdersCard from '../components/ActiveOrdersCard';
+import TokenDetailSheet from '../components/TokenDetailSheet';
+import Portfolio from '../pages/Portfolio';
 import { explorerAddr } from '../lib/chains';
 import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
-import { currencyOf, vsOf } from '../lib/currency';
+import { currencyOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
 import { useAppStore } from '../store/useAppStore';
 import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
 import { revealMnemonic } from '../lib/localWallet';
+import { buildIntelligence } from '../lib/portfolioIntel';
+import { groupHoldings } from '../lib/walletRisk';
+import { apiBase } from '../lib/apiBase';
 import TokenIcon from '../lib/tokenIcon';
-import { IconCopy, IconExternal, IconGlobe, IconWallet, IconBuilding, IconChevronRight, IconTrend } from '../components/Icons';
-import { IconSend, IconReceive, WalletMesh } from '../components/WalletArt';
+import { IconCopy, IconGlobe, IconBuilding, IconChevronRight, IconTrend } from '../components/Icons';
+import { WalletMesh } from '../components/WalletArt';
 import '../styles/wallet-modern.css';
 import '../styles/wallet.css';
 
@@ -90,7 +98,20 @@ function providerLabel(wallet, t) {
   }
 }
 
-function WalHero({ wallet, currency, portfolio, t, onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, children }) {
+/** Compact change label for the hero 24H/7D/30D chips — real data only. */
+function changeLabel(ch, currency) {
+  if (!ch) return '—';
+  if (ch.from && ch.from > 0) {
+    const pct = (ch.abs / ch.from) * 100;
+    return `${ch.abs >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+  }
+  return `${ch.abs >= 0 ? '+' : ''}${fmtCurrencyValue(ch.abs, currency) ?? ''}`;
+}
+
+function WalHero({
+  wallet, currency, portfolio, intel, chips, hideBalances, t,
+  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, children
+}) {
   const connected = Boolean(wallet.address) && !wallet.locked;
   const [switching, setSwitching] = useState(false);
   const [switchErr, setSwitchErr] = useState(null);
@@ -123,7 +144,7 @@ function WalHero({ wallet, currency, portfolio, t, onConnect, onDisconnect, onRe
               <span className={`wal-chip-dot ${wallet.locked ? '' : 'is-live'}`} />
               <span className="mono" style={{ fontWeight: 700 }}>
                 <button
-                  className="wal-addr-plain"
+                  className={`wal-addr-plain ${hideBalances ? 'wal-addr-blur' : ''}`}
                   onClick={() => onCopy(wallet.address)}
                   title={t('wallet.copyAddress')}
                   aria-label={t('wallet.copyAddress')}
@@ -161,22 +182,48 @@ function WalHero({ wallet, currency, portfolio, t, onConnect, onDisconnect, onRe
                 </span>
               )}
             </div>
+
+            {/* 24H / 7D / 30D — real snapshot deltas only; else — */}
+            <div className="wal-chg-row" role="group" aria-label={t('wallet.changes')}>
+              {[['24H', intel?.change24h], ['7D', intel?.change7d], ['30D', intel?.change30d]].map(([label, ch]) => (
+                <span key={label} className={`pill ${ch && ch.abs >= 0 ? 'pill-up' : ch ? 'pill-down' : ''}`} style={{ fontSize: 10.5, padding: '5px 9px' }}>
+                  {label} {changeLabel(ch, currency)}
+                </span>
+              ))}
+            </div>
+
+            {/* Assets / DeFi / NFT chips — honest counts or explicit not-indexed */}
+            <div className="wal-hero-chips">
+              <button type="button" className="wal-hero-chip" onClick={() => children?.onAssets?.()} title={t('wallet.assets')}>
+                <span className="wal-hero-chip-label">{t('wallet.assets')}</span>
+                <strong>{portfolio.totalCount}</strong>
+              </button>
+              <button type="button" className="wal-hero-chip" onClick={() => children?.onFarm?.()} title={t('nav.farm')}>
+                <span className="wal-hero-chip-label">{t('wallet.defi')}</span>
+                <strong className="faint">—</strong>
+                <small className="wal-hero-chip-note">{t('wallet.notIndexed')}</small>
+              </button>
+              <button type="button" className="wal-hero-chip" onClick={() => children?.onNft?.()} title={t('nav.nft')}>
+                <span className="wal-hero-chip-label">{t('wallet.nft')}</span>
+                {chips.nft.state === 'count'
+                  ? <strong>{chips.nft.count}</strong>
+                  : <strong className="faint">—</strong>}
+                {chips.nft.state !== 'count' && <small className="wal-hero-chip-note">{t('wallet.notScanned')}</small>}
+              </button>
+            </div>
           </div>
 
-          <div className="wallet-actions-modern">
-            <button className="wallet-action-modern recv" onClick={() => children?.onReceive?.()}>
-              <span className="wallet-action-icon-modern" aria-hidden="true"><IconReceive /></span>
-              <span className="wallet-action-label">{t('receive.title')}</span>
-            </button>
-            <button className="wallet-action-modern send" onClick={() => children?.onSend?.()} disabled={wallet.locked}>
-              <span className="wallet-action-icon-modern" aria-hidden="true"><IconSend /></span>
-              <span className="wallet-action-label">{t('send.title')}</span>
-            </button>
-          </div>
-
-          <button className="wallet-buy-modern wal-buy" onClick={() => children?.onBuy?.()}>
-            {t('nav.buy')} →
-          </button>
+          {/* One equal-sized action row + Optimize (proposal only) */}
+          <WalletActionRow
+            onSend={() => children?.onSend?.()}
+            onReceive={() => children?.onReceive?.()}
+            onSwap={() => children?.onSwap?.()}
+            onBridge={() => children?.onBridge?.()}
+            onBuy={() => children?.onBuy?.()}
+            onEarn={() => children?.onEarn?.()}
+            onOptimize={() => children?.onOptimize?.()}
+            canOptimize={children?.canOptimize}
+          />
 
           {/* Utility / wallet management row */}
           <div className="wal-utils">
@@ -303,7 +350,14 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
   );
 }
 
-function AssetList({ portfolio, selectedChain, onSelect, t, currency }) {
+/**
+ * Asset list with CROSS-CHAIN UNIFICATION.
+ *
+ * On "All networks" the same symbol held on several chains merges into ONE
+ * row (ETH on 3 networks → one row with the summed amount) with the chains
+ * listed underneath. Tapping any row opens the TokenDetailSheet.
+ */
+function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currency }) {
   const [q, setQ] = useState('');
   const rows = useMemo(() => {
     let list = portfolio.rows || [];
@@ -314,6 +368,21 @@ function AssetList({ portfolio, selectedChain, onSelect, t, currency }) {
     }
     return list;
   }, [portfolio.rows, selectedChain, q]);
+
+  const groups = useMemo(() => {
+    if (selectedChain === 'all') return groupHoldings(rows);
+    return rows.map((r) => ({
+      symbol: r.symbol,
+      name: r.name,
+      items: [r],
+      chains: 1,
+      totalAmount: r.amount,
+      value: r.value,
+      priced: r.value != null ? 1 : 0,
+      total: 1
+    }));
+  }, [rows, selectedChain]);
+
   /* True when the CURRENT filter is empty but the wallet holds assets on
      other networks — the "my Bitcoin is missing" case, where the answer is
      one tap away, not a bug. */
@@ -329,7 +398,7 @@ function AssetList({ portfolio, selectedChain, onSelect, t, currency }) {
       <div className="row-between" style={{ marginBottom: 10 }}>
         <span className="wallet-section-title">{t('wallet.assets')}</span>
         <span className="faint" style={{ fontSize: 11 }}>
-          {rows.length} {t('wallet.assetsUnit')}
+          {groups.length} {t('wallet.assetsUnit')}
         </span>
       </div>
       <div className="row" style={{ gap: 8, marginBottom: 10 }}>
@@ -351,7 +420,7 @@ function AssetList({ portfolio, selectedChain, onSelect, t, currency }) {
             <div key={i} className="skel" style={{ height: 58, borderRadius: 14 }} />
           ))}
         </div>
-      ) : !rows.length ? (
+      ) : !groups.length ? (
         <div className="wal-empty-asset">
           {selectedChain === 'all' ? t('wallet.noAssets') : t('wallet.noAssetsChain')}
           {hasElsewhere && (
@@ -366,30 +435,45 @@ function AssetList({ portfolio, selectedChain, onSelect, t, currency }) {
         </div>
       ) : (
         <div className="stack" style={{ gap: 8 }}>
-          {rows.map((r) => {
-            const chain = EVM_CHAINS[r.chainId];
+          {groups.map((g) => {
+            const chain = EVM_CHAINS[g.items[0]?.chainId];
+            const partial = g.total > g.priced;
             return (
-              <div key={r.key} className="wallet-token-row-modern wal-asset-row">
-                <TokenIcon token={{ symbol: r.symbol, address: r.address, native: r.native }} chainId={r.chainId} size={34} />
-                <span style={{ flex: 1, minWidth: 0 }}>
+              <button
+                key={g.symbol}
+                type="button"
+                className="wallet-token-row-modern wal-asset-row wal-asset-group"
+                onClick={() => onOpenToken?.(g)}
+              >
+                <TokenIcon token={{ symbol: g.symbol, address: g.items[0]?.address, native: g.items[0]?.native }} chainId={g.items[0]?.chainId} size={34} />
+                <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
                   <span className="row" style={{ gap: 6 }}>
-                    <strong style={{ fontSize: 13.5 }}>{r.symbol}</strong>
-                    <span className="wal-chip-net" style={{ background: chain?.color ? `${chain.color}22` : 'rgba(255,255,255,0.06)', color: chain?.color || 'var(--text-2)' }}>
-                      {chain?.short}
-                    </span>
-                    {r.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+                    <strong style={{ fontSize: 13.5 }}>{g.symbol}</strong>
+                    {g.items.map((r) => {
+                      const c = EVM_CHAINS[r.chainId];
+                      return (
+                        <span key={r.chainId} className="wal-chip-net" style={{ background: c?.color ? `${c.color}22` : 'rgba(255,255,255,0.06)', color: c?.color || 'var(--text-2)' }}>
+                          {c?.short}
+                        </span>
+                      );
+                    })}
+                    {g.items[0]?.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
                   </span>
-                  <small className="faint">{r.name}</small>
+                  <small className="faint">
+                    {g.name}
+                    {partial && <span className="wal-note" style={{ marginInlineStart: 6, fontSize: 9 }}>{t('wallet.partial')}</span>}
+                  </small>
                 </span>
                 <span style={{ textAlign: 'end' }}>
                   <div className="mono" style={{ fontWeight: 800, fontSize: 13 }}>
-                    {fmtQty(r.amount)}
+                    {fmtQty(g.totalAmount)}
                   </div>
                   <div className="faint mono" style={{ fontSize: 11 }}>
-                    {r.value != null ? fmtCurrencyValue(r.value, currency) : '—'}
+                    {g.value != null ? fmtCurrencyValue(g.value, currency) : '—'}
                   </div>
                 </span>
-              </div>
+                <IconChevronRight width={14} height={14} style={{ flexShrink: 0, opacity: 0.5 }} />
+              </button>
             );
           })}
         </div>
@@ -542,7 +626,7 @@ function PracticeTab({ t, currency }) {
 }
 
 export default function Wallet() {
-  useHideBalances();
+  const hideBalances = useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
@@ -565,6 +649,17 @@ export default function Wallet() {
   const [backupResult, setBackupResult] = useState(null);
   const [backupErr, setBackupErr] = useState(null);
 
+  /* Command-center state */
+  const [sendToken, setSendToken] = useState(null);
+  const [tokenGroup, setTokenGroup] = useState(null);
+  const [tokenSheet, setTokenSheet] = useState(false);
+  const [intelSheet, setIntelSheet] = useState(false);
+  const [pnlSheet, setPnlSheet] = useState(false);
+  const [optimizeSheet, setOptimizeSheet] = useState(false);
+  const [nftChip, setNftChip] = useState({ state: 'unknown' });
+
+  const connected = Boolean(wallet.address) && !wallet.locked;
+
   useEffect(() => {
     if (wallet.chainId && wallet.isConnected) setSelectedChain(wallet.chainId);
   }, [wallet.chainId, wallet.isConnected]);
@@ -586,10 +681,108 @@ export default function Wallet() {
     portfolio.refresh?.();
   }, [wallet, portfolio]);
 
+  /*
+   * P&L / intelligence from the local lot ledger + live holdings. Only built
+   * when there is a real priced total: an unpriced-only wallet would record
+   * a zero snapshot and poison the 24h/7d/30d deltas.
+   */
+  const intel = useMemo(() => {
+    if (!portfolio.totalValue || portfolio.totalValue <= 0) return null;
+    return buildIntelligence({
+      holdings: portfolio.rows.map((r) => ({
+        symbol: r.symbol, name: r.name, value: r.value, amount: r.amount, chainId: r.chainId, native: r.native
+      }))
+    });
+  }, [portfolio.rows, portfolio.totalValue]);
+
+  /* Real NFT count for the hero chip — from /api/nft, or an honest "not scanned". */
+  useEffect(() => {
+    if (!connected) return undefined;
+    let alive = true;
+    setNftChip({ state: 'loading' });
+    (async () => {
+      try {
+        const base = apiBase();
+        const res = await fetch(`${base}/nft/chains`);
+        const info = await res.json();
+        if (!alive) return;
+        if (!info?.configured || !Array.isArray(info?.chains) || !info.chains.includes(wallet.chainId)) {
+          setNftChip({ state: 'notScanned' });
+          return;
+        }
+        const r = await fetch(`${base}/nft/${wallet.chainId}/${wallet.address}`);
+        if (!alive) return;
+        const data = await r.json();
+        const count = Array.isArray(data?.nfts) ? data.nfts.length : Number(data?.total) || 0;
+        setNftChip(count > 0 ? { state: 'count', count } : { state: 'count', count: 0 });
+      } catch {
+        if (alive) setNftChip({ state: 'error' });
+      }
+    })();
+    return () => { alive = false; };
+  }, [connected, wallet.address, wallet.chainId]);
+
+  const canOptimize = connected && portfolio.rows.length > 0 && portfolio.totalValue > 0;
+
+  const handleOptimize = useCallback(() => {
+    haptic?.('select');
+    if (!connected) { setConnectOpen(true); return; }
+    if (!canOptimize) { setOptimizeSheet(true); return; }
+    const priced = [...portfolio.rows].filter((r) => r.value != null).sort((a, b) => b.value - a.value);
+    const top = priced[0];
+    if (!top) { setOptimizeSheet(true); return; }
+    const native = portfolio.rows.find((r) => r.chainId === wallet.chainId && r.native);
+    let from = top.symbol;
+    let to = from === 'USDC' ? 'ETH' : 'USDC';
+    if (native && from === native.symbol) to = 'USDC';
+    navigate(`/intent?tab=compose&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&chain=${wallet.chainId}`);
+  }, [haptic, connected, canOptimize, portfolio.rows, wallet.chainId, navigate]);
+
+  const handleOpenToken = useCallback((group) => {
+    haptic?.('select');
+    setTokenGroup(group);
+    setTokenSheet(true);
+  }, [haptic]);
+
+  const handleTokenSend = useCallback(async (row) => {
+    if (!row) return;
+    if (row.chainId && row.chainId !== wallet.chainId) {
+      haptic?.('select');
+      const ok = await wallet.switchChain(row.chainId);
+      if (!ok) return;
+    }
+    setSendToken({
+      symbol: row.symbol,
+      name: row.name,
+      address: row.address,
+      native: row.native,
+      decimals: row.decimals
+    });
+    setSendOpen(true);
+  }, [wallet, haptic]);
+
+  /* Top non-native holding on the active chain — the only honest "Get Gas"
+     route: swap that token for native when gas is too low. */
+  const gasSwapTarget = useMemo(() => {
+    if (!wallet.chainId) return null;
+    const onChain = (portfolio.rows || [])
+      .filter((r) => r.chainId === wallet.chainId && !r.native && r.value != null)
+      .sort((a, b) => b.value - a.value);
+    return onChain[0]?.symbol ?? null;
+  }, [portfolio.rows, wallet.chainId]);
+
   const heroApi = {
     onSend: () => setSendOpen(true),
     onReceive: () => setReceiveOpen(true),
     onBuy: () => navigate('/buy'),
+    onSwap: () => navigate('/swap'),
+    onBridge: () => navigate('/bridge'),
+    onEarn: () => navigate('/earn'),
+    onOptimize: handleOptimize,
+    canOptimize,
+    onAssets: () => setSelectedChain('all'),
+    onFarm: () => navigate('/farm'),
+    onNft: () => navigate('/nft'),
     setSeedSheet,
     setBackupSheet
   };
@@ -613,6 +806,9 @@ export default function Wallet() {
             wallet={wallet}
             currency={currency}
             portfolio={portfolio}
+            intel={intel}
+            chips={{ nft: nftChip }}
+            hideBalances={hideBalances}
             t={t}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
@@ -627,21 +823,37 @@ export default function Wallet() {
 
           {wallet.address && !wallet.locked && (
             <>
-              <ChainBreakdown
-                portfolio={portfolio}
-                activeChainId={wallet.chainId}
-                onSelect={handleSelectChain}
-                selectedChain={selectedChain}
-                t={t}
-                currency={currency}
-              />
-              <AssetList
-                portfolio={portfolio}
-                selectedChain={selectedChain}
-                onSelect={handleSelectChain}
-                t={t}
-                currency={currency}
-              />
+              {/* Intelligence | P&L | Risk — the command-center trio */}
+              <div style={{ marginTop: 14 }}>
+                <WalletIntelTiles intel={intel} onIntel={() => setIntelSheet(true)} onPnl={() => setPnlSheet(true)} />
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <ChainBreakdown
+                  portfolio={portfolio}
+                  activeChainId={wallet.chainId}
+                  onSelect={handleSelectChain}
+                  selectedChain={selectedChain}
+                  t={t}
+                  currency={currency}
+                />
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <AssetList
+                  portfolio={portfolio}
+                  selectedChain={selectedChain}
+                  onSelect={handleSelectChain}
+                  onOpenToken={handleOpenToken}
+                  t={t}
+                  currency={currency}
+                />
+              </div>
+
+              {/* ACTIVE: live orders + recent intents */}
+              <div style={{ marginTop: 14 }}>
+                <ActiveOrdersCard />
+              </div>
 
               {/* Real-wallet holdings beyond the current chain: pools + NFTs */}
               <section className="wallet-pie-card" style={{ marginTop: 14, padding: 14, borderRadius: 18 }}>
@@ -679,8 +891,39 @@ export default function Wallet() {
       </div>
 
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
-      <SendSheet open={sendOpen} onClose={() => setSendOpen(false)} />
+      <SendSheet open={sendOpen} onClose={() => setSendOpen(false)} token={sendToken} swapForGasTarget={gasSwapTarget} />
       <ReceiveSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} />
+
+      {/* Token detail (from the unified asset list) */}
+      <TokenDetailSheet
+        open={tokenSheet}
+        onClose={() => setTokenSheet(false)}
+        group={tokenGroup}
+        intel={intel}
+        wallet={wallet}
+        currency={currency}
+        onSend={handleTokenSend}
+      />
+
+      {/* Intelligence — the existing embedded Portfolio dashboard */}
+      <Sheet open={intelSheet} onClose={() => setIntelSheet(false)} title={t('intel.title')} anchor="bottom" size="lg">
+        <Portfolio embedded />
+      </Sheet>
+
+      {/* P&L detail */}
+      <Sheet open={pnlSheet} onClose={() => setPnlSheet(false)} title={t('wallet.pnl.title')} anchor="bottom" size="lg">
+        <WalletPnl intel={intel} />
+      </Sheet>
+
+      {/* Optimize explainer — why no draft was prefilled */}
+      <Sheet open={optimizeSheet} onClose={() => setOptimizeSheet(false)} title={t('wallet.optimize')} anchor="bottom">
+        <div className="stack" style={{ gap: 12 }}>
+          <p className="notice">{t('wallet.optimizeExplain')}</p>
+          <button className="btn btn-primary" style={{ minHeight: 46, borderRadius: 14 }} onClick={() => { setOptimizeSheet(false); navigate('/intent?tab=compose'); }}>
+            {t('wallet.optimizeOpenManual')}
+          </button>
+        </div>
+      </Sheet>
 
       {/* Seed reveal sheet */}
       <Sheet
@@ -752,7 +995,7 @@ export default function Wallet() {
             try {
               const res = await shareWalletBackup();
               if (res?.ok) {
-                useAppStore.getState().notify(res.downloaded ? 'فایل دانلود شد — پوشه Downloads را ببین' : res.webShared ? 'اشتراک‌گذاری انجام شد' : 'آماده شد', 'success');
+                useAppStore.getState().notify(res.downloaded ? 'فایل دانلود شد — پوشه Downloads را ببین' : res.webShared ? 'اشتراکگذاری انجام شد' : 'آماده شد', 'success');
                 haptic?.('success');
               } else { setBackupErr('FAILED'); haptic?.('error'); }
             } catch { setBackupErr('FAILED'); haptic?.('error'); }

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import Switch from '../components/Switch';
 import SegIndicator from '../components/SegIndicator';
-import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
+import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from '../lib/chains';
 import {
   SOLVER_CAPABILITIES,
   WORKFLOW_ACTIONS,
@@ -153,22 +153,42 @@ export default function IntentOS() {
      the timeline is never a decorative mock. */
   const [lifecycle, setLifecycle] = useState(null);
   const [networkStatus, setNetworkStatus] = useState(null);
-  const [draft, setDraft] = useState(() => ({
-    kind: 'swap',
-    chainId: intentMemoryAtBoot.current.preferredChainId,
-    fromSymbol: 'USDC',
-    toSymbol: 'ETH',
-    amountIn: '1000',
-    amountUsd: '1000',
-    minReceive: '',
-    deadlineHours: 2,
-    maxSlippagePct: intentMemoryAtBoot.current.maxSlippagePct,
-    privacy: 'standard',
-    conditionType: 'priceBelow',
-    conditionValue: '2500',
-    note: '',
-    steps: DEFAULT_WORKFLOW
-  }));
+  /*
+   * The wallet's Optimize button prefills a real draft via ?from=&to=&chain=
+   * (never signs anything — this is the compose screen). Symbols are accepted
+   * only if they exist in the chain registry, so an unknown token can never
+   * slip into a compiled intent.
+   */
+  const [draft, setDraft] = useState(() => {
+    const mem = intentMemoryAtBoot.current;
+    const known = (v) => {
+      if (typeof v !== 'string' || !v.trim()) return null;
+      const up = v.trim().toUpperCase();
+      return Object.values(TOKENS).some((list) => Array.isArray(list) && list.some((tk) => tk.symbol === up))
+        ? up
+        : null;
+    };
+    const chainParam = Number(searchParams.get('chain'));
+    const chainId = Number.isInteger(chainParam) && EVM_CHAINS[chainParam] ? chainParam : mem.preferredChainId;
+    const fromSymbol = known(searchParams.get('from')) ?? 'USDC';
+    const toSymbol = known(searchParams.get('to')) ?? 'ETH';
+    return {
+      kind: 'swap',
+      chainId,
+      fromSymbol,
+      toSymbol,
+      amountIn: '1000',
+      amountUsd: '1000',
+      minReceive: '',
+      deadlineHours: 2,
+      maxSlippagePct: intentMemoryAtBoot.current.maxSlippagePct,
+      privacy: 'standard',
+      conditionType: 'priceBelow',
+      conditionValue: '2500',
+      note: '',
+      steps: DEFAULT_WORKFLOW
+    };
+  });
 
   const activeTemplate = TEMPLATES.find((item) => item.kind === draft.kind);
   const savedDrafts = useMemo(() => saved.slice(0, 4), [saved]);

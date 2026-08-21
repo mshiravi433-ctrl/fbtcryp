@@ -428,7 +428,12 @@
     "networks": "Networks",
     "networksUnit": "networks",
     "assetsUnit": "assets",
-    "active": "Active",
+    "active": {
+      "title": "Active",
+      "os": "Intent OS",
+      "empty": "No active orders or intents yet.",
+      "intents": "Recent intents"
+    },
     "chainUnavailable": "temporarily unavailable",
     "assets": "Assets",
     "searchAssets": "Search assets…",
@@ -442,7 +447,63 @@
     "copyAddress": "Copy address",
     "practiceMode": "Practice mode",
     "practiceBody": "Virtual balance for learning — no real money at risk. Test trading, explore features, and get comfortable before connecting a real wallet.",
-    "showAllNetworks": "Show all networks"
+    "showAllNetworks": "Show all networks",
+    "notIndexed": "not indexed",
+    "notScanned": "not scanned",
+    "partialCost": "partial",
+    "partial": "partial",
+    "noRecordedTrades": "no recorded trades",
+    "actions": "Wallet actions",
+    "changes": "Portfolio changes",
+    "optimize": "✨ Optimize",
+    "optimizeNote": "draft only — nothing is signed",
+    "optimizeWhy": "Optimize needs indexed holdings and prices to build a draft. Connect a wallet with priced assets, or open Intent OS manually.",
+    "optimizeExplain": "To propose an optimization we need at least one holding with a real price. Once a wallet with priced assets is connected, Optimize opens Intent OS with a prefilled draft — it never signs or executes anything.",
+    "optimizeOpenManual": "Open Intent OS manually",
+    "defi": "DeFi",
+    "nft": "NFT",
+    "pnl": {
+      "title": "P&L",
+      "unrealized": "Unrealized",
+      "realized": "Realized",
+      "partialNote": "Some holdings have no cost basis — their P&L is blank, not zero."
+    },
+    "intel": {
+      "tile": "Intelligence",
+      "tileHint": "Portfolio dashboard"
+    },
+    "security": {
+      "title": "Security",
+      "band": {
+        "low": "Lower",
+        "medium": "Medium",
+        "high": "Higher"
+      },
+      "notConfigured": "not configured",
+      "score": "Security score",
+      "scoreNote": "The score is based only on real protections you have set — enable 2FA or biometrics in Settings to raise it.",
+      "connection": "Connection",
+      "wcSession": "WalletConnect session",
+      "injected": "Browser wallet",
+      "twoFactor": "2FA",
+      "biometric": "Biometric",
+      "autoLock": "Auto-lock",
+      "minutes": "min",
+      "network": "Network",
+      "approvals": "Approvals",
+      "notScanned": "not scanned",
+      "body": "There is no approval indexer here, so suspicious approvals are not scanned — never shown as \"✓ clean\". Revoke approvals through the chain explorer’s own tool; it is a transaction you sign, and nobody can revoke for you.",
+      "revoke": "Revoke approvals",
+      "noRevokeTool": "This network’s explorer has no approval-revocation tool."
+    },
+    "tok": {
+      "price": "Price",
+      "balances": "Balances",
+      "total": "Total",
+      "weight": "Portfolio weight",
+      "contract": "View contract",
+      "noChart": "no chart data"
+    }
   },
   "toast": {
     "insufficientBalance": "Not enough balance",
@@ -2183,7 +2244,33 @@
       "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
       "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again."
     },
-    "asset": "Asset"
+    "asset": "Asset",
+    "ensResolving": "Resolving ENS name…",
+    "ensFailed": "Could not resolve this name on this network.",
+    "risk": {
+      "fresh": "This address has no previous on-chain activity — double-check it before sending.",
+      "contract": "Contract address detected. Funds sent to a contract may be unrecoverable.",
+      "unchecksummed": "Address is not EIP-55 checksummed — verify it carefully.",
+      "clean": "Address checks out (active, non-contract)."
+    },
+    "firewall": {
+      "title": "Firewall",
+      "ok": "verified",
+      "locked": "locked",
+      "request": "Request",
+      "type": {
+        "native": "native transfer",
+        "erc20": "token transfer (ERC-20)"
+      },
+      "amount": "Amount",
+      "network": "Network",
+      "wrongNetwork": "does not match the selected network",
+      "lockBody": "The network does not match what the app has selected. Signing is locked — switch the network in your wallet and try again.",
+      "wcNote": "Your WalletConnect wallet will show this exact request. Verify the amount and address there before approving."
+    },
+    "gasEstimate": "Estimated fee",
+    "gasLow": "Native balance is too low to cover the fee — this transfer may not confirm.",
+    "getGas": "Get {{to}} — swap {{from}} for gas"
   },
   "receive": {
     "title": "Receive",

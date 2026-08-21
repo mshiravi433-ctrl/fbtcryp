@@ -423,3 +423,276 @@
   .wallet-stocks-banner { transition: none; }
   .wallet-stocks-banner:hover { transform: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SMART WALLET COMMAND CENTER (2.0)
+   Everything below lives on /wallet. Sizes match the rest of the app:
+   the action strip mirrors .wallet-action-modern (54px min-height, 16px
+   radius), the tiles reuse .wallet-pie-card, and the tab strip is untouched.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* 24H / 7D / 30D chips under the total — real snapshot deltas only. */
+.wal-chg-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.wal-chg-row .pill { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }
+
+/* Assets / DeFi / NFT chips */
+.wal-hero-chips {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 11px;
+}
+.wal-hero-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 11px;
+  min-height: 54px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  color: var(--text-1);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.wal-hero-chip:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); }
+.wal-hero-chip:active { transform: scale(0.98); }
+.wal-hero-chip-label { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-3); text-transform: uppercase; }
+.wal-hero-chip strong { font-size: 17px; font-weight: 900; line-height: 1.05; }
+.wal-hero-chip-note { font-size: 9px; font-weight: 700; color: var(--text-3); line-height: 1.2; }
+
+/* One equal-sized action row (horizontal scroll) + Optimize. */
+.wallet-actions-v2 { margin-top: 14px; }
+.wallet-action-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.wallet-action-strip::-webkit-scrollbar { display: none; }
+.wallet-action-v2 {
+  position: relative;
+  flex: 0 0 84px;
+  min-height: 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  color: var(--text-1);
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.wallet-action-v2:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); }
+.wallet-action-v2:active { transform: scale(0.96); }
+.wallet-action-v2-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.10) inset;
+}
+.wallet-action-v2-label { font-size: 11px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+.wal-action-send .wallet-action-v2-icon { background: linear-gradient(135deg, #ff2d95 0%, #7c4dff 100%); }
+.wal-action-recv .wallet-action-v2-icon { background: linear-gradient(135deg, #00ff9d 0%, #00e5ff 100%); }
+.wal-action-swap .wallet-action-v2-icon { background: linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%); }
+.wal-action-bridge .wallet-action-v2-icon { background: linear-gradient(135deg, #ffb300 0%, #ff2d95 100%); }
+.wal-action-buy .wallet-action-v2-icon { background: linear-gradient(135deg, #00ff9d 0%, #7c4dff 100%); }
+.wal-action-earn .wallet-action-v2-icon { background: linear-gradient(135deg, #7c4dff 0%, #00e5ff 100%); }
+
+.wallet-optimize {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 35%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rgb-1) 16%, transparent), color-mix(in srgb, var(--rgb-3) 18%, transparent));
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.18s ease;
+}
+.wallet-optimize:hover { border-color: color-mix(in srgb, var(--rgb-1) 60%, transparent); box-shadow: 0 10px 26px rgba(0,229,255,0.14); transform: translateY(-1px); }
+.wallet-optimize-note { font-size: 9.5px; font-weight: 600; color: var(--text-3); margin-inline-start: 2px; }
+
+/* Intelligence | P&L | Risk tiles */
+.wallet-intel-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.wal-intel-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  min-height: 92px;
+  padding: 12px;
+  border-radius: 16px;
+  color: var(--text-1);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.wal-intel-tile:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); }
+.wal-intel-tile:active { transform: scale(0.98); }
+.wal-intel-tile-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--text-1);
+}
+.wal-intel-tile-head svg { opacity: 0.55; flex-shrink: 0; }
+
+/* Security center card (third tile) */
+.wal-sec-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 92px;
+  padding: 12px;
+  border-radius: 16px;
+  color: var(--text-1);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.wal-sec-card:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); }
+.wal-sec-card:active { transform: scale(0.98); }
+.wal-sec-ico {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%);
+  box-shadow: 0 8px 20px rgba(0,229,255,0.18);
+}
+
+/* ACTIVE card rows */
+.wal-active-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-1);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.wal-active-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+.wal-active-ico {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-2);
+}
+.wal-link-btn {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  color: var(--rgb-1);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.wal-link-btn:hover { text-decoration: underline; }
+.wal-link-row {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-1);
+  font-family: inherit;
+  cursor: pointer;
+}
+.wal-link-row:hover { border-color: rgba(255,255,255,0.16); }
+
+/* Privacy: blur the address when hide-balances is on (copy still works). */
+.wal-addr-blur {
+  filter: blur(5px);
+  user-select: none;
+}
+
+/* The unified asset list rows are real buttons now (tap → token sheet). */
+.wal-asset-group {
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-1);
+  text-align: start;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.wal-asset-group:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-1px); }
+.wal-asset-group:active { transform: scale(0.985); }
+
+/* Light theme — new surfaces inherit .wallet-pie-card overrides; the rest: */
+:root[data-theme='light'] .wal-hero-chip,
+:root[data-theme='light'] .wallet-action-v2,
+:root[data-theme='light'] .wal-active-row,
+:root[data-theme='light'] .wal-link-row {
+  background: rgba(255,255,255,0.8);
+  border-color: rgba(13,16,32,0.08);
+  box-shadow: 0 6px 16px rgba(13,16,32,0.04);
+}
+:root[data-theme='light'] .wal-active-ico { background: rgba(13,16,32,0.05); color: var(--text-2); }
+
+/* NATIVE — the same backdrop-filter kill as the rest of the wallet screen.
+   New command-center surfaces get the flat treatment too. */
+:root[data-native='true'] .wal-hero-chip,
+:root[data-native='true'] .wallet-action-v2,
+:root[data-native='true'] .wal-active-row {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Small screens: keep the tiles and chips from feeling cramped. */
+@media (max-width: 400px) {
+  .wallet-intel-row { gap: 6px; }
+  .wal-intel-tile, .wal-sec-card { padding: 10px; }
+  .wallet-action-v2 { flex-basis: 78px; min-height: 62px; }
+}
