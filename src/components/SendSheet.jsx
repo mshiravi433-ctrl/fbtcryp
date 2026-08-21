@@ -1,14 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import Sheet from './Sheet';
 import QrScanner, { scannerSupported } from './QrScanner';
 import { useWallet } from '../context/WalletContext';
 import { formatUnitsExact, getTokenBalance, NATIVE_GAS_FLOOR, sendToken } from '../lib/swap';
 import { EVM_CHAINS, TOKENS } from '../lib/chains';
-import { IconQr, IconCheck, IconExternal, IconWallet } from './Icons';
+import {
+  looksLikeDomain,
+  structurallyValidAddress,
+  checksumState,
+  recipientRisk,
+  estimateSendFeeNative,
+  hasEnoughGas,
+  verifySendContext,
+  labelRequestType,
+  setWalletRiskFormatters
+} from '../lib/walletRisk';
+import { IconQr, IconCheck, IconExternal, IconWallet, IconShield } from './Icons';
 import { IconSend } from './WalletArt';
 import TokenIcon from '../lib/tokenIcon';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
+
+const loadEthers = () => import('ethers');
 
 /**
  * DIRECT SEND (the real OTC leg)
@@ -38,8 +52,9 @@ import { checkPolicy, recordSpend } from '../lib/smartWallet';
  *    to pay the fee, so the transaction cannot even be mined — the classic way
  *    to strand a wallet.
  */
-export default function SendSheet({ open, onClose, token: initialToken = null }) {
+export default function SendSheet({ open, onClose, token: initialToken = null, swapForGasTarget = null }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const wallet = useWallet();
 
   const [to, setTo] = useState('');
@@ -49,6 +64,13 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
   const [stage, setStage] = useState('form'); // form → confirm → sending → done
   const [error, setError] = useState(null);
   const [hash, setHash] = useState(null);
+
+  /* Smart-send verification state (ENS + on-chain recipient risk + gas). */
+  const [ens, setEns] = useState(null); // resolving | resolved | failed
+  const [risk, setRisk] = useState(null); // { loading, flags, checksummed }
+  const [gas, setGas] = useState(null); // { nativeBalance, feeNative, enough }
+  const ensSeq = useRef(0);
+  const riskSeq = useRef(0);
 
   const chain = EVM_CHAINS[wallet.chainId];
 
@@ -91,7 +113,114 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
     setStage('form');
     setError(null);
     setHash(null);
+    setEns(null);
+    setRisk(null);
+    setGas(null);
   }, [open]);
+
+  /*
+   * ENS RESOLUTION — only when the input is actually a domain, and only with
+   * a REAL resolveName against the connected provider. A failed lookup shows
+   * an honest failure; nothing is ever guessed.
+   */
+  useEffect(() => {
+    const raw = to.trim();
+    if (!looksLikeDomain(raw)) {
+      setEns(null);
+      return undefined;
+    }
+    let alive = true;
+    const seq = ++ensSeq.current;
+    setEns({ type: 'resolving' });
+    const timer = setTimeout(async () => {
+      try {
+        const provider = wallet.getReadProvider();
+        const { isAddress } = await loadEthers();
+        const resolved = await provider.resolveName(raw);
+        if (!alive || seq !== ensSeq.current) return;
+        if (resolved && isAddress(resolved)) {
+          setTo(resolved);
+          setEns({ type: 'resolved' });
+        } else {
+          setEns({ type: 'failed' });
+        }
+      } catch {
+        if (alive && seq === ensSeq.current) setEns({ type: 'failed' });
+      }
+    }, 450);
+    return () => { alive = false; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to]);
+
+  /*
+   * ON-CHAIN RECIPIENT RISK — nonce and code are real facts from the RPC:
+   * a zero nonce means "no previous activity" and a non-empty code means the
+   * destination is a contract. Both are warnings, never verdicts.
+   */
+  useEffect(() => {
+    const raw = to.trim();
+    if (!structurallyValidAddress(raw)) {
+      setRisk(null);
+      return undefined;
+    }
+    let alive = true;
+    const seq = ++riskSeq.current;
+    setRisk({ loading: true, flags: [], checksummed: null });
+    const timer = setTimeout(async () => {
+      try {
+        const provider = wallet.getReadProvider();
+        const { getAddress } = await loadEthers();
+        const [txCount, code] = await Promise.all([
+          provider.getTransactionCount(raw).catch(() => null),
+          provider.getCode(raw).catch(() => null)
+        ]);
+        if (!alive || seq !== riskSeq.current) return;
+        const flags = recipientRisk({
+          txCount: txCount == null ? undefined : txCount,
+          code: code == null ? undefined : code,
+          checksummed: checksumState(raw, getAddress) === 'checksummed'
+        });
+        setRisk({ loading: false, flags, checksummed: checksumState(raw, getAddress) });
+      } catch {
+        if (alive && seq === riskSeq.current) {
+          setRisk({ loading: false, flags: [], checksummed: null });
+        }
+      }
+    }, 400);
+    return () => { alive = false; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to]);
+
+  /*
+   * GAS INTELLIGENCE — estimate the transfer fee in native coin from the
+   * provider's real fee data, and compare it to the wallet's native balance.
+   * "Get Gas" is only offered when a swap route to native exists.
+   */
+  const checkGas = useCallback(async () => {
+    if (!open || !token || !wallet.address) return;
+    try {
+      const provider = wallet.getReadProvider();
+      const { formatEther } = await loadEthers();
+      setWalletRiskFormatters({ formatEther });
+      const [balWei, feeData] = await Promise.all([
+        provider.getBalance(wallet.address).catch(() => null),
+        provider.getFeeData().catch(() => null)
+      ]);
+      const nativeBalance = balWei == null ? null : Number(formatEther(balWei));
+      const feeNative = estimateSendFeeNative({ fee: feeData, token });
+      setGas({
+        nativeBalance,
+        feeNative,
+        enough: hasEnoughGas({ nativeBalance, feeNative })
+      });
+    } catch {
+      setGas(null);
+    }
+  }, [open, token, wallet]);
+
+  useEffect(() => {
+    if (stage === 'confirm') checkGas();
+  }, [stage, checkGas]);
 
   useEffect(() => {
     if (!open || !token || !wallet.address) return;
@@ -160,6 +289,28 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
   const amountValid = Number(amount) > 0;
   const overBalance = balanceText != null && Number(amount) > Number(balanceText);
   const canReview = addressLooksValid && amountValid && !overBalance;
+
+  /*
+   * TRANSACTION FIREWALL — the verification shown before signing.
+   * For WalletConnect this is a READ-ONLY gate: the request chain must match
+   * the app's selected chain (otherwise the confirm button locks), the
+   * recipient must be structurally valid, and the amount is displayed in the
+   * token's own decimals — never raw or converted to dollars. Calldata is
+   * never rewritten; the wallet app shows the same request.
+   */
+  const firewall = useMemo(() => {
+    const ctx = verifySendContext({
+      tokenChainId: wallet.chainId,
+      walletChainId: wallet.chainId,
+      supported: wallet.chainOk
+    });
+    return {
+      chainOk: ctx.chainOk && Boolean(wallet.chainOk),
+      requestType: labelRequestType(token),
+      amountLabel: `${amount || '0'} ${token?.symbol || ''}`,
+      networkName: chain?.name ?? null
+    };
+  }, [amount, token, chain, wallet.chainId, wallet.chainOk]);
 
   const spendUsdGuess = () => {
     if (token && ['USDT', 'USDC', 'DAI', 'FDUSD'].includes(token.symbol)) {
@@ -256,6 +407,67 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
 
             <p className="notice" style={{ marginTop: 12 }}>{t('send.irreversible')}</p>
 
+            {/* Transaction firewall — verification before sign */}
+            <div className="card card-tight" style={{ marginTop: 10, borderColor: 'var(--line-strong)' }}>
+              <div className="row-between" style={{ marginBottom: 7 }}>
+                <span className="row" style={{ gap: 6, fontSize: 12, fontWeight: 800 }}>
+                  <IconShield width={14} height={14} /> {t('send.firewall.title')}
+                </span>
+                {firewall.chainOk
+                  ? <span className="pill pill-up" style={{ fontSize: 9 }}>{t('send.firewall.ok')}</span>
+                  : <span className="pill pill-down" style={{ fontSize: 9 }}>{t('send.firewall.locked')}</span>}
+              </div>
+              <div className="row-between" style={{ padding: '4px 0', fontSize: 11.5 }}>
+                <span className="faint">{t('send.firewall.request')}</span>
+                <span className="mono" style={{ fontWeight: 700 }}>eth_sendTransaction · {t(`send.firewall.type.${firewall.requestType}`)}</span>
+              </div>
+              <div className="row-between" style={{ padding: '4px 0', fontSize: 11.5, borderTop: '1px solid var(--line)' }}>
+                <span className="faint">{t('send.firewall.amount')}</span>
+                <span className="mono" style={{ fontWeight: 700 }}>{firewall.amountLabel}</span>
+              </div>
+              <div className="row-between" style={{ padding: '4px 0', fontSize: 11.5, borderTop: '1px solid var(--line)' }}>
+                <span className="faint">{t('send.firewall.network')}</span>
+                <span className="mono" style={{ fontWeight: 700 }}>
+                  {firewall.networkName || '—'}
+                  {firewall.chainOk ? '' : ` · ${t('send.firewall.wrongNetwork')}`}
+                </span>
+              </div>
+              {!firewall.chainOk && (
+                <p className="notice notice-danger" style={{ margin: '8px 0 0', fontSize: 11.5 }}>{t('send.firewall.lockBody')}</p>
+              )}
+              {wallet.mode === 'wc' && firewall.chainOk && (
+                <p className="muted" style={{ margin: '8px 0 0', fontSize: 10.5, lineHeight: 1.6 }}>
+                  {t('send.firewall.wcNote')}
+                </p>
+              )}
+            </div>
+
+            {/* Gas intelligence — real fee estimate vs native balance */}
+            {gas && gas.feeNative != null && (
+              <div className="row-between" style={{ marginTop: 9, fontSize: 11.5 }}>
+                <span className="faint">{t('send.gasEstimate')}</span>
+                <span className="mono" style={{ fontWeight: 800 }}>
+                  ≈ {gas.feeNative.toFixed(6)} {chain?.native?.symbol}
+                </span>
+              </div>
+            )}
+            {gas && gas.enough === false && (
+              <div className="stack" style={{ gap: 7, marginTop: 8 }}>
+                <p className="notice notice-danger" style={{ margin: 0, fontSize: 11.5 }}>
+                  {t('send.gasLow', { symbol: chain?.native?.symbol || '' })}
+                </p>
+                {swapForGasTarget && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ minHeight: 38, borderRadius: 11 }}
+                    onClick={() => navigate(`/swap?from=${encodeURIComponent(swapForGasTarget)}&to=${encodeURIComponent(chain?.native?.symbol || '')}&chain=${wallet.chainId}`)}
+                  >
+                    {t('send.getGas', { from: swapForGasTarget, to: chain?.native?.symbol || '' })}
+                  </button>
+                )}
+              </div>
+            )}
+
             {error && (
               <p className="notice notice-danger" style={{ marginTop: 9 }}>
                 {t(
@@ -273,7 +485,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
               <button
                 className="xfer-submit xfer-submit-danger"
                 style={{ flex: 1, marginTop: 0, minHeight: 48 }}
-                disabled={stage === 'sending'}
+                disabled={stage === 'sending' || !firewall.chainOk}
                 onClick={doSend}
               >
                 {stage === 'sending' ? t('send.sending') : t('send.confirm')}
@@ -305,6 +517,33 @@ export default function SendSheet({ open, onClose, token: initialToken = null })
             </div>
             {to && !addressLooksValid && (
               <p className="notice notice-danger" style={{ marginTop: 7 }}>{t('send.err.INVALID_ADDRESS')}</p>
+            )}
+
+            {/* ENS resolution status — real resolveName result, honest failure */}
+            {ens?.type === 'resolving' && (
+              <p className="notice" style={{ marginTop: 7 }}>{t('send.ensResolving')}</p>
+            )}
+            {ens?.type === 'failed' && (
+              <p className="notice" style={{ marginTop: 7 }}>{t('send.ensFailed')}</p>
+            )}
+
+            {/* On-chain recipient risk — facts from the RPC, warnings not verdicts */}
+            {risk?.loading && <p className="notice" style={{ marginTop: 7 }}>…</p>}
+            {risk && !risk.loading && risk.flags.length > 0 && (
+              <div className="stack" style={{ gap: 5, marginTop: 7 }}>
+                {risk.flags.includes('fresh') && (
+                  <p className="notice" style={{ marginTop: 0 }}>{t('send.risk.fresh')}</p>
+                )}
+                {risk.flags.includes('contract') && (
+                  <p className="notice notice-danger" style={{ marginTop: 0 }}>{t('send.risk.contract')}</p>
+                )}
+                {risk.flags.includes('unchecksummed') && (
+                  <p className="notice" style={{ marginTop: 0 }}>{t('send.risk.unchecksummed')}</p>
+                )}
+              </div>
+            )}
+            {risk && !risk.loading && risk.flags.length === 0 && addressLooksValid && (
+              <p className="faint" style={{ fontSize: 11, marginTop: 6 }}>✓ {t('send.risk.clean')}</p>
             )}
 
             {/*

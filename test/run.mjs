@@ -126,6 +126,16 @@ console.log('▸ probing replaced-transaction tracking…');
   report('intent replacement tracking', await runReplacement());
 }
 
+/* --------------------- 0a-2. wallet risk / verification helpers ----------- */
+/* Pure logic, no DOM and no network: recipient risk classification, gas
+   estimates that return null (never zero) when the fee feed is missing, the
+   WC-style chain gate, cross-chain asset grouping and the security score. */
+console.log('▸ probing the wallet risk / verification helpers…');
+{
+  const { default: runRisk } = await import('./wallet-risk-probe.mjs');
+  report('wallet risk helpers', await runRisk());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */
@@ -547,6 +557,22 @@ console.log('\n▸ checking the wallet panel…');
   const host = document.createElement('div');
   document.body.appendChild(host);
   report('wallet panel', await runWallet(host));
+}
+
+/*
+ * The wallet command center (Smart Wallet 2.0) renders only after a wallet is
+ * CONNECTED, which the wallet panel probe above cannot reach — it mounts the
+ * page in the disconnected empty state. This drives each new component
+ * directly with representative props and asserts the honest states.
+ */
+console.log('\n▸ checking the wallet command center components…');
+{
+  npx(['vite', 'build', '-c', 'test/vite.wcc.mjs', '--logLevel', 'error']);
+  installDom();
+  const { run: runWcc } = await import('./.out/wcc/wallet-command-center-probe.js');
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  report('wallet command center', await runWcc(host));
 }
 
 console.log('\n▸ checking the bottom nav layout…');

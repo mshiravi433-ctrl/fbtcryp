@@ -130,7 +130,14 @@ const GROUPS = [
          direct discovery path again; it remains the specialised editor for
          limit, DCA, TWAP and rebalance plans compiled by the OS. */
       { to: '/orders', key: 'nav.orders', Icon: IconClock, hue: 'var(--rgb-1)' },
-      { to: '/portfolio', key: 'nav.portfolio', Icon: IconBriefcase, hue: 'var(--rgb-2)' },
+      /*
+       * ─── PORTFOLIO IS NOT LISTED HERE ANY MORE ───────────────────────────
+       * The Portfolio intelligence dashboard now lives INSIDE the wallet
+       * screen (the Intelligence tile on /wallet opens the embedded
+       * dashboard). The /portfolio ROUTE still exists and still works so a
+       * saved or shared link resolves — only the menu doorway was removed,
+       * the same rule the /solana and /nft entries follow.
+       */
       /* Points and ranking are one screen now — a score is only meaningful
          next to the standing it produces. */
       { to: '/rewards', key: 'rewards.title', Icon: IconTrophy, hue: 'var(--rgb-5)' },
