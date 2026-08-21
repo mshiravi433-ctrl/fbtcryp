@@ -606,12 +606,16 @@ app.post('/api/developer/projects/:id/keys', async (req, res) => {
 });
 app.post('/api/developer/projects/:id/keys/:keyId/revoke', async (req, res) => {
   if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401);
+  const revokeClaim = await claimIdempotency(req.tgUser.id, `key-revoke:${req.params.id}:${req.params.keyId}`, req.get('idempotency-key'), req.params.keyId);
+  if (!revokeClaim.ok) return projectError(res, revokeClaim.code, revokeClaim.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'A valid idempotency key is required', revokeClaim.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 400);
+  if (revokeClaim.replay) return res.json(revokeClaim.result);
   const owned = await ownedProject(req.tgUser.id, req.params.id);
   if (!owned.ok) return projectError(res, owned.code, 'Developer project storage is not configured', 503);
   if (!owned.project) return projectError(res, 'PROJECT_NOT_FOUND', 'Project not found', 404);
   const result = await revokeApiKey(req.tgUser.id, owned.project, req.params.keyId);
   if (!result.ok) return projectError(res, result.code, result.code === 'PROJECT_STORE_UNAVAILABLE' ? 'Developer key storage is not configured' : 'Key not found', result.code === 'PROJECT_STORE_UNAVAILABLE' ? 503 : 404);
-  return res.json({ data: { revoked: true }, meta: { schema: 'fbt.api-key-revocation.v1' } });
+  const response = { data: { revoked: true }, meta: { schema: 'fbt.api-key-revocation.v1' } }; await saveIdempotency(revokeClaim, response);
+  return res.json(response);
 });
 
 app.get('/api/reputation/:id', (req, res) => res.json({ data: null, meta: { schema: SCHEMAS.reputation, dataStatus: 'unavailable', subjectId: String(req.params.id).slice(0, 64), limitations: ['No privacy-safe observed reputation store is configured.'] } }));
