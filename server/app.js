@@ -36,6 +36,7 @@ import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
 import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
+import { fetchSolanaIntel, fetchSolanaWhales, solscanConfigured, SOLANA_SIGNAL_MINTS } from './solanaIntel.js';
 import { fetchDydxAccount, fetchDydxMarkets, fetchDydxOrderbook } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
@@ -3044,6 +3045,54 @@ app.get('/api/shop/products', (req, res) =>
  * rate without its interval produces a confident wrong number.
  */
 app.get('/api/perp/markets', (_req, res) => serve(res, 300_000)(fetchPerpMarkets, 'perp-markets'));
+
+/*
+ * SOLANA ON-CHAIN INTELLIGENCE — whale flow, holder concentration and DEX
+ * pressure for the Signals page's Solana tab. The Solscan key is a paid secret
+ * read server-side only (see server/solanaIntel.js); without it both routes
+ * answer `{ configured:false }` and the card hides its on-chain row.
+ *
+ * Five-minute cache, like the perp feed: positioning moves intraday, not per
+ * request, and Solscan credits are metered. A bad mint or an upstream outage
+ * is a 4xx/502 here rather than a fabricated number, exactly as /api/news/whales
+ * behaves.
+ */
+app.get('/api/solana/intel/:mint', async (req, res) => {
+  try {
+    const out = await fetchSolanaIntel(req.params.mint);
+    if (out && out.configured === false) {
+      res.set('cache-control', 'public, max-age=60, s-maxage=60');
+      return res.json(out);
+    }
+    res.set('cache-control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    const code = String(err?.code || err?.message || '');
+    if (code === 'BAD_MINT') return res.status(400).json({ error: 'BAD_MINT' });
+    return res.status(502).json({ error: 'SOLSCAN_UPSTREAM_FAILED', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+app.get('/api/solana/whales', async (_req, res) => {
+  if (!solscanConfigured()) {
+    res.set('cache-control', 'public, max-age=60, s-maxage=60');
+    return res.json({ configured: false, schema: 'fbt.solana-whales.v1', transfers: [] });
+  }
+  try {
+    const out = await fetchSolanaWhales();
+    res.set('cache-control', 'public, max-age=120, s-maxage=300, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'SOLSCAN_UPSTREAM_FAILED', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* The curated Solana mints the Signals page offers, so the client does not
+   hard-code a second copy of addresses that can drift out of sync. Keyless. */
+app.get('/api/solana/signal-mints', (_req, res) => {
+  res.set('cache-control', 'public, max-age=3600, s-maxage=3600');
+  return res.json({ mints: SOLANA_SIGNAL_MINTS });
+});
 
 /**
  * CONTRACT ADDRESS → COINGECKO ID, for the automatic-order screen.

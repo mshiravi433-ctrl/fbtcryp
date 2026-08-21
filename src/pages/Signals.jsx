@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -8,14 +8,18 @@ import CoinLogo from '../components/CoinLogo';
 import AdBanner from '../components/AdBanner';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
-import { useChart, useGlobalStats, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin, useGlobalStats, useMarkets } from '../hooks/useMarket';
 import { analyze, marketSentiment, projectRange } from '../lib/ai';
-import { fmtPct, fmtPrice } from '../lib/format';
+import { fmtPct, fmtPrice, fmtCompact } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { aiStatus, getMarketBrief, getOutlook } from '../lib/aiClient';
 import SegIndicator from '../components/SegIndicator';
 import VerdictPanel from '../components/VerdictPanel';
 import { verdict } from '../lib/verdict';
+import { marketRegime } from '../lib/macro';
+import { scenarioSplit, findLevels } from '../lib/history';
+import { SOLANA_SIGNAL_ASSETS, getSolanaIntel } from '../lib/solanaSignals';
+import { getPerpMarkets } from '../lib/perp';
 import { useLearningTelemetry } from '../hooks/telemetry';
 import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -27,6 +31,9 @@ const HORIZONS = [
   { days: 7, key: '7D' },
   { days: 30, key: '30D' }
 ];
+
+/* The four verdict regimes, mapped to one-line labels a layperson reads. */
+const REGIME_LABEL = { riskOn: 'riskOn', btcLed: 'btcLed', rotationOut: 'rotationOut', riskOff: 'riskOff' };
 
 function Gauge({ score, label, confidence }) {
   const { t } = useTranslation();
@@ -57,6 +64,34 @@ function Gauge({ score, label, confidence }) {
         <div className="faint" style={{ marginTop: 4, fontSize: 12 }}>{t('signals.confidence')}: <span style={{ color: 'var(--text-1)', fontWeight: 800 }}>{confidence}%</span></div>
       </div>
     </div>
+  );
+}
+
+/*
+ * The same bipolar bar IndicatorBar draws, generalised to take a ready-made
+ * label so it can render a VERDICT LAYER (technical / structural / macro /
+ * derivatives) as well as an analysis indicator.
+ */
+function LayerBar({ label, score, weight }) {
+  const pct = Math.min(100, Math.abs(score));
+  const positive = score >= 0;
+  const dim = weight < 0.4; /* a low-weight layer still shows, just quieter */
+  return (
+    <motion.div variants={riseIn} style={{ marginBottom: 13, opacity: dim ? 0.78 : 1 }}>
+      <div className="row-between" style={{ marginBottom: 6 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700 }}>{label}</span>
+        <span className={`mono ${positive ? 'up' : 'down'}`} style={{ fontSize: 12, fontWeight: 800 }}>{positive ? '+' : ''}{Math.round(score)}</span>
+      </div>
+      <div style={{ display: 'flex', height: 8, borderRadius: 999, overflow: 'hidden', background: 'rgba(127,127,127,.10)', padding: 1.5 }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          {!positive && <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--down)', borderRadius: 999, boxShadow: '0 0 10px rgba(255,59,107,0.32)' }} />}
+        </div>
+        <div style={{ width: 2, background: 'rgba(255,255,255,.18)', borderRadius: 2, margin: '0 1px' }} />
+        <div style={{ flex: 1 }}>
+          {positive && <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--up)', borderRadius: 999, height: '100%', boxShadow: '0 0 10px rgba(0,255,157,0.32)' }} />}
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -116,7 +151,17 @@ export default function Signals() {
   const { haptic } = useTelegram();
   const { data: coins } = useMarkets(40);
   const { data: global } = useGlobalStats();
+
+  /* ─── ASSET PICKER: an [All | Solana ◎] tab, not a new page ───────────────
+   * The All tab is the existing first-14-coins scroll. The Solana tab is the
+   * curated set (src/lib/solanaSignals.js): SOL plus six SPL tokens, each with
+   * a verified mint, run through the SAME technical pipeline (useChart +
+   * analyze). No new route, no new page. */
+  const [tab, setTab] = useState('all');
   const [coinId, setCoinId] = useState('bitcoin');
+  const [solanaId, setSolanaId] = useState('solana');
+  const activeId = tab === 'solana' ? solanaId : coinId;
+
   const [horizon, setHorizon] = useState(HORIZONS[1]);
   const [scanning, setScanning] = useState(true);
   const [ai, setAi] = useState({ enabled: false });
@@ -124,16 +169,105 @@ export default function Signals() {
   const [brief, setBrief] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
-  const { data: chart } = useChart(coinId, 30);
+
+  const { data: chart } = useChart(activeId, 30);
   const { data: btcChart } = useChart('bitcoin', 30);
-  const coin = useMemo(() => (coins ?? []).find((c) => c.id === coinId), [coins, coinId]);
+  /* useCoin(null) on the All tab avoids a redundant per-coin fetch — the All
+     tab already has the coin from the markets list. */
+  const { data: solanaCoin } = useCoin(tab === 'solana' ? activeId : null);
+
+  const coin = useMemo(() => {
+    if (tab === 'solana') return solanaCoin;
+    return (coins ?? []).find((c) => c.id === coinId);
+  }, [tab, solanaCoin, coins, coinId]);
+
   const priceSeries = useMemo(() => (chart?.length ? chart.map((p) => p.p) : (coin?.sparkline ?? [])), [chart, coin]);
   const btcSeries = useMemo(() => (btcChart ?? []).map((p) => p.p), [btcChart]);
   const analysis = useMemo(() => (priceSeries.length ? analyze(priceSeries, coin ?? {}) : null), [priceSeries, coin]);
   const projection = useMemo(() => (analysis ? projectRange(analysis, horizon.days) : null), [analysis, horizon]);
-  const weeklyProjection = useMemo(() => (analysis ? projectRange(analysis, 7) : null), [analysis]);
-  const monthlyProjection = useMemo(() => (analysis ? projectRange(analysis, 30) : null), [analysis]);
   const sentiment = useMemo(() => marketSentiment(global), [global]);
+
+  /* MARKET REGIME — one small chip beside the signal title, only when the
+     wider market actually tells us something (dominance present). */
+  const regime = useMemo(() => (global ? marketRegime({ global, btcSeries }) : null), [global, btcSeries]);
+
+  /* DERIVATIVES — fetched LAZILY after the first paint so it never blocks
+     the gauge. The verdict's derivatives layer carries weight 0 until this
+     resolves, so the initial read is identical to the four-layer engine. */
+  const [perpMarkets, setPerpMarkets] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    getPerpMarkets().then((d) => alive && setPerpMarkets(Array.isArray(d?.assets) ? d.assets : [])).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const verdictData = useMemo(
+    () => (analysis ? verdict({ analysis, series: priceSeries, btcSeries, coin, global, perpMarkets }) : null),
+    [analysis, priceSeries, btcSeries, coin, global, perpMarkets]
+  );
+  const perpForCoin = useMemo(() => {
+    if (!perpMarkets || !coin?.symbol) return null;
+    return perpMarkets.find((m) => m?.symbol === String(coin.symbol).toUpperCase()) || null;
+  }, [perpMarkets, coin]);
+
+  /* The detail card reads the horizon the user picked (7D → short, 30D → long). */
+  const horizonKey = horizon.days >= 30 ? 'long' : 'short';
+  const read = verdictData?.[horizonKey];
+
+  /* PROBABILITY SCENENARIOS — how often the same window ended up, flat or
+     down on this coin's own history, with the neutral band sized to the
+     projection cone so a calm coin is not flagged for ordinary noise. */
+  const bandPct = useMemo(() => {
+    if (!projection || !projection.mid) return 2;
+    const half = (projection.high - projection.low) / 2;
+    return Math.max(0.5, Math.min(10, (half / projection.mid) * 100));
+  }, [projection]);
+  const scenarios = useMemo(
+    () => (priceSeries.length ? scenarioSplit(priceSeries, horizon.days, bandPct) : null),
+    [priceSeries, horizon.days, bandPct]
+  );
+
+  /* INVALIDATION — the nearest support BELOW the current price, from the same
+     level finder the backtest uses. Real, never guessed; hidden when none. */
+  const invalidation = useMemo(() => {
+    if (!priceSeries.length) return null;
+    const price = priceSeries[priceSeries.length - 1];
+    const support = findLevels(priceSeries)
+      .filter((l) => l.kind === 'support' && l.price < price)
+      .sort((a, b) => b.price - a.price)[0];
+    if (!support) return null;
+    return { price: support.price, pctBelow: ((price - support.price) / price) * 100 };
+  }, [priceSeries]);
+
+  /* BACKTEST HISTORY — how this same setup has actually paid. Hidden when the
+     sample is too thin to mean anything (< 8 fires), exactly as the verdict's
+     historical layer refuses to weight a handful of occurrences. */
+  const backtestInfo = useMemo(() => {
+    const bt = analysis?.backtest;
+    if (!bt || !bt.samples || bt.samples < 8) return null;
+    const side = String(analysis.label ?? '').includes('ell') ? bt.sell : bt.buy;
+    if (!side || side.total < 8 || side.edge === null || side.edge === undefined) return null;
+    return { rate: side.rate, edge: side.edge, samples: side.total, base: bt.baseRate };
+  }, [analysis]);
+
+  /* ON-CHAIN INTEL — Solana tab only, fetched lazily per mint. Fail-closed:
+     configured:false OR all-null → the whole row stays hidden (no empty box). */
+  const activeMint = useMemo(
+    () => (tab === 'solana' ? (SOLANA_SIGNAL_ASSETS.find((a) => a.id === activeId)?.mint ?? null) : null),
+    [tab, activeId]
+  );
+  const [solanaIntel, setSolanaIntel] = useState(null);
+  const intelReqId = useRef(0);
+  useEffect(() => {
+    if (!activeMint) { setSolanaIntel(null); return undefined; }
+    const req = ++intelReqId.current;
+    setSolanaIntel(null);
+    getSolanaIntel(activeMint)
+      .then((d) => { if (req === intelReqId.current) setSolanaIntel(d); })
+      .catch(() => { if (req === intelReqId.current) setSolanaIntel(null); });
+    return () => { intelReqId.current += 1; };
+  }, [activeMint]);
+
   /*
    * LEARNING TELEMETRY — wired up from Signals.jsx ONLY, and gated twice:
    * `optedIn` here (so the hook's inputs are null and it does zero work when
@@ -146,9 +280,9 @@ export default function Signals() {
   const learn = useLearningParams();
   const verdictForTelemetry = useMemo(
     () => (optedIn && analysis && !scanning
-      ? verdict({ analysis, series: priceSeries, btcSeries, coin, global })
+      ? verdict({ analysis, series: priceSeries, btcSeries, coin, global, perpMarkets })
       : null),
-    [optedIn, analysis, scanning, priceSeries, btcSeries, coin, global]
+    [optedIn, analysis, scanning, priceSeries, btcSeries, coin, global, perpMarkets]
   );
   useLearningTelemetry({
     coin: optedIn ? coin : null,
@@ -169,11 +303,32 @@ export default function Signals() {
       .then((r) => alive && (r ? setOutlook(r) : setAiError('AI_FAILED'))).catch((e) => alive && setAiError(e.code || 'AI_FAILED')).finally(() => alive && setAiLoading(false));
     return () => { alive = false; };
   }, [coin?.id, analysis?.score, i18n.language, horizon.days]);
-  useEffect(() => { setScanning(true); const id = setTimeout(() => setScanning(false), 850); return () => clearTimeout(id); }, [coinId]);
+  useEffect(() => { setScanning(true); const id = setTimeout(() => setScanning(false), 850); return () => clearTimeout(id); }, [activeId]);
   const ranked = useMemo(() => {
     if (!coins?.length) return [];
     return coins.map((c) => { const a = c.sparkline?.length >= 30 ? analyze(c.sparkline, c) : null; return a ? { coin: c, a, strength: Math.abs(a.score) * (a.confidence / 100) } : null; }).filter(Boolean).sort((x, y) => y.strength - x.strength).slice(0, 8);
   }, [coins]);
+
+  /* Only render the on-chain row when the Solscan key is configured AND at
+     least one metric returned real data — fail-closed, never an empty box. */
+  const intel = solanaIntel && solanaIntel.configured ? solanaIntel : null;
+  const hasOnchain = Boolean(
+    intel && (
+      intel.whaleFlow?.direction
+      || intel.holderTrend?.change
+      || intel.topHolderPct != null
+      || intel.dexActivity?.pressure
+    )
+  );
+
+  /* Layer bars: every verdict layer carrying real weight, in read order. */
+  const layerRows = useMemo(() => {
+    if (!read?.layers) return [];
+    const order = ['technical', 'historical', 'structural', 'macro', 'derivatives'];
+    return order
+      .map((k) => ({ key: k, ...read.layers[k] }))
+      .filter((l) => l && l.weight > 0);
+  }, [read]);
 
   return (
     <PageTransition>
@@ -219,10 +374,25 @@ export default function Signals() {
 
       <motion.div className="wallet-pie-card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, padding: 14 }}>
         <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7, marginBottom: 10 }}>{t('signals.chooseAsset')}</div>
+        {/* The two-tab picker: All (markets) or Solana ◎ (curated SPL set). */}
+        <div className="segmented" style={{ width: '100%', marginBottom: 12 }}>
+          <button className={tab === 'all' ? 'active' : ''} onClick={() => { haptic?.('select'); setTab('all'); }} style={{ isolation: 'isolate', flex: 1, minHeight: 36 }}>
+            {tab === 'all' && <SegIndicator id="tab-all" />}
+            {t('signals.allTab')}
+          </button>
+          <button className={tab === 'solana' ? 'active' : ''} onClick={() => { haptic?.('select'); setTab('solana'); }} style={{ isolation: 'isolate', flex: 1, minHeight: 36 }}>
+            {tab === 'solana' && <SegIndicator id="tab-sol" />}
+            {t('signals.solanaTab')}
+          </button>
+        </div>
         <div className="tag-scroll" style={{ gap: 8 }}>
-          {(coins ?? []).slice(0, 14).map((c) => (
-            <button key={c.id} className={`tag ${coinId === c.id ? 'active' : ''}`} onClick={() => { haptic?.('select'); setCoinId(c.id); }} style={{ minHeight: 34, padding: '7px 13px', fontSize: 12.5, borderRadius: 12 }}>{c.symbol}</button>
-          ))}
+          {tab === 'all'
+            ? (coins ?? []).slice(0, 14).map((c) => (
+              <button key={c.id} className={`tag ${coinId === c.id ? 'active' : ''}`} onClick={() => { haptic?.('select'); setCoinId(c.id); }} style={{ minHeight: 34, padding: '7px 13px', fontSize: 12.5, borderRadius: 12 }}>{c.symbol}</button>
+            ))
+            : SOLANA_SIGNAL_ASSETS.map((a) => (
+              <button key={a.id} className={`tag ${solanaId === a.id ? 'active' : ''}`} onClick={() => { haptic?.('select'); setSolanaId(a.id); }} style={{ minHeight: 34, padding: '7px 13px', fontSize: 12.5, borderRadius: 12 }}>{a.symbol}</button>
+            ))}
         </div>
       </motion.div>
 
@@ -235,11 +405,22 @@ export default function Signals() {
               <span className="faint" style={{ fontSize: 12.5 }}>{t('signals.analyzing')}</span>
             </motion.div>
           ) : (
-            <motion.div key="gauge" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}>
-              <div className="row-between" style={{ marginBottom: 12 }}>
+            <motion.div key="gauge" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ width: '100%' }}>
+              <div className="row-between" style={{ marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
                 <div className="row" style={{ gap: 10 }}>
                   <CoinLogo coin={coin} />
-                  <div><div style={{ fontWeight: 800, fontSize: 14 }}>{coin?.symbol}</div><div className="faint mono" style={{ fontSize: 11.5 }}>${fmtPrice(coin?.price)}</div></div>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {coin?.symbol}
+                      {/* Market regime chip — only when the wider market reads. */}
+                      {regime?.regime && (
+                        <span className="pill" title={t(`signals.regime.${REGIME_LABEL[regime.regime]}`)} style={{ fontSize: 10, padding: '3px 8px', background: regime.regime === 'riskOff' || regime.regime === 'rotationOut' ? 'rgba(255,89,107,0.10)' : 'rgba(0,255,157,0.10)', borderColor: regime.regime === 'riskOff' || regime.regime === 'rotationOut' ? 'rgba(255,89,107,0.22)' : 'rgba(0,255,157,0.22)', color: regime.regime === 'riskOff' || regime.regime === 'rotationOut' ? 'var(--down)' : 'var(--up)' }}>
+                          {t(`signals.regime.${REGIME_LABEL[regime.regime]}`)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="faint mono" style={{ fontSize: 11.5 }}>${fmtPrice(coin?.price)}</div>
+                  </div>
                 </div>
                 <span className={`pill ${(coin?.change24h ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 11.5, padding: '5px 10px' }}>{fmtPct(coin?.change24h ?? 0)}</span>
               </div>
@@ -253,6 +434,161 @@ export default function Signals() {
         <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
           <VerdictPanel analysis={analysis} series={priceSeries} btcSeries={btcSeries} coin={coin} global={global} />
         </motion.div>
+      )}
+
+      {/*
+        THE SIGNAL CARD — completed, not a new page. Layer score bars, the
+        three probability scenarios, the invalidation level and the backtest
+        history of this same setup, each rendered ONLY when it has real data.
+        The derivatives row appears for the majors the perp feed covers; the
+        on-chain row appears in the Solana tab only when Solscan returned data.
+      */}
+      {analysis && !scanning && (
+        <motion.section className="wallet-pie-card" variants={stagger} initial="hidden" animate="show" style={{ marginTop: 14 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-3), var(--rgb-2))', color: '#fff', fontSize: 12 }}>◈</span>
+            {t('signals.breakdown')}
+          </div>
+
+          {/* Layer score bars — the "why", each layer's real contribution. */}
+          {layerRows.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 10 }}>{t('signals.layerTitle')}</div>
+              {layerRows.map((l) => (
+                <LayerBar key={l.key} label={t(`verdict.layerName.${l.key}`)} score={l.score} weight={l.weight} />
+              ))}
+            </div>
+          )}
+
+          {/* Derivatives row — funding + open interest, majors only. */}
+          {perpForCoin && perpForCoin.avgFundingApr != null && (
+            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 8 }}>{t('signals.derivatives.title')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div className="faint" style={{ fontSize: 10 }}>{t('signals.derivatives.funding')}</div>
+                  <div className={`mono ${perpForCoin.avgFundingApr >= 0 ? 'up' : 'down'}`} style={{ fontSize: 14, fontWeight: 800, marginTop: 3 }}>
+                    {perpForCoin.avgFundingApr > 0 ? '+' : ''}{Math.round(perpForCoin.avgFundingApr)}%
+                  </div>
+                </div>
+                {perpForCoin.openInterestUsd != null && (
+                  <div style={{ textAlign: 'end' }}>
+                    <div className="faint" style={{ fontSize: 10 }}>{t('signals.derivatives.openInterest')}</div>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 800, marginTop: 3 }}>${fmtCompact(perpForCoin.openInterestUsd)}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Probability scenarios — up / flat / down over this horizon. */}
+          {scenarios && scenarios.samples >= 20 && (
+            <div style={{ marginBottom: 12 }}>
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 8 }}>{t('signals.scenarios.title')}</div>
+              <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: 'rgba(127,127,127,.10)' }}>
+                <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--up)' }} />
+                <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral}%` }} transition={{ duration: 0.7 }} style={{ background: 'rgba(127,127,127,.32)' }} />
+                <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctDown}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--down)' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11 }}>
+                <span className="up" style={{ fontWeight: 700 }}>▲ {scenarios.pctUp}% {t('signals.scenarios.bullish')}</span>
+                <span className="faint" style={{ fontWeight: 700 }}>{scenarios.pctNeutral}% {t('signals.scenarios.neutral')}</span>
+                <span className="down" style={{ fontWeight: 700 }}>▼ {scenarios.pctDown}% {t('signals.scenarios.bearish')}</span>
+              </div>
+              <div className="faint" style={{ fontSize: 10.5, marginTop: 6 }}>{t('signals.scenarios.hint', { n: scenarios.samples, d: horizon.days })}</div>
+            </div>
+          )}
+
+          {/* Invalidation level — the nearest support below price. */}
+          {invalidation && (
+            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
+              <div className="row-between">
+                <div>
+                  <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.invalidation')}</div>
+                  <div className="mono down" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>${fmtPrice(invalidation.price)}</div>
+                </div>
+                <div style={{ textAlign: 'end' }}>
+                  <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.invalidationBelow')}</div>
+                  <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>-{fmtPct(invalidation.pctBelow)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Backtest history — hide when the sample is too thin. */}
+          {backtestInfo && (
+            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 8 }}>{t('signals.backtestHistory')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="mono up" style={{ fontSize: 16, fontWeight: 900 }}>{Math.round(backtestInfo.rate)}%</div>
+                  <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{t('signals.backtestHitRate')}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div className={`mono ${backtestInfo.edge >= 0 ? 'up' : 'down'}`} style={{ fontSize: 16, fontWeight: 900 }}>{backtestInfo.edge >= 0 ? '+' : ''}{Math.round(backtestInfo.edge)}pp</div>
+                  <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{t('signals.backtestEdge')}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="mono" style={{ fontSize: 16, fontWeight: 900 }}>{backtestInfo.samples}</div>
+                  <div className="faint" style={{ fontSize: 10, marginTop: 3 }}>{t('signals.backtestSamples')}</div>
+                </div>
+              </div>
+              <div className="faint" style={{ fontSize: 10.5, marginTop: 8 }}>{t('signals.backtestHint', { base: Math.round(backtestInfo.base) })}</div>
+            </div>
+          )}
+
+          {/* On-chain row — Solana tab only, fail-closed when no real data. */}
+          {hasOnchain && (
+            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12, borderColor: 'rgba(152,120,255,0.18)' }}>
+              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 10 }}>{t('signals.onchain.title')}</div>
+              <div style={{ display: 'grid', gap: 10 }}>
+                {intel.whaleFlow?.direction && (
+                  <div className="row-between">
+                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.whaleFlow')}</span>
+                    <span className={`mono ${intel.whaleFlow.direction === 'outflow' ? 'down' : intel.whaleFlow.direction === 'inflow' ? 'up' : ''}`} style={{ fontSize: 12, fontWeight: 800 }}>
+                      {t(`signals.onchain.flow.${intel.whaleFlow.direction}`)}
+                    </span>
+                  </div>
+                )}
+                {intel.holderTrend?.change && (
+                  <div className="row-between">
+                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.holderTrend')}</span>
+                    <span className={`mono ${intel.holderTrend.change === 'rising' ? 'down' : 'up'}`} style={{ fontSize: 12, fontWeight: 800 }}>
+                      {t(`signals.onchain.trend.${intel.holderTrend.change}`)}
+                    </span>
+                  </div>
+                )}
+                {intel.topHolderPct != null && (
+                  <div className="row-between">
+                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.topHolder')}</span>
+                    <span className="mono" style={{ fontSize: 12, fontWeight: 800 }}>{intel.topHolderPct}%</span>
+                  </div>
+                )}
+                {intel.dexActivity?.pressure && (
+                  <div className="row-between">
+                    <span className="faint" style={{ fontSize: 11.5 }}>{t('signals.onchain.dexActivity')}</span>
+                    <span className={`mono ${intel.dexActivity.pressure === 'buy' ? 'up' : intel.dexActivity.pressure === 'sell' ? 'down' : ''}`} style={{ fontSize: 12, fontWeight: 800 }}>
+                      {t(`signals.onchain.pressure.${intel.dexActivity.pressure}`)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {analysis.signals.map((s) => <IndicatorBar key={s.key} signal={s} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
+            {analysis.indicators.rsi != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>RSI (14)</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.rsi.toFixed(1)}</div></div>}
+            {analysis.indicators.volatility != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.volatility')}</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.volatility.toFixed(0)}%</div></div>}
+            {analysis.indicators.support != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.support')}</div><div className="mono up" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.support)}</div></div>}
+            {analysis.indicators.resistance != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.resistance')}</div><div className="mono down" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.resistance)}</div></div>}
+          </div>
+
+          {/* Create Intent — pre-fills Intent OS, never auto-executes. */}
+          <button className="btn btn-primary" style={{ width: '100%', minHeight: 46, borderRadius: 14, marginTop: 16 }} onClick={() => { haptic?.('select'); navigate(`/intent?to=${encodeURIComponent(coin?.symbol || '')}`); }}>
+            {t('signals.createIntent')}
+          </button>
+        </motion.section>
       )}
 
       {(
@@ -320,22 +656,6 @@ export default function Signals() {
         </motion.section>
       )}
 
-      {analysis && !scanning && (
-        <motion.section className="wallet-pie-card" variants={stagger} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 28, height: 28, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-3), var(--rgb-2))', color: '#fff', fontSize: 12 }}>◈</span>
-            {t('signals.breakdown')}
-          </div>
-          {analysis.signals.map((s) => <IndicatorBar key={s.key} signal={s} />)}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
-            {analysis.indicators.rsi != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>RSI (14)</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.rsi.toFixed(1)}</div></div>}
-            {analysis.indicators.volatility != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.volatility')}</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.volatility.toFixed(0)}%</div></div>}
-            {analysis.indicators.support != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.support')}</div><div className="mono up" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.support)}</div></div>}
-            {analysis.indicators.resistance != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.resistance')}</div><div className="mono down" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.resistance)}</div></div>}
-          </div>
-        </motion.section>
-      )}
-
       <AdBanner slot="swap" />
 
       {ranked.length > 0 && (
@@ -346,7 +666,7 @@ export default function Signals() {
           </div>
           <motion.div className="stack" style={{ gap: 10 }} variants={stagger} initial="hidden" animate="show">
             {ranked.map(({ coin: c, a }) => (
-              <motion.div key={c.id} className="wallet-token-row-modern" variants={riseIn} onClick={() => { haptic?.('select'); setCoinId(c.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ cursor: 'pointer', padding: 14 }}>
+              <motion.div key={c.id} className="wallet-token-row-modern" variants={riseIn} onClick={() => { haptic?.('select'); setTab('all'); setCoinId(c.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ cursor: 'pointer', padding: 14 }}>
                 <CoinLogo coin={c} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 800, fontSize: 13.5 }}>{c.symbol}</div>
@@ -365,8 +685,8 @@ export default function Signals() {
       </InfoBox>
 
       <div className="row" style={{ gap: 12, marginTop: 18 }}>
-        <button className="btn btn-primary" style={{ flex: 1, minHeight: 46, borderRadius: 14 }} onClick={() => navigate(`/swap?coin=${coinId}`)}>{t('nav.swap')}</button>
-        <button className="btn btn-ghost" style={{ flex: 1, minHeight: 46, borderRadius: 14 }} onClick={() => navigate(`/coin/${coinId}`)}>{t('signals.viewChart')}</button>
+        <button className="btn btn-primary" style={{ flex: 1, minHeight: 46, borderRadius: 14 }} onClick={() => navigate(`/swap?coin=${activeId}`)}>{t('nav.swap')}</button>
+        <button className="btn btn-ghost" style={{ flex: 1, minHeight: 46, borderRadius: 14 }} onClick={() => navigate(`/coin/${activeId}`)}>{t('signals.viewChart')}</button>
       </div>
     </PageTransition>
   );

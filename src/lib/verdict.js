@@ -243,6 +243,60 @@ function structuralLayer(series, horizon) {
   return { score: clamp(score, -100, 100), weight: horizon === 'long' ? 0.8 : 0.5, reasons };
 }
 
+/**
+ * LAYER 5 — DERIVATIVES: funding and open interest, from the live perp feed.
+ *
+ * This is the layer that can SEE what leveraged traders are doing, which none
+ * of the chart layers can. Funding is the cost longs and shorts pay each
+ * other, so its sign is a direct read of which side is crowded — and a crowd
+ * on one side is, contrarian-style, a small argument the other way.
+ *
+ * ─── THE INTERPRETATION IS DELIBERATELY CONTRARIAN, AND SMALL ───────────────
+ * Extreme POSITIVE funding (longs pay shorts) means the perpetual is bid up
+ * by a crowded long book; that is a caution, not a confirmation. Sustained
+ * NEGATIVE funding (shorts pay longs) is the mirror — shorts are crowded,
+ * which historically leans toward positive pressure (a squeeze cuts both
+ * ways, so the weight stays low).
+ *
+ * The weight is the LOWEST of any layer on purpose: funding is a sentiment
+ * read, not a directional edge, and a small leveraged crowd should never be
+ * able to flip the structural and historical reads above it. It only joins
+ * the blend when we have a real, funded perp market for THIS asset.
+ *
+ * @param {object|null} market  one asset row from server/perp.js
+ *        (avgFundingApr, openInterestUsd, crowding), or null/undefined.
+ */
+function derivativesLayer(market, horizon) {
+  if (!market) return { score: 0, weight: 0, reasons: [] };
+
+  const apr = Number(market.avgFundingApr);
+  /* A market with no usable annualised funding tells us nothing; null, never
+     zero, for the same reason crowding() treats a missing rate as missing. */
+  if (!Number.isFinite(apr)) return { score: 0, weight: 0, reasons: [] };
+
+  let score = 0;
+  const reasons = [];
+
+  /* The neutral band is not zero: most venues bake a small interest component
+     into funding, so a calm market sits slightly positive (see perp.js). Only
+     past 20% APR does the long book read as genuinely crowded. */
+  if (apr > 20) {
+    score = -clamp((apr - 20) * 1.4, 0, 40);
+    reasons.push({ id: 'fundingHotLong', kind: 'caution', values: { apr: Math.round(apr) } });
+  } else if (apr < -5) {
+    score = clamp((-5 - apr) * 1.4, 0, 35);
+    reasons.push({ id: 'fundingShortCrowded', kind: 'notable', values: { apr: Math.round(apr) } });
+  }
+
+  return {
+    score: clamp(score, -100, 100),
+    /* Low by design — see the header. Slightly louder over a month, where
+       positioning drift matters more than inside a week. */
+    weight: horizon === 'long' ? 0.45 : 0.3,
+    reasons
+  };
+}
+
 /** LAYER 4 — the market this asset lives in. Dominant over a month. */
 function macroLayer(macro, horizon) {
   if (!macro?.regime) return { score: 0, weight: 0, reasons: [] };
@@ -356,14 +410,15 @@ const stanceFor = (score) =>
  *        well as in lib/learning.js — the hot path never trusts a remote
  *        number. Null ⇒ today's exact behaviour.
  */
-function buildHorizon(horizon, { analysis, series, macro, multipliers }) {
+function buildHorizon(horizon, { analysis, series, macro, multipliers, derivatives }) {
   const bars = horizon === 'long' ? 30 : 7;
 
   const layers = {
     technical: technicalLayer(analysis, horizon),
     historical: historicalLayer(series, analysis, bars),
     structural: structuralLayer(series, horizon),
-    macro: macroLayer(macro, horizon)
+    macro: macroLayer(macro, horizon),
+    derivatives: derivativesLayer(derivatives, horizon)
   };
 
   /*
@@ -485,13 +540,17 @@ function buildHorizon(horizon, { analysis, series, macro, multipliers }) {
  * @param {number[]} args.btcSeries  BTC prices over the same window
  * @param {object}   args.coin       market row
  * @param {object}   args.global     global market stats
+ * @param {object[]} [args.perpMarkets] optional per-asset derivatives rows from
+ *        server/perp.js (avgFundingApr, openInterestUsd…). When absent or when
+ *        none matches this asset's symbol, the derivatives layer carries no
+ *        weight and the engine behaves exactly as before.
  * @param {object}   [args.tune]     { layers: { short: {...}, long: {...} } }
  *        optional per-layer weight multipliers from the learning core. When
  *        absent, missing or malformed the engine uses today's hardcoded
  *        weights — identical behaviour to before this feature existed.
  * @returns {{short, long, macro, facts, agree}|null}
  */
-export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, global = null, tune = null } = {}) {
+export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, global = null, perpMarkets = null, tune = null } = {}) {
   /*
    * ─── A DEFAULT PARAMETER DOES NOT CATCH `null` ──────────────────────────
    * This signature was `coin = {}`, which looks safe and is not: a default
@@ -524,17 +583,30 @@ export function verdict({ analysis, series = [], btcSeries = [], coin: coinArg, 
 
   const macro = macroContext({ coin, series: v, btcSeries, global });
 
+  /*
+   * DERIVATIVES, optional. The perp feed covers a small, fixed set of majors
+   * (see server/perp.js TRACKED_ASSETS); for anything else `perpMarkets` is
+   * null/empty and the derivatives layer contributes nothing — the blend is
+   * identical to the four-layer engine that existed before this. Matched by
+   * symbol so an ETH signal picks up ETH's funding, never BTC's.
+   */
+  const derivatives = Array.isArray(perpMarkets)
+    ? (perpMarkets.find((m) => m && m.symbol === String(coin?.symbol || '').toUpperCase()) || null)
+    : null;
+
   const short = buildHorizon('short', {
     analysis,
     series: v,
     macro,
-    multipliers: tune?.layers?.short
+    multipliers: tune?.layers?.short,
+    derivatives
   });
   const long = buildHorizon('long', {
     analysis,
     series: v,
     macro,
-    multipliers: tune?.layers?.long
+    multipliers: tune?.layers?.long,
+    derivatives
   });
 
   /*

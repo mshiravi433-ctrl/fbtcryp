@@ -233,6 +233,22 @@ console.log('▸ probing the safe-refresh contract…');
   report('safe refresh', refreshRows);
 }
 
+/* ------------------------------ 0f. signals page --------------------------- */
+/*
+ * The enhanced Signals page (asset tabs, market regime chip, completed signal
+ * card, derivatives layer, on-chain row, Create Intent) is verified in three
+ * ways against the real code: the Solana on-chain module is fail-closed (no
+ * key ⇒ { configured:false }, a key never leaks, an empty upstream nulls its
+ * metrics); the signal card hides every data-less section rather than showing
+ * an empty box; and the JSX carries no hardcoded fa/ar. Pure logic + source
+ * read, no bundler or DOM.
+ */
+console.log('▸ probing the Signals page (fail-closed + no hardcoded fa/ar)…');
+{
+  const { default: signalsRows } = await import('./signals-probe.mjs');
+  report('signals page', await signalsRows());
+}
+
 /* ------------------------------ 1. units -------------------------------- */
 /* Pure logic first: it is the fastest suite and the one whose failures point
    most precisely at a cause. Bundled with Vite so extensionless imports and
