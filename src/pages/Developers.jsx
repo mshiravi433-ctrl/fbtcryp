@@ -97,7 +97,12 @@ const GROUPS = [
       { m: 'GET', p: '/api/bridge/status', d: 'bridgeStatus' },
       { m: 'GET', p: '/api/fiat/status', d: 'fiatStatus' },
       { m: 'GET', p: '/api/solana/status', d: 'solanaStatus' },
-      { m: 'GET', p: '/api/gasless/status', d: 'gaslessStatus' }
+      { m: 'GET', p: '/api/gasless/status', d: 'gaslessStatus' },
+      { m: 'GET', p: '/api/environments', d: 'environments' },
+      { m: 'GET', p: '/api/ecosystem/agents', d: 'agentsCatalog' },
+      { m: 'GET', p: '/api/ecosystem/strategies', d: 'strategiesCatalog' },
+      { m: 'GET', p: '/api/ecosystem/liquidity', d: 'liquidityCatalog' },
+      { m: 'GET', p: '/api/network/overview?window=24h', d: 'networkOverview' }
     ]
   }
 ];
