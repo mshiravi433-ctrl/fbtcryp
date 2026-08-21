@@ -9515,10 +9515,10 @@ export default function run() {
      *    App ID — so push would have kept working and then stopped without
      *    warning, which is the worst shape a bug can take.
      *
-     *    The owner has since registered ir.fbtswap.app properly in the
-     *    Firebase console, and the real file carries TWO clients with two
-     *    DISTINCT App IDs. So the check is now: our package must be present
-     *    AND must own an App ID that no other package shares.
+     * ir.fbtswap.app is registered on Firebase project fbtswap-36b13 (the
+     * same project the live API uses for FCM HTTP v1). The file may list
+     * only this client; older APKs on ir.fbt.swap / fbt-room-a46fc are a
+     * separate Firebase app and cannot share tokens.
      */
     const gs = JSON.parse(read('android/app/google-services.json'));
     const clients = gs.client.map((c) => ({
@@ -9527,22 +9527,12 @@ export default function run() {
     }));
     const mine = clients.find((c) => c.pkg === APP_ID);
     t(`google-services.json registers ${APP_ID}`, Boolean(mine));
-    /*
-     * The distinctness test is the one that would have caught the hand-edit.
-     * A copied App ID means the file was edited rather than downloaded.
-     */
     t('...with an App ID of its own, not one copied from the old package',
       Boolean(mine) && clients.every((c) => c.pkg === APP_ID || c.appId !== mine.appId));
-    /*
-     * The old package stays listed on purpose: users on the previous build are
-     * still subscribed under it, and removing it would silently cut their
-     * alerts off.
-     */
-    t('...and the old package is kept so existing users keep their alerts',
-      clients.some((c) => c.pkg === 'ir.fbt.swap'));
-    /* Every client must belong to the project the server actually pushes from. */
-    t('...inside the project the server sends from (fbt-room-a46fc)',
-      gs.project_info.project_id === 'fbt-room-a46fc');
+    t('...and the Android client App ID is the registered FCM app',
+      mine?.appId === '1:232682194047:android:5820992e9ec08292942b4a');
+    t('...inside the project the server sends from (fbtswap-36b13)',
+      gs.project_info.project_id === 'fbtswap-36b13');
     t('...and the re-registration step is written down, not assumed',
       /google-services\.json/.test(read('docs/PACKAGE-RENAME-FA.md')));
 
