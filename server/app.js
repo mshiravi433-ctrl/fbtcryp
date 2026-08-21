@@ -54,6 +54,7 @@ import { catalogList, catalogError } from './ecosystemCatalog.js';
 import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
 import { createApiKey, revokeApiKey } from './developerKeys.js';
+import { SCHEMAS } from './phase2Schemas.js';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { PROJECT_SCHEMA } from './developerProjects.js';
 import { pushConfigured, sendDailyPromo } from './push.js';
@@ -603,6 +604,8 @@ app.post('/api/developer/projects/:id/keys/:keyId/revoke', async (req, res) => {
   return res.json({ data: { revoked: true }, meta: { schema: 'fbt.api-key-revocation.v1' } });
 });
 
+app.get('/api/reputation/:id', (req, res) => res.json({ data: null, meta: { schema: SCHEMAS.reputation, dataStatus: 'unavailable', subjectId: String(req.params.id).slice(0, 64), limitations: ['No privacy-safe observed reputation store is configured.'] } }));
+app.get('/api/portfolio/agent', (req, res) => { if (!req.tgUser?.id) return projectError(res, 'AUTH_REQUIRED', 'Telegram authentication is required', 401); return res.json({ data: null, meta: { schema: SCHEMAS.portfolioAgent, dataStatus: 'unavailable', limitations: ['Portfolio Agent is approval-only and no durable agent configuration exists.'] } }); });
 app.get('/api/environments', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(environmentList());

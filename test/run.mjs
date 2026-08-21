@@ -701,6 +701,14 @@ console.log('\n▸ measuring light-theme contrast…');
     ['sandbox draft is local and created', created.ok && created.project.ownerRef === 'local-device'],
     ['draft has no key or signer fields', created.ok && !('apiKey' in created.project) && !('signer' in created.project)]
   ]);
+  const { validatePortfolioAgent, validateRevenueEvent, validateCertification, reputationRelationship } = await import('../server/phase2Schemas.js');
+  report('phase 2/3 fail-closed schemas', [
+    ['portfolio agent cannot withdraw', !validatePortfolioAgent({ schema: 'fbt.portfolio-agent.v1', allocations: [{ asset: 'ETH' }], permissions: { withdrawFunds: true }, rebalance: { maxTradeUsd: 10, maxSlippageBps: 50 } }).ok],
+    ['portfolio agent requires approval mode', validatePortfolioAgent({ schema: 'fbt.portfolio-agent.v1', allocations: [{ asset: 'ETH' }], permissions: {}, rebalance: { maxTradeUsd: 10, maxSlippageBps: 50 } }).value?.rebalance.mode === 'approval_required'],
+    ['revenue is unavailable without accounting', validateRevenueEvent({ schema: 'fbt.revenue-event.v1', projectId: 'p', status: 'unavailable' }).ok],
+    ['active certification requires evidence array', !validateCertification({ schema: 'fbt.certification.v1', subjectId: 'a', certificationType: 'api_verified', issuer: 'fbt', issuedAt: 1, status: 'active' }).ok],
+    ['small reputation samples are insufficient', reputationRelationship({ sampleSize: 2 }).status === 'insufficient_data']
+  ]);
 }
 
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
