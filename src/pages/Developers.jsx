@@ -111,6 +111,9 @@ const GROUPS = [
       { m: 'POST', p: '/api/ecosystem/agents/:id/submit', d: 'submitListing' },
       { m: 'POST', p: '/api/ecosystem/agents/:id/publish', d: 'publishListing' },
       { m: 'GET', p: '/api/ecosystem/mine/agents', d: 'myListings' },
+      { m: 'GET', p: '/api/ecosystem/review/queue', d: 'reviewQueue' },
+      { m: 'GET', p: '/api/portfolio/agent', d: 'portfolioAgent' },
+      { m: 'GET', p: '/api/openapi.json', d: 'openapi' },
       { m: 'GET', p: '/api/network/overview?window=24h', d: 'networkOverview' }
     ]
   }

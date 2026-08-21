@@ -74,6 +74,7 @@ import {
   sweepCertifications
 } from './ecosystemCertifications.js';
 import { REPUTATION_LIMITATIONS, getReputation, getReputationSnapshot } from './ecosystemReputation.js';
+import { openApiDocument } from './openapi.js';
 import { PORTFOLIO_LIMITATIONS, readPortfolioAgent, savePortfolioAgent } from './portfolioAgents.js';
 import { environmentList } from './environments.js';
 import { listProjects, createProject, ownedProject, projectScopes } from './developerProjects.js';
@@ -710,6 +711,41 @@ app.get('/api/environments', (_req, res) => {
   return res.json(environmentList());
 });
 /*
+ * A TIGHTER BUDGET FOR REGISTRY WRITES.
+ *
+ * Every ecosystem write is a durable Blob read-modify-write, so the broad
+ * /api allowance (120/min, sized for cached market data) is the wrong shape:
+ * it lets one account rewrite the catalog two hundred times a minute and pay
+ * for it in someone else's latency. Reads are untouched — discovery stays as
+ * cheap and as cacheable as it was.
+ *
+ * Keyed by the authenticated identity when there is one, IP otherwise, so a
+ * shared NAT cannot be used to starve a signed-in owner.
+ */
+const ecosystemWriteHits = new Map();
+const ECOSYSTEM_WRITE_MAX_PER_WINDOW = Number(process.env.ECOSYSTEM_WRITE_RATE_LIMIT || 12);
+app.use('/api/ecosystem', (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const key = req.tgUser?.id ?? req.get('authorization') ?? req.ip;
+  const now = Date.now();
+  const rec = ecosystemWriteHits.get(key);
+  if (!rec || now > rec.reset) {
+    ecosystemWriteHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > ECOSYSTEM_WRITE_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json(catalogError('ECOSYSTEM_WRITE_RATE_LIMITED', 'Too many registry writes; retry after the window resets', true));
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, rec] of ecosystemWriteHits) if (now > rec.reset) ecosystemWriteHits.delete(key);
+}, WINDOW_MS).unref?.();
+
+/*
  * ECOSYSTEM REGISTRY — public reads, authenticated writes, zero authority.
  *
  * Reads are open and cacheable. Writes require a verified Telegram identity
@@ -938,6 +974,19 @@ app.get('/api/ecosystem/review/queue', async (req, res) => {
  * every number here is already derivable from the public catalog, and because
  * "why is the catalog empty" should be answerable without a login.
  */
+/*
+ * A MACHINE-READABLE CONTRACT for the surface an integrator can actually use.
+ *
+ * Deliberately scoped to the ecosystem/developer/trust endpoints rather than
+ * every market proxy: a spec that lists a hundred routes nobody maintains is
+ * how documentation starts lying. test/wiring.mjs proves every path in here is
+ * really registered, so this file cannot drift into fiction.
+ */
+app.get('/api/openapi.json', (_req, res) => {
+  res.set('cache-control', 'public, max-age=300, s-maxage=300');
+  return res.json(openApiDocument({ certificationIssuerConfigured: certificationsConfigured(), durableStore: blobConfigured() }));
+});
+
 app.get('/api/ecosystem/status', async (_req, res) => {
   const [counts, certifications] = await Promise.all([registryCounts(), listCertifications({})]);
   const active = certifications.data.filter((row) => row.status === 'active').length;

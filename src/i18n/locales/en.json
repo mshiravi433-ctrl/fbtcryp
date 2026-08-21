@@ -1655,7 +1655,10 @@
       "createAgent": "Register an agent listing. Telegram auth or an API key with manage_listings; starts as a draft.",
       "submitListing": "Send your draft for review. Owner only.",
       "publishListing": "Publish a reviewed listing. Requires an active certification from an allowlisted reviewer.",
-      "myListings": "Your own drafts, submissions and published listings, including why one is not visible."
+      "myListings": "Your own drafts, submissions and published listings, including why one is not visible.",
+      "reviewQueue": "Listings awaiting review. Allowlisted reviewers only, and it never says who submitted them.",
+      "portfolioAgent": "Your approval-only allocation target. No scheduler or signer acts on it.",
+      "openapi": "Machine-readable contract for this surface, including the boundary flags (no signing, execution or withdrawal)."
     },
     "fairUse": "Fair use, stated plainly",
     "fairUseBody": "This data costs upstream quota shared by every user. Cache what you fetch, poll no faster than the tiers above, and identify your client in the user-agent so we can contact you rather than block you. No paid tier exists — if you need more, self-host. It is free and takes three commands.",
@@ -4261,7 +4264,20 @@
         "identity_verified": "Identity verified"
       },
       "observed": "{{rate}}% completed across {{samples}} observed executions in {{days}} days",
-      "noReputation": "Not enough observed executions to report a success rate"
+      "noReputation": "Not enough observed executions to report a success rate",
+      "showEvidence": "Show the evidence",
+      "hideEvidence": "Hide the evidence",
+      "evidenceLoading": "Reading the certification record…",
+      "evidenceNone": "No certification record is published for this listing.",
+      "issuedBy": "Issued by {{issuer}} on {{date}}",
+      "expires": "Expires {{date}}",
+      "openEvidence": "Open the artefact",
+      "certStatus": {
+        "active": "Active",
+        "revoked": "Revoked",
+        "expired": "Expired",
+        "superseded": "Superseded"
+      }
     }
   },
   "whales": {

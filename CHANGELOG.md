@@ -1,3 +1,22 @@
+## Unreleased — Machine-readable contract, write rate limit, checkable evidence
+
+- `GET /api/openapi.json` describes the ecosystem/developer/trust surface in
+  OpenAPI 3.1, including an `x-fbt-boundary` block that states in the contract
+  itself that nothing can sign, execute, settle or withdraw, and the live
+  configuration of the deployment answering. Market-data routes are
+  deliberately excluded rather than documented into fiction, and the probe
+  calls every documented path so the spec cannot advertise a missing endpoint.
+- Registry writes got their own budget (`ECOSYSTEM_WRITE_RATE_LIMIT`, 12/min,
+  keyed by identity then IP) with a named, retryable 429; reads are untouched.
+- Catalog cards can now show the evidence behind a badge: issuer, dates,
+  status and the artefact (https link or sha256 digest), read from the public
+  certification endpoint. Links are re-proved https client-side before they
+  are rendered.
+- Fixed a real flake in the pre-existing intent API probe: it built an account
+  binding from its own clock while the wallet had signed the server's
+  challenge, so the proof failed whenever a second ticked between them. It now
+  echoes the challenge back, which is what a real client must do anyway.
+
 ## Unreleased — Developer and reviewer consoles, registry operations
 
 - The registry stopped being curl-only. `src/components/DeveloperConsole.jsx`

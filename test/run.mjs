@@ -46,6 +46,14 @@ process.env.INTENT_SETTLEMENT_RATE_LIMIT = process.env.INTENT_SETTLEMENT_RATE_LI
  * secret and never leaves the process: nothing in the suite starts the bot.
  */
 process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '0000000000:test-only-token-not-a-real-bot';
+/*
+ * Registry writes have their own, much smaller budget than the broad /api one
+ * (12/min in production). The probe walks every write route to prove none of
+ * them 404s, which is more requests than a real caller makes in a minute, so
+ * the budget is raised just enough to let the walk through — and the probe
+ * then bursts past it on an isolated key to prove the limiter still bites.
+ */
+process.env.ECOSYSTEM_WRITE_RATE_LIMIT = process.env.ECOSYSTEM_WRITE_RATE_LIMIT || '25';
 
 const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -737,7 +745,8 @@ console.log('\n▸ measuring light-theme contrast…');
     ['agents', 'loading'], ['agents', 'errorTitle'], ['agents', 'total'], ['agents', 'unverified'],
     ['agents', 'listNote'], ['agents', 'emptyLiveBody'], ['strategies', 'loading'], ['strategies', 'maxAmount'],
     ['strategies', 'maxSlippage'], ['strategies', 'trigger'], ['strategies', 'listNote'], ['strategies', 'emptyLiveBody'],
-    ['catalog', 'certified'], ['catalog', 'certifiedBy'], ['catalog', 'observed'], ['catalog', 'noReputation']
+    ['catalog', 'certified'], ['catalog', 'certifiedBy'], ['catalog', 'observed'], ['catalog', 'noReputation'],
+    ['catalog', 'showEvidence'], ['catalog', 'evidenceNone'], ['catalog', 'issuedBy'], ['catalog', 'openEvidence']
   ];
   /*
    * The developer/reviewer consoles are the first screens that can CHANGE
@@ -789,6 +798,11 @@ console.log('\n▸ measuring light-theme contrast…');
     ['the certified badge is rendered from the derived certification only',
       /entry\.certification/.test(intentOsSource) && /catalog\.certifiedBy/.test(intentOsSource)],
     ['an uncertified listing still renders as unverified', /\$\{ns\}\.unverified/.test(intentOsSource)],
+    ['a badge can be checked: the card opens the certification evidence',
+      /fetchCertifications/.test(intentOsSource) && /EvidenceDrawer/.test(intentOsSource)],
+    ['evidence links are proved https before they are rendered',
+      /httpsOnly/.test(catalogClient) && /protocol === 'https:'/.test(catalogClient)],
+    ['an evidence link opens with noreferrer and noopener', /rel="noreferrer noopener"/.test(intentOsSource)],
     ['catalog copy is translated in en, fa and ar',
       localeFiles.every((locale) => catalogKeys.every(([group, key]) => typeof locale?.intentOS?.[group]?.[key] === 'string'))],
     ['the catalog page holds no hardcoded Persian or Arabic string',

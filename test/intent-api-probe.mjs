@@ -1089,15 +1089,27 @@ try {
       && challenge.body.challenge?.partyPublicKey === counterpartyKeys.publicKey
       && !JSON.stringify(challenge.body).toLowerCase().includes('private'));
   const walletSignature = await walletOwner.signMessage(challenge.body.challenge.message);
-  const provenBinding = buildAccountBinding({
+  /*
+   * Use the challenge's OWN issuedAt/expiresAt, not the probe's earlier clock
+   * read. The message the wallet signed is derived from the values the server
+   * put in the challenge, and the request above deliberately omits issuedAt so
+   * the server stamps it — meaning `crossNow` and the challenge disagree
+   * whenever a second ticks between them. That is a real client requirement
+   * (echo the challenge back verbatim), and using it here also removes the
+   * intermittent failure this probe hit when the machine was loaded.
+   */
+  const provenBuild = buildAccountBinding({
     state: createdCross.body.state,
     partyId: 'api-cross-counterparty',
     chainId: 42161,
     address: walletOwner.address,
-    issuedAt: crossNow,
-    expiresAt: crossNow + 86400,
+    issuedAt: challenge.body.challenge.issuedAt,
+    expiresAt: challenge.body.challenge.expiresAt,
     walletProof: { scheme: 'EIP-191', nonce: 'probe-nonce', signature: walletSignature }
-  }, counterpartyKeys.privateKey).binding;
+  }, counterpartyKeys.privateKey);
+  t('a wallet signature over the served challenge builds a verified binding',
+    provenBuild.ok === true && Boolean(provenBuild.binding));
+  const provenBinding = provenBuild.binding;
   const storedProven = await request(`/cross-chain/states/${crossStateId}/account-bindings`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(provenBinding)
   });

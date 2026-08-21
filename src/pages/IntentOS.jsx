@@ -33,7 +33,7 @@ import {
 } from '../lib/intentLifecycle';
 import { IntentTimeline } from '../components/IntentTimeline';
 import { confidentialSwapReadiness } from '../lib/confidentialIntent';
-import { fetchCatalog, localizedValue } from '../lib/ecosystemCatalog';
+import { fetchCatalog, fetchCertifications, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
 const TABS = ['compose', 'memory', 'proofs', 'agents', 'strategies', 'network'];
@@ -153,10 +153,54 @@ function CatalogFact({ label, value }) {
  * never upgrades a listing on its own, and the issuer is always shown, because
  * "verified" without "by whom" is just a colour.
  */
+/**
+ * The evidence drawer.
+ *
+ * A badge the user cannot check is a logo, so tapping "evidence" fetches the
+ * public certification records for this subject and shows who issued them,
+ * when they expire, and the artefact behind each one. Links are rendered only
+ * when the client-side reader has already proved they are https.
+ */
+function EvidenceDrawer({ subjectId, t }) {
+  const [state, setState] = useState({ status: 'loading', items: [] });
+  useEffect(() => {
+    let active = true;
+    fetchCertifications(subjectId).then((result) => { if (active) setState(result); });
+    return () => { active = false; };
+  }, [subjectId]);
+
+  if (state.status === 'loading') return <p className="ios-catalog-trust ios-catalog-muted">{t('intentOS.catalog.evidenceLoading')}</p>;
+  if (state.status !== 'live' || !state.items.length) return <p className="ios-catalog-trust ios-catalog-muted">{t('intentOS.catalog.evidenceNone')}</p>;
+
+  return (
+    <div className="ios-catalog-evidence">
+      {state.items.map((row) => (
+        <div key={row.id} className="ios-catalog-evidence-row">
+          <span className="row-between">
+            <b>{row.type ? t(`intentOS.catalog.certificationType.${row.type}`) : row.id}</b>
+            <span className={`ios-status ${row.status === 'active' ? 'eligible' : 'unavailable'}`}>{t(`intentOS.catalog.certStatus.${row.status}`)}</span>
+          </span>
+          <small>{t('intentOS.catalog.issuedBy', { issuer: row.issuer || '—', date: row.issuedAt ? new Date(row.issuedAt).toISOString().slice(0, 10) : '—' })}</small>
+          {row.expiresAt ? <small>{t('intentOS.catalog.expires', { date: new Date(row.expiresAt).toISOString().slice(0, 10) })}</small> : null}
+          {row.evidence.map((item, index) => (
+            <small key={`${row.id}-${index}`}>
+              {t(`dev.review.evidence.${item.type}`)}{': '}
+              {item.uri
+                ? <a href={item.uri} target="_blank" rel="noreferrer noopener">{t('intentOS.catalog.openEvidence')}</a>
+                : <span className="mono">{item.sha256.slice(0, 16)}…</span>}
+            </small>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CatalogCard({ ns, entry, lang, t, facts }) {
   const description = localizedValue(entry.description, lang, null);
   const cert = entry.certification;
   const rep = entry.reputation;
+  const [showEvidence, setShowEvidence] = useState(false);
   return (
     <article className="ios-catalog-card">
       <div className="row-between">
@@ -188,6 +232,11 @@ function CatalogCard({ ns, entry, lang, t, facts }) {
       <div className="ios-catalog-facts">
         {facts.map((fact) => <CatalogFact key={fact.label} label={fact.label} value={fact.value} />)}
       </div>
+      {/* Read-only, and the only button a listing card will ever have. */}
+      <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 8 }} onClick={() => setShowEvidence((open) => !open)}>
+        {showEvidence ? t('intentOS.catalog.hideEvidence') : t('intentOS.catalog.showEvidence')}
+      </button>
+      {showEvidence ? <EvidenceDrawer subjectId={entry.id} t={t} /> : null}
     </article>
   );
 }

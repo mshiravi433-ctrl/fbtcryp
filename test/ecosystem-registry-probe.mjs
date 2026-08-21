@@ -515,6 +515,57 @@ try {
     t('an ordinary account cannot read the review queue', queue.status === 403);
   }
 
+  /*
+   * THE SPEC CANNOT BE FICTION. Every path the OpenAPI document advertises is
+   * requested here; a 404 would mean the contract describes an endpoint nobody
+   * implemented, which is the failure mode a machine-readable spec makes worse
+   * (integrators generate clients from it).
+   */
+  {
+    const spec = await (await fetch(base + '/api/openapi.json', { headers: { accept: 'application/json' } })).json();
+    t('the OpenAPI document is served and scoped to the registry surface',
+      spec.openapi?.startsWith('3.') && Object.keys(spec.paths || {}).length >= 20);
+    t('the document states the safety boundary in machine-readable form',
+      spec['x-fbt-boundary']?.canSign === false && spec['x-fbt-boundary']?.canWithdraw === false
+        && spec['x-fbt-boundary']?.publishRequiresCertification === true);
+    t('the document never advertises an execution or withdrawal path',
+      !Object.keys(spec.paths).some((path) => /(execute|withdraw|sign|settle)/i.test(path)));
+
+    const missing = [];
+    for (const [path, operations] of Object.entries(spec.paths)) {
+      const url = base + '/api' + path.replace('{id}', 'spec-probe-id');
+      for (const method of Object.keys(operations)) {
+        const res = await fetch(url, {
+          method: method.toUpperCase(),
+          headers: { accept: 'application/json', ...(method === 'post' ? { 'content-type': 'application/json', 'idempotency-key': 'spec-probe-key-0001' } : {}) },
+          ...(method === 'post' ? { body: '{}' } : {})
+        });
+        /* 401/403/409/429/503 all prove the route exists and refused; 404 does not. */
+        if (res.status === 404) missing.push(`${method.toUpperCase()} ${path}`);
+      }
+    }
+    t(`every documented endpoint is registered${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`, missing.length === 0);
+  }
+
+  /* Registry writes carry their own budget, keyed per caller. The burst below
+     uses its own bearer value so it cannot starve the checks above. */
+  {
+    const burstKey = 'Bearer fbt_sandbox_burstprobe0000000000000';
+    let limited = false;
+    for (let i = 0; i < 40 && !limited; i += 1) {
+      const res = await fetch(base + '/api/ecosystem/agents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': `burst-key-${i}-000000`, authorization: burstKey },
+        body: JSON.stringify(AGENT)
+      });
+      if (res.status === 429) {
+        const body = await res.json();
+        limited = body.error?.code === 'ECOSYSTEM_WRITE_RATE_LIMITED' && body.error?.retryable === true && Boolean(res.headers.get('retry-after'));
+      }
+    }
+    t('registry writes are rate limited with a retryable, named error', limited);
+  }
+
   /* There is no execution surface to find. */
   for (const path of ['/api/ecosystem/agents/probe-agent/run', '/api/ecosystem/strategies/probe-strategy/execute', '/api/ecosystem/agents/probe-agent/withdraw']) {
     const res = await post(path, {}, { auth: Boolean(BOT_TOKEN) });
