@@ -261,6 +261,55 @@ export function baseRate(series, horizon = 7) {
 }
 
 /**
+ * How often, historically, did a {{horizon}}-bar window end UP, FLAT or DOWN?
+ *
+ * ─── THIS IS A DESCRIPTION OF THE PAST, NOT A FORECAST ──────────────────────
+ * `baseRate` collapses the same windows into a single up/down figure. This
+ * splits them three ways, because "rose a little" and "rose a lot" are
+ * different situations and a two-way number hides that. Like baseRate it
+ * reports `samples`, and the UI is expected to refuse to draw a percentage
+ * from too few of them.
+ *
+ * `bandPct` is the band, as a PERCENT of price, inside which a window counts
+ * as NEUTRAL. The caller derives it from `projectRange()` (the volatility
+ * cone's half-width): a coin that barely moves should not label ordinary
+ * noise as "bullish" or "bearish", and a coin that moves a lot should not be
+ * called neutral for moving the way it always does.
+ *
+ * @returns {{up, neutral, down, samples, pctUp, pctNeutral, pctDown}|null}
+ */
+export function scenarioSplit(series, horizon = 7, bandPct = 1.5) {
+  const v = clean(series);
+  if (v.length < horizon + 10) return null;
+
+  const band = Math.abs(Number(bandPct));
+  if (!Number.isFinite(band) || band <= 0) return null;
+
+  let up = 0;
+  let neutral = 0;
+  let down = 0;
+  for (let i = 0; i + horizon < v.length; i += 1) {
+    if (v[i] <= 0) continue;
+    const ret = ((v[i + horizon] - v[i]) / v[i]) * 100;
+    if (ret > band) up += 1;
+    else if (ret < -band) down += 1;
+    else neutral += 1;
+  }
+  const samples = up + neutral + down;
+  if (!samples) return null;
+
+  return {
+    up,
+    neutral,
+    down,
+    samples,
+    pctUp: Math.round((up / samples) * 100),
+    pctNeutral: Math.round((neutral / samples) * 100),
+    pctDown: Math.round((down / samples) * 100)
+  };
+}
+
+/**
  * Where does the current price sit within the range of the series?
  * 0 = at the period low, 100 = at the period high.
  */

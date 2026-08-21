@@ -1195,7 +1195,56 @@
     "horizon": {
       "weekly": "Weekly · 7 days",
       "monthly": "Monthly · 30 days"
-    }
+    },
+    "allTab": "All",
+    "solanaTab": "Solana ◎",
+    "regime": {
+      "riskOn": "Risk on",
+      "btcLed": "BTC leading",
+      "rotationOut": "Capital rotating",
+      "riskOff": "Risk off"
+    },
+    "layerTitle": "What's driving the signal",
+    "derivatives": {
+      "title": "Positioning (funding & open interest)",
+      "funding": "Funding (APR)",
+      "openInterest": "Open interest"
+    },
+    "scenarios": {
+      "title": "Probability scenarios",
+      "bullish": "up",
+      "neutral": "flat",
+      "bearish": "down",
+      "hint": "From {{n}} similar {{d}}-day windows in this coin’s own history"
+    },
+    "invalidationBelow": "below now",
+    "backtestHistory": "How this setup did before",
+    "backtestHitRate": "hit rate",
+    "backtestEdge": "edge",
+    "backtestSamples": "samples",
+    "backtestHint": "Versus {{base}}% on any random day",
+    "onchain": {
+      "title": "On-chain read",
+      "whaleFlow": "Whale flow",
+      "holderTrend": "Holder trend",
+      "topHolder": "Top holder share",
+      "dexActivity": "DEX activity",
+      "flow": {
+        "inflow": "off exchange",
+        "outflow": "to exchange",
+        "mixed": "two-way"
+      },
+      "trend": {
+        "rising": "concentrating",
+        "falling": "spreading"
+      },
+      "pressure": {
+        "buy": "buy pressure",
+        "sell": "sell pressure",
+        "balanced": "balanced"
+      }
+    },
+    "createIntent": "Create intent"
   },
   "stocks": {
     "title": "Stocks",
@@ -2872,7 +2921,8 @@
       "technical": "The chart today",
       "historical": "Its own track record",
       "structural": "Price structure",
-      "macro": "The wider market"
+      "macro": "The wider market",
+      "derivatives": "Funding cost"
     },
     "layerNoData": "not enough data",
     "layerWeight": "{{pct}}% of this read",
@@ -2950,7 +3000,9 @@
           "up": "Recent momentum is positive ({{value}}%).",
           "down": "Recent momentum is negative ({{value}}%)."
         }
-      }
+      },
+      "fundingHotLong": "Holding a long is expensive right now ({{apr}}% APR): long positions look crowded.",
+      "fundingShortCrowded": "Holding a short is expensive right now ({{apr}}% APR): short positions look crowded."
     },
     "plain": {
       "title": "In plain words",
