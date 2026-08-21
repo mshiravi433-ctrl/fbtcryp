@@ -44,8 +44,12 @@ process.env.INTENT_SETTLEMENT_RATE_LIMIT = process.env.INTENT_SETTLEMENT_RATE_LI
  * AUTHENTICATED CALLER (an anonymous 401 would prove nothing), so a throwaway
  * token is pinned here and the probe signs real initData with it. It is not a
  * secret and never leaves the process: nothing in the suite starts the bot.
+ *
+ * The pinned value carries a DELIBERATE trailing newline: env stores smuggle
+ * exactly this byte into real secrets, and the suite must prove the server
+ * trims it (the probes sign with the clean token, the way Telegram would).
  */
-process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '0000000000:test-only-token-not-a-real-bot';
+process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '0000000000:test-only-token-not-a-real-bot\n';
 /*
  * Registry writes have their own, much smaller budget than the broad /api one
  * (12/min in production). The probe walks every write route to prove none of
@@ -102,6 +106,16 @@ console.log('▸ probing the intent compiler (pure logic, no DOM)…');
 {
   const { default: runIntent } = await import('./intent-probe.mjs');
   report('intent compiler', await runIntent());
+}
+
+/* Telegram Mini App login verification: genuine initData must verify even
+   when the stored bot token carries a trailing newline or padding spaces
+   (the classic env-store poisoning that presents as BAD_SIGNATURE), while
+   forged hashes, tampered fields and wrong tokens still fail closed. */
+console.log('▸ probing Telegram initData verification (token normalization)…');
+{
+  const { default: runTelegramAuth } = await import('./telegram-auth-probe.mjs');
+  report('telegram auth', await runTelegramAuth());
 }
 
 /* --------------------- 0a. intent execution core v2 ------------------------ */

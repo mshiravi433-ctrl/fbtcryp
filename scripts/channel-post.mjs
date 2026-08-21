@@ -46,7 +46,7 @@
 
 import { fetchGlobal, fetchMarkets } from '../server/providers.js';
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const CHANNEL = process.env.TELEGRAM_CHANNEL_ID || '';
 const APP_URL = process.env.WEBAPP_URL || 'https://fbtswap.ir';
 const GROQ_KEY = process.env.GROQ_API_KEY || '';

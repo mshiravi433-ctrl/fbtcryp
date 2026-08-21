@@ -334,7 +334,13 @@ const STRATEGY = {
 }
 
 /* ---------------------------- 2. real HTTP ------------------------------- */
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+/*
+ * trim(): the runner pins the env token WITH a trailing newline on purpose —
+ * the server must tolerate it. But Telegram itself holds the clean token, so
+ * the probe signs with the trimmed value; verification only succeeds if
+ * server/app.js normalizes its own copy the same way.
+ */
+const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const { default: app } = await import('../server/app.js');
 const server = await new Promise((resolve) => {
   const listening = app.listen(0, '127.0.0.1', () => resolve(listening));
