@@ -511,6 +511,12 @@ try {
   if (BOT_TOKEN) {
     const who = await (await fetch(base + '/api/ecosystem/certifier', { headers: { accept: 'application/json', 'x-telegram-init-data': initData(4242) } })).json();
     t('an ordinary account is told it is not a reviewer', who.data?.isCertifier === false);
+    /* The setup path: an operator can only switch certification on if they can
+       see their own id, and they must never see anyone else's. */
+    t('the caller is shown their own id and the variable that enables reviewing',
+      who.data?.callerId === '4242' && who.data?.envVar === 'ECOSYSTEM_CERTIFIERS');
+    t('the certifier endpoint never lists other reviewers',
+      !Array.isArray(who.data?.certifiers) && !JSON.stringify(who.data).includes('555000555'));
     const queue = await fetch(base + '/api/ecosystem/review/queue', { headers: { accept: 'application/json', 'x-telegram-init-data': initData(4242) } });
     t('an ordinary account cannot read the review queue', queue.status === 403);
   }
@@ -545,6 +551,13 @@ try {
       }
     }
     t(`every documented endpoint is registered${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`, missing.length === 0);
+  }
+
+  {
+    const paged = await fetch(base + '/api/ecosystem/agents?cursor=not-a-real-cursor', { headers: { accept: 'application/json' } });
+    /* With no durable registry there is nothing to page through, so the
+       honest answer is the unavailable list rather than a cursor error. */
+    t('an unavailable catalog does not invent a pagination error', paged.status === 200);
   }
 
   /* Registry writes carry their own budget, keyed per caller. The burst below

@@ -1,3 +1,17 @@
+## Unreleased — Ready to switch on: paging, reviewer setup path, go-live runbook
+
+- Catalog tabs page through the registry with the server's cursor instead of
+  showing only the first twenty rows; a failed page keeps what is already on
+  screen and says so.
+- An operator can now actually turn certification on. `GET /api/ecosystem/certifier`
+  returns the caller's OWN Telegram id (and only theirs), and the Developers
+  page renders the exact `ECOSYSTEM_CERTIFIERS=<id>:Label` line to paste when
+  no reviewer is configured — the one question an empty catalog would
+  otherwise turn into a bug report.
+- `docs/ECOSYSTEM-GO-LIVE-FA.md`: the five-minute runbook from `curl
+  /api/ecosystem/status` to a published, certified listing, with the error
+  table for every refusal the registry can answer with.
+
 ## Unreleased — Machine-readable contract, write rate limit, checkable evidence
 
 - `GET /api/openapi.json` describes the ecosystem/developer/trust surface in

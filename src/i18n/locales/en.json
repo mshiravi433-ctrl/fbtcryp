@@ -1761,7 +1761,10 @@
         "code_review": "Code review",
         "documentation": "Documentation",
         "signed_attestation": "Signed attestation"
-      }
+      },
+      "setupTitle": "Certification is not switched on",
+      "setupBody": "No reviewer is configured, so nothing can be certified and nothing can be published — the catalog stays empty on purpose. Set {{envVar}} in the deployment to the line below (your own Telegram id and the public label reviewers will be shown as), then redeploy.",
+      "setupNote": "The label is public and appears on every certification. Your Telegram id is never stored on a certification record."
     }
   },
   "eco": {
@@ -4277,7 +4280,9 @@
         "revoked": "Revoked",
         "expired": "Expired",
         "superseded": "Superseded"
-      }
+      },
+      "loadMore": "Load more",
+      "pageError": "The next page could not be loaded. What you already see is unchanged."
     }
   },
   "whales": {

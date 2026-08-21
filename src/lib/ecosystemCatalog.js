@@ -132,26 +132,32 @@ function normalize(kind, row) {
  * failed). It never rejects: a catalog is discovery, and a failed discovery
  * call must not take the tab down with it.
  */
-export async function fetchCatalog(kind, { timeout = 7000, signal } = {}) {
+export async function fetchCatalog(kind, { timeout = 7000, signal, cursor = null } = {}) {
   const path = PATHS[kind];
-  if (!path) return { status: 'error', items: [] };
+  if (!path) return { status: 'error', items: [], cursor: null, hasMore: false };
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   const onAbort = () => ctrl.abort();
   signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`${API_BASE}${path}`, { signal: ctrl.signal, headers: { accept: 'application/json' } });
-    if (!res.ok) return { status: 'error', items: [] };
+    /* The cursor is whatever the server handed back last time and is echoed
+       verbatim: inventing one client-side is how a paginated list silently
+       starts skipping rows. */
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    const res = await fetch(`${API_BASE}${path}${query}`, { signal: ctrl.signal, headers: { accept: 'application/json' } });
+    if (!res.ok) return { status: 'error', items: [], cursor: null, hasMore: false };
     const body = await res.json();
     const items = (Array.isArray(body?.data) ? body.data : []).map((row) => normalize(kind, row)).filter(Boolean);
     return {
       status: body?.meta?.dataStatus === 'live' ? 'live' : 'unavailable',
       items,
+      cursor: typeof body?.pagination?.cursor === 'string' ? body.pagination.cursor : null,
+      hasMore: Boolean(body?.pagination?.hasMore),
       limitations: Array.isArray(body?.meta?.limitations) ? body.meta.limitations : []
     };
   } catch {
-    return { status: 'error', items: [] };
+    return { status: 'error', items: [], cursor: null, hasMore: false };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);

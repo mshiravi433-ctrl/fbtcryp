@@ -286,7 +286,7 @@ function StrategyCard({ entry, lang, t }) {
  *   live + empty — the registry answered and nobody has listed anything yet
  *   live + rows  — the listings, unverified
  */
-function CatalogSection({ ns, catalog, lang, t, onRetry }) {
+function CatalogSection({ ns, catalog, lang, t, onRetry, onLoadMore }) {
   const state = catalog?.state || 'loading';
   if (state === 'loading') {
     return <section className="ios-empty-proof"><span>◇</span><h3>{t(`intentOS.${ns}.loading`)}</h3></section>;
@@ -329,6 +329,12 @@ function CatalogSection({ ns, catalog, lang, t, onRetry }) {
         {items.map((entry) => (ns === 'agents'
           ? <AgentCard key={entry.id} entry={entry} lang={lang} t={t} />
           : <StrategyCard key={entry.id} entry={entry} lang={lang} t={t} />))}
+        {catalog?.hasMore ? (
+          <button className="btn btn-ghost btn-sm" disabled={catalog.loadingMore} onClick={() => onLoadMore(catalog.cursor)}>
+            {catalog.loadingMore ? t(`intentOS.${ns}.loading`) : t('intentOS.catalog.loadMore')}
+          </button>
+        ) : null}
+        {catalog?.pageError ? <p className="ios-catalog-trust ios-catalog-muted">{t('intentOS.catalog.pageError')}</p> : null}
       </div>
       <p className="ios-honesty-note">{t(`intentOS.${ns}.listNote`)}</p>
     </>
@@ -433,16 +439,40 @@ export default function IntentOS() {
   }, []);
 
   /* Load the agent/strategy registry when its tab is opened. */
-  const loadCatalog = useCallback((kind, { force = false } = {}) => {
-    if (!kind || (!force && catalogRequested.current[kind])) return;
+  const loadCatalog = useCallback((kind, { force = false, cursor = null } = {}) => {
+    if (!kind || (!force && !cursor && catalogRequested.current[kind])) return;
     catalogRequested.current[kind] = true;
-    setCatalogs((current) => ({ ...current, [kind]: { state: 'loading', items: [] } }));
-    fetchCatalog(kind).then((result) => {
+    setCatalogs((current) => ({
+      ...current,
+      /* Paging keeps what is already on screen and marks the tail as loading;
+         only a fresh load clears the list. */
+      [kind]: cursor
+        ? { ...current[kind], state: 'live', loadingMore: true }
+        : { state: 'loading', items: [], cursor: null, hasMore: false }
+    }));
+    fetchCatalog(kind, { cursor }).then((result) => {
       /* A failed fetch is reported as an error, never as an empty registry —
          "nobody has listed anything" and "we could not ask" are different
          claims and the user is told which one happened. */
       if (result.status === 'error') catalogRequested.current[kind] = false;
-      setCatalogs((current) => ({ ...current, [kind]: { state: result.status, items: result.items } }));
+      setCatalogs((current) => {
+        const previous = cursor && Array.isArray(current[kind]?.items) ? current[kind].items : [];
+        /* A page that fails mid-scroll must not wipe the rows already read. */
+        if (cursor && result.status === 'error') {
+          return { ...current, [kind]: { ...current[kind], loadingMore: false, pageError: true } };
+        }
+        return {
+          ...current,
+          [kind]: {
+            state: result.status,
+            items: [...previous, ...result.items],
+            cursor: result.cursor,
+            hasMore: result.hasMore,
+            loadingMore: false,
+            pageError: false
+          }
+        };
+      });
     });
   }, []);
 
@@ -976,6 +1006,7 @@ export default function IntentOS() {
             lang={i18n.language}
             t={t}
             onRetry={() => loadCatalog('agent', { force: true })}
+            onLoadMore={(cursor) => loadCatalog('agent', { cursor })}
           />
         </motion.div>
       )}
@@ -989,6 +1020,7 @@ export default function IntentOS() {
             lang={i18n.language}
             t={t}
             onRetry={() => loadCatalog('strategy', { force: true })}
+            onLoadMore={(cursor) => loadCatalog('strategy', { cursor })}
           />
         </motion.div>
       )}

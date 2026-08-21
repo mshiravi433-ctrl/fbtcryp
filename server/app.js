@@ -951,7 +951,21 @@ app.get('/api/ecosystem/certifier', (req, res) => {
   const label = certifierLabel(req.tgUser.id);
   res.set('cache-control', 'private, no-store');
   return res.json({
-    data: { configured: certificationsConfigured(), isCertifier: Boolean(label), label: label || null, certificationTypes: [...CERTIFICATION_TYPES], evidenceTypes: [...EVIDENCE_TYPES] },
+    data: {
+      configured: certificationsConfigured(),
+      isCertifier: Boolean(label),
+      label: label || null,
+      /*
+       * The caller's OWN id, echoed back to the caller only. This is the one
+       * thing an operator cannot find anywhere else: to switch certification
+       * on they must put their Telegram id in ECOSYSTEM_CERTIFIERS, and
+       * without this they are left guessing or pasting someone else's.
+       */
+      callerId: String(req.tgUser.id),
+      envVar: 'ECOSYSTEM_CERTIFIERS',
+      certificationTypes: [...CERTIFICATION_TYPES],
+      evidenceTypes: [...EVIDENCE_TYPES]
+    },
     meta: { schema: 'fbt.certifier-status.v1', dataStatus: 'live' }
   });
 });

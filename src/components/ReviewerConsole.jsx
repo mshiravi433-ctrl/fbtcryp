@@ -47,6 +47,8 @@ export default function ReviewerConsole() {
     if (!session) return;
     const who = await certifierStatus();
     if (!who.ok || !who.data?.isCertifier) {
+      /* Keep the payload even when the caller is not a reviewer: it carries
+         the setup line for an operator whose allowlist is still empty. */
       setStatus(who.ok ? who.data : null);
       setQueue([]);
       return;
@@ -58,10 +60,31 @@ export default function ReviewerConsole() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  /* Not a reviewer (or not configured) → render nothing. The section is not
-     "locked" with a teaser, because a teaser for a permission you cannot
-     request is just noise. */
-  if (!session || !status?.isCertifier) return null;
+  if (!session || !status) return null;
+
+  /*
+   * NOBODY can certify yet. That is the honest default — an unconfigured
+   * review pipeline yields an empty catalog rather than a self-certified one —
+   * but it is also the single question an operator will otherwise file a bug
+   * about ("I published it, why is the catalog empty?"). So when the allowlist
+   * is unset we render the one-line fix, with the caller's own id filled in.
+   */
+  if (!status.configured) {
+    const line = `${status.callerId}:FBT Review`;
+    return (
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">{t('dev.review.setupTitle')}</p>
+        <p className="prose-sm">{t('dev.review.setupBody', { envVar: status.envVar })}</p>
+        <code className="mono" style={{ display: 'block', wordBreak: 'break-all', margin: '6px 0' }}>{status.envVar}={line}</code>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard?.writeText(`${status.envVar}=${line}`)}>{t('common.copy')}</button>
+        <small style={{ display: 'block', marginTop: 8, opacity: .75 }}>{t('dev.review.setupNote')}</small>
+      </section>
+    );
+  }
+
+  /* Configured, but this account is not a reviewer → render nothing. No
+     teaser: an invitation to a permission you cannot request is just noise. */
+  if (!status.isCertifier) return null;
 
   const run = async (fn) => {
     setBusy(true);
