@@ -49,6 +49,8 @@ import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
+import { networkOverview, validWindow, networkError } from './networkOverview.js';
+import { catalogList, catalogError } from './ecosystemCatalog.js';
 import { timingSafeEqual } from 'node:crypto';
 import { pushConfigured, sendDailyPromo } from './push.js';
 import { fcmBroadcast, fcmConfigured, fcmDiagnose, fcmSelfTest } from './fcm.js';
@@ -560,6 +562,20 @@ function serve(res, ttlMs) {
 }
 
 /* --------------------------------- routes -------------------------------- */
+
+/* FBT Network 2.0: aggregate, read-only analytics. This deliberately reports
+ * empty when no durable observation source is configured; it never treats
+ * client state, demo data or configured provider names as network activity. */
+app.get('/api/ecosystem/agents', (_req, res) => res.json(catalogList('agent')));
+app.get('/api/ecosystem/strategies', (_req, res) => res.json(catalogList('strategy')));
+app.get('/api/ecosystem/liquidity', (_req, res) => res.json(catalogList('liquidity')));
+
+app.get('/api/network/overview', (req, res) => {
+  const window = validWindow(req.query.window);
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  if (!window) return res.status(400).json(networkError('INVALID_WINDOW', 'window must be one of 1h, 24h, 7d or 30d', false));
+  return res.json(networkOverview({ window }));
+});
 
 app.get('/api/health', (_req, res) => {
   /*

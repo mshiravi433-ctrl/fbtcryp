@@ -141,6 +141,14 @@ export default function Developers() {
       </motion.div>
 
       <p className="prose-sm">{t('dev.intro')}</p>
+      <section className="card" style={{ marginTop: 12 }}>
+        <p className="section-label">FBT Network ecosystem</p>
+        <p className="prose-sm">Read-only discovery surfaces are embedded here. No agent, strategy or liquidity listing is executable in this phase.</p>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {['Agents', 'Strategies', 'Liquidity', 'Connect', 'SDK', 'Environments', 'Reputation', 'Revenue'].map((item) => <span className="pill pill-neutral" key={item}>{item}</span>)}
+        </div>
+        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>Not configured · Automatic execution unavailable · Withdraw funds: never available</small>
+      </section>
 
       {/* ------------------------- start here ------------------------- */}
       <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show">
