@@ -7813,9 +7813,9 @@ export default function run() {
      * nothing the user can SEE, so nobody would ever report it as broken.
      */
     t('velora retries a network-level failure through the same-origin proxy',
-      /PROXY_BASE = '\/api\/swap\/velora'/.test(velCode) && /isNetworkFailure/.test(velCode));
+      /proxyBase = \(\) => apiBase\(\) \+ '\/swap\/velora'/.test(velCode) && /isNetworkFailure/.test(velCode));
     t('...and the proxied request carries the identical query string',
-      /veloraFetchOnce\(`\$\{PROXY_BASE\}\/prices\?\$\{params\}`/.test(velCode));
+      /veloraFetchOnce\(`\$\{proxyBase\(\)\}\/prices\?\$\{params\}`/.test(velCode));
 
     const swapProxy = read('server/swapProxy.js');
     t('the server exposes a Velora proxy route with its own chain allowlist',
@@ -8724,7 +8724,7 @@ export default function run() {
      * to one number and signed another.
      */
     t('...and re-quotes when it changes',
-      /address, slippageBps\]/.test(solPage));
+      /address, slippageBps, quoteNonce\]/.test(solPage));
     /*
      * 0 bps means "no tolerance at all" and fails every quote on a moving
      * market, so the conversion floors at 1.

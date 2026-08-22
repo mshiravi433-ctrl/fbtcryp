@@ -114,8 +114,14 @@ const OO_TIMEOUT_MS = 3000;
  * (server/swapProxy.js), which forwards it from a datacenter. This turns a
  * hard "no route" into a working quote for exactly the users who were
  * locked out.
+ *
+ * Resolved through apiBase(): a hardcoded relative '/api' resolves to the
+ * WebView's own https://localhost inside the packaged app and 404s, which
+ * would silently disable this fallback exactly where it matters most.
  */
-const PROXY_BASE = '/api/swap/oo';
+import { apiBase } from './apiBase';
+
+const proxyBase = () => apiBase() + '/swap/oo';
 
 /**
  * True when a failure means "the network path to the API is broken" rather
@@ -183,7 +189,7 @@ async function ooFetch(url, { timeout = OO_TIMEOUT_MS, endpoint = null } = {}) {
     // The proxy routes are per-endpoint (/api/swap/oo/quote, /api/swap/oo/swap),
     // so the endpoint name has to survive into the proxied URL.
     const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
-    const proxied = await ooFetchOnce(`${PROXY_BASE}/${endpoint}${q ? `?${q}` : ''}`, timeout + 2000).catch(() => null);
+    const proxied = await ooFetchOnce(`${proxyBase()}/${endpoint}${q ? `?${q}` : ''}`, timeout + 2000).catch(() => null);
     if (proxied) return proxied;
     throw err;
   }

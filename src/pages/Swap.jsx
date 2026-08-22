@@ -421,6 +421,23 @@ export default function Swap() {
   // we keep effectiveSlippage in deps but skip auto-derived-only changes.
   const lastAmountRef = useRef(amount);
   const lastManualSlippageRef = useRef(slippage);
+  /*
+   * ─── WHY retryNonce NEEDS ITS OWN "changed" TRACKING ───────────────────
+   * REAL BUG this fixes: `retryNonce` was in the effect's deps, but the
+   * "skip auto-derived-only changes" bail-out below only looked at amount
+   * and manual slippage. With autoSlippage on (the default), a retryNonce
+   * bump — the manual retry button AND the 20s auto-refresh — fell straight
+   * into the bail-out and did nothing. The retry button had already set
+   * `quoting=true` and cleared the quote, so the screen showed a spinner
+   * forever with no price and no way out: the exact «فقط می‌چرخد و قیمتی
+   * نیست» report. A nonce change must always force a fresh quote.
+   */
+  const lastRetryNonceRef = useRef(retryNonce);
+  /* Latest quote, readable inside the debounce timer without re-arming the
+     effect — lets the 20s auto-refresh stay silent instead of flashing the
+     price into a skeleton every cycle. */
+  const latestQuoteRef = useRef(null);
+  useEffect(() => { latestQuoteRef.current = quote; }, [quote]);
 
   useEffect(() => {
     if (confidentialRequested) {
@@ -433,6 +450,7 @@ export default function Swap() {
       setQuoting(false);
       lastAmountRef.current = amount;
       lastManualSlippageRef.current = slippage;
+      lastRetryNonceRef.current = retryNonce;
       return undefined;
     }
 
@@ -445,29 +463,45 @@ export default function Swap() {
       setImpact(null);
       setQuoting(false);
       lastAmountRef.current = rawAmt;
+      lastRetryNonceRef.current = retryNonce;
       return undefined;
     }
 
     const amountChanged = lastAmountRef.current !== rawAmt;
     const manualSlipChanged = lastManualSlippageRef.current !== slippage;
+    const retryRequested = lastRetryNonceRef.current !== retryNonce;
 
     // If only derived auto slippage changed (impact -> advice), skip auto re-quote
-    // to honor "max 1 request after 20 chars". Manual slippage change still triggers.
-    if (!amountChanged && !manualSlipChanged && autoSlippage) {
+    // to honor "max 1 request after 20 chars". Manual slippage change still triggers,
+    // and so does a retryNonce bump — that is the retry button and the 20s
+    // refresh, which MUST re-quote or the retry spinner never resolves.
+    if (!amountChanged && !manualSlipChanged && !retryRequested && autoSlippage) {
       // Update refs and bail - advice display updates via state, but no new network request
       lastAmountRef.current = rawAmt;
       return undefined;
     }
 
+    lastRetryNonceRef.current = retryNonce;
+
     // Debounce: clear previous
     if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current);
     if (abortRef.current) abortRef.current.abort();
+
+    /*
+     * A nonce-only wake-up while a healthy quote is on screen is the 20s
+     * auto-refresh: refresh silently, keeping the current price visible
+     * instead of collapsing it into a skeleton. The manual retry button
+     * clears the quote first, so it still shows the spinner.
+     */
+    const silentRefresh =
+      retryRequested && !amountChanged && !manualSlipChanged &&
+      Boolean(latestQuoteRef.current) && !latestQuoteRef.current?.error;
 
     const timer = setTimeout(async () => {
       const seq = ++quoteSeq.current;
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       abortRef.current = controller;
-      setQuoting(true);
+      if (!silentRefresh) setQuoting(true);
       try {
         const provider = await wallet.getReadProvider(chainId);
         if (controller?.signal?.aborted) return;
@@ -501,7 +535,10 @@ export default function Swap() {
         }
       } catch {
         if (seq === quoteSeq.current && !abortRef.current?.signal?.aborted) {
-          setQuote({ error: 'QUOTE_FAILED' });
+          // retriable: this branch is reached on transport-level failures
+          // (RPC/aggregator unreachable), which is precisely when the user
+          // needs the retry button to re-establish the connection.
+          setQuote({ error: 'QUOTE_FAILED', retriable: true });
         }
       } finally {
         if (seq === quoteSeq.current && !abortRef.current?.signal?.aborted) setQuoting(false);
