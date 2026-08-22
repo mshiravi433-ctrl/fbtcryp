@@ -13,6 +13,11 @@
  *     other provider", never as "this pair is untradeable";
  *   • a genuine answer (400 BAD_AMOUNT, a Jupiter errorCode) is NOT a
  *     network problem, and does not fall back to the public endpoint;
+ *   • the Jupiter answer is parsed from the FLAT shape the live V2 API
+ *     actually returns — outAmount and friends at the top level, no nested
+ *     `quote` object — because the first version of this probe stubbed a
+ *     nested shape that only ever existed in the stub itself, and the
+ *     screen's price display died on the difference;
  *   • the keyless public Jupiter fallback is the last resort, and it sends
  *     no fee fields the caller could forge.
  *
@@ -25,7 +30,13 @@
 
 import { pathToFileURL } from 'node:url';
 import { getOceanQuote } from '../src/lib/solanaOcean.js';
-import { getSolanaOrder, executeSolanaOrder, executeSucceeded } from '../src/lib/solana.js';
+import {
+  getSolanaOrder,
+  executeSolanaOrder,
+  executeSignature,
+  executeSucceeded,
+  orderQuote
+} from '../src/lib/solana.js';
 
 const rows = [];
 const t = (name, ok) => rows.push([name, Boolean(ok)]);
@@ -126,43 +137,48 @@ try {
   }
 
   /* ----------------- 2. the Jupiter fallback (getSolanaOrder) ----------------- */
+  /*
+   * THE REAL V2 SHAPE, FLAT — as Jupiter's order-and-execute docs type it
+   * and as a live keyless call answered on 2026-08-22. The earlier stubs
+   * here invented a nested `quote` object the API never sends, and the
+   * screen's parser grew to match the stubs; every test passed while the
+   * price stayed blank. These payloads are the contract now.
+   */
+  const jupPriceOnly = {
+    swapMode: 'ExactIn',
+    inputMint: SOL, inAmount: AMOUNT, outputMint: USDC, outAmount: '264000000',
+    otherAmountThreshold: '262500000', slippageBps: 50, priceImpactPct: '0.02%',
+    router: 'metis', mode: 'manual', feeBps: 0, feeMint: SOL,
+    transaction: null, // documented: null when no taker (price only)
+    taker: null,
+    requestId: 'probe-request-123'
+  };
   {
-    const jup = {
-      quote: {
-        inputMint: SOL, inAmount: AMOUNT, outputMint: USDC, outAmount: '264000000',
-        otherAmountThreshold: '262500000', swapMode: 'ExactIn', slippageBps: 50,
-        priceImpactPct: '0.02%'
-      },
-      transaction: '',
-      userAccount: null,
-      requestId: null
-    };
-    route = async () => json(200, jup);
+    route = async () => json(200, jupPriceOnly);
     calls.length = 0;
     const { ok, err } = await throws(() => getSolanaOrder({ inputMint: SOL, outputMint: USDC, amount: AMOUNT, slippageBps: 50 }));
-    t('the backend Jupiter answer is used directly (price only, nothing signable)', !err && ok?.quote?.outAmount === '264000000' && ok?.transaction === '');
+    t('the backend Jupiter answer is used directly (price only, nothing signable)', !err && ok?.outAmount === '264000000' && ok?.transaction === null);
     t('...via OUR api, key stays server-side', last('/api/solana/order') !== null && last('https://api.jup.ag') === null);
+    /* The screen reads its price through orderQuote() — the exact call the
+       quote effect makes. Had this existed when the nested stubs did, the
+       mismatch would have failed here instead of in a customer's hands. */
+    t('orderQuote() extracts the price from the FLAT answer', orderQuote(ok)?.outAmount === '264000000');
+    t('...with the slippage floor the button is gated on', orderQuote(ok)?.otherAmountThreshold === '262500000');
+    /* The legacy nested shape must keep parsing, in case upstream ever
+       moves in that direction — but it is not the shape being served. */
+    t('orderQuote() also tolerates a nested legacy quote', orderQuote({ quote: { outAmount: '1' } })?.outAmount === '1');
+    t('...and yields nothing from an empty answer', orderQuote(null) === null);
   }
   {
     /* The backend is down: the keyless public endpoint is the last resort. */
     route = async () => json(500, { error: 'UPSTREAM_FAILED' });
-    const jup = {
-      quote: {
-        inputMint: SOL, inAmount: AMOUNT, outputMint: USDC, outAmount: '264000000',
-        otherAmountThreshold: '262500000', swapMode: 'ExactIn', slippageBps: 50,
-        priceImpactPct: '0.02%'
-      },
-      transaction: '',
-      userAccount: null,
-      requestId: null
-    };
     upstream = async (u) => {
       t('the fallback sends no fee fields the caller could forge', !u.includes('referralAccount') && !u.includes('referralFee'));
-      return json(200, jup);
+      return json(200, jupPriceOnly);
     };
     calls.length = 0;
     const { ok, err } = await throws(() => getSolanaOrder({ inputMint: SOL, outputMint: USDC, amount: AMOUNT, slippageBps: 50 }));
-    t('a 5xx backend falls back to the public Jupiter endpoint', !err && ok?.quote?.outAmount === '264000000');
+    t('a 5xx backend falls back to the public Jupiter endpoint', !err && ok?.outAmount === '264000000');
     t('...and the public endpoint is the one that answered', last('https://api.jup.ag/swap/v2/order') !== null);
   }
   {
@@ -179,14 +195,10 @@ try {
   }
   {
     route = async () => json(200, {
-      quote: {
-        inputMint: SOL, inAmount: AMOUNT, outputMint: USDC, outAmount: '264000000',
-        otherAmountThreshold: '262500000', swapMode: 'ExactIn', slippageBps: 50,
-        priceImpactPct: '0.02%'
-      },
+      ...jupPriceOnly,
+      /* With a taker the transaction is base64, not null. */
       transaction: 'SklQRU9SREVSQVQ=',
-      userAccount: 'B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4',
-      requestId: 'probe-request-123'
+      taker: 'B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4'
     });
     const { ok, err } = await throws(() => getSolanaOrder({
       inputMint: SOL, outputMint: USDC, amount: AMOUNT,
@@ -196,31 +208,41 @@ try {
     t('with a taker the client gets the signable transaction + requestId', !err && ok?.transaction === 'SklQRU9SREVSQVQ=' && ok?.requestId === 'probe-request-123');
   }
   {
-    /* The failure shape the page maps with orderErrorKey(). */
-    route = async () => json(200, { transaction: '', errorCode: 2, router: 'jupiterz' });
+    /* The failure shape the page maps with orderErrorKey(): pricing is
+       STILL present (flat) when the build fails, per the docs. */
+    route = async () => json(200, { ...jupPriceOnly, transaction: '', errorCode: 2, errorMessage: 'Insufficient SOL for gas', router: 'jupiterz' });
     const { ok, err } = await throws(() => getSolanaOrder({
       inputMint: SOL, outputMint: USDC, amount: AMOUNT,
       taker: 'B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4',
       slippageBps: 50
     }));
     t('a failed build comes back as transaction:"" + errorCode (not a crash)', !err && ok?.transaction === '' && ok?.errorCode === 2);
+    t('...and still carries the flat pricing the docs promise', orderQuote(ok)?.outAmount === '264000000');
   }
 
   /* ---------------------- 3. execution is success-checked ---------------------- */
+  /*
+   * The documented /execute answer names the signature field `signature`
+   * (present on both success and some failures) — earlier stubs echoed
+   * `transaction`, which the API never sends there, and the screen read
+   * what the stubs said. A landed swap reporting SEND_FAILED is the worst
+   * direction to be wrong in, so the documented field is locked here.
+   */
   {
-    route = async () => json(200, { status: 'Success', code: 0, transaction: '5probeSignature' });
+    route = async () => json(200, { status: 'Success', code: 0, signature: '5probeSignature' });
     const exec = await executeSolanaOrder({ signedTransaction: 'U0lHTkVE', requestId: 'probe-request-123' });
     t('a successful /execute is recognized by executeSucceeded', executeSucceeded(exec) === true);
-    t('...and the signature is the chain\'s, not a guess', exec?.transaction === '5probeSignature');
+    t('...and the signature comes from the documented field', executeSignature(exec) === '5probeSignature');
   }
   {
-    route = async () => json(200, { status: 'Failed', code: 1, transaction: '' });
+    route = async () => json(200, { status: 'Failed', code: 1, signature: '' });
     const exec = await executeSolanaOrder({ signedTransaction: 'U0lHTkVE', requestId: 'probe-request-123' });
     t('a failed /execute is NOT treated as success (no fake signature)', executeSucceeded(exec) === false);
+    t('...and exposes no signature to report', executeSignature(exec) === null);
   }
   {
     route = async () => json(500, { error: 'UPSTREAM_FAILED' });
-    upstream = async () => json(200, { status: 'Success', code: 0, transaction: '5probeSignature' });
+    upstream = async () => json(200, { status: 'Success', code: 0, signature: '5probeSignature' });
     const exec = await executeSolanaOrder({ signedTransaction: 'U0lHTkVE', requestId: 'probe-request-123' });
     t('execution falls back to the public endpoint like quotes do', executeSucceeded(exec) === true);
   }

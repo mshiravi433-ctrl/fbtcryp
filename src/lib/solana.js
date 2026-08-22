@@ -291,6 +291,41 @@ export async function executeSolanaOrder({ signedTransaction, requestId }) {
 }
 
 /**
+ * The pricing half of an /order answer.
+ *
+ * ─── THE SHAPE JUPITER ACTUALLY ANSWERS ─────────────────────────────────────
+ * V2 `/order` is FLAT: `inAmount`, `outAmount`, `otherAmountThreshold` and
+ * `priceImpactPct` sit at the TOP LEVEL, next to `transaction` and
+ * `requestId` — there is NO nested `quote` object. Their own docs state the
+ * response type as `{ transaction, requestId, outAmount, router, mode,
+ * feeBps, feeMint, errorCode?, errorMessage? }`, and a live keyless call
+ * against our own proxy measured exactly that (SOL→USDC, 2026-08-22:
+ * `outAmount` at the top level, no `quote` key anywhere).
+ *
+ * The nested `quote` shape existed only in the stubs the first Jupiter
+ * fallback was tested against. That is exactly how «قیمت در سولنا نشان داده
+ * نمیشود» SURVIVED its own fix: Jupiter was answering with a price the whole
+ * time, and the screen was reading `jo.quote.outAmount` — a field that is
+ * never there — and concluding «no route». The tests passed because the
+ * stubs and the code agreed with each other, not with the API.
+ *
+ * This reader accepts either shape: the flat one because that is the
+ * documented and measured contract, the nested one so a future upstream
+ * change in the other direction cannot break the price again. It returns a
+ * small fixed object so callers cannot drift onto undocumented fields.
+ */
+export function orderQuote(order) {
+  if (!order || typeof order !== 'object') return null;
+  const q = order.quote && typeof order.quote === 'object' ? order.quote : order;
+  return {
+    inAmount: q.inAmount ?? null,
+    outAmount: q.outAmount ?? null,
+    otherAmountThreshold: q.otherAmountThreshold ?? null,
+    priceImpactPct: q.priceImpactPct ?? null
+  };
+}
+
+/**
  * Human-readable reason an order could not be built.
  *
  * Jupiter returns `transaction: ""` with an errorCode whose MEANING DEPENDS ON
@@ -319,3 +354,15 @@ export function orderErrorKey(order) {
 
 /** True when /execute reported an on-chain success. */
 export const executeSucceeded = (r) => r?.status === 'Success' && Number(r?.code) === 0;
+
+/**
+ * The on-chain signature from an /execute answer.
+ *
+ * The documented field is `signature` — present on both success and some
+ * failures — not `transaction`, which is what the original stubs echoed and
+ * what this code therefore read. Reading a field that is not there turns a
+ * LANDED swap into «SEND_FAILED»: the user paid gas, the chain has the trade,
+ * and the app says it failed — the worst direction to be wrong in. Both
+ * names are accepted, the documented one first.
+ */
+export const executeSignature = (r) => r?.signature || r?.transaction || null;

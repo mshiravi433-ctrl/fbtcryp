@@ -1,3 +1,29 @@
+## Unreleased — Solana price fixed for real: parsing what Jupiter actually answers
+
+- Reported «قیمت در سولنا نشان داده نمیشود — مشکل باقی مانده» AFTER the
+  OpenOcean→Jupiter fallback shipped: the fallback was live and Jupiter was
+  answering (measured through our own keyless proxy: 1 SOL ≈ 94.18 USDC),
+  but the screen threw NO_ROUTE on every healthy answer. Jupiter's V2
+  `/order` responds FLAT — `outAmount`, `otherAmountThreshold` and
+  `priceImpactPct` at the top level, next to `transaction` — while the
+  client read `jo.quote.outAmount`, a nested shape that only ever existed
+  in the test stubs. `orderQuote()` in `src/lib/solana.js` now reads the
+  real shape (and tolerates the legacy nested one), and the Solana swap
+  screen and its transaction builder both parse through it.
+- Same family of bug, caught alongside: `/execute` returns the on-chain
+  signature in the documented `signature` field, not `transaction`; reading
+  the invented field reported SEND_FAILED for swaps that had already
+  landed. `executeSignature()` reads the documented field, both names
+  accepted.
+- The probes (`test/solana-price-probe.mjs`, `test/solana-client-probe.mjs`)
+  stubbed the fabricated shapes and were the reason this survived its own
+  fix — code and tests agreed with each other, not with the API. Their
+  Jupiter payloads now match the live V2 contract, verified against a real
+  keyless call and Jupiter's order-and-execute docs, and lock the flat
+  parse end to end.
+- `docs/SOLANA-PRICE-BUG-FA.md` gains the second-bug walkthrough, and its
+  verify link moves off the retired lawpoetics.ir host to fbtswap.ir.
+
 ## Unreleased — Ready to switch on: paging, reviewer setup path, go-live runbook
 
 - Catalog tabs page through the registry with the server's cursor instead of
