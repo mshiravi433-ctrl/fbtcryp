@@ -136,20 +136,43 @@ Intent OS → تب Agents باید همان کارت را با نشان «گوا
 
 ## خطاهایی که ممکن است ببینی
 
-| کد | معنی | کار درست |
-|---|---|---|
-| `REGISTRY_STORE_UNAVAILABLE` (۵۰۳) | Blob تنظیم نیست | `BLOB_READ_WRITE_TOKEN` |
-| `CERTIFIER_NOT_CONFIGURED` (۵۰۳) | allowlist خالی است | گام ۲ |
-| `CERTIFIER_NOT_AUTHORIZED` (۴۰۳) | آیدی تو در allowlist نیست | گام ۱ و ۲ |
-| `CERTIFICATION_REQUIRED` (۴۰۹) | انتشار بدون گواهی فعال | گام ۴ |
-| `CERTIFICATION_STALE` (۴۰۹) | محتوا بعد از گواهی عوض شده | دوباره ارسال و گواهی بگیر |
-| `ENTRY_NOT_EDITABLE` (۴۰۹) | ویرایش لیستینگ منتشرشده | اول ابطال |
-| `SCOPE_NOT_ALLOWED` (۴۰۳) | کلید API اسکوپ `manage_listings` ندارد | کلید تازه با آن اسکوپ |
-| `ECOSYSTEM_WRITE_RATE_LIMITED` (۴۲۹) | بیش از ۱۲ نوشتن در دقیقه | `retry-after` را رعایت کن |
-| `AUTH_REQUIRED` داخل تلگرام | نشست Mini App تأیید نشده؛ علت دقیق را از diagnose بگیر | **گام ۰.۵** |
+| کد | HTTP | معنی | کار درست / env |
+|---|---|---|---|
+| `REGISTRY_STORE_UNAVAILABLE` | ۵۰۳ | رجیستری پایدار پیکربندی نشده؛ نوشتن fail-closed | `BLOB_READ_WRITE_TOKEN` |
+| `CERTIFIER_NOT_CONFIGURED` | ۵۰۳ | allowlist بازبین خالی است؛ هیچ‌چیز گواهی/منتشر نمی‌شود | `ECOSYSTEM_CERTIFIERS` — گام ۲ |
+| `CERTIFIER_NOT_AUTHORIZED` | ۴۰۳ | آیدی تلگرام تو در allowlist نیست | گام ۱ و ۲؛ خط `ECOSYSTEM_CERTIFIERS=<id>:Label` |
+| `CERTIFICATION_REQUIRED` | ۴۰۹ | انتشار بدون گواهی فعال | گام ۴ — کنسول بازبین |
+| `CERTIFICATION_STALE` | ۴۰۹ | محتوا بعد از گواهی عوض شده | دوباره submit + گواهی تازه |
+| `CERTIFICATION_NOT_FOUND` | ۴۰۴ | شناسهٔ گواهی ناشناخته | id را از صف/لیست گواهی‌ها بردار |
+| `ENTRY_NOT_EDITABLE` | ۴۰۹ | ویرایش لیستینگ published/revoked | اول revoke → draft |
+| `ENTRY_NOT_FOUND` | ۴۰۴ | لیستینگ نیست یا مال تو نیست | id و type را چک کن |
+| `NOT_ENTRY_OWNER` | ۴۰۳ | لیستینگ مال حساب دیگری است | با همان حساب سازنده وارد شو |
+| `ENTRY_ID_TAKEN` / `DUPLICATE_ENTRY` | ۴۰۹ | این id قبلاً ثبت شده | id یکتا |
+| `INVALID_TRANSITION` | ۴۰۹ | این جابه‌جایی چرخهٔ عمر مجاز نیست | جدول draft→submitted→published→revoked |
+| `TYPE_NOT_WRITABLE` | ۴۰۵ | liquidity فقط‌خواندنی است | ایجنت/استراتژی بنویس |
+| `SCOPE_NOT_ALLOWED` | ۴۰۳ | کلید API اسکوپ `manage_listings` ندارد | کلید تازه با آن اسکوپ |
+| `API_KEY_INVALID` / `API_KEY_REVOKED` | ۴۰۱ | کلید بدشکل/ناشناخته یا باطل‌شده | کلید تازه؛ راز فقط یک‌بار نشان داده می‌شود |
+| `IDEMPOTENCY_KEY_REQUIRED` | ۴۰۰ | هدر `idempotency-key` نیست/نامعتبر | کنسول خودش می‌گذارد؛ در curl فراموش نکن |
+| `IDEMPOTENCY_CONFLICT` | ۴۰۹ | همان کلید با payload متفاوت | کلید تازه برای درخواست تازه |
+| `ECOSYSTEM_WRITE_RATE_LIMITED` | ۴۲۹ | بیش از بودجهٔ نوشتن (پیش‌فرض ۱۲/دقیقه) | هدر `retry-after`؛ `ECOSYSTEM_WRITE_RATE_LIMIT` |
+| `FORBIDDEN_PERMISSION` / `AUTOMATIC_EXECUTION_FORBIDDEN` | ۴۰۰ | `withdrawFunds` / `executeWithoutUser` / `automaticExecution` | این فیلدها هرگز پذیرفته نمی‌شوند |
+| `EVIDENCE_REQUIRED` | ۴۰۰ | گواهی بدون شواهد قابل‌بررسی | لینک https یا هش sha256 |
+| `AUTH_REQUIRED` داخل تلگرام | ۴۰۱ | نشست Mini App تأیید نشده | **گام ۰.۵** + `/api/telegram/diagnose` |
+| `BAD_SIGNATURE` / `EXPIRED` / `NO_INIT_DATA_SENT` | — | تشخیص کلاینت از diagnose | Menu Button همان ربات؛ نشست تازه |
 
-## چیزی که هنوز عمداً ساخته نشده
+کنسول توسعه‌دهنده زیر هر کد ردشده یک **hint ترجمه‌شده** نشان می‌دهد
+(`dev.console.hint.*`) تا لازم نباشد این جدول را حفظ باشی.
 
-مرحلهٔ ۵: اجرای واقعی ایجنت. نیازمند لایهٔ اعتماد و زیرساخت امضای جداگانه است
-و تا آن موقع هیچ ایجنت یا استراتژی‌ای اجازهٔ امضا، اجرا، تسویه یا برداشت ندارد
-— نه با کلید API، نه با گواهی، نه با هیچ ترکیبی از این دو.
+## مرحلهٔ ۵ — بعد از زنده‌شدن کاتالوگ
+
+کاتالوگِ گواهی‌شده تازهٔ شروع است. حلقهٔ اجرای واقعی ایجنت/استراتژی
+(لیستینگ گواهی‌دار → intent → commitment سالور → auction → امضای کاربر در
+کیف پول خودش → execution-claim → reputation) و مرزهای ثابتِ بدون
+اجرای‌خودکار/برداشت/کاستدی در:
+
+- `docs/ECOSYSTEM-REGISTRY-FA.md` → بخش **«مرحلهٔ ۵ — واقعی‌شدن ایجنت و استراتژی»**
+- `docs/PHASE6-ACTIVATE-FA.md` → هشت آیتم env/مراسم/curl فاز ۶
+- `docs/INTENT-ROADMAP-NEXT-FA.md` → چک capabilities لایو
+
+تا کاربر در کیف پول خودش امضا نکرده، هیچ ایجنتی روی زنجیره اثری ندارد —
+عمدی است، نه نقص.

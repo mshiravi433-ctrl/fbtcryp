@@ -1531,6 +1531,12 @@
         "name": "الاسم",
         "description": "ماذا يفعل",
         "chains": "معرّفات الشبكات مفصولة بفواصل"
+      },
+      "hint": {
+        "REGISTRY_STORE_UNAVAILABLE": "السجل الدائم متوقف. اضبط BLOB_READ_WRITE_TOKEN على الخادم وأعد النشر — تُرفض الكتابة حتى يصبح التخزين حقيقياً.",
+        "CERTIFIER_NOT_CONFIGURED": "لا يوجد مراجع مُعدّ، لذلك لا يمكن توثيق أو نشر أي شيء. أضف ECOSYSTEM_CERTIFIERS=<معرّف تيليجرام>:Label على الخادم (بطاقة الإعداد تعرض معرّفك) ثم أعد النشر.",
+        "CERTIFIER_NOT_AUTHORIZED": "حساب تيليجرام هذا ليس في قائمة المراجعين. ضع معرّفك في ECOSYSTEM_CERTIFIERS (انظر بطاقة الإعداد) أو اطلب من مراجع مصرّح له التوثيق.",
+        "_default": "جدول الأخطاء الكامل والإصلاح لكل رمز: docs/ECOSYSTEM-GO-LIVE-FA.md"
       }
     },
     "review": {

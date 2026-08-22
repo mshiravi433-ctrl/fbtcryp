@@ -1792,6 +1792,12 @@
         "name": "نام",
         "description": "چه کاری می‌کند",
         "chains": "شناسهٔ زنجیره‌ها، جداشده با کاما"
+      },
+      "hint": {
+        "REGISTRY_STORE_UNAVAILABLE": "رجیستری پایدار خاموش است. BLOB_READ_WRITE_TOKEN را روی سرور بگذار و Redeploy کن — تا ذخیره‌سازی واقعی نباشد نوشتن رد می‌شود.",
+        "CERTIFIER_NOT_CONFIGURED": "هیچ بازبینی پیکربندی نشده؛ پس هیچ‌چیز گواهی یا منتشر نمی‌شود. ECOSYSTEM_CERTIFIERS=<آیدی‌تلگرام‌تو>:Label را روی سرور بگذار (کارت راه‌اندازی همان بالاست آیدی‌ات را نشان می‌دهد) و Redeploy کن.",
+        "CERTIFIER_NOT_AUTHORIZED": "این حساب تلگرام در allowlist بازبین نیست. آیدی‌ات را در ECOSYSTEM_CERTIFIERS بگذار (کارت راه‌اندازی) یا از بازبین مجاز بخواه گواهی بدهد.",
+        "_default": "جدول کامل خطاها و کار درست هر کد: docs/ECOSYSTEM-GO-LIVE-FA.md"
       }
     },
     "review": {

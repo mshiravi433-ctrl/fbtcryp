@@ -1792,6 +1792,12 @@
         "name": "Name",
         "description": "What it does",
         "chains": "Chain ids, comma separated"
+      },
+      "hint": {
+        "REGISTRY_STORE_UNAVAILABLE": "The durable registry is off. Set BLOB_READ_WRITE_TOKEN on the server and redeploy — writes stay refused until storage is real.",
+        "CERTIFIER_NOT_CONFIGURED": "No reviewer is configured, so nothing can be certified or published. Add ECOSYSTEM_CERTIFIERS=<yourTelegramId>:Label on the server (the setup card above shows your id) and redeploy.",
+        "CERTIFIER_NOT_AUTHORIZED": "This Telegram account is not on the reviewer allowlist. Put your id in ECOSYSTEM_CERTIFIERS (see the setup card) or ask an allowlisted reviewer to certify.",
+        "_default": "See docs/ECOSYSTEM-GO-LIVE-FA.md for the full error table and the fix for each code."
       }
     },
     "review": {

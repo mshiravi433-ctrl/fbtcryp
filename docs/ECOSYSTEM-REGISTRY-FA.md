@@ -291,3 +291,66 @@ POST /api/ecosystem/certifications/:id/revoke ← فقط صادرکنندهٔ م
 - اعتبار با کمتر از ۵ نمونه → `insufficient_data` با `null` بودن شمارش و نرخ
 - مالک غیرمرتبط نمی‌تواند ویرایش/انتقال وضعیت انجام دهد
 - باطل‌کردن گواهی → حذف فوری لیستینگ از کاتالوگ عمومی
+
+
+## مرحلهٔ ۵ — واقعی‌شدن ایجنت و استراتژی (حلقهٔ اجرا)
+
+مراحل ۱–۴ یک **فهرست قابل‌اعتماد** ساختند: لیستینگ مالک‌دار، گواهی بازبین،
+کلید API با اسکوپ محدود، و اعتبار مشاهده‌شده. مرحلهٔ ۵ همان لیستینگ را به
+**مسیر اجرای واقعی** Intent OS وصل می‌کند — بدون اینکه کاتالوگ خودش امضا کند،
+خرج کند یا وجه نگه دارد.
+
+### حلقهٔ اجرا (ترتیب اجباری)
+
+```
+لیستینگ گواهی‌شده (published + active certification)
+        │
+        ▼
+intent envelope  ──validate──▶  /api/intents/v1/validate
+        │
+        ▼
+commitment امضاشدهٔ سالور  ──▶  transparency log (Blob)
+        │
+        ▼
+auction open → bids → seal → close امضاشدهٔ Coordinator
+        │
+        ▼
+امضای کاربر در کیف پول خودش  (FBT هرگز کلید/کاستدی ندارد)
+        │
+        ▼
+execution-claim  →  dispute?  →  adjudication  →  settlement-report
+        │
+        ▼
+مشاهدهٔ opt-in  ──▶  reputation تجمیعی  (ecosystem-reputation:v1)
+```
+
+### جدول ترتیب فعال‌سازی
+
+| # | پیش‌نیاز | از کجا | بدون آن چه می‌شود |
+|---|---|---|---|
+| ۱ | لیستینگ `published` + گواهی فعال | مراحل ۳–۴ + `ECOSYSTEM_CERTIFIERS` | کاتالوگ خالی می‌ماند — صادقانه |
+| ۲ | سالور ثبت‌شده + Blob | `INTENT_SOLVER_KEYS` + `BLOB_READ_WRITE_TOKEN` | commitment پذیرفته نمی‌شود |
+| ۳ | وثیقهٔ اعلامی (اختیاری ولی توصیه‌شده) | `INTENT_SOLVER_BONDS` | `bonded:false`؛ جریمه `null` |
+| ۴ | Coordinator + close token | `INTENT_COORDINATOR_*` + `INTENT_AUCTION_CLOSE_TOKEN` | مزایده بسته نمی‌شود |
+| ۵ | verifier برای settlement/dispute | `INTENT_VERIFIER_KEYS` | گزارش تسویه ثبت نمی‌شود |
+| ۶ | attestation ناظر/راستی‌آزما (فاز ۶) | `INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS` | `independentVerification.configured:false` |
+| ۷ | امضای کاربر روی زنجیره | کیف پول خود کاربر | هیچ خرج خودکاری رخ نمی‌دهد — عمدی |
+
+راهنمای env و curl هر آیتم: `docs/PHASE6-ACTIVATE-FA.md`.
+راهنمای زنده‌کردن کاتالوگ: `docs/ECOSYSTEM-GO-LIVE-FA.md`.
+
+### مرزهای ثابت (عمدی و غیرقابل دور زدن)
+
+این‌ها با گواهی، کلید API، یا هر ترکیبی از env عوض **نمی‌شوند**:
+
+| ادعا | مقدار همیشگی |
+|---|---|
+| اجرای خودکار ایجنت/استراتژی | ❌ هرگز (`automaticExecution` رد می‌شود) |
+| برداشت وجه / `withdrawFunds` | ❌ هرگز |
+| کاستدی / escrow وجوه کاربر توسط FBT | ❌ `custody: false` |
+| امضای سرور به‌جای کاربر | ❌ `executableByServer: false` |
+| کلید API برای اجرا/امضا/برداشت | ❌ هیچ اسکوپی وجود ندارد |
+| نشان «گواهی‌شده» = مجوز اجرا | ❌ گواهی فقط کیفیت فهرست است |
+
+تا وقتی کاربر در کیف پول **خودش** تراکنش را امضا نکرده، هیچ ایجنت یا
+استراتژی‌ای روی زنجیره اثری ندارد. کاتالوگ مسیر کشف است، نه مسیر خرج.
