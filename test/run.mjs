@@ -159,6 +159,18 @@ console.log('▸ probing replaced-transaction tracking…');
   report('intent replacement tracking', await runReplacement());
 }
 
+/* --------------------- 0a-1b. anchor fail-safe boundary -------------------- */
+/* Pure logic with an injected fake RPC: the optional Phase 6 on-chain anchors
+   must stay strictly additive. Config parsing is fail-closed, every RPC /
+   receipt / event / confirmation failure is a typed refusal, a failed anchor
+   NEVER invalidates the signed auction close, and duplicate submits converge
+   on one stored record instead of conflicting documents. */
+console.log('▸ probing the anchor fail-safe boundary (fake RPC, no network)…');
+{
+  const { default: runAnchors } = await import('./intent-anchor-probe.mjs');
+  report('intent anchor fail-safe', await runAnchors());
+}
+
 /* --------------------- 0a-2. wallet risk / verification helpers ----------- */
 /* Pure logic, no DOM and no network: recipient risk classification, gas
    estimates that return null (never zero) when the fee feed is missing, the
