@@ -82,7 +82,11 @@ async function ofetch(url) {
     err.status = res.status;
     // A gateway-level failure of OUR backend (404 in a build with no API,
     // 5xx, geo-block) is a connectivity problem, not a verdict on the pair.
-    if (res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
+    // 401 joins the list now that Solana sits behind OpenOcean's whitelist:
+    // the upstream's auth rejection is passed through verbatim, and telling
+    // the user "the pair has no route" for it would send them down the wrong
+    // path — the caller's provider fallback then decides the real answer.
+    if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
       err.network = true;
     }
     throw err;

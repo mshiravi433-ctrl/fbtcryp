@@ -412,6 +412,40 @@ export async function getSolanaSwapBalances({ owner, inputMint, outputMint }) {
  */
 export async function signSolanaTransaction(base64Tx) {
   const provider = getSolanaProvider();
+  const mwa = !provider ? getMwaWallet() : null;
+
+  /*
+   * MWA is Wallet Standard, not an injected provider — the same gap that
+   * used to strand Android Chrome users after connect, now on the Jupiter
+   * path (signAndSendSolana already had its own MWA branch). Without it the
+   * Jupiter fallback — now the price source of record while OpenOcean waits
+   * for its whitelist key — would be signable only by desktop extensions.
+   *
+   * `solana:signTransaction` returns the SIGNED transaction bytes, which is
+   * exactly what /execute wants back; it is NOT a broadcast, so returning it
+   * to the caller instead of sending it is correct for this path.
+   */
+  if (mwa) {
+    const feature = mwa.features?.['solana:signTransaction'];
+    const account = mwaAccount ?? mwa.accounts?.find((a) => a.address === mwaAddress);
+    if (!feature?.signTransaction || !account) throw new Error('CANNOT_SIGN');
+    try {
+      const signed = await feature.signTransaction({
+        account,
+        transaction: base64ToBytes(base64Tx),
+        chain: 'solana:mainnet'
+      });
+      if (!(signed instanceof Uint8Array) || signed.length === 0) throw new Error('SIGN_FAILED');
+      return bytesToBase64(signed);
+    } catch (err) {
+      if (err?.code === 4001 || /reject|denied|cancel/i.test(String(err?.message))) {
+        throw new Error('REJECTED');
+      }
+      if (err?.message === 'SIGN_FAILED') throw err;
+      throw new Error('SIGN_FAILED');
+    }
+  }
+
   if (!provider) throw new Error('NO_WALLET');
   if (typeof provider.signTransaction !== 'function') throw new Error('CANNOT_SIGN');
 
