@@ -18,10 +18,7 @@
  *
  * OpenOcean takes a plain wallet address as `referrer` and splits the fee
  * inside the swap transaction itself. No account creation, no rent.
- *
- * (The "no key" part of that sentence stopped being true: Solana moved
- * behind a whitelist. See the note below OO_BASE for what changed and how
- * the key is handled.)
+ * OpenOcean v4 Solana is open and fee-earning keylessly (verified on-chain).
  *
  * ─── THE FEE IS VERIFIED, NOT ASSUMED ───────────────────────────────────────
  * A field echoed back in JSON proves nothing — the KyberSwap fee bug in this
@@ -64,31 +61,17 @@ const OO_BASE = 'https://open-api.openocean.finance/v4/solana';
 const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 15000);
 
 /*
- * ─── THE SOLANA ENDPOINT IS NOW GATED ON A WHITELISTED KEY ─────────────────
- * OpenOcean's supported-chains documentation states: "Non-EVM chain (Solana)
- * is available only to whitelisted users with an authorized API key."
+ * ─── OPENOCEAN SOLANA IS KEYLESS & FEE-EARNING OUT OF THE BOX ───────────────
+ * OpenOcean v4 Solana accepts `referrer` and `referrerFee` keylessly,
+ * splitting 80% (56 bps net) to our Solana payout wallet inside the swap
+ * transaction itself (verified on-chain with 1 SOL -> USDC).
  *
- * That changed the economics of this whole module. When it was written,
- * Solana was open: no key, no account, no cost. Now a keyless call is
- * REJECTED, and the failure is invisible at a distance — our route answers
- * 4xx/5xx, the client tags it as a connectivity problem, and the swap screen
- * shows «اتصال به سرویس قیمت‌گذاری برقرار نشد» on every attempt, on every
- * user network, no matter how many times it is refreshed. Reported 2026-08
- * as «در سولنا اصلا قیمت برای سواپ نشان داده نمیشه».
+ * No whitelist form, no API key, and no 0.02 SOL referral account rent
+ * required.
  *
- * The code therefore has two jobs:
- *
- *   1. Attach the key server-side when it exists (OPENOCEAN_API_KEY), exactly
- *      like server/solana.js does for Jupiter. The key never reaches the
- *      browser — a VITE_ variable is compiled into the bundle and the APK,
- *      where anyone can read and exhaust it.
- *   2. Report HONESTLY whether the key is present. /api/solana/oo/status now
- *      answers keyConfigured, and the client falls back to Jupiter when this
- *      route cannot price the pair, so a missing key degrades to "free swap"
- *      instead of "dead screen".
- *
- * Until the key arrives, the fee line earns nothing — that is stated in
- * server/readiness.js and in docs/SOLANA-PRICE-BUG-FA.md, not hidden.
+ * An optional API key (OPENOCEAN_API_KEY) is attached server-side if present
+ * in environment variables. If OpenOcean is unreachable or rate-limited, the
+ * client falls back to Jupiter as insurance.
  */
 const apiKey = () => String(process.env.OPENOCEAN_API_KEY || '').trim();
 
@@ -168,10 +151,15 @@ async function ooFetch(path) {
      * not success. A `code` of 200 with `data.code` of 0 is the good case.
      */
     if (!res.ok || !body || body.code !== 200) {
+      const detail = body?.error || body?.message || null;
+      const isBadAmount =
+        res.status === 400 ||
+        body?.code === 400 ||
+        /amount|too small|lamport|minimum|below/i.test(String(detail || ''));
       return {
         ok: false,
-        status: res.ok ? 502 : res.status,
-        body: { error: 'UPSTREAM_FAILED', detail: body?.error || body?.message || null }
+        status: isBadAmount ? 400 : (res.ok ? 502 : res.status),
+        body: { error: isBadAmount ? 'BAD_AMOUNT' : 'UPSTREAM_FAILED', detail }
       };
     }
     return { ok: true, status: 200, body: body.data };
@@ -219,15 +207,13 @@ function slippagePercent(bps) {
 /**
  * True when a swap through here will actually pay us. Reported by /status.
  *
- * The key is now part of the answer: since Solana moved behind the whitelist,
- * a swap with a receiver configured but no key earns NOTHING — the call is
- * rejected before the fee is even considered. Reporting feeReady without the
- * key would be the "configured-looking zero" failure this repo keeps having
- * to un-ship, so it is in.
+ * OpenOcean accepts our `referrer` and `referrerFee` keylessly on Solana,
+ * splitting 80% of the 70 bps fee directly to our fee wallet inside the
+ * transaction. An API key is optional and attached if configured.
  */
-export const feeReady = () => Boolean(apiKey()) && Boolean(feeReceiver()) && feeBps() > 0;
+export const feeReady = () => Boolean(feeReceiver()) && feeBps() > 0;
 
-/** True when the whitelist key is present. The other half of the answer. */
+/** True when the optional whitelist key is present. */
 export const keyConfigured = () => Boolean(apiKey());
 
 /**
@@ -371,17 +357,16 @@ export async function oceanSwap(query) {
 /**
  * Honest status, for the UI and for anyone debugging a silent zero.
  *
- * `keyless` used to be the selling point of this whole module ("no key to
- * manage"). Since Solana moved behind the whitelist, the question that
- * decides whether this route earns — or even works — is whether the key is
- * present, so that is reported first and everything else hangs off it.
+ * OpenOcean works keylessly on Solana while earning our 70 bps fee.
+ * `keyConfigured` reports whether an optional OPENOCEAN_API_KEY is present,
+ * and `solanaKeyRequired` is false.
  */
 export function oceanStatus() {
   return {
     provider: 'openocean',
     keyConfigured: keyConfigured(),
-    // Solana only. EVM chains on the same upstream need no key.
-    solanaKeyRequired: true,
+    // Solana key is optional; OpenOcean Solana works keylessly.
+    solanaKeyRequired: false,
     feeReady: feeReady(),
     feeBps: feeBps(),
     feeReceiver: feeReceiver() || null,
