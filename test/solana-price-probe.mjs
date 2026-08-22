@@ -120,25 +120,40 @@ function installUpstreamStub() {
       if (weather.jup !== 'ok') throw new Error('jupiter down');
       if (u.includes('/order')) {
         const hasTaker = u.includes('taker=');
+        /*
+         * THE REAL V2 SHAPE — flat, exactly as a live keyless call through
+         * our own proxy answered on 2026-08-22 (SOL→USDC) and as Jupiter's
+         * order-and-execute docs type it. There is NO nested `quote` object;
+         * the pricing fields sit at the top level next to `transaction`.
+         * An earlier version of this stub invented a nested shape, the
+         * client code grew to match the stub, and both passed every test
+         * while the real API answered differently — which is how «قیمت در
+         * سولنا نشان داده نمیشه» survived its own fix. The stub now answers
+         * what the API answers, nothing else.
+         */
         return json(200, {
-          quote: {
-            inputMint: SOL,
-            inAmount: AMOUNT,
-            outputMint: USDC,
-            outAmount: '264000000',
-            otherAmountThreshold: '262500000',
-            swapMode: 'ExactIn',
-            slippageBps: 50,
-            priceImpactPct: '0.02%'
-          },
-          /* Without a taker: price only, nothing signable comes back. */
-          transaction: hasTaker ? JUP_TX : '',
-          userAccount: hasTaker ? 'taker-present' : null,
-          requestId: hasTaker ? 'probe-request-123' : null
+          swapMode: 'ExactIn',
+          inputMint: SOL,
+          outputMint: USDC,
+          inAmount: AMOUNT,
+          outAmount: '264000000',
+          otherAmountThreshold: '262500000',
+          slippageBps: 50,
+          priceImpactPct: '0.02%',
+          router: 'metis',
+          mode: 'manual',
+          feeBps: 0,
+          feeMint: SOL,
+          /* Documented: null without a taker, base64 with one, '' when the
+             router quoted a price but could not build (errorCode set). */
+          transaction: hasTaker ? JUP_TX : null,
+          taker: hasTaker ? WIFER : null,
+          requestId: 'probe-request-123'
         });
       }
       if (u.includes('/execute')) {
-        return json(200, { status: 'Success', code: 0, transaction: '5probeSignature' });
+        /* The documented field is `signature`, not `transaction`. */
+        return json(200, { status: 'Success', code: 0, signature: '5probeSignature' });
       }
       return json(404, { error: 'unknown jupiter path' });
     }
@@ -236,8 +251,9 @@ try {
   {
     const res = await fetch(`${base}/api/solana/order?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
     const body = await res.json();
-    t('the Jupiter proxy still prices without a key', res.status === 200 && body.quote?.outAmount === '264000000');
-    t('...price-only when no taker (nothing signable)', body.transaction === '' && body.requestId === null);
+    /* Flat, as the live V2 API answers: outAmount at the top level. */
+    t('the Jupiter proxy still prices without a key', res.status === 200 && body.outAmount === '264000000');
+    t('...price-only when no taker (nothing signable)', body.transaction === null && typeof body.requestId === 'string');
     t('and it did not send a Jupiter key we do not have', weather.jupKeys.every((k) => k === null));
   }
   {

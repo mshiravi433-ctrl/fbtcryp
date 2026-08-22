@@ -13,9 +13,11 @@ import {
   fromBaseUnits,
   getSolanaOrder,
   executeSolanaOrder,
+  executeSignature,
   executeSucceeded,
   isSolanaAddress,
   orderErrorKey,
+  orderQuote,
   referralFeeBps,
   solanaFeeReady,
   toBaseUnits
@@ -494,7 +496,14 @@ export default function SolanaSwap({ embedded = false }) {
                  router, so it is mapped the same way swap() maps it. */
               throw new Error(orderErrorKey(jo) || 'NO_ROUTE');
             }
-            const cq = jo?.quote;
+            /*
+             * orderQuote(), NOT `jo.quote`: V2 /order answers FLAT — the
+             * pricing fields sit at the top level and no `quote` object
+             * exists (see lib/solana.js). Reading the nested field threw
+             * NO_ROUTE on every successful Jupiter answer, which is how the
+             * price stayed missing after the fallback itself was shipped.
+             */
+            const cq = orderQuote(jo);
             if (!cq?.outAmount || cq.outAmount === '0') throw new Error('NO_ROUTE');
             q = {
               inAmount: cq.inAmount ?? base,
@@ -569,7 +578,8 @@ export default function SolanaSwap({ embedded = false }) {
       provider: 'jupiter',
       transaction: jo.transaction,
       requestId: jo.requestId,
-      outAmount: jo.quote?.outAmount ?? null,
+      /* Flat V2 answer again — the pricing fields are top-level. */
+      outAmount: orderQuote(jo)?.outAmount ?? null,
       feeBps: solanaFeeReady() ? referralFeeBps() : null,
       versioned: true
     };
@@ -679,7 +689,12 @@ export default function SolanaSwap({ embedded = false }) {
           requestId: built.requestId
         });
         if (!executeSucceeded(exec)) throw new Error('SEND_FAILED');
-        signature = exec?.transaction || null;
+        /*
+         * executeSignature() reads the documented `signature` field —
+         * `exec.transaction` is what the stubs invented, and reading it
+         * would report SEND_FAILED for a swap that already landed.
+         */
+        signature = executeSignature(exec);
         if (!signature) throw new Error('SEND_FAILED');
       } else {
         /*
