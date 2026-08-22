@@ -443,15 +443,17 @@ export default function SolanaSwap({ embedded = false }) {
        * a transaction they did not ask for.
        *
        * ─── AND WHY IT FALLS BACK TO JUPITER ────────────────────────────────
-       * OpenOcean's Solana endpoint moved behind a WHITELIST: their
-       * supported-chains docs now say "Non-EVM chain (Solana) is available
-       * only to whitelisted users with an authorized API key". While our
-       * server does not hold one, every call it makes is rejected, and the
-       * client — correctly — read that as a connectivity problem and showed
-       * «اتصال به سرویس قیمت‌گذاری برقرار نشد» on every attempt, on every
-       * user network, no matter how many times the screen was refreshed.
-       * (Reported 2026-08 as «در سولنا اصلا قیمت برای سواپ نشان داده
-       * نمیشه».)
+       * De¹ Exchange (the rebranded OpenOcean) whitelist-gates Solana: the
+       * supported-chains docs say "Non-EVM chain (Solana) is available only
+       * to whitelisted users with an authorized API key", and the old public
+       * host stopped answering Solana quotes in 2026-08 (it sits behind a
+       * Cloudflare interstitial). The server now calls the De¹ Enterprise
+       * host with OPENOCEAN_API_KEY attached server-side. If that key is
+       * missing/rejected, or the host is unreachable, the client — correctly
+       * — reads it as a connectivity problem and falls back to Jupiter
+       * instead of showing «اتصال به سرویس قیمت‌گذاری برقرار نشد» on every
+       * attempt. (The original outage was reported 2026-08 as «در سولنا
+       * اصلا قیمت برای سواپ نشان داده نمیشه».)
        *
        * So when OpenOcean cannot price the pair, the quote goes to Jupiter
        * through the SAME hardened path this screen used before the switch:
