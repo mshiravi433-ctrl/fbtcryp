@@ -39,6 +39,14 @@ import {
 } from '../src/lib/referral.js';
 import { backpackBrowseLink, phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
+import {
+  TELEGRAM_BOT_ID,
+  TELEGRAM_BOT_URL,
+  TELEGRAM_BOT_USERNAME,
+  telegramBotStartAppUrl
+} from '../src/lib/telegramBot.js';
+import { EXPECTED_TELEGRAM_BOT_ID, botIdFromToken, telegramBotIdentity } from '../server/telegramIdentity.js';
+import { webAppUrlForStart } from '../server/bot.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
 import { comparable, improvementBps, isUsableQuote, pickBestQuote } from '../src/lib/bestQuote.js';
@@ -1819,6 +1827,16 @@ export default async function run() {
     t('a missing parameter is fine', captureReferral('?utm_source=x') === null);
     t('an empty query is fine', captureReferral('') === null);
 
+    /* Telegram Main Mini App links pass startapp through start_param, not a
+       browser ?ref= query. Both Telegram surfaces must retain attribution. */
+    clearReferral();
+    t('a Telegram start_param is captured', captureReferral('', 'TGFRIEND') === 'TGFRIEND');
+    clearReferral();
+    t('a Telegram URL launch parameter is captured',
+      captureReferral('?tgWebAppStartParam=URLFRIEND') === 'URLFRIEND');
+    clearReferral();
+    t('an invalid Telegram start_param is refused', captureReferral('', '<bad>') === null);
+
     /*
      * SELF-REFERRAL. Opening your own invite link must not credit you, or
      * every fee you generate owes you a rebate.
@@ -1856,6 +1874,39 @@ export default async function run() {
      */
     t('the share never exceeds the fee', referrerShare(7) < 7);
     t('a share above 100% is refused', referrerShare(7, 1.5) === 0);
+  }
+
+  /* ---------------------- Telegram bot identity ------------------------- */
+  /*
+   * A bot migration has two independent edges: the public t.me link users
+   * follow, and the secret token the server uses to verify their Mini App
+   * signatures. The numeric ID is public diagnostic metadata, never a token.
+   */
+  {
+    t('the public bot username is fbtco_bot', TELEGRAM_BOT_USERNAME === 'fbtco_bot');
+    t('the public bot ID is 7837421575', TELEGRAM_BOT_ID === '7837421575');
+    t('the public bot URL is canonical', TELEGRAM_BOT_URL === 'https://t.me/fbtco_bot');
+    t('the server expects the same public bot ID', EXPECTED_TELEGRAM_BOT_ID === TELEGRAM_BOT_ID);
+
+    t('a referral deep link opens the Main Mini App with startapp',
+      telegramBotStartAppUrl('FRIEND01') === 'https://t.me/fbtco_bot?startapp=FRIEND01');
+    t('an unsafe deep-link payload falls back to the bare bot URL',
+      telegramBotStartAppUrl('<bad>') === TELEGRAM_BOT_URL);
+
+    t('a bot ID is parsed from a syntactically valid token without exposing it',
+      botIdFromToken('7837421575:test-only-token-not-a-real-secret') === '7837421575');
+    const matching = telegramBotIdentity('7837421575:test-only-token-not-a-real-secret');
+    const stale = telegramBotIdentity('9999999999:test-only-token-not-a-real-secret');
+    t('the matching token prefix is reported as the expected public identity',
+      matching.configuredBotId === TELEGRAM_BOT_ID && matching.identityMatches === true);
+    t('a stale token prefix is visibly flagged without being accepted as a match',
+      stale.configuredBotId === '9999999999' && stale.identityMatches === false);
+
+    const launched = new URL(webAppUrlForStart('https://fbtswap.ir/?source=bot#/swap', 'FRIEND01'));
+    t('a /start payload reaches the self-hosted Web App button as ?ref=',
+      launched.searchParams.get('ref') === 'FRIEND01' && launched.hash === '#/swap');
+    t('an invalid /start payload does not alter the Web App URL',
+      webAppUrlForStart('https://fbtswap.ir/#/swap', '<bad>') === 'https://fbtswap.ir/#/swap');
   }
 
   /* ----------------------- sharing beyond Telegram ---------------------- */

@@ -17,6 +17,10 @@ import { startBot } from './bot.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT || 8787);
+// Explicitly bind every local/self-hosted instance to all interfaces. This is
+// required for an HTTPS tunnel or the Arena live preview to reach the app; the
+// browser still uses relative /api URLs and never calls localhost itself.
+const HOST = process.env.HOST || '0.0.0.0';
 // trim() for the same reason as server/app.js: env stores smuggle newlines
 // into secrets, and local polling must use the exact same token bytes the API
 // verifies initData against.
@@ -39,8 +43,8 @@ app.use((req, res) => {
 
 /* --------------------------------- boot ---------------------------------- */
 
-app.listen(PORT, () => {
-  console.log(`▸ API + app listening on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`▸ API + app listening on http://${HOST}:${PORT}`);
   if (!process.env.COINGECKO_API_KEY) console.log('  (no COINGECKO_API_KEY — using the public rate limit)');
   if (!process.env.OPENROUTER_API_KEY) console.log('  (no OPENROUTER_API_KEY — AI features disabled)');
   if (BOT_TOKEN) {

@@ -372,13 +372,20 @@ Verified by simulation — dice EV 0.973, wheel EV 0.972 per unit staked.
 
 | Command | Does |
 |---|---|
-| `/start` | Welcome + launch button (handles `?start=REFCODE` referrals) |
+| `/start` | Welcome + launch button (retains legacy `?start=REFCODE` referrals) |
 | `/app` | Opens the Mini App |
 | `/price btc` | Spot price, 1h/24h/7d change, cap, volume |
 | `/top` | Top 10 by market cap |
 | `/trending` | CoinGecko trending list |
 | `/global` | Total cap, volume, BTC/ETH dominance |
-| inline | Type `@yourbot btc` in any chat to share a price card |
+| inline | Type `@fbtco_bot btc` in any chat to share a price card |
+
+**Official Mini App:** [@fbtco_bot](https://t.me/fbtco_bot) (public Bot ID
+`7837421575`). Referral links use Telegram's Main Mini App form,
+`https://t.me/fbtco_bot?startapp=REFCODE`, so the app receives the code as a
+Telegram launch parameter. The ID is public metadata; production still needs
+the new bot's private `TELEGRAM_BOT_TOKEN` in Vercel to verify Mini App
+sessions.
 
 Nothing in the bot moves money or accepts deposits, by design.
 

@@ -64,7 +64,14 @@ function write(key, value) {
 }
 
 /**
- * Capture `?ref=` from the current URL, once.
+ * Capture a referral from either a normal URL or Telegram's Mini App launch
+ * parameter, once.
+ *
+ * Telegram direct Mini App links use `?startapp=CODE`; Telegram then exposes
+ * that value to the app as `initDataUnsafe.start_param` (and some clients also
+ * surface `tgWebAppStartParam` in the page URL). Supporting all three forms
+ * means an invite retains attribution whether it opens in Telegram, a browser
+ * or the installed APK.
  *
  * ─── FIRST TOUCH WINS ───────────────────────────────────────────────────────
  * An existing referral is never overwritten. Otherwise anyone could send an
@@ -84,17 +91,29 @@ function ownRefCode() {
   }
 }
 
-export function captureReferral(search = typeof window !== 'undefined' ? window.location.search : '') {
+export function captureReferral(
+  search = typeof window !== 'undefined' ? window.location.search : '',
+  telegramStartParam = ''
+) {
   const existing = read(REF_KEY);
   if (isValidRefCode(existing)) return existing;
 
-  let code = null;
+  let query = null;
   try {
-    code = new URLSearchParams(search).get('ref');
+    query = new URLSearchParams(search);
   } catch {
     return null;
   }
-  if (!isValidRefCode(code)) return null;
+
+  // Prefer an explicit web referral. The two Telegram forms are fallbacks for
+  // a Main Mini App direct link and are constrained by the same validator.
+  const candidates = [
+    query.get('ref'),
+    query.get('tgWebAppStartParam'),
+    telegramStartParam
+  ];
+  const code = candidates.find(isValidRefCode) ?? null;
+  if (!code) return null;
 
   /*
    * Self-referral is refused.

@@ -18,7 +18,7 @@ import InfoBox from '../components/InfoBox';
 import { perksFor } from '../lib/perks';
 import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
-import { publicAppUrl } from '../lib/nativeShell';
+import { telegramBotStartAppUrl } from '../lib/telegramBot';
 import { dailyRewardStatus } from '../lib/dailyRewards';
 
 /**
@@ -243,17 +243,13 @@ export default function Earn({ embedded = false }) {
 
   const refCode = useMemo(() => ensureRefCode(user?.id), [ensureRefCode, user?.id]);
   /*
-   * REAL BUG: this was `https://t.me/your_bot_username?start=...` — a literal
-   * placeholder. Every invite anyone shared pointed at a Telegram bot that has
-   * never existed, so the referral feature could not have worked once, and the
-   * friend received a dead link with our name on it.
-   *
-   * It now points at the site, which is where the app actually lives.
-   * `publicAppUrl` resolves the configured origin rather than
-   * window.location, because inside the APK that is https://localhost and the
-   * invite would send people to their own phone.
+   * The official bot is the shortest, most useful referral entry point: its
+   * Main Mini App opens directly and Telegram forwards startapp=CODE as the
+   * signed Web App start_param. telegramBotStartAppUrl owns the public bot
+   * identity, validates the parameter and falls back to the bare bot link if
+   * a corrupted local refCode somehow reaches this point.
    */
-  const inviteUrl = `${publicAppUrl('/')}?ref=${encodeURIComponent(refCode)}`;
+  const inviteUrl = telegramBotStartAppUrl(refCode);
 
   const tier = tierFor(points);
   const next = nextTier(points);

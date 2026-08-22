@@ -26,6 +26,7 @@ import {
   fetchTrending,
 } from './providers.js';
 import { telegramAuth, verifyInitData } from './telegramAuth.js';
+import { telegramBotIdentity } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
@@ -337,7 +338,7 @@ app.use(telegramAuth(BOT_TOKEN)); // optional — populates req.tgUser when pres
  */
 app.get('/api/telegram/diagnose', (req, res) => {
   const initData = req.get('x-telegram-init-data') || req.query.initData || '';
-  const botId = BOT_TOKEN.includes(':') ? BOT_TOKEN.split(':')[0] : null;
+  const identity = telegramBotIdentity(BOT_TOKEN);
   const params = new URLSearchParams(typeof initData === 'string' ? initData : '');
   const authDate = Number(params.get('auth_date') || 0);
   const verified = initData ? verifyInitData(initData, BOT_TOKEN) : { ok: false, reason: 'NO_INIT_DATA_SENT' };
@@ -345,8 +346,11 @@ app.get('/api/telegram/diagnose', (req, res) => {
   res.set('cache-control', 'private, no-store');
   return res.json({
     data: {
-      botTokenConfigured: Boolean(BOT_TOKEN),
-      botId,
+      // Only public identity metadata; the token never leaves the server.
+      botTokenConfigured: identity.tokenConfigured,
+      botId: identity.configuredBotId,
+      expectedBotId: identity.expectedBotId,
+      botIdentityMatches: identity.identityMatches,
       initDataReceived: Boolean(initData),
       initDataLength: String(initData).length,
       hashPresent: params.has('hash'),
@@ -1073,11 +1077,15 @@ app.get('/api/health', (_req, res) => {
    */
   const snap = servingSnapshot();
   const m = snap?.manifest ?? null;
+  const telegram = telegramBotIdentity(BOT_TOKEN);
   res.json({
     ok: true,
     uptime: process.uptime(),
     cache: cacheStats(),
-    bot: Boolean(BOT_TOKEN),
+    // Kept for backwards-compatible health checks; use telegram below for
+    // the public ID match that matters after a bot migration.
+    bot: telegram.tokenConfigured,
+    telegram,
     /* Config flags only — no store reads. /api/ecosystem/status has the counts. */
     ecosystem: {
       durableStore: blobConfigured(),

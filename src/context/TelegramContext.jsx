@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { captureReferral } from '../lib/referral';
 
 const TelegramContext = createContext(null);
 
@@ -17,6 +18,15 @@ export function TelegramProvider({ children }) {
     tg.expand?.();
     tg.disableVerticalSwipes?.(); // stops the sheet closing while dragging charts
     setUser(tg.initDataUnsafe?.user ?? null);
+
+    /*
+     * A direct Main Mini App link carries `startapp=CODE`; Telegram makes that
+     * value available only inside the signed Web App payload. Capture it here
+     * after the provider has access to initDataUnsafe. The referral module is
+     * first-touch-wins, so this cannot overwrite a normal ?ref= link or a
+     * previously attributed user.
+     */
+    captureReferral('', tg.initDataUnsafe?.start_param);
 
     // Force our own black chrome instead of the user's Telegram theme.
     tg.setHeaderColor?.('#000000');

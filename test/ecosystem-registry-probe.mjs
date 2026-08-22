@@ -386,6 +386,8 @@ try {
     const signedBody = await signed.json();
     t('Telegram diagnosis verifies a signed initData and returns the user id',
       signed.status === 200 && signedBody.data?.verified === true && signedBody.data?.reason === 'OK' && signedBody.data?.userId === '4242');
+    t('Telegram diagnosis exposes only the expected public bot identity match status',
+      signedBody.data?.expectedBotId === '7837421575' && typeof signedBody.data?.botIdentityMatches === 'boolean');
 
     const forgedParams = new URLSearchParams(initData(4242));
     forgedParams.set('hash', '0'.repeat(64));
@@ -539,6 +541,8 @@ try {
     const health = await (await fetch(base + '/api/health')).json();
     t('health reports the registry configuration without reading the store',
       health.ecosystem?.publishRequiresCertification === true && typeof health.ecosystem?.certificationIssuerConfigured === 'boolean');
+    t('health makes the expected Telegram bot ID and token-ID match observable',
+      health.telegram?.expectedBotId === '7837421575' && typeof health.telegram?.identityMatches === 'boolean');
   }
   for (const path of ['/api/ecosystem/certifier', '/api/ecosystem/review/queue']) {
     const res = await fetch(base + path, { headers: { accept: 'application/json' } });
