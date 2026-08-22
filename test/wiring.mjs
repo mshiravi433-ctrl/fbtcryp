@@ -6963,8 +6963,8 @@ export default function run() {
     const libCode = code(lib);
     t('the client calls OUR api, so the fee fields stay unforgeable',
       /\/solana\/oo\/quote/.test(libCode) && /\/solana\/oo\/swap/.test(libCode));
-    t('...and never calls OpenOcean from the browser, which would expose them',
-      !/open-api\.openocean\.finance/.test(libCode));
+    t('...and never calls OpenOcean/De¹ from the browser, which would expose them',
+      !/open-api\.openocean\.finance/.test(libCode) && !/open-api[a-z-]*\.de1\.exchange/.test(libCode));
 
     /*
      * THE LINK THAT MATTERS MOST: the page must actually use it. A perfect

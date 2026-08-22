@@ -1,6 +1,20 @@
 /**
- * SOLANA SWAP VIA OPENOCEAN — the fee-earning path that costs us nothing
+ * SOLANA SWAP VIA DE¹ EXCHANGE (formerly OpenOcean) — the fee-earning path
  * ---------------------------------------------------------------------------
+ * OpenOcean rebranded to De¹ Exchange. The v4 API shape is identical
+ * (see https://docs.de1.exchange/docs/swap-api/v4) — same params, same
+ * `referrer`/`referrerFee`, same { code: 200, data: { outAmount } } envelope.
+ *
+ * The Solana route is whitelist-gated: docs state "Non-EVM chain (Solana) is
+ * available only to whitelisted users with an authorized API key". The old
+ * public host (open-api.openocean.finance) stopped answering Solana quotes in
+ * 2026-08 (it sits behind a Cloudflare interstitial and returns no JSON), so
+ * the fee-earning route now calls the De¹ Enterprise endpoint with the
+ * OPENOCEAN_API_KEY attached server-side. EVM stays on the public keyless
+ * host because src/lib/openocean.js runs in the browser and must never hold a
+ * key. If the Enterprise call is rejected or unreachable, the client falls
+ * back to Jupiter exactly as before.
+ *
  * ─── WHY THIS EXISTS ALONGSIDE server/solana.js ─────────────────────────────
  * Jupiter earns us nothing today and CANNOT be made to without spending money.
  * Its fee mechanism needs a `referralAccount` plus a `referralTokenAccount`
@@ -16,9 +30,11 @@
  * So the Jupiter path is not "nearly earning". It is structurally earning zero
  * and looks identical to a working integration from the outside.
  *
- * OpenOcean takes a plain wallet address as `referrer` and splits the fee
- * inside the swap transaction itself. No account creation, no rent.
- * OpenOcean v4 Solana is open and fee-earning keylessly (verified on-chain).
+ * De¹/OpenOcean takes a plain wallet address as `referrer` and splits the fee
+ * inside the swap transaction itself. No account creation, no rent. The fee
+ * mechanism was verified on-chain on the original OpenOcean host; the route
+ * now calls the De¹ Enterprise host, which requires the OPENOCEAN_API_KEY
+ * (the v4 request/response shape is unchanged).
  *
  * ─── THE FEE IS VERIFIED, NOT ASSUMED ───────────────────────────────────────
  * A field echoed back in JSON proves nothing — the KyberSwap fee bug in this
@@ -41,8 +57,10 @@
  * 9609fac2821a67ab58b4717e7d68d79652cc3bd51bd3d595fd485966dd173541, which is
  * present in the transaction's account table. The fee is real.
  *
- * ─── WHY THE PROXY, GIVEN THERE IS NO KEY TO HIDE ───────────────────────────
- * Not for secrecy. For CONTROL OF THE FEE FIELDS.
+ * ─── WHY THE PROXY, BESIDES KEEPING THE KEY SERVER-SIDE ─────────────────────
+ * The Enterprise key must never reach the browser, which is one reason the
+ * request is made server-side. But the proxy is not only for secrecy — it is
+ * for CONTROL OF THE FEE FIELDS.
  *
  * If the browser called OpenOcean directly, `referrer` and `referrerFee` would
  * be attacker-editable: anyone could point our revenue at their own wallet, or
@@ -57,21 +75,27 @@
  * nothing here can move funds on its own.
  */
 
-const OO_BASE = 'https://open-api.openocean.finance/v4/solana';
+/*
+ * De¹ Enterprise host for the whitelist-gated Solana API. The v4 path and
+ * response shape are unchanged from OpenOcean; only the host and the
+ * now-required key differ. Override is for tests/emergency only and must
+ * never point at a host that leaks the key to the browser.
+ */
+const OO_BASE =
+  String(process.env.SOLANA_OO_BASE || 'https://open-api-enterprise.de1.exchange/v4/solana').replace(/\/+$/, '');
 const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 15000);
 
 /*
- * ─── OPENOCEAN SOLANA IS KEYLESS & FEE-EARNING OUT OF THE BOX ───────────────
- * OpenOcean v4 Solana accepts `referrer` and `referrerFee` keylessly,
- * splitting 80% (56 bps net) to our Solana payout wallet inside the swap
- * transaction itself (verified on-chain with 1 SOL -> USDC).
+ * ─── DE¹ SOLANA IS WHITELIST-GATED: THE KEY IS REQUIRED ─────────────────────
+ * The Enterprise endpoint rejects Solana calls without an authorized API key
+ * ("No API key found in request"). OPENOCEAN_API_KEY is attached server-side
+ * as x-api-key and never reaches the client. With a valid key the endpoint
+ * honours `referrer` and `referrerFee`, splitting 80% (56 bps net) to our
+ * Solana payout wallet inside the swap transaction itself (verified on-chain
+ * with 1 SOL -> USDC on the OpenOcean host before the rebrand).
  *
- * No whitelist form, no API key, and no 0.02 SOL referral account rent
- * required.
- *
- * An optional API key (OPENOCEAN_API_KEY) is attached server-side if present
- * in environment variables. If OpenOcean is unreachable or rate-limited, the
- * client falls back to Jupiter as insurance.
+ * If the key is missing, rejected or the host is unreachable, the client
+ * falls back to Jupiter as insurance. The fallback behaviour is unchanged.
  */
 const apiKey = () => String(process.env.OPENOCEAN_API_KEY || '').trim();
 
@@ -128,10 +152,10 @@ async function ooFetch(path) {
   try {
     const headers = { accept: 'application/json' };
     /*
-     * Solana requires the whitelist key (see the note at the top). EVM never
-     * does — attaching it there would be harmless but would make the header
-     * look load-bearing where it is not, so it goes on only when present.
-     * OpenOcean's documented header is x-api-key, the same one Jupiter uses.
+     * The De¹ Enterprise Solana endpoint requires the whitelist key (see the
+     * note at the top). It is attached only here, server-side; the EVM client
+     * in src/lib/openocean.js runs in the browser and has no key. De¹'s
+     * documented header is x-api-key, the same one Jupiter uses.
      */
     const key = apiKey();
     if (key) headers['x-api-key'] = key;
@@ -207,13 +231,15 @@ function slippagePercent(bps) {
 /**
  * True when a swap through here will actually pay us. Reported by /status.
  *
- * OpenOcean accepts our `referrer` and `referrerFee` keylessly on Solana,
- * splitting 80% of the 70 bps fee directly to our fee wallet inside the
- * transaction. An API key is optional and attached if configured.
+ * With a valid Enterprise key, De¹ honours our `referrer` and `referrerFee`
+ * on Solana, splitting 80% of the 70 bps fee directly to our fee wallet
+ * inside the transaction. The key is required on this host; without it the
+ * call is rejected and the client falls back to Jupiter (which earns
+ * nothing), so feeReady also requires the key.
  */
-export const feeReady = () => Boolean(feeReceiver()) && feeBps() > 0;
+export const feeReady = () => Boolean(feeReceiver()) && feeBps() > 0 && Boolean(apiKey());
 
-/** True when the optional whitelist key is present. */
+/** True when the whitelist key for the De¹ Enterprise Solana endpoint is present. */
 export const keyConfigured = () => Boolean(apiKey());
 
 /**
@@ -357,20 +383,21 @@ export async function oceanSwap(query) {
 /**
  * Honest status, for the UI and for anyone debugging a silent zero.
  *
- * OpenOcean works keylessly on Solana while earning our 70 bps fee.
- * `keyConfigured` reports whether an optional OPENOCEAN_API_KEY is present,
- * and `solanaKeyRequired` is false.
+ * The De¹ Enterprise Solana endpoint requires an OPENOCEAN_API_KEY. With it,
+ * the route earns our 70 bps fee; without it the call is rejected and the
+ * screen falls back to Jupiter. `keyConfigured` reports whether the key is
+ * present and `solanaKeyRequired` is true on this host.
  */
 export function oceanStatus() {
   return {
     provider: 'openocean',
     keyConfigured: keyConfigured(),
-    // Solana key is optional; OpenOcean Solana works keylessly.
-    solanaKeyRequired: false,
+    // The De¹ Enterprise host requires an authorized Solana API key.
+    solanaKeyRequired: true,
     feeReady: feeReady(),
     feeBps: feeBps(),
     feeReceiver: feeReceiver() || null,
-    // OpenOcean's documented share of our fee.
+    // De¹/OpenOcean's documented share of our fee.
     providerCutPercent: 20
   };
 }

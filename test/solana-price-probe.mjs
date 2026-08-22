@@ -1,23 +1,27 @@
 /**
  * SOLANA PRICE PROBE — server half of «در سولنا اصلا قیمت نشان داده نمیشه»
  * ---------------------------------------------------------------------------
- * Live tests confirmed OpenOcean v4 Solana is open without an API key and
- * accepts our 70 bps fee (80% net to fee wallet) inside the swap transaction.
+ * The Solana route calls De¹ Exchange's Enterprise endpoint
+ * (open-api-enterprise.de1.exchange, the rebranded OpenOcean v4 API). Solana
+ * is whitelist-gated there: an OPENOCEAN_API_KEY is required, and the 70 bps
+ * fee (80% net to our fee wallet) is attached server-side.
  *
  * This probe (server side, real HTTP through server/app.js with the upstream
  * stubbed) proves:
  *
- *   1. Keyless status reports feeReady: true, solanaKeyRequired: false, and
- *      keyConfigured: false.
- *   2. Keyless quotes and swaps earn 70 bps out of the box with referrer and
- *      referrerFee=0.7 attached server-side (unforgeable from the browser).
+ *   1. Keyless status honestly reports keyConfigured: false,
+ *      solanaKeyRequired: true and feeReady: false (no key -> no fee route;
+ *      the client falls back to Jupiter).
+ *   2. With the key configured, quotes and swaps attach referrer and
+ *      referrerFee=0.7 server-side (unforgeable from the browser) and carry
+ *      x-api-key.
  *   3. Upstream amount errors (e.g. too-small amounts) are cleanly distinguished
  *      as 400 BAD_AMOUNT rather than generic network/connectivity failures.
  *   4. Upstream whitelist/auth refusals (403/401) are passed through for
  *      the client's Jupiter fallback.
- *   5. Optional OPENOCEAN_API_KEY is attached server-side (x-api-key) when
- *      configured, and never echoed.
- *   6. /api/revenue/readiness reports swap-solana as live: true keylessly.
+ *   5. OPENOCEAN_API_KEY is attached server-side (x-api-key) when configured,
+ *      and never echoed.
+ *   6. /api/revenue/readiness reflects the keyed state.
  *   7. The Jupiter proxy (insurance fallback) answers keyless and keyed.
  *
  * Standalone:
@@ -31,6 +35,11 @@ const rows = [];
 const t = (name, ok) => rows.push([name, Boolean(ok)]);
 
 process.env.RATE_LIMIT = process.env.RATE_LIMIT || '100000';
+// SOLANA_OO_BASE is pinned in test/run.mjs before server/app.js loads, so the
+// upstream fetch below is intercepted against the stub host. When this file is
+// run standalone, set it here too (the real Enterprise host requires a live
+// whitelist key we never put in tests).
+process.env.SOLANA_OO_BASE = process.env.SOLANA_OO_BASE || 'https://ocean-stub.invalid/v4/solana';
 
 const SOL = 'So11111111111111111111111111111111111111112';
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -71,7 +80,7 @@ function installUpstreamStub() {
     const h = init?.headers || {};
     const key = h['x-api-key'] ?? h['X-Api-Key'] ?? (h instanceof Headers ? h.get('x-api-key') : null);
 
-    if (u.startsWith('https://open-api.openocean.finance/v4/solana')) {
+    if (u.startsWith('https://ocean-stub.invalid/v4/solana')) {
       weather.oceanKeys.push(key ?? null);
       weather.oceanUrls.push(u);
       if (weather.ocean === 'bad-amount') {
@@ -165,31 +174,23 @@ try {
     const body = await res.json();
     t('status answers without a key', res.status === 200);
     t('keyConfigured is false without the key', body.keyConfigured === false);
-    t('feeReady is true without a key (keyless fee supported)', body.feeReady === true);
-    t('solanaKeyRequired is false (key is optional)', body.solanaKeyRequired === false);
+    t('feeReady is false without the key (Enterprise requires it)', body.feeReady === false);
+    t('solanaKeyRequired is true (Enterprise host)', body.solanaKeyRequired === true);
     t('...and still reports the house rate', body.feeBps === 70);
   }
 
-  /* ------------------ 2. keyless quote & swap (earns out of the box) ------------------ */
-  weather.ocean = 'ok';
-  weather.expectedKey = null;
+  /* ------------------ 2. keyless call is rejected (client falls back to Jupiter) --- */
+  weather.ocean = 'reject-401';
+  weather.expectedKey = 'probe-ocean-key';
   clearWeather();
   {
     const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
-    const body = await res.json();
-    t('a keyless quote answers 200', res.status === 200);
-    t('the quote carries the price', body.outAmount === '265000000');
-    t('...and the fee the route will take', body.feeBps === 70);
+    t('a keyless quote is rejected by the Enterprise whitelist', res.status === 401);
     t('the outgoing call carried no x-api-key', weather.oceanKeys.every((k) => k === null));
+    /* The fee fields are still assembled server-side; the upstream simply
+       refuses before pricing, which is what triggers the Jupiter fallback. */
     t('and the fee fields our server owns (unforgeable from the browser)',
       weather.oceanUrls.some((u) => u.includes(`referrer=${WIFER}`) && u.includes('referrerFee=0.7')));
-  }
-  {
-    const res = await fetch(`${base}/api/solana/oo/swap?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&account=${WIFER}&slippageBps=50`);
-    const body = await res.json();
-    t('a keyless swap builds the unsigned transaction', res.status === 200 && body.transaction === OCEAN_TX);
-    t('...and the echo check confirms the fee was honoured', body.feeApplied === true);
-    t('versioned is passed through for the right deserialiser', body.versioned === true);
   }
 
   /* ------------------ 3. amount error discrimination ------------------ */
@@ -217,7 +218,7 @@ try {
     t('...and the 401 refusal is passed through too', res.status === 401);
   }
 
-  /* ------------------ 5. WITH OPTIONAL KEY: key is attached ------------------ */
+  /* ------------------ 5. WITH THE ENTERPRISE KEY: quote & swap earn the fee ---- */
   weather.ocean = 'ok';
   weather.expectedKey = 'probe-ocean-key';
   process.env.OPENOCEAN_API_KEY = 'probe-ocean-key';
@@ -226,7 +227,7 @@ try {
     const res = await fetch(`${base}/api/solana/oo/status`);
     const body = await res.json();
     t('keyConfigured flips true the moment the key is set', body.keyConfigured === true);
-    t('feeReady stays true (key + receiver + rate)', body.feeReady === true);
+    t('feeReady is true once key + receiver + rate are all present', body.feeReady === true);
   }
   {
     const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
@@ -235,12 +236,15 @@ try {
     t('the quote carries the price', body.outAmount === '265000000');
     t('...and the fee the route will take', body.feeBps === 70);
     t('the outgoing call carried x-api-key', weather.oceanKeys.includes('probe-ocean-key'));
+    t('and the fee fields our server owns (unforgeable from the browser)',
+      weather.oceanUrls.some((u) => u.includes(`referrer=${WIFER}`) && u.includes('referrerFee=0.7')));
   }
   {
     const res = await fetch(`${base}/api/solana/oo/swap?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&account=${WIFER}&slippageBps=50`);
     const body = await res.json();
     t('a keyed swap builds the unsigned transaction', res.status === 200 && body.transaction === OCEAN_TX);
     t('...and the echo check confirms the fee was honoured', body.feeApplied === true);
+    t('versioned is passed through for the right deserialiser', body.versioned === true);
   }
   {
     const res = await fetch(`${base}/api/solana/oo/status`);
@@ -271,13 +275,14 @@ try {
     delete process.env.JUPITER_API_KEY;
   }
 
-  /* ---------------- 7. revenue readiness ---------------- */
+  /* ---------------- 7. revenue readiness follows the key ---------------- */
+  process.env.OPENOCEAN_API_KEY = 'probe-ocean-key';
   {
     const res = await fetch(`${base}/api/revenue/readiness`);
     const body = await res.json();
     const row = body.lines?.find((l) => l.id === 'swap-solana');
     t('revenue readiness reports the swap-solana line', Boolean(row));
-    t('...and it is earning (live: true) keylessly', row && row.live === true);
+    t('...and it is earning (live: true) once the Enterprise key is set', row && row.live === true);
     t('...while naming the fallback that keeps the swap alive', row && /jupiter fallback/i.test(row.note));
   }
 } finally {

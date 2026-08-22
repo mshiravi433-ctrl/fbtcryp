@@ -27,6 +27,14 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 process.env.RATE_LIMIT = process.env.RATE_LIMIT || '100000';
 process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT || '3';
 /*
+ * server/solanaOcean.js reads its upstream base once at module load. The
+ * Solana price probe intercepts fetch against a stub host; if a different
+ * probe imports server/app.js first, the real Enterprise host gets cached and
+ * the stub never matches. Pin the stub host here, before any import, exactly
+ * like RATE_LIMIT above. (A real key is never present in tests.)
+ */
+process.env.SOLANA_OO_BASE = process.env.SOLANA_OO_BASE || 'https://ocean-stub.invalid/v4/solana';
+/*
  * The same trap, one budget over: the intent probe walks the full
  * claim/dispute/adjudication/cross-chain lifecycle and exceeds the
  * production settlement budget of 20/min — which it raises to 100 BEFORE
