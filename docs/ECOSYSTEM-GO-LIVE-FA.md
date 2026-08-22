@@ -25,24 +25,71 @@ curl -s https://fbtswap.ir/api/ecosystem/status | jq
 
 ---
 
-## گام ۰.۵ — تلگرام را وصل کن
+## گام ۰.۵ — تلگرام را با ربات جدید وصل کن
+
+ربات رسمی فعلی این اپ:
+
+- آدرس: [@fbtco_bot](https://t.me/fbtco_bot)
+- Bot ID عمومی: `7837421575`
 
 این مرحله برای خطای `AUTH_REQUIRED` داخل Mini App حیاتی است: `initData` باید
-با **همان رباتی** امضا شده باشد که توکنش در Vercel تنظیم شده است.
+با **همین ربات** امضا شده باشد که توکنش در Vercel تنظیم شده است. خودِ Bot ID
+راز نیست و به‌تنهایی نمی‌تواند نشست را تأیید کند؛ برای امضای Mini App حتماً
+**توکن کامل و خصوصی BotFather** لازم است.
 
-۱. اول در `https://fbtswap.ir/api/health` فیلد `"bot"` را چک کن. مقدار `true`
-یعنی `TELEGRAM_BOT_TOKEN` در محیط دیپلوی تنظیم شده است؛ `false` یعنی هیچ
-نشست Mini Appای نمی‌تواند روی سرور تأیید شود.
-۲. در [@BotFather](https://t.me/BotFather) برای ربات توکن بگیر. اگر توکن قبلی
-در چت یا جای عمومی لو رفته، همان‌جا با `/revoke` باطلش کن و فقط توکن جدید را
-استفاده کن.
-۳. در **Vercel → پروژه → Settings → Environment Variables** متغیر
-`TELEGRAM_BOT_TOKEN` را در محیط درست بگذار، سپس **Redeploy** کن. متغیر در زمان
-بوت خوانده می‌شود و با ذخیره‌کردن بدون دیپلوی عوض نمی‌شود.
-۴. در BotFather مسیر **`/mybots → Bot Settings → Menu Button`** را باز کن و
-آدرس `https://fbtswap.ir` را به‌عنوان Web App URL بگذار. اپ را باید از همین
-Menu Button باز کنی؛ بازکردن یک لینک معمولی در مرورگر داخلی تلگرام،
-`initData` امضاشدهٔ Mini App را تضمین نمی‌کند.
+۱. بعد از دیپلوی، وضعیت را چک کن:
+
+   ```bash
+   curl -s https://fbtswap.ir/api/health | jq '.telegram'
+   ```
+
+   انتظار این است:
+
+   ```json
+   {
+     "expectedBotId": "7837421575",
+     "configuredBotId": "7837421575",
+     "tokenConfigured": true,
+     "identityMatches": true
+   }
+   ```
+
+   `bot: true` به‌تنهایی فقط می‌گوید یک توکن وجود دارد؛ `identityMatches:
+   true` ثابت می‌کند پیشوند همان توکن با ربات جدید یکی است.
+
+۲. در [@BotFather](https://t.me/BotFather) → `/mybots` → **@fbtco_bot** توکن
+   کامل ربات جدید را بگیر. اگر توکن قبلی در چت یا جای عمومی لو رفته، همان‌جا
+   با `/revoke` باطلش کن. **توکن را در چت، کد، فایل `.env` کامیت‌شده، یا
+   GitHub Variables قرار نده.**
+
+۳. در **Vercel → پروژهٔ `fbtcryp-kkxi` → Settings → Environment Variables**
+   این دو مقدار را در محیط Production (و اگر Preview را تست می‌کنی، Preview)
+   بگذار و بعد **Redeploy** کن:
+
+   | نام | مقدار |
+   |---|---|
+   | `TELEGRAM_BOT_TOKEN` | توکن کاملِ خصوصیِ @fbtco_bot |
+   | `TELEGRAM_BOT_ID` | `7837421575` |
+
+   مقدار دوم عمومی و فقط برای تشخیص ناسازگاری است؛ اولی راز است و تنها مقداری
+   است که امضای Telegram را تأیید می‌کند. متغیرها در زمان بوت خوانده می‌شوند،
+   بنابراین صرفِ Save کردن بدون Redeploy کافی نیست.
+
+۴. در BotFather برای **@fbtco_bot** مسیر **`/mybots → Bot Settings → Menu
+   Button`** (یا **Main Mini App**) را باز کن و `https://fbtswap.ir` را به‌عنوان
+   Web App URL بگذار. سپس با [@fbtco_bot](https://t.me/fbtco_bot) ربات را باز
+   و دکمهٔ Open/Menu را لمس کن. بازکردن یک لینک عادی در مرورگر داخلی تلگرام
+   `initData` امضاشدهٔ Mini App را تضمین نمی‌کند.
+
+۵. لینک‌های دعوت اکنون به شکل
+   `https://t.me/fbtco_bot?startapp=<referral-code>` ساخته می‌شوند. Telegram
+   پارامتر را به Mini App می‌رساند و اپ آن را یک‌بار ثبت می‌کند؛ در نتیجه
+   referral در فاصلهٔ بازشدن ربات تا ورود به اپ گم نمی‌شود.
+
+اگر همین ربات برای پست‌گذاری کانال GitHub Actions هم استفاده می‌شود، در
+**GitHub → Settings → Secrets and variables → Actions → Secrets** مقدار
+`TELEGRAM_BOT_TOKEN` را هم با توکن جدید عوض کن؛ آنجا باید **Secret** باشد، نه
+Variable.
 
 روی Vercel پردازهٔ polling ربات اجرا نمی‌شود و برای Mini App هم لازم نیست.
 Mini App فقط `initData` را می‌فرستد و سرور امضای آن را با توکن بررسی می‌کند؛
@@ -50,7 +97,8 @@ polling برای پاسخ‌دادن به پیام‌های ربات است، ن
 
 برای علت دقیق، بدون هدر به `/api/telegram/diagnose` برو و سپس همان درخواست را
 از داخل Mini App با هدر واقعی `x-telegram-init-data` تکرار کن. این endpoint
-هیچ توکنی برنمی‌گرداند و فقط وضعیت امضا، عمر نشست و `botId` عمومی را نشان می‌دهد.
+هیچ توکنی برنمی‌گرداند و فقط وضعیت امضا، عمر نشست، Bot ID پیکربندی‌شده و
+`botIdentityMatches` عمومی را نشان می‌دهد.
 
 ---
 

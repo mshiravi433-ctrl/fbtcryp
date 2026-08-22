@@ -2209,34 +2209,41 @@ export default function run() {
     );
   }
 
-  /* ---- 25. the invite link must point somewhere real --------------------- */
+  /* ---- 25. the invite link must point at the current real bot --------- */
   /*
-   * REAL BUG found while building the referral system: the invite URL was
+   * A literal `your_bot_username` once made every invite dead. A web URL then
+   * avoided the placeholder but skipped the Telegram Mini App entirely. The
+   * actual launch path is the canonical bot's Main Mini App direct link:
    *
-   *   https://t.me/your_bot_username?start=CODE
+   *   https://t.me/fbtco_bot?startapp=CODE
    *
-   * A literal placeholder. Every invite anyone ever shared pointed at a
-   * Telegram bot that has never existed, so the referral feature could not
-   * have worked once — and the friend received a dead link with our name on
-   * it, which costs more than the referral was worth.
-   *
-   * It now points at the site with ?ref=, built from the configured origin
-   * rather than window.location: inside the APK that is https://localhost and
-   * the invite would send people to their own phone.
+   * Telegram exposes CODE as initDataUnsafe.start_param, so the client must
+   * record both the usual browser ?ref= and that Telegram-only launch value.
    */
   {
     const earn = read('src/pages/Earn.jsx');
     const strip = (src) =>
       src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
     const code = strip(earn);
+    const bot = strip(read('src/lib/telegramBot.js'));
+    const ref = strip(read('src/lib/referral.js'));
+    const telegramContext = strip(read('src/context/TelegramContext.jsx'));
 
     t('the invite link has no placeholder host', !/your_bot_username/.test(code));
-    t('the invite link is built from the public origin', /publicAppUrl\(/.test(code));
-    t('the invite link carries a ref parameter', /\?ref=/.test(code));
-    t('the invite code is url-encoded', /encodeURIComponent\(refCode\)/.test(code));
+    t('the invite link uses the centralized bot-link helper',
+      /telegramBotStartAppUrl\(refCode\)/.test(code));
+    t('the public bot identity names fbtco_bot',
+      /DEFAULT_BOT_USERNAME\s*=\s*'fbtco_bot'/.test(bot) && /https:\/\/t\.me\/\$\{TELEGRAM_BOT_USERNAME\}/.test(bot));
+    t('the public bot ID is 7837421575', /DEFAULT_BOT_ID\s*=\s*'7837421575'/.test(bot));
+    t('the direct Mini App referral link uses startapp, not a chat-only start link',
+      /\?startapp=/.test(bot) && !/\?start=/.test(bot));
 
     // The capture side must run, or codes are shared and never recorded.
-    t('referrals are captured at boot', /captureReferral\(\)/.test(strip(read('src/App.jsx'))));
+    t('browser referrals are captured at boot', /captureReferral\(\)/.test(strip(read('src/App.jsx'))));
+    t('Telegram start_param referrals are captured after Mini App init',
+      /captureReferral\('',\s*tg\.initDataUnsafe\?\.start_param\)/.test(telegramContext));
+    t('the referral parser accepts Telegram launch parameters',
+      /tgWebAppStartParam/.test(ref) && /telegramStartParam/.test(ref));
 
     /*
      * The referral must NOT try to split the fee on-chain. The aggregator
@@ -2246,7 +2253,6 @@ export default function run() {
      */
     // Comments stripped: the module DOCUMENTS why it does not split on-chain,
     // and matching that prose would fail for explaining itself.
-    const ref = strip(read('src/lib/referral.js'));
     t('the referral module does not touch the fee receiver', !/feeRecipientFor|feeReceiver/.test(ref));
     t('the referral share is documented as a share of OUR fee', /REFERRAL_SHARE/.test(ref));
   }

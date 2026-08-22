@@ -23,16 +23,49 @@ const fmtUsd = (v) => {
 const arrow = (v) => (v >= 0 ? '🟢' : '🔴');
 const pct = (v) => `${v >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`;
 
+// Keep Bot API /start payloads on the same strict shape as browser referrals.
+// It prevents arbitrary Telegram message text from becoming part of an HTML
+// reply or of a Web App URL.
+const REFERRAL_CODE_RE = /^[A-Za-z0-9_-]{4,32}$/;
+const validReferralCode = (value) => {
+  const code = String(value ?? '').trim();
+  return REFERRAL_CODE_RE.test(code) ? code : null;
+};
+
+/**
+ * Add a verified /start referral to the Web App button. This is a useful
+ * fallback for a self-hosted polling bot: t.me/bot?start=CODE opens a chat,
+ * and the next tap must not lose CODE before the app loads.
+ */
+export function webAppUrlForStart(webAppUrl, startPayload = '') {
+  if (!webAppUrl) return '';
+  const code = validReferralCode(startPayload);
+  if (!code) return webAppUrl;
+  try {
+    const url = new URL(webAppUrl);
+    url.searchParams.set('ref', code);
+    return url.toString();
+  } catch {
+    // WEBAPP_URL is operator-controlled. Preserve it unchanged rather than
+    // making /start unusable because of a malformed local configuration.
+    return webAppUrl;
+  }
+}
+
+function launchKeyboard(webAppUrl, startPayload = '') {
+  const url = webAppUrlForStart(webAppUrl, startPayload);
+  return url
+    ? { reply_markup: { inline_keyboard: [[{ text: '🚀 Open FBT SWAP', web_app: { url } }]] } }
+    : undefined;
+}
+
 export async function startBot({ token, webAppUrl }) {
   const bot = new Telegraf(token);
 
-  const launchKeyboard = webAppUrl
-    ? { reply_markup: { inline_keyboard: [[{ text: '🚀 Open FBT SWAP', web_app: { url: webAppUrl } }]] } }
-    : undefined;
-
   bot.start(async (ctx) => {
     const name = ctx.from?.first_name ?? 'trader';
-    const referral = ctx.startPayload ? `\n🎟 Referral code: <code>${ctx.startPayload}</code>` : '';
+    const referralCode = validReferralCode(ctx.startPayload);
+    const referral = referralCode ? `\n🎟 Referral code: <code>${referralCode}</code>` : '';
     /*
      * ─── A FALSE SAFETY CLAIM, NOW REMOVED ────────────────────────────────
      * This used to say "Everything runs on virtual NX credits." That was true
@@ -55,7 +88,7 @@ export async function startBot({ token, webAppUrl }) {
         `Live market data and a non-custodial swap across 10 networks — you hold your own keys, and you sign every trade yourself.${referral}\n\n` +
         `<i>⚠️ Swaps move real funds and on-chain transactions cannot be reversed. This bot never takes deposits, never holds your keys, and will never ask you to send crypto anywhere.</i>\n\n` +
         `Commands: /price /top /global /trending /help`,
-      launchKeyboard
+      launchKeyboard(webAppUrl, referralCode)
     );
   });
 
@@ -68,12 +101,12 @@ export async function startBot({ token, webAppUrl }) {
         `/trending — what's hot right now\n` +
         `/global — total market snapshot\n\n` +
         `⚠️ Nothing here is financial advice. Crypto is volatile and you can lose everything.`,
-      launchKeyboard
+      launchKeyboard(webAppUrl)
     )
   );
 
   bot.command('app', (ctx) =>
-    ctx.reply(webAppUrl ? 'Tap to open 👇' : 'WEBAPP_URL is not configured on the server.', launchKeyboard)
+    ctx.reply(webAppUrl ? 'Tap to open 👇' : 'WEBAPP_URL is not configured on the server.', launchKeyboard(webAppUrl))
   );
 
   bot.command('global', async (ctx) => {
@@ -86,7 +119,7 @@ export async function startBot({ token, webAppUrl }) {
           `BTC dominance: <b>${g.btcDominance.toFixed(2)}%</b>\n` +
           `ETH dominance: <b>${g.ethDominance.toFixed(2)}%</b>\n` +
           `Coins: ${g.coins.toLocaleString()} · Markets: ${g.markets.toLocaleString()}`,
-        launchKeyboard
+        launchKeyboard(webAppUrl)
       );
     } catch {
       await ctx.reply('Market data is temporarily unavailable. Try again in a minute.');
@@ -99,7 +132,7 @@ export async function startBot({ token, webAppUrl }) {
       const lines = coins
         .map((c, i) => `${String(i + 1).padStart(2)}. <b>${c.symbol}</b> ${fmtUsd(c.price)} ${arrow(c.change24h)} ${pct(c.change24h)}`)
         .join('\n');
-      await ctx.replyWithHTML(`<b>🏆 Top 10 by market cap</b>\n\n${lines}`, launchKeyboard);
+      await ctx.replyWithHTML(`<b>🏆 Top 10 by market cap</b>\n\n${lines}`, launchKeyboard(webAppUrl));
     } catch {
       await ctx.reply('Could not fetch the top coins right now.');
     }
@@ -109,7 +142,7 @@ export async function startBot({ token, webAppUrl }) {
     try {
       const { value: list } = await withCache('trending', 120000, fetchTrending);
       const lines = list.map((c, i) => `${i + 1}. <b>${c.symbol}</b> — ${c.name}`).join('\n');
-      await ctx.replyWithHTML(`<b>🔥 Trending</b>\n\n${lines}`, launchKeyboard);
+      await ctx.replyWithHTML(`<b>🔥 Trending</b>\n\n${lines}`, launchKeyboard(webAppUrl));
     } catch {
       await ctx.reply('Trending data is unavailable right now.');
     }
@@ -136,7 +169,7 @@ export async function startBot({ token, webAppUrl }) {
           `7d: ${arrow(coin.change7d)} ${pct(coin.change7d)}\n` +
           `Cap: ${fmtUsd(coin.mcap)} · Vol: ${fmtUsd(coin.volume)}\n\n` +
           `<i>Not financial advice.</i>`,
-        launchKeyboard
+        launchKeyboard(webAppUrl)
       );
     } catch {
       return ctx.reply('Price lookup failed. Try again shortly.');

@@ -8,7 +8,7 @@
 
 |  | اپ (تلگرام) | وب (مرورگر) |
 |---|---|---|
-| آدرس | داخل تلگرام: `@FBTswap_bot` → دکمهٔ `Open` | `https://fbtcryp.vercel.app` یا `localhost:5173` در دولوپ |
+| آدرس | داخل تلگرام: [@fbtco_bot](https://t.me/fbtco_bot) → دکمهٔ `Open` | `https://fbtswap.ir` یا `localhost:5173` در دولوپ |
 | کیف پول | WalletConnect / کیف پولِ تلگرام | MetaMask / Rabby / Trust (افزونه) |
 | باز شدنِ لینکِ خارجی (مثلاً `dydx.trade`) | `tg.openLink(url)` — تبِ مرورگرِ تلگرام | `window.open(url, '_blank')` — تبِ جدید مرورگر |
 
