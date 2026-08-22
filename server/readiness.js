@@ -59,11 +59,23 @@ export function revenueReadiness() {
       note: 'KyberSwap, 70 bps, fee echoed in every quote'
     }),
     line({
+      /*
+       * ─── THE SWAP IS ALWAYS LIVE; THE FEE IS WHAT THE KEY GATES ──────────
+       * OpenOcean's Solana endpoint moved behind a whitelist (their
+       * supported-chains docs), so without OPENOCEAN_API_KEY their route
+       * answers nothing and the client falls back to Jupiter — which keeps
+       * the screen working but, with no referral account configured, earns
+       * nothing either. This file means "earning" by `live`, so the key (or
+       * a Jupiter referral account) decides it, and the note says what a
+       * keyless deploy actually serves: free swaps, honestly announced.
+       */
       id: 'swap-solana',
-      live: true,
+      live: Boolean(env('OPENOCEAN_API_KEY') || env('JUP_REFERRAL_ACCOUNT')),
       ready: true,
+      envVar: 'OPENOCEAN_API_KEY',
       cost: 0,
-      note: 'OpenOcean, 70 bps, verified by decoding the transaction'
+      blockedBy: 'THIRD_PARTY',
+      note: 'Solana swaps always work (Jupiter fallback is keyless); the 70 bps fee needs the OpenOcean whitelist key — free to request, form in their docs. docs/SOLANA-PRICE-BUG-FA.md walks through it'
     }),
     line({
       id: 'gasless',

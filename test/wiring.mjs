@@ -6972,12 +6972,31 @@ export default function run() {
     t('...and BUILDS the swap through it', /getOceanSwap\(/.test(pageCode));
 
     /*
-     * The old Jupiter execution path must be GONE from this screen, not just
-     * unused. Left importable, a later edit re-reaches for it and silently
-     * returns the screen to earning nothing.
+     * ─── THE FALLBACK CONTRACT (2026-08: OpenOcean's Solana went key-gated) ─
+     * OpenOcean's supported-chains docs now say Solana is whitelisted-only,
+     * so while our server holds no key its route answers nothing and the
+     * screen was dead on every quote. The design that replaced the old
+     * single-provider one: quote OpenOcean FIRST (it is the route that pays
+     * us), fall back to Jupiter when it cannot answer; build the swap with
+     * the provider that PRICED it, then the other; claim a fee only when it
+     * is requested. The tests that used to assert Jupiter was GONE from this
+     * screen asserted the old design — what must be proved now is that the
+     * order and the fee claims stayed honest under the fallback.
      */
-    t('the earning-nothing Jupiter order path is no longer used here',
-      !/getSolanaOrder\(/.test(pageCode) && !/executeSolanaOrder\(/.test(pageCode));
+    const quoteEffect = page.slice(
+      page.indexOf('const id = setTimeout(async () => {'),
+      page.indexOf('}, DEBOUNCE_MS);')
+    );
+    const quoteCode = code(quoteEffect);
+    t('the quote tries OpenOcean (the fee-earning route) first',
+      /getOceanQuote\(/.test(quoteCode) &&
+      quoteCode.indexOf('getOceanQuote(') < quoteCode.indexOf('getSolanaOrder('));
+    t('...and falls back to Jupiter when OpenOcean cannot price the pair',
+      /getSolanaOrder\(/.test(quoteCode));
+    t('the swap keeps the quote\'s provider first when it builds',
+      /order\.provider === 'jupiter'/.test(pageCode));
+    t('the Jupiter execution is success-checked before any signature is shown',
+      /executeSolanaOrder\(/.test(pageCode) && /executeSucceeded\(/.test(pageCode));
 
     /*
      * Sign-AND-send, not sign-only. Jupiter lands its own transactions;
@@ -7001,11 +7020,24 @@ export default function run() {
 
     /*
      * The disclosure must follow the SAME number that is charged. It read
-     * solanaFeeReady() — a Jupiter-only flag that now answers false, which
-     * would tell every user the swap is free while charging 0.70%.
+     * solanaFeeReady() — a build-time flag that can disagree with what the
+     * quote actually requested, which is how the screen once told every user
+     * the swap was free while charging 0.70% (or the reverse). The notice
+     * therefore renders from the quote's OWN feeBps, with an explicit
+     * "no fee" line for quotes that carry none.
      */
     t('the fee notice follows the quote, so it cannot understate the charge',
-      /order\?\.feeBps/.test(pageCode) && !/solanaFeeReady\(\)\n?\s*\?/.test(pageCode));
+      /order\?\.feeBps/.test(pageCode) &&
+      /t\('solana\.feeNotice'/.test(pageCode) && /t\('solana\.feeNoneNotice'\)/.test(pageCode));
+    /*
+     * The same property on the fallback side: a Jupiter quote may only CARRY
+     * a fee number when it will actually REQUEST it. solanaFeeReady() is the
+     * flag that decides the request (lib/solana.js attaches the referral
+     * params with it), so it must be the same flag that decides the claim —
+     * anything else re-opens "announced 0.70%, charged 0".
+     */
+    t('the Jupiter fallback claims the fee only when it requests it',
+      /solanaFeeReady\(\) \? referralFeeBps\(\)/.test(pageCode));
   }
 
   /* ---- 76. cross-chain / Tron, and the fee that must cross families ----- */

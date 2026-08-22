@@ -225,6 +225,24 @@ console.log('▸ probing the calm music endpoint and filters…');
   report('calm music', calmRows);
 }
 
+/* --------------------- 0d2. Solana price (the 2026-08 outage) ------------- */
+/* Real HTTP against the real Solana routes with both upstreams stubbed. The
+   bug: OpenOcean's Solana endpoint moved behind a whitelist, so keyless
+   server calls were refused and the client read that as a dead network — no
+   price, on every user network, no matter how often it refreshed. The server
+   half proves the refusal passes through, the key is attached server-side,
+   and status/readiness report honestly; the client half (Vite-bundled, like
+   units) proves the error tags and the Jupiter fallback that keep the screen
+   alive without a key. */
+console.log('▸ probing the Solana price path (OpenOcean whitelist + Jupiter fallback)…');
+{
+  const { default: solanaServerRows } = await import('./solana-price-probe.mjs');
+  report('solana price (server: key, status, fallback proxy)', solanaServerRows);
+  npx(['vite', 'build', '-c', 'test/vite.solana-client.mjs', '--logLevel', 'error']);
+  const { default: solanaClientRows } = await import('./.out/solana-client/solana-client-probe.js');
+  report('solana price (client: error tags, Jupiter fallback)', solanaClientRows);
+}
+
 /* ------------------------------ 0e. safe refresh ---------------------------- */
 /* The refresh contract: single-flight, guard-respecting, storage-untouching. */
 console.log('▸ probing the safe-refresh contract…');

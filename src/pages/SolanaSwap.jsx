@@ -11,7 +11,13 @@ import {
   USDC_MINT,
   USDT_MINT,
   fromBaseUnits,
+  getSolanaOrder,
+  executeSolanaOrder,
+  executeSucceeded,
   isSolanaAddress,
+  orderErrorKey,
+  referralFeeBps,
+  solanaFeeReady,
   toBaseUnits
 } from '../lib/solana';
 import { getOceanQuote, getOceanSwap } from '../lib/solanaOcean';
@@ -22,6 +28,7 @@ import {
   connectSolana,
   disconnectSolana,
   signAndSendSolana,
+  signSolanaTransaction,
   getSolanaSwapBalances,
   solanaAddress,
   solanaWalletAvailable,
@@ -416,49 +423,114 @@ export default function SolanaSwap({ embedded = false }) {
     setQuoting(true);
 
     const id = setTimeout(async () => {
+      /*
+       * ─── WHY THE QUOTE COMES FROM OPENOCEAN FIRST ────────────────────────
+       * This screen used to quote Jupiter, which earned us nothing: its fee
+       * needs a referralAccount plus a referralTokenAccount per fee mint,
+       * all created by on-chain transactions, and the Solana payout wallet
+       * holds 0 SOL. Jupiter's own docs say an uninitialised token account
+       * means the swap executes WITHOUT our fee and returns no error, so
+       * the screen was silently free forever.
+       *
+       * OpenOcean takes a plain wallet address as `referrer`. Verified by
+       * decoding a live transaction: 1 SOL in produced 5,600,000 lamports
+       * to us and 1,400,000 to OpenOcean — 0.70000% exactly, split 80/20.
+       *
+       * The quote deliberately does NOT pass the wallet address. Without it
+       * nothing signable comes back, so a price refresh cannot hand anyone
+       * a transaction they did not ask for.
+       *
+       * ─── AND WHY IT FALLS BACK TO JUPITER ────────────────────────────────
+       * OpenOcean's Solana endpoint moved behind a WHITELIST: their
+       * supported-chains docs now say "Non-EVM chain (Solana) is available
+       * only to whitelisted users with an authorized API key". While our
+       * server does not hold one, every call it makes is rejected, and the
+       * client — correctly — read that as a connectivity problem and showed
+       * «اتصال به سرویس قیمت‌گذاری برقرار نشد» on every attempt, on every
+       * user network, no matter how many times the screen was refreshed.
+       * (Reported 2026-08 as «در سولنا اصلا قیمت برای سواپ نشان داده
+       * نمیشه».)
+       *
+       * So when OpenOcean cannot price the pair, the quote goes to Jupiter
+       * through the SAME hardened path this screen used before the switch:
+       * our backend attaches JUPITER_API_KEY when it is configured, and the
+       * keyless public endpoint covers builds with no backend. The user gets
+       * a price either way, and the fee disclosure follows the quote's own
+       * `feeBps`, so a free Jupiter fallback is announced as free — never
+       * promised as 0.70%.
+       */
       try {
-        /*
-         * ─── WHY THE QUOTE COMES FROM OPENOCEAN NOW ────────────────────────
-         * This screen used to quote Jupiter, which earned us nothing: its fee
-         * needs a referralAccount plus a referralTokenAccount per fee mint,
-         * all created by on-chain transactions, and the Solana payout wallet
-         * holds 0 SOL. Jupiter's own docs say an uninitialised token account
-         * means the swap executes WITHOUT our fee and returns no error, so
-         * the screen was silently free forever.
-         *
-         * OpenOcean takes a plain wallet address as `referrer`. Verified by
-         * decoding a live transaction: 1 SOL in produced 5,600,000 lamports
-         * to us and 1,400,000 to OpenOcean — 0.70000% exactly, split 80/20.
-         *
-         * The quote deliberately does NOT pass the wallet address. Without it
-         * nothing signable comes back, so a price refresh cannot hand anyone
-         * a transaction they did not ask for.
-         */
-        const q = await getOceanQuote({
-          inputMint: fromToken.mint,
-          outputMint: toToken.mint,
-          amount: base,
-          /* The user's setting, finally reaching the request. */
-          slippageBps
-        });
+        let q = null;
+        let err = null;
+
+        try {
+          const oq = await getOceanQuote({
+            inputMint: fromToken.mint,
+            outputMint: toToken.mint,
+            amount: base,
+            /* The user's setting, finally reaching the request. */
+            slippageBps
+          });
+          if (oq?.outAmount && oq.outAmount !== '0') {
+            q = { ...oq, provider: 'openocean' };
+          } else {
+            err = new Error('NO_ROUTE');
+          }
+        } catch (e) {
+          err = e; // remembered; Jupiter's verdict wins if it can answer
+        }
+
+        if (!q) {
+          try {
+            const jo = await getSolanaOrder({
+              inputMint: fromToken.mint,
+              outputMint: toToken.mint,
+              amount: base,
+              /* No taker: price only, nothing signable comes back. */
+              slippageBps
+            });
+            if (jo?.transaction === '' && jo.errorCode) {
+              /* Build failed upstream: the code's meaning depends on the
+                 router, so it is mapped the same way swap() maps it. */
+              throw new Error(orderErrorKey(jo) || 'NO_ROUTE');
+            }
+            const cq = jo?.quote;
+            if (!cq?.outAmount || cq.outAmount === '0') throw new Error('NO_ROUTE');
+            q = {
+              inAmount: cq.inAmount ?? base,
+              outAmount: cq.outAmount,
+              minOutAmount: cq.otherAmountThreshold ?? null,
+              priceImpact: cq.priceImpactPct ?? null,
+              /* Claim the fee only when we will actually request it —
+                 solanaFeeReady() is the same flag that decides the request. */
+              feeBps: solanaFeeReady() ? referralFeeBps() : null,
+              provider: 'jupiter'
+            };
+          } catch (e2) {
+            err = e2;
+          }
+        }
+
         if (reqSeq.current !== seq) return; // a newer request won
-        if (!q?.outAmount || q.outAmount === '0') {
-          setQuoteErr('NO_ROUTE');
+        if (!q) {
+          /*
+           * A network-level failure (timeout, DNS, backend unreachable) is a
+           * different situation from "this pair has no route", and telling the
+           * user to fix the pair when the connection is the problem sends them
+           * down the wrong path. lib/solanaOcean.js and lib/solana.js tag
+           * those errors.
+           */
+          setQuoteErr(err?.network === true ? 'QUOTE_NETWORK' : (err?.message || 'QUOTE_FAILED'));
           setOrder(null);
         } else {
           setOrder(q);
         }
-      } catch (err) {
-        if (reqSeq.current !== seq) return;
-        /*
-         * A network-level failure (timeout, DNS, backend unreachable) is a
-         * different situation from "this pair has no route", and telling the
-         * user to fix the pair when the connection is the problem sends them
-         * down the wrong path. lib/solanaOcean.js tags those errors.
-         */
-        setQuoteErr(err?.network === true ? 'QUOTE_NETWORK' : (err.message || 'QUOTE_FAILED'));
-        setOrder(null);
       } finally {
+        /*
+         * The spinner belongs to the request that started it. A superseded
+         * request leaves it running for its replacement (which set it true
+         * again); the current one is the only one allowed to stop it.
+         */
         if (reqSeq.current === seq) setQuoting(false);
       }
     }, DEBOUNCE_MS);
@@ -467,6 +539,41 @@ export default function SolanaSwap({ embedded = false }) {
   }, [amount, fromToken, toToken, address, slippageBps, quoteNonce]);
 
   /* -------------------------------- swap --------------------------------- */
+
+  /**
+   * Jupiter half of the build.
+   *
+   * `/order` with a taker returns the quote PLUS the unsigned transaction and
+   * the `requestId` that `/execute` later needs. Without a taker it is the
+   * price-only call the quote effect uses.
+   *
+   * The failure mapping is `orderErrorKey()`, which reads BOTH the code and
+   * the router: code 2 means "insufficient SOL for gas" on the aggregators
+   * but "missing token account" on JupiterZ, and a single-number mapping
+   * would tell the user to top up when the fix is different.
+   *
+   * `versioned` is true by construction: Jupiter V2 always returns v0
+   * versioned transactions, so there is nothing to read and nothing to get
+   * wrong — unlike OpenOcean, whose `isVersioned` must be passed through.
+   */
+  const buildJupiterSwap = async ({ inputMint, outputMint, amount, account, slippageBps }) => {
+    const jo = await getSolanaOrder({
+      inputMint,
+      outputMint,
+      amount,
+      taker: account,
+      slippageBps
+    });
+    if (!jo?.transaction) throw new Error(orderErrorKey(jo) || 'ORDER_FAILED');
+    return {
+      provider: 'jupiter',
+      transaction: jo.transaction,
+      requestId: jo.requestId,
+      outAmount: jo.quote?.outAmount ?? null,
+      feeBps: solanaFeeReady() ? referralFeeBps() : null,
+      versioned: true
+    };
+  };
 
   const swap = async () => {
     if (!order || busy || !address) return;
@@ -501,29 +608,89 @@ export default function SolanaSwap({ embedded = false }) {
        * own sake: a transaction built seconds ago against a moved market is
        * exactly what a user should not be signing. This is the same
        * re-quote-before-signing rule the EVM path already follows.
+       *
+       * ─── AND THE BUILDER HAS A FALLBACK, LIKE THE QUOTE DOES ─────────────
+       * Build with the provider that PRICED it first — the number the user
+       * consented to is that provider's number — then the other. When
+       * OpenOcean is behind its whitelist, the quote comes from Jupiter and
+       * so does the transaction; when OpenOcean is reachable it stays the
+       * preferred builder because it is the one that pays us. A failure on
+       * the first provider is remembered and only surfaces if the second one
+       * also fails, so the user sees the real reason, not a mystery.
        */
-      const built = await getOceanSwap({
-        inputMint: fromToken.mint,
-        outputMint: toToken.mint,
-        amount: toBaseUnits(amount, fromToken.decimals),
-        account: address,
+      const providers = order.provider === 'jupiter'
+        ? ['jupiter', 'openocean']
+        : ['openocean', 'jupiter'];
+      let built = null;
+      let buildErr = null;
+      for (const p of providers) {
+        try {
+          built = p === 'jupiter'
+            ? await buildJupiterSwap({
+              inputMint: fromToken.mint,
+              outputMint: toToken.mint,
+              amount: toBaseUnits(amount, fromToken.decimals),
+              account: address,
+              /*
+               * MUST match the quote above. Building the signable transaction
+               * with a different tolerance than the one priced would mean the
+               * user consented to one number and signed another.
+               */
+              slippageBps
+            })
+            : {
+              provider: 'openocean',
+              ...(await getOceanSwap({
+                inputMint: fromToken.mint,
+                outputMint: toToken.mint,
+                amount: toBaseUnits(amount, fromToken.decimals),
+                account: address,
+                slippageBps
+              }))
+            };
+          if (!built?.transaction) throw new Error('NO_TRANSACTION');
+          break;
+        } catch (e) {
+          buildErr = e;
+        }
+      }
+      if (!built) throw buildErr || new Error('NO_TRANSACTION');
+
+      let signature;
+      if (built.provider === 'jupiter') {
         /*
-         * MUST match the quote above. Building the signable transaction with
-         * a different tolerance than the one priced would mean the user
-         * consented to one number and signed another.
+         * ─── SIGN ONLY, THEN HAND IT TO JUPITER ─────────────────────────────
+         * The Jupiter path lands the trade through its own /execute, and RFQ
+         * (JupiterZ) routes need a market-maker signature added AFTER ours —
+         * broadcasting it ourselves would break exactly the routes that price
+         * best. signAndSendSolana (the OpenOcean path) would leave such a
+         * trade unlanded, or double-sent. Two named signing functions, so the
+         * two cannot be swapped by accident — for the same reason they were
+         * split in the first place.
+         *
+         * executeSucceeded() is the only success test: a /execute answer that
+         * is not { status: 'Success', code: 0 } means nothing reached the
+         * chain, and reporting a signature for it would be the worst lie this
+         * screen could tell.
          */
-        slippageBps
-      });
-
-      if (!built?.transaction) throw new Error('NO_TRANSACTION');
-
-      /*
-       * signAndSend, NOT sign-only. OpenOcean returns an unsigned transaction
-       * and does not broadcast; the Jupiter helper signs and hands back, which
-       * here would leave the trade never submitted while the UI reported
-       * success. Two named functions so the two cannot be swapped by accident.
-       */
-      const signature = await signAndSendSolana(built.transaction, built.versioned);
+        const signed = await signSolanaTransaction(built.transaction);
+        const exec = await executeSolanaOrder({
+          signedTransaction: signed,
+          requestId: built.requestId
+        });
+        if (!executeSucceeded(exec)) throw new Error('SEND_FAILED');
+        signature = exec?.transaction || null;
+        if (!signature) throw new Error('SEND_FAILED');
+      } else {
+        /*
+         * signAndSend, NOT sign-only. OpenOcean returns an unsigned
+         * transaction and does not broadcast; the Jupiter helper signs and
+         * hands back, which here would leave the trade never submitted while
+         * the UI reported success. Two named functions so the two cannot be
+         * swapped by accident.
+         */
+        signature = await signAndSendSolana(built.transaction, built.versioned);
+      }
 
       if (signature) {
         setResult({ signature });
@@ -875,7 +1042,15 @@ export default function SolanaSwap({ embedded = false }) {
           <div className="stack" style={{ gap: 6, marginTop: 12 }}>
             <div className="row-between">
               <span className="faint">{t('solana.router')}</span>
-              <span className="mono" style={{ fontSize: 12 }}>OpenOcean</span>
+              {/*
+                The provider that actually priced the number on screen, not
+                the one we prefer. Since the OpenOcean → Jupiter fallback,
+                hard-coding "OpenOcean" here would have told the user their
+                quote came from a route that was just rejected.
+              */}
+              <span className="mono" style={{ fontSize: 12 }}>
+                {order.provider === 'jupiter' ? 'Jupiter' : 'OpenOcean'}
+              </span>
             </div>
             <div className="row-between">
               <span className="faint">{t('swap.networkFee')}</span>
