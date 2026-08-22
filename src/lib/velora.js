@@ -70,8 +70,13 @@ const TIMEOUT_MS = 3000;
  * the network conditions most likely to filter Kyber/OpenOcean (Iranian
  * mobile networks) filter this too, and those are the users this third
  * opinion was added FOR.
+ *
+ * Resolved through apiBase() so it also works inside the packaged app,
+ * where a relative '/api' would 404 against the WebView's own localhost.
  */
-const PROXY_BASE = '/api/swap/velora';
+import { apiBase } from './apiBase';
+
+const proxyBase = () => apiBase() + '/swap/velora';
 
 /** True when a failure means "the network path is broken", not "no route". */
 function isNetworkFailure(err) {
@@ -120,7 +125,7 @@ async function veloraFetchPrices(params) {
     return await veloraFetchOnce(direct, TIMEOUT_MS);
   } catch (err) {
     if (!isNetworkFailure(err)) throw err;
-    const proxied = await veloraFetchOnce(`${PROXY_BASE}/prices?${params}`, TIMEOUT_MS + 2000).catch(() => null);
+    const proxied = await veloraFetchOnce(`${proxyBase()}/prices?${params}`, TIMEOUT_MS + 2000).catch(() => null);
     if (proxied) return proxied;
     throw err;
   }

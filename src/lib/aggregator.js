@@ -66,8 +66,15 @@ export const toAggAddress = (token) => (token.native ? NATIVE_SENTINEL : token.a
  * Only network-level failures trigger the retry. If the API answered "no
  * route", a datacenter would get the same answer — retrying would just add
  * latency.
+ *
+ * Resolved through apiBase() rather than a hardcoded '/api': inside the
+ * packaged Android app a relative path points at the WebView's own
+ * https://localhost and 404s, which silently disabled this fallback for
+ * exactly the users it exists for.
  */
-const PROXY_BASE = '/api/swap/kyber';
+import { apiBase } from './apiBase';
+
+const proxyBase = () => apiBase() + '/swap/kyber';
 
 /** True when a failure means "the network path is broken", not "no route". */
 function isNetworkFailure(err) {
@@ -125,7 +132,7 @@ async function aggFetch(url, options = {}, timeout = 15000, proxyPath = null) {
   } catch (err) {
     if (!proxyPath || !isNetworkFailure(err)) throw err;
     const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
-    const proxied = await aggFetchOnce(`${PROXY_BASE}/${proxyPath}${q ? `?${q}` : ''}`, options, timeout + 2000).catch(
+    const proxied = await aggFetchOnce(`${proxyBase()}/${proxyPath}${q ? `?${q}` : ''}`, options, timeout + 2000).catch(
       () => null
     );
     if (proxied) return proxied;

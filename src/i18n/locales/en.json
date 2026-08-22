@@ -2759,6 +2759,7 @@
       "BAD_TRANSACTION": "The transaction from the aggregator could not be read.",
       "SIGN_FAILED": "Signing failed.",
       "QUOTE_FAILED": "Could not fetch a price. Check your connection.",
+      "QUOTE_NETWORK": "Could not reach the pricing service. Switch networks (or enable a VPN) and try again — the token pair itself is fine.",
       "BAD_MINT": "That is not a valid Solana mint address.",
       "SAME_TOKEN": "Pick two different tokens.",
       "BAD_AMOUNT": "Enter an amount greater than zero.",

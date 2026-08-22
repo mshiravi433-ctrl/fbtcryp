@@ -25,8 +25,7 @@
  * produce a signed transaction that nobody ever sends.
  */
 
-const API_BASE =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
+import { apiBase } from './apiBase';
 
 /** Well-known mints, duplicated from lib/solana.js callers rather than re-derived. */
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -36,8 +35,41 @@ export function isSolanaAddress(addr) {
   return typeof addr === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr.trim());
 }
 
+/**
+ * Fetch with a hard deadline.
+ *
+ * REAL BUG this fixes: the original fetch had NO timeout. On a connection
+ * where packets silently vanish (exactly the networks our users are on) the
+ * browser can hold a request open for minutes, and the Solana screen spun
+ * with no price and no error the whole time. 15s is generous for a quote and
+ * short enough that the user gets an actionable message instead of a spinner.
+ *
+ * Failures that happen at the network layer (timeout, DNS, refused, offline)
+ * are tagged `err.network = true` so the UI can say "check your connection /
+ * try again" instead of the misleading "no route between these tokens".
+ */
 async function ofetch(url) {
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { accept: 'application/json' },
+      ...(ctrl ? { signal: ctrl.signal } : {})
+    });
+  } catch (err) {
+    // AbortError = our timeout; TypeError = DNS/refused/offline. Both mean
+    // the network path is broken, not that the pair has no route.
+    if (err?.name === 'AbortError') {
+      const e = new Error('QUOTE_NETWORK');
+      e.network = true;
+      throw e;
+    }
+    if (err instanceof TypeError) err.network = true;
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const text = await res.text();
   let body = null;
   try {
@@ -48,6 +80,11 @@ async function ofetch(url) {
   if (!res.ok) {
     const err = new Error(body?.error || body?.detail || `HTTP ${res.status}`);
     err.status = res.status;
+    // A gateway-level failure of OUR backend (404 in a build with no API,
+    // 5xx, geo-block) is a connectivity problem, not a verdict on the pair.
+    if (res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
+      err.network = true;
+    }
     throw err;
   }
   return body;
@@ -62,7 +99,7 @@ async function ofetch(url) {
  * makes a VITE_ variable look updated when it is not.
  */
 export async function oceanStatus() {
-  return ofetch(`${API_BASE}/solana/oo/status`);
+  return ofetch(`${apiBase()}/solana/oo/status`);
 }
 
 /**
@@ -84,7 +121,7 @@ export async function getOceanQuote({ inputMint, outputMint, amount, slippageBps
   const params = new URLSearchParams({ inputMint, outputMint, amount: String(amount) });
   if (Number.isFinite(slippageBps)) params.set('slippageBps', String(Math.round(slippageBps)));
 
-  return ofetch(`${API_BASE}/solana/oo/quote?${params}`);
+  return ofetch(`${apiBase()}/solana/oo/quote?${params}`);
 }
 
 /**
@@ -104,7 +141,7 @@ export async function getOceanSwap({ inputMint, outputMint, amount, account, sli
   });
   if (Number.isFinite(slippageBps)) params.set('slippageBps', String(Math.round(slippageBps)));
 
-  return ofetch(`${API_BASE}/solana/oo/swap?${params}`);
+  return ofetch(`${apiBase()}/solana/oo/swap?${params}`);
 }
 
 /**

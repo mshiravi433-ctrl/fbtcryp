@@ -37,12 +37,10 @@
 
 import { FEE_BPS } from './feeBps';
 import { PAYOUT_ADDRESSES } from './payout';
+import { apiBase } from './apiBase';
 
 /** Jupiter's own hosted API, used only when we have no backend. */
 const JUP_PUBLIC = 'https://api.jup.ag/swap/v2';
-
-const API_BASE =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 /** Well-known mints. `So111...112` is wrapped SOL and is what Jupiter expects. */
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -172,7 +170,27 @@ export function fromBaseUnits(raw, decimals) {
 }
 
 async function jfetch(url, init) {
-  const res = await fetch(url, init);
+  /*
+   * Hard 15s deadline. Without it a request over a lossy connection can hang
+   * for minutes with the UI spinning — the timeout converts that into an
+   * error the fallback path (or the user) can act on.
+   */
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
+  let res;
+  try {
+    res = await fetch(url, { ...(init || {}), ...(ctrl ? { signal: ctrl.signal } : {}) });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const e = new Error('QUOTE_NETWORK');
+      e.network = true;
+      throw e;
+    }
+    if (err instanceof TypeError) err.network = true;
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const text = await res.text();
   let body = null;
   try {
@@ -240,7 +258,7 @@ export async function getSolanaOrder({
 
   // 1. our backend — keeps the API key off the device
   try {
-    return await jfetch(`${API_BASE}/solana/order?${params}`);
+    return await jfetch(`${apiBase()}/solana/order?${params}`);
   } catch (err) {
     // A 4xx from our own server is a real answer (bad mint, no route); only a
     // transport/5xx failure means "no backend deployed", so only then fall back.
@@ -265,7 +283,7 @@ export async function executeSolanaOrder({ signedTransaction, requestId }) {
   const headers = { 'Content-Type': 'application/json' };
 
   try {
-    return await jfetch(`${API_BASE}/solana/execute`, { method: 'POST', headers, body });
+    return await jfetch(`${apiBase()}/solana/execute`, { method: 'POST', headers, body });
   } catch (err) {
     if (err.status && err.status < 500) throw err;
   }

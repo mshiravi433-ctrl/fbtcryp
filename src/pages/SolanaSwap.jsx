@@ -269,6 +269,9 @@ export default function SolanaSwap({ embedded = false }) {
   const [order, setOrder] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteErr, setQuoteErr] = useState(null);
+  /* Bumped by the retry button under a failed quote; re-arms the quoting
+     effect without requiring the user to edit the amount. */
+  const [quoteNonce, setQuoteNonce] = useState(0);
 
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -388,8 +391,22 @@ export default function SolanaSwap({ embedded = false }) {
     setTxErr(null);
 
     const base = toBaseUnits(amount, fromToken.decimals);
-    if (!base || base === '0') return undefined;
+    if (!base || base === '0') {
+      /*
+       * REAL BUG this guards against: reaching here with a request already in
+       * flight (user cleared the amount mid-debounce) left two problems —
+       * `quoting` stayed true forever, spinning over an empty field, and the
+       * in-flight response still matched `reqSeq` so it could paint a price
+       * for an amount that no longer exists. Invalidate the sequence AND drop
+       * the spinner on every early exit.
+       */
+      reqSeq.current += 1;
+      setQuoting(false);
+      return undefined;
+    }
     if (fromToken.mint === toToken.mint) {
+      reqSeq.current += 1;
+      setQuoting(false);
       setQuoteErr('SAME_TOKEN');
       return undefined;
     }
@@ -433,7 +450,13 @@ export default function SolanaSwap({ embedded = false }) {
         }
       } catch (err) {
         if (reqSeq.current !== seq) return;
-        setQuoteErr(err.message || 'QUOTE_FAILED');
+        /*
+         * A network-level failure (timeout, DNS, backend unreachable) is a
+         * different situation from "this pair has no route", and telling the
+         * user to fix the pair when the connection is the problem sends them
+         * down the wrong path. lib/solanaOcean.js tags those errors.
+         */
+        setQuoteErr(err?.network === true ? 'QUOTE_NETWORK' : (err.message || 'QUOTE_FAILED'));
         setOrder(null);
       } finally {
         if (reqSeq.current === seq) setQuoting(false);
@@ -441,7 +464,7 @@ export default function SolanaSwap({ embedded = false }) {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(id);
-  }, [amount, fromToken, toToken, address, slippageBps]);
+  }, [amount, fromToken, toToken, address, slippageBps, quoteNonce]);
 
   /* -------------------------------- swap --------------------------------- */
 
@@ -831,9 +854,21 @@ export default function SolanaSwap({ embedded = false }) {
         </div>
 
         {quoteErr && (
-          <p className="notice notice-danger" style={{ marginTop: 11 }}>
-            {t(`solana.err.${quoteErr}`, t('solana.err.QUOTE_FAILED'))}
-          </p>
+          <div className="stack" style={{ gap: 8, marginTop: 11 }}>
+            <p className="notice notice-danger" style={{ margin: 0 }}>
+              {t(`solana.err.${quoteErr}`, t('solana.err.QUOTE_FAILED'))}
+            </p>
+            {quoteErr !== 'SAME_TOKEN' && (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ alignSelf: 'flex-start' }}
+                onClick={() => { haptic?.('select'); setQuoteNonce((n) => n + 1); }}
+                disabled={quoting}
+              >
+                {quoting ? t('swap.quoting') : t('common.retry')}
+              </button>
+            )}
+          </div>
         )}
 
         {order && (
