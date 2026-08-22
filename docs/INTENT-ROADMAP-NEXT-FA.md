@@ -255,7 +255,13 @@ root واقعی از مسیر `calldata → tx → POST /root-anchor` anchor م�
 
 ## چک فعال‌سازی لایو
 
+> **راهنمای کامل هشت آیتم فاز ۶** (env، شکل JSON، مراسم آفلاین، curl، حد
+> صداقت): [`docs/PHASE6-ACTIVATE-FA.md`](./PHASE6-ACTIVATE-FA.md).
+> حلقهٔ اجرای ایجنت پس از کاتالوگ گواهی‌شده:
+> [`docs/ECOSYSTEM-REGISTRY-FA.md`](./ECOSYSTEM-REGISTRY-FA.md) → مرحلهٔ ۵.
+
 ```bash
+export FBT_URL=https://fbtswap.ir
 curl -s "$FBT_URL/api/intents/v1/capabilities" | python3 -m json.tool
 curl -s "$FBT_URL/api/intents/v1/bonds" | python3 -m json.tool
 curl -s "$FBT_URL/api/intents/v1/operators" | python3 -m json.tool
@@ -268,7 +274,12 @@ curl -s "$FBT_URL/api/intents/v1/merkle-anchor-networks" | python3 -m json.tool
 - با وجود آن، `organizationalIndependenceProven === false` (مرز صادقانه)؛
 - `auctions.coordinatorRotationConfigured === true` فقط پس از rotation واقعی؛
 - `merkleRootAnchors.configured === true` فقط پس از deployment/RPC واقعی؛
+- `workflows.contract.configured === true` فقط با آدرس mainnet واقعی
+  (`INTENT_WORKFLOW_BATCH_ADDRESS`) — هرگز تست‌نت؛
 - روی یک log مشخص، `externallyAnchored === true` فقط پس از tx تأییدشده.
+
+اگر `operators.blockers` پر است، هر ردیف `offlineCommand` دقیق همان کلیدی را
+می‌دهد که صاحبش باید امضا کند — سرور راه میان‌بر ندارد.
 
 ## چک فعال‌سازی فاز ۴c روی لایو
 

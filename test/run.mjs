@@ -820,6 +820,10 @@ console.log('\n▸ measuring light-theme contrast…');
     ['the console has no run, execute or sign control',
       !/(execute|runListing|signListing|withdraw)\s*\(/i.test(devConsole)],
     ['a published-but-invisible listing explains itself', /blockedReason/.test(devConsole)],
+    ['a refused write shows a translated operational hint under the code',
+      /dev\.console\.hint\./.test(devConsole)
+      && localeFiles.every((locale) => ['REGISTRY_STORE_UNAVAILABLE', 'CERTIFIER_NOT_CONFIGURED', 'CERTIFIER_NOT_AUTHORIZED', '_default']
+        .every((key) => typeof locale?.dev?.console?.hint?.[key] === 'string' && locale.dev.console.hint[key].length > 0))],
     ['the reviewer console renders nothing for a non-reviewer',
       /if \(!status\.isCertifier\) return null;/.test(reviewerConsole)],
     ['the setup card appears only while no reviewer is configured',

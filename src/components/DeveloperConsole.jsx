@@ -136,9 +136,19 @@ export default function DeveloperConsole() {
         </div>
       )}
       {notice && !notice.auth && (
-        <p className={notice.level === 'danger' ? 'notice notice-danger' : 'notice'} role="status">
-          {notice.code === 'OK' ? t('dev.console.done') : t('dev.console.refused', { code: notice.code })}
-        </p>
+        <div className={notice.level === 'danger' ? 'notice notice-danger' : 'notice'} role="status">
+          <p style={{ margin: 0 }}>
+            {notice.code === 'OK' ? t('dev.console.done') : t('dev.console.refused', { code: notice.code })}
+          </p>
+          {/* Operational refusals get a translated next-step under the code so a
+              mobile operator does not have to open GO-LIVE mid-flow. Missing
+              hint keys fall back to a generic string — never an empty row. */}
+          {notice.code && notice.code !== 'OK' && (
+            <small style={{ display: 'block', marginTop: 6, opacity: .85 }}>
+              {t([`dev.console.hint.${notice.code}`, 'dev.console.hint._default'])}
+            </small>
+          )}
+        </div>
       )}
 
       {/* ------------------------------ projects ------------------------------ */}
