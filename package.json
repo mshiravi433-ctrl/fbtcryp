@@ -15,6 +15,8 @@
     "compile:workflow": "node scripts/compile-workflow.mjs",
     "compile:merkle-anchor": "node scripts/compile-merkle-anchor.mjs",
     "deploy:merkle-anchor": "node scripts/deploy-merkle-anchor.mjs",
+    "compile:auction-anchor": "node scripts/compile-auction-anchor.mjs",
+    "deploy:auction-anchor": "node scripts/deploy-auction-anchor.mjs",
     "deploy:feerouter": "node scripts/deploy-feerouter.mjs",
     "deploy:workflow": "node scripts/deploy-workflow.mjs",
     "test:feerouter": "node scripts/test-feerouter.mjs",
