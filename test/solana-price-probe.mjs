@@ -1,8 +1,12 @@
 /**
  * SOLANA PRICE PROBE — server half of «در سولنا اصلا قیمت نشان داده نمیشه»
  * ---------------------------------------------------------------------------
- * Live tests confirmed OpenOcean v4 Solana is open without an API key and
- * accepts our 70 bps fee (80% net to fee wallet) inside the swap transaction.
+ * The Solana route now talks to De¹ Exchange (the rebranded OpenOcean) on the
+ * enterprise gateway, because the old public host began answering our
+ * datacenter egress with a Cloudflare interstitial instead of a quote — see
+ * the header of server/solanaOcean.js for the live evidence. The v4 contract
+ * itself is unchanged, so is the 70 bps fee (80% net to the fee wallet) that
+ * De¹ splits inside the swap transaction.
  *
  * This probe (server side, real HTTP through server/app.js with the upstream
  * stubbed) proves:
@@ -15,8 +19,11 @@
  *      as 400 BAD_AMOUNT rather than generic network/connectivity failures.
  *   4. Upstream whitelist/auth refusals (403/401) are passed through for
  *      the client's Jupiter fallback.
- *   5. Optional OPENOCEAN_API_KEY is attached server-side (x-api-key) when
- *      configured, and never echoed.
+ *   5. OPENOCEAN_API_KEY is attached server-side — both as the x-api-key
+ *      header and as the `apikey` query parameter the enterprise gateway
+ *      authenticates on — and is never echoed back to a caller.
+ *   5b. Every outgoing call goes to the enterprise host, so a silent revert
+ *      to the challenged public domain fails the suite instead of the user.
  *   6. /api/revenue/readiness reports swap-solana as live: true keylessly.
  *   7. The Jupiter proxy (insurance fallback) answers keyless and keyed.
  *
@@ -51,13 +58,16 @@ const realFetch = globalThis.fetch;
  *   'reject-401' — HTTP 401 refusal
  * `jup` decides what Jupiter answers: 'ok' (with taker → transaction).
  */
+const OO_HOST = 'https://open-api-enterprise.de1.exchange/v4/solana';
+
 const weather = {
   ocean: 'ok',
   expectedKey: null,
   jup: 'ok',
   oceanKeys: [],
   jupKeys: [],
-  oceanUrls: []
+  oceanUrls: [],
+  oceanQueryKeys: []
 };
 
 const json = (status, body) => new Response(JSON.stringify(body), {
@@ -71,9 +81,10 @@ function installUpstreamStub() {
     const h = init?.headers || {};
     const key = h['x-api-key'] ?? h['X-Api-Key'] ?? (h instanceof Headers ? h.get('x-api-key') : null);
 
-    if (u.startsWith('https://open-api.openocean.finance/v4/solana')) {
+    if (u.startsWith(OO_HOST)) {
       weather.oceanKeys.push(key ?? null);
       weather.oceanUrls.push(u);
+      weather.oceanQueryKeys.push(new URL(u).searchParams.get('apikey'));
       if (weather.ocean === 'bad-amount') {
         return json(200, { code: 500, message: 'amount is too small (minimum 10000 lamports)' });
       }
@@ -146,6 +157,7 @@ function clearWeather() {
   weather.oceanKeys.length = 0;
   weather.jupKeys.length = 0;
   weather.oceanUrls.length = 0;
+  weather.oceanQueryKeys.length = 0;
 }
 
 let server = null;
@@ -181,6 +193,9 @@ try {
     t('the quote carries the price', body.outAmount === '265000000');
     t('...and the fee the route will take', body.feeBps === 70);
     t('the outgoing call carried no x-api-key', weather.oceanKeys.every((k) => k === null));
+    t('...and no apikey query parameter either', weather.oceanQueryKeys.every((k) => k === null));
+    t('the upstream is the De¹ enterprise gateway, not the challenged public host',
+      weather.oceanUrls.length > 0 && weather.oceanUrls.every((u) => u.startsWith(OO_HOST)));
     t('and the fee fields our server owns (unforgeable from the browser)',
       weather.oceanUrls.some((u) => u.includes(`referrer=${WIFER}`) && u.includes('referrerFee=0.7')));
   }
@@ -226,6 +241,7 @@ try {
     const res = await fetch(`${base}/api/solana/oo/status`);
     const body = await res.json();
     t('keyConfigured flips true the moment the key is set', body.keyConfigured === true);
+    t('status names the upstream so a rollback is visible', body.endpoint === OO_HOST);
     t('feeReady stays true (key + receiver + rate)', body.feeReady === true);
   }
   {
@@ -235,6 +251,10 @@ try {
     t('the quote carries the price', body.outAmount === '265000000');
     t('...and the fee the route will take', body.feeBps === 70);
     t('the outgoing call carried x-api-key', weather.oceanKeys.includes('probe-ocean-key'));
+    t('...and the apikey query parameter the enterprise gateway reads',
+      weather.oceanQueryKeys.includes('probe-ocean-key'));
+    t('...still to the enterprise gateway', weather.oceanUrls.every((u) => u.startsWith(OO_HOST)));
+    t('the quote body never echoes the key', !JSON.stringify(body).includes('probe-ocean-key'));
   }
   {
     const res = await fetch(`${base}/api/solana/oo/swap?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&account=${WIFER}&slippageBps=50`);

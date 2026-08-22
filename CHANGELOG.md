@@ -1,3 +1,45 @@
+## Unreleased — Solana route moves to De¹ Enterprise (the rebranded OpenOcean)
+
+- Production was earning nothing on Solana and looked healthy while doing it.
+  `/api/solana/oo/status` reported `keyConfigured: true, feeReady: true`, but
+  a real quote through `/api/solana/oo/quote` (SOL→USDC, 0.01 SOL) came back
+  `{"error":"UPSTREAM_FAILED","detail":"<!DOCTYPE html>…<title>Just a
+  moment...</title>…"}` — a Cloudflare interstitial served to our serverless
+  egress by `open-api.openocean.finance`, not an API answer. Every Solana
+  swap was therefore falling through to the fee-less Jupiter fallback. The
+  same URL answers a normal v4 body from a residential IP, which is why the
+  status endpoint never noticed.
+- OpenOcean has rebranded to **De¹ Exchange**; `docs.de1.exchange` documents
+  the identical v4 contract (same paths, same `amountDecimals`, same
+  `referrer` / `referrerFee`, same documented 20% provider share). The Solana
+  path in `server/solanaOcean.js` now calls the enterprise gateway issued by
+  the `enterprise.de1.exchange` dashboard,
+  `https://open-api-enterprise.de1.exchange/v4/solana`, overridable with the
+  non-secret `OPENOCEAN_BASE_URL`. The fee wallet, the 70 bps rate, the
+  server-side-only fee fields, the `feeRatio` echo check and the Jupiter
+  fallback are all untouched.
+- The gateway authenticates rather than IP-challenges, verified against the
+  live host: no key → `No API key found in request.`, wrong key →
+  `Unauthorized.`. Neither is a v4 body, so both are classified UPSTREAM_FAILED
+  and the swap screen falls back to Jupiter exactly as it does on a timeout —
+  a missing key costs us the fee, never the user's trade. The key travels as
+  the documented `x-api-key` header **and** as the `apikey` query parameter,
+  which is the form proven to reach this gateway's authenticator.
+- `/api/solana/oo/status` now reports `endpoint` (and `brand: "de1"`), so a
+  host change or a rollback is visible in one field instead of only in a
+  failing quote — the exact blind spot that hid this bug. It contains no
+  secret; the key is still server-side only, never echoed, with no VITE_ twin.
+- The EVM paths (`server/swapProxy.js`, `src/lib/openocean.js`) deliberately
+  stay on the old host: the enterprise gateway could not be exercised for EVM
+  slugs without spending the production key, and the browser client has no key
+  to send. They keep their KyberSwap/Velora competition, so an OpenOcean miss
+  there costs a second opinion, not a swap.
+- `test/solana-price-probe.mjs` now stubs the enterprise host and fails if a
+  call ever goes back to the challenged public domain, asserts the key travels
+  in both forms keyed and in neither form keyless, and pins the new `endpoint`
+  field. `.env.example` documents De¹, the dashboard, and the new base URL knob
+  without carrying any value.
+
 ## Unreleased — Solana price fixed for real: parsing what Jupiter actually answers
 
 - Reported «قیمت در سولنا نشان داده نمیشود — مشکل باقی مانده» AFTER the

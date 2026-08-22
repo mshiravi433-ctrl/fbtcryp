@@ -1,5 +1,11 @@
 /**
- * SOLANA SWAP VIA OPENOCEAN — the fee-earning path that costs us nothing
+ * SOLANA SWAP VIA De¹ EXCHANGE (ex-OpenOcean) — the fee-earning path
+ * ---------------------------------------------------------------------------
+ * OpenOcean rebranded to De¹ Exchange. Same v4 API, same parameters, same
+ * referrer economics — docs live at https://docs.de1.exchange/docs/swap-api/v4
+ * (formerly docs.openocean.finance). The provider name is still reported as
+ * `openocean` on the wire so nothing downstream has to be re-taught, and the
+ * key is still read from OPENOCEAN_API_KEY.
  * ---------------------------------------------------------------------------
  * ─── WHY THIS EXISTS ALONGSIDE server/solana.js ─────────────────────────────
  * Jupiter earns us nothing today and CANNOT be made to without spending money.
@@ -57,21 +63,74 @@
  * nothing here can move funds on its own.
  */
 
-const OO_BASE = 'https://open-api.openocean.finance/v4/solana';
+/*
+ * ─── WHY De¹ ENTERPRISE AND NOT open-api.openocean.finance ──────────────────
+ * OpenOcean rebranded to De¹ Exchange. docs.de1.exchange documents the SAME
+ * v4 API: same paths, same parameters, same `referrer` / `referrerFee`
+ * semantics and the same documented 20% provider share. Nothing about the
+ * fee mechanism below changes with the host.
+ *
+ * The host had to change because the public domain stopped answering US.
+ * Checked live from production (2026-08-22), with the key configured:
+ *
+ *   GET /api/solana/oo/status
+ *     -> { "keyConfigured": true, "feeReady": true, "feeBps": 70, ... }
+ *   GET /api/solana/oo/quote?inputMint=SOL&outputMint=USDC&amount=10000000
+ *     -> { "error": "UPSTREAM_FAILED",
+ *          "detail": "<!DOCTYPE html>...<title>Just a moment...</title>..." }
+ *
+ * That is a Cloudflare interstitial served to our datacenter egress, not an
+ * API answer: the public host is IP-challenging the serverless function, so
+ * every Solana quote was silently falling through to the fee-less Jupiter
+ * fallback. The same URL answers normally from a residential IP, which is
+ * exactly why this failure survived so long unnoticed.
+ *
+ * The enterprise gateway is a different front door, authenticated by the key
+ * instead of by IP reputation, and is the host printed in the
+ * enterprise.de1.exchange dashboard where the referrer address and the key
+ * were registered.
+ *
+ * OPENOCEAN_BASE_URL overrides it without a code change — an escape hatch for
+ * the next rebrand or outage, not a place for anything secret (it is a plain
+ * host, the key stays in OPENOCEAN_API_KEY).
+ */
+const OO_ROOT = String(process.env.OPENOCEAN_BASE_URL || 'https://open-api-enterprise.de1.exchange/v4')
+  .trim()
+  .replace(/\/+$/, '');
+const OO_BASE = `${OO_ROOT}/solana`;
 const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 15000);
 
+/** The upstream we talk to, for /status. Never carries the key. */
+export const upstreamBase = () => OO_BASE;
+
 /*
- * ─── OPENOCEAN SOLANA IS KEYLESS & FEE-EARNING OUT OF THE BOX ───────────────
- * OpenOcean v4 Solana accepts `referrer` and `referrerFee` keylessly,
- * splitting 80% (56 bps net) to our Solana payout wallet inside the swap
- * transaction itself (verified on-chain with 1 SOL -> USDC).
+ * ─── THE KEY IS NOW LOAD-BEARING, NOT OPTIONAL ──────────────────────────────
+ * On the old public host the key was optional: Solana answered keylessly and
+ * still paid the referrer fee (verified on-chain, see the header above). The
+ * enterprise gateway rejects unauthenticated traffic outright — proved with a
+ * real request, no guessing:
  *
- * No whitelist form, no API key, and no 0.02 SOL referral account rent
- * required.
+ *   GET https://open-api-enterprise.de1.exchange/v4/solana/quote?...
+ *     (no key)      -> { "error": "No API key found in request." }
+ *     (wrong key)   -> { "error": "Unauthorized." }
  *
- * An optional API key (OPENOCEAN_API_KEY) is attached server-side if present
- * in environment variables. If OpenOcean is unreachable or rate-limited, the
- * client falls back to Jupiter as insurance.
+ * Both are gateway errors, not v4 bodies, so ooFetch() below classifies them
+ * as UPSTREAM_FAILED and the Solana screen falls back to Jupiter exactly as
+ * it does for a timeout. A missing key therefore costs us the fee, never the
+ * user's swap.
+ *
+ * WHERE THE KEY GOES: the gateway is demonstrably reading the `apikey` QUERY
+ * parameter (that is the request that came back "Unauthorized." rather than
+ * "No API key found"). The header form could not be probed the same way from
+ * here, so both are sent — the header because it is what OpenOcean's own docs
+ * have always used and what the previous host accepted, the query parameter
+ * because it is the one form proven to reach this gateway's authenticator.
+ * Unknown extra parameters are ignored by v4.
+ *
+ * The key is read from the environment on every call so a Vercel rotation
+ * takes effect on the next request rather than on the next cold start, and it
+ * exists ONLY here on the server: it is never echoed into a response, never
+ * logged, and there is no VITE_ twin of it.
  */
 const apiKey = () => String(process.env.OPENOCEAN_API_KEY || '').trim();
 
@@ -128,14 +187,16 @@ async function ooFetch(path) {
   try {
     const headers = { accept: 'application/json' };
     /*
-     * Solana requires the whitelist key (see the note at the top). EVM never
-     * does — attaching it there would be harmless but would make the header
-     * look load-bearing where it is not, so it goes on only when present.
-     * OpenOcean's documented header is x-api-key, the same one Jupiter uses.
+     * See the note above the key reader: the header is the documented form,
+     * the query parameter is the form proved to reach the enterprise
+     * gateway's authenticator. Sending both costs one query parameter and
+     * removes a class of "silently unauthenticated" failure.
      */
     const key = apiKey();
     if (key) headers['x-api-key'] = key;
-    const res = await fetch(`${OO_BASE}${path}`, {
+    const url = new URL(`${OO_BASE}${path}`);
+    if (key) url.searchParams.set('apikey', key);
+    const res = await fetch(url, {
       signal: ctrl.signal,
       headers
     });
@@ -207,13 +268,17 @@ function slippagePercent(bps) {
 /**
  * True when a swap through here will actually pay us. Reported by /status.
  *
- * OpenOcean accepts our `referrer` and `referrerFee` keylessly on Solana,
- * splitting 80% of the 70 bps fee directly to our fee wallet inside the
- * transaction. An API key is optional and attached if configured.
+ * This answers "are the fee fields configured", NOT "is the upstream
+ * reachable" — De¹ splits 80% of the 70 bps to our wallet inside the swap
+ * transaction whenever `referrer`/`referrerFee` are accepted, and whether
+ * they are accepted is a question only a real request can answer. Folding
+ * reachability in here would make one flag mean two things and would flip
+ * false on a transient outage that the Jupiter fallback already covers.
+ * `keyConfigured` is reported separately for exactly that reason.
  */
 export const feeReady = () => Boolean(feeReceiver()) && feeBps() > 0;
 
-/** True when the optional whitelist key is present. */
+/** True when OPENOCEAN_API_KEY is present. Never reveals the value itself. */
 export const keyConfigured = () => Boolean(apiKey());
 
 /**
@@ -357,20 +422,32 @@ export async function oceanSwap(query) {
 /**
  * Honest status, for the UI and for anyone debugging a silent zero.
  *
- * OpenOcean works keylessly on Solana while earning our 70 bps fee.
- * `keyConfigured` reports whether an optional OPENOCEAN_API_KEY is present,
- * and `solanaKeyRequired` is false.
+ * `endpoint` is the upstream host we actually call. It is here because the
+ * failure this module just recovered from was invisible from the outside:
+ * status said `keyConfigured: true` while every quote was being bounced by a
+ * Cloudflare interstitial on the old public host. A deploy can now be told
+ * apart from a rollback by reading one field, and no secret is exposed — the
+ * key is never part of this URL.
  */
 export function oceanStatus() {
   return {
     provider: 'openocean',
+    // De¹ Exchange is the rebranded OpenOcean; the v4 API is unchanged.
+    brand: 'de1',
+    endpoint: upstreamBase(),
     keyConfigured: keyConfigured(),
-    // Solana key is optional; OpenOcean Solana works keylessly.
+    /*
+     * Kept false so the UI's fail-safe behaviour is untouched: the Solana
+     * screen must never refuse to price a swap because our fee plumbing is
+     * unconfigured — it falls back to Jupiter and says it earns nothing.
+     * The enterprise gateway does require the key in practice, which is what
+     * `keyConfigured` is for.
+     */
     solanaKeyRequired: false,
     feeReady: feeReady(),
     feeBps: feeBps(),
     feeReceiver: feeReceiver() || null,
-    // OpenOcean's documented share of our fee.
+    // De¹'s documented share of our fee.
     providerCutPercent: 20
   };
 }
