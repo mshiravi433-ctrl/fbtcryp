@@ -1,35 +1,28 @@
 /**
  * SOLANA PRICE PROBE — server half of «در سولنا اصلا قیمت نشان داده نمیشه»
  * ---------------------------------------------------------------------------
- * Reported 2026-08: every Solana quote failed with «اتصال به سرویس
- * قیمت‌گذاری برقرار نشد», on every user network, no matter how often the
- * screen was refreshed. The user's network was not the cause: OpenOcean's
- * Solana endpoint moved behind a whitelist, so the SERVER's keyless calls
- * were rejected and the client — correctly — read the 4xx/5xx as a
- * connectivity problem.
+ * Live tests confirmed OpenOcean v4 Solana is open without an API key and
+ * accepts our 70 bps fee (80% net to fee wallet) inside the swap transaction.
  *
  * This probe (server side, real HTTP through server/app.js with the upstream
  * stubbed) proves:
  *
- *   1. The whitelist refusal is passed through verbatim (403/401), never
- *      turned into a fake 200 — that pass-through is what the client turns
- *      into QUOTE_NETWORK, and the client half of the story is locked in
- *      test/solana-client-probe.mjs.
- *   2. OPENOCEAN_API_KEY is attached server-side (x-api-key) the moment it
- *      is configured, the fee fields travel unforgeable, and the key value
- *      is never echoed by any route.
- *   3. /api/solana/oo/status reports keyConfigured/feeReady honestly, and
- *      /api/revenue/readiness does not claim a fee the keyless deploy is not
- *      taking.
- *   4. The Jupiter proxy (the fallback that keeps prices alive) answers
- *      keyless and attaches JUPITER_API_KEY when configured.
+ *   1. Keyless status reports feeReady: true, solanaKeyRequired: false, and
+ *      keyConfigured: false.
+ *   2. Keyless quotes and swaps earn 70 bps out of the box with referrer and
+ *      referrerFee=0.7 attached server-side (unforgeable from the browser).
+ *   3. Upstream amount errors (e.g. too-small amounts) are cleanly distinguished
+ *      as 400 BAD_AMOUNT rather than generic network/connectivity failures.
+ *   4. Upstream whitelist/auth refusals (403/401) are passed through for
+ *      the client's Jupiter fallback.
+ *   5. Optional OPENOCEAN_API_KEY is attached server-side (x-api-key) when
+ *      configured, and never echoed.
+ *   6. /api/revenue/readiness reports swap-solana as live: true keylessly.
+ *   7. The Jupiter proxy (insurance fallback) answers keyless and keyed.
  *
  * Standalone:
  *   node test/solana-price-probe.mjs
  * The shared runner (test/run.mjs) imports the default export of rows.
- *
- * The fetch stub is installed ONLY around this file's own requests and
- * always restored — other probes in the shared process keep global fetch.
  */
 
 import { pathToFileURL } from 'node:url';
@@ -52,15 +45,14 @@ const realFetch = globalThis.fetch;
 
 /**
  * The upstream weather. `ocean` decides what OpenOcean answers for Solana:
- *   'reject-403' — the whitelist refusal, HTTP 403 (what the live service
- *                  does for a keyless caller)
- *   'reject-401' — the same refusal as an HTTP 401 variant
- *   'ok'         — a real quote/swap answer, but ONLY when the request
- *                  carries the expected x-api-key
+ *   'ok'         — a real quote/swap answer
+ *   'bad-amount' — upstream amount-too-small error
+ *   'reject-403' — HTTP 403 refusal
+ *   'reject-401' — HTTP 401 refusal
  * `jup` decides what Jupiter answers: 'ok' (with taker → transaction).
  */
 const weather = {
-  ocean: 'reject-403',
+  ocean: 'ok',
   expectedKey: null,
   jup: 'ok',
   oceanKeys: [],
@@ -82,8 +74,11 @@ function installUpstreamStub() {
     if (u.startsWith('https://open-api.openocean.finance/v4/solana')) {
       weather.oceanKeys.push(key ?? null);
       weather.oceanUrls.push(u);
+      if (weather.ocean === 'bad-amount') {
+        return json(200, { code: 500, message: 'amount is too small (minimum 10000 lamports)' });
+      }
       if (weather.ocean === 'ok') {
-        if (key !== weather.expectedKey) return json(403, { code: 403, message: 'bad key' });
+        if (weather.expectedKey && key !== weather.expectedKey) return json(403, { code: 403, message: 'bad key' });
         if (u.includes('/swap?')) {
           return json(200, {
             code: 200,
@@ -109,8 +104,7 @@ function installUpstreamStub() {
           }
         });
       }
-      /* The whitelist refusal, verbatim: a 403/401 whose body carries its
-         own code. The server must NOT convert this into a 200. */
+      /* Upstream refusal pass-through */
       const code = weather.ocean === 'reject-401' ? 401 : 403;
       return json(code, { code, message: 'Solana is available only to whitelisted users' });
     }
@@ -120,17 +114,6 @@ function installUpstreamStub() {
       if (weather.jup !== 'ok') throw new Error('jupiter down');
       if (u.includes('/order')) {
         const hasTaker = u.includes('taker=');
-        /*
-         * THE REAL V2 SHAPE — flat, exactly as a live keyless call through
-         * our own proxy answered on 2026-08-22 (SOL→USDC) and as Jupiter's
-         * order-and-execute docs type it. There is NO nested `quote` object;
-         * the pricing fields sit at the top level next to `transaction`.
-         * An earlier version of this stub invented a nested shape, the
-         * client code grew to match the stub, and both passed every test
-         * while the real API answered differently — which is how «قیمت در
-         * سولنا نشان داده نمیشه» survived its own fix. The stub now answers
-         * what the API answers, nothing else.
-         */
         return json(200, {
           swapMode: 'ExactIn',
           inputMint: SOL,
@@ -144,15 +127,12 @@ function installUpstreamStub() {
           mode: 'manual',
           feeBps: 0,
           feeMint: SOL,
-          /* Documented: null without a taker, base64 with one, '' when the
-             router quoted a price but could not build (errorCode set). */
           transaction: hasTaker ? JUP_TX : null,
           taker: hasTaker ? WIFER : null,
           requestId: 'probe-request-123'
         });
       }
       if (u.includes('/execute')) {
-        /* The documented field is `signature`, not `transaction`. */
         return json(200, { status: 'Success', code: 0, signature: '5probeSignature' });
       }
       return json(404, { error: 'unknown jupiter path' });
@@ -185,24 +165,50 @@ try {
     const body = await res.json();
     t('status answers without a key', res.status === 200);
     t('keyConfigured is false without the key', body.keyConfigured === false);
-    t('feeReady is false without the key (the fee cannot earn)', body.feeReady === false);
-    t('the status names the Solana key requirement', body.solanaKeyRequired === true);
+    t('feeReady is true without a key (keyless fee supported)', body.feeReady === true);
+    t('solanaKeyRequired is false (key is optional)', body.solanaKeyRequired === false);
     t('...and still reports the house rate', body.feeBps === 70);
   }
 
-  /*
-   * 2. THE REPORTED FAILURE, REPRODUCED: keyless, upstream refuses. The
-   *    route must pass the refusal through (403), not answer 200 — that
-   *    pass-through is what the client turns into QUOTE_NETWORK.
-   */
+  /* ------------------ 2. keyless quote & swap (earns out of the box) ------------------ */
+  weather.ocean = 'ok';
+  weather.expectedKey = null;
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
+    const body = await res.json();
+    t('a keyless quote answers 200', res.status === 200);
+    t('the quote carries the price', body.outAmount === '265000000');
+    t('...and the fee the route will take', body.feeBps === 70);
+    t('the outgoing call carried no x-api-key', weather.oceanKeys.every((k) => k === null));
+    t('and the fee fields our server owns (unforgeable from the browser)',
+      weather.oceanUrls.some((u) => u.includes(`referrer=${WIFER}`) && u.includes('referrerFee=0.7')));
+  }
+  {
+    const res = await fetch(`${base}/api/solana/oo/swap?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&account=${WIFER}&slippageBps=50`);
+    const body = await res.json();
+    t('a keyless swap builds the unsigned transaction', res.status === 200 && body.transaction === OCEAN_TX);
+    t('...and the echo check confirms the fee was honoured', body.feeApplied === true);
+    t('versioned is passed through for the right deserialiser', body.versioned === true);
+  }
+
+  /* ------------------ 3. amount error discrimination ------------------ */
+  weather.ocean = 'bad-amount';
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}`);
+    const body = await res.json();
+    t('an upstream amount error returns 400 BAD_AMOUNT, not a connection failure', res.status === 400 && body.error === 'BAD_AMOUNT');
+  }
+
+  /* ------------------ 4. fallback resilience: whitelist refusal pass-through ------------------ */
   weather.ocean = 'reject-403';
   clearWeather();
   {
     const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}`);
     const body = await res.json();
-    t('a keyless quote passes the whitelist 403 through, not a fake 200', res.status === 403);
+    t('a whitelist 403 refusal passes through as 403 for client fallback', res.status === 403);
     t('...with the upstream reason visible for debugging', /whitelisted/i.test(String(body.detail || body.message || '')));
-    t('the server did not invent an x-api-key', weather.oceanKeys.every((k) => k === null));
   }
   {
     weather.ocean = 'reject-401';
@@ -211,7 +217,7 @@ try {
     t('...and the 401 refusal is passed through too', res.status === 401);
   }
 
-  /* ------------- 3. WITH THE KEY: the route earns again ------------- */
+  /* ------------------ 5. WITH OPTIONAL KEY: key is attached ------------------ */
   weather.ocean = 'ok';
   weather.expectedKey = 'probe-ocean-key';
   process.env.OPENOCEAN_API_KEY = 'probe-ocean-key';
@@ -220,7 +226,7 @@ try {
     const res = await fetch(`${base}/api/solana/oo/status`);
     const body = await res.json();
     t('keyConfigured flips true the moment the key is set', body.keyConfigured === true);
-    t('feeReady flips true (key + receiver + rate)', body.feeReady === true);
+    t('feeReady stays true (key + receiver + rate)', body.feeReady === true);
   }
   {
     const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
@@ -229,15 +235,12 @@ try {
     t('the quote carries the price', body.outAmount === '265000000');
     t('...and the fee the route will take', body.feeBps === 70);
     t('the outgoing call carried x-api-key', weather.oceanKeys.includes('probe-ocean-key'));
-    t('and the fee fields our server owns (unforgeable from the browser)',
-      weather.oceanUrls.some((u) => u.includes(`referrer=${WIFER}`) && u.includes('referrerFee=0.7')));
   }
   {
     const res = await fetch(`${base}/api/solana/oo/swap?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&account=${WIFER}&slippageBps=50`);
     const body = await res.json();
     t('a keyed swap builds the unsigned transaction', res.status === 200 && body.transaction === OCEAN_TX);
     t('...and the echo check confirms the fee was honoured', body.feeApplied === true);
-    t('versioned is passed through for the right deserialiser', body.versioned === true);
   }
   {
     const res = await fetch(`${base}/api/solana/oo/status`);
@@ -245,13 +248,12 @@ try {
     t('no route echoes the key value', !raw.includes('probe-ocean-key'));
   }
 
-  /* ---------------- 4. the Jupiter fallback, keyless ---------------- */
+  /* ---------------- 6. the Jupiter fallback, keyless ---------------- */
   delete process.env.OPENOCEAN_API_KEY;
   clearWeather();
   {
     const res = await fetch(`${base}/api/solana/order?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
     const body = await res.json();
-    /* Flat, as the live V2 API answers: outAmount at the top level. */
     t('the Jupiter proxy still prices without a key', res.status === 200 && body.outAmount === '264000000');
     t('...price-only when no taker (nothing signable)', body.transaction === null && typeof body.requestId === 'string');
     t('and it did not send a Jupiter key we do not have', weather.jupKeys.every((k) => k === null));
@@ -269,13 +271,13 @@ try {
     delete process.env.JUPITER_API_KEY;
   }
 
-  /* The readiness line must not claim a fee it is not taking. */
+  /* ---------------- 7. revenue readiness ---------------- */
   {
     const res = await fetch(`${base}/api/revenue/readiness`);
     const body = await res.json();
     const row = body.lines?.find((l) => l.id === 'swap-solana');
     t('revenue readiness reports the swap-solana line', Boolean(row));
-    t('...and it is not "earning" without the key', row && row.live === false);
+    t('...and it is earning (live: true) keylessly', row && row.live === true);
     t('...while naming the fallback that keeps the swap alive', row && /jupiter fallback/i.test(row.note));
   }
 } finally {
