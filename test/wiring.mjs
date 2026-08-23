@@ -11945,6 +11945,71 @@ export default function run() {
         (offenders.length ? ` — found in: ${offenders.join(', ')}` : ''),
         offenders.length === 0);
     }
+
+    /*
+     * ---- 108b. the internal BTC wallet can never eat the swap either --------
+     *
+     * Same rule, new leg: the internal bitcoin wallet (lib/btcWallet.js +
+     * lib/btcTx.js + the /api/btc proxy in server/btcChain.js) exists to
+     * receive money that is ALREADY bitcoin — the P2P funnel's landing spot
+     * and its BTC→BTCB exit. It is a local-input lane, like the Bridge's
+     * native tab, never a quote source and never an "alternative" to the
+     * swap path: wiring it into the quote search would divert crypto-to-
+     * crypto volume from our 0.70% to... nothing at all, because the leg has
+     * no crypto-to-crypto path. The temptation will be a "compare with your
+     * BTC balance" panel on the swap screen; that panel is this section's
+     * reason to exist.
+     */
+    const BTC_NEEDLES = /btcWallet|btcTx|btcChain|BtcCard|BtcSendSheet/;
+    for (const f of SWAP_PATH) {
+      if (!existsSync(f)) continue;
+      t(`${f} never references the internal BTC wallet`,
+        !BTC_NEEDLES.test(stripCode(read(f))));
+    }
+    for (const f of [
+      'src/pages/Market.jsx', 'src/pages/Discover.jsx', 'src/pages/Lab.jsx',
+      'src/pages/Home.jsx', 'src/pages/Homepage.jsx'
+    ]) {
+      if (!existsSync(f)) continue;
+      t(`${f} never suggests the internal BTC wallet as a swap alternative`,
+        !BTC_NEEDLES.test(stripCode(read(f))));
+    }
+
+    /*
+     * Directory containment for the BTC leg: the wallet component imports
+     * only the pages allowed to host it. server/btcChain.js is deliberately
+     * in the innocuous-contact set BELOW this block (it is chain-data
+     * infrastructure like the coins route, not a swap participant) — but the
+     * SWAP PATH still may never touch it, per the loop above.
+     */
+    /* needle matches both static imports and dynamic import('../lib/btcWallet') */
+    for (const [needle, allowed] of [
+      [/lib\/btcWallet/, new Set([
+        'src/components/BtcCard.jsx', 'src/components/BtcSendSheet.jsx',
+        'src/components/P2PMarket.jsx', 'src/components/ReceiveSheet.jsx'
+      ])],
+      [/components\/BtcCard/, new Set(['src/pages/Wallet.jsx'])]
+    ]) {
+      const users = walk('src')
+        .filter((p) => needle instanceof RegExp ? needle.test(stripCode(read(p))) : stripCode(read(p)).includes(needle));
+      const offenders = users.filter((p) => !allowed.has(p));
+      t(`${needle} is imported only from its allowed hosts` +
+        (offenders.length ? ` — found in: ${offenders.join(', ')}` : ''),
+        offenders.length === 0);
+    }
+
+    /*
+     * The zero law, as a wiring fact: btcWallet/btcTx never write any
+     * persistent secret. localStorage/sessionStorage writes from the BTC
+     * modules would be the first sign of a vault bypass — the address cache
+     * is in-memory by design and the key accessor returns transient values.
+     */
+    for (const f of ['src/lib/btcWallet.js', 'src/lib/btcTx.js']) {
+      if (!existsSync(f)) continue;
+      const src = stripCode(read(f));
+      t(`${f} never persists anything (no storage writes)`,
+        !/localStorage|sessionStorage|indexedDB|document\.cookie/.test(src));
+    }
   }
 
   return rows;

@@ -270,6 +270,20 @@ console.log('▸ probing the P2P market proxy (side mapping · allow-list · ref
   report('P2P market (server: proxy contract)', await p2pRows);
 }
 
+/* ------------------------- 0d₃. Internal BTC wallet ------------------------- */
+/*
+ * The BIP-84 leg on the same seed: derivation pinned to the official BIP-84
+ * vector, the BIP-143 P2WPKH signature reproduced byte-for-byte from the
+ * BIP's own example, the all-UTXO builder's failure modes, and the /api/btc
+ * proxy contract (checksum allow-list before any egress, integer sats,
+ * honest 429/503/502 — never 500).
+ */
+console.log('▸ probing the internal BTC wallet (BIP-84 · BIP-143 · /api/btc proxy)…');
+{
+  const { default: btcRows } = await import('./btc-wallet-probe.mjs');
+  report('BTC wallet (BIP-84 · BIP-143 · proxy)', btcRows);
+}
+
 /* ------------------------------ 0e. safe refresh ---------------------------- */
 /* The refresh contract: single-flight, guard-respecting, storage-untouching. */
 console.log('▸ probing the safe-refresh contract…');
