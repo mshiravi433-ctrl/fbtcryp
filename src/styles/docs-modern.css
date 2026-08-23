@@ -244,3 +244,64 @@
 :root[data-theme='light'] .docs-level-beginner { color: #007a68; background: rgba(0, 122, 104, 0.08); }
 :root[data-theme='light'] .docs-level-intermediate { color: #8a5a00; background: rgba(138, 90, 0, 0.08); }
 :root[data-theme='light'] .docs-level-pro { color: #5746c9; background: rgba(87, 70, 201, 0.08); }
+
+/* ─── SIGNALS: COLLAPSIBLE SECTIONS ──────────────────────────────────────────
+ *
+ * The breakdown card's seven blocks are accordions now (see SignalSection in
+ * pages/Signals.jsx for the reasoning). These rules are deliberately thin — the
+ * blocks keep their own existing styling inside `.sig-acc-body`, so this change
+ * added a header and a divider and nothing else.
+ *
+ * Logical properties throughout (`padding-inline`, `text-align: start`,
+ * `margin-inline-start`) so the header reads correctly in fa/ar without a
+ * single RTL override.
+ */
+.sig-acc + .sig-acc { border-top: 1px solid var(--line); }
+.sig-acc-head {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-inline: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sig-acc-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The headline number, so a COLLAPSED section still tells the user something.
+   Monospaced because every value that lands here is a figure. */
+.sig-acc-summary {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-1);
+  opacity: 0.85;
+}
+.sig-acc-caret {
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: transform 200ms ease;
+}
+.sig-acc-caret.is-open { transform: rotate(180deg); }
+/* Rotation is decoration on a state already announced by aria-expanded, so it
+   is simply switched off rather than replaced. */
+@media (prefers-reduced-motion: reduce) {
+  .sig-acc-caret { transition: none; }
+}
+.sig-acc-body { padding-block: 2px 12px; }

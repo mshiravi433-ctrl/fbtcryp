@@ -9,7 +9,8 @@ import { btcAddressInfo } from '../lib/btcAddress';
 import { btcAddressForSigner, btcSpendFromSigner } from '../lib/btcWallet';
 import { buildP2wpkhTx, DUST_SATS } from '../lib/btcTx';
 import { getBtcAddressInfo, getBtcFees, broadcastBtcTx } from '../lib/btcApi';
-import { IconCheck, IconExternal, IconShield } from './Icons';
+import QrScanner, { scannerSupported, parseScannedBtc } from './QrScanner';
+import { IconCheck, IconExternal, IconQr, IconShield } from './Icons';
 import { fmtNum } from '../lib/format';
 import useHideBalances from '../hooks/useHideBalances';
 
@@ -67,6 +68,7 @@ export default function BtcSendSheet({ open, onClose, prefill = null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null); /* { code, detail } */
   const [result, setResult] = useState(null); /* { txid, feeSats, vsize } */
+  const [scanOpen, setScanOpen] = useState(false);
 
   /* Reset on every open — a stale amount surviving between opens is exactly
      the "sent the previous number" bug SendSheet guards against. */
@@ -80,6 +82,7 @@ export default function BtcSendSheet({ open, onClose, prefill = null }) {
     setError(null);
     setResult(null);
     setBusy(false);
+    setScanOpen(false);
     return undefined;
   }, [open, prefill]);
 
@@ -186,6 +189,7 @@ export default function BtcSendSheet({ open, onClose, prefill = null }) {
   if (!open) return null;
 
   return (
+    <>
     <Sheet open={open} onClose={onClose} title={t('btc.send.title')} anchor="bottom" size="lg">
       {!unlocked ? (
         <p className="notice">{t('btc.send.locked')}</p>
@@ -281,7 +285,26 @@ export default function BtcSendSheet({ open, onClose, prefill = null }) {
         <div className="stack" style={{ gap: 10 }}>
           {prefill?.thor ? <p className="notice" style={{ margin: 0, fontSize: 11.5 }}>{t('btc.send.thorPrefill')}</p> : null}
 
-          <label className="field-label" htmlFor="btc-send-addr">{t('btc.send.recipient')}</label>
+          {/*
+            ─── SCAN, EXACTLY THE SendSheet PATTERN ──────────────────────────
+            Same `scannerSupported()` gate (the button is absent, not disabled
+            and not silently broken, where getUserMedia does not exist), same
+            sheet, same cancel-is-not-an-error behaviour — QrScanner owns the
+            permission-denied / no-camera / not-an-address copy, so there is
+            no second set of error strings to drift.
+
+            Hidden entirely when a THORChain prefill owns the field: the
+            inbound address is part of a quote and scanning over it would
+            build a deposit the memo no longer matches.
+          */}
+          <div className="xfer-label-row">
+            <span className="xfer-label">{t('btc.send.recipient')}</span>
+            {scannerSupported() && !prefill?.recipient && (
+              <button type="button" className="xfer-scan" onClick={() => setScanOpen(true)}>
+                <IconQr width={13} height={13} /> {t('send.scan')}
+              </button>
+            )}
+          </div>
           <input
             id="btc-send-addr"
             dir="ltr"
@@ -290,6 +313,7 @@ export default function BtcSendSheet({ open, onClose, prefill = null }) {
             disabled={Boolean(prefill?.recipient)}
             className={`mono ${recipientInfo ? (recipientInfo.valid ? 'p2pm-addr-ok' : 'p2pm-addr-bad') : ''}`}
             placeholder="bc1q…"
+            aria-label={t('btc.send.recipient')}
             aria-invalid={Boolean(recipientInfo && !recipientInfo.valid)}
             value={recipient}
             onChange={(e) => setRecipient(e.target.value.trim())}
@@ -358,5 +382,25 @@ export default function BtcSendSheet({ open, onClose, prefill = null }) {
         </div>
       )}
     </Sheet>
+
+      {/*
+        The scanned string goes through `btcAddressInfo` by the ONLY route the
+        typed one does: it is written into `recipient`, and `recipientInfo`
+        re-derives from that state. There is no separate accept path, so a
+        scanned testnet or mistyped address is refused with the same message
+        and the same disabled Review button as a pasted one.
+      */}
+      <QrScanner
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        parse={parseScannedBtc}
+        onResult={(parsed) => {
+          if (parsed?.address) setRecipient(String(parsed.address).trim());
+          /* BIP-21 may carry an amount. Honoured only when it parses as money,
+             and never for a THOR prefill, whose amount the user still chooses. */
+          if (parsed?.amount && !prefill?.thor) setAmountBtc(String(parsed.amount));
+        }}
+      />
+    </>
   );
 }

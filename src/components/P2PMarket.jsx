@@ -12,8 +12,10 @@ import { btcAddressInfo } from '../lib/btcAddress';
 import { openUrl } from '../lib/browser';
 import { fmtNum, fmtQty } from '../lib/format';
 import {
-  IconCheck, IconChevronLeft, IconExternal, IconGlobe, IconRefresh, IconShield, IconSwap, IconUser
+  IconBank, IconCard, IconCash, IconCheck, IconChevronLeft, IconCoins, IconExternal, IconGift,
+  IconGlobe, IconMobileMoney, IconRefresh, IconSearch, IconShield, IconSwap, IconUser, IconWalletOnline, IconX
 } from './Icons';
+import { flagEmoji, flagFallback, flagSupported } from '../lib/countryFlag';
 
 /**
  * P2P MARKET — live Hodl Hodl offers, shared by /buy and /p2p.
@@ -62,6 +64,175 @@ const FALLBACK_CURRENCIES = [
 ];
 
 const emptyInputs = () => ({ amount: '', currency: 'USD', paymentMethod: '', country: '', layer: 'any' });
+
+/* ─── PAYMENT-METHOD GLYPHS ──────────────────────────────────────────────────
+ *
+ * Keyed off the `type` Hodl Hodl already sends (server/hodlhodl.js normalises
+ * it into `type`), so this costs no extra request and no new server shape —
+ * the constraint on this item was explicitly "use the metadata we already
+ * have".
+ *
+ * Matching is by SUBSTRING on a lower-cased type, not by exact equality. Their
+ * vocabulary is not a closed enum and has grown before ("online_wallet",
+ * "digital_wallet", "e_wallet" have all appeared); an exact map would silently
+ * fall through to the generic glyph for a whole category the day they rename
+ * one. Order matters — the first match wins, so the more specific tests come
+ * first.
+ */
+const METHOD_ICONS = [
+  [/gift|voucher/, IconGift],
+  [/mobile|airtime|m_?pesa/, IconMobileMoney],
+  [/cash|in_person|meet/, IconCash],
+  [/card|visa|master/, IconCard],
+  [/wallet|paypal|revolut|wise|skrill|payeer|zelle|venmo/, IconWalletOnline],
+  [/crypto|stable|usdt|token/, IconCoins],
+  [/bank|transfer|sepa|swift|wire|ach|iban/, IconBank]
+];
+
+/** The glyph for a payment method. Never null — an unknown type gets IconCoins. */
+export function paymentMethodIcon(type, name) {
+  const hay = `${String(type ?? '')} ${String(name ?? '')}`.toLowerCase();
+  for (const [re, Icon] of METHOD_ICONS) if (re.test(hay)) return Icon;
+  return IconCoins;
+}
+
+/**
+ * A country flag, or the two letters when the platform cannot draw one.
+ *
+ * `flagSupported()` measures the platform once per session (see
+ * lib/countryFlag.js for why measuring beats sniffing) and the fallback keeps
+ * the chip the same width either way, so the picker rows do not reflow between
+ * a Mac and a Windows machine.
+ */
+function CountryFlag({ code }) {
+  const emoji = flagEmoji(code);
+  if (!emoji || !flagSupported()) {
+    return <span className="p2pm-flag p2pm-flag-text">{flagFallback(code) || '··'}</span>;
+  }
+  return <span className="p2pm-flag">{emoji}</span>;
+}
+
+/**
+ * SEARCHABLE PICKER — the replacement for the three bare <select>s.
+ *
+ * ─── WHY NOT A <select> WITH NICER OPTIONS ──────────────────────────────────
+ * You cannot put a flag, a badge and an icon inside an <option>: the platform
+ * draws that list, and it draws text. Hodl Hodl publishes ~200 payment methods
+ * and ~150 countries, and an unsearchable native list of 200 text rows is the
+ * complaint this item is about.
+ *
+ * ─── WHY A PANEL AND NOT A SHEET ────────────────────────────────────────────
+ * The Buy and P2P screens already open a Sheet for the offer detail. A picker
+ * that was also a Sheet would stack two modals and fight over the body-scroll
+ * lock. This is a plain absolutely-positioned panel with a capped height.
+ *
+ * ACCESSIBILITY: the trigger is a real button with aria-haspopup/aria-expanded,
+ * the list is a listbox and each row an option carrying aria-selected. Escape
+ * closes and returns focus to the trigger; a pointer-down anywhere else closes.
+ * RTL-safe by construction — `inset-inline` and logical padding only, no
+ * `left`/`right` anywhere.
+ */
+function FilterPicker({ id, label, value, options, onChange, searchPlaceholder, emptyText }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    setQ('');
+    const onDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    /* pointerdown, not click: a click listener fires after the target has
+       already handled its own click, which on a filter chip means the panel
+       closes and reopens in the same gesture. */
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter((o) =>
+      String(o.label ?? '').toLowerCase().includes(needle) ||
+      String(o.search ?? '').toLowerCase().includes(needle));
+  }, [options, q]);
+
+  return (
+    <div className="p2pm-picker" ref={wrapRef}>
+      <span className="field-label" id={`${id}-label`}>{label}</span>
+      <button
+        type="button"
+        ref={triggerRef}
+        id={id}
+        className={`p2pm-picker-trigger ${open ? 'is-open' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={`${id}-label ${id}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {selected?.lead ? <span className="p2pm-picker-lead" aria-hidden="true">{selected.lead}</span> : null}
+        <span className="p2pm-picker-value">{selected?.label ?? ''}</span>
+        <svg className="p2pm-picker-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="p2pm-picker-panel" role="dialog" aria-labelledby={`${id}-label`}>
+          <div className="p2pm-picker-search">
+            <IconSearch width={14} height={14} aria-hidden="true" />
+            <input
+              type="text"
+              value={q}
+              autoFocus
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+            />
+            {q ? (
+              <button type="button" className="p2pm-picker-clear" onClick={() => setQ('')} aria-label={searchPlaceholder}>
+                <IconX width={12} height={12} />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="p2pm-picker-list" role="listbox" aria-labelledby={`${id}-label`} tabIndex={-1}>
+            {filtered.length === 0 ? (
+              <p className="p2pm-picker-empty">{emptyText}</p>
+            ) : filtered.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={o.value === value}
+                className={`p2pm-picker-opt ${o.value === value ? 'is-active' : ''}`}
+                onClick={() => { onChange(o.value); setOpen(false); triggerRef.current?.focus(); }}
+              >
+                {o.lead ? <span className="p2pm-picker-lead" aria-hidden="true">{o.lead}</span> : null}
+                <span className="p2pm-picker-opt-text">{o.label}</span>
+                {o.value === value ? <IconCheck width={13} height={13} aria-hidden="true" /> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 /** Age in minutes/hours for the stale label. */
 function staleAge(t, fetchedAt) {
@@ -349,51 +520,64 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
               }}
             />
           </div>
-          <div className="p2pm-field">
-            <label className="field-label" htmlFor="p2pm-currency">{t('p2pMarket.currency.label')}</label>
-            <select
-              id="p2pm-currency"
-              aria-label={t('p2pMarket.currency.label')}
-              value={input.currency}
-              onChange={(e) => patch({ currency: e.target.value })}
-            >
-              {currencyOptions.map((c) => (
-                <option key={c.code} value={c.code}>{c.code}</option>
-              ))}
-            </select>
-          </div>
+          <FilterPicker
+            id="p2pm-currency"
+            label={t('p2pMarket.currency.label')}
+            value={input.currency}
+            onChange={(v) => patch({ currency: v })}
+            searchPlaceholder={t('p2pMarket.currency.search')}
+            emptyText={t('p2pMarket.picker.none')}
+            options={currencyOptions.map((c) => ({
+              value: c.code,
+              /* The ticker is the identity — a trader searches "TRY", not
+                 "Turkish Lira" — so it leads, in the existing pill style, and
+                 the full name rides along only as search fodder. */
+              label: c.code,
+              lead: <span className="p2pm-ticker">{c.code}</span>,
+              search: c.name
+            }))}
+          />
         </div>
 
         <div className="p2pm-amount-row">
-          <div className="p2pm-field">
-            <label className="field-label" htmlFor="p2pm-method">{t('p2pMarket.method.label')}</label>
-            <select
-              id="p2pm-method"
-              aria-label={t('p2pMarket.method.label')}
-              value={input.paymentMethod}
-              onChange={(e) => patch({ paymentMethod: e.target.value })}
-            >
-              <option value="">{t('p2pMarket.method.any')}</option>
-              {meta.paymentMethods.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
+          <FilterPicker
+            id="p2pm-method"
+            label={t('p2pMarket.method.label')}
+            value={input.paymentMethod}
+            onChange={(v) => patch({ paymentMethod: v })}
+            searchPlaceholder={t('p2pMarket.method.search')}
+            emptyText={t('p2pMarket.picker.none')}
+            options={[
+              { value: '', label: t('p2pMarket.method.any'), lead: <IconGlobe width={14} height={14} /> },
+              ...meta.paymentMethods.map((m) => {
+                const Icon = paymentMethodIcon(m.type, m.name);
+                return {
+                  value: String(m.id),
+                  label: m.name,
+                  lead: <Icon width={14} height={14} />,
+                  search: m.type
+                };
+              })
+            ]}
+          />
           {meta.countries.length > 0 && (
-            <div className="p2pm-field">
-              <label className="field-label" htmlFor="p2pm-country">{t('p2pMarket.country.label')}</label>
-              <select
-                id="p2pm-country"
-                aria-label={t('p2pMarket.country.label')}
-                value={input.country}
-                onChange={(e) => patch({ country: e.target.value })}
-              >
-                <option value="">{t('p2pMarket.country.any')}</option>
-                {meta.countries.map((c) => (
-                  <option key={c.code} value={c.code}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+            <FilterPicker
+              id="p2pm-country"
+              label={t('p2pMarket.country.label')}
+              value={input.country}
+              onChange={(v) => patch({ country: v })}
+              searchPlaceholder={t('p2pMarket.country.search')}
+              emptyText={t('p2pMarket.picker.none')}
+              options={[
+                { value: '', label: t('p2pMarket.country.any'), lead: <IconGlobe width={14} height={14} /> },
+                ...meta.countries.map((c) => ({
+                  value: c.code,
+                  label: c.name,
+                  lead: <CountryFlag code={c.code} />,
+                  search: c.code
+                }))
+              ]}
+            />
           )}
         </div>
 
@@ -444,9 +628,41 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
               setBtcAddress(e.target.value.trim());
             }}
           />
-          <p className="prose-sm" style={{ marginTop: 6 }}>
-            {internalBtc ? t('p2pMarket.address.hintInternal') : t('p2pMarket.address.hint')}
-          </p>
+          {/*
+            ─── THE HINT, REWRITTEN AS A LEAD PLUS TWO CHOICES ────────────────
+            It used to be one 40-word sentence carrying three separate facts:
+            where the coins land, that the app now has its own address, and
+            that any other address works too. Read on a phone that is a wall,
+            and the two ACTIONS were buried mid-sentence where they read as
+            prose rather than as options.
+
+            So: one short sentence for the consequence — which is the part that
+            costs money if misread — then the two options as a checked list,
+            in the order they should be considered.
+
+            The other branch, for users with no internal wallet, is untouched:
+            it has only one option to offer and a list of one is worse than a
+            sentence.
+          */}
+          {internalBtc ? (
+            <div className="p2pm-hint">
+              <p className="prose-sm" style={{ margin: '6px 0 7px' }}>
+                {t('p2pMarket.address.hintInternal')}
+              </p>
+              <ul className="p2pm-hint-list">
+                <li>
+                  <IconCheck width={12} height={12} aria-hidden="true" />
+                  <span>{t('p2pMarket.address.hintInternalWallet')}</span>
+                </li>
+                <li>
+                  <IconCheck width={12} height={12} aria-hidden="true" />
+                  <span>{t('p2pMarket.address.hintInternalPaste')}</span>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <p className="prose-sm" style={{ marginTop: 6 }}>{t('p2pMarket.address.hint')}</p>
+          )}
           {internalBtc && !addressTouched && (
             <button
               type="button"

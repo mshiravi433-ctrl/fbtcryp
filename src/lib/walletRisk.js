@@ -136,6 +136,52 @@ export function labelRequestType(token) {
  * Returns a sorted array:
  *   { symbol, name, items, chains, totalAmount, value, priced, total }
  */
+/**
+ * ─── ONE-LINE, SAFE TEXT FOR AN ASSET ROW ───────────────────────────────────
+ *
+ * The bug: some rows in the wallet list rendered three broken lines where the
+ * asset name should be. Three separate causes, all in the DATA rather than the
+ * layout, which is why it only ever affected *some* rows:
+ *
+ *  1. AIRDROPPED SCAM TOKENS. Their metadata is an advert, not a name — the
+ *     `symbol` field routinely holds something like
+ *     "Visit x.com to claim 5000 USDT". The row's <strong> is a flex child, so
+ *     it shrinks and then wraps that sentence over three lines, pushing the
+ *     amount out of alignment. Every wallet that has ever received one of
+ *     these is affected, which is most of them.
+ *
+ *  2. CONTROL CHARACTERS. Token names come from third-party lists and
+ *     sometimes carry a literal newline, tab or a zero-width/bidi override.
+ *     A newline forces a break that no `text-overflow: ellipsis` can undo, and
+ *     an unbalanced RTL override (U+202E) reverses the rest of the line — the
+ *     "scrambled" variant of the same report.
+ *
+ *  3. MISSING METADATA. In the per-chain view the row was built with
+ *     `name: r.name` and no fallback, so a token the list has no name for
+ *     rendered an empty sub-line and the row lost its second line entirely,
+ *     making the list ragged.
+ *
+ * This normalises all three at the point the row is built, and the CSS pins
+ * the result to a single line with a fixed row height. Doing it here rather
+ * than only in CSS matters: `overflow: hidden` would visually hide a bidi
+ * override while it still reordered the characters around it.
+ *
+ * Truncation is by CHARACTERS, and generously — the ellipsis is the CSS's job
+ * for the ordinary long-but-legitimate name. This cap only exists so a
+ * 2 KB advert cannot become a 2 KB DOM text node on every row.
+ */
+export function cleanAssetText(raw, max = 40) {
+  if (raw == null) return '';
+  let s = String(raw);
+  /* Strip C0/C1 controls, bidi overrides/embeddings and zero-width joiners.
+     Kept as an explicit class rather than a \s catch-all: ordinary spaces
+     inside a real name ("PAX Gold") must survive. */
+  s = s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  if (s.length > max) s = `${s.slice(0, max - 1).trimEnd()}…`;
+  return s;
+}
+
 export function groupHoldings(rows = []) {
   const map = new Map();
   for (const r of rows) {
@@ -151,7 +197,11 @@ export function groupHoldings(rows = []) {
       : null;
     out.push({
       symbol,
-      name: items[0]?.name ?? symbol,
+      /* The raw symbol stays the identity (React key, search, the token sheet).
+         `displaySymbol` is the only thing the row renders — see the note on
+         cleanAssetText for why the two must not be the same value. */
+      displaySymbol: cleanAssetText(symbol, 14) || '?',
+      name: cleanAssetText(items[0]?.name, 44) || cleanAssetText(symbol, 44) || '—',
       items,
       chains: items.length,
       totalAmount: items.reduce((s, r) => s + (Number(r.amount) || 0), 0),

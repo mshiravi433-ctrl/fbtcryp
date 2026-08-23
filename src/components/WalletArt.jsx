@@ -89,18 +89,32 @@ export function WalletMesh() {
  * Kept here rather than in components/Icons.jsx because they are drawn at a
  * specific weight to match this panel — the shared set is stroked at 2 for
  * 21px nav use, and the same paths look coarse at 20px inside a filled tile.
+ *
+ * ─── THE BROKEN GLYPH, AND WHY IT ONLY BROKE ON THE ACTION ROW ──────────────
+ * Both icons carried a decorative "sparkle": a FILLED diamond 0.7 user units
+ * across, in a 24-unit viewBox. WalletActionRow renders these at 19px, so that
+ * diamond is 0.7 × (19/24) ≈ 0.55 CSS pixels. Sub-pixel filled geometry does
+ * not anti-alias predictably: depending on device pixel ratio it renders as a
+ * grey smudge, a hard dot floating away from the glyph, or nothing at all —
+ * which is exactly the "آیکون شکسته" next to the Receive button.
+ *
+ * On top of that the Receive arrowhead ended at y=14.5 while its shaft stopped
+ * at y=14, so the two strokes met with a visible 0.5-unit overshoot notch.
+ *
+ * Both are now drawn as pure strokes on the same 1.9 weight as the rest of the
+ * glyph, with the arrowhead meeting the shaft exactly. Nothing here is smaller
+ * than the stroke width, so the icons stay legible from 14px up.
  */
 export function IconReceive(props) {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      {/* Tray with arrow — more detail: double line tray for depth */}
-      <path d="M12 4v10" />
-      <path d="M8 10.5 12 14.5 16 10.5" />
+      {/* Arrow travelling DOWN into the tray — shaft and head share y=14.5. */}
+      <path d="M12 4v10.5" />
+      <path d="M8 11 12 14.9 16 11" />
+      {/* Tray */}
       <path d="M4.5 17v1.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V17" />
       <path d="M6 17h12" opacity="0.35" />
-      {/* Sparkle for attractiveness */}
-      <path d="M19 5l0.7 0.7L19 6.5l-0.7-0.7L19 5z" fill="currentColor" stroke="none" opacity="0.9" />
     </svg>
   );
 }
@@ -109,11 +123,33 @@ export function IconSend(props) {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
          strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M12 20V10" />
-      <path d="M8 13.5 12 9.5 16 13.5" />
+      {/* Arrow travelling UP out of the tray — mirror of Receive, same weight. */}
+      <path d="M12 20V9.5" />
+      <path d="M8 13 12 9.1 16 13" />
       <path d="M4.5 7V5.5A1.5 1.5 0 0 1 6 4h12a1.5 1.5 0 0 1 1.5 1.5V7" />
       <path d="M6 7h12" opacity="0.35" />
-      <path d="M19 18l0.7 0.7L19 19.5l-0.7-0.7L19 18z" fill="currentColor" stroke="none" opacity="0.9" />
+    </svg>
+  );
+}
+
+/**
+ * BITCOIN — the doorway added to the wallet action row.
+ *
+ * Deliberately drawn HERE and not imported from any lib/btc* module: this is
+ * 8 path commands, it costs nothing, and it keeps the action row free of any
+ * dependency on the bitcoin code. Same 1.9 stroke as its two neighbours so the
+ * row reads as one set, and no sub-pixel geometry (see the note above).
+ */
+export function IconBitcoin(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+         strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      {/* The two stems that poke out above and below the B. */}
+      <path d="M10.4 3.6v3M13.6 3.6v3M10.4 17.4v3M13.6 17.4v3" />
+      {/* The B itself: one spine, two bowls. */}
+      <path d="M8.2 6.6h5.4a2.7 2.7 0 0 1 0 5.4H8.2z" />
+      <path d="M8.2 12h6a2.7 2.7 0 0 1 0 5.4H8.2z" />
+      <path d="M8.2 6.6v10.8" />
     </svg>
   );
 }

@@ -65,6 +65,55 @@ export function parseScanned(raw) {
   return null;
 }
 
+/**
+ * BITCOIN: BIP-21 and bare addresses.
+ * ---------------------------------------------------------------------------
+ * A SEPARATE parser rather than another branch inside `parseScanned`, and the
+ * distinction matters:
+ *
+ *   • A bech32 bitcoin address contains characters (`0`, `b`) that the base58
+ *     branch above excludes, so `parseScanned` correctly returns null for
+ *     `bc1q…` today and the scanner says "not an address". Widening the shared
+ *     parser would instead make the EVM Send sheet accept a bitcoin address
+ *     into an 0x field — a silently wrong destination on an irreversible
+ *     transfer, which is the exact failure mode this whole component exists to
+ *     prevent.
+ *
+ *   • So the caller declares which chain it is scanning FOR (see the `parse`
+ *     prop below) and gets a parser that can only produce that chain's shape.
+ *
+ * This is a SHAPE pre-filter, not a validator. The real mainnet checksum is
+ * `btcAddressInfo` in lib/btcAddress.js, and the caller runs the result
+ * through it exactly as if it had been typed by hand — scanning must not be a
+ * way to bypass the validation the keyboard path enforces. Keeping the decoder
+ * out of this file also keeps the bitcoin code out of every chunk that only
+ * ever scans an 0x address.
+ */
+const BTC_SHAPE = /^(?:bc1[02-9ac-hj-np-z]{6,87}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/i;
+
+export function parseScannedBtc(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+
+  // BIP-21: bitcoin:bc1q…?amount=0.01&label=…  (the scheme is case-insensitive)
+  const uri = /^bitcoin:([^?#\s]+)/i.exec(text);
+  const candidate = uri ? uri[1] : text.split('?')[0];
+  if (!BTC_SHAPE.test(candidate)) return null;
+
+  let amount = null;
+  try {
+    const q = text.includes('?') ? new URLSearchParams(text.slice(text.indexOf('?') + 1)) : null;
+    const a = q?.get('amount');
+    /* BIP-21 amounts are decimal BTC. Anything else is dropped rather than
+       guessed at — a misread amount is a wrong payment. */
+    if (a && /^\d{1,9}(\.\d{1,8})?$/.test(a)) amount = a;
+  } catch {
+    /* malformed query — the address is still usable */
+  }
+
+  return { address: candidate, amount };
+}
+
 /*
  * WHY BarcodeDetector IS NOT REQUIRED HERE ANY MORE.
  *
@@ -85,7 +134,14 @@ export function scannerSupported() {
   return typeof window !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
 }
 
-export default function QrScanner({ open, onClose, onResult }) {
+/**
+ * @param {object}   props
+ * @param {Function} [props.parse] — which chain's shape to accept. Defaults to
+ *   the EVM/Solana/Tron parser, so every existing call site is unchanged; the
+ *   bitcoin send sheet passes `parseScannedBtc`. A scanner that accepted every
+ *   chain would hand an 0x field a bitcoin address.
+ */
+export default function QrScanner({ open, onClose, onResult, parse = parseScanned }) {
   const { t } = useTranslation();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -137,9 +193,11 @@ export default function QrScanner({ open, onClose, onResult }) {
    * callback without treating it as a reason to restart the hardware.
    */
   const onCloseRef = useRef(onClose);
+  const parseRef = useRef(parse);
   const onResultRef = useRef(onResult);
   useEffect(() => {
     onCloseRef.current = onClose;
+    parseRef.current = parse;
     onResultRef.current = onResult;
   });
 
@@ -244,7 +302,7 @@ export default function QrScanner({ open, onClose, onResult }) {
           try {
             const value = await detect(videoRef.current);
             if (value) {
-              const parsed = parseScanned(value);
+              const parsed = parseRef.current(value);
               if (parsed) {
                 stop();
                 onResultRef.current?.(parsed, value);

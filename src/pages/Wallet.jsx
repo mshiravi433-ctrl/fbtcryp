@@ -13,6 +13,7 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import SendSheet from '../components/SendSheet';
 import ReceiveSheet from '../components/ReceiveSheet';
 import BtcCard from '../components/BtcCard';
+import BtcHubSheet from '../components/BtcHubSheet';
 import WalletActionRow from '../components/WalletActionRow';
 import WalletIntelTiles from '../components/WalletIntelTiles';
 import WalletPnl from '../components/WalletPnl';
@@ -29,7 +30,7 @@ import { useAppStore } from '../store/useAppStore';
 import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
 import { revealMnemonic } from '../lib/localWallet';
 import { buildIntelligence } from '../lib/portfolioIntel';
-import { groupHoldings } from '../lib/walletRisk';
+import { cleanAssetText, groupHoldings } from '../lib/walletRisk';
 import { apiBase } from '../lib/apiBase';
 import TokenIcon from '../lib/tokenIcon';
 import { IconCopy, IconGlobe, IconBuilding, IconChevronRight, IconTrend } from '../components/Icons';
@@ -218,6 +219,7 @@ function WalHero({
           <WalletActionRow
             onSend={() => children?.onSend?.()}
             onReceive={() => children?.onReceive?.()}
+            onBitcoin={() => children?.onBitcoin?.()}
             onSwap={() => children?.onSwap?.()}
             onBridge={() => children?.onBridge?.()}
             onBuy={() => children?.onBuy?.()}
@@ -372,9 +374,14 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
 
   const groups = useMemo(() => {
     if (selectedChain === 'all') return groupHoldings(rows);
+    /* The per-chain branch used to build rows by hand with `name: r.name` and
+       no fallback, so a token the lists have no name for rendered a blank
+       sub-line — one of the three causes of the broken rows. It now produces
+       exactly the same normalised shape groupHoldings does. */
     return rows.map((r) => ({
       symbol: r.symbol,
-      name: r.name,
+      displaySymbol: cleanAssetText(r.symbol, 14) || '?',
+      name: cleanAssetText(r.name, 44) || cleanAssetText(r.symbol, 44) || '—',
       items: [r],
       chains: 1,
       totalAmount: r.amount,
@@ -447,9 +454,21 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
                 onClick={() => onOpenToken?.(g)}
               >
                 <TokenIcon token={{ symbol: g.symbol, address: g.items[0]?.address, native: g.items[0]?.native }} chainId={g.items[0]?.chainId} size={34} />
-                <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
-                  <span className="row" style={{ gap: 6 }}>
-                    <strong style={{ fontSize: 13.5 }}>{g.symbol}</strong>
+                {/*
+                  ─── THE ROW IS PINNED TO EXACTLY TWO LINES ───────────────
+                  `wal-asset-main` is the overflow context and `wal-asset-sym`
+                  is the one element allowed to shrink; the chain chips and the
+                  gas pill never shrink and are clipped instead. Without the
+                  explicit min-width:0 chain a flex child refuses to go below
+                  its content width, which is what let a scam token's
+                  advert-as-a-symbol wrap onto three lines and shove the
+                  balance out of the row. `dir="auto"` is per-element so a
+                  Persian layout keeps the numbers on the correct side while a
+                  Latin symbol still reads left-to-right.
+                */}
+                <span className="wal-asset-main">
+                  <span className="wal-asset-line">
+                    <strong className="wal-asset-sym" dir="auto" title={g.symbol}>{g.displaySymbol}</strong>
                     {g.items.map((r) => {
                       const c = EVM_CHAINS[r.chainId];
                       return (
@@ -458,14 +477,14 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
                         </span>
                       );
                     })}
-                    {g.items[0]?.native && <span className="pill pill-rgb" style={{ fontSize: 9 }}>{t('wallet.gasCoin')}</span>}
+                    {g.items[0]?.native && <span className="pill pill-rgb" style={{ fontSize: 9, flexShrink: 0 }}>{t('wallet.gasCoin')}</span>}
                   </span>
-                  <small className="faint">
+                  <small className="faint wal-asset-name" dir="auto" title={g.name}>
                     {g.name}
                     {partial && <span className="wal-note" style={{ marginInlineStart: 6, fontSize: 9 }}>{t('wallet.partial')}</span>}
                   </small>
                 </span>
-                <span style={{ textAlign: 'end' }}>
+                <span className="wal-asset-figures">
                   <div className="mono" style={{ fontWeight: 800, fontSize: 13 }}>
                     {fmtQty(g.totalAmount)}
                   </div>
@@ -639,6 +658,7 @@ export default function Wallet() {
 
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [btcHubOpen, setBtcHubOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState('all');
   const [tab, setTab] = useState('real');
@@ -775,6 +795,7 @@ export default function Wallet() {
   const heroApi = {
     onSend: () => setSendOpen(true),
     onReceive: () => setReceiveOpen(true),
+    onBitcoin: () => setBtcHubOpen(true),
     onBuy: () => navigate('/buy'),
     onSwap: () => navigate('/swap'),
     onBridge: () => navigate('/bridge'),
@@ -882,7 +903,7 @@ export default function Wallet() {
           itself renders nothing for injected/locked wallets — so this line is
           a no-op for everyone who has no internal BTC wallet. It lives in the
           Wallet chunk only; no other route pulls it in. */}
-      {tab === 'real' && <BtcCard />}
+      <div id="wallet-btc-card">{tab === 'real' && <BtcCard />}</div>
 
       {/* ----------------- allocation ----------------- */}
       {tab === 'practice' && <>
@@ -901,6 +922,33 @@ export default function Wallet() {
       <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
       <SendSheet open={sendOpen} onClose={() => setSendOpen(false)} token={sendToken} swapForGasTarget={gasSwapTarget} />
       <ReceiveSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} />
+
+      {/*
+        ─── THE BITCOIN POPUP (action row, between Receive and Swap) ─────────
+        `vaultState` is computed HERE because this page already holds the
+        wallet context; the sheet itself stays free of any bitcoin-wallet
+        import, which is what keeps its chunk small and the import-graph rule
+        in the wiring suite satisfied.
+
+        The sheet mounts on this page only, so the watch-only code and the
+        /api/btc reads it performs are part of the Wallet chunk and cannot
+        reach Home, Market or the swap path.
+      */}
+      <BtcHubSheet
+        open={btcHubOpen}
+        onClose={() => setBtcHubOpen(false)}
+        vaultState={wallet.mode === 'local' ? (wallet.locked ? 'locked' : 'unlocked') : 'none'}
+        onOpenCard={() => {
+          /* The card is already on this page; scroll rather than duplicate it.
+             `smooth` is skipped when the OS asks for reduced motion — the
+             media query is read directly because this is a one-shot imperative
+             call, not a render-time decision. */
+          const behavior = typeof window !== 'undefined'
+            && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+            ? 'auto' : 'smooth';
+          document.getElementById('wallet-btc-card')?.scrollIntoView({ behavior, block: 'center' });
+        }}
+      />
 
       {/* Token detail (from the unified asset list) */}
       <TokenDetailSheet
