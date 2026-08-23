@@ -48,6 +48,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
+import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
@@ -3355,6 +3356,42 @@ app.get('/api/swap/oo/swap', async (req, res) => {
 /* Velora — quote-only, same reachability fallback (see lib/velora.js). */
 app.get('/api/swap/velora/prices', async (req, res) => {
   const r = await proxyVeloraPrices(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * P2P bitcoin market (Hodl Hodl) — live offers for buying/selling BTC
+ * against local money, proxied with a strict allow-list so no arbitrary
+ * client parameter can reach upstream. The referral link is built ONLY in
+ * server/hodlhodl.js from HODLHODL_REF — the same boundary that keeps
+ * `referrer` unforgeable on the Solana route.
+ *
+ * Read-only by design: escrow creation needs the user's own payment
+ * password on hodlhodl.com, and this project will never hold a Signature
+ * Key (their docs: it grants direct access to user funds).
+ *
+ * These sit under the broad /api limiter like everything else; the upstream
+ * budget (2 reads/min anonymous) is absorbed by the in-module caching.
+ */
+app.get('/api/p2p/status', (_req, res) => res.json(p2pStatus()));
+
+app.get('/api/p2p/offers', async (req, res) => {
+  const r = await p2pOffers(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/p2p/payment-methods', async (req, res) => {
+  const r = await p2pPaymentMethods(req.query);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/p2p/currencies', async (_req, res) => {
+  const r = await p2pCurrencies();
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/p2p/countries', async (_req, res) => {
+  const r = await p2pCountries();
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
