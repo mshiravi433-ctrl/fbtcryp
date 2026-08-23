@@ -124,7 +124,7 @@
     "noProvider": "براؤزر میں کوئی والٹ نہیں ملا۔ ٹیلیگرام کے اندرونی براؤزر میں والٹ نہیں ہوتا — WalletConnect یا ایپ والٹ استعمال کریں۔",
     "connectFailed": "کنکشن ناکام یا مسترد۔",
     "wcOriginBlocked": "WalletConnect نے اس ایپ کا origin مسترد کیا۔ Reown ڈیش بورڈ میں یقینی بنائیں کہ Allowed Domains میں https://fbtswap.ir اور https://localhost، اور App IDs میں ir.fbtswap.app شامل ہوں۔",
-    "wcRelayUnreachable": "WalletConnect ریلے (relay.walletconnect.com) تک رسائی ممکن نہیں ہوئی۔ کچھ نیٹ ورک اسے بلاک کرتے ہیں — دوسرا نیٹ ورک یا VPN آزما کر دوبارہ کوشش کریں۔",
+    "wcRelayUnreachable": "WalletConnect ریلے تک رسائی ممکن نہیں ہوئی — کچھ نیٹ ورک اور آپریٹر اسے بلاک کرتے ہیں۔ اگر VPN استعمال کرتے ہیں تو وہ پورے ڈیوائس پر فعال ہونا چاہیے، کیونکہ والٹ ایپ کو بھی ریلے تک پہنچنا ہوتا ہے، صرف براؤزر کو نہیں۔ VPN کے بغیر بھی آپ یہ سائٹ والٹ کے اندرونی براؤزر (Trust یا MetaMask ← Browser ٹیب) میں کھول سکتے ہیں — اس راستے کو ریلے کی ضرورت ہی نہیں۔",
     "wcExpired": "کنکشن کی درخواست والٹ کی منظوری سے پہلے ختم ہو گئی۔ والٹ فہرست کھول کر دوبارہ کوشش کریں۔",
     "resetDesc": "آپ کا ورچوئل بیلنس، پوزیشنز، پلانز اور تاریخ ابتدائی حالت پر واپس لے آتا ہے۔",
     "noWcProject": "WalletConnect فعال کرنے کے لیے .env میں VITE_WALLETCONNECT_PROJECT_ID سیٹ کریں۔ cloud.reown.com پر مفت ہے۔",

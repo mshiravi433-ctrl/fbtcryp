@@ -121,7 +121,7 @@
     "backupTitle": "अपना सीड फ़्रेज़ बैकअप करें",
     "connectFailed": "कनेक्शन विफल या अस्वीकृत।",
     "wcOriginBlocked": "WalletConnect ने इस ऐप का origin अस्वीकार किया। Reown डैशबोर्ड में जाँचें कि Allowed Domains में https://fbtswap.ir और https://localhost तथा App IDs में ir.fbtswap.app शामिल हों।",
-    "wcRelayUnreachable": "WalletConnect रिले (relay.walletconnect.com) तक नहीं पहुँच सका। कुछ नेटवर्क इसे ब्लॉक करते हैं — दूसरा नेटवर्क या VPN आज़माकर फिर कोशिश करें।",
+    "wcRelayUnreachable": "WalletConnect रिले तक नहीं पहुँच सका — कुछ नेटवर्क और ISP इसे ब्लॉक करते हैं। यदि VPN इस्तेमाल करते हैं तो वह पूरे डिवाइस पर सक्रिय होना चाहिए, क्योंकि वॉलेट ऐप को भी रिले से जुड़ना होता है, सिर्फ़ ब्राउज़र को नहीं। बिना VPN के भी आप इस साइट को वॉलेट के अंदरूनी ब्राउज़र (Trust या MetaMask → Browser टैब) में खोल सकते हैं — उस रास्ते में रिले की ज़रूरत ही नहीं है।",
     "wcExpired": "वॉलेट की मंज़ूरी से पहले कनेक्शन अनुरोध समाप्त हो गया। वॉलेट सूची खोलकर फिर से कोशिश करें।",
     "resetDesc": "आपका वर्चुअल बैलेंस, पोज़िशन, प्लान और इतिहास शुरुआती स्थिति में लौटा देता है।",
     "noWcProject": "WalletConnect चालू करने के लिए .env में VITE_WALLETCONNECT_PROJECT_ID सेट करें। cloud.reown.com पर मुफ़्त मिलता है।",

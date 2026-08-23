@@ -121,7 +121,7 @@
     "backupTitle": "Sauvegardez votre phrase de récupération",
     "connectFailed": "Connexion échouée ou refusée.",
     "wcOriginBlocked": "WalletConnect a refusé l’origine de cette app. Dans le tableau de bord Reown, vérifiez que Allowed Domains contient https://fbtswap.ir et https://localhost, et que App IDs contient ir.fbtswap.app.",
-    "wcRelayUnreachable": "Impossible d'atteindre le relais WalletConnect (relay.walletconnect.com). Certains réseaux le bloquent — essayez un autre réseau ou un VPN, puis réessayez.",
+    "wcRelayUnreachable": "Impossible d'atteindre le relais WalletConnect — certains réseaux et opérateurs le bloquent. Si vous utilisez un VPN, il doit couvrir tout l'appareil : l'app du portefeuille doit aussi joindre le relais, pas seulement le navigateur. Sans VPN, vous pouvez aussi ouvrir ce site dans le navigateur intégré du portefeuille (Trust ou MetaMask → onglet Browser) — cette voie n'a pas besoin de relais.",
     "wcExpired": "La demande de connexion a expiré avant l'approbation du portefeuille. Rouvrez la liste des portefeuilles et réessayez.",
     "resetDesc": "Remet votre solde virtuel, vos positions, vos plans et votre historique à l'état initial.",
     "noWcProject": "Définissez VITE_WALLETCONNECT_PROJECT_ID dans votre .env pour activer WalletConnect. Gratuit sur cloud.reown.com.",
