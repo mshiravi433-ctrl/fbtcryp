@@ -1755,7 +1755,14 @@
         "wrongBot": "That is NOT this app's bot — the token on the server belongs to a different bot. Fix TELEGRAM_BOT_TOKEN in Vercel and redeploy.",
         "tokenRejected": "Telegram rejected the server's token itself (revoked or invalid). Paste a fresh token from BotFather into Vercel and redeploy.",
         "needKey": "This check needs the server secret. From a terminal run: curl \"{{url}}?key=CRON_SECRET\" — replacing CRON_SECRET with the project's value.",
-        "failed": "The check could not reach the server or Telegram. Try again in a moment."
+        "failed": "The check could not reach the server or Telegram. Try again in a moment.",
+        "findingsTitle": "Server findings",
+        "findTransit": "Transport corruption: the header/body copies do not match, or the received hash is not 64 characters.",
+        "findPoison": "Stored token looks polluted: wrapping quotes, invisible characters, or an invalid Bot API token shape were detected.",
+        "findOtherKey": "The initData was signed with a different bot key than this server is using.",
+        "findFp": "Token fingerprint: {{fingerprint}} (length {{length}}).",
+        "noToken": "No TELEGRAM_BOT_TOKEN is configured on this server.",
+        "cronMissing": "Full token diagnostics require CRON_SECRET or a verified session."
       },
       "projects": "Sandbox projects",
       "createProject": "Create",

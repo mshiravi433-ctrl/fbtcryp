@@ -28,18 +28,21 @@ const t = (name, ok) => rows.push([name, Boolean(ok)]);
 /* A syntactically bot-token-shaped test value. NOT a real secret. */
 const CLEAN_TOKEN = '1234567890:TEST-not-a-real-bot-token-AAAAAAAA';
 
-/** A real Mini App signature, computed the way Telegram computes it. */
-function signInitData(token, fields = {}) {
+const MODERN_CLIENT_SIGNATURE = 'MEUCIQDa_fake-modern-ed25519-signature_MIGAIgExampleOnly';
+
+/** A real Mini App HMAC, computed over the payload a current Telegram client sends. */
+function signInitData(token, fields = {}, { includeSignature = true } = {}) {
   const params = new URLSearchParams({
     auth_date: String(Math.floor(Date.now() / 1000)),
     user: JSON.stringify({ id: 4242, first_name: 'Probe' }),
+    ...(includeSignature ? { signature: MODERN_CLIENT_SIGNATURE } : {}),
     ...fields
   });
-  /* Telegram's data_check_string: all fields except hash, sorted BY FIELD
-     NAME, joined as key=value lines. */
+  /* Telegram's HMAC data_check_string: all received fields except hash,
+     rendered as key=value lines and sorted exactly like the reference helper. */
   const check = [...params.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${k}=${v}`)
+    .sort()
     .join('\n');
   const secret = createHmac('sha256', 'WebAppData').update(token).digest();
   params.set('hash', createHmac('sha256', secret).update(check).digest('hex'));
@@ -49,11 +52,20 @@ function signInitData(token, fields = {}) {
 export default async function run() {
   const initData = signInitData(CLEAN_TOKEN);
 
-  /* Baseline: a clean token verifies. */
+  /* Baseline: a clean token verifies, including the Bot API 7.10+ signature
+     field that belongs inside the HMAC payload. */
   {
     const r = verifyInitData(initData, CLEAN_TOKEN);
-    t('a clean bot token verifies genuine initData', r.ok === true && String(r.user?.id) === '4242');
+    t('a clean bot token verifies genuine initData with a signature field', r.ok === true && String(r.user?.id) === '4242');
   }
+  {
+    const forged = new URLSearchParams(initData);
+    forged.set('signature', 'tampered-modern-ed25519-signature');
+    t('tampering with the signature field is BAD_SIGNATURE',
+      verifyInitData(forged.toString(), CLEAN_TOKEN).reason === 'BAD_SIGNATURE');
+  }
+  t('legacy initData without a signature field still verifies',
+    verifyInitData(signInitData(CLEAN_TOKEN, {}, { includeSignature: false }), CLEAN_TOKEN).ok === true);
 
   /* The regression: whitespace smuggled into the stored secret must not
      change the verdict. Telegram signed with the clean token; the server
@@ -122,11 +134,9 @@ export default async function run() {
   t('a non-string token fails closed as MISSING_INPUT',
     verifyInitData(initData, 12345).reason === 'MISSING_INPUT');
 
-  /* The check string sorts BY FIELD NAME, exactly like Telegram. With a
-     prefix-colliding key pair (user / user2), sorting the joined key=value
-     LINES would produce a different order (the byte '=' sorts after digits)
-     and break the HMAC — this locks in the official behaviour. */
-  t('prefix-colliding fields verify with the by-name sort',
+  /* The check string is the reference helper's sorted key=value line chain,
+     with every received field except hash included. */
+  t('prefix-colliding fields verify with the reference sorted-line chain',
     verifyInitData(signInitData(CLEAN_TOKEN, { user2: 'extra-field' }), CLEAN_TOKEN).ok === true);
   t('prefix-colliding fields verify even against a quoted stored token',
     verifyInitData(signInitData(CLEAN_TOKEN, { user2: 'extra-field' }), `'${CLEAN_TOKEN}'`).ok === true);

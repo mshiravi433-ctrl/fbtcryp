@@ -63,6 +63,7 @@ export default function DeveloperConsole() {
      to a developer and are not confused with the Telegram session problem. */
   const [notice, setNotice] = useState(null);
   const [authReason, setAuthReason] = useState(null);
+  const [authDiagnostic, setAuthDiagnostic] = useState(null);
   /* Result of the server-side "which bot owns your token" check, shown inside
      the BAD_SIGNATURE checklist. Null until the owner runs it. */
   const [botCheck, setBotCheck] = useState(null);
@@ -91,11 +92,35 @@ export default function DeveloperConsole() {
     if (botCheck.ok && botCheck.data?.telegramAccepted === false) {
       return t('dev.console.authcheck.tokenRejected');
     }
+    if (botCheck.ok && botCheck.data?.fullDiagnostics) {
+      return t('dev.console.authcheck.cronMissing');
+    }
     if (!botCheck.ok && botCheck.status === 401) {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       return t('dev.console.authcheck.needKey', { url: `${origin}/api/telegram/whoami-bot` });
     }
     return t('dev.console.authcheck.failed');
+  };
+
+  const serverFindings = () => {
+    if (!authDiagnostic) return [];
+    const hashLength = Number(authDiagnostic.hashLength);
+    const shortHash = Number.isFinite(hashLength) && hashLength !== 64;
+    const transit = authDiagnostic.transportMatch === 'MISMATCH' || shortHash;
+    const poison = authDiagnostic.tokenHadQuotes === true || authDiagnostic.tokenHadInvisibleChars === true || authDiagnostic.tokenShapeValid === false;
+    const lines = [];
+    if (transit) lines.push(t('dev.console.authcheck.findTransit'));
+    if (poison) lines.push(t('dev.console.authcheck.findPoison'));
+    if (!transit && !poison && authDiagnostic.transportMatch === 'MATCH') lines.push(t('dev.console.authcheck.findOtherKey'));
+    if (authDiagnostic.tokenFingerprint) {
+      lines.push(t('dev.console.authcheck.findFp', {
+        fingerprint: authDiagnostic.tokenFingerprint,
+        length: String(authDiagnostic.tokenLength ?? '?')
+      }));
+    } else {
+      lines.push(t('dev.console.authcheck.noToken'));
+    }
+    return lines;
   };
 
   const refresh = useCallback(async () => {
@@ -111,9 +136,11 @@ export default function DeveloperConsole() {
     if (authFailure) {
       const diagnosis = await diagnoseTelegramAuth();
       setAuthReason(safeAuthReason(diagnosis.data?.reason || authFailure.code));
+      setAuthDiagnostic(diagnosis.data || null);
       setNotice({ level: 'danger', auth: true });
     } else {
       setAuthReason(null);
+      setAuthDiagnostic(null);
     }
   }, [session]);
 
@@ -127,11 +154,14 @@ export default function DeveloperConsole() {
     if (!result.ok && isAuthFailure(result.code)) {
       const diagnosis = await diagnoseTelegramAuth();
       setAuthReason(safeAuthReason(diagnosis.data?.reason || result.code));
+      setAuthDiagnostic(diagnosis.data || null);
       setNotice({ level: 'danger', auth: true });
     } else if (!result.ok) {
+      setAuthDiagnostic(null);
       setNotice({ level: 'danger', code: result.code });
     } else {
       setAuthReason(null);
+      setAuthDiagnostic(null);
       setNotice({ level: 'success', code: 'OK' });
     }
     await refresh();
@@ -156,6 +186,7 @@ export default function DeveloperConsole() {
 
   const rows = Array.isArray(listings[type]) ? listings[type] : [];
   const listingError = listings[type]?.error || null;
+  const findingLines = authReason === 'BAD_SIGNATURE' ? serverFindings() : [];
 
   return (
     <section className="card" style={{ marginTop: 12 }}>
@@ -170,6 +201,14 @@ export default function DeveloperConsole() {
               token). A numbered checklist plus a live server-side bot check
               turns "could not verify" into an actionable verdict without
               guessing. */}
+          {authReason === 'BAD_SIGNATURE' && findingLines.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <b>{t('dev.console.authcheck.findingsTitle')}</b>
+              <ul style={{ margin: '6px 0 0', paddingInlineStart: 20, textAlign: 'start' }}>
+                {findingLines.map((line) => <li key={line} style={{ marginBottom: 4 }}>{line}</li>)}
+              </ul>
+            </div>
+          )}
           {authReason === 'BAD_SIGNATURE' && (
             <ol style={{ margin: '10px 0 0', paddingInlineStart: 20, textAlign: 'start' }}>
               <li style={{ marginBottom: 6 }}>{t('dev.console.authcheck.step1')}</li>
@@ -184,6 +223,12 @@ export default function DeveloperConsole() {
                 {botCheck && (
                   <small style={{ display: 'block', marginTop: 6, wordBreak: 'break-word' }}>
                     {botCheckLine()}
+                    {botCheck.ok && botCheck.data?.fullDiagnostics && (
+                      <>
+                        <br />
+                        {t('dev.console.authcheck.cronMissing')}
+                      </>
+                    )}
                     {botCheck.ok && botCheck.data?.usernameMatches === false && (
                       <>
                         <br />

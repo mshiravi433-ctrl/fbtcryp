@@ -68,20 +68,16 @@ export function verifyInitData(initData, botToken, { maxAgeSeconds = 86400 } = {
   if (!hash) return { ok: false, reason: 'NO_HASH' };
 
   params.delete('hash');
-  params.delete('signature'); // Ed25519 field, not part of the HMAC payload
 
   /*
-   * The official algorithm sorts the received fields alphabetically BY FIELD
-   * NAME, then joins them as key=value lines. Sorting the joined lines gives
-   * the same order for every field name Telegram sends today, but differs for
-   * names where one is a prefix of the other (e.g. `user` vs `user2`: the
-   * byte `=` sorts after digits). Sort by key so a future Telegram field
-   * cannot silently flip the order — the check string must match Telegram's
-   * byte for byte.
+   * Telegram's HMAC path covers every received field except `hash`. Newer
+   * clients also send an Ed25519 `signature` field; that field remains part of
+   * this data-check-string. Only the third-party Ed25519 validation flow drops
+   * both `hash` and `signature`.
    */
   const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${k}=${v}`)
+    .sort()
     .join('\n');
 
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();

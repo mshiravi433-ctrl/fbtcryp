@@ -59,11 +59,38 @@ function launchKeyboard(webAppUrl, startPayload = '') {
     : undefined;
 }
 
+function html(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function apiBaseUrl(webAppUrl) {
+  try {
+    return `${new URL(webAppUrl).origin}/api`;
+  } catch {
+    return '/api';
+  }
+}
+
 export async function startBot({ token, webAppUrl }) {
   const bot = new Telegraf(token);
 
+  await bot.telegram.setMyCommands([
+    { command: 'app', description: 'Open the FBT Swap Mini App' },
+    { command: 'guide', description: 'Developer guide for the Mini App and API' },
+    { command: 'api', description: 'API reference and authentication quick start' },
+    { command: 'price', description: 'Look up a coin price, for example /price btc' },
+    { command: 'top', description: 'Show the top 10 coins by market cap' },
+    { command: 'trending', description: 'Show trending coins' },
+    { command: 'global', description: 'Show the global crypto market snapshot' },
+    { command: 'help', description: 'Show all bot commands' }
+  ]).catch((err) => console.warn('setMyCommands failed:', err?.message ?? err));
+
   bot.start(async (ctx) => {
-    const name = ctx.from?.first_name ?? 'trader';
+    const name = html(ctx.from?.first_name ?? 'trader');
     const referralCode = validReferralCode(ctx.startPayload);
     const referral = referralCode ? `\n🎟 Referral code: <code>${referralCode}</code>` : '';
     /*
@@ -87,7 +114,8 @@ export async function startBot({ token, webAppUrl }) {
         `Hey ${name} 👋\n` +
         `Live market data and a non-custodial swap across 10 networks — you hold your own keys, and you sign every trade yourself.${referral}\n\n` +
         `<i>⚠️ Swaps move real funds and on-chain transactions cannot be reversed. This bot never takes deposits, never holds your keys, and will never ask you to send crypto anywhere.</i>\n\n` +
-        `Commands: /price /top /global /trending /help`,
+        `Developer quick start: /guide and /api\n` +
+        `Commands: /app /guide /api /price /top /global /trending /help`,
       launchKeyboard(webAppUrl, referralCode)
     );
   });
@@ -95,11 +123,14 @@ export async function startBot({ token, webAppUrl }) {
   bot.help((ctx) =>
     ctx.replyWithHTML(
       `<b>Commands</b>\n` +
-        `/app — open the mini app\n` +
+        `/app — open the Mini App\n` +
+        `/guide — developer guide and troubleshooting steps\n` +
+        `/api — API reference, auth, endpoints, and limits\n` +
         `/price &lt;symbol&gt; — spot price (e.g. <code>/price btc</code>)\n` +
         `/top — top 10 by market cap\n` +
         `/trending — what's hot right now\n` +
         `/global — total market snapshot\n\n` +
+        `Read /guide first, then /api, then open the app.\n\n` +
         `⚠️ Nothing here is financial advice. Crypto is volatile and you can lose everything.`,
       launchKeyboard(webAppUrl)
     )
@@ -108,6 +139,50 @@ export async function startBot({ token, webAppUrl }) {
   bot.command('app', (ctx) =>
     ctx.reply(webAppUrl ? 'Tap to open 👇' : 'WEBAPP_URL is not configured on the server.', launchKeyboard(webAppUrl))
   );
+
+  bot.command('guide', (ctx) =>
+    ctx.replyWithHTML(
+      `<b>Developer guide</b>\n\n` +
+        `<b>1) What this bot is</b>\n` +
+        `FBT Swap is a non-custodial Mini App launcher and market assistant. It never asks for seed phrases or private keys, never takes deposits, and never holds user funds.\n\n` +
+        `<b>2) Open the Mini App</b>\n` +
+        `Use the Menu Button in this exact bot, then tap “Open FBT SWAP”. Opening a copied link from another bot can create a signature mismatch.\n\n` +
+        `<b>3) Developers page inside the Mini App</b>\n` +
+        `Open Developers to create projects, generate an API key that is shown only once, and manage agent or strategy listings. Store the key immediately; the server cannot show it again.\n\n` +
+        `<b>4) If login fails</b>\n` +
+        `Fully close the Mini App and reopen it from this bot's Menu Button. If the signature error continues, use /api and the Telegram diagnose endpoint to inspect transport, token fingerprint, and bot identity.\n\n` +
+        `<b>5) Next step</b>\n` +
+        `Read /api, then open the app and continue from the Developers page.`,
+      launchKeyboard(webAppUrl)
+    )
+  );
+
+  bot.command('api', (ctx) => {
+    const base = apiBaseUrl(webAppUrl);
+    return ctx.replyWithHTML(
+      `<b>FBT Swap API quick reference</b>\n\n` +
+        `<b>Base URL</b>\n` +
+        `<code>${html(base)}</code>\n\n` +
+        `<b>Authentication</b>\n` +
+        `For Telegram-protected POSTs, send the raw Mini App initData in the <code>x-telegram-init-data</code> header or in a JSON body field like <code>{"initData":"..."}</code>. Sending both is recommended because the body round-trips bytes exactly.\n\n` +
+        `<b>Key endpoints</b>\n` +
+        `<code>GET  /telegram/diagnose</code>\n` +
+        `<code>POST /telegram/diagnose</code>\n` +
+        `<code>GET  /telegram/whoami-bot</code>\n` +
+        `<code>GET  /developer/projects</code>\n` +
+        `<code>POST /developer/projects</code>\n` +
+        `<code>GET  /ecosystem/agents</code>\n` +
+        `<code>GET  /ecosystem/strategies</code>\n` +
+        `<code>GET  /ecosystem/mine/agents</code>\n` +
+        `<code>GET  /ecosystem/mine/strategies</code>\n` +
+        `<code>POST /ecosystem/agents</code> and <code>POST /ecosystem/strategies</code> for listings.\n\n` +
+        `<b>Limits</b>\n` +
+        `Plan for about 120 requests per minute per user. The API answers <code>429 RATE_LIMITED</code> with <code>retry-after</code> when the window is exceeded.\n\n` +
+        `<b>OpenAPI</b>\n` +
+        `Schema: <code>${html(base)}/openapi.json</code>`,
+      launchKeyboard(webAppUrl)
+    );
+  });
 
   bot.command('global', async (ctx) => {
     try {

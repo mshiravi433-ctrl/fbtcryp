@@ -422,11 +422,37 @@ app.post('/api/telegram/diagnose', telegramDiagnoseHandler);
  *   · Telegram rejects the token   → revoked or never valid; re-paste and
  *     redeploy.
  *
- * Authorization: the shared CRON_SECRET (same channels as /api/ai/diagnose —
- * Authorization: Bearer, x-cron-secret header, or ?key=) OR an already
- * verified Mini App session (req.tgUser), which during a BAD_SIGNATURE
- * outage is exactly what the owner does NOT have — hence the secret path.
+ * Anonymous callers may see only public getMe identity data. Full diagnostics
+ * require the shared CRON_SECRET (Authorization: Bearer, x-cron-secret header,
+ * or ?key=) OR an already verified Mini App session (req.tgUser), which during
+ * a BAD_SIGNATURE outage is exactly what the owner does NOT have — hence the
+ * secret path.
  */
+const TELEGRAM_GET_ME_TTL_MS = 60000;
+let telegramGetMeCache = { token: '', expires: 0, hasValue: false, payload: null, error: null };
+
+async function cachedTelegramGetMe(botToken) {
+  const now = Date.now();
+  if (telegramGetMeCache.token === botToken && telegramGetMeCache.hasValue && now < telegramGetMeCache.expires) {
+    if (telegramGetMeCache.error) throw telegramGetMeCache.error;
+    return telegramGetMeCache.payload;
+  }
+  /* The token appears in the URL only for the lifetime of this one call and is
+     never logged, stored or returned. The result is cached so anonymous checks
+     cannot fan out into more than one Telegram getMe request per minute. */
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/getMe`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    const payload = await response.json().catch(() => null);
+    telegramGetMeCache = { token: botToken, expires: now + TELEGRAM_GET_ME_TTL_MS, hasValue: true, payload, error: null };
+    return payload;
+  } catch (err) {
+    telegramGetMeCache = { token: botToken, expires: now + TELEGRAM_GET_ME_TTL_MS, hasValue: true, payload: null, error: err };
+    throw err;
+  }
+}
+
 app.get('/api/telegram/whoami-bot', async (req, res) => {
   const secret = process.env.CRON_SECRET || '';
   const provided =
@@ -438,55 +464,56 @@ app.get('/api/telegram/whoami-bot', async (req, res) => {
   const b = Buffer.from(provided);
   const secretOk = Boolean(secret) && a.length === b.length && timingSafeEqual(a, b);
   const sessionOk = Boolean(req.tgUser?.id);
-  if (!secretOk && !sessionOk) {
-    return res.status(401).json({
-      error: 'NEEDS_CRON_SECRET',
-      hint: 'curl "<origin>/api/telegram/whoami-bot?key=<CRON_SECRET>" — or re-run once the Mini App session verifies.'
-    });
-  }
-  if (!BOT_TOKEN) return res.status(503).json({ error: 'NO_BOT_TOKEN', hint: 'TELEGRAM_BOT_TOKEN is not set on this instance.' });
+  const fullOk = secretOk || sessionOk;
+  const cronSecretSet = Boolean(secret);
+  if (!BOT_TOKEN) return res.status(503).json({ error: 'NO_BOT_TOKEN', cronSecretSet });
 
-  /* Raw env value, like the diagnose route: the flags describe what was
-     STORED, not the cleaned copy the HMAC uses. */
-  const token = tokenDiagnostics(process.env.TELEGRAM_BOT_TOKEN);
   const expectedUsername = String(process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '').toLowerCase();
+  const withExpectedUsername = (data) => expectedUsername
+    ? { ...data, expectedBotUsername: expectedUsername, usernameMatches: data.bot?.username ? String(data.bot.username).toLowerCase() === expectedUsername : false }
+    : data;
 
   let payload = null;
   try {
-    /* The token appears in the URL only for the lifetime of this one call and
-       is never logged, stored or returned. */
-    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`, {
-      signal: AbortSignal.timeout(8000)
-    });
-    payload = await response.json().catch(() => null);
+    payload = await cachedTelegramGetMe(BOT_TOKEN);
   } catch {
-    return res.status(502).json({ error: 'TELEGRAM_UNREACHABLE', hint: 'Could not reach api.telegram.org from this instance.' });
+    return res.status(502).json({ error: 'TELEGRAM_UNREACHABLE', cronSecretSet });
   }
-  if (!payload) return res.status(502).json({ error: 'TELEGRAM_UNREACHABLE', hint: 'api.telegram.org returned an unreadable response.' });
+  if (!payload) return res.status(502).json({ error: 'TELEGRAM_UNREACHABLE', cronSecretSet });
 
   res.set('cache-control', 'private, no-store');
-  if (payload.ok !== true) {
-    /* Telegram itself refuses this token: revoked, mistyped or placeholder. */
+  const publicData = payload.ok === true
+    ? withExpectedUsername({
+        telegramAccepted: true,
+        bot: {
+          id: payload.result?.id ?? null,
+          username: typeof payload.result?.username === 'string' ? payload.result.username : null
+        },
+        cronSecretSet
+      })
+    : withExpectedUsername({
+        telegramAccepted: false,
+        bot: null,
+        cronSecretSet
+      });
+
+  if (!fullOk) {
     return res.json({
       data: {
-        telegramAccepted: false,
-        telegramError: payload.error_code ?? null,
-        telegramErrorDescription: typeof payload.description === 'string' ? payload.description.slice(0, 120) : null,
-        ...token,
-        expectedBotUsername: expectedUsername || null
+        ...publicData,
+        fullDiagnostics: 'requires CRON_SECRET or a verified session'
       },
       meta: { schema: 'fbt.telegram-whoami.v1' }
     });
   }
 
-  const bot = payload.result || {};
-  const username = typeof bot.username === 'string' ? bot.username : '';
+  /* Raw env value, like the diagnose route: the flags describe what was
+     STORED, not the cleaned copy the HMAC uses. */
+  const token = tokenDiagnostics(process.env.TELEGRAM_BOT_TOKEN);
   return res.json({
     data: {
-      telegramAccepted: true,
-      bot: { id: bot.id ?? null, username: username || null, firstName: typeof bot.first_name === 'string' ? bot.first_name : null },
-      expectedBotUsername: expectedUsername || null,
-      usernameMatches: expectedUsername ? username.toLowerCase() === expectedUsername : null,
+      ...publicData,
+      tokenDiagnostics: token,
       ...token
     },
     meta: { schema: 'fbt.telegram-whoami.v1' }
