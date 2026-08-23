@@ -9596,3 +9596,193 @@ body { overflow-x: clip; }
     transform: none !important;
   }
 }
+
+/* ==========================================================================
+   P2P MARKET — live offer cards, filters, sticky summary (components/P2PMarket)
+   --------------------------------------------------------------------------
+   Deliberately backdrop-filter-free on the list cards: a long list of blurred
+   glass is the slowest thing a low-end phone renders. The glass effect is
+   faked with a layered gradient + border, which composites for free.
+   ========================================================================== */
+
+.p2pm { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+
+.p2pm-filters { display: flex; flex-direction: column; gap: 10px; }
+
+.p2pm-amount-row { display: flex; gap: 9px; }
+.p2pm-field { flex: 1; min-width: 0; }
+.p2pm-field-amount { flex: 1.4; }
+.p2pm-field input, .p2pm-field select { width: 100%; }
+
+.p2pm-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-height: 44px; padding: 0 14px;
+  border-radius: 999px; border: 1px solid var(--line);
+  background: var(--bg-panel); color: var(--text-2);
+  font-size: 12px; font-weight: 700; font-family: inherit;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.p2pm-toggle.active {
+  border-color: rgba(0, 229, 255, 0.45);
+  color: var(--text-1);
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.14), rgba(0, 255, 157, 0.08));
+}
+
+/* ------------------------------ offer cards ------------------------------ */
+
+.p2pm-list { display: flex; flex-direction: column; gap: 9px; }
+
+/*
+ * Fixed floor on height: the loading skeleton renders the very same class, so
+ * the list does not jump a pixel when live offers arrive.
+ */
+.p2pm-card {
+  position: relative;
+  min-height: 148px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 13px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02) 55%, rgba(0, 229, 255, 0.045)),
+    var(--bg-panel);
+  transition: border-color 160ms ease;
+}
+.p2pm-card:not(.skel):hover { border-color: var(--line-strong); }
+.p2pm-card-out { opacity: 0.55; }
+
+/* Skeleton cards reuse the exact card geometry; the shimmer must win over the
+   card's own glass background or the loading state renders as solid boxes. */
+.p2pm-card.skel {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: skel-shine 1.3s ease-in-out infinite;
+  border-color: var(--line);
+}
+@media (prefers-reduced-motion: reduce) {
+  .p2pm-card.skel { animation: none; }
+}
+
+.p2pm-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.p2pm-price {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: var(--text-1);
+}
+.p2pm-price-cc { font-size: 11px; font-weight: 700; color: var(--text-3); margin-inline-start: 6px; letter-spacing: 0.06em; }
+.p2pm-badges { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+
+.p2pm-card-mid { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.p2pm-range { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
+.p2pm-window { font-size: 11px; color: var(--text-3); }
+.p2pm-youget {
+  margin-inline-start: auto;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 800; color: var(--up);
+}
+
+.p2pm-card-methods { display: flex; gap: 5px; flex-wrap: wrap; }
+.p2pm-chip {
+  max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); color: var(--text-2);
+}
+.p2pm-chip-more { color: var(--text-3); }
+
+.p2pm-card-bottom { display: flex; align-items: center; gap: 9px; margin-top: auto; }
+.p2pm-trader {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: var(--text-1);
+  max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.p2pm-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.p2pm-dot.on { background: var(--up); box-shadow: 0 0 6px rgba(0, 255, 157, 0.8); }
+.p2pm-dot.off { background: var(--text-3); }
+.p2pm-verified { color: var(--up); flex-shrink: 0; }
+.p2pm-stats { font-size: 11px; color: var(--text-2); }
+.p2pm-stats b { color: var(--text-1); }
+.p2pm-trade-btn { margin-inline-start: auto; min-width: 86px; }
+
+.p2pm-outnote { margin: 0; font-size: 11px; color: var(--down); line-height: 1.55; }
+.p2pm-card-out .p2pm-outnote { opacity: 1; }
+
+/* ------------------------------ address ---------------------------------- */
+
+.p2pm-address { display: flex; flex-direction: column; }
+.p2pm-address input { width: 100%; }
+.p2pm-address input.p2pm-addr-ok { border-color: rgba(0, 255, 157, 0.5); }
+.p2pm-address input.p2pm-addr-bad { border-color: rgba(255, 59, 107, 0.6); }
+.p2pm-addr-msg { display: flex; align-items: center; gap: 5px; margin: 6px 0 0; font-size: 11.5px; line-height: 1.6; }
+.p2pm-addr-msg.p2pm-addr-bad { display: block; border: none; color: var(--down); }
+.p2pm-addr-msg.p2pm-addr-ok { color: var(--up); }
+
+/* ------------------------------ empty/error ------------------------------ */
+
+.p2pm-empty {
+  min-height: 148px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 9px; padding: 20px; text-align: center;
+  border-radius: var(--radius); border: 1px dashed var(--line-strong);
+}
+
+/* --------------------------- sticky summary bar -------------------------- */
+
+/*
+ * Always the last thing on the page and always in reach of the thumb: the
+ * amount the user typed, priced by the best card, plus the single action the
+ * funnel exists for.
+ */
+.p2pm-bar {
+  position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  z-index: 12;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(160deg, rgba(0, 229, 255, 0.14), rgba(0, 255, 157, 0.06)),
+    var(--bg-panel-solid);
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.65);
+}
+.p2pm-bar-figures { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; }
+.p2pm-bar-fiat { font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.p2pm-bar-btc { font-family: var(--font-mono); font-size: 13.5px; font-weight: 800; color: var(--text-1); white-space: nowrap; }
+.p2pm-bar-arrow { color: var(--text-3); flex-shrink: 0; }
+[dir='rtl'] .p2pm-bar-arrow { transform: scaleX(-1); }
+.p2pm-bar-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
+.p2pm-bar .btn { flex-shrink: 0; }
+
+/* --------------------------- sheet rows ---------------------------------- */
+
+.p2pm-sheet-offer { margin-bottom: 10px; }
+.p2pm-sheet-rows {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 6px 12px; background: rgba(255, 255, 255, 0.03);
+}
+.p2pm-swap-cta { margin-top: 2px; }
+
+/* ------------------------------ light theme ------------------------------- */
+
+:root[data-theme='light'] .p2pm-card {
+  border-color: rgba(15, 23, 42, 0.1);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(241, 245, 249, 0.75) 55%, rgba(186, 230, 253, 0.25)),
+    #ffffff;
+}
+:root[data-theme='light'] .p2pm-chip { background: rgba(15, 23, 42, 0.05); border-color: rgba(15, 23, 42, 0.1); }
+:root[data-theme='light'] .p2pm-toggle { background: #ffffff; border-color: rgba(15, 23, 42, 0.14); }
+:root[data-theme='light'] .p2pm-toggle.active {
+  border-color: rgba(2, 132, 199, 0.45);
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.1), rgba(5, 150, 105, 0.07));
+}
+:root[data-theme='light'] .p2pm-bar {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: linear-gradient(160deg, rgba(2, 132, 199, 0.12), rgba(5, 150, 105, 0.06)), #ffffff;
+  box-shadow: 0 10px 30px -14px rgba(15, 23, 42, 0.35);
+}
+:root[data-theme='light'] .p2pm-sheet-rows { background: rgba(15, 23, 42, 0.03); }
+:root[data-theme='light'] .p2pm-empty { border-color: rgba(15, 23, 42, 0.2); }
+
+/* --------------------------- reduced motion ------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .p2pm-card, .p2pm-toggle { transition: none; }
+}

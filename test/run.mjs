@@ -255,6 +255,21 @@ console.log('▸ probing the Solana price path (OpenOcean whitelist + Jupiter fa
   report('solana price (client: error tags, Jupiter fallback)', solanaClientRows);
 }
 
+/* --------------------------- 0d₂. P2P market proxy -------------------------- */
+/*
+ * The /buy + /p2p directory became an in-app market over Hodl Hodl. The whole
+ * contract — the side inversion, both payment-method shapes, min/max, the
+ * env-only referral, the parameter allow-list, honest 429/503 mapping, stale
+ * serving, and the BIP-173/350 address validator — is exercised end to end
+ * over real HTTP with the upstream stubbed. A regression in any of them was
+ * precisely a bug that very nearly shipped.
+ */
+console.log('▸ probing the P2P market proxy (side mapping · allow-list · referrals · bech32)…');
+{
+  const { default: p2pRows } = await import('./p2p-market-probe.mjs');
+  report('P2P market (server: proxy contract)', await p2pRows);
+}
+
 /* ------------------------------ 0e. safe refresh ---------------------------- */
 /* The refresh contract: single-flight, guard-respecting, storage-untouching. */
 console.log('▸ probing the safe-refresh contract…');

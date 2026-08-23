@@ -2198,9 +2198,13 @@ export default function run() {
      * coloured pill behind it comes from SegIndicator. Buy copied the markup
      * without it, so the selected tab was black text on a dark panel —
      * invisible in dark theme.
+     *
+     * The buy/sell tab strip moved into the shared P2PMarket when the link
+     * directory was replaced by the live market (see section 74), so the
+     * assertion moved with it. Same bug class, same check.
      */
-    const buy = read('src/pages/Buy.jsx');
-    t('the Buy tabs render an active indicator', /<SegIndicator/.test(buy));
+    t('the buy/sell tabs render an active indicator',
+      /<SegIndicator/.test(read('src/components/P2PMarket.jsx')));
 
     // And Buy must be reachable from the wallet, where the question is asked.
     t(
@@ -4319,11 +4323,13 @@ export default function run() {
    */
   {
     /*
-     * P2P is deliberately NOT in this list. Those three desks convert rial to
-     * crypto, which is the one thing this app genuinely does not do — they
-     * compete with nothing of ours, so removing them would leave a real need
-     * with no answer. They are allowed to stay ONLY with the block warning
-     * asserted below.
+     * P2P used to be deliberately NOT in this list — the three desks it
+     * linked converted rial to crypto, the one thing this app could not do,
+     * so they competed with nothing of ours. That argument died with the
+     * link directory: the owner ruled «ارجاع کلا قشنگ نیست», the desks are
+     * gone, and P2P now hosts OUR market over the Hodl Hodl desk instead
+     * (section 74 and the anti-cannibalisation section at the end of this
+     * suite). The bans below keep covering what actually came back once.
      */
     const swapSurfaces = ['src/pages/Buy.jsx', 'src/pages/Swap.jsx'];
     /* Comments stripped: these files EXPLAIN why the links were removed, and
@@ -4381,35 +4387,47 @@ export default function run() {
      * this screen was rebuilt to remove.
      */
     /*
-     * ─── THE P2P EXCEPTION IS CONDITIONAL ───────────────────────────────────
-     * Binance, OKX and Bybit all publish Iran as fully blocked under OFAC.
-     * Sending somebody to sign up where they will be refused — or worse, be
-     * frozen after depositing — is not help. The desks may stay, but only
-     * while the warning does, so both are asserted together.
-     */
-    /*
-     * ─── THE WARNING MOVED; IT DID NOT DISAPPEAR ────────────────────────────
-     * It used to be a permanent red banner plus a red "Blocks Iran" badge on
-     * all three rows. The owner's objection is a product point, not a
-     * cosmetic one: «ما از همه جهان مشتری داریم نه فقط ایران». A user in
-     * Ankara or Dubai met three red badges about a rule that does not apply
-     * to them, which trains everybody — including the person it was written
-     * for — to scroll past red.
+     * ─── THE DESK DIRECTORY IS GONE; THE P2P EXCEPTION WITH IT ────────────
+     * Binance, OKX and Bybit all publish Iran as fully blocked under OFAC —
+     * the exact users this corner of the app was built for — and sending a
+     * ready user to a competitor who refuses them was indefensible revenue
+     * design anyway. Both arguments closed, so the directory closed with
+     * them. Its replacement is asserted in section 74; here the assertion
+     * is the absence.
      *
-     * So the facts moved into RestrictionsSheet, one neutral tap away, as a
-     * per-country table. The pairing this check enforces is unchanged in
-     * substance: the desks may stay only while the disclosure exists and
-     * remains reachable. Reachability is the part that is easy to lose, so
-     * it is asserted as a CHAIN — sheet file exists, P2P imports it, P2P
-     * renders it, P2P has a control that opens it, and the copy still names
-     * OFAC and Iran.
+     * A comment-stripped scan of both pages: "binance" only survives in the
+     * P2P scam warnings as a RISK word ("imposter site"), never as a link to
+     * 'p2p.binance.com' — the rivals list above still covers that URL.
      */
     const p2p = read('src/pages/P2P.jsx');
+    const p2pCode = code(p2p);
+    const buyCode = code(read('src/pages/Buy.jsx'));
+    for (const [f, src] of [['P2P.jsx', p2pCode], ['Buy.jsx', buyCode]]) {
+      const desks = ['bisq.network', 'okx.com', 'bybit.com', 'p2p.binance.com']
+        .filter((desk) => src.includes(desk));
+      t(`${f} has no desk-directory links${desks.length ? ` — found: ${desks.join(', ')}` : ''}`,
+        desks.length === 0);
+    }
+
+    /*
+     * ─── THE RESTRICTIONS SHEET SURVIVED THE DESKS ──────────────────────────
+     * RestrictionsSheet answered "which of the three desks may freeze me" —
+     * a question the directory itself created. With the directory gone the
+     * P2P page no longer needs the control, but the CONTENT is still
+     * accurate for the card-rail partner (server/fiat.js is kept for its
+     * return, section 74) and the sheet is still rendered by FiatPanel for
+     * exactly that. The chain below is therefore retargeted, not deleted:
+     * sheet file exists, FiatPanel renders it, FiatPanel has a control that
+     * opens it, and the copy still names OFAC and Iran. Deleting the sheet
+     * while the partner may come back would re-create the knowledge from
+     * scratch at the worst time.
+     */
     t('the restrictions sheet exists', existsSync('src/components/RestrictionsSheet.jsx'));
-    t('...the P2P screen imports it', /import RestrictionsSheet/.test(p2p));
-    t('...renders it', /<RestrictionsSheet/.test(p2p));
+    const fiatPanel = read('src/components/FiatPanel.jsx');
+    t('...the fiat panel imports it', /import RestrictionsSheet/.test(fiatPanel));
+    t('...renders it', /<RestrictionsSheet/.test(fiatPanel));
     t('...and offers a control that opens it',
-      /setRestrictOpen\(true\)/.test(p2p) && /restrict\.open/.test(p2p));
+      /setRestrictOpen\(true\)/.test(fiatPanel) && /restrict\.open/.test(fiatPanel));
     {
       const en = JSON.parse(read('src/i18n/locales/en.json'));
       const fa = JSON.parse(read('src/i18n/locales/fa.json'));
@@ -6777,37 +6795,87 @@ export default function run() {
       existsSync('server/fiat.js') && /\/api\/fiat\/quote/.test(read('server/app.js')));
 
     /*
-     * ─── THE REPLACEMENT LINKS WERE EACH OPENED, NOT COPIED ────────────────
-     * Verified live: Bisq — "No registration required", 2-of-2 multisig, Tor
-     * by default, open source. Hodl Hodl — "Non-custodial", "Anonymous — No
-     * verification required", multisig escrow, 100+ currencies.
+     * ═══════════════════════════════════════════════════════════════════════
+     * 1b. THE LINK DIRECTORY BECAME OUR OWN MARKET.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Buy used to hand off to Bisq and Hodl Hodl, P2P to Binance/OKX/Bybit.
+     * The owner's ruling ended that era: «ارجاع کلا قشنگ نیست» — referrals
+     * are ugly — and «ما خودمون صرافی هستیم» — we ARE an exchange. A
+     * directory pays nothing and hands the fastest-converting user in the
+     * app to whoever is cheapest for him next time.
      *
-     * freepd.com taught this lesson last week: a source everyone recommends
-     * can simply be gone.
+     * The replacement is an in-app market over the ONE desk that can sit
+     * under us without contradiction: Hodl Hodl asks no identity check, its
+     * escrow is multisig on its own platform, and its referral pays a share
+     * of THEIR fee (~0.025–0.05% of volume) while our own swap collects
+     * 0.70%. The funnel is therefore fiat -> BTC on the desk (referral)
+     * followed by BTC -> anything in OUR swap — and the swap CTA at the
+     * bottom of the market is the part that makes this page a business.
+     *
+     * Asserted as a chain because a market nothing renders was exactly the
+     * bug shipped twice: proxy server module, routes, client lib, shared
+     * component, both pages mounting it, swap CTA on both directions, and
+     * the copy present in the three locales that pay us.
      */
-    t('...replaced by desks that need no identity check',
-      /bisq\.network/.test(buyCode) && /hodlhodl\.com/.test(buyCode));
-    /* https only — these open in a Custom Tab where the domain is visible. */
-    t('...over https',
-      !/http:\/\/(bisq|hodlhodl)/.test(buyCode));
+    t('the Hodl Hodl proxy module exists', existsSync('server/hodlhodl.js'));
+    t('...its routes are mounted', /\/api\/p2p\/offers/.test(read('server/app.js')) &&
+      /\/api\/p2p\/payment-methods/.test(read('server/app.js')));
+    t('the thin client exists', existsSync('src/lib/p2pMarket.js'));
+    t('the shared market component exists', existsSync('src/components/P2PMarket.jsx'));
+
+    const market = read('src/components/P2PMarket.jsx');
+    const marketCode = code(market);
+    t('Buy renders the shared market, not a copy of it',
+      /<P2PMarket/.test(buyCode));
+    t('P2P renders the same shared component, not a copy of it',
+      /<P2PMarket/.test(code(read('src/pages/P2P.jsx'))));
+    t('the swap CTA exists for BOTH directions',
+      /\/swap\?from=BTCB/.test(marketCode) && /\/swap\?to=BTCB/.test(marketCode));
+
+    /*
+     * The referral code is an env secret-adjacent knob: present in deploys,
+     * never in source. Hard-coding it once made every working tree a leak.
+     */
+    t('no referral code is hard-coded in the proxy',
+      !/YPLJ/.test(code(read('server/hodlhodl.js'))));
+    t('...and the proxy reads it from the environment',
+      /process\.env\.HODLHODL_REF/.test(read('server/hodlhodl.js')));
+    t('.env.example documents both names without values',
+      /HODLHODL_REF=/.test(read('.env.example')) &&
+      /HODLHODL_API_KEY=/.test(read('.env.example')));
 
     {
       const enL = JSON.parse(read('src/i18n/locales/en.json'));
       const faL = JSON.parse(read('src/i18n/locales/fa.json'));
-      for (const id of ['bisq', 'hodlhodl']) {
-        t(`the ${id} route is described in en and fa`,
-          hasKey(enL, `buy.route.${id}.name`) && hasKey(enL, `buy.route.${id}.buy`) &&
-          hasKey(faL, `buy.route.${id}.name`) && hasKey(faL, `buy.route.${id}.buy`));
-      }
+      const arL = JSON.parse(read('src/i18n/locales/ar.json'));
+      t('the market copy exists in the three locales that pay',
+        ['p2pMarket.tab.buy', 'p2pMarket.none.title', 'p2pMarket.sheet.fees', 'p2pMarket.swapCta.buyBtn']
+          .every((k) => hasKey(enL, k) && hasKey(faL, k) && hasKey(arL, k)));
       /*
-       * Each entry must state its real limitation. Bisq is desktop-only and
-       * Hodl Hodl is Bitcoin-only; a directory that hides those sends people
-       * to a door they cannot open, which is the dead-button failure with
-       * extra steps.
+       * The honesty bullets are the deal the user signs up to: escrow on the
+       * desk, never us; their fee quoted; our code CHEAPER, never costlier.
+       * If any leg disappears the market silently becomes a referral trap.
        */
-      t('...and each names its own limitation',
-        /[Dd]esktop only/.test(enL.buy.route.bisq.buy) &&
-        /Bitcoin only/.test(enL.buy.route.hodlhodl.buy));
+      t('the sheet states the escrow is theirs, not ours',
+        /Hodl Hodl/.test(enL.p2pMarket.sheet.escrow) &&
+        /never hold/i.test(enL.p2pMarket.sheet.escrow));
+      t('the sheet states our code makes it cheaper, not costlier',
+        /0\.5%/.test(enL.p2pMarket.sheet.fees) &&
+        /0\.75%/.test(enL.p2pMarket.sheet.fees));
+      /*
+       * Persian is the language this screen actually earns in; an English
+       * fallback on THIS panel fails the same test the whole suite fails on.
+       */
+      t('the market copy is actually Persian in fa',
+        !/^[a-z0-9\s.,'"()—:;!?\-%{}$/]+$/i.test(faL.p2pMarket.tab.buy) &&
+        !/^[a-z0-9\s.,'"()—:;!?\-%{}$/]+$/i.test(faL.p2pMarket.sheet.escrow));
+      /*
+       * The retired directory copy is gone in the same pass — dead keys are
+       * how "bisq" quietly returns in a theme edit.
+       */
+      t('the desk-directory keys are deleted',
+        !hasKey(enL, 'buy.route.bisq.name') && !hasKey(enL, 'p2p.desks.binance.name') &&
+        !hasKey(faL, 'buy.route.bisq.name') && !hasKey(faL, 'p2p.desks.binance.name'));
     }
 
     /*
@@ -8420,28 +8488,31 @@ export default function run() {
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
       .replace(/^\s*\/\/.*$/gm, '');
     const p2p = code(read('src/pages/P2P.jsx'));
+    const enP2p = JSON.parse(read('src/i18n/locales/en.json')).p2p;
 
     /*
-     * ─── THE INSTRUCTION THAT WAS MISSING ───────────────────────────────────
-     * The fiat tab explained why we do not run a desk, listed three desks, and
-     * listed four ways to be defrauded — and never once said HOW to complete a
-     * purchase. All context and warning, no instruction, which is why it read
-     * as discouraging rather than useful. The OTC tab had a numbered walk-
-     * through; this side had none.
+     * ─── THE INSTRUCTION IS NOW THE MARKET ITSELF ───────────────────────────
+     * The directory-era fiat tab needed a numbered walk-through because the
+     * actual buying happened somewhere else; the tab taught the trip, not
+     * the trade. With the live market embedded, the how-to IS the screen —
+     * the one instruction that remains is where the escrow contract is
+     * finished, and that lives in the trade sheet opened before every deal.
      */
-    t('the cash tab explains how to actually buy', /p2p\.buyStep\./.test(p2p));
-    const enP2p = JSON.parse(read('src/i18n/locales/en.json')).p2p;
-    t('...in ordered steps', ['b1', 'b2', 'b3', 'b4', 'b5', 'b6']
-      .every((k) => Boolean(enP2p.buyStep?.[k])));
+    t('the market sheet explains where the escrow step happens',
+      /p2pMarket\.sheet\.step/.test(code(read('src/components/P2PMarket.jsx'))));
+    t('...and the sheet copy points at the desk, not at us',
+      /hodlhodl\.com/i.test(String(JSON.parse(read('src/i18n/locales/en.json')).p2pMarket?.sheet?.step ?? '')));
     /*
-     * The two instructions that actually prevent losses: pay from an account
-     * in your own name, and never name crypto in the bank reference — banks
-     * freeze accounts over that wording.
+     * The two instructions that actually prevent losses SURVIVED the move:
+     * pay from an account in your own name, and never name crypto in the
+     * bank reference — banks freeze accounts over that wording. They now
+     * hang on the buyer's own trade sheet, which is where a bank transfer
+     * is decided, rather than on a directory for sites we no longer name.
      */
     t('...and warns to pay from an account in your own name',
-      /OWN NAME/i.test(JSON.stringify(enP2p.buyStep)));
+      /OWN NAME/i.test(JSON.stringify(JSON.parse(read('src/i18n/locales/en.json')).p2pMarket?.sheet)));
     t('...and warns against naming crypto in the payment reference',
-      /reference/i.test(JSON.stringify(enP2p.buyStep)));
+      /reference/i.test(JSON.stringify(JSON.parse(read('src/i18n/locales/en.json')).p2pMarket?.sheet)));
 
     /*
      * ─── THE WARNINGS, COLLAPSED ────────────────────────────────────────────
@@ -8467,10 +8538,11 @@ export default function run() {
       /no escrow at all/i.test(String(enP2p.cashBody)));
 
     /* Persian must be hand-written, and present, in every new key. */
-    const faP2p = JSON.parse(read('src/i18n/locales/fa.json')).p2p;
+    const faL = JSON.parse(read('src/i18n/locales/fa.json'));
+    const faP2p = faL.p2p;
     t('the cash guide is translated into Persian',
-      Boolean(faP2p.howTitle) && Boolean(faP2p.cashBody)
-      && ['b1', 'b6'].every((k) => Boolean(faP2p.buyStep?.[k])));
+      Boolean(faP2p.cashBody)
+      && Boolean(faL.p2pMarket?.sheet?.payOwn) && Boolean(faL.p2pMarket?.sheet?.payRef));
   }
 
   /* ---- 87. Server features nobody can reach ----------------------------- */
@@ -9785,8 +9857,10 @@ export default function run() {
 
     /* The tab must exist, and the other two must be untouched. */
     const p2p = code(read('src/pages/P2P.jsx'));
-    t('the board is reachable as a third P2P tab', /'otc', 'fiat', 'board'/.test(p2p));
-    t('...and the default tab is still OTC', /useState\('otc'\)/.test(p2p));
+    /* The strip is market-first since the directory became a market — see
+       section 74 for why the default tab is the one that earns. */
+    t('the board is reachable as a P2P tab', /'market', 'otc', 'board'/.test(p2p));
+    t('...and the default tab is the market', /useState\('market'\)/.test(p2p));
   }
 
   /* ---- 96. the community feed: rendered, never hosted -------------------- */
@@ -9886,9 +9960,10 @@ export default function run() {
       /import CommunityPanel/.test(news) && /<CommunityPanel \/>/.test(news));
     t('...and P2P no longer mounts it',
       !/CommunityPanel/.test(read('src/pages/P2P.jsx')));
+    /* Market-first strip since the market replaced the directory (sec. 74). */
     t('...and the P2P tab strip is back to three tabs',
-      /\['otc', 'fiat', 'board'\]/.test(p2p));
-    t('...and OTC is still the default P2P tab', /useState\('otc'\)/.test(p2p));
+      /\['market', 'otc', 'board'\]/.test(p2p));
+    t('...and the market is the default P2P tab', /useState\('market'\)/.test(p2p));
     t('...and Headlines is still the default News tab',
       /NEWS_TABS\.includes\(fromUrl\) \? fromUrl : 'read'/.test(news));
   }
@@ -11788,6 +11863,88 @@ export default function run() {
         && verifyDoc.includes('Allowed Domains') && verifyDoc.includes('ir.fbtswap.app'));
     t('the runbook documents the code-side repair (localhost identity bug)',
       verifyDoc.includes('wc.signer.metadata') && verifyDoc.includes('https://localhost'));
+  }
+
+  /* ---- 108. the P2P market can never eat the swap ------------------------ */
+  /*
+   * ─── RULE #1 OF THE HODL HODL INTEGRATION, ABOVE THE FEATURE ITSELF ──────
+   * The owner's directive, in order, before any rendering requirements:
+   *
+   *   Hodl Hodl appears ONLY in /buy and /p2p. NEVER in the swap path —
+   *   not as a crypto->crypto price source, not as a row in a "best price"
+   *   comparison, not as a suggested alternative on Home, Market or Wallet.
+   *
+   * The arithmetic is the whole reason. Our swap collects 0.70% of volume
+   * directly (on Solana it is 56 bps net, verified on-chain). The desk
+   * referral is 5–10% of their 0.5% fee — roughly 0.025–0.05% of volume to
+   * us. Diverting ONE swapper to the desk trades 0.70% for ~0.03%: up to a
+   * 25x revenue loss wearing the costume of user choice. And the desk only
+   * trades BTC<->fiat, so it could never serve a crypto->crypto user
+   * anyway — the comparison would be dishonest as well as expensive.
+   *
+   * The temptation to violate this is structural, not hypothetical: a P2P
+   * price panel looks like exactly the kind of "choice" a good-faith
+   * engineer adds to a swap screen. That is why this section hard-fails on
+   * imports and on stripped source, so the rule survives whoever forgets it.
+   */
+  {
+    const stripCode = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const SWAP_PATH = [
+      'src/pages/Swap.jsx', 'src/pages/SolanaSwap.jsx',
+      'src/lib/aggregator.js', 'src/lib/bestQuote.js',
+      'src/lib/openocean.js', 'src/lib/velora.js', 'src/lib/solanaOcean.js',
+      'server/swapProxy.js', 'server/solanaOcean.js'
+    ];
+    for (const f of SWAP_PATH) {
+      if (!existsSync(f)) continue;
+      /*
+       * Comments are stripped, but `p2pMarket`/`hodlhodl` in a comment on a
+       * swap file would only ever be EXPLAINING why it must not appear, so
+       * we strip them; the design discussion lives in this suite instead.
+       */
+      const src = stripCode(read(f));
+      t(`${f} never references the P2P desk`,
+        !/hodlhodl|p2pMarket/i.test(src));
+    }
+    /*
+     * The discovery surfaces the owner named by hand: nobody may be sent out
+     * of the app while comparison-shopping a swap. The market feed, the
+     * discovery hubs and the wallet overview are where such a panel would be
+     * bolted on, so they are scanned; missing files are simply not surfaces.
+     */
+    for (const f of [
+      'src/pages/Market.jsx', 'src/pages/Discover.jsx', 'src/pages/Lab.jsx',
+      'src/pages/Wallet.jsx', 'src/pages/Home.jsx', 'src/pages/Homepage.jsx'
+    ]) {
+      if (!existsSync(f)) continue;
+      const src = stripCode(read(f));
+      t(`${f} never suggests the desk as a swap alternative`,
+        !/hodlhodl|p2pMarket/i.test(src));
+    }
+
+    /*
+     * Directory containment, by import graph rather than by convention: the
+     * thin client may be imported only by the shared market component, and
+     * the shared component only by the two pages that are allowed to host
+     * the desk. A grep on imports — the THIRD import-graph check in this
+     * suite, each of which caught a leak a code read had blessed. walk() is
+     * the suite's own helper from the top of this file.
+     */
+    for (const [needle, allowed] of [
+      ["lib/p2pMarket'", new Set(['src/components/P2PMarket.jsx'])],
+      ['components/P2PMarket', new Set(['src/pages/Buy.jsx', 'src/pages/P2P.jsx'])]
+    ]) {
+      const users = walk('src')
+        .filter((p) => stripCode(read(p)).includes(needle));
+      const offenders = users.filter((p) => !allowed.has(p));
+      t(`${needle} is imported only from its allowed hosts` +
+        (offenders.length ? ` — found in: ${offenders.join(', ')}` : ''),
+        offenders.length === 0);
+    }
   }
 
   return rows;

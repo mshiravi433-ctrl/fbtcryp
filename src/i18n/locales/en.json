@@ -2056,10 +2056,10 @@
   },
   "p2p": {
     "title": "P2P",
-    "subtitle": "Trade directly with other people.",
+    "subtitle": "Buy and sell bitcoin for local money with real escrow, or send crypto directly, person to person.",
     "tab": {
+      "market": "Market",
       "otc": "On-chain OTC",
-      "fiat": "Buy with cash",
       "board": "Board"
     },
     "otcTitle": "Direct wallet-to-wallet",
@@ -2069,26 +2069,6 @@
     "openSend": "Open send screen",
     "connectFirst": "Connect a wallet to send crypto to someone directly.",
     "otcNotice": "Double-check the address before sending. On-chain transfers are irreversible — there is no support desk that can reverse a mistake.",
-    "honestTitle": "Why we don't run our own fiat P2P",
-    "honestBody": "A fiat P2P desk needs escrow holding crypto while money moves, human arbitrators for disputes, and identity checks on both sides. Running one makes you a licensed money services business. We'd rather send you to desks that already have that infrastructure than build a fake escrow you'd trust with real money.",
-    "desks": "Established P2P desks",
-    "desk": {
-      "binance": {
-        "name": "Binance P2P",
-        "short": "BNB",
-        "desc": "Largest volume, supports many local currencies"
-      },
-      "okx": {
-        "name": "OKX P2P",
-        "short": "OKX",
-        "desc": "Escrow-protected, competitive spreads"
-      },
-      "bybit": {
-        "name": "Bybit P2P",
-        "short": "BYB",
-        "desc": "Zero-fee trading on many pairs"
-      }
-    },
     "scamsTitle": "How people get scammed in P2P",
     "scam": {
       "reversal": {
@@ -2108,7 +2088,7 @@
         "body": "They send a doctored receipt showing extra money and ask you to refund the difference. Always check your actual bank balance, never a screenshot."
       }
     },
-    "notice": "These are independent platforms. Fanous Bazaar Pishgam does not operate them, holds no escrow, earns nothing from them, and cannot help recover funds lost in a P2P trade.",
+    "notice": "Trades run between you and another person, escrowed by Hodl Hodl. Fanous Bazaar Pishgam does not operate the escrow and cannot recover funds lost in a P2P trade. From trades started here we receive a share of the desk's own fee — with our code your fee is lower (0.5% instead of 0.75%), never higher.",
     "step": {
       "s1": "Agree the price and amount with the other person first — off the app. FBT Swap is not involved in that negotiation and cannot arbitrate it.",
       "s2": "Ask them for their receiving address AND the network it is on. The same address string can exist on several networks; sending on the wrong one usually loses the funds.",
@@ -2116,20 +2096,12 @@
       "s4": "Send a small test amount first when the sum is large. Losing a dollar to a mistake is a lesson; losing the whole amount is not recoverable.",
       "s5": "Send the rest, then give them the transaction link so they can verify it on-chain themselves."
     },
-    "noticeTitle": "We do not run these platforms and cannot recover your money",
-    "howTitle": "How to buy with cash, step by step",
-    "howIntro": "Every desk below works the same way. The escrow is what protects you, so the whole method is: never leave it, and never release before the money is genuinely in your account.",
-    "buyStep": {
-      "b1": "Open one of the desks below and create an account. You will need identity verification — that is not optional on any real desk, and a platform offering to skip it is the warning sign, not the bargain.",
-      "b2": "Choose BUY, pick your own currency, and sort by price. Ignore the very best rate and look at the seller's completed-order count and release time instead. A rate two percent worse from someone with 5,000 trades is the cheaper option once your time is counted.",
-      "b3": "Open the order for the amount you want. The moment you do, the desk LOCKS the seller's crypto in escrow. They cannot take it back, and this is the only thing standing between you and a stranger — which is why every instruction below is about not leaving it.",
-      "b4": "Pay using the exact method the order names, from an account in YOUR OWN name. Send the precise amount. Never write 'crypto', 'USDT' or the desk's name in the payment reference — banks freeze accounts over that wording.",
-      "b5": "Mark the order paid and upload your receipt. Then wait. The seller releases and the crypto lands in your desk account, usually in minutes.",
-      "b6": "Withdraw to your own wallet — do not leave it sitting on the desk. Copy your address from the Wallet screen, pick the SAME network on both sides, and send a small test amount first if the sum is large."
-    },
+    "noticeTitle": "We do not run the escrow and cannot recover your money",
     "scamsIntro": "Every one of these works by getting you outside the escrow, or by getting you to release before the money is really yours. If you recognise the shape, none of them work.",
     "cashTitle": "Buying with physical cash, in person",
-    "cashBody": "Meeting someone with banknotes has no escrow at all — nothing can be reversed and nobody can arbitrate. If you do it anyway: meet inside a bank branch or a police-station lobby in daylight, count the notes before touching your phone, and have the sender broadcast the transaction while you are both standing there. Never travel to a private address, and never hand over cash against a screenshot — only against a confirmation you have read on-chain yourself."
+    "cashBody": "Meeting someone with banknotes has no escrow at all — nothing can be reversed and nobody can arbitrate. If you do it anyway: meet inside a bank branch or a police-station lobby in daylight, count the notes before touching your phone, and have the sender broadcast the transaction while you are both standing there. Never travel to a private address, and never hand over cash against a screenshot — only against a confirmation you have read on-chain yourself.",
+    "escrowTitle": "Why the escrow lives on the desk",
+    "escrowBody": "A fiat P2P desk needs multisig escrow holding the coins while money moves, arbitrators for disputes, and a licensed operator. Hodl Hodl runs exactly that — no identity check to start, escrowed since 2018. So the offers stream live into this page, and the one step that requires their infrastructure (the escrow contract) is completed on their platform. We never hold your funds at any point."
   },
   "rank": {
     "title": "Your points",
@@ -2823,46 +2795,9 @@
   },
   "buy": {
     "title": "Buy & sell",
-    "tab": {
-      "buy": "Buy crypto",
-      "sell": "Sell crypto"
-    },
-    "buy": {
-      "heading": "Turning money into crypto",
-      "body": "FBT does not sell crypto and never holds your money — there is no deposit address here and never will be. What this page does is point you at the routes that work, so the coins arrive directly in a wallet only you control.",
-      "routesTitle": "Ways that work"
-    },
-    "sell": {
-      "heading": "Turning crypto back into money",
-      "body": "Same principle in reverse. You send crypto from your own wallet to a buyer or a desk, and they pay you. FBT never takes custody at any point, which is why we cannot reverse a transfer or recover one sent to the wrong place. Check the address and the network twice before you send.",
-      "routesTitle": "Ways that work"
-    },
-    "route": {
-      "p2p": {
-        "name": "Person to person (P2P)",
-        "buy": "Buy from another person through a desk that holds the crypto in escrow until you have paid.",
-        "sell": "Sell to another person with the same escrow protection. Usually the best rate."
-      },
-      "receive": {
-        "name": "Receive from someone you know",
-        "buy": "The simplest route: show your address and have them send. No third party, no fee, no rate.",
-        "sell": "Send directly to their address. Confirm the network first — a wrong network loses the funds."
-      },
-      "swap": {
-        "name": "Already hold crypto?",
-        "buy": "Then skip the fiat step. Swap what you have for what you want, right here.",
-        "sell": "Convert to a stablecoin first, then cash out. Often smoother than selling a volatile coin."
-      },
-      "bisq": {
-        "name": "Bisq — peer-to-peer, no account",
-        "buy": "Open-source desktop software. No registration and no identity check: you buy directly from another person and the bitcoin sits in 2-of-2 multisig, so nobody — including Bisq — can take it. Desktop only, which is its one real drawback.",
-        "sell": "Sell directly to another person over Tor, with no account and no verification. The bitcoin stays in multisig escrow until you confirm the money arrived. Desktop only."
-      },
-      "hodlhodl": {
-        "name": "Hodl Hodl — peer-to-peer, works on a phone",
-        "buy": "Non-custodial escrow, no verification required, 100+ currencies, running since 2018. It needs an email address, but unlike Bisq it works in a mobile browser. Bitcoin only.",
-        "sell": "Sell bitcoin to a person of your choosing with multisig escrow protecting both sides. No identity check, and it works on a phone. Bitcoin only."
-      }
+    "intro": {
+      "heading": "Money in, money out — person to person",
+      "body": "FBT does not sell crypto and never holds your money. Below is a live market of people buying and selling bitcoin for local money, protected by multisig escrow on the desk's own site. You compare and choose here; only the escrow contract itself is finished on their platform."
     },
     "yourAddress": "Coins arrive here",
     "addressHint": "This is your own address on {{chain}}. Anyone sending you crypto must use this exact address AND this network. A wrong network means the funds are gone — nobody can recover them.",
@@ -4521,6 +4456,103 @@
       "unavailable": "Not extractable from receipt",
       "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
       "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
+    }
+  },
+  "p2pMarket": {
+    "sideLabel": "Trade direction",
+    "tab": {
+      "buy": "Buy BTC",
+      "sell": "Sell BTC"
+    },
+    "amount": {
+      "label": "Amount",
+      "placeholder": "100"
+    },
+    "currency": {
+      "label": "Currency"
+    },
+    "method": {
+      "label": "Payment method",
+      "any": "Any method"
+    },
+    "country": {
+      "label": "Country",
+      "any": "Worldwide"
+    },
+    "layer": {
+      "onchain": "Bitcoin on-chain",
+      "fast": "Lightning / Ark"
+    },
+    "workingNow": "Working now",
+    "refresh": "Refresh offers",
+    "loading": "Loading live offers…",
+    "listLabel": "Live offers",
+    "err": {
+      "rate": "Hodl Hodl is rate-limiting requests right now — wait a minute and retry.",
+      "unavailable": "Hodl Hodl reports itself temporarily unavailable. Try again shortly.",
+      "network": "The offer feed could not be reached. Check your connection and retry.",
+      "retry": "Retry"
+    },
+    "none": {
+      "title": "No offers match",
+      "body": "No desk currently matches these filters. Widen the amount, method or country — or check back later; offers come and go all day."
+    },
+    "stale": "Live feed unreachable — showing prices from {{age}}.",
+    "staleMin": "{{n}} min ago",
+    "staleHours": "{{n}} h ago",
+    "card": {
+      "offline": "offline",
+      "window": "pay within {{n}} min",
+      "trades": "{{n}} trades",
+      "anon": "desk",
+      "more": "+{{n}}",
+      "askDesk": "Ask the desk for methods",
+      "trade": "Trade",
+      "range": "Range",
+      "outOfRange": "This desk takes {{min}} – {{max}} {{currency}}",
+      "firstTrade": "First trade with this desk is capped at {{amount}} {{currency}}"
+    },
+    "more": "Show more offers",
+    "summary": {
+      "label": "Trade summary",
+      "hint": "Enter an amount to see what you get",
+      "continue": "Continue"
+    },
+    "address": {
+      "title": "Your Bitcoin address",
+      "hint": "The BTC you buy is released to this address. This app's own wallet is not a Bitcoin wallet — paste an address from a wallet that supports Bitcoin.",
+      "placeholder": "bc1q…",
+      "invalid": "This Bitcoin address does not check out — one wrong character and the coins are gone. Check it twice.",
+      "valid": "Address format verified"
+    },
+    "sheet": {
+      "title": "Before you trade",
+      "price": "Price",
+      "counterparty": "Counterparty",
+      "youPay": "You pay",
+      "youGet": "You receive",
+      "youGive": "You deposit",
+      "youGetFiat": "You receive",
+      "feeRow": "Desk fee (est. {{pct}}%)",
+      "releaseTo": "Released to",
+      "escrow": "The trade is escrowed by multisig ON Hodl Hodl. We never hold your money or your coins at any point.",
+      "fees": "Hodl Hodl's fee on this offer is {{pct}}% in BTC. With our code your account fee drops to 0.5% permanently instead of 0.75% — you pay less, and we receive a share of THEIR fee, never an extra charge on you.",
+      "step": "The final step — account, payment password and the escrow contract — happens on hodlhodl.com itself. Nothing here signs or moves anything.",
+      "join": "Create account with our code",
+      "joinNote": "Fee 0.5% instead of 0.75%, forever",
+      "open": "I already have an account — open this offer",
+      "openPlain": "Open this offer on Hodl Hodl",
+      "domain": "Check the real domain, hodlhodl.com, in your browser before trading.",
+      "payOwn": "Pay only from a bank account in your own name — a third-party payment can be reversed even after release.",
+      "payRef": "Never write crypto or bitcoin in the bank transfer reference — banks freeze accounts over that wording."
+    },
+    "swapCta": {
+      "buyTitle": "Got the BTC? Convert it right here",
+      "buyBody": "Swap it for USDT or anything else inside the app — the swap screen picks the best route. Native BTC bridges in with one tap from the Bridge screen.",
+      "buyBtn": "Swap BTC now",
+      "sellTitle": "Holding something other than BTC?",
+      "sellBody": "Swap it to BTC here first, then sell that for money above.",
+      "sellBtn": "Swap to BTC"
     }
   }
 }
