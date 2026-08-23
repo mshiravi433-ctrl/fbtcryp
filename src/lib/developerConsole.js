@@ -98,9 +98,9 @@ export async function diagnoseTelegramAuth() {
 
 /**
  * Ask the server which bot its TELEGRAM_BOT_TOKEN actually belongs to.
- * Answers 401 NEEDS_CRON_SECRET when the caller has neither a verified Mini
- * App session (the usual state during a BAD_SIGNATURE outage) nor the cron
- * secret — in that case the owner runs the curl from the checklist instead.
+ * Anonymous callers receive the bot's public getMe identity. Full token
+ * diagnostics are included only when the request has either a verified Mini
+ * App session or the cron secret.
  */
 export async function whoamiBot() {
   const headers = telegramAuthHeaders();
