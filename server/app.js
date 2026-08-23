@@ -25,8 +25,8 @@ import {
   fetchSimplePrices,
   fetchTrending,
 } from './providers.js';
-import { telegramAuth, verifyInitData } from './telegramAuth.js';
-import { telegramBotIdentity } from './telegramIdentity.js';
+import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
+import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
 import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
@@ -290,13 +290,15 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /*
- * trim(): a trailing newline or stray space stored alongside the secret in the
+ * normalizeBotToken(): a trailing newline, stray spaces, wrapping quotes or an
+ * invisible BOM/zero-width character stored alongside the secret in the
  * environment changes the HMAC key and turns every valid initData into
- * BAD_SIGNATURE. verifyInitData trims defensively too, but normalizing here
- * keeps botId parsing and the diagnose endpoint consistent with what the
- * middleware actually verifies against.
+ * BAD_SIGNATURE — while the bot-id prefix still LOOKS right in any dashboard.
+ * verifyInitData normalizes defensively too, but normalizing here keeps botId
+ * parsing and the diagnose endpoint consistent with what the middleware
+ * actually verifies against.
  */
-const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const BOT_TOKEN = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
 
 const app = express();
 app.disable('x-powered-by');
@@ -337,11 +339,30 @@ app.use(telegramAuth(BOT_TOKEN)); // optional — populates req.tgUser when pres
  * while the bot token and all field values remain server-side secrets. It does
  * not authenticate the caller or change the optional middleware's fail-open
  * behaviour; it explains why a protected route later answered AUTH_REQUIRED.
+ *
+ * Accepts initData via the x-telegram-init-data header (GET or POST) AND via
+ * a JSON body `{ "initData": "..." }` (POST). The client sends BOTH when it
+ * can, which lets the server compare the two transports byte for byte: the
+ * body round-trips any string exactly, so a MISMATCH proves the header was
+ * mangled in transit (proxy limits, re-encoding) — the one BAD_SIGNATURE
+ * cause that is NOT a token problem.
  */
-app.get('/api/telegram/diagnose', (req, res) => {
-  const initData = req.get('x-telegram-init-data') || req.query.initData || '';
+const telegramDiagnoseHandler = (req, res) => {
+  /* The auth middleware consumed and kept the three transports on
+     req.telegramInitData (and removed the credential from req.body so nothing
+     downstream stores it). Extract again only if this route were ever mounted
+     before the middleware. */
+  const { initData, source, headerInitData, bodyInitData } = req.telegramInitData || extractInitData(req);
   const identity = telegramBotIdentity(BOT_TOKEN);
-  const params = new URLSearchParams(typeof initData === 'string' ? initData : '');
+  /* Same secret, seen through every angle that matters for BAD_SIGNATURE:
+     length/fingerprint identify WHICH token this instance holds (compare
+     across deploys and Vercel projects), the quote/invisible flags say the
+     stored env VALUE was poisoned. Fed the RAW env value on purpose —
+     diagnostics must see the stored bytes, not the cleaned copy. 4+4
+     characters only — never the secret. */
+  const token = tokenDiagnostics(process.env.TELEGRAM_BOT_TOKEN);
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash') || '';
   const authDate = Number(params.get('auth_date') || 0);
   const verified = initData ? verifyInitData(initData, BOT_TOKEN) : { ok: false, reason: 'NO_INIT_DATA_SENT' };
 
@@ -353,16 +374,122 @@ app.get('/api/telegram/diagnose', (req, res) => {
       botId: identity.configuredBotId,
       expectedBotId: identity.expectedBotId,
       botIdentityMatches: identity.identityMatches,
+      tokenLength: token.tokenLength,
+      tokenFingerprint: token.tokenFingerprint,
+      tokenHadQuotes: token.tokenHadQuotes,
+      tokenHadInvisibleChars: token.tokenHadInvisibleChars,
+      tokenShapeValid: token.tokenShapeValid,
+      initDataSource: source,
+      headerInitDataLength: headerInitData ? headerInitData.length : null,
+      bodyInitDataLength: bodyInitData ? bodyInitData.length : null,
+      /* MATCH = both transports carried identical bytes; MISMATCH = the header
+         was corrupted on the way in (hypothesis: transit, not token). null =
+         only one transport was used. */
+      transportMatch: headerInitData && bodyInitData ? (headerInitData === bodyInitData ? 'MATCH' : 'MISMATCH') : null,
       initDataReceived: Boolean(initData),
       initDataLength: String(initData).length,
       hashPresent: params.has('hash'),
+      /* 64 for a healthy hash; 63 or less means the initData string itself
+         was truncated before it reached us. */
+      hashLength: hash.length,
+      signatureFieldPresent: params.has('signature'),
       fields: [...params.keys()].sort(),
       authDateAgeSeconds: authDate ? Math.max(0, Math.floor(Date.now() / 1000) - authDate) : null,
       verified: verified.ok === true,
       reason: verified.ok ? 'OK' : verified.reason,
       userId: verified.ok ? String(verified.user?.id ?? '') : null
     },
-    meta: { schema: 'fbt.telegram-diagnose.v1' }
+    meta: { schema: 'fbt.telegram-diagnose.v2' }
+  });
+};
+app.get('/api/telegram/diagnose', telegramDiagnoseHandler);
+app.post('/api/telegram/diagnose', telegramDiagnoseHandler);
+
+/*
+ * Which bot does THIS instance's token actually belong to?
+ *
+ * The decisive check for "BAD_SIGNATURE but the owner swears the token is
+ * right": asks api.telegram.org getMe with the server's own token and returns
+ * the bot's public username/id — never the token, never a fingerprint beyond
+ * the 4+4 diagnostic above. Three possible verdicts, each actionable without
+ * guessing:
+ *
+ *   · username is this app's bot   → the token is right, so BAD_SIGNATURE
+ *     means the initData was signed by a DIFFERENT bot (wrong Menu Button
+ *     bot, another project's domain) or was mangled in transit.
+ *   · username is ANOTHER bot      → this instance holds another bot's token
+ *     (second Vercel project, stale redeploy, mixed-up env).
+ *   · Telegram rejects the token   → revoked or never valid; re-paste and
+ *     redeploy.
+ *
+ * Authorization: the shared CRON_SECRET (same channels as /api/ai/diagnose —
+ * Authorization: Bearer, x-cron-secret header, or ?key=) OR an already
+ * verified Mini App session (req.tgUser), which during a BAD_SIGNATURE
+ * outage is exactly what the owner does NOT have — hence the secret path.
+ */
+app.get('/api/telegram/whoami-bot', async (req, res) => {
+  const secret = process.env.CRON_SECRET || '';
+  const provided =
+    req.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+    req.get('x-cron-secret') ||
+    String(req.query.key || '') ||
+    '';
+  const a = Buffer.from(secret);
+  const b = Buffer.from(provided);
+  const secretOk = Boolean(secret) && a.length === b.length && timingSafeEqual(a, b);
+  const sessionOk = Boolean(req.tgUser?.id);
+  if (!secretOk && !sessionOk) {
+    return res.status(401).json({
+      error: 'NEEDS_CRON_SECRET',
+      hint: 'curl "<origin>/api/telegram/whoami-bot?key=<CRON_SECRET>" — or re-run once the Mini App session verifies.'
+    });
+  }
+  if (!BOT_TOKEN) return res.status(503).json({ error: 'NO_BOT_TOKEN', hint: 'TELEGRAM_BOT_TOKEN is not set on this instance.' });
+
+  /* Raw env value, like the diagnose route: the flags describe what was
+     STORED, not the cleaned copy the HMAC uses. */
+  const token = tokenDiagnostics(process.env.TELEGRAM_BOT_TOKEN);
+  const expectedUsername = String(process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '').toLowerCase();
+
+  let payload = null;
+  try {
+    /* The token appears in the URL only for the lifetime of this one call and
+       is never logged, stored or returned. */
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    payload = await response.json().catch(() => null);
+  } catch {
+    return res.status(502).json({ error: 'TELEGRAM_UNREACHABLE', hint: 'Could not reach api.telegram.org from this instance.' });
+  }
+  if (!payload) return res.status(502).json({ error: 'TELEGRAM_UNREACHABLE', hint: 'api.telegram.org returned an unreadable response.' });
+
+  res.set('cache-control', 'private, no-store');
+  if (payload.ok !== true) {
+    /* Telegram itself refuses this token: revoked, mistyped or placeholder. */
+    return res.json({
+      data: {
+        telegramAccepted: false,
+        telegramError: payload.error_code ?? null,
+        telegramErrorDescription: typeof payload.description === 'string' ? payload.description.slice(0, 120) : null,
+        ...token,
+        expectedBotUsername: expectedUsername || null
+      },
+      meta: { schema: 'fbt.telegram-whoami.v1' }
+    });
+  }
+
+  const bot = payload.result || {};
+  const username = typeof bot.username === 'string' ? bot.username : '';
+  return res.json({
+    data: {
+      telegramAccepted: true,
+      bot: { id: bot.id ?? null, username: username || null, firstName: typeof bot.first_name === 'string' ? bot.first_name : null },
+      expectedBotUsername: expectedUsername || null,
+      usernameMatches: expectedUsername ? username.toLowerCase() === expectedUsername : null,
+      ...token
+    },
+    meta: { schema: 'fbt.telegram-whoami.v1' }
   });
 });
 

@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import app from './app.js';
+import { normalizeBotToken } from './telegramAuth.js';
 import { startBot } from './bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,10 +22,10 @@ const PORT = Number(process.env.PORT || 8787);
 // required for an HTTPS tunnel or the Arena live preview to reach the app; the
 // browser still uses relative /api URLs and never calls localhost itself.
 const HOST = process.env.HOST || '0.0.0.0';
-// trim() for the same reason as server/app.js: env stores smuggle newlines
-// into secrets, and local polling must use the exact same token bytes the API
-// verifies initData against.
-const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+// Same normalization as server/app.js: env stores smuggle newlines, quotes
+// and zero-width characters into secrets, and local polling must use the
+// exact same token bytes the API verifies initData against.
+const BOT_TOKEN = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
 const WEBAPP_URL = process.env.WEBAPP_URL || '';
 
 /* ----------------------------- static frontend ---------------------------- */

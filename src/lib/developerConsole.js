@@ -19,7 +19,7 @@
  *     a user double-tapping "submit" replays instead of creating a duplicate.
  */
 
-import { telegramAuthHeaders } from './telegramSession.js';
+import { telegramAuthHeaders, telegramAuthBodyFields } from './telegramSession.js';
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 const TIMEOUT_MS = 9000;
@@ -35,6 +35,13 @@ async function call(path, { method = 'GET', body = null } = {}) {
      that "open this inside Telegram" does not say better. */
   if (!headers) return { ok: false, code: 'AUTH_REQUIRED', status: 401 };
 
+  /* POSTs carry the initData in the JSON body as well as the header: the
+     body is byte-exact, the header can be mangled by proxies. The server
+     verifies the body copy first and can compare both — see
+     /api/telegram/diagnose. Existing routes ignore the extra key. */
+  const bodyFields = method === 'GET' ? null : telegramAuthBodyFields();
+  const requestBody = bodyFields ? { ...bodyFields, ...(body || {}) } : body;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -42,7 +49,7 @@ async function call(path, { method = 'GET', body = null } = {}) {
       method,
       headers,
       signal: controller.signal,
-      ...(body ? { body: JSON.stringify(body) } : {})
+      ...(requestBody ? { body: JSON.stringify(requestBody) } : {})
     });
     const payload = await res.json().catch(() => null);
     if (!res.ok) return { ok: false, status: res.status, code: payload?.error?.code || `HTTP_${res.status}`, retryable: Boolean(payload?.error?.retryable) };
@@ -60,16 +67,50 @@ async function call(path, { method = 'GET', body = null } = {}) {
  * diagnostic route for the precise reason before showing a human message.
  * This request is allowed without a session so NO_INIT_DATA_SENT is diagnosed
  * too; the endpoint never returns initData values or the bot token.
+ *
+ * Sent as POST with the initData in BOTH the JSON body and the header: the
+ * server verifies the byte-exact body copy and reports whether the two
+ * transports arrived identical (transportMatch) — which separates "the header
+ * was corrupted on the way in" from "the server holds the wrong token",
+ * the two causes of BAD_SIGNATURE that need opposite fixes.
  */
 export async function diagnoseTelegramAuth() {
-  const headers = telegramAuthHeaders() || { accept: 'application/json' };
+  const headers = telegramAuthHeaders();
+  const bodyFields = telegramAuthBodyFields();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${API_BASE}/telegram/diagnose`, { headers, signal: controller.signal });
+    const res = await fetch(`${API_BASE}/telegram/diagnose`, {
+      method: 'POST',
+      headers: headers || { accept: 'application/json' },
+      body: JSON.stringify(bodyFields || {}),
+      signal: controller.signal
+    });
     const payload = await res.json().catch(() => null);
     if (!res.ok) return { ok: false, status: res.status, code: `HTTP_${res.status}` };
     return { ok: true, status: res.status, data: payload?.data ?? null, meta: payload?.meta ?? null };
+  } catch (err) {
+    return { ok: false, code: err?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK', status: 0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Ask the server which bot its TELEGRAM_BOT_TOKEN actually belongs to.
+ * Answers 401 NEEDS_CRON_SECRET when the caller has neither a verified Mini
+ * App session (the usual state during a BAD_SIGNATURE outage) nor the cron
+ * secret — in that case the owner runs the curl from the checklist instead.
+ */
+export async function whoamiBot() {
+  const headers = telegramAuthHeaders();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}/telegram/whoami-bot`, { headers: headers || { accept: 'application/json' }, signal: controller.signal });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, status: res.status, code: payload?.error || `HTTP_${res.status}` };
+    return { ok: true, status: res.status, data: payload?.data ?? null };
   } catch (err) {
     return { ok: false, code: err?.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK', status: 0 };
   } finally {
