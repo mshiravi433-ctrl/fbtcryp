@@ -7,6 +7,8 @@ import P2PMarket from '../components/P2PMarket';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { IconChevronLeft, IconShield } from '../components/Icons';
+import ExternalWalletPurchase from '../components/ExternalWalletPurchase';
+import SegIndicator from '../components/SegIndicator';
 import '../styles/lab-modern.css';
 
 /**
@@ -53,6 +55,7 @@ export default function Buy() {
   /* Controlled side: the page keeps its address card in sync with the tab
      the market is showing (coins arrive -> buy only). */
   const [tab, setTab] = useState('buy');
+  const [walletTab, setWalletTab] = useState('internal');
 
   return (
     <PageTransition>
@@ -63,19 +66,25 @@ export default function Buy() {
         <h1 className="h1" style={{ margin: 0 }}>{t('buy.title')}</h1>
       </div>
 
-      {/* ------------------------------ intro ------------------------------ */}
-      <motion.section className="lab-hero" variants={riseIn} initial="hidden" animate="show" style={{ padding: 18 }}>
-        <div className="lab-aurora" aria-hidden="true" />
-        <p className="section-label" style={{ marginBottom: 8, position: 'relative' }}>{t('buy.intro.heading')}</p>
-        <p className="prose-sm" style={{ position: 'relative' }}>{t('buy.intro.body')}</p>
-      </motion.section>
+      <div className="segmented" role="tablist" aria-label={t('buy.walletTabsLabel')}>
+        {['internal', 'external'].map((key) => (
+          <button key={key} role="tab" aria-selected={walletTab === key} className={walletTab === key ? 'active' : ''} onClick={() => setWalletTab(key)}>
+            {walletTab === key && <SegIndicator id="buy-wallet-tab" />}
+            {t(`buy.walletTabs.${key}`)}
+          </button>
+        ))}
+      </div>
 
-      {/*
-        The market IS the body of this page now. The buy/sell tab strip lives
-        inside P2PMarket (identical on both pages) and reports upward so the
-        address card can appear only where receiving is relevant.
-      */}
-      <P2PMarket side={tab} onSideChange={setTab} />
+      {walletTab === 'external' ? <ExternalWalletPurchase /> : <>
+        {/* ------------------------------ intro ------------------------------ */}
+        <motion.section className="lab-hero" variants={riseIn} initial="hidden" animate="show" style={{ padding: 18 }}>
+          <div className="lab-aurora" aria-hidden="true" />
+          <p className="section-label" style={{ marginBottom: 8, position: 'relative' }}>{t('buy.intro.heading')}</p>
+          <p className="prose-sm" style={{ position: 'relative' }}>{t('buy.intro.body')}</p>
+        </motion.section>
+
+        {/* The current P2P market remains intact under the internal wallet tab. */}
+        <P2PMarket side={tab} onSideChange={setTab} />
 
       {/* --------------------------- your address --------------------------- */}
       {/*
@@ -140,8 +149,9 @@ export default function Buy() {
             <li key={w}>{t(`buy.warn.${w}`)}</li>
           ))}
         </ul>
-        <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('buy.notAdvice')}</p>
-      </motion.section>
+          <p className="notice notice-danger" style={{ marginTop: 12 }}>{t('buy.notAdvice')}</p>
+        </motion.section>
+      </>}
     </PageTransition>
   );
 }

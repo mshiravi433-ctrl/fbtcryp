@@ -1,0 +1,40 @@
+/* External wallet purchase preferences. AppKit owns the actual on-ramp flow. */
+.external-wallet-card {
+  position: relative;
+  overflow: hidden;
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, var(--rgb-2));
+  border-radius: 20px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--card) 88%, var(--rgb-2)), var(--card));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .12);
+}
+.external-wallet-card::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--rgb-2) 16%, transparent), transparent 38%); }
+.external-wallet-head, .external-wallet-identity, .external-wallet-form-title, .external-wallet-disclosure { position: relative; display: flex; }
+.external-wallet-head { gap: 11px; align-items: center; }
+.external-wallet-icon { display: grid; flex: 0 0 auto; width: 42px; height: 42px; place-items: center; border-radius: 14px; color: var(--rgb-2); background: color-mix(in srgb, var(--rgb-2) 15%, transparent); }
+.external-wallet-card h2 { margin: 0; font-size: 15px; }
+.external-wallet-card p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.external-wallet-status { display: inline-flex; gap: 6px; align-items: center; margin-inline-start: auto; padding: 6px 9px; border-radius: 999px; color: var(--up); background: color-mix(in srgb, var(--up) 12%, transparent); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.external-wallet-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.external-wallet-identity { gap: 10px; margin-top: 17px; }
+.external-wallet-identity > div { display: grid; gap: 5px; flex: 1; min-width: 0; padding: 11px; border-radius: 13px; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.external-wallet-identity span, .external-wallet-form label, .external-wallet-methods legend { color: var(--muted); font-size: 11px; }
+.external-wallet-identity strong { overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.external-wallet-empty { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; }
+.external-wallet-connect { grid-column: 1 / -1; justify-content: center; margin-top: 2px; }
+.external-wallet-form-title { display: block; margin-bottom: 16px; }
+.external-wallet-grid { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.external-wallet-grid label { display: grid; gap: 6px; }
+.external-wallet-grid input, .external-wallet-grid select, .external-wallet-readonly { width: 100%; min-height: 42px; box-sizing: border-box; padding: 0 11px; border: 1px solid var(--border); border-radius: 11px; outline: none; color: var(--ink); background: color-mix(in srgb, var(--card) 88%, var(--ink)); font: inherit; font-size: 13px; }
+.external-wallet-readonly { display: flex; align-items: center; opacity: .8; }
+.external-wallet-methods { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; padding: 0; border: 0; }
+.external-wallet-methods legend { width: 100%; margin-bottom: 2px; }
+.external-wallet-methods label { display: inline-flex; gap: 6px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); font-size: 12px; }
+.external-wallet-methods input { accent-color: var(--rgb-2); }
+.external-wallet-continue { position: relative; width: 100%; justify-content: center; }
+.external-wallet-unavailable { position: relative; margin-top: 11px !important; padding: 10px; border-radius: 10px; color: var(--warn) !important; background: color-mix(in srgb, var(--warn) 11%, transparent); }
+.external-wallet-disclosure { gap: 9px; align-items: flex-start; margin-top: 12px; padding: 4px 5px; color: var(--muted); }
+.external-wallet-disclosure svg { flex: 0 0 auto; margin-top: 3px; color: var(--rgb-5); }
+.external-wallet-disclosure p { margin: 0; font-size: 11.5px; line-height: 1.6; }
+@media (max-width: 380px) { .external-wallet-grid { grid-template-columns: 1fr; } .external-wallet-status { display: none; } }
