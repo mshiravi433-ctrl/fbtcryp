@@ -47,7 +47,7 @@ const SOCIALS = [
  * genuine accessibility problem for people with vestibular disorders — and it
  * is the one screen nobody can skip.
  */
-export default function Splash({ onStart }) {
+export default function Splash({ onStart, hideGalaxy }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
 
@@ -64,7 +64,7 @@ export default function Splash({ onStart }) {
         screen shown once, and on a slow Iranian connection it would still be
         buffering while the user is deciding whether the app works.
       */}
-      <GalaxyBackdrop />
+      {!hideGalaxy && <GalaxyBackdrop />}
 
       {/* Soft colour wash on top of the galaxy, tying it to the brand hues. */}
       <div className="splash-glow" aria-hidden="true" />

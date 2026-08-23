@@ -741,8 +741,7 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
             <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{swapCta.title}</div>
             <p className="prose-sm">{swapCta.body}</p>
             <button
-              className="btn btn-primary btn-sm"
-              style={{ marginTop: 10 }}
+              className="btn btn-primary p2pm-cta-btn"
               onClick={() => {
                 haptic?.('medium');
                 navigate(swapCta.to);

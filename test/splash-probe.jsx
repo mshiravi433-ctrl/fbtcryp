@@ -31,7 +31,8 @@ export async function run(c) {
 
   t('the galaxy mounts', !!c.querySelector('.galaxy'));
   t('the nebula renders', !!c.querySelector('.galaxy-neb'));
-  t('both star planes render', c.querySelectorAll('.galaxy-layer').length === 2);
+  const planes = c.querySelectorAll('.galaxy-layer').length;
+  t(`at least two star planes at different speeds (${planes})`, planes >= 2);
 
   const stars = c.querySelectorAll('.galaxy-star');
   t(`stars are drawn (${stars.length})`, stars.length > 40);

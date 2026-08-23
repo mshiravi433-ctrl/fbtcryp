@@ -4,6 +4,7 @@ import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
 import { IconChevronRight } from '../components/Icons';
 import { AnimatedLanguages, useStill } from '../components/AnimatedIcon';
+import LaunchProgress from '../components/LaunchProgress';
 
 /**
  * WELCOME — the very first screen, shown once, before onboarding.
@@ -58,6 +59,7 @@ export default function Welcome({ onDone }) {
         >
           {t('welcome.subtitle')}
         </motion.p>
+        <LaunchProgress step={1} total={10} />
       </div>
 
       <div className="welcome-scroll">

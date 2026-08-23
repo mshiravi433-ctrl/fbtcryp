@@ -388,6 +388,11 @@
     },
     "custody": {
       "title": "आपकी चाबी, आपके सिक्के"
+    },
+    "wallet": {
+      "why": "Connecting lets this device sign swaps. The app never stores your seed or private key.",
+      "gain": "You see live balances and can confirm a swap here. You may skip this step.",
+      "skipOk": "Skipping is allowed. You can connect later from Wallet or any swap screen."
     }
   },
   "guide": {
@@ -398,7 +403,19 @@
     "title": "शुरू करने से पहले",
     "step": "चरण {{n}}",
     "doneHint": "पहले चारों भाग खोलें।",
-    "closing": "तैयार — आपका स्वागत है"
+    "closing": "तैयार — आपका स्वागत है",
+    "start": {
+      "walletWhattitle": "What a wallet is",
+      "walletWhatbody": "A wallet is software that holds keys. This app does not keep your coins; they stay on-chain under those keys.",
+      "seedWhytitle": "Why 12 words matter",
+      "seedWhybody": "The recovery phrase is the only backup. Anyone who has it can move the funds. We never ask you to type it here.",
+      "feeWhattitle": "Fees",
+      "feeWhatbody": "A swap pays network gas plus this app’s platform fee. Both are shown on the review screen before you sign.",
+      "slipWhattitle": "Slippage",
+      "slipWhatbody": "Slippage is how much the price may move while the swap is pending. If it moves more than your limit, the swap fails and you keep the tokens.",
+      "firstSteptitle": "First useful step",
+      "firstStepbody": "Connect or create a wallet, then open Swap. Review the quote, the fee, and the minimum you receive before you confirm."
+    }
   },
   "predict": {
     "riskNotice": "यह स्क्रीन केवल वर्चुअल क्रेडिट पर चलती है; इसमें असली पैसा नहीं जोड़ा जा सकता। असली पैसे से अल्पकालिक ऊपर/नीचे सट्टा ईरानी कानून में प्रतिबंधित है और यूके व ईयू में खुदरा ग्राहकों के लिए भी प्रतिबंधित है। यह केवल तंत्र समझने के लिए है।"
@@ -819,5 +836,8 @@
       "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
       "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
     }
+  },
+  "launch": {
+    "step": "Step {{n}} of {{total}}"
   }
 }

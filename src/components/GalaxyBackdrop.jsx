@@ -92,8 +92,9 @@ export default function GalaxyBackdrop() {
 
   // Two layers at different densities. Parallax needs depth, and depth needs
   // more than one plane.
-  const far = useMemo(() => makeStars(46, 1337), []);
-  const near = useMemo(() => makeStars(18, 90210), []);
+  const far = useMemo(() => makeStars(38, 1337), []);
+  const mid = useMemo(() => makeStars(22, 4242), []);
+  const near = useMemo(() => makeStars(16, 90210), []);
 
   return (
     <div className={`galaxy ${reduce ? 'is-still' : ''}`} aria-hidden="true">
@@ -154,6 +155,24 @@ export default function GalaxyBackdrop() {
         ))}
       </div>
 
+      <div className="galaxy-layer galaxy-mid">
+        {mid.map((s, i) => (
+          <span
+            key={i}
+            className="galaxy-star"
+            style={{
+              left: `${s.x}%`,
+              top: `${s.y}%`,
+              width: s.size,
+              height: s.size,
+              '--dim': s.dim,
+              animationDelay: `${s.delay}s`,
+              animationDuration: `${s.duration}s`
+            }}
+          />
+        ))}
+      </div>
+
       <div className="galaxy-layer galaxy-near">
         {near.map((s, i) => (
           <span
@@ -171,6 +190,18 @@ export default function GalaxyBackdrop() {
           />
         ))}
       </div>
+
+      <svg className="galaxy-planet" viewBox="0 0 80 80" focusable="false" aria-hidden="true">
+        <defs>
+          <radialGradient id="plt-body" cx="38%" cy="34%" r="62%">
+            <stop offset="0%" stopColor="#8ec8ff" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="#3a6db8" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#0b1a33" stopOpacity="0.85" />
+          </radialGradient>
+        </defs>
+        <circle cx="40" cy="40" r="22" fill="url(#plt-body)" />
+        <ellipse cx="40" cy="40" rx="34" ry="8" fill="none" stroke="rgba(180,210,255,0.35)" strokeWidth="2" />
+      </svg>
 
       {/*
         A vignette over everything. Without it the stars run all the way to

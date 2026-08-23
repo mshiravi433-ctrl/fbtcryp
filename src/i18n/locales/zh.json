@@ -388,6 +388,11 @@
     },
     "custody": {
       "title": "你的密钥，你的资产"
+    },
+    "wallet": {
+      "why": "Connecting lets this device sign swaps. The app never stores your seed or private key.",
+      "gain": "You see live balances and can confirm a swap here. You may skip this step.",
+      "skipOk": "Skipping is allowed. You can connect later from Wallet or any swap screen."
     }
   },
   "guide": {
@@ -398,7 +403,19 @@
     "title": "开始之前",
     "step": "第 {{n}} 步",
     "doneHint": "请先浏览全部四个部分。",
-    "closing": "准备就绪 — 欢迎使用"
+    "closing": "准备就绪 — 欢迎使用",
+    "start": {
+      "walletWhattitle": "What a wallet is",
+      "walletWhatbody": "A wallet is software that holds keys. This app does not keep your coins; they stay on-chain under those keys.",
+      "seedWhytitle": "Why 12 words matter",
+      "seedWhybody": "The recovery phrase is the only backup. Anyone who has it can move the funds. We never ask you to type it here.",
+      "feeWhattitle": "Fees",
+      "feeWhatbody": "A swap pays network gas plus this app’s platform fee. Both are shown on the review screen before you sign.",
+      "slipWhattitle": "Slippage",
+      "slipWhatbody": "Slippage is how much the price may move while the swap is pending. If it moves more than your limit, the swap fails and you keep the tokens.",
+      "firstSteptitle": "First useful step",
+      "firstStepbody": "Connect or create a wallet, then open Swap. Review the quote, the fee, and the minimum you receive before you confirm."
+    }
   },
   "predict": {
     "riskNotice": "本页仅使用虚拟额度，无法接入真实资金。以真实资金进行的短期涨跌押注（二元期权）在伊朗法律下被禁止，在英国和欧盟也对散户禁止。这里的内容只用于理解机制。"
@@ -819,5 +836,8 @@
       "unavailableHint": "The receipt logs did not prove the amount received. No guessed number is shown.",
       "reviewHint": "This is the quote estimate. After confirmation the actual amount is read from the receipt logs — never invented."
     }
+  },
+  "launch": {
+    "step": "Step {{n}} of {{total}}"
   }
 }

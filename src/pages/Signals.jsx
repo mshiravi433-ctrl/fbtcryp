@@ -90,11 +90,16 @@ function SignalSection({ id, title, summary, defaultOpen = false, children }) {
             key="body"
             initial={still ? false : { height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
-            exit={still ? { height: 0, opacity: 0 } : { height: 0, opacity: 0 }}
+            exit={{ height: 0, opacity: 0 }}
             transition={still ? { duration: 0 } : { duration: 0.24, ease: 'easeOut' }}
             style={{ overflow: 'hidden' }}
           >
-            <div className="sig-acc-body">{children}</div>
+            {/* Object initial/animate on the height wrapper breaks the parent
+                stagger/show variant chain, so children stayed at riseIn.hidden
+                (opacity 0, y 12) while still occupying height. Restart labels. */}
+            <motion.div className="sig-acc-body" variants={stagger} initial="hidden" animate="show">
+              {children}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -147,7 +152,7 @@ function LayerBar({ label, score, weight }) {
   const positive = score >= 0;
   const dim = weight < 0.4; /* a low-weight layer still shows, just quieter */
   return (
-    <motion.div variants={riseIn} style={{ marginBottom: 13, opacity: dim ? 0.78 : 1 }}>
+    <motion.div variants={riseIn} className="sig-ind" style={{ opacity: dim ? 0.78 : 1 }}>
       <div className="row-between" style={{ marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700 }}>{label}</span>
         <span className={`mono ${positive ? 'up' : 'down'}`} style={{ fontSize: 12, fontWeight: 800 }}>{positive ? '+' : ''}{Math.round(score)}</span>
@@ -170,7 +175,7 @@ function IndicatorBar({ signal }) {
   const pct = Math.abs(signal.score);
   const positive = signal.score >= 0;
   return (
-    <motion.div variants={riseIn} style={{ marginBottom: 13 }}>
+    <motion.div variants={riseIn} className="sig-ind">
       <div className="row-between" style={{ marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700 }}>{t(`signals.ind.${signal.key}`)}</span>
         <span className={`mono ${positive ? 'up' : 'down'}`} style={{ fontSize: 12, fontWeight: 800 }}>{positive ? '+' : ''}{signal.score}</span>
