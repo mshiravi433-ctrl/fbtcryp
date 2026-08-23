@@ -2837,7 +2837,36 @@
       "escrow": "Only trade where an escrow holds the crypto. If someone asks you to move the deal off-platform, that is the scam.",
       "rate": "Compare the rate against the market price on the Market tab. A rate far better than everyone else's is bait."
     },
-    "notAdvice": "Nothing here is financial advice, and we do not endorse any desk or counterparty. You are dealing with third parties at your own risk. Crypto transactions are irreversible."
+    "notAdvice": "Nothing here is financial advice, and we do not endorse any desk or counterparty. You are dealing with third parties at your own risk. Crypto transactions are irreversible.",
+    "walletTabsLabel": "Purchase wallet type",
+    "walletTabs": {
+      "internal": "Internal wallet",
+      "external": "External wallet"
+    },
+    "external": {
+      "title": "External wallet",
+      "connectMessage": "To buy with an external wallet, connect your wallet first.",
+      "connect": "Connect wallet",
+      "connected": "Your connected wallet will receive the purchase.",
+      "status": "Connected",
+      "address": "Wallet address",
+      "network": "Network",
+      "networkUnavailable": "Network unavailable",
+      "prepareTitle": "Prepare your purchase",
+      "preferenceNote": "These are purchase preferences. AppKit may not pass them to every provider.",
+      "amount": "Purchase amount",
+      "fiat": "Fiat currency",
+      "asset": "Destination asset",
+      "payment": "Payment preference",
+      "paymentOptions": {
+        "card": "Card",
+        "walletPay": "Apple Pay / Google Pay",
+        "bank": "Bank transfer"
+      },
+      "continue": "Continue purchase with external wallet",
+      "unavailable": "Buying with an external wallet is not enabled in this version. AppKit On-Ramp must be enabled in the WalletConnect/AppKit configuration. Please use the internal wallet tab.",
+      "disclosure": "Card purchases are completed by a third-party service provider inside AppKit. Availability may be limited by country, bank card, KYC, network and asset. FBT Swap never receives your private key, seed phrase or card details."
+    }
   },
   "install": {
     "title": "Install FBT Swap",
