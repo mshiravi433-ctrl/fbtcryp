@@ -105,15 +105,15 @@ export default {
     pt: 'O WalletConnect recusou a origem desta app. No painel Reown, confirme que Allowed Domains inclui https://fbtswap.ir e https://localhost, e que App IDs inclui ir.fbtswap.app.'
   },
   'wallet.wcRelayUnreachable': {
-    zh: '无法连接 WalletConnect 中继（relay.walletconnect.com）。部分网络会屏蔽它 — 换个网络或使用 VPN 后重试。',
-    hi: 'WalletConnect रिले (relay.walletconnect.com) तक नहीं पहुँच सका। कुछ नेटवर्क इसे ब्लॉक करते हैं — दूसरा नेटवर्क या VPN आज़माकर फिर कोशिश करें।',
-    es: 'No se pudo alcanzar el relay de WalletConnect (relay.walletconnect.com). Algunas redes lo bloquean: prueba otra red o una VPN y vuelve a intentarlo.',
-    fr: "Impossible d'atteindre le relais WalletConnect (relay.walletconnect.com). Certains réseaux le bloquent — essayez un autre réseau ou un VPN, puis réessayez.",
-    ru: 'Не удалось связаться с релеем WalletConnect (relay.walletconnect.com). Некоторые сети его блокируют — попробуйте другую сеть или VPN и повторите.',
-    tr: 'WalletConnect aktarıcısına (relay.walletconnect.com) ulaşılamadı. Bazı ağlar bunu engeller — başka bir ağ veya VPN deneyip tekrar deneyin.',
-    ur: 'WalletConnect ریلے (relay.walletconnect.com) تک رسائی ممکن نہیں ہوئی۔ کچھ نیٹ ورک اسے بلاک کرتے ہیں — دوسرا نیٹ ورک یا VPN آزما کر دوبارہ کوشش کریں۔',
-    id: 'Tidak dapat menjangkau relay WalletConnect (relay.walletconnect.com). Sebagian jaringan memblokirnya — coba jaringan lain atau VPN, lalu ulangi.',
-    pt: 'Não foi possível contactar o relay do WalletConnect (relay.walletconnect.com). Algumas redes bloqueiam-no — tente outra rede ou uma VPN e volte a tentar.'
+    zh: '无法连接 WalletConnect 中继 — 部分网络和运营商会屏蔽它。如果使用 VPN，必须对整台设备生效：钱包 App 也要连接中继，而不只是浏览器。不用 VPN 时，也可以在钱包内置浏览器（Trust 或 MetaMask → Browser 标签）中打开本站 — 该方式完全不需要中继。',
+    hi: 'WalletConnect रिले तक नहीं पहुँच सका — कुछ नेटवर्क और ISP इसे ब्लॉक करते हैं। यदि VPN इस्तेमाल करते हैं तो वह पूरे डिवाइस पर सक्रिय होना चाहिए, क्योंकि वॉलेट ऐप को भी रिले से जुड़ना होता है, सिर्फ़ ब्राउज़र को नहीं। बिना VPN के भी आप इस साइट को वॉलेट के अंदरूनी ब्राउज़र (Trust या MetaMask → Browser टैब) में खोल सकते हैं — उस रास्ते में रिले की ज़रूरत ही नहीं है।',
+    es: 'No se pudo alcanzar el relay de WalletConnect: algunas redes y operadores lo bloquean. Si usas VPN, debe cubrir todo el dispositivo, porque la app de la cartera también necesita llegar al relay, no solo el navegador. Sin VPN, también puedes abrir este sitio dentro del navegador integrado de tu cartera (Trust o MetaMask → pestaña Browser); esa vía no necesita relay.',
+    fr: "Impossible d'atteindre le relais WalletConnect — certains réseaux et opérateurs le bloquent. Si vous utilisez un VPN, il doit couvrir tout l'appareil : l'app du portefeuille doit aussi joindre le relais, pas seulement le navigateur. Sans VPN, vous pouvez aussi ouvrir ce site dans le navigateur intégré du portefeuille (Trust ou MetaMask → onglet Browser) — cette voie n'a pas besoin de relais.",
+    ru: 'Не удалось связаться с релеем WalletConnect — некоторые сети и операторы его блокируют. Если используете VPN, он должен работать для всего устройства: приложению кошелька тоже нужен доступ к релею, а не только браузеру. Без VPN можно открыть этот сайт во встроенном браузере кошелька (Trust или MetaMask → вкладка Browser) — этому пути релей вообще не нужен.',
+    tr: 'WalletConnect aktarıcısına ulaşılamadı — bazı ağlar ve operatörler onu engelliyor. VPN kullanıyorsanız tüm cihazı kapsamalı; çünkü cüzdan uygulamasının da aktarıcıya erişmesi gerekir, yalnızca tarayıcının değil. VPN olmadan da bu siteyi cüzdanın yerleşik tarayıcısında (Trust veya MetaMask → Browser sekmesi) açabilirsiniz — o yol aktarıcıya hiç ihtiyaç duymaz.',
+    ur: 'WalletConnect ریلے تک رسائی ممکن نہیں ہوئی — کچھ نیٹ ورک اور آپریٹر اسے بلاک کرتے ہیں۔ اگر VPN استعمال کرتے ہیں تو وہ پورے ڈیوائس پر فعال ہونا چاہیے، کیونکہ والٹ ایپ کو بھی ریلے تک پہنچنا ہوتا ہے، صرف براؤزر کو نہیں۔ VPN کے بغیر بھی آپ یہ سائٹ والٹ کے اندرونی براؤزر (Trust یا MetaMask ← Browser ٹیب) میں کھول سکتے ہیں — اس راستے کو ریلے کی ضرورت ہی نہیں۔',
+    id: 'Tidak dapat menjangkau relay WalletConnect — sebagian jaringan dan operator memblokirnya. Jika memakai VPN, VPN harus mencakup seluruh perangkat, karena aplikasi dompet juga harus menjangkau relay, bukan hanya browser. Tanpa VPN, kamu juga bisa membuka situs ini di browser bawaan dompet (Trust atau MetaMask → tab Browser) — jalur itu sama sekali tidak butuh relay.',
+    pt: 'Não foi possível contactar o relay do WalletConnect — algumas redes e operadores bloqueiam-no. Se usar VPN, ela deve cobrir o dispositivo inteiro, porque a app da carteira também precisa de alcançar o relay, não apenas o navegador. Sem VPN, também pode abrir este site no navegador integrado da carteira (Trust ou MetaMask → separador Browser) — esse caminho não precisa de relay.'
   },
   'wallet.wcExpired': {
     zh: '钱包批准前连接请求已过期。请重新打开钱包列表再试一次。',

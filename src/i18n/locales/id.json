@@ -121,7 +121,7 @@
     "backupTitle": "Cadangkan frasa pemulihan",
     "connectFailed": "Koneksi gagal atau ditolak.",
     "wcOriginBlocked": "WalletConnect menolak origin aplikasi ini. Di dasbor Reown, pastikan Allowed Domains berisi https://fbtswap.ir dan https://localhost, serta App IDs berisi ir.fbtswap.app.",
-    "wcRelayUnreachable": "Tidak dapat menjangkau relay WalletConnect (relay.walletconnect.com). Sebagian jaringan memblokirnya — coba jaringan lain atau VPN, lalu ulangi.",
+    "wcRelayUnreachable": "Tidak dapat menjangkau relay WalletConnect — sebagian jaringan dan operator memblokirnya. Jika memakai VPN, VPN harus mencakup seluruh perangkat, karena aplikasi dompet juga harus menjangkau relay, bukan hanya browser. Tanpa VPN, kamu juga bisa membuka situs ini di browser bawaan dompet (Trust atau MetaMask → tab Browser) — jalur itu sama sekali tidak butuh relay.",
     "wcExpired": "Permintaan koneksi kedaluwarsa sebelum dompet menyetujuinya. Buka daftar dompet dan coba lagi.",
     "resetDesc": "Mengembalikan saldo virtual, posisi, rencana, dan riwayat ke keadaan awal.",
     "noWcProject": "Atur VITE_WALLETCONNECT_PROJECT_ID di .env untuk mengaktifkan WalletConnect. Gratis di cloud.reown.com.",

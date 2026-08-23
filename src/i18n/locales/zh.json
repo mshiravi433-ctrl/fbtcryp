@@ -121,7 +121,7 @@
     "backupTitle": "备份你的助记词",
     "connectFailed": "连接失败或被拒绝。",
     "wcOriginBlocked": "WalletConnect 拒绝了此应用的来源。请在 Reown 控制台确认 Allowed Domains 包含 https://fbtswap.ir 和 https://localhost，且 App IDs 包含 ir.fbtswap.app。",
-    "wcRelayUnreachable": "无法连接 WalletConnect 中继（relay.walletconnect.com）。部分网络会屏蔽它 — 换个网络或使用 VPN 后重试。",
+    "wcRelayUnreachable": "无法连接 WalletConnect 中继 — 部分网络和运营商会屏蔽它。如果使用 VPN，必须对整台设备生效：钱包 App 也要连接中继，而不只是浏览器。不用 VPN 时，也可以在钱包内置浏览器（Trust 或 MetaMask → Browser 标签）中打开本站 — 该方式完全不需要中继。",
     "wcExpired": "钱包批准前连接请求已过期。请重新打开钱包列表再试一次。",
     "resetDesc": "把虚拟余额、持仓、计划和历史记录全部恢复到初始状态。",
     "noWcProject": "在 .env 中设置 VITE_WALLETCONNECT_PROJECT_ID 以启用 WalletConnect。可在 cloud.reown.com 免费获取。",

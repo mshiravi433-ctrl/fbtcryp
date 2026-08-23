@@ -121,7 +121,7 @@
     "backupTitle": "Сохраните seed-фразу",
     "connectFailed": "Подключение не удалось или было отклонено.",
     "wcOriginBlocked": "WalletConnect отклонил origin приложения. В панели Reown проверьте, что Allowed Domains содержит https://fbtswap.ir и https://localhost, а App IDs — ir.fbtswap.app.",
-    "wcRelayUnreachable": "Не удалось связаться с релеем WalletConnect (relay.walletconnect.com). Некоторые сети его блокируют — попробуйте другую сеть или VPN и повторите.",
+    "wcRelayUnreachable": "Не удалось связаться с релеем WalletConnect — некоторые сети и операторы его блокируют. Если используете VPN, он должен работать для всего устройства: приложению кошелька тоже нужен доступ к релею, а не только браузеру. Без VPN можно открыть этот сайт во встроенном браузере кошелька (Trust или MetaMask → вкладка Browser) — этому пути релей вообще не нужен.",
     "wcExpired": "Запрос на подключение истёк до одобрения кошельком. Откройте список кошельков и попробуйте снова.",
     "resetDesc": "Сбрасывает виртуальный баланс, позиции, планы и историю к начальному состоянию.",
     "noWcProject": "Задайте VITE_WALLETCONNECT_PROJECT_ID в .env, чтобы включить WalletConnect. Бесплатно на cloud.reown.com.",
