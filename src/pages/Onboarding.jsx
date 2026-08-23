@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import LaunchProgress from '../components/LaunchProgress';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -112,7 +113,8 @@ function Art({ Icon, hues, index }) {
 }
 
 export default function Onboarding({ onDone }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const rtl = i18n.dir() === 'rtl';
   const { haptic } = useTelegram();
   const wallet = useWallet();
   const complete = useSettingsStore((s) => s.completeOnboarding);
@@ -196,9 +198,9 @@ export default function Onboarding({ onDone }) {
         <motion.div
           key={index}
           custom={dir}
-          initial={{ opacity: 0, x: 40 * dir }}
+          initial={{ opacity: 0, x: 40 * dir * (rtl ? -1 : 1) }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -40 * dir }}
+          exit={{ opacity: 0, x: -40 * dir * (rtl ? -1 : 1) }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         >
           {/* ---------------- feature slides ---------------- */}
@@ -238,6 +240,10 @@ export default function Onboarding({ onDone }) {
               <p className="muted" style={{ textAlign: 'center', fontSize: 13, lineHeight: 1.75 }}>
                 {t('onboarding.wallet.body')}
               </p>
+              <ul className="prose-list" style={{ marginTop: 12 }}>
+                <li>{t('onboarding.wallet.why')}</li>
+                <li>{t('onboarding.wallet.gain')}</li>
+              </ul>
 
               {wallet.address ? (
                 <motion.div
@@ -263,6 +269,9 @@ export default function Onboarding({ onDone }) {
 
               <p className="faint" style={{ textAlign: 'center', marginTop: 12, lineHeight: 1.7 }}>
                 {t('onboarding.wallet.skipNote')}
+              </p>
+              <p className="muted" style={{ textAlign: 'center', marginTop: 6, fontSize: 12.5 }}>
+                {t('onboarding.wallet.skipOk')}
               </p>
             </div>
           )}
@@ -323,6 +332,7 @@ export default function Onboarding({ onDone }) {
           both buttons are flex:1 with the same min-height so they stay exactly
           the same size regardless of how wide the translated label is. */}
       <div className="onb-foot">
+        <LaunchProgress step={2 + index} total={10} />
         <div className="onb-dots">
           {Array.from({ length: TOTAL }).map((_, i) => (
             <button

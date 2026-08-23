@@ -29,6 +29,7 @@ import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
 import Splash from './pages/Splash';
+import GalaxyBackdrop from './components/GalaxyBackdrop';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
 import { SPECULATION_ENABLED } from './lib/features';
@@ -417,7 +418,7 @@ export default function App() {
       />
     );
   } else if (showSplash) {
-    screen = <Splash onStart={() => setShowSplash(false)} />;
+    screen = <Splash hideGalaxy onStart={() => setShowSplash(false)} />;
   } else if (showWelcome) {
     screen = <Welcome onDone={() => setShowWelcome(false)} />;
   } else if (showOnb) {

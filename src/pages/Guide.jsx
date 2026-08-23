@@ -5,6 +5,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { FEE_BPS } from '../lib/chains';
 import LanguagePicker from '../components/LanguagePicker';
+import LaunchProgress from '../components/LaunchProgress';
 import {
   IconSwap,
   IconTrend,
@@ -215,6 +216,7 @@ export default function Guide({ onDone }) {
           <div>
             <div className="guide-kicker mono">{t('guide.step', { n: i18n.language === 'fa' ? toFa(index + 1) : index + 1 })}</div>
             <h1 className="guide-title">{t('guide.title')}</h1>
+            <LaunchProgress step={7 + index} total={10} />
           </div>
           <motion.div
             className="guide-badge"
@@ -258,9 +260,9 @@ export default function Guide({ onDone }) {
         <AnimatePresence mode="wait">
           <motion.div
             key={section.key}
-            initial={{ opacity: 0, x: 26 }}
+            initial={{ opacity: 0, x: 26 * (i18n.dir() === 'rtl' ? -1 : 1) }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -26 }}
+            exit={{ opacity: 0, x: -26 * (i18n.dir() === 'rtl' ? -1 : 1) }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
             <h2 className="guide-sec-title">{t(`guide.${section.key}.title`)}</h2>

@@ -304,4 +304,7 @@
 @media (prefers-reduced-motion: reduce) {
   .sig-acc-caret { transition: none; }
 }
-.sig-acc-body { padding-block: 2px 12px; }
+.sig-acc-body { padding-block: 8px 10px; }
+.sig-ind { margin-bottom: 10px; }
+.sig-ind:last-of-type { margin-bottom: 0; }
+.sig-ind-grid { margin-top: 10px; }

@@ -572,7 +572,10 @@
       "title": "Connect your wallet",
       "body": "FBT Swap is non-custodial — trades execute straight from your own wallet and we never hold your funds.",
       "connected": "Wallet connected",
-      "skipNote": "You can skip this and connect later. You'll need a wallet before your first swap."
+      "skipNote": "You can skip this and connect later. You'll need a wallet before your first swap.",
+      "why": "الاتصال يتيح لهذا الجهاز توقيع المبادلات. التطبيق لا يخزن عبارة الاسترداد أو المفتاح الخاص.",
+      "gain": "ترى الأرصدة ويمكنك تأكيد المبادلة من هنا. يمكنك تخطي هذه الخطوة.",
+      "skipOk": "التخطي مسموح. يمكنك الاتصال لاحقاً من المحفظة أو أي شاشة مبادلة."
     },
     "terms": {
       "title": "Before you start",
@@ -1918,7 +1921,19 @@
       "s8body": "A free airdrop that first needs your wallet connected; an unknown token that appeared by itself and cannot be sold; fake support in Telegram that replies first; and thousand-percent yields. All four want the same thing: your signature."
     },
     "language": "لغة الدليل",
-    "closing": "أنت جاهز — أهلاً بك"
+    "closing": "أنت جاهز — أهلاً بك",
+    "start": {
+      "walletWhattitle": "ما هي المحفظة",
+      "walletWhatbody": "المحفظة برنامج يحتفظ بالمفاتيح. الأصول تبقى على السلسلة؛ هذا التطبيق لا يحتفظ بعملاتك.",
+      "seedWhytitle": "لماذا الكلمات الاثنتا عشرة حاسمة",
+      "seedWhybody": "عبارة الاسترداد هي النسخة الاحتياطية الوحيدة. من يملكها يمكنه نقل الأموال. لن نطلب منك كتابتها هنا.",
+      "feeWhattitle": "الرسوم",
+      "feeWhatbody": "كل مبادلة تدفع رسوم الشبكة ورسوم المنصة. كلاهما يظهر في شاشة المراجعة قبل التوقيع.",
+      "slipWhattitle": "الانزلاق",
+      "slipWhatbody": "الانزلاق هو مقدار تغير السعر أثناء الانتظار. إذا تجاوز حدك تفشل المبادلة وتبقى الرموز لديك.",
+      "firstSteptitle": "أول خطوة عملية",
+      "firstStepbody": "اربط محفظة أو أنشئها ثم افتح المبادلة. راجع السعر والرسوم والحد الأدنى قبل التأكيد."
+    }
   },
   "news": {
     "title": "أحدث ما في الكريبتو",
@@ -3137,5 +3152,8 @@
         "FULL": "القائمة ممتلئة — احذف عنواناً لإضافة آخر."
       }
     }
+  },
+  "launch": {
+    "step": "الخطوة {{n}} من {{total}}"
   }
 }
