@@ -4,6 +4,7 @@ import { hasTelegramSession } from '../lib/telegramSession';
 import {
   buildListingPayload,
   diagnoseTelegramAuth,
+  whoamiBot,
   createProject,
   createProjectKey,
   listMyListings,
@@ -62,6 +63,40 @@ export default function DeveloperConsole() {
      to a developer and are not confused with the Telegram session problem. */
   const [notice, setNotice] = useState(null);
   const [authReason, setAuthReason] = useState(null);
+  /* Result of the server-side "which bot owns your token" check, shown inside
+     the BAD_SIGNATURE checklist. Null until the owner runs it. */
+  const [botCheck, setBotCheck] = useState(null);
+  const [botCheckBusy, setBotCheckBusy] = useState(false);
+
+  const checkBot = async () => {
+    setBotCheckBusy(true);
+    setBotCheck(await whoamiBot());
+    setBotCheckBusy(false);
+  };
+
+  /*
+   * One translated line for the whoami-bot outcome. The server answers with
+   * the bot's PUBLIC username/id (never the token); a 401 means the owner
+   * must run the curl from a terminal because the broken session cannot
+   * authenticate the browser call.
+   */
+  const botCheckLine = () => {
+    if (!botCheck) return null;
+    if (botCheck.ok && botCheck.data?.telegramAccepted === true && botCheck.data?.bot) {
+      return t('dev.console.authcheck.botIs', {
+        username: botCheck.data.bot.username ? `@${botCheck.data.bot.username}` : '?',
+        id: String(botCheck.data.bot.id ?? '?')
+      });
+    }
+    if (botCheck.ok && botCheck.data?.telegramAccepted === false) {
+      return t('dev.console.authcheck.tokenRejected');
+    }
+    if (!botCheck.ok && botCheck.status === 401) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return t('dev.console.authcheck.needKey', { url: `${origin}/api/telegram/whoami-bot` });
+    }
+    return t('dev.console.authcheck.failed');
+  };
 
   const refresh = useCallback(async () => {
     if (!session) return;
@@ -130,6 +165,36 @@ export default function DeveloperConsole() {
       {notice?.auth && (
         <div className="notice notice-danger" role="alert">
           <p style={{ margin: 0 }}>{t(`dev.console.auth.${authReason || 'UNKNOWN'}`)}</p>
+          {/* BAD_SIGNATURE has exactly three owner-fixable causes and they
+              need OPPOSITE fixes (reopen the app / redeploy / replace the
+              token). A numbered checklist plus a live server-side bot check
+              turns "could not verify" into an actionable verdict without
+              guessing. */}
+          {authReason === 'BAD_SIGNATURE' && (
+            <ol style={{ margin: '10px 0 0', paddingInlineStart: 20, textAlign: 'start' }}>
+              <li style={{ marginBottom: 6 }}>{t('dev.console.authcheck.step1')}</li>
+              <li style={{ marginBottom: 6 }}>{t('dev.console.authcheck.step2')}</li>
+              <li>
+                {t('dev.console.authcheck.step3')}
+                <div style={{ marginTop: 6 }}>
+                  <button className="btn btn-ghost btn-sm" type="button" disabled={botCheckBusy} onClick={checkBot}>
+                    {botCheckBusy ? t('dev.console.authcheck.checking') : t('dev.console.authcheck.run')}
+                  </button>
+                </div>
+                {botCheck && (
+                  <small style={{ display: 'block', marginTop: 6, wordBreak: 'break-word' }}>
+                    {botCheckLine()}
+                    {botCheck.ok && botCheck.data?.usernameMatches === false && (
+                      <>
+                        <br />
+                        <b>{t('dev.console.authcheck.wrongBot')}</b>
+                      </>
+                    )}
+                  </small>
+                )}
+              </li>
+            </ol>
+          )}
           <button className="btn btn-ghost btn-sm" type="button" disabled={busy} style={{ marginTop: 8 }} onClick={retryAuth}>
             {t('common.retry')}
           </button>

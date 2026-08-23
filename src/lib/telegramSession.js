@@ -25,3 +25,17 @@ export function telegramAuthHeaders(extra = {}) {
   if (!initData) return null;
   return { accept: 'application/json', 'x-telegram-init-data': initData, ...extra };
 }
+
+/**
+ * Body fields for an authenticated POST — the byte-exact transport.
+ *
+ * HTTP headers can be truncated or re-encoded by proxies and are rejected
+ * outright when they contain non-ASCII bytes, while a JSON string round-trips
+ * any content exactly. So POSTs carry the initData BOTH ways: the server
+ * compares the two and can prove (or rule out) in-transit corruption. The
+ * header stays for GETs and for every older caller.
+ */
+export function telegramAuthBodyFields() {
+  const initData = telegramInitData();
+  return initData ? { initData } : null;
+}
