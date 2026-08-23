@@ -12,6 +12,7 @@ import { useTelegram } from '../context/TelegramContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import SendSheet from '../components/SendSheet';
 import ReceiveSheet from '../components/ReceiveSheet';
+import BtcCard from '../components/BtcCard';
 import WalletActionRow from '../components/WalletActionRow';
 import WalletIntelTiles from '../components/WalletIntelTiles';
 import WalletPnl from '../components/WalletPnl';
@@ -875,6 +876,13 @@ export default function Wallet() {
       )}
 
       {tab === 'real' && <HardwareWalletCard />}
+
+      {/* ----------------- internal bitcoin (same seed, BIP-84) -----------------
+          Only the local vault can grow a BTC leg (zero law), and the card
+          itself renders nothing for injected/locked wallets — so this line is
+          a no-op for everyone who has no internal BTC wallet. It lives in the
+          Wallet chunk only; no other route pulls it in. */}
+      {tab === 'real' && <BtcCard />}
 
       {/* ----------------- allocation ----------------- */}
       {tab === 'practice' && <>

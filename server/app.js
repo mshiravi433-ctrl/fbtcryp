@@ -49,6 +49,7 @@ import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasl
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
+import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
@@ -3394,6 +3395,40 @@ app.get('/api/p2p/countries', async (_req, res) => {
   const r = await p2pCountries();
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
+
+/*
+ * BITCOIN CHAIN FACTS for the internal BIP-84 wallet (server/btcChain.js).
+ *
+ * The app's own BTC leg needs balance/UTXOs, fee estimates and a broadcast
+ * relay for transactions the UNLOCKED vault signs in the browser. The server
+ * is the sole egress to the Esplora upstream (default mempool.space,
+ * BTC_API_BASE to override), exactly the hodlhodl.js pattern: an allow-list
+ * decides what is askable — addresses must pass the REAL mainnet checksum
+ * (src/lib/btcAddress.js, the same validator the P2P paste box uses) before
+ * any upstream call is made.
+ *
+ * The server never sees a key or a mnemonic: /api/btc/tx relays finished,
+ * signed, public bytes only, and never logs or echoes the raw hex. These sit
+ * under the broad /api limiter like everything else; the upstream budget is
+ * absorbed by the in-module TTL cache.
+ */
+app.get('/api/btc/address/:addr', async (req, res) => {
+  const r = await btcAddress(req.params.addr);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/btc/fees', async (_req, res) => {
+  const r = await btcFees();
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.post('/api/btc/tx', async (req, res) => {
+  const raw = typeof req.body === 'string' ? req.body : req.body?.rawTx;
+  const r = await btcBroadcast(raw);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.get('/api/btc/status', (_req, res) => res.json(btcStatus()));
 
 /*
  * Cross-chain swaps, and the only route in the app that reaches TRON.

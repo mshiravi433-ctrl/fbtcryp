@@ -564,7 +564,8 @@
     "orderErr.BAD_DRIFT": "Pick a drift between 2% and 50%",
     "walletSessionRestored": "Wallet session restored",
     "walletSessionExpired": "Wallet session ended",
-    "refreshFailed": "Refresh failed — try again"
+    "refreshFailed": "Refresh failed — try again",
+    "btcSent": "Bitcoin send broadcast"
   },
   "swap": {
     "title": "Swap",
@@ -2420,7 +2421,11 @@
     "onlyOn": "Only send assets on {{network}}",
     "unknownNetwork": "this network",
     "connectFirst": "Connect a wallet first — there is no address to show yet.",
-    "warning": "Sending on a different network than the one shown will usually lose the funds permanently. Always check the network in the sending app before you confirm."
+    "warning": "Sending on a different network than the one shown will usually lose the funds permanently. Always check the network in the sending app before you confirm.",
+    "btc": {
+      "title": "This wallet’s Bitcoin address",
+      "backupCovered": "Your existing 12-word backup already covers this Bitcoin address — it is the same wallet, derived from the same seed."
+    }
   },
   "explore": {
     "title": "Explorer",
@@ -4523,7 +4528,9 @@
       "hint": "The BTC you buy is released to this address. This app's own wallet is not a Bitcoin wallet — paste an address from a wallet that supports Bitcoin.",
       "placeholder": "bc1q…",
       "invalid": "This Bitcoin address does not check out — one wrong character and the coins are gone. Check it twice.",
-      "valid": "Address format verified"
+      "valid": "Address format verified",
+      "hintInternal": "The BTC you buy is released to this address. This app’s own wallet now has a Bitcoin address — you can use it and skip the copy-paste, or paste any other Bitcoin address you control.",
+      "useAppWallet": "Use app wallet address"
     },
     "sheet": {
       "title": "Before you trade",
@@ -4553,6 +4560,72 @@
       "sellTitle": "Holding something other than BTC?",
       "sellBody": "Swap it to BTC here first, then sell that for money above.",
       "sellBtn": "Swap to BTC"
+    }
+  },
+  "btc": {
+    "card": {
+      "title": "Bitcoin",
+      "subtitle": "Built into this wallet — same 12-word backup",
+      "incoming": "{{sats}} sats incoming — wait for a confirmation before spending",
+      "copy": "Copy Bitcoin address",
+      "send": "Send BTC",
+      "convert": "Convert to BTCB here",
+      "converting": "Getting the swap memo…",
+      "convertNote": "Converts through THORChain to BTCB on BNB Smart Chain, straight to this wallet’s own address — no other app needed. After it arrives, swap to USDT in one tap.",
+      "note": "Receive BTC from any wallet, or buy on the P2P market — it lands here, inside this app.",
+      "err": {
+        "QUOTE_FAILED": "Could not get a swap memo — try again in a moment.",
+        "AMOUNT_TOO_SMALL": "Not enough confirmed bitcoin yet for the minimum swap.",
+        "QUOTE_INCOMPLETE": "The swap quote came back incomplete — nothing was sent."
+      }
+    },
+    "send": {
+      "title": "Send Bitcoin",
+      "locked": "Unlock the app wallet first — bitcoin sends need the open vault.",
+      "recipient": "Recipient Bitcoin address",
+      "badAddress": "This Bitcoin address does not check out — one wrong character and the coins are gone. Check it twice.",
+      "amount": "Amount (BTC)",
+      "max": "MAX",
+      "belowDust": "below the 546-sat minimum",
+      "balance": "Spendable",
+      "feeTitle": "Fee",
+      "fee": {
+        "fast": "Fast",
+        "normal": "Normal",
+        "slow": "Slow"
+      },
+      "memoLabel": "Memo (on-chain, attached to this transaction)",
+      "reviewCta": "Review send",
+      "confirmTitle": "Check everything twice",
+      "amountLabel": "Amount",
+      "satsLabel": "In satoshis",
+      "feeLabel": "Network fee",
+      "toAddress": "To address",
+      "irreversible": "Bitcoin sends cannot be undone, reversed or recovered — not by us, not by anyone. A wrong address means the coins are gone permanently.",
+      "back": "Back",
+      "confirmCta": "Send now",
+      "sending": "Sending…",
+      "doneTitle": "Broadcast to the network",
+      "doneBody": "The transaction is on its way. It usually appears in mempool viewers within seconds and confirms with the next blocks.",
+      "feePaid": "Fee: {{sats}} sats",
+      "thorPrefill": "This send deposits into the THORChain swap. The address and memo below were set by the quote — do not edit them.",
+      "thorNote": "The memo identifies the swap and your receiving address. It is attached to the transaction automatically — send it exactly as shown.",
+      "thorArrival": "BTCB will arrive at this app’s own address on BNB Smart Chain. When it lands, the swap to USDT is one tap away.",
+      "swapBtcb": "Swap BTCB → USDT",
+      "err": {
+        "SEND_FAILED": "The send failed — nothing left the wallet.",
+        "LOCKED": "The vault locked — unlock and try again.",
+        "NO_UTXOS": "No confirmed bitcoin to spend yet.",
+        "INSUFFICIENT_FUNDS": "Not enough for the amount plus the fee.",
+        "DUST_PAYEE": "Amount is below the 546-sat network minimum.",
+        "BAD_PAYEE_ADDRESS": "The recipient address failed validation.",
+        "MEMO_TOO_LONG": "The attached memo is too long for one transaction.",
+        "KEY_MISMATCH": "The spending key does not match the funded address.",
+        "TX_REJECTED": "The network rejected the transaction.",
+        "UPSTREAM_RATE_LIMIT": "Too many requests — wait a moment and try again.",
+        "UPSTREAM_UNAVAILABLE": "The bitcoin explorer is temporarily unavailable.",
+        "UPSTREAM_FAILED": "Could not reach the bitcoin network — try again shortly."
+      }
     }
   }
 }

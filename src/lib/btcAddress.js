@@ -93,6 +93,13 @@ function sha256(bytes) {
 /* bech32 / bech32m (BIP-173, BIP-350)                                        */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Exported because the transaction builder (lib/btcTx.js) needs double-SHA256
+ * for BIP-143 sighashes and txids and must stay synchronous/pure; this is
+ * the same FIPS 180-4 implementation the Base58Check path already pins.
+ */
+export { sha256, sha256 as sha256Bytes };
+
 const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const BECH32_LOOKUP = new Map([...BECH32_CHARSET].map((c, i) => [c, i]));
 
@@ -140,6 +147,90 @@ function convertBits(data, fromBits, toBits) {
   if (bits >= fromBits) return null;
   if (((acc << (toBits - bits)) & maxv) !== 0) return null;
   return out;
+}
+
+/**
+ * The other direction: bytes -> 5-bit words, ZERO-padded. That padding is
+ * what BIP-173 specifies for encoding (a witness program is not a multiple
+ * of 5 bits in general; the decoder rejects any padding that is not zero).
+ */
+function convertBitsPad(data, fromBits, toBits) {
+  let acc = 0;
+  let bits = 0;
+  const maxv = (1 << toBits) - 1;
+  const out = [];
+  for (const v of data) {
+    if (v < 0 || v >> fromBits !== 0) return null;
+    acc = (acc << fromBits) | v;
+    bits += fromBits;
+    while (bits >= toBits) {
+      bits -= toBits;
+      out.push((acc >> bits) & maxv);
+    }
+  }
+  if (bits > 0) out.push((acc << (toBits - bits)) & maxv);
+  return out;
+}
+
+/** BIP-173 constant for plain bech32, BIP-350 constant for bech32m. */
+const BECH32_CONST = 1;
+const BECH32M_CONST = 0x2bc830a3;
+
+function encodeData(hrp, words, checksumConst) {
+  if (!hrp || !Array.isArray(words) || words.length === 0) return null;
+  const lower = hrp.toLowerCase();
+  const values = [...hrpExpand(lower), ...words];
+  const polymod = bech32Polymod([...values, 0, 0, 0, 0, 0, 0]) ^ checksumConst;
+  const checksum = [];
+  for (let i = 0; i < 6; i++) checksum.push((polymod >> (5 * (5 - i))) & 31);
+  const body = [...words, ...checksum].map((v) => BECH32_CHARSET[v]).join('');
+  return `${lower}1${body}`;
+}
+
+/**
+ * Encode a bech32 string (BIP-173) from hrp + 5-bit words.
+ * Returns lowercase; callers that need uppercase must upper() the WHOLE
+ * string (mixed case is invalid by construction here).
+ */
+export function encodeBech32(hrp, words) {
+  return encodeData(hrp, words, BECH32_CONST);
+}
+
+/** Encode a bech32m string (BIP-350) from hrp + 5-bit words. */
+export function encodeBech32m(hrp, words) {
+  return encodeData(hrp, words, BECH32M_CONST);
+}
+
+/**
+ * Build a SegWit address string from a witness program.
+ *
+ * The exact inverse of decodeSegwit: version 0 uses plain bech32, v1+ uses
+ * bech32m (BIP-350). Passing a 20-byte program with version 0 is how the
+ * P2WPKH addresses of src/lib/btcWallet.js are produced; the BIP-173/350
+ * vectors in test/p2p-market-probe.mjs pin every other shape this accepts.
+ *
+ * @returns {string|null} null when the program/version is impossible.
+ */
+export function encodeSegwitAddress(hrp, version, program) {
+  if (!Array.isArray(program) && !(program instanceof Uint8Array)) return null;
+  const ver = Number(version);
+  if (!Number.isInteger(ver) || ver < 0 || ver > 16) return null;
+  if (program.length < 2 || program.length > 40) return null;
+  if (ver === 0 && program.length !== 20 && program.length !== 32) return null;
+  const words = convertBitsPad(program, 8, 5);
+  if (!words) return null;
+  const data = [ver, ...words];
+  return ver === 0 ? encodeBech32(hrp, data) : encodeBech32m(hrp, data);
+}
+
+/**
+ * Decode a SegWit address into its witness program (exposed for the encoder's
+ * own round-trip test and for tx building, which needs the raw program).
+ * Same rules as the validator below — this is the decode half of the pair.
+ */
+export function btcAddressProgram(raw) {
+  const decoded = decodeSegwit(String(raw ?? '').trim());
+  return decoded ? { ...decoded, program: Uint8Array.from(decoded.program) } : null;
 }
 
 /**
@@ -218,6 +309,12 @@ function base58Decode(s) {
 
 /** Returns 'p2pkh' | 'p2sh' when decoding + checksum + version all pass. */
 function decodeBase58Check(addr) {
+  const decoded = decodeBase58WithPayload(addr);
+  return decoded ? decoded.type : null;
+}
+
+/** Same verification, keeping the 21-byte payload for script building. */
+function decodeBase58WithPayload(addr) {
   if (addr.length < 26 || addr.length > 35) return null;
   const raw = base58Decode(addr);
   if (!raw || raw.length !== 25) return null;
@@ -227,8 +324,8 @@ function decodeBase58Check(addr) {
   for (let i = 0; i < 4; i++) {
     if (digest[i] !== checksum[i]) return null;
   }
-  if (payload[0] === 0x00) return 'p2pkh';
-  if (payload[0] === 0x05) return 'p2sh';
+  if (payload[0] === 0x00) return { type: 'p2pkh', payload };
+  if (payload[0] === 0x05) return { type: 'p2sh', payload };
   return null; /* other versions (testnet etc) are not mainnet money */
 }
 
@@ -261,4 +358,38 @@ export function btcAddressInfo(raw) {
 
 export function isValidBtcAddress(raw) {
   return btcAddressInfo(raw).valid;
+}
+
+/**
+ * The scriptPubKey an output PAYING this address must carry.
+ *
+ * The transaction builder (lib/btcTx.js) needs the exact bytes — a payment
+ * script is derived from the same decode the validator already did, so the
+ * address→script mapping cannot drift from the validation. Returns null for
+ * anything the validator refuses (which is the point: a payment here is only
+ * ever built for an address that passed the real checksum).
+ *
+ *   segwit v0/vN → OP_<n> <len> <program>          (0x0014… / 0x5121…)
+ *   p2pkh        → OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG
+ *   p2sh         → OP_HASH160 <20> OP_EQUAL
+ */
+export function btcAddressScript(raw) {
+  const addr = String(raw ?? '').trim();
+
+  const sw = decodeSegwit(addr);
+  if (sw) {
+    const versionOp = sw.version === 0 ? 0x00 : 0x50 + sw.version;
+    return Uint8Array.from([versionOp, sw.program.length, ...sw.program]);
+  }
+
+  const b58 = decodeBase58WithPayload(addr);
+  if (b58?.type === 'p2pkh') {
+    const h = b58.payload.slice(1); /* 20-byte HASH160 */
+    return Uint8Array.from([0x76, 0xa9, 0x14, ...h, 0x88, 0xac]);
+  }
+  if (b58?.type === 'p2sh') {
+    const h = b58.payload.slice(1);
+    return Uint8Array.from([0xa9, 0x14, ...h, 0x87]);
+  }
+  return null;
 }

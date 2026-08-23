@@ -111,6 +111,26 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
     }
   }, [wallet?.address, addressTouched]);
 
+  /* ── THE INTERNAL BITCOIN LEG ──────────────────────────────────────────
+     The wallet this app itself runs (local vault, unlocked) now has a real
+     BIP-84 address — same seed, same 12-word backup. When it exists, the buy
+     tab OFFERS it (button below) instead of sending the user to TrustWallet
+     to fetch a paste, and the hint copy stops claiming the app has no
+     bitcoin wallet. Injected/locked wallets still get the old honest text:
+     no phrase in memory ⇒ no internal address to offer, ever. */
+  const [internalBtc, setInternalBtc] = useState(null);
+  const localUnlocked = wallet?.mode === 'local' && !wallet?.locked && Boolean(wallet?.address);
+  useEffect(() => {
+    if (!localUnlocked) { setInternalBtc(null); return undefined; }
+    let alive = true;
+    (async () => {
+      const { btcAddressForSigner } = await import('../lib/btcWallet');
+      const addr = await btcAddressForSigner(wallet.getSigner?.(), { index: 0 });
+      if (alive) setInternalBtc(addr);
+    })();
+    return () => { alive = false; };
+  }, [localUnlocked, wallet?.address]);
+
   const addressInfo = useMemo(
     () => (btcAddress ? btcAddressInfo(btcAddress) : null),
     [btcAddress]
@@ -424,7 +444,19 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
               setBtcAddress(e.target.value.trim());
             }}
           />
-          <p className="prose-sm" style={{ marginTop: 6 }}>{t('p2pMarket.address.hint')}</p>
+          <p className="prose-sm" style={{ marginTop: 6 }}>
+            {internalBtc ? t('p2pMarket.address.hintInternal') : t('p2pMarket.address.hint')}
+          </p>
+          {internalBtc && !addressTouched && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ marginTop: 8, minHeight: 38, borderRadius: 12 }}
+              onClick={() => { setAddressTouched(true); setBtcAddress(internalBtc); haptic?.('light'); }}
+            >
+              {t('p2pMarket.address.useAppWallet')}
+            </button>
+          )}
           {addressInfo && !addressInfo.valid && (
             <p className="p2pm-addr-msg p2pm-addr-bad" role="alert">{t('p2pMarket.address.invalid')}</p>
           )}
