@@ -418,7 +418,7 @@ export default function App() {
       />
     );
   } else if (showSplash) {
-    screen = <Splash hideGalaxy onStart={() => setShowSplash(false)} />;
+    screen = <Splash onStart={() => setShowSplash(false)} />;
   } else if (showWelcome) {
     screen = <Welcome onDone={() => setShowWelcome(false)} />;
   } else if (showOnb) {
@@ -462,6 +462,21 @@ export default function App() {
     <TelegramProvider>
       <WalletProvider>
         <RgbBackground />
+        {/*
+          THE LIFTED GALAXY — the starfield behind the whole first-run flow.
+          `.welcome-stage` / `.onb-stage` are deliberately transparent (see
+          index.css: "Transparent so the lifted GalaxyBackdrop stays visible")
+          and `.launch-galaxy` sits at z-index 90, right under the stages'
+          z-index 95. Rendering it ONCE here instead of inside each page means
+          the sky does not re-randomise or restart its drift between Welcome,
+          Onboarding and the Guide. The Splash draws its own copy (its opaque
+          z-300 surface would cover this one).
+        */}
+        {!locked && !showSplash && (showWelcome || showOnb || showGuide) && (
+          <div className="launch-galaxy" aria-hidden="true">
+            <GalaxyBackdrop />
+          </div>
+        )}
         {screen}
         <Toasts />
         {/*
