@@ -354,3 +354,74 @@ export const IconPhone = (p) => (
     <path d="M6.6 3.5h3l1.5 3.7-1.9 1.1a11.5 11.5 0 0 0 5.5 5.5l1.1-1.9 3.7 1.5v3a1.6 1.6 0 0 1-1.8 1.6C10.9 17.3 6.7 13.1 5 5.3A1.6 1.6 0 0 1 6.6 3.5z" />
   </svg>
 );
+
+/* ─── PAYMENT-METHOD GLYPHS ───────────────────────────────────────────────────
+ *
+ * The P2P filters listed payment methods as bare text in a <select>. These give
+ * each method a shape, which is what makes a long list scannable rather than
+ * read-word-by-word.
+ *
+ * They are drawn HERE, in the shared set, on the same `base` (1.75 stroke,
+ * 24-unit box, currentColor) as everything else — a second icon vocabulary is
+ * how a design system stops being one. Nothing here is smaller than the stroke
+ * width, for the sub-pixel reason documented in WalletArt.jsx.
+ *
+ * They are keyed off the `type` field Hodl Hodl already returns
+ * (server/hodlhodl.js normalises it) — no extra request, no new server shape.
+ */
+
+export const IconBank = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 9.5 12 4l9 5.5" />
+    <path d="M5 9.5v8M9.7 9.5v8M14.3 9.5v8M19 9.5v8" />
+    <path d="M3 20.5h18" />
+  </svg>
+);
+
+export const IconCash = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.5" y="6" width="19" height="12" rx="2.2" />
+    <circle cx="12" cy="12" r="2.6" />
+    <path d="M6 10v4M18 10v4" />
+  </svg>
+);
+
+export const IconCard = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.5" y="5" width="19" height="14" rx="2.4" />
+    <path d="M2.5 9.8h19" />
+    <path d="M6 14.6h3.5" />
+  </svg>
+);
+
+export const IconWalletOnline = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18v2.5" />
+    <path d="M3 7.5v9A2.5 2.5 0 0 0 5.5 19h13a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-13" />
+    <circle cx="16.8" cy="13.5" r="1.1" />
+  </svg>
+);
+
+export const IconGift = (p) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="9" width="18" height="11.5" rx="1.8" />
+    <path d="M2 9h20M12 9v11.5" />
+    <path d="M12 9C10.5 5.5 9.2 4 7.7 4a2.2 2.2 0 0 0 0 4.4M12 9c1.5-3.5 2.8-5 4.3-5a2.2 2.2 0 0 1 0 4.4" />
+  </svg>
+);
+
+export const IconMobileMoney = (p) => (
+  <svg {...base} {...p}>
+    <rect x="6.5" y="2.5" width="11" height="19" rx="2.4" />
+    <path d="M10.5 5.4h3" />
+    <path d="M12 10v5.5M10.2 11.2h2.6a1.3 1.3 0 0 1 0 2.6h-1.6a1.3 1.3 0 0 0 0 2.6h2.6" />
+  </svg>
+);
+
+export const IconCoins = (p) => (
+  <svg {...base} {...p}>
+    <ellipse cx="12" cy="6.6" rx="7" ry="2.9" />
+    <path d="M5 6.6v4.4c0 1.6 3.1 2.9 7 2.9s7-1.3 7-2.9V6.6" />
+    <path d="M5 11v4.4c0 1.6 3.1 2.9 7 2.9s7-1.3 7-2.9V11" />
+  </svg>
+);

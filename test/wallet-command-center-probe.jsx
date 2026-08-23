@@ -61,10 +61,12 @@ export async function run(c) {
     const el = document.createElement('div');
     host.appendChild(el);
     let sent = 0;
+    let btc = 0;
     const root = await render(el, (
       <WalletActionRow
         onSend={() => { sent += 1; }}
         onReceive={() => {}}
+        onBitcoin={() => { btc += 1; }}
         onSwap={() => {}}
         onBridge={() => {}}
         onBuy={() => {}}
@@ -74,13 +76,34 @@ export async function run(c) {
       />
     ));
     const buttons = el.querySelectorAll('.wallet-action-v2');
-    t('the action row has six equal actions', buttons.length === 6);
+    /* Seven since the Bitcoin doorway was added between Receive and Swap. The
+       count is asserted rather than a >= so an accidental duplicate entry — the
+       way this row has grown before — still fails. */
+    t('the action row has seven equal actions', buttons.length === 7);
     t('the actions carry tint classes', !!el.querySelector('.wal-action-send') && !!el.querySelector('.wal-action-buy'));
+
+    /*
+     * ─── THE BITCOIN DOORWAY: POSITION IS PART OF THE REQUIREMENT ───────────
+     * "after Send and Receive, before Swap", exactly. Asserted by INDEX rather
+     * than by mere presence, because a reordering that puts it last still
+     * renders seven buttons and would pass a presence check.
+     */
+    const order = [...buttons].map((b) => [...b.classList].find((c) => c.startsWith('wal-action-')));
+    t('Bitcoin sits between Receive and Swap',
+      order.indexOf('wal-action-btc') === order.indexOf('wal-action-recv') + 1 &&
+      order.indexOf('wal-action-swap') === order.indexOf('wal-action-btc') + 1);
+
     t('Optimize renders as a proposal button', !!el.querySelector('.wallet-optimize'));
     t('the low-data why-note renders when Optimize cannot draft', /optimizeWhy/i.test(el.textContent) || el.textContent.includes('Optimize'));
     const sendBtn = el.querySelector('.wal-action-send');
     await act(async () => sendBtn.click());
     t('Send fires the sheet callback', sent === 1);
+
+    /* The doorway must OPEN something. A tile wired to nothing is exactly the
+       "the button does nothing" bug this batch of work started from. */
+    await act(async () => el.querySelector('.wal-action-btc').click());
+    t('Bitcoin fires its popup callback', btc === 1);
+
     await act(async () => root.unmount());
   }
 

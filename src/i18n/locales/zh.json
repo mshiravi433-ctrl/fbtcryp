@@ -581,8 +581,7 @@
     },
     "fundingHelp": {
       "title": "Where do I fund the account?",
-      "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds.",
-      "newTab": "Opens the official site in a new tab"
+      "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
     }
   },
   "biz": {

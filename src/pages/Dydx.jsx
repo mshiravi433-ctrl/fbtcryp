@@ -6,7 +6,7 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconExternal } from '../components/Icons';
+import { IconInfo } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
@@ -25,13 +25,23 @@ import {
 export default function Dydx() {
   const { t } = useTranslation();
   const wallet = useWallet();
-  const { haptic, tg } = useTelegram();
-  const openDydx = () => {
-    haptic?.('light');
-    const url = 'https://dydx.trade';
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
-  };
+  const { haptic } = useTelegram();
+  /*
+   * ─── THE "FUND YOUR ACCOUNT" BUTTON TO THE dYdX WEBSITE IS GONE ──────────
+   * It was the only outbound link on this page, and it paid nothing: dYdX's
+   * affiliate programme needs $10k of our own trading volume before it pays a
+   * cent, so the button handed a funded, ready-to-trade user straight to
+   * somebody else for free.
+   *
+   * Worse than merely unpaid, it competed with this very screen. Everything
+   * below runs against our own same-origin proxy with a builder fee attached
+   * (see `DYDX_BUILDER_FEE_PPM` / `DYDX_BUILDER_ADDRESS`), so every tap on
+   * that button was revenue walking out of an integration that earns.
+   *
+   * The EXPLANATION stays. Someone does still need to know how a dYdX
+   * subaccount gets funded, and the deposit flow is reachable from the
+   * connected wallet — what is removed is us doing the marketing for it.
+   */
   const [connectOpen, setConnectOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [live, setLive] = useState(false);
@@ -258,18 +268,11 @@ export default function Dydx() {
 
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18, width: '100%', boxSizing: 'border-box', borderColor: 'rgba(0,229,255,0.14)', background: 'linear-gradient(145deg, rgba(0,229,255,0.06), rgba(255,255,255,0.02))' }}>
         <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 9, background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.18)', color: 'var(--rgb-1)' }}><IconExternal width={15} height={15} /></span>
+          <span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 9, background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.18)', color: 'var(--rgb-1)' }}><IconInfo width={15} height={15} /></span>
           {t('dydx.fundingHelp.title')}
         </div>
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.9, margin: 0 }}>
           {t('dydx.fundingHelp.body')}
-        </p>
-        <button type="button" className="btn btn-primary" style={{ width: '100%', marginTop: 12, gap: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={openDydx}>
-          <IconExternal width={15} height={15} />
-          {t('dydx.fundAccount')}
-        </button>
-        <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, textAlign: 'center' }}>
-          {t('dydx.fundingHelp.newTab')}
         </p>
       </motion.section>
 

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import { useStill } from '../components/AnimatedIcon';
 import InfoBox from '../components/InfoBox';
 import CoinLogo from '../components/CoinLogo';
 import AdBanner from '../components/AdBanner';
@@ -31,6 +32,75 @@ const HORIZONS = [
   { days: 7, key: '7D' },
   { days: 30, key: '30D' }
 ];
+
+/**
+ * ─── COLLAPSIBLE SIGNAL SECTION ─────────────────────────────────────────────
+ *
+ * The breakdown card had grown to seven stacked blocks — layer scores,
+ * derivatives, scenarios, invalidation, backtest, on-chain, raw indicators —
+ * rendered one after another with nothing but a faint caption between them.
+ * On a phone that is several screens of scrolling with no way to tell what is
+ * below, which is the "crowded and jumbled" report this item names.
+ *
+ * ─── WHAT THIS DELIBERATELY DOES NOT DO ─────────────────────────────────────
+ * It changes PRESENTATION only. Every gate that decides whether a block exists
+ * at all is untouched and still sits outside this wrapper, so a section with
+ * no real data is still absent rather than being a collapsed header promising
+ * something that is not there — the fail-closed rule the Signals probe pins.
+ *
+ * ─── THE SUMMARY IS THE POINT ───────────────────────────────────────────────
+ * A plain accordion trades scrolling for tapping. Each header therefore
+ * carries the block's single most important number, so a collapsed section is
+ * still informative and the user expands only what they want the workings of.
+ *
+ * MOTION: height is animated with framer-motion, and `useStill` collapses the
+ * transition to zero for prefers-reduced-motion — the same gate the nav icons
+ * and Sheet use. `overflow: hidden` only while animating, so a fully open
+ * section can still show focus rings that overflow its box.
+ */
+function SignalSection({ id, title, summary, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const still = useStill();
+
+  return (
+    <div className="sig-acc">
+      <button
+        type="button"
+        className="sig-acc-head"
+        aria-expanded={open}
+        aria-controls={`sig-acc-${id}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="sig-acc-title">{title}</span>
+        {summary != null ? <span className="sig-acc-summary">{summary}</span> : null}
+        <svg
+          className={`sig-acc-caret ${open ? 'is-open' : ''}`}
+          width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            id={`sig-acc-${id}`}
+            role="region"
+            key="body"
+            initial={still ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={still ? { height: 0, opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={still ? { duration: 0 } : { duration: 0.24, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="sig-acc-body">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /* The four verdict regimes, mapped to one-line labels a layperson reads. */
 const REGIME_LABEL = { riskOn: 'riskOn', btcLed: 'btcLed', rotationOut: 'rotationOut', riskOff: 'riskOff' };
@@ -450,20 +520,29 @@ export default function Signals() {
             {t('signals.breakdown')}
           </div>
 
-          {/* Layer score bars — the "why", each layer's real contribution. */}
+          {/* Layer score bars — the "why", each layer's real contribution.
+              Open by default: this is the section that answers the question
+              the user came to the page with. */}
           {layerRows.length > 0 && (
-            <div style={{ marginBottom: 6 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 10 }}>{t('signals.layerTitle')}</div>
+            <SignalSection
+              id="layers"
+              defaultOpen
+              title={t('signals.layerTitle')}
+              summary={t('signals.acc.layersSummary', { n: layerRows.length })}
+            >
               {layerRows.map((l) => (
                 <LayerBar key={l.key} label={t(`verdict.layerName.${l.key}`)} score={l.score} weight={l.weight} />
               ))}
-            </div>
+            </SignalSection>
           )}
 
           {/* Derivatives row — funding + open interest, majors only. */}
           {perpForCoin && perpForCoin.avgFundingApr != null && (
-            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 8 }}>{t('signals.derivatives.title')}</div>
+            <SignalSection
+              id="derivatives"
+              title={t('signals.derivatives.title')}
+              summary={`${perpForCoin.avgFundingApr > 0 ? '+' : ''}${Math.round(perpForCoin.avgFundingApr)}%`}
+            >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <div className="faint" style={{ fontSize: 10 }}>{t('signals.derivatives.funding')}</div>
@@ -478,13 +557,16 @@ export default function Signals() {
                   </div>
                 )}
               </div>
-            </div>
+            </SignalSection>
           )}
 
           {/* Probability scenarios — up / flat / down over this horizon. */}
           {scenarios && scenarios.samples >= 20 && (
-            <div style={{ marginBottom: 12 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 8 }}>{t('signals.scenarios.title')}</div>
+            <SignalSection
+              id="scenarios"
+              title={t('signals.scenarios.title')}
+              summary={`▲ ${scenarios.pctUp}% · ▼ ${scenarios.pctDown}%`}
+            >
               <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: 'rgba(127,127,127,.10)' }}>
                 <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctUp}%` }} transition={{ duration: 0.7 }} style={{ background: 'var(--up)' }} />
                 <motion.div initial={{ width: 0 }} animate={{ width: `${scenarios.pctNeutral}%` }} transition={{ duration: 0.7 }} style={{ background: 'rgba(127,127,127,.32)' }} />
@@ -496,12 +578,16 @@ export default function Signals() {
                 <span className="down" style={{ fontWeight: 700 }}>▼ {scenarios.pctDown}% {t('signals.scenarios.bearish')}</span>
               </div>
               <div className="faint" style={{ fontSize: 10.5, marginTop: 6 }}>{t('signals.scenarios.hint', { n: scenarios.samples, d: horizon.days })}</div>
-            </div>
+            </SignalSection>
           )}
 
           {/* Invalidation level — the nearest support below price. */}
           {invalidation && (
-            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
+            <SignalSection
+              id="invalidation"
+              title={t('signals.invalidation')}
+              summary={`$${fmtPrice(invalidation.price)}`}
+            >
               <div className="row-between">
                 <div>
                   <div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.invalidation')}</div>
@@ -512,13 +598,16 @@ export default function Signals() {
                   <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 4 }}>-{fmtPct(invalidation.pctBelow)}</div>
                 </div>
               </div>
-            </div>
+            </SignalSection>
           )}
 
           {/* Backtest history — hide when the sample is too thin. */}
           {backtestInfo && (
-            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 8 }}>{t('signals.backtestHistory')}</div>
+            <SignalSection
+              id="backtest"
+              title={t('signals.backtestHistory')}
+              summary={`${Math.round(backtestInfo.rate)}% · n=${backtestInfo.samples}`}
+            >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                 <div style={{ textAlign: 'center' }}>
                   <div className="mono up" style={{ fontSize: 16, fontWeight: 900 }}>{Math.round(backtestInfo.rate)}%</div>
@@ -534,13 +623,12 @@ export default function Signals() {
                 </div>
               </div>
               <div className="faint" style={{ fontSize: 10.5, marginTop: 8 }}>{t('signals.backtestHint', { base: Math.round(backtestInfo.base) })}</div>
-            </div>
+            </SignalSection>
           )}
 
           {/* On-chain row — Solana tab only, fail-closed when no real data. */}
           {hasOnchain && (
-            <div className="card card-soft" style={{ padding: 12, borderRadius: 12, marginBottom: 12, borderColor: 'rgba(152,120,255,0.18)' }}>
-              <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, marginBottom: 10 }}>{t('signals.onchain.title')}</div>
+            <SignalSection id="onchain" title={t('signals.onchain.title')}>
               <div style={{ display: 'grid', gap: 10 }}>
                 {intel.whaleFlow?.direction && (
                   <div className="row-between">
@@ -573,9 +661,16 @@ export default function Signals() {
                   </div>
                 )}
               </div>
-            </div>
+            </SignalSection>
           )}
 
+          {/* Raw indicators. Collapsed by default — this is the workings, and
+              the layers section above is the conclusion drawn from them. */}
+          <SignalSection
+            id="indicators"
+            title={t('signals.acc.indicators')}
+            summary={t('signals.acc.indicatorsSummary', { n: analysis.signals.length })}
+          >
           {analysis.signals.map((s) => <IndicatorBar key={s.key} signal={s} />)}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
             {analysis.indicators.rsi != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>RSI (14)</div><div className="mono" style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{analysis.indicators.rsi.toFixed(1)}</div></div>}
@@ -583,6 +678,7 @@ export default function Signals() {
             {analysis.indicators.support != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.support')}</div><div className="mono up" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.support)}</div></div>}
             {analysis.indicators.resistance != null && <div className="card card-tight" style={{ padding: 12, textAlign: 'center', borderRadius: 12 }}><div className="faint" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6 }}>{t('signals.resistance')}</div><div className="mono down" style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>${fmtPrice(analysis.indicators.resistance)}</div></div>}
           </div>
+          </SignalSection>
 
           {/* Create Intent — pre-fills Intent OS, never auto-executes. */}
           <button className="btn btn-primary" style={{ width: '100%', minHeight: 46, borderRadius: 14, marginTop: 16 }} onClick={() => { haptic?.('select'); navigate(`/intent?to=${encodeURIComponent(coin?.symbol || '')}`); }}>

@@ -518,6 +518,11 @@
 .wal-action-bridge .wallet-action-v2-icon { background: linear-gradient(135deg, #ffb300 0%, #ff2d95 100%); }
 .wal-action-buy .wallet-action-v2-icon { background: linear-gradient(135deg, #00ff9d 0%, #7c4dff 100%); }
 .wal-action-earn .wallet-action-v2-icon { background: linear-gradient(135deg, #7c4dff 0%, #00e5ff 100%); }
+/* Bitcoin doorway — the one tile with the asset's own colour, so it reads as
+   "a coin" rather than "another verb". The strip is already a horizontal
+   scroller with a fixed flex-basis per tile, so a seventh tile changes no
+   other geometry and flips correctly under RTL with the rest of the row. */
+.wal-action-btc .wallet-action-v2-icon { background: linear-gradient(135deg, #f7931a 0%, #ffb300 100%); }
 
 .wallet-optimize {
   display: flex;
@@ -695,4 +700,69 @@
   .wallet-intel-row { gap: 6px; }
   .wal-intel-tile, .wal-sec-card { padding: 10px; }
   .wallet-action-v2 { flex-basis: 78px; min-height: 62px; }
+}
+
+/* ─── ASSET ROW: TWO LINES, ALWAYS ────────────────────────────────────────────
+ *
+ * The reported bug was rows showing three broken lines of text instead of an
+ * asset name. lib/walletRisk.js#cleanAssetText documents the three data causes;
+ * these rules are the layout half, and both are needed — sanitising alone still
+ * lets a legitimately long name wrap, and clipping alone still lets a bidi
+ * override reorder the characters it is hiding.
+ *
+ * The load in the flex chain is deliberate: only `.wal-asset-sym` may shrink.
+ * `min-width: 0` has to be repeated on every ancestor because a flex item's
+ * default `min-width: auto` refuses to shrink below its content, and one
+ * missing link in that chain restores the old wrapping.
+ */
+.wal-asset-row,
+.wal-asset-group {
+  /* Matches the skeleton's height, so the list does not jolt when real rows
+     replace the placeholders. */
+  min-height: 58px;
+}
+.wal-asset-main {
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+}
+.wal-asset-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.wal-asset-sym {
+  font-size: 13.5px;
+  font-weight: 800;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The chips describe WHICH networks; they are short and must not be the thing
+   that gets squeezed. They are clipped by the line's overflow instead. */
+.wal-asset-line .wal-chip-net { flex-shrink: 0; }
+.wal-asset-name {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Numbers never wrap and never shrink — a balance broken over two lines is
+   unreadable, and this column is the reason the row exists. */
+.wal-asset-figures {
+  flex-shrink: 0;
+  text-align: end;
+  white-space: nowrap;
 }

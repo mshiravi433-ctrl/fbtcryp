@@ -1245,7 +1245,12 @@
         "balanced": "balanced"
       }
     },
-    "createIntent": "Create intent"
+    "createIntent": "Create intent",
+    "acc": {
+      "layersSummary": "{{n}} layers",
+      "indicators": "Raw indicators",
+      "indicatorsSummary": "{{n}} readings"
+    }
   },
   "stocks": {
     "title": "Stocks",
@@ -1262,24 +1267,6 @@
     "rwaTokens": "RWA sector tokens",
     "rwaNote": "These are the tokens of protocols building tokenization infrastructure. They are not shares in those companies and they do not track equity prices.",
     "noTokens": "No RWA tokens in the current market data",
-    "issuers": "Licensed issuers",
-    "issuer": {
-      "backed": {
-        "name": "Backed Finance",
-        "short": "bTKN",
-        "desc": "Swiss-regulated tokenized equities and ETFs"
-      },
-      "ondo": {
-        "name": "Ondo Finance",
-        "short": "ONDO",
-        "desc": "Tokenized US treasuries and short-term bonds"
-      },
-      "swarm": {
-        "name": "Swarm Markets",
-        "short": "SWRM",
-        "desc": "German BaFin-regulated tokenized stocks"
-      }
-    },
     "kycNotice": "These issuers require identity verification and may not accept users from every country. Fanous Bazaar Pishgam has no affiliation with them, earns nothing from them, and cannot help with their onboarding.",
     "riskNotice": "Tokenized assets carry market risk, issuer risk and freeze risk together. If the issuer fails, is shut down, or decides not to serve you, the token may not be redeemable for the underlying asset. Never put in money you cannot afford to lose.",
     "realTitle": "What these actually are",
@@ -2424,7 +2411,8 @@
     "warning": "Sending on a different network than the one shown will usually lose the funds permanently. Always check the network in the sending app before you confirm.",
     "btc": {
       "title": "This wallet’s Bitcoin address",
-      "backupCovered": "Your existing 12-word backup already covers this Bitcoin address — it is the same wallet, derived from the same seed."
+      "backupCovered": "Your existing 12-word backup already covers this Bitcoin address — it is the same wallet, derived from the same seed.",
+      "locked": "Unlock this wallet to see its Bitcoin address. The address is derived from your 12-word phrase, which only exists in memory while the wallet is unlocked."
     }
   },
   "explore": {
@@ -3600,7 +3588,6 @@
     "entryPrice": "Entry price",
     "builderTitle": "Builder fee is inside the signed order",
     "builderBody": "dYdX pays the {{fee}} ppm builder fee to {{address}} on each fill. It is visible onchain and FBT never holds the trade collateral.",
-    "fundAccount": "Fund or manage the account on official dYdX",
     "confirmTitle": "Confirm real dYdX order",
     "direction": "Direction",
     "confirmRisk": "This broadcasts a real order to dYdX Chain. IOC market orders may fill partially or at a worse price up to the displayed slippage limit.",
@@ -3634,8 +3621,7 @@
     },
     "fundingHelp": {
       "title": "Where do I fund the account?",
-      "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds.",
-      "newTab": "Opens the official site in a new tab"
+      "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
     }
   },
   "derivatives": {
@@ -4474,15 +4460,18 @@
       "placeholder": "100"
     },
     "currency": {
-      "label": "Currency"
+      "label": "Currency",
+      "search": "Search a currency"
     },
     "method": {
       "label": "Payment method",
-      "any": "Any method"
+      "any": "Any method",
+      "search": "Search a payment method"
     },
     "country": {
       "label": "Country",
-      "any": "Worldwide"
+      "any": "Worldwide",
+      "search": "Search a country"
     },
     "layer": {
       "onchain": "Bitcoin on-chain",
@@ -4529,8 +4518,10 @@
       "placeholder": "bc1q…",
       "invalid": "This Bitcoin address does not check out — one wrong character and the coins are gone. Check it twice.",
       "valid": "Address format verified",
-      "hintInternal": "The BTC you buy is released to this address. This app’s own wallet now has a Bitcoin address — you can use it and skip the copy-paste, or paste any other Bitcoin address you control.",
-      "useAppWallet": "Use app wallet address"
+      "hintInternal": "The Bitcoin you buy is released to exactly this address.",
+      "useAppWallet": "Use app wallet address",
+      "hintInternalWallet": "Use this app’s own wallet address — no copy-paste",
+      "hintInternalPaste": "Or paste any other Bitcoin address you control"
     },
     "sheet": {
       "title": "Before you trade",
@@ -4560,6 +4551,9 @@
       "sellTitle": "Holding something other than BTC?",
       "sellBody": "Swap it to BTC here first, then sell that for money above.",
       "sellBtn": "Swap to BTC"
+    },
+    "picker": {
+      "none": "Nothing matches that search."
     }
   },
   "btc": {
@@ -4625,6 +4619,38 @@
         "UPSTREAM_RATE_LIMIT": "Too many requests — wait a moment and try again.",
         "UPSTREAM_UNAVAILABLE": "The bitcoin explorer is temporarily unavailable.",
         "UPSTREAM_FAILED": "Could not reach the bitcoin network — try again shortly."
+      }
+    },
+    "hub": {
+      "action": "Bitcoin",
+      "title": "Bitcoin",
+      "ownTitle": "This wallet’s Bitcoin",
+      "ownSub": "Built in — same 12-word backup as your other coins",
+      "openCard": "Open the Bitcoin card",
+      "locked": "Unlock this wallet to use its Bitcoin address. The key is derived from your 12-word phrase and only exists while the wallet is unlocked.",
+      "noVault": "The built-in Bitcoin wallet works with this app’s own 12-word wallet. A connected external wallet cannot grow a Bitcoin address here. You can still watch any address below."
+    },
+    "watch": {
+      "title": "Watch an address",
+      "count": "{{n}} of {{max}} saved",
+      "viewOnly": "View only. These are public addresses — this app holds no key for them and can never spend from them.",
+      "empty": "Add a public Bitcoin address to follow its balance from here, without moving anything.",
+      "unnamed": "Unnamed address",
+      "utxos": "{{n}} unspent outputs",
+      "failed": "Could not read",
+      "refresh": "Refresh balances",
+      "remove": "Remove address",
+      "add": "Add an address",
+      "save": "Save",
+      "addressLabel": "Bitcoin address",
+      "nameLabel": "Name (optional)",
+      "namePlaceholder": "Hardware wallet, savings…",
+      "note": "Balances are read through this app’s own Bitcoin proxy. Nothing is sent anywhere else, and no key, seed or extended public key is ever stored.",
+      "err": {
+        "EMPTY": "Enter a Bitcoin address first.",
+        "INVALID": "That is not a valid Bitcoin mainnet address. Testnet addresses are not accepted.",
+        "DUPLICATE": "That address is already on the list.",
+        "FULL": "The list is full — remove one to add another."
       }
     }
   }

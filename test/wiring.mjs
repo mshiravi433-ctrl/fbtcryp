@@ -12012,5 +12012,190 @@ export default function run() {
     }
   }
 
+  /* -------- 109. the bitcoin doorway, the receive sheet, watch-only ------- */
+  /*
+   * This section guards the batch of wallet work that started from a plain bug
+   * report: "the Receive button does nothing and its icon is broken".
+   *
+   * Each assertion below is a fact that, if it flips, reproduces a bug that
+   * actually shipped — not a restatement of the implementation.
+   */
+  {
+    /* Comments must not count as usage — §108's stripper, re-declared because
+       it is block-scoped there. An explanation of why a module is NOT imported
+       would otherwise read as an import. */
+    const stripCode = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+
+    const recv = read('src/components/ReceiveSheet.jsx');
+
+    /*
+     * ─── THE ACTUAL CAUSE OF "RECEIVE DOES NOTHING" ─────────────────────────
+     * BtcSection calls useEffect, and the file imported only useMemo/useState.
+     * The ReferenceError was thrown during render and swallowed by the route
+     * boundary, so the sheet mounted to nothing and the button looked dead.
+     *
+     * Asserted as an invariant rather than a one-off fix: EVERY hook this file
+     * calls must appear in its react import. That catches the next useRef or
+     * useCallback added to a section component the same way.
+     */
+    const reactImport = (recv.match(/import\s*\{([^}]*)\}\s*from\s*'react'/) || [, ''])[1];
+    const hooksUsed = [...new Set((recv.match(/\buse[A-Z][A-Za-z]*/g) || []))]
+      .filter((h) => ['useState', 'useEffect', 'useMemo', 'useRef', 'useCallback', 'useLayoutEffect'].includes(h));
+    const notImported = hooksUsed.filter((h) => !new RegExp(`\\b${h}\\b`).test(reactImport));
+    t('ReceiveSheet imports every React hook it calls' +
+      (notImported.length ? ` — missing: ${notImported.join(', ')}` : ''),
+      notImported.length === 0);
+
+    /*
+     * The second bug in the same file: the Bitcoin section returned early for
+     * a locked wallet and only THEN called useMemo, so locking or unlocking
+     * changed the hook count and React threw. Every hook must therefore sit
+     * above the first return in the component.
+     */
+    {
+      const i = recv.indexOf('function BtcSection');
+      const lines = (i > 0 ? recv.slice(i) : '').split('\n');
+      /*
+       * Indentation is the discriminator. A `return` at two spaces leaves the
+       * COMPONENT; the same word at four or more is leaving a callback (the
+       * `return undefined` inside the effect's early exit, or its cleanup),
+       * which is not a branch React ever sees.
+       */
+      let guard = -1;
+      for (let n = 1; n < lines.length; n += 1) {
+        if (/^\}/.test(lines[n])) break;                     /* end of component */
+        if (/^ {2}(?:if\s*\(|return\b)/.test(lines[n])) { guard = n; break; }
+      }
+      const after = guard > 0 ? lines.slice(guard).join('\n') : '';
+      t('no hook in BtcSection runs after a conditional return',
+        guard > 0 && !/\buse(?:State|Effect|Memo|Ref|Callback)\s*\(/.test(after));
+    }
+
+    /* A locked wallet must SAY it is locked. A blank Bitcoin panel is the same
+       user-visible failure as the crash it replaced. */
+    t('a locked wallet gets a message, not an empty Bitcoin panel',
+      recv.includes('receive.btc.locked'));
+
+    /* Item 2: the doorway exists, is wired, and is a callback — never a route. */
+    const row = read('src/components/WalletActionRow.jsx');
+    const wallet = read('src/pages/Wallet.jsx');
+    t('the action row exposes a Bitcoin action', /onBitcoin/.test(row));
+    t('the Bitcoin action opens a popup rather than navigating',
+      !/navigate\(['"]\/btc/.test(row) && !/navigate\(['"]\/bitcoin/.test(row));
+    t('the Wallet page owns the Bitcoin sheet state', /btcHubOpen/.test(wallet));
+    t('the Wallet page passes onBitcoin down', /onBitcoin=\{/.test(wallet));
+
+    /*
+     * ─── THE DOORWAY MUST STAY WEIGHTLESS ───────────────────────────────────
+     * WalletActionRow renders on every wallet paint. If it ever imports the
+     * bitcoin libraries, the whole btc stack lands in the wallet's first
+     * paint for people who never tap the icon. The icon is paths, the handler
+     * is a callback; both must stay that way.
+     */
+    t('the action row pulls in no bitcoin module',
+      !/btcWallet|btcTx|btcApi|BtcCard|BtcHubSheet/.test(stripCode(row)));
+
+    /* Item 3-1: the BTC send field can be scanned, following the EVM pattern. */
+    const btcSend = read('src/components/BtcSendSheet.jsx');
+    const qr = read('src/components/QrScanner.jsx');
+    t('the BTC recipient field has a scanner', /QrScanner/.test(btcSend));
+    t('...guarded by the same support check the EVM sheet uses',
+      /scannerSupported/.test(btcSend));
+    t('...parsing BIP-21 rather than EIP-681', /parseScannedBtc/.test(btcSend));
+    t('...and the scanned address still goes through btcAddressInfo',
+      /btcAddressInfo/.test(btcSend));
+    t('the BTC parser is a separate export, leaving the EVM one alone',
+      /export function parseScannedBtc/.test(qr) && /export function parseScanned\b/.test(qr));
+    t('the scanner takes a parser rather than sniffing the payload',
+      /parse\s*=\s*parseScanned/.test(qr));
+
+    /* Item 3-2: watch-only is view-only, structurally. */
+    const watch = read('src/lib/btcWatch.js');
+    t('the watch store never writes key material',
+      !/mnemonic|privateKey|xpub|wif|seed/i.test(stripCode(watch)));
+    t('the watch store validates with the real decoder',
+      /btcAddressInfo/.test(watch));
+    t('the watch store is namespaced and versioned',
+      /'fbt-btc-watch-v1'/.test(watch));
+    const hub = read('src/components/BtcHubSheet.jsx');
+    t('the Bitcoin sheet labels watch-only addresses as view-only',
+      /btc\.watch\.viewOnly/.test(hub));
+    t('the Bitcoin sheet offers no send control for watched addresses',
+      !/btcTx|signTx|broadcast/i.test(stripCode(hub)));
+
+    /* i18n: every new key, in the primary market's language too. */
+    const enJson = JSON.parse(read('src/i18n/locales/en.json'));
+    const faJson = JSON.parse(read('src/i18n/locales/fa.json'));
+    const arJson = JSON.parse(read('src/i18n/locales/ar.json'));
+    const dig = (o, k) => k.split('.').reduce((a, p) => (a && typeof a === 'object' ? a[p] : undefined), o);
+    const newKeys = [
+      'receive.btc.locked', 'btc.hub.action', 'btc.hub.title', 'btc.hub.locked',
+      'btc.watch.title', 'btc.watch.viewOnly', 'btc.watch.err.INVALID', 'btc.watch.err.FULL',
+      'p2pMarket.address.hintInternal', 'p2pMarket.address.hintInternalWallet',
+      'p2pMarket.address.hintInternalPaste', 'p2pMarket.currency.search',
+      'p2pMarket.method.search', 'p2pMarket.country.search', 'p2pMarket.picker.none',
+      'signals.acc.indicators'
+    ];
+    for (const [name, json] of [['English', enJson], ['Persian', faJson], ['Arabic', arJson]]) {
+      const missing = newKeys.filter((k) => typeof dig(json, k) !== 'string' || !dig(json, k).trim());
+      t(`${name} translates every new wallet/market key` +
+        (missing.length ? ` — missing: ${missing.join(', ')}` : ''),
+        missing.length === 0);
+    }
+    /* Hand-written, not copy-pasted English: the Persian and Arabic strings
+       must actually be in those scripts. */
+    t('the Persian hint is Persian', /[\u0600-\u06ff]/.test(dig(faJson, 'p2pMarket.address.hintInternal')));
+    t('the Arabic hint is Arabic', /[\u0600-\u06ff]/.test(dig(arJson, 'p2pMarket.address.hintInternal')));
+    t('the Persian watch-only warning is Persian', /[\u0600-\u06ff]/.test(dig(faJson, 'btc.watch.viewOnly')));
+
+    /* The dead issuer keys went with the buttons — a stale key is a promise
+       someone will re-render later. */
+    t('the removed issuer copy is gone from every locale',
+      dig(enJson, 'stocks.issuers') === undefined &&
+      dig(faJson, 'stocks.issuers') === undefined &&
+      dig(arJson, 'stocks.issuers') === undefined);
+  }
+
+  /* ---- 110. outbound links must pay for the user they take away --------- */
+  /*
+   * The rule, decided once: a button that leaves this app has to earn. Checked
+   * against lib/venueReferral.js, which is the single source of truth.
+   *
+   *   apx   — no affiliate programme at all
+   *   dydx  — programme requires $10k of our own volume, which we do not have
+   *
+   * Both were removed. dYdX in particular is a full in-app tab on the same
+   * screen, running through our own proxy with a builder fee, so the outbound
+   * button was cannibalising the one integration there that earns.
+   */
+  {
+    const perp = read('src/pages/Perp.jsx');
+    t('the ApolloX link is gone from the futures overview', !/apollox\.finance/.test(perp));
+    t('the dYdX link is gone from the futures overview', !/dydx\.trade/.test(perp));
+    t('...and neither id remains in the venue list',
+      !/id:\s*'apx'/.test(perp) && !/id:\s*'dydx'/.test(perp));
+
+    /* The earning ones stay — removing revenue was never the ask. */
+    t('the Avantis link (registered code) is kept', /avantisfi\.com/.test(perp));
+    t('the GMX link is kept', /app\.gmx\.io/.test(perp));
+
+    /* The in-app dYdX tab is untouched: it is the alternative, not a casualty. */
+    t('the in-app dYdX tab survives', /PERP_TABS/.test(perp) && /LazyDydx/.test(perp));
+    const dydx = read('src/pages/Dydx.jsx');
+    t('the dYdX page no longer pushes users to the external site',
+      !/dydx\.trade/.test(dydx) && !/openDydx/.test(dydx));
+
+    /*
+     * Explorer links are NOT venue links. A transaction hash has to be
+     * checkable somewhere, and no explorer pays anyone. This guards against an
+     * over-eager future cleanup taking them out too.
+     */
+    const explorers = read('src/lib/chains.js');
+    t('block explorers are untouched', /explorer/i.test(explorers));
+  }
+
   return rows;
 }

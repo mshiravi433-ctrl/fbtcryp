@@ -11,7 +11,7 @@ import HistoryPanel from '../components/HistoryPanel';
 import { useChart, useMarkets } from '../hooks/useMarket';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
-import { IconExternal, IconShield } from '../components/Icons';
+import { IconShield } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 /*
@@ -72,19 +72,32 @@ const LazyDerivatives = SPECULATION_ENABLED ? lazyRetry(() => import('./Derivati
 /** Protocols building tokenized real-world assets. These are normal tokens. */
 const RWA_IDS = ['ondo-finance', 'chainlink', 'maker', 'polymesh', 'centrifuge', 'pendle'];
 
-/**
- * Other licensed issuers, kept from the previous version of this screen.
+/*
+ * ─── THE ISSUER LINK-OUTS ARE GONE ──────────────────────────────────────────
+ * This tab used to end with three buttons to backed.fi, ondo.finance and
+ * swarm.com. They were honest — the copy said plainly that we earn nothing —
+ * but "honest" is not the same as "worth having", and on re-reading they
+ * failed both tests that matter here:
  *
- * Still useful and still honest: Backed is one issuer among several, these
- * others serve markets and instruments it does not, and someone who wants a
- * KYC'd relationship with a regulated broker should be able to find one from
- * here. We earn nothing from any of them and the copy says so.
+ *  1. THEY EARNED NOTHING AND COST A USER. None of the three has a referral
+ *     programme we can join, so every tap was a user leaving a screen where
+ *     our own aggregator quotes the same asset class at 70 bps. The RWA rows
+ *     directly above already do the honest, monetised version of the same job:
+ *     they are ordinary ERC-20s, the price comes through our own proxy, the
+ *     row opens /coin/:id inside the app, and buying goes through our swap.
+ *
+ *  2. THE DESTINATIONS WERE MARKETING PAGES. Nothing on them is actionable
+ *     without a KYC relationship this app cannot broker, so the button
+ *     promised a next step it could not deliver.
+ *
+ * The KYC notice below stays: it is the honest limit, and it is the part that
+ * was actually load-bearing. Deleted rather than hidden behind a flag — a flag
+ * is just the same link waiting for someone to set an env var.
+ *
+ * The `stocks.issuer.*` and `stocks.issuers` keys are removed from en/fa/ar in
+ * the same change, so nothing is left pointing at a section that no longer
+ * renders.
  */
-const ISSUERS = [
-  { id: 'backed', url: 'https://backed.fi', color: 'var(--rgb-1)' },
-  { id: 'ondo', url: 'https://ondo.finance', color: 'var(--rgb-2)' },
-  { id: 'swarm', url: 'https://swarm.com', color: 'var(--rgb-3)' }
-];
 
 /** Sizes for the depth gate. Deliberately the same set the Farm screen uses. */
 const AMOUNTS = [100, 1000, 5000];
@@ -95,7 +108,7 @@ const STOCK_TABS = SPECULATION_ENABLED
 export default function Stocks() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { haptic, tg } = useTelegram();
+  const { haptic } = useTelegram();
   const { data: coins, loading } = useMarkets(100);
   const [tab, setTab] = useState('equity');
 
@@ -222,11 +235,9 @@ export default function Stocks() {
     [goldChart]
   );
 
-  const open = (url) => {
-    haptic?.('light');
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
-  };
+  /* The out-of-app opener went with the issuer buttons — this screen no longer
+     sends anyone anywhere. Every remaining action stays inside the app: a row
+     opens /coin/:id, and Buy hands off to our own Solana swap below. */
 
   /*
    * Hand off to the Solana swap screen with the pair pre-filled. Reuses the
@@ -618,32 +629,6 @@ export default function Stocks() {
               </motion.div>
             )}
             <p className="faint" style={{ marginTop: 9, lineHeight: 1.7 }}>{t('stocks.rwaNote')}</p>
-          </section>
-
-          <section>
-            <p className="section-label">{t('stocks.issuers')}</p>
-            <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-              {ISSUERS.map((iss) => (
-                <motion.button
-                  key={iss.id}
-                  className="wallet-option"
-                  variants={riseIn}
-                  whileTap={{ scale: 0.985 }}
-                  onClick={() => open(iss.url)}
-                >
-                  <span className="wallet-badge" style={{ color: iss.color, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                    {t(`stocks.issuer.${iss.id}.short`)}
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5 }}>
-                      {t(`stocks.issuer.${iss.id}.name`)}
-                    </span>
-                    <span className="set-row-sub">{t(`stocks.issuer.${iss.id}.desc`)}</span>
-                  </span>
-                  <IconExternal width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                </motion.button>
-              ))}
-            </motion.div>
           </section>
 
           <InfoBox title={t('stocks.kycTitle')} tone="info" id="stocks-kyc">

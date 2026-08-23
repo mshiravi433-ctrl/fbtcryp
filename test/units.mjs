@@ -38,6 +38,16 @@ import {
   referrerShare
 } from '../src/lib/referral.js';
 import { backpackBrowseLink, phantomBrowseLink, publicAppUrl, solflareBrowseLink } from '../src/lib/solanaWallet.js';
+import {
+  BTC_WATCH_KEY,
+  MAX_WATCH,
+  addWatch,
+  loadWatch,
+  removeWatch,
+  saveWatch,
+  validateWatch
+} from '../src/lib/btcWatch.js';
+import { flagEmoji, flagFallback, flagSupported, normalizeCountryCode } from '../src/lib/countryFlag.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import {
   TELEGRAM_BOT_ID,
@@ -8222,6 +8232,132 @@ export default async function run() {
     // Kind set must include the supported categories
     t('event kind set includes transfer/mint/burn',
       EVENT_KINDS.includes('transfer') && EVENT_KINDS.includes('mint') && EVENT_KINDS.includes('burn'));
+  }
+
+  /* ---------------- watch-only bitcoin addresses --------------------- */
+  /*
+   * The whole point of this module is that it can NEVER spend. These cases
+   * therefore guard two different things: that the record shape stays minimal
+   * (no key material can sneak in), and that the address validation is the
+   * same mainnet-only decoder the send path uses — a regex would happily
+   * accept a testnet address and then show an eternally empty balance.
+   */
+  {
+    /* Real mainnet addresses, one of each encoding the decoder supports. */
+    const P2PKH = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2';
+    const P2SH = '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy';
+    const BECH32 = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+    /* Testnet equivalents — valid bitcoin, wrong network, must be refused. */
+    const TB1 = 'tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx';
+    const TESTNET_P2PKH = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';
+
+    t('a mainnet bech32 address validates', validateWatch(BECH32, '', []).ok === true);
+    t('a mainnet P2PKH address validates', validateWatch(P2PKH, '', []).ok === true);
+    t('a mainnet P2SH address validates', validateWatch(P2SH, '', []).ok === true);
+
+    t('an empty address reports EMPTY', validateWatch('   ', '', []).code === 'EMPTY');
+    t('a testnet bech32 address is rejected as INVALID', validateWatch(TB1, '', []).code === 'INVALID');
+    t('a testnet base58 address is rejected as INVALID', validateWatch(TESTNET_P2PKH, '', []).code === 'INVALID');
+    t('a mistyped address (bad checksum) is rejected',
+      validateWatch('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN3', '', []).code === 'INVALID');
+    t('an ethereum address is rejected',
+      validateWatch('0x1111111111111111111111111111111111111111', '', []).code === 'INVALID');
+
+    /* The stored record is address + label and nothing else, forever. */
+    const made = validateWatch(BECH32, '  Hardware wallet  ', []);
+    t('the saved entry trims the label', made.entry.label === 'Hardware wallet');
+    t('the saved entry holds ONLY an address and a label',
+      Object.keys(made.entry).sort().join(',') === 'address,label');
+    t('a pasted paragraph cannot blow up the label',
+      validateWatch(BECH32, 'x'.repeat(500), []).entry.label.length <= 24);
+
+    /* add / duplicate / full */
+    const one = addWatch([], BECH32, 'a');
+    t('addWatch returns a new list rather than mutating', one.ok && one.list.length === 1);
+    t('the same address twice reports DUPLICATE', addWatch(one.list, BECH32, 'b').code === 'DUPLICATE');
+    t('DUPLICATE leaves the list untouched', addWatch(one.list, BECH32, 'b').list.length === 1);
+    /* base58 is case-significant: lower-casing to compare would fuse two
+       genuinely different addresses, so a case variant is NOT a duplicate. */
+    t('a base58 case variant is not treated as the same address',
+      addWatch([{ address: P2PKH, label: '' }], P2PKH.toLowerCase(), '').code !== 'DUPLICATE');
+
+    const full = [P2PKH, P2SH, BECH32, '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq']
+      .map((address) => ({ address, label: '' }));
+    t('the list caps at five', full.length === MAX_WATCH);
+    t('a sixth address reports FULL',
+      addWatch(full, '3FZbgi29cpjq2GjdwV8eyHuJJnkLtktZc5', '').code === 'FULL');
+
+    /* delete */
+    t('removeWatch deletes exactly one entry',
+      removeWatch(full, P2SH).length === 4 && !removeWatch(full, P2SH).some((e) => e.address === P2SH));
+    t('removing an unknown address is a no-op', removeWatch(full, 'nope').length === 5);
+
+    /* Round-trip through storage. Node has no localStorage before 22, and the
+       module must degrade rather than throw either way, so both paths are
+       exercised: first with no storage at all, then with a minimal shim. */
+    if (!globalThis.localStorage) {
+      t('loadWatch returns an empty list when storage does not exist', loadWatch().length === 0);
+      const mem = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: (k) => mem.delete(k)
+      };
+    }
+    saveWatch([{ address: BECH32, label: 'cold' }]);
+    const back = loadWatch();
+    t('a saved address survives a reload', back.length === 1 && back[0].address === BECH32);
+    t('the label survives a reload', back[0].label === 'cold');
+    t('storage is namespaced and versioned', BTC_WATCH_KEY === 'fbt-btc-watch-v1');
+
+    /* Storage is user-writable. A hand-edited testnet address, a duplicate or
+       a smuggled key field must not survive the read. */
+    globalThis.localStorage.setItem(BTC_WATCH_KEY, JSON.stringify([
+      { address: TB1, label: 'testnet' },
+      { address: BECH32, label: 'ok', wif: 'L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ' },
+      { address: BECH32, label: 'dupe' }
+    ]));
+    const cleaned = loadWatch();
+    t('a hand-edited testnet address is dropped on read',
+      !cleaned.some((e) => e.address === TB1));
+    t('a duplicate on disk is collapsed on read', cleaned.length === 1);
+    t('a smuggled private key is never read back',
+      cleaned.every((e) => Object.keys(e).sort().join(',') === 'address,label'));
+
+    globalThis.localStorage.setItem(BTC_WATCH_KEY, '{not json');
+    t('corrupt storage reads as an empty list, not a crash', loadWatch().length === 0);
+    globalThis.localStorage.removeItem(BTC_WATCH_KEY);
+  }
+
+  /* ---------------- country flags from ISO codes --------------------- */
+  {
+    /* A + 0x1F1E6 - 0x41, twice. Nothing else, no table, no package. */
+    t('CA becomes the Canadian flag', flagEmoji('CA') === '\u{1F1E8}\u{1F1E6}');
+    t('IR becomes the Iranian flag', flagEmoji('IR') === '\u{1F1EE}\u{1F1F7}');
+    t('lower case input still works', flagEmoji('de') === flagEmoji('DE'));
+    t('surrounding whitespace is ignored', flagEmoji('  us ') === flagEmoji('US'));
+    t('a flag is two regional indicators', [...flagEmoji('GB')].length === 2);
+
+    t('a three-letter code has no flag', flagEmoji('USA') === '');
+    t('a one-letter code has no flag', flagEmoji('U') === '');
+    t('digits have no flag', flagEmoji('12') === '');
+    t('null has no flag', flagEmoji(null) === '');
+    t('undefined has no flag', flagEmoji(undefined) === '');
+
+    t('normalizeCountryCode upper-cases and trims', normalizeCountryCode(' ir ') === 'IR');
+    /* null, not '' — the caller branches on it, and a falsy-but-string return
+       would let `code ?? 'XX'` style defaults slip through unnoticed. */
+    t('normalizeCountryCode rejects junk with null', normalizeCountryCode('n/a') === null);
+
+    /* The fallback keeps the row the same width on platforms with no flag
+       glyphs (every Windows build), so it must always be the two letters. */
+    t('the fallback is the two-letter code', flagFallback('ir') === 'IR');
+    t('the fallback of junk is empty', flagFallback('!!') === '');
+
+    /* Headless: there is no canvas to measure, so support must be assumed
+       rather than reported as false — a false here would show letters to
+       everyone on a server-rendered pass. */
+    t('flag support is assumed when there is no DOM to measure', flagSupported(true) === true);
   }
 
   return rows;

@@ -35,14 +35,37 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
  * FBT is not the counterparty.
  */
 
+/*
+ * ─── THE OVERVIEW SENDS PEOPLE OUT OF THE APP AS LITTLE AS POSSIBLE ─────────
+ *
+ * This list used to hold four venues. ApolloX and dYdX are gone.
+ *
+ * The rule applied, and it is a revenue rule rather than a taste one:
+ * a button that leaves the app has to pay for the user it takes. Checked
+ * against lib/venueReferral.js, which is the single source of truth for this:
+ *
+ *   apx      earns: false   reason: NO_PROGRAMME      → removed
+ *   dydx     earns: false   reason: VOLUME_REQUIRED   → removed
+ *   gmx      earns: true    permissionless Tier 1     → kept
+ *   avantis  earns: true    code `fbtswap` registered → kept
+ *
+ * ApolloX has no affiliate programme at all, and dYdX's needs $10k of our own
+ * trading volume, which we do not have and are not going to fabricate. Both
+ * links therefore did the one thing this codebase treats as a bug: hand a
+ * user who is ready to trade to somebody else for free.
+ *
+ * dYdX in particular did not even need the link. It is a full tab on this same
+ * screen (`PERP_TABS`) running against our own same-origin proxy with a
+ * builder fee attached — an outbound button next to it was cannibalising the
+ * one integration here that actually earns.
+ *
+ * The two survivors both discount the referred trader's fees, so those links
+ * are better for the user than the bare URL — and either way the notice below
+ * says which case we are in, driven by the same flag that attaches the code.
+ * Everything else on this page (index prices, funding comparison, the
+ * liquidation table, the whole explainer) is in-app and stays.
+ */
 const VENUES = [
-  {
-    id: 'apx',
-    url: 'https://www.apollox.finance/en/futures/v2/BTCUSD',
-    pairs: '200+',
-    leverage: '100x',
-    color: 'var(--rgb-1)'
-  },
   {
     id: 'gmx',
     url: 'https://app.gmx.io/#/trade',
@@ -52,22 +75,14 @@ const VENUES = [
   },
   {
     /*
-     * The only venue here with a permissionless referral AND non-crypto
-     * markets — forex, metals, commodities, indices, equities. See
-     * lib/venueReferral.js for why the other three earn nothing.
+     * Permissionless referral AND non-crypto markets — forex, metals,
+     * commodities, indices, equities.
      */
     id: 'avantis',
     url: 'https://www.avantisfi.com/trade',
     pairs: '60+',
     leverage: '500x',
     color: 'var(--rgb-4)'
-  },
-  {
-    id: 'dydx',
-    url: 'https://dydx.trade',
-    pairs: '100+',
-    leverage: '20x',
-    color: 'var(--rgb-3)'
   }
 ];
 

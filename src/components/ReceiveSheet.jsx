@@ -1,4 +1,24 @@
-import { useMemo, useState } from 'react';
+/*
+ * ─── FIX: THE RECEIVE BUTTON DID NOTHING ────────────────────────────────────
+ * Reported as "دکمهٔ دریافت کار نمی‌کند". The handler, the state and the mount
+ * were all correct — Wallet.jsx sets `receiveOpen` and renders <ReceiveSheet
+ * open={receiveOpen} …>, and WalletActionRow wires onReceive straight through.
+ * Nothing was disabled and nothing was conditional.
+ *
+ * The real cause was one missing import. `BtcSection` at the bottom of this
+ * file calls `useEffect`, and this line imported only `useMemo` and `useState`.
+ * `useEffect` was therefore a free identifier, so the moment React rendered
+ * BtcSection — which happens unconditionally, on the very first render of the
+ * sheet — the module threw `ReferenceError: useEffect is not defined`. The
+ * RouteBoundary swallowed it and the screen simply never changed, which from
+ * the outside is indistinguishable from a dead button.
+ *
+ * Why no test caught it: a missing binding is not a syntax error, so both
+ * `vite build` and every source-grep wiring assertion passed happily. It can
+ * only be caught by RENDERING the sheet, which is what the new probe in
+ * test/wallet-probe.jsx now does.
+ */
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import qrcode from 'qrcode-generator';
 import Sheet from './Sheet';
@@ -181,12 +201,16 @@ function BtcSection() {
   const [btcAddr, setBtcAddr] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  const unlocked = wallet?.mode === 'local' && !wallet?.locked && Boolean(wallet?.address);
+  const isLocalVault = wallet?.mode === 'local';
+  const unlocked = isLocalVault && !wallet?.locked && Boolean(wallet?.address);
 
   useEffect(() => {
     if (!unlocked) { setBtcAddr(null); return undefined; }
     let alive = true;
     (async () => {
+      /* Dynamic, so the bitcoin derivation code is fetched the first time
+         someone actually opens Receive on an unlocked vault — it must never
+         ride along in the initial bundle. */
       const { btcAddressForSigner } = await import('../lib/btcWallet');
       const addr = await btcAddressForSigner(wallet.getSigner?.(), { index: 0 });
       if (alive) setBtcAddr(addr);
@@ -194,20 +218,15 @@ function BtcSection() {
     return () => { alive = false; };
   }, [unlocked, wallet?.address]);
 
-  if (!unlocked) return null;
-
-  const copy = async () => {
-    if (!btcAddr) return;
-    try {
-      await navigator.clipboard.writeText(btcAddr);
-      setCopied(true);
-      notify('addressCopied', 'success');
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      notify('copyFailed', 'error');
-    }
-  };
-
+  /*
+   * ─── SECOND FIX IN THE SAME COMPONENT: A HOOK BELOW AN EARLY RETURN ───────
+   * `useMemo` used to sit AFTER `if (!unlocked) return null`, so the number of
+   * hooks this component calls changed with the lock state. Locking or
+   * unlocking the vault while the sheet was open therefore produced React's
+   * "Rendered fewer/more hooks than during the previous render" invariant and
+   * tore the tree down — the same "sometimes it just breaks" class as the bug
+   * above. Every hook now runs unconditionally, before any return.
+   */
   const qr = useMemo(() => {
     if (!btcAddr) return null;
     try {
@@ -226,6 +245,38 @@ function BtcSection() {
       return null;
     }
   }, [btcAddr]);
+
+  /*
+   * A LOCKED local vault used to render nothing at all here, which reads as
+   * "this app has no bitcoin address" — the second half of the reported bug.
+   * There is no phrase in memory to derive from (the zero law), so we cannot
+   * show the address, but we can say exactly why and what to do.
+   */
+  if (!unlocked) {
+    if (!isLocalVault) return null;
+    return (
+      <div style={{ marginTop: 16 }}>
+        <div className="xfer-summary-divider" style={{ margin: '4px 0 14px' }} />
+        <div className="row-between" style={{ marginBottom: 8 }}>
+          <strong style={{ fontSize: 12.5 }}>{t('receive.btc.title')}</strong>
+          <span className="pill" style={{ fontSize: 9 }}>Bitcoin · bech32</span>
+        </div>
+        <p className="notice" style={{ margin: 0, fontSize: 11.5 }}>{t('receive.btc.locked')}</p>
+      </div>
+    );
+  }
+
+  const copy = async () => {
+    if (!btcAddr) return;
+    try {
+      await navigator.clipboard.writeText(btcAddr);
+      setCopied(true);
+      notify('addressCopied', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      notify('copyFailed', 'error');
+    }
+  };
 
   return (
     <div style={{ marginTop: 16 }}>
