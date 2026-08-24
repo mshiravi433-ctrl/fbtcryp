@@ -2231,19 +2231,6 @@ input, select, textarea { font-size: 16px !important; }
   border: 1px solid var(--line-strong);
 }
 
-.onb-dots { display: flex; gap: 7px; justify-content: center; margin: 16px 0 18px; }
-.onb-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--line-strong);
-  transition: width 0.3s, background 0.3s;
-}
-.onb-dot[data-active='true'] {
-  width: 22px;
-  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
-}
-
 /* Info page rows */
 .info-row {
   display: flex;
@@ -3303,29 +3290,6 @@ input, select, textarea { font-size: 16px !important; }
 [dir='rtl'] .onb-btn svg,
 [dir='rtl'] .welcome-foot .onb-btn svg { transform: scaleX(-1); }
 
-.onb-dots {
-  display: flex;
-  gap: 7px;
-  justify-content: center;
-  margin: 0 0 12px;
-  padding: 0;
-}
-
-.onb-dot {
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: var(--line-strong);
-  cursor: pointer;
-  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s;
-}
-.onb-dot[data-active='true'] {
-  width: 22px;
-  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-3));
-}
-
 /* The art block sized itself with flex:1 inside a column that no longer
    exists; inside the scroll box it needs a fixed, modest height so the copy
    below it is visible without scrolling on a short phone. */
@@ -3335,8 +3299,7 @@ input, select, textarea { font-size: 16px !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .onb-btn,
-  .onb-dot { transition: none; }
+  .onb-btn { transition: none; }
 }
 
 /* ------------------------ guide: language row --------------------------- */
@@ -6387,22 +6350,6 @@ body { overflow-x: clip; }
   to   { transform: translate3d(5%, -3%, 0); }
 }
 
-/* One slow planet — transform only, same compositor budget as the layers. */
-.galaxy-planet {
-  position: absolute;
-  inset-inline-end: 8%;
-  bottom: 18%;
-  width: min(28vw, 140px);
-  height: min(28vw, 140px);
-  pointer-events: none;
-  will-change: transform;
-  animation: planet-drift 80s ease-in-out infinite alternate;
-}
-@keyframes planet-drift {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-6%, 4%, 0); }
-}
-
 .galaxy-star {
   position: absolute;
   border-radius: 50%;
@@ -6451,8 +6398,7 @@ body { overflow-x: clip; }
  */
 .galaxy.is-still .galaxy-neb,
 .galaxy.is-still .galaxy-layer,
-.galaxy.is-still .galaxy-star,
-.galaxy.is-still .galaxy-planet {
+.galaxy.is-still .galaxy-star {
   animation: none;
 }
 
@@ -6465,15 +6411,13 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .galaxy-neb,
   .galaxy-layer,
-  .galaxy-star,
-  .galaxy-planet { animation: none; }
+  .galaxy-star { animation: none; }
 }
 
 /* On the light theme a starfield is wrong — white stars on a white page are
    invisible and the vignette would be a grey smear. The nebula stays as a
    soft wash and the stars go. */
-:root[data-theme='light'] .galaxy-layer,
-:root[data-theme='light'] .galaxy-planet { display: none; }
+:root[data-theme='light'] .galaxy-layer { display: none; }
 :root[data-theme='light'] .galaxy-neb { opacity: 0.4; }
 :root[data-theme='light'] .galaxy-vignette {
   background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(244, 245, 250, 0.9) 92%);

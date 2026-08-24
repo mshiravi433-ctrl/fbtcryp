@@ -20,7 +20,7 @@ import {
 } from '../components/Icons';
 
 /**
- * Six-step welcome: language, three feature slides, wallet connect, terms.
+ * Five-step welcome: three feature slides, wallet connect, and terms.
  *
  * The terms step is a hard gate — you cannot enter the app without ticking it.
  * Wallet connect is skippable, because forcing it before someone has seen the
@@ -58,8 +58,6 @@ const SLIDES = [
  * language switch in the header (below) still lets anyone change it from any
  * step, which was the only real justification for keeping it here.
  */
-const TOTAL = SLIDES.length + 2;
-
 function Art({ Icon, hues, index }) {
   return (
     <div className="onb-art">
@@ -333,19 +331,6 @@ export default function Onboarding({ onDone }) {
           the same size regardless of how wide the translated label is. */}
       <div className="onb-foot">
         <LaunchProgress step={2 + index} total={10} />
-        <div className="onb-dots">
-          {Array.from({ length: TOTAL }).map((_, i) => (
-            <button
-              key={i}
-              className="onb-dot"
-              data-active={i === index}
-              onClick={() => goTo(i)}
-              aria-label={`${i + 1}`}
-              type="button"
-            />
-          ))}
-        </div>
-
         <div className="onb-foot-row">
           <motion.button
             className="btn btn-ghost onb-btn"

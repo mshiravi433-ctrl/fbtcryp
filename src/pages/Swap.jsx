@@ -5,7 +5,14 @@ import { useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
-import { gaslessEligible, getGaslessPrice, getGaslessQuote, submitGasless, summariseGasless } from '../lib/gasless';
+import {
+  gaslessEligible,
+  getGaslessPrice,
+  getGaslessQuote,
+  parseGaslessAmount,
+  submitGasless,
+  summariseGasless
+} from '../lib/gasless';
 import AdBanner from '../components/AdBanner';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
@@ -690,7 +697,7 @@ export default function Swap() {
 
     setTxState({ stage: 'preparing' });
     try {
-      const raw = quote?.amountInWei != null ? quote.amountInWei.toString() : null;
+      const raw = gaslessAmountWei?.toString() ?? null;
       if (!raw) throw new Error('BAD_AMOUNT');
 
       setTxState({ stage: 'quoting' });
@@ -704,6 +711,13 @@ export default function Swap() {
       });
 
       if (q?.liquidityAvailable === false) throw new Error('NO_ROUTE');
+      const firmSummary = summariseGasless(
+        q,
+        fromToken?.decimals ?? 6,
+        toToken?.decimals ?? 6,
+        effectiveSlippage
+      );
+      if (!firmSummary?.amountOut || firmSummary.minReceived == null) throw new Error('QUOTE_FAILED');
 
       setTxState({ stage: 'signing' });
 
@@ -727,7 +741,18 @@ export default function Swap() {
         trade: signed.trade
       });
 
-      setTxState({ stage: 'success', gaslessHash: res?.tradeHash ?? null, gasless: true });
+      setTxState({
+        stage: 'success',
+        gaslessHash: res?.tradeHash ?? null,
+        gasless: true,
+        paid: amount,
+        paidSymbol: fromToken.symbol,
+        got: firmSummary.amountOut,
+        estimatedOut: firmSummary.amountOut,
+        minReceived: firmSummary.minReceived,
+        gotSymbol: toToken.symbol,
+        gaslessGasFee: firmSummary.gasFee
+      });
       const rewards = useAppStore.getState();
       rewards.awardPoints('swap', POINT_VALUES.swap, {
         network: 'evm',
@@ -738,7 +763,7 @@ export default function Swap() {
       rewards.completeQuest('firstSwap');
       const usd = spendUsdGuess();
       if (usd != null) recordSpend(usd);
-      const got = Number(quote?.amountOut);
+      const got = firmSummary.amountOut;
       if (usd != null && Number.isFinite(got) && got > 0) {
         recordLot({
           symbol: toToken.symbol,
@@ -746,7 +771,7 @@ export default function Swap() {
           side: 'buy',
           qty: got,
           priceUsd: usd / got,
-          feeUsd: usd * ((quote?.feeBps || 0) / 10000),
+          feeUsd: firmSummary.ourFee,
           txHash: res?.tradeHash ?? null
         });
       }
@@ -1089,14 +1114,11 @@ export default function Swap() {
 
   const fromBal = balances[tokenKey(fromToken)]?.formatted ?? 0;
   const fromRaw = balances[tokenKey(fromToken)]?.raw;
+  const enteredAmountWei = parseGaslessAmount(amount, fromToken?.decimals ?? 18);
   const insufficient =
-    quote?.amountInWei != null && fromRaw != null
-      ? quote.amountInWei > fromRaw
+    enteredAmountWei != null && fromRaw != null
+      ? enteredAmountWei > fromRaw
       : Number(amount) > fromBal;
-  const canSwap = !confidentialRequested
-    && wallet.isConnected && quote && !quote.error && !insufficient && Number(amount) > 0;
-  const highImpact = impact != null && impact > 5;
-
   const nativeBal = wallet.nativeBalance ?? 0;
   const gasNeeded = (gasCost ?? 0) * 1.35;
   const spendingNative = Boolean(fromToken?.native);
@@ -1111,17 +1133,128 @@ export default function Swap() {
   const [useGasless, setUseGasless] = useState(false);
   const [gaslessQuote, setGaslessQuote] = useState(null);
   const [gaslessBusy, setGaslessBusy] = useState(false);
+  const [gaslessError, setGaslessError] = useState(null);
   const cannotPayGas = wallet.isConnected && gaslessOk && nativeBal <= 0;
 
+  /* 0x prices the exact sell amount, so do not wait for the normal router
+     quote (and do not reuse its amount when the input has just changed). */
+  const gaslessAmountWei = useMemo(
+    () => parseGaslessAmount(amount, fromToken?.decimals ?? 18),
+    [amount, fromToken?.decimals]
+  );
+  const gaslessRequestSeq = useRef(0);
+
+  /*
+   * Gasless is a second quote stream. It is intentionally reactive to every
+   * value that changes what 0x will sign: amount, pair, chain, slippage and
+   * wallet/taker. Sequence and AbortController guards ensure a slow response
+   * for the previous pair can never paint over the current price.
+   */
   useEffect(() => {
+    const seq = ++gaslessRequestSeq.current;
+    let timer = null;
+    let controller = null;
+
+    const readyToRequest = Boolean(
+      useGasless &&
+      gaslessOk &&
+      wallet.isConnected &&
+      wallet.address &&
+      fromToken?.address &&
+      toToken?.address &&
+      gaslessAmountWei
+    );
+
+    if (!readyToRequest) {
+      setGaslessQuote(null);
+      setGaslessError(null);
+      setGaslessBusy(false);
+      if (!gaslessOk) setUseGasless(false);
+      return undefined;
+    }
+
     setGaslessQuote(null);
-    if (!gaslessOk) setUseGasless(false);
-  }, [gaslessOk, chainId, fromSym, toSym, amount]);
+    setGaslessError(null);
+    setGaslessBusy(true);
+
+    timer = setTimeout(async () => {
+      controller = new AbortController();
+      try {
+        const result = await getGaslessPrice(
+          {
+            chainId,
+            sellToken: fromToken.address,
+            buyToken: toToken.address,
+            sellAmount: gaslessAmountWei.toString(),
+            taker: wallet.address,
+            slippageBps: String(Math.round(Number(effectiveSlippage) * 100))
+          },
+          { signal: controller.signal }
+        );
+        if (controller.signal.aborted || seq !== gaslessRequestSeq.current) return;
+        setGaslessQuote(result);
+        if (result?.liquidityAvailable === false) setGaslessError('NO_ROUTE');
+      } catch (error) {
+        if (controller?.signal?.aborted || seq !== gaslessRequestSeq.current) return;
+        setGaslessQuote(null);
+        setGaslessError(error?.code || 'QUOTE_FAILED');
+      } finally {
+        if (!controller?.signal?.aborted && seq === gaslessRequestSeq.current) setGaslessBusy(false);
+      }
+    }, 280);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [
+    useGasless,
+    gaslessOk,
+    chainId,
+    fromToken?.address,
+    toToken?.address,
+    fromToken?.decimals,
+    amount,
+    gaslessAmountWei,
+    wallet.isConnected,
+    wallet.address,
+    effectiveSlippage
+  ]);
 
   const gaslessSummary = useMemo(
-    () => summariseGasless(gaslessQuote, toToken?.decimals ?? 6),
-    [gaslessQuote, toToken?.decimals]
+    () => summariseGasless(
+      gaslessQuote,
+      fromToken?.decimals ?? 6,
+      toToken?.decimals ?? 6,
+      effectiveSlippage
+    ),
+    [gaslessQuote, fromToken?.decimals, toToken?.decimals, effectiveSlippage]
   );
+
+  const normalQuoteReady = Boolean(quote && !quote.error);
+  const gaslessQuoteReady = Boolean(
+    useGasless &&
+    gaslessSummary &&
+    gaslessSummary.liquidityAvailable &&
+    gaslessSummary.amountOut > 0 &&
+    gaslessSummary.minReceived > 0 &&
+    !gaslessSummary.insufficientBalance
+  );
+  const displayQuoteReady = useGasless ? gaslessQuoteReady : normalQuoteReady;
+  const displayAmountOut = useGasless ? gaslessSummary?.amountOut : quote?.amountOut;
+  const displayMinOut = useGasless ? gaslessSummary?.minReceived : quote?.minOut;
+  const displayPriceImpact = useGasless ? gaslessSummary?.priceImpact : impact;
+  const displayRate = useGasless
+    ? gaslessSummary?.amountOut != null && Number(amount) > 0
+      ? gaslessSummary.amountOut / Number(amount)
+      : null
+    : quote?.rate;
+  const highImpact = displayPriceImpact != null && displayPriceImpact > 5;
+  const canSwap = !confidentialRequested
+    && wallet.isConnected
+    && !insufficient
+    && Number(amount) > 0
+    && (useGasless ? gaslessQuoteReady : normalQuoteReady);
 
   const [chainTab, setChainTab] = useState('evm');
   useEffect(() => {
@@ -1334,19 +1467,19 @@ export default function Swap() {
               border: 'none',
               fontFamily: 'var(--font-mono)',
               fontSize: 15,
-              color: quote?.amountOut ? 'var(--text-1)' : 'var(--text-3)',
+              color: displayAmountOut != null ? 'var(--text-1)' : 'var(--text-3)',
               minHeight: 44,
               display: 'grid',
               placeItems: 'center end'
             }}
           >
-            {quoting ? (
+            {quoting || (useGasless && gaslessBusy) ? (
               <span className="skel" style={{ display: 'inline-block', width: 70, height: 16 }} />
-            ) : quote?.amountOut ? (
+            ) : displayAmountOut != null ? (
               shouldAnimateNumbers ? (
-                <AnimatedNumber value={quote.amountOut} format={(v) => fmtQty(v)} />
+                <AnimatedNumber value={displayAmountOut} format={(v) => fmtQty(v)} />
               ) : (
-                <span className="mono">{fmtQty(quote.amountOut)}</span>
+                <span className="mono">{fmtQty(displayAmountOut)}</span>
               )
             ) : (
               '0.0'
@@ -1363,7 +1496,7 @@ export default function Swap() {
 
         {/* quote details: reserved min-height, opacity only, no height:auto animation */}
         <div className="swap-quote-wrap" style={{ minHeight: quote && !quote.error ? 0 : 0 }}>
-          {quote && !quote.error && (
+          {displayQuoteReady && (
             <div
               className="stack swap-quote-box"
               style={{ gap: 6, marginTop: 14 }}
@@ -1371,14 +1504,23 @@ export default function Swap() {
               <div className="row-between">
                 <span className="faint">{t('swap.rate')}</span>
                 <span className="mono" style={{ fontSize: 11.5 }}>
-                  1 {fromToken.symbol} ≈ {fmtQty(quote.rate)} {toToken.symbol}
+                  1 {fromToken.symbol} ≈ {fmtQty(displayRate)} {toToken.symbol}
                 </span>
               </div>
               <div className="row-between">
                 <span className="faint">{t('swap.minReceived')}</span>
-                <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(quote.minOut)} {toToken.symbol}</span>
+                <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(displayMinOut)} {toToken.symbol}</span>
               </div>
-              {quote.feeBps > 0 && (
+              {useGasless ? (
+                gaslessSummary?.ourFee > 0 && (
+                  <div className="row-between">
+                    <span className="faint">{t('swap.gaslessPlatformFee')}</span>
+                    <span className="mono" style={{ fontSize: 11.5 }}>
+                      {fmtQty(gaslessSummary.ourFee)} {fromToken.symbol}
+                    </span>
+                  </div>
+                )
+              ) : quote.feeBps > 0 && (
                 <div className="row-between">
                   <span className="faint">{t('swap.platformFee', { pct: quote.feeBps / 100 })}</span>
                   <span className="mono" style={{ fontSize: 11.5 }}>
@@ -1386,29 +1528,44 @@ export default function Swap() {
                   </span>
                 </div>
               )}
-              {impact != null && (
+              {displayPriceImpact != null && (
                 <div className="row-between">
                   <span className="faint">{t('swap.priceImpact')}</span>
                   <span className={`mono ${highImpact ? 'down' : ''}`} style={{ fontSize: 11.5 }}>
-                    {impact.toFixed(2)}%
+                    {displayPriceImpact.toFixed(2)}%
                   </span>
                 </div>
               )}
-              {gasCost != null && (
+              {(useGasless || gasCost != null) && (
                 <div className="row-between">
                   <span className="faint">{t('swap.networkFee')}</span>
-                  <span className="mono" style={{ fontSize: 11.5 }}>≈{fmtQty(gasCost)} {cfg.native.symbol}</span>
+                  <span className="mono" style={{ fontSize: 11.5 }}>
+                    {useGasless ? (
+                      <>
+                        0 {cfg.native.symbol}
+                        <span className="faint" style={{ fontSize: 10.5 }}>
+                          {' '}({t('swap.gaslessGasFee')}: {gaslessSummary?.gasFee != null
+                            ? `${fmtQty(gaslessSummary.gasFee)} ${fromToken.symbol}`
+                            : '—'})
+                        </span>
+                      </>
+                    ) : (
+                      <>≈{fmtQty(gasCost)} {cfg.native.symbol}</>
+                    )}
+                  </span>
                 </div>
               )}
               <div className="row-between">
                 <span className="faint">{t('swap.route')}</span>
                 <span className="mono faint" style={{ fontSize: 10.5 }}>
-                  {quote.source === 'aggregator'
-                    ? t('swap.bestOf', { n: quote.hops })
-                    : `${quote.hops} ${t('swap.hops')}`}
+                  {useGasless
+                    ? '0x Gasless'
+                    : quote.source === 'aggregator'
+                      ? t('swap.bestOf', { n: quote.hops })
+                      : `${quote.hops} ${t('swap.hops')}`}
                 </span>
               </div>
-              {quote.routesChecked > 1 && (
+              {!useGasless && quote.routesChecked > 1 && (
                 <div className="row-between">
                   <span className="faint">{t('swap.compared')}</span>
                   <span className="mono faint" style={{ fontSize: 10.5 }}>
@@ -1416,7 +1573,7 @@ export default function Swap() {
                   </span>
                 </div>
               )}
-              {quote.beatenBy > 10 && (
+              {!useGasless && quote.beatenBy > 10 && (
                 <div className="row-between">
                   <span className="faint">{t('swap.beatenBy')}</span>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
@@ -1430,7 +1587,7 @@ export default function Swap() {
 
         {/* error + warnings: each with reserved placeholder to avoid layout shift */}
         <div className="swap-feedback-area">
-          {quote?.error && (
+          {!useGasless && quote?.error && (
             <div className="stack" style={{ gap: 8, marginTop: 12 }}>
               <p className="notice notice-danger">{t(`swap.err.${quote.error}`)}</p>
               {quote.retriable && (
@@ -1447,15 +1604,16 @@ export default function Swap() {
           )}
         </div>
 
-        {quote && !quote.error && (
+        {displayQuoteReady && (
           <MevGuard
             chainId={chainId}
             slippagePct={effectiveSlippage}
-            priceImpact={impact}
+            priceImpact={displayPriceImpact}
             amountUsd={spendUsdGuess()}
-            amountOut={quote.amountOut}
-            minOut={quote.minOut}
-            gasNative={gasCost}
+            amountOut={displayAmountOut}
+            minOut={displayMinOut}
+            /* Gasless relays pay native gas; the token deduction is shown above. */
+            gasNative={useGasless ? 0 : gasCost}
             bothStable={isStableSymbol(fromToken?.symbol) && isStableSymbol(toToken?.symbol)}
             protectOn={mevProtect}
             onProtectChange={() => setMevProtect((v) => !v)}
@@ -1474,37 +1632,26 @@ export default function Swap() {
               <span className="set-row-label">
                 <div>{t('swap.gaslessTitle')}</div>
                 <div className="set-row-sub">
-                  {cannotPayGas ? t('swap.gaslessNeeded', { coin: cfg.native.symbol }) : t('swap.gaslessSub')}
+                  {cannotPayGas ? t('swap.gaslessNeeded', { coin: cfg.native.symbol }) : t('swap.gaslessSub', { coin: cfg.native.symbol })}
                 </div>
               </span>
               <Switch
                 on={useGasless}
                 label={t('swap.gaslessTitle')}
-                onChange={async () => {
+                onChange={() => {
                   haptic?.('select');
-                  const next = !useGasless;
-                  setUseGasless(next);
-                  if (!next || !quote?.amountInWei) return;
-                  setGaslessBusy(true);
-                  try {
-                    setGaslessQuote(await getGaslessPrice({
-                      chainId,
-                      sellToken: fromToken.address,
-                      buyToken: toToken.address,
-                      sellAmount: quote.amountInWei.toString(),
-                      taker: wallet.address,
-                      slippageBps: String(Math.round(effectiveSlippage * 100))
-                    }));
-                  } catch {
-                    setGaslessQuote(null);
-                  } finally {
-                    setGaslessBusy(false);
-                  }
+                  setUseGasless((enabled) => !enabled);
                 }}
               />
             </div>
 
             {gaslessBusy && <p className="faint" style={{ marginTop: 8, fontSize: 12 }}>{t('swap.quoting')}</p>}
+            {useGasless && gaslessError && !gaslessBusy &&
+              (!gaslessSummary || gaslessSummary.liquidityAvailable) && (
+              <p className="notice notice-danger" style={{ marginTop: 8 }}>
+                {gaslessError === 'NO_ROUTE' ? t('swap.err.NO_ROUTE') : t('swap.gaslessQuoteFailed')}
+              </p>
+            )}
 
             {useGasless && gaslessSummary && !gaslessBusy && (
               <div className="stack" style={{ gap: 6, marginTop: 10 }}>
@@ -1514,7 +1661,15 @@ export default function Swap() {
                     {fmtQty(gaslessSummary.gasFee)} {fromToken.symbol}
                   </span>
                 </div>
-                {gaslessSummary.zeroExFee > 0 && (
+                {gaslessSummary.ourFee > 0 && (
+                  <div className="row-between">
+                    <span className="faint">{t('swap.gaslessPlatformFee')}</span>
+                    <span className="mono" style={{ fontSize: 11.5 }}>
+                      {fmtQty(gaslessSummary.ourFee)} {fromToken.symbol}
+                    </span>
+                  </div>
+                )}
+                {gaslessSummary.zeroExFee != null && (
                   <div className="row-between">
                     <span className="faint">{t('swap.gaslessZeroExFee')}</span>
                     <span className="mono" style={{ fontSize: 11.5 }}>
@@ -1524,6 +1679,9 @@ export default function Swap() {
                 )}
                 {!gaslessSummary.liquidityAvailable && (
                   <p className="notice notice-danger" style={{ marginTop: 4 }}>{t('swap.err.NO_ROUTE')}</p>
+                )}
+                {gaslessSummary.insufficientBalance && (
+                  <p className="notice notice-danger" style={{ marginTop: 4 }}>{t('swap.insufficient')}</p>
                 )}
               </div>
             )}
@@ -1854,7 +2012,7 @@ export default function Swap() {
       >
         <h2 className="h2" style={{ marginBottom: 12 }}>{t('swap.confirmTitle')}</h2>
 
-        {!txState && quote && (
+        {!txState && displayQuoteReady && (
           <>
             <div className="card card-tight stack" style={{ gap: 9 }}>
               <div className="row-between">
@@ -1863,21 +2021,45 @@ export default function Swap() {
               </div>
               <div className="row-between">
                 <span className="faint">{t('exec.receipt.estimated')}</span>
-                <span className="mono up" style={{ fontWeight: 700 }}>≈{fmtQty(quote.amountOut)} {toToken.symbol}</span>
+                <span className="mono up" style={{ fontWeight: 700 }}>≈{fmtQty(displayAmountOut)} {toToken.symbol}</span>
               </div>
               <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.65, margin: 0 }}>
                 {t('exec.receipt.reviewHint')}
               </p>
               <div className="row-between">
                 <span className="faint">{t('swap.minReceived')}</span>
-                <span className="mono">{fmtQty(quote.minOut)} {toToken.symbol}</span>
+                <span className="mono">{fmtQty(displayMinOut)} {toToken.symbol}</span>
               </div>
-              {quote.feeBps > 0 && (
+              {useGasless ? (
+                gaslessSummary?.ourFee > 0 && (
+                  <div className="row-between">
+                    <span className="faint">{t('swap.gaslessPlatformFee')}</span>
+                    <span className="mono">{fmtQty(gaslessSummary.ourFee)} {fromToken.symbol}</span>
+                  </div>
+                )
+              ) : quote.feeBps > 0 && (
                 <div className="row-between">
                   <span className="faint">{t('swap.platformFee', { pct: quote.feeBps / 100 })}</span>
                   <span className="mono">{fmtQty(quote.platformFee)} {fromToken.symbol}</span>
                 </div>
               )}
+              <div className="row-between">
+                <span className="faint">{t('swap.networkFee')}</span>
+                <span className="mono">
+                  {useGasless ? (
+                    <>
+                      0 {cfg.native.symbol}
+                      <span className="faint" style={{ fontSize: 10.5 }}>
+                        {' '}({t('swap.gaslessGasFee')}: {gaslessSummary?.gasFee != null
+                          ? `${fmtQty(gaslessSummary.gasFee)} ${fromToken.symbol}`
+                          : '—'})
+                      </span>
+                    </>
+                  ) : gasCost != null ? (
+                    <>≈{fmtQty(gasCost)} {cfg.native.symbol}</>
+                  ) : '—'}
+                </span>
+              </div>
               <div className="row-between">
                 <span className="faint">{t('swap.slippage')}</span>
                 <span className="mono">{effectiveSlippage}%</span>
@@ -1991,6 +2173,14 @@ export default function Swap() {
                         ≈{fmtQty(Number(txState.estimatedOut ?? txState.got))} {txState.gotSymbol}
                       </span>
                     </div>
+                    {txState.minReceived != null && (
+                      <div className="row-between">
+                        <span className="faint">{t('swap.minReceived')}</span>
+                        <span className="mono" style={{ fontSize: 13 }}>
+                          {fmtQty(Number(txState.minReceived))} {txState.gotSymbol}
+                        </span>
+                      </div>
+                    )}
                     <div className="row-between">
                       <span className="faint">{t('exec.receipt.actual')}</span>
                       <span className="mono up" style={{ fontSize: 13, fontWeight: 700 }}>
