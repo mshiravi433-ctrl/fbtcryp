@@ -60,8 +60,13 @@ export function gaslessEligible({ chainId, fromToken, toToken }) {
   return fromToken.address.toLowerCase() !== toToken.address.toLowerCase();
 }
 
-async function call(path, params, { timeout = 25000 } = {}) {
+async function call(path, params, { timeout = 25000, signal: parentSignal } = {}) {
   const ctrl = new AbortController();
+  const abortFromParent = () => ctrl.abort();
+  if (parentSignal) {
+    if (parentSignal.aborted) ctrl.abort();
+    else parentSignal.addEventListener('abort', abortFromParent, { once: true });
+  }
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const qs = new URLSearchParams(params);
@@ -78,6 +83,7 @@ async function call(path, params, { timeout = 25000 } = {}) {
     return body;
   } finally {
     clearTimeout(timer);
+    parentSignal?.removeEventListener('abort', abortFromParent);
   }
 }
 
@@ -125,34 +131,136 @@ export async function submitGasless(body, { timeout = 30000 } = {}) {
  * instead". Hiding it would make the honest version of this feature look
  * dishonest the first time someone did the arithmetic.
  */
-export function summariseGasless(quote, decimals = 6) {
+/* Keep base-unit arithmetic exact until the final, display-only Number. */
+function integerRaw(value) {
+  if (value == null || value === '') return null;
+  const text = String(value);
+  if (!/^\d+$/.test(text)) return null;
+  try {
+    return BigInt(text);
+  } catch {
+    return null;
+  }
+}
+
+function decimalsFor(value, fallback = 6) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 36 ? n : fallback;
+}
+
+/** Parse a human amount without rounding it before it reaches 0x. */
+export function parseGaslessAmount(value, decimals = 18) {
+  const places = decimalsFor(decimals, 18);
+  const text = String(value ?? '').trim().replace(',', '.');
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null;
+  const [wholePart, fractionPart = ''] = text.split('.');
+  if (fractionPart.length > places) return null;
+  const raw = BigInt(wholePart || '0') * (10n ** BigInt(places))
+    + BigInt((fractionPart || '').padEnd(places, '0') || '0');
+  return raw > 0n ? raw : null;
+}
+
+function formatRaw(value, decimals = 6) {
+  const raw = integerRaw(value);
+  if (raw == null) return null;
+  const places = decimalsFor(decimals);
+  if (places === 0) return raw.toString();
+  const base = 10n ** BigInt(places);
+  const whole = raw / base;
+  const fraction = raw % base;
+  if (fraction === 0n) return whole.toString();
+  return `${whole}.${fraction.toString().padStart(places, '0').replace(/0+$/, '')}`;
+}
+
+function numberFromRaw(value, decimals = 6) {
+  const formatted = formatRaw(value, decimals);
+  if (formatted == null) return null;
+  const n = Number(formatted);
+  return Number.isFinite(n) ? n : null;
+}
+
+function feeAmount(fee) {
+  /* Gasless v1 uses `amount`; newer 0x responses use `feeAmount`. */
+  return fee?.amount ?? fee?.feeAmount ?? null;
+}
+
+function feeRaw(fee) {
+  const raw = feeAmount(fee);
+  return integerRaw(raw);
+}
+
+/**
+ * Pull the numbers a user needs out of 0x's response.
+ *
+ * `feeDecimals` is the SELL token's precision: gas, 0x and integrator fees are
+ * deducted from that token. `buyDecimals` is deliberately separate because
+ * stablecoin pairs can have different precisions. The raw API fields remain
+ * available, while the `amountOut`/`minReceived` fields are ready for the UI.
+ */
+export function summariseGasless(quote, feeDecimals = 6, buyDecimals = feeDecimals, slippagePct = 0) {
   if (!quote) return null;
 
   const f = quote.fees ?? {};
-  const num = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
+  const feePlaces = decimalsFor(feeDecimals);
+  const buyPlaces = decimalsFor(buyDecimals, feePlaces);
 
   /*
    * `integratorFees` is the newer array shape and `integratorFee` the older
    * single object. Both are read because 0x returns whichever suits the route,
    * and assuming one would silently report our fee as zero on half of them.
    */
-  const ourFeeRaw = Array.isArray(f.integratorFees)
-    ? f.integratorFees.reduce((n, x) => n + num(x?.amount), 0)
-    : num(f.integratorFee?.amount);
+  const integratorItems = Array.isArray(f.integratorFees) && f.integratorFees.length > 0
+    ? f.integratorFees
+    : (f.integratorFee?.amount != null || f.integratorFee?.feeAmount != null
+      ? [f.integratorFee]
+      : []);
+  const ourFeeRaw = integratorItems.reduce((total, item) => total + (feeRaw(item) ?? 0n), 0n);
+  const zeroExFeeRaw = feeRaw(f.zeroExFee);
+  const gasFeeRaw = feeRaw(f.gasFee);
 
-  const scale = 10 ** (Number(decimals) || 6);
+  const buyAmount = quote.buyAmount ?? quote.grossBuyAmount ?? null;
+  let minBuyAmount = quote.minBuyAmount ?? quote.minAmountOut ?? null;
+
+  /*
+   * Some 0x Gasless v2 responses omit `minBuyAmount`. Derive the exact integer
+   * floor from the API's returned buy amount and the same slippage sent in the
+   * request instead of falling back to the normal router's quote.
+   */
+  if (minBuyAmount == null) {
+    const buyRaw = integerRaw(buyAmount);
+    const slip = Number(slippagePct);
+    if (buyRaw != null && Number.isFinite(slip) && slip >= 0 && slip <= 100) {
+      const slipBps = BigInt(Math.max(0, Math.min(10_000, Math.round(slip * 100))));
+      minBuyAmount = ((buyRaw * (10_000n - slipBps)) / 10_000n).toString();
+    }
+  }
+
+  const amountOut = numberFromRaw(buyAmount, buyPlaces);
+  const minReceived = numberFromRaw(minBuyAmount, buyPlaces);
+  const priceImpactRaw =
+    quote.estimatedPriceImpact ?? quote.grossEstimatedPriceImpact ?? quote.priceImpact ?? null;
+  const priceImpact = priceImpactRaw == null ? null : Number(priceImpactRaw);
 
   return {
-    buyAmount: quote.buyAmount ?? null,
-    minBuyAmount: quote.minBuyAmount ?? null,
-    ourFee: ourFeeRaw / scale,
-    zeroExFee: num(f.zeroExFee?.amount) / scale,
+    buyAmount,
+    minBuyAmount,
+    buyAmountFormatted: formatRaw(buyAmount, buyPlaces),
+    minBuyAmountFormatted: formatRaw(minBuyAmount, buyPlaces),
+    /* Display-only decimal values used by the existing quantity/MEV widgets. */
+    amountOut,
+    minReceived,
+    ourFee: Number(formatRaw(ourFeeRaw.toString(), feePlaces) ?? 0),
+    zeroExFee: zeroExFeeRaw == null ? null : Number(formatRaw(zeroExFeeRaw.toString(), feePlaces)),
     /* The whole point: paid in the sold token, so no native coin is needed. */
-    gasFee: num(f.gasFee?.amount) / scale,
+    gasFee: gasFeeRaw == null ? null : Number(formatRaw(gasFeeRaw.toString(), feePlaces)),
+    gasFeeFormatted: gasFeeRaw == null ? null : formatRaw(gasFeeRaw.toString(), feePlaces),
+    totalTokenFees: Number(formatRaw(
+      (ourFeeRaw + (zeroExFeeRaw ?? 0n) + (gasFeeRaw ?? 0n)).toString(),
+      feePlaces
+    ) ?? 0),
+    priceImpact: Number.isFinite(priceImpact) ? priceImpact : null,
     liquidityAvailable: quote.liquidityAvailable !== false,
+    route: quote.route ?? null,
     /*
      * `approval` and `trade` are the two EIP-712 payloads. A token that already
      * has a Permit2 allowance returns only `trade`, so the UI must not assume
@@ -165,6 +273,9 @@ export function summariseGasless(quote, decimals = 6) {
      * from a generic failure means the user is told "you do not have enough"
      * rather than "something went wrong".
      */
-    insufficientBalance: Boolean(quote.issues?.balance)
+    insufficientBalance: Boolean(quote.issues?.balance),
+    sellAmount: quote.sellAmount ?? quote.grossSellAmount ?? null,
+    sellToken: quote.sellToken ?? quote.sellTokenAddress ?? null,
+    buyToken: quote.buyToken ?? quote.buyTokenAddress ?? null
   };
 }

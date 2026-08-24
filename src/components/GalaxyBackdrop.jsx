@@ -191,18 +191,6 @@ export default function GalaxyBackdrop() {
         ))}
       </div>
 
-      <svg className="galaxy-planet" viewBox="0 0 80 80" focusable="false" aria-hidden="true">
-        <defs>
-          <radialGradient id="plt-body" cx="38%" cy="34%" r="62%">
-            <stop offset="0%" stopColor="#8ec8ff" stopOpacity="0.95" />
-            <stop offset="55%" stopColor="#3a6db8" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#0b1a33" stopOpacity="0.85" />
-          </radialGradient>
-        </defs>
-        <circle cx="40" cy="40" r="22" fill="url(#plt-body)" />
-        <ellipse cx="40" cy="40" rx="34" ry="8" fill="none" stroke="rgba(180,210,255,0.35)" strokeWidth="2" />
-      </svg>
-
       {/*
         A vignette over everything. Without it the stars run all the way to
         the edges and compete with the button and the wordmark; darkening the
