@@ -57,6 +57,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
 import TokenRiskCard from '../components/TokenRiskCard';
 import MevGuard from '../components/MevGuard';
+import { evaluateExecutionGate, isBlocked, requiresAcknowledgement } from '../lib/executionGate';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
 import { POINT_VALUES } from '../lib/ranks';
@@ -305,7 +306,22 @@ export default function Swap() {
   const [flipCount, setFlipCount] = useState(0);
   const [policyBlock, setPolicyBlock] = useState(null);
   const [mevProtect, setMevProtect] = useState(false);
+  // The output-token risk verdict, lifted out of TokenRiskCard so the
+  // execution gate can enforce it (not just display it). Reset whenever the
+  // target token changes: a verdict for the previous token must never gate a
+  // swap for a different one.
+  const [toTokenRisk, setToTokenRisk] = useState(null);
+  const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const still = useStill();
+
+  // Reset the lifted risk verdict and its acknowledgement whenever the target
+  // token or chain changes. A verdict (and a user's acknowledgement of it)
+  // belongs to one specific token; carrying it across a switch would gate the
+  // wrong swap, or let a user's "I accept the risk" for token A excuse token B.
+  useEffect(() => {
+    setToTokenRisk(null);
+    setRiskAcknowledged(false);
+  }, [toToken?.address, chainId]);
 
   // Detect native to disable heavy effects
   const isNative = useMemo(() => isNativeShell(), []);
@@ -1257,6 +1273,44 @@ export default function Swap() {
     && (useGasless ? gaslessQuoteReady : normalQuoteReady);
 
   const [chainTab, setChainTab] = useState('evm');
+
+  /*
+   * ─── THE EXECUTION RISK GATE ──────────────────────────────────────────────
+   * The last pure check before the wallet is asked to sign. It combines the
+   * output-token risk (lifted from TokenRiskCard) with the intent simulation
+   * (when the swap is intent-originated) into one verdict the confirm button
+   * reads. Before this, a confirmed honeypot rendered red and the user could
+   * still tap Execute — risk was DISPLAYED, never ENFORCED.
+   *
+   *   · decision 'block'        → the confirm button is disabled and names why
+   *   · decision 'acknowledge'  → the first press acknowledges, the second signs
+   *   · decision 'allow'        → unchanged behaviour
+   *
+   * The simulation is only fed in when it actually ran (intent swaps). For an
+   * ordinary swap there is no exec simulation, so the gate keys off token risk
+   * alone — which is the strongest independent signal we have either way.
+   */
+  const simForGate = useMemo(() => {
+    if (!exec.enforced || !exec.simulation) return undefined;
+    const st = exec.simulation.status;
+    if (st === 'passed') return { status: 'simulated-clean' };
+    if (st === 'failed' || st === 'revert') return { status: 'revert-detected' };
+    return { status: 'provider-busy' };
+  }, [exec.enforced, exec.simulation?.status]);
+
+  const execGate = useMemo(
+    () =>
+      evaluateExecutionGate({
+        tokenRisk: toTokenRisk,
+        simulation: simForGate,
+        acknowledgedHigh: riskAcknowledged
+      }),
+    [toTokenRisk, simForGate, riskAcknowledged]
+  );
+
+  const confirmDisabled =
+    (exec.enforced && (exec.simulating || exec.simulation?.status !== 'passed')) ||
+    isBlocked(execGate);
   useEffect(() => {
     if (confidentialRequested && chainTab !== 'evm') setChainTab('evm');
   }, [confidentialRequested, chainTab]);
@@ -1702,6 +1756,7 @@ export default function Swap() {
           chainId={chainId}
           address={toToken?.address}
           symbol={toToken?.symbol}
+          onRisk={setToTokenRisk}
         />
 
         <button
@@ -2093,13 +2148,50 @@ export default function Swap() {
 
             <p className="notice" style={{ marginTop: 12 }}>{t('swap.reviewNotice')}</p>
 
+            {/*
+              * THE GATE BANNER. Sits between the review and the confirm button so
+              * a blocked trade cannot be signed and an unacknowledged high/unknown
+              * risk needs a deliberate second press. The wording is honest: a
+              * 'block' is a refusal (you cannot sell this / simulation reverted),
+              * an 'acknowledge' is a warning the user must see before signing.
+              * Absence of data is never shown as "safe".
+              */}
+            {execGate.decision === 'block' && (
+              <div className="infobox infobox-danger" style={{ marginTop: 12 }}>
+                <strong>{t('swap.gate.blockedTitle')}</strong>
+                <p style={{ marginTop: 6, lineHeight: 1.6 }}>
+                  {execGate.blocked.some((r) => r.startsWith('token'))
+                    ? t('swap.gate.tokenBlocked')
+                    : execGate.blocked.some((r) => r.startsWith('simulation'))
+                      ? t('swap.gate.simulationBlocked')
+                      : t('swap.gate.walletBlocked')}
+                </p>
+                <p className="faint mono" style={{ marginTop: 6, fontSize: 10, wordBreak: 'break-all' }}>
+                  {execGate.blocked.join(', ')}
+                </p>
+              </div>
+            )}
+            {execGate.decision === 'acknowledge' && (
+              <div className={`infobox ${execGate.level === 'high' ? 'infobox-danger' : 'infobox-warn'}`} style={{ marginTop: 12 }}>
+                <strong>{t('swap.gate.reviewTitle')}</strong>
+                <p style={{ marginTop: 6, lineHeight: 1.6 }}>
+                  {riskAcknowledged
+                    ? t('swap.gate.acknowledged')
+                    : execGate.level === 'unknown'
+                      ? t('swap.gate.unknownRisk')
+                      : t('swap.gate.highRisk')}
+                </p>
+              </div>
+            )}
+
             <div className="row" style={{ gap: 10, marginTop: 12 }}>
               <button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button>
               <button
                 className="btn btn-primary"
                 /* An intent-originated swap cannot be signed until the exact
-                   preflight passes. A plain swap keeps its existing behaviour. */
-                disabled={exec.enforced && (exec.simulating || exec.simulation?.status !== 'passed')}
+                   preflight passes; a gate-blocked trade cannot be signed at
+                   all. A plain swap keeps its existing behaviour otherwise. */
+                disabled={confirmDisabled}
                 onClick={() => {
                   primeAudio();
                   /* Terms moved after the review: the first press re-approves
@@ -2109,6 +2201,15 @@ export default function Swap() {
                     exec.acknowledgeChange();
                     return;
                   }
+                  /* The execution gate's acknowledge step: a high/unknown risk
+                     needs a deliberate first press to acknowledge before a
+                     second press signs. This mirrors the route-change flow
+                     above — never sign on the same press that surfaced the
+                     warning. */
+                  if (requiresAcknowledgement(execGate) && !riskAcknowledged) {
+                    setRiskAcknowledged(true);
+                    return;
+                  }
                   runSwap();
                 }}
               >
@@ -2116,7 +2217,9 @@ export default function Swap() {
                   ? t('exec.sim.status.running')
                   : exec.needsReauthorisation
                     ? t('exec.action.REQUEST_NEW_SIGNATURE')
-                    : t('swap.confirmSwap')}
+                    : requiresAcknowledgement(execGate) && !riskAcknowledged
+                      ? t('swap.gate.acknowledge')
+                      : t('swap.confirmSwap')}
               </button>
             </div>
           </>

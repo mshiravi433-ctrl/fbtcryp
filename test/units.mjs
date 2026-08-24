@@ -60,6 +60,47 @@ import { webAppUrlForStart } from '../server/bot.js';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, LEGACY_EMAIL_IN_LOCALES, withContactEmail } from '../src/lib/contact.js';
 import { allowedNumbers, buildPost, esc, hasInventedNumber } from '../scripts/channel-post.mjs';
 import { comparable, improvementBps, isUsableQuote, pickBestQuote } from '../src/lib/bestQuote.js';
+import {
+  QUOTE_SCHEMA,
+  normalizeQuote,
+  quoteAgeMs,
+  isFresh,
+  isExpired,
+  netOutputUsd,
+  canBeBest,
+  comparable as comparableUnified,
+  rankByNetOutput,
+  fingerprintMatches,
+  failureCode,
+  isRetriable,
+  fnv1aHex
+} from '../src/lib/quoteModel.js';
+import {
+  buildUnsignedTransaction,
+  verifyCounterparties,
+  computeAmountOutMin,
+  computeDeadline,
+  decodeRevertReason,
+  simulateUnsignedTransaction,
+  simulationOutcome
+} from '../src/lib/preSignSimulation.js';
+import {
+  mevExecutionState,
+  mayShowProtected,
+  mevStateLabel
+} from '../src/lib/mevProtection.js';
+import {
+  evaluateExecutionGate,
+  worse,
+  isBlocked,
+  requiresAcknowledgement
+} from '../src/lib/executionGate.js';
+import {
+  buildProviderStatus,
+  providerStatusReport,
+  recordSuccess,
+  recordFailure
+} from '../server/providerStatus.js';
 import { bpsToPercent, ooSwapParams, openOceanSupports, toOOAddress } from '../src/lib/openocean.js';
 import { betaToBtc, cyclePosition, macroContext, marketRegime } from '../src/lib/macro.js';
 import { CONFIDENCE_CEILING, verdict } from '../src/lib/verdict.js';
@@ -2253,6 +2294,406 @@ export default async function run() {
      * measured rather than reasoned about.
      */
   }
+
+  /* -------------- the UNIFIED QUOTE MODEL (quoteModel.js) --------------- */
+  /*
+   * These cover the P0 acceptance criteria that are pure: quote freshness,
+   * net-output selection (not gross), fee correctness/fingerprint integrity,
+   * stale-quote rejection, comparability strictness, and the failure taxonomy.
+   * The async paths (real eth_call, replay on chain) live in their own probes.
+   */
+  {
+    const baseQuote = (over = {}) => ({
+      amountInWei: 1_000_000_000n,
+      amountOutWei: 2_000_000_000n,
+      minOutWei: 1_990_000_000n,
+      amountOutUsd: 2000,
+      amountInUsd: 1000,
+      gasUsd: 5,
+      ...over
+    });
+    const ctx = (over = {}) => ({
+      chainId: 56,
+      tokenIn: '0x' + 'a'.repeat(40),
+      tokenOut: '0x' + 'b'.repeat(40),
+      fbtFeeBps: 70,
+      feeRecipient: '0x' + 'f'.repeat(40),
+      slippageBps: 50,
+      source: 'kyberswap',
+      now: 1_000_000,
+      ttlMs: 30_000,
+      ...over
+    });
+
+    /* ---- normalization produces the unified schema ---- */
+    const n = normalizeQuote(baseQuote(), ctx());
+    t('a normalized quote carries the schema tag', n.schema === QUOTE_SCHEMA);
+    t('normalization preserves the raw amountOut as bigint', n.amountOutWei === 2_000_000_000n);
+    t('the FBT fee bps is carried through', n.fbtFeeBps === 70);
+    t('the quote gets a quoteTimestamp from the injected clock', n.quoteTimestamp === 1_000_000);
+    t('expiry is timestamp + ttl', n.expiry === 1_000_000 + 30_000);
+    t('a normalized quote has a fingerprint', typeof n.fingerprint === 'string' && n.fingerprint.length === 8);
+
+    /* ---- freshness: a stale quote cannot be signed ---- */
+    t('a quote is fresh before its expiry', isFresh(n, 1_010_000));
+    t('a quote is expired AT its expiry', isExpired(n, 1_030_000));
+    t('a quote is expired past its expiry', isExpired(n, 1_040_000));
+    t('quoteAgeMs measures time since the quote', quoteAgeMs(n, 1_010_000) === 10_000);
+    /*
+     * FAIL CLOSED on freshness: a quote with no expiry is treated as expired.
+     * The only safe default for something about to be signed.
+     */
+    t('a quote with no expiry is treated as expired', isExpired({ schema: QUOTE_SCHEMA }, 1));
+
+    /* ---- net output, not gross ---- */
+    /*
+     * THE CENTRAL RULE. Two quotes with the same gross output but different gas
+     * are NOT equal: the one with cheaper gas is the better route. Ranking on
+     * gross would ignore gas and call them a tie.
+     */
+    const cheap = normalizeQuote(baseQuote({ gasUsd: 3 }), ctx({ source: 'a' }));
+    const dear = normalizeQuote(baseQuote({ gasUsd: 9 }), ctx({ source: 'b' }));
+    t('net output subtracts gas from the received value', netOutputUsd(cheap) === 1997);
+    t('a cheaper-gas route has a higher net output', netOutputUsd(cheap) > netOutputUsd(dear));
+    t('net output is null when the received value is unknown', netOutputUsd({ amountOutUsd: null }) === null);
+
+    /* ---- gas unknown can never be "the best" ---- */
+    /*
+     * The spec: "if gas or price source is unknown, the route must not be
+     * presented as the best route." A route whose gas we cannot price is
+     * ineligible to win, even if its gross output is enormous.
+     */
+    const gasless = normalizeQuote(baseQuote({ gasUsd: null }), ctx({ source: 'c' }));
+    t('a route with unknown gas cannot be the best', !canBeBest(gasless, 1_000_000));
+    t('a route with known gas can be the best', canBeBest(cheap, 1_000_000));
+    t('an expired route cannot be the best', !canBeBest(cheap, 9_999_999));
+
+    /* ---- ranking by net output picks the cheaper-gas winner ---- */
+    const ranked = rankByNetOutput([cheap, dear], 1_000_000);
+    t('rankByNetOutput returns a best', Boolean(ranked.best));
+    t('the cheaper-gas route wins on net output', ranked.best.source === 'a');
+    t('ranked reports how many were eligible', ranked.checked === 2);
+    t('ranked surfaces the alternative', ranked.alternatives.length === 1);
+
+    /* ---- stale and non-executable quotes are dropped and counted ---- */
+    const stale = normalizeQuote(baseQuote(), ctx({ source: 'stale', now: 1, ttlMs: 10 }));
+    const exec = normalizeQuote(baseQuote(), ctx({ source: 'exec' }));
+    const r2 = rankByNetOutput([stale, exec], 1_000_000);
+    t('a stale quote is dropped and counted', r2.stale === 1);
+    t('the stale quote did not win', r2.best.source === 'exec');
+
+    const notExec = normalizeQuote(baseQuote(), ctx({ source: 'velora' }));
+    notExec.executable = false;
+    const r3 = rankByNetOutput([exec, notExec], 1_000_000);
+    t('a non-executable quote is dropped and counted', r3.notExecutable === 1);
+    t('a non-executable quote cannot win', r3.best.source !== 'velora');
+
+    const gasUnknown = normalizeQuote(baseQuote({ gasUsd: null }), ctx({ source: 'x' }));
+    const r4 = rankByNetOutput([exec, gasUnknown], 1_000_000);
+    t('a gas-unknown quote is dropped and counted', r4.gasUnknown === 1);
+
+    /* ---- comparability is strict: chain/pair/fee/slippage/clock ---- */
+    t('two identical-context quotes are comparable', comparableUnified(cheap, dear, 1_000_000));
+    const otherChain = normalizeQuote(baseQuote(), ctx({ source: 'z', chainId: 1 }));
+    t('a different chain blocks comparison', !comparableUnified(cheap, otherChain, 1_000_000));
+    const otherFee = normalizeQuote(baseQuote(), ctx({ source: 'z', fbtFeeBps: 0 }));
+    t('a different fee blocks comparison', !comparableUnified(cheap, otherFee, 1_000_000));
+    const skewedClock = normalizeQuote(baseQuote(), ctx({ source: 'z', now: 1_000_000 + 999_999 }));
+    t('a clock-skewed quote blocks comparison', !comparableUnified(cheap, skewedClock, 1_000_000));
+
+    /* ---- fingerprint integrity: tamper is a hard stop ---- */
+    const shown = normalizeQuote(baseQuote(), ctx());
+    const matching = normalizeQuote(baseQuote(), ctx());
+    t('two identical quotes share a fingerprint', fingerprintMatches(shown, matching));
+    const tampered = normalizeQuote(baseQuote({ amountOutWei: 9_000_000_000n }), ctx());
+    t('a tampered amountOut changes the fingerprint', !fingerprintMatches(shown, tampered));
+    const tamperedFee = normalizeQuote(baseQuote(), ctx({ feeRecipient: '0x' + 'e'.repeat(40) }));
+    t('a tampered fee recipient changes the fingerprint', !fingerprintMatches(shown, tamperedFee));
+
+    /* ---- failure taxonomy: provider strings drift, codes do not ---- */
+    t('NO_ROUTE maps to itself', failureCode(new Error('NO_ROUTE')) === 'NO_ROUTE');
+    t('FEE_NOT_APPLIED maps to itself', failureCode(new Error('FEE_NOT_APPLIED')) === 'FEE_NOT_APPLIED');
+    t('FEE_RECIPIENT_MISMATCH maps to itself', failureCode(new Error('FEE_RECIPIENT_MISMATCH')) === 'FEE_RECIPIENT_MISMATCH');
+    t('a timeout maps to PROVIDER_UNREACHABLE', failureCode(new Error('ETIMEDOUT')) === 'PROVIDER_UNREACHABLE');
+    t('a 401 maps to PROVIDER_AUTH', failureCode(new Error('HTTP 401')) === 'PROVIDER_AUTH');
+    t('an AGG_TIMEOUT maps to QUOTE_NETWORK', failureCode(new Error('AGG_TIMEOUT')) === 'QUOTE_NETWORK');
+    t('an unknown error maps to QUOTE_FAILED', failureCode(new Error('something weird')) === 'QUOTE_FAILED');
+    t('NO_ROUTE is retriable', isRetriable('NO_ROUTE'));
+    t('FEE_NOT_APPLIED is NOT retriable', !isRetriable('FEE_NOT_APPLIED'));
+
+    /* ---- fnv1a is deterministic ---- */
+    t('fnv1a is deterministic for the same input', fnv1aHex('fbt') === fnv1aHex('fbt'));
+    t('fnv1a differs for different input', fnv1aHex('fbt') !== fnv1aHex('FBT'));
+  }
+
+  /* -------------- PRE-SIGN SIMULATION (preSignSimulation.js) ------------ */
+  /*
+   * The pure pieces: counterparty sanity, amountOutMin/deadline maths, and the
+   * outcome-shape rules. The live eth_call is exercised by an integration
+   * probe; here we prove the verdict logic is honest about a revert vs a busy
+   * provider vs a clean call.
+   */
+  {
+    /* ---- counterparties: zero address and bad shape are refused ---- */
+    t('a valid recipient passes', verifyCounterparties({ recipient: '0x' + '1'.repeat(40) }).ok);
+    t('the zero address recipient is refused', !verifyCounterparties({ recipient: '0x' + '0'.repeat(40) }).ok);
+    t('a malformed recipient is refused', !verifyCounterparties({ recipient: '0xdeadbeef' }).ok);
+    t('the zero address spender is refused', !verifyCounterparties({ spender: '0x' + '0'.repeat(40) }).ok);
+    t('a missing recipient/spender passes (nothing to check)', verifyCounterparties({}).ok);
+
+    /* ---- amountOutMin = out * (1 - slippage) ---- */
+    const min50 = computeAmountOutMin({ amountOutWei: 10_000n, slippageBps: 50 });
+    t('amountOutMin at 0.5% slippage is out*0.995', min50 === 9_950n);
+    const minFull = computeAmountOutMin({ amountOutWei: 10_000n, slippageBps: 10_000 });
+    t('amountOutMin at 100% slippage is zero', minFull === 0n);
+
+    /* ---- deadline is in the future and bounded ---- */
+    const dl = computeDeadline({ deadlineMinutes: 20 });
+    const nowSec = BigInt(Math.floor(Date.now() / 1000));
+    t('a 20-minute deadline is in the future', dl > nowSec);
+    t('a 20-minute deadline is ~20 minutes ahead', dl - nowSec > 60n && dl - nowSec <= 1201n);
+
+    /* ---- revert decode is honest ---- */
+    t('an error with a reason field decodes it', decodeRevertReason({ reason: 'transfer failed' }) === 'transfer failed');
+    t('null produces null', decodeRevertReason(null) === null);
+    t('a panic selector surfaces the code', decodeRevertReason({ data: '0x4e487b710000000000000000000000000000000000000000000000000000000000000011' }) === 'Panic(0x00000011)');
+
+    /* ---- buildUnsignedTransaction validates inputs ---- */
+    let built;
+    try { built = buildUnsignedTransaction({ from: '0x' + '1'.repeat(40), to: '0x' + '2'.repeat(40), data: '0xabcd', value: 100n }); } catch { built = null; }
+    t('a valid unsigned tx builds', Boolean(built) && built.value === 100n);
+    let badFrom = false;
+    try { buildUnsignedTransaction({ from: 'not-an-address', to: '0x' + '2'.repeat(40) }); } catch { badFrom = true; }
+    t('a bad from-address throws', badFrom);
+
+    /* ---- the simulation verdict is honest about each state ---- */
+    t('a clean simulation is provenSafe', simulationOutcome({ status: 'simulated-clean', mempoolPath: 'public-mempool' }).provenSafe);
+    t('a revert-detected outcome is NOT provenSafe', !simulationOutcome({ status: 'revert-detected' }).provenSafe);
+    t('a provider-busy outcome is NOT provenSafe', !simulationOutcome({ status: 'provider-busy' }).provenSafe);
+    t('an unknown outcome is NOT provenSafe', !simulationOutcome({ status: 'unknown' }).provenSafe);
+    t('the default mempool path is unknown', simulationOutcome({ status: 'unknown' }).mempoolPath === 'unknown');
+
+    /* ---- no provider/tx yields unknown, never a fake "safe" ---- */
+    const none = await simulateUnsignedTransaction({ provider: null, tx: null });
+    t('no provider yields status unknown', none.status === 'unknown');
+    t('no provider yields provenSafe false', none.provenSafe === false);
+
+    /*
+     * A fake provider that reverts on eth_call must produce a revert-detected
+     * verdict — the whole point: a reverting trade must be stopped before the
+     * wallet is asked to sign.
+     */
+    const revertingProvider = {
+      call: async () => { throw { reason: 'INSUFFICIENT_OUTPUT_AMOUNT', data: '0x08c379a0' }; },
+      estimateGas: async () => 200_000n
+    };
+    const revertSim = await simulateUnsignedTransaction({
+      provider: revertingProvider,
+      tx: { from: '0x' + '1'.repeat(40), to: '0x' + '2'.repeat(40), data: '0x', value: 0n }
+    });
+    t('a reverting eth_call yields revert-detected', revertSim.status === 'revert-detected');
+    t('a reverting eth_call decodes a reason', Boolean(revertSim.revertReason));
+
+    /* A clean provider yields simulated-clean. */
+    const cleanProvider = {
+      call: async () => '0x',
+      estimateGas: async () => 180_000n
+    };
+    const cleanSim = await simulateUnsignedTransaction({
+      provider: cleanProvider,
+      tx: { from: '0x' + '1'.repeat(40), to: '0x' + '2'.repeat(40), data: '0x', value: 0n }
+    });
+    t('a clean eth_call yields simulated-clean', cleanSim.status === 'simulated-clean');
+    t('a clean eth_call reports the real gas limit', cleanSim.gasLimit === 180_000n);
+
+    /* A provider whose gas estimate fails is NOT simulated-clean (we cannot
+       assert safe without a gas limit). */
+    const busyGasProvider = {
+      call: async () => '0x',
+      estimateGas: async () => { throw new Error('gas estimate failed'); }
+    };
+    const busySim = await simulateUnsignedTransaction({
+      provider: busyGasProvider,
+      tx: { from: '0x' + '1'.repeat(40), to: '0x' + '2'.repeat(40), data: '0x', value: 0n }
+    });
+    t('a failed gas estimate yields provider-busy', busySim.status === 'provider-busy');
+  }
+
+  /* -------------- MEV EXECUTION STATE (mevProtection.js) --------------- */
+  /*
+   * The honesty contract: nothing is "protected" unless a private path is
+   * confirmed. Risk-measured, recommended and selected are all weaker.
+   */
+  {
+    /* No relay for the chain → the only honest state is no-private-path. */
+    const noRelay = mevExecutionState({ chainId: 999999, sandwich: { score: 90 } });
+    t('a chain with no relay reports no-private-path-available', noRelay.state === 'no-private-path-available');
+    t('a no-private-path state is not confirmed', !noRelay.confirmed);
+
+    /* Ethereum has a relay. Low risk → risk-measured, not protected. */
+    const lowRisk = mevExecutionState({ chainId: 1, sandwich: { score: 10 } });
+    t('low risk on a relay chain is risk-measured', lowRisk.state === 'risk-measured');
+    t('risk-measured is not confirmed', !lowRisk.confirmed);
+
+    /* High risk → recommend the relay, but still not protected. */
+    const highRisk = mevExecutionState({ chainId: 1, sandwich: { score: 60 } });
+    t('high risk recommends the relay', highRisk.state === 'private-relay-recommended');
+    t('recommended is not confirmed', !highRisk.confirmed);
+
+    /* User opted in → selected, but STILL not protected (preference ≠ fact). */
+    const selected = mevExecutionState({ chainId: 1, sandwich: { score: 60 }, userSelectedPrivate: true });
+    t('a user opt-in is private-relay-selected', selected.state === 'private-relay-selected');
+    t('selected is not confirmed', !selected.confirmed);
+
+    /* Only a confirmed private simulation may be shown as protected. */
+    const confirmed = mevExecutionState({ chainId: 1, sandwich: { score: 60 }, simulatedViaPrivate: true });
+    t('a private simulation is private-execution-confirmed', confirmed.state === 'private-execution-confirmed');
+
+    /* The single chokepoint: only confirmed may render "protected". */
+    t('only confirmed may show protected', mayShowProtected('private-execution-confirmed'));
+    t('selected may NOT show protected', !mayShowProtected('private-relay-selected'));
+    t('recommended may NOT show protected', !mayShowProtected('private-relay-recommended'));
+    t('risk-measured may NOT show protected', !mayShowProtected('risk-measured'));
+    t('no-private-path may NOT show protected', !mayShowProtected('no-private-path-available'));
+
+    /* Labels are stable i18n keys. */
+    t('each state has a label key', typeof mevStateLabel(confirmed.state) === 'string');
+    t('the label for confirmed mentions private', mevStateLabel('private-execution-confirmed').includes('private'));
+  }
+
+  /* -------------- EXECUTION GATE (executionGate.js) ------------------- */
+  /*
+   * The pre-sign decision. Critical blocks; high and unknown require
+   * acknowledgement; absence of data is never "safe".
+   */
+  {
+    /* A clean trade with low token risk is allowed. */
+    const allowed = evaluateExecutionGate({
+      tokenRisk: { level: 'low', honeypot: false, cannotSell: false },
+      simulation: { status: 'simulated-clean' }
+    });
+    t('a low-risk clean trade is allowed', allowed.decision === 'allow' && allowed.canSign);
+
+    /* A honeypot BLOCKS outright — no acknowledgement path for "cannot sell". */
+    const honeypot = evaluateExecutionGate({
+      tokenRisk: { level: 'critical', honeypot: true, cannotSell: true },
+      simulation: { status: 'simulated-clean' }
+    });
+    t('a honeypot blocks execution', honeypot.decision === 'block' && isBlocked(honeypot));
+    t('a blocked gate cannot sign', !honeypot.canSign);
+    t('a honeypot block names the reason', honeypot.blocked.includes('token-honeypot'));
+
+    /* Critical (non-honeypot) also blocks. */
+    const critical = evaluateExecutionGate({
+      tokenRisk: { level: 'critical', honeypot: false, cannotSell: false },
+      simulation: { status: 'simulated-clean' }
+    });
+    t('critical token risk blocks', critical.decision === 'block');
+
+    /* High risk requires acknowledgement before signing. */
+    const high = evaluateExecutionGate({
+      tokenRisk: { level: 'high', honeypot: false, cannotSell: false },
+      simulation: { status: 'simulated-clean' }
+    });
+    t('high risk requires acknowledgement', high.decision === 'acknowledge' && requiresAcknowledgement(high));
+    t('an unacknowledged high-risk trade cannot sign', !high.canSign);
+    const highAck = evaluateExecutionGate({
+      tokenRisk: { level: 'high', honeypot: false, cannotSell: false },
+      simulation: { status: 'simulated-clean' },
+      acknowledgedHigh: true
+    });
+    t('an acknowledged high-risk trade can sign', highAck.canSign);
+
+    /*
+     * Unknown risk is NOT safe. A missing token-risk report must not read as
+     * "low risk" — the user has to see that we could not verify safety.
+     */
+    const unknown = evaluateExecutionGate({ simulation: { status: 'simulated-clean' } });
+    t('missing token risk is unknown, not low', unknown.level === 'unknown');
+    t('unknown risk requires acknowledgement', requiresAcknowledgement(unknown));
+
+    /* A detected revert BLOCKS — there is nothing to acknowledge. */
+    const revert = evaluateExecutionGate({
+      tokenRisk: { level: 'low', honeypot: false, cannotSell: false },
+      simulation: { status: 'revert-detected' }
+    });
+    t('a revert-detected simulation blocks', revert.decision === 'block');
+    t('a revert block names the reason', revert.blocked.includes('simulation-revert-detected'));
+
+    /* A simulation we could not run warns (unknown), never "safe". */
+    const busy = evaluateExecutionGate({
+      tokenRisk: { level: 'low', honeypot: false, cannotSell: false },
+      simulation: { status: 'provider-busy' }
+    });
+    t('a busy simulation yields unknown level', busy.level === 'unknown');
+    t('a busy simulation warns', busy.warnings.includes('simulation-unavailable'));
+
+    /* worse() ordering: unknown sits between medium and high. */
+    t('worse picks the higher severity', worse('low', 'high') === 'high');
+    t('unknown is worse than medium', worse('medium', 'unknown') === 'unknown');
+    t('high is worse than unknown', worse('unknown', 'high') === 'high');
+  }
+
+  /* -------------- PROVIDER STATUS (providerStatus.js) ----------------- */
+  /*
+   * The standard shape: reachable/authenticated start false and flip only on
+   * evidence; nothing reveals a secret value.
+   */
+  {
+    const row = buildProviderStatus({
+      id: 'test-provider',
+      configured: true,
+      supportedChains: [1, 56],
+      feeReady: true
+    });
+    t('a status row carries every standard field', [
+      'id', 'configured', 'reachable', 'authenticated', 'feeReady',
+      'supportedChains', 'lastSuccessAt', 'lastFailureAt', 'retryable',
+      'missingConfiguration', 'externalApprovalRequired'
+    ].every((k) => k in row));
+    t('a fresh provider is configured but not reachable', row.configured && !row.reachable);
+    t('a fresh provider is not authenticated', !row.authenticated);
+    t('a fresh provider has no lastSuccessAt', row.lastSuccessAt === null);
+
+    /* Recording a success flips reachable on. */
+    recordSuccess('test-provider');
+    const row2 = buildProviderStatus({
+      id: 'test-provider',
+      configured: true,
+      supportedChains: [1]
+    });
+    t('a recorded success flips reachable on', row2.reachable);
+    t('a recorded success sets lastSuccessAt', row2.lastSuccessAt !== null);
+    t('a reachable configured provider is authenticated', row2.authenticated);
+
+    /* Recording an auth-class failure flips authenticated back off. */
+    recordFailure('test-provider', '401 Unauthorized');
+    const row3 = buildProviderStatus({
+      id: 'test-provider',
+      configured: true,
+      supportedChains: [1]
+    });
+    t('a 401 failure flips authenticated off', !row3.authenticated);
+    t('a failure sets lastFailureAt', row3.lastFailureAt !== null);
+
+    /* An unconfigured provider reports its missing config by name. */
+    const uncfg = buildProviderStatus({
+      id: 'no-key-provider',
+      configured: false,
+      supportedChains: [],
+      missingConfiguration: ['SOME_API_KEY']
+    });
+    t('an unconfigured provider lists the missing env var', uncfg.missingConfiguration.includes('SOME_API_KEY'));
+    t('an unconfigured provider is not fee-ready', !uncfg.feeReady);
+
+    /* The aggregate report never echoes a secret — only booleans/names. */
+    const report = providerStatusReport();
+    t('the report carries the schema tag', report.schema === 'fbt.provider-status.v1');
+    t('the report has a summary', typeof report.summary.total === 'number' && report.summary.total > 0);
+    const serialized = JSON.stringify(report);
+    t('the report never contains the word "key" as a value boundary', !/:"[A-Za-z0-9_-]{20,}"/.test(serialized));
+  }
+
 
   /* ----------------------- the OpenOcean adapter ------------------------ */
   {

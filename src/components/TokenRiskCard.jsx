@@ -14,7 +14,7 @@ import { IconChevronRight } from './Icons';
  *
  * A missing address or an unsupported chain renders nothing.
  */
-export default function TokenRiskCard({ chainId, address, symbol, compact = false }) {
+export default function TokenRiskCard({ chainId, address, symbol, compact = false, onRisk = null }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const [risk, setRisk] = useState(null);
@@ -37,11 +37,21 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
       .then((r) => {
         if (!alive) return;
         setRisk(r);
+        // Lift the verdict to the parent so the execution gate can enforce it
+        // (block a honeypot, require acknowledgement on high risk). The card
+        // stays the display; this callback is how the signing button learns.
+        if (typeof onRisk === 'function') onRisk(r);
         // Auto-open when the verdict is scary so a real warning can't hide
         // behind a collapsed header.
         if (r && (r.level === 'critical' || r.level === 'high')) setOpen(true);
       })
-      .catch(() => alive && setRisk(null))
+      .catch(() => {
+        if (!alive) return;
+        setRisk(null);
+        // A failed scan is honest data: the gate treats "no report" as
+        // unknown, never safe. Lift null so the parent can warn accordingly.
+        if (typeof onRisk === 'function') onRisk(null);
+      })
       .finally(() => alive && setBusy(false));
     return () => {
       alive = false;
