@@ -51,6 +51,8 @@ import RestrictionsSheet from '../src/components/RestrictionsSheet.jsx';
 import RadioPanel from '../src/components/RadioPanel.jsx';
 import FiatPanel from '../src/components/FiatPanel.jsx';
 import VaultCard from '../src/components/VaultCard.jsx';
+import Vault from '../src/pages/Vault.jsx';
+import AutopilotGuideSheet from '../src/components/AutopilotGuideSheet.jsx';
 import SendSheet from '../src/components/SendSheet.jsx';
 import ReceiveSheet from '../src/components/ReceiveSheet.jsx';
 import LanguagePicker from '../src/components/LanguagePicker.jsx';
@@ -287,6 +289,201 @@ export async function run(container) {
    * outcome, so `mayBeEmpty`; what must hold is that it throws nothing.
    */
   await mount('VaultCard (no vault configured)', <VaultCard />, { mayBeEmpty: true });
+
+  /*
+   * The /vault page, mounted directly: it is lazy-loaded behind a route, so
+   * no other mount reaches it. It renders with no vault configured, which is
+   * the default on every deployment until one exists.
+   */
+  await mount('Vault (no vault configured)', <Vault />);
+
+  /*
+   * ─── THE AUTOPILOT GUIDE SHEET ───────────────────────────────────────────
+   * It lives behind a button on the Orders foot, so the Orders mount above
+   * never opens it — and the two states that matter are the ones the sheet
+   * has to survive: a real price series, and no data at all.
+   *
+   * With no series the engine refuses (BAD_AMOUNT is the guard, but here it
+   * is `why` running out of samples), and the sheet must fall back to the
+   * honest "not enough data" copy rather than print a zero or a dash where a
+   * measurement belongs. That fallback is the whole point of the component:
+   * a guidance sheet that invents numbers is worse than no sheet.
+   */
+  const guideSeries = Array.from({ length: 90 }, (_, i) => ({
+    t: 1_700_000_000 + i * 86_400,
+    c: 3_000 + Math.sin(i / 7) * 90
+  }));
+  await mount('AutopilotGuideSheet (open, with a series)', (
+    <AutopilotGuideSheet
+      open
+      onClose={() => {}}
+      series={guideSeries}
+      fromToken={{ symbol: 'USDT', address: '0x' }}
+      toToken={{ symbol: 'ETH', address: '0x' }}
+      chainId={1}
+    />
+  ), { portal: true });
+  await mount('AutopilotGuideSheet (open, no data)', (
+    <AutopilotGuideSheet
+      open
+      onClose={() => {}}
+      series={null}
+      fromToken={{ symbol: 'USDT', address: '0x' }}
+      toToken={{ symbol: 'ETH', address: '0x' }}
+      chainId={1}
+    />
+  ), { portal: true });
+
+  /*
+   * ─── THE NEW SURFACES IN PERSIAN (RTL) ──────────────────────────────────
+   * Persian is the primary audience, so the gold/forex yield cards, the
+   * autopilot guide sheet and the Buy external-wallet tab are re-rendered
+   * under `dir="rtl"` and asserted there, not only in the default language.
+   *
+   * SCOPE, STATED PLAINLY: jsdom has no layout engine — `getBoundingClientRect`
+   * returns zeros — so this block cannot measure a 360px column or detect
+   * overflow. What it CAN prove is the half that actually caused the reported
+   * breakage: the direction is applied, the Persian copy is what renders
+   * (English leaking through would be the `earn.yield.*` keys missing from
+   * fa.json), every tap target carries an explicit 44px floor, and nothing
+   * throws. Pixel geometry needs a real browser.
+   */
+  {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const before = errors.length;
+    await act(async () => {
+      setLanguage('fa');
+      root.render(
+        <Wrap>
+          <AutopilotGuideSheet
+            open
+            onClose={() => {}}
+            series={guideSeries}
+            fromToken={{ symbol: 'USDT', address: '0x' }}
+            toToken={{ symbol: 'ETH', address: '0x' }}
+            chainId={1}
+          />
+        </Wrap>
+      );
+    });
+
+    /*
+     * `Sheet` portals to document.body — which is the whole point of it, see
+     * the centring block below — so the content is NOT inside `host`. My first
+     * draft queried `host` and every assertion below silently measured nothing:
+     * "every option starts closed" passed because there were no options to be
+     * open. A check that passes on an empty set is worse than no check.
+     */
+    const sheetScope = document.body;
+    out.push(['RTL: the guide sheet renders under dir=rtl',
+      errors.length === before
+      && document.documentElement.getAttribute('dir') === 'rtl']);
+    /* All three options, and all three closed — the owner's ask was a sheet
+       that opens on a tap, not one that arrives already unpacked. */
+    const heads = sheetScope.querySelectorAll('.ap-opt-head');
+    out.push(['RTL: the sheet shows its three options', heads.length === 3]);
+    out.push(['RTL: every option starts closed',
+      heads.length === 3
+      && sheetScope.querySelectorAll('.ap-opt-open').length === 0
+      && [...heads].every((b) => b.getAttribute('aria-expanded') === 'false')]);
+    out.push(['RTL: a closed option shows no rows',
+      sheetScope.querySelectorAll('.ap-fact-label').length === 0]);
+
+    /* Open one, and only one: the three rows the owner specified appear, and
+       the other two stay shut. */
+    await act(async () => heads[1]?.click());
+    out.push(['RTL: opening an option reveals its three rows',
+      sheetScope.querySelectorAll('.ap-fact-label').length === 3
+      && sheetScope.querySelectorAll('.ap-opt-open').length === 1]);
+    out.push(['RTL: the other two stay closed',
+      heads[0].getAttribute('aria-expanded') === 'false'
+      && heads[2].getAttribute('aria-expanded') === 'false']);
+    /* What it does / what we control / what we learn — in Persian, with the
+       measured figures. A missing fa.json key renders the English string and
+       looks fine until someone reads it. */
+    const sheetText = sheetScope.textContent || '';
+    out.push(['RTL: the sheet speaks Persian, not English',
+      /[ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]/.test(sheetText)
+      && !/What we control|What you learn|What it does/i.test(sheetText)]);
+    const factRows = [...sheetScope.querySelectorAll('.ap-fact-text')]
+      .map((r) => r.textContent || '');
+    /*
+     * ─── THE BUG THIS CATCHES ───────────────────────────────────────────────
+     * The three rows read `autopilot.${goal}.how`, but the copy lives at
+     * `autopilot.goal.${goal}.how` — the same namespace the title two lines
+     * above already used. i18n answered with the key itself, so the sheet
+     * rendered «autopilot.protect.how» as a sentence, in every language, and
+     * every other assertion still passed because the title and intro were
+     * correct Persian. A key path is not checked by the "static key exists"
+     * wiring scan because `${goal}` is not static, so it is asserted here.
+     */
+    out.push(['RTL: no row renders a raw i18n key',
+      factRows.length === 3 && !factRows.some((row) => /autopilot\./.test(row))]);
+    /*
+     * The two measured rows carry a figure or an honest em dash — never a
+     * fabricated 0, and never an empty cell. The first row is prose ("what it
+     * does") and correctly contains no number, which is why it is not in this
+     * list. `\d` is ASCII-only, so Persian digits are matched separately.
+     */
+    out.push(['RTL: the measured rows carry a figure, not an empty cell',
+      factRows.length === 3
+      && factRows.slice(1).every((row) => /\d|[۰-۹]|—/.test(row))]);
+    /* Guidance only: the sheet must not be able to place an order. */
+    out.push(['RTL: the guide sheet offers no submit path',
+      !sheetScope.querySelector('form')
+      && !/submit/i.test([...sheetScope.querySelectorAll('button')]
+        .map((b) => b.getAttribute('type') || '').join(' '))]);
+
+    await act(async () => root.unmount());
+    host.remove();
+  }
+
+  /*
+   * The yield cards in Persian: this is the surface the owner asked to see at
+   * 360px, and it is the one whose buy buttons used to be a nested <button>
+   * inside a <button>.
+   */
+  {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const before = errors.length;
+    await act(async () => {
+      setLanguage('fa');
+      root.render(<Wrap><Earn /></Wrap>);
+    });
+
+    const yields = host.querySelectorAll('.earn-yield');
+    out.push(['RTL: the yield cards render', errors.length === before && yields.length >= 5]);
+    /*
+     * The tap-target floor is asserted in test/wiring.mjs against index.css
+     * rather than here: jsdom has no stylesheet and no layout engine, so
+     * getComputedStyle returns nothing and a `>= 44` test would fail for the
+     * wrong reason. What is provable at render time is the structure that the
+     * CSS rule attaches to.
+     */
+    out.push(['RTL: each card has its header tap target',
+      yields.length > 0
+      && host.querySelectorAll('.earn-yield-head').length === yields.length]);
+    /* Gold and forex are the two the owner named, and both must route INSIDE
+       the app — an anchor to a foreign site is the bug that started this. */
+    out.push(['RTL: no yield card links off-site',
+      [...host.querySelectorAll('.earn-yield a')].every((a) => {
+        const href = a.getAttribute('href') || '';
+        return href.startsWith('/') || href.startsWith('#') || href === '';
+      })]);
+    /* The gold row's two buy buttons are what replaced the external link. */
+    out.push(['RTL: the gold card offers both gold tokens',
+      [...host.querySelectorAll('.earn-yield button')].some((b) => /PAXG/.test(b.textContent || ''))
+      && [...host.querySelectorAll('.earn-yield button')].some((b) => /XAUt/.test(b.textContent || ''))]);
+    out.push(['RTL: the yield copy is Persian',
+      /[ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی]/.test(host.textContent || '')]);
+
+    await act(async () => root.unmount());
+    host.remove();
+  }
 
   /*
    * SendSheet with no wallet connected: chainId is undefined, so both the

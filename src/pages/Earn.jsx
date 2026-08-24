@@ -10,7 +10,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { POINT_VALUES, tierFor, nextTier, tierProgress } from '../lib/ranks';
-import { IconCheck, IconChevronRight, IconExternal, IconKey, IconPools, IconShield, IconSwap, IconTrend, IconUser, IconWallet } from '../components/Icons';
+import { IconCheck, IconChevronRight, IconKey, IconPools, IconShield, IconSwap, IconTrend, IconUser, IconWallet } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import ShareSheet from '../components/ShareSheet';
 import VaultCard from '../components/VaultCard';
@@ -20,15 +20,17 @@ import { useShare } from '../hooks/useShare';
 import { copyText } from '../lib/share';
 import { telegramBotStartAppUrl } from '../lib/telegramBot';
 import { dailyRewardStatus } from '../lib/dailyRewards';
+import { SPECULATION_ENABLED } from '../lib/features';
+import { vaultIsLive } from '../lib/vault';
 
 /**
  * Earn.
  *
  * Split deliberately into two halves that are never blended:
  *
- *   REAL YIELD — actual on-chain opportunities where the user's own money
- *   earns a return. Every one routes to an audited protocol from the user's
- *   own wallet; we take nothing beyond the swap fee they'd pay anyway.
+ *   REAL YIELD — the ways to put money to work. Every single one of them is
+ *   OUR OWN SCREEN. There is no outbound link anywhere in the list, which is
+ *   the rule this file is built around (see YIELD below for why).
  *
  *   POINTS — a reputation score for using the app. Points buy nothing and
  *   transfer to nobody. They used to be "virtual credits", which looked like a
@@ -36,157 +38,148 @@ import { dailyRewardStatus } from '../lib/dailyRewards';
  *   where other screens move real funds.
  */
 
-/** Real, on-chain ways to earn. Ordered roughly by risk. */
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE YIELD LIST IS OUR OWN PRODUCTS. EVERY ROW. NO EXCEPTIONS.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Owner directive: «بخش درآمد باید از محصولات خودمون استفاده کنه — مثلا طلا و
+ * فارکس».
+ *
+ * ─── WHAT WAS HERE BEFORE, AND WHY IT WAS WRONG ────────────────────────────
+ * Nine rows, seven of them `url:` links to PancakeSwap, Venus, Aave, Morpho,
+ * Jito, THORChain and Lido. The render did `y.internal ? navigate(...) :
+ * open(y.url)`, so the majority of this screen sent the user to somebody
+ * else's site at the exact moment they were ready to put money in — and paid
+ * us nothing for finding the opportunity. Every one of those venues has no
+ * referral programme we can join (checked: Aave, Compound and Morpho have none
+ * at all; the CeFi desks exclude our readers by name), so it was not even a
+ * referral we simply had not registered. It was free advertising.
+ *
+ * ─── WHAT REPLACED IT ──────────────────────────────────────────────────────
+ * The products this app actually runs, each of which is already built,
+ * reachable and fee-earning:
+ *
+ *   gold      — PAXG / XAUt, bought through our own swap
+ *   ethStake  — stETH / rETH, where buying the token IS the stake
+ *   solStake  — Solana LSTs, same shape, routed through our Solana swap
+ *   stocks    — tokenized equities, quoted by our own aggregator
+ *   forex     — forex / metals / indices on Ostium (website builds only)
+ *   vault     — our own lending vault, and only once it is deployed
+ *   bridge    — cross-chain moves, our own bridge fee
+ *
+ * ─── THE TWO RULES THIS ARRAY IS HELD TO ───────────────────────────────────
+ * 1. THERE IS NO `url` KEY. Not one row carries an outbound address, so there
+ *    is nothing for a future edit to accidentally open. The render navigates
+ *    and does nothing else.
+ * 2. NO INVENTED NUMBERS. Not one row carries an `apr` string. A rate written
+ *    into a source file is stale the day it is committed, and a fabricated
+ *    rate on a money screen destroys trust in every honest number around it.
+ *    Where a real live rate exists (staking APY, pool yields) it is shown on
+ *    the screen that actually measures it — Farm reads DefiLlama — and this
+ *    row says what the product IS instead.
+ */
 const YIELD = [
   {
-    id: 'stablePool',
-    Icon: IconPools,
-    apr: '4–9%',
-    risk: 'low',
-    color: 'var(--rgb-4)',
-    url: 'https://pancakeswap.finance/liquidity/pools',
-    internal: '/farm'
-  },
-  {
-    id: 'cakeStake',
-    Icon: IconTrend,
-    apr: '2–8%',
+    /*
+     * GOLD. Listed first because it is the one asset here with no yield at
+     * all and the one most people come to this screen for — and because
+     * pretending otherwise is the exact failure the rest of this file avoids.
+     *
+     * `buys` renders two buttons that pre-fill our own swap with the token
+     * address from lib/chains.js. Never a symbol: PAXG has clones.
+     */
+    id: 'gold',
+    Icon: IconShield,
     risk: 'low',
     color: 'var(--rgb-5)',
-    url: 'https://pancakeswap.finance/pools'
-  },
-  {
-    id: 'lpFarm',
-    Icon: IconPools,
-    apr: '10–40%',
-    risk: 'medium',
-    color: 'var(--rgb-1)',
-    url: 'https://pancakeswap.finance/farms',
-    internal: '/farm'
-  },
-  {
-    id: 'lending',
-    Icon: IconShield,
-    apr: '3–12%',
-    risk: 'medium',
-    color: 'var(--rgb-2)',
-    url: 'https://app.venus.io'
+    internal: '/farm?tab=inapp&focus=gold',
+    buys: ['PAXG', 'XAUt']
   },
   {
     /*
-     * ─── ROUTED INWARDS, BECAUSE WE ACTUALLY DO THIS ONE ────────────────────
-     * Asked to prefer our own screens over external links here.
-     *
-     * This row pointed at lido.fi, which was a real mistake rather than a
-     * missed optimisation: the Farm screen already sells stETH and rETH
-     * directly, and for a liquid staking token BUYING IT IS THE DEPOSIT —
-     * there is no separate stake step, no lock-up, and it grows against ETH by
-     * itself. So the user got sent to another site to accomplish something
-     * this app performs in one swap, and we earned nothing for finding it for
-     * them.
-     *
-     * `internal` makes the card navigate rather than open a browser, and the
-     * 0.70% swap fee applies exactly as it does anywhere else.
+     * ETHEREUM STAKING. Buying stETH or rETH IS the deposit — there is no
+     * separate stake step and no lock-up, and the token grows against ETH by
+     * itself. That is why this is one of our own products rather than a link
+     * to Lido: the same outcome runs through our swap at the normal fee.
      */
-    id: 'liquidStake',
-    Icon: IconSwap,
-    apr: '3–6%',
+    id: 'ethStake',
+    Icon: IconTrend,
     risk: 'medium',
     color: 'var(--rgb-8)',
-    url: 'https://lido.fi',
-    internal: '/farm'
-  },
-
-  /*
-   * ═════════════════════════════════════════════════════════════════════════
-   * ADDED AFTER A DEEP SEARCH FOR REAL, USABLE YIELD.
-   * ═════════════════════════════════════════════════════════════════════════
-   * The owner asked for more genuine ways to earn here. These four were the
-   * survivors of a much longer list, and what got the others cut matters as
-   * much as what got these in:
-   *
-   *   REJECTED — anything requiring an account. Nexo, YouHodler, CoinRabbit
-   *   and every other CeFi yield desk was excluded, not on quality grounds
-   *   but because they exclude us: CoinRabbit's terms name the "Islamic
-   *   Republic of Iran" in their restricted list verbatim, alongside the US,
-   *   UK, Canada and Hong Kong. Listing a platform that will refuse most of
-   *   our readers is the dead-button problem again.
-   *
-   *   REJECTED — anything paying in a protocol's own inflationary token and
-   *   quoting that emission as "APR". A 300% APR paid in a token with no
-   *   buyers is not 300%, and printing the number would make everything else
-   *   on this screen less believable.
-   *
-   *   KEPT — permissionless, non-custodial, no account, real revenue
-   *   underneath. Each one below is a protocol the user interacts with from
-   *   their own wallet, exactly like the five above.
-   */
-  {
-    /*
-     * Aave. The largest lending market in DeFi and the obvious omission from
-     * the original list, which pointed only at Venus on BNB Chain.
-     *
-     * `risk: medium` and not `low` despite the size: supply yield is real
-     * revenue from borrower interest, but a lending pool can take bad debt in
-     * a fast liquidation cascade, and that has happened to major protocols
-     * more than once.
-     */
-    id: 'aaveSupply',
-    Icon: IconShield,
-    apr: '3–8%',
-    risk: 'medium',
-    color: 'var(--rgb-3)',
-    url: 'https://app.aave.com'
+    internal: '/farm?tab=inapp&focus=eth',
+    buys: ['stETH', 'rETH']
   },
   {
     /*
-     * Morpho. Included because it is structurally different rather than as a
-     * second name on the same list: markets are isolated, so a bad asset
-     * cannot contaminate the pool your money is in. That is a genuinely
-     * different risk shape, and the reason a user might choose it over Aave.
-     */
-    id: 'morphoLend',
-    Icon: IconShield,
-    apr: '4–9%',
-    risk: 'medium',
-    color: 'var(--rgb-1)',
-    url: 'https://app.morpho.org'
-  },
-  {
-    /*
-     * Solana liquid staking. The app already has a whole Solana screen and
-     * lists SOL everywhere, but every yield route here was EVM-only — a
-     * Solana holder had nothing to do.
-     *
-     * Jito rather than a wrapper: it is the largest by a distance and the
-     * stake is redeemable for SOL directly, so there is no third-party
-     * redemption queue between the user and their asset.
+     * SOLANA STAKING. Same shape as above, on the other chain: the LST is
+     * bought through our Solana swap and stays tradable. The live APY per
+     * token is on the Farm screen, which measures it — not guessed here.
      */
     id: 'solStake',
     Icon: IconTrend,
-    apr: '6–8%',
     risk: 'low',
     color: 'var(--rgb-2)',
-    url: 'https://www.jito.network/staking/'
+    internal: '/farm?tab=inapp&focus=sol'
   },
   {
     /*
-     * Native-BTC yield, which is the one thing none of the routes above can
-     * offer. THORChain's savers take real Bitcoin — not a wrapped IOU — and
-     * pay from swap fees.
-     *
-     * `risk: high`, stated plainly and higher than anything else on this
-     * screen. Savers carry impermanent loss against the pool, the protocol
-     * has paused savers before, and yield depends entirely on swap volume
-     * that can fall to nothing. It is listed because native BTC yield with
-     * no custodian genuinely has no substitute, not because it is safe.
+     * TOKENIZED STOCKS. Our own aggregator quotes Backed's xStocks and the
+     * issuer's key is re-verified server-side on every fetch, so the clones
+     * cannot reach the list. Settles in USDT and is not a share — the Stocks
+     * screen says both, above the list rather than in a footnote.
      */
-    id: 'thorSavers',
+    id: 'stocks',
     Icon: IconPools,
-    apr: '2–7%',
-    risk: 'high',
-    color: 'var(--rgb-5)',
-    url: 'https://app.thorswap.finance/earn'
+    risk: 'medium',
+    color: 'var(--rgb-1)',
+    internal: '/stocks'
+  },
+  /*
+   * FOREX / METALS / INDICES.
+   *
+   * Gated on the SAME flag that gates the route in App.jsx. In a store build
+   * `/ostium` does not exist, so a card pointing at it would land on the
+   * catch-all and look broken — and "cannot work completely" means absent,
+   * not half-built.
+   */
+  ...(SPECULATION_ENABLED
+    ? [{
+      id: 'forex',
+      Icon: IconTrend,
+      risk: 'high',
+      color: 'var(--rgb-3)',
+      internal: '/ostium'
+    }]
+    : []),
+  /*
+   * OUR OWN VAULT — the only row that recurs instead of paying once.
+   *
+   * Rendered from the live config, not a static entry: `vaultIsLive()` is
+   * false on every deployment until a real Morpho vault address AND chain are
+   * set, and a card for a vault nobody can deposit into is worse than no card.
+   * The same condition already governs <VaultCard /> above this list.
+   */
+  ...(vaultIsLive()
+    ? [{
+      id: 'vault',
+      Icon: IconShield,
+      risk: 'medium',
+      color: 'var(--rgb-4)',
+      internal: '/vault'
+    }]
+    : []),
+  {
+    /*
+     * BRIDGE. Moves the user's own assets between chains and collects our
+     * bridge fee on the way. Not yield in the strict sense, but it is ours,
+     * it works, and it belongs on a list of things to do with money in this
+     * app far more than a link to a protocol we cannot pay for.
+     */
+    id: 'bridge',
+    Icon: IconSwap,
+    risk: 'low',
+    color: 'var(--rgb-4)',
+    internal: '/bridge'
   }
 ];
 
@@ -378,10 +371,10 @@ export default function Earn({ embedded = false }) {
             already had three times (bridge, gasless, fiat), and a card
             advertising a vault nobody can deposit into is worse than no card.
 
-            Placed above the other routes because it is the only entry on this
-            screen that is ours. Every row below sends the user to somebody
-            else's protocol and earns us nothing, and the user is entitled to
-            know which is which.
+            Placed above the list because a live vault is the one entry that
+            pays us on an ongoing basis rather than once per trade. Every row
+            below is ours too now — that is the rule this screen runs on — but
+            the vault is still the one worth showing first when it exists.
           */}
           <VaultCard />
 
@@ -389,51 +382,118 @@ export default function Earn({ embedded = false }) {
             <p className="section-label">{t('earn.opportunities')}</p>
             <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
               {YIELD.map((y) => (
-                <motion.button
+                /*
+                 * ─── A CARD, NOT A BUTTON ─────────────────────────────────
+                 * It used to be one big <motion.button>. That is impossible
+                 * now: the gold and staking rows carry their OWN buy buttons,
+                 * and a <button> inside a <button> is invalid HTML — the
+                 * browser drops the inner one, which would have made the buy
+                 * buttons the thing that silently does nothing.
+                 */
+                <motion.div
                   key={y.id}
-                  className="card"
+                  className="card earn-yield"
                   variants={riseIn}
-                  whileTap={{ scale: 0.985 }}
-                  onClick={() => (y.internal ? navigate(y.internal) : open(y.url))}
-                  style={{ textAlign: 'start', cursor: 'pointer', width: '100%', padding: 16, borderRadius: 16, background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}
+                  style={{ padding: 16, borderRadius: 16, background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}
                 >
-                  <div className="row-between">
-                    <div className="row" style={{ gap: 13, minWidth: 0 }}>
-                      <span
-                        style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0, display: 'grid', placeItems: 'center', background: `linear-gradient(135deg, \${y.color} 14%, transparent)`, border: `1px solid \${y.color}22`, color: y.color }}
-                      >
-                        <y.Icon width={20} height={20} />
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 800, fontSize: 14 }}>{t(`earn.yield.${y.id}.title`)}</div>
-                        <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 2 }}>{t(`earn.yield.${y.id}.body`)}</div>
+                  <button
+                    type="button"
+                    className="earn-yield-head"
+                    onClick={() => {
+                      haptic?.('select');
+                      navigate(y.internal);
+                    }}
+                  >
+                    <div className="row-between">
+                      <div className="row" style={{ gap: 13, minWidth: 0 }}>
+                        {/*
+                         * The escaped `\${y.color}` here was a real bug: inside
+                         * a template literal `\$` is a literal dollar sign, so
+                         * the gradient read `linear-gradient(135deg, ${y.color}
+                         * 14%, transparent)` and the browser threw the whole
+                         * value away. The icon chips have been flat and
+                         * borderless since the day this was written.
+                         */}
+                        <span
+                          className="earn-yield-icon"
+                          style={{ background: `linear-gradient(135deg, ${y.color} 14%, transparent)`, border: `1px solid ${y.color}22`, color: y.color }}
+                        >
+                          <y.Icon width={20} height={20} />
+                        </span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: 14 }}>{t(`earn.yield.${y.id}.title`)}</div>
+                          <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 2 }}>{t(`earn.yield.${y.id}.body`)}</div>
+                        </div>
                       </div>
-                    </div>
-                    <span className="docs-chevron" style={{ flexShrink: 0 }}>
-                      {y.internal ? (
+                      {/* A chevron only. There is no external icon on this
+                          screen any more, because there is nothing external
+                          left to point at. */}
+                      <span className="docs-chevron" style={{ flexShrink: 0 }}>
                         <IconChevronRight width={16} height={16} />
-                      ) : (
-                        <IconExternal width={14} height={14} />
-                      )}
-                    </span>
-                  </div>
+                      </span>
+                    </div>
+                  </button>
+
                   <div className="row" style={{ gap: 7, marginTop: 12, flexWrap: 'wrap' }}>
-                    <span className="pill pill-up" style={{ fontSize: 11, padding: '4px 8px' }}>APR {y.apr}</span>
+                    {/*
+                      WHAT THE PRODUCT IS, INSTEAD OF AN APR NUMBER.
+
+                      The old pill read "APR 4–9%", typed into this file. A
+                      rate frozen in source is wrong within a week and nobody
+                      notices, so the number is gone: each row says what it
+                      actually is, and the screens that measure a real rate
+                      (Farm reads live yields, Stocks reads live prices) show
+                      that number where it can be true.
+                    */}
+                    <span className="pill pill-up" style={{ fontSize: 11, padding: '4px 8px' }}>
+                      {t(`earn.yield.${y.id}.tag`)}
+                    </span>
                     <span className={`pill ${y.risk === 'low' ? 'pill-neutral' : 'pill-rgb'}`} style={{ fontSize: 11 }}>
                       {t(`invest.risk.${y.risk}`)}
                     </span>
-                    {/*
-                      Says plainly which rows stay in the app.
-
-                      The chevron-versus-external-icon already encoded this,
-                      but only to somebody who knows the convention. Asked to
-                      favour our own screens here, and a route the user cannot
-                      TELL is ours is not favoured in any way that matters —
-                      they still tap it expecting to leave.
-                    */}
-                    {y.internal && <span className="pill pill-neutral">{t('earn.inApp')}</span>}
+                    <span className="pill pill-neutral">{t('earn.inApp')}</span>
                   </div>
-                </motion.button>
+
+                  {/*
+                    ─── BUY HERE, ON THE CARD ──────────────────────────────
+                    For the two products where buying IS the whole action
+                    (gold and ETH staking) the swap is pre-filled right here:
+                    chain 1, USDT out, the named token in. One tap instead of
+                    card → section → token → swap.
+
+                    The SYMBOL travels because that is the contract the Swap
+                    screen already accepts — `?to=PAXG` resolves the address
+                    from its own verified table. An address retyped in this
+                    file would be a second source of truth for a token with
+                    clones.
+                  */}
+                  {y.buys && (
+                    <div className="btn-row" style={{ marginTop: 10 }}>
+                      {y.buys.map((sym) => (
+                        <button
+                          key={sym}
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => {
+                            haptic?.('select');
+                            navigate(`/swap?chain=1&from=USDT&to=${encodeURIComponent(sym)}`);
+                          }}
+                        >
+                          {t('earn.yield.buy', { sym })}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/*
+                    The honest limit, on the card. Gold can be frozen by its
+                    issuer; tokenized stocks settle in USDT and are not shares.
+                    Both were already stated on the screens these rows open —
+                    repeating the one line here is what stops the card reading
+                    as a promise the destination then walks back.
+                  */}
+                  <p className="faint earn-yield-note">{t(`earn.yield.${y.id}.note`)}</p>
+                </motion.div>
               ))}
             </motion.div>
           </section>
@@ -443,10 +503,11 @@ export default function Earn({ embedded = false }) {
           {/*
             Reported: «در صفحه سود واقعی پایین صفحه هشدار هست».
 
-            Kept as `danger` tone but folded: this list now carries a HIGH-risk
-            entry (THORChain savers), so the warning still has to be prominent
-            — but a red wall at the foot of a list of opportunities was being
-            scrolled past, which is the opposite of prominent.
+            Kept as `danger` tone but folded: the list still carries genuinely
+            risky entries (forex can take the whole margin, a gold issuer can
+            freeze an address), so the warning has to stay prominent — but a
+            red wall at the foot of a list of opportunities was being scrolled
+            past, which is the opposite of prominent.
 
             The title alone carries the point, and the detail opens for anyone
             about to act on it.
@@ -464,7 +525,7 @@ export default function Earn({ embedded = false }) {
             variants={riseIn}
             initial="hidden"
             animate="show"
-            style={{ borderColor: `${tier.color}22`, cursor: 'pointer', background: `linear-gradient(145deg, \${tier.color}0a, var(--bg-raised))`, borderRadius: 16 }}
+            style={{ borderColor: `${tier.color}22`, cursor: 'pointer', background: `linear-gradient(145deg, ${tier.color}0a, var(--bg-raised))`, borderRadius: 16 }}
             onClick={() => navigate('/leaderboard')}
           >
             <div className="aurora" />

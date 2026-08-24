@@ -49,6 +49,7 @@ import HistoryPanel from '../components/HistoryPanel';
 import { adviseOrder } from '../lib/orderAdvisor';
 import { loadLearningParams, orderTune } from '../lib/learning';
 import AutopilotPanel from '../components/AutopilotPanel';
+import AutopilotGuideSheet from '../components/AutopilotGuideSheet';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -75,6 +76,14 @@ export default function Orders() {
 
   const [orders, setOrders] = useState([]);
   const [sheet, setSheet] = useState(null); // 'limit' | 'dca' | null
+  /*
+   * THE GUIDE SHEET, CLOSED BY DEFAULT.
+   *
+   * Requested as «یک پاپ‌آپ پایین صفحه که پیش‌فرض بسته باشد». `false` here is
+   * the whole feature: nothing about the autopilot is on screen until somebody
+   * asks for it, and the component is not even mounted until then.
+   */
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
     // Mark stale limit orders on open so the list explains why one stopped,
@@ -86,6 +95,27 @@ export default function Orders() {
 
   const chain = EVM_CHAINS[wallet.chainId] ?? EVM_CHAINS[56];
   const chainTokens = TOKENS[chain.id] ?? [];
+
+  /*
+   * History for the guide sheet — and ONLY while it is open.
+   *
+   * The sheet prints real measurements (how often a level held, the typical
+   * daily move, the worst fall), so it needs the same 90-day series the order
+   * form measures. Passing `null` when the sheet is closed makes `useChart`
+   * resolve to an empty array without a request, which is why the default
+   * closed state costs nothing at all.
+   *
+   * The pair is the same default the form picks: the first two tokens of the
+   * connected chain. The sheet names the pair next to the numbers, so nobody
+   * reads a BTC measurement as if it described the coin they meant.
+   */
+  const guideFrom = chainTokens[0] ?? null;
+  const guideTo = chainTokens[1] ?? chainTokens[0] ?? null;
+  const { data: guideSeries } = useChart(guideOpen ? guideFrom?.coingeckoId ?? null : null, 90);
+  const guidePrices = useMemo(
+    () => (guideSeries ?? []).map((d) => d.p).filter((p) => Number.isFinite(p) && p > 0),
+    [guideSeries]
+  );
 
   /**
    * Current rate of fromToken priced in toToken.
@@ -692,6 +722,44 @@ export default function Orders() {
         <motion.div className="card" variants={riseIn} initial="hidden" animate="show">
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('orders.empty')}</p>
         </motion.div>
+      )}
+
+      {/*
+        ─── THE ONE WAY INTO THE GUIDE ─────────────────────────────────────
+        A single button at the foot of the screen, 44px tall like every other
+        tap target here. `.btn` already carries `width: 100%`, so at 360px it
+        fills the column and stays readable in Persian without wrapping.
+      */}
+      <motion.button
+        className="btn btn-ghost"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ minHeight: 44, marginTop: 4 }}
+        aria-expanded={guideOpen}
+        onClick={() => {
+          haptic?.('select');
+          setGuideOpen(true);
+        }}
+      >
+        {t('autopilot.sheet.open')}
+      </motion.button>
+
+      {/*
+        Mounted only while open. A closed sheet that is still in the tree is
+        the same thing rendered twice, and `Sheet` itself renders null on
+        `open={false}` — so this is belt and braces on the "closed means
+        absent" rule rather than a performance trick.
+      */}
+      {guideOpen && (
+        <AutopilotGuideSheet
+          open
+          onClose={() => setGuideOpen(false)}
+          series={guidePrices}
+          fromToken={guideFrom}
+          toToken={guideTo}
+          chainId={chain.id}
+        />
       )}
 
       <OrderSheet

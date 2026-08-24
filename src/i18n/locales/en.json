@@ -243,48 +243,55 @@
       "points": "Points"
     },
     "realTitle": "Make your crypto work",
-    "realBody": "Real on-chain yield, paid by real borrowers and traders. Where the row says “In this app”, you can do the whole thing here — your keys never leave your wallet and no extra approval is needed. The rest we simply show you honestly, including the ones we earn nothing from.",
+    "realBody": "Every row below is our own screen — gold, staking, tokenized stocks, forex, our bridge. Nothing here sends you to another site, and nothing here asks you to hand us your keys: the tokens stay in your wallet and every route runs through our own swap at the normal fee.",
     "opportunities": "Ways to earn",
     "yield": {
-      "stablePool": {
-        "title": "Stablecoin pool",
-        "body": "USDT/USDC pair — the lowest-risk way to earn trading fees"
+      "gold": {
+        "title": "Gold — PAXG & XAUt",
+        "body": "One token, one real ounce in a vault. Buy it here with USDT and hold it in your own wallet.",
+        "tag": "No yield — a price, not a rate",
+        "note": "The issuer can freeze or burn a balance. That is the trade you are making for a token you can move in seconds."
       },
-      "cakeStake": {
-        "title": "Single-token staking",
-        "body": "Stake one token, no impermanent loss"
-      },
-      "lpFarm": {
-        "title": "Liquidity farming",
-        "body": "Provide a token pair and earn fees plus rewards"
-      },
-      "lending": {
-        "title": "Lending",
-        "body": "Supply assets to a lending market and earn interest"
-      },
-      "liquidStake": {
-        "title": "Liquid staking",
-        "body": "Stake ETH and keep a tradable receipt token"
-      },
-      "aaveSupply": {
-        "title": "Lend on Aave",
-        "body": "The largest lending market in DeFi. Supply an asset, earn what borrowers pay"
-      },
-      "morphoLend": {
-        "title": "Lend on Morpho",
-        "body": "Isolated markets, so one bad asset cannot affect the pool your money is in"
+      "ethStake": {
+        "title": "Ethereum staking",
+        "body": "Buying stETH or rETH IS the stake — no lock-up, and swapping back out is how you unstake.",
+        "tag": "Staking reward, paid by the chain",
+        "note": "The live APY is measured on the Farm screen. A staking token can trade below ETH while withdrawals queue."
       },
       "solStake": {
-        "title": "Stake Solana",
-        "body": "Stake SOL and hold a token you can still trade or use elsewhere"
+        "title": "Solana staking",
+        "body": "Swap into a liquid staking token and it keeps growing against SOL, while staying tradable.",
+        "tag": "Staking reward, paid by the chain",
+        "note": "No deposit step and nothing to lock. Swapping back to SOL is how you stop."
       },
-      "thorSavers": {
-        "title": "Native Bitcoin yield",
-        "body": "Deposit real BTC — not a wrapped IOU — and earn from swap fees"
-      }
+      "stocks": {
+        "title": "Tokenized stocks",
+        "body": "Real shares as tokens, quoted by our own aggregator and verified against the issuer’s key.",
+        "tag": "Tracks the share price",
+        "note": "They settle in USDT. They are not shares: no vote, no dividend, no shareholder register."
+      },
+      "forex": {
+        "title": "Forex, metals & indices",
+        "body": "Real-world markets — currencies, gold, oil and indices — traded on Arbitrum from this app.",
+        "tag": "Market moves, both directions",
+        "note": "You can lose the whole margin on one move. Trade an amount you can afford to lose entirely."
+      },
+      "vault": {
+        "title": "Our lending vault",
+        "body": "The one route here that pays us every year the deposit stays, not once per trade.",
+        "tag": "Lending yield, less our fee",
+        "note": "We choose which lending markets the money enters. That is a real responsibility and a real risk."
+      },
+      "bridge": {
+        "title": "Bridge between chains",
+        "body": "Move your own assets onto the chain you need, and pay the bridge fee on the way.",
+        "tag": "Not a yield — a route",
+        "note": "Cross-chain moves are not instant and every leg is final once it lands."
+      },
+      "buy": "Buy {{sym}}"
     },
-    "aprNote": "These rates move constantly with volume and rewards, so treat them as a rough guide and check the live number on the protocol before you deposit. A rate that looks unusually high is usually paying in a token whose price is falling.",
-    "realRisk": "Every yield here is paid by someone taking a risk, and sometimes that someone is you. A pool can hand you back less than you put in if the two tokens move apart. A lending market can freeze withdrawals when too many borrowers default at once. Any contract can be drained, no matter how long it has run without trouble. None of that is unlikely enough to ignore — so put in an amount you could lose without it changing your month, and read the protocol before the deposit rather than after.",
+    "aprNote": "No rate on this list is written down in advance, and that is deliberate. A staking or pool rate is a live number that moves with the network, so it is shown on the screen that measures it rather than printed here where it would be stale within a week. Gold pays no yield at all — you are holding a price, not earning a rate.",
+    "realRisk": "Each of these carries a real risk and they are not the same risk. A gold token can be frozen or burned by its issuer, which is not the same as owning a bar. A staking token can trade below the asset it tracks while a withdrawal queue clears. Tokenized stocks settle in USDT, are not shares, and give you no vote or dividend. Forex can take the whole margin on one move. And any contract can be drained however long it has run without trouble. So read the issuer's terms before you buy rather than after, and put in an amount you could lose without it changing your month.",
     "riskTitle": "What can go wrong here",
     "inApp": "In this app"
   },
@@ -710,7 +717,9 @@
       "unknownRisk": "The token scanner could not verify this token is safe. Absence of a warning is not a safety guarantee. Review, then press again to confirm you accept the unknown risk.",
       "acknowledged": "Risk acknowledged. Press again to sign — only what your wallet shows will execute.",
       "acknowledge": "Acknowledge risk"
-    }
+    },
+    "gaslessUnavailable": "Swapping without gas is not enabled on this deployment, so this trade still needs {{coin}} for the network fee.",
+    "gaslessUsingNormal": "The normal price above still applies."
   },
   "onboarding": {
     "skip": "Skip",
@@ -1772,7 +1781,18 @@
     "keysBody": "If you self-host, keys go in server-side environment variables only. Never in a VITE_ variable — those are compiled into the browser bundle and into the Android APK, where anyone can read them out in minutes. The one exception is a genuinely public identifier such as a referral code.",
     "noSla": "There is no uptime guarantee and no support contract on this API. It is the same backend the app uses, offered as-is. If your product cannot tolerate it going down, run your own copy.",
     "ecosystem": "FBT Network ecosystem",
-    "ecosystemBody": "Read-only discovery surfaces are embedded here. No agent, strategy or liquidity listing is executable in this phase.",
+    "ecosystemBody": "The catalog and the API on this page are live. Browse agents, strategies and liquidity listings, read every route this server exposes, and make your first request without an account.",
+    "boundary": "Automatic execution and withdrawal are intentionally unavailable, and no environment variable turns them on: we never hold your funds, so there is nothing here that could sign for you or pay you out. The keys stay in your wallet.",
+    "status": {
+      "checking": "Checking…",
+      "live": "Discovery live",
+      "none": "Discovery off",
+      "unreachable": "Discovery unreachable"
+    },
+    "cta": {
+      "projects": "Create a sandbox project",
+      "sample": "Copy a working request"
+    },
     "pill": {
       "agents": "Agents",
       "strategies": "Strategies",
@@ -1783,7 +1803,6 @@
       "reputation": "Reputation",
       "revenue": "Revenue"
     },
-    "notConfigured": "Not configured · Automatic execution unavailable · Withdraw funds: never available",
     "projects": "Projects",
     "projectsBody": "Create a local sandbox draft. This does not create an account, API key, webhook, or production project.",
     "projectName": "Project name",
@@ -2903,29 +2922,18 @@
       "internal": "Internal wallet",
       "external": "External wallet"
     },
-    "external": {
-      "title": "External wallet",
-      "connectMessage": "To buy with an external wallet, connect your wallet first.",
-      "connect": "Connect wallet",
-      "connected": "Your connected wallet will receive the purchase.",
-      "status": "Connected",
-      "address": "Wallet address",
-      "network": "Network",
-      "networkUnavailable": "Network unavailable",
-      "prepareTitle": "Prepare your purchase",
-      "preferenceNote": "These are purchase preferences. AppKit may not pass them to every provider.",
-      "amount": "Purchase amount",
-      "fiat": "Fiat currency",
-      "asset": "Destination asset",
-      "payment": "Payment preference",
-      "paymentOptions": {
-        "card": "Card",
-        "walletPay": "Apple Pay / Google Pay",
-        "bank": "Bank transfer"
-      },
-      "continue": "Continue purchase with external wallet",
-      "unavailable": "Buying with an external wallet is not enabled in this version. AppKit On-Ramp must be enabled in the WalletConnect/AppKit configuration. Please use the internal wallet tab.",
-      "disclosure": "Card purchases are completed by a third-party service provider inside AppKit. Availability may be limited by country, bank card, KYC, network and asset. FBT Swap never receives your private key, seed phrase or card details."
+    "ext": {
+      "title": "Buying with an external wallet",
+      "body": "Your keys stay in your own wallet the whole way through. Nothing on this screen asks for them, and nothing here can spend them.",
+      "noOnRamp": "We do not run a card on-ramp. There is no provider behind such a button on this deployment, so there is no button — a form that ends in \"not enabled\" would only waste your time.",
+      "p2p": "Buy BTC on the P2P desk",
+      "p2pNote": "The desk releases to any Bitcoin address you control, including one in an external wallet. Escrow runs on the desk’s own multisig; we never hold the coins.",
+      "p2pCta": "Open the P2P market",
+      "swap": "Swap what you already hold",
+      "swapNote": "If that wallet already holds crypto, send it to your in-app address and swap it here at the normal EVM swap fee (0.70%).",
+      "swapCta": "Go to swap",
+      "walletCta": "In-app wallet",
+      "disclosure": "No third party ever receives your private key, seed phrase or card details from this app, because this app never asks for them."
     }
   },
   "install": {
@@ -3129,18 +3137,37 @@
   "autopilot": {
     "title": "Autopilot",
     "intro": "Tell it what you are trying to do and it builds the whole order from what this chart has actually done — the levels that keep holding, how much it moves on an ordinary day. You review it before anything is saved.",
+    "sheet": {
+      "open": "How the autopilot builds an order",
+      "title": "What each option does",
+      "intro": "Three goals, no jargon. Open one to see what it does, which numbers we are allowed to set, and what the chart actually told us. Nothing here is applied — building the order happens in the form, and you review it there.",
+      "howLabel": "What it does",
+      "controlLabel": "What we control",
+      "learnLabel": "What we learn",
+      "measuredOn": "measured on {{pair}}",
+      "boundary": "This sheet only explains. It never places an order, and the last action is always yours."
+    },
     "goal": {
       "protect": {
         "title": "Protect what I have",
-        "sub": "Follow the price up, sell only if it falls back"
+        "sub": "Follow the price up, sell only if it falls back",
+        "how": "It follows the price upward and sells only if the price falls back a set distance from its highest point since you started.",
+        "control": "One number: the trailing distance. It is three times this chart’s typical daily move, scaled by your tuning of {{trailMult}}× — right now that works out to {{trail}}. Everything else in the form stays yours to change.",
+        "learn": "An ordinary day on this chart moves {{typical}}%, and the worst fall inside the window was {{maxDd}}%, measured over {{samples}} days. Those two figures are what decide whether a stop is riding normal noise or giving the position away."
       },
       "takeProfit": {
         "title": "Take profit gradually",
-        "sub": "Sell in steps as it rises, instead of guessing the top"
+        "sub": "Sell in steps as it rises, instead of guessing the top",
+        "how": "It sells in several steps as the price rises, instead of trying to guess a single top.",
+        "control": "How many rungs and how far apart. The span from the current price to the level above is divided by {{ladderStepDiv}}, then clamped to a minimum of 2 and a maximum of 8 steps — {{steps}} here, from {{start}} up to {{end}}.",
+        "learn": "The level it sells into held {{held}} of {{tested}} tests over {{samples}} days. A price the market has repeatedly stopped at is evidence; a round number nobody has touched is a guess."
       },
       "buyDip": {
         "title": "Buy lower, in steps",
-        "sub": "Spread your entry down towards support"
+        "sub": "Spread your entry down towards support",
+        "how": "It spreads your entry downward towards support, so you are not buying everything at one price.",
+        "control": "The stop buffer under support — the typical daily move, scaled by {{stopBufferMult}}× — plus the same rung divisor of {{ladderStepDiv}}. That gives {{steps}} steps from {{start}} down to {{end}}.",
+        "learn": "The support below held {{held}} of {{tested}} tests over {{samples}} days, and an ordinary day here moves {{typical}}%. That gap is the difference between a dip worth buying and a breakdown you are catching."
       }
     },
     "summary": {
@@ -3278,7 +3305,12 @@
     "risk": "We decide which lending markets this vault uses, and that is a real risk you are taking on us. Lending markets can take bad debt and smart contracts can be exploited. Our fee is a share of the yield only — if the vault earns nothing, we earn nothing.",
     "open": "Open the vault",
     "verify": "Verify on-chain",
-    "venueNote": "Deposits and withdrawals happen on Morpho’s own audited interface, not inside this app, so you never depend on us being online to reach your money."
+    "venueNote": "Deposits and withdrawals happen on Morpho’s own audited interface, not inside this app, so you never depend on us being online to reach your money.",
+    "pageTitle": "Our lending vault",
+    "notLive": "No vault is deployed on this deployment",
+    "notLiveBody": "The vault is real code waiting for a real contract: it appears here the moment an address and a chain are configured, with its fee, its risks and its contract on an explorer. Until then there is nothing to deposit into, so nothing is offered.",
+    "goFarm": "Ways to earn",
+    "goEarn": "Earn screen"
   },
   "hardware": {
     "title": "Keep your keys where this app cannot reach them",
