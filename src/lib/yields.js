@@ -18,6 +18,8 @@
  * "we cannot show you rates right now", not a plausible-looking table.
  */
 
+import { TOKENS } from './chains';
+
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
 /** Risk bands, ordered least to most. Exported so the filter UI cannot drift. */
@@ -83,6 +85,51 @@ export function pairTokens(pool) {
   if (!sym || pool?.exposure === 'single') return [];
   const parts = sym.split(/[-/]/).map((s) => s.trim()).filter(Boolean);
   return parts.length >= 2 ? parts.slice(0, 2) : [];
+}
+
+/**
+ * DefiLlama chain labels → our EVM chain ids. Unknown chains stay null so
+ * Farm never invents a swap the registry cannot fill.
+ */
+const LLAMA_CHAIN_IDS = {
+  ethereum: 1,
+  eth: 1,
+  bsc: 56,
+  binance: 56,
+  'binance smart chain': 56,
+  polygon: 137,
+  matic: 137,
+  arbitrum: 42161,
+  base: 8453,
+  optimism: 10,
+  avalanche: 43114,
+  avax: 43114,
+  linea: 59144,
+  sonic: 146
+};
+
+export function llamaChainId(chain) {
+  const key = String(chain ?? '').trim().toLowerCase();
+  return LLAMA_CHAIN_IDS[key] ?? null;
+}
+
+function tokenOnChain(chainId, symbol) {
+  const list = TOKENS[chainId] ?? [];
+  const want = String(symbol ?? '').trim().toUpperCase();
+  if (!want) return null;
+  return list.find((tk) => String(tk.symbol).toUpperCase() === want) ?? null;
+}
+
+/**
+ * Both legs of an LP pair must exist in OUR registry on that chain.
+ * A "get tokens" button that lands on a missing ticker is a dead swap.
+ */
+export function pairSwapRoute(pool) {
+  const pair = pairTokens(pool);
+  const chainId = llamaChainId(pool?.chain);
+  if (pair.length !== 2 || !chainId) return null;
+  if (!tokenOnChain(chainId, pair[0]) || !tokenOnChain(chainId, pair[1])) return null;
+  return { chainId, from: pair[0], to: pair[1] };
 }
 
 /**

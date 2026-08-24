@@ -1,87 +1,50 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
 import SegIndicator from '../components/SegIndicator';
+import VaultCard from '../components/VaultCard';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { IconExternal, IconPools, IconShield, IconSwap } from '../components/Icons';
 import TokenIcon from '../lib/tokenIcon';
 import { useHideBalances } from '../hooks/useHideBalances';
-import { RISK_BANDS, getYields, pairTokens, projectEarnings, rateIsUnusual, realShare } from '../lib/yields';
+import {
+  RISK_BANDS,
+  getYields,
+  pairSwapRoute,
+  projectEarnings,
+  rateIsUnusual,
+  realShare
+} from '../lib/yields';
 import { TOKENS } from '../lib/chains';
 import { getSolanaAssets, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
+import { vaultConfig } from '../lib/vault';
+import { GMX_CODE, isValidGmxCode, withReferral } from '../lib/venueReferral';
 
 /**
- * FARM — live yields, filtered for safety.
+ * FARM — live yields + in-app revenue routes.
  *
- * ─── WHAT THIS SCREEN USED TO BE ────────────────────────────────────────────
- * Four hard-coded pools with hand-written APR ranges ("15–40%"). The ranges
- * were honest about being ranges and completely disconnected from what those
- * pools actually paid. A yield figure that never moves is not a yield figure,
- * and a range that wide cannot be wrong, which is worse than being wrong.
- *
- * It now reads live rates from DefiLlama through our own backend, which does
- * the filtering — see server/yields.js. The upstream is free and keyless,
- * which is the only reason this feature exists at all.
- *
- * ─── THE THREE THINGS THIS SHOWS THAT OTHERS DO NOT ─────────────────────────
- *
- * 1. THE REAL/EMISSION SPLIT. Every aggregator shows one combined APY. A
- *    "24%" that is 22% freshly-minted governance tokens is a countdown, not
- *    an income, and the headline gives you no way to tell. We show the split
- *    on every row.
- *
- * 2. TODAY VERSUS THE 30-DAY AVERAGE. A pool at 40% today with a 6% average
- *    is not a 40% pool. Somebody deciding on the headline is deciding on a
- *    spike that will be gone before their deposit confirms.
- *
- * 3. HOW MANY POOLS WERE REJECTED. "40 of 312 passed" makes the filtering
- *    visible rather than implicit, and it is the fastest way to explain what
- *    this screen is actually doing for the user.
- *
- * ─── WHERE THE REVENUE IS, HONESTLY ─────────────────────────────────────────
- * We take NOTHING from anyone's yield and the screen says so. Skimming a
- * user's farming return would require custody, which this app does not have
- * and will not take.
- *
- * The revenue is upstream of the deposit: you cannot enter a CAKE-BNB pool
- * without holding CAKE and BNB, and most people arriving here hold neither.
- * The "get the tokens" button routes that swap through our own swap screen at
- * the standard 0.7%. That is a real service performed for a real fee, it is
- * disclosed, and the user can ignore it and swap elsewhere. Which is the only
- * kind of revenue worth building.
+ * Tabs live ON this page. Existing /earn /stocks /ostium /dydx stay mounted
+ * elsewhere; we only deep-link. Nothing is deleted.
  */
 
-/** Filters. `all` first because most users will not want to think about it. */
 const RISK_FILTERS = ['all', ...RISK_BANDS];
-
-/**
- * Preset amounts for the calculator.
- *
- * Round numbers a person actually thinks in, not $1/$10/$100 which invites
- * mental multiplication and gets it wrong. $1,000 is deliberately the default:
- * it is large enough that the yearly figure is legible and small enough that
- * it is not aspirational.
- */
 const AMOUNTS = [100, 1000, 10000];
+const FARM_TABS = ['inapp', 'market', 'trade'];
+
+const ETH_STAKE_TOKENS = (TOKENS[1] ?? []).filter((tk) => tk.stake === 'eth');
+const GOLD_TOKENS = (TOKENS[1] ?? []).filter((tk) => tk.rwa === 'gold');
 
 function RiskPill({ risk, t }) {
   const cls = risk === 'low' ? 'pill-neutral' : risk === 'medium' ? 'pill-rgb' : 'pill-down';
   return <span className={`pill ${cls}`}>{t(`farm.risk.${risk}`)}</span>;
 }
 
-/**
- * The yield split bar.
- *
- * Two segments: revenue and emissions. Rendered as a bar rather than as two
- * numbers because the RATIO is the point — "6% of 18%" requires arithmetic,
- * a third-full bar does not.
- */
 function SplitBar({ pool }) {
   const share = realShare(pool);
   if (share == null) return null;
@@ -92,11 +55,18 @@ function SplitBar({ pool }) {
   );
 }
 
-function PoolRow({ pool, amount, onOpen, onGetTokens, t }) {
+function FeePill({ label }) {
+  return <span className="pill pill-rgb">{label}</span>;
+}
+
+function PoolRow({ pool, amount, horizon, onOpen, onGetTokens, t }) {
   const share = realShare(pool);
   const unusual = rateIsUnusual(pool);
   const projection = projectEarnings(pool, amount);
-  const pair = pairTokens(pool);
+  const route = pairSwapRoute(pool);
+  const shown = projection && (horizon === 'month' ? projection.month : projection.year);
+  const realPart = projection?.fromRealYield;
+  const shownReal = realPart == null ? null : horizon === 'month' ? realPart / 12 : realPart;
 
   return (
     <motion.div className="farm-pool" variants={riseIn}>
@@ -118,9 +88,9 @@ function PoolRow({ pool, amount, onOpen, onGetTokens, t }) {
         {pool.ilRisk && <span className="pill pill-down">{t('farm.ilShort')}</span>}
         {pool.stablecoin && <span className="pill pill-neutral">{t('farm.stableShort')}</span>}
         <span className="pill pill-neutral">{t('farm.tvl')} {fmtCompact(pool.tvlUsd)}</span>
+        {route && <FeePill label={t('farm.earn.inAppFee')} />}
       </div>
 
-      {/* The split — the number every other aggregator hides. */}
       {share != null && (
         <div style={{ marginTop: 10 }}>
           <SplitBar pool={pool} />
@@ -133,38 +103,39 @@ function PoolRow({ pool, amount, onOpen, onGetTokens, t }) {
         </div>
       )}
 
-      {/* Today versus normal. Only rendered when it is actually unusual. */}
       {unusual && (
         <p className={`farm-unusual farm-unusual-${unusual.direction}`}>
           {t(`farm.unusual.${unusual.direction}`, { ratio: unusual.ratio, mean: unusual.mean })}
         </p>
       )}
 
-      {/* What the rate means in money, which is what the percentage does not. */}
       {projection && (
         <div className="farm-calc">
           <span className="faint">{t('farm.wouldEarn', { amount: fmtUsd(amount) })}</span>
-          <span className="mono farm-calc-num">{fmtUsd(projection.year)}<span className="faint">/{t('farm.year')}</span></span>
+          <span className="mono farm-calc-num">
+            {fmtUsd(shown)}
+            <span className="faint">/{horizon === 'month' ? t('farm.month') : t('farm.year')}</span>
+          </span>
         </div>
+      )}
+      {shownReal != null && (
+        <p className="faint" style={{ marginTop: 4 }}>
+          {t('farm.realShareMoney', { amount: fmtUsd(shownReal) })}
+        </p>
       )}
 
       <div className="farm-actions">
-        {/*
-          The revenue path, and the only one on this screen.
-
-          Entering an LP pair requires holding both tokens and most people
-          arriving here hold neither. Routing that swap through our own screen
-          earns the standard fee for work we actually do. Single-asset pools
-          get no such button, because there is nothing to pair up and adding
-          one would be manufacturing a swap the user does not need.
-        */}
-        {pair.length === 2 && (
-          <button className="btn btn-ghost farm-btn" onClick={() => onGetTokens(pair)}>
+        {route && (
+          <button className="btn btn-ghost farm-btn" onClick={() => onGetTokens(route)}>
             <IconSwap width={15} height={15} />
-            {t('farm.getTokens', { a: pair[0], b: pair[1] })}
+            {t('farm.getTokens', { a: route.from, b: route.to })}
           </button>
         )}
-        <button className="btn btn-ghost farm-btn" onClick={() => onOpen(pool.url)}>
+        <button
+          className="btn btn-ghost farm-btn farm-btn-minor"
+          title={t('farm.openPoolHint')}
+          onClick={() => onOpen(pool.url)}
+        >
           {t('farm.openPool')}
           <IconExternal width={15} height={15} />
         </button>
@@ -173,37 +144,60 @@ function PoolRow({ pool, amount, onOpen, onGetTokens, t }) {
   );
 }
 
-/*
- * Read from the curated token table, never retyped. A second copy of a
- * contract address is a second chance to get one wrong, and these are tokens
- * the user will spend money on.
- */
-const ETH_STAKE_TOKENS = (TOKENS[1] ?? []).filter((tk) => tk.stake === 'eth');
+function InvestCard({ title, sub, apy, pills, cta, onCta, extra }) {
+  return (
+    <motion.div className="farm-pool" variants={riseIn}>
+      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="farm-pool-sym">{title}</div>
+          {sub && <div className="set-row-sub">{sub}</div>}
+        </div>
+        {apy != null && (
+          <div style={{ textAlign: 'end', flexShrink: 0 }}>
+            <div className="farm-apy mono">{typeof apy === 'number' ? `${apy}%` : apy}</div>
+          </div>
+        )}
+      </div>
+      {pills && (
+        <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>{pills}</div>
+      )}
+      {extra}
+      {cta && (
+        <div className="farm-actions">
+          <button className="btn btn-ghost farm-btn" onClick={onCta}>
+            <IconSwap width={15} height={15} />
+            {cta}
+          </button>
+        </div>
+      )}
+    </motion.div>
+  );
+}
 
 export default function Farm() {
-  // Subscribe so the figures re-render the moment the switch moves; the
-  // masking itself lives in the formatters.
   useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const { haptic, tg } = useTelegram();
   const wallet = useWallet();
+
+  const fromUrl = params.get('tab');
+  const tab = FARM_TABS.includes(fromUrl) ? fromUrl : 'inapp';
 
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  /*
-   * Liquid staking tokens, fetched alongside the pool list.
-   *
-   * A failure here must NOT take out the pools below — they are independent
-   * features that happen to share a screen, and one dead upstream should cost
-   * one section, not the page. Hence the separate state and the swallowed
-   * rejection.
-   */
   const [lst, setLst] = useState([]);
   const [risk, setRisk] = useState('all');
   const [amount, setAmount] = useState(AMOUNTS[1]);
+  const [customAmt, setCustomAmt] = useState('');
+  const [horizon, setHorizon] = useState('year');
   const [showIl, setShowIl] = useState(false);
+  const [q, setQ] = useState('');
+  const [onlyStable, setOnlyStable] = useState(false);
+  const [onlyBuyable, setOnlyBuyable] = useState(false);
+  const [chainFilter, setChainFilter] = useState('all');
 
   useEffect(() => {
     let alive = true;
@@ -221,13 +215,17 @@ export default function Farm() {
     let alive = true;
     getSolanaAssets()
       .then((d) => alive && setLst(d.lst ?? []))
-      .catch(() => {
-        /* Section simply does not render. See the note on the state above. */
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
+
+  const deposit = useMemo(() => {
+    const n = Number(customAmt);
+    if (Number.isFinite(n) && n > 0) return n;
+    return amount;
+  }, [amount, customAmt]);
 
   const open = (url) => {
     haptic?.('light');
@@ -235,32 +233,88 @@ export default function Farm() {
     else window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  /*
-   * Hand off to our own swap screen pre-filled with the pair. Swap already
-   * accepts ?from=&to= (the Orders screen uses the same handoff), so this
-   * reuses a path that is already tested rather than inventing a second one.
-   */
-  const getTokens = (pair) => {
+  const getTokens = (route) => {
     haptic?.('select');
-    navigate(`/swap?from=${encodeURIComponent(pair[0])}&to=${encodeURIComponent(pair[1])}`);
+    navigate(`/swap?chain=${route.chainId}&from=${encodeURIComponent(route.from)}&to=${encodeURIComponent(route.to)}`);
   };
 
-  const pools = useMemo(() => {
-    const all = data?.pools ?? [];
-    return risk === 'all' ? all : all.filter((p) => p.risk === risk);
-  }, [data, risk]);
+  const selectTab = (id) => {
+    if (id === tab) return;
+    haptic?.('select');
+    setParams({ tab: id }, { replace: true });
+  };
 
-  /*
-   * Join the live APY from the DefiLlama feed onto each staking token.
-   *
-   * Deliberately a join and not a constant. Writing `apy: 7.5` into the asset
-   * list would be wrong within a week and nobody would notice — which is
-   * precisely the bug the old hard-coded "15-40%" ranges had. A token with no
-   * matching pool shows no yield rather than a stale one.
-   */
+  const chainOptions = useMemo(() => {
+    const set = new Set((data?.pools ?? []).map((p) => p.chain).filter(Boolean));
+    return ['all', ...[...set].sort()];
+  }, [data]);
+
+  const pools = useMemo(() => {
+    let all = data?.pools ?? [];
+    if (risk !== 'all') all = all.filter((p) => p.risk === risk);
+    if (onlyStable) all = all.filter((p) => p.stablecoin);
+    if (chainFilter !== 'all') all = all.filter((p) => p.chain === chainFilter);
+    if (onlyBuyable) all = all.filter((p) => pairSwapRoute(p));
+    const needle = q.trim().toLowerCase();
+    if (needle) {
+      all = all.filter((p) =>
+        `${p.symbol} ${p.project} ${p.chain}`.toLowerCase().includes(needle)
+      );
+    }
+    return all;
+  }, [data, risk, onlyStable, chainFilter, onlyBuyable, q]);
+
   const stakingRows = useMemo(
     () => lst.map((a) => ({ asset: a, live: yieldForLst(a, data?.pools ?? []) })),
     [lst, data]
+  );
+
+  const vault = vaultConfig();
+
+  const amountBar = (
+    <div className="farm-amounts">
+      <span className="faint">{t('farm.ifIDeposit')}</span>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {AMOUNTS.map((a) => (
+          <button
+            key={a}
+            type="button"
+            className={`tag ${amount === a && !customAmt ? 'active' : ''}`}
+            onClick={() => {
+              setAmount(a);
+              setCustomAmt('');
+            }}
+          >
+            {fmtUsd(a)}
+          </button>
+        ))}
+        <input
+          className="farm-amt-input"
+          inputMode="decimal"
+          placeholder={t('farm.customAmt')}
+          value={customAmt}
+          onChange={(e) => setCustomAmt(e.target.value.replace(/[^\d.]/g, ''))}
+          aria-label={t('farm.customAmt')}
+        />
+        <div className="segmented" style={{ flex: '0 0 auto' }}>
+          {['month', 'year'].map((h) => (
+            <button
+              key={h}
+              type="button"
+              className={horizon === h ? 'active' : ''}
+              onClick={() => {
+                haptic?.('select');
+                setHorizon(h);
+              }}
+              style={{ isolation: 'isolate' }}
+            >
+              {horizon === h && <SegIndicator id="farmhorizon" />}
+              {t(`farm.${h}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 
   return (
@@ -270,7 +324,23 @@ export default function Farm() {
         <p className="muted">{t('farm.subtitle')}</p>
       </motion.div>
 
-      {/* ---------- what farming is ---------- */}
+      <div className="segmented seg-lg farm-tabs" role="tablist">
+        {FARM_TABS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={tab === id ? 'active' : ''}
+            onClick={() => selectTab(id)}
+            style={{ isolation: 'isolate' }}
+          >
+            {tab === id && <SegIndicator id="farmtab" />}
+            {t(`farm.tab.${id}`)}
+          </button>
+        ))}
+      </div>
+
       <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
         <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
@@ -284,7 +354,6 @@ export default function Farm() {
         </div>
       </motion.section>
 
-      {/* ---------- the risk people underestimate ---------- */}
       <motion.button
         className="card"
         variants={riseIn}
@@ -311,260 +380,297 @@ export default function Farm() {
         </motion.div>
       </motion.button>
 
-      {/*
-        ─── LIQUID STAKING ────────────────────────────────────────────────
-        Placed ABOVE the pool list on purpose. This is the only yield on this
-        screen a beginner can take without meeting impermanent loss, and the
-        only one that stays inside the app — the pool rows below all end in
-        "open this somewhere else".
+      {amountBar}
 
-        Buying jitoSOL IS staking. No separate deposit, no lock-up, no new
-        contract to approve: the token's exchange rate against SOL grows every
-        epoch and swapping back out is how you unstake. That makes it the one
-        real yield product this app can offer without taking custody of
-        anything.
-      */}
-      {/*
-        ─── THE AMOUNT SELECTOR LIVES HERE, ABOVE BOTH SECTIONS ────────────
-        It used to sit inside the pools section further down the page, while
-        the staking rows above it already read `amount` to compute their
-        projection. So the staking numbers were driven by a control the user
-        could not see until they had scrolled past them — the owner reported
-        it as "it doesn't say how much", which is what a control that changes
-        nothing visible looks like.
+      {tab === 'inapp' && (
+        <>
+          {vault && <VaultCard />}
 
-        One selector, above everything that depends on it. A control must be
-        visible from whatever it changes.
-      */}
-      <div className="farm-amounts">
-        <span className="faint">{t('farm.ifIDeposit')}</span>
-        <div className="row" style={{ gap: 6 }}>
-          {AMOUNTS.map((a) => (
-            <button
-              key={a}
-              type="button"
-              className={`tag ${amount === a ? 'active' : ''}`}
-              onClick={() => setAmount(a)}
-            >
-              {fmtUsd(a)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {stakingRows.length > 0 && (
-        <section>
-          <p className="section-label">{t('farm.stakingTitle')}</p>
-          <p className="farm-filtered faint">{t('farm.stakingIntro')}</p>
-
-          <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-            {stakingRows.map(({ asset, live }) => {
-              const projection = live ? projectStake(live.apy, amount) : null;
-              return (
-                <motion.div key={asset.id} className="farm-pool" variants={riseIn}>
-                  <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
-                    <div className="row" style={{ gap: 10, minWidth: 0 }}>
-                      {/* TokenIcon, not a bare <img>: a raw tag with no
-                          onError leaves an empty circle when the CDN fails,
-                          which reads as broken. See lib/tokenIcon.jsx. */}
-                      <TokenIcon token={asset} size={34} />
-                      <div style={{ minWidth: 0 }}>
-                        <div className="farm-pool-sym">{asset.symbol}</div>
-                        <div className="set-row-sub">{asset.name}</div>
+          {stakingRows.length > 0 && (
+            <section>
+              <p className="section-label">{t('farm.stakingTitle')}</p>
+              <p className="farm-filtered faint">{t('farm.stakingIntro')}</p>
+              <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+                {stakingRows.map(({ asset, live }) => {
+                  const projection = live ? projectStake(live.apy, deposit) : null;
+                  const shown = projection && (horizon === 'month' ? projection.year / 12 : projection.year);
+                  return (
+                    <motion.div key={asset.id} className="farm-pool" variants={riseIn}>
+                      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+                        <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                          <TokenIcon token={asset} size={34} />
+                          <div style={{ minWidth: 0 }}>
+                            <div className="farm-pool-sym">{asset.symbol}</div>
+                            <div className="set-row-sub">{asset.name}</div>
+                          </div>
+                        </div>
+                        {live && (
+                          <div style={{ textAlign: 'end', flexShrink: 0 }}>
+                            <div className="farm-apy mono">{live.apy}%</div>
+                            <div className="faint" style={{ fontSize: 10.5 }}>{t('farm.apy')}</div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    {/* No yield shown at all when the feed has no match — a
-                        missing number beats a stale one. */}
-                    {live && (
-                      <div style={{ textAlign: 'end', flexShrink: 0 }}>
-                        <div className="farm-apy mono">{live.apy}%</div>
-                        <div className="faint" style={{ fontSize: 10.5 }}>{t('farm.apy')}</div>
+                      <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                        <span className="pill pill-neutral">{t('farm.noIl')}</span>
+                        {asset.capturesMev && <span className="pill pill-rgb">{t('farm.mevBoost')}</span>}
+                        {asset.protocolFeePct != null && (
+                          <span className="pill pill-neutral">{t('farm.protocolFee', { pct: asset.protocolFeePct })}</span>
+                        )}
+                        <FeePill label={t('farm.earn.inAppFee')} />
                       </div>
-                    )}
-                  </div>
+                      {projection && (
+                        <div className="farm-calc">
+                          <span className="faint">{t('farm.wouldEarn', { amount: fmtUsd(deposit) })}</span>
+                          <span className="mono farm-calc-num">
+                            {fmtUsd(shown)}
+                            <span className="faint">/{horizon === 'month' ? t('farm.month') : t('farm.year')}</span>
+                          </span>
+                        </div>
+                      )}
+                      <div className="farm-actions">
+                        <button
+                          className="btn btn-ghost farm-btn"
+                          onClick={() => {
+                            haptic?.('select');
+                            navigate(`/solana?to=${encodeURIComponent(asset.mint)}`);
+                          }}
+                        >
+                          <IconSwap width={15} height={15} />
+                          {t('farm.stakeNow', { sym: asset.symbol })}
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+              <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.stakingNote')}</p>
+            </section>
+          )}
 
-                  <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                    <span className="pill pill-neutral">{t('farm.noIl')}</span>
-                    {asset.capturesMev && <span className="pill pill-rgb">{t('farm.mevBoost')}</span>}
-                    {asset.protocolFeePct != null && (
-                      <span className="pill pill-neutral">
-                        {t('farm.protocolFee', { pct: asset.protocolFeePct })}
-                      </span>
-                    )}
-                  </div>
-
-                  {projection && (
-                    <div className="farm-calc">
-                      <span className="faint">{t('farm.wouldEarn', { amount: fmtUsd(amount) })}</span>
-                      <span className="mono farm-calc-num">
-                        {fmtUsd(projection.year)}<span className="faint">/{t('farm.year')}</span>
-                      </span>
+          <section>
+            <div className="row-between" style={{ marginBottom: 8 }}>
+              <p className="section-label" style={{ margin: 0 }}>{t('farm.ethStakingTitle')}</p>
+            </div>
+            <motion.div variants={stagger} initial="hidden" animate="show" className="stack" style={{ gap: 9 }}>
+              {ETH_STAKE_TOKENS.map((tk) => {
+                const live = (data?.pools ?? []).find(
+                  (pl) => String(pl.symbol || '').toUpperCase() === tk.symbol.toUpperCase()
+                );
+                return (
+                  <motion.div key={tk.symbol} className="card card-soft" variants={riseIn}>
+                    <div className="row-between">
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{tk.symbol}</div>
+                        <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>{tk.name}</div>
+                      </div>
+                      {live?.apy != null && (
+                        <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--rgb-4)' }}>
+                          {live.apy.toFixed(2)}%
+                        </div>
+                      )}
                     </div>
+                    <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      <FeePill label={t('farm.earn.inAppFee')} />
+                    </div>
+                    <div className="farm-actions" style={{ marginTop: 10 }}>
+                      <button
+                        className="btn btn-ghost farm-btn"
+                        onClick={() => {
+                          haptic?.('select');
+                          navigate(`/swap?chain=1&from=USDT&to=${encodeURIComponent(tk.symbol)}`);
+                        }}
+                      >
+                        <IconSwap width={15} height={15} />
+                        {t('farm.stakeNow', { sym: tk.symbol })}
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+            <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.ethStakingNote')}</p>
+          </section>
+
+          <section>
+            <p className="section-label">{t('farm.goldTitle')}</p>
+            <p className="farm-filtered faint">{t('farm.goldIntro')}</p>
+            <motion.div variants={stagger} initial="hidden" animate="show" className="stack" style={{ gap: 9 }}>
+              {GOLD_TOKENS.map((tk) => (
+                <InvestCard
+                  key={tk.symbol}
+                  title={tk.symbol}
+                  sub={tk.name}
+                  pills={(
+                    <>
+                      <span className="pill pill-down">{t('farm.goldFreeze')}</span>
+                      <FeePill label={t('farm.earn.inAppFee')} />
+                    </>
                   )}
+                  extra={<p className="notice" style={{ marginTop: 10 }}>{t('farm.goldWarn')}</p>}
+                  cta={t('farm.buyHere', { sym: tk.symbol })}
+                  onCta={() => {
+                    haptic?.('select');
+                    navigate(`/swap?chain=1&from=USDT&to=${encodeURIComponent(tk.symbol)}`);
+                  }}
+                />
+              ))}
+            </motion.div>
+          </section>
 
-                  <div className="farm-actions">
-                    <button
-                      className="btn btn-ghost farm-btn"
-                      onClick={() => {
-                        haptic?.('select');
-                        navigate(`/solana?to=${encodeURIComponent(asset.mint)}`);
-                      }}
-                    >
-                      <IconSwap width={15} height={15} />
-                      {t('farm.stakeNow', { sym: asset.symbol })}
-                    </button>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
+          <InvestCard
+            title={t('farm.stocksTitle')}
+            sub={t('farm.stocksBody')}
+            pills={<FeePill label={t('farm.earn.inAppFee')} />}
+            cta={t('farm.stocksCta')}
+            onCta={() => {
+              haptic?.('select');
+              navigate('/stocks');
+            }}
+          />
 
-          <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.stakingNote')}</p>
+          <InvestCard
+            title={t('farm.bridgeTitle')}
+            sub={t('farm.bridgeBody')}
+            pills={<FeePill label={t('farm.earn.bridgeFee')} />}
+            cta={t('farm.bridgeCta')}
+            onCta={() => {
+              haptic?.('select');
+              navigate('/bridge');
+            }}
+          />
+        </>
+      )}
+
+      {tab === 'market' && (
+        <section>
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <p className="section-label" style={{ margin: 0 }}>{t('farm.pools')}</p>
+          </div>
+          {data && (
+            <p className="farm-filtered faint">
+              {t('farm.filteredNote', { shown: data.pools.length, considered: data.considered })}
+            </p>
+          )}
+
+          <input
+            className="farm-search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('farm.search')}
+            aria-label={t('farm.search')}
+          />
+
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+            <button type="button" className={`tag ${onlyStable ? 'active' : ''}`} onClick={() => setOnlyStable((v) => !v)}>
+              {t('farm.filterStable')}
+            </button>
+            <button type="button" className={`tag ${onlyBuyable ? 'active' : ''}`} onClick={() => setOnlyBuyable((v) => !v)}>
+              {t('farm.filterBuyable')}
+            </button>
+            <select
+              className="farm-chain-select"
+              value={chainFilter}
+              onChange={(e) => setChainFilter(e.target.value)}
+              aria-label={t('farm.filterChain')}
+            >
+              {chainOptions.map((c) => (
+                <option key={c} value={c}>{c === 'all' ? t('farm.filter.all') : c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="segmented" style={{ marginBottom: 10 }}>
+            {RISK_FILTERS.map((k) => (
+              <button
+                key={k}
+                className={risk === k ? 'active' : ''}
+                onClick={() => {
+                  haptic?.('select');
+                  setRisk(k);
+                }}
+                style={{ isolation: 'isolate' }}
+              >
+                {risk === k && <SegIndicator id="farmrisk" />}
+                {t(`farm.filter.${k}`)}
+              </button>
+            ))}
+          </div>
+
+          {loading && (
+            <div className="stack" style={{ gap: 9, marginTop: 8 }}>
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  className="skel"
+                  style={{ height: 96, borderRadius: 14 }}
+                  animate={{ opacity: [0.4, 0.9, 0.4] }}
+                  transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.12 }}
+                />
+              ))}
+            </div>
+          )}
+
+          {!loading && error && <p className="notice notice-danger">{t('farm.unavailable')}</p>}
+          {!loading && !error && pools.length === 0 && (
+            <p className="notice">{t('farm.noneInBand')}</p>
+          )}
+
+          {!loading && pools.length > 0 && (
+            <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+              {pools.map((p) => (
+                <PoolRow
+                  key={p.id}
+                  pool={p}
+                  amount={deposit}
+                  horizon={horizon}
+                  onOpen={open}
+                  onGetTokens={getTokens}
+                  t={t}
+                />
+              ))}
+            </motion.div>
+          )}
+
+          <p className="faint" style={{ marginTop: 10, lineHeight: 1.7 }}>{t('farm.aprNote')}</p>
         </section>
       )}
 
-      {/* ---------- ethereum staking ---------- */}
-      {/*
-        ─── WHY THIS SECTION EARNS AND THE POOL LIST BELOW DOES NOT ───────────
-        The pools further down are read from DefiLlama and link OUT to the
-        protocol. That is useful information and it pays us nothing — we do the
-        work of finding the yield and hand the transaction to somebody else.
-
-        Ethereum staking is different because buying the token IS the deposit.
-        stETH and rETH grow against ETH by themselves; there is no separate
-        stake step, no lock-up, and unstaking is just swapping back. So the
-        exact outcome the user wants can be delivered by our own swap screen at
-        the normal 0.70%, with no extra contract for them to approve.
-        Verified live before shipping: both echoed our fee receiver back.
-
-        This mirrors what the Solana section above already does with jitoSOL
-        and mSOL — the EVM half was simply missing.
-      */}
-      <section>
-        <div className="row-between" style={{ marginBottom: 8 }}>
-          <p className="section-label" style={{ margin: 0 }}>{t('farm.ethStakingTitle')}</p>
-        </div>
-
-        <motion.div variants={stagger} initial="hidden" animate="show" className="stack" style={{ gap: 9 }}>
-          {ETH_STAKE_TOKENS.map((tk) => {
-            const live = (data?.pools ?? []).find(
-              (pl) => String(pl.symbol || '').toUpperCase() === tk.symbol.toUpperCase()
-            );
-            return (
-              <motion.div key={tk.symbol} className="card card-soft" variants={riseIn}>
-                <div className="row-between">
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{tk.symbol}</div>
-                    <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>{tk.name}</div>
-                  </div>
-                  {/*
-                    Only shown when the live feed actually carries this token.
-                    A hard-coded APY would be wrong within a week and nobody
-                    would notice — the same mistake this page was built to fix.
-                  */}
-                  {live?.apy != null && (
-                    <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--rgb-4)' }}>
-                      {live.apy.toFixed(2)}%
-                    </div>
-                  )}
-                </div>
-
-                <div className="farm-actions" style={{ marginTop: 10 }}>
-                  <button
-                    className="btn btn-ghost farm-btn"
-                    onClick={() => {
-                      haptic?.('select');
-                      navigate(`/swap?chain=1&from=USDT&to=${encodeURIComponent(tk.symbol)}`);
-                    }}
-                  >
-                    <IconSwap width={15} height={15} />
-                    {t('farm.stakeNow', { sym: tk.symbol })}
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-
-        <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.ethStakingNote')}</p>
-      </section>
-
-      {/* ---------- pools ---------- */}
-      <section>
-        <div className="row-between" style={{ marginBottom: 8 }}>
-          <p className="section-label" style={{ margin: 0 }}>{t('farm.pools')}</p>
-        </div>
-
-        {/*
-          How many were rejected. One line, and it explains the whole screen
-          better than a paragraph would: the user can see that the short list
-          is short on purpose.
-        */}
-        {data && (
-          <p className="farm-filtered faint">
-            {t('farm.filteredNote', { shown: data.pools.length, considered: data.considered })}
-          </p>
-        )}
-
-        <div className="segmented" style={{ marginBottom: 10 }}>
-          {RISK_FILTERS.map((k) => (
-            <button
-              key={k}
-              className={risk === k ? 'active' : ''}
-              onClick={() => {
-                haptic?.('select');
-                setRisk(k);
-              }}
-              style={{ isolation: 'isolate' }}
-            >
-              {risk === k && <SegIndicator id="farmrisk" />}
-              {t(`farm.filter.${k}`)}
-            </button>
-          ))}
-        </div>
-
-        {loading && (
-          <div className="stack" style={{ gap: 9, marginTop: 8 }}>
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                className="skel"
-                style={{ height: 96, borderRadius: 14 }}
-                animate={{ opacity: [0.4, 0.9, 0.4] }}
-                transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.12 }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/*
-          No offline fallback, deliberately — see the note in lib/yields.js.
-          A stale price corrects itself next refresh; a stale APY sends someone
-          to a pool that no longer pays what the screen said.
-        */}
-        {!loading && error && <p className="notice notice-danger">{t('farm.unavailable')}</p>}
-
-        {!loading && !error && pools.length === 0 && (
-          <p className="notice">{t('farm.noneInBand')}</p>
-        )}
-
-        {!loading && pools.length > 0 && (
-          <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-            {pools.map((p) => (
-              <PoolRow
-                key={p.id}
-                pool={p}
-                amount={amount}
-                onOpen={open}
-                onGetTokens={getTokens}
-                t={t}
-              />
-            ))}
-          </motion.div>
-        )}
-
-        <p className="faint" style={{ marginTop: 10, lineHeight: 1.7 }}>{t('farm.aprNote')}</p>
-      </section>
+      {tab === 'trade' && (
+        <section className="stack" style={{ gap: 10 }}>
+          <p className="section-label">{t('farm.tradeTitle')}</p>
+          <p className="farm-filtered faint">{t('farm.tradeIntro')}</p>
+          <InvestCard
+            title={t('nav.ostium')}
+            sub={t('farm.tradeOstium')}
+            pills={<FeePill label={t('farm.earn.builderFee')} />}
+            cta={t('farm.tradeOpen')}
+            onCta={() => {
+              haptic?.('select');
+              navigate('/ostium');
+            }}
+          />
+          <InvestCard
+            title={t('nav.dydx')}
+            sub={t('farm.tradeDydx')}
+            pills={<FeePill label={t('farm.earn.builderFee')} />}
+            cta={t('farm.tradeOpen')}
+            onCta={() => {
+              haptic?.('select');
+              navigate('/dydx');
+            }}
+          />
+          {isValidGmxCode(GMX_CODE) && (
+            <InvestCard
+              title="GMX"
+              sub={t('farm.tradeGmx')}
+              pills={<FeePill label={t('farm.earn.refFee')} />}
+              cta={t('farm.tradeOpen')}
+              onCta={() => open(withReferral('gmx', 'https://app.gmx.io/#/trade'))}
+            />
+          )}
+        </section>
+      )}
 
       <AdBanner slot="swap" />
 

@@ -7664,6 +7664,24 @@ export default function run() {
     /* Addresses must come from the token table, never retyped. */
     t('...and reads the token list rather than duplicating addresses',
       /TOKENS\[1\] \?\? \[\]\)\.filter\(\(tk\) => tk\.stake === 'eth'\)/.test(read('src/pages/Farm.jsx')));
+    t('Farm default tab is in-app invest, not the market dump',
+      /FARM_TABS = \['inapp', 'market', 'trade'\]/.test(read('src/pages/Farm.jsx'))
+      && /FARM_TABS\.includes\(fromUrl\) \? fromUrl : 'inapp'/.test(read('src/pages/Farm.jsx')));
+    t('Farm primary CTAs stay in-app (swap, stocks, ostium, dydx, earn, vault)',
+      /navigate\(`\/swap/.test(read('src/pages/Farm.jsx'))
+      && /navigate\('\/stocks'\)/.test(read('src/pages/Farm.jsx'))
+      && /navigate\('\/ostium'\)/.test(read('src/pages/Farm.jsx'))
+      && /navigate\('\/dydx'\)/.test(read('src/pages/Farm.jsx'))
+      && /navigate\('\/earn'\)/.test(read('src/pages/Farm.jsx'))
+      && /<VaultCard/.test(read('src/pages/Farm.jsx')));
+    t('Farm GMX is referral-gated, never a bare outbound',
+      /isValidGmxCode\(GMX_CODE\)/.test(read('src/pages/Farm.jsx'))
+      && /withReferral\('gmx'/.test(read('src/pages/Farm.jsx')));
+    t('Farm market get-tokens uses a verified pair swap route',
+      /pairSwapRoute/.test(read('src/pages/Farm.jsx')));
+    t('Earn page is still its own route, not deleted into Farm',
+      /path="\/earn"/.test(read('src/App.jsx')) && existsSync('src/pages/Earn.jsx'));
+
     t('jupSOL is offered, the largest LST we were missing',
       /jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v/.test(read('src/lib/solanaAssets.js')));
 

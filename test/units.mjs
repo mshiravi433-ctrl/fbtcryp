@@ -26,7 +26,7 @@ import {
 } from '../src/lib/solanaAssets.js';
 import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
 import { iconCandidates } from '../src/lib/tokenIcon.jsx';
-import { pairTokens, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
+import { pairTokens, pairSwapRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import { normalizeEvent, validateResponseShape, EVENT_KINDS } from '../src/lib/whales.js';
 import {
@@ -3543,6 +3543,12 @@ export default async function run() {
      */
     t('a hyphenated single-asset symbol still has no pair',
       pairTokens({ symbol: 'WBTC-WRAPPED', exposure: 'single' }).length === 0);
+    t('Ethereum Llama slug maps to chain 1', llamaChainId('Ethereum') === 1);
+    t('an unknown Llama chain is null, never invented', llamaChainId('Solana') === null);
+    t('a BSC pair we list is a real swap route',
+      pairSwapRoute({ symbol: 'CAKE-BNB', exposure: 'multi', chain: 'BSC' })?.chainId === 56);
+    t('a pair we do not list cannot become a swap',
+      pairSwapRoute({ symbol: 'FOO-BAR', exposure: 'multi', chain: 'Ethereum' }) === null);
 
     /* ---- the calculator -------------------------------------------------- */
     const proj = projectEarnings({ apy: 12, apyBase: 6 }, 1000);
