@@ -7679,6 +7679,34 @@ export default function run() {
       && /withReferral\('gmx'/.test(read('src/pages/Farm.jsx')));
     t('Farm market get-tokens uses a verified pair swap route',
       /pairSwapRoute/.test(read('src/pages/Farm.jsx')));
+    {
+      /*
+       * The trade intro must not name venues that do not exist yet. The old
+       * sentence offered a "builder 5 bps on notional" fee and promised
+       * Hyperliquid and Drift "until they are ready" — both named venues that
+       * are not built, and the check is written against comments too so the
+       * rationale itself cannot trip it.
+       */
+      const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\/\/.*$/gm, '');
+      const farmSrc = strip(read('src/pages/Farm.jsx'));
+      const enIntro = JSON.parse(read('src/i18n/locales/en.json'))?.farm?.tradeIntro ?? '';
+      const faIntro = JSON.parse(read('src/i18n/locales/fa.json'))?.farm?.tradeIntro ?? '';
+      t('the Farm trade intro is honest about unbuilt venues',
+        !/hyperliquid|drift/i.test(farmSrc + enIntro + faIntro));
+    }
+    {
+      const farmSrc = read('src/pages/Farm.jsx');
+      const yieldsSrc = read('src/lib/yields.js');
+      /* The intelligence-lite additions are pure client-side maths on the pool
+         object — no new endpoint, and the score is never sold as a security or
+         AI rating. */
+      t('Farm derives a transparency score in the yields module',
+        /export function farmScore/.test(yieldsSrc) && /farmScore/.test(farmSrc));
+      t('the IL toy is gated to two-leg pairs',
+        /pairTokens/.test(farmSrc) && /impermanentLoss/.test(farmSrc) && /impermanentLoss\(/.test(yieldsSrc));
+      t('the calculator offers day and week',
+        /HORIZONS = \['day', 'week', 'month', 'year'\]/.test(farmSrc));
+    }
     t('Earn page is still its own route, not deleted into Farm',
       /path="\/earn"/.test(read('src/App.jsx')) && existsSync('src/pages/Earn.jsx'));
 

@@ -156,6 +156,7 @@ export function projectEarnings(pool, amountUsd) {
   return {
     year,
     month: year / 12,
+    week: year / 52,
     day: year / 365,
     /*
      * The part of the projection backed by actual revenue. Shown beside the
@@ -164,6 +165,83 @@ export function projectEarnings(pool, amountUsd) {
      */
     fromRealYield: real == null ? null : year * real
   };
+}
+
+/**
+ * What a 50/50 LP position loses (as a fraction, negative) when the two legs'
+ * price ratio moves by `ratio` (1 = no move, 1.5 = one leg is worth 50% more
+ * relative to the other). Classic impermanent loss for a 50/50 pair:
+ *
+ *   IL = 2·√k / (1 + k) − 1
+ *
+ * This is PRICE-MOVE IL only. It deliberately says nothing about what the pool
+ * actually pays in swap fees — we do not have that number unless the feed sent
+ * it, and inventing it would be exactly the kind of flattering guess the rest
+ * of this module refuses to make. Returns null for a missing or non-positive
+ * ratio rather than pretending the loss is zero.
+ */
+export function impermanentLoss(ratio) {
+  const k = Number(ratio);
+  if (!Number.isFinite(k) || k <= 0) return null;
+  return (2 * Math.sqrt(k)) / (1 + k) - 1;
+}
+
+/**
+ * A 0–100 quality score for one market row, computed entirely from data the
+ * feed already sent (never from a black-box forecast, never an audit/trust
+ * score we do not have).
+ *
+ * Weights (each factor is normalised to 0–1):
+ *
+ *   40%  base yield   — `apyBase` (interest/fees actually paid), NOT the
+ *                       emissions headline. If the feed left the split out we
+ *                       use the headline discounted, because an unknown split
+ *                       is more likely emissions than revenue.
+ *   25%  size         — log10 of TVL with a soft cap, so $10bn cannot
+ *                       auto-win: $10m→0.25, $1bn→0.75, $10bn→1.0, flat
+ *                       above that.
+ *   20%  real share   — `realShare`. null is NOT treated as 1; an unknown
+ *                       split scores 0, not "all real".
+ *   15%  stability    — penalises `rateIsUnusual` spikes. A pool spiking far
+ *                       above its own 30-day mean is usually an incentive
+ *                       burst about to vanish.
+ *
+ * Returns null for a pool we cannot score at all (no APY and no base), so the
+ * UI shows nothing rather than a default "100".
+ */
+export function farmScore(pool) {
+  if (!pool || typeof pool !== 'object') return null;
+  const apy = Number(pool.apy);
+  const base = pool.apyBase == null ? NaN : Number(pool.apyBase);
+  const tvl = Number(pool.tvlUsd);
+  if (!Number.isFinite(apy) && !Number.isFinite(base)) return null;
+
+  const share = realShare(pool);
+
+  const clamp01 = (n) => Math.max(0, Math.min(1, n));
+
+  // Base yield — prefer the real (non-emissions) part of the rate.
+  const baseRate = Number.isFinite(base) ? base : apy * 0.6;
+  const baseFactor = clamp01(baseRate / 30);
+
+  // Size with a soft cap (log10 keeps a $10bn pool from auto-winning).
+  const sizeFactor = Number.isFinite(tvl) && tvl > 0
+    ? clamp01(Math.log10(tvl / 1_000_000) / 4)
+    : 0;
+
+  // Real share; null → 0, never a flattering "1".
+  const realFactor = share == null ? 0 : share;
+
+  // Stability: penalise a spike away from the pool's own 30-day mean.
+  const unusual = rateIsUnusual(pool);
+  let stability = 1;
+  if (unusual) {
+    if (unusual.direction === 'above') stability = Math.max(0.4, 1 - (unusual.ratio - 1) * 0.12);
+    else stability = Math.max(0.5, 1 - (1 - unusual.ratio) * 0.25);
+  }
+
+  const score = 100 * (0.4 * baseFactor + 0.25 * sizeFactor + 0.2 * realFactor + 0.15 * stability);
+  return Math.round(Math.max(0, Math.min(100, score)));
 }
 
 /**
