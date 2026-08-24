@@ -7,6 +7,7 @@ import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import {
   gaslessEligible,
+  getGaslessStatus,
   getGaslessPrice,
   getGaslessQuote,
   parseGaslessAmount,
@@ -1145,12 +1146,56 @@ export default function Swap() {
 
   const unverifiedTarget = toToken && !toToken.verified && !toToken.native ? toToken : null;
 
-  const gaslessOk = !confidentialRequested && gaslessEligible({ chainId, fromToken, toToken });
+  /*
+   * ─── THE TOGGLE EXISTS ONLY IF THE SERVER CAN HONOUR IT ───────────────────
+   * THIS WAS THE BUG: "gasless shows unavailable and all the prices vanish".
+   *
+   * `gaslessOk` used to be `gaslessEligible()` and nothing else — a check of
+   * the chain and the token pair, both of which are true on a deployment that
+   * has no 0x key at all. server/gasless.js says so in its own header: without
+   * `ZEROX_API_KEY` every request 401s, which is exactly why it exposes
+   * `/api/gasless/status`. Nothing here ever called it.
+   *
+   * So the user could switch the feature on, every gasless quote failed, and —
+   * because the display read the gasless quote exclusively — the perfectly
+   * healthy normal quote was thrown away too. "Unavailable" and no price.
+   *
+   * Now the capability is fetched once (cached five minutes, stale-while-
+   * revalidate) and three things follow from it:
+   *   · not configured ⇒ the toggle is not rendered at all
+   *   · not configured ⇒ `gaslessOk` is false, so nothing requests a quote
+   *   · a failed gasless quote no longer hides the normal one (see
+   *     `gaslessShown` below)
+   */
+  const [gaslessStatus, setGaslessStatus] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    getGaslessStatus()
+      .then((status) => { if (alive) setGaslessStatus(status); })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const gaslessConfigured = gaslessStatus?.configured === true;
+
+  /* The pair itself is fine — kept separate from `gaslessOk` so the "you have
+     no gas and this deployment cannot help" message can still be honest. */
+  const gaslessPairOk = !confidentialRequested && gaslessEligible({ chainId, fromToken, toToken });
+  const gaslessOk = gaslessPairOk && gaslessConfigured;
+
   const [useGasless, setUseGasless] = useState(false);
   const [gaslessQuote, setGaslessQuote] = useState(null);
   const [gaslessBusy, setGaslessBusy] = useState(false);
   const [gaslessError, setGaslessError] = useState(null);
-  const cannotPayGas = wallet.isConnected && gaslessOk && nativeBal <= 0;
+  /*
+   * "You cannot pay gas" is a fact about the WALLET, not about the feature.
+   * It used to be gated on `gaslessOk`, which meant a user with zero native
+   * coin saw nothing at all on a deployment where gasless is not configured —
+   * no toggle, no explanation, just a swap that could never run. Now the
+   * message survives and says what is actually true.
+   */
+  const cannotPayGas = wallet.isConnected && gaslessPairOk && nativeBal <= 0;
 
   /* 0x prices the exact sell amount, so do not wait for the normal router
      quote (and do not reuse its amount when the input has just changed). */
@@ -1194,6 +1239,17 @@ export default function Swap() {
     setGaslessBusy(true);
 
     timer = setTimeout(async () => {
+      /*
+       * Belt and braces on the amount. `readyToRequest` already requires a
+       * parsed amount, but this fires 280ms later and `gaslessAmountWei` is
+       * read from the closure at request time: an empty or over-precise input
+       * parses to null, and sending `sellAmount: "null"` upstream produces a
+       * 400 the user reads as "the feature is broken".
+       */
+      if (gaslessAmountWei == null) {
+        setGaslessBusy(false);
+        return;
+      }
       controller = new AbortController();
       try {
         const result = await getGaslessPrice(
@@ -1256,14 +1312,29 @@ export default function Swap() {
     gaslessSummary.minReceived > 0 &&
     !gaslessSummary.insufficientBalance
   );
-  const displayQuoteReady = useGasless ? gaslessQuoteReady : normalQuoteReady;
-  const displayAmountOut = useGasless ? gaslessSummary?.amountOut : quote?.amountOut;
-  const displayMinOut = useGasless ? gaslessSummary?.minReceived : quote?.minOut;
-  const displayPriceImpact = useGasless ? gaslessSummary?.priceImpact : impact;
+  /*
+   * ─── WHICH QUOTE IS ON SCREEN ─────────────────────────────────────────────
+   * `gaslessShown` is the second half of the fix. The display used to read
+   * `useGasless`, which is a SWITCH; it now reads whether the gasless quote
+   * actually arrived, which is a RESULT. When gasless is on and its own quote
+   * fails, the normal quote is healthy and it is what the user sees — the rate
+   * row, the minimum, the output figure all stay on screen, and the gasless
+   * failure is a note under the toggle where it belongs.
+   *
+   * Everything that LABELS a number (which fee row, which network fee, which
+   * route name) also keys off `gaslessShown`, never off the switch: showing
+   * "0x Gasless" over the router's price would be a lie about where the number
+   * came from.
+   */
+  const gaslessShown = useGasless && gaslessQuoteReady;
+  const displayQuoteReady = useGasless ? (gaslessQuoteReady || normalQuoteReady) : normalQuoteReady;
+  const displayAmountOut = useGasless ? (gaslessSummary?.amountOut ?? quote?.amountOut) : quote?.amountOut;
+  const displayMinOut = useGasless ? (gaslessSummary?.minReceived ?? quote?.minOut) : quote?.minOut;
+  const displayPriceImpact = useGasless ? (gaslessSummary?.priceImpact ?? impact) : impact;
   const displayRate = useGasless
-    ? gaslessSummary?.amountOut != null && Number(amount) > 0
+    ? gaslessShown && gaslessSummary?.amountOut != null && Number(amount) > 0
       ? gaslessSummary.amountOut / Number(amount)
-      : null
+      : quote?.rate
     : quote?.rate;
   const highImpact = displayPriceImpact != null && displayPriceImpact > 5;
   const canSwap = !confidentialRequested
@@ -1527,7 +1598,13 @@ export default function Swap() {
               placeItems: 'center end'
             }}
           >
-            {quoting || (useGasless && gaslessBusy) ? (
+            {/*
+              A skeleton only when there is no number to show. While gasless is
+              busy this used to blank the output field even though the normal
+              quote had already answered — the visible half of "all the prices
+              disappear".
+            */}
+            {(quoting || (useGasless && gaslessBusy)) && displayAmountOut == null ? (
               <span className="skel" style={{ display: 'inline-block', width: 70, height: 16 }} />
             ) : displayAmountOut != null ? (
               shouldAnimateNumbers ? (
@@ -1565,7 +1642,7 @@ export default function Swap() {
                 <span className="faint">{t('swap.minReceived')}</span>
                 <span className="mono" style={{ fontSize: 11.5 }}>{fmtQty(displayMinOut)} {toToken.symbol}</span>
               </div>
-              {useGasless ? (
+              {gaslessShown ? (
                 gaslessSummary?.ourFee > 0 && (
                   <div className="row-between">
                     <span className="faint">{t('swap.gaslessPlatformFee')}</span>
@@ -1590,11 +1667,11 @@ export default function Swap() {
                   </span>
                 </div>
               )}
-              {(useGasless || gasCost != null) && (
+              {(gaslessShown || gasCost != null) && (
                 <div className="row-between">
                   <span className="faint">{t('swap.networkFee')}</span>
                   <span className="mono" style={{ fontSize: 11.5 }}>
-                    {useGasless ? (
+                    {gaslessShown ? (
                       <>
                         0 {cfg.native.symbol}
                         <span className="faint" style={{ fontSize: 10.5 }}>
@@ -1612,14 +1689,14 @@ export default function Swap() {
               <div className="row-between">
                 <span className="faint">{t('swap.route')}</span>
                 <span className="mono faint" style={{ fontSize: 10.5 }}>
-                  {useGasless
+                  {gaslessShown
                     ? '0x Gasless'
                     : quote.source === 'aggregator'
                       ? t('swap.bestOf', { n: quote.hops })
                       : `${quote.hops} ${t('swap.hops')}`}
                 </span>
               </div>
-              {!useGasless && quote.routesChecked > 1 && (
+              {!gaslessShown && quote.routesChecked > 1 && (
                 <div className="row-between">
                   <span className="faint">{t('swap.compared')}</span>
                   <span className="mono faint" style={{ fontSize: 10.5 }}>
@@ -1627,7 +1704,7 @@ export default function Swap() {
                   </span>
                 </div>
               )}
-              {!useGasless && quote.beatenBy > 10 && (
+              {!gaslessShown && quote.beatenBy > 10 && (
                 <div className="row-between">
                   <span className="faint">{t('swap.beatenBy')}</span>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
@@ -1667,7 +1744,7 @@ export default function Swap() {
             amountOut={displayAmountOut}
             minOut={displayMinOut}
             /* Gasless relays pay native gas; the token deduction is shown above. */
-            gasNative={useGasless ? 0 : gasCost}
+            gasNative={gaslessShown ? 0 : gasCost}
             bothStable={isStableSymbol(fromToken?.symbol) && isStableSymbol(toToken?.symbol)}
             protectOn={mevProtect}
             onProtectChange={() => setMevProtect((v) => !v)}
@@ -1680,7 +1757,18 @@ export default function Swap() {
           </p>
         )}
 
-        {gaslessOk && (
+        {/*
+          ─── THE TOGGLE, OR THE REASON THERE ISN'T ONE ────────────────────
+          Rendered only when the server can actually relay (key configured AND
+          this chain/pair is eligible). Otherwise a switch that always fails —
+          and, before the display fallback above, a switch that also erased the
+          working price.
+
+          When it is NOT offered and the user has no native coin, one faint
+          line says so. Silence here was the real cost: someone with zero BNB
+          saw a disabled-looking swap and no explanation of why.
+        */}
+        {gaslessOk ? (
           <div className="card card-tight" style={{ marginTop: 10 }}>
             <div className="set-row" style={{ padding: 0 }}>
               <span className="set-row-label">
@@ -1700,10 +1788,18 @@ export default function Swap() {
             </div>
 
             {gaslessBusy && <p className="faint" style={{ marginTop: 8, fontSize: 12 }}>{t('swap.quoting')}</p>}
-            {useGasless && gaslessError && !gaslessBusy &&
-              (!gaslessSummary || gaslessSummary.liquidityAvailable) && (
-              <p className="notice notice-danger" style={{ marginTop: 8 }}>
+            {/*
+              ─── A NOTE UNDER THE TOGGLE, NOT IN PLACE OF THE PRICE ────────
+              This is where the failure is reported now. It used to be the
+              ONLY thing left on screen when a gasless quote failed, because
+              the quote box above keyed off the switch rather than the result.
+              The price stays; the explanation sits here.
+            */}
+            {useGasless && gaslessError && !gaslessBusy && (
+              <p className="faint" style={{ marginTop: 8, fontSize: 11.8, lineHeight: 1.75 }}>
                 {gaslessError === 'NO_ROUTE' ? t('swap.err.NO_ROUTE') : t('swap.gaslessQuoteFailed')}
+                {' '}
+                {normalQuoteReady && t('swap.gaslessUsingNormal')}
               </p>
             )}
 
@@ -1744,7 +1840,11 @@ export default function Swap() {
               <p>{t('swap.gaslessHelp')}</p>
             </InfoBox>
           </div>
-        )}
+        ) : cannotPayGas ? (
+          <p className="faint" style={{ marginTop: 10, fontSize: 11.8, lineHeight: 1.75 }}>
+            {t('swap.gaslessUnavailable', { coin: cfg.native.symbol })}
+          </p>
+        ) : null}
 
         {unverifiedTarget && (
           <p className="notice" style={{ marginTop: 10 }}>
@@ -2085,7 +2185,7 @@ export default function Swap() {
                 <span className="faint">{t('swap.minReceived')}</span>
                 <span className="mono">{fmtQty(displayMinOut)} {toToken.symbol}</span>
               </div>
-              {useGasless ? (
+              {gaslessShown ? (
                 gaslessSummary?.ourFee > 0 && (
                   <div className="row-between">
                     <span className="faint">{t('swap.gaslessPlatformFee')}</span>
@@ -2101,7 +2201,7 @@ export default function Swap() {
               <div className="row-between">
                 <span className="faint">{t('swap.networkFee')}</span>
                 <span className="mono">
-                  {useGasless ? (
+                  {gaslessShown ? (
                     <>
                       0 {cfg.native.symbol}
                       <span className="faint" style={{ fontSize: 10.5 }}>

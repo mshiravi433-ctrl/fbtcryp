@@ -8,7 +8,8 @@
  *
  * Also checks that the IntentOS page's capabilities caching is effective.
  */
-import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const INTENT_OS = '../src/lib/intentOS.js';
 
@@ -236,6 +237,210 @@ export default async function run() {
       ok: true,
       commitReveal: { available: true, frontendIntegrated: true, durablePrivateStorage: true, requesterAuthentication: true, earlyRevealProtection: true }
     }).available === true);
+
+  /* ------------------------------------------------------------------ */
+  /*  9. END-TO-END: the target workflow, risk → execution → proof       */
+  /* ------------------------------------------------------------------ */
+  /*
+   * ─── WHAT THIS PROBE IS FOR ───────────────────────────────────────────────
+   * The owner's requirement for Intent OS is narrow and deliberate: it is a
+   * QA surface, it executes nothing by itself, and no agent withdraws funds.
+   * Every section above checks one stage in isolation. This one walks the
+   * target workflow — swap USDC → ETH, then deposit that ETH — through the
+   * whole pipeline, because the failure mode that matters is not a stage
+   * returning the wrong thing, it is the stages disagreeing:
+   *
+   *   risk says PASS  →  the envelope must carry abort-all, not "continue"
+   *   envelope built  →  the proof must say what actually settled
+   *   abort-all set   →  a partial failure must stop, not run half-done
+   *
+   * Each arrow is asserted separately, against the real modules. Nothing here
+   * re-implements the logic it is checking.
+   */
+  const wfServer = await import('../server/intentWorkflow.js');
+  const proofs = await import('../src/lib/executionProof.js');
+
+  /* The exact workflow the Compose tab opens with, so this probe cannot
+     drift away from what a user actually submits. */
+  const TARGET_STEPS = [
+    { id: 'step-1', action: 'swap', chainId: 42161, asset: 'ETH' },
+    { id: 'step-2', action: 'deposit', chainId: 42161, asset: 'ETH' }
+  ];
+
+  /* ---- stage 1+2: intent → risk, and the risk level is PASS --------- */
+  const target = mod.compileIntent({
+    kind: 'workflow',
+    chainId: 42161,
+    fromSymbol: 'USDC',
+    toSymbol: 'ETH',
+    amountIn: '100',
+    maxSlippagePct: 0.5,
+    privacy: 'standard',
+    steps: TARGET_STEPS
+  }, defaultMemory);
+  t('E2E: the target workflow compiles with no error', !target.error);
+  t('E2E: the target workflow passes the risk gate', target.blocked === false);
+  /*
+   * NOTE ON THESE TWO. My first draft read `c.code` (the field is `id`) and
+   * asserted "no check warns". Both were wrong, and the second was wrong in
+   * the dangerous direction: this workflow is submitted with
+   * `privacy: 'standard'`, so the engine DOES warn — STANDARD_BROADCAST_
+   * DISCLOSED, telling the user a normal broadcast is public. That warning is
+   * the risk engine doing its job, and flattening it to make a test green
+   * would be exactly the "never weaken the risk engine" failure. So the
+   * assertion is precise instead: nothing blocks, the workflow check passes,
+   * and the ONLY warning is the disclosure.
+   */
+  t('E2E: the workflow atomicity check is a PASS, not a warning',
+    target.checks.find((c) => c.id === 'WORKFLOW_SINGLE_CHAIN_ATOMIC')?.level === 'pass');
+  t('E2E: nothing on it blocks',
+    !target.checks.some((c) => c.level === 'block'));
+  t('E2E: the one warning is the public-broadcast disclosure, not the workflow',
+    JSON.stringify(target.checks.filter((c) => c.level === 'warn').map((c) => c.id))
+      === JSON.stringify(['STANDARD_BROADCAST_DISCLOSED']));
+  /* The pipeline is intent → risk → solvers → simulation → execution →
+     verification. The first three are the compiler's job. */
+  t('E2E: it still runs the solver stage', target.solvers.length >= 6);
+  t('E2E: a passing workflow is ready-for-review, never executed',
+    target.status === 'ready-for-review');
+  t('E2E: ...and the only execution offered is a handoff to the swap screen',
+    typeof target.handoff === 'string' && target.handoff.startsWith('/swap'));
+
+  /* ---- stage 4+5: the execution envelope --------------------------- */
+  const workflow = wfServer.workflowFromLegacySteps(TARGET_STEPS, {
+    chainId: 42161,
+    deadline: Math.floor(Date.now() / 1000) + 600
+  });
+  t('E2E: the lifted workflow validates', wfServer.validateWorkflow(workflow).ok === true);
+  t('E2E: it is recognised as a same-chain atomic candidate',
+    wfServer.isSingleChainWorkflow(workflow) === true);
+
+  const envelope = wfServer.buildWorkflowBatchCalldata(workflow);
+  t('E2E: the batch envelope builds', envelope.ok === true);
+  t('E2E: it carries both nodes', envelope.callCount === 2);
+  /*
+   * ─── ABORT-ALL HAS TO SURVIVE THE ENCODING ───────────────────────────────
+   * This is the check the owner asked for by name: «abort-all stops instead
+   * of continuing half-done». The contract is what stops — but only if the
+   * envelope actually tells it to. A policy that is dropped or defaulted
+   * somewhere between the Compose UI and the calldata would leave a workflow
+   * running its second node on the first node's failure, which is exactly
+   * half-done. So the policy is asserted in the encoded data, not just in
+   * the object next to it.
+   */
+  t('E2E: abort-all is the policy on the envelope', envelope.policy === 'abort-all');
+  t('E2E: abort-all encodes as the abort code, not a continue',
+    envelope.policyCode === wfServer.POLICY_ABORT_ALL && wfServer.POLICY_ABORT_ALL === 0);
+  const decoded = wfServer.workflowInterface.decodeFunctionData('execute', envelope.data);
+  t('E2E: the abort code is what the contract will actually read',
+    Number(decoded[2]) === wfServer.POLICY_ABORT_ALL);
+  /*
+   * And the inverse: a different policy must produce different calldata. If
+   * every policy encoded the same bytes, the flag would be decoration.
+   */
+  const continueWorkflow = wfServer.workflowFromLegacySteps(
+    TARGET_STEPS.map((s) => ({ ...s, revertPolicy: 'continue' })),
+    { chainId: 42161, deadline: workflow.nodes[0].deadline }
+  );
+  const continueEnvelope = wfServer.buildWorkflowBatchCalldata(continueWorkflow);
+  t('E2E: a continue policy encodes differently from abort-all',
+    continueEnvelope.ok === true
+    && continueEnvelope.data !== envelope.data
+    && continueEnvelope.policyCode === wfServer.POLICY_CONTINUE);
+  /*
+   * Mixed policies fail SAFE. `dominantRevertPolicy` cannot find a single
+   * policy across the nodes, and the fallback is abort-all — never the
+   * permissive one. A workflow the user only half-configured must stop, not
+   * carry on.
+   */
+  const mixed = wfServer.workflowFromLegacySteps(
+    [{ ...TARGET_STEPS[0], revertPolicy: 'abort-all' },
+      { ...TARGET_STEPS[1], revertPolicy: 'continue' }],
+    { chainId: 42161, deadline: workflow.nodes[0].deadline }
+  );
+  t('E2E: a mixed policy falls back to abort-all, never to continue',
+    wfServer.dominantRevertPolicy(wfServer.validateWorkflow(mixed).workflow.nodes) === 'abort-all'
+    && wfServer.buildWorkflowBatchCalldata(mixed).policyCode === wfServer.POLICY_ABORT_ALL);
+  /* An unknown policy must not silently become "keep going" either. */
+  t('E2E: an unrecognised policy encodes as abort',
+    wfServer.policyCode('carry-on-anyway') === wfServer.POLICY_ABORT_ALL);
+
+  /* ---- the boundary the owner named ------------------------------- */
+  t('E2E: the envelope takes no custody and holds no tokens',
+    envelope.custody === false && envelope.holdsTokens === false);
+  t('E2E: the server cannot execute it',
+    wfServer.workflowProtocolStatus().executableByServer === false
+    && wfServer.workflowProtocolStatus().userSignatureRequired === true);
+  t('E2E: no batch address means no destination, not a fallback one',
+    wfServer.configuredWorkflowBatchAddress('') === null && envelope.to === null);
+  t('E2E: it admits the calldata is planned, not a live router payload',
+    envelope.liveRouterCalldata === false && envelope.verifiesCallOutputs === false);
+
+  /* ---- stage 6: verification, and the proof tells the truth -------- */
+  const confirmed = await proofs.createWorkflowExecutionProof({
+    workflowId: envelope.workflowId,
+    chainId: 42161,
+    nodeCount: envelope.callCount,
+    revertPolicy: envelope.policy,
+    txHash: `0x${'a'.repeat(64)}`,
+    receipt: { status: 1, blockNumber: 123456, gasUsed: 210000n }
+  });
+  t('E2E: a confirmed run produces a proof', confirmed.schema === proofs.WORKFLOW_EXECUTION_PROOF_SCHEMA);
+  t('E2E: ...which records abort-all as the policy it ran under',
+    confirmed.payload.workflow.revertPolicy === 'abort-all');
+  t('E2E: ...whose status is confirmed, not "planned"',
+    confirmed.payload.settlement.status === 'confirmed');
+  t('E2E: ...and it verifies', (await proofs.verifyExecutionProof(confirmed)).ok === true);
+  t('E2E: the verification recomputes the digest rather than trusting it',
+    (await proofs.verifyExecutionProof(confirmed)).code === 'DIGEST_MATCH');
+
+  /* A reverted run is reported as a reverted run. */
+  const reverted = await proofs.createWorkflowExecutionProof({
+    workflowId: envelope.workflowId,
+    chainId: 42161,
+    nodeCount: envelope.callCount,
+    revertPolicy: envelope.policy,
+    txHash: `0x${'b'.repeat(64)}`,
+    receipt: { status: 0, blockNumber: 123457 }
+  });
+  t('E2E: a failed run is recorded, not laundered into a success',
+    reverted.payload.settlement.status !== 'confirmed');
+  /* An aborted batch settles as ONE reverted transaction: node two never
+     ran, which is what abort-all is for. */
+  t('E2E: the aborted run settles as one transaction, not two',
+    typeof reverted.payload.settlement.txHash === 'string'
+    && reverted.payload.workflow.nodeCount === 2);
+
+  /* Tampering must be caught. */
+  const tampered = JSON.parse(JSON.stringify(confirmed));
+  tampered.payload.settlement.status = 'confirmed';
+  tampered.payload.workflow.revertPolicy = 'continue';
+  const tamperCheck = await proofs.verifyExecutionProof(tampered);
+  t('E2E: editing a proof after the fact fails verification',
+    tamperCheck.ok === false && tamperCheck.code === 'DIGEST_MISMATCH');
+  t('E2E: a proof with no digest is not a proof',
+    (await proofs.verifyExecutionProof({ schema: confirmed.schema, payload: {} })).ok === false);
+
+  /* ---- and no agent can move funds by itself ---------------------- */
+  /*
+   * Every intent module on both sides, found by name rather than listed — a
+   * hard-coded list goes stale the moment somebody adds intentSomething.js,
+   * and a stale list is a check that silently stopped covering the new file.
+   */
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const intentFiles = [
+    ...readdirSync(`${root}src/lib`).filter((f) => /intent/i.test(f)).map((f) => `src/lib/${f}`),
+    ...readdirSync(`${root}server`).filter((f) => /intent/i.test(f)).map((f) => `server/${f}`),
+    'src/pages/IntentOS.jsx'
+  ];
+  t('E2E: the scan covers the whole intent surface, not a stale list',
+    intentFiles.length >= 30);
+  t('E2E: no agent withdrawal path exists anywhere in the intent system',
+    !intentFiles.some((f) => /withdrawFunds|withdrawForUser|drainWallet/.test(
+      readFileSync(`${root}${f}`, 'utf8'))));
+  /* No server-side code path may submit a transaction for the user. */
+  t('E2E: the workflow protocol says in so many words',
+    wfServer.workflowProtocolStatus().executableByServer === false);
 
   return rows;
 }

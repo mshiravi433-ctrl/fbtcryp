@@ -4941,6 +4941,161 @@ input, select, textarea { font-size: 16px !important; }
   gap: 4px;
 }
 
+/* ==========================================================================
+   AUTOPILOT GUIDE SHEET  —  .ap-sheet-*  (bottom sheet on /orders)
+
+   ─── WHY IT IS A SEPARATE SET FROM .ap-goal ────────────────────────────────
+   `.ap-goal` is a PICKER: three options, one selected, and the panel below
+   immediately builds the chosen order. This is a READER: nothing is selected,
+   nothing is built, and each option opens to show three facts about itself.
+   Same family, different job, so the classes are separate rather than one
+   component wearing two hats.
+
+   ─── RTL ───────────────────────────────────────────────────────────────────
+   No left/right anywhere: `text-align: start`, flex with `gap`, and the
+   disclosure mark sits in normal flow. Persian flips the whole block with the
+   rest of the app and nothing has to be mirrored by hand.
+   ========================================================================== */
+.ap-sheet {
+  display: grid;
+  gap: 9px;
+}
+.ap-sheet-intro {
+  margin: 0 0 3px;
+  font-size: 12.2px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+/* One option. The card itself is not the button — the header inside it is —
+   so the expanding body can hold links and text without nested buttons. */
+.ap-opt {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: border-color .18s ease;
+}
+.ap-opt-open {
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+}
+
+/* 44px is the tap-target floor, and this is the only way in. */
+.ap-opt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 12px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: start;
+}
+.ap-opt-copy { min-width: 0; }
+.ap-opt-title {
+  display: block;
+  font-weight: 700;
+  font-size: 13.2px;
+  color: var(--text-1);
+}
+.ap-opt-sub {
+  display: block;
+  font-size: 11.6px;
+  line-height: 1.65;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+/* +/− in a box, so "this opens" is legible without relying on colour. */
+.ap-opt-mark {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+}
+.ap-opt-open .ap-opt-mark {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  color: var(--ink-cyan);
+}
+
+/* The three explicit rows: what it does / what we control / what we learn. */
+.ap-opt-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.ap-fact {
+  display: grid;
+  gap: 3px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.ap-fact-label {
+  font-size: 10.6px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--text-3);
+}
+.ap-fact-text {
+  font-size: 12.2px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+/* The measured numbers inside "what we learn" are counts, so they read as
+   mono like every other figure in the app. */
+.ap-fact-text .mono { color: var(--text-1); }
+.ap-opt-foot {
+  font-size: 11.4px;
+  line-height: 1.7;
+  color: var(--text-3);
+  margin: 0;
+}
+
+/* ==========================================================================
+   EARN — THE YIELD CARD  (.earn-yield-*)
+
+   The card used to be a single <motion.button>. It is a container now, with a
+   header button inside it, because the gold and staking rows carry their own
+   buy buttons and a <button> inside a <button> is invalid HTML.
+   ========================================================================== */
+.earn-yield-head {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: start;
+}
+/* The chip's gradient is set inline (it is per-row colour); the size lives
+   here so the 360px layout cannot drift from the copy beside it. */
+.earn-yield-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.earn-yield .btn-row > .btn { min-height: 44px; }
+.earn-yield-note {
+  font-size: 11.2px;
+  line-height: 1.75;
+  margin: 10px 0 0;
+}
+
 .ord-row {
   padding: 12px 13px;
   border-radius: 15px;

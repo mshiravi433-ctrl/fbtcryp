@@ -87,6 +87,76 @@ async function call(path, params, { timeout = 25000, signal: parentSignal } = {}
   }
 }
 
+/*
+ * ─── THE CAPABILITY QUESTION, ANSWERED ONCE ────────────────────────────────
+ * `server/gasless.js` says it plainly: without `ZEROX_API_KEY` every request
+ * 401s, and `gaslessConfigured()` exists so the UI never offers a feature that
+ * cannot work. Until now nothing on the client asked. The toggle rendered on
+ * the strength of `gaslessEligible()` alone — which only checks the chain and
+ * the token pair — so on a deployment with no key the user could switch
+ * gasless on, watch every quote fail, and (worse) watch the healthy normal
+ * quote disappear with it.
+ *
+ * ─── CACHED, BECAUSE THE ANSWER IS ABOUT THE SERVER AND NOT THE TRADE ──────
+ * Five minutes, stale-while-revalidate: the key does not change during a
+ * session, and a round-trip on every mount would make the toggle flicker in
+ * and out on a slow connection. A failed refresh keeps serving the last known
+ * answer rather than reporting "not available" for a feature that is working.
+ *
+ * ─── AND FAIL-CLOSED WHEN THERE IS NOTHING TO SERVE ────────────────────────
+ * Unknown ⇒ `configured: false` ⇒ the toggle is not rendered at all. A
+ * missing capability is better than a visible one that always fails.
+ */
+const STATUS_TTL_MS = 5 * 60 * 1000;
+let statusCache = null;
+let statusInFlight = null;
+
+/** Normalise the server's status shape, tolerating an older or partial body. */
+function normaliseStatus(body) {
+  return {
+    configured: Boolean(body?.configured),
+    chains: Array.isArray(body?.chains) && body.chains.length
+      ? body.chains.map(Number).filter((n) => Number.isInteger(n))
+      : [...GASLESS_CHAINS],
+    feeBps: Number.isFinite(Number(body?.feeBps)) ? Number(body.feeBps) : null
+  };
+}
+
+/** The last known status, or null if this session has never asked. */
+export const cachedGaslessStatus = () => statusCache?.value ?? null;
+
+/**
+ * Is gasless configured on this server?
+ *
+ * @returns {Promise<{configured:boolean, chains:number[], feeBps:number|null}>}
+ */
+export function getGaslessStatus({ force = false } = {}) {
+  if (!force && statusCache && Date.now() - statusCache.at < STATUS_TTL_MS) {
+    return Promise.resolve(statusCache.value);
+  }
+  if (statusInFlight) return statusInFlight;
+
+  statusInFlight = call('/gasless/status', {})
+    .then((body) => {
+      const value = normaliseStatus(body);
+      statusCache = { at: Date.now(), value };
+      return value;
+    })
+    .catch(() => {
+      /*
+       * Stale beats nothing: a network blip must not turn a working feature
+       * off mid-session. With no previous answer there is nothing to fall back
+       * to, and the honest default is "not offered".
+       */
+      return statusCache?.value ?? { configured: false, chains: [...GASLESS_CHAINS], feeBps: null };
+    })
+    .finally(() => {
+      statusInFlight = null;
+    });
+
+  return statusInFlight;
+}
+
 /** An indicative price. Cheap, and does not lock anything in. */
 export const getGaslessPrice = (params, opts) => call('/gasless/price', params, opts);
 

@@ -125,7 +125,15 @@ export default function run() {
      */
     '/solana',                  // -> tab inside /swap
     '/ostium', '/dydx', '/derivatives', // -> derivatives / stocks tabs
-    '/portfolio'                // -> Intelligence tile inside /wallet
+    '/portfolio',               // -> Intelligence tile inside /wallet
+    /*
+     * The vault's own route, reached from the Earn list — and the Earn list is
+     * itself a tab inside /rewards, so there is no menu entry to point at it
+     * either. The row only renders when a vault is actually deployed
+     * (see `vaultIsLive()` in src/pages/Earn.jsx), which is why the route
+     * exists but nothing links to it in a default build.
+     */
+    '/vault'                    // -> row on /earn, shown only when a vault is live
   ]);
 
   const orphans = routes.filter(
@@ -1692,6 +1700,57 @@ export default function run() {
       'reading AI status is never throttled',
       /req\.method === 'GET'\) return next\(\)/.test(server)
     );
+
+    /*
+     * ─── THE ECOSYSTEM STATUS IS READ, NOT PRINTED ─────────────────────────
+     * The owner asked «چرا غیرفعاله؟ فعالش کن» about the Ecosystem card, which
+     * showed «پیکربندی نشده · اجرای خودکار در دسترس نیست · برداشت وجه: هرگز در
+     * دسترس نیست» on every deployment, configured or not.
+     *
+     * Two things were wrong and they need separate assertions. The STATUS was
+     * a constant where the server already had an answer (/api/environments).
+     * And the two capabilities it named are not a configuration: automatic
+     * execution and withdrawal are absent because the product is
+     * non-custodial, so the honest fix is a reason, not a switch.
+     */
+    const devCode = dev.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    t('the always-printed not-configured line is gone', !/dev\.notConfigured/.test(dev));
+    t('...and so is the key it used',
+      !['en', 'fa', 'ar'].some((l) =>
+        JSON.parse(read(`src/i18n/locales/${l}.json`)).dev?.notConfigured));
+    t('the status comes from the environments route',
+      /fetch\('\/api\/environments'/.test(devCode)
+      && /environments\.some\(\(e\) => e\?\.status === 'available'\)/.test(devCode));
+    t('...and distinguishes loading, live, off and unreachable',
+      /const envStatus = environments \? \(envConfigured \? 'live' : 'none'\) : \(envFailed \? 'unreachable' : 'checking'\);/.test(devCode));
+    t('...with all four states translated in en, fa and ar',
+      ['en', 'fa', 'ar'].every((l) => {
+        const L = JSON.parse(read(`src/i18n/locales/${l}.json`));
+        return ['checking', 'live', 'none', 'unreachable']
+          .every((k) => typeof L?.dev?.status?.[k] === 'string' && L.dev.status[k].length > 0);
+      }));
+    /*
+     * THE BOUNDARY, WITH ITS REASON. This is the assertion that keeps the fix
+     * honest in the direction that matters: the page must say WHY, and it must
+     * not grow the control the sentence says does not exist.
+     */
+    t('the card states the boundary and its non-custodial reason',
+      /dev\.boundary/.test(devCode)
+      && ['en', 'fa'].every((l) =>
+        /never hold|هیچ‌وقت دارایی/.test(String(JSON.parse(read(`src/i18n/locales/${l}.json`)).dev?.boundary))));
+    t('...and still has no execute or withdraw control',
+      !/(execute|withdraw|runAgent|autoRun)\s*[:(]/i.test(devCode)
+      && !/automaticExecution/.test(devCode));
+    /*
+     * WHAT WORKS NOW. An explanation of what is missing is half an answer, so
+     * the card offers the two things that genuinely work on any deployment —
+     * and both are wired to something on the page rather than to a promise.
+     */
+    t('the card offers the two things that work today',
+      /dev\.cta\.projects/.test(devCode) && /dev\.cta\.sample/.test(devCode));
+    t('...and both scroll to a real, working target',
+      /ref=\{projectInput\}/.test(dev) && /ref=\{quickstartRef\}/.test(dev)
+      && /scrollIntoView/.test(devCode) && /createSandboxProject\(\{/.test(devCode));
   }
 
   /* ---- 17. Solana: receive-only, and the UI must say so ----------------- */
@@ -3629,6 +3688,79 @@ export default function run() {
     const env = read('.env.example');
     t('the gasless vars are documented', /ZEROX_FEE_BPS/.test(env));
     t('...and the example never carries a real key', /ZEROX_API_KEY=\s*$/m.test(env));
+
+    /*
+     * ─── THE CLIENT MUST ASK BEFORE IT OFFERS ───────────────────────────────
+     * Reported: «گسلس رو که روشن میکنم مینویسه unavailable و همهٔ قیمت‌ها غیب
+     * می‌شن».
+     *
+     * Both halves of that were one bug. The toggle rendered because
+     * `gaslessEligible()` only looks at the chain and the token pair, so a
+     * deployment with no `ZEROX_API_KEY` offered a feature that could only
+     * 401 — and because the display read the GASLESS quote exclusively, that
+     * failure also erased the healthy normal quote. "Unavailable" and no price.
+     *
+     * These checks pin the three properties that make it impossible again.
+     */
+    const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const lib = strip(read('src/lib/gasless.js'));
+    const swap = read('src/pages/Swap.jsx');
+    const swapCode = strip(swap);
+
+    t('the client can ask whether the server is configured',
+      /export function getGaslessStatus/.test(lib) && /call\('\/gasless\/status'/.test(lib));
+    t('...and the answer is cached, so the toggle cannot flicker per mount',
+      /STATUS_TTL_MS = 5 \* 60 \* 1000/.test(lib) && /statusCache/.test(lib));
+    t('...a failed refresh keeps the last known answer instead of lying',
+      /statusCache\?\.value \?\? \{ configured: false/.test(lib));
+    t('...and unknown means not offered, never "probably works"',
+      /\{ configured: false, chains: \[\.\.\.GASLESS_CHAINS\], feeBps: null \}/.test(lib));
+
+    t('the swap screen reads the capability',
+      /getGaslessStatus\(\)/.test(swapCode) && /gaslessStatus\?\.configured === true/.test(swapCode));
+    t('gasless toggle only renders when configured',
+      /const gaslessOk = gaslessPairOk && gaslessConfigured;/.test(swapCode)
+      && /\{gaslessOk \? \(/.test(swapCode)
+      && /<Switch[\s\S]{0,400}setUseGasless/.test(swapCode));
+    t('...and an unconfigured deployment with no native coin is told why',
+      /\) : cannotPayGas \? \(/.test(swapCode) && /swap\.gaslessUnavailable/.test(swapCode));
+    t('the quote request itself is gated on the same condition',
+      /useGasless &&\s*\n?\s*gaslessOk &&/.test(swapCode));
+    t('an empty amount never reaches the relay',
+      /if \(gaslessAmountWei == null\) \{/.test(swapCode));
+
+    /*
+     * THE PRICE MUST SURVIVE. This is the assertion that would have caught the
+     * report on its own: with gasless on and its quote missing, the display
+     * falls back to the normal quote instead of blanking.
+     */
+    t('gasless failure never hides the normal quote',
+      /const displayQuoteReady = useGasless \? \(gaslessQuoteReady \|\| normalQuoteReady\) : normalQuoteReady;/.test(swapCode)
+      && /const displayAmountOut = useGasless \? \(gaslessSummary\?\.amountOut \?\? quote\?\.amountOut\) : quote\?\.amountOut;/.test(swapCode)
+      && /const displayMinOut = useGasless \? \(gaslessSummary\?\.minReceived \?\? quote\?\.minOut\) : quote\?\.minOut;/.test(swapCode));
+    t('...and the skeleton only covers a genuinely empty field',
+      /&& displayAmountOut == null \?/.test(swapCode));
+    /*
+     * The labels have to follow the numbers. Printing "0x Gasless" over the
+     * router's price would be a lie about where the figure came from, so every
+     * fee row keys off `gaslessShown` (a result) and never off the switch.
+     */
+    t('the fee rows describe the quote that actually produced the number',
+      /const gaslessShown = useGasless && gaslessQuoteReady;/.test(swapCode)
+      && (swapCode.match(/\{gaslessShown \? \(/g) ?? []).length >= 2
+      && !/\{useGasless \? \(\s*\n?\s*gaslessSummary\?\.ourFee/.test(swapCode));
+    t('the failure is a note under the toggle, not a replacement for the price',
+      /swap\.gaslessQuoteFailed/.test(swapCode) && /swap\.gaslessUsingNormal/.test(swapCode));
+    /* Executing gasless without a gasless quote must stay impossible. */
+    t('...but the confirm button still needs a real gasless quote',
+      /&& \(useGasless \? gaslessQuoteReady : normalQuoteReady\);/.test(swapCode));
+
+    /* The honest fee itemisation is unchanged and still ours. */
+    t('all three fees are still itemised from the sold token',
+      /swap\.gaslessGasFee/.test(swapCode) && /swap\.gaslessPlatformFee/.test(swapCode)
+      && /swap\.gaslessZeroExFee/.test(swapCode));
+    t('...and the summary still sums them in base units',
+      /totalTokenFees: Number\(formatRaw\(/.test(lib));
   }
 
   /* ---- 48. perp funding: the panel must actually be reachable ---------- */
@@ -4163,6 +4295,131 @@ export default function run() {
     for (const r of ['NO_HISTORY', 'NO_LEVEL', 'NO_VOLATILITY', 'BAD_AMOUNT']) {
       t(`the ${r} refusal is explained in both languages`,
         hasKey(en, `autopilot.refused.${r}`) && hasKey(fa, `autopilot.refused.${r}`));
+    }
+
+    /*
+     * ─── THE GUIDE SHEET: CLOSED BY DEFAULT, BOTTOM-ANCHORED, THREE ROWS ────
+     * Requested as «یک پاپ‌آپ پایین صفحه، پیش‌فرض بسته، بازشونده». Sheet.jsx
+     * has supported `anchor='bottom'` for a while and nothing on this screen
+     * used it, so the options rendered always-open with a title and a subtitle
+     * and no way to see what they actually do.
+     *
+     * What these checks pin is the part a render test cannot see: that the
+     * default is CLOSED (a sheet that opens itself is the same wall of text in
+     * a worse place), that it is anchored to the bottom, that each option is
+     * its own collapsible card with the three explicit rows, and that the
+     * numbers in "what we learn" come from the engine rather than from copy.
+     */
+    t('the guide sheet exists', existsSync('src/components/AutopilotGuideSheet.jsx'));
+    if (existsSync('src/components/AutopilotGuideSheet.jsx')) {
+      const guide = read('src/components/AutopilotGuideSheet.jsx');
+      const guideCode = code(guide);
+
+      t('the page imports the guide sheet', /import AutopilotGuideSheet from/.test(page));
+      t('...and mounts it only while open',
+        /\{guideOpen && \(\s*<AutopilotGuideSheet/.test(code(page)));
+      /* The default is the whole feature. */
+      t('...and the sheet starts closed', /useState\(false\);\s*\/\*/.test(page) ||
+        /const \[guideOpen, setGuideOpen\] = useState\(false\)/.test(code(page)));
+      t('...opened by a button at the foot of the screen',
+        /setGuideOpen\(true\)/.test(code(page)) && /minHeight: 44/.test(code(page)));
+
+      t('the sheet is anchored to the bottom', /anchor="bottom"/.test(guideCode));
+      t('...and goes through the shared Sheet, so it portals and locks scroll',
+        /import Sheet from '\.\/Sheet'/.test(guide) && /<Sheet[\s\S]{0,140}anchor="bottom"/.test(guideCode));
+
+      t('each goal is its own collapsible card',
+        /results\.map\(\(\{ goal, result \}\)/.test(guideCode) && /ap-opt-head/.test(guideCode));
+      t('...closed until opened, one at a time',
+        /const \[expanded, setExpanded\] = useState\(null\)/.test(guideCode)
+        && /setExpanded\(isOpen \? null : goal\)/.test(guideCode));
+      t('...with a +/− that says which way it moves', /ap-opt-mark/.test(guideCode));
+      t('...and a smooth height expand that respects reduce-motion',
+        /height: 'auto'/.test(guideCode) && /useStill\(\)/.test(guideCode));
+
+      /* The three explicit rows, in the order asked for. */
+      t('every option states what it does, what we control, and what we learn',
+        /autopilot\.sheet\.howLabel/.test(guideCode)
+        && /autopilot\.sheet\.controlLabel/.test(guideCode)
+        && /autopilot\.sheet\.learnLabel/.test(guideCode)
+        && guideCode.indexOf('howLabel') < guideCode.indexOf('controlLabel')
+        && guideCode.indexOf('controlLabel') < guideCode.indexOf('learnLabel'));
+
+      /*
+       * REAL PARAMS, NOT PROSE. "What we control" must carry the tuning values
+       * the engine actually applies, and "what we learn" must carry the
+       * engine's own measurements — otherwise both rows are copy that can
+       * drift away from the code they describe.
+       */
+      t('the control row reads the real order tune',
+        /orderTune\(learn\)/.test(guideCode)
+        && /trailMult: num\(tune\.trailMult\)/.test(guideCode)
+        && /stopBufferMult: num\(tune\.stopBufferMult\)/.test(guideCode)
+        && /ladderStepDiv: num\(tune\.ladderStepDiv, 1\)/.test(guideCode));
+      t('the learn row prints the engine\'s own measurements',
+        /buildAutopilot\(\{/.test(guideCode)
+        && /held: v\.held/.test(guideCode) && /tested: v\.tested/.test(guideCode)
+        && /typical: num\(v\.typicalMovePct\)/.test(guideCode)
+        && /maxDd: num\(v\.maxDrawdownPct, 1\)/.test(guideCode)
+        && /samples: v\.samples/.test(guideCode));
+      /* A refusal is an answer, and it must be the one shown. */
+      t('...and falls back to the honest refusal instead of zeros',
+        /result\?\.refused/.test(guideCode) && /autopilot\.refused\.\$\{result\.refused\}/.test(guideCode));
+
+      /*
+       * ─── THE BOUNDARY ───────────────────────────────────────────────────
+       * Guidance only. This component has no submit path at all: no order is
+       * created, no draft is applied, and the boundary is printed where it is
+       * read rather than buried in a comment.
+       */
+      t('the guide sheet cannot place an order',
+        !/addOrder|createOrder|onSubmit|onApply/.test(guideCode));
+      t('...and says so on screen', /autopilot\.sheet\.boundary/.test(guideCode));
+
+      /* Every key it renders must resolve in both languages. */
+      const gKeys = [...guide.matchAll(/t\('([a-zA-Z0-9_.]+)'/g)].map((m) => m[1]);
+      const gMiss = [...new Set(gKeys)].filter((k) => !hasKey(en, k));
+      t(`every guide-sheet key resolves (${new Set(gKeys).size} checked)` +
+        (gMiss.length ? ` — missing: ${gMiss.join(', ')}` : ''), gMiss.length === 0);
+      for (const g of ['protect', 'takeProfit', 'buyDip']) {
+        t(`the ${g} guide rows are translated in en and fa`,
+          ['how', 'control', 'learn'].every((row) =>
+            hasKey(en, `autopilot.goal.${g}.${row}`) && hasKey(fa, `autopilot.goal.${g}.${row}`)));
+      }
+
+      /*
+       * ─── THE KEYS EXISTING IS NOT THE SAME AS THE KEYS BEING READ ────────
+       * The loop above proves the copy is there. It says nothing about the
+       * path the component asks for — and that is exactly the bug that shipped
+       * here: the rows read `autopilot.${goal}.how` while the copy lives at
+       * `autopilot.goal.${goal}.how`, the namespace the title on the line two
+       * rows up already used. i18n answered with the key itself, so the sheet
+       * printed «autopilot.protect.how» as a sentence in all twelve languages,
+       * and every key-existence check stayed green.
+       *
+       * A `${goal}` template is invisible to the static key scan above, so the
+       * namespace is asserted here for all three rows.
+       */
+      t('the guide rows read the namespace their copy actually lives in',
+        ['how', 'control', 'learn'].every((row) =>
+          guideCode.includes(`autopilot.goal.\${goal}.${row}`))
+        && !/t\(`autopilot\.\$\{goal\}\./.test(guideCode));
+      for (const k of ['open', 'title', 'intro', 'howLabel', 'controlLabel', 'learnLabel', 'boundary']) {
+        t(`autopilot.sheet.${k} exists in en and fa`,
+          hasKey(en, `autopilot.sheet.${k}`) && hasKey(fa, `autopilot.sheet.${k}`));
+      }
+
+      /* The sheet's own styles, so the "modern & neat" ask is checkable. */
+      const css = read('src/index.css');
+      t('the guide sheet is themed with variables, not fixed colours',
+        /\.ap-opt \{[\s\S]{0,200}var\(--line\)/.test(css)
+        && /\.ap-opt \{[\s\S]{0,200}var\(--bg-panel\)/.test(css)
+        && /\.ap-fact-text \{[\s\S]{0,160}var\(--text-2\)/.test(css));
+      t('...its trigger is a real tap target',
+        /\.ap-opt-head \{[\s\S]{0,240}min-height: 44px/.test(css));
+      t('...and nothing in it is pinned left or right, so RTL is safe',
+        !/\.ap-opt[^{]*\{[^}]*(margin-left|margin-right|padding-left|padding-right|left:|right:)/.test(css)
+        && /text-align: start/.test(css));
     }
   }
 
@@ -6798,6 +7055,46 @@ export default function run() {
     t('the fiat panel is off the buy screen', !/FiatPanel/.test(buyCode));
 
     /*
+     * ─── THE EXTERNAL WALLET TAB ──────────────────────────────────────────
+     * Reported: «ظاهرش خوب نیست، وصل هم نمیشه», ending in «خرید با کیف خارجی در
+     * این نسخه فعال نیست. AppKit On-Ramp باید در تنظیمات WalletConnect/AppKit
+     * فعال باشد».
+     *
+     * The message was accurate and useless. This app ships WalletConnect's
+     * Ethereum provider, not Reown AppKit, so `window.reownAppKit` was never
+     * going to exist and that button could only ever fail — after collecting an
+     * amount, a fiat, an asset and a payment method for a checkout that does
+     * not exist. The owner settled it: «فعلا On-Ramp نداریم، API‌اش را نداریم».
+     */
+    t('the external wallet tab never renders a dead on-ramp form',
+      !existsSync('src/components/ExternalWalletPurchase.jsx')
+      && !/ExternalWalletPurchase/.test(buyCode)
+      && !/(reownAppKit|window\.appKit|OnRampProviders)/.test(buyCode));
+    t('...and the unavailable-AppKit message is gone from every locale',
+      !['en', 'fa', 'ar'].some((l) =>
+        JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.external));
+    t('...with the stylesheet that only that form used',
+      !existsSync('src/styles/external-wallet-purchase.css'));
+    /*
+     * But "we cannot do that" on its own is the same dead end with better
+     * manners, so the tab has to offer something that works. Every button goes
+     * to a real route in this app — not to a provider, and not to a setting
+     * nobody has.
+     */
+    t('the tab states plainly that there is no card on-ramp',
+      /buy\.ext\.noOnRamp/.test(buyCode)
+      && ['en', 'fa'].every((l) =>
+        /do not run a card on-ramp|آن‌رمپ کارت بانکی نداریم/.test(
+          String(JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.ext?.noOnRamp))));
+    t('...and both of its buttons go somewhere that works',
+      /navigate\('\/p2p'\)/.test(buyCode) && /navigate\('\/swap'\)/.test(buyCode)
+      && /navigate\('\/wallet'\)/.test(buyCode));
+    t('...and says the desk releases to an address the USER controls',
+      ['en', 'fa'].every((l) =>
+        /کنترلش دست توست|address you control/.test(
+          String(JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.ext?.p2pNote))));
+
+    /*
      * The server module and its routes STAY. Nothing is thrown away and
      * re-enabling is a one-line revert; deleting them would turn a two-month
      * pause into a rewrite.
@@ -9234,15 +9531,48 @@ export default function run() {
       )));
 
     /*
-     * ─── PREFER OUR OWN SCREENS FOR REAL YIELD ──────────────────────────────
-     * Asked for. `liquidStake` pointed at lido.fi, which was a genuine
-     * mistake: the Farm screen already sells stETH and rETH, and for a liquid
-     * staking token BUYING IT IS THE DEPOSIT. The user was sent elsewhere for
-     * something this app does in one swap, and we earned nothing for it.
+     * ─── EVERY YIELD ROW IS OUR OWN SCREEN NOW ─────────────────────────────
+     * This used to ask only that `liquidStake` point at /farm instead of
+     * lido.fi — one row out of nine. The owner then settled the whole
+     * question: «بخش درآمد باید از محصولات خودمون استفاده کنه — مثلا طلا و
+     * فارکس». So the list was rebuilt around our own products (gold, ETH and
+     * SOL staking, tokenized stocks, forex, the vault, the bridge) and the
+     * outbound rows were deleted rather than relabelled.
+     *
+     * These three assertions are the ones that keep it that way. A row that
+     * grows a `url` again is not a style preference — it is the app handing a
+     * ready-to-spend user to a venue that pays us nothing.
      */
     const earnSrc = code(read('src/pages/Earn.jsx'));
+    /* The array itself, so a comment cannot satisfy the check. */
+    const yieldArray = earnSrc.slice(
+      earnSrc.indexOf('const YIELD = ['),
+      earnSrc.indexOf('export default function Earn')
+    );
+    t('every earn card routes in-app, never out', !/open\(y\.url\)/.test(earnSrc));
+    t('no earn card keeps a standalone external url',
+      !/https?:\/\//.test(yieldArray) && !/\burl:/.test(yieldArray));
+    /*
+     * `window.open` still exists in this file — the rank perks open referral
+     * links, which is a different thing and stays. What must be true is that
+     * the YIELD render has no second branch: it navigates, full stop.
+     */
+    t('...and the click handler only navigates',
+      /navigate\(y\.internal\)/.test(earnSrc) && !/y\.url/.test(earnSrc));
+    t('a meaningful number of in-app rows survived the rewrite',
+      (yieldArray.match(/internal: '\//g) ?? []).length >= 6);
+    /* The staking row specifically — the one this check used to cover. */
     t('liquid staking routes to our own farm screen',
-      /id: 'liquidStake'[\s\S]{0,220}internal: '\/farm'/.test(earnSrc));
+      /id: 'ethStake'[\s\S]{0,260}internal: '\/farm\?tab=inapp&focus=eth'/.test(yieldArray));
+    t('...and gold offers a pre-filled in-app buy, not a link',
+      /id: 'gold'[\s\S]{0,260}buys: \['PAXG', 'XAUt'\]/.test(yieldArray)
+      && /\/swap\?chain=1&from=USDT&to=/.test(earnSrc));
+    t('...the forex row is gated on the same flag as its route',
+      /SPECULATION_ENABLED[\s\S]{0,220}internal: '\/ostium'/.test(yieldArray));
+    t('...the vault row only exists when a vault is deployed',
+      /vaultIsLive\(\)/.test(yieldArray));
+    /* No invented rate: a number typed into a source file is stale on arrival. */
+    t('no earn card prints a hardcoded APR', !/\bapr:/.test(yieldArray));
     /*
      * And the user must be able to TELL. The chevron already encoded it, but
      * only for somebody who knows the convention.
@@ -9250,6 +9580,21 @@ export default function run() {
     t('...and in-app routes are labelled as such', /earn\.inApp/.test(earnSrc));
     t('...in Persian too',
       Boolean(JSON.parse(read('src/i18n/locales/fa.json')).earn?.inApp));
+    /*
+     * Every row must carry its own honest limit. Gold can be frozen by its
+     * issuer, tokenized stocks settle in USDT — the destination screens say
+     * so, and the card that opens them has to as well.
+     */
+    {
+      const ids = [...yieldArray.matchAll(/id: '([a-zA-Z]+)'/g)].map((m) => m[1]);
+      const enY = JSON.parse(read('src/i18n/locales/en.json')).earn?.yield ?? {};
+      const faY = JSON.parse(read('src/i18n/locales/fa.json')).earn?.yield ?? {};
+      const missing = ids.filter(
+        (id) => !enY[id]?.note || !enY[id]?.tag || !faY[id]?.note || !faY[id]?.tag
+      );
+      t(`every yield row states what it is and what can go wrong${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
+        ids.length >= 6 && missing.length === 0);
+    }
   }
 
   /* ---- 91. Points that are really earned, perks that must be reached ---- */
@@ -11595,7 +11940,14 @@ export default function run() {
         && /const runGasless = async \(\) => \{\s*if \(confidentialRequested\)/.test(swap)
         && /const runSwap = async \(\) => \{\s*if \(confidentialRequested\)/.test(swap)
         && /const canSwap = !confidentialRequested/.test(swap)
-        && /const gaslessOk = !confidentialRequested/.test(swap));
+        /*
+         * `gaslessOk` is now derived, because it also has to be false when the
+         * server has no 0x key. The confidential guard moved one line up into
+         * `gaslessPairOk`, which is the only thing `gaslessOk` can be true
+         * through — so both halves are asserted, not just the name.
+         */
+        && /const gaslessPairOk = !confidentialRequested && gaslessEligible\(/.test(swap)
+        && /const gaslessOk = gaslessPairOk && gaslessConfigured;/.test(swap));
     t('Intent OS confidential selection is single-swap and capability driven',
       /draft\.kind === ['"]swap['"] && confidentialReadiness\.available/.test(intentPage)
         && /disabled=\{disabled\}/.test(intentPage)

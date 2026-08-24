@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -39,6 +39,20 @@ import { GMX_CODE, isValidGmxCode, withReferral } from '../lib/venueReferral';
 const RISK_FILTERS = ['all', ...RISK_BANDS];
 const AMOUNTS = [100, 1000, 10000];
 const FARM_TABS = ['inapp', 'market', 'trade'];
+
+/**
+ * Deep-link targets for `?focus=`.
+ *
+ * Earn's yield rows open a PRODUCT, not a tab: "gold" has to land on the gold
+ * section, not somewhere near the top of the in-app tab with the user still
+ * scrolling. The id is the section's own DOM id, so a section that is renamed
+ * here breaks the scroll and nothing else.
+ */
+const FARM_FOCUS = {
+  gold: 'farm-gold',
+  eth: 'farm-eth',
+  sol: 'farm-sol'
+};
 const HORIZONS = ['day', 'week', 'month', 'year'];
 const HORIZON_DIVISOR = { day: 365, week: 52, month: 12, year: 1 };
 
@@ -239,6 +253,7 @@ export default function Farm() {
 
   const fromUrl = params.get('tab');
   const tab = FARM_TABS.includes(fromUrl) ? fromUrl : 'inapp';
+  const focus = params.get('focus');
 
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -253,6 +268,30 @@ export default function Farm() {
   const [onlyStable, setOnlyStable] = useState(false);
   const [onlyBuyable, setOnlyBuyable] = useState(false);
   const [chainFilter, setChainFilter] = useState('all');
+
+  /*
+   * Scroll to the section a deep link asked for.
+   *
+   * Declared below the state it lists as dependencies: a dependency array is
+   * evaluated during render, so naming `data` or `lst` above their `useState`
+   * lines throws in the temporal dead zone before the effect ever registers.
+   *
+   * It re-runs when the pool data lands because the gold and staking sections
+   * are rendered from that data — on the first pass they do not exist yet and
+   * `getElementById` finds nothing. The ref makes it fire at most once per
+   * requested focus, so a later refresh cannot yank the page back up while
+   * the user is reading.
+   */
+  const focusedRef = useRef(null);
+  useEffect(() => {
+    const id = focus ? FARM_FOCUS[focus] : null;
+    if (!id || focusedRef.current === focus) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    focusedRef.current = focus;
+  }, [focus, data, lst]);
+
 
   useEffect(() => {
     let alive = true;
@@ -460,7 +499,7 @@ export default function Farm() {
           {vault && <VaultCard />}
 
           {stakingRows.length > 0 && (
-            <section>
+            <section id="farm-sol">
               <p className="section-label">{t('farm.stakingTitle')}</p>
               <p className="farm-filtered faint">{t('farm.stakingIntro')}</p>
               <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
@@ -522,7 +561,7 @@ export default function Farm() {
             </section>
           )}
 
-          <section>
+          <section id="farm-eth">
             <div className="row-between" style={{ marginBottom: 8 }}>
               <p className="section-label" style={{ margin: 0 }}>{t('farm.ethStakingTitle')}</p>
             </div>
@@ -566,7 +605,7 @@ export default function Farm() {
             <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('farm.ethStakingNote')}</p>
           </section>
 
-          <section>
+          <section id="farm-gold">
             <p className="section-label">{t('farm.goldTitle')}</p>
             <p className="farm-filtered faint">{t('farm.goldIntro')}</p>
             <motion.div variants={stagger} initial="hidden" animate="show" className="stack" style={{ gap: 9 }}>

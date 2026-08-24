@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -137,7 +137,60 @@ export default function Developers() {
   const [projects, setProjects] = useState(() => loadProjectDrafts());
   const [projectName, setProjectName] = useState('');
   const [projectError, setProjectError] = useState(null);
-  useEffect(() => { let active = true; fetch('/api/environments', { headers: { accept: 'application/json' } }).then((r) => r.ok ? r.json() : null).then((x) => { if (active) setEnvironments(x?.data || null); }).catch(() => { if (active) setEnvironments(null); }); return () => { active = false; }; }, []);
+  /*
+   * ─── DISCOVERY ANSWERED ≠ DISCOVERY WORKED ────────────────────────────────
+   * `environments` used to be null both before the fetch resolved AND after it
+   * failed, so the page could not tell "still asking" from "the server said
+   * no". That is the whole difference between a status line that means
+   * something and one that is printed unconditionally — which is what this
+   * card did before.
+   */
+  const [envFailed, setEnvFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/environments', { headers: { accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((x) => {
+        if (!active) return;
+        setEnvironments(x?.data || null);
+        setEnvFailed(!x?.data);
+      })
+      .catch(() => {
+        if (!active) return;
+        setEnvironments(null);
+        setEnvFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /*
+   * ─── THE STATUS IS READ, NOT ASSERTED ─────────────────────────────────────
+   * The owner asked why this section said "not configured" and to activate it.
+   * The answer is that the sentence was static: it printed on every deployment,
+   * including one where discovery answers and the catalog is live, and the two
+   * things it named — automatic execution and withdrawal — are not a
+   * configuration anyone can turn on. They are absent because this product
+   * never holds funds.
+   *
+   * So the line is now derived from GET /api/environments: `available` rows
+   * mean discovery is configured and answering. What it says when nothing is
+   * configured is different from what it says when the request failed, and
+   * both are different from what it says while it is still in flight.
+   */
+  const envConfigured = Array.isArray(environments) && environments.some((e) => e?.status === 'available');
+  const envStatus = environments ? (envConfigured ? 'live' : 'none') : (envFailed ? 'unreachable' : 'checking');
+
+  /* The two things on this page that work right now, made one tap away. */
+  const projectInput = useRef(null);
+  const quickstartRef = useRef(null);
+  const jumpTo = (ref) => {
+    haptic?.('select');
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    /* Only the project card has a field to focus; the other is a copy target. */
+    ref.current?.querySelector?.('input, pre')?.focus?.();
+  };
 
   /*
    * A REAL host, resolved the same way share links are. The old page printed
@@ -166,14 +219,53 @@ export default function Developers() {
 
       <p className="prose-sm">{t('dev.intro')}</p>
       <section className="card" style={{ marginTop: 12 }}>
-        <p className="section-label">{t('dev.ecosystem')}</p>
+        {/*
+          The status pill is the answer to "why is it inactive". It is read
+          from the server on every visit, so a deployment that has configured
+          discovery says so, and one that has not says THAT — instead of both
+          printing the same hard-coded sentence.
+        */}
+        <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+          <p className="section-label" style={{ margin: 0 }}>{t('dev.ecosystem')}</p>
+          <span className={`pill ${envStatus === 'live' ? 'pill-up' : 'pill-neutral'}`} style={{ flexShrink: 0 }}>
+            {t(`dev.status.${envStatus}`)}
+          </span>
+        </div>
         <p className="prose-sm">{t('dev.ecosystemBody')}</p>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           {['agents', 'strategies', 'liquidity', 'connect', 'sdk', 'environments', 'reputation', 'revenue'].map((item) => <span className="pill pill-neutral" key={item}>{t(`dev.pill.${item}`)}</span>)}
         </div>
-        <small style={{ display: 'block', marginTop: 10, opacity: .75 }}>{t('dev.notConfigured')}</small>
+
+        {/*
+          ─── THE BOUNDARY, WITH ITS REASON ──────────────────────────────────
+          The old line read «پیکربندی نشده · اجرای خودکار در دسترس نیست ·
+          برداشت وجه: هرگز در دسترس نیست» — three facts and no cause, so it
+          looked like a broken install. The cause is that we are
+          non-custodial: there is no execution to automate and no balance to
+          withdraw, because the keys never leave the user's wallet. That is a
+          design decision and the wiring suite fails if a control appears here
+          that could ever do either.
+        */}
+        <p className="notice" style={{ marginTop: 10 }}>{t('dev.boundary')}</p>
+
+        {/*
+          ─── WHAT DOES WORK, ONE TAP AWAY ───────────────────────────────────
+          An explanation of what is missing is only half an answer. Both of
+          these are real and work on this deployment today: a sandbox draft is
+          created locally by `createSandboxProject`, and the sample request
+          below needs no key at all — which is the honest answer to "how do I
+          get an API key".
+        */}
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button className="btn btn-primary" type="button" onClick={() => jumpTo(projectInput)}>
+            {t('dev.cta.projects')}
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => jumpTo(quickstartRef)}>
+            {t('dev.cta.sample')}
+          </button>
+        </div>
       </section>
-      <section className="card" style={{ marginTop: 12 }}>
+      <section className="card" style={{ marginTop: 12 }} ref={projectInput} tabIndex={-1}>
         <p className="section-label">{t('dev.projects')}</p>
         <p className="prose-sm">{t('dev.projectsBody')}</p>
         <div className="row" style={{ gap: 8 }}>
@@ -195,7 +287,7 @@ export default function Developers() {
       </section>
 
       {/* ------------------------- start here ------------------------- */}
-      <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card card-rgb edge-mint" variants={riseIn} initial="hidden" animate="show" ref={quickstartRef}>
         <div className="aurora" />
         <p className="section-label" style={{ marginBottom: 9 }}>{t('dev.quickstart')}</p>
         <p className="prose-sm" style={{ marginBottom: 10 }}>{t('dev.quickstartBody')}</p>

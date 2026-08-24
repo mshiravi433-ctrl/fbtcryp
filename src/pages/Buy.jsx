@@ -7,7 +7,6 @@ import P2PMarket from '../components/P2PMarket';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { IconChevronLeft, IconShield } from '../components/Icons';
-import ExternalWalletPurchase from '../components/ExternalWalletPurchase';
 import SegIndicator from '../components/SegIndicator';
 import '../styles/lab-modern.css';
 
@@ -75,7 +74,90 @@ export default function Buy() {
         ))}
       </div>
 
-      {walletTab === 'external' ? <ExternalWalletPurchase /> : <>
+      {walletTab === 'external' ? (
+        /*
+         * ─── WHAT REPLACED THE ON-RAMP FORM ────────────────────────────────
+         * Reported: the external tab «ظاهرش خوب نیست، وصل هم نمیشه» and ended
+         * in «خرید با کیف خارجی در این نسخه فعال نیست. AppKit On-Ramp باید در
+         * تنظیمات WalletConnect/AppKit فعال باشد».
+         *
+         * That message was true and useless. It named a setting nobody has,
+         * because there is no Reown AppKit in this app — it ships
+         * WalletConnect's Ethereum provider, so `window.reownAppKit` was never
+         * going to exist and the button could only ever fail. Worse, above the
+         * failure sat a form for amount, fiat, asset and payment method that
+         * collected preferences for a checkout that does not exist.
+         *
+         * The owner settled it: «فعلا On-Ramp نداریم، API‌اش را نداریم». So
+         * this is not a form and not a dead button. It is three sentences and
+         * two buttons that both work — because a screen that explains what is
+         * missing and then offers nothing is the same failure wearing better
+         * clothes.
+         */
+        <>
+          <motion.section className="lab-card" variants={riseIn} initial="hidden" animate="show" style={{ padding: 15 }}>
+            <p className="section-label" style={{ marginBottom: 8 }}>{t('buy.ext.title')}</p>
+            <p className="prose-sm">{t('buy.ext.body')}</p>
+            <p className="notice" style={{ marginTop: 10 }}>{t('buy.ext.noOnRamp')}</p>
+
+            {/*
+             * ─── THE TWO PATHS THAT ACTUALLY WORK ────────────────────────────
+             * Both keep the user's keys where they are. The desk releases to
+             * any Bitcoin address the user controls; the swap needs nothing
+             * from an external wallet at all beyond a transfer the user makes
+             * themselves.
+             */}
+            <div className="stack" style={{ gap: 9, marginTop: 12 }}>
+              <div className="ord-row">
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{t('buy.ext.p2p')}</div>
+                <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>{t('buy.ext.p2pNote')}</p>
+                <button
+                  className="btn btn-primary"
+                  style={{ marginTop: 10 }}
+                  onClick={() => {
+                    haptic?.('select');
+                    navigate('/p2p');
+                  }}
+                >
+                  {t('buy.ext.p2pCta')}
+                </button>
+              </div>
+
+              <div className="ord-row">
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{t('buy.ext.swap')}</div>
+                <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>{t('buy.ext.swapNote')}</p>
+                <div className="btn-row" style={{ marginTop: 10 }}>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      haptic?.('select');
+                      navigate('/swap');
+                    }}
+                  >
+                    {t('buy.ext.swapCta')}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      haptic?.('light');
+                      navigate('/wallet');
+                    }}
+                  >
+                    {t('buy.ext.walletCta')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {/*
+            The one thing the old form got right, kept: a third party never
+            sees a key here, because nothing here can. It now sits under real
+            buttons instead of under a form that could not submit.
+          */}
+          <p className="notice" style={{ marginTop: 10 }}>{t('buy.ext.disclosure')}</p>
+        </>
+      ) : <>
         {/* ------------------------------ intro ------------------------------ */}
         <motion.section className="lab-hero" variants={riseIn} initial="hidden" animate="show" style={{ padding: 18 }}>
           <div className="lab-aurora" aria-hidden="true" />
