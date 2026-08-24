@@ -53,6 +53,7 @@ import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
+import { providerStatusReport } from './providerStatus.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
 import { catalogList, catalogError, CATALOG_SCHEMAS } from './ecosystemCatalog.js';
 import {
@@ -3606,6 +3607,24 @@ app.get('/api/btc/status', (_req, res) => res.json(btcStatus()));
  * Reports booleans only, never the configured values.
  */
 app.get('/api/revenue/readiness', (_req, res) => res.json(revenueReadiness()));
+
+/*
+ * STANDARD PROVIDER STATUS — one operational shape for every integration.
+ *
+ * Sibling to /api/revenue/readiness: that answers "what is earning?", this
+ * answers "which providers are actually working right now?". Reports booleans
+ * and chain lists only — never a secret value, a key, or a credential. See
+ * server/providerStatus.js for the honesty rules (reachable/authenticated
+ * start false and flip only on evidence).
+ *
+ * Cacheable for a minute: the in-process health tracker that feeds
+ * lastSuccessAt/lastFailureAt is per-instance, and a shorter TTL would just
+ * re-emit the same booleans. Stale-while-revalidate keeps it cheap.
+ */
+app.get('/api/providers/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  return res.json(providerStatusReport());
+});
 
 app.get('/api/xchain/status', (_req, res) => res.json(crossChainStatus()));
 

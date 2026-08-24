@@ -231,7 +231,18 @@ export default function run() {
       swap.includes('<SimulationCard') && swap.includes('quoteGasNative='));
     t('the review sheet shows the route selection policy', swap.includes('<RoutePolicyCard'));
     t('an intent-originated swap cannot be confirmed without a passing preflight',
-      /disabled=\{exec\.enforced && \(exec\.simulating \|\| exec\.simulation\?\.status !== 'passed'\)\}/.test(swap));
+      /disabled=\{confirmDisabled\}/.test(swap)
+      && /exec\.enforced && \(exec\.simulating \|\| exec\.simulation\?\.status !== 'passed'\)/.test(swap));
+    /*
+     * THE EXECUTION RISK GATE: the confirm button must also refuse a gate
+     * BLOCK (a honeypot, an unsellable token, a revert detected by the
+     * pre-sign simulation). Before this the risk was displayed but the button
+     * stayed tappable — risk-as-decoration rather than risk-as-gate.
+     */
+    t('the confirm button is disabled when the execution gate blocks',
+      /isBlocked\(execGate\)/.test(swap) && /disabled=\{confirmDisabled\}/.test(swap));
+    t('the execution gate is evaluated from the lifted token risk',
+      swap.includes('evaluateExecutionGate(') && swap.includes('onRisk={setToTokenRisk}'));
     t('an intent-originated swap signs through the gated submit path',
       swap.includes('exec.submit({ signer })'));
     t('the retry button re-runs the preflight rather than re-sending',

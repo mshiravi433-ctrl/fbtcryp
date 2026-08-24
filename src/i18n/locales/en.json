@@ -699,7 +699,18 @@
       "replaced": "a replacement",
       "generic": "a replacement"
     },
-    "replacementHash": "New transaction"
+    "replacementHash": "New transaction",
+    "gate": {
+      "blockedTitle": "Swap blocked",
+      "reviewTitle": "Review the risk before signing",
+      "tokenBlocked": "This token is flagged as unsafe to trade (honeypot, unsellable, or a detected scam). Signing is disabled.",
+      "simulationBlocked": "The pre-sign simulation found that this transaction would revert. Signing is disabled until the route changes.",
+      "walletBlocked": "This wallet is flagged with a critical risk. Signing is disabled.",
+      "highRisk": "This token carries high risk. Review the breakdown above, then press again to confirm you accept it.",
+      "unknownRisk": "The token scanner could not verify this token is safe. Absence of a warning is not a safety guarantee. Review, then press again to confirm you accept the unknown risk.",
+      "acknowledged": "Risk acknowledged. Press again to sign — only what your wallet shows will execute.",
+      "acknowledge": "Acknowledge risk"
+    }
   },
   "onboarding": {
     "skip": "Skip",
