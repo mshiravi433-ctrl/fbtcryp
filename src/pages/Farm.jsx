@@ -16,7 +16,10 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import {
   RISK_BANDS,
   getYields,
+  farmScore,
+  impermanentLoss,
   pairSwapRoute,
+  pairTokens,
   projectEarnings,
   rateIsUnusual,
   realShare
@@ -36,6 +39,8 @@ import { GMX_CODE, isValidGmxCode, withReferral } from '../lib/venueReferral';
 const RISK_FILTERS = ['all', ...RISK_BANDS];
 const AMOUNTS = [100, 1000, 10000];
 const FARM_TABS = ['inapp', 'market', 'trade'];
+const HORIZONS = ['day', 'week', 'month', 'year'];
+const HORIZON_DIVISOR = { day: 365, week: 52, month: 12, year: 1 };
 
 const ETH_STAKE_TOKENS = (TOKENS[1] ?? []).filter((tk) => tk.stake === 'eth');
 const GOLD_TOKENS = (TOKENS[1] ?? []).filter((tk) => tk.rwa === 'gold');
@@ -62,14 +67,21 @@ function FeePill({ label }) {
 function PoolRow({ pool, amount, horizon, onOpen, onGetTokens, t }) {
   const share = realShare(pool);
   const unusual = rateIsUnusual(pool);
+  const score = farmScore(pool);
   const projection = projectEarnings(pool, amount);
   const route = pairSwapRoute(pool);
-  const shown = projection && (horizon === 'month' ? projection.month : projection.year);
+  const pair = pairTokens(pool);
+  const [showIl, setShowIl] = useState(false);
+  const [ilK, setIlK] = useState(1.5);
+  const shown = projection ? projection[horizon] : null;
   const realPart = projection?.fromRealYield;
-  const shownReal = realPart == null ? null : horizon === 'month' ? realPart / 12 : realPart;
+  const div = HORIZON_DIVISOR[horizon] ?? 1;
+  const shownReal = realPart == null ? null : realPart / div;
+  const il = pair.length === 2 ? impermanentLoss(ilK) : null;
+  const ilPct = il == null ? null : `${(il * 100).toFixed(2)}%`;
 
   return (
-    <motion.div className="farm-pool" variants={riseIn}>
+    <motion.div className="farm-pool" variants={riseIn} id={`farm-pool-${pool.id}`}>
       <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0, flex: '1 1 auto' }}>
           <div className="farm-pool-sym">{pool.symbol}</div>
@@ -80,6 +92,7 @@ function PoolRow({ pool, amount, horizon, onOpen, onGetTokens, t }) {
         <div style={{ textAlign: 'end', flexShrink: 0 }}>
           <div className="farm-apy mono">{pool.apy}%</div>
           <div className="faint" style={{ fontSize: 10.5 }}>{t('farm.apy')}</div>
+          {score != null && <div className="farm-score mono">{t('farm.score', { score })}</div>}
         </div>
       </div>
 
@@ -114,21 +127,63 @@ function PoolRow({ pool, amount, horizon, onOpen, onGetTokens, t }) {
           <span className="faint">{t('farm.wouldEarn', { amount: fmtUsd(amount) })}</span>
           <span className="mono farm-calc-num">
             {fmtUsd(shown)}
-            <span className="faint">/{horizon === 'month' ? t('farm.month') : t('farm.year')}</span>
+            <span className="faint">/{t(`farm.${horizon}`)}</span>
           </span>
         </div>
       )}
+      {projection && <p className="faint farm-calc-cond">{t('farm.rateConditional')}</p>}
       {shownReal != null && (
         <p className="faint" style={{ marginTop: 4 }}>
           {t('farm.realShareMoney', { amount: fmtUsd(shownReal) })}
         </p>
       )}
 
+      {pair.length === 2 && (
+        <div className="farm-il">
+          <button
+            type="button"
+            className="farm-il-toggle"
+            aria-expanded={showIl}
+            onClick={() => setShowIl((v) => !v)}
+          >
+            <span style={{ color: 'var(--down)', flexShrink: 0 }}>{showIl ? '−' : '+'}</span>
+            <span>{t('farm.ilToyTitle')}</span>
+          </button>
+          {showIl && (
+            <div className="farm-il-body">
+              <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className="faint">{t('farm.ilMultiple')}:</span>
+                <input
+                  className="farm-il-input"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.1"
+                  step="0.1"
+                  value={Number.isFinite(ilK) ? ilK : 0.1}
+                  onChange={(e) => setIlK(Math.max(0.1, Number(e.target.value) || 0.1))}
+                  aria-label={t('farm.ilMultiple')}
+                />
+                <span className="faint">×</span>
+              </div>
+              <div className="mono farm-il-out">{ilPct}</div>
+              <p className="faint farm-il-note">{t('farm.ilFeeNote')}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="farm-actions">
         {route && (
-          <button className="btn btn-ghost farm-btn" onClick={() => onGetTokens(route)}>
+          <button
+            className="btn btn-ghost farm-btn"
+            title={t('farm.getTokens', { a: route.from, b: route.to })}
+            onClick={() => onGetTokens(route)}
+          >
             <IconSwap width={15} height={15} />
-            {t('farm.getTokens', { a: route.from, b: route.to })}
+            <span className="farm-btn-text">
+              <span className="farm-btn-label">{t('farm.getPair')}</span>
+              <span className="farm-btn-sub">{route.from}·{route.to}</span>
+            </span>
           </button>
         )}
         <button
@@ -264,6 +319,24 @@ export default function Farm() {
     return all;
   }, [data, risk, onlyStable, chainFilter, onlyBuyable, q]);
 
+  /*
+   * Top of the already-filtered list by farmScore, used by both the hot strip
+   * and the advisor. Computed once from the filtered `pools` so the two agree
+   * and neither fetches anything extra.
+   */
+  const topPools = useMemo(() => {
+    return pools
+      .map((p) => ({ pool: p, score: farmScore(p) }))
+      .filter((x) => x.score != null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+  }, [pools]);
+
+  const scrollToPool = (id) => {
+    haptic?.('light');
+    document.getElementById(`farm-pool-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const stakingRows = useMemo(
     () => lst.map((a) => ({ asset: a, live: yieldForLst(a, data?.pools ?? []) })),
     [lst, data]
@@ -297,7 +370,7 @@ export default function Farm() {
           aria-label={t('farm.customAmt')}
         />
         <div className="segmented" style={{ flex: '0 0 auto' }}>
-          {['month', 'year'].map((h) => (
+          {HORIZONS.map((h) => (
             <button
               key={h}
               type="button"
@@ -393,7 +466,7 @@ export default function Farm() {
               <motion.div className="stack" style={{ gap: 10, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
                 {stakingRows.map(({ asset, live }) => {
                   const projection = live ? projectStake(live.apy, deposit) : null;
-                  const shown = projection && (horizon === 'month' ? projection.year / 12 : projection.year);
+                  const shown = projection && horizon ? projection.year / HORIZON_DIVISOR[horizon] : null;
                   return (
                     <motion.div key={asset.id} className="farm-pool" variants={riseIn}>
                       <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
@@ -424,10 +497,11 @@ export default function Farm() {
                           <span className="faint">{t('farm.wouldEarn', { amount: fmtUsd(deposit) })}</span>
                           <span className="mono farm-calc-num">
                             {fmtUsd(shown)}
-                            <span className="faint">/{horizon === 'month' ? t('farm.month') : t('farm.year')}</span>
+                            <span className="faint">/{t(`farm.${horizon}`)}</span>
                           </span>
                         </div>
                       )}
+                      {projection && <p className="faint farm-calc-cond">{t('farm.rateConditional')}</p>}
                       <div className="farm-actions">
                         <button
                           className="btn btn-ghost farm-btn"
@@ -596,6 +670,46 @@ export default function Farm() {
               </button>
             ))}
           </div>
+
+          {!loading && !error && topPools.length > 0 && (
+            <div className="farm-hot">
+              <p className="section-label">{t('farm.hot')}</p>
+              <div className="farm-hot-grid">
+                {topPools.map(({ pool, score }) => (
+                  <button
+                    type="button"
+                    className="farm-hot-card"
+                    key={pool.id}
+                    onClick={() => scrollToPool(pool.id)}
+                  >
+                    <span className="farm-hot-sym">{pool.symbol}</span>
+                    <span className="mono farm-hot-apy">{pool.apy}%</span>
+                    <span className="mono farm-hot-score">{t('farm.score', { score })}</span>
+                    <RiskPill risk={pool.risk} t={t} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && topPools.length > 0 && (
+            <div className="farm-advisor">
+              <p className="section-label">{t('farm.advisorTitle')}</p>
+              <p className="farm-filtered faint" style={{ marginTop: 0 }}>
+                {t('farm.ifIDeposit')} {fmtUsd(deposit)} · {risk === 'all' ? t('farm.filter.all') : t(`farm.filter.${risk}`)}
+              </p>
+              <div className="stack" style={{ gap: 8 }}>
+                {topPools.map(({ pool, score }) => (
+                  <div key={pool.id} className="farm-advisor-row">
+                    <span className="farm-advisor-sym">{pool.symbol}</span>
+                    <span className="mono farm-advisor-apy">{pool.apy}%</span>
+                    <span className="mono farm-advisor-score">{t('farm.score', { score })}</span>
+                    <RiskPill risk={pool.risk} t={t} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {loading && (
             <div className="stack" style={{ gap: 9, marginTop: 8 }}>

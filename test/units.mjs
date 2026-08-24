@@ -26,7 +26,7 @@ import {
 } from '../src/lib/solanaAssets.js';
 import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
 import { iconCandidates } from '../src/lib/tokenIcon.jsx';
-import { pairTokens, pairSwapRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
+import { pairTokens, pairSwapRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare, farmScore, impermanentLoss } from '../src/lib/yields.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import { normalizeEvent, validateResponseShape, EVENT_KINDS } from '../src/lib/whales.js';
 import {
@@ -3567,6 +3567,41 @@ export default async function run() {
      */
     t('the projection says how much of it is real', Math.abs(proj.fromRealYield - 60) < 0.01);
     t('a zero deposit projects nothing', projectEarnings({ apy: 12 }, 0) === null);
+    /* ---- day / week horizons ---------------------------------------------- */
+    t('the week figure is the yearly one divided by 52', Math.abs(proj.week - 120 / 52) < 0.01);
+    t('the day figure is the yearly one divided by 365', Math.abs(proj.day - 120 / 365) < 0.01);
+
+    /* ---- the 0–100 transparency score -------------------------------------- */
+    /* A score is only shown when we can actually derive one; a pool we cannot
+       score must be null, never a confident default that reads like a rating. */
+    t('a null pool has no score', farmScore(null) === null);
+    t('a pool with no yield data has no score', farmScore({}) === null);
+    t('the score is an integer in 0–100', (() => {
+      const s = farmScore({ apy: 12, apyBase: 8, tvlUsd: 50000000, apyMean30d: 11 });
+      return Number.isInteger(s) && s >= 0 && s <= 100;
+    })());
+    /* Emissions-only must not outrank an all-real pool of the same headline. */
+    t('emissions-only scores below an all-real pool of the same APY',
+      farmScore({ apy: 20, apyBase: 0, tvlUsd: 100000000, apyMean30d: 20 })
+        < farmScore({ apy: 20, apyBase: 20, tvlUsd: 100000000, apyMean30d: 20 }));
+    /* A missing 30-day mean is not fatal — the score just skips the penalty. */
+    t('a missing mean still scores', Number.isFinite(farmScore({ apy: 10, apyBase: 10, tvlUsd: 100000000 })));
+    /* A tiny pool must not be able to dominate on yield alone. */
+    t('a tiny pool scores below a large pool of the same yield',
+      farmScore({ apy: 15, apyBase: 15, tvlUsd: 10000000, apyMean30d: 15 })
+        < farmScore({ apy: 15, apyBase: 15, tvlUsd: 1000000000, apyMean30d: 15 }));
+    /* A spike above a pool's own 30-day mean is penalised against the same
+       pool at its own rate — this is the property that keeps a burst from
+       outranking its normal self. */
+    t('a rate spike above the pool own mean is penalised',
+      farmScore({ apy: 40, apyBase: 40, tvlUsd: 100000000, apyMean30d: 8 })
+        < farmScore({ apy: 40, apyBase: 40, tvlUsd: 100000000, apyMean30d: 40 }));
+
+    /* ---- the tiny price-move IL helper (pairs only) ------------------------ */
+    t('no move means no IL', Math.abs(impermanentLoss(1)) < 1e-9);
+    t('a 1.5x move is the classic ~2% loss', Math.abs(impermanentLoss(1.5) - (2 * Math.sqrt(1.5) / 2.5 - 1)) < 1e-9);
+    t('a missing ratio is null, never a fake zero', impermanentLoss(null) === null);
+    t('a non-positive ratio is null', impermanentLoss(0) === null);
   }
 
   /* ========================= the engine stays cheap ====================== */
