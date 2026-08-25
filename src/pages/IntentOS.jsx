@@ -366,6 +366,7 @@ export default function IntentOS() {
      It is created here at compile time and continued by the swap screen, so
      the timeline is never a decorative mock. */
   const [lifecycle, setLifecycle] = useState(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [networkStatus, setNetworkStatus] = useState(null);
   /*
    * Ecosystem catalogs are fetched lazily, once, and only for the tab being
@@ -913,9 +914,25 @@ export default function IntentOS() {
                   </div>
 
                   {compiled.handoff ? (
-                    <button className="btn btn-primary ios-compile" onClick={() => navigate(compiled.handoff)}>
+                    <div>
+                    <button className="btn btn-primary ios-compile" onClick={() => setConfirmationOpen(true)}>
                       {t('intentOS.result.reviewHandoff')} <span>→</span>
                     </button>
+                  {confirmationOpen && (
+                    <div className="ios-confirm-gate" role="dialog" aria-modal="true" aria-labelledby="ios-confirm-title">
+                      <h3 id="ios-confirm-title">{t('intentOS.confirm.title', { defaultValue: 'Confirmation required before signing' })}</h3>
+                      <p>{t('intentOS.confirm.body', { defaultValue: 'This is a review gate, not an automatic execution approval. Your wallet must still approve and sign the final transaction.' })}</p>
+                      <div className="ios-confirm-summary">
+                        <b>{compiled.intent.fromSymbol} → {compiled.intent.toSymbol}</b>
+                        <span>{compiled.intent.amountIn} · {compiled.intent.amountUsd} USD</span>
+                        <span>Chain: {compiled.intent.chainId} · Slippage: {compiled.intent.maxSlippagePct}%</span>
+                        <span>Deadline: {new Date(compiled.intent.deadlineAt).toLocaleString()}</span>
+                      </div>
+                      <p className="ios-guardian-pass">✓ Guardian review passed · explicit wallet confirmation still required</p>
+                      <div className="ios-confirm-actions"><button className="btn btn-ghost btn-sm" onClick={() => setConfirmationOpen(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={() => navigate(compiled.handoff)}>Review in wallet</button></div>
+                    </div>
+                  )}
+                    </div>
                   ) : (
                     <p className="ios-honesty-note">{t('intentOS.result.draftOnly')}</p>
                   )}
