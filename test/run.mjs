@@ -17,6 +17,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import './dca-execution-probe.mjs';
 
 /*
  * server/app.js reads its rate budgets at module load, and the FIRST probe

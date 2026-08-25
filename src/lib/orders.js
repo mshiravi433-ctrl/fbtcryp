@@ -242,9 +242,11 @@ export function createOrder(input, now = Date.now()) {
     toToken: input.toToken,
     amountIn: String(input.amountIn),
     createdAt: now,
-    status: 'active',
+    status: input.type === 'dca' ? 'paused' : 'active',
+    // A DCA is a reviewable local draft until the user explicitly signs it.
     runsDone: 0,
-    lastNotifiedAt: 0
+    lastNotifiedAt: 0,
+    ...(input.type === 'dca' && input.goalId ? { goalId: input.goalId } : {})
   };
 
   if (input.type === 'limit') {

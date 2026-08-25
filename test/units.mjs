@@ -1,3 +1,4 @@
+import { activateDca } from '../src/lib/dcaExecution.js';
 /**
  * Pure-logic unit tests. No DOM, no bundler — these modules are deliberately
  * free of React and browser APIs so they can be exercised directly, which is
@@ -1066,9 +1067,11 @@ export default async function run() {
     t('expiry is marked, not hidden', expireStale([lim], later)[0].status === 'expired');
 
     // DCA scheduling
-    const { order: dca } = createOrder({ ...base, type: 'dca', interval: 'weekly', totalRuns: 4 }, now);
-    t('the first DCA buy is due immediately', evaluateOrder(dca, null, now).ready === true);
-    t('DCA does not need a price to be due', evaluateOrder(dca, null, now).reason === 'DUE');
+    const { order: dcaDraft } = createOrder({ ...base, type: 'dca', interval: 'weekly', totalRuns: 4 }, now);
+    t('a new DCA is paused until explicit sign', dcaDraft.status === 'paused');
+    const dca = activateDca(dcaDraft, { confirmed: true }, now).order;
+    t('the first signed DCA buy is due immediately', evaluateOrder(dca, null, now).ready === true);
+    t('signed DCA does not need a price to be due', evaluateOrder(dca, null, now).reason === 'DUE');
     let cur = advanceOrder(dca, now);
     t('a completed run is counted', cur.runsDone === 1);
     t('DCA is not due again immediately', evaluateOrder(cur, null, now).ready === false);
