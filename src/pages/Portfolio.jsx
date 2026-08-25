@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -7,28 +7,116 @@ import InfoBox from '../components/InfoBox';
 import { IconChevronLeft } from '../components/Icons';
 import { useWallet } from '../context/WalletContext';
 import { useWalletBalances } from '../hooks/useWalletBalances';
+import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
 import { buildIntelligence, taxCsv } from '../lib/portfolioIntel';
+import { goalProgress, requiredMonthlyContribution } from '../lib/goalMath';
 import { fmtPct, fmtUsd } from '../lib/format';
 import { useHideBalances } from '../hooks/useHideBalances';
+import { EVM_CHAIN_ORDER } from '../lib/chains';
 
 /**
- * Portfolio Intelligence — modern, more visual layout.
+ * Wealth Hub (formerly Portfolio Intelligence).
  *
- * Hero value card with gradient + 24H/7D chips, a 4-tile bento of key stats,
- * best/worst/whale rows in a soft card, allocation as progress bars,
- * and the tax export as a primary action.
+ * Extends the existing P&L / allocation / risk dashboard with two honest
+ * features from the P0 plan:
+ *
+ *   1. Multi-chain source for EVM wallets. When the connected wallet
+ *      exposes a read provider, holdings are aggregated across every
+ *      supported EVM chain (the same hook the Wallet screen uses). When
+ *      not — a Solana wallet, an unconnected state, an injected provider
+ *      that does not implement getReadProvider — we fall back to the
+ *      single-chain hook and the screen still works.
+ *
+ *   2. A coverage badge that says out loud how much of what is on screen
+ *      is actually verified. "8 of 9 chains read, 23 of 41 priced" is the
+ *      honest shape. The bar can never claim a total that the
+ *      underneath numbers do not support.
+ *
+ *   3. A Goal Card that reads progress strictly from the live total. The
+ *      math lives in lib/goalMath (pure, unit-tested); the card asks
+ *      once and never re-projects from forecasts.
+ *
+ * What it still does NOT do (and will not until those modules are real):
+ *   - no on-chain Solana / dYdX / Ostium balance reads (the multi-chain
+ *     hook is EVM only — see useMultiChainPortfolio.js);
+ *   - no draft intent for an automatic DCA from the goal card (that
+ *     wires up in a later slice; the card surfaces the math only).
  */
+
+const GOAL_STORAGE_KEY = 'fbt-wealth-goal-v1';
+
+function readGoalFromStorage() {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(GOAL_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const target = Number(parsed.targetUsd);
+    const deadline = Number(parsed.deadlineMs);
+    const yieldPct = Number(parsed.annualYield);
+    if (!Number.isFinite(target) || target <= 0) return null;
+    if (!Number.isFinite(deadline) || deadline <= 0) return null;
+    return {
+      targetUsd: target,
+      deadlineMs: deadline,
+      annualYield: Number.isFinite(yieldPct) ? Math.max(0, Math.min(1, yieldPct)) : 0
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeGoalToStorage(goal) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (!goal) {
+      localStorage.removeItem(GOAL_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(GOAL_STORAGE_KEY, JSON.stringify(goal));
+  } catch {
+    /* storage full or unavailable — the goal simply does not persist */
+  }
+}
+
 export default function Portfolio({ embedded = false, onBack }) {
   useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();
-  const onchain = useWalletBalances(wallet);
+
+  /*
+   * The hook selector.
+   *
+   * useMultiChainPortfolio aggregates every EVM chain in one call, but it
+   * needs a function that returns a read provider for a chainId. Only an
+   * EVM-style wallet exposes that (it is the wallet's own multi-chain
+   * provider switcher). For everything else we keep the single-chain
+   * behaviour the screen always had, so the page still renders for
+   * non-EVM wallets and for the unconnected state.
+   */
+  const useMulti = Boolean(wallet?.address && typeof wallet.getReadProvider === 'function');
+  const single = useWalletBalances(useMulti ? null : wallet);
+  const multi = useMultiChainPortfolio(useMulti ? wallet : null);
+
+  const source = useMulti ? multi : single;
+  const rows = source.rows ?? [];
+  const total = source.total ?? 0;
+
   const intel = useMemo(
-    () => buildIntelligence({ holdings: onchain.rows.map((r) => ({ ...r, chainId: wallet.chainId })) }),
-    [onchain.rows, wallet.chainId]
+    () => buildIntelligence({
+      holdings: rows.map((r) => ({ ...r, chainId: r.chainId ?? wallet.chainId ?? null }))
+    }),
+    [rows, wallet.chainId]
   );
+
   const [expand, setExpand] = useState(false);
+  const [goal, setGoal] = useState(() => readGoalFromStorage());
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [goalDraft, setGoalDraft] = useState({ targetUsd: '', deadlineDays: 365, annualYieldPct: 0 });
+
+  useEffect(() => { writeGoalToStorage(goal); }, [goal]);
 
   const ch24 = intel.change24h;
   const ch7 = intel.change7d;
@@ -45,6 +133,47 @@ export default function Portfolio({ embedded = false, onBack }) {
     URL.revokeObjectURL(url);
   };
 
+  /*
+   * Coverage numbers. The badge says "X of Y read, M of N priced" only
+   * when the multi-chain hook is the source — for the single-chain case
+   * the page already says "partial" through intel.partial, so the badge
+   * is suppressed to avoid two overlapping honesty signals.
+   */
+  const coverage = useMemo(() => {
+    if (!useMulti) return null;
+    const totalChains = EVM_CHAIN_ORDER.length;
+    const readChains = (source.chains ?? []).filter((c) => !c.error).length;
+    const pricedRows = (source.rows ?? []).filter((r) => r.value != null).length;
+    const totalRows = (source.rows ?? []).length;
+    return { readChains, totalChains, pricedRows, totalRows };
+  }, [useMulti, source]);
+
+  const progress = goal ? goalProgress({ targetUsd: goal.targetUsd, currentUsd: total }) : null;
+  const requiredPmt = goal
+    ? requiredMonthlyContribution({
+        targetUsd: goal.targetUsd,
+        currentUsd: total,
+        deadlineMs: goal.deadlineMs,
+        annualYield: goal.annualYield
+      })
+    : null;
+  const goalMissed = goal && goal.deadlineMs <= Date.now();
+
+  const submitGoalDraft = () => {
+    const tNum = Number(goalDraft.targetUsd);
+    const days = Number(goalDraft.deadlineDays);
+    const yPct = Number(goalDraft.annualYieldPct);
+    if (!Number.isFinite(tNum) || tNum <= 0) return;
+    if (!Number.isFinite(days) || days <= 0) return;
+    const y = Number.isFinite(yPct) ? Math.max(0, Math.min(1, yPct / 100)) : 0;
+    setGoal({
+      targetUsd: tNum,
+      deadlineMs: Date.now() + days * 86400000,
+      annualYield: y
+    });
+    setGoalEditing(false);
+  };
+
   const content = (
     <>
       {!embedded && (
@@ -52,7 +181,31 @@ export default function Portfolio({ embedded = false, onBack }) {
           <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
             <IconChevronLeft width={18} height={18} />
           </button>
-          <h1 className="h1" style={{ fontSize: 19 }}>{t('intel.title')}</h1>
+          <h1 className="h1" style={{ fontSize: 19 }}>{t('wealth.title')}</h1>
+        </motion.div>
+      )}
+
+      {/* ── COVERAGE BADGE ────────────────────────────────────── */}
+      {coverage && (coverage.readChains < coverage.totalChains || coverage.pricedRows < coverage.totalRows) && (
+        <motion.div
+          variants={riseIn}
+          initial="hidden"
+          animate="show"
+          style={{
+            marginTop: embedded ? 0 : 10,
+            padding: '8px 12px',
+            borderRadius: 12,
+            background: 'rgba(255, 200, 80, 0.08)',
+            border: '1px solid rgba(255, 200, 80, 0.25)',
+            fontSize: 11.5
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>{t('wealth.coverage.partial')}</span>
+          <span className="faint" style={{ marginInlineStart: 8 }}>
+            {t('wealth.coverage.reads', { read: coverage.readChains, total: coverage.totalChains })}
+            {' · '}
+            {t('wealth.coverage.priced', { priced: coverage.pricedRows, total: coverage.totalRows })}
+          </span>
         </motion.div>
       )}
 
@@ -74,7 +227,7 @@ export default function Portfolio({ embedded = false, onBack }) {
       >
         <div className="wallet-hero-aurora" aria-hidden="true" />
         <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.7, position: 'relative' }}>
-          {t('intel.value')}
+          {t('wealth.netWorth')}
         </div>
         <div className="wallet-total-modern" style={{ marginTop: 4, fontSize: 34, position: 'relative' }}>
           {fmtUsd(intel.total)}
@@ -119,6 +272,220 @@ export default function Portfolio({ embedded = false, onBack }) {
           </div>
         ))}
       </motion.div>
+
+      {/* ── GOAL CARD ────────────────────────────────────────── */}
+      <motion.section
+        className="wallet-pie-card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
+      >
+        <div className="row-between" style={{ marginBottom: 10 }}>
+          <span style={{ fontWeight: 800, fontSize: 13 }}>{t('wealth.goal.title')}</span>
+          {!goal && !goalEditing && (
+            <button
+              type="button"
+              className="row"
+              onClick={() => {
+                setGoalDraft({ targetUsd: '', deadlineDays: 365, annualYieldPct: 0 });
+                setGoalEditing(true);
+              }}
+              style={{
+                background: 'rgba(0,229,255,0.12)',
+                border: '1px solid rgba(0,229,255,0.4)',
+                borderRadius: 10,
+                padding: '6px 12px',
+                minHeight: 36,
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#00e5ff'
+              }}
+            >
+              {t('wealth.goal.set')}
+            </button>
+          )}
+          {goal && !goalEditing && (
+            <button
+              type="button"
+              onClick={() => {
+                const days = Math.max(1, Math.round((goal.deadlineMs - Date.now()) / 86400000));
+                setGoalDraft({
+                  targetUsd: String(goal.targetUsd),
+                  deadlineDays: days,
+                  annualYieldPct: Math.round(goal.annualYield * 100)
+                });
+                setGoalEditing(true);
+              }}
+              className="faint"
+              style={{ background: 'transparent', border: 0, fontSize: 11, padding: 4, minHeight: 32 }}
+            >
+              {t('wealth.goal.edit')}
+            </button>
+          )}
+        </div>
+
+        {!goal && !goalEditing && (
+          <p className="faint" style={{ fontSize: 12, lineHeight: 1.55 }}>
+            {t('wealth.goal.empty')}
+          </p>
+        )}
+
+        {goalEditing && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="faint" style={{ fontSize: 11, fontWeight: 700 }}>
+                {t('wealth.goal.targetLabel')}
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                value={goalDraft.targetUsd}
+                onChange={(e) => setGoalDraft((d) => ({ ...d, targetUsd: e.target.value }))}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  minHeight: 44,
+                  fontSize: 14,
+                  color: 'inherit',
+                  width: '100%'
+                }}
+                placeholder="10000"
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="faint" style={{ fontSize: 11, fontWeight: 700 }}>
+                {t('wealth.goal.deadlineLabel')}
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                step="1"
+                value={goalDraft.deadlineDays}
+                onChange={(e) => setGoalDraft((d) => ({ ...d, deadlineDays: e.target.value }))}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  minHeight: 44,
+                  fontSize: 14,
+                  color: 'inherit',
+                  width: '100%'
+                }}
+                placeholder="365"
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="faint" style={{ fontSize: 11, fontWeight: 700 }}>
+                {t('wealth.goal.yieldLabel')}
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="100"
+                step="0.1"
+                value={goalDraft.annualYieldPct}
+                onChange={(e) => setGoalDraft((d) => ({ ...d, annualYieldPct: e.target.value }))}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  minHeight: 44,
+                  fontSize: 14,
+                  color: 'inherit',
+                  width: '100%'
+                }}
+                placeholder="0"
+              />
+            </label>
+            <div className="row" style={{ gap: 8, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={submitGoalDraft}
+                className="btn btn-primary"
+                style={{ flex: 1, minHeight: 44, borderRadius: 12 }}
+              >
+                {t('wealth.goal.save')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGoal(null);
+                  setGoalEditing(false);
+                }}
+                className="btn"
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--line)'
+                }}
+              >
+                {t('wealth.goal.remove')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {goal && !goalEditing && progress && (
+          <div>
+            {goalMissed ? (
+              <p className="faint" style={{ fontSize: 12, lineHeight: 1.55 }}>
+                {t('wealth.goal.missed')}
+              </p>
+            ) : (
+              <>
+                <div className="row-between" style={{ marginBottom: 6 }}>
+                  <span className="faint" style={{ fontSize: 12 }}>
+                    {t('wealth.goal.progressLabel', { pct: Math.round(progress.progress * 100) })}
+                  </span>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
+                    {fmtUsd(total)} / {fmtUsd(goal.targetUsd)}
+                  </span>
+                </div>
+                <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, Math.round(progress.progress * 100))}%` }}
+                    transition={{ type: 'spring', stiffness: 110, damping: 20 }}
+                    style={{
+                      height: '100%',
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg, #00e5ff, #7c4dff)'
+                    }}
+                  />
+                </div>
+                {progress.reached ? (
+                  <p className="faint" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
+                    {t('wealth.goal.reached')}
+                  </p>
+                ) : requiredPmt == null ? (
+                  <p className="faint" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
+                    {t('wealth.goal.noSchedule')}
+                  </p>
+                ) : requiredPmt === 0 ? (
+                  <p className="faint" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
+                    {t('wealth.goal.funded')}
+                  </p>
+                ) : (
+                  <p className="faint" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55 }}>
+                    {t('wealth.goal.requiredMonthly', { amount: fmtUsd(requiredPmt) })}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </motion.section>
 
       {/* ── BEST/WORST/WHALE ─────────────────────────────────── */}
       {intel.best && (
