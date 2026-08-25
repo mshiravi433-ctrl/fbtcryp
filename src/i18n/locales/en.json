@@ -2684,7 +2684,12 @@
     "status": {
       "filled": "Done",
       "expired": "Expired",
-      "paused": "Paused"
+      "paused": "Paused",
+      "completed": "Completed",
+      "failed": "Failed",
+      "rejected": "Rejected",
+      "partial": "Partial",
+      "cancelled": "Cancelled"
     },
     "from": "From",
     "to": "To",
@@ -2756,7 +2761,20 @@
     "twapWindow": "Window (minutes)",
     "twapNote": "The amount is split evenly across the window. Each slice is an alert you confirm — we never sign for you.",
     "rebalanceDrift": "Drift that triggers a rebalance (%)",
-    "rebalanceNote": "Fires when the pair has moved this far from the rate you called balanced. One shot — after you swap, set a new one if you still want it watched."
+    "rebalanceNote": "Fires when the pair has moved this far from the rate you called balanced. One shot — after you swap, set a new one if you still want it watched.",
+    "signActivate": "Sign and activate",
+    "dcaSignReview": "Review this DCA once more. Continue to sign and activate it?",
+    "cancelDca": "Cancel DCA",
+    "confirmCancel": "Confirm cancellation",
+    "edit": "Edit",
+    "editAmountPrompt": "New amount per run",
+    "revisionReview": "A new paused revision was created. Changed: {{changes}}. Sign it separately; the active plan was not changed.",
+    "goalLink": "Link to goal",
+    "noGoalLink": "No goal link",
+    "currentGoal": "Current goal",
+    "editCadencePrompt": "New cadence: daily, weekly, or monthly",
+    "editChainPrompt": "New EVM chain ID",
+    "editDeadlinePrompt": "New deadline (Unix milliseconds; leave empty for none)"
   },
   "lock": {
     "title": "Locked",
@@ -4843,7 +4861,18 @@
       "noSchedule": "Deadline is past or this month — no monthly schedule reaches the target.",
       "funded": "Already funded by the live total. No contribution required.",
       "requiredMonthly": "About {amount} per month to reach it on time.",
-      "missed": "Deadline has passed. The live progress bar above is the only honest number now."
+      "missed": "Deadline has passed. The live progress bar above is the only honest number now.",
+      "awaitingConfirmation": "Awaiting your confirmation.",
+      "ordersLink": "Open orders",
+      "activeNoExecution": "Active, no verified execution.",
+      "noVerifiedExecution": "— No verified execution.",
+      "verifiedExecution": "Verified DCA execution: {{amount}}.",
+      "removeWarning": "Removing this goal does not cancel its active DCA plan. Cancel the DCA separately in Orders. Continue?",
+      "execution": {
+        "failed": "Execution failed. Check Orders and retry only after reviewing the cause.",
+        "rejected": "Execution was rejected. The DCA remains unfilled; review Orders.",
+        "partial": "Partial execution recorded. Only the verified actual amount is included."
+      }
     }
   }
 }

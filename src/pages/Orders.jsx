@@ -41,6 +41,8 @@ import {
   updateOrder
 } from '../lib/orders';
 import { dispatchStageAlert } from '../lib/stagePush';
+import { activateDca, confirmDcaCancel, createDcaRevision, dcaDisplayStatus, loadDcaReceipts, requestDcaCancel } from '../lib/dcaExecution';
+import { loadGoal } from '../lib/goalStore';
 import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -84,6 +86,7 @@ export default function Orders() {
    * asks for it, and the component is not even mounted until then.
    */
   const [guideOpen, setGuideOpen] = useState(false);
+  const [cancelReview, setCancelReview] = useState(null);
 
   useEffect(() => {
     // Mark stale limit orders on open so the list explains why one stopped,
@@ -306,7 +309,8 @@ export default function Orders() {
       id: order.id,
       haptic
     }).catch(() => {});
-    setOrders(updateOrder(order.id, advanceOrder(order)));
+    // A hand-off to swap is not a receipt. DCA progress advances only when verified evidence is recorded.
+    if (order.type !== 'dca') setOrders(updateOrder(order.id, advanceOrder(order)));
     const params = new URLSearchParams({
       from: order.fromToken.symbol,
       to: order.toToken.symbol,
@@ -314,6 +318,36 @@ export default function Orders() {
       chain: String(order.chainId)
     });
     navigate(`/swap?${params.toString()}`);
+  };
+
+  const signDca = (order) => {
+    // This is intentionally an explicit second action, never an automatic activation.
+    if (!window.confirm(t('orders.dcaSignReview'))) return;
+    const result = activateDca(order, { confirmed: true });
+    if (result.order) setOrders(updateOrder(order.id, result.order));
+  };
+  const reviewCancelDca = (order) => {
+    const result = requestDcaCancel(order);
+    if (result.order) { setOrders(updateOrder(order.id, result.order)); setCancelReview(order.id); }
+  };
+  const confirmCancelDca = (order) => {
+    const result = confirmDcaCancel(order, { confirmed: true });
+    if (result.order) { setOrders(updateOrder(order.id, result.order)); setCancelReview(null); }
+  };
+  const editDca = (order) => {
+    const amount = window.prompt(t('orders.editAmountPrompt'), order.amountIn);
+    if (amount == null) return;
+    const interval = window.prompt(t('orders.editCadencePrompt'), order.interval);
+    if (interval == null) return;
+    const chainId = window.prompt(t('orders.editChainPrompt'), String(order.chainId));
+    if (chainId == null) return;
+    const deadlineMs = window.prompt(t('orders.editDeadlinePrompt'), order.deadlineMs ? String(order.deadlineMs) : '');
+    if (deadlineMs == null) return;
+    const revision = createDcaRevision(order, { amountIn: amount, interval, chainId: Number(chainId), deadlineMs: deadlineMs ? Number(deadlineMs) : undefined });
+    if (!revision.order) return;
+    // Old active order remains untouched; the revision is a separate paused draft.
+    const res = addOrder(revision.order);
+    if (!res.error) { setOrders(res.orders); window.alert(t('orders.revisionReview', { changes: revision.diff.map((d) => d.key).join(', ') })); }
   };
 
   const cancel = (id) => {
@@ -348,6 +382,7 @@ export default function Orders() {
 
   const Row = ({ o, isReady }) => {
     const notional = orderNotionalUsd(o, usdMap);
+    const executionStatus = o.type === 'dca' ? dcaDisplayStatus(o, loadDcaReceipts()) : o.status;
     const raw = rateFor(o);
     // Display in whichever unit the order was written in.
     const rate =
@@ -368,6 +403,7 @@ export default function Orders() {
           <span className="ord-pair mono">
             {o.amountIn} {o.fromToken.symbol} → {o.toToken.symbol}
           </span>
+          {o.type === 'dca' && ['completed', 'failed', 'rejected', 'partial', 'cancelled'].includes(executionStatus) && <span className={`ord-status ord-${executionStatus}`}>{t(`orders.status.${executionStatus}`, { defaultValue: executionStatus })}</span>}
 
           {/*
             IS THIS ORDER ACTUALLY WATCHING?  Requested: «فعال بودن کادم را
@@ -537,14 +573,19 @@ export default function Orders() {
               {t('orders.swapNow')}
             </button>
           )}
-          {(o.status === 'active' || o.status === 'paused') && (
+          {o.type === 'dca' && o.status === 'paused' && (
+            <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => signDca(o)}>{t('orders.signActivate')}</button>
+          )}
+          {o.type === 'dca' && o.status === 'active' && (
             <>
-              <button className="btn btn-ghost btn-sm" onClick={() => togglePause(o)}>
-                {o.status === 'paused' ? t('orders.resume') : t('orders.pause')}
-              </button>
-              <button className="btn btn-ghost btn-sm" style={{ flex: isReady ? 0 : 1 }} onClick={() => cancel(o.id)}>
-                {t('orders.cancel')}
-              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => editDca(o)}>{t('orders.edit')}</button>
+              {cancelReview === o.id ? <button className="btn btn-ghost btn-sm" onClick={() => confirmCancelDca(o)}>{t('orders.confirmCancel')}</button> : <button className="btn btn-ghost btn-sm" onClick={() => reviewCancelDca(o)}>{t('orders.cancelDca')}</button>}
+            </>
+          )}
+          {o.type !== 'dca' && (o.status === 'active' || o.status === 'paused') && (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => togglePause(o)}>{o.status === 'paused' ? t('orders.resume') : t('orders.pause')}</button>
+              <button className="btn btn-ghost btn-sm" style={{ flex: isReady ? 0 : 1 }} onClick={() => cancel(o.id)}>{t('orders.cancel')}</button>
             </>
           )}
           {o.status !== 'active' && o.status !== 'paused' && (
@@ -797,6 +838,8 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
   const [twapSlices, setTwapSlices] = useState('4');
   const [twapWindow, setTwapWindow] = useState('60');
   const [rebalanceDrift, setRebalanceDrift] = useState('10');
+  const goal = useMemo(() => loadGoal(), [kind]);
+  const [goalId, setGoalId] = useState('');
 
   useEffect(() => {
     if (!kind || !tokens.length) return;
@@ -1330,6 +1373,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
           </>
         ) : (
           <>
+            {goal && <label className="ord-field"><span className="faint">{t('orders.goalLink')}</span><select value={goalId} onChange={(e) => setGoalId(e.target.value)}><option value="">{t('orders.noGoalLink')}</option><option value={goal.id}>{t('orders.currentGoal')}</option></select></label>}
             <label className="ord-field">
               <span className="faint">{t('orders.interval')}</span>
               <select value={interval} onChange={(e) => setInterval(e.target.value)}>
@@ -1376,7 +1420,8 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
               steps: Number(ladderSteps),
               slices: Number(twapSlices),
               windowMin: Number(twapWindow),
-              driftPct: Number(rebalanceDrift)
+              driftPct: Number(rebalanceDrift),
+              goalId: kind === 'dca' && goalId ? goalId : undefined
             })
           }
         >

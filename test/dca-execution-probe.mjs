@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { activateDca, confirmDcaCancel, createDcaRevision, requestDcaCancel, validExecutionReceipt, verifiedGoalExecution } from '../src/lib/dcaExecution.js';
+const base = { id: 'd1', type: 'dca', goalId: 'g1', chainId: 1, status: 'paused', amountIn: '10', interval: 'weekly', fromToken: { symbol: 'USDC' }, toToken: { symbol: 'ETH' } };
+const receipt = { orderId: 'd1', goalId: 'g1', chainId: 1, verified: true, verification: 'verified', txHash: '0x123456789', actualUsd: 7, status: 'partial' };
+assert.equal(verifiedGoalExecution({ goalId: 'g1', orders: [base], receipts: [receipt] }).totalUsd, 7);
+assert.equal(verifiedGoalExecution({ goalId: 'g1', orders: [base], receipts: [{ ...receipt, goalId: 'other' }] }).totalUsd, 0);
+assert.equal(validExecutionReceipt({ ...receipt, actualUsd: null }, base, 'g1'), false);
+assert.equal(activateDca(base, null).error, 'SIGNATURE_REQUIRED');
+const active = activateDca(base, { confirmed: true }).order;
+assert.equal(active.status, 'active');
+const revision = createDcaRevision(active, { amountIn: '20' }).order;
+assert.equal(active.amountIn, '10'); assert.equal(revision.status, 'paused');
+assert.equal(confirmDcaCancel(active, { confirmed: true }).error, 'CANCEL_REVIEW_REQUIRED');
+assert.equal(confirmDcaCancel(requestDcaCancel(active).order, { confirmed: true }).order.status, 'cancelled');
+console.log('dca execution probe passed');

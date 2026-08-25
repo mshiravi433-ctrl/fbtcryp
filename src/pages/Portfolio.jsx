@@ -13,6 +13,9 @@ import { goalProgress, requiredMonthlyContribution } from '../lib/goalMath';
 import { fmtPct, fmtUsd } from '../lib/format';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { EVM_CHAIN_ORDER } from '../lib/chains';
+import { loadOrders } from '../lib/orders';
+import { loadDcaReceipts, verifiedGoalExecution, dcaDisplayStatus } from '../lib/dcaExecution';
+import { loadGoal, saveGoal } from '../lib/goalStore';
 
 /**
  * Wealth Hub (formerly Portfolio Intelligence).
@@ -45,40 +48,9 @@ import { EVM_CHAIN_ORDER } from '../lib/chains';
 
 const GOAL_STORAGE_KEY = 'fbt-wealth-goal-v1';
 
-function readGoalFromStorage() {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(GOAL_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    const target = Number(parsed.targetUsd);
-    const deadline = Number(parsed.deadlineMs);
-    const yieldPct = Number(parsed.annualYield);
-    if (!Number.isFinite(target) || target <= 0) return null;
-    if (!Number.isFinite(deadline) || deadline <= 0) return null;
-    return {
-      targetUsd: target,
-      deadlineMs: deadline,
-      annualYield: Number.isFinite(yieldPct) ? Math.max(0, Math.min(1, yieldPct)) : 0
-    };
-  } catch {
-    return null;
-  }
-}
+function readGoalFromStorage() { return loadGoal(); }
 
-function writeGoalToStorage(goal) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    if (!goal) {
-      localStorage.removeItem(GOAL_STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(GOAL_STORAGE_KEY, JSON.stringify(goal));
-  } catch {
-    /* storage full or unavailable — the goal simply does not persist */
-  }
-}
+function writeGoalToStorage(goal) { saveGoal(goal); }
 
 export default function Portfolio({ embedded = false, onBack }) {
   useHideBalances();
@@ -148,11 +120,16 @@ export default function Portfolio({ embedded = false, onBack }) {
     return { readChains, totalChains, pricedRows, totalRows };
   }, [useMulti, source]);
 
-  const progress = goal ? goalProgress({ targetUsd: goal.targetUsd, currentUsd: total }) : null;
-  const requiredPmt = goal
+  const goalExecution = useMemo(() => goal ? verifiedGoalExecution({ goalId: goal.id, orders: loadOrders(), receipts: loadDcaReceipts() }) : null, [goal]);
+  const linkedDcas = useMemo(() => goal ? loadOrders().filter((o) => o.type === 'dca' && o.goalId === goal.id) : [], [goal]);
+  // Goal progress is execution evidence only. Wallet holdings can include funds
+  // unrelated to this goal, and a planned DCA is not a completed purchase.
+  const progress = goal && goalExecution?.hasVerifiedExecution
+    ? goalProgress({ targetUsd: goal.targetUsd, currentUsd: goalExecution.totalUsd }) : null;
+  const requiredPmt = goal && goalExecution?.hasVerifiedExecution
     ? requiredMonthlyContribution({
         targetUsd: goal.targetUsd,
-        currentUsd: total,
+        currentUsd: goalExecution.totalUsd,
         deadlineMs: goal.deadlineMs,
         annualYield: goal.annualYield
       })
@@ -167,6 +144,8 @@ export default function Portfolio({ embedded = false, onBack }) {
     if (!Number.isFinite(days) || days <= 0) return;
     const y = Number.isFinite(yPct) ? Math.max(0, Math.min(1, yPct / 100)) : 0;
     setGoal({
+      id: goal?.id || `g_${Date.now().toString(36)}`,
+      createdAt: goal?.createdAt || Date.now(),
       targetUsd: tNum,
       deadlineMs: Date.now() + days * 86400000,
       annualYield: y
@@ -418,6 +397,7 @@ export default function Portfolio({ embedded = false, onBack }) {
               <button
                 type="button"
                 onClick={() => {
+                  if (loadOrders().some((o) => o.type === 'dca' && o.goalId === goal?.id && o.status === 'active') && !window.confirm(t('wealth.goal.removeWarning'))) return;
                   setGoal(null);
                   setGoalEditing(false);
                 }}
@@ -436,6 +416,23 @@ export default function Portfolio({ embedded = false, onBack }) {
           </div>
         )}
 
+        {goal && !goalEditing && (
+          <div className="notice" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.55 }}>
+            {linkedDcas.length === 0 ? (
+              <><span>{t('wealth.goal.noVerifiedExecution')}</span> <button type="button" className="wal-link-btn" onClick={() => navigate('/orders')}>{t('wealth.goal.ordersLink')}</button></>
+            ) : linkedDcas.some((o) => o.status === 'paused') ? (
+              <><span>{t('wealth.goal.awaitingConfirmation')}</span> <button type="button" className="wal-link-btn" onClick={() => navigate('/orders')}>{t('wealth.goal.ordersLink')}</button></>
+            ) : linkedDcas.some((o) => o.status === 'active') && !goalExecution?.hasVerifiedExecution ? (
+              t('wealth.goal.activeNoExecution')
+            ) : goalExecution?.hasVerifiedExecution ? (
+              t('wealth.goal.verifiedExecution', { amount: fmtUsd(goalExecution.totalUsd) })
+            ) : t('wealth.goal.noVerifiedExecution')}
+            {linkedDcas.map((o) => ['failed', 'rejected', 'partial'].includes(dcaDisplayStatus(o, loadDcaReceipts())) && (
+              <p key={o.id} style={{ margin: '6px 0 0' }}>{t(`wealth.goal.execution.${dcaDisplayStatus(o, loadDcaReceipts())}`)}</p>
+            ))}
+          </div>
+        )}
+
         {goal && !goalEditing && progress && (
           <div>
             {goalMissed ? (
@@ -449,7 +446,7 @@ export default function Portfolio({ embedded = false, onBack }) {
                     {t('wealth.goal.progressLabel', { pct: Math.round(progress.progress * 100) })}
                   </span>
                   <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
-                    {fmtUsd(total)} / {fmtUsd(goal.targetUsd)}
+                    {fmtUsd(goalExecution.totalUsd)} / {fmtUsd(goal.targetUsd)}
                   </span>
                 </div>
                 <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
