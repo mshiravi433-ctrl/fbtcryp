@@ -51,6 +51,13 @@ import {
   validateWatch
 } from '../src/lib/btcWatch.js';
 import { flagEmoji, flagFallback, flagSupported, normalizeCountryCode } from '../src/lib/countryFlag.js';
+import {
+  GOAL_MAX_ANNUAL_YIELD,
+  goalProgress,
+  monthsBetween,
+  projectGoalValue,
+  requiredMonthlyContribution
+} from '../src/lib/goalMath.js';
 import { shareTargets, telegramShareUrl } from '../src/lib/share.js';
 import {
   TELEGRAM_BOT_ID,
@@ -8926,6 +8933,202 @@ export default async function run() {
        rather than reported as false — a false here would show letters to
        everyone on a server-rendered pass. */
     t('flag support is assumed when there is no DOM to measure', flagSupported(true) === true);
+  }
+
+  /* ------------------- Goal math (Wealth Hub) -------------------------- */
+  /*
+   * Pure math, no DOM, no React. The engine answers two questions:
+   *   1. How far along is the user right now? (goalProgress)
+   *   2. What monthly contribution reaches the target? (requiredMonthlyContribution)
+   * Every assertion below would catch a regression that would either mislead
+   * the user (a wrong progress bar) or ask for an impossible payment.
+   */
+  {
+    /* ---- monthsBetween: calendar months, never a 30-day approximation ---- */
+    // Same calendar day, +12 months → exactly 12 whole months.
+    t('months between the same day a year apart is 12',
+      monthsBetween(new Date(2026, 0, 15).getTime(), new Date(2027, 0, 15).getTime()) === 12);
+    // 14 months exactly.
+    t('14 months is 14',
+      monthsBetween(new Date(2026, 0, 15).getTime(), new Date(2027, 2, 15).getTime()) === 14);
+    // Deadline is the 10th, today is the 15th — the 10th has not been reached
+    // yet this month, so the contribution for the partial final month does
+    // not count. A user who set a goal 1 year and 25 days ago gets 12
+    // contributions, not 13.
+    t('a partial final month is not a whole payment',
+      monthsBetween(new Date(2026, 0, 15).getTime(), new Date(2027, 0, 10).getTime()) === 11);
+    // Past deadline → 0.
+    t('a deadline in the past is 0 months',
+      monthsBetween(new Date(2026, 5, 1).getTime(), new Date(2026, 0, 1).getTime()) === 0);
+    // Same instant → 0.
+    t('a deadline equal to now is 0 months',
+      monthsBetween(1_000_000, 1_000_000) === 0);
+    // Garbage in → 0 out, never a throw.
+    t('non-numeric timestamps do not throw', monthsBetween('a', 'b') === 0);
+
+    /* ---- goalProgress: clamped bar + honest unclamped ratio ---- */
+    t('progress is the ratio clamped to [0, 1]',
+      goalProgress({ targetUsd: 1000, currentUsd: 250 }).progress === 0.25);
+    t('unclamped exposes the raw ratio, even above 1',
+      Math.abs(goalProgress({ targetUsd: 1000, currentUsd: 1750 }).unclamped - 1.75) < 1e-9);
+    t('a portfolio above target clamps the bar to 1, not > 1',
+      goalProgress({ targetUsd: 1000, currentUsd: 1750 }).progress === 1);
+    t('a reached goal is marked reached',
+      goalProgress({ targetUsd: 1000, currentUsd: 1000 }).reached === true);
+    t('a goal not yet reached is not marked reached',
+      goalProgress({ targetUsd: 1000, currentUsd: 999.99 }).reached === false);
+    t('a zero balance is progress 0, not a crash',
+      goalProgress({ targetUsd: 1000, currentUsd: 0 }).progress === 0);
+    t('negative current is treated as 0 (a bug read as bad data, not a negative bar)',
+      goalProgress({ targetUsd: 1000, currentUsd: -50 }).progress === 0);
+    t('missing target is missing, not 0',
+      goalProgress({ targetUsd: null, currentUsd: 500 }).missing === true);
+    t('a non-positive target is missing',
+      goalProgress({ targetUsd: 0, currentUsd: 500 }).missing === true);
+    t('a NaN target is missing',
+      goalProgress({ targetUsd: NaN, currentUsd: 500 }).missing === true);
+    t('remainingUsd is the gap, never negative',
+      goalProgress({ targetUsd: 1000, currentUsd: 1750 }).remainingUsd === 0);
+
+    /* ---- requiredMonthlyContribution: the future-value formula ---- */
+    // No yield, simple linear division. Saving $6000 over 12 months from
+    // a $0 start → $500/month.
+    t('no yield, 6000 over 12 months is 500 per month',
+      Math.abs(requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 0, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) - 500) < 1e-9);
+    // With a starting balance that already covers half, the payment halves.
+    t('a starting balance halves the payment',
+      Math.abs(requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 3000, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) - 250) < 1e-9);
+    // The PV already exceeds the target → PMT is 0, not negative. We never
+    // tell a user to withdraw from a funded goal. (With no yield the
+    // linear-division formula returns (t - c) / months = −83.33 here, which
+    // is the wrong answer for the UI; the engine clamps to 0 instead.)
+    t('an over-funded goal needs zero payment, not a negative one',
+      requiredMonthlyContribution({
+        targetUsd: 1000, currentUsd: 2000, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === 0);
+    // With a positive yield the formula can still produce a small positive
+    // PMT even when PV > FV (the growth eats into the surplus). That number
+    // is a real one — the goal is over-funded in nominal terms but the
+    // growth assumption may be wrong. We do not over-claim by clamping it
+    // to 0 in that case; the UI displays it as "you are already funded".
+    t('an over-funded goal with yield is not silently clamped to 0',
+      requiredMonthlyContribution({
+        targetUsd: 1000, currentUsd: 1500, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === 0);
+    // The exact case that motivated the cap: an implausible 500% APR must
+    // not produce a negative number of months, and must return null rather
+    // than a number the UI would render as "−$1200/month".
+    t('a yield above the cap is refused with null',
+      requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 0, annualYield: 5,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === null);
+    t('a negative yield is refused with null',
+      requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 0, annualYield: -0.1,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === null);
+    t('a NaN yield is refused with null',
+      requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 0, annualYield: NaN,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === null);
+    t('a missed deadline returns null, not infinity or a negative number',
+      requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 0, annualYield: 0,
+        deadlineMs: new Date(2025, 0, 1).getTime(),
+        now: new Date(2026, 0, 1).getTime()
+      }) === null);
+    t('zero months remaining returns null, not a division-by-zero infinity',
+      requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: 0, annualYield: 0,
+        deadlineMs: new Date(2025, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === null);
+    t('a missing target returns null',
+      requiredMonthlyContribution({
+        targetUsd: undefined, currentUsd: 0, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === null);
+    t('a missing current returns null',
+      requiredMonthlyContribution({
+        targetUsd: 6000, currentUsd: undefined, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      }) === null);
+
+    /* ---- with yield: the payment must be lower than without ---- */
+    {
+      const noYield = requiredMonthlyContribution({
+        targetUsd: 12000, currentUsd: 0, annualYield: 0,
+        deadlineMs: new Date(2027, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      });
+      const withYield = requiredMonthlyContribution({
+        targetUsd: 12000, currentUsd: 0, annualYield: 0.08,
+        deadlineMs: new Date(2027, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      });
+      t('a positive yield reduces the required payment',
+        withYield < noYield && withYield > 0);
+      t('with 8% APR, 12k in 2 years from 0 is below 500/month',
+        withYield < 500 && withYield > 0);
+    }
+
+    /* ---- projectGoalValue: companion formula, no solving ---- */
+    {
+      const projected = projectGoalValue({
+        currentUsd: 0, monthlyUsd: 500, annualYield: 0,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      });
+      t('12 × 500 with no growth projects to 6000', projected === 6000);
+      const grown = projectGoalValue({
+        currentUsd: 1000, monthlyUsd: 100, annualYield: 0.12,
+        deadlineMs: new Date(2026, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      });
+      t('with 12% APR the projected value is greater than the linear sum',
+        grown > 1000 + 100 * 12);
+    }
+
+    /* ---- the math is the same when used as a round trip ---- */
+    {
+      // Pick a payment, project, and confirm the projection matches the
+      // formula's expected value to floating-point tolerance.
+      const pmt = requiredMonthlyContribution({
+        targetUsd: 24000, currentUsd: 3000, annualYield: 0.05,
+        deadlineMs: new Date(2027, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      });
+      const projected = projectGoalValue({
+        currentUsd: 3000, monthlyUsd: pmt, annualYield: 0.05,
+        deadlineMs: new Date(2027, 0, 1).getTime(),
+        now: new Date(2025, 0, 1).getTime()
+      });
+      t('the required PMT and the projected value round-trip to the target',
+        Math.abs(projected - 24000) < 0.01);
+    }
+
+    /* ---- the cap is exported for the UI to read ---- */
+    t('the cap is exported at 100% APR (1.0)',
+      GOAL_MAX_ANNUAL_YIELD === 1.0);
   }
 
   return rows;

@@ -4819,5 +4819,31 @@
   },
   "launch": {
     "step": "Step {{n}} of {{total}}"
+  },
+  "wealth": {
+    "title": "Wealth Hub",
+    "netWorth": "Net worth",
+    "coverage": {
+      "partial": "Partial coverage",
+      "reads": "{read} of {total} chains read",
+      "priced": "{priced} of {total} holdings priced"
+    },
+    "goal": {
+      "title": "Goal",
+      "set": "Set a goal",
+      "edit": "Edit",
+      "empty": "Pick a target and a deadline. The hub shows the monthly contribution and your live progress from real holdings only.",
+      "targetLabel": "Target (USD)",
+      "deadlineLabel": "Deadline (days from today)",
+      "yieldLabel": "Expected annual yield (%) — optional",
+      "save": "Save goal",
+      "remove": "Remove",
+      "progressLabel": "Progress: {pct}%",
+      "reached": "Goal reached — the live total covers the target.",
+      "noSchedule": "Deadline is past or this month — no monthly schedule reaches the target.",
+      "funded": "Already funded by the live total. No contribution required.",
+      "requiredMonthly": "About {amount} per month to reach it on time.",
+      "missed": "Deadline has passed. The live progress bar above is the only honest number now."
+    }
   }
 }
