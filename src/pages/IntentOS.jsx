@@ -366,6 +366,7 @@ export default function IntentOS() {
      It is created here at compile time and continued by the swap screen, so
      the timeline is never a decorative mock. */
   const [lifecycle, setLifecycle] = useState(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [networkStatus, setNetworkStatus] = useState(null);
   /*
    * Ecosystem catalogs are fetched lazily, once, and only for the tab being
@@ -382,6 +383,15 @@ export default function IntentOS() {
    * only if they exist in the chain registry, so an unknown token can never
    * slip into a compiled intent.
    */
+  // Level 2 policy: a pre-authorized ceiling is never an execution approval.
+  // Sensitive operations still require an explicit confirmation gate.
+  const [executionPolicy, setExecutionPolicy] = useState({
+    maxCapitalUsd: '1000',
+    maxTransactionUsd: '250',
+    maxLossUsd: '100',
+    approvalMode: 'sensitive'
+  });
+
   const [draft, setDraft] = useState(() => {
     const mem = intentMemoryAtBoot.current;
     const known = (v) => {
@@ -519,7 +529,16 @@ export default function IntentOS() {
     const result = compileIntent({
       ...draft,
       deadlineAt: Date.now() + Number(draft.deadlineHours || 2) * 60 * 60 * 1000,
-      requireExecutionProof: memory.requireExecutionProof
+      requireExecutionProof: memory.requireExecutionProof,
+      executionPolicy: {
+        maxCapitalUsd: Number(executionPolicy.maxCapitalUsd),
+        maxTransactionUsd: Number(executionPolicy.maxTransactionUsd),
+        maxLossUsd: Number(executionPolicy.maxLossUsd),
+        approvalMode: executionPolicy.approvalMode,
+        // Explicitly false: this phase can prepare, but never autonomously execute.
+        autonomousExecution: false,
+        confirmationRequired: true
+      }
     }, memory, Date.now(), { confidentialAvailable: confidentialSelectable });
     setCompiled(result);
     if (result.error) {
@@ -711,6 +730,20 @@ export default function IntentOS() {
               </label>
             </div>
 
+            <section className="ios-policy-card" aria-labelledby="intent-policy-title">
+              <div className="row-between">
+                <strong id="intent-policy-title">{t('intentOS.policy.title', { defaultValue: 'Execution policy' })}</strong>
+                <span className="ios-status eligible">{t('intentOS.policy.level', { defaultValue: 'Pre-authorization' })}</span>
+              </div>
+              <p className="ios-honesty-note">{t('intentOS.policy.subtitle', { defaultValue: 'These limits define the maximum authority. Every sensitive operation still requires your confirmation and signature.' })}</p>
+              <div className="ios-grid-3">
+                <label className="ios-field"><span>{t('intentOS.policy.capital', { defaultValue: 'Capital ceiling (USD)' })}</span><input type="number" min="0" value={executionPolicy.maxCapitalUsd} onChange={(event) => setExecutionPolicy((p) => ({ ...p, maxCapitalUsd: event.target.value }))} /></label>
+                <label className="ios-field"><span>{t('intentOS.policy.transaction', { defaultValue: 'Max transaction (USD)' })}</span><input type="number" min="0" value={executionPolicy.maxTransactionUsd} onChange={(event) => setExecutionPolicy((p) => ({ ...p, maxTransactionUsd: event.target.value }))} /></label>
+                <label className="ios-field"><span>{t('intentOS.policy.loss', { defaultValue: 'Max loss (USD)' })}</span><input type="number" min="0" value={executionPolicy.maxLossUsd} onChange={(event) => setExecutionPolicy((p) => ({ ...p, maxLossUsd: event.target.value }))} /></label>
+              </div>
+              <label className="ios-field"><span>{t('intentOS.policy.approval', { defaultValue: 'Approval rule' })}</span><select value={executionPolicy.approvalMode} onChange={(event) => setExecutionPolicy((p) => ({ ...p, approvalMode: event.target.value }))}><option value="sensitive">{t('intentOS.policy.sensitive', { defaultValue: 'Confirm sensitive operations' })}</option><option value="every">{t('intentOS.policy.every', { defaultValue: 'Confirm every operation' })}</option></select></label>
+            </section>
+
             {draft.kind === 'automation' && (
               <div className="ios-grid-2 ios-condition-grid">
                 <label className="ios-field">
@@ -881,9 +914,25 @@ export default function IntentOS() {
                   </div>
 
                   {compiled.handoff ? (
-                    <button className="btn btn-primary ios-compile" onClick={() => navigate(compiled.handoff)}>
+                    <div>
+                    <button className="btn btn-primary ios-compile" onClick={() => setConfirmationOpen(true)}>
                       {t('intentOS.result.reviewHandoff')} <span>→</span>
                     </button>
+                  {confirmationOpen && (
+                    <div className="ios-confirm-gate" role="dialog" aria-modal="true" aria-labelledby="ios-confirm-title">
+                      <h3 id="ios-confirm-title">{t('intentOS.confirm.title', { defaultValue: 'Confirmation required before signing' })}</h3>
+                      <p>{t('intentOS.confirm.body', { defaultValue: 'This is a review gate, not an automatic execution approval. Your wallet must still approve and sign the final transaction.' })}</p>
+                      <div className="ios-confirm-summary">
+                        <b>{compiled.intent.fromSymbol} → {compiled.intent.toSymbol}</b>
+                        <span>{compiled.intent.amountIn} · {compiled.intent.amountUsd} USD</span>
+                        <span>Chain: {compiled.intent.chainId} · Slippage: {compiled.intent.maxSlippagePct}%</span>
+                        <span>Deadline: {new Date(compiled.intent.deadlineAt).toLocaleString()}</span>
+                      </div>
+                      <p className="ios-guardian-pass">✓ Guardian review passed · explicit wallet confirmation still required</p>
+                      <div className="ios-confirm-actions"><button className="btn btn-ghost btn-sm" onClick={() => setConfirmationOpen(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={() => navigate(compiled.handoff)}>Review in wallet</button></div>
+                    </div>
+                  )}
+                    </div>
                   ) : (
                     <p className="ios-honesty-note">{t('intentOS.result.draftOnly')}</p>
                   )}
