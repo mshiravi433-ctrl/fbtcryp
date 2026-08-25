@@ -67,10 +67,53 @@ const ALLOWED_PROJECTS = new Set([
   // major AMMs
   'curve-dex',
   'uniswap-v3',
+  /*
+   * ─── uniswap-v4 — added 2026-08-24, verified against the real sources ───
+   * Slug: DefiLlama's yield-server uses the adapter FOLDER NAME as the
+   * `project` slug (its README says the adapter test fails on any mismatch),
+   * and the adapter at
+   *   github.com/DefiLlama/yield-server  src/adaptors/uniswap-v4/index.js
+   * (master, read 2026-08-24) emits `project: 'uniswap-v4'` for chains
+   * ethereum, base, arbitrum, polygon, unichain, bsc, avax, optimism.
+   * Data shape: symbol is "TOKEN0-TOKEN1" (get-pair works), `apyBase` only
+   * with no `apyReward`, so the 70% emission ceiling cannot fire.
+   * Live feed the same day (yields.llama.fi/pools): ETH-WBTC 15.2m @ 5.86%,
+   * ETH-USDC (Arbitrum) 18.2m @ 10.25%, ETH-AZTEC 15.4m @ 1.08%,
+   * SYRUPUSDC-USDC 13.3m @ 1.45% — several pools clear MIN_TVL, so the
+   * screen is not empty. test/wiring.mjs pins this evidence and fails if
+   * the slug ever drifts from it.
+   */
+  'uniswap-v4',
   'pancakeswap-amm',
   'pancakeswap-amm-v3',
   'balancer-v2',
   'aerodrome-slipstream',
+  /*
+   * ─── CONSIDERED AND REJECTED, 2026-08-24 (do not add without re-checking) ─
+   *
+   * 'meteora' — the adapter is broken, and has never worked. Its ONLY commit
+   * (2025-01-23, "rename resolv") left `p.pool_token_mints` and `apyReward`
+   * referencing undefined variables, so `apy()` throws a ReferenceError on
+   * every run and the server can have stored no `project: 'meteora'` pool
+   * since. Verified against master on 2026-08-24; `meteora-dlmm` and `ajna`
+   * are not present in the repo at all. A slug with no data behind it would
+   * only look like we list Meteora when we do not.
+   *
+   * 'ajna-v2' — two independent problems, either one enough to stay out:
+   *   1. WRONG LABEL ON THE WRONG ASSET. The adapter puts the COLLATERAL
+   *      token in `symbol` (e.g. "WBTC") while the token a depositor
+   *      actually lends is the quote in `mintedCoin`/`borrowToken`, and
+   *      `underlyingTokens` lists the collateral only. Our riskBand() would
+   *      then render a USDC-lending pool as "WBTC · low" — the exact
+   *      mislabel this app exists to refuse. Adding it would require
+   *      first teaching normalizePool to prefer `mintedCoin`.
+   *   2. NOTHING PASSES THE FLOOR. The whole protocol holds under ~$1M
+   *      (DefiLlama: 4 pools tracked, average APY 0.93%, 2026-08-24), so
+   *      every pool dies at MIN_TVL = $10m. A slug that renders zero rows
+   *      is dead weight today and a trap for problem 1 the day TVL grows.
+   * If Ajna outgrows the floor, add the slug AND the mintedCoin label fix
+   * together, with fresh evidence in test/wiring.mjs.
+   */
   // stablecoin yield with a real, explainable source
   'sky-lending',
   'ethena-usde',

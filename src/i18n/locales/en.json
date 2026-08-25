@@ -1199,6 +1199,7 @@
     "tradeOpen": "Open",
     "earn": {
       "inAppFee": "in-app · 0.70% on EVM",
+      "solanaFee": "in-app · fee per quote on Solana",
       "bridgeFee": "bridge · 30–40 bps",
       "builderFee": "builder · 5 bps",
       "refFee": "referral",
@@ -2926,13 +2927,20 @@
       "title": "Buying with an external wallet",
       "body": "Your keys stay in your own wallet the whole way through. Nothing on this screen asks for them, and nothing here can spend them.",
       "noOnRamp": "We do not run a card on-ramp. There is no provider behind such a button on this deployment, so there is no button — a form that ends in \"not enabled\" would only waste your time.",
+      "options": "Three ways that actually work",
       "p2p": "Buy BTC on the P2P desk",
       "p2pNote": "The desk releases to any Bitcoin address you control, including one in an external wallet. Escrow runs on the desk’s own multisig; we never hold the coins.",
+      "p2pReferral": "The desk charges 0.75% per side. Registering with our referral link lowers your fee to 0.5% permanently, and the desk pays us a 5–10% share of its own fee on trades started this way — you still pay less than a stranger would.",
       "p2pCta": "Open the P2P market",
       "swap": "Swap what you already hold",
       "swapNote": "If that wallet already holds crypto, send it to your in-app address and swap it here at the normal EVM swap fee (0.70%).",
       "swapCta": "Go to swap",
       "walletCta": "In-app wallet",
+      "solana": {
+        "title": "Buy & sell any Solana token",
+        "note": "Straight from your own wallet, with no custody anywhere in the path. The fee for each quote is shown on the screen before you sign — some routes carry 0% today, the standard Solana swap fee is 0.70%."
+      },
+      "solanaCta": "Go to Solana swap",
       "disclosure": "No third party ever receives your private key, seed phrase or card details from this app, because this app never asks for them."
     }
   },

@@ -27,6 +27,9 @@ import {
 import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
 import { iconCandidates } from '../src/lib/tokenIcon.jsx';
 import { pairTokens, pairSwapRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare, farmScore, impermanentLoss } from '../src/lib/yields.js';
+/* LST_ASSETS / EQUITY_ASSETS / COMMODITY_ASSETS are imported above (solanaAssets). */
+import { SOL_MINT, USDC_MINT, USDT_MINT } from '../src/lib/solana.js';
+import { SOLANA_SIGNAL_ASSETS } from '../src/lib/solanaSignals.js';
 import { buildHoldings } from '../src/hooks/useWalletBalances.js';
 import { normalizeEvent, validateResponseShape, EVENT_KINDS } from '../src/lib/whales.js';
 import {
@@ -3544,11 +3547,94 @@ export default async function run() {
     t('a hyphenated single-asset symbol still has no pair',
       pairTokens({ symbol: 'WBTC-WRAPPED', exposure: 'single' }).length === 0);
     t('Ethereum Llama slug maps to chain 1', llamaChainId('Ethereum') === 1);
-    t('an unknown Llama chain is null, never invented', llamaChainId('Solana') === null);
+    /*
+     * Deliberate behaviour change (2026-08-24), not a weakened assertion:
+     * Solana is a chain the app supports (server/yields.js ALLOWED_CHAINS
+     * already listed it), so it must no longer resolve to "unknown chain".
+     * It maps to 0 — the not-EVM sentinel — because /swap routes are
+     * EVM-only, and 0 stays falsy through the EVM path's `!chainId` guard,
+     * so no code can build a `/swap?chain=0`. pairSwapRoute handles Solana
+     * in its own branch (below).
+     */
+    t('Solana maps to the not-EVM sentinel, never an invented EVM id', llamaChainId('Solana') === 0);
+    t('a chain the app truly does not know is still null', llamaChainId('Fantom') === null);
     t('a BSC pair we list is a real swap route',
       pairSwapRoute({ symbol: 'CAKE-BNB', exposure: 'multi', chain: 'BSC' })?.chainId === 56);
     t('a pair we do not list cannot become a swap',
       pairSwapRoute({ symbol: 'FOO-BAR', exposure: 'multi', chain: 'Ethereum' }) === null);
+
+    /*
+     * ─── SOLANA PAIR ROUTES: /solana?toMint=, NEVER /swap ──────────────────
+     * Synthetic pools, deliberately NOT from the live feed (tests that read
+     * the network fail on Sunday). The mints come from the mint-verified
+     * lists, never retyped — a second copy of a base58 string is the trap
+     * this app's Solana work exists to avoid.
+     */
+    const JUP_MINT = SOLANA_SIGNAL_ASSETS.find((a) => a.symbol === 'JUP').mint;
+    const BONK_MINT = SOLANA_SIGNAL_ASSETS.find((a) => a.symbol === 'BONK').mint;
+    const JITOSOL_MINT = LST_ASSETS.find((a) => a.symbol === 'jitoSOL').mint;
+    t('a Solana pair routes to the Solana screen with a verified mint', (() => {
+      const r = pairSwapRoute({ symbol: 'SOL-JUP', exposure: 'multi', chain: 'Solana' });
+      return r?.kind === 'solana' && r.from === 'SOL' && r.to === 'JUP' && r.toMint === JUP_MINT;
+    })());
+    t('...and the non-base leg is the one you swap INTO',
+      pairSwapRoute({ symbol: 'USDC-JUP', exposure: 'multi', chain: 'Solana' })?.toMint === JUP_MINT);
+    t('...when both legs are base, the second leg is the target',
+      pairSwapRoute({ symbol: 'SOL-USDC', exposure: 'multi', chain: 'Solana' })?.toMint === USDC_MINT);
+    t('...and USDT is a base leg too',
+      pairSwapRoute({ symbol: 'JUP-USDT', exposure: 'multi', chain: 'Solana' })?.toMint === JUP_MINT);
+    t('...when neither leg is base, the second leg is the target',
+      pairSwapRoute({ symbol: 'JUP-BONK', exposure: 'multi', chain: 'Solana' })?.toMint === BONK_MINT);
+    t('...and the feed spelling of an LST resolves (JITOSOL, not jitoSOL)',
+      pairSwapRoute({ symbol: 'JITOSOL-SOL', exposure: 'multi', chain: 'Solana' })?.toMint === JITOSOL_MINT);
+    t('...case in the feed symbol does not matter',
+      pairSwapRoute({ symbol: 'sol-jup', exposure: 'multi', chain: 'Solana' })?.toMint === JUP_MINT);
+    /*
+     * PENGU is a real, liquid Solana token that is deliberately NOT in the
+     * mint-verified lists: the honest answer for an unverified leg is null,
+     * which keeps the pool on its external DefiLlama link instead of giving
+     * it a button that resolves a symbol to a mint by guesswork.
+     */
+    t('an unverified Solana leg stays an honest null',
+      pairSwapRoute({ symbol: 'SOL-PENGU', exposure: 'multi', chain: 'Solana' }) === null);
+    t('a single-asset Solana pool has no route at all',
+      pairSwapRoute({ symbol: 'JITOSOL', exposure: 'single', chain: 'Solana' }) === null);
+    t('the EVM route shape is unchanged (no kind field, has chainId)', (() => {
+      const r = pairSwapRoute({ symbol: 'CAKE-BNB', exposure: 'multi', chain: 'BSC' });
+      return r?.kind === undefined && r.chainId === 56;
+    })());
+
+    /*
+     * ─── uniswap-v4 IN THE ALLOW-LIST (added 2026-08-24) ───────────────────
+     * Row shape copied from the live feed on that date: apyBase only (no
+     * apyReward), ilRisk yes, exposure multi, outlier false. This proves the
+     * allow-list entry can produce a VISIBLE row — TVL, APY band and outlier
+     * filters all pass — not merely that a string joined a Set. The slug
+     * evidence itself (adapter source, chains, live pools) lives in
+     * test/wiring.mjs, which fails if it drifts.
+     */
+    const v4 = {
+      pool: '9507bfe0-3fd8-41dc-b2fc-4752244917fb',
+      chain: 'Ethereum',
+      project: 'uniswap-v4',
+      symbol: 'ETH-WBTC',
+      tvlUsd: 15_208_749,
+      apy: 5.9,
+      apyBase: 5.9,
+      apyReward: null,
+      apyMean30d: 5.9,
+      stablecoin: false,
+      ilRisk: 'yes',
+      exposure: 'multi',
+      outlier: false
+    };
+    t('a uniswap-v4 pool with real live-feed numbers passes every filter', isEligible(v4));
+    t('...an apyBase-only pool is 100% real, so the emissions ceiling cannot fire',
+      realShare(v4) === 1);
+    t('...and its get-pair route works: both legs are listed on Ethereum',
+      pairSwapRoute(v4)?.chainId === 1);
+    t('...and a sub-floor v4 pool is still rejected',
+      !isEligible({ ...v4, tvlUsd: 4_000_000 }));
 
     /* ---- the calculator -------------------------------------------------- */
     const proj = projectEarnings({ apy: 12, apyBase: 6 }, 1000);

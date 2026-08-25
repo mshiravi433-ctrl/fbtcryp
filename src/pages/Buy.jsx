@@ -101,16 +101,41 @@ export default function Buy() {
             <p className="notice" style={{ marginTop: 10 }}>{t('buy.ext.noOnRamp')}</p>
 
             {/*
-             * ─── THE TWO PATHS THAT ACTUALLY WORK ────────────────────────────
-             * Both keep the user's keys where they are. The desk releases to
-             * any Bitcoin address the user controls; the swap needs nothing
-             * from an external wallet at all beyond a transfer the user makes
-             * themselves.
+             * ─── THE THREE PATHS THAT ACTUALLY WORK ─────────────────────────
+             * The dead end used to be "no on-ramp, nothing else". The owner's
+             * rule for what replaces it: real options, buy/sell-only, and —
+             * where it exists — a commission that is VERIFIED from the
+             * venue's own source, never assumed:
+             *
+             *   1. P2P desk over Hodl Hodl. Verified against their FAQ + fee
+             *      guide + ToS (2026-08-24): fee 0.75% per party; 0.5%
+             *      permanent for anyone registering with a referral code;
+             *      the referrer earns 5–10% of the platform commission per
+             *      completed trade (tiered by active traders). Buy/sell
+             *      only, no custody — escrow is the desk's own 2-of-3
+             *      multisig and releases to any address the user controls.
+             *   2. Our own EVM swap at 0.70% — the largest revenue line in
+             *      the app, so it stays a primary CTA here.
+             *   3. Our Solana swap (Jupiter / De¹). Buy/sell-only, straight
+             *      from the user's wallet. The fee is what the quote shows
+             *      (De¹ routes charge 0.70%, of which the server keeps its
+             *      verified share; the Jupiter fallback carries 0% while the
+             *      referral account is unfunded) — the note states exactly
+             *      that and nothing more.
+             *
+             * No third-party spot-swap service with a permissionless
+             * referral met all the rules (buy/sell-only + revenue for us +
+             * not in the wiring rival list), so there is no fourth card:
+             * padding a dead end with revenue-free competitor links is the
+             * failure this screen already went through once. Every button
+             * goes to a route that exists in this app.
              */}
-            <div className="stack" style={{ gap: 9, marginTop: 12 }}>
+            <p className="section-label" style={{ marginTop: 14, marginBottom: 2 }}>{t('buy.ext.options')}</p>
+            <div className="stack" style={{ gap: 9 }}>
               <div className="ord-row">
                 <div style={{ fontWeight: 700, fontSize: 13 }}>{t('buy.ext.p2p')}</div>
                 <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>{t('buy.ext.p2pNote')}</p>
+                <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>{t('buy.ext.p2pReferral')}</p>
                 <button
                   className="btn btn-primary"
                   style={{ marginTop: 10 }}
@@ -146,6 +171,21 @@ export default function Buy() {
                     {t('buy.ext.walletCta')}
                   </button>
                 </div>
+              </div>
+
+              <div className="ord-row">
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{t('buy.ext.solana.title')}</div>
+                <p className="faint" style={{ marginTop: 4, lineHeight: 1.75 }}>{t('buy.ext.solana.note')}</p>
+                <button
+                  className="btn btn-ghost"
+                  style={{ marginTop: 10 }}
+                  onClick={() => {
+                    haptic?.('select');
+                    navigate('/solana');
+                  }}
+                >
+                  {t('buy.ext.solanaCta')}
+                </button>
               </div>
             </div>
           </motion.section>
