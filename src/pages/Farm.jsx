@@ -115,7 +115,13 @@ function PoolRow({ pool, amount, horizon, onOpen, onGetTokens, t }) {
         {pool.ilRisk && <span className="pill pill-down">{t('farm.ilShort')}</span>}
         {pool.stablecoin && <span className="pill pill-neutral">{t('farm.stableShort')}</span>}
         <span className="pill pill-neutral">{t('farm.tvl')} {fmtCompact(pool.tvlUsd)}</span>
-        {route && <FeePill label={t('farm.earn.inAppFee')} />}
+        {/*
+          The Solana pill does NOT say 0.70%: that is the EVM rate. On
+          Solana the fee is what the quote shows (some routes carry 0%
+          today), and a pill that states a flat rate would be a number the
+          screen would not honour.
+        */}
+        {route && <FeePill label={route.kind === 'solana' ? t('farm.earn.solanaFee') : t('farm.earn.inAppFee')} />}
       </div>
 
       {share != null && (
@@ -329,6 +335,17 @@ export default function Farm() {
 
   const getTokens = (route) => {
     haptic?.('select');
+    /*
+     * Solana pools route to the Solana screen, never /swap: the EVM registry
+     * has no say there, and `?toMint=` is the parameter SolanaSwap honours
+     * with a verified mint (the route was already resolved against the
+     * mint-verified lists in lib/yields.js — an unresolved leg would never
+     * reach this button).
+     */
+    if (route.kind === 'solana') {
+      navigate(`/solana?toMint=${encodeURIComponent(route.toMint)}`);
+      return;
+    }
     navigate(`/swap?chain=${route.chainId}&from=${encodeURIComponent(route.from)}&to=${encodeURIComponent(route.to)}`);
   };
 

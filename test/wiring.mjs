@@ -7095,6 +7095,37 @@ export default function run() {
           String(JSON.parse(read(`src/i18n/locales/${l}.json`)).buy?.ext?.p2pNote))));
 
     /*
+     * ─── THE DEAD END NOW HAS THREE WORKING OPTIONS (2026-08-24) ──────────
+     * The tab used to end in "no on-ramp, nothing else" — «ارجاع کلا
+     * قشنگ نیست» is the owner's ruling against what replaced it before, so
+     * the replacement must be real, buy/sell-only, and earn where an
+     * earning path exists (verified from each venue's own source, 2026-08-24:
+     * Hodl Hodl FAQ/fee guide/ToS for 0.75% → 0.5% with referral and the
+     * 5–10% commission; our swap at 0.70%; Solana's fee per quote). No
+     * third-party spot-swap venue met all the rules, so there is no fourth
+     * card and NO third-party link at all: every string that looks like a
+     * URL in this file would be a hand-off, and a hand-off is what this
+     * screen exists to have stopped. The dead-link check is the URL scan —
+     * zero URLs means every button is an in-app route.
+     */
+    t('...and the tab offers the Solana path as a third working option',
+      /navigate\('\/solana'\)/.test(buyCode));
+    {
+      const get = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+      const newKeys = ['options', 'p2pReferral', 'solana.title', 'solana.note', 'solanaCta'];
+      t('...every new option string exists in en and fa (other languages fall back to en)',
+        ['en', 'fa'].every((l) => {
+          const loc = JSON.parse(read(`src/i18n/locales/${l}.json`));
+          return newKeys.every((k) => {
+            const v = get(loc, `buy.ext.${k}`);
+            return typeof v === 'string' && v.trim().length > 3;
+          });
+        }));
+      t('...and no third-party URL is linked from anywhere in the file',
+        !/https?:\/\//.test(buyCode));
+    }
+
+    /*
      * The server module and its routes STAY. Nothing is thrown away and
      * re-enabling is a one-line revert; deleting them would turn a two-month
      * pause into a rewrite.
@@ -8021,6 +8052,118 @@ export default function run() {
       /st\.solanaRpc/.test(swal) && /solanaCluster === 'devnet'/.test(swal));
     t('...over https only, matching the EVM rule',
       /\^https:\\\/\\\//.test(swal));
+  }
+
+  /* ---- 79a. Solana pair routes + farm allow-list slug evidence ----------- */
+  {
+    const code = (src) => src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const farmCode = code(read('src/pages/Farm.jsx'));
+    const yieldsSrc = read('src/lib/yields.js');
+    const serverSrc = code(read('server/yields.js'));
+
+    /*
+     * ─── SOLANA PAIR ROUTES (2026-08-24) ──────────────────────────────────
+     * Before this, a Solana pool resolved to "unknown chain" on the client
+     * (no solana in LLAMA_CHAIN_IDS) even though the server's ALLOWED_CHAINS
+     * already listed Solana — so Farm's `{route && ...}` CTA never rendered
+     * for them and the only exit was an external DefiLlama link. Pinned at
+     * three points: the label resolves to the not-EVM sentinel (never an
+     * invented EVM id), the pair legs resolve ONLY against the mint-verified
+     * lists (a symbol we have not verified to a mint never becomes a
+     * button), and the Farm CTA navigates to /solana?toMint=, never /swap.
+     * Behaviour — mint resolution, honest nulls, base-leg choice — is
+     * unit-tested with synthetic pools in test/units.mjs, not the live feed.
+     */
+    t('Solana resolves to the not-EVM sentinel, not an invented EVM id',
+      /solana:\s*0/.test(yieldsSrc));
+    t('Solana pair legs resolve only against the mint-verified lists',
+      /LST_ASSETS/.test(yieldsSrc) && /EQUITY_ASSETS/.test(yieldsSrc) &&
+      /COMMODITY_ASSETS/.test(yieldsSrc) && /SOLANA_SIGNAL_ASSETS/.test(yieldsSrc) &&
+      /solanaMintFor/.test(yieldsSrc));
+    t('Farm routes a Solana pair to /solana?toMint=, never /swap',
+      /route\.kind === 'solana'/.test(farmCode) &&
+      /navigate\(`\/solana\?toMint=/.test(farmCode));
+    t('...and the EVM get-tokens template survives as the other branch',
+      /navigate\(`\/swap\?chain=/.test(farmCode));
+
+    /*
+     * ─── FARM ALLOW-LIST SLUG EVIDENCE ────────────────────────────────────
+     * "If DefiLlama renames or removes a slug, do not stay silent": the
+     * suite runs offline (a test that fetches fails on Sunday), so the
+     * authoritative source is pinned HERE instead of guessed: the adapter
+     * path in DefiLlama/yield-server — whose README makes the adapter FOLDER
+     * NAME the slug and fails the adapter's own test on any mismatch — the
+     * exact `project:` literal the adapter emits, the chains it covers, the
+     * live-feed check, and the date. Changing the allow-list below without a
+     * re-verified record fails this block, which is the honest version of a
+     * live assertion: the drift becomes a red test, not a silent empty page.
+     *
+     * Re-verification procedure (what bumping a date must mean):
+     *   1. Fetch https://raw.githubusercontent.com/DefiLlama/yield-server/master/src/adaptors/<slug>/index.js
+     *   2. Confirm `project: '<slug>'` and the chain list against the record.
+     *   3. Spot-check yields.llama.fi/pools for a pool of that slug clearing
+     *      the $10m TVL floor on an app chain, and record it here.
+     */
+    const SLUG_EVIDENCE = {
+      'uniswap-v4': {
+        verified: '2026-08-24',
+        adapter: 'github.com/DefiLlama/yield-server src/adaptors/uniswap-v4/index.js',
+        emits: "project: 'uniswap-v4'",
+        chains: ['ethereum', 'base', 'arbitrum', 'polygon', 'unichain', 'bsc', 'avax', 'optimism'],
+        liveCheck: '2026-08-24 yields.llama.fi/pools: ETH-WBTC 15.2m @5.86%, ETH-USDC (Arbitrum) 18.2m @10.25%, ETH-AZTEC 15.4m @1.08%, SYRUPUSDC-USDC 13.3m @1.45% — several clear MIN_TVL, the page is not empty',
+        shape: 'symbol TOKEN0-TOKEN1 (get-pair works); apyBase only, apyReward null, so the emissions ceiling cannot fire'
+      }
+    };
+
+    const setBlock = (name) =>
+      serverSrc.match(new RegExp(name + '\\s*=\\s*new Set\\(\\[([\\s\\S]*?)\\]\\)'))?.[1] ?? '';
+    const inAllowList = (slug) => new RegExp(`['"]${slug}['"]`).test(setBlock('ALLOWED_PROJECTS'));
+    /* Adapter chain strings → the labels formatChain() puts in the feed,
+       i.e. the labels ALLOWED_CHAINS must match. */
+    const CHAIN_LABEL = {
+      ethereum: 'Ethereum', base: 'Base', arbitrum: 'Arbitrum', polygon: 'Polygon',
+      bsc: 'BSC', avax: 'Avalanche', optimism: 'Optimism', unichain: 'Unichain'
+    };
+    const inAllowedChains = (label) => new RegExp(`['"]${label}['"]`).test(setBlock('ALLOWED_CHAINS'));
+
+    for (const [slug, ev] of Object.entries(SLUG_EVIDENCE)) {
+      t(`allow-list slug ${slug} has pinned evidence that matches the slug`,
+        ev.emits === `project: '${slug}'` && /^\d{4}-\d{2}-\d{2}$/.test(ev.verified) &&
+        /DefiLlama\/yield-server/.test(ev.adapter));
+      t(`...and it is actually in ALLOWED_PROJECTS`, inAllowList(slug));
+      const supported = ev.chains.map((c) => CHAIN_LABEL[c]).filter(Boolean);
+      const reachable = supported.filter((label) => inAllowedChains(label));
+      t(`...and at least three of its chains are app chains (${reachable.join(', ')})`,
+        reachable.length >= 3);
+    }
+
+    /*
+     * The two slugs that do NOT go in, pinned so a future "let's add it"
+     * cannot ship half-broken:
+     *
+     * 'meteora' — its adapter is broken and has never worked: its ONLY
+     * commit (2025-01-23, "rename resolv") left `p.pool_token_mints` and
+     * `apyReward` referencing undefined variables, so `apy()` throws on
+     * every run and the server has stored no `project: 'meteora'` pool
+     * since (verified against master, 2026-08-24; `meteora-dlmm` and
+     * `ajna` do not exist in the repo at all). A slug with no data behind
+     * it would look like a listing we do not have.
+     *
+     * 'ajna-v2' — the adapter puts the COLLATERAL token in `symbol`
+     * (e.g. "WBTC") while the token a depositor actually lends is the quote
+     * in `mintedCoin`/`borrowToken`, and `underlyingTokens` lists the
+     * collateral only — so riskBand() would label a USDC-lending pool
+     * "WBTC · low": the wrong label on the wrong asset, which this app
+     * refuses to ship. On top of that NOTHING passes the floor: the whole
+     * protocol holds under ~$1m (DefiLlama, 2026-08-24: 4 pools tracked,
+     * average APY 0.93%), so every pool dies at MIN_TVL = $10m. Revisit
+     * only with the mintedCoin label fix AND fresh TVL evidence, both
+     * pinned in the allow-list comments in server/yields.js.
+     */
+    t('meteora is NOT in the allow-list (broken adapter, never worked — see evidence)',
+      !inAllowList('meteora'));
+    t('ajna-v2 is NOT in the allow-list (mislabel on wrong asset + sub-floor TVL — see evidence)',
+      !inAllowList('ajna-v2'));
   }
 
   /* ---- 80. the real coin crash, header scale, selects, rwa reachability - */

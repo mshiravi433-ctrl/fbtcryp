@@ -19,6 +19,9 @@
  */
 
 import { TOKENS } from './chains';
+import { LST_ASSETS, EQUITY_ASSETS, COMMODITY_ASSETS } from './solanaAssets';
+import { SOLANA_SIGNAL_ASSETS } from './solanaSignals';
+import { SOL_MINT, USDC_MINT, USDT_MINT } from './solana';
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || '/api';
 
@@ -90,6 +93,14 @@ export function pairTokens(pool) {
 /**
  * DefiLlama chain labels → our EVM chain ids. Unknown chains stay null so
  * Farm never invents a swap the registry cannot fill.
+ *
+ * Solana is NOT an EVM chain, so it maps to 0 — a sentinel meaning "a chain
+ * this app supports that is not in the EVM registry". `pairSwapRoute` handles
+ * it in its own branch and never feeds 0 to the registry; and the EVM path's
+ * `!chainId` guard treats 0 as "not an EVM id", so no code can accidentally
+ * build a `/swap?chain=0` route. (The old value was null, which made Solana
+ * pools look like unknown chains even though the server's ALLOWED_CHAINS
+ * already lists them.)
  */
 const LLAMA_CHAIN_IDS = {
   ethereum: 1,
@@ -105,12 +116,51 @@ const LLAMA_CHAIN_IDS = {
   avalanche: 43114,
   avax: 43114,
   linea: 59144,
-  sonic: 146
+  sonic: 146,
+  solana: 0
 };
 
 export function llamaChainId(chain) {
   const key = String(chain ?? '').trim().toLowerCase();
-  return LLAMA_CHAIN_IDS[key] ?? null;
+  return key in LLAMA_CHAIN_IDS ? LLAMA_CHAIN_IDS[key] : null;
+}
+
+/**
+ * symbol → mint, from the mint-VERIFIED lists only.
+ *
+ * ─── WHY THIS UNION AND NOTHING ELSE ────────────────────────────────────────
+ * A "get the pair" button that lands on a mint we did not verify is a
+ * dead swap with extra steps — on Solana, a plausible-looking base58 string
+ * is a stranger's token. So the only symbols that can ever resolve are the
+ * ones with a mint verified by hand against the issuer's own authority:
+ *
+ *   • lib/solanaAssets.js — LSTs, xStocks, tokenized gold (issuer-checked)
+ *   • lib/solanaSignals.js — the seven signal mints (authority-checked)
+ *   • lib/solana.js — the three base mints every Solana flow is built on
+ *
+ * `WSOL` is an alias, not a guess: it is the on-chain symbol of the wrapped
+ * SOL mint that SolanaSwap and Jupiter use everywhere in this codebase.
+ * Anything not in these lists (e.g. "WSOL" of some bridge, "USDC.e", a
+ * pump.fun clone) resolves to null, and the pool keeps its honest external
+ * link instead of getting a button that cannot be trusted.
+ */
+const SOLANA_SYMBOL_MINTS = (() => {
+  const m = new Map();
+  const add = (symbol, mint) => {
+    const k = String(symbol ?? '').trim().toUpperCase();
+    if (k && !m.has(k)) m.set(k, mint);
+  };
+  for (const a of [...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS]) add(a.symbol, a.mint);
+  for (const a of SOLANA_SIGNAL_ASSETS) add(a.symbol, a.mint);
+  add('SOL', SOL_MINT);
+  add('WSOL', SOL_MINT);
+  add('USDC', USDC_MINT);
+  add('USDT', USDT_MINT);
+  return m;
+})();
+
+function solanaMintFor(symbol) {
+  return SOLANA_SYMBOL_MINTS.get(String(symbol ?? '').trim().toUpperCase()) ?? null;
 }
 
 function tokenOnChain(chainId, symbol) {
@@ -121,13 +171,38 @@ function tokenOnChain(chainId, symbol) {
 }
 
 /**
- * Both legs of an LP pair must exist in OUR registry on that chain.
- * A "get tokens" button that lands on a missing ticker is a dead swap.
+ * Where "get the pair" leads, or null.
+ *
+ * EVM: both legs must exist in OUR token registry on that chain — a button
+ * that lands on a missing ticker is a dead swap.
+ *
+ * Solana: the registry is meaningless there, so both legs must instead
+ * resolve against the mint-verified lists (see SOLANA_SYMBOL_MINTS). The
+ * route goes to /solana — never /swap — with `toMint` set to the leg the
+ * user does NOT already hold in the base asset: SolanaSwap's `?toMint=`
+ * honours exactly one verified mint and pre-fills the order, and the swap
+ * screen remains fully interactive from there. When EITHER leg is
+ * unresolvable the answer is null, and the pool keeps its external
+ * DefiLlama link — the same honest behaviour as an unresolvable EVM pair.
  */
 export function pairSwapRoute(pool) {
   const pair = pairTokens(pool);
+  if (pair.length !== 2) return null;
+
+  if (String(pool?.chain ?? '').trim().toLowerCase() === 'solana') {
+    const mintA = solanaMintFor(pair[0]);
+    const mintB = solanaMintFor(pair[1]);
+    if (!mintA || !mintB) return null;
+    const isBase = (mint) => mint === SOL_MINT || mint === USDC_MINT || mint === USDT_MINT;
+    /* The non-base leg is the one to swap INTO. When both legs are base
+       (e.g. a SOL-USDC pool) there is nothing interesting to target, so the
+       second leg is the honest default. */
+    const toMint = !isBase(mintA) && isBase(mintB) ? mintA : mintB;
+    return { kind: 'solana', from: pair[0], to: pair[1], toMint };
+  }
+
   const chainId = llamaChainId(pool?.chain);
-  if (pair.length !== 2 || !chainId) return null;
+  if (!chainId) return null;
   if (!tokenOnChain(chainId, pair[0]) || !tokenOnChain(chainId, pair[1])) return null;
   return { chainId, from: pair[0], to: pair[1] };
 }
