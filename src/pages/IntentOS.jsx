@@ -24,6 +24,7 @@ import {
   verifyExecutionProof
 } from '../lib/executionProof';
 import { getIntentCapabilities } from '../lib/intentNetwork';
+import { LAUNCH_BANNER, INTENT_AI_VERSION } from '../lib/intent-ai/index.js';
 import {
   ensureLifecycle,
   expireIfDue,
@@ -73,6 +74,32 @@ function StageRail({ t }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Honest public launch status. The four contract lines come from the intent-ai
+ * library itself (LAUNCH_BANNER); they are never green and never skipped.
+ */
+function LaunchStatusStrip({ t }) {
+  return (
+    <section className="ios-launch-status" aria-live="polite" data-testid="intent-os-launch-status">
+      <div className="ios-launch-status-head">
+        <span className="ios-launch-dot" aria-hidden="true" />
+        <strong>{t('intentOS.launchBanner.label', { defaultValue: 'وضعیت عملیاتی — صادقانه' })}</strong>
+        <code>{INTENT_AI_VERSION}</code>
+      </div>
+      <ul>
+        {LAUNCH_BANNER.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <small>
+        {t('intentOS.launchBanner.note', {
+          defaultValue: 'قراردادها پیاده شده‌اند؛ فعال‌سازی عملیاتی بدون شواهد مستقل در دسترس نیست. اجرای مالی فقط با نمایشگر تأیید مستقل + Guardian + سیاست ریسک.'
+        })}
+      </small>
+    </section>
   );
 }
 
@@ -616,6 +643,8 @@ export default function IntentOS() {
           </button>
         </div>
       </motion.section>
+
+      <LaunchStatusStrip t={t} />
 
       <StageRail t={t} />
 

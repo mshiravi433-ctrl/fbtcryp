@@ -1,3 +1,58 @@
+## Unreleased — Intent AI Spec 65 Gap-Fill: every incomplete 65-item contract, fail-closed
+
+- Filled the remaining gaps of the 65-item Intent AI specification with 21 new
+  fail-closed contracts in `src/lib/intent-ai/`, all exported from `index.js`
+  and all carrying `noExecutionPermission`. Nothing new claims live,
+  production, ready or verified status; the Phase 21–50 control plane gained
+  no new phase.
+- Priority 1: `goalNegotiation` (unrealistic goals get reasons + Keep/Reduce/
+  Extend, acceptance never authorizes), `costToGoal` + `predictNetOutcome`
+  (unknown costs are unavailable, never zero; net is a lower bound),
+  `whyTransparency` (Why-This-Decision with no unevidenced "better", and
+  Why-This-Permission whose decline is a safe replan, not a dead end or an
+  auto-enable), `shadowExecution` (attested paper sandbox; timeout ≠ quote;
+  paper-passed ≠ live-ready; real execution still needs the full gate chain).
+- Priority 2: capability catalog completed (RWA/Payment/P2P/Shop/Risk-Engine
+  added, honestly not-implemented), `scanSummary`/`assertScanBeforeStart`
+  (scan ≠ activation), `capabilityActivation` (one click = permission request;
+  Activate stays pending-evidence without operational proof),
+  `discoverForCapability` (listing ≠ permission ≠ execution), `autoRevoke`
+  (intent end sweeps dYdX/external/smart-wallet grants; permanent access is a
+  violation).
+- Priority 3: `specialistAgents` — explicit input/output/cannot-execute
+  contracts for all 15 roles (only Strategy and Execution are internal-real
+  engines), council quorum for important trades, voting thresholds with a
+  hard Guardian veto; the council can still only recommend the authorization
+  screen.
+- Priority 4: honest adapters — `marketRegime` (no evidence → unavailable),
+  `eventRiskAdapter` (unverified sources can only raise risk; high risk only
+  lowers confidence), `smartMoneyAdapter` (existing whale panel payload →
+  strategy evidence, no fabricated numbers), `confidenceDecay` (stale data
+  blocks execution).
+- Priority 5–6: `parallelStrategies` (fail-closed policy compatibility),
+  `goalProgress` (attested balance or null) + `buildGoalTree` (tree ≠
+  execution), `intentOptimizer` + `suggestIntentOptions` (futures off without
+  explicit opt-in; suggestions never activate), `chatReplay` (structured
+  events only; private chain-of-thought dropped), `disasterMode` +
+  `smartPause` (evidenced defensive posture; pause ≠ permission to continue),
+  `dynamicRouteSwitch` (material delta mid-execution requires
+  re-authorization).
+- Priority 7–8: `agentReputation` + `agentLeaderboard` + appreciation
+  (observed-only, insufficient_data on thin samples, Guardian-blind),
+  `personalityLayer` + `agentAvatar` (tone and visuals only; exported
+  `personalityCannotChangeRisk` proof helper), `agentProtocol` envelope +
+  passport completeness gate + multi-agent chain (any link halts, no link
+  signs), `agentPayment` (withdrawal cap enforced; displayed fee ≠ paid),
+  `agentLearningExchange` (opt-in, structured, local-only, no chat text).
+- Six new probes (`npm run test:spec65`, 170 assertions) prove the required
+  invariants: paper≠live, score without evidence stays null, council cannot
+  execute, personality cannot change risk, decline causes a safe replan, and
+  the scheduler prepares but never signs. Phase 2–50 + phase-status probes
+  still pass.
+- Intent OS now shows the contractual launch banner (from `LAUNCH_BANNER`)
+  as a permanent honest status strip; no green execution button was added.
+  Docs: `docs/INTENT-AI-SPEC65-GAPS-FA.md`.
+
 ## Unreleased — Intent AI Phase 8: production activation and Secret Manager boundary
 
 - Added `GET /api/intents/v1/activation`, a public, cacheable report that keeps
