@@ -289,6 +289,15 @@ import {
 } from './intentConfidential.js';
 import { activationReport } from './intentActivation.js';
 import { phaseStatusReport } from './intentPhaseStatus.js';
+import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence } from './intentOperatorEvidence.js';
+import { handleUnfreeze, handleFreeze, freezeStateReport } from './intentFreezeControl.js';
+import { auditStatus } from './intentAuditLog.js';
+import { simulatorEvidence } from './intentSimulator.js';
+import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
+import { schedulerEvidence } from './intentScheduler.js';
+import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
+import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
+import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1372,6 +1381,85 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
       rawCredentialsAllowed: false
     },
     sourceOfTruth: status.sourceOfTruth
+  });
+});
+
+/* ── Wave 4: Operator Evidence Injection ──────────────────────────────── */
+app.post('/api/intents/v1/operator-evidence', (req, res) => {
+  return handleOperatorEvidence(req, res);
+});
+
+/* ── Wave 4: Freeze / Unfreeze Control ────────────────────────────────── */
+app.post('/api/intents/v1/unfreeze', (req, res) => {
+  return handleUnfreeze(req, res);
+});
+
+app.post('/api/intents/v1/freeze', (req, res) => {
+  return handleFreeze(req, res);
+});
+
+app.get('/api/intents/v1/freeze-status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=5, s-maxage=5');
+  return res.json(freezeStateReport());
+});
+
+/* ── Wave 2/4: Evidence Status Dashboard ──────────────────────────────── */
+app.get('/api/intents/v1/evidence-status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=10, s-maxage=10');
+  return res.json(evidenceStoreStatus());
+});
+
+/* ── Wave 2: Audit Status ─────────────────────────────────────────────── */
+app.get('/api/intents/v1/audit-status', async (_req, res) => {
+  const status = await auditStatus();
+  res.set('cache-control', 'public, max-age=15, s-maxage=15');
+  return res.json(status);
+});
+
+/* ── Wave 1: Venue Health ─────────────────────────────────────────────── */
+app.get('/api/intents/v1/venue-health', async (_req, res) => {
+  await probeAllVenues();
+  return res.json(venueHealthStatus());
+});
+
+/* ── Wave 1: Bridge Quote (read-only) ─────────────────────────────────── */
+app.get('/api/intents/v1/bridge-quote', async (req, res) => {
+  const quote = await getBridgeQuote({
+    fromChain: Number(req.query.fromChain) || 421614,
+    toChain: Number(req.query.toChain) || 42161,
+    amount: req.query.amount || '1000000',
+    token: req.query.token || 'USDC'
+  });
+  return res.json(quote);
+});
+
+app.get('/api/intents/v1/bridge-status', (_req, res) => {
+  return res.json(intentBridgeStatus());
+});
+
+/* ── Wave 2: Simulator / Monitor / Scheduler Status ───────────────────── */
+app.get('/api/intents/v1/simulator-status', (_req, res) => {
+  const evidence = simulatorEvidence();
+  return res.json({ schema: 'fbt.simulator-status.v1', evidence });
+});
+
+app.get('/api/intents/v1/monitor-status', (_req, res) => {
+  recordHeartbeat('api-request');
+  return res.json({ schema: 'fbt.monitor-status.v1', evidence: monitorEvidence() });
+});
+
+app.get('/api/intents/v1/scheduler-status', (_req, res) => {
+  return res.json({ schema: 'fbt.scheduler-status.v1', evidence: schedulerEvidence() });
+});
+
+/* ── Wave 2: Drill Status ─────────────────────────────────────────────── */
+app.get('/api/intents/v1/drill-status', (_req, res) => {
+  return res.json({
+    schema: 'fbt.drill-status.v1',
+    backupRestore: backupRestoreDrill(),
+    reproducibleBuild: reproducibleBuildCheck(),
+    rollbackDrill: rollbackDrill(),
+    sloMeasurement: sloMeasurement()
   });
 });
 
