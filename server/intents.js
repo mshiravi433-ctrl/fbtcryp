@@ -64,6 +64,24 @@ export const INTENT_CAPABILITIES = Object.freeze({
   outcomeBidSchema: 'fbt.outcome-bid.v1',
   generatedBy: 'FBT Intent OS',
   operatingMode: 'validation-signed-commitments-and-coordinator-signed-auction-close',
+  primaryModes: [
+    'HUMAN ↔ AI',
+    'AI ↔ AI INSIDE FBT',
+    'FBT AI ↔ EXTERNAL AI AGENT'
+  ],
+  modeCount: 3,
+  permissionBoundary: {
+    analysis: true,
+    preparation: true,
+    financialExecution: 'explicit-user-authorization-screen-only',
+    rawCredentialsToExternalAgents: false
+  },
+  capabilityDiscovery: {
+    schema: 'fbt.intent-capability-scan.v1',
+    source: 'runtime-and-evidence-only',
+    score: 'withheld-until-seven-bounded-metrics-are-evidenced',
+    optionalCapabilityDecline: 'safe-replan-required'
+  },
   custody: false,
   chains: CHAINS,
   endpoints: {

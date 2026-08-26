@@ -1,5 +1,5 @@
 /**
- * FBT INTENT AI — Phases 1-8
+ * FBT INTENT AI — Phases 1-9
  * ---------------------------------------------------------------------------
  * Public client API surface. Everything exported here is deterministic and
  * carries no raw credential material. Server-only Secret Manager and
@@ -80,6 +80,7 @@ export {
   chatTurn,
   answerClarifications,
   confirmSessionPolicy,
+  userControl,
   userStop,
   STRATEGY_AGENT_IDENTITY as _STRATEGY_AGENT_IDENTITY,
   EXECUTION_ORCHESTRATOR_IDENTITY as _EXECUTION_ORCHESTRATOR_IDENTITY
@@ -191,6 +192,82 @@ export {
   COLLAB_SCHEMA
 } from './collaborationSession.js';
 
+// ── Phase 9: Intent AI OS contracts ────────────────────────────────────────
+export {
+  PRIMARY_MODES,
+  MODE_LABELS,
+  MODE_DEFINITIONS,
+  modeLabel,
+  REQUEST_CLASSES,
+  SESSION_MODE_SCHEMA,
+  isPrimaryMode,
+  normalizePrimaryMode,
+  normalizeMode,
+  modeDefinition,
+  classifyPermissionRequest,
+  classifyRequest,
+  permissionRequirement,
+  buildPermissionBoundary,
+  canAnalyze as modeCanAnalyze,
+  canPrepare as modeCanPrepare,
+  canExecute as modeCanExecute,
+  assertModeBoundary,
+  createModeSession,
+  modeCapabilitySummary
+} from './sessionModes.js';
+export {
+  CAPABILITY_CATALOG,
+  CAPABILITY_SCORING,
+  CAPABILITY_SCANNER_SCHEMA,
+  CAPABILITY_SCAN_SCHEMA,
+  CAPABILITY_SCORE_SCHEMA,
+  scanCapabilities,
+  scoreCapability,
+  capabilityScore,
+  recommendOptionalCapabilities,
+  replanAfterCapabilityDecline,
+  capabilityById
+} from './capabilityScanner.js';
+export {
+  TARGET_REALITY_SCHEMA,
+  TARGET_DISCLAIMERS,
+  assessTarget,
+  realityChoice
+} from './targetReality.js';
+export {
+  COUNCIL_SCHEMA,
+  CHALLENGE_SCHEMA,
+  COUNCIL_ROLES,
+  challengeStrategy,
+  runAgentCouncil,
+  councilDecisionAllowsReview
+} from './agentCouncil.js';
+export {
+  GENOME_SCHEMA,
+  GENOME_DIMENSIONS,
+  createIntentGenome,
+  rejectSecretGenomeInput,
+  matchIntentDNA,
+  evolveIntentGenome
+} from './intentGenome.js';
+export {
+  MEMORY_SCHEMA as INTENT_AGENT_MEMORY_SCHEMA,
+  EVENT_TYPES,
+  createMemoryStore,
+  buildLearningBatch,
+  feedbackFromDecision
+} from './agentMemory.js';
+export {
+  POLICY_SCHEMA as INTENT_OS_POLICY_SCHEMA,
+  CONTROL_SCHEMA,
+  DEFAULT_POLICY as INTENT_OS_DEFAULT_POLICY,
+  normalizePolicy as normalizeIntentOSPolicy,
+  evaluatePolicy,
+  createControlState,
+  applyControl,
+  feeTransparency
+} from './policyGuard.js';
+
 // ── Phase 5: Local-First Adaptive Learning ──────────────────────────────────
 export {
   loadMemory,
@@ -226,4 +303,4 @@ export {
 export { venueHealth } from './venueHealth.js';
 export { submitPipeline } from './submitPipeline.js';
 
-export const INTENT_AI_VERSION = 'phase8.production-activation.v1';
+export const INTENT_AI_VERSION = 'phase9.intent-os.partial.v1';

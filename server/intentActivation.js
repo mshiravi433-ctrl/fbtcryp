@@ -23,18 +23,37 @@ export const CURRENT_INTENT_AI_PHASE = 8;
  */
 export const INTENT_AI_ROADMAP_8_20 = Object.freeze([
   Object.freeze({ phase: 8, id: 'production-activation', title: 'Production activation and secret boundary', status: 'in-progress' }),
-  Object.freeze({ phase: 9, id: 'bridge-execution', title: 'Fail-closed bridge execution', status: 'roadmap' }),
-  Object.freeze({ phase: 10, id: 'broker-adapter', title: 'Scoped broker and CEX adapter', status: 'roadmap' }),
-  Object.freeze({ phase: 11, id: 'dydx-session-lifecycle', title: 'Durable dYdX session lifecycle', status: 'roadmap' }),
-  Object.freeze({ phase: 12, id: 'atomic-cross-chain', title: 'Audited on-chain escrow and atomic cross-chain state machine', status: 'roadmap' }),
-  Object.freeze({ phase: 13, id: 'independent-operators', title: 'Independent operator attestation and external audit', status: 'roadmap' }),
-  Object.freeze({ phase: 14, id: 'key-rotation-anchors', title: 'Coordinator rotation and external root anchors', status: 'roadmap' }),
-  Object.freeze({ phase: 15, id: 'bond-enforcement', title: 'Bond custody and settlement enforcement', status: 'roadmap' }),
-  Object.freeze({ phase: 16, id: 'confidential-compute', title: 'Operational confidential transport and TEE', status: 'roadmap' }),
-  Object.freeze({ phase: 17, id: 'onchain-policy', title: 'On-chain policy and smart-account enforcement', status: 'roadmap' }),
-  Object.freeze({ phase: 18, id: 'reliability-recovery', title: 'Observability, recovery and disaster resilience', status: 'roadmap' }),
-  Object.freeze({ phase: 19, id: 'security-compliance', title: 'Independent security, privacy and compliance review', status: 'roadmap' }),
+  Object.freeze({ phase: 9, id: 'intent-os-foundation', title: 'Intent OS foundation: three modes, agents, capabilities and authorization', status: 'roadmap' }),
+  Object.freeze({ phase: 10, id: 'agent-marketplace-trust', title: 'Agent marketplace, passport, security, sandbox and reputation', status: 'roadmap' }),
+  Object.freeze({ phase: 11, id: 'strategy-competition-and-simulation', title: 'Strategy generation, competition, simulation and switching', status: 'roadmap' }),
+  Object.freeze({ phase: 12, id: 'smart-wallet-policy-guardian', title: 'Smart Wallet policy, limits, fees and Guardian controls', status: 'roadmap' }),
+  Object.freeze({ phase: 13, id: 'live-recurring-intents', title: 'Live and recurring intents, monitoring, exit and results', status: 'roadmap' }),
+  Object.freeze({ phase: 14, id: 'intent-genome-and-memory', title: 'Intent Genome, DNA matching, evolution and local-first memory', status: 'roadmap' }),
+  Object.freeze({ phase: 15, id: 'external-agent-runtime', title: 'External Agent runtime, scoped sessions and sandbox', status: 'roadmap' }),
+  Object.freeze({ phase: 16, id: 'execution-adapter-activation', title: 'Execution adapter activation, venue proof and recovery', status: 'roadmap' }),
+  Object.freeze({ phase: 17, id: 'onchain-policy-enforcement', title: 'On-chain policy and Smart Account enforcement', status: 'roadmap' }),
+  Object.freeze({ phase: 18, id: 'observability-and-proof', title: 'Observability, audit, why engine, receipts and resilience', status: 'roadmap' }),
+  Object.freeze({ phase: 19, id: 'security-privacy-compliance', title: 'Security, privacy, confidential runtime and compliance review', status: 'roadmap' }),
   Object.freeze({ phase: 20, id: 'launch-governance', title: 'Production launch, governance and public verification', status: 'roadmap' })
+]);
+
+/* Authoritative specification grouping. The historical array above remains
+   available for Phase 8 consumers; this surface is what the Intent OS UI and
+   future phases use, so a bridge milestone cannot masquerade as Phase 9's
+   product foundation. */
+export const INTENT_AI_SPECIFICATION_ROADMAP_9_20 = Object.freeze([
+  Object.freeze({ phase: 9, id: 'intent-os-foundation', domains: ['three-primary-modes', 'analysis-execution-permission-boundary', 'internal-agents', 'capability-discovery', 'target-reality', 'challenge-council', 'authorization-ux'], status: 'in-progress' }),
+  Object.freeze({ phase: 10, id: 'agent-marketplace-trust', domains: ['capability-passport', 'security', 'sandbox', 'reputation', 'optional-capability-choice'], status: 'roadmap' }),
+  Object.freeze({ phase: 11, id: 'strategy-competition-and-simulation', domains: ['strategy-generation', 'strategy-competition', 'route-simulation', 'route-switching', 'monitoring'], status: 'roadmap' }),
+  Object.freeze({ phase: 12, id: 'smart-wallet-policy-guardian', domains: ['scoped-permissions', 'fee-transparency', 'risk-guardian', 'limits', 'pause-kill-switch-emergency-exit'], status: 'roadmap' }),
+  Object.freeze({ phase: 13, id: 'live-recurring-intents', domains: ['live-intents', 'recurring-intents', 'exit-policy', 'timeline', 'final-result'], status: 'roadmap' }),
+  Object.freeze({ phase: 14, id: 'intent-genome-and-memory', domains: ['intent-genome', 'dna-matching', 'evolution', 'structured-memory', 'offline-learning'], status: 'roadmap' }),
+  Object.freeze({ phase: 15, id: 'external-agent-runtime', domains: ['external-agent-passport', 'scoped-session-key', 'permission-expiry', 'disconnect', 'sandbox-runtime'], status: 'roadmap' }),
+  Object.freeze({ phase: 16, id: 'execution-adapter-activation', domains: ['wallet-adapter', 'broker-adapter', 'bridge-adapter', 'venue-proof', 'recovery'], status: 'roadmap' }),
+  Object.freeze({ phase: 17, id: 'onchain-policy-enforcement', domains: ['smart-account-policy', 'protocol-and-chain-limits', 'fee-limits', 'revoke-enforcement'], status: 'roadmap' }),
+  Object.freeze({ phase: 18, id: 'observability-and-proof', domains: ['audit-timeline', 'why-engine', 'receipt-integrity', 'incident-recovery', 'disaster-resilience'], status: 'roadmap' }),
+  Object.freeze({ phase: 19, id: 'security-privacy-compliance', domains: ['threat-model', 'privacy', 'confidential-runtime', 'independent-review', 'compliance'], status: 'roadmap' }),
+  Object.freeze({ phase: 20, id: 'launch-governance', domains: ['public-verification', 'versioning', 'migration', 'slo', 'change-control'], status: 'roadmap' })
 ]);
 
 const trim = (value, max = 96) => {
@@ -216,6 +235,28 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       operational: phase8Operational ? 'ready' : 'partial',
       secretManager
     },
+    /* The authoritative 63-section product specification is a separate
+       surface from the historical activation dependency list above. Phase 9
+       now has real client contracts/probes, but runtime providers and the
+       external-agent trust plane are not fully activated. */
+    intentOS: {
+      schema: 'fbt.intent-os-status.v1',
+      phase: 9,
+      implementation: 'partial',
+      operational: 'partial',
+      primaryModeCount: 3,
+      primaryModes: ['HUMAN ↔ AI', 'AI ↔ AI INSIDE FBT', 'FBT AI ↔ EXTERNAL AI AGENT'],
+      analysisSeparatedFromFinancialExecution: true,
+      authorizationScreenRequired: true,
+      capabilityDiscovery: 'runtime-and-evidence-only',
+      targetPromises: false,
+      externalAgentRawCredentials: false,
+      blockers: [
+        'RUNTIME_CAPABILITY_PROVIDERS_REQUIRED',
+        'EXTERNAL_AGENT_VERIFICATION_AND_SCOPED_SANDBOX_REQUIRED',
+        'SMART_WALLET_AND_POLICY_PROVIDER_OPERATIONAL_PROOF_REQUIRED'
+      ]
+    },
     integrations: {
       swap: {
         implementation: 'wired',
@@ -234,10 +275,14 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
     },
     blockers,
     roadmap: INTENT_AI_ROADMAP_8_20.map((item) => ({ ...item })),
+    specificationRoadmap: INTENT_AI_SPECIFICATION_ROADMAP_9_20.map((item) => ({ ...item, domains: [...item.domains] })),
     next: {
       phase: 9,
-      id: 'bridge-execution',
-      prerequisite: 'complete-phase-8-secret-boundary-and-activation-review'
-    }
+      id: 'intent-os-foundation',
+      prerequisite: 'complete-phase-8-secret-boundary-and-activation-review',
+      status: 'in-progress'
+    },
+    historicalActivationRoadmap: true,
+    specificationSource: 'official-fbt-intent-ai-63-section-specification'
   };
 }

@@ -16,12 +16,13 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { riseIn } from './PageTransition';
 import {
-  startSession, chatTurn, confirmSessionPolicy, userStop,
+  startSession, chatTurn, confirmSessionPolicy, userStop, userControl,
   describeLevel, policyPreview, INTENT_AI_VERSION,
   openConfirmationGate, decideGate, assertGateAllowsSubmit, termsFromDraft,
-  evaluateRisk, venueHealth, reconcile
+  evaluateRisk, venueHealth, reconcile,
+  PRIMARY_MODES, MODE_LABELS
 } from '../lib/intent-ai';
-import { getIntentActivation } from '../lib/intentNetwork';
+import { getIntentActivation, getIntentCapabilities } from '../lib/intentNetwork';
 
 const LEVELS = [
   { value: 1, key: 'level1' },
@@ -36,12 +37,14 @@ function fmtTime(ts) {
 
 export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) {
   const { t } = useTranslation();
+  const [mode, setMode] = useState(PRIMARY_MODES[0]);
   const [level, setLevel] = useState(1);
-  const [session, setSession] = useState(() => startSession({ level: 1, defaultChainId }));
+  const [session, setSession] = useState(() => startSession({ mode: PRIMARY_MODES[0], level: 1, defaultChainId }));
   const [input, setInput] = useState('');
   const [gate, setGate] = useState(null);
   const [risk, setRisk] = useState(null);
   const [activation, setActivation] = useState(null);
+  const [protocolCapabilities, setProtocolCapabilities] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [gateAction, setGateAction] = useState(null);
   const [policyInput, setPolicyInput] = useState({
@@ -51,18 +54,21 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
 
   useEffect(() => {
     let active = true;
-    getIntentActivation()
-      .then((value) => { if (active) setActivation(value); })
-      .catch(() => { if (active) setActivation(null); });
+    Promise.allSettled([getIntentActivation(), getIntentCapabilities()])
+      .then(([activationResult, capabilityResult]) => {
+        if (!active) return;
+        setActivation(activationResult.status === 'fulfilled' ? activationResult.value : null);
+        setProtocolCapabilities(capabilityResult.status === 'fulfilled' ? capabilityResult.value : null);
+      });
     return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    const s = startSession({ level, defaultChainId, policyInput: level === 3 ? buildPolicy(policyInput) : null });
+    const s = startSession({ mode, level, defaultChainId, policyInput: level === 3 ? buildPolicy(policyInput) : null });
     setSession(s);
     setGate(null); setRisk(null); setReceipt(null); setGateAction(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [level]);
+  }, [level, mode]);
 
   function buildPolicy(p) {
     return {
@@ -132,7 +138,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   }
 
   function handleConfirmPolicy() {
-    const s = startSession({ level: 3, defaultChainId, policyInput: buildPolicy(policyInput) });
+    const s = startSession({ mode, level: 3, defaultChainId, policyInput: buildPolicy(policyInput) });
     const { session: confirmed } = confirmSessionPolicy(s);
     setSession(confirmed);
   }
@@ -146,10 +152,23 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
     setReceipt({ status: 'emergency-stop', confirmed: false });
   }
 
+  function handleControl(action) {
+    if (action === 'EMERGENCY_EXIT' || action === 'STOP' || action === 'KILL_SWITCH') {
+      handleEmergencyStop();
+      return;
+    }
+    const result = userControl(session, action);
+    if (!result.ok) {
+      setReceipt({ status: 'unavailable', confirmed: false, code: result.error });
+      return;
+    }
+    setSession(result.session);
+    if (['REVOKE', 'DISCONNECT', 'PAUSE'].includes(action)) setGate(null);
+  }
+
   const msgs = session?.messages || [];
   const preview = session?.policy ? policyPreview(session.policy) : null;
   const l3NeedsConfirm = level === 3 && session?.policy && !session.policy.userConfirmed;
-  const canExecute = level >= 3 && session?.policy?.userConfirmed;
 
   const visibleMessages = useMemo(() => msgs.filter((m) => m.role !== 'system' || !/^(session\.started|policy\.confirmed)$/.test(m.type)), [msgs]);
 
@@ -159,6 +178,26 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
       <p className="muted" style={{ fontSize: 12.2, margin: '0 0 10px', lineHeight: 1.7 }}>
         {t('intentAI.subtitle', { summary: describeLevel(level).summary, version: INTENT_AI_VERSION })}
       </p>
+
+      <div className="card-inner" style={{ background: 'rgba(0,229,255,0.06)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
+        <p className="faint" style={{ fontSize: 10.5, margin: '0 0 6px' }}>{t('intentAI.mode.title', { defaultValue: 'Primary mode' })}</p>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {PRIMARY_MODES.map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              className={`chip ${mode === candidate ? 'chip-on' : ''}`}
+              onClick={() => setMode(candidate)}
+              aria-pressed={mode === candidate}
+            >
+              {t(`intentAI.mode.${candidate}`, { defaultValue: MODE_LABELS[candidate] })}
+            </button>
+          ))}
+        </div>
+        <p className="muted" style={{ fontSize: 11.5, margin: '7px 0 0', lineHeight: 1.6 }}>
+          {t('intentAI.mode.boundary', { defaultValue: 'Analysis and preparation never authorize financial execution. Every execution requires a separate authorization screen.' })}
+        </p>
+      </div>
 
       <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {LEVELS.map((L) => (
@@ -173,6 +212,46 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
           </button>
         ))}
       </div>
+
+      <div className="card-inner" style={{ background: 'rgba(255,255,255,0.035)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
+        <div className="row-between" style={{ gap: 8 }}>
+          <span className="faint" style={{ fontSize: 10.5 }}>{t('intentAI.authorization.title', { defaultValue: 'Authorization boundary' })}</span>
+          <span className="faint" style={{ fontSize: 10.5 }}>{session?.modeLabel || MODE_LABELS[mode]}</span>
+        </div>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', fontSize: 11.5, marginTop: 6 }}>
+          <span style={{ color: 'var(--ok, #62e6a7)' }}>✓ {t('intentAI.authorization.analysis', { defaultValue: 'Analysis allowed' })}</span>
+          <span style={{ color: level >= 2 ? 'var(--ok, #62e6a7)' : 'var(--muted, #9aa4b2)' }}>✓ {t('intentAI.authorization.preparation', { defaultValue: 'Preparation' })}: {level >= 2 ? t('intentAI.authorization.available', { defaultValue: 'available' }) : t('intentAI.authorization.off', { defaultValue: 'off' })}</span>
+          <span style={{ color: session?.authorization?.financialExecution ? 'var(--ok, #62e6a7)' : 'var(--warn, #ffb454)' }}>! {t('intentAI.authorization.execution', { defaultValue: 'Financial execution' })}: {session?.authorization?.financialExecution ? t('intentAI.authorization.authorized', { defaultValue: 'authorized for this action' }) : t('intentAI.authorization.screenRequired', { defaultValue: 'authorization screen required' })}</span>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          {['STOP', 'PAUSE', 'REVOKE', 'DISCONNECT', 'EMERGENCY_EXIT'].map((action) => (
+            <button key={action} type="button" className="btn" onClick={() => handleControl(action)}>
+              {action === 'EMERGENCY_EXIT' ? '⚠ ' : ''}{t(`intentAI.controls.${action.toLowerCase()}`, { defaultValue: action.replace('_', ' ') })}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {session?.capabilityScan && (
+        <details style={{ marginBottom: 10, fontSize: 12 }}>
+          <summary className="muted">{t('intentAI.capabilities.title', { defaultValue: 'Runtime capability discovery' })}</summary>
+          <p className="muted" style={{ fontSize: 11.5, margin: '7px 0', lineHeight: 1.6 }}>
+            {t('intentAI.capabilities.summary', { defaultValue: 'Only runtime configuration and evidence can make a capability available. Scores are withheld when evidence is incomplete.', available: session.capabilityScan.available.length, conditional: session.capabilityScan.conditional.length, evidence: session.capabilityScan.evidenceComplete })}
+          </p>
+          {protocolCapabilities?.capabilityDiscovery && (
+            <p className="faint" style={{ fontSize: 10.5, margin: '5px 0', lineHeight: 1.5 }}>
+              {protocolCapabilities.capabilityDiscovery.source} · {protocolCapabilities.capabilityDiscovery.score}
+            </p>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
+            {session.capabilityScan.capabilities.filter((row) => row.intentRelevant).slice(0, 12).map((row) => (
+              <div key={row.id} className="faint" style={{ fontSize: 10.5 }}>
+                <b>{row.name}</b>: {row.status}{row.score == null ? ' · score withheld' : ` · ${row.score}/100`}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {session?.status === 'STOPPED' && (
         <p className="notice" style={{ color: 'var(--bad, #ff6b6b)' }}>
@@ -225,7 +304,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
               <input type="number" value={policyInput.durationMin} onChange={(e) => setPolicyInput({ ...policyInput, durationMin: e.target.value })} /></label>
           </div>
           <button type="button" className="btn" style={{ marginTop: 8 }}
-            onClick={() => setSession(startSession({ level: 3, defaultChainId, policyInput: buildPolicy(policyInput) }))}>
+            onClick={() => setSession(startSession({ mode, level: 3, defaultChainId, policyInput: buildPolicy(policyInput) }))}>
             {t('intentAI.policy.apply')}
           </button>
         </details>
@@ -345,10 +424,12 @@ function MessageContent({ msg, onDraftReady }) {
     );
   }
   if (type === 'analysis') {
-    const { intent, suggestions = [], confidence } = payload;
+    const { intent, suggestions = [], confidence, targetReality } = payload;
     return (
       <div>
         <div><b>{t('intentAI.msg.intent')}:</b> {intent?.action} · {t('intentAI.msg.confidence', { n: confidence })}</div>
+        <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.analysisOnly', { defaultValue: 'Analysis only — no financial execution permission.' })}</div>
+        {targetReality?.ok && <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.reality', { defaultValue: 'Target reality' })}: {targetReality.realism?.level} · {t('intentAI.msg.notGuaranteed', { defaultValue: 'not guaranteed' })}</div>}
         {suggestions.length > 0 && (
           <div style={{ marginTop: 4 }}>
             <b>{t('intentAI.msg.suggestions')}:</b>
@@ -360,8 +441,28 @@ function MessageContent({ msg, onDraftReady }) {
       </div>
     );
   }
+  if (type === 'strategy-requires-revision') {
+    return (
+      <div>
+        <div style={{ color: 'var(--warn, #ffb454)' }}>{t('intentAI.msg.strategyRevision', { defaultValue: 'The independent challenge requires a recalculation before authorization.' })}</div>
+        {(payload.reasons || []).map((reason) => <div key={reason} className="faint" style={{ marginTop: 3 }}>{reason}</div>)}
+        {payload.council && <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.councilDecision', { defaultValue: 'Council decision' })}: {payload.council.decision}</div>}
+      </div>
+    );
+  }
+  if (type === 'credential-rejected') {
+    return <div style={{ color: 'var(--bad, #ff6b6b)' }}>{t('intentAI.msg.credentialRejected', { defaultValue: 'Raw credentials are never accepted or persisted.' })}</div>;
+  }
+  if (type === 'mode-boundary-blocked' || type === 'execution-blocked') {
+    return (
+      <div>
+        <div style={{ color: 'var(--bad, #ff6b6b)' }}>{t('intentAI.msg.blocked', { defaultValue: 'Blocked by a fail-closed safety boundary.' })}</div>
+        <div className="faint" style={{ marginTop: 3 }}>{payload.code || 'SAFETY_BOUNDARY'}{payload.message ? ` · ${payload.message}` : ''}</div>
+      </div>
+    );
+  }
   if (type === 'prepared-draft' || type === 'ready-for-confirmation') {
-    const { selectedStrategy, plan, drafts = [], termsHash, level } = payload;
+    const { selectedStrategy, plan, drafts = [], termsHash, level, targetReality, authorizationScreen } = payload;
     return (
       <div>
         <div><b>{type === 'ready-for-confirmation' ? t('intentAI.msg.ready') : t('intentAI.msg.draftPrepared')}</b> (L{level})</div>
@@ -370,6 +471,12 @@ function MessageContent({ msg, onDraftReady }) {
           <div key={s.seq} style={{ marginTop: 4 }}>• {t('intentAI.msg.step', { seq: s.seq, action: s.action })} {s.fromSymbol || ''}{s.toSymbol ? ` → ${s.toSymbol}` : ''} {t('intentAI.msg.onChain', { n: s.chainId || s.fromChain })}</div>
         ))}
         {drafts.length > 0 && <div className="faint" style={{ marginTop: 4 }}>{t('intentAI.msg.drafts', { n: drafts.length })} · {termsHash?.slice(0, 8)}</div>}
+        {targetReality?.ok && (
+          <div className="faint" style={{ marginTop: 5 }}>
+            {t('intentAI.msg.reality', { defaultValue: 'Target reality' })}: {targetReality.targetPct == null ? '—' : `${targetReality.targetPct}%`} · {targetReality.realism?.level} · {t('intentAI.msg.notGuaranteed', { defaultValue: 'not guaranteed' })}
+          </div>
+        )}
+        {authorizationScreen && <div className="faint" style={{ marginTop: 4 }}>{t('intentAI.msg.authRequired', { defaultValue: 'Financial execution remains locked until this screen is explicitly confirmed.' })}</div>}
         {type === 'ready-for-confirmation' && (
           <button type="button" className="btn btn-primary" style={{ marginTop: 6 }} onClick={() => onDraftReady?.({ plan, drafts, termsHash })}>
             {t('intentAI.msg.openGate')}
