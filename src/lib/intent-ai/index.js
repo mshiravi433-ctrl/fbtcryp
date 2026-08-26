@@ -606,5 +606,15 @@ export {
   activateControlPlane,
   controlPlaneRow
 } from './controlPlaneActivation.js';
+export { PHASE31_SCHEMA, operateIncidentCommand, evaluateIncidentCommandPlane } from './phase31IncidentCommand.js';
+export { PHASE32_SCHEMA, operateSecretRotation, evaluateSecretRotationPlane } from './phase32SecretRotation.js';
+export { PHASE33_SCHEMA, operateFailover, evaluateFailoverCapacityPlane } from './phase33FailoverCapacity.js';
+export { PHASE34_SCHEMA, operateAbuseLimits, evaluateAbuseRateLimitPlane } from './phase34AbuseRateLimits.js';
+export { PHASE35_SCHEMA, operatePublicDisclosure, evaluatePublicDisclosurePlane } from './phase35PublicDisclosure.js';
+export { PHASE36_SCHEMA, operateResidencyHold, evaluateResidencyHoldPlane } from './phase36ResidencyLegalHold.js';
+export { PHASE37_SCHEMA, operateDependencyAttestation, evaluateDependencyAttestationPlane } from './phase37DependencyAttestation.js';
+export { PHASE38_SCHEMA, operateContinuousVerification, evaluateContinuousVerificationPlane } from './phase38ContinuousVerification.js';
+export { PHASE39_SCHEMA, operateGameDay, evaluateGameDayPlane } from './phase39GameDayRehearsal.js';
+export { PHASE40_SCHEMA, operateSustainment, evaluateSustainmentPlane } from './phase40SustainmentGovernance.js';
 
-export const INTENT_AI_VERSION = 'phase30.control-plane.activated.fail-closed.v2';
+export const INTENT_AI_VERSION = 'phase40.ops-plane.activated.fail-closed.v1';

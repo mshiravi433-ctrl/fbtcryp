@@ -37,7 +37,17 @@ export const SPEC_PHASES = Object.freeze([
   { phase: 27, id: 'rpc-policy-ops', title: 'RPC Quorum و On-Chain Policy Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase27RpcPolicyOps.js'], tests: ['test/intent-ai/phase27-rpc-policy-ops-probe.mjs'], requiredEvidence: ['rpc', 'policy-contract', 'code-hash-proof'] },
   { phase: 28, id: 'audit-dr-ops', title: 'Immutable Audit و Disaster Recovery Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase28AuditDrOps.js'], tests: ['test/intent-ai/phase28-audit-dr-ops-probe.mjs'], requiredEvidence: ['durable-immutable-audit', 'backup-restore-drill'] },
   { phase: 29, id: 'assurance-network', title: 'Independent Assurance Network', implementation: 'implemented', source: ['src/lib/intent-ai/phase29AssuranceNetwork.js'], tests: ['test/intent-ai/phase29-assurance-network-probe.mjs'], requiredEvidence: ['independent-security-review', 'privacy-review', 'compliance-review'] },
-  { phase: 30, id: 'launch-control-plane', title: 'Launch Control Plane', implementation: 'implemented', source: ['src/lib/intent-ai/phase30LaunchControlPlane.js', 'src/lib/intent-ai/controlPlaneActivation.js'], tests: ['test/intent-ai/phase30-launch-control-plane-probe.mjs'], requiredEvidence: ['reproducible-deployment', 'rollback-drill', 'slo-measurement', 'launch-freeze-control'] }
+  { phase: 30, id: 'launch-control-plane', title: 'Launch Control Plane', implementation: 'implemented', source: ['src/lib/intent-ai/phase30LaunchControlPlane.js', 'src/lib/intent-ai/controlPlaneActivation.js'], tests: ['test/intent-ai/phase30-launch-control-plane-probe.mjs'], requiredEvidence: ['reproducible-deployment', 'rollback-drill', 'slo-measurement', 'launch-freeze-control'] },
+  { phase: 31, id: 'incident-command', title: 'Incident Command', implementation: 'implemented', source: ['src/lib/intent-ai/phase31IncidentCommand.js'], tests: ['test/intent-ai/phase31-incident-command-probe.mjs'], requiredEvidence: ['incident-commander', 'incident-declaration'] },
+  { phase: 32, id: 'secret-rotation', title: 'Secret Manager و Key Rotation', implementation: 'implemented', source: ['src/lib/intent-ai/phase32SecretRotation.js'], tests: ['test/intent-ai/phase32-secret-rotation-probe.mjs'], requiredEvidence: ['attested-secret-manager', 'dual-control-rotation'] },
+  { phase: 33, id: 'failover-capacity', title: 'Failover و Capacity', implementation: 'implemented', source: ['src/lib/intent-ai/phase33FailoverCapacity.js'], tests: ['test/intent-ai/phase33-failover-capacity-probe.mjs'], requiredEvidence: ['primary-region', 'secondary-region', 'failover-drill'] },
+  { phase: 34, id: 'abuse-rate-limits', title: 'Abuse و Rate Limit Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase34AbuseRateLimits.js'], tests: ['test/intent-ai/phase34-abuse-rate-limits-probe.mjs'], requiredEvidence: ['enforced-rate-limiter'] },
+  { phase: 35, id: 'public-disclosure', title: 'Public Disclosure', implementation: 'implemented', source: ['src/lib/intent-ai/phase35PublicDisclosure.js'], tests: ['test/intent-ai/phase35-public-disclosure-probe.mjs'], requiredEvidence: ['attested-disclosure-channel'] },
+  { phase: 36, id: 'residency-legal-hold', title: 'Residency و Legal Hold', implementation: 'implemented', source: ['src/lib/intent-ai/phase36ResidencyLegalHold.js'], tests: ['test/intent-ai/phase36-residency-hold-probe.mjs'], requiredEvidence: ['residency-enforcement', 'legal-hold-control'] },
+  { phase: 37, id: 'dependency-attestation', title: 'Dependency Attestation', implementation: 'implemented', source: ['src/lib/intent-ai/phase37DependencyAttestation.js'], tests: ['test/intent-ai/phase37-dependency-attestation-probe.mjs'], requiredEvidence: ['sbom-attestation', 'supplier-attestation'] },
+  { phase: 38, id: 'continuous-verification', title: 'Continuous Verification', implementation: 'implemented', source: ['src/lib/intent-ai/phase38ContinuousVerification.js'], tests: ['test/intent-ai/phase38-continuous-verification-probe.mjs'], requiredEvidence: ['continuous-probe'] },
+  { phase: 39, id: 'gameday-rehearsal', title: 'Game Day Rehearsal', implementation: 'implemented', source: ['src/lib/intent-ai/phase39GameDayRehearsal.js'], tests: ['test/intent-ai/phase39-gameday-rehearsal-probe.mjs'], requiredEvidence: ['executed-rehearsal'] },
+  { phase: 40, id: 'sustainment-governance', title: 'Sustainment Governance', implementation: 'implemented', source: ['src/lib/intent-ai/phase40SustainmentGovernance.js'], tests: ['test/intent-ai/phase40-sustainment-governance-probe.mjs'], requiredEvidence: ['accountable-owner', 'review-cadence'] }
 ]);
 
 function phase10Status() {
@@ -78,7 +88,9 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
       ? phase10Status()
       : phase.phase === 21
         ? operationalPhase21Row(scan)
-        : inactiveStatus(phase);
+        : phase.phase >= 22
+          ? controlPlaneRow(phase.phase, scan.controlPlane)
+          : inactiveStatus(phase);
     const sourcePresent = phase.source.every((file) => existsSync(file));
     const testsPresent = phase.tests.every((file) => existsSync(file));
     return {

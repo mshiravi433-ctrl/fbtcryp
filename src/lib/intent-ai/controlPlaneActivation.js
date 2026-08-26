@@ -1,5 +1,5 @@
 /**
- * FBT INTENT AI — Phases 21–30 unified control plane.
+ * FBT INTENT AI — Phases 21–40 unified control plane.
  * Activating the plane means wiring evaluators, not going live.
  */
 import { aggregateOperationalReadiness, phase21PublicStatus } from './operationalActivation.js';
@@ -12,8 +12,18 @@ import { evaluateRpcPolicyPlane } from './phase27RpcPolicyOps.js';
 import { evaluateAuditDrPlane } from './phase28AuditDrOps.js';
 import { evaluateAssurancePlane } from './phase29AssuranceNetwork.js';
 import { evaluateLaunchControlPlane, LAUNCH_BANNER } from './phase30LaunchControlPlane.js';
+import { evaluateIncidentCommandPlane } from './phase31IncidentCommand.js';
+import { evaluateSecretRotationPlane } from './phase32SecretRotation.js';
+import { evaluateFailoverCapacityPlane } from './phase33FailoverCapacity.js';
+import { evaluateAbuseRateLimitPlane } from './phase34AbuseRateLimits.js';
+import { evaluatePublicDisclosurePlane } from './phase35PublicDisclosure.js';
+import { evaluateResidencyHoldPlane } from './phase36ResidencyLegalHold.js';
+import { evaluateDependencyAttestationPlane } from './phase37DependencyAttestation.js';
+import { evaluateContinuousVerificationPlane } from './phase38ContinuousVerification.js';
+import { evaluateGameDayPlane } from './phase39GameDayRehearsal.js';
+import { evaluateSustainmentPlane } from './phase40SustainmentGovernance.js';
 
-export const CONTROL_PLANE_SCHEMA = 'fbt.control-plane-activation.v1';
+export const CONTROL_PLANE_SCHEMA = 'fbt.control-plane-activation.v2';
 
 export function activateControlPlane({
   evidence = [],
@@ -26,6 +36,16 @@ export function activateControlPlane({
   rpc = {},
   audit = {},
   assurance = {},
+  incident = {},
+  secrets = {},
+  failover = {},
+  abuse = {},
+  disclosure = {},
+  residency = {},
+  deps = {},
+  continuous = {},
+  gameday = {},
+  sustainment = {},
   freeze = true,
   now = Date.now()
 } = {}) {
@@ -54,7 +74,17 @@ export function activateControlPlane({
       operational: false,
       live: false,
       ready: false
-    }
+    },
+    evaluateIncidentCommandPlane(incident),
+    evaluateSecretRotationPlane({ ...secrets, now }),
+    evaluateFailoverCapacityPlane(failover),
+    evaluateAbuseRateLimitPlane(abuse),
+    evaluatePublicDisclosurePlane(disclosure),
+    evaluateResidencyHoldPlane(residency),
+    evaluateDependencyAttestationPlane(deps),
+    evaluateContinuousVerificationPlane({ ...continuous, now }),
+    evaluateGameDayPlane(gameday),
+    evaluateSustainmentPlane({ ...sustainment, evidence, now })
   ];
   const blockers = [...new Set(planes.flatMap((row) => row.blockers || []))];
   return {
