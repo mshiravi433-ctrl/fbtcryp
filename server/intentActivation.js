@@ -225,7 +225,7 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       currentPhase: CURRENT_INTENT_AI_PHASE,
       currentPhaseImplementation: 'implemented',
       currentPhaseOperational: phase8Operational ? 'ready' : 'partial',
-      specificationImplementedThrough: 20,
+      specificationImplementedThrough: 30,
       specificationOperationalThrough: 7,
       operationalActivationRequired: true
     },

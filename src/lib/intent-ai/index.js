@@ -512,4 +512,78 @@ export {
   launchChecklist
 } from './launchGovernance.js';
 
-export const INTENT_AI_VERSION = 'phase20.specification-contracts.partial.v2';
+export {
+  OPERATIONAL_EVIDENCE_SCHEMA,
+  OPERATIONAL_READINESS_SCHEMA,
+  PHASE21_SCHEMA,
+  EVIDENCE_KINDS,
+  CRITICAL_FAILURE_CODES,
+  normalizeEvidence,
+  verifyCertificateAuthority,
+  verifySandboxOperator,
+  verifySimulator,
+  verifyMonitor,
+  verifyScheduler,
+  verifySmartWalletAndGuardian,
+  verifySigner,
+  verifyProviderHealth,
+  verifyRpcAndContract,
+  verifyAuditIntegrity,
+  verifyBackupRestore,
+  verifyIndependentReview,
+  verifyReproducibleBuild,
+  verifyRollbackDrill,
+  verifySloMeasurement,
+  aggregateOperationalReadiness,
+  phase21PublicStatus
+} from './operationalActivation.js';
+
+export {
+  PHASE22_SCHEMA,
+  operateDurableRegistry,
+  operateCertificateAuthority
+} from './phase22RegistryCaOps.js';
+export {
+  PHASE23_SCHEMA,
+  SANDBOX_STAGES,
+  runSandboxMesh
+} from './phase23SandboxMesh.js';
+export {
+  PHASE24_SCHEMA,
+  operateSimulator,
+  operateMonitor,
+  operateScheduler
+} from './phase24SimMonitorOps.js';
+export {
+  PHASE25_SCHEMA,
+  FEE_CATEGORIES,
+  operateSmartWallet,
+  operateProductionSigner,
+  authorizationFeesPresent
+} from './phase25SignerGuardianOps.js';
+export {
+  PHASE26_SCHEMA,
+  ADAPTERS as VENUE_ADAPTERS,
+  federateVenueHealth
+} from './phase26VenueFederation.js';
+export {
+  PHASE27_SCHEMA,
+  operateRpcQuorum,
+  enforceOnchainPolicy
+} from './phase27RpcPolicyOps.js';
+export {
+  PHASE28_SCHEMA,
+  operateImmutableAudit,
+  operateBackupRestore
+} from './phase28AuditDrOps.js';
+export {
+  PHASE29_SCHEMA,
+  THREATS,
+  operateAssurance
+} from './phase29AssuranceNetwork.js';
+export {
+  PHASE30_SCHEMA,
+  evaluateLaunchControlPlane
+} from './phase30LaunchControlPlane.js';
+
+export const INTENT_AI_VERSION = 'phase30.control-plane.fail-closed.v1';

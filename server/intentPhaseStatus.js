@@ -12,6 +12,7 @@
 import { existsSync } from 'node:fs';
 import { blobConfigured } from './blobCache.js';
 import { certificationsConfigured } from './ecosystemCertifications.js';
+import { operationalPhase21Row, scanOperationalProviders } from './intentOperationalEvidence.js';
 
 export const PHASE_STATUS_SCHEMA = 'fbt.intent-ai-phase-status.v1';
 export const SPEC_PHASES = Object.freeze([
@@ -25,7 +26,17 @@ export const SPEC_PHASES = Object.freeze([
   { phase: 17, id: 'onchain-policy-enforcement', title: 'On-Chain Policy Enforcement', implementation: 'implemented', source: ['src/lib/intent-ai/onchainPolicy.js'], tests: ['test/intent-ai/phase17-onchain-policy-probe.mjs'], requiredEvidence: ['deployed-smart-account', 'policy-contract', 'rpc-proof', 'onchain-revoke'] },
   { phase: 18, id: 'observability-and-proof', title: 'Observability و Proof', implementation: 'implemented', source: ['src/lib/intent-ai/observabilityProof.js'], tests: ['test/intent-ai/phase18-observability-proof-probe.mjs'], requiredEvidence: ['durable-immutable-audit', 'receipt-verifier', 'backup-drill', 'incident-operator'] },
   { phase: 19, id: 'security-privacy-compliance', title: 'Security و Privacy و Compliance', implementation: 'implemented', source: ['src/lib/intent-ai/securityCompliance.js'], tests: ['test/intent-ai/phase19-security-compliance-probe.mjs'], requiredEvidence: ['threat-review', 'independent-security-review', 'privacy-review', 'compliance-review'] },
-  { phase: 20, id: 'launch-governance', title: 'Launch و Governance', implementation: 'implemented', source: ['src/lib/intent-ai/launchGovernance.js'], tests: ['test/intent-ai/phase20-launch-governance-probe.mjs'], requiredEvidence: ['reproducible-deployment', 'rollback-drill', 'slo-measurement', 'public-runtime-status', 'incident-drill'] }
+  { phase: 20, id: 'launch-governance', title: 'Launch و Governance', implementation: 'implemented', source: ['src/lib/intent-ai/launchGovernance.js'], tests: ['test/intent-ai/phase20-launch-governance-probe.mjs'], requiredEvidence: ['reproducible-deployment', 'rollback-drill', 'slo-measurement', 'public-runtime-status', 'incident-drill'] },
+  { phase: 21, id: 'operational-activation', title: 'Operational Activation و Launch Readiness', implementation: 'implemented', source: ['src/lib/intent-ai/operationalActivation.js', 'server/intentOperationalEvidence.js'], tests: ['test/intent-ai/phase21-operational-activation-probe.mjs'], requiredEvidence: ['approved-durable-registry', 'certificate-authority', 'sandbox-operator', 'simulator', 'monitor', 'smart-wallet', 'production-signer', 'wallet-provider', 'venue-health', 'rpc', 'policy-contract', 'durable-immutable-audit', 'backup-restore-drill', 'independent-security-review', 'reproducible-deployment', 'rollback-drill', 'slo-measurement'] },
+  { phase: 22, id: 'registry-ca-ops', title: 'Durable Registry و CA Operations', implementation: 'implemented', source: ['src/lib/intent-ai/phase22RegistryCaOps.js'], tests: ['test/intent-ai/phase22-registry-ca-ops-probe.mjs'], requiredEvidence: ['approved-durable-registry', 'certificate-authority', 'restart-recovery'] },
+  { phase: 23, id: 'sandbox-mesh', title: 'Sandbox Operator Mesh', implementation: 'implemented', source: ['src/lib/intent-ai/phase23SandboxMesh.js'], tests: ['test/intent-ai/phase23-sandbox-mesh-probe.mjs'], requiredEvidence: ['sandbox-operator', 'isolation-attestation'] },
+  { phase: 24, id: 'sim-monitor-ops', title: 'Simulator Monitor Scheduler Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase24SimMonitorOps.js'], tests: ['test/intent-ai/phase24-sim-monitor-ops-probe.mjs'], requiredEvidence: ['simulator', 'monitor', 'scheduler-operator'] },
+  { phase: 25, id: 'signer-guardian-ops', title: 'Smart Wallet Guardian Signer Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase25SignerGuardianOps.js'], tests: ['test/intent-ai/phase25-signer-guardian-ops-probe.mjs'], requiredEvidence: ['smart-wallet', 'independent-guardian', 'production-signer'] },
+  { phase: 26, id: 'venue-federation', title: 'Venue و Adapter Federation', implementation: 'implemented', source: ['src/lib/intent-ai/phase26VenueFederation.js'], tests: ['test/intent-ai/phase26-venue-federation-probe.mjs'], requiredEvidence: ['wallet-provider', 'broker-provider', 'bridge-provider', 'venue-health'] },
+  { phase: 27, id: 'rpc-policy-ops', title: 'RPC Quorum و On-Chain Policy Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase27RpcPolicyOps.js'], tests: ['test/intent-ai/phase27-rpc-policy-ops-probe.mjs'], requiredEvidence: ['rpc', 'policy-contract', 'code-hash-proof'] },
+  { phase: 28, id: 'audit-dr-ops', title: 'Immutable Audit و Disaster Recovery Ops', implementation: 'implemented', source: ['src/lib/intent-ai/phase28AuditDrOps.js'], tests: ['test/intent-ai/phase28-audit-dr-ops-probe.mjs'], requiredEvidence: ['durable-immutable-audit', 'backup-restore-drill'] },
+  { phase: 29, id: 'assurance-network', title: 'Independent Assurance Network', implementation: 'implemented', source: ['src/lib/intent-ai/phase29AssuranceNetwork.js'], tests: ['test/intent-ai/phase29-assurance-network-probe.mjs'], requiredEvidence: ['independent-security-review', 'privacy-review', 'compliance-review'] },
+  { phase: 30, id: 'launch-control-plane', title: 'Launch Control Plane', implementation: 'implemented', source: ['src/lib/intent-ai/phase30LaunchControlPlane.js'], tests: ['test/intent-ai/phase30-launch-control-plane-probe.mjs'], requiredEvidence: ['reproducible-deployment', 'rollback-drill', 'slo-measurement', 'launch-freeze-control'] }
 ]);
 
 function phase10Status() {
@@ -59,9 +70,14 @@ function inactiveStatus(phase) {
   };
 }
 
-export function phaseStatusReport({ now = Date.now() } = {}) {
+export function phaseStatusReport({ now = Date.now(), operationalScan = null } = {}) {
+  const scan = operationalScan || scanOperationalProviders({ now });
   const phases = SPEC_PHASES.map((phase) => {
-    const activation = phase.phase === 10 ? phase10Status() : inactiveStatus(phase);
+    const activation = phase.phase === 10
+      ? phase10Status()
+      : phase.phase === 21
+        ? operationalPhase21Row(scan)
+        : inactiveStatus(phase);
     const sourcePresent = phase.source.every((file) => existsSync(file));
     const testsPresent = phase.tests.every((file) => existsSync(file));
     return {
@@ -95,9 +111,12 @@ export function phaseStatusReport({ now = Date.now() } = {}) {
     phases,
     criticalBlockers: [...new Set(phases.flatMap((phase) => phase.blockers))],
     anyLive: phases.some((phase) => phase.live),
-    allOperational: phases.every((phase) => phase.operational === 'live' || phase.operational === 'verified'),
+    allOperational: false,
     executionActivated: false,
-    rawCredentialsAllowed: false
+    rawCredentialsAllowed: false,
+    launchAllowed: false,
+    operationalActivation: scan.publicStatus,
+    phase21: scan
   };
 }
 

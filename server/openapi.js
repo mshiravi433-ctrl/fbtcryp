@@ -296,7 +296,7 @@ export function openApiDocument({ certificationIssuerConfigured = false, durable
       '/intents/v1/phase-status': {
         get: {
           summary: 'Authoritative Phase 10–20 status',
-          description: 'Read-only implementation/configuration/operational status. Source files, mocks and env names never become live evidence.',
+          description: 'Read-only implementation/configuration/operational status for Phases 10–21. Source files, mocks and env names never become live evidence.',
           responses: { 200: { description: 'Status with explicit unavailable blockers' }, ...ERROR_RESPONSE }
         }
       },
