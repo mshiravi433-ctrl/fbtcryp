@@ -24,6 +24,7 @@
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
+    "test:phase10": "node test/intent-ai/phase10-agent-trust-probe.mjs",
     "build:full": "VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs"
   },
   "dependencies": {

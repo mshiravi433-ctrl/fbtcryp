@@ -39,6 +39,7 @@ import { challengeStrategy, runAgentCouncil } from './agentCouncil.js';
 import { createIntentGenome } from './intentGenome.js';
 import { createMemoryStore } from './agentMemory.js';
 import { createControlState, applyControl } from './policyGuard.js';
+import { discoverExternalAgents } from './externalAgentTrust.js';
 
 const SESSION_SCHEMA = 'fbt.intent-session.v2';
 
@@ -70,7 +71,9 @@ export function startSession({
   runtime = {},
   evidence = {},
   userId = null,
-  genome = null
+  genome = null,
+  externalAgents = [],
+  externalAgentsSource = 'unavailable'
 } = {}) {
   const lvl = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
   const normalizedMode = normalizeMode(mode);
@@ -113,6 +116,14 @@ export function startSession({
   }
 
   const capabilityScan = scanCapabilities({ runtime, evidence, now });
+  const externalAgentDiscovery = normalizedMode === 'fbt-external-ai'
+    ? discoverExternalAgents({
+      agents: Array.isArray(externalAgents) ? externalAgents : [],
+      source: externalAgentsSource === 'unavailable' && Array.isArray(externalAgents) && externalAgents.length ? 'runtime-input' : externalAgentsSource,
+      trustedRegistry: externalAgentsSource === 'server-catalog',
+      now
+    })
+    : null;
   const definition = modeDefinition(normalizedMode);
   return {
     schema: SESSION_SCHEMA,
@@ -144,6 +155,7 @@ export function startSession({
     },
     capabilityScan,
     capabilities: capabilityScan,
+    externalAgentDiscovery,
     targetReality: null,
     council: null,
     challenge: null,
@@ -253,6 +265,28 @@ export function chatTurn(session, text, ctx = {}) {
     evidenceComplete: capabilityScan.evidenceComplete
   });
 
+  const externalInputs = Array.isArray(ctx.externalAgents)
+    ? ctx.externalAgents
+    : ctx.externalAgentPassport
+      ? [ctx.externalAgentPassport]
+      : ctx.externalAgent
+        ? [ctx.externalAgent]
+        : [];
+  const externalAgentDiscovery = session.mode === 'fbt-external-ai'
+    ? discoverExternalAgents({
+      agents: externalInputs,
+      intent: parsed.intent || {},
+      source: ctx.externalAgentsSource || (externalInputs.length ? 'runtime-input' : 'unavailable'),
+      trustedRegistry: ctx.externalAgentsSource === 'server-catalog',
+      now: Date.now()
+    })
+    : session.externalAgentDiscovery;
+  if (session.mode === 'fbt-external-ai') session.externalAgentDiscovery = externalAgentDiscovery;
+  const selectedExternal = externalAgentDiscovery?.candidates?.find((candidate) => (
+    candidate.passport.id === String(ctx.externalAgentId || ctx.externalAgentPassport?.id || '')
+  )) || (externalAgentDiscovery?.candidates?.length === 1 ? externalAgentDiscovery.candidates[0] : null);
+  const discoveredExternalVerified = selectedExternal?.eligibleForAnalysis === true;
+
   // The external mode cannot silently admit an unverified participant. For
   // analysis/preparation we pass an explicit stage so a swap request is not
   // mistaken for permission to execute a swap.
@@ -265,7 +299,7 @@ export function chatTurn(session, text, ctx = {}) {
     intent: parsed.intent,
     stage,
     userAuthorized: false,
-    externalVerified: ctx.externalVerified === true || ctx.externalAgent?.verified === true,
+    externalVerified: ctx.externalVerified === true || discoveredExternalVerified,
     rawCredential
   });
   session.authorization = {
@@ -281,6 +315,7 @@ export function chatTurn(session, text, ctx = {}) {
       mode: session.mode,
       analysisPermission: false,
       financialExecutionPermission: false,
+      externalAgentDiscovery,
       message: boundary.code === 'EXTERNAL_AGENT_NOT_VERIFIED'
         ? 'External Agent mode requires a verified, scoped participant before analysis is admitted.'
         : 'This request is blocked at the mode boundary; no credential or execution permission was granted.'
@@ -332,6 +367,7 @@ export function chatTurn(session, text, ctx = {}) {
       suggestions: analysis.proposals.slice(0, 3).map((p) => ({ id: p.id, strategy: p.strategy, description: p.description, risk: p.risk })),
       targetReality,
       capabilityScan,
+      externalAgentDiscovery,
       permission: buildPermissionBoundary({ mode: session.mode, request: { ...parsed.intent, stage }, userAuthorized: false }),
       canExecute: false,
       financialExecutionAuthorized: false,
@@ -492,6 +528,7 @@ export function chatTurn(session, text, ctx = {}) {
     termsHash: orch.termsHash,
     targetReality,
     capabilityScan,
+    externalAgentDiscovery,
     challenge,
     council,
     agentDialogue,

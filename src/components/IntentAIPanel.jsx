@@ -22,7 +22,7 @@ import {
   evaluateRisk, venueHealth, reconcile,
   PRIMARY_MODES, MODE_LABELS
 } from '../lib/intent-ai';
-import { getIntentActivation, getIntentCapabilities } from '../lib/intentNetwork';
+import { getIntentActivation, getIntentCapabilities, getExternalAgents } from '../lib/intentNetwork';
 
 const LEVELS = [
   { value: 1, key: 'level1' },
@@ -45,6 +45,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   const [risk, setRisk] = useState(null);
   const [activation, setActivation] = useState(null);
   const [protocolCapabilities, setProtocolCapabilities] = useState(null);
+  const [externalAgentCatalog, setExternalAgentCatalog] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [gateAction, setGateAction] = useState(null);
   const [policyInput, setPolicyInput] = useState({
@@ -54,21 +55,30 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getIntentActivation(), getIntentCapabilities()])
-      .then(([activationResult, capabilityResult]) => {
+    Promise.allSettled([getIntentActivation(), getIntentCapabilities(), getExternalAgents()])
+      .then(([activationResult, capabilityResult, externalResult]) => {
         if (!active) return;
         setActivation(activationResult.status === 'fulfilled' ? activationResult.value : null);
         setProtocolCapabilities(capabilityResult.status === 'fulfilled' ? capabilityResult.value : null);
+        setExternalAgentCatalog(externalResult.status === 'fulfilled' ? externalResult.value : null);
       });
     return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    const s = startSession({ mode, level, defaultChainId, policyInput: level === 3 ? buildPolicy(policyInput) : null });
+    const catalogAvailable = mode === 'fbt-external-ai' && externalAgentCatalog?.dataStatus === 'live';
+    const s = startSession({
+      mode,
+      level,
+      defaultChainId,
+      policyInput: level === 3 ? buildPolicy(policyInput) : null,
+      externalAgents: catalogAvailable && Array.isArray(externalAgentCatalog?.candidates) ? externalAgentCatalog.candidates : [],
+      externalAgentsSource: catalogAvailable ? 'server-catalog' : 'unavailable'
+    });
     setSession(s);
     setGate(null); setRisk(null); setReceipt(null); setGateAction(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [level, mode]);
+  }, [level, mode, externalAgentCatalog]);
 
   function buildPolicy(p) {
     return {
@@ -88,7 +98,11 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
     if (!input.trim()) return;
     const text = input.trim();
     setInput('');
-    const { session: after } = chatTurn({ ...session }, text, { defaultChainId });
+    const { session: after } = chatTurn({ ...session }, text, {
+      defaultChainId,
+      externalAgents: Array.isArray(externalAgentCatalog?.candidates) ? externalAgentCatalog.candidates : [],
+      externalAgentsSource: externalAgentCatalog?.dataStatus === 'live' ? 'server-catalog' : 'unavailable'
+    });
     const plan = after?.messages?.slice(-3).reverse().find((m) => m.type === 'ready-for-confirmation' || m.type === 'prepared-draft');
     setSession(after);
     if (plan && level >= 2) openGate(plan.payload);
@@ -250,6 +264,22 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
               </div>
             ))}
           </div>
+          {session.mode === 'fbt-external-ai' && session.externalAgentDiscovery && (
+            <div className="card-inner" style={{ marginTop: 9, padding: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+              <div className="faint" style={{ fontSize: 10.5 }}>
+                {t('intentAI.external.title', { defaultValue: 'External Agent discovery' })} · {session.externalAgentDiscovery.dataStatus}
+              </div>
+              {session.externalAgentDiscovery.candidates.length === 0 ? (
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  {t('intentAI.external.empty', { defaultValue: 'No external Agent is verified for this request. Discovery does not grant access.' })}
+                </div>
+              ) : session.externalAgentDiscovery.candidates.slice(0, 4).map((candidate) => (
+                <div key={candidate.passport.id} className="faint" style={{ fontSize: 10.5, marginTop: 4 }}>
+                  <b>{candidate.passport.name}</b> · {candidate.trustStatus} · {candidate.matches ? t('intentAI.external.compatible', { defaultValue: 'compatible' }) : t('intentAI.external.incompatible', { defaultValue: 'not compatible' })} · {candidate.score == null ? t('intentAI.external.scoreWithheld', { defaultValue: 'score withheld' }) : `${candidate.score}/100`}
+                </div>
+              ))}
+            </div>
+          )}
         </details>
       )}
 

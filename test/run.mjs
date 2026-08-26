@@ -267,6 +267,12 @@ console.log('▸ probing FBT Intent AI — Phase 9 Intent OS contracts…');
   report('intent-ai phase-9 intent OS', await run9());
 }
 
+/* Phase 10 is a fail-closed contract probe. It runs as a standalone module so
+ * it can also be invoked directly with `npm run test:phase10`; importing it
+ * here keeps the normal test command from silently skipping the trust plane. */
+console.log('▸ probing FBT Intent AI — Phase 10 External Agent trust plane…');
+await import('./intent-ai/phase10-agent-trust-probe.mjs');
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

@@ -4907,6 +4907,13 @@
     "title": "کشف قابلیت از runtime",
     "summary": "{{available}} فعال · {{conditional}} مشروط · {{evidence}} امتیاز مستند. فقط واقعیت runtime می‌تواند قابلیت را فعال گزارش کند."
   },
+  "external": {
+    "title": "کشف Agent خارجی",
+    "empty": "برای این درخواست Agent خارجی تأییدشده‌ای وجود ندارد. کشف Agent مجوز دسترسی ایجاد نمی‌کند.",
+    "compatible": "سازگار",
+    "incompatible": "ناسازگار",
+    "scoreWithheld": "امتیاز نامشخص"
+  },
   "levels": {
       "level1": "تحلیل",
       "level2": "آماده‌سازی",

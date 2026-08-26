@@ -267,6 +267,33 @@ export {
   applyControl,
   feeTransparency
 } from './policyGuard.js';
+export {
+  EXTERNAL_AGENT_TRUST_SCHEMA,
+  EXTERNAL_AGENT_PASSPORT_SCHEMA,
+  EXTERNAL_AGENT_DISCOVERY_SCHEMA,
+  EXTERNAL_AGENT_SECURITY_SCHEMA,
+  EXTERNAL_AGENT_SANDBOX_SCHEMA,
+  EXTERNAL_AGENT_HANDSHAKE_SCHEMA,
+  EXTERNAL_AGENT_REPUTATION_SCHEMA,
+  EXTERNAL_AGENT_RATING_SCHEMA,
+  EXTERNAL_AGENT_SCOPE_SCHEMA,
+  EXTERNAL_AGENT_SANDBOX_STAGES,
+  EXTERNAL_AGENT_REPUTATION_CATEGORIES,
+  EXTERNAL_AGENT_REQUIRED_PERMISSIONS,
+  sanitizeExternalAgentPassport,
+  passportFromCatalog,
+  evaluateExternalAgentSecurity,
+  discoverExternalAgents,
+  createExternalAgentSandbox,
+  advanceExternalAgentSandbox,
+  createExternalAgentHandshake,
+  externalAgentHandshakeTurn,
+  handshakeTranscript,
+  buildExternalAgentReputation,
+  createBidirectionalAgentRating,
+  authorizeExternalAgentScope,
+  revokeExternalAgentScope
+} from './externalAgentTrust.js';
 
 // ── Phase 5: Local-First Adaptive Learning ──────────────────────────────────
 export {

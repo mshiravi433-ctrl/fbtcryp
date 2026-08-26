@@ -24,7 +24,7 @@ operational: partial
 |---:|---|---|---|---|
 | ۸ | فعال‌سازی تولید و مرز Secret Manager | activation report عمومی، provider boundary، handle scope و secret hygiene | بدون secret leak؛ provider فقط با health + durable + attestation سبز شود | **انجام‌شده از نظر کد / partial در runtime** |
 | ۹ | هستهٔ Intent OS | سه mode رسمی، جداسازی permission تحلیل/اجرا، دو Agent داخلی، capability discovery، target reality، challenge/council و authorization UX | mode چهارم وجود نداشته باشد؛ score بدون evidence سبز نشود؛ execution فقط بعد از صفحهٔ تأیید | **در حال پیاده‌سازی؛ partial** |
-| ۱۰ | marketplace و trust برای Agentها | capability passport، security، sandbox، reputation و انتخاب اختیاری capability | external Agent بدون verification/scope وارد نشود؛ decline باعث safe replan شود | Roadmap |
+| ۱۰ | marketplace و trust برای Agentها | capability passport، security، sandbox، reputation و انتخاب اختیاری capability | external Agent بدون verification/scope وارد نشود؛ decline باعث safe replan شود | **پیاده‌سازی قراردادها / partial در runtime** |
 | ۱۱ | تولید و رقابت strategy | generation، competition، route simulation، switching و monitoring | proposal با evidence/risk قابل‌توضیح؛ سود هرگز تضمین نشود | Roadmap |
 | ۱۲ | Smart Wallet و Guardian policy | scoped permissions، هفت limit، fee transparency، risk Guardian، pause/kill/emergency/exit | همهٔ limitها fail-closed؛ هیچ شخصیت یا Agentی Guardian را دور نزند | Roadmap |
 | ۱۳ | live و recurring intents | live/recurring intent، monitoring، exit policy، timeline و final result | pending/partial/unavailable هرگز Completed نشود | Roadmap |
@@ -38,7 +38,7 @@ operational: partial
 
 ## مرجع authoritative specification
 
-این جدول اکنون grouping اجرایی specification رسمی ۶۳بخشی است؛ roadmap قدیمی bridge/broker به‌عنوان source of truth ادامهٔ محصول استفاده نمی‌شود. endpoint activation برای compatibility آرایهٔ قدیمی را نیز نگه می‌دارد، اما `specificationRoadmap` و فیلد `intentOS` وضعیت جدید را گزارش می‌کنند. برای Phase 9 فقط وضعیت `partial` معتبر است و نبود provider، attestation یا runtime evidence هرگز با env یا label به `ready` تبدیل نمی‌شود.
+این جدول اکنون grouping اجرایی specification رسمی ۶۳بخشی است؛ roadmap قدیمی bridge/broker به‌عنوان source of truth ادامهٔ محصول استفاده نمی‌شود. endpoint activation برای compatibility آرایهٔ قدیمی را نیز نگه می‌دارد، اما `specificationRoadmap` و فیلد `intentOS` وضعیت جدید را گزارش می‌کنند. برای Phase 9 و Phase 10 فقط وضعیت `partial` معتبر است و نبود provider، attestation، registry یا runtime evidence هرگز با env یا label به `ready` تبدیل نمی‌شود.
 
 ## ترتیب اجرایی پیشنهادی
 
@@ -89,4 +89,5 @@ GET /api/intents/v1/capabilities
 - فازهای ۱ تا ۷: تکمیل‌شده در سطح product scope؛
 - فاز ۸: کد boundary، گزارش activation، API، UI و probe اضافه شد؛
 - فاز ۹: هستهٔ Intent OS، contracts، UI و probe پیاده شده اما به‌دلیل نبود runtime provider و trust plane کامل، **partial** است؛
-- فازهای ۱۰ تا ۲۰: هنوز انجام‌شده اعلام نشده‌اند؛ جزئیات authoritative فاز ۹ در `INTENT-AI-PHASE9-FA.md` است.
+- فاز ۱۰: trust-plane contracts، approved-catalog discovery، UI status، scope boundary و probe پیاده شده‌اند، اما به‌دلیل نبود registry/certificate-authority/sandbox/provider واقعی **partial** است؛ جزئیات authoritative در `INTENT-AI-PHASE10-FA.md` است؛
+- فازهای ۱۱ تا ۲۰: هنوز انجام‌شده اعلام نشده‌اند.

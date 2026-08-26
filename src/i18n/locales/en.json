@@ -4922,6 +4922,13 @@
     "title": "Runtime capability discovery",
     "summary": "{{available}} available · {{conditional}} conditional · {{evidence}} evidenced score(s). Only runtime facts can make a capability available."
   },
+  "external": {
+    "title": "External Agent discovery",
+    "empty": "No external Agent is verified for this request. Discovery does not grant access.",
+    "compatible": "compatible",
+    "incompatible": "not compatible",
+    "scoreWithheld": "score withheld"
+  },
   "levels": {
       "level1": "Analysis",
       "level2": "Prepare",
