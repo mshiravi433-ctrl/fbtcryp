@@ -114,4 +114,23 @@ export {
 } from './audit.js';
 
 /** Version sentinel for UI & telemetry. */
-export const INTENT_AI_VERSION = 'phase1.foundation.v1';
+export {
+  openConfirmationGate,
+  decideGate,
+  assertGateAllowsSubmit,
+  termsFromDraft,
+  materialDelta
+} from './confirmationGate.js';
+export { evaluateRisk } from './riskEngine.js';
+export { issueSessionKey, revokeSessionKey, scopeFor, revokeAllForPolicy } from './sessionKeys.js';
+export { signDraft } from './walletAdapter.js';
+export { brokerSubmit, bindBrokerHandle } from './brokerAdapter.js';
+export { createMonitor, heartbeat } from './executionMonitor.js';
+export { evaluateExit } from './exitPolicy.js';
+export { reconcile } from './reconciliation.js';
+export { classifyFailure, FAILURE_CLASSES } from './failureModes.js';
+export { buildConfirmationBlock, GATE_BUTTONS } from './confirmationUI.js';
+export { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
+export { executeConfirmed } from './humanAi.js';
+
+export const INTENT_AI_VERSION = 'phase2.controlled-execution.v1';

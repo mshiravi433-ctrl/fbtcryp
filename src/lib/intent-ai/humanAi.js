@@ -19,9 +19,11 @@ import { parseUserIntent, refineIntent } from './intentParser.js';
 import { sanitizePolicy, describeLevel, canPrepare, canExecute } from './permissions.js';
 import { formulateStrategies, STRATEGY_AGENT_IDENTITY } from './strategyAgent.js';
 import { orchestrate, EXECUTION_ORCHESTRATOR_IDENTITY } from './executionOrchestrator.js';
-import { guardianReview } from './guardian.js';
+import { guardianReview, emergencyStopCheck } from './guardian.js';
 import { createDraftOrder, draftOrderFromPlanStep } from './draftOrder.js';
 import { createPolicy, confirmPolicy, policyIsValid, policyPreview } from './policyModel.js';
+import { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
+import { classifyFailure } from './failureModes.js';
 
 const SESSION_SCHEMA = 'fbt.human-ai-session.v1';
 
@@ -66,7 +68,9 @@ export function startSession({ level = 1, policyInput = null, defaultChainId = 4
     plans: [],
     audit: [],
     status: 'ACTIVE',
-    pendingClarifications: null
+    pendingClarifications: null,
+    execution: null,
+    learningOptIn: false
   };
 }
 
@@ -90,8 +94,11 @@ export function chatTurn(session, text, ctx = {}) {
   session = push(session, userMessage(text));
   appendAudit(session, { type: 'user_input', length: text.length });
 
-  // 1. parse
-  let parsed = parseUserIntent(text, { defaultChainId: session.defaultChainId, ...ctx });
+  // 1. parse (or reuse a refined intent from answerClarifications)
+  let parsed = ctx.resolvedParsed
+    || (ctx.resolvedIntent
+      ? { ok: true, intent: ctx.resolvedIntent, signals: ctx.resolvedIntent.signals || {}, confidence: ctx.resolvedIntent.confidence || 70, clarifications: [] }
+      : parseUserIntent(text, { defaultChainId: session.defaultChainId, ...ctx }));
   appendAudit(session, { type: 'parse', ok: parsed.ok, confidence: parsed.confidence, clarifications: parsed.clarifications });
 
   // 2. if clarifications needed, ask
@@ -189,9 +196,71 @@ export function chatTurn(session, text, ctx = {}) {
 export function answerClarifications(session, answers) {
   if (!session.pendingClarifications?.parsed) return { session, reply: assistantMessage('nothing-to-clarify', {}) };
   const refined = refineIntent(session.pendingClarifications.parsed, answers);
-  session.pendingClarifications = null;
-  // treat the answers as a new turn with the refined intent
-  return chatTurn(session, refined.intent.raw || '(refined)', { resolvedIntent: refined.intent });
+  const next = { ...session, pendingClarifications: null };
+  const label = refined.intent?.raw || Object.values(answers || {}).filter(Boolean).join(' ') || '(refined)';
+  return chatTurn(next, label, { resolvedParsed: refined, resolvedIntent: refined.intent });
+}
+
+/**
+ * After ConfirmationGate: sign → submit → monitor → reconcile.
+ */
+export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, signer, brokerHandle, idempotencyKey, observation, submitVia = 'wallet' } = {}) {
+  if (session.status === 'STOPPED' || session.policy?.emergencyStop) {
+    const err = classifyFailure('EMERGENCY_STOP');
+    session = push(session, assistantMessage('error', { code: err.code, class: err.class, translatable: err.translatable }));
+    return { session, reply: session.messages.at(-1), ok: false, error: err };
+  }
+  const draft = session.drafts[session.drafts.length - 1];
+  const lastPlan = session.plans[session.plans.length - 1];
+  const termsHash = session.messages.filter((m) => m.payload?.termsHash).at(-1)?.payload?.termsHash;
+  const prepared = prepareExecution({
+    draftOrder: draft,
+    policy: session.policy,
+    session,
+    riskInput,
+    termsHash
+  });
+  if (!prepared.ok) {
+    session = push(session, assistantMessage('error', { code: prepared.error.code, translatable: prepared.error.translatable }));
+    return { session, reply: session.messages.at(-1), ok: false, error: prepared.error };
+  }
+  const submitted = confirmAndSubmit({
+    prepared,
+    action,
+    policy: session.policy,
+    session,
+    signer,
+    brokerHandle,
+    idempotencyKey,
+    currentTerms: prepared.gate.lockedTerms,
+    submitVia
+  });
+  if (!submitted.ok) {
+    const kind = submitted.reauthoriseRequired ? 'status' : 'error';
+    session = push(session, assistantMessage(kind, {
+      code: submitted.error?.code,
+      translatable: submitted.error?.translatable,
+      reauthoriseRequired: !!submitted.reauthoriseRequired
+    }));
+    return { session, reply: session.messages.at(-1), ok: false, error: submitted.error, reauthoriseRequired: submitted.reauthoriseRequired };
+  }
+  const rec = observeAndReconcile({
+    submitted,
+    observation: observation || { confirmed: false, confirmations: 0 },
+    session,
+    emergencyStop: session.policy.emergencyStop
+  });
+  const type = rec.partial ? 'partial' : rec.receipt?.confirmed ? 'status' : 'status';
+  session = { ...session, execution: { submitted, receipt: rec.receipt } };
+  session = push(session, assistantMessage(type, {
+    status: rec.receipt?.status,
+    confirmed: rec.receipt?.confirmed === true,
+    partial: !!rec.partial,
+    filledAmount: rec.receipt?.filledAmount,
+    fabricated: false,
+    translatable: rec.error?.translatable || 'intentAi.status.ok'
+  }));
+  return { session, reply: session.messages.at(-1), ok: rec.ok, receipt: rec.receipt };
 }
 
 /**
@@ -216,7 +285,8 @@ export function userStop(session, now = Date.now()) {
     stoppedAt: now,
     autonomousExecution: false
   });
-  const updated = { ...session, policy: stopped, status: 'STOPPED' };
+  emergencyHalt(stopped, session);
+  const updated = { ...session, policy: stopped, status: 'STOPPED', execution: null };
   const withMsg = push(updated, systemMessage('emergency_stop.triggered', { at: now }));
   appendAudit(withMsg, { type: 'emergency_stop', at: now });
   return withMsg;

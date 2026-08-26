@@ -193,6 +193,20 @@ console.log('▸ probing FBT Intent AI — Phase 1 Foundation (parser · permiss
   report('intent-ai phase-1 foundation', await runIntentAI());
 }
 
+console.log('▸ probing FBT Intent AI — Phase 2 Controlled Execution…');
+{
+  const { default: runGate } = await import('./intent-ai/phase2-confirmation-gate-probe.mjs');
+  report('intent-ai phase-2 confirmation gate', await runGate());
+  const { default: runRisk } = await import('./intent-ai/phase2-risk-engine-probe.mjs');
+  report('intent-ai phase-2 risk engine', await runRisk());
+  const { default: runSk } = await import('./intent-ai/phase2-session-key-probe.mjs');
+  report('intent-ai phase-2 session keys', await runSk());
+  const { default: runFail } = await import('./intent-ai/phase2-fail-closed-probe.mjs');
+  report('intent-ai phase-2 fail-closed', await runFail());
+  const { default: runE2e } = await import('./intent-ai/phase2-e2e-probe.mjs');
+  report('intent-ai phase-2 e2e', await runE2e());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

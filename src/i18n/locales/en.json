@@ -4456,6 +4456,21 @@
       },
       "loadMore": "Load more",
       "pageError": "The next page could not be loaded. What you already see is unchanged."
+    },
+    "policy": {
+      "title": "Execution policy",
+      "level": "Pre-authorization",
+      "subtitle": "These limits define the maximum authority. Every sensitive operation still requires your confirmation and signature.",
+      "capital": "Capital ceiling (USD)",
+      "transaction": "Max transaction (USD)",
+      "loss": "Max loss (USD)",
+      "approval": "Approval rule",
+      "sensitive": "Confirm sensitive operations",
+      "every": "Confirm every operation"
+    },
+    "confirm": {
+      "title": "Confirm this execution",
+      "body": "Review the terms. Nothing is signed until you confirm in your wallet."
     }
   },
   "whales": {
