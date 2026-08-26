@@ -20,15 +20,29 @@ import {
   describeLevel, policyPreview, INTENT_AI_VERSION,
   openConfirmationGate, decideGate, assertGateAllowsSubmit, termsFromDraft,
   evaluateRisk, venueHealth, reconcile,
-  PRIMARY_MODES, MODE_LABELS
+  PRIMARY_MODES, MODE_LABELS, MODE_DEFINITIONS
 } from '../lib/intent-ai';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus } from '../lib/intentNetwork';
+import '../styles/intent-os.css';
 
 const LEVELS = [
   { value: 1, key: 'level1' },
   { value: 2, key: 'level2' },
   { value: 3, key: 'level3' }
 ];
+
+/*
+ * Session control buttons — see the .ia-ctl block in intent-os.css.
+ * STOP / EMERGENCY_EXIT are danger glass, PAUSE is amber, REVOKE and
+ * DISCONNECT are violet. `title` gives the long form on long-press/hover.
+ */
+const CONTROL_VARIANTS = {
+  STOP: 'ia-danger',
+  PAUSE: 'ia-warn',
+  REVOKE: 'ia-cool',
+  DISCONNECT: 'ia-cool',
+  EMERGENCY_EXIT: 'ia-danger'
+};
 
 function fmtTime(ts) {
   try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
@@ -189,7 +203,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   const visibleMessages = useMemo(() => msgs.filter((m) => m.role !== 'system' || !/^(session\.started|policy\.confirmed)$/.test(m.type)), [msgs]);
 
   return (
-    <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+    <motion.section className="card ia-panel" variants={riseIn} initial="hidden" animate="show">
       <p className="section-label" style={{ marginBottom: 6 }}>{t('intentAI.title')}</p>
       <p className="muted" style={{ fontSize: 12.2, margin: '0 0 10px', lineHeight: 1.7 }}>
         {t('intentAI.subtitle', { summary: describeLevel(level).summary, version: INTENT_AI_VERSION })}
@@ -197,19 +211,72 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
 
       <div className="card-inner" style={{ background: 'rgba(0,229,255,0.06)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
         <p className="faint" style={{ fontSize: 10.5, margin: '0 0 6px' }}>{t('intentAI.mode.title', { defaultValue: 'Primary mode' })}</p>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {PRIMARY_MODES.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              className={`chip ${mode === candidate ? 'chip-on' : ''}`}
-              onClick={() => setMode(candidate)}
-              aria-pressed={mode === candidate}
-            >
-              {t(`intentAI.mode.${candidate}`, { defaultValue: MODE_LABELS[candidate] })}
-            </button>
-          ))}
+        {/* Real mode selector: each chip carries the mode's actual participants
+            from MODE_DEFINITIONS, and switching rebuilds the session boundary. */}
+        <div className="ia-modes" role="group" aria-label={t('intentAI.mode.title', { defaultValue: 'Primary mode' })}>
+          {PRIMARY_MODES.map((candidate) => {
+            const definition = MODE_DEFINITIONS[candidate];
+            const who = (definition?.participants || [])
+              .map((p) => t(`intentAI.participants.${p}`, { defaultValue: p }))
+              .join(' · ');
+            return (
+              <button
+                key={candidate}
+                type="button"
+                className={`ia-mode${mode === candidate ? ' on' : ''}`}
+                onClick={() => setMode(candidate)}
+                aria-pressed={mode === candidate}
+              >
+                {t(`intentAI.mode.${candidate}`, { defaultValue: MODE_LABELS[candidate] })}
+                <small>{who}</small>
+              </button>
+            );
+          })}
         </div>
+
+        {/* Live mode card — the session's real participants and, in external
+            mode, the actual discovery result from the server catalog. */}
+        {session?.modeDefinition && (
+          <div className="ia-mode-card" style={{ marginTop: 8 }} data-testid="intent-ai-mode-card">
+            <div className="ia-mode-card-head">
+              <span className="ia-live-pill" aria-hidden="true">{t('intentAI.modeLive.title')}</span>
+              <strong>{session.modeLabel || MODE_LABELS[mode]}</strong>
+            </div>
+            <div className="ia-participants">
+              <span className="ia-p-label">{t('intentAI.modeLive.participants')}</span>
+              {session.modeDefinition.participants.map((p) => (
+                <span key={p} className={`ia-participant${p === 'external-agent' ? ' ext' : ''}`}>
+                  {t(`intentAI.participants.${p}`, { defaultValue: p })}
+                </span>
+              ))}
+            </div>
+            {mode === 'fbt-external-ai' && session.externalAgentDiscovery && (
+              <div className="ia-ext-list">
+                {session.externalAgentDiscovery.candidates.length === 0 ? (
+                  <small className="ia-note">{t('intentAI.external.empty')}</small>
+                ) : session.externalAgentDiscovery.candidates.slice(0, 4).map((candidate) => (
+                  <div key={candidate.passport.id} className="ia-ext-row">
+                    <b>{candidate.passport.name}</b>
+                    <span className={`ia-ext-badge ${candidate.matches ? 'ok' : 'no'}`}>
+                      {candidate.matches ? t('intentAI.external.compatible') : t('intentAI.external.incompatible')}
+                    </span>
+                    <span className="ia-ext-badge dim">
+                      {candidate.score == null ? t('intentAI.external.scoreWithheld') : `${candidate.score}/100`}
+                    </span>
+                    <span className="ia-ext-badge dim">{candidate.trustStatus}</span>
+                  </div>
+                ))}
+                <small className="ia-note">
+                  {t('intentAI.modeLive.externalSource')}: {session.externalAgentDiscovery.source} · {session.externalAgentDiscovery.dataStatus}
+                </small>
+              </div>
+            )}
+            {mode !== 'fbt-external-ai' && (
+              <small className="ia-note">{t('intentAI.modeLive.notDiscovered')}</small>
+            )}
+          </div>
+        )}
+
         <p className="muted" style={{ fontSize: 11.5, margin: '7px 0 0', lineHeight: 1.6 }}>
           {t('intentAI.mode.boundary', { defaultValue: 'Analysis and preparation never authorize financial execution. Every execution requires a separate authorization screen.' })}
         </p>
@@ -239,9 +306,14 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
           <span style={{ color: level >= 2 ? 'var(--ok, #62e6a7)' : 'var(--muted, #9aa4b2)' }}>✓ {t('intentAI.authorization.preparation', { defaultValue: 'Preparation' })}: {level >= 2 ? t('intentAI.authorization.available', { defaultValue: 'available' }) : t('intentAI.authorization.off', { defaultValue: 'off' })}</span>
           <span style={{ color: session?.authorization?.financialExecution ? 'var(--ok, #62e6a7)' : 'var(--warn, #ffb454)' }}>! {t('intentAI.authorization.execution', { defaultValue: 'Financial execution' })}: {session?.authorization?.financialExecution ? t('intentAI.authorization.authorized', { defaultValue: 'authorized for this action' }) : t('intentAI.authorization.screenRequired', { defaultValue: 'authorization screen required' })}</span>
         </div>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+        <div className="ia-controls" style={{ marginTop: 8 }}>
           {['STOP', 'PAUSE', 'REVOKE', 'DISCONNECT', 'EMERGENCY_EXIT'].map((action) => (
-            <button key={action} type="button" className="btn" onClick={() => handleControl(action)}>
+            <button
+              key={action}
+              type="button"
+              className={`ia-ctl ${CONTROL_VARIANTS[action] || ''}`}
+              onClick={() => handleControl(action)}
+            >
               {action === 'EMERGENCY_EXIT' ? '⚠ ' : ''}{t(`intentAI.controls.${action.toLowerCase()}`, { defaultValue: action.replace('_', ' ') })}
             </button>
           ))}
@@ -266,22 +338,8 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
               </div>
             ))}
           </div>
-          {session.mode === 'fbt-external-ai' && session.externalAgentDiscovery && (
-            <div className="card-inner" style={{ marginTop: 9, padding: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
-              <div className="faint" style={{ fontSize: 10.5 }}>
-                {t('intentAI.external.title', { defaultValue: 'External Agent discovery' })} · {session.externalAgentDiscovery.dataStatus}
-              </div>
-              {session.externalAgentDiscovery.candidates.length === 0 ? (
-                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                  {t('intentAI.external.empty', { defaultValue: 'No external Agent is verified for this request. Discovery does not grant access.' })}
-                </div>
-              ) : session.externalAgentDiscovery.candidates.slice(0, 4).map((candidate) => (
-                <div key={candidate.passport.id} className="faint" style={{ fontSize: 10.5, marginTop: 4 }}>
-                  <b>{candidate.passport.name}</b> · {candidate.trustStatus} · {candidate.matches ? t('intentAI.external.compatible', { defaultValue: 'compatible' }) : t('intentAI.external.incompatible', { defaultValue: 'not compatible' })} · {candidate.score == null ? t('intentAI.external.scoreWithheld', { defaultValue: 'score withheld' }) : `${candidate.score}/100`}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* External agent discovery moved OUT of this collapsed block into
+              the live mode card above — it is real data and belongs in view. */}
         </details>
       )}
 
@@ -307,9 +365,9 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
             <li><b>{t('intentAI.policy.exit')}:</b> {preview.exitPolicy}</li>
             <li><b>{t('intentAI.policy.emergency')}:</b> {preview.emergencyStop}</li>
           </ul>
-          <div className="row" style={{ gap: 8, marginTop: 10 }}>
-            <button type="button" className="btn btn-primary" onClick={handleConfirmPolicy}>{t('intentAI.policy.confirmStart')}</button>
-            <button type="button" className="btn" onClick={handleCancelPolicy}>{t('intentAI.policy.cancel')}</button>
+          <div className="ia-controls" style={{ marginTop: 10 }}>
+            <button type="button" className="ia-ctl ia-go" onClick={handleConfirmPolicy}>{t('intentAI.policy.confirmStart')}</button>
+            <button type="button" className="ia-ctl" onClick={handleCancelPolicy}>{t('intentAI.policy.cancel')}</button>
           </div>
         </div>
       )}
@@ -335,7 +393,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
             <label className="field"><span className="field-label">{t('intentAI.policy.duration')}</span>
               <input type="number" value={policyInput.durationMin} onChange={(e) => setPolicyInput({ ...policyInput, durationMin: e.target.value })} /></label>
           </div>
-          <button type="button" className="btn" style={{ marginTop: 8 }}
+          <button type="button" className="ia-ctl ia-cool" style={{ marginTop: 8 }}
             onClick={() => setSession(startSession({ mode, level: 3, defaultChainId, policyInput: buildPolicy(policyInput) }))}>
             {t('intentAI.policy.apply')}
           </button>
@@ -359,11 +417,11 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
               {t('intentAI.risk.summary', { level: risk.level, decision: risk.decision })}
             </p>
           )}
-          <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-primary" disabled={gate.confirmed} onClick={() => handleGateAction('CONFIRM')}>{t('intentAI.gate.confirm')}</button>
-            <button type="button" className="btn" onClick={() => handleGateAction('REJECT')}>{t('intentAI.gate.reject')}</button>
-            <button type="button" className="btn" onClick={() => handleGateAction('CANCEL')}>{t('intentAI.gate.cancel')}</button>
-            <button type="button" className="btn" onClick={() => handleGateAction('REAUTHORIZE')}>{t('intentAI.gate.reauthorize')}</button>
+          <div className="ia-controls" style={{ marginTop: 10 }}>
+            <button type="button" className="ia-ctl ia-go" disabled={gate.confirmed} onClick={() => handleGateAction('CONFIRM')}>{t('intentAI.gate.confirm')}</button>
+            <button type="button" className="ia-ctl ia-danger" onClick={() => handleGateAction('REJECT')}>{t('intentAI.gate.reject')}</button>
+            <button type="button" className="ia-ctl" onClick={() => handleGateAction('CANCEL')}>{t('intentAI.gate.cancel')}</button>
+            <button type="button" className="ia-ctl ia-cool" onClick={() => handleGateAction('REAUTHORIZE')}>{t('intentAI.gate.reauthorize')}</button>
           </div>
         </div>
       )}
@@ -410,18 +468,22 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         )}
       </details>
 
-      <div className="intent-ai-thread" style={{ maxHeight: 300, overflowY: 'auto', padding: 8, borderRadius: 10, background: 'rgba(255,255,255,0.03)', marginBottom: 10 }}>
+      <div className="intent-ai-thread">
         {visibleMessages.length === 0 && (
           <p className="muted" style={{ fontSize: 12 }}>{t('intentAI.chat.try')}</p>
         )}
         {visibleMessages.map((m) => <MessageBubble key={m.id} msg={m} onDraftReady={onDraftReady} />)}
       </div>
 
-      <form onSubmit={handleSend} className="row" style={{ gap: 8 }}>
-        <input className="field-input" placeholder={t('intentAI.chat.placeholder')} value={input}
-          onChange={(e) => setInput(e.target.value)} disabled={session?.status === 'STOPPED'} style={{ flex: 1 }} />
-        <button type="submit" className="btn btn-primary" disabled={!input.trim()}>{t('intentAI.chat.send')}</button>
-        {level >= 2 && <button type="button" className="btn" onClick={handleEmergencyStop} title={t('intentAI.stop.title')}>{t('intentAI.stop.button')}</button>}
+      <form onSubmit={handleSend} className="ia-composer">
+        <input placeholder={t('intentAI.chat.placeholder')} value={input}
+          onChange={(e) => setInput(e.target.value)} disabled={session?.status === 'STOPPED'} />
+        <button type="submit" className="ia-send" disabled={!input.trim()}>{t('intentAI.chat.send')}</button>
+        {level >= 2 && (
+          <button type="button" className="ia-ctl ia-danger" onClick={handleEmergencyStop} title={t('intentAI.stop.title')}>
+            {t('intentAI.stop.button')}
+          </button>
+        )}
       </form>
     </motion.section>
   );
@@ -522,7 +584,7 @@ function MessageContent({ msg, onDraftReady }) {
         )}
         {authorizationScreen && <div className="faint" style={{ marginTop: 4 }}>{t('intentAI.msg.authRequired', { defaultValue: 'Financial execution remains locked until this screen is explicitly confirmed.' })}</div>}
         {type === 'ready-for-confirmation' && (
-          <button type="button" className="btn btn-primary" style={{ marginTop: 6 }} onClick={() => onDraftReady?.({ plan, drafts, termsHash })}>
+          <button type="button" className="ia-ctl ia-go" style={{ marginTop: 6 }} onClick={() => onDraftReady?.({ plan, drafts, termsHash })}>
             {t('intentAI.msg.openGate')}
           </button>
         )}

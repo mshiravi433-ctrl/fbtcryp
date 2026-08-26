@@ -75,9 +75,25 @@
   --min-tap: 44px;
 }
 
-/* Light theme */
+/*
+ * ─── THIS BLOCK MUST NEVER BEAT AN EXPLICIT THEME CHOICE ───────────────────
+ *
+ * It used to be a bare `:root { … }` inside the media query. Both selectors
+ * have the same specificity, and this one comes later in the file — so on any
+ * device whose OS is set to light, these light values OVERRODE the app's own
+ * `data-theme="dark"`: a white canvas under full-strength neon orbs, a white
+ * inner disk inside the header logo, dark top-bar gradients over light panels.
+ * That was reported as «تم مشکی و پشت زمینه مشکی بهم خورده».
+ *
+ * The app always resolves the theme itself (useSettingsStore.applyTheme maps
+ * 'auto' → 'dark' | 'light' before touching the DOM, and index.html's
+ * pre-paint script does the same before first paint), so this fallback is
+ * scoped to documents that have NOT chosen yet — a bare HTML load with no JS.
+ * Once `data-theme` exists, the base dark block above or the explicit
+ * `:root[data-theme='light']` section below is the only thing that applies.
+ */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme='dark']):not([data-theme='light']) {
     --bg-void: #ffffff;
     --bg-abyss: #f8f9fa;
     --bg-panel: rgba(0, 0, 0, 0.03);
@@ -6062,32 +6078,20 @@ input, select, textarea { font-size: 16px !important; }
   }
 
   /* ---------------------------------------------------------------------
-     THE HEADER HAS TO GROW WITH THE COLUMN.
+     HEADER CENTRING ONLY — the brand itself stays phone-sized.
 
-     Reported: «هیدر در دسکتاپ و لپ‌تاپ هم خیلی کوچیکه».
-
-     Everything in the header was a fixed phone-sized value — a 15px brand
-     name, a 30px mark, 34px buttons — while the column beside it widened
-     from 520px to 680px. Held next to that, and viewed from desktop
-     distance rather than phone distance, the bar reads as a caption on top
-     of the page rather than its title.
-
-     Scaled proportionally rather than by a blanket zoom: the mark, the
-     wordmark and the buttons each have their own minimum for their own
-     reason (the buttons must stay a comfortable click target, the sub-label
-     must stay readable at a mono letter-spacing of 0.2em).
+     An earlier change also grew the header here (38px mark, 18.5px wordmark,
+     again at 1400px) so it would "keep pace with the wider column". Reported
+     back as «لوگو هیدر بزرگ شده، کلا بیار روی قبل» — the enlargement rules
+     are gone and the bar keeps its base padding and 30px mark on every
+     screen; only the width/centring survives, so the header still lines up
+     with the column and the nav below it.
      --------------------------------------------------------------------- */
   .top-bar {
     max-width: 680px;
     margin-inline: auto;
-    padding: 18px 20px 15px;
+    padding: 14px 16px 12px;
   }
-
-  .brand { gap: 11px; }
-  .brand-mark { width: 38px; height: 38px; border-radius: 11px; }
-  .brand-name { font-size: 18.5px; }
-  .brand-sub { font-size: 9.5px; }
-  .icon-btn { min-width: 42px; min-height: 42px; font-size: 16px; }
 
   /* Two-up on wide screens: these grids are single-column on a phone and
      leave a lot of dead space once the column grows. */
@@ -6104,12 +6108,6 @@ input, select, textarea { font-size: 16px !important; }
   .top-bar {
     max-width: 760px;
   }
-
-  /* The column grows once more here, so the header keeps pace. Capped at
-     20px: past that the wordmark starts to dominate a page whose actual
-     content is 13px financial rows. */
-  .brand-name { font-size: 20px; }
-  .brand-mark { width: 40px; height: 40px; }
 }
 
 /* ==========================================================================
@@ -6238,13 +6236,10 @@ input, select, textarea { font-size: 16px !important; }
     margin-inline: auto;
   }
 
-  /* A step between phone and desktop, for the same reason as the 900px
-     block: the column is wider here too, so a phone-sized header looks
-     undersized against it. Smaller step, because a tablet is held closer
-     than a laptop. */
-  .top-bar { padding: 16px 18px 13px; }
-  .brand-mark { width: 34px; height: 34px; }
-  .brand-name { font-size: 16.5px; }
+  /* A step between phone and desktop: the bar keeps the base phone sizing
+     (an earlier 34px-mark bump here was reverted with the other header
+     enlargement — «لوگو هیدر بزرگ شده، کلا بیار روی قبل»), only the column
+     centring applies. */
 
   /* The nav is position:fixed, so without inset-inline + margin it spans the
      whole viewport and floats detached from the column above it. */
@@ -10010,26 +10005,17 @@ body { overflow-x: clip; }
   .insight-asset-row { align-items: flex-start; flex-direction: column; }
 }
 
-@media (min-width: 600px) and (max-width: 899px) {
-  .header-brand-stage { max-width: 300px; height: 36px; }
-  .header-spotlight-mark { flex-basis: 34px; width: 34px; height: 34px; }
-  .header-spotlight-copy strong { font-size: 12px; }
-}
-
+/*
+ * The header brand stage used to widen and grow here (300/360px wide,
+ * 36/42px tall, with 34-40px spotlight marks) as part of the desktop header
+ * enlargement. Reverted with it — the stage keeps its base 236px × 34px box
+ * and the 30px spotlight mark on every screen, so the logo cannot change
+ * size between devices.
+ */
 @media (min-width: 900px) {
-  .header-brand-stage { max-width: 360px; height: 42px; }
-  .header-spotlight-mark { flex-basis: 38px; width: 38px; height: 38px; border-radius: 11px; }
-  .header-spotlight-copy small { font-size: 8.7px; }
-  .header-spotlight-copy strong { font-size: 13px; }
-  .header-spotlight-change { font-size: 11px; }
   .insights-unavailable-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .insight-unavailable { flex-direction: column; }
   .insight-unavailable-head { align-items: flex-start; flex-direction: column; }
-}
-
-@media (min-width: 1400px) {
-  .header-brand-stage { height: 42px; }
-  .header-spotlight-mark { flex-basis: 40px; width: 40px; height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
