@@ -8,7 +8,7 @@
  *
  * Also checks that the IntentOS page's capabilities caching is effective.
  */
-import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const INTENT_OS = '../src/lib/intentOS.js';
@@ -428,16 +428,38 @@ export default async function run() {
    * and a stale list is a check that silently stopped covering the new file.
    */
   const root = fileURLToPath(new URL('..', import.meta.url));
+  const listFiles = (dir, pattern) => {
+    const out = [];
+    const walk = (p) => {
+      const entries = readdirSync(`${root}${p}`);
+      for (const e of entries) {
+        const rel = `${p}/${e}`;
+        let st;
+        try { st = statSync(`${root}${rel}`); } catch { continue; }
+        if (st.isDirectory()) {
+          // skip node_modules/dist/.git but walk our own source subdirs
+          if (e === 'node_modules' || e === 'dist' || e.startsWith('.')) continue;
+          walk(rel);
+        } else if (pattern.test(e)) {
+          out.push(rel);
+        }
+      }
+    };
+    walk(dir);
+    return out;
+  };
   const intentFiles = [
-    ...readdirSync(`${root}src/lib`).filter((f) => /intent/i.test(f)).map((f) => `src/lib/${f}`),
-    ...readdirSync(`${root}server`).filter((f) => /intent/i.test(f)).map((f) => `server/${f}`),
+    ...listFiles('src/lib', /intent/i),
+    ...listFiles('server', /intent/i),
     'src/pages/IntentOS.jsx'
   ];
   t('E2E: the scan covers the whole intent surface, not a stale list',
     intentFiles.length >= 30);
   t('E2E: no agent withdrawal path exists anywhere in the intent system',
-    !intentFiles.some((f) => /withdrawFunds|withdrawForUser|drainWallet/.test(
-      readFileSync(`${root}${f}`, 'utf8'))));
+    !intentFiles.some((f) => {
+      try { return /withdrawFunds|withdrawForUser|drainWallet/.test(readFileSync(`${root}${f}`, 'utf8')); }
+      catch { return false; }
+    }));
   /* No server-side code path may submit a transaction for the user. */
   t('E2E: the workflow protocol says in so many words',
     wfServer.workflowProtocolStatus().executableByServer === false);
