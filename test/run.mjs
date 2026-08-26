@@ -182,6 +182,17 @@ console.log('▸ probing the wallet risk / verification helpers…');
   report('wallet risk helpers', await runRisk());
 }
 
+/* --------------------- 0a-3. FBT Intent AI — Phase 1 Foundation ---------- */
+/* Pure logic, no DOM and no network: intent parser, permission levels,
+   policy model, Guardian, Strategy Agent, Execution Orchestrator, Draft
+   Orders, Human↔AI session, Social Protocol, Stickers, and Audit log.
+   Every safety property from the master spec is locked here. */
+console.log('▸ probing FBT Intent AI — Phase 1 Foundation (parser · permissions · guardian · agents · audit)…');
+{
+  const { default: runIntentAI } = await import('./intent-ai/intent-ai-foundation-probe.mjs');
+  report('intent-ai phase-1 foundation', await runIntentAI());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */
