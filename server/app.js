@@ -288,6 +288,7 @@ import {
   publicOperatorRegistry
 } from './intentConfidential.js';
 import { activationReport } from './intentActivation.js';
+import { phaseStatusReport } from './intentPhaseStatus.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1332,6 +1333,38 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
 app.get('/api/intents/v1/activation', (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
   return res.json(activationReport());
+});
+
+/* Phases 10–20: implementation/configuration/operational status is a separate
+ * read-only contract. It never turns a source file, mock, env name, or UI into
+ * live evidence. */
+app.get('/api/intents/v1/phase-status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
+  return res.json(phaseStatusReport());
+});
+
+app.get('/api/intents/v1/public-status', (_req, res) => {
+  const status = phaseStatusReport();
+  res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
+  return res.json({
+    schema: 'fbt.public-status.v1',
+    service: 'FBT Intent AI',
+    generatedAt: status.generatedAt,
+    status: 'unavailable',
+    launchAllowed: false,
+    phases: status.phases.map((phase) => ({
+      phase: phase.phase,
+      id: phase.id,
+      implementation: phase.implementation,
+      configuration: phase.configuration,
+      operational: false,
+      status: phase.operational,
+      dataStatus: phase.dataStatus,
+      blockers: phase.blockers
+    })),
+    claims: { deployed: false, reproducible: false, publicVerification: false },
+    sourceOfTruth: status.sourceOfTruth
+  });
 });
 
 /* Phase 10: read-only external-agent discovery. The ecosystem registry is the

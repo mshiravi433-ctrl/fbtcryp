@@ -43,6 +43,11 @@ export const getExternalAgents = () => cachedGet('/intents/v1/external-agents', 
 /* Phase 8: implementation/configuration/operational readiness is distinct
    from protocol capabilities and is safe to cache with the same short TTL. */
 export const getIntentActivation = () => cachedGet('/intents/v1/activation', 6000);
+/* Authoritative implementation/configuration/operational separation for the
+   official specification Phases 10–20. This is read-only and cannot issue a
+   permission or make a provider appear live. */
+export const getIntentPhaseStatus = () => cachedGet('/intents/v1/phase-status', 6000);
+export const getIntentPublicStatus = () => cachedGet('/intents/v1/public-status', 6000);
 export const getRegisteredSolvers = () => cachedGet('/intents/v1/solvers', 6000);
 export const getBondBoard = () => cachedGet('/intents/v1/bonds', 6000);
 export const getAuctionCoordinator = () => cachedGet('/intents/v1/coordinator', 6000);

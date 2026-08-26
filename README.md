@@ -39,6 +39,9 @@ censored.
 - [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
 - [Intent AI — فازهای ۸ تا ۲۰ و وضعیت فعال‌سازی](docs/INTENT-AI-ROADMAP-8-20-FA.md)
 - [فاز ۸ — مرز Secret Manager و گزارش readiness](docs/INTENT-AI-PHASE8-FA.md)
+- [فاز ۱۰ — Marketplace و Trust](docs/INTENT-AI-PHASE10-FA.md)
+- [فازهای ۱۱ تا ۱۵ — Strategy، Policy، Lifecycle، Genome و Runtime](docs/INTENT-AI-PHASE11-FA.md) · [۱۲](docs/INTENT-AI-PHASE12-FA.md) · [۱۳](docs/INTENT-AI-PHASE13-FA.md) · [۱۴](docs/INTENT-AI-PHASE14-FA.md) · [۱۵](docs/INTENT-AI-PHASE15-FA.md)
+- [فازهای ۱۶ تا ۲۰ — Adapters، On-chain Policy، Proof، Security و Launch](docs/INTENT-AI-PHASE16-FA.md) · [۱۷](docs/INTENT-AI-PHASE17-FA.md) · [۱۸](docs/INTENT-AI-PHASE18-FA.md) · [۱۹](docs/INTENT-AI-PHASE19-FA.md) · [۲۰](docs/INTENT-AI-PHASE20-FA.md)
 - [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)
 
 ### Public guides

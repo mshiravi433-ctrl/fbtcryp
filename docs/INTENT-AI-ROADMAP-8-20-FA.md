@@ -6,9 +6,9 @@
 ## قانون وضعیت
 
 فازهای ۱ تا ۷ Intent AI در `main` پیاده و منتشر شده‌اند. این سند ادامهٔ roadmap
-را تعریف می‌کند؛ **تعریف یک فاز به معنی انجام‌شدن آن نیست**. هر فاز فقط وقتی
-کامل اعلام می‌شود که کد، تست، integration واقعی و گزارش fail-closed آن موجود
-باشد.
+را تعریف می‌کند؛ **وجود source و probe به معنی فعال‌شدن عملیاتی نیست**. هر فاز فقط وقتی
+کامل اعلام می‌شود که کد، تست، integration واقعی، evidence عملیاتی و گزارش
+fail-closed آن موجود باشد.
 
 فاز ۸ در همین مرحله اجرا شد، اما چون provider واقعی Secret Manager هنوز در
 environment نصب و attested نشده، وضعیت آن دو لایه دارد:
@@ -25,16 +25,16 @@ operational: partial
 | ۸ | فعال‌سازی تولید و مرز Secret Manager | activation report عمومی، provider boundary، handle scope و secret hygiene | بدون secret leak؛ provider فقط با health + durable + attestation سبز شود | **انجام‌شده از نظر کد / partial در runtime** |
 | ۹ | هستهٔ Intent OS | سه mode رسمی، جداسازی permission تحلیل/اجرا، دو Agent داخلی، capability discovery، target reality، challenge/council و authorization UX | mode چهارم وجود نداشته باشد؛ score بدون evidence سبز نشود؛ execution فقط بعد از صفحهٔ تأیید | **در حال پیاده‌سازی؛ partial** |
 | ۱۰ | marketplace و trust برای Agentها | capability passport، security، sandbox، reputation و انتخاب اختیاری capability | external Agent بدون verification/scope وارد نشود؛ decline باعث safe replan شود | **پیاده‌سازی قراردادها / partial در runtime** |
-| ۱۱ | تولید و رقابت strategy | generation، competition، route simulation، switching و monitoring | proposal با evidence/risk قابل‌توضیح؛ سود هرگز تضمین نشود | Roadmap |
-| ۱۲ | Smart Wallet و Guardian policy | scoped permissions، هفت limit، fee transparency، risk Guardian، pause/kill/emergency/exit | همهٔ limitها fail-closed؛ هیچ شخصیت یا Agentی Guardian را دور نزند | Roadmap |
-| ۱۳ | live و recurring intents | live/recurring intent، monitoring، exit policy، timeline و final result | pending/partial/unavailable هرگز Completed نشود | Roadmap |
-| ۱۴ | Intent Genome و local-first memory | DNA matching، evolution، structured memory و offline learning pipeline | memory secret ذخیره نکند؛ learning بدون opt-in upload نشود | Roadmap |
-| ۱۵ | External Agent runtime | passport، scoped session key، expiration، disconnect و sandbox اجرایی | seed/private key/master password هرگز به external Agent داده نشود | Roadmap |
-| ۱۶ | activation آداپترهای execution | wallet/broker/bridge، venue proof و recovery | نبود provider یا evidence success محسوب نشود؛ no-sign روی خطا | Roadmap |
-| ۱۷ | enforcement آن‌چین | Smart Account policy، protocol/chain/fee limits و revoke خارج از localStorage | دورزدن policy با wallet دیگر به‌صورت honest گزارش شود | Roadmap |
-| ۱۸ | observability و proof | audit timeline، why engine، receipt integrity، incident recovery و disaster resilience | history بازنویسی نشود؛ partial/reorg/outage قابل تشخیص باشد | Roadmap |
-| ۱۹ | security/privacy/compliance | threat model، privacy، confidential runtime، independent review و compliance | blocker بحرانی صفر و گزارش مستقل قابل انتشار باشد | Roadmap |
-| ۲۰ | launch و governance | public verification، versioning، migration، SLO و change control | deployment بازتولیدپذیر و status عمومی بدون ادعای ساختگی | Roadmap |
+| ۱۱ | تولید و رقابت strategy | generation، competition، route simulation، switching و monitoring | proposal با evidence/risk قابل‌توضیح؛ سود هرگز تضمین نشود | **کد + probe / unavailable در runtime** |
+| ۱۲ | Smart Wallet و Guardian policy | scoped permissions، هفت limit اجباری و Slippage در صورت وجود، fee transparency، risk Guardian، pause/kill/emergency/exit | همهٔ limitها fail-closed؛ هیچ شخصیت یا Agentی Guardian را دور نزند | **کد + probe / unavailable در runtime** |
+| ۱۳ | live و recurring intents | live/recurring intent، monitoring، exit policy، timeline و final result | pending/partial/unavailable هرگز Completed نشود | **کد + probe / unavailable در runtime** |
+| ۱۴ | Intent Genome و local-first memory | DNA matching، evolution، structured memory و offline learning pipeline | memory secret ذخیره نکند؛ learning بدون opt-in upload نشود | **کد + probe / unavailable در runtime** |
+| ۱۵ | External Agent runtime | passport، scoped session key، expiration، disconnect و sandbox اجرایی | seed/private key/master password هرگز به external Agent داده نشود | **کد + probe / unavailable در runtime** |
+| ۱۶ | activation آداپترهای execution | wallet/broker/bridge، venue proof و recovery | نبود provider یا evidence success محسوب نشود؛ no-sign روی خطا | **کد + probe / unavailable در runtime** |
+| ۱۷ | enforcement آن‌چین | Smart Account policy، protocol/chain/fee limits و revoke خارج از localStorage | دورزدن policy با wallet دیگر به‌صورت honest گزارش شود | **کد + probe / unavailable در runtime** |
+| ۱۸ | observability و proof | audit timeline، why engine، receipt integrity، incident recovery و disaster resilience | history بازنویسی نشود؛ partial/reorg/outage قابل تشخیص باشد | **کد + probe / unavailable در runtime** |
+| ۱۹ | security/privacy/compliance | threat model، privacy، confidential runtime، independent review و compliance | blocker بحرانی صفر و گزارش مستقل قابل انتشار باشد | **کد + probe / unavailable در runtime** |
+| ۲۰ | launch و governance | public verification، versioning، migration، SLO و change control | deployment بازتولیدپذیر و status عمومی بدون ادعای ساختگی | **کد + probe / launch blocked** |
 
 ## مرجع authoritative specification
 
@@ -90,4 +90,6 @@ GET /api/intents/v1/capabilities
 - فاز ۸: کد boundary، گزارش activation، API، UI و probe اضافه شد؛
 - فاز ۹: هستهٔ Intent OS، contracts، UI و probe پیاده شده اما به‌دلیل نبود runtime provider و trust plane کامل، **partial** است؛
 - فاز ۱۰: trust-plane contracts، approved-catalog discovery، UI status، scope boundary و probe پیاده شده‌اند، اما به‌دلیل نبود registry/certificate-authority/sandbox/provider واقعی **partial** است؛ جزئیات authoritative در `INTENT-AI-PHASE10-FA.md` است؛
-- فازهای ۱۱ تا ۲۰: هنوز انجام‌شده اعلام نشده‌اند.
+- فازهای ۱۱ تا ۱۹: source production-safe، export، integration status و probe اضافه شده‌اند؛ هرکدام به‌دلیل نبود provider/runtime/evidence واقعی **implemented در سطح کد، اما operationally unavailable** هستند؛ مستندات authoritative در `INTENT-AI-PHASE11-FA.md` تا `INTENT-AI-PHASE19-FA.md` است؛
+- فاز ۲۰: source governance، launch gate، public status و probe اضافه شده‌اند؛ به‌دلیل blockerهای critical و نبود deployment evidence، **launch blocked** است؛ جزئیات در `INTENT-AI-PHASE20-FA.md` است؛
+- نتیجه: فازهای ۱۰ تا ۲۰ complete/live/production-verified اعلام نشده‌اند و تصمیم فعلی fail-closed است.

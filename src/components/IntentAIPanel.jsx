@@ -22,7 +22,7 @@ import {
   evaluateRisk, venueHealth, reconcile,
   PRIMARY_MODES, MODE_LABELS
 } from '../lib/intent-ai';
-import { getIntentActivation, getIntentCapabilities, getExternalAgents } from '../lib/intentNetwork';
+import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus } from '../lib/intentNetwork';
 
 const LEVELS = [
   { value: 1, key: 'level1' },
@@ -46,6 +46,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   const [activation, setActivation] = useState(null);
   const [protocolCapabilities, setProtocolCapabilities] = useState(null);
   const [externalAgentCatalog, setExternalAgentCatalog] = useState(null);
+  const [phaseStatus, setPhaseStatus] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [gateAction, setGateAction] = useState(null);
   const [policyInput, setPolicyInput] = useState({
@@ -55,12 +56,13 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getIntentActivation(), getIntentCapabilities(), getExternalAgents()])
-      .then(([activationResult, capabilityResult, externalResult]) => {
+    Promise.allSettled([getIntentActivation(), getIntentCapabilities(), getExternalAgents(), getIntentPhaseStatus()])
+      .then(([activationResult, capabilityResult, externalResult, phaseResult]) => {
         if (!active) return;
         setActivation(activationResult.status === 'fulfilled' ? activationResult.value : null);
         setProtocolCapabilities(capabilityResult.status === 'fulfilled' ? capabilityResult.value : null);
         setExternalAgentCatalog(externalResult.status === 'fulfilled' ? externalResult.value : null);
+        setPhaseStatus(phaseResult.status === 'fulfilled' ? phaseResult.value : null);
       });
     return () => { active = false; };
   }, []);
@@ -393,6 +395,18 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
               count: Array.isArray(activation.blockers) ? activation.blockers.length : 0
             })}
           </p>
+        )}
+        {phaseStatus?.phases?.length > 0 && (
+          <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+            <p className="faint" style={{ fontSize: 10.5, margin: 0 }}>
+              {t('intentAI.readiness.specificationStatus', { defaultValue: 'Official specification Phases 10–20: source implemented; operational activation remains unavailable until external evidence exists.' })}
+            </p>
+            {phaseStatus.phases.map((phase) => (
+              <div key={phase.phase} className="faint" style={{ fontSize: 10.5 }}>
+                <b>Phase {phase.phase}</b> · {phase.implementation} · {phase.configuration} · {phase.operational} · {phase.live ? t('intentAI.readiness.live', { defaultValue: 'live' }) : t('intentAI.readiness.notLive', { defaultValue: 'not live' })}
+              </div>
+            ))}
+          </div>
         )}
       </details>
 

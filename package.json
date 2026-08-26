@@ -25,6 +25,18 @@
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
     "test:phase10": "node test/intent-ai/phase10-agent-trust-probe.mjs",
+    "test:phase11": "node test/intent-ai/phase11-strategy-competition-probe.mjs",
+    "test:phase12": "node test/intent-ai/phase12-smart-wallet-policy-probe.mjs",
+    "test:phase13": "node test/intent-ai/phase13-live-recurring-probe.mjs",
+    "test:phase14": "node test/intent-ai/phase14-genome-memory-probe.mjs",
+    "test:phase15": "node test/intent-ai/phase15-external-runtime-probe.mjs",
+    "test:phase16": "node test/intent-ai/phase16-adapter-activation-probe.mjs",
+    "test:phase17": "node test/intent-ai/phase17-onchain-policy-probe.mjs",
+    "test:phase18": "node test/intent-ai/phase18-observability-proof-probe.mjs",
+    "test:phase19": "node test/intent-ai/phase19-security-compliance-probe.mjs",
+    "test:phase20": "node test/intent-ai/phase20-launch-governance-probe.mjs",
+    "test:phase-status": "node test/intent-ai/phase-status-probe.mjs",
+    "test:phases11-20": "npm run test:phase11 && npm run test:phase12 && npm run test:phase13 && npm run test:phase14 && npm run test:phase15 && npm run test:phase16 && npm run test:phase17 && npm run test:phase18 && npm run test:phase19 && npm run test:phase20 && npm run test:phase-status",
     "build:full": "VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs"
   },
   "dependencies": {

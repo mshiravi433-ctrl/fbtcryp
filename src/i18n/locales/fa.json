@@ -4987,7 +4987,10 @@
       "title": "قابلیت‌ها و آمادگی",
       "secretManagerStandIn": "مدیر راز: SecureMemoryMap هنوز جایگزین فاز ۲ است (handle مبهم، نه KMS / Secret Manager واقعی).",
       "venueConfigured": "مسیرهای زنده: swap / dYdX متصل‌اند؛ اجرای bridge متصل نیست (configured:false). بروکر نیازمند handle محدود است.",
-      "phase8Status": "فعال‌سازی فاز ۸ {{status}} است؛ {{count}} مانع به‌صورت صادقانه گزارش شده است."
+      "phase8Status": "فعال‌سازی فاز ۸ {{status}} است؛ {{count}} مانع به‌صورت صادقانه گزارش شده است.",
+      "specificationStatus": "مشخصات رسمی فازهای ۱۰ تا ۲۰: source پیاده شده است؛ فعال‌سازی عملیاتی تا وجود شواهد بیرونی در دسترس نیست.",
+      "live": "زنده",
+      "notLive": "زنده نیست"
     },
     "chat": {
       "try": "مثال: «جابجایی ۱۰۰ USDC به ETH در Arbitrum»، «تحلیل BTC»، یا «هدف ۱۰٪ روی ۵۰۰ USDC در ۴ ساعت».",
