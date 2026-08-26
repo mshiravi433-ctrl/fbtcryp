@@ -133,4 +133,97 @@ export { buildConfirmationBlock, GATE_BUTTONS } from './confirmationUI.js';
 export { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
 export { executeConfirmed } from './humanAi.js';
 
-export const INTENT_AI_VERSION = 'phase2.controlled-execution.v1';
+// ── Phase 3: Multi-Agent Ecosystem ──────────────────────────────────────────
+export {
+  issueCapabilityToken,
+  revokeCapabilityToken,
+  revokeAllForPolicy as revokeAllCapabilityTokensForPolicy,
+  scopeCapabilityToken,
+  tokenHasForbiddenKey,
+  FORBIDDEN_CAPABILITY_TOKENS,
+  ALLOWED_CAPABILITY_TOKENS
+} from './capabilityToken.js';
+export {
+  registerAgent,
+  registerInternalAgent,
+  deregisterAgent,
+  getAgent,
+  listAgents,
+  isVerified,
+  matchAgent,
+  assertAgentForExecute,
+  DIRECTORY_IS_SELF_REPORTED
+} from './agentDirectory.js';
+export {
+  coordinateMultiAgent,
+  multiAgentHandshake,
+  emergencyStopAllForPolicy,
+  MULTIAGENT_SCHEMA
+} from './multiAgentOrchestrator.js';
+export {
+  recordLearningSample,
+  loadLearningSamples,
+  clearLearningSamples,
+  learningConsent,
+  LEARNING_SCHEMA
+} from './learningOptIn.js';
+
+// ── Phase 4: Agent Scoring & Specialist Marketplace ─────────────────────────
+export {
+  observedScore,
+  scoreDisplayLabel,
+  MIN_OBSERVED_SAMPLE_SIZE,
+  AGENT_SCORE_SCHEMA,
+  SCORE_IS_OBSERVED,
+  SCORE_NEVER_VERIFIES
+} from './agentScore.js';
+export {
+  listSpecialists,
+  quote as specialistQuote,
+  hire as hireSpecialist,
+  MARKET_SCHEMA
+} from './specialistMarket.js';
+export {
+  createCollaborationSession,
+  collaborationTurn,
+  readCollaborationTranscript,
+  isExecutableMessage,
+  COLLAB_SCHEMA
+} from './collaborationSession.js';
+
+// ── Phase 5: Local-First Adaptive Learning ──────────────────────────────────
+export {
+  loadMemory,
+  memoryStats,
+  clearMemory,
+  memoryCapabilities,
+  rememberOutcome,
+  MEMORY_SCHEMA,
+  MAX_MEMORY_RECORDS
+} from './adaptiveMemory.js';
+export {
+  refineStrategies,
+  MAX_REFINED_CONFIDENCE,
+  REFINE_NUDGE_CAP,
+  REFINE_DISCLAIMERS,
+  REFINE_SCHEMA
+} from './strategyRefine.js';
+export {
+  buildConfidentialEnvelope,
+  redactForCollab,
+  carriesSecret,
+  confidentialCapabilities,
+  CONFIDENTIAL_COLLAB_SCHEMA
+} from './confidentialCollab.js';
+
+// ── Phase 6: Live Adapter Wiring (honest, fail-closed) ─────────────────────
+export {
+  routeForDraft,
+  chainSupportedForSwap,
+  venueReadiness,
+  LIVE_VENUES
+} from './liveRouterBridge.js';
+export { venueHealth } from './venueHealth.js';
+export { submitPipeline } from './submitPipeline.js';
+
+export const INTENT_AI_VERSION = 'phase6.live-adapter-wiring.v1';

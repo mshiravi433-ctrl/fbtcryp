@@ -1,0 +1,55 @@
+/**
+ * FBT INTENT AI — VENUE HEALTH (Phase 6)
+ * ---------------------------------------------------------------------------
+ * Reads whether a venue is CONFIGURED for live execution, without ever
+ * revealing a secret. Fail-closed: a missing key, RPC, signer, provider, or
+ * broker handle is reported as `status: 'unavailable'` — never a fake success.
+ *
+ * The status is deliberately coarse and honest:
+ *   configured   — the venue has its required runtime inputs.
+ *   unavailable  — something is missing; no execution is attempted.
+ */
+
+import { routeForDraft, chainSupportedForSwap } from './liveRouterBridge.js';
+import { classifyFailure } from './failureModes.js';
+
+/** Check health of a venue for a draft, given runtime capabilities. */
+export function venueHealth(draft, ctx = {}) {
+  const route = routeForDraft(draft);
+  if (!route.ok) {
+    return { ok: false, status: 'unavailable', venue: null, reasons: [route.reason], error: classifyFailure('UNKNOWN', { detail: route.reason }) };
+  }
+
+  const reasons = [];
+  const venue = route.venue;
+
+  if (venue === 'swap') {
+    if (!chainSupportedForSwap(draft.chainId, ctx.supportedChains)) reasons.push('CHAIN_UNSUPPORTED');
+    if (!ctx.provider) reasons.push('NO_PROVIDER');
+    if (!ctx.signer) reasons.push('NO_SIGNER');
+  } else if (venue === 'dydx') {
+    if (!ctx.signer) reasons.push('NO_SIGNER');
+    if (ctx.dydxConnected !== true) reasons.push('NO_DYDX_SESSION');
+  } else if (venue === 'broker') {
+    if (!ctx.brokerHandle) reasons.push('NO_BROKER_HANDLE');
+  } else if (venue === 'bridge') {
+    // Bridge execution is not wired. Always honest.
+    reasons.push('BRIDGE_EXECUTE_UNAVAILABLE');
+  } else if (venue === 'dca') {
+    if (ctx.explicitSignature !== true) reasons.push('NO_EXPLICIT_SIGNATURE');
+  } else if (venue === 'smartWallet') {
+    if (!ctx.policy) reasons.push('NO_POLICY');
+  }
+
+  const configured = reasons.length === 0;
+  return {
+    ok: configured,
+    venue,
+    route,
+    status: configured ? 'configured' : 'unavailable',
+    reasons,
+    // Never expose a secret-shaped field.
+    secretsExposed: false,
+    error: configured ? null : classifyFailure('MISSING_DATA', { detail: reasons.join(',') })
+  };
+}

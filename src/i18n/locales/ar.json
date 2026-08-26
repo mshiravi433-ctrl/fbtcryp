@@ -2962,7 +2962,8 @@
       "maxSlippage": "أقصى انزلاق",
       "automatic": "التنفيذ التلقائي",
       "listNote": "الإدراجات ذاتية التصريح وللقراءة فقط. لا تصل أي استراتيجية إلى موقّع؛ يمكنها فقط اقتراح Intent توافق عليه وتوقّعه بنفسك."
-    }
+    },
+    "aiAssistant": "اسأل مساعد Intent AI"
   },
   "verdict": {
     "layerName": {
@@ -3217,5 +3218,104 @@
   },
   "launch": {
     "step": "الخطوة {{n}} من {{total}}"
+  },
+  "intentAI": {
+    "title": "FBT Intent AI",
+    "subtitle": "محلل intent حتمي · {{summary}} · v{{version}}",
+    "levels": {
+      "level1": "تحليل",
+      "level2": "تحضير",
+      "level3": "موجّه"
+    },
+    "stop": {
+      "active": "إيقاف الطوارئ نشط. لا يمكن أي تنفيذ.",
+      "title": "إيقاف الطوارئ (لا رجعة فيه لهذه الجلسة)",
+      "button": "🛑 إيقاف"
+    },
+    "policy": {
+      "confirmPrompt": "أكّد سياسة الجلسة المستقلة قبل البدء:",
+      "level": "المستوى",
+      "capital": "الحد الأقصى لرأس المال",
+      "transaction": "الحد الأقصى لكل معاملة",
+      "loss": "الحد الأقصى للخسارة",
+      "leverage": "الحد الأقصى للرافعة",
+      "chains": "الشبكات المسموحة",
+      "protocols": "البروتوكولات المسموحة",
+      "assets": "الأصول المسموحة",
+      "duration": "المدة",
+      "exit": "سياسة الخروج",
+      "emergency": "إيقاف الطوارئ",
+      "confirmStart": "تأكيد وبدء",
+      "cancel": "إلغاء",
+      "settings": "إعدادات سياسة الجلسة",
+      "maxCapital": "الحد الأقصى لرأس المال (USD)",
+      "maxPerTx": "الحد الأقصى لكل معاملة (USD)",
+      "maxLoss": "الحد الأقصى للخسارة (USD)",
+      "maxLeverage": "الحد الأقصى للرافعة (x)",
+      "allowedChains": "الشبكات المسموحة (csv)",
+      "allowedProtocols": "البروتوكولات المسموحة (csv)",
+      "allowedAssets": "الأصول المسموحة (csv)",
+      "durationLabel": "المدة (دقائق)",
+      "apply": "تطبيق السياسة (غير مؤكدة)"
+    },
+    "policy_duration": "المدة (دقائق)",
+    "gate": {
+      "title": "بوابة التأكيد",
+      "amount": "المبلغ",
+      "from": "من",
+      "to": "إلى",
+      "chain": "الشبكة",
+      "protocol": "البروتوكول",
+      "minOut": "الحد الأدنى للاستلام",
+      "termsHash": "تجزئة الشروط",
+      "confirm": "تأكيد",
+      "reject": "رفض",
+      "cancel": "إلغاء",
+      "reauthorize": "إعادة تأكيد"
+    },
+    "risk": {
+      "summary": "المخاطر: المستوى {{level}} · القرار {{decision}}"
+    },
+    "receipt": {
+      "title": "الوصال",
+      "venue": "الوجهة {{venue}}",
+      "pending": "بانتظار التأكيد — لا يوجد وصال بعد",
+      "submitted": "أُرسل — بانتظار التأكيد",
+      "partial": "تنفيذ جزئي",
+      "completed": "مكتمل (مؤكد)",
+      "failed": "فاشل",
+      "unavailable": "غير متاح — لا يوجد مسار مباشر",
+      "reauthorize": "تغيّرت الشروط — يلزم إعادة تأكيد",
+      "rejected": "رفضه المستخدم",
+      "cancelled": "أُلغِي",
+      "unconfirmed": "البوابة غير مؤكدة",
+      "emergency-stop": "إيقاف الطوارئ"
+    },
+    "readiness": {
+      "title": "القدرات والجاهزية",
+      "secretManagerStandIn": "مدير الأسرار: SecureMemoryMap ما زال بديلاً مؤقتاً من المرحلة ٢ (مقبض غامض، ليس KMS / Secret Manager حقيقياً).",
+      "venueConfigured": "المسارات الحيّة: swap / dYdX موصولتان؛ تنفيذ bridge غير موصول (configured:false). الوسيط يحتاج مقبضاً مقيّداً."
+    },
+    "chat": {
+      "try": "جرّب: «تبديل 100 USDC إلى ETH على Arbitrum»، «حلّل BTC»، أو «هدف 10% على 500 USDC خلال 4 ساعات».",
+      "placeholder": "اسأل Intent AI",
+      "send": "إرسال",
+      "you": "أنت",
+      "ai": "fbt.ai"
+    },
+    "msg": {
+      "clarifications": "بعض الأمور غير واضحة:",
+      "intent": "Intent",
+      "confidence": "ثقة {{n}}٪",
+      "suggestions": "الاقتراحات:",
+      "ready": "جاهز للتأكيد",
+      "draftPrepared": "أُعدّ المسودة",
+      "step": "الخطوة {{seq}}: {{action}}",
+      "onChain": "على الشبكة {{n}}",
+      "drafts": "{{n}} مسودة",
+      "openGate": "فتح بوابة التأكيد",
+      "cannotProceed": "لا يمكن المتابعة",
+      "policyConfirm": "يرجى تأكيد سياسة الجلسة في اللوحة أعلاه."
+    }
   }
 }
