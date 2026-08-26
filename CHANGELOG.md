@@ -1,3 +1,38 @@
+## Unreleased — Intent AI panel: glass session controls, live mode cards, en↔fa sync
+
+- Reported: «شکل بعضی از دکمه‌ها مثل توقف/توقف موقت/قطع اتصال/لغو مجوز/
+  خروج اضطراری خرابه — شیشه‌ای نیست و ریلی هم نیست»، «فیلد حرف زدن با
+  ایجنت سایزش بده» و «انگلیسی و فارسی سینک نیست».
+- ROOT CAUSE (buttons and chat field): the panel used the global `.btn`
+  class inside plain `.row` flex containers. `.btn` is `width: 100%` — the
+  exact trap documented on `.btn-row` in index.css — so each of the five
+  session controls claimed the full row as its flex-basis and rendered as
+  stacked full-width bars, while in the composer the Send and Stop buttons
+  squeezed the chat input to nothing. A bare `.btn` also carries no
+  background at all, so every control was invisible glass-less text.
+- The panel now has its own scoped control set in `intent-os.css`: `.ia-ctl`
+  glass buttons sized to content (`flex: 0 1 auto`), with severity variants —
+  danger (STOP, EMERGENCY EXIT), warn (PAUSE), cool (REVOKE, DISCONNECT) and
+  go (confirm actions) — each a layered translucent gradient + 16px backdrop
+  blur + inner highlight, with full light-theme counterparts. The composer is
+  `.ia-composer`: the chat input takes the free space first, Send/Stop size
+  to content. The policy-settings `.field` labels finally have a layout
+  (the class had no definition anywhere in the app).
+- The three primary modes (HUMAN ↔ AI, AI ↔ AI INSIDE FBT, FBT AI ↔ EXTERNAL
+  AI AGENT) are no longer text-only chips: each mode card carries its real
+  participants from `MODE_DEFINITIONS`, and a live mode card shows the active
+  session's participants plus — in external mode — the actual discovery
+  result from the server catalog, moved out of the collapsed details block
+  into view with compatible/incompatible, score-or-withheld and trust status
+  badges. Discovery still grants no permission; every boundary is unchanged.
+- Language sync: the eleven `intentOS.*` keys that existed only in English
+  (the whole execution-policy block, the confirm sheet and the launch banner)
+  are now translated in fa, and the missing `intentAI.authorization`,
+  `mode.boundary`, `external`, `capabilities`, `controls` and `msg.*` groups
+  are filled in ar. en↔fa key parity on these screens is asserted in the
+  wiring tests (which also un-broke the pre-existing "static t() key exists
+  in en.json" failure for `intentOS.launchBanner.*`).
+
 ## Unreleased — Intent AI Spec 65 Gap-Fill: every incomplete 65-item contract, fail-closed
 
 - Filled the remaining gaps of the 65-item Intent AI specification with 21 new

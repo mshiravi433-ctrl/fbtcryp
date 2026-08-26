@@ -12778,5 +12778,62 @@ export default function run() {
     t('block explorers are untouched', /explorer/i.test(explorers));
   }
 
+  /* ---- 113. Intent AI panel: glass controls, live modes, locale parity ---- */
+  /*
+   * Reported: «شکل بعضی از دکمه‌ها مثل توقف/توقف موقت/قطع اتصال/لغو مجوز/
+   * خروج اضطراری خرابه — شیشه‌ای نیست و ریلی هم نیست» و «فیلد حرف زدن با
+   * ایجنت سایزش بده» و «انگلیسی و فارسی سینک نیست».
+   *
+   * ROOT CAUSE 1 — the panel used the global `.btn` class inside plain `.row`
+   * flex containers. `.btn` is `width: 100%` (see the .btn-row comment in
+   * index.css), so each control claimed the full row as its flex-basis: five
+   * full-width invisible bars instead of buttons, and in the composer the
+   * Send/Stop buttons squeezed the chat input to nothing. The panel now uses
+   * scoped `.ia-ctl` glass buttons sized to content.
+   *
+   * ROOT CAUSE 2 — eleven intentOS.* keys (the whole execution-policy block)
+   * existed only in en.json; Persian users got English sentences inline.
+   */
+  {
+    const panel = read('src/components/IntentAIPanel.jsx');
+    const css = read('src/styles/intent-os.css');
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+    const ar = JSON.parse(read('src/i18n/locales/ar.json'));
+
+    t('the session controls are content-sized glass buttons, not full-width .btn',
+      /ia-controls/.test(panel) && /ia-ctl /.test(panel) &&
+      !/className="btn"/.test(panel));
+    t('...and every control carries a severity variant',
+      /CONTROL_VARIANTS = \{[\s\S]*?STOP: 'ia-danger'[\s\S]*?PAUSE: 'ia-warn'[\s\S]*?REVOKE: 'ia-cool'[\s\S]*?EMERGENCY_EXIT: 'ia-danger'/.test(panel));
+    t('the glass itself is real: blur + layered translucency + inner highlight',
+      /\.ia-ctl \{[^}]*backdrop-filter: blur\(16px\)/.test(css) &&
+      /\.ia-ctl \{[^}]*linear-gradient\(/.test(css) &&
+      /inset 0 1px rgba\(255, 255, 255/.test(css));
+    t('the composer sizes the chat field first and the buttons to content',
+      /\.ia-composer \{[^}]*display: flex/.test(css) &&
+      /\.ia-composer input \{[^}]*flex: 1 1 auto/.test(css) &&
+      /\.ia-send \{[^}]*flex: 0 0 auto/.test(css));
+    t('the policy fields finally have a layout (.field had no definition)',
+      /\.ia-panel label\.field \{[^}]*flex-direction: column/.test(css));
+
+    /* The three primary modes show their real participants from
+       MODE_DEFINITIONS, and external discovery renders inline, not buried. */
+    t('mode chips carry the real participants from MODE_DEFINITIONS',
+      /MODE_DEFINITIONS/.test(panel) && /intentAI\.participants\.\$\{p\}/.test(panel));
+    t('external agent discovery renders inline in the live mode card',
+      /ia-mode-card/.test(panel) && /ia-ext-row/.test(panel) &&
+      /externalAgentDiscovery\.candidates/.test(panel));
+
+    /* en↔fa parity on the two screens the report named. */
+    t('fa carries the execution-policy block en has',
+      hasKey(fa, 'intentOS.policy.title') && hasKey(fa, 'intentOS.policy.subtitle') &&
+      hasKey(fa, 'intentOS.confirm.title') && hasKey(fa, 'intentOS.confirm.body') &&
+      hasKey(fa, 'intentOS.launchBanner.label'));
+    t('ar carries the Intent AI authorization/mode/external block',
+      hasKey(ar, 'intentAI.authorization.title') && hasKey(ar, 'intentAI.mode.boundary') &&
+      hasKey(ar, 'intentAI.external.empty') && hasKey(ar, 'intentAI.controls.emergency_exit') &&
+      hasKey(ar, 'intentOS.policy.title'));
+  }
+
   return rows;
 }

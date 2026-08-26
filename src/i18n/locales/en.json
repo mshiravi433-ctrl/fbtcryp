@@ -4472,7 +4472,11 @@
       "title": "Confirm this execution",
       "body": "Review the terms. Nothing is signed until you confirm in your wallet."
     },
-    "aiAssistant": "Ask the Intent AI assistant"
+    "aiAssistant": "Ask the Intent AI assistant",
+    "launchBanner": {
+      "label": "Operational status — honest",
+      "note": "The contracts are implemented; operational activation is unavailable without independent evidence. Financial execution only ever runs through the independent confirmation display + Guardian + risk policy."
+    }
   },
   "whales": {
     "title": "Whale Tracking",
@@ -4893,43 +4897,43 @@
   },
   "intentAI": {
     "title": "FBT Intent AI",
-  "subtitle": "Deterministic intent parser · {{summary}} · v{{version}}",
-  "mode": {
-    "title": "Primary mode",
-    "human-ai": "HUMAN ↔ AI",
-    "ai-ai-inside-fbt": "AI ↔ AI INSIDE FBT",
-    "fbt-external-ai": "FBT AI ↔ EXTERNAL AI AGENT",
-    "boundary": "Analysis and preparation never authorize financial execution. Every execution requires a separate authorization screen."
-  },
-  "authorization": {
-    "title": "Authorization boundary",
-    "analysis": "Analysis allowed",
-    "preparation": "Preparation",
-    "available": "available",
-    "off": "off",
-    "execution": "Financial execution",
-    "authorized": "authorized for this action",
-    "screenRequired": "authorization screen required"
-  },
-  "controls": {
-    "stop": "STOP",
-    "pause": "PAUSE",
-    "revoke": "REVOKE",
-    "disconnect": "DISCONNECT",
-    "emergency_exit": "EMERGENCY EXIT"
-  },
-  "capabilities": {
-    "title": "Runtime capability discovery",
-    "summary": "{{available}} available · {{conditional}} conditional · {{evidence}} evidenced score(s). Only runtime facts can make a capability available."
-  },
-  "external": {
-    "title": "External Agent discovery",
-    "empty": "No external Agent is verified for this request. Discovery does not grant access.",
-    "compatible": "compatible",
-    "incompatible": "not compatible",
-    "scoreWithheld": "score withheld"
-  },
-  "levels": {
+    "subtitle": "Deterministic intent parser · {{summary}} · v{{version}}",
+    "mode": {
+      "title": "Primary mode",
+      "human-ai": "HUMAN ↔ AI",
+      "ai-ai-inside-fbt": "AI ↔ AI INSIDE FBT",
+      "fbt-external-ai": "FBT AI ↔ EXTERNAL AI AGENT",
+      "boundary": "Analysis and preparation never authorize financial execution. Every execution requires a separate authorization screen."
+    },
+    "authorization": {
+      "title": "Authorization boundary",
+      "analysis": "Analysis allowed",
+      "preparation": "Preparation",
+      "available": "available",
+      "off": "off",
+      "execution": "Financial execution",
+      "authorized": "authorized for this action",
+      "screenRequired": "authorization screen required"
+    },
+    "controls": {
+      "stop": "STOP",
+      "pause": "PAUSE",
+      "revoke": "REVOKE",
+      "disconnect": "DISCONNECT",
+      "emergency_exit": "EMERGENCY EXIT"
+    },
+    "capabilities": {
+      "title": "Runtime capability discovery",
+      "summary": "{{available}} available · {{conditional}} conditional · {{evidence}} evidenced score(s). Only runtime facts can make a capability available."
+    },
+    "external": {
+      "title": "External Agent discovery",
+      "empty": "No external Agent is verified for this request. Discovery does not grant access.",
+      "compatible": "compatible",
+      "incompatible": "not compatible",
+      "scoreWithheld": "score withheld"
+    },
+    "levels": {
       "level1": "Analysis",
       "level2": "Prepare",
       "level3": "Controlled"
@@ -5016,17 +5020,17 @@
     },
     "msg": {
       "clarifications": "A few things are unclear:",
-    "intent": "Intent",
-    "confidence": "conf {{n}}%",
-    "analysisOnly": "Analysis only — no financial execution permission.",
-    "reality": "Target reality",
-    "notGuaranteed": "not guaranteed",
-    "authRequired": "Financial execution remains locked until this screen is explicitly confirmed.",
-    "strategyRevision": "The independent challenge requires a recalculation before authorization.",
-    "councilDecision": "Council decision",
-    "blocked": "Blocked by a fail-closed safety boundary.",
-    "credentialRejected": "Raw credentials are never accepted or persisted.",
-    "suggestions": "Suggestions:",
+      "intent": "Intent",
+      "confidence": "conf {{n}}%",
+      "analysisOnly": "Analysis only — no financial execution permission.",
+      "reality": "Target reality",
+      "notGuaranteed": "not guaranteed",
+      "authRequired": "Financial execution remains locked until this screen is explicitly confirmed.",
+      "strategyRevision": "The independent challenge requires a recalculation before authorization.",
+      "councilDecision": "Council decision",
+      "blocked": "Blocked by a fail-closed safety boundary.",
+      "credentialRejected": "Raw credentials are never accepted or persisted.",
+      "suggestions": "Suggestions:",
       "ready": "Ready for confirmation",
       "draftPrepared": "Draft prepared",
       "step": "step {{seq}}: {{action}}",
@@ -5035,6 +5039,19 @@
       "openGate": "Open confirmation gate",
       "cannotProceed": "Cannot proceed",
       "policyConfirm": "Please confirm the session policy in the panel above."
+    },
+    "participants": {
+      "user": "you",
+      "fbt-ai": "FBT AI",
+      "fbt-strategy": "FBT strategy engine",
+      "fbt-execution": "FBT execution engine",
+      "external-agent": "external agent"
+    },
+    "modeLive": {
+      "title": "Active mode",
+      "participants": "participants",
+      "externalSource": "discovery source",
+      "notDiscovered": "No external agent participates in this mode."
     }
   }
 }

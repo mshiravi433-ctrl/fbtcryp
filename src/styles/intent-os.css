@@ -648,3 +648,299 @@
 .ios-launch-status li { font: 700 10px/1.45 var(--font-mono); color: var(--text-2); }
 .ios-launch-status li::before { content: '■ '; color: #ffb020; }
 .ios-launch-status small { display: block; margin-top: 9px; color: var(--text-3); font-size: 9px; line-height: 1.6; }
+
+/* ==========================================================================
+   INTENT AI PANEL (/intent-ai) — Mode A glass controls
+   --------------------------------------------------------------------------
+   Reported: «شکل بعضی از دکمه‌ها مثل توقف/توقف موقت/قطع اتصال/لغو مجوز/
+   خروج اضطراری خرابه، شیشه‌ای نیست و ریلی هم نیست» و «فیلد حرف زدن با
+   ایجنت سایزش بده».
+
+   The panel used the global `.btn` class inside plain `.row` flex containers.
+   `.btn` is `width: 100%` (see the .btn-row comment in index.css), so each
+   control demanded the full row as its flex-basis: the five session controls
+   collapsed into a stack of full-width bars, and in the composer row the
+   Send/Stop buttons squeezed the chat input to nothing. A bare `.btn` also
+   carries no background at all, so the controls rendered as floating text.
+
+   Everything here is scoped to `.ia-panel` and sized to content (`flex: 0 1
+   auto`), so buttons can never blow up a row again, and every surface is real
+   glass: layered translucent gradient + backdrop blur + inner highlight.
+   ========================================================================== */
+.ia-panel { display: flex; flex-direction: column; gap: 10px; }
+
+/* --- session control buttons: توقف · توقف موقت · لغو مجوز · قطع اتصال · خروج اضطراری --- */
+.ia-controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+
+.ia-ctl {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.028));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.09), 0 10px 26px -18px rgba(0, 0, 0, 0.9);
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+.ia-ctl:active { transform: scale(0.96); }
+.ia-ctl:disabled { opacity: 0.42; cursor: not-allowed; }
+.ia-ctl:hover { border-color: rgba(255, 255, 255, 0.24); }
+
+/* Danger — STOP and EMERGENCY EXIT: red glass, unmistakable. */
+.ia-ctl.ia-danger {
+  border-color: rgba(255, 82, 120, 0.45);
+  background: linear-gradient(165deg, rgba(255, 82, 120, 0.2), rgba(255, 45, 100, 0.07));
+  color: #ffdce4;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.12), 0 10px 26px -16px rgba(255, 45, 100, 0.55);
+}
+.ia-ctl.ia-danger:hover { border-color: rgba(255, 82, 120, 0.7); box-shadow: inset 0 1px rgba(255, 255, 255, 0.14), 0 10px 28px -14px rgba(255, 45, 100, 0.7); }
+
+/* Warn — PAUSE: amber glass. */
+.ia-ctl.ia-warn {
+  border-color: rgba(255, 179, 0, 0.42);
+  background: linear-gradient(165deg, rgba(255, 179, 0, 0.17), rgba(255, 179, 0, 0.05));
+  color: #ffe9c2;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 10px 26px -18px rgba(255, 179, 0, 0.5);
+}
+
+/* Cool — REVOKE / DISCONNECT: violet glass. */
+.ia-ctl.ia-cool {
+  border-color: rgba(157, 123, 255, 0.4);
+  background: linear-gradient(165deg, rgba(157, 123, 255, 0.17), rgba(124, 77, 255, 0.05));
+  color: #e4d9ff;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 10px 26px -18px rgba(124, 77, 255, 0.55);
+}
+
+/* Confirm — the affirmative action of a row: neon glass, mirrors .btn-primary. */
+.ia-ctl.ia-go {
+  border-color: rgba(66, 232, 255, 0.5);
+  background: linear-gradient(120deg, rgba(66, 232, 255, 0.28), rgba(157, 123, 255, 0.24));
+  color: #eafcff;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 10px 30px -14px rgba(0, 229, 255, 0.55);
+}
+
+/* --- primary mode selector: HUMAN↔AI · AI↔AI INSIDE FBT · FBT↔EXTERNAL AI --- */
+.ia-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+@media (max-width: 460px) { .ia-modes { grid-template-columns: 1fr; } }
+
+.ia-mode {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.018));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.07), 0 10px 26px -20px rgba(0, 0, 0, 0.9);
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.ia-mode:active { transform: scale(0.98); }
+.ia-mode small {
+  color: var(--text-3);
+  font: 600 8.5px/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ia-mode.on {
+  border-color: rgba(66, 232, 255, 0.55);
+  background: linear-gradient(160deg, rgba(66, 232, 255, 0.16), rgba(157, 123, 255, 0.1));
+  color: var(--text-1);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.14), 0 12px 30px -16px rgba(0, 229, 255, 0.5);
+}
+.ia-mode.on small { color: #9fe8f5; }
+
+/* Live mode card — participants and, in external mode, the real discovery
+   results straight from the server catalog. Never decorative. */
+.ia-mode-card {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(157, 123, 255, 0.24);
+  background: linear-gradient(160deg, rgba(157, 123, 255, 0.09), rgba(66, 232, 255, 0.04));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+}
+.ia-mode-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ia-mode-card-head strong { font-size: 11.5px; color: var(--text-1); }
+.ia-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid rgba(101, 245, 188, 0.4);
+  background: rgba(101, 245, 188, 0.09);
+  color: #a9f5d3;
+  font: 700 8.5px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ia-live-pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #65f5bc;
+  box-shadow: 0 0 7px rgba(101, 245, 188, 0.8);
+}
+.ia-participants { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.ia-participants > span.ia-p-label { color: var(--text-3); font: 600 8.5px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.ia-participant {
+  padding: 4px 9px;
+  border-radius: 99px;
+  border: 1px solid rgba(66, 232, 255, 0.3);
+  background: rgba(66, 232, 255, 0.07);
+  color: #bdeef8;
+  font: 650 9.5px/1.3 var(--font-display);
+  white-space: nowrap;
+}
+.ia-participant.ext {
+  border-color: rgba(255, 209, 107, 0.38);
+  background: rgba(255, 209, 107, 0.08);
+  color: #ffe4ae;
+}
+.ia-ext-list { display: grid; gap: 5px; }
+.ia-ext-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.028);
+  font-size: 10px;
+  color: var(--text-2);
+}
+.ia-ext-row b { color: var(--text-1); font-size: 10.5px; }
+.ia-ext-badge {
+  padding: 2px 7px;
+  border-radius: 99px;
+  font: 700 8px/1.5 var(--font-mono);
+  letter-spacing: 0.05em;
+}
+.ia-ext-badge.ok { border: 1px solid rgba(101, 245, 188, 0.4); color: #a9f5d3; background: rgba(101, 245, 188, 0.08); }
+.ia-ext-badge.no { border: 1px solid rgba(255, 93, 125, 0.4); color: #ffc3d0; background: rgba(255, 93, 125, 0.08); }
+.ia-ext-badge.dim { border: 1px solid var(--line); color: var(--text-3); background: rgba(255, 255, 255, 0.03); }
+.ia-mode-card small.ia-note { color: var(--text-3); font-size: 9.5px; line-height: 1.6; }
+
+/* --- composer: the agent chat field + send, sized to content --- */
+.ia-composer { display: flex; gap: 8px; align-items: stretch; }
+.ia-composer input { flex: 1 1 auto; min-width: 0; }
+.ia-send {
+  flex: 0 0 auto;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(66, 232, 255, 0.5);
+  background: linear-gradient(120deg, rgba(66, 232, 255, 0.3), rgba(157, 123, 255, 0.26));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 10px 30px -14px rgba(0, 229, 255, 0.55);
+  color: #eafcff;
+  font: 700 12.5px/1 var(--font-display);
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+.ia-send:active { transform: scale(0.96); }
+.ia-send:disabled { opacity: 0.42; cursor: not-allowed; }
+
+/* --- policy settings fields (`.field` had no definition anywhere) --- */
+.ia-panel label.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ia-panel label.field > input,
+.ia-panel label.field > select { width: 100%; min-width: 0; }
+
+/* --- chat thread --- */
+.intent-ai-thread {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.028);
+}
+
+/* --- light theme: glass needs darker edges and lighter fills on white --- */
+:root[data-theme='light'] .ia-ctl {
+  border-color: rgba(27, 62, 91, 0.22);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.85), rgba(240, 246, 252, 0.6));
+  color: #17263d;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.9), 0 8px 20px -14px rgba(32, 55, 84, 0.35);
+}
+:root[data-theme='light'] .ia-ctl:hover { border-color: rgba(27, 62, 91, 0.4); }
+:root[data-theme='light'] .ia-ctl.ia-danger {
+  border-color: rgba(207, 27, 62, 0.4);
+  background: linear-gradient(165deg, rgba(255, 235, 238, 0.9), rgba(255, 226, 230, 0.6));
+  color: #a3123a;
+}
+:root[data-theme='light'] .ia-ctl.ia-warn {
+  border-color: rgba(157, 110, 0, 0.4);
+  background: linear-gradient(165deg, rgba(255, 246, 230, 0.9), rgba(255, 240, 219, 0.6));
+  color: #7a5500;
+}
+:root[data-theme='light'] .ia-ctl.ia-cool {
+  border-color: rgba(98, 68, 173, 0.38);
+  background: linear-gradient(165deg, rgba(243, 238, 255, 0.9), rgba(238, 231, 253, 0.6));
+  color: #53369b;
+}
+:root[data-theme='light'] .ia-ctl.ia-go,
+:root[data-theme='light'] .ia-send {
+  border-color: rgba(0, 120, 141, 0.45);
+  background: linear-gradient(120deg, rgba(0, 164, 193, 0.18), rgba(105, 74, 181, 0.16));
+  color: #0b5b6b;
+}
+:root[data-theme='light'] .ia-mode {
+  border-color: rgba(35, 62, 91, 0.2);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(244, 249, 253, 0.65));
+  color: #526078;
+}
+:root[data-theme='light'] .ia-mode.on {
+  border-color: rgba(0, 120, 141, 0.55);
+  background: linear-gradient(160deg, rgba(0, 164, 193, 0.16), rgba(105, 74, 181, 0.1));
+  color: #10233a;
+}
+:root[data-theme='light'] .ia-mode.on small { color: #00788d; }
+:root[data-theme='light'] .ia-mode-card {
+  border-color: rgba(98, 68, 173, 0.26);
+  background: linear-gradient(160deg, rgba(243, 238, 255, 0.8), rgba(235, 248, 251, 0.6));
+}
+:root[data-theme='light'] .ia-participant { border-color: rgba(0, 120, 141, 0.32); background: rgba(0, 164, 193, 0.08); color: #0b5b6b; }
+:root[data-theme='light'] .ia-participant.ext { border-color: rgba(157, 110, 0, 0.4); background: rgba(255, 199, 89, 0.14); color: #7a5500; }
+:root[data-theme='light'] .ia-live-pill { border-color: rgba(8, 123, 87, 0.4); background: rgba(8, 179, 122, 0.1); color: #05684a; }
+:root[data-theme='light'] .intent-ai-thread { border-color: rgba(35, 62, 91, 0.18); background: rgba(255, 255, 255, 0.7); }
+:root[data-theme='light'] .ia-ext-row { border-color: rgba(35, 62, 91, 0.18); background: rgba(255, 255, 255, 0.75); color: #34445f; }
+:root[data-theme='light'] .ia-ext-row b { color: #10233a; }
+:root[data-theme='light'] .ia-ext-badge.ok { border-color: rgba(8, 123, 87, 0.4); color: #05684a; background: rgba(8, 179, 122, 0.1); }
+:root[data-theme='light'] .ia-ext-badge.no { border-color: rgba(207, 27, 62, 0.4); color: #a3123a; background: rgba(255, 226, 230, 0.7); }
