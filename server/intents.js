@@ -144,6 +144,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     executionObservationModel: '/api/intents/v1/execution-observation-model',
     /* Phase 8 — public production activation/readiness report. */
     activation: '/api/intents/v1/activation',
+    phaseStatus: '/api/intents/v1/phase-status',
+    publicStatus: '/api/intents/v1/public-status',
     externalAgents: '/api/intents/v1/external-agents',
     /* Phase 5 — confidential intent transport. */
     intentCommitments: '/api/intents/v1/confidential/commit',

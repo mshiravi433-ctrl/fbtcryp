@@ -3295,7 +3295,10 @@
       "title": "القدرات والجاهزية",
       "secretManagerStandIn": "مدير الأسرار: SecureMemoryMap ما زال بديلاً مؤقتاً من المرحلة ٢ (مقبض غامض، ليس KMS / Secret Manager حقيقياً).",
       "venueConfigured": "المسارات الحيّة: swap / dYdX موصولتان؛ تنفيذ bridge غير موصول (configured:false). الوسيط يحتاج مقبضاً مقيّداً.",
-      "phase8Status": "تفعيل المرحلة ٨ {{status}}؛ يتم الإبلاغ بصدق عن {{count}} عائقاً."
+      "phase8Status": "تفعيل المرحلة ٨ {{status}}؛ يتم الإبلاغ بصدق عن {{count}} عائقاً.",
+      "specificationStatus": "المواصفة الرسمية للمراحل ١٠–٢٠: تم تنفيذ المصدر؛ يبقى التفعيل التشغيلي غير متاح حتى وجود دليل خارجي.",
+      "live": "حيّ",
+      "notLive": "غير حيّ"
     },
     "chat": {
       "try": "جرّب: «تبديل 100 USDC إلى ETH على Arbitrum»، «حلّل BTC»، أو «هدف 10% على 500 USDC خلال 4 ساعات».",

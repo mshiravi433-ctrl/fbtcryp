@@ -13,6 +13,7 @@
  */
 
 import { SECRET_MANAGER_SCHEMA } from './intentSecretManager.js';
+import { phaseStatusReport } from './intentPhaseStatus.js';
 
 export const ACTIVATION_SCHEMA = 'fbt.intent-ai-activation.v1';
 export const CURRENT_INTENT_AI_PHASE = 8;
@@ -209,6 +210,7 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
   const secretManager = safeSecretManagerStatus(secretManagerStatus, env);
   const blockers = buildBlockers(secretManager, env);
   const phase8Operational = secretManager.operational;
+  const specificationStatus = phaseStatusReport({ now });
 
   return {
     schema: ACTIVATION_SCHEMA,
@@ -218,9 +220,14 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       completedPhases: [1, 2, 3, 4, 5, 6, 7],
       numberedPhasesRemaining: 0,
       originalRoadmapComplete: true,
+      /* Backwards-compatible Phase 8 fields remain above; the authoritative
+         specification status is exposed separately below. */
       currentPhase: CURRENT_INTENT_AI_PHASE,
       currentPhaseImplementation: 'implemented',
-      currentPhaseOperational: phase8Operational ? 'ready' : 'partial'
+      currentPhaseOperational: phase8Operational ? 'ready' : 'partial',
+      specificationImplementedThrough: 20,
+      specificationOperationalThrough: 7,
+      operationalActivationRequired: true
     },
     securityBoundary: {
       guardianNonDisableable: true,
@@ -273,9 +280,19 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       broker: { implementation: 'wired', operational: 'handle-conditional' },
       bridge: { implementation: 'not-wired', operational: 'unavailable' }
     },
-    blockers,
+    blockers: [...blockers, ...specificationStatus.criticalBlockers.map((code) => blocker(code, Number(String(code).match(/PHASE_(\d+)/)?.[1] || 10), 'operational', true, 'Required external provider, deployment evidence or runtime proof is not configured.'))],
+    /* Authoritative status for Phases 10–20. Source and probes are present;
+       external activation is intentionally unavailable until the evidence in
+       each row exists. */
+    specificationStatus,
     roadmap: INTENT_AI_ROADMAP_8_20.map((item) => ({ ...item })),
-    specificationRoadmap: INTENT_AI_SPECIFICATION_ROADMAP_9_20.map((item) => ({ ...item, domains: [...item.domains] })),
+    specificationRoadmap: INTENT_AI_SPECIFICATION_ROADMAP_9_20.map((item) => ({
+      ...item,
+      status: item.phase === 9 ? item.status : 'implemented-partial',
+      operational: specificationStatus.phases.find((row) => row.phase === item.phase)?.operational || 'unavailable',
+      live: specificationStatus.phases.find((row) => row.phase === item.phase)?.live || false,
+      domains: [...item.domains]
+    })),
     next: {
       phase: 9,
       id: 'intent-os-foundation',

@@ -293,6 +293,20 @@ export function openApiDocument({ certificationIssuerConfigured = false, durable
           }
         }
       },
+      '/intents/v1/phase-status': {
+        get: {
+          summary: 'Authoritative Phase 10–20 status',
+          description: 'Read-only implementation/configuration/operational status. Source files, mocks and env names never become live evidence.',
+          responses: { 200: { description: 'Status with explicit unavailable blockers' }, ...ERROR_RESPONSE }
+        }
+      },
+      '/intents/v1/public-status': {
+        get: {
+          summary: 'Public runtime status',
+          description: 'Read-only status page generated from runtime truth. It cannot authorize execution or announce an incomplete phase as live.',
+          responses: { 200: { description: 'Public status' }, ...ERROR_RESPONSE }
+        }
+      },
       '/ecosystem/agents': {
         get: { summary: 'List published agents', description: 'Public. Only listings that are published AND currently certified appear.', responses: listResponse('Published agent listings') },
         post: writeOp('Register an agent', 'Creates a draft owned by the caller. Requests for withdrawFunds or executeWithoutUser are refused before storage is touched.')

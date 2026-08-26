@@ -85,7 +85,8 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
 let failed = 0;
 const report = (suite, rows) => {
   console.log(`\n── ${suite} ─────────────────────────────`);
-  for (const [name, ok] of rows) {
+  for (const row of rows) {
+    const [name, ok] = Array.isArray(row) ? row : [row?.name, row?.ok];
     if (!ok) failed += 1;
     console.log(`  ${ok ? '✓' : '✗'} ${name}`);
   }
@@ -272,6 +273,30 @@ console.log('▸ probing FBT Intent AI — Phase 9 Intent OS contracts…');
  * here keeps the normal test command from silently skipping the trust plane. */
 console.log('▸ probing FBT Intent AI — Phase 10 External Agent trust plane…');
 await import('./intent-ai/phase10-agent-trust-probe.mjs');
+
+/* The official specification phases 11–20 are imported into the normal test
+ * command as well as exposed as individual npm scripts. Their probes use
+ * injected doubles only for deterministic boundaries; the runtime status still
+ * stays unavailable unless real provider/evidence is present. */
+const laterPhaseProbes = [
+  [11, './intent-ai/phase11-strategy-competition-probe.mjs'],
+  [12, './intent-ai/phase12-smart-wallet-policy-probe.mjs'],
+  [13, './intent-ai/phase13-live-recurring-probe.mjs'],
+  [14, './intent-ai/phase14-genome-memory-probe.mjs'],
+  [15, './intent-ai/phase15-external-runtime-probe.mjs'],
+  [16, './intent-ai/phase16-adapter-activation-probe.mjs'],
+  [17, './intent-ai/phase17-onchain-policy-probe.mjs'],
+  [18, './intent-ai/phase18-observability-proof-probe.mjs'],
+  [19, './intent-ai/phase19-security-compliance-probe.mjs'],
+  [20, './intent-ai/phase20-launch-governance-probe.mjs']
+];
+for (const [phase, probe] of laterPhaseProbes) {
+  console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);
+  const module = await import(probe);
+  if (Array.isArray(module.default)) report(`intent-ai phase-${phase}`, module.default);
+}
+console.log('▸ probing FBT Intent AI — authoritative status routes…');
+await import('./intent-ai/phase-status-probe.mjs');
 
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost

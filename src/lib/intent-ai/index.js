@@ -330,4 +330,186 @@ export {
 export { venueHealth } from './venueHealth.js';
 export { submitPipeline } from './submitPipeline.js';
 
-export const INTENT_AI_VERSION = 'phase9.intent-os.partial.v1';
+// ── Phase 11: strategy competition and simulation ───────────────────────────
+export {
+  STRATEGY_PROPOSAL_SCHEMA,
+  STRATEGY_SIMULATION_SCHEMA,
+  STRATEGY_COMPETITION_SCHEMA,
+  STRATEGY_MONITOR_SCHEMA,
+  STRATEGY_SWITCH_SCHEMA,
+  generateStrategies,
+  compareStrategies,
+  simulateRoute,
+  competeStrategies,
+  explainStrategyComparison,
+  explainStrategy,
+  switchStrategy,
+  monitorStrategy,
+  replanAfterCapabilityDecline as replanAfterStrategyCapabilityDecline
+} from './strategyCompetition.js';
+
+// ── Phase 12: Smart Wallet, Guardian and policy ─────────────────────────────
+export {
+  SMART_WALLET_POLICY_SCHEMA,
+  GUARDIAN_DECISION_SCHEMA,
+  FEE_SHEET_SCHEMA,
+  AUTHORIZATION_SCREEN_SCHEMA,
+  AUTHORIZATION_SCHEMA,
+  CONTROLS_SCHEMA,
+  FEE_TYPES,
+  createSmartWalletPolicy,
+  validateSmartWalletPolicy,
+  evaluateSmartWalletPolicy,
+  buildFeeSheet,
+  guardianDecision,
+  createAuthorizationScreen,
+  confirmAuthorization,
+  authorizeFinancialExecution,
+  createControls,
+  applyControl as applySmartWalletControl,
+  controlsAreBlocking,
+  policyPublicSummary
+} from './smartWalletPolicy.js';
+
+// ── Phase 13: live and recurring intent lifecycle ───────────────────────────
+export {
+  LIVE_INTENT_SCHEMA,
+  RECURRING_INTENT_SCHEMA,
+  INTENT_TIMELINE_SCHEMA,
+  INTENT_RESULT_SCHEMA,
+  LIVE_INTENT_STATUSES,
+  TERMINAL_LIVE_STATUSES,
+  LIVE_TRANSITIONS,
+  createLiveIntent,
+  createRecurringIntent,
+  transitionLiveIntent,
+  finalizeLiveIntent,
+  recordLiveFailure,
+  monitorLiveIntent,
+  prepareRecurringRun,
+  applyLiveControl,
+  finalResult
+} from './liveRecurringIntents.js';
+
+// ── Phase 14: Intent Genome and local-first memory ──────────────────────────
+export {
+  INTENT_GENOME_SCHEMA,
+  GENOME_MATCH_SCHEMA,
+  GENOME_EVOLUTION_SCHEMA,
+  LOCAL_MEMORY_SCHEMA,
+  MEMORY_EVENT_SCHEMA,
+  LEARNING_BATCH_SCHEMA,
+  GENOME_DIMENSIONS as PHASE14_GENOME_DIMENSIONS,
+  createIntentGenome as createPhase14IntentGenome,
+  rejectSecretGenomeInput as rejectPhase14SecretGenomeInput,
+  matchIntentGenome,
+  evolveIntentGenome as evolvePhase14IntentGenome,
+  redactMemoryEvent,
+  createLocalFirstMemory,
+  buildLearningBatch as buildPhase14LearningBatch,
+  localMemoryCapabilities
+} from './intentGenomeMemory.js';
+
+// ── Phase 15: External Agent runtime ───────────────────────────────────────
+export {
+  EXTERNAL_RUNTIME_SCHEMA,
+  RUNTIME_SESSION_SCHEMA,
+  CAPABILITY_NEGOTIATION_SCHEMA,
+  RUNTIME_REQUEST_SCHEMA,
+  RUNTIME_EVENT_SCHEMA,
+  createExternalAgentRuntime,
+  validateExternalRuntimeRequest
+} from './externalAgentRuntime.js';
+
+// ── Phase 16: execution adapter activation ─────────────────────────────────
+export {
+  EXECUTION_ADAPTER_SCHEMA,
+  ADAPTER_READINESS_SCHEMA,
+  TRANSACTION_SIMULATION_SCHEMA,
+  EXECUTION_ATTEMPT_SCHEMA,
+  ADAPTER_KINDS,
+  verifyTransactionRequest,
+  checkAdapterReadiness,
+  simulateTransaction,
+  executeWithAdapter,
+  clearExecutionIdempotency,
+  adapterStatus
+} from './executionAdapters.js';
+
+// ── Phase 17: on-chain policy enforcement ──────────────────────────────────
+export {
+  ONCHAIN_POLICY_SCHEMA,
+  DEPLOYMENT_EVIDENCE_SCHEMA,
+  ONCHAIN_EVALUATION_SCHEMA,
+  POLICY_MIGRATION_SCHEMA,
+  ONCHAIN_REVOKE_SCHEMA,
+  verifyPolicyDeployment,
+  evaluateOnchainPolicy,
+  migrateOnchainPolicy,
+  revokeOnchainSession,
+  onchainPolicyStatus
+} from './onchainPolicy.js';
+
+// ── Phase 18: observability and proof ───────────────────────────────────────
+export {
+  AUDIT_TIMELINE_SCHEMA,
+  AUDIT_EVENT_SCHEMA,
+  RECEIPT_INTEGRITY_SCHEMA,
+  EXECUTION_PROOF_SCHEMA as PHASE18_EXECUTION_PROOF_SCHEMA,
+  INCIDENT_SCHEMA,
+  RECOVERY_SCHEMA,
+  contentHash,
+  createAuditTimeline,
+  verifyAuditTimeline,
+  createExecutionReceipt,
+  verifyExecutionReceipt,
+  whyEngine,
+  classifyIncident,
+  recoverExecution,
+  disasterRecoveryStatus
+} from './observabilityProof.js';
+
+// ── Phase 19: security, privacy and compliance ─────────────────────────────
+export {
+  SECURITY_COMPLIANCE_SCHEMA,
+  THREAT_MODEL_SCHEMA,
+  PRIVACY_BOUNDARY_SCHEMA,
+  SECURITY_EVENT_SCHEMA,
+  COMPLIANCE_SCHEMA,
+  INDEPENDENT_REVIEW_SCHEMA,
+  THREAT_CATEGORIES,
+  containsSecuritySecret,
+  sanitizeSecurityPayload,
+  validatePrivacyBoundary,
+  createSecurityAuditEvent,
+  buildThreatModel,
+  independentReviewStatus,
+  complianceChecklist,
+  securityPosture,
+  securityBoundaryForApi,
+  retentionPolicy
+} from './securityCompliance.js';
+
+// ── Phase 20: launch and governance ─────────────────────────────────────────
+export {
+  RELEASE_MANIFEST_SCHEMA,
+  MIGRATION_SCHEMA,
+  ROLLBACK_SCHEMA,
+  SLO_SCHEMA,
+  CHANGE_CONTROL_SCHEMA,
+  LAUNCH_GATE_SCHEMA,
+  PUBLIC_STATUS_SCHEMA,
+  GOVERNANCE_SCHEMA,
+  createReleaseManifest,
+  validateReleaseManifest,
+  createMigrationPlan,
+  createRollbackPlan,
+  defineSLO,
+  approveChange,
+  evaluateLaunchGate,
+  publicStatusPage,
+  governanceStatus,
+  launchChecklist
+} from './launchGovernance.js';
+
+export const INTENT_AI_VERSION = 'phase20.specification-contracts.partial.v2';

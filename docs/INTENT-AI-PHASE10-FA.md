@@ -215,4 +215,4 @@ npm run test:phase10
 - feeهای شناخته‌شده باید قبل از scope معلوم باشند و fee unknown می‌تواند scope را block کند؛
 - STOP، PAUSE، REVOKE، DISCONNECT و EMERGENCY EXIT در execution boundary برقرار می‌مانند؛
 - نبود provider، credential، operator، certificate، قرارداد یا runtime evidence هرگز به `verified`، `ready` یا `live` تبدیل نمی‌شود؛
-- Phaseهای ۱۱ تا ۲۰ هنوز انجام‌شده اعلام نشده‌اند.
+- Phaseهای ۱۱ تا ۲۰ اکنون source، export، probe و مستندات مستقل دارند؛ اما به‌دلیل نبود provider/runtime/evidence واقعی، operationally unavailable هستند و live/complete اعلام نمی‌شوند.
