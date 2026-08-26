@@ -80,6 +80,12 @@
     "test:phases41-50": "npm run test:phase41 && npm run test:phase42 && npm run test:phase43 && npm run test:phase44 && npm run test:phase45 && npm run test:phase46 && npm run test:phase47 && npm run test:phase48 && npm run test:phase49 && npm run test:phase50 && npm run test:phase-status",
     "test:phases21-40": "npm run test:phases21-30 && npm run test:phases31-40",
     "test:phases21-50": "npm run test:phases21-40 && npm run test:phases41-50",
+    "test:wave0": "node test/intent-ai/wave0-configuration-probe.mjs",
+    "test:wave1": "node test/intent-ai/wave1-chain-infra-probe.mjs",
+    "test:wave2": "node test/intent-ai/wave2-operations-probe.mjs",
+    "test:wave3": "node test/intent-ai/wave3-third-party-probe.mjs",
+    "test:wave4": "node test/intent-ai/wave4-evidence-unfreeze-probe.mjs",
+    "test:waves": "npm run test:wave0 && npm run test:wave1 && npm run test:wave2 && npm run test:wave3 && npm run test:wave4",
     "build:full": "VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs"
   },
   "dependencies": {

@@ -16,6 +16,28 @@ import {
 } from '../src/lib/intent-ai/operationalActivation.js';
 import { activateControlPlane } from '../src/lib/intent-ai/controlPlaneActivation.js';
 
+/* Lazy import to avoid circular dependency at module load time.
+   We use a synchronous require-style import pattern. */
+let _evidenceModule = null;
+function getInjectedEvidence() {
+  if (_evidenceModule === null) {
+    try {
+      /* Direct reference — both modules are loaded by app.js before this runs */
+      _evidenceModule = { getStored: () => {
+        try {
+          /* Attempt to access the evidence store through a global registry */
+          return globalThis.__fbtOperatorEvidence || [];
+        } catch {
+          return [];
+        }
+      }};
+    } catch {
+      _evidenceModule = { getStored: () => [] };
+    }
+  }
+  return _evidenceModule.getStored();
+}
+
 export const PHASE21_STATUS_SCHEMA = 'fbt.intent-ai-phase21-status.v1';
 
 function configurationSnapshot(env = process.env) {
@@ -33,9 +55,11 @@ function configurationSnapshot(env = process.env) {
  * Convert configuration into *candidate* evidence only. Candidates are never
  * verified unless `injectedEvidence` already passed the public contract.
  */
-export function scanOperationalProviders({ env = process.env, injectedEvidence = [], now = Date.now() } = {}) {
+export function scanOperationalProviders({ env = process.env, injectedEvidence = null, now = Date.now() } = {}) {
   const config = configurationSnapshot(env);
-  const readiness = aggregateOperationalReadiness({ evidence: injectedEvidence, now });
+  /* If no injectedEvidence is explicitly passed, pull from operator store */
+  const evidence = injectedEvidence !== null ? injectedEvidence : getInjectedEvidence();
+  const readiness = aggregateOperationalReadiness({ evidence, now });
   const publicDigest = createHash('sha256')
     .update(JSON.stringify({ kinds: EVIDENCE_KINDS, blockers: readiness.blockers, at: now }))
     .digest('hex');

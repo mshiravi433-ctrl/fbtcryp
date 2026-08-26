@@ -17,7 +17,7 @@ const input = {
   settings: {
     optimizer: { enabled: true, runs: 200 },
     evmVersion: 'paris', // BSC-safe: avoids PUSH0 from Shanghai
-    outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.gasEstimates'] } }
+    outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object', 'evm.gasEstimates'] } }
   }
 };
 
@@ -36,6 +36,7 @@ const artifact = {
   contractName: 'FeeRouter',
   abi: c.abi,
   bytecode: '0x' + c.evm.bytecode.object,
+  deployedBytecode: '0x' + c.evm.deployedBytecode.object,
   compiler: solc.version(),
   evmVersion: 'paris',
   optimizer: { enabled: true, runs: 200 }
