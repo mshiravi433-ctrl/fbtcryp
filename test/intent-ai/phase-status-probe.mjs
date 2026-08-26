@@ -17,7 +17,7 @@ try {
   const phaseStatus = await get('/api/intents/v1/phase-status');
   assert.equal(phaseStatus.response.status, 200);
   assert.equal(phaseStatus.body.schema, 'fbt.intent-ai-phase-status.v1');
-  assert.deepEqual(phaseStatus.body.phases.map((row) => row.phase), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]);
+  assert.deepEqual(phaseStatus.body.phases.map((row) => row.phase), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]);
   assert.equal(phaseStatus.body.launchAllowed, false);
   assert(phaseStatus.body.phases.every((row) => row.implementation === 'implemented' && row.operational === 'unavailable' && row.ready === false && row.live === false));
   assert.equal(phaseStatus.body.executionActivated, false);

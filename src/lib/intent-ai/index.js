@@ -616,5 +616,15 @@ export { PHASE37_SCHEMA, operateDependencyAttestation, evaluateDependencyAttesta
 export { PHASE38_SCHEMA, operateContinuousVerification, evaluateContinuousVerificationPlane } from './phase38ContinuousVerification.js';
 export { PHASE39_SCHEMA, operateGameDay, evaluateGameDayPlane } from './phase39GameDayRehearsal.js';
 export { PHASE40_SCHEMA, operateSustainment, evaluateSustainmentPlane } from './phase40SustainmentGovernance.js';
+export { PHASE41_SCHEMA, operateReleaseTrain, evaluateReleaseTrainPlane } from './phase41ReleaseTrain.js';
+export { PHASE42_SCHEMA, operateBreakGlass, evaluateBreakGlassPlane } from './phase42BreakGlassSupport.js';
+export { PHASE43_SCHEMA, operateCostKillSpend, evaluateCostKillSpendPlane } from './phase43CostKillSpend.js';
+export { PHASE44_SCHEMA, operateWorkforceAccess, evaluateWorkforceAccessPlane } from './phase44WorkforceAccess.js';
+export { PHASE45_SCHEMA, operateTelemetryIntegrity, evaluateTelemetryIntegrityPlane } from './phase45TelemetryIntegrity.js';
+export { PHASE46_SCHEMA, operateModelSupplyChain, evaluateModelSupplyChainPlane } from './phase46ModelSupplyChain.js';
+export { PHASE47_SCHEMA, operateAgentFleet, evaluateAgentFleetPlane } from './phase47AgentFleetGov.js';
+export { PHASE48_SCHEMA, operateCapitalBond, evaluateCapitalBondPlane } from './phase48CapitalBondOps.js';
+export { PHASE49_SCHEMA, operateRegulatoryReporting, evaluateRegulatoryReportingPlane } from './phase49RegulatoryReporting.js';
+export { PHASE50_SCHEMA, operateProgramControl, evaluateProgramControlPlane } from './phase50ProgramControl.js';
 
-export const INTENT_AI_VERSION = 'phase40.ops-plane.activated.fail-closed.v1';
+export const INTENT_AI_VERSION = 'phase50.program-control.activated.fail-closed.v1';

@@ -22,8 +22,18 @@ import { evaluateDependencyAttestationPlane } from './phase37DependencyAttestati
 import { evaluateContinuousVerificationPlane } from './phase38ContinuousVerification.js';
 import { evaluateGameDayPlane } from './phase39GameDayRehearsal.js';
 import { evaluateSustainmentPlane } from './phase40SustainmentGovernance.js';
+import { evaluateReleaseTrainPlane } from './phase41ReleaseTrain.js';
+import { evaluateBreakGlassPlane } from './phase42BreakGlassSupport.js';
+import { evaluateCostKillSpendPlane } from './phase43CostKillSpend.js';
+import { evaluateWorkforceAccessPlane } from './phase44WorkforceAccess.js';
+import { evaluateTelemetryIntegrityPlane } from './phase45TelemetryIntegrity.js';
+import { evaluateModelSupplyChainPlane } from './phase46ModelSupplyChain.js';
+import { evaluateAgentFleetPlane } from './phase47AgentFleetGov.js';
+import { evaluateCapitalBondPlane } from './phase48CapitalBondOps.js';
+import { evaluateRegulatoryReportingPlane } from './phase49RegulatoryReporting.js';
+import { evaluateProgramControlPlane } from './phase50ProgramControl.js';
 
-export const CONTROL_PLANE_SCHEMA = 'fbt.control-plane-activation.v2';
+export const CONTROL_PLANE_SCHEMA = 'fbt.control-plane-activation.v3';
 
 export function activateControlPlane({
   evidence = [],
@@ -46,6 +56,16 @@ export function activateControlPlane({
   continuous = {},
   gameday = {},
   sustainment = {},
+  release = {},
+  support = {},
+  cost = {},
+  workforce = {},
+  telemetry = {},
+  model = {},
+  fleet = {},
+  capital = {},
+  regulatory = {},
+  program = {},
   freeze = true,
   now = Date.now()
 } = {}) {
@@ -84,7 +104,17 @@ export function activateControlPlane({
     evaluateDependencyAttestationPlane(deps),
     evaluateContinuousVerificationPlane({ ...continuous, now }),
     evaluateGameDayPlane(gameday),
-    evaluateSustainmentPlane({ ...sustainment, evidence, now })
+    evaluateSustainmentPlane({ ...sustainment, evidence, now }),
+    evaluateReleaseTrainPlane(release),
+    evaluateBreakGlassPlane(support),
+    evaluateCostKillSpendPlane(cost),
+    evaluateWorkforceAccessPlane(workforce),
+    evaluateTelemetryIntegrityPlane(telemetry),
+    evaluateModelSupplyChainPlane(model),
+    evaluateAgentFleetPlane(fleet),
+    evaluateCapitalBondPlane(capital),
+    evaluateRegulatoryReportingPlane(regulatory),
+    evaluateProgramControlPlane({ ...program, evidence, freeze, now })
   ];
   const blockers = [...new Set(planes.flatMap((row) => row.blockers || []))];
   return {

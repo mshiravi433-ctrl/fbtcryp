@@ -110,7 +110,7 @@ try {
     const activation = await get('/api/intents/v1/activation');
     check('phase-status includes phase 21 as implemented but unavailable', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === 'unavailable' && row.live === false));
     check('public-status launch remains blocked', publicStatus.body.launchAllowed === false && publicStatus.body.claims.executionActivated === false);
-    check('activation still separates implementation from operational proof', activation.body.product.specificationImplementedThrough === 40 && activation.body.product.operationalActivationRequired === true);
+    check('activation still separates implementation from operational proof', activation.body.product.specificationImplementedThrough === 50 && activation.body.product.operationalActivationRequired === true);
     const dumped = JSON.stringify({ phaseStatus: phaseStatus.body, publicStatus: publicStatus.body, activation: activation.body, empty, ready });
     check('no raw credential words leak into status output', !/private.?key|seed.?phrase|master.?password|BEGIN [A-Z ]*PRIVATE KEY/i.test(dumped));
     const document = openApiDocument();
