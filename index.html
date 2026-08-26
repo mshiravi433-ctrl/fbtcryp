@@ -388,13 +388,21 @@
           if (theme === 'auto') {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
-          /*
-           * Only an EXPLICIT light choice overrides. `null` means a fresh
-           * install with nothing saved, and that must stay dark — treating
-           * "no preference" as light is what would make new users flash.
-           */
+          if (theme !== 'light') {
+            /*
+             * Dark is the default, and it is now WRITTEN to the DOM rather
+             * than left implicit. index.css keeps a prefers-color-scheme
+             * fallback for a JS-less load, and that fallback used to win on
+             * any device whose OS is in light mode — painting a white canvas
+             * under the dark app for users who never chose light. An explicit
+             * data-theme here shuts that window: the resolved theme exists on
+             * <html> from the first frame, so only the user's actual choice
+             * (or this dark default) can ever apply.
+             */
+            theme = 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
           if (theme === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
             document.documentElement.style.setProperty('--boot-bg', '#f4f5fa');
             document.documentElement.style.setProperty('--boot-fg', '#0f172a');
             document.documentElement.style.background = '#f4f5fa';
@@ -402,7 +410,8 @@
             if (m) m.setAttribute('content', '#f4f5fa');
           }
         } catch (e) {
-          /* keep the dark default */
+          /* keep the dark default even if storage is unavailable */
+          document.documentElement.setAttribute('data-theme', 'dark');
         }
       })();
     </script>

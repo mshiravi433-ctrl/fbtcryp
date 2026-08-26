@@ -8254,20 +8254,49 @@ export default function run() {
 
     /*
      * ═══════════════════════════════════════════════════════════════════════
-     * 3. HEADER AND SELECTS ON DESKTOP.
+     * 3. SELECTS ON DESKTOP (the header enlargement was REVERTED).
      * ═══════════════════════════════════════════════════════════════════════
      */
     const css = read('src/index.css');
     /*
-     * Everything in the header was a fixed phone value while the column grew
-     * from 520 to 760px, so it read as a caption rather than a title.
+     * The header used to grow with the column (mark 30 → 34/38/40px, wordmark
+     * 15 → 16.5/18.5/20px across the ≥600/≥900/≥1400px breakpoints). Reported
+     * back as «لوگو هیدر بزرگ شده، کلا بیار روی قبل» — the owner wants the
+     * original uniform size on every screen. The enlargement rules are gone;
+     * these assertions lock the revert in so the scaling cannot quietly come
+     * back with a future "desktop polish" change.
      */
-    t('the header scales with the column at every wide breakpoint',
-      /\.brand-name \{ font-size: 16\.5px; \}/.test(css) &&
-      /\.brand-name \{ font-size: 18\.5px; \}/.test(css) &&
-      /\.brand-name \{ font-size: 20px; \}/.test(css));
-    t('...and the mark and buttons grow with it, not just the text',
-      /\.brand-mark \{ width: 38px/.test(css) && /\.icon-btn \{ min-width: 42px/.test(css));
+    t('the header logo keeps one uniform size at every breakpoint',
+      !/\.brand-mark \{ width: 3[48]px/.test(css) &&
+      !/\.brand-mark \{ width: 40px/.test(css) &&
+      !/\.brand-name \{ font-size: 1[68]\.5px; \}/.test(css) &&
+      !/\.brand-name \{ font-size: 20px; \}/.test(css));
+    t('...and the brand stage and spotlight mark stay phone-sized too',
+      !/\.header-brand-stage \{ max-width: (?:300|360)px/.test(css) &&
+      !/\.header-brand-stage \{[^}]*height: (?:36|42)px/.test(css) &&
+      !/\.header-spotlight-mark \{ flex-basis: (?:34|38|40)px/.test(css));
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 3b. THE OS LIGHT SCHEME MUST NOT OVERRIDE THE APP'S THEME CHOICE.
+     * ═══════════════════════════════════════════════════════════════════════
+     * Reported: «تم مشکی و پشت زمینه مشکی بهم خورده». The
+     * prefers-color-scheme fallback was a bare `:root { … }` later in the file
+     * than the dark tokens, so on any device whose OS is set to light it beat
+     * the app's own `data-theme="dark"`: white canvas, full-strength neon
+     * orbs, and a white inner disk inside the header logo. It is now scoped to
+     * documents that have chosen no theme, and the pre-paint script always
+     * writes the resolved choice, so the window where the fallback could win
+     * is closed. Asserted so a refactor cannot reopen it.
+     */
+    t('the OS light scheme cannot override the chosen theme',
+      /@media \(prefers-color-scheme: light\) \{\s*:root:not\(\[data-theme='dark'\]\):not\(\[data-theme='light'\]\) \{/.test(css));
+    t('...and no unscoped prefers-color-scheme block remains',
+      !/@media \(prefers-color-scheme: light\) \{\s*:root \{/.test(css));
+    t('the pre-paint script writes the resolved theme before first paint',
+      /document\.documentElement\.setAttribute\('data-theme', theme\)/.test(read('index.html')));
+    t('...and even a storage failure lands on dark, not on the OS scheme',
+      /catch \(e\) \{\s*\/\* keep the dark default even if storage is unavailable \*\/\s*document\.documentElement\.setAttribute\('data-theme', 'dark'\);/.test(read('index.html')));
 
     /*
      * A themed box around an unthemed control: without `appearance: none` the
@@ -11757,8 +11786,8 @@ export default function run() {
       /https-proxy-agent/.test(vite) &&
       /src\/shims\/https-proxy-agent\.js/.test(vite) &&
       /class HttpsProxyAgent/.test(read('src/shims/https-proxy-agent.js')));
-    t('the service-worker shell cache moved to v3',
-      /fbt-shell-v3/.test(sw) && !/fbt-shell-v2/.test(sw));
+    t('the service-worker shell cache moved to v4',
+      /fbt-shell-v4/.test(sw) && !/fbt-shell-v3/.test(sw));
   }
 
   /* ---- 102. the wallet glow layer must not push the panel down ---------- */

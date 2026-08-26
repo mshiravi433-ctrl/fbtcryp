@@ -10,17 +10,18 @@
 
 /*
  * ─── THE VERSION SUFFIX IS LOAD-BEARING ─────────────────────────────────────
- * Bumped v2 -> v3 so the `activate` handler below deletes the old cache. A
- * v2 cache can be holding an index.html from a previous deploy, and that HTML
- * names chunk files (CoinDetail-<hash>.js) the server no longer has. Serving
- * it produces a 404 on the dynamic import, which throws past <Suspense> and
- * lands the user on the crash screen -- reported as «بعضی اوقات ... کرش
- * میکنه». Renaming the cache is what evicts that stale HTML from devices
- * already carrying it.
+ * Bumped v3 -> v4 alongside the theme/header fixes. A v3 cache on an existing
+ * install can be holding the previous deploy's index.html — and with it the
+ * CSS that broke the black theme and oversized the header logo. Renaming the
+ * cache is what evicts that stale HTML from every device already carrying it,
+ * without waiting for each asset's own cache entry to expire. (This is the
+ * same v2 -> v3 pattern: stale shell HTML names chunk files the server no
+ * longer has, which lands the user on the crash screen.)
  *
- * Bump this whenever the shell caching strategy changes.
+ * Bump this whenever the shell caching strategy changes OR the shell itself
+ * needs to be force-refreshed on every existing install.
  */
-const SHELL = 'fbt-shell-v3';
+const SHELL = 'fbt-shell-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
