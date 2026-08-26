@@ -1,10 +1,10 @@
 /**
- * FBT INTENT AI — Phase 1: Intent Foundation
+ * FBT INTENT AI — Phases 1-8
  * ---------------------------------------------------------------------------
- * Public API surface. Everything exported here is a deterministic,
- * pure-function module with no network access, no wallet access, and no
- * secret material. Execution adapters (broker / wallet / CEX / DEX) live
- * in later phases and must route through Guardian.
+ * Public client API surface. Everything exported here is deterministic and
+ * carries no raw credential material. Server-only Secret Manager and
+ * activation boundaries stay outside this browser bundle; execution adapters
+ * must route through Guardian, Risk and the Confirmation Gate.
  */
 
 // Permission model & levels
@@ -226,4 +226,4 @@ export {
 export { venueHealth } from './venueHealth.js';
 export { submitPipeline } from './submitPipeline.js';
 
-export const INTENT_AI_VERSION = 'phase6.live-adapter-wiring.v1';
+export const INTENT_AI_VERSION = 'phase8.production-activation.v1';

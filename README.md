@@ -37,6 +37,8 @@ executable calldata, bonded settlement, or proof that no pre-seal bid was
 censored.
 
 - [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
+- [Intent AI — فازهای ۸ تا ۲۰ و وضعیت فعال‌سازی](docs/INTENT-AI-ROADMAP-8-20-FA.md)
+- [فاز ۸ — مرز Secret Manager و گزارش readiness](docs/INTENT-AI-PHASE8-FA.md)
 - [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)
 
 ### Public guides

@@ -21,6 +21,7 @@ import {
   openConfirmationGate, decideGate, assertGateAllowsSubmit, termsFromDraft,
   evaluateRisk, venueHealth, reconcile
 } from '../lib/intent-ai';
+import { getIntentActivation } from '../lib/intentNetwork';
 
 const LEVELS = [
   { value: 1, key: 'level1' },
@@ -40,12 +41,21 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   const [input, setInput] = useState('');
   const [gate, setGate] = useState(null);
   const [risk, setRisk] = useState(null);
+  const [activation, setActivation] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [gateAction, setGateAction] = useState(null);
   const [policyInput, setPolicyInput] = useState({
     maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
     allowedChains: '42161,8453', allowedProtocols: 'swap', allowedAssets: 'USDC,ETH,BTC', durationMin: 60
   });
+
+  useEffect(() => {
+    let active = true;
+    getIntentActivation()
+      .then((value) => { if (active) setActivation(value); })
+      .catch(() => { if (active) setActivation(null); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const s = startSession({ level, defaultChainId, policyInput: level === 3 ? buildPolicy(policyInput) : null });
@@ -267,6 +277,14 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         <p className="muted" style={{ fontSize: 12, margin: '6px 0 0', lineHeight: 1.7 }}>
           {t('intentAI.readiness.venueConfigured')}
         </p>
+        {activation?.product && (
+          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0', lineHeight: 1.7 }}>
+            {t('intentAI.readiness.phase8Status', {
+              status: activation.product.currentPhaseOperational,
+              count: Array.isArray(activation.blockers) ? activation.blockers.length : 0
+            })}
+          </p>
+        )}
       </details>
 
       <div className="intent-ai-thread" style={{ maxHeight: 300, overflowY: 'auto', padding: 8, borderRadius: 10, background: 'rgba(255,255,255,0.03)', marginBottom: 10 }}>

@@ -4966,7 +4966,8 @@
     "readiness": {
       "title": "Capabilities & readiness",
       "secretManagerStandIn": "Secret Manager: SecureMemoryMap is still the Phase-2 stand-in (opaque handle, not a real KMS / Secret Manager).",
-      "venueConfigured": "Live venues: swap / dYdX are wired; bridge execute is not wired (configured:false). Broker requires a bound handle."
+      "venueConfigured": "Live venues: swap / dYdX are wired; bridge execute is not wired (configured:false). Broker requires a bound handle.",
+      "phase8Status": "Phase 8 activation is {{status}}; {{count}} blocker(s) are reported honestly."
     },
     "chat": {
       "try": "Try: \"swap 100 USDC to ETH on Arbitrum\", \"analyze BTC\", or \"target 10% on 500 USDC in 4 hours\".",

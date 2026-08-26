@@ -1,3 +1,20 @@
+## Unreleased — Intent AI Phase 8: production activation and Secret Manager boundary
+
+- Added `GET /api/intents/v1/activation`, a public, cacheable report that keeps
+  implementation, adapter wiring, runtime configuration and operational proof
+  separate. It confirms phases 1–7 are complete without claiming phases 9–20
+  are done.
+- Added the server-only `intentSecretManager` boundary. It stores only scoped
+  opaque-handle metadata, refuses raw secret-shaped fields, requires an
+  injected provider with durable and attested health, and exposes secrets only
+  inside an internal callback. The default is unavailable; no env flag can
+  manufacture a green KMS status.
+- Added a read-only activation client and a localized Phase 8 status line in
+  the Intent AI panel. `en`, `fa` and `ar` remain key-parity checked.
+- Added `docs/INTENT-AI-PHASE8-FA.md` and
+  `docs/INTENT-AI-ROADMAP-8-20-FA.md`. Phases 9–20 are defined, not falsely
+  marked complete. The Phase 8 boundary probe is part of `npm test`.
+
 ## Unreleased — Solana route moves to De¹ Enterprise (the rebranded OpenOcean)
 
 - Production was earning nothing on Solana and looked healthy while doing it.

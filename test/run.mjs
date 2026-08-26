@@ -255,6 +255,12 @@ console.log('▸ probing FBT Intent AI — Phase 7 Product UI, i18n & Honest Act
   report('intent-ai phase-7 ui/i18n/activation', await run7());
 }
 
+console.log('▸ probing FBT Intent AI — Phase 8 Production Activation & Secret Boundary…');
+{
+  const { default: run8 } = await import('./intent-ai/phase8-activation-probe.mjs');
+  report('intent-ai phase-8 activation/secret boundary', await run8());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

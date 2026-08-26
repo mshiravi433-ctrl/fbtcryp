@@ -108,6 +108,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     /* Execution Core v2 — privacy-safe execution observation ingest. */
     executionObservations: '/api/intents/v1/observations',
     executionObservationModel: '/api/intents/v1/execution-observation-model',
+    /* Phase 8 — public production activation/readiness report. */
+    activation: '/api/intents/v1/activation',
     /* Phase 5 — confidential intent transport. */
     intentCommitments: '/api/intents/v1/confidential/commit',
     intentReveals: '/api/intents/v1/confidential/reveal',

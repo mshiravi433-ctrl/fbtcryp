@@ -287,6 +287,7 @@ import {
   parseOperatorRegistry,
   publicOperatorRegistry
 } from './intentConfidential.js';
+import { activationReport } from './intentActivation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1320,6 +1321,17 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
     confidential: confidentialProtocolStatus({ operatorRegistry: parseOperatorRegistry() }),
     commitReveal: intentCommitmentStatus({ operatorRegistrySize: parseOperatorRegistry().size })
   });
+});
+
+/*
+ * Phase 8: public activation contract. This is deliberately separate from
+ * capabilities: capabilities describe protocol surfaces, while this report
+ * distinguishes implemented, wired, configured and operational. It contains
+ * no env values, URLs, key references or secret material.
+ */
+app.get('/api/intents/v1/activation', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  return res.json(activationReport());
 });
 
 app.get('/api/intents/v1/solvers', (_req, res) => {
