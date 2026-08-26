@@ -4893,8 +4893,43 @@
   },
   "intentAI": {
     "title": "FBT Intent AI",
-    "subtitle": "Deterministic intent parser · {{summary}} · v{{version}}",
-    "levels": {
+  "subtitle": "Deterministic intent parser · {{summary}} · v{{version}}",
+  "mode": {
+    "title": "Primary mode",
+    "human-ai": "HUMAN ↔ AI",
+    "ai-ai-inside-fbt": "AI ↔ AI INSIDE FBT",
+    "fbt-external-ai": "FBT AI ↔ EXTERNAL AI AGENT",
+    "boundary": "Analysis and preparation never authorize financial execution. Every execution requires a separate authorization screen."
+  },
+  "authorization": {
+    "title": "Authorization boundary",
+    "analysis": "Analysis allowed",
+    "preparation": "Preparation",
+    "available": "available",
+    "off": "off",
+    "execution": "Financial execution",
+    "authorized": "authorized for this action",
+    "screenRequired": "authorization screen required"
+  },
+  "controls": {
+    "stop": "STOP",
+    "pause": "PAUSE",
+    "revoke": "REVOKE",
+    "disconnect": "DISCONNECT",
+    "emergency_exit": "EMERGENCY EXIT"
+  },
+  "capabilities": {
+    "title": "Runtime capability discovery",
+    "summary": "{{available}} available · {{conditional}} conditional · {{evidence}} evidenced score(s). Only runtime facts can make a capability available."
+  },
+  "external": {
+    "title": "External Agent discovery",
+    "empty": "No external Agent is verified for this request. Discovery does not grant access.",
+    "compatible": "compatible",
+    "incompatible": "not compatible",
+    "scoreWithheld": "score withheld"
+  },
+  "levels": {
       "level1": "Analysis",
       "level2": "Prepare",
       "level3": "Controlled"
@@ -4966,7 +5001,8 @@
     "readiness": {
       "title": "Capabilities & readiness",
       "secretManagerStandIn": "Secret Manager: SecureMemoryMap is still the Phase-2 stand-in (opaque handle, not a real KMS / Secret Manager).",
-      "venueConfigured": "Live venues: swap / dYdX are wired; bridge execute is not wired (configured:false). Broker requires a bound handle."
+      "venueConfigured": "Live venues: swap / dYdX are wired; bridge execute is not wired (configured:false). Broker requires a bound handle.",
+      "phase8Status": "Phase 8 activation is {{status}}; {{count}} blocker(s) are reported honestly."
     },
     "chat": {
       "try": "Try: \"swap 100 USDC to ETH on Arbitrum\", \"analyze BTC\", or \"target 10% on 500 USDC in 4 hours\".",
@@ -4977,9 +5013,17 @@
     },
     "msg": {
       "clarifications": "A few things are unclear:",
-      "intent": "Intent",
-      "confidence": "conf {{n}}%",
-      "suggestions": "Suggestions:",
+    "intent": "Intent",
+    "confidence": "conf {{n}}%",
+    "analysisOnly": "Analysis only — no financial execution permission.",
+    "reality": "Target reality",
+    "notGuaranteed": "not guaranteed",
+    "authRequired": "Financial execution remains locked until this screen is explicitly confirmed.",
+    "strategyRevision": "The independent challenge requires a recalculation before authorization.",
+    "councilDecision": "Council decision",
+    "blocked": "Blocked by a fail-closed safety boundary.",
+    "credentialRejected": "Raw credentials are never accepted or persisted.",
+    "suggestions": "Suggestions:",
       "ready": "Ready for confirmation",
       "draftPrepared": "Draft prepared",
       "step": "step {{seq}}: {{action}}",

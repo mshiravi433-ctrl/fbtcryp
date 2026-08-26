@@ -4878,8 +4878,43 @@
   },
   "intentAI": {
     "title": "FBT Intent AI",
-    "subtitle": "پارس‌کنندهٔ قطعی intent · {{summary}} · v{{version}}",
-    "levels": {
+  "subtitle": "پارس‌کنندهٔ قطعی intent · {{summary}} · v{{version}}",
+  "mode": {
+    "title": "حالت اصلی",
+    "human-ai": "HUMAN ↔ AI",
+    "ai-ai-inside-fbt": "AI ↔ AI INSIDE FBT",
+    "fbt-external-ai": "FBT AI ↔ EXTERNAL AI AGENT",
+    "boundary": "تحلیل و آماده‌سازی هرگز مجوز اجرای مالی نیستند. هر اجرا به صفحهٔ مجزای تأیید نیاز دارد."
+  },
+  "authorization": {
+    "title": "مرز مجوز",
+    "analysis": "تحلیل مجاز است",
+    "preparation": "آماده‌سازی",
+    "available": "فعال",
+    "off": "خاموش",
+    "execution": "اجرای مالی",
+    "authorized": "برای این اقدام مجاز شد",
+    "screenRequired": "صفحهٔ تأیید لازم است"
+  },
+  "controls": {
+    "stop": "توقف",
+    "pause": "توقف موقت",
+    "revoke": "لغو مجوز",
+    "disconnect": "قطع اتصال",
+    "emergency_exit": "خروج اضطراری"
+  },
+  "capabilities": {
+    "title": "کشف قابلیت از runtime",
+    "summary": "{{available}} فعال · {{conditional}} مشروط · {{evidence}} امتیاز مستند. فقط واقعیت runtime می‌تواند قابلیت را فعال گزارش کند."
+  },
+  "external": {
+    "title": "کشف Agent خارجی",
+    "empty": "برای این درخواست Agent خارجی تأییدشده‌ای وجود ندارد. کشف Agent مجوز دسترسی ایجاد نمی‌کند.",
+    "compatible": "سازگار",
+    "incompatible": "ناسازگار",
+    "scoreWithheld": "امتیاز نامشخص"
+  },
+  "levels": {
       "level1": "تحلیل",
       "level2": "آماده‌سازی",
       "level3": "کنترل‌شده"
@@ -4951,7 +4986,8 @@
     "readiness": {
       "title": "قابلیت‌ها و آمادگی",
       "secretManagerStandIn": "مدیر راز: SecureMemoryMap هنوز جایگزین فاز ۲ است (handle مبهم، نه KMS / Secret Manager واقعی).",
-      "venueConfigured": "مسیرهای زنده: swap / dYdX متصل‌اند؛ اجرای bridge متصل نیست (configured:false). بروکر نیازمند handle محدود است."
+      "venueConfigured": "مسیرهای زنده: swap / dYdX متصل‌اند؛ اجرای bridge متصل نیست (configured:false). بروکر نیازمند handle محدود است.",
+      "phase8Status": "فعال‌سازی فاز ۸ {{status}} است؛ {{count}} مانع به‌صورت صادقانه گزارش شده است."
     },
     "chat": {
       "try": "مثال: «جابجایی ۱۰۰ USDC به ETH در Arbitrum»، «تحلیل BTC»، یا «هدف ۱۰٪ روی ۵۰۰ USDC در ۴ ساعت».",
@@ -4962,9 +4998,17 @@
     },
     "msg": {
       "clarifications": "چند مورد نامشخص است:",
-      "intent": "Intent",
-      "confidence": "اطمینان {{n}}٪",
-      "suggestions": "پیشنهادها:",
+    "intent": "Intent",
+    "confidence": "اطمینان {{n}}٪",
+    "analysisOnly": "فقط تحلیل — بدون مجوز اجرای مالی.",
+    "reality": "واقعیت هدف",
+    "notGuaranteed": "تضمین‌نشده",
+    "authRequired": "اجرای مالی تا تأیید صریح این صفحه قفل می‌ماند.",
+    "strategyRevision": "چالش مستقل پیش از مجوز به محاسبهٔ دوباره نیاز دارد.",
+    "councilDecision": "تصمیم شورا",
+    "blocked": "به‌دلیل مرز ایمنی fail-closed مسدود شد.",
+    "credentialRejected": "اطلاعات خام حساب هرگز پذیرفته یا ذخیره نمی‌شود.",
+    "suggestions": "پیشنهادها:",
       "ready": "آمادهٔ تأیید",
       "draftPrepared": "پیش‌نویس آماده شد",
       "step": "گام {{seq}}: {{action}}",

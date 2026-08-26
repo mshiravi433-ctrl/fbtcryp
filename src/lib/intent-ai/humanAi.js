@@ -24,44 +24,150 @@ import { createDraftOrder, draftOrderFromPlanStep } from './draftOrder.js';
 import { createPolicy, confirmPolicy, policyIsValid, policyPreview } from './policyModel.js';
 import { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
 import { classifyFailure } from './failureModes.js';
+import {
+  PRIMARY_MODES,
+  normalizeMode,
+  modeDefinition,
+  assertModeBoundary,
+  buildPermissionBoundary,
+  createModeSession,
+  REQUEST_CLASSES
+} from './sessionModes.js';
+import { scanCapabilities } from './capabilityScanner.js';
+import { assessTarget } from './targetReality.js';
+import { challengeStrategy, runAgentCouncil } from './agentCouncil.js';
+import { createIntentGenome } from './intentGenome.js';
+import { createMemoryStore } from './agentMemory.js';
+import { createControlState, applyControl } from './policyGuard.js';
+import { discoverExternalAgents } from './externalAgentTrust.js';
 
-const SESSION_SCHEMA = 'fbt.human-ai-session.v1';
+const SESSION_SCHEMA = 'fbt.intent-session.v2';
+
+const RAW_CREDENTIAL_TEXT = /(-----BEGIN[^-]*PRIVATE KEY-----|\b(?:0x)?[a-f0-9]{64}\b|\b(?:seed phrase|recovery phrase|mnemonic|private key|master password|raw secret)\b)/i;
+const CREDENTIAL_FIELD = /^(?:seed|mnemonic|private.?key|master.?password|raw.?secret|secret.?key|credential|token|cookie)$/i;
+
+function containsCredentialField(value, depth = 0, seen = new WeakSet()) {
+  if (!value || typeof value !== 'object' || depth > 4) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.entries(value).some(([key, child]) => (
+    CREDENTIAL_FIELD.test(key) || containsCredentialField(child, depth + 1, seen)
+  ));
+}
 
 function sid() {
   return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
- * Start a new Human↔AI session at the given permission level.
+ * Start a session under exactly one of the three product modes. `level` is a
+ * separate preparation/execution permission tier; it is never a fourth mode.
  */
-export function startSession({ level = 1, policyInput = null, defaultChainId = 42161 } = {}) {
-  const lvl = Number(level) || 1;
+export function startSession({
+  mode = 'human-ai',
+  level = 1,
+  policyInput = null,
+  defaultChainId = 42161,
+  runtime = {},
+  evidence = {},
+  userId = null,
+  genome = null,
+  externalAgents = [],
+  externalAgentsSource = 'unavailable'
+} = {}) {
+  const lvl = [1, 2, 3].includes(Number(level)) ? Number(level) : 1;
+  const normalizedMode = normalizeMode(mode);
+  const modeSession = createModeSession({ mode: normalizedMode || mode, userId });
+  const now = Date.now();
+
+  // Invalid mode is a visible, blocked state — never silently mapped to a
+  // fallback mode. Omitted mode still uses the documented Human ↔ AI default.
+  if (!normalizedMode || !modeSession.ok) {
+    return {
+      schema: SESSION_SCHEMA,
+      id: sid(),
+      startedAt: now,
+      mode: null,
+      modeError: 'UNKNOWN_PRIMARY_MODE',
+      availableModes: [...PRIMARY_MODES],
+      level: lvl,
+      messages: [systemMessage('session.blocked', { code: 'UNKNOWN_PRIMARY_MODE', availableModes: [...PRIMARY_MODES] })],
+      drafts: [], plans: [], audit: [], status: 'BLOCKED', pendingClarifications: null,
+      execution: null, learningOptIn: false,
+      controls: createControlState(),
+      authorization: { analysis: false, preparation: false, financialExecution: false },
+      capabilityScan: scanCapabilities({ runtime, evidence, now }),
+      memory: createMemoryStore(),
+      genome: createIntentGenome(genome || {})
+    };
+  }
+
   let policy;
   let policyErrors = [];
-
   if (lvl >= 3 && policyInput) {
     const created = createPolicy({ ...policyInput, level: 3 });
     policy = created.policy;
     policyErrors = created.errors || [];
   } else {
-    // L1/L2 use an implicit "analysis/prepare only" policy (zero execution caps).
+    // L1/L2 use an implicit analysis/prepare-only policy (zero execution caps).
     const created = createPolicy({ level: lvl });
     policy = created.policy;
     policyErrors = created.errors || [];
   }
 
+  const capabilityScan = scanCapabilities({ runtime, evidence, now });
+  const externalAgentDiscovery = normalizedMode === 'fbt-external-ai'
+    ? discoverExternalAgents({
+      agents: Array.isArray(externalAgents) ? externalAgents : [],
+      source: externalAgentsSource === 'unavailable' && Array.isArray(externalAgents) && externalAgents.length ? 'runtime-input' : externalAgentsSource,
+      trustedRegistry: externalAgentsSource === 'server-catalog',
+      now
+    })
+    : null;
+  const definition = modeDefinition(normalizedMode);
   return {
     schema: SESSION_SCHEMA,
     id: sid(),
-    startedAt: Date.now(),
+    mode: normalizedMode,
+    modeLabel: definition.label,
+    modeDefinition: definition,
+    modeSessionId: modeSession.id,
+    availableModes: [...PRIMARY_MODES],
+    startedAt: now,
     level: lvl,
     defaultChainId,
     policy,
     policyErrors,
+    permissions: {
+      analysis: true,
+      preparation: lvl >= 2,
+      financialExecution: lvl >= 3,
+      executionAuthorized: false,
+      explanation: 'Analysis and preparation do not authorize financial execution.'
+    },
+    authorization: {
+      analysis: true,
+      preparation: lvl >= 2,
+      financialExecution: false,
+      screenRequired: true,
+      userConfirmed: false,
+      guardianApproved: false
+    },
+    capabilityScan,
+    capabilities: capabilityScan,
+    externalAgentDiscovery,
+    targetReality: null,
+    council: null,
+    challenge: null,
+    genome: createIntentGenome(genome || {}),
+    memory: createMemoryStore(),
     messages: [
-      systemMessage(`session.started`, {
+      systemMessage('session.started', {
+        mode: normalizedMode,
+        modeLabel: definition.label,
         level: describeLevel(lvl),
-        requiresUserConfirmation: lvl >= 3
+        requiresUserConfirmation: lvl >= 3,
+        executionAuthorizationSeparate: true
       })
     ],
     drafts: [],
@@ -70,6 +176,7 @@ export function startSession({ level = 1, policyInput = null, defaultChainId = 4
     status: 'ACTIVE',
     pendingClarifications: null,
     execution: null,
+    controls: createControlState(),
     learningOptIn: false
   };
 }
@@ -77,92 +184,299 @@ export function startSession({ level = 1, policyInput = null, defaultChainId = 4
 /**
  * Append a human message and produce the AI's structured reply.
  *
+ * Parsing, capability discovery and agent dialogue can prepare a proposal, but
+ * this function never treats that work as financial execution. A later
+ * Confirmation Gate must set authorization explicitly before an adapter can
+ * be called.
+ *
  * @returns {{session: object, reply: object}}
  */
 export function chatTurn(session, text, ctx = {}) {
-  if (session.status !== 'ACTIVE') {
+  if (!session || session.status !== 'ACTIVE') {
     return { session, reply: assistantMessage('session-inactive', {}) };
   }
-  if (policyIsValid(session.policy, Date.now()).valid === false && session.level >= 3) {
-    // L3 requires a confirmed valid policy. L1/L2 always valid.
-    if (session.policy && !session.policy.userConfirmed) {
-      return awaitingPolicyConfirm(session);
-    }
+  const controls = session.controls || {};
+  if (controls.paused || controls.revoked || controls.disconnected || controls.emergency || controls.stopped) {
+    const code = controls.emergency ? 'EMERGENCY_EXIT' : controls.revoked ? 'PERMISSION_REVOKED' : controls.disconnected ? 'DISCONNECTED' : controls.paused ? 'PAUSED' : 'STOPPED';
+    const blocked = push(session, assistantMessage('execution-blocked', {
+      code,
+      message: 'This control state is fail-closed. No financial execution permission was granted.',
+      financialExecutionAuthorized: false
+    }));
+    return { session: blocked, reply: blocked.messages.at(-1) };
   }
 
-  // append user message
-  session = push(session, userMessage(text));
-  appendAudit(session, { type: 'user_input', length: text.length });
+  const validity = policyIsValid(session.policy, Date.now());
+  if (session.level >= 3 && !validity.valid) {
+    if (validity.reason === 'NOT_CONFIRMED') return awaitingPolicyConfirm(session);
+    const blocked = push(session, assistantMessage('execution-blocked', {
+      code: `POLICY_${validity.reason || 'INVALID'}`,
+      reason: 'The policy is not valid. No analysis result is treated as execution authorization.',
+      financialExecutionAuthorized: false
+    }));
+    appendAudit(blocked, { type: 'policy_block', reason: validity.reason });
+    return { session: blocked, reply: blocked.messages.at(-1) };
+  }
 
-  // 1. parse (or reuse a refined intent from answerClarifications)
-  let parsed = ctx.resolvedParsed
+  // Reject credential-shaped chat input before it reaches messages, memory or
+  // any model/agent. We retain only a length/code audit entry, never the raw
+  // value itself.
+  const rawText = String(text || '');
+  if (RAW_CREDENTIAL_TEXT.test(rawText)) {
+    const reply = assistantMessage('credential-rejected', {
+      code: 'RAW_CREDENTIAL_FORBIDDEN',
+      message: 'Seed phrases, private keys, master passwords and raw secrets are never accepted by Intent AI.',
+      persisted: false,
+      financialExecutionAuthorized: false
+    });
+    session = push(session, reply);
+    appendAudit(session, { type: 'credential_rejected', length: rawText.length });
+    return { session, reply };
+  }
+
+  // Append the human message and keep only bounded, structured memory.
+  session = push(session, userMessage(rawText));
+  appendAudit(session, { type: 'user_input', length: rawText.length });
+  session.memory?.append?.('intent.created', { text: rawText.slice(0, 500), mode: session.mode }, { localFirst: true });
+
+  // 1. Parse (or reuse a refined intent from answerClarifications).
+  const parsedInput = ctx.resolvedParsed
     || (ctx.resolvedIntent
       ? { ok: true, intent: ctx.resolvedIntent, signals: ctx.resolvedIntent.signals || {}, confidence: ctx.resolvedIntent.confidence || 70, clarifications: [] }
       : parseUserIntent(text, { defaultChainId: session.defaultChainId, ...ctx }));
+  const parsed = parsedInput?.intent
+    ? { ...parsedInput, intent: { ...parsedInput.intent, mode: session.mode } }
+    : parsedInput;
   appendAudit(session, { type: 'parse', ok: parsed.ok, confidence: parsed.confidence, clarifications: parsed.clarifications });
 
-  // 2. if clarifications needed, ask
+  // Capability discovery is refreshed per request. Runtime evidence is passed
+  // in by the adapter boundary; no green status is inferred locally.
+  const capabilityScan = scanCapabilities({
+    runtime: ctx.runtime || {},
+    evidence: ctx.evidence || {},
+    intent: parsed.intent,
+    now: Date.now()
+  });
+  session.capabilityScan = capabilityScan;
+  session.capabilities = capabilityScan;
+  session.memory?.append?.('capability.scanned', {
+    available: capabilityScan.available.map((row) => row.id),
+    conditional: capabilityScan.conditional.map((row) => row.id),
+    evidenceComplete: capabilityScan.evidenceComplete
+  });
+
+  const externalInputs = Array.isArray(ctx.externalAgents)
+    ? ctx.externalAgents
+    : ctx.externalAgentPassport
+      ? [ctx.externalAgentPassport]
+      : ctx.externalAgent
+        ? [ctx.externalAgent]
+        : [];
+  const externalAgentDiscovery = session.mode === 'fbt-external-ai'
+    ? discoverExternalAgents({
+      agents: externalInputs,
+      intent: parsed.intent || {},
+      source: ctx.externalAgentsSource || (externalInputs.length ? 'runtime-input' : 'unavailable'),
+      trustedRegistry: ctx.externalAgentsSource === 'server-catalog',
+      now: Date.now()
+    })
+    : session.externalAgentDiscovery;
+  if (session.mode === 'fbt-external-ai') session.externalAgentDiscovery = externalAgentDiscovery;
+  const selectedExternal = externalAgentDiscovery?.candidates?.find((candidate) => (
+    candidate.passport.id === String(ctx.externalAgentId || ctx.externalAgentPassport?.id || '')
+  )) || (externalAgentDiscovery?.candidates?.length === 1 ? externalAgentDiscovery.candidates[0] : null);
+  const discoveredExternalVerified = selectedExternal?.eligibleForAnalysis === true;
+
+  // The external mode cannot silently admit an unverified participant. For
+  // analysis/preparation we pass an explicit stage so a swap request is not
+  // mistaken for permission to execute a swap.
+  const stage = session.level === 1 || parsed.intent?.kind === 'analysis'
+    ? REQUEST_CLASSES.ANALYSIS
+    : REQUEST_CLASSES.PREPARATION;
+  const rawCredential = ctx.rawCredential === true || containsCredentialField(ctx);
+  const boundary = assertModeBoundary({
+    mode: session.mode || 'human-ai',
+    intent: parsed.intent,
+    stage,
+    userAuthorized: false,
+    externalVerified: ctx.externalVerified === true || discoveredExternalVerified,
+    rawCredential
+  });
+  session.authorization = {
+    ...(session.authorization || {}),
+    lastRequestClass: stage,
+    lastBoundary: boundary.code || 'OK',
+    financialExecution: false,
+    executionAuthorized: false
+  };
+  if (!boundary.ok) {
+    const reply = assistantMessage('mode-boundary-blocked', {
+      code: boundary.code,
+      mode: session.mode,
+      analysisPermission: false,
+      financialExecutionPermission: false,
+      externalAgentDiscovery,
+      message: boundary.code === 'EXTERNAL_AGENT_NOT_VERIFIED'
+        ? 'External Agent mode requires a verified, scoped participant before analysis is admitted.'
+        : 'This request is blocked at the mode boundary; no credential or execution permission was granted.'
+    });
+    session = push(session, reply);
+    appendAudit(session, { type: 'mode_boundary', ok: false, code: boundary.code });
+    return { session, reply };
+  }
+
+  // 2. If clarifications are needed, ask without creating an order.
   if (!parsed.ok && parsed.clarifications.length) {
     session = push(session, assistantMessage('clarifications-needed', {
       clarifications: parsed.clarifications,
-      signals: parsed.signals
+      signals: parsed.signals,
+      mode: session.mode,
+      financialExecutionAuthorized: false
     }));
     session.pendingClarifications = { parsed };
-    return { session, reply: session.messages[session.messages.length - 1] };
+    return { session, reply: session.messages.at(-1) };
   }
 
-  // 3. Level 1: analysis-only
+  const STABLES = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP', 'USDD']);
+  const amountUsd = parsed.intent?.amountUsd ?? ctx.amountUsd
+    ?? (parsed.intent?.amount && STABLES.has(parsed.intent?.amountUnit) ? parsed.intent.amount : null);
+  const targetReality = parsed.intent?.kind === 'goal'
+    ? assessTarget({
+      capital: ctx.capitalUsd ?? amountUsd,
+      targetPct: parsed.intent.goalPct,
+      durationHrs: parsed.intent.durationHrs,
+      probabilityPct: ctx.probabilityPct,
+      expectedReturnPct: ctx.expectedReturnPct,
+      potentialLossPct: ctx.potentialLossPct,
+      maximumDrawdownPct: ctx.maximumDrawdownPct,
+      confidencePct: ctx.confidencePct
+    })
+    : null;
+  session.targetReality = targetReality;
+
+  // 3. Level 1 and all analysis requests stay analysis-only.
   if (session.level === 1 || parsed.intent.kind === 'analysis') {
     const analysis = formulateStrategies(parsed.intent, ctx);
     session = push(session, assistantMessage('analysis', {
+      mode: session.mode,
+      modeLabel: session.modeLabel,
       intent: parsed.intent,
       signals: parsed.signals,
       confidence: parsed.confidence,
       research: analysis.evidence,
       suggestions: analysis.proposals.slice(0, 3).map((p) => ({ id: p.id, strategy: p.strategy, description: p.description, risk: p.risk })),
+      targetReality,
+      capabilityScan,
+      externalAgentDiscovery,
+      permission: buildPermissionBoundary({ mode: session.mode, request: { ...parsed.intent, stage }, userAuthorized: false }),
       canExecute: false,
+      financialExecutionAuthorized: false,
       level: 1
     }));
+    session.memory?.append?.('target.assessed', targetReality || { skipped: true });
     session.pendingClarifications = null;
-    return { session, reply: session.messages[session.messages.length - 1] };
+    return { session, reply: session.messages.at(-1) };
   }
 
-  // 4. Level 2: prepare (quotes + draft orders)
-  const strategies = formulateStrategies(parsed.intent, {
-    ...ctx,
-    disabledCapabilities: session.level < 3 ? { futures: false, dydx: false, bridge: false, cex: false, defi: false, externalAgent: false } : {}
-  });
+  // 4. Level 2/3: prepare quotes and draft orders. Optional capability
+  // declines are converted to a safe replan, not a dead-end.
+  const levelDisabled = session.level < 3
+    ? { futures: false, dydx: false, bridge: false, cex: false, defi: false, externalAgent: false }
+    : {};
+  const declined = Array.isArray(ctx.declinedCapabilities) ? ctx.declinedCapabilities : [];
+  const declinedDisabled = Object.fromEntries(declined.map((id) => [id, false]));
+  const disabledCapabilities = { ...levelDisabled, ...declinedDisabled, ...(ctx.disabledCapabilities || {}) };
+  const strategies = formulateStrategies(parsed.intent, { ...ctx, disabledCapabilities });
+  if (!strategies.proposals.length) {
+    const reply = assistantMessage('unable-to-proceed', {
+      reasons: ['NO_STRATEGY_AVAILABLE'],
+      capabilityScan,
+      targetReality,
+      financialExecutionAuthorized: false
+    });
+    session = push(session, reply);
+    appendAudit(session, { type: 'strategy', ok: false, reason: 'NO_STRATEGY_AVAILABLE' });
+    return { session, reply };
+  }
 
-  // Treat stable-denominated amounts as 1:1 USD for quoting/cap purposes.
-  const STABLES = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP', 'USDD']);
-  const amountUsd = parsed.intent.amountUsd
-    || ctx.amountUsd
-    || (parsed.intent.amount && STABLES.has(parsed.intent.amountUnit) ? parsed.intent.amount : null);
+  const candidate = strategies.proposals.find((p) => p.id === ctx.selectedProposalId) || strategies.proposals[0];
+  const highValue = Number(amountUsd) >= Number(ctx.councilThresholdUsd ?? 10000);
+  const highRisk = candidate.risk === 'high' || Number(parsed.intent?.goalPct || 0) >= 25 || Number(candidate.leverage || 1) > 1;
+  // Low-risk planning can still be reviewed when capability metrics are
+  // incomplete; high-risk/high-value decisions require real evidence rather
+  // than a guessed green score.
+  const evidenceComplete = ctx.evidenceComplete ?? (!highRisk && !highValue ? true : capabilityScan.evidenceComplete > 0);
+  const challenge = challengeStrategy(candidate, {
+    ...ctx,
+    amountUsd,
+    unavailableCapabilities: capabilityScan.unavailable.map((row) => row.id),
+    evidenceComplete
+  });
+  const councilRequired = ctx.requireCouncil === true || highValue || highRisk || session.mode === 'ai-ai-inside-fbt';
+  const council = councilRequired
+    ? runAgentCouncil({
+      proposal: candidate,
+      context: {
+        ...ctx,
+        amountUsd,
+        unavailableCapabilities: capabilityScan.unavailable.map((row) => row.id),
+        evidenceComplete,
+        guardianApproved: true,
+        riskDecision: ctx.riskDecision
+      },
+      highValue,
+      highRisk
+    })
+    : null;
+  session.challenge = challenge;
+  session.council = council;
+  session.memory?.append?.('strategy.challenged', { decision: challenge.decision, disagreements: challenge.disagreements });
+
+  if (councilRequired && (!council?.ok || council.decision !== 'APPROVE')) {
+    const reply = assistantMessage('strategy-requires-revision', {
+      reasons: council?.decision === 'REJECT' ? ['COUNCIL_REJECTED'] : ['COUNCIL_REVISE_REQUIRED'],
+      challenge,
+      council,
+      targetReality,
+      capabilityScan,
+      financialExecutionAuthorized: false
+    });
+    session = push(session, reply);
+    appendAudit(session, { type: 'council', ok: false, decision: council?.decision });
+    return { session, reply };
+  }
 
   const orch = orchestrate(strategies, session.policy, {
     amountUsd,
-    slippagePct: ctx.slippagePct || 0.5,
+    slippagePct: ctx.slippagePct ?? 0.5,
     sessionStartAt: session.policy.sessionStartAt,
-    disabledCapabilities: session.level < 3 ? { futures: false, dydx: false, bridge: false, cex: false, defi: false, externalAgent: false } : {},
+    disabledCapabilities,
+    selectedProposalId: ctx.selectedProposalId,
     now: Date.now()
   });
 
   if (!orch.ok) {
-    session = push(session, assistantMessage('unable-to-proceed', {
+    const reply = assistantMessage('unable-to-proceed', {
       reasons: [...(orch.guardian.reasons || []), ...(orch.review || []).filter((r) => r.level === 'block').map((r) => r.code)],
-      review: orch.review
-    }));
+      review: orch.review,
+      challenge,
+      council,
+      capabilityScan,
+      targetReality,
+      financialExecutionAuthorized: false
+    });
+    session = push(session, reply);
     appendAudit(session, { type: 'orchestrate', ok: false, reasons: orch.guardian.reasons });
-    return { session, reply: session.messages[session.messages.length - 1] };
+    return { session, reply };
   }
 
-  // Build draft orders for every step
+  // Build DRAFT artefacts only. Nothing in this loop signs or submits.
   const drafts = [];
   for (const step of orch.plan.steps) {
     const d = draftOrderFromPlanStep(step, orch.plan, {
-      amountUsd: parsed.intent.amountUsd || ctx.amountUsd,
+      amountUsd: parsed.intent.amountUsd ?? ctx.amountUsd,
       amountIn: parsed.intent.amount,
-      slippagePct: ctx.slippagePct || 0.5,
+      slippagePct: ctx.slippagePct ?? 0.5,
       maxLossUsd: session.policy.maxLossUsd,
       policyId: session.policy.id
     });
@@ -172,22 +486,70 @@ export function chatTurn(session, text, ctx = {}) {
   session.plans.push(orch.plan);
 
   const replyKind = session.level === 2 ? 'prepared-draft' : 'ready-for-confirmation';
-
+  session.authorization = {
+    ...(session.authorization || {}),
+    financialExecution: false,
+    executionAuthorized: false,
+    screenRequired: true,
+    userConfirmed: false,
+    guardianApproved: orch.guardian.approved,
+    state: 'PENDING_USER_AUTHORIZATION'
+  };
+  session.permissions = {
+    ...(session.permissions || {}),
+    executionAuthorized: false,
+    explanation: 'A proposal, plan or Guardian approval never substitutes for the explicit authorization screen.'
+  };
+  const agentDialogue = {
+    mode: session.mode,
+    participants: session.modeDefinition?.participants || ['fbt-strategy', 'fbt-execution'],
+    messages: [
+      { from: 'fbt.strategy', type: 'proposal', executable: false },
+      { from: 'fbt.execution', type: 'independent-review', executable: false },
+      { from: 'fbt.guardian', type: 'gate-result', approved: orch.guardian.approved, executable: false }
+    ],
+    challenge,
+    council,
+    socialMessagesAreNonExecutable: true
+  };
   session = push(session, assistantMessage(replyKind, {
+    mode: session.mode,
+    modeLabel: session.modeLabel,
     intent: parsed.intent,
     selectedStrategy: orch.selected,
     plan: orch.plan,
-    drafts: drafts.map((d) => ({ id: d.id, kind: d.kind, summary: `${d.fromSymbol} → ${d.toSymbol || ''} ${d.amountIn}` })),
+    drafts: drafts.map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      summary: `${d.fromSymbol} → ${d.toSymbol || ''} ${d.amountIn}`,
+      order: { ...d }
+    })),
     terms: orch.terms,
     termsHash: orch.termsHash,
-    canExecute: canExecute(session.level),
+    targetReality,
+    capabilityScan,
+    externalAgentDiscovery,
+    challenge,
+    council,
+    agentDialogue,
+    authorizationScreen: {
+      required: true,
+      analysisPermission: true,
+      financialExecutionPermission: false,
+      buttons: ['CONFIRM', 'REJECT', 'CANCEL', 'REAUTHORIZE'],
+      guardianApproved: orch.guardian.approved
+    },
+    canExecute: false,
+    financialExecutionAuthorized: false,
     requiresConfirmation: true,
     level: session.level
   }));
 
-  appendAudit(session, { type: 'prepared', ok: true, planId: orch.plan.planId, draftCount: drafts.length });
+  session.memory?.append?.('strategy.proposed', { proposalId: orch.selected?.id, planId: orch.plan.planId, mode: session.mode });
+  session.memory?.append?.('authorization.requested', { planId: orch.plan.planId, termsHash: orch.termsHash, financialExecutionAuthorized: false });
+  appendAudit(session, { type: 'prepared', ok: true, planId: orch.plan.planId, draftCount: drafts.length, authorizationRequired: true });
   session.pendingClarifications = null;
-  return { session, reply: session.messages[session.messages.length - 1] };
+  return { session, reply: session.messages.at(-1) };
 }
 
 /**
@@ -195,6 +557,13 @@ export function chatTurn(session, text, ctx = {}) {
  */
 export function answerClarifications(session, answers) {
   if (!session.pendingClarifications?.parsed) return { session, reply: assistantMessage('nothing-to-clarify', {}) };
+  let serializedAnswers = '';
+  try { serializedAnswers = JSON.stringify(answers ?? {}); } catch { serializedAnswers = '[unserializable]'; }
+  if (RAW_CREDENTIAL_TEXT.test(serializedAnswers) || /\b(?:seed|mnemonic|credential|private.?key|master.?password|raw.?secret)\b/i.test(serializedAnswers)) {
+    // Route a safe sentinel through the same rejection path; the supplied raw
+    // answer is never handed to the parser, message list or memory.
+    return chatTurn(session, 'private key');
+  }
   const refined = refineIntent(session.pendingClarifications.parsed, answers);
   const next = { ...session, pendingClarifications: null };
   const label = refined.intent?.raw || Object.values(answers || {}).filter(Boolean).join(' ') || '(refined)';
@@ -205,11 +574,55 @@ export function answerClarifications(session, answers) {
  * After ConfirmationGate: sign → submit → monitor → reconcile.
  */
 export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, signer, brokerHandle, idempotencyKey, observation, submitVia = 'wallet' } = {}) {
-  if (session.status === 'STOPPED' || session.policy?.emergencyStop) {
+  if (!session || !PRIMARY_MODES.includes(session.mode || 'human-ai')) {
+    const err = classifyFailure('INSUFFICIENT_PERMISSION');
+    return { session, reply: assistantMessage('error', { code: err.code, translatable: err.translatable }), ok: false, error: err };
+  }
+  if (session.status === 'STOPPED' || session.policy?.emergencyStop || session.controls?.paused || session.controls?.revoked || session.controls?.disconnected || session.controls?.emergency) {
     const err = classifyFailure('EMERGENCY_STOP');
     session = push(session, assistantMessage('error', { code: err.code, class: err.class, translatable: err.translatable }));
     return { session, reply: session.messages.at(-1), ok: false, error: err };
   }
+
+  // A caller cannot turn a draft, Guardian approval or policy confirmation
+  // into an execution authorization by invoking this function directly. The
+  // per-action authorization screen emitted by chatTurn must exist, and the
+  // caller must submit one of its explicit decisions. `confirmAndSubmit`
+  // performs the immutable Confirmation Gate check again immediately before
+  // signing/submitting; this earlier check closes the screen-bypass path.
+  const requestedAction = String(action || '').toUpperCase();
+  const authorizationMessage = [...(session.messages || [])].reverse().find((message) => (
+    message?.payload?.authorizationScreen?.required === true
+    && message?.payload?.termsHash
+  ));
+  const screen = authorizationMessage?.payload?.authorizationScreen;
+  const screenIsValid = session.authorization?.screenRequired === true
+    && screen?.financialExecutionPermission === false
+    && Array.isArray(screen?.buttons)
+    && screen.buttons.includes(requestedAction);
+  if (!screenIsValid) {
+    const err = classifyFailure('USER_AUTHORIZATION_REQUIRED', { detail: 'AUTHORIZATION_SCREEN_NOT_CONFIRMED' });
+    session = push(session, assistantMessage('error', {
+      code: err.code,
+      translatable: err.translatable,
+      authorizationScreenRequired: true,
+      financialExecutionAuthorized: false
+    }));
+    appendAudit(session, {
+      type: 'authorization_screen',
+      ok: false,
+      action: requestedAction,
+      reason: 'AUTHORIZATION_SCREEN_NOT_CONFIRMED'
+    });
+    return { session, reply: session.messages.at(-1), ok: false, error: err };
+  }
+  appendAudit(session, {
+    type: 'authorization_screen',
+    ok: true,
+    action: requestedAction,
+    confirmed: requestedAction === 'CONFIRM',
+    termsHash: authorizationMessage.payload.termsHash
+  });
   const draft = session.drafts[session.drafts.length - 1];
   const lastPlan = session.plans[session.plans.length - 1];
   const termsHash = session.messages.filter((m) => m.payload?.termsHash).at(-1)?.payload?.termsHash;
@@ -251,7 +664,22 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
     emergencyStop: session.policy.emergencyStop
   });
   const type = rec.partial ? 'partial' : rec.receipt?.confirmed ? 'status' : 'status';
-  session = { ...session, execution: { submitted, receipt: rec.receipt } };
+  session = {
+    ...session,
+    execution: { submitted, receipt: rec.receipt },
+    authorization: {
+      ...(session.authorization || {}),
+      financialExecution: true,
+      executionAuthorized: true,
+      userConfirmed: true,
+      state: 'ACTION_CONFIRMED_AND_SUBMITTED'
+    },
+    permissions: {
+      ...(session.permissions || {}),
+      executionAuthorized: true
+    }
+  };
+  session.memory?.append?.('execution.completed', { status: rec.receipt?.status, confirmed: rec.receipt?.confirmed === true, fabricated: false });
   session = push(session, assistantMessage(type, {
     status: rec.receipt?.status,
     confirmed: rec.receipt?.confirmed === true,
@@ -269,10 +697,44 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
 export function confirmSessionPolicy(session, now = Date.now()) {
   if (!session.policy) return { session, ok: false, reason: 'NO_POLICY' };
   const confirmed = confirmPolicy(session.policy, now);
-  session = { ...session, policy: confirmed, status: 'ACTIVE' };
-  session = push(session, systemMessage('policy.confirmed', { policyId: confirmed.id }));
-  appendAudit(session, { type: 'policy_confirmed', policyId: confirmed.id });
+  if (!confirmed) return { session, ok: false, reason: 'INVALID_POLICY' };
+  session = {
+    ...session,
+    policy: confirmed,
+    status: 'ACTIVE',
+    authorization: {
+      ...(session.authorization || {}),
+      userConfirmed: true,
+      financialExecution: false,
+      executionAuthorized: false,
+      state: 'POLICY_CONFIRMED_ACTION_AUTH_STILL_REQUIRED'
+    },
+    permissions: {
+      ...(session.permissions || {}),
+      financialExecution: true,
+      executionAuthorized: false
+    }
+  };
+  session = push(session, systemMessage('policy.confirmed', { policyId: confirmed.id, financialExecutionStillRequiresActionScreen: true }));
+  session.memory?.append?.('authorization.decided', { kind: 'policy', decision: 'confirmed', executionAuthorized: false });
+  appendAudit(session, { type: 'policy_confirmed', policyId: confirmed.id, executionAuthorization: 'pending-per-action-screen' });
   return { session, ok: true };
+}
+
+/**
+ * User-facing STOP, PAUSE, REVOKE, DISCONNECT and EMERGENCY EXIT controls.
+ * Controls are not social messages and cannot be overridden by an Agent.
+ */
+export function userControl(session, action, now = Date.now()) {
+  const value = String(action || '').toUpperCase();
+  if (value === 'STOP' || value === 'KILL_SWITCH' || value === 'EMERGENCY_EXIT') return userStop(session, now);
+  const result = applyControl(session?.controls || createControlState(), value);
+  if (!result.ok) return { session, ok: false, error: result.code };
+  let updated = { ...session, controls: result.controls };
+  updated = push(updated, systemMessage('control.changed', { action: value, controls: result.controls }));
+  updated.memory?.append?.('control.changed', { action: value, controls: result.controls });
+  appendAudit(updated, { type: 'control_changed', action: value });
+  return { session: updated, ok: true, action: value };
 }
 
 /**
@@ -286,8 +748,15 @@ export function userStop(session, now = Date.now()) {
     autonomousExecution: false
   });
   emergencyHalt(stopped, session);
-  const updated = { ...session, policy: stopped, status: 'STOPPED', execution: null };
-  const withMsg = push(updated, systemMessage('emergency_stop.triggered', { at: now }));
+  const control = applyControl(session.controls || createControlState(), 'EMERGENCY_EXIT');
+  const updated = {
+    ...session,
+    policy: stopped,
+    status: 'STOPPED',
+    execution: null,
+    controls: control.controls
+  };
+  const withMsg = push(updated, systemMessage('emergency_stop.triggered', { at: now, controls: control.controls }));
   appendAudit(withMsg, { type: 'emergency_stop', at: now });
   return withMsg;
 }

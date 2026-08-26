@@ -36,6 +36,13 @@ function cachedGet(path, timeout = 6000) {
 }
 
 export const getIntentCapabilities = () => cachedGet('/intents/v1/capabilities', 6000);
+/* Phase 10: read-only approved external-agent discovery. An unavailable
+   registry keeps its explicit unavailable status; it is never converted into
+   an empty list that looks like "no agents exist". */
+export const getExternalAgents = () => cachedGet('/intents/v1/external-agents', 6000);
+/* Phase 8: implementation/configuration/operational readiness is distinct
+   from protocol capabilities and is safe to cache with the same short TTL. */
+export const getIntentActivation = () => cachedGet('/intents/v1/activation', 6000);
 export const getRegisteredSolvers = () => cachedGet('/intents/v1/solvers', 6000);
 export const getBondBoard = () => cachedGet('/intents/v1/bonds', 6000);
 export const getAuctionCoordinator = () => cachedGet('/intents/v1/coordinator', 6000);

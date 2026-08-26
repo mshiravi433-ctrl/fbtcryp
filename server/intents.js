@@ -64,6 +64,40 @@ export const INTENT_CAPABILITIES = Object.freeze({
   outcomeBidSchema: 'fbt.outcome-bid.v1',
   generatedBy: 'FBT Intent OS',
   operatingMode: 'validation-signed-commitments-and-coordinator-signed-auction-close',
+  primaryModes: [
+    'HUMAN ↔ AI',
+    'AI ↔ AI INSIDE FBT',
+    'FBT AI ↔ EXTERNAL AI AGENT'
+  ],
+  modeCount: 3,
+  permissionBoundary: {
+    analysis: true,
+    preparation: true,
+    financialExecution: 'explicit-user-authorization-screen-only',
+    rawCredentialsToExternalAgents: false
+  },
+  capabilityDiscovery: {
+    schema: 'fbt.intent-capability-scan.v1',
+    source: 'runtime-and-evidence-only',
+    score: 'withheld-until-seven-bounded-metrics-are-evidenced',
+    optionalCapabilityDecline: 'safe-replan-required'
+  },
+  externalAgentTrust: {
+    schema: 'fbt.external-agent-trust.v1',
+    passportSchema: 'fbt.external-agent-passport.v1',
+    discovery: 'approved-registry-only',
+    security: 'independent-certification-and-sandbox-required',
+    reputation: 'observed-samples-only; thin-sample-score-withheld',
+    handshake: 'social-and-evidence-only; never-executable',
+    credentials: 'seed-phrase-private-key-master-password-never-accepted',
+    scope: 'smart-wallet-session-key-scoped-permission-expiration-required',
+    automaticEnable: false,
+    automaticExecution: false
+  },
+  externalAgentDiscovery: {
+    endpoint: '/api/intents/v1/external-agents',
+    dataStatus: 'unavailable-until-approved-registry-is-operational'
+  },
   custody: false,
   chains: CHAINS,
   endpoints: {
@@ -108,6 +142,9 @@ export const INTENT_CAPABILITIES = Object.freeze({
     /* Execution Core v2 — privacy-safe execution observation ingest. */
     executionObservations: '/api/intents/v1/observations',
     executionObservationModel: '/api/intents/v1/execution-observation-model',
+    /* Phase 8 — public production activation/readiness report. */
+    activation: '/api/intents/v1/activation',
+    externalAgents: '/api/intents/v1/external-agents',
     /* Phase 5 — confidential intent transport. */
     intentCommitments: '/api/intents/v1/confidential/commit',
     intentReveals: '/api/intents/v1/confidential/reveal',

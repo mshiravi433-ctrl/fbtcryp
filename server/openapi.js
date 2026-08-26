@@ -8,7 +8,7 @@
  * spec would produce a document that is wrong within a month, and a wrong spec
  * is worse than none: integrators generate clients from it. What is described
  * here is the surface WE own and WE version — the registry, its lifecycle, the
- * developer credentials, and the two trust reads.
+ * developer credentials, and the read-only trust/discovery reads.
  *
  * HONESTY RULES BAKED IN
  * ---------------------------------------------------------------------------
@@ -267,6 +267,32 @@ export function openApiDocument({ certificationIssuerConfigured = false, durable
       }
     },
     paths: {
+      '/intents/v1/external-agents': {
+        get: {
+          summary: 'Discover approved external agents',
+          description: 'Public and read-only. The response preserves unavailable registry status; a candidate is never an execution permission, capability token or session key.',
+          parameters: [
+            { name: 'cursor', in: 'query', schema: { type: 'string' } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }
+          ],
+          responses: {
+            200: {
+              description: 'External-agent discovery with an honest live/unavailable status',
+              content: json({
+                type: 'object',
+                required: ['schema', 'dataStatus', 'candidates'],
+                properties: {
+                  schema: { type: 'string', const: 'fbt.external-agent-discovery.v1' },
+                  dataStatus: { type: 'string', enum: ['live', 'unavailable'] },
+                  candidates: { type: 'array', items: { type: 'object' } },
+                  pagination: { type: 'object' }
+                }
+              })
+            },
+            ...ERROR_RESPONSE
+          }
+        }
+      },
       '/ecosystem/agents': {
         get: { summary: 'List published agents', description: 'Public. Only listings that are published AND currently certified appear.', responses: listResponse('Published agent listings') },
         post: writeOp('Register an agent', 'Creates a draft owned by the caller. Requests for withdrawFunds or executeWithoutUser are refused before storage is touched.')

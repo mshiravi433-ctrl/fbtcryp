@@ -255,6 +255,24 @@ console.log('▸ probing FBT Intent AI — Phase 7 Product UI, i18n & Honest Act
   report('intent-ai phase-7 ui/i18n/activation', await run7());
 }
 
+console.log('▸ probing FBT Intent AI — Phase 8 Production Activation & Secret Boundary…');
+{
+  const { default: run8 } = await import('./intent-ai/phase8-activation-probe.mjs');
+  report('intent-ai phase-8 activation/secret boundary', await run8());
+}
+
+console.log('▸ probing FBT Intent AI — Phase 9 Intent OS contracts…');
+{
+  const { default: run9 } = await import('./intent-ai/phase9-intent-os-probe.mjs');
+  report('intent-ai phase-9 intent OS', await run9());
+}
+
+/* Phase 10 is a fail-closed contract probe. It runs as a standalone module so
+ * it can also be invoked directly with `npm run test:phase10`; importing it
+ * here keeps the normal test command from silently skipping the trust plane. */
+console.log('▸ probing FBT Intent AI — Phase 10 External Agent trust plane…');
+await import('./intent-ai/phase10-agent-trust-probe.mjs');
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

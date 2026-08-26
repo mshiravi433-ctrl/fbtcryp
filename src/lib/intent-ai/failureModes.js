@@ -17,6 +17,7 @@ export const CAUSE_CODES = Object.freeze({
   GUARDIAN_REJECTED: { cls: 'FAILED', retry: false },
   RISK_BLOCKED: { cls: 'FAILED', retry: false },
   GATE_NOT_CONFIRMED: { cls: 'FAILED', retry: false },
+  USER_AUTHORIZATION_REQUIRED: { cls: 'FAILED', retry: false },
   TERMS_CHANGED: { cls: 'FAILED', retry: false },
   SESSION_KEY_EXPIRED: { cls: 'EXPIRED', retry: false },
   SESSION_KEY_REVOKED: { cls: 'CANCELLED', retry: false },

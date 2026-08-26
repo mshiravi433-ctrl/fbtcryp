@@ -287,6 +287,7 @@ import {
   parseOperatorRegistry,
   publicOperatorRegistry
 } from './intentConfidential.js';
+import { activationReport } from './intentActivation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1319,6 +1320,65 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
     }),
     confidential: confidentialProtocolStatus({ operatorRegistry: parseOperatorRegistry() }),
     commitReveal: intentCommitmentStatus({ operatorRegistrySize: parseOperatorRegistry().size })
+  });
+});
+
+/*
+ * Phase 8: public activation contract. This is deliberately separate from
+ * capabilities: capabilities describe protocol surfaces, while this report
+ * distinguishes implemented, wired, configured and operational. It contains
+ * no env values, URLs, key references or secret material.
+ */
+app.get('/api/intents/v1/activation', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  return res.json(activationReport());
+});
+
+/* Phase 10: read-only external-agent discovery. The ecosystem registry is the
+ * only source of approved listings; no client can publish a verified passport
+ * and this route never issues a permission or execution handle. The existing
+ * registry currently stores a minimal listing shape, so incomplete passports
+ * remain explicitly non-executable until the trust plane has all required
+ * fields and sandbox evidence. */
+app.get('/api/intents/v1/external-agents', async (req, res) => {
+  const payload = await catalogList('agent', { cursor: req.query.cursor, limit: req.query.limit });
+  if (payload.meta?.error) return ecosystemFail(res, payload.meta.error);
+  const data = (payload.data || []).map((row) => ({
+    schema: 'fbt.external-agent-passport.v1',
+    id: row.id,
+    name: row.name,
+    creator: 'not-disclosed',
+    capabilities: Array.isArray(row.capabilities) ? row.capabilities : [],
+    supportedChains: Array.isArray(row.supportedChains) ? row.supportedChains : [],
+    supportedAssets: Array.isArray(row.supportedAssets) ? row.supportedAssets : [],
+    supportedProtocols: Array.isArray(row.supportedProtocols) ? row.supportedProtocols : [],
+    financialFunctions: Array.isArray(row.financialFunctions) ? row.financialFunctions : [],
+    fees: Array.isArray(row.fees) ? row.fees : [],
+    verification: row.verification,
+    reputation: row.reputation,
+    sandbox: row.sandbox || { stage: 'discovery' },
+    requiredPermissions: ['smart-wallet', 'session-key', 'scoped-permission', 'transaction-policy', 'temporary-authorization', 'spending-limit', 'expiration'],
+    maxCapitalUsd: Number.isFinite(Number(row.maxCapitalUsd)) ? Number(row.maxCapitalUsd) : null,
+    maxTransactionUsd: Number.isFinite(Number(row.maxTransactionUsd)) ? Number(row.maxTransactionUsd) : null,
+    expiresAt: Number.isFinite(Number(row.expiresAt)) ? Number(row.expiresAt) : null,
+    passportComplete: false,
+    eligibleForExecution: false,
+    executionBlockers: ['PASSPORT_FIELDS_REQUIRED', 'SANDBOX_NOT_COMPLETE', 'USER_AUTHORIZATION_REQUIRED', 'GUARDIAN_REQUIRED'],
+    source: 'approved-ecosystem-catalog',
+    rawCredentialsAllowed: false,
+    automaticExecution: false
+  }));
+  res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=120');
+  return res.json({
+    schema: 'fbt.external-agent-discovery.v1',
+    dataStatus: payload.meta?.dataStatus || 'unavailable',
+    candidates: data,
+    pagination: payload.pagination,
+    limitations: [
+      'Only active reviewer-certified listings are returned.',
+      'A listing is not an execution permission.',
+      'Incomplete passport or sandbox evidence remains non-executable.'
+    ]
   });
 });
 
