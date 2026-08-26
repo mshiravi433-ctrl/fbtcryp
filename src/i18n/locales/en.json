@@ -4471,7 +4471,8 @@
     "confirm": {
       "title": "Confirm this execution",
       "body": "Review the terms. Nothing is signed until you confirm in your wallet."
-    }
+    },
+    "aiAssistant": "Ask the Intent AI assistant"
   },
   "whales": {
     "title": "Whale Tracking",
@@ -4888,6 +4889,105 @@
         "rejected": "Execution was rejected. The DCA remains unfilled; review Orders.",
         "partial": "Partial execution recorded. Only the verified actual amount is included."
       }
+    }
+  },
+  "intentAI": {
+    "title": "FBT Intent AI",
+    "subtitle": "Deterministic intent parser · {{summary}} · v{{version}}",
+    "levels": {
+      "level1": "Analysis",
+      "level2": "Prepare",
+      "level3": "Controlled"
+    },
+    "stop": {
+      "active": "Emergency stop is active. No execution is possible.",
+      "title": "Emergency stop (irrevocable for this session)",
+      "button": "🛑 Stop"
+    },
+    "policy": {
+      "confirmPrompt": "Confirm autonomous-session policy before starting:",
+      "level": "Level",
+      "capital": "Max capital",
+      "transaction": "Max per transaction",
+      "loss": "Max loss",
+      "leverage": "Max leverage",
+      "chains": "Allowed chains",
+      "protocols": "Allowed protocols",
+      "assets": "Allowed assets",
+      "duration": "Duration",
+      "exit": "Exit policy",
+      "emergency": "Emergency stop",
+      "confirmStart": "CONFIRM & START",
+      "cancel": "CANCEL",
+      "settings": "Session policy settings",
+      "maxCapital": "Max capital (USD)",
+      "maxPerTx": "Max per tx (USD)",
+      "maxLoss": "Max loss (USD)",
+      "maxLeverage": "Max leverage (x)",
+      "allowedChains": "Allowed chains (csv)",
+      "allowedProtocols": "Allowed protocols (csv)",
+      "allowedAssets": "Allowed assets (csv)",
+      "durationLabel": "Duration (minutes)",
+      "apply": "Apply policy (unconfirmed)"
+    },
+    "policy_duration": "Duration (minutes)",
+    "gate": {
+      "title": "Confirmation Gate",
+      "amount": "Amount",
+      "from": "From",
+      "to": "To",
+      "chain": "Chain",
+      "protocol": "Protocol",
+      "minOut": "Min receive",
+      "termsHash": "Terms hash",
+      "confirm": "CONFIRM",
+      "reject": "REJECT",
+      "cancel": "CANCEL",
+      "reauthorize": "REAUTHORIZE"
+    },
+    "risk": {
+      "summary": "Risk: level {{level}} · decision {{decision}}"
+    },
+    "receipt": {
+      "title": "Receipt",
+      "venue": "venue {{venue}}",
+      "pending": "Pending confirmation — no receipt yet",
+      "submitted": "Submitted — awaiting confirmation",
+      "partial": "Partially executed",
+      "completed": "Completed (confirmed)",
+      "failed": "Failed",
+      "unavailable": "Unavailable — no live venue",
+      "reauthorize": "Terms changed — reauthorization required",
+      "rejected": "Rejected by user",
+      "cancelled": "Cancelled",
+      "unconfirmed": "Gate not confirmed",
+      "emergency-stop": "Emergency stop"
+    },
+    "readiness": {
+      "title": "Capabilities & readiness",
+      "secretManagerStandIn": "Secret Manager: SecureMemoryMap is still the Phase-2 stand-in (opaque handle, not a real KMS / Secret Manager).",
+      "venueConfigured": "Live venues: swap / dYdX are wired; bridge execute is not wired (configured:false). Broker requires a bound handle."
+    },
+    "chat": {
+      "try": "Try: \"swap 100 USDC to ETH on Arbitrum\", \"analyze BTC\", or \"target 10% on 500 USDC in 4 hours\".",
+      "placeholder": "Ask Intent AI",
+      "send": "Send",
+      "you": "you",
+      "ai": "fbt.ai"
+    },
+    "msg": {
+      "clarifications": "A few things are unclear:",
+      "intent": "Intent",
+      "confidence": "conf {{n}}%",
+      "suggestions": "Suggestions:",
+      "ready": "Ready for confirmation",
+      "draftPrepared": "Draft prepared",
+      "step": "step {{seq}}: {{action}}",
+      "onChain": "on chain {{n}}",
+      "drafts": "{{n}} draft order(s)",
+      "openGate": "Open confirmation gate",
+      "cannotProceed": "Cannot proceed",
+      "policyConfirm": "Please confirm the session policy in the panel above."
     }
   }
 }

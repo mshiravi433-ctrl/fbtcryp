@@ -207,6 +207,54 @@ console.log('▸ probing FBT Intent AI — Phase 2 Controlled Execution…');
   report('intent-ai phase-2 e2e', await runE2e());
 }
 
+console.log('▸ probing FBT Intent AI — Phase 3 Multi-Agent Ecosystem…');
+{
+  const { default: runCap } = await import('./intent-ai/phase3-capability-token-probe.mjs');
+  report('intent-ai phase-3 capability token', await runCap());
+  const { default: runDir } = await import('./intent-ai/phase3-directory-probe.mjs');
+  report('intent-ai phase-3 agent directory', await runDir());
+  const { default: runMa } = await import('./intent-ai/phase3-multi-agent-probe.mjs');
+  report('intent-ai phase-3 multi-agent', await runMa());
+  const { default: runLearn } = await import('./intent-ai/phase3-learning-optin-probe.mjs');
+  report('intent-ai phase-3 learning opt-in', await runLearn());
+  const { default: runFail3 } = await import('./intent-ai/phase3-fail-closed-probe.mjs');
+  report('intent-ai phase-3 fail-closed', await runFail3());
+}
+
+console.log('▸ probing FBT Intent AI — Phase 4 Agent Scoring & Specialist Marketplace…');
+{
+  const { default: runSc } = await import('./intent-ai/phase4-scoring-probe.mjs');
+  report('intent-ai phase-4 agent scoring', await runSc());
+  const { default: runMk } = await import('./intent-ai/phase4-marketplace-probe.mjs');
+  report('intent-ai phase-4 specialist marketplace', await runMk());
+  const { default: runFail4 } = await import('./intent-ai/phase4-fail-closed-probe.mjs');
+  report('intent-ai phase-4 fail-closed', await runFail4());
+}
+
+console.log('▸ probing FBT Intent AI — Phase 5 Local-First Adaptive Learning…');
+{
+  const { default: runMem } = await import('./intent-ai/phase5-adaptive-memory-probe.mjs');
+  report('intent-ai phase-5 adaptive memory', await runMem());
+  const { default: runRef } = await import('./intent-ai/phase5-refine-probe.mjs');
+  report('intent-ai phase-5 strategy refine', await runRef());
+  const { default: runConf } = await import('./intent-ai/phase5-confidential-probe.mjs');
+  report('intent-ai phase-5 confidential collab', await runConf());
+}
+
+console.log('▸ probing FBT Intent AI — Phase 6 Live Adapter Wiring (honest, fail-closed)…');
+{
+  const { default: runLive } = await import('./intent-ai/phase6-live-wiring-probe.mjs');
+  report('intent-ai phase-6 live wiring', await runLive());
+  const { default: runUnav } = await import('./intent-ai/phase6-unavailable-honest-probe.mjs');
+  report('intent-ai phase-6 unavailable honest', await runUnav());
+}
+
+console.log('▸ probing FBT Intent AI — Phase 7 Product UI, i18n & Honest Activation…');
+{
+  const { default: run7 } = await import('./intent-ai/phase7-ui-i18n-probe.mjs');
+  report('intent-ai phase-7 ui/i18n/activation', await run7());
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

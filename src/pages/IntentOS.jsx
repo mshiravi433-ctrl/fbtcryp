@@ -610,6 +610,11 @@ export default function IntentOS() {
           <span>⌁ {t('intentOS.badge.policyBound')}</span>
           <span>✓ {t('intentOS.badge.verifiable')}</span>
         </div>
+        <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-primary" onClick={() => navigate('/intent-ai')}>
+            {t('intentOS.aiAssistant')}
+          </button>
+        </div>
       </motion.section>
 
       <StageRail t={t} />

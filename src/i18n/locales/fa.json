@@ -4456,7 +4456,8 @@
       },
       "loadMore": "موارد بیشتر",
       "pageError": "صفحهٔ بعدی بارگذاری نشد. آنچه از قبل می‌بینی تغییری نکرده است."
-    }
+    },
+    "aiAssistant": "از دستیار Intent AI بپرس"
   },
   "whales": {
     "title": "ردیابی نهنگ‌ها",
@@ -4873,6 +4874,105 @@
         "rejected": "اجرا رد شد. DCA پر نشده است؛ سفارش‌ها را بررسی کنید.",
         "partial": "اجرای جزئی ثبت شد. فقط مبلغ واقعیِ تأییدشده محاسبه شده است."
       }
+    }
+  },
+  "intentAI": {
+    "title": "FBT Intent AI",
+    "subtitle": "پارس‌کنندهٔ قطعی intent · {{summary}} · v{{version}}",
+    "levels": {
+      "level1": "تحلیل",
+      "level2": "آماده‌سازی",
+      "level3": "کنترل‌شده"
+    },
+    "stop": {
+      "active": "Emergency Stop فعال است. هیچ اجرایی ممکن نیست.",
+      "title": "توقف اضطراری (غیرقابل‌بازگشت برای این نشست)",
+      "button": "🛑 توقف"
+    },
+    "policy": {
+      "confirmPrompt": "پیش از شروع، سیاست نشست خودمختار را تأیید کنید:",
+      "level": "سطح",
+      "capital": "حداکثر سرمایه",
+      "transaction": "حداکثر هر تراکنش",
+      "loss": "حداکثر ضرر",
+      "leverage": "حداکثر لیوریج",
+      "chains": "شبکه‌های مجاز",
+      "protocols": "پروتکل‌های مجاز",
+      "assets": "دارایی‌های مجاز",
+      "duration": "مدت",
+      "exit": "سیاست خروج",
+      "emergency": "توقف اضطراری",
+      "confirmStart": "تأیید و START",
+      "cancel": "لغو",
+      "settings": "تنظیمات سیاست نشست",
+      "maxCapital": "حداکثر سرمایه (USD)",
+      "maxPerTx": "حداکثر هر تراکنش (USD)",
+      "maxLoss": "حداکثر ضرر (USD)",
+      "maxLeverage": "حداکثر لیوریج (x)",
+      "allowedChains": "شبکه‌های مجاز (csv)",
+      "allowedProtocols": "پروتکل‌های مجاز (csv)",
+      "allowedAssets": "دارایی‌های مجاز (csv)",
+      "durationLabel": "مدت (دقیقه)",
+      "apply": "اعمال سیاست (تأییدنشده)"
+    },
+    "policy_duration": "مدت (دقیقه)",
+    "gate": {
+      "title": "دروازهٔ تأیید",
+      "amount": "مبلغ",
+      "from": "از",
+      "to": "به",
+      "chain": "شبکه",
+      "protocol": "پروتکل",
+      "minOut": "حداقل دریافت",
+      "termsHash": "هش شرایط",
+      "confirm": "تأیید",
+      "reject": "رد",
+      "cancel": "لغو",
+      "reauthorize": "بازتأیید"
+    },
+    "risk": {
+      "summary": "ریسک: سطح {{level}} · تصمیم {{decision}}"
+    },
+    "receipt": {
+      "title": "رسید",
+      "venue": "مقصد {{venue}}",
+      "pending": "در انتظار تأیید — هنوز رسیدی نیست",
+      "submitted": "ارسال شد — در انتظار تأیید",
+      "partial": "اجرای جزئی",
+      "completed": "کامل (تأییدشده)",
+      "failed": "ناموفق",
+      "unavailable": "در دسترس نیست — هیچ مسیر زنده‌ای نیست",
+      "reauthorize": "شرایط تغییر کرد — بازتأیید لازم است",
+      "rejected": "توسط کاربر رد شد",
+      "cancelled": "لغو شد",
+      "unconfirmed": "دروازه تأیید نشده",
+      "emergency-stop": "توقف اضطراری"
+    },
+    "readiness": {
+      "title": "قابلیت‌ها و آمادگی",
+      "secretManagerStandIn": "مدیر راز: SecureMemoryMap هنوز جایگزین فاز ۲ است (handle مبهم، نه KMS / Secret Manager واقعی).",
+      "venueConfigured": "مسیرهای زنده: swap / dYdX متصل‌اند؛ اجرای bridge متصل نیست (configured:false). بروکر نیازمند handle محدود است."
+    },
+    "chat": {
+      "try": "مثال: «جابجایی ۱۰۰ USDC به ETH در Arbitrum»، «تحلیل BTC»، یا «هدف ۱۰٪ روی ۵۰۰ USDC در ۴ ساعت».",
+      "placeholder": "از Intent AI بپرس",
+      "send": "ارسال",
+      "you": "شما",
+      "ai": "fbt.ai"
+    },
+    "msg": {
+      "clarifications": "چند مورد نامشخص است:",
+      "intent": "Intent",
+      "confidence": "اطمینان {{n}}٪",
+      "suggestions": "پیشنهادها:",
+      "ready": "آمادهٔ تأیید",
+      "draftPrepared": "پیش‌نویس آماده شد",
+      "step": "گام {{seq}}: {{action}}",
+      "onChain": "روی شبکهٔ {{n}}",
+      "drafts": "{{n}} پیش‌نویس",
+      "openGate": "باز کردن دروازهٔ تأیید",
+      "cannotProceed": "امکان ادامه نیست",
+      "policyConfirm": "لطفاً سیاست نشست را در پنل بالا تأیید کنید."
     }
   }
 }
