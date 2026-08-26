@@ -541,49 +541,70 @@ export {
 export {
   PHASE22_SCHEMA,
   operateDurableRegistry,
-  operateCertificateAuthority
+  operateCertificateAuthority,
+  revokeCertificate,
+  handshakeWithCertificate,
+  evaluateRegistryCaPlane
 } from './phase22RegistryCaOps.js';
 export {
   PHASE23_SCHEMA,
   SANDBOX_STAGES,
-  runSandboxMesh
+  runSandboxMesh,
+  auditSandboxStage,
+  evaluateSandboxMeshPlane
 } from './phase23SandboxMesh.js';
 export {
   PHASE24_SCHEMA,
   operateSimulator,
   operateMonitor,
-  operateScheduler
+  operateScheduler,
+  interpretQuote,
+  evaluateSimMonitorPlane
 } from './phase24SimMonitorOps.js';
 export {
   PHASE25_SCHEMA,
   FEE_CATEGORIES,
   operateSmartWallet,
   operateProductionSigner,
-  authorizationFeesPresent
+  authorizationFeesPresent,
+  evaluateSignerGuardianPlane
 } from './phase25SignerGuardianOps.js';
 export {
   PHASE26_SCHEMA,
   ADAPTERS as VENUE_ADAPTERS,
-  federateVenueHealth
+  federateVenueHealth,
+  quoteVenueOnly,
+  evaluateVenueFederationPlane
 } from './phase26VenueFederation.js';
 export {
   PHASE27_SCHEMA,
   operateRpcQuorum,
-  enforceOnchainPolicy
+  enforceOnchainPolicy,
+  evaluateRpcPolicyPlane
 } from './phase27RpcPolicyOps.js';
 export {
   PHASE28_SCHEMA,
   operateImmutableAudit,
-  operateBackupRestore
+  operateBackupRestore,
+  evaluateAuditDrPlane
 } from './phase28AuditDrOps.js';
 export {
   PHASE29_SCHEMA,
   THREATS,
-  operateAssurance
+  operateAssurance,
+  evaluateAssurancePlane
 } from './phase29AssuranceNetwork.js';
 export {
   PHASE30_SCHEMA,
-  evaluateLaunchControlPlane
+  LAUNCH_BANNER,
+  evaluateLaunchControlPlane,
+  applyLaunchControl,
+  evaluateLaunchPlane
 } from './phase30LaunchControlPlane.js';
+export {
+  CONTROL_PLANE_SCHEMA,
+  activateControlPlane,
+  controlPlaneRow
+} from './controlPlaneActivation.js';
 
-export const INTENT_AI_VERSION = 'phase30.control-plane.fail-closed.v1';
+export const INTENT_AI_VERSION = 'phase30.control-plane.activated.fail-closed.v2';

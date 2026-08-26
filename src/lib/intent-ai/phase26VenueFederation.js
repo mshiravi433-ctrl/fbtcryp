@@ -11,12 +11,25 @@ export function federateVenueHealth({ adapters = {}, now = Date.now() } = {}) {
   const rows = ADAPTERS.map((kind) => {
     const row = adapters[kind];
     if (!row || row.available !== true || row.attested !== true) {
-      return { kind, status: 'unavailable', operational: false, live: false, code: kind === 'venue' ? 'VENUE_UNAVAILABLE' : 'PROVIDER_HEALTH_FAILURE' };
+      return {
+        kind,
+        status: 'unavailable',
+        operational: false,
+        live: false,
+        code: kind === 'venue' ? 'VENUE_UNAVAILABLE' : 'PROVIDER_HEALTH_FAILURE'
+      };
     }
     if (kind === 'bridge' && row.executable !== true) {
       return { kind, status: 'quote-only', operational: false, live: false, code: 'BRIDGE_NOT_EXECUTABLE' };
     }
-    return { kind, status: 'configured-not-live', operational: false, live: false, providerId: safeId(row.providerId), checkedAt: now };
+    return {
+      kind,
+      status: 'configured-not-live',
+      operational: false,
+      live: false,
+      providerId: safeId(row.providerId),
+      checkedAt: now
+    };
   });
   const blockers = rows.filter((row) => row.status === 'unavailable' || row.code === 'BRIDGE_NOT_EXECUTABLE').map((row) => row.code);
   return {
@@ -27,5 +40,29 @@ export function federateVenueHealth({ adapters = {}, now = Date.now() } = {}) {
     live: false,
     executable: false,
     operational: false
+  };
+}
+
+export function quoteVenueOnly({ adapters = {}, now = Date.now() } = {}) {
+  const federation = federateVenueHealth({ adapters, now });
+  return {
+    ...federation,
+    quoteOnly: true,
+    executionAuthorized: false
+  };
+}
+
+export function evaluateVenueFederationPlane(input = {}) {
+  const federation = federateVenueHealth(input);
+  return {
+    phase: 26,
+    schema: PHASE26_SCHEMA,
+    implementation: 'implemented',
+    operational: false,
+    live: false,
+    ready: false,
+    executable: false,
+    blockers: federation.blockers.length ? federation.blockers : ['PROVIDER_HEALTH_FAILURE'],
+    federation
   };
 }

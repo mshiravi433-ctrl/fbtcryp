@@ -11,9 +11,16 @@ export const THREATS = Object.freeze([
   'privacy-reidentification', 'outage-recovery'
 ]);
 
-export function operateAssurance({ review = null, privacy = null, compliance = null } = {}) {
+export function operateAssurance({ review = null, privacy = null, compliance = null, operatorId = null } = {}) {
   if (!review || review.independent !== true || review.signed !== true || !safeId(review.reviewerId)) {
-    return unavailable('SECURITY_REVIEW_NOT_INDEPENDENT', null, { schema: PHASE29_SCHEMA, verified: false, claims: { secure: false, private: false, compliant: false, audited: false } });
+    return unavailable('SECURITY_REVIEW_NOT_INDEPENDENT', null, {
+      schema: PHASE29_SCHEMA,
+      verified: false,
+      claims: { secure: false, private: false, compliant: false, audited: false }
+    });
+  }
+  if (operatorId && String(review.reviewerId) === String(operatorId)) {
+    return unavailable('REVIEWER_MUST_NOT_BE_OPERATOR', null, { verified: false });
   }
   const covered = Array.isArray(review.threats) ? review.threats : [];
   const missing = THREATS.filter((item) => !covered.includes(item));
@@ -29,5 +36,21 @@ export function operateAssurance({ review = null, privacy = null, compliance = n
     verified: false,
     operational: false,
     claims: { secure: false, private: false, compliant: false, audited: false }
+  };
+}
+
+export function evaluateAssurancePlane(input = {}) {
+  const assurance = operateAssurance(input);
+  return {
+    phase: 29,
+    schema: PHASE29_SCHEMA,
+    implementation: 'implemented',
+    operational: false,
+    live: false,
+    ready: false,
+    verified: false,
+    claims: assurance.claims || { secure: false, private: false, compliant: false, audited: false },
+    blockers: [assurance.code || (assurance.ok ? 'ASSURANCE_NOT_OPERATIONAL' : 'SECURITY_REVIEW_NOT_INDEPENDENT')],
+    assurance
   };
 }

@@ -9,7 +9,12 @@ export const SANDBOX_STAGES = Object.freeze(['discovery', 'isolation', 'capabili
 
 export function runSandboxMesh({ operator = null, stages = [], now = Date.now() } = {}) {
   if (!operator || operator.available !== true || operator.attested !== true) {
-    return unavailable('SANDBOX_OPERATOR_UNAVAILABLE', null, { schema: PHASE23_SCHEMA, handshake: false, verifiedAgent: false });
+    return unavailable('SANDBOX_OPERATOR_UNAVAILABLE', null, {
+      schema: PHASE23_SCHEMA,
+      handshake: false,
+      verifiedAgent: false,
+      operational: false
+    });
   }
   if (operator.mainnetAccess === true || operator.productionSigner === true || operator.realCustody === true) {
     return fail('SANDBOX_MUST_NOT_TOUCH_PRODUCTION');
@@ -27,6 +32,35 @@ export function runSandboxMesh({ operator = null, stages = [], now = Date.now() 
     stages: [...SANDBOX_STAGES],
     handshake: false,
     verifiedAgent: false,
-    operational: false
+    operational: false,
+    live: false,
+    mainnetBlocked: true
+  };
+}
+
+export function auditSandboxStage({ stage = null } = {}) {
+  if (!stage || !SANDBOX_STAGES.includes(stage.id)) return unavailable('SANDBOX_STAGE_UNKNOWN');
+  if (stage.isolated !== true) return fail('SANDBOX_ISOLATION_FAILED');
+  if (stage.id === 'capability-check' && stage.escalation === true) return fail('SANDBOX_CAPABILITY_ESCALATION');
+  if (stage.id === 'timeout-drill' && stage.timedOut !== true) return unavailable('SANDBOX_TIMEOUT_DRILL_MISSING');
+  if (stage.id === 'cleanup' && stage.cleaned !== true) return unavailable('SANDBOX_CLEANUP_INCOMPLETE');
+  return { ok: true, schema: PHASE23_SCHEMA, stage: stage.id, isolated: true, operational: false };
+}
+
+export function evaluateSandboxMeshPlane(input = {}) {
+  const mesh = runSandboxMesh(input);
+  const audits = (Array.isArray(input.stages) ? input.stages : []).map((stage) => auditSandboxStage({ stage }));
+  const blockers = [mesh.code, ...audits.map((row) => row.code)].filter(Boolean);
+  return {
+    phase: 23,
+    schema: PHASE23_SCHEMA,
+    implementation: 'implemented',
+    operational: false,
+    live: false,
+    ready: false,
+    handshake: false,
+    verifiedAgent: false,
+    blockers: [...new Set(blockers.length ? blockers : ['SANDBOX_OPERATOR_UNAVAILABLE'])],
+    mesh
   };
 }

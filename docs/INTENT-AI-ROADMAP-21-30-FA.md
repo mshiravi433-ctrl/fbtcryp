@@ -4,7 +4,7 @@
 
 ## قانون وضعیت
 
-وجود source و probe به معنی فعال‌سازی عملیاتی یا launch نیست. سه mode اولیه بدون mode چهارم حفظ می‌شوند. Guardian، policy، STOP و evidence واقعی غیرقابل bypass هستند.
+Control plane فعال است (`activateControlPlane`) یعنی ارزیاب‌ها wired شده‌اند. وجود source و probe به معنی فعال‌سازی عملیاتی یا launch نیست. سه mode اولیه بدون mode چهارم حفظ می‌شوند. Guardian، policy، STOP و evidence واقعی غیرقابل bypass هستند.
 
 | فاز | عنوان | خروجی | وضعیت |
 |---:|---|---|---|

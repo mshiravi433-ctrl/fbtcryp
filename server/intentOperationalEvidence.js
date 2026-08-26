@@ -14,6 +14,7 @@ import {
   EVIDENCE_KINDS,
   phase21PublicStatus
 } from '../src/lib/intent-ai/operationalActivation.js';
+import { activateControlPlane } from '../src/lib/intent-ai/controlPlaneActivation.js';
 
 export const PHASE21_STATUS_SCHEMA = 'fbt.intent-ai-phase21-status.v1';
 
@@ -50,6 +51,7 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
     readiness,
     publicStatus: phase21PublicStatus(readiness),
     publicDigest,
+    controlPlane: activateControlPlane({ evidence: injectedEvidence, freeze: true, now }),
     secretsExposed: false
   };
 }
