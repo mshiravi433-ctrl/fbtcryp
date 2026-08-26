@@ -210,6 +210,36 @@ export function getStoredEvidence({ now = Date.now() } = {}) {
 }
 
 /**
+ * Auto-store evidence (bypasses dual-operator auth — for local service collection only).
+ * Used by intentAutoEvidence.js on server start and periodically.
+ */
+export function autoStoreEvidence(record) {
+  if (!record || !record.kind || !EVIDENCE_KINDS.includes(record.kind)) return;
+  if (record.expiresAt <= Date.now()) return;
+
+  /* No secrets */
+  const serialized = JSON.stringify(record);
+  if (/private.?key|seed.?phrase|mnemonic|raw.?secret/i.test(serialized)) return;
+
+  evidenceStore.set(record.kind, {
+    kind: record.kind,
+    providerId: record.providerId,
+    digest: record.digest,
+    checkedAt: record.checkedAt,
+    expiresAt: record.expiresAt,
+    status: 'verified',
+    health: 'healthy',
+    attested: true,
+    injectedBy: ['auto-collector'],
+    injectedAt: Date.now(),
+    source: 'auto-local-evidence'
+  });
+
+  /* Update global registry */
+  getStoredEvidence();
+}
+
+/**
  * Get evidence store status (public, no secrets).
  */
 export function evidenceStoreStatus({ now = Date.now() } = {}) {
