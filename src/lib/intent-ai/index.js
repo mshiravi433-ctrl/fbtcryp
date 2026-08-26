@@ -512,4 +512,119 @@ export {
   launchChecklist
 } from './launchGovernance.js';
 
-export const INTENT_AI_VERSION = 'phase20.specification-contracts.partial.v2';
+export {
+  OPERATIONAL_EVIDENCE_SCHEMA,
+  OPERATIONAL_READINESS_SCHEMA,
+  PHASE21_SCHEMA,
+  EVIDENCE_KINDS,
+  CRITICAL_FAILURE_CODES,
+  normalizeEvidence,
+  verifyCertificateAuthority,
+  verifySandboxOperator,
+  verifySimulator,
+  verifyMonitor,
+  verifyScheduler,
+  verifySmartWalletAndGuardian,
+  verifySigner,
+  verifyProviderHealth,
+  verifyRpcAndContract,
+  verifyAuditIntegrity,
+  verifyBackupRestore,
+  verifyIndependentReview,
+  verifyReproducibleBuild,
+  verifyRollbackDrill,
+  verifySloMeasurement,
+  aggregateOperationalReadiness,
+  phase21PublicStatus
+} from './operationalActivation.js';
+
+export {
+  PHASE22_SCHEMA,
+  operateDurableRegistry,
+  operateCertificateAuthority,
+  revokeCertificate,
+  handshakeWithCertificate,
+  evaluateRegistryCaPlane
+} from './phase22RegistryCaOps.js';
+export {
+  PHASE23_SCHEMA,
+  SANDBOX_STAGES,
+  runSandboxMesh,
+  auditSandboxStage,
+  evaluateSandboxMeshPlane
+} from './phase23SandboxMesh.js';
+export {
+  PHASE24_SCHEMA,
+  operateSimulator,
+  operateMonitor,
+  operateScheduler,
+  interpretQuote,
+  evaluateSimMonitorPlane
+} from './phase24SimMonitorOps.js';
+export {
+  PHASE25_SCHEMA,
+  FEE_CATEGORIES,
+  operateSmartWallet,
+  operateProductionSigner,
+  authorizationFeesPresent,
+  evaluateSignerGuardianPlane
+} from './phase25SignerGuardianOps.js';
+export {
+  PHASE26_SCHEMA,
+  ADAPTERS as VENUE_ADAPTERS,
+  federateVenueHealth,
+  quoteVenueOnly,
+  evaluateVenueFederationPlane
+} from './phase26VenueFederation.js';
+export {
+  PHASE27_SCHEMA,
+  operateRpcQuorum,
+  enforceOnchainPolicy,
+  evaluateRpcPolicyPlane
+} from './phase27RpcPolicyOps.js';
+export {
+  PHASE28_SCHEMA,
+  operateImmutableAudit,
+  operateBackupRestore,
+  evaluateAuditDrPlane
+} from './phase28AuditDrOps.js';
+export {
+  PHASE29_SCHEMA,
+  THREATS,
+  operateAssurance,
+  evaluateAssurancePlane
+} from './phase29AssuranceNetwork.js';
+export {
+  PHASE30_SCHEMA,
+  LAUNCH_BANNER,
+  evaluateLaunchControlPlane,
+  applyLaunchControl,
+  evaluateLaunchPlane
+} from './phase30LaunchControlPlane.js';
+export {
+  CONTROL_PLANE_SCHEMA,
+  activateControlPlane,
+  controlPlaneRow
+} from './controlPlaneActivation.js';
+export { PHASE31_SCHEMA, operateIncidentCommand, evaluateIncidentCommandPlane } from './phase31IncidentCommand.js';
+export { PHASE32_SCHEMA, operateSecretRotation, evaluateSecretRotationPlane } from './phase32SecretRotation.js';
+export { PHASE33_SCHEMA, operateFailover, evaluateFailoverCapacityPlane } from './phase33FailoverCapacity.js';
+export { PHASE34_SCHEMA, operateAbuseLimits, evaluateAbuseRateLimitPlane } from './phase34AbuseRateLimits.js';
+export { PHASE35_SCHEMA, operatePublicDisclosure, evaluatePublicDisclosurePlane } from './phase35PublicDisclosure.js';
+export { PHASE36_SCHEMA, operateResidencyHold, evaluateResidencyHoldPlane } from './phase36ResidencyLegalHold.js';
+export { PHASE37_SCHEMA, operateDependencyAttestation, evaluateDependencyAttestationPlane } from './phase37DependencyAttestation.js';
+export { PHASE38_SCHEMA, operateContinuousVerification, evaluateContinuousVerificationPlane } from './phase38ContinuousVerification.js';
+export { PHASE39_SCHEMA, operateGameDay, evaluateGameDayPlane } from './phase39GameDayRehearsal.js';
+export { PHASE40_SCHEMA, operateSustainment, evaluateSustainmentPlane } from './phase40SustainmentGovernance.js';
+export { PHASE41_SCHEMA, operateReleaseTrain, evaluateReleaseTrainPlane } from './phase41ReleaseTrain.js';
+export { PHASE42_SCHEMA, operateBreakGlass, evaluateBreakGlassPlane } from './phase42BreakGlassSupport.js';
+export { PHASE43_SCHEMA, operateCostKillSpend, evaluateCostKillSpendPlane } from './phase43CostKillSpend.js';
+export { PHASE44_SCHEMA, operateWorkforceAccess, evaluateWorkforceAccessPlane } from './phase44WorkforceAccess.js';
+export { PHASE45_SCHEMA, operateTelemetryIntegrity, evaluateTelemetryIntegrityPlane } from './phase45TelemetryIntegrity.js';
+export { PHASE46_SCHEMA, operateModelSupplyChain, evaluateModelSupplyChainPlane } from './phase46ModelSupplyChain.js';
+export { PHASE47_SCHEMA, operateAgentFleet, evaluateAgentFleetPlane } from './phase47AgentFleetGov.js';
+export { PHASE48_SCHEMA, operateCapitalBond, evaluateCapitalBondPlane } from './phase48CapitalBondOps.js';
+export { PHASE49_SCHEMA, operateRegulatoryReporting, evaluateRegulatoryReportingPlane } from './phase49RegulatoryReporting.js';
+export { PHASE50_SCHEMA, operateProgramControl, evaluateProgramControlPlane } from './phase50ProgramControl.js';
+
+export const INTENT_AI_VERSION = 'phase50.program-control.activated.fail-closed.v1';

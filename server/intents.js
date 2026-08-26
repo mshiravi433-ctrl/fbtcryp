@@ -146,6 +146,7 @@ export const INTENT_CAPABILITIES = Object.freeze({
     activation: '/api/intents/v1/activation',
     phaseStatus: '/api/intents/v1/phase-status',
     publicStatus: '/api/intents/v1/public-status',
+    operationalActivation: '/api/intents/v1/phase-status',
     externalAgents: '/api/intents/v1/external-agents',
     /* Phase 5 — confidential intent transport. */
     intentCommitments: '/api/intents/v1/confidential/commit',

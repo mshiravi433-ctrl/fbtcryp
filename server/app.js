@@ -1352,6 +1352,7 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
     generatedAt: status.generatedAt,
     status: 'unavailable',
     launchAllowed: false,
+    operationalActivation: status.operationalActivation,
     phases: status.phases.map((phase) => ({
       phase: phase.phase,
       id: phase.id,
@@ -1362,7 +1363,14 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
       dataStatus: phase.dataStatus,
       blockers: phase.blockers
     })),
-    claims: { deployed: false, reproducible: false, publicVerification: false },
+    claims: {
+      deployed: false,
+      reproducible: false,
+      publicVerification: false,
+      production: false,
+      executionActivated: false,
+      rawCredentialsAllowed: false
+    },
     sourceOfTruth: status.sourceOfTruth
   });
 });
