@@ -627,4 +627,155 @@ export { PHASE48_SCHEMA, operateCapitalBond, evaluateCapitalBondPlane } from './
 export { PHASE49_SCHEMA, operateRegulatoryReporting, evaluateRegulatoryReportingPlane } from './phase49RegulatoryReporting.js';
 export { PHASE50_SCHEMA, operateProgramControl, evaluateProgramControlPlane } from './phase50ProgramControl.js';
 
-export const INTENT_AI_VERSION = 'phase50.program-control.activated.fail-closed.v1';
+// ── Spec 65 gap-fill: contracts for every incomplete specification item ────
+// These are honest contracts: they fill specification gaps without claiming
+// operational activation. Evidence stays required; nothing here is live.
+export {
+  GOAL_NEGOTIATION_SCHEMA,
+  GOAL_NEGOTIATION_OPTIONS,
+  negotiateGoal,
+  applyGoalChoice,
+  negotiationGrantsExecution
+} from './goalNegotiation.js';
+export {
+  COST_TO_GOAL_SCHEMA,
+  NET_OUTCOME_SCHEMA,
+  COST_CLASSES,
+  computeCostToGoal,
+  predictNetOutcome
+} from './costToGoal.js';
+export {
+  WHY_DECISION_SCHEMA,
+  WHY_PERMISSION_SCHEMA,
+  PERMISSION_REQUESTING_CAPABILITIES,
+  whyThisDecision,
+  whyThisPermission
+} from './whyTransparency.js';
+export {
+  SHADOW_RUN_SCHEMA,
+  SHADOW_RUN_STATUSES,
+  createShadowRun,
+  advanceShadowRun,
+  paperToRealRequirements
+} from './shadowExecution.js';
+export {
+  CAPABILITY_ACTIVATION_SCHEMA,
+  CAPABILITY_MARKETPLACE_SCHEMA,
+  ACTIVATION_STAGES,
+  requestCapabilityActivation,
+  discoverForCapability
+} from './capabilityActivation.js';
+export {
+  AUTO_REVOKE_SCHEMA,
+  REVOCABLE_GRANT_KINDS,
+  sweepAutoRevoke,
+  assertBoundedGrant,
+  revokeGrantNow,
+  reapplyGrantAfterControl
+} from './autoRevoke.js';
+export {
+  SPECIALIST_AGENTS_SCHEMA,
+  SPECIALIST_ROLES,
+  SPECIALIST_SPECS,
+  IMPORTANT_TRADE_MIN_ROLES,
+  runSpecialist,
+  assertCouncilQuorum,
+  tallyVotes
+} from './specialistAgents.js';
+export {
+  MARKET_REGIME_SCHEMA,
+  REGIME_LABELS,
+  detectMarketRegime
+} from './marketRegime.js';
+export {
+  CONFIDENCE_DECAY_SCHEMA,
+  DEFAULT_HALF_LIFE_HRS,
+  DEFAULT_REVIEW_THRESHOLD,
+  decayConfidence,
+  applyDecayToEvidence
+} from './confidenceDecay.js';
+export {
+  EVENT_RISK_SCHEMA,
+  EVENT_TYPES as SPEC65_EVENT_TYPES,
+  SOURCE_CLASSES,
+  assessEventRisk
+} from './eventRiskAdapter.js';
+export {
+  SMART_MONEY_SCHEMA,
+  WHALE_EVENT_KINDS,
+  smartMoneyEvidence
+} from './smartMoneyAdapter.js';
+export {
+  PARALLEL_STRATEGIES_SCHEMA,
+  allocateParallelCapital
+} from './parallelStrategies.js';
+export {
+  GOAL_PROGRESS_SCHEMA,
+  GOAL_TREE_SCHEMA,
+  goalProgress,
+  buildGoalTree
+} from './goalProgress.js';
+export {
+  AGENT_SUGGESTIONS_SCHEMA,
+  INTENT_OPTIMIZER_SCHEMA,
+  suggestIntentOptions,
+  optimizeIntent
+} from './intentOptimizer.js';
+export {
+  CHAT_REPLAY_SCHEMA,
+  REPLAY_EVENT_TYPES,
+  buildSessionReplay
+} from './chatReplay.js';
+export {
+  AGENT_REPUTATION_SCHEMA,
+  AGENT_LEADERBOARD_SCHEMA,
+  AGENT_APPRECIATION_SCHEMA,
+  REPUTATION_CATEGORIES,
+  MIN_REPUTATION_SAMPLE_SIZE,
+  buildAgentReputation,
+  agentLeaderboard,
+  createAgentAppreciation
+} from './agentReputation.js';
+export {
+  PERSONALITY_SCHEMA,
+  AGENT_AVATAR_SCHEMA,
+  PERSONALITY_TONES,
+  applyPersonality,
+  personalityCannotChangeRisk,
+  agentAvatar
+} from './personalityLayer.js';
+export {
+  AGENT_PROTOCOL_SCHEMA,
+  AGENT_CHAIN_SCHEMA,
+  ENVELOPE_FIELDS,
+  CHAIN_LINKS,
+  createAgentEnvelope,
+  buildAgentChain,
+  advanceAgentChain
+} from './agentProtocol.js';
+export {
+  AGENT_PAYMENT_SCHEMA,
+  createPaymentPlan,
+  requestAgentWithdrawal,
+  settleFeeWithEvidence
+} from './agentPayment.js';
+export { AGENT_LEARNING_EXCHANGE_SCHEMA, createLearningExchange } from './agentLearningExchange.js';
+export {
+  DISASTER_MODE_SCHEMA,
+  SMART_PAUSE_SCHEMA,
+  DISASTER_TRIGGERS,
+  evaluateDisasterMode,
+  smartPause
+} from './disasterMode.js';
+export {
+  ROUTE_SWITCH_SCHEMA,
+  MATERIAL_DELTA_DEFAULTS,
+  evaluateRouteSwitch
+} from './dynamicRouteSwitch.js';
+export {
+  scanSummary,
+  assertScanBeforeStart
+} from './capabilityScanner.js';
+export { createNonBypassableControls } from './phaseBoundary.js';
+
+export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';

@@ -50,6 +50,11 @@ const CATALOG_ROWS = [
   ['ai-prediction', 'AI Prediction', true, 'Predictions are uncertain evidence and never a promise.'],
   ['mev-protection', 'MEV Protection', true, 'Protection is available only when transport actually proves it.'],
   ['gas-optimization', 'Gas Optimization', true, 'Gas estimates must be sourced; missing data remains null.'],
+  ['risk-engine', 'Risk Engine', true, 'Bounded risk evaluation runs before authorization; it never executes.'],
+  ['rwa', 'RWA', false, 'Real-world assets require an external adapter and jurisdiction evidence; none is claimed.'],
+  ['payment', 'Payment', false, 'Payments require an external payment adapter with settlement evidence.'],
+  ['p2p', 'P2P', false, 'P2P trades require the P2P adapter and its own dispute/settlement evidence.'],
+  ['shop', 'Shop', false, 'Shop checkout requires the commerce adapter with merchant settlement evidence.'],
   ['external-ai-agents', 'External AI Agents', true, 'External agents require verification, scope and user opt-in.']
 ];
 
@@ -226,4 +231,54 @@ export function replanAfterCapabilityDecline({ strategies = [], declinedCapabili
 export function capabilityById(id) {
   const row = catalogById.get(String(id));
   return row ? { ...row } : null;
+}
+
+/**
+ * Spec 65 item 1 — honest pre-flight summary: how many capabilities exist,
+ * how many are relevant to the stated intent, how many are optional, and how
+ * many actually have evidence. A scan is a read-only discovery step; it never
+ * activates anything.
+ */
+export function scanSummary(scan, { now = Date.now() } = {}) {
+  if (!scan || scan.schema !== CAPABILITY_SCANNER_SCHEMA || !Array.isArray(scan.capabilities)) {
+    return {
+      ok: false,
+      schema: CAPABILITY_SCANNER_SCHEMA,
+      status: 'unavailable',
+      code: 'SCAN_REQUIRED',
+      total: 0, relevant: 0, optional: 0, available: 0, unavailable: 0, evidenced: 0,
+      scanBeforeStart: true,
+      scanIsNotActivation: true,
+      summarizedAt: now
+    };
+  }
+  const rows = scan.capabilities;
+  const relevant = rows.filter((row) => row.intentRelevant === true);
+  const available = rows.filter((row) => row.status === 'available');
+  return {
+    ok: true,
+    schema: CAPABILITY_SCANNER_SCHEMA,
+    status: 'scan-only',
+    total: rows.length,
+    relevant: relevant.length,
+    relevantIds: relevant.map((row) => row.id),
+    optional: rows.filter((row) => row.optional === true).length,
+    available: available.length,
+    unavailable: rows.filter((row) => row.status === 'unavailable' || row.status === 'not-implemented').length,
+    conditional: rows.filter((row) => row.status === 'conditional' || row.status === 'configured-not-operational').length,
+    evidenced: rows.filter((row) => row.scoreStatus === 'observed').length,
+    scanBeforeStart: true,
+    scanIsNotActivation: true,
+    summarizedAt: now
+  };
+}
+
+/**
+ * Spec 65 item 1 — a scan must exist before an intent starts, and it must be
+ * a real scan (not an empty object). Returns BLOCK when there is no scan.
+ */
+export function assertScanBeforeStart(scan) {
+  const summary = scanSummary(scan);
+  if (!summary.ok) return { ok: false, decision: 'BLOCK', code: 'PRE_START_SCAN_REQUIRED', failClosed: true, scanIsNotActivation: true };
+  return { ok: true, decision: 'SCAN_ONLY', summary, scanIsNotActivation: true, executionAuthorized: false };
 }
