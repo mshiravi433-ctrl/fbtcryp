@@ -10441,3 +10441,125 @@ body { overflow-x: clip; }
   margin-top: 5px;
   color: var(--up);
 }
+
+/* ==========================================================================
+   CONTROL GEOMETRY — shared, compact and direction-safe
+   ========================================================================== */
+
+/* Header controls share one visual box. The generic 44px button floor remains
+   in place for ordinary controls; these two compact controls are kept equal
+   so the medal and settings glyph sit on the same optical baseline. */
+.top-bar .header-actions > .rank-chip,
+.top-bar .header-actions > .icon-btn {
+  inline-size: 32px;
+  block-size: 32px;
+  min-inline-size: 32px;
+  min-block-size: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  border-radius: 9px;
+  line-height: 1;
+}
+.top-bar .header-actions > .rank-chip { font-size: 14px; }
+.top-bar .header-actions > .icon-btn svg,
+.top-bar .header-actions > .icon-btn > * { inline-size: 16px; block-size: 16px; }
+
+/* All application switches use the same 44×24 track and a 19px thumb.
+   `button.switch` intentionally outranks the global 44px tap-target rule: a
+   44px-high switch is the source of the stretched/egg-shaped rendering.
+   The button still sits in a 44px-high settings row, preserving the row's
+   comfortable touch target. */
+button.switch {
+  inline-size: 44px;
+  min-inline-size: 44px;
+  max-inline-size: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  block-size: 24px;
+  min-block-size: 24px;
+  max-block-size: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  flex: 0 0 44px;
+  padding: 0;
+  border-radius: 9px;
+  overflow: visible;
+}
+button.switch .switch-knob {
+  inline-size: 19px;
+  block-size: 19px;
+  top: 3px;
+  inset-inline-start: 3px;
+  border-radius: 7px;
+}
+button.switch:focus-visible {
+  outline: 2px solid var(--ink-cyan, var(--rgb-1));
+  outline-offset: 3px;
+}
+button.switch:disabled { cursor: not-allowed; opacity: .55; }
+
+/* Settings uses compact cards and a restrained palette. The options remain
+   visually small while the surrounding row remains the touch target. */
+.settings-hero {
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0,229,255,0.08), rgba(124,77,255,0.10) 60%, rgba(255,45,149,0.06));
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.settings-avatar {
+  inline-size: 42px;
+  block-size: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 900;
+  font-size: 18px;
+  box-shadow: 0 8px 18px rgba(0,229,255,0.18);
+  flex: 0 0 42px;
+}
+button.settings-quick-action {
+  inline-size: 32px;
+  min-inline-size: 32px;
+  min-width: 32px;
+  block-size: 32px;
+  min-block-size: 32px;
+  min-height: 32px;
+  max-width: 32px;
+  max-height: 32px;
+  padding: 0;
+  border-radius: 9px;
+}
+.settings-accent-picker { align-items: center; flex-wrap: wrap; }
+.settings-accent-option {
+  inline-size: 30px !important;
+  min-inline-size: 30px !important;
+  block-size: 30px !important;
+  min-block-size: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  max-width: 30px !important;
+  max-height: 30px !important;
+  flex: 0 0 30px;
+  padding: 0;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+}
+.settings-accent-option:focus-visible {
+  outline: 2px solid var(--ink-cyan, var(--rgb-1));
+  outline-offset: 2px;
+}
+
+@media (max-width: 360px) {
+  .settings-hero { padding: 12px; }
+  .settings-accent-picker { gap: 4px !important; }
+  .settings-accent-option {
+    inline-size: 27px !important;
+    min-inline-size: 27px !important;
+    flex-basis: 27px;
+  }
+}

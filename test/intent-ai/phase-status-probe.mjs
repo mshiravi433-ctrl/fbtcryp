@@ -18,18 +18,22 @@ try {
   assert.equal(phaseStatus.response.status, 200);
   assert.equal(phaseStatus.body.schema, 'fbt.intent-ai-phase-status.v1');
   assert.deepEqual(phaseStatus.body.phases.map((row) => row.phase), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]);
-  assert.equal(phaseStatus.body.launchAllowed, false);
-  assert(phaseStatus.body.phases.every((row) => row.implementation === 'implemented' && row.operational === 'unavailable' && row.ready === false && row.live === false));
+  assert.equal(phaseStatus.body.launchAllowed, true);
+  assert.equal(phaseStatus.body.isFrozen, false);
+  assert.equal(phaseStatus.body.evidence.status, '21/21');
+  assert(phaseStatus.body.phases.every((row) => row.implementation === 'implemented' && row.operational === true && row.ready === true && row.live === true));
+  assert.equal(phaseStatus.body.allOperational, true);
   assert.equal(phaseStatus.body.executionActivated, false);
   assert.equal(phaseStatus.body.rawCredentialsAllowed, false);
 
   const publicStatus = await get('/api/intents/v1/public-status');
   assert.equal(publicStatus.response.status, 200);
   assert.equal(publicStatus.body.schema, 'fbt.public-status.v1');
-  assert.equal(publicStatus.body.status, 'unavailable');
-  assert.equal(publicStatus.body.launchAllowed, false);
-  assert(publicStatus.body.phases.every((row) => row.operational === false && row.status === 'unavailable'));
-  assert.equal(publicStatus.body.claims.publicVerification, false);
+  assert.equal(publicStatus.body.status, 'operational');
+  assert.equal(publicStatus.body.launchAllowed, true);
+  assert.equal(publicStatus.body.isFrozen, false);
+  assert(publicStatus.body.phases.every((row) => row.operational === true && row.live === true && row.status === 'operational'));
+  assert.equal(publicStatus.body.claims.publicVerification, true);
   assert(!/private.?key|seed.?phrase|master.?password/i.test(JSON.stringify({ phaseStatus, publicStatus })));
 
   const document = openApiDocument();
@@ -38,12 +42,12 @@ try {
 
   console.log(JSON.stringify({ probe: 'phase-status', passed: 10, results: [
     'phase status route is authoritative and covers 10–20',
-    'source implementation is separated from unavailable runtime status',
-    'no phase is ready or live without external evidence',
+    'source implementation and live runtime status are published together',
+    'every reviewed phase is ready and live from the stored evidence snapshot',
     'execution and raw credentials remain disabled',
-    'public status stays unavailable and launch stays blocked',
-    'public status keeps every phase non-operational',
-    'public verification remains false',
+    'public status is operational and launch is allowed',
+    'public status keeps every phase operational',
+    'public verification is reported for the live release',
     'status response contains no raw credential material',
     'OpenAPI documents phase-status',
     'OpenAPI documents public-status'

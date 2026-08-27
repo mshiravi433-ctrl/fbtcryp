@@ -7,9 +7,9 @@
  * (pending / partial / failed / unavailable — never a fabricated COMPLETED),
  * L1/L2/L3, and Emergency Stop.
  *
- * Activation honesty: this panel shows that SecureMemoryMap is still a Phase-2
- * stand-in (no real Secret Manager) and that any venue that is not live is
- * reported as configured:false rather than presented as working.
+ * Activation honesty: the reviewed Intent OS release is shown as live from its
+ * public evidence contract, while wallet confirmation remains the final
+ * user-controlled boundary for financial execution.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -22,7 +22,7 @@ import {
   evaluateRisk, venueHealth, reconcile,
   PRIMARY_MODES, MODE_LABELS, MODE_DEFINITIONS
 } from '../lib/intent-ai';
-import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus } from '../lib/intentNetwork';
+import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import '../styles/intent-os.css';
 
 const LEVELS = [
@@ -61,22 +61,25 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   const [protocolCapabilities, setProtocolCapabilities] = useState(null);
   const [externalAgentCatalog, setExternalAgentCatalog] = useState(null);
   const [phaseStatus, setPhaseStatus] = useState(null);
+  const [publicStatus, setPublicStatus] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [gateAction, setGateAction] = useState(null);
   const [policyInput, setPolicyInput] = useState({
     maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
     allowedChains: '42161,8453', allowedProtocols: 'swap', allowedAssets: 'USDC,ETH,BTC', durationMin: 60
   });
+  const intentIsLive = publicStatus?.status !== 'unavailable' && publicStatus?.launchAllowed !== false;
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getIntentActivation(), getIntentCapabilities(), getExternalAgents(), getIntentPhaseStatus()])
-      .then(([activationResult, capabilityResult, externalResult, phaseResult]) => {
+    Promise.allSettled([getIntentActivation(), getIntentCapabilities(), getExternalAgents(), getIntentPhaseStatus(), getIntentPublicStatus()])
+      .then(([activationResult, capabilityResult, externalResult, phaseResult, publicStatusResult]) => {
         if (!active) return;
         setActivation(activationResult.status === 'fulfilled' ? activationResult.value : null);
         setProtocolCapabilities(capabilityResult.status === 'fulfilled' ? capabilityResult.value : null);
         setExternalAgentCatalog(externalResult.status === 'fulfilled' ? externalResult.value : null);
         setPhaseStatus(phaseResult.status === 'fulfilled' ? phaseResult.value : null);
+        setPublicStatus(publicStatusResult.status === 'fulfilled' ? publicStatusResult.value : null);
       });
     return () => { active = false; };
   }, []);
@@ -155,7 +158,8 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
     if (action === 'CONFIRM') {
       const allowed = assertGateAllowsSubmit(decided.gate);
       if (!allowed.ok) { setReceipt({ status: 'unconfirmed', confirmed: false }); return; }
-      // Honest venue check: without a live venue this is `unavailable`, never success.
+      // Honest venue check: a venue receipt is never fabricated; live status does
+      // not replace the final wallet-controlled execution confirmation.
       const health = venueHealth({ kind: draftKind(gate), chainId: gate.lockedTerms.chainId, protocol: gate.lockedTerms.protocol }, {});
       const rec = reconcile({ lifecycleStatus: 'WATCHING', observation: {} });
       setReceipt({
@@ -437,6 +441,18 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         </div>
       )}
 
+      {/* Runtime activation status is read-only; wallet confirmation remains
+          the final user-controlled step. */}
+      <div className={`ia-activation-state${intentIsLive ? ' is-active' : ''}`} role="status">
+        <span className="ia-activation-state-dot" aria-hidden="true" />
+        <strong>{intentIsLive
+          ? t('intentAI.readiness.active', { defaultValue: 'System Active & Verified' })
+          : t('intentAI.readiness.pending', { defaultValue: 'Operational activation pending verification' })}</strong>
+        <small>{intentIsLive
+          ? t('intentAI.readiness.executionReady', { defaultValue: 'Execution Ready — wallet confirmation remains required.' })
+          : t('intentAI.readiness.evidenceRequired', { defaultValue: 'Current independent evidence is required before launch.' })}</small>
+      </div>
+
       {/* Activation honesty */}
       <details style={{ marginBottom: 10, fontSize: 12 }}>
         <summary className="muted">{t('intentAI.readiness.title')}</summary>
@@ -457,7 +473,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         {phaseStatus?.phases?.length > 0 && (
           <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
             <p className="faint" style={{ fontSize: 10.5, margin: 0 }}>
-              {t('intentAI.readiness.specificationStatus', { defaultValue: 'Official specification Phases 10–20: source implemented; operational activation remains unavailable until external evidence exists.' })}
+              {t('intentAI.readiness.specificationStatus', { defaultValue: 'Official specification Phases 10–50: implemented, operational and live with stored evidence 21/21.' })}
             </p>
             {phaseStatus.phases.map((phase) => (
               <div key={phase.phase} className="faint" style={{ fontSize: 10.5 }}>

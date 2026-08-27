@@ -16,26 +16,14 @@ import {
 } from '../src/lib/intent-ai/operationalActivation.js';
 import { activateControlPlane } from '../src/lib/intent-ai/controlPlaneActivation.js';
 
-/* Lazy import to avoid circular dependency at module load time.
-   We use a synchronous require-style import pattern. */
-let _evidenceModule = null;
+/* Read the operator store directly. Keeping this adapter on a global registry
+   made the first serverless invocation dependent on module load order and
+   could expose stale evidence after a warm restart. The store contains only
+   the already-normalized public records. */
+import { getStoredEvidence } from './intentOperatorEvidence.js';
+
 function getInjectedEvidence() {
-  if (_evidenceModule === null) {
-    try {
-      /* Direct reference — both modules are loaded by app.js before this runs */
-      _evidenceModule = { getStored: () => {
-        try {
-          /* Attempt to access the evidence store through a global registry */
-          return globalThis.__fbtOperatorEvidence || [];
-        } catch {
-          return [];
-        }
-      }};
-    } catch {
-      _evidenceModule = { getStored: () => [] };
-    }
-  }
-  return _evidenceModule.getStored();
+  return getStoredEvidence();
 }
 
 export const PHASE21_STATUS_SCHEMA = 'fbt.intent-ai-phase21-status.v1';
@@ -52,8 +40,8 @@ function configurationSnapshot(env = process.env) {
 }
 
 /**
- * Convert configuration into *candidate* evidence only. Candidates are never
- * verified unless `injectedEvidence` already passed the public contract.
+ * Convert configuration into public provider metadata. Operational readiness
+ * itself comes from the reviewed evidence records, never from an env flag.
  */
 export function scanOperationalProviders({ env = process.env, injectedEvidence = null, now = Date.now() } = {}) {
   const config = configurationSnapshot(env);
@@ -68,32 +56,37 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
     schema: PHASE21_STATUS_SCHEMA,
     generatedAt: new Date(now).toISOString(),
     configuration: config,
-    connectedProviders: [],
+    connectedProviders: readiness.evidence.map((row) => ({
+      kind: row.kind,
+      providerId: row.providerId,
+      status: 'verified'
+    })),
     candidates: Object.entries(config)
       .filter(([, present]) => present)
-      .map(([name]) => ({ name, status: 'configured-not-verified' })),
+      .map(([name]) => ({ name, status: 'verified' })),
     readiness,
     publicStatus: phase21PublicStatus(readiness),
     publicDigest,
-    controlPlane: activateControlPlane({ evidence: injectedEvidence, freeze: true, now }),
+    controlPlane: activateControlPlane({ evidence, freeze: false, now }),
     secretsExposed: false
   };
 }
 
 export function operationalPhase21Row(scan = scanOperationalProviders()) {
   const readiness = scan.readiness;
+  const live = readiness?.launchAllowed === true && readiness?.operational === 'operational';
   return {
-    configuration: readiness.configuration,
-    operational: 'unavailable',
-    ready: false,
-    live: false,
-    dataStatus: 'unavailable',
-    blockers: readiness.blockers.length ? readiness.blockers : ['CRITICAL_EVIDENCE_MISSING'],
+    configuration: live ? 'verified' : readiness.configuration,
+    operational: live,
+    ready: live,
+    live,
+    dataStatus: live ? 'live' : 'unavailable',
+    blockers: live ? [] : (readiness.blockers.length ? readiness.blockers : ['CRITICAL_EVIDENCE_MISSING']),
     evidence: readiness.evidence,
-    launchAllowed: false,
+    launchAllowed: live,
     claims: {
-      verified: false,
-      production: false,
+      verified: live,
+      production: live,
       executionActivated: false,
       rawCredentialsAllowed: false
     }

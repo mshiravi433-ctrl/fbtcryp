@@ -24,7 +24,7 @@ import { motion } from 'framer-motion';
  * track. Travel has to follow the writing direction — which is exactly the
  * kind of correction that gets dropped when a component is duplicated by hand.
  */
-export default function Switch({ on, onChange, label }) {
+export default function Switch({ on, onChange, label, disabled = false }) {
   const rtl = typeof document !== 'undefined'
     && document.documentElement.getAttribute('dir') === 'rtl';
   const travel = rtl ? -19 : 19;
@@ -32,11 +32,12 @@ export default function Switch({ on, onChange, label }) {
   return (
     <button
       className="switch"
-      data-on={on}
+      data-on={Boolean(on)}
       onClick={onChange}
+      disabled={disabled}
       type="button"
       role="switch"
-      aria-checked={on}
+      aria-checked={Boolean(on)}
       aria-label={label}
     >
       <motion.span

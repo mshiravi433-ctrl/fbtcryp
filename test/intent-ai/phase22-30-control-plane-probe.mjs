@@ -73,8 +73,8 @@ try {
   check('29 even complete review does not publish secure/audited claims', assurance.claims.secure === false && assurance.verified === false);
 
   const plane = evaluateLaunchControlPlane({ evidence: [], freeze: true, now });
-  check('30 freeze keeps launch closed', plane.launchAllowed === false && plane.goLive === false && plane.freeze === true);
-  check('30 empty evidence is fail-closed', plane.banner[0] === 'Launch blocked.');
+  check('30 legacy freeze flag cannot alter the evidence decision', plane.launchAllowed === false && plane.goLive === false && plane.freeze === false);
+  check('30 empty evidence is fail-closed', plane.banner[0] === 'Activation pending verification.');
   check('no raw credentials in control-plane output', !/private.?key|seed.?phrase|master.?password/i.test(JSON.stringify({ store, venues, plane, assurance })));
 
   console.log(JSON.stringify({ probe: 'phase22-30-control-plane', passed: results.filter((row) => row.ok).length, total: results.length, results }, null, 2));

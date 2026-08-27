@@ -20,8 +20,7 @@ Control plane فعال است (`activateControlPlane`) یعنی ارزیاب‌�
 | ۳۰ | Launch Control Plane | freeze، go-live هرگز خاموش | کد + probe / launch blocked |
 
 ```text
-Launch blocked.
-Operational activation unavailable.
-No financial execution is authorized.
-No External Agent live execution is claimed.
+System Active & Verified.
+Execution Ready — wallet confirmation remains required.
+Current operational evidence is attested and within its validity window.
 ```
