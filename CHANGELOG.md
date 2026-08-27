@@ -1,3 +1,43 @@
+## Unreleased — Intent OS Arc G (phases 85-89): scale and globalisation
+
+- **85 — multi-region edge, product level.** `regionalEdge.js` measures the
+  latency the user actually experiences and reports percentiles from real
+  samples. Fewer than five fresh samples is "unknown", never a comforting
+  default; a slow or erroring region is drained; a failover is announced to the
+  user with its reason instead of happening silently; and zero healthy regions
+  is an honest "no region available".
+- **86 — parser language parity.** The UI shipped twelve languages while the
+  intent box understood three. `parserLocales.js` canonicalises an utterance in
+  any of the twelve into the vocabulary `intentParser.js` already knows:
+  Persian, Arabic-Indic and Devanagari digits become ASCII, action verbs, chain
+  names and connectors are mapped per language, and every substitution is
+  recorded so an audit can see nothing was invented. A language with no lexicon
+  hands over to the guided flow rather than guessing an English word out of a
+  foreign sentence. The probe asserts each of the twelve separately.
+- **87 — regional compliance gate.** `regionalCompliance.js` gates features by
+  region and wires that to the phase-36 legal hold. An unknown region gets the
+  STRICTEST policy, a legal hold overrides every allow and is explained rather
+  than hidden behind a disabled button, the availability map is complete and
+  user-visible, and `assertGateOnlyRestricts()` proves geo-gating can only
+  subtract features, never grant one.
+- **88 — honest fiat ramp boundary.** `fiatRampBoundary.js` detects a fiat
+  request — card, wire, IBAN, "cash out", a fiat currency symbol — and answers
+  plainly that this app only swaps crypto you already hold, offering what we DO
+  support instead of a dead end. Routes that need a ramp are removed, a
+  third-party provider is only shown when explicitly configured over https and
+  is labelled as somebody else's service, and `assertNoRampPromise()` blocks
+  any copy that implies we touch a bank account.
+- **89 — chaos testing for the intent plane.** `intentChaos.js` injects ten
+  faults — RPC down, dead feed, disconnected wallet, quote timeout, missing
+  receipt, revoked session key, corrupt storage and more — and demands exactly
+  one outcome from each: honest-unavailable. A crash, a fabricated COMPLETED
+  receipt, an invented price, a silent authorization or an untranslated message
+  all fail the drill, one failure fails the whole drill, and a partial run is
+  never reported as a pass.
+- Probes `phase85`-`phase89` (224 checks) cover measured latency, all twelve
+  parser languages, unknown-region strictness, the ramp refusal and every fault
+  drill; en/fa/ar copy added for every new string.
+
 ## Unreleased — Intent OS Arc D (phases 69-74): the agent ecosystem at scale
 
 - **69 — agent protocol v2.** `agentHandshake.js` replaces "we list this agent"

@@ -5600,6 +5600,44 @@
       "tight": "Demand is higher than the proven supply.",
       "balanced": "Supply and demand are roughly balanced.",
       "ample": "There is more proven supply than demand."
+    },
+    "edge": {
+      "serving": "Served from {{region}} ({{ms}} ms).",
+      "healthy": "The {{region}} edge is responding normally.",
+      "slow": "The {{region}} edge is slow right now ({{ms}} ms).",
+      "latencyUnknown": "Not enough requests yet to report a speed.",
+      "failover": "You were moved from {{from}} to {{to}} to keep things working.",
+      "drained": "The {{region}} edge was taken out of rotation.",
+      "noRegion": "No edge region is healthy right now."
+    },
+    "parser": {
+      "localeParity": "Your language is fully supported in the intent box.",
+      "localeGap": "The intent box does not yet understand every supported language.",
+      "localeUnsupported": "The intent box does not understand this language yet. Use the guided steps instead.",
+      "guidedFallback": "Let us go step by step instead."
+    },
+    "compliance": {
+      "mapTitle": "What is available in your region",
+      "regionUnknown": "Your region could not be determined, so the strictest rules apply.",
+      "available": "Available here.",
+      "restricted": "Available here with an extra confirmation.",
+      "blocked": "Not available in your region.",
+      "legalHold": "Not available right now for legal reasons.",
+      "unknownFeature": "This feature is not recognised."
+    },
+    "ramp": {
+      "noOnramp": "We cannot buy crypto with a bank card or bank transfer. This app only swaps crypto you already hold.",
+      "noOfframp": "We cannot send money to a bank account. This app only swaps crypto you already hold.",
+      "alternative": "You can swap between the tokens already in your wallet.",
+      "thirdPartyDisclaimer": "This is a separate company. We do not operate it and cannot support it.",
+      "routesRemoved": "Some routes were hidden because they need a service we do not provide."
+    },
+    "chaos": {
+      "passed": "The {{fault}} drill behaved honestly.",
+      "failed": "The {{fault}} drill did not behave honestly.",
+      "drillPassed": "Every fault drill behaved honestly.",
+      "drillFailed": "{{failed}} drills failed and {{untested}} were not run.",
+      "unavailable": "This is unavailable right now. Nothing was sent."
     }
   }
 }

@@ -903,6 +903,28 @@ export {
   revokeAccess, revokeEverything, assertKeyUsable, applyRevocation, assertNothingSurvives
 } from './accessRecovery.js';
 
+/* Arc G — scale and globalisation (phases 85-89) */
+export {
+  EDGE_SCHEMA, REGIONS, MIN_LATENCY_SAMPLES, SLOW_P95_MS, SAMPLE_MAX_AGE_MS,
+  measureRegion, selectRegion, recordFailover, drainRegion, assertEdgeHonest
+} from './regionalEdge.js';
+export {
+  PARSER_LOCALE_SCHEMA, SUPPORTED_LOCALES, normalizeDigits, isLocaleSupported,
+  canonicalizeUtterance, parseLocalizedIntent, localeCoverage, assertNoSilentFallback
+} from './parserLocales.js';
+export {
+  COMPLIANCE_SCHEMA as REGIONAL_COMPLIANCE_SCHEMA, FEATURE_STATES, GATED_FEATURES, REGION_POLICY,
+  featureState, legalHoldCovers, availabilityMap, assertFeaturePermitted, assertGateOnlyRestricts
+} from './regionalCompliance.js';
+export {
+  RAMP_SCHEMA, RAMP_SUPPORTED, FIAT_CURRENCIES, detectFiatIntent, fiatBoundaryResponse,
+  filterMisleadingRoutes, assertNoRampPromise
+} from './fiatRampBoundary.js';
+export {
+  CHAOS_SCHEMA, FAULTS, REQUIRED_BEHAVIOUR, injectFault, runChaosDrill,
+  honestUnavailable, assertDrillHonest
+} from './intentChaos.js';
+
 /* Arc D — agent ecosystem at scale (phases 69-74) */
 export {
   HANDSHAKE_SCHEMA, PROTOCOL_VERSIONS, MIN_PROTOCOL_VERSION, HANDSHAKE_TTL_MS,
