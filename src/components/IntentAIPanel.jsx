@@ -39,7 +39,13 @@ import {
   goalProgress,
   PRIMARY_MODES, MODE_LABELS, MODE_DEFINITIONS,
   INTENT_LIMITS, MAX_GOAL_DURATION_HRS,
-  FLOW_CHAIN_SUGGESTIONS, FLOW_TASK_SUGGESTIONS, FLOW_TOOL_SUGGESTIONS
+  FLOW_CHAIN_SUGGESTIONS, FLOW_TASK_SUGGESTIONS, FLOW_TOOL_SUGGESTIONS,
+  /* Phase 90 — the fee is on the preview and on the receipt, or nothing runs. */
+  computeFee, attachFeeToReceipt,
+  /* Phase 94 — offline is a waiting room, never an outbox. */
+  enqueueIntent, offlineStatus,
+  /* Phase 88 — a swap is not a ramp; say so before anything is drafted. */
+  detectFiatIntent, fiatBoundaryResponse
 } from '../lib/intent-ai';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
@@ -156,6 +162,16 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
   const [gateAction, setGateAction] = useState(null);
   const [screen, setScreen] = useState(null);
   const [showExtInfo, setShowExtInfo] = useState(false);
+  /*
+   * Phase 94 — connectivity is read from the browser, never guessed. `online`
+   * starts optimistic so a test harness or an SSR pass does not paint a false
+   * "you are offline". The queue holds intents the user already confirmed;
+   * nothing in it has been sent, and nothing sends itself.
+   */
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  const [offlineQueue, setOfflineQueue] = useState([]);
+  /* Phase 88 — the honest answer when a request is really about money. */
+  const [rampNotice, setRampNotice] = useState(null);
   const [policyInput, setPolicyInput] = useState({
     maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
     allowedChains: '42161,8453', allowedProtocols: 'swap', allowedAssets: 'USDC,ETH,BTC', durationMin: 60
@@ -199,6 +215,42 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     if (el) el.scrollTop = el.scrollHeight;
   }, [session?.messages?.length]);
 
+  /*
+   * Phase 94 — the panel follows the real connection state. Going offline
+   * changes only what we SAY; it never flushes, retries or executes anything.
+   * Coming back online does not send the queue either: the user re-confirms.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  /* The one place the offline strip reads its words from. */
+  const connection = useMemo(
+    () => offlineStatus({ online, queue: offlineQueue, now: Date.now() }),
+    [online, offlineQueue]
+  );
+
+  /*
+   * Phase 90 — the fee line for whatever is currently on the confirmation
+   * screen. It is derived, not stored, so an edit to the amount moves the fee
+   * in the same render: the number the user approves is the number we quote.
+   * `computeFee` refuses a missing or over-maximum rate, and that refusal is
+   * shown rather than swallowed.
+   */
+  const feeQuote = useMemo(() => {
+    const notional = Number(screen?.amountUsd);
+    if (!Number.isFinite(notional) || notional <= 0) return null;
+    return computeFee({ notional, symbol: screen?.fromSymbol || 'USD' });
+  }, [screen?.amountUsd, screen?.fromSymbol]);
+
   function buildPolicy(p) {
     return {
       maxCapitalUsd: Number(p.maxCapitalUsd) || 0,
@@ -223,6 +275,24 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     });
     setSession(after);
     const last = after?.messages?.at(-1);
+    const drafted = Boolean(last?.payload?.drafts?.length || last?.payload?.draft || last?.payload?.plan);
+
+    /*
+     * Phase 88 — the fiat boundary, checked where it cannot cause a false
+     * refusal. If the parser turned the sentence into a real crypto-to-crypto
+     * draft, the request was never about money and we say nothing. If it did
+     * NOT, and the sentence is about a bank, a card or a national currency,
+     * the user gets the plain answer: we do not move real money, here is what
+     * we can do instead. No hopeful link, no "coming soon".
+     */
+    if (drafted) {
+      setRampNotice(null);
+    } else {
+      const detection = detectFiatIntent({ text: value, intent: last?.payload?.intent || null });
+      const boundary = fiatBoundaryResponse({ detection });
+      setRampNotice(boundary.applies ? boundary : null);
+    }
+
     if (last && (last.type === 'ready-for-confirmation' || last.type === 'prepared-draft')) {
       openInteractiveScreen(last.payload, after);
     } else if (last && last.type === 'next-step-ready') {
@@ -395,6 +465,35 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     const base = sessionArg || session;
     const draftId = screen?.draftId || null;
     const activeGate = gate;
+
+    /*
+     * Phase 94 — with no network, the honest move is to stop and say so. The
+     * confirmed intent is parked in the queue with status `queued`: no tx
+     * hash, no receipt, no authority. It is not sent when the connection
+     * returns either — the user re-opens it and confirms again, because the
+     * price they agreed to has had time to move.
+     */
+    if (!online) {
+      const enqueued = enqueueIntent({
+        queue: offlineQueue,
+        intent: {
+          draftId,
+          terms: activeGate?.lockedTerms || null,
+          termsHash: activeGate?.termsHash || null
+        },
+        confirmation: { userConfirmed: true, decision: 'CONFIRM', at: Date.now() }
+      });
+      if (enqueued.ok) setOfflineQueue(enqueued.queue);
+      setReceipt({
+        // Never `completed`, never `submitted` — nothing left the device.
+        status: 'unavailable',
+        confirmed: false,
+        ok: false,
+        queued: enqueued.ok,
+        reasonKey: enqueued.ok ? 'intentAI.receipt.queued' : 'intentAI.offline.notQueued'
+      });
+      return;
+    }
     const health = activeGate
       ? venueHealth(
         { kind: draftKind(activeGate), chainId: activeGate.lockedTerms?.chainId, protocol: activeGate.lockedTerms?.protocol },
@@ -441,11 +540,36 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       }
     });
     if (result.ok) {
+      /*
+       * Phase 90 — the fee the user approved on the preview is re-checked
+       * against the fee actually on the receipt. A drift beyond FEE_TOLERANCE
+       * is TERMS_CHANGED: the flow halts and asks for reauthorization rather
+       * than printing a success with a number nobody agreed to.
+       */
+      const settled = attachFeeToReceipt({
+        receipt: { ...(rec.receipt || {}), feeAmount: result.receipt?.feeAmount ?? null },
+        quotedFee: feeQuote
+      });
+      if (feeQuote?.ok && !settled.ok && settled.error?.code === 'TERMS_CHANGED') {
+        setReceipt({
+          status: 'reauthorize',
+          confirmed: false,
+          ok: false,
+          venue: health.venue || null,
+          receipt: rec.receipt,
+          fee: feeQuote,
+          feeDrift: settled.drift ?? null,
+          reasonKey: settled.i18nKey,
+          reasonParams: {}
+        });
+        return;
+      }
       setReceipt({
         status: rec.receipt?.status === 'COMPLETED' ? 'completed' : 'submitted',
         confirmed: rec.receipt?.confirmed === true,
         venue: health.venue || null,
-        receipt: rec.receipt,
+        receipt: settled.ok ? settled.receipt : rec.receipt,
+        fee: feeQuote?.ok ? feeQuote : null,
         txHash: result.txHash || null,
         signerKind: result.signerKind || null,
         ok: true
@@ -897,6 +1021,30 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
             </div>
           </div>
 
+          {/* Phase 90 — the fee, on the preview, before anything is approved:
+              the percentage, the amount, and what is left afterwards. */}
+          {feeQuote && (
+            <div className="ia-fee-line" data-testid="preview-fee-line">
+              <span className="field-label">{t('intentAI.fee.title')}</span>
+              {feeQuote.ok ? (
+                <>
+                  <span data-testid="preview-fee-amount">
+                    {t('intentAI.fee.line', {
+                      percent: feeQuote.percent,
+                      amount: feeQuote.feeAmount,
+                      symbol: feeQuote.symbol || ''
+                    })}
+                  </span>
+                  <small className="ia-hint" data-testid="preview-fee-net">
+                    {t('intentAI.fee.net', { amount: feeQuote.netAmount, symbol: feeQuote.symbol || '' })}
+                  </small>
+                </>
+              ) : (
+                <span className="ia-limit-warning">{t(feeQuote.i18nKey)}</span>
+              )}
+            </div>
+          )}
+
           {/* Tool permissions — the user decides what the agents may use. */}
           <div className="ia-tools-box">
             <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>{t('intentAI.confirm.toolsTitle')}</p>
@@ -972,13 +1120,61 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
               {t(receipt.reasonKey, receipt.reasonParams || {})}
             </p>
           )}
+          {/* Phase 90 — the same fee, restated on the receipt in the same
+              units, so the preview and the record can be compared. */}
+          {receipt.fee?.ok && (
+            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-fee-line">
+              {t('intentAI.fee.onReceipt', {
+                amount: receipt.fee.feeAmount,
+                symbol: receipt.fee.symbol || '',
+                percent: receipt.fee.percent
+              })}
+            </p>
+          )}
           {receipt.txHash && (
             <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-tx-hash">
               {t('intentAI.receipt.txHash', { hash: receipt.txHash })}
             </p>
           )}
+          {/* Phase 94 — a queued intent is a promise to ask again, not a
+              promise to send. It carries no hash and no receipt. */}
+          {receipt.queued && (
+            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-queued-note">
+              {t('intentAI.offline.reviewNote')}
+            </p>
+          )}
         </div>
       )}
+
+      {/* Phase 88 — the honest fiat boundary. Shown when the user asked us to
+          move real money, which we do not do, with what we CAN do next to it. */}
+      {rampNotice?.applies && (
+        <div className="ia-ramp-notice" role="note" data-testid="fiat-ramp-notice">
+          <p className="muted" style={{ fontSize: 12, margin: '0 0 4px' }}>{t('intentAI.ramp.title')}</p>
+          <p style={{ fontSize: 12.5, margin: 0 }} data-testid="fiat-ramp-message">
+            {t(rampNotice.i18nKey)}
+          </p>
+          <small className="ia-hint" data-testid="fiat-ramp-alternative">
+            {t(rampNotice.alternativeI18nKey)}
+          </small>
+        </div>
+      )}
+
+      {/* Phase 94 — the connection, stated plainly. Offline says nothing was
+          sent; a waiting queue says how many intents are parked, never that
+          any of them ran. */}
+      <div
+        className={`ia-connection${connection.online ? ' is-online' : ''}`}
+        role="status"
+        data-testid="offline-status"
+        data-online={connection.online ? 'true' : 'false'}
+      >
+        <span className="ia-connection-dot" aria-hidden="true" />
+        <small>{t(connection.i18nKey, { count: connection.queued })}</small>
+        {connection.queued > 0 && (
+          <small className="ia-hint" data-testid="offline-queue-note">{t('intentAI.offline.reviewNote')}</small>
+        )}
+      </div>
 
       {/* Runtime activation status is read-only; wallet confirmation remains
           the final user-controlled step. */}

@@ -987,6 +987,68 @@
   box-shadow: 0 0 7px rgba(0, 255, 157, .6);
 }
 
+/*
+ * Phase 94 — connection strip. Offline is amber, not red: nothing is broken
+ * and nothing was lost, the app simply cannot send right now.
+ */
+.ia-connection {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 3px 8px;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 176, 32, .24);
+  border-radius: 10px;
+  background: rgba(255, 176, 32, .055);
+}
+.ia-connection-dot {
+  grid-row: span 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffb020;
+  box-shadow: 0 0 7px rgba(255, 176, 32, .5);
+}
+.ia-connection small { font-size: 10.5px; line-height: 1.5; color: var(--text-2); }
+.ia-connection .ia-hint { grid-column: 2; color: var(--text-3); }
+.ia-connection.is-online {
+  border-color: rgba(0, 255, 157, .22);
+  background: rgba(0, 255, 157, .04);
+}
+.ia-connection.is-online .ia-connection-dot {
+  background: var(--ios-mint, #00ff9d);
+  box-shadow: 0 0 7px rgba(0, 255, 157, .55);
+}
+
+/*
+ * Phase 88 — the fiat boundary notice. Deliberately calm: this is a "we do
+ * not do that" answer, not an error the user caused.
+ */
+.ia-ramp-notice {
+  margin: 0 0 10px;
+  padding: 10px 11px;
+  border: 1px solid rgba(120, 160, 255, .26);
+  border-radius: 10px;
+  background: rgba(120, 160, 255, .06);
+}
+.ia-ramp-notice .ia-hint { display: block; margin-top: 5px; }
+
+/* Phase 90 — the fee line on the confirmation preview. */
+.ia-fee-line {
+  display: grid;
+  gap: 3px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  background: rgba(255, 255, 255, .03);
+  font-size: 12.5px;
+}
+.ia-fee-line .field-label { font-size: 10.5px; }
+:root[data-theme='light'] .ia-fee-line { border-color: rgba(35, 62, 91, .14); background: rgba(35, 62, 91, .035); }
+:root[data-theme='light'] .ia-ramp-notice { background: rgba(120, 160, 255, .1); }
+
 /* ==========================================================================
    GUIDED CHAT FLOW · INTERACTIVE CONFIRMATION · COUNTDOWN · INFO MODAL
    Everything the step-by-step conversation, the editable confirmation

@@ -100,6 +100,41 @@ try {
   check('no ramp copy promises a bank transfer',
     Object.values(locales[0].intentAI.ramp).every((v) => !/we (will|can) (send|deposit) (money|funds) to your bank/i.test(v)));
 
+  /* ------------------------------------------------------------------ */
+  /* UI WIRING — the boundary is spoken, not just computed.               */
+  /* ------------------------------------------------------------------ */
+  const panel = readFileSync('src/components/IntentAIPanel.jsx', 'utf8');
+
+  check('the panel imports the fiat boundary functions',
+    /detectFiatIntent/.test(panel) && /fiatBoundaryResponse/.test(panel));
+  check('the panel checks every message the user sends',
+    /detectFiatIntent\(\{ text: value/.test(panel));
+  check('the panel renders the boundary notice',
+    panel.includes('data-testid="fiat-ramp-notice"'));
+  check('the notice states the refusal in the user\u2019s language',
+    /data-testid="fiat-ramp-message"[\s\S]{0,200}t\(rampNotice\.i18nKey\)/.test(panel));
+  check('the notice offers what we CAN do instead of dead-ending',
+    /data-testid="fiat-ramp-alternative"[\s\S]{0,200}t\(rampNotice\.alternativeI18nKey\)/.test(panel));
+  check('the notice is cleared once a real crypto draft is produced',
+    /if \(drafted\) \{[\s\S]{0,80}setRampNotice\(null\)/.test(panel));
+  check('the panel never renders a first-party ramp link',
+    !/onramp|on-ramp|buy with card/i.test(panel.replace(/detectFiatIntent|fiatBoundaryResponse|rampNotice/g, '')));
+  check('the ramp title exists in en, fa and ar',
+    locales.every((loc) => typeof loc?.intentAI?.ramp?.title === 'string'));
+
+  /*
+   * The boundary the UI actually shows must itself pass the phase-88 guard —
+   * the same assertion the module-level checks use, applied to the exact
+   * object the panel renders from.
+   */
+  const shown = fiatBoundaryResponse({ detection: detectFiatIntent({ text: 'buy ETH with my visa card' }) });
+  check('the response the panel renders is detected as a fiat intent', shown.applies === true);
+  check('the response the panel renders is blocked', shown.blocked === true);
+  check('the response the panel renders authorises no execution', shown.executionAuthorized === false);
+  check('the response the panel renders promises no ramp', assertNoRampPromise(shown).ok === true);
+  check('a plain crypto swap produces no notice at all',
+    fiatBoundaryResponse({ detection: detectFiatIntent({ text: 'swap 100 USDC to ETH on Arbitrum' }) }).applies !== true);
+
   console.log(JSON.stringify({ probe: 'phase88-fiat-ramp-boundary', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

@@ -98,6 +98,39 @@ try {
   check('the english fee line shows both the percentage and the amount',
     /\{\{percent\}\}/.test(locales[0].intentAI.fee.line) && /\{\{amount\}\}/.test(locales[0].intentAI.fee.line));
 
+  /* ------------------------------------------------------------------ */
+  /* UI WIRING — the fee is on the screen, not just in the module.        */
+  /* ------------------------------------------------------------------ */
+  /*
+   * Phase 90 asks for a transparent fee line on EVERY preview and receipt.
+   * A module that computes a correct fee nobody can see does not satisfy
+   * that, so these checks read the panel source and assert the wiring.
+   */
+  const panel = readFileSync('src/components/IntentAIPanel.jsx', 'utf8');
+
+  check('the panel imports computeFee and attachFeeToReceipt',
+    /computeFee/.test(panel) && /attachFeeToReceipt/.test(panel));
+  check('the panel derives the fee from the amount currently on the screen',
+    /computeFee\(\{[\s\S]{0,120}notional/.test(panel));
+  check('the preview renders a fee line',
+    panel.includes('data-testid="preview-fee-line"'));
+  check('the preview fee line shows the percentage and the amount',
+    /data-testid="preview-fee-amount"[\s\S]{0,240}intentAI\.fee\.line/.test(panel));
+  check('the preview fee line shows the net amount the user keeps',
+    /data-testid="preview-fee-net"[\s\S]{0,200}intentAI\.fee\.net/.test(panel));
+  check('the receipt restates the fee that was charged',
+    panel.includes('data-testid="receipt-fee-line"') && panel.includes('intentAI.fee.onReceipt'));
+  check('a fee drift halts the flow with TERMS_CHANGED rather than printing success',
+    /TERMS_CHANGED/.test(panel) && /status: 'reauthorize'[\s\S]{0,300}feeDrift/.test(panel));
+  check('an uncomputable fee is surfaced, not hidden',
+    /feeQuote\.ok \?[\s\S]{0,700}t\(feeQuote\.i18nKey\)/.test(panel));
+  check('the fee copy used by the panel exists in en, fa and ar',
+    locales.every((loc) => typeof loc?.intentAI?.fee?.title === 'string'
+      && typeof loc?.intentAI?.fee?.net === 'string'
+      && typeof loc?.intentAI?.fee?.onReceipt === 'string'));
+  check('the net line names both the amount and the symbol',
+    /\{\{amount\}\}/.test(locales[0].intentAI.fee.net) && /\{\{symbol\}\}/.test(locales[0].intentAI.fee.net));
+
   console.log(JSON.stringify({ probe: 'phase90-fee-integrity', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

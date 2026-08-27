@@ -23,6 +23,32 @@
  */
 const SHELL = 'fbt-shell-v4';
 
+/*
+ * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
+ * This mirrors `cachePolicyFor` in src/lib/intent-ai/offlineQueue.js. A service
+ * worker is not part of the bundle graph — it cannot import an ES module that
+ * pulls in failureModes.js and termsDiff.js — so the route list is repeated
+ * here and the phase-94 probe asserts the two lists are identical. If somebody
+ * adds a route to CACHEABLE_ROUTES and forgets this file, the suite fails.
+ *
+ * The rule the duplication protects: only public, non-personal, non-live pages
+ * may be served from cache. A page that reflects a balance, a price, a session
+ * or a receipt must hit the network or show nothing — a saved copy of somebody's
+ * portfolio is a lie with a timestamp.
+ */
+const CACHEABLE_ROUTES = ['/', '/about', '/faq', '/terms', '/privacy', '/landing'];
+
+function cachePolicyFor(route) {
+  const path = String(route || '');
+  const cacheable = CACHEABLE_ROUTES.includes(path) || path.startsWith('/landing');
+  return {
+    route: path,
+    cacheable,
+    reason: cacheable ? 'PUBLIC_STATIC' : 'PERSONAL_OR_LIVE',
+    servesStalePrices: false
+  };
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL).then((c) => c.addAll(['/', '/index.html']).catch(() => {}))
@@ -57,16 +83,27 @@ self.addEventListener('fetch', (event) => {
    * a 200 with `type: 'opaqueredirect'` or a different URL, and caching that
    * as index.html is exactly how a captive portal bricks a PWA.
    */
+  /*
+   * Phase 94 — the public/personal split. Only a route `cachePolicyFor`
+   * approves is ever WRITTEN to the cache. Everything else stays network-only
+   * on the way in; on the way out it may still fall back to the app shell, so
+   * a private route offline renders the empty shell (which then says it needs
+   * a connection) rather than one person's stale account page.
+   */
+  const policy = cachePolicyFor(url.pathname);
+
   event.respondWith(
     fetch(request)
       .then((res) => {
-        if (res && res.ok && res.type === 'basic' && !res.redirected) {
+        if (policy.cacheable && res && res.ok && res.type === 'basic' && !res.redirected) {
           const copy = res.clone();
           caches.open(SHELL).then((c) => c.put(request, copy)).catch(() => {});
         }
         return res;
       })
-      .catch(() => caches.match(request).then((r) => r ?? caches.match('/index.html')))
+      .catch(() => (policy.cacheable
+        ? caches.match(request).then((r) => r ?? caches.match('/index.html'))
+        : caches.match('/index.html')))
   );
 });
 
