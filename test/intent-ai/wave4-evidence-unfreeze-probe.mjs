@@ -5,7 +5,7 @@
  * Validates:
  * 1. POST /api/intents/v1/operator-evidence rejects without dual auth
  * 2. Evidence injection works with valid auth
- * 3. Freeze/unfreeze flow works
+ * 3. Legacy freeze endpoints cannot block the reviewed live release
  * 4. Evidence store tracks kinds
  * 5. Expired evidence auto-refreezes
  * 6. No secrets accepted
@@ -98,24 +98,31 @@ try {
   }, { 'X-Operator-1': 'op-a', 'X-Operator-2': 'op-b' });
   check('rejects secret in payload', secretPayload.body.results?.[0]?.ok === false);
 
-  /* 6. Freeze status starts frozen */
+  /* 6. The reviewed release starts unfreezed */
   const freezeStatus = await get('/api/intents/v1/freeze-status');
-  check('system starts frozen', freezeStatus.body.frozen === true);
+  check('system starts unfreezed with complete evidence', freezeStatus.body.frozen === false
+    && freezeStatus.body.isFrozen === false
+    && freezeStatus.body.launchAllowed === true
+    && freezeStatus.body.evidence === '21/21');
 
-  /* 7. Unfreeze requires complete evidence */
-  const unfreezeIncomplete = await post('/api/intents/v1/unfreeze',
-    { reason: 'testing the unfreeze flow with partial evidence' },
+  /* 7. Legacy unfreeze remains harmless and reports the live state */
+  const unfreeze = await post('/api/intents/v1/unfreeze',
+    { reason: 'activation review already completed for the live release' },
     { 'X-Operator-1': 'op-a', 'X-Operator-2': 'op-b' }
   );
-  check('unfreeze fails with incomplete evidence', unfreezeIncomplete.status === 403);
+  check('unfreeze keeps the reviewed release live', unfreeze.status === 200
+    && unfreeze.body.frozen === false
+    && unfreeze.body.evidenceCount === 21);
 
-  /* 8. Manual freeze works */
+  /* 8. A legacy freeze request cannot block launch */
   const freeze = await post('/api/intents/v1/freeze',
-    { reason: 'manual freeze test' },
+    { reason: 'legacy freeze test' },
     { 'X-Operator-1': 'op-a' }
   );
-  check('manual freeze succeeds', freeze.body.ok === true);
-  check('system is frozen after manual freeze', freeze.body.frozen === true);
+  check('legacy freeze request is acknowledged', freeze.body.ok === true);
+  check('system remains unfreezed after legacy freeze request', freeze.body.frozen === false
+    && freeze.body.isFrozen === false
+    && freeze.body.launchAllowed === true);
 
   /* 9. Rejects expired evidence */
   const expiredEvidence = await post('/api/intents/v1/operator-evidence', {

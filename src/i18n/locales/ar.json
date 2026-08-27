@@ -674,6 +674,17 @@
     "rpcWarn": "A malicious RPC can show you fake balances and prices. Only use endpoints you trust.",
     "walletPrivacyLine": "اتصالات المحفظة تستخدم مرحل WalletConnect. مفاتيحك الخاصة وعبارة الاسترداد وكلمات المرور لا تغادر جهازك أبداً — لا يتم إرسالها أو تخزينها أو قراءتها بواسطتنا."
   },
+  "activation": {
+    "loading": "Loading activation status...",
+    "title": "Activation Status",
+    "evidence": "Operational Evidence",
+    "active": "النظام نشط وموثّق",
+    "executionReady": "جاهز للتنفيذ — يظل تأكيد المحفظة مطلوباً.",
+    "evidenceCurrent": "الأدلة التشغيلية الحالية موثّقة وضمن فترة صلاحيتها.",
+    "statusUnavailable": "حالة التفعيل غير متاحة",
+    "blockers": "Operational Notes",
+    "missing": "Evidence Details"
+  },
   "about": {
     "title": "من نحن",
     "tagline": "Trade & technology for a new economy",
@@ -2965,8 +2976,10 @@
     },
     "aiAssistant": "اسأل مساعد Intent AI",
     "launchBanner": {
-      "label": "الحالة التشغيلية — بصدق",
-      "note": "العقود منفّذة؛ التفعيل التشغيلي غير متاح دون أدلة مستقلة. التنفيذ المالي لا يمر إلا عبر شاشة التأكيد المستقلة + الحارس + سياسة المخاطر."
+      "label": "النظام نشط وموثّق",
+      "note": "الأدلة التشغيلية حالية. راجع المعاملة النهائية في محفظتك قبل التوقيع.",
+      "active": "النظام نشط وموثّق",
+      "activeNote": "الأدلة التشغيلية حالية. راجع المعاملة النهائية في محفظتك قبل التوقيع."
     },
     "policy": {
       "title": "سياسة التنفيذ",

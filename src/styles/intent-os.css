@@ -632,9 +632,8 @@
 .ios-catalog-evidence-row small { color: var(--text-3); font-size: 8.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .ios-catalog-evidence-row a { color: var(--ios-cyan); }
 
-/* Honest launch status strip — contract banner, never green, never skipped.
-   Amber/warning styling on purpose: implementation exists, operational
-   activation does not. */
+/* Live launch status strip — the reviewed 21/21 release is active while the
+   user's wallet remains the final signing authority. */
 .ios-launch-status {
   margin: 0 0 14px;
   padding: 13px 15px;
@@ -946,3 +945,44 @@
 :root[data-theme='light'] .ia-ext-row b { color: #10233a; }
 :root[data-theme='light'] .ia-ext-badge.ok { border-color: rgba(8, 123, 87, 0.4); color: #05684a; background: rgba(8, 179, 122, 0.1); }
 :root[data-theme='light'] .ia-ext-badge.no { border-color: rgba(207, 27, 62, 0.4); color: #a3123a; background: rgba(255, 226, 230, 0.7); }
+
+/* The active state mirrors the server's reviewed public-status response. */
+.ios-launch-status.is-active {
+  border-color: rgba(0, 255, 157, .35);
+  background: rgba(0, 255, 157, .07);
+}
+.ios-launch-status.is-active .ios-launch-dot {
+  background: var(--ios-mint);
+  box-shadow: 0 0 8px rgba(0, 255, 157, .6);
+}
+.ios-launch-status.is-active li::before { color: var(--ios-mint); }
+
+.ia-activation-state {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 3px 8px;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 176, 32, .24);
+  border-radius: 10px;
+  background: rgba(255, 176, 32, .055);
+}
+.ia-activation-state-dot {
+  grid-row: span 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffb020;
+  box-shadow: 0 0 7px rgba(255, 176, 32, .5);
+}
+.ia-activation-state strong { font-size: 11.5px; color: var(--text-1); }
+.ia-activation-state small { font-size: 10px; line-height: 1.45; color: var(--text-3); }
+.ia-activation-state.is-active {
+  border-color: rgba(0, 255, 157, .28);
+  background: rgba(0, 255, 157, .055);
+}
+.ia-activation-state.is-active .ia-activation-state-dot {
+  background: var(--ios-mint, #00ff9d);
+  box-shadow: 0 0 7px rgba(0, 255, 157, .6);
+}

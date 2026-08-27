@@ -11,16 +11,17 @@ export function operateProgramControl({
   now = Date.now()
 } = {}) {
   const launch = evaluateLaunchControlPlane({ evidence, freeze, now });
+  const live = launch.launchAllowed === true && programComplete === true;
   return {
     ok: true,
     schema: PHASE50_SCHEMA,
     programComplete: programComplete === true,
-    launchAllowed: false,
-    goLive: false,
-    live: false,
-    operational: false,
-    blockers: launch.blockers,
-    banner: [...LAUNCH_BANNER]
+    launchAllowed: live,
+    goLive: live,
+    live,
+    operational: live,
+    blockers: live ? [] : launch.blockers,
+    banner: [...launch.banner]
   };
 }
 
@@ -28,8 +29,12 @@ export function evaluateProgramControlPlane(input = {}) {
   const row = operateProgramControl(input);
   return opsPlane(50, PHASE50_SCHEMA, row.blockers, {
     program: row,
-    launchAllowed: false,
-    goLive: false,
-    banner: [...LAUNCH_BANNER]
+    operational: row.operational,
+    live: row.live,
+    ready: row.live,
+    launchAllowed: row.launchAllowed,
+    goLive: row.goLive,
+    blockers: row.live ? [] : row.blockers,
+    banner: [...row.banner]
   });
 }

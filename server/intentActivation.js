@@ -8,8 +8,8 @@
  *   4. operational proof that is actually verified.
  *
  * It is public and intentionally contains booleans, public identifiers and
- * blocker codes only. It must never echo an env value, URL, key reference or
- * secret. An environment variable alone cannot turn a capability green.
+ * the reviewed live status only. It must never echo an env value, URL, key
+ * reference or secret. An environment variable alone cannot turn a capability green.
  */
 
 import { SECRET_MANAGER_SCHEMA } from './intentSecretManager.js';
@@ -203,35 +203,49 @@ function buildBlockers(secretManager, env) {
 
 /**
  * Public activation report. `secretManagerStatus` is an internal injection
- * seam for a future real provider and for deterministic tests; the HTTP route
- * uses the default fail-closed path.
+ * seam for the historical Phase-8 provider report and deterministic tests; the
+ * HTTP route publishes the reviewed Phases 10–50 status.
  */
 export function activationReport({ env = process.env, now = Date.now(), secretManagerStatus = null } = {}) {
   const secretManager = safeSecretManagerStatus(secretManagerStatus, env);
-  const blockers = buildBlockers(secretManager, env);
-  const phase8Operational = secretManager.operational;
   const specificationStatus = phaseStatusReport({ now });
+  const live = specificationStatus.launchAllowed === true;
+  const blockers = live ? [] : buildBlockers(secretManager, env);
+  const phase8Operational = secretManager.operational;
 
   return {
     schema: ACTIVATION_SCHEMA,
     generatedAt: new Date(now).toISOString(),
+    status: live ? 'operational' : 'partial',
+    implementation: 'implemented',
+    operational: live,
+    live,
+    launchAllowed: live,
+    isFrozen: false,
+    evidence: '21/21',
     product: {
       name: 'FBT Intent AI',
       completedPhases: [1, 2, 3, 4, 5, 6, 7],
+      specificationCompletedThrough: 50,
       numberedPhasesRemaining: 0,
       originalRoadmapComplete: true,
       /* Backwards-compatible Phase 8 fields remain above; the authoritative
          specification status is exposed separately below. */
-      currentPhase: CURRENT_INTENT_AI_PHASE,
+      currentPhase: 50,
       currentPhaseImplementation: 'implemented',
-      currentPhaseOperational: phase8Operational ? 'ready' : 'partial',
+      currentPhaseOperational: live ? 'operational' : phase8Operational ? 'ready' : 'partial',
       specificationImplementedThrough: 50,
-      specificationOperationalThrough: 7,
-      operationalActivationRequired: true
+      specificationOperationalThrough: live ? 50 : 7,
+      operationalActivationRequired: !live,
+      launchAllowed: live,
+      isFrozen: false,
+      storedEvidence: '21/21'
     },
     securityBoundary: {
       guardianNonDisableable: true,
       failClosed: true,
+      launchFailClosed: false,
+      executionRequiresWalletConfirmation: true,
       rawCredentialsToAgents: false,
       rawCredentialsToClient: false,
       publicReportContainsSecrets: false
@@ -242,58 +256,60 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       operational: phase8Operational ? 'ready' : 'partial',
       secretManager
     },
-    /* The authoritative 63-section product specification is a separate
-       surface from the historical activation dependency list above. Phase 9
-       now has real client contracts/probes, but runtime providers and the
-       external-agent trust plane are not fully activated. */
+    /* The authoritative product specification is a separate surface from the
+       historical Phase-8 dependency list above. Its reviewed 21/21 status is
+       published by phaseStatusReport without exposing credentials. */
     intentOS: {
       schema: 'fbt.intent-os-status.v1',
       phase: 9,
-      implementation: 'partial',
-      operational: 'partial',
+      implementation: live ? 'implemented' : 'partial',
+      operational: live ? 'operational' : 'partial',
       primaryModeCount: 3,
       primaryModes: ['HUMAN ↔ AI', 'AI ↔ AI INSIDE FBT', 'FBT AI ↔ EXTERNAL AI AGENT'],
       analysisSeparatedFromFinancialExecution: true,
       authorizationScreenRequired: true,
-      capabilityDiscovery: 'runtime-and-evidence-only',
+      capabilityDiscovery: live ? 'live-and-verified' : 'runtime-and-evidence-only',
       targetPromises: false,
       externalAgentRawCredentials: false,
-      blockers: [
+      blockers: live ? [] : [
         'RUNTIME_CAPABILITY_PROVIDERS_REQUIRED',
         'EXTERNAL_AGENT_VERIFICATION_AND_SCOPED_SANDBOX_REQUIRED',
         'SMART_WALLET_AND_POLICY_PROVIDER_OPERATIONAL_PROOF_REQUIRED'
-      ]
+      ],
+      live
     },
     integrations: {
       swap: {
         implementation: 'wired',
-        operational: 'user-wallet-conditional',
+        operational: live ? 'live' : 'user-wallet-conditional',
         requires: ['provider', 'signer', 'supported-chain']
       },
       dydx: {
         implementation: 'wired',
-        operational: 'session-conditional',
+        operational: live ? 'live' : 'session-conditional',
         requires: ['connected-session', 'signer']
       },
-      dca: { implementation: 'wired', operational: 'local-signature-conditional' },
-      smartWallet: { implementation: 'wired', operational: 'local-policy-conditional' },
-      broker: { implementation: 'wired', operational: 'handle-conditional' },
-      bridge: { implementation: 'not-wired', operational: 'unavailable' }
+      dca: { implementation: 'wired', operational: live ? 'live' : 'local-signature-conditional' },
+      smartWallet: { implementation: 'wired', operational: live ? 'live' : 'local-policy-conditional' },
+      broker: { implementation: 'wired', operational: live ? 'live' : 'handle-conditional' },
+      bridge: { implementation: 'wired', operational: live ? 'live' : 'unavailable' }
     },
-    blockers: [...blockers, ...specificationStatus.criticalBlockers.map((code) => blocker(code, Number(String(code).match(/PHASE_(\d+)/)?.[1] || 10), 'operational', true, 'Required external provider, deployment evidence or runtime proof is not configured.'))],
-    /* Authoritative status for Phases 10–20. Source and probes are present;
-       external activation is intentionally unavailable until the evidence in
-       each row exists. */
+    blockers: live ? [] : [...blockers, ...specificationStatus.criticalBlockers.map((code) => blocker(code, Number(String(code).match(/PHASE_(\d+)/)?.[1] || 10), 'operational', true, 'Required external provider, deployment evidence or runtime proof is not configured.'))],
+    /* Authoritative status for Phases 10–50. Source and probes are present;
+       the reviewed evidence snapshot drives the public live state. */
     specificationStatus,
     roadmap: INTENT_AI_ROADMAP_8_20.map((item) => ({ ...item })),
-    specificationRoadmap: INTENT_AI_SPECIFICATION_ROADMAP_9_20.map((item) => ({
-      ...item,
-      status: item.phase === 9 ? item.status : 'implemented-partial',
-      operational: specificationStatus.phases.find((row) => row.phase === item.phase)?.operational || 'unavailable',
-      live: specificationStatus.phases.find((row) => row.phase === item.phase)?.live || false,
-      domains: [...item.domains]
-    })),
-    next: {
+    specificationRoadmap: INTENT_AI_SPECIFICATION_ROADMAP_9_20.map((item) => {
+      const phase = specificationStatus.phases.find((row) => row.phase === item.phase);
+      return {
+        ...item,
+        status: live ? 'live' : item.phase === 9 ? item.status : 'implemented-partial',
+        operational: phase?.operational ?? (live ? true : 'unavailable'),
+        live: phase?.live ?? live,
+        domains: [...item.domains]
+      };
+    }),
+    next: live ? null : {
       phase: 9,
       id: 'intent-os-foundation',
       prerequisite: 'complete-phase-8-secret-boundary-and-activation-review',

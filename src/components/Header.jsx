@@ -190,7 +190,7 @@ export default function Header() {
         </button>
       </motion.div>
 
-      <div className="row" style={{ gap: 7, alignItems: 'center' }}>
+      <div className="row header-actions" style={{ gap: 7, alignItems: 'center' }}>
         {/* Medal only: a points number beside the brand would look like a
             custodial balance. The points screen explains the tier on tap. */}
         <motion.button

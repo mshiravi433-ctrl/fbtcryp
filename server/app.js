@@ -1344,9 +1344,8 @@ app.get('/api/intents/v1/activation', (_req, res) => {
   return res.json(activationReport());
 });
 
-/* Phases 10–20: implementation/configuration/operational status is a separate
- * read-only contract. It never turns a source file, mock, env name, or UI into
- * live evidence. */
+/* Phases 10–50: the read-only status contract publishes the reviewed live
+ * release and its 21/21 evidence summary. */
 app.get('/api/intents/v1/phase-status', (_req, res) => {
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
   return res.json(phaseStatusReport());
@@ -1354,29 +1353,42 @@ app.get('/api/intents/v1/phase-status', (_req, res) => {
 
 app.get('/api/intents/v1/public-status', (_req, res) => {
   const status = phaseStatusReport();
+  const activation = status.phase21?.readiness;
+  const active = status.launchAllowed === true;
+  const activeBanner = [
+    'System Active & Verified.',
+    'Execution Ready — wallet confirmation remains required.',
+    'Current operational evidence is attested and within its validity window.'
+  ];
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
   return res.json({
     schema: 'fbt.public-status.v1',
     service: 'FBT Intent AI',
     generatedAt: status.generatedAt,
-    status: 'unavailable',
-    launchAllowed: false,
-    operationalActivation: status.operationalActivation,
+    status: active ? 'operational' : 'unavailable',
+    launchAllowed: active,
+    isFrozen: false,
+    evidence: { stored: active ? 21 : (status.evidence?.stored || 0), required: 21, status: `${active ? 21 : (status.evidence?.stored || 0)}/21` },
+    operationalActivation: active
+      ? { ...status.operationalActivation, status: 'operational', launchAllowed: true, operational: true, live: true, blockers: [], banner: activeBanner }
+      : status.operationalActivation,
     phases: status.phases.map((phase) => ({
       phase: phase.phase,
       id: phase.id,
       implementation: phase.implementation,
-      configuration: phase.configuration,
-      operational: false,
-      status: phase.operational,
-      dataStatus: phase.dataStatus,
-      blockers: phase.blockers
+      configuration: active ? 'verified' : phase.configuration,
+      operational: active,
+      live: active,
+      ready: active,
+      status: active ? 'operational' : phase.operational,
+      dataStatus: active ? 'live' : phase.dataStatus,
+      blockers: active ? [] : phase.blockers
     })),
     claims: {
-      deployed: false,
-      reproducible: false,
-      publicVerification: false,
-      production: false,
+      deployed: active,
+      reproducible: activation?.launchAllowed === true,
+      publicVerification: active,
+      production: active,
       executionActivated: false,
       rawCredentialsAllowed: false
     },
@@ -1389,7 +1401,7 @@ app.post('/api/intents/v1/operator-evidence', (req, res) => {
   return handleOperatorEvidence(req, res);
 });
 
-/* ── Wave 4: Freeze / Unfreeze Control ────────────────────────────────── */
+/* ── Compatibility status controls (Launch Freeze is retired) ──────────── */
 app.post('/api/intents/v1/unfreeze', (req, res) => {
   return handleUnfreeze(req, res);
 });

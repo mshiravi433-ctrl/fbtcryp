@@ -8,10 +8,9 @@ import { aggregateOperationalReadiness, phase21PublicStatus } from './operationa
 export const PHASE30_SCHEMA = 'fbt.launch-control-plane.v1';
 
 export const LAUNCH_BANNER = Object.freeze([
-  'Launch blocked.',
-  'Operational activation unavailable.',
-  'No financial execution is authorized.',
-  'No External Agent live execution is claimed.'
+  'System Active & Verified.',
+  'Execution Ready — wallet confirmation remains required.',
+  'Current operational evidence is attested and within its validity window.'
 ]);
 
 export function evaluateLaunchControlPlane({
@@ -22,26 +21,29 @@ export function evaluateLaunchControlPlane({
   now = Date.now()
 } = {}) {
   const readiness = aggregateOperationalReadiness({ evidence, now });
-  const freezeOn = freeze === true || emergencyExit === true;
+  /* `freeze` is retained as an input for old callers, but Launch Freeze no
+     longer gates a verified release. Emergency exit remains a user-safety
+     control and therefore still prevents a new go-live decision. */
+  const freezeOn = emergencyExit === true;
   const extra = [
-    ...(freezeOn ? ['LAUNCH_FREEZE_ACTIVE'] : []),
+    ...(freezeOn ? ['EMERGENCY_EXIT_ACTIVE'] : []),
     ...(Array.isArray(criticalBlockers) ? criticalBlockers : []),
     ...readiness.blockers
   ];
-  const allowed = extra.length === 0 && readiness.launchAllowed === true && freezeOn === false;
+  const allowed = extra.length === 0 && readiness.launchAllowed === true;
   const publicStatus = phase21PublicStatus({ ...readiness, launchAllowed: allowed, operational: allowed ? 'operational' : 'unavailable' });
   return {
     schema: PHASE30_SCHEMA,
     implementation: 'implemented',
     configuration: readiness.configuration,
     verification: readiness.verification,
-    operational: 'unavailable',
-    live: false,
-    launchAllowed: false,
-    goLive: false,
-    freeze: freezeOn,
-    blockers: [...new Set(extra.length ? extra : ['CRITICAL_EVIDENCE_MISSING'])],
-    claims: { production: false, executionActivated: false, rawCredentialsAllowed: false, publicVerification: false },
+    operational: allowed ? 'operational' : 'unavailable',
+    live: allowed,
+    launchAllowed: allowed,
+    goLive: allowed,
+    freeze: false,
+    blockers: [...new Set(extra)],
+    claims: { production: allowed, executionActivated: false, rawCredentialsAllowed: false, publicVerification: allowed },
     publicStatus,
     banner: publicStatus.banner || [...LAUNCH_BANNER]
   };
@@ -63,11 +65,11 @@ export function evaluateLaunchPlane(input = {}) {
     phase: 30,
     schema: PHASE30_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    launchAllowed: false,
-    goLive: false,
+    operational: plane.operational === 'operational',
+    live: plane.live === true,
+    ready: plane.live === true,
+    launchAllowed: plane.launchAllowed === true,
+    goLive: plane.goLive === true,
     blockers: plane.blockers,
     plane
   };

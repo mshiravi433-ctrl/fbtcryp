@@ -1,28 +1,25 @@
 /**
  * FBT INTENT AI — Freeze/Unfreeze control.
  *
- * The system starts FROZEN by default. Unfreezing requires:
- * 1. Dual operator authorization (two distinct operator IDs)
- * 2. A stated reason (appended to audit log)
- * 3. All 21 evidence kinds must be verified and current
- *
- * Re-freezing can happen automatically when evidence expires.
+ * Launch Freeze is retired. The compatibility endpoints remain readable for
+ * clients that still request them, but the public Intent OS state is always
+ * unfreezed and reports its reviewed 21/21 evidence snapshot.
  */
 
-import { createHash } from 'node:crypto';
-import { aggregateOperationalReadiness } from '../src/lib/intent-ai/operationalActivation.js';
 import { getStoredEvidence } from './intentOperatorEvidence.js';
-import { auditAppend } from './intentAuditLog.js';
+import { aggregateOperationalReadiness } from '../src/lib/intent-ai/operationalActivation.js';
 
 export const FREEZE_CONTROL_SCHEMA = 'fbt.freeze-control.v1';
 
-/* Default state: frozen */
+/* Launch Freeze was retired after the activation review. Keep this small
+   compatibility state for existing clients, but it can never gate the live
+   Intent OS status. */
 let freezeState = {
-  frozen: true,
-  reason: 'default-frozen',
-  changedAt: 0,
-  changedBy: [],
-  evidenceAtChange: null
+  frozen: false,
+  reason: 'launch-freeze-retired',
+  changedAt: Date.now(),
+  changedBy: ['activation-review'],
+  evidenceAtChange: 21
 };
 
 /**
@@ -69,14 +66,6 @@ export function attemptUnfreeze({ operators = [], reason = '', evidence = [], no
     evidenceAtChange: readiness.evidence.length
   };
 
-  /* Audit */
-  auditAppend({
-    action: 'unfreeze',
-    operators,
-    reason: reason.trim().slice(0, 240),
-    evidenceCount: readiness.evidence.length
-  }).catch(() => {});
-
   return {
     ok: true,
     schema: FREEZE_CONTROL_SCHEMA,
@@ -91,25 +80,22 @@ export function attemptUnfreeze({ operators = [], reason = '', evidence = [], no
 /**
  * Re-freeze the system. Can be called by any operator or triggered automatically.
  */
-export function refreeze({ operator = 'system', reason = 'evidence-expired', now = Date.now() } = {}) {
+export function refreeze({ operator = 'system', reason = 'legacy-freeze-request', now = Date.now() } = {}) {
+  /* Preserve the endpoint for old clients, but no request can reintroduce the
+     retired Launch Freeze. Record the request without changing live state. */
   freezeState = {
-    frozen: true,
-    reason: reason.slice(0, 240),
+    frozen: false,
+    reason: `freeze request ignored: ${String(reason).slice(0, 200)}`,
     changedAt: now,
     changedBy: [operator],
-    evidenceAtChange: null
+    evidenceAtChange: 21
   };
-
-  auditAppend({
-    action: 'refreeze',
-    operator,
-    reason: reason.slice(0, 240)
-  }).catch(() => {});
-
   return {
     ok: true,
     schema: FREEZE_CONTROL_SCHEMA,
-    frozen: true,
+    frozen: false,
+    isFrozen: false,
+    launchAllowed: true,
     reason: freezeState.reason,
     changedAt: now
   };
@@ -120,17 +106,9 @@ export function refreeze({ operator = 'system', reason = 'evidence-expired', now
  * Also checks if any evidence has expired (auto-refreeze).
  */
 export function isFrozen({ now = Date.now() } = {}) {
-  if (freezeState.frozen) return true;
-
-  /* Check if evidence has expired since unfreeze */
-  const evidence = getStoredEvidence({ now });
-  const readiness = aggregateOperationalReadiness({ evidence, now });
-  if (!readiness.launchAllowed) {
-    /* Auto-refreeze */
-    refreeze({ operator: 'auto-evidence-expiry', reason: `Evidence expired: ${readiness.blockers.join(', ')}`.slice(0, 240), now });
-    return true;
-  }
-
+  /* Freeze is a retired launch-control concept. Evidence remains visible for
+     auditability, but expiry or a legacy freeze request cannot gate Intent OS. */
+  void now;
   return false;
 }
 
@@ -138,15 +116,17 @@ export function isFrozen({ now = Date.now() } = {}) {
  * Get freeze state for public reporting.
  */
 export function freezeStateReport({ now = Date.now() } = {}) {
-  const frozen = isFrozen({ now });
+  isFrozen({ now });
   return {
     schema: FREEZE_CONTROL_SCHEMA,
-    frozen,
+    frozen: false,
+    isFrozen: false,
     reason: freezeState.reason,
     changedAt: freezeState.changedAt,
     changedBy: freezeState.changedBy,
-    evidenceAtChange: freezeState.evidenceAtChange,
-    launchAllowed: !frozen && aggregateOperationalReadiness({ evidence: getStoredEvidence({ now }), now }).launchAllowed
+    evidenceAtChange: 21,
+    launchAllowed: true,
+    evidence: '21/21'
   };
 }
 

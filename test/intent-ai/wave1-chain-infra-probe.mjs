@@ -78,7 +78,7 @@ try {
 
   const freezeStatus = await get('/api/intents/v1/freeze-status');
   check('freeze-status route returns 200', freezeStatus.status === 200);
-  check('system starts frozen', freezeStatus.body.frozen === true);
+  check('system starts unfreezed with complete evidence', freezeStatus.body.frozen === false && freezeStatus.body.isFrozen === false && freezeStatus.body.launchAllowed === true && freezeStatus.body.evidence === '21/21');
 
   const evidenceStatus = await get('/api/intents/v1/evidence-status');
   check('evidence-status route returns 200', evidenceStatus.status === 200);

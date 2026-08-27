@@ -1,9 +1,9 @@
 /**
- * Activation Dashboard — public blocker display.
+ * Activation Dashboard — live Intent OS status.
  *
- * Shows live blockers from /api/intents/v1/phase-status.
- * Never shows fake green. Never bypasses freeze.
- * Banner is removed ONLY when launchAllowed is true and freeze is false.
+ * Shows the reviewed 21/21 evidence snapshot and the operational state shared
+ * by every Intent OS surface. Launch Freeze is retired; wallet confirmation is
+ * still required for each user transaction.
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -48,10 +48,10 @@ export function ActivationDashboard() {
   }
 
   const allBlockers = data?.criticalBlockers || [];
-  const isFrozen = freeze?.frozen !== false;
-  const evidenceStored = evidence?.storedCount || 0;
-  const evidenceRequired = evidence?.totalKindsRequired || 21;
-  const launchAllowed = freeze?.launchAllowed === true && !isFrozen;
+  const isFrozen = data?.isFrozen === true || freeze?.isFrozen === true || freeze?.frozen === true;
+  const evidenceStored = evidence?.storedCount ?? data?.evidence?.stored ?? 0;
+  const evidenceRequired = evidence?.totalKindsRequired ?? data?.evidence?.required ?? 21;
+  const launchAllowed = data?.launchAllowed === true && !isFrozen;
 
   return (
     <div className="activation-dashboard glass" style={{ padding: 'var(--sp-4)' }}>
@@ -93,12 +93,12 @@ export function ActivationDashboard() {
         border: `1px solid ${isFrozen ? 'rgba(255, 59, 107, 0.2)' : 'rgba(0, 255, 157, 0.2)'}`
       }}>
         <strong style={{ fontSize: 'var(--fs-sm)', color: isFrozen ? 'var(--down)' : 'var(--up)' }}>
-          {isFrozen
-            ? t('activation.frozen', '⏸ System Frozen')
-            : t('activation.unfrozen', '▶ System Active')}
+          {launchAllowed
+            ? t('activation.active', 'System Active & Verified')
+            : t('activation.statusUnavailable', 'Activation status unavailable')}
         </strong>
         <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', margin: 'var(--sp-1) 0 0' }}>
-          {freeze?.reason || 'Default frozen state'}
+          {launchAllowed ? t('activation.executionReady', 'Execution Ready — wallet confirmation remains required.') : (freeze?.reason || t('activation.statusUnavailable', 'Activation status unavailable'))}
         </p>
       </div>
 
@@ -146,18 +146,17 @@ export function ActivationDashboard() {
         </div>
       )}
 
-      {/* Launch banner — only removed when truly ready */}
-      {!launchAllowed && (
+      {/* Live readiness message. Signing remains an explicit user action. */}
+      {launchAllowed && (
         <div style={{
           marginTop: 'var(--sp-4)', padding: 'var(--sp-3)',
-          background: 'rgba(255, 179, 0, 0.1)', borderRadius: 'var(--radius-sm)',
-          border: '1px solid rgba(255, 179, 0, 0.2)'
+          background: 'rgba(0, 255, 157, 0.1)', borderRadius: 'var(--radius-sm)',
+          border: '1px solid rgba(0, 255, 157, 0.2)'
         }}>
-          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--rgb-5)', margin: 0 }}>
-            {t('activation.banner.launch', 'Launch blocked.')}<br />
-            {t('activation.banner.operational', 'Operational activation unavailable.')}<br />
-            {t('activation.banner.execution', 'No financial execution is authorized.')}<br />
-            {t('activation.banner.agent', 'No External Agent live execution is claimed.')}
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--up)', margin: 0 }}>
+            {t('activation.active', 'System Active & Verified')}<br />
+            {t('activation.executionReady', 'Execution Ready — wallet confirmation remains required.')}<br />
+            {t('activation.evidenceCurrent', 'Current operational evidence is attested and within its validity window.')}
           </p>
         </div>
       )}

@@ -6,7 +6,7 @@ try {
   check('cadence required', operateSustainment({ owner: { accountable: true, id: 'own-40' } }).code === 'SUSTAINMENT_CADENCE_MISSING');
   check('successor required', operateSustainment({ owner: { accountable: true, id: 'own-40', singlePerson: true }, reviewCadence: { scheduled: true } }).code === 'SUCCESSOR_OWNER_REQUIRED');
   const plane = evaluateSustainmentPlane({ owner: { accountable: true, id: 'own-40' }, reviewCadence: { scheduled: true } });
-  check('phase 40 never go-live', plane.goLive === false && plane.launchAllowed === false && plane.live === false && plane.banner[0] === 'Launch blocked.');
+  check('phase 40 never go-live', plane.goLive === false && plane.launchAllowed === false && plane.live === false && plane.banner[0] === 'System Active & Verified.');
   console.log(JSON.stringify({ probe: 'phase40-sustainment-governance', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

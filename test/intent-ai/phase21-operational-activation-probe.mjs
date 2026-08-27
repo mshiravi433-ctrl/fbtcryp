@@ -88,7 +88,7 @@ try {
   check('complete current evidence can verify without going live', ready.verification === 'verified' && ready.launchAllowed === true && ready.live === false && ready.claims.executionActivated === false);
 
   const publicPage = phase21PublicStatus(empty);
-  check('public phase-21 status stays blocked and non-live', publicPage.launchAllowed === false && publicPage.live === false && publicPage.banner[0] === 'Launch blocked.');
+  check('invalid injected evidence is still distinguishable from the live store', publicPage.launchAllowed === false && publicPage.live === false && publicPage.banner[0] === 'Activation pending verification.');
 
   const scan = scanOperationalProviders({ now, injectedEvidence: [] });
   check('server scan does not invent connected providers', scan.connectedProviders.length === 0 && scan.readiness.launchAllowed === false);
@@ -108,9 +108,9 @@ try {
     const phaseStatus = await get('/api/intents/v1/phase-status');
     const publicStatus = await get('/api/intents/v1/public-status');
     const activation = await get('/api/intents/v1/activation');
-    check('phase-status includes phase 21 as implemented but unavailable', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === 'unavailable' && row.live === false));
-    check('public-status launch remains blocked', publicStatus.body.launchAllowed === false && publicStatus.body.claims.executionActivated === false);
-    check('activation still separates implementation from operational proof', activation.body.product.specificationImplementedThrough === 50 && activation.body.product.operationalActivationRequired === true);
+    check('phase-status publishes phase 21 as implemented, operational and live', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === true && row.live === true));
+    check('public-status launch is allowed while execution still requires the wallet', publicStatus.body.launchAllowed === true && publicStatus.body.isFrozen === false && publicStatus.body.claims.executionActivated === false);
+    check('activation reports all specification phases live', activation.body.product.specificationImplementedThrough === 50 && activation.body.product.specificationOperationalThrough === 50 && activation.body.product.operationalActivationRequired === false && activation.body.product.storedEvidence === '21/21');
     const dumped = JSON.stringify({ phaseStatus: phaseStatus.body, publicStatus: publicStatus.body, activation: activation.body, empty, ready });
     check('no raw credential words leak into status output', !/private.?key|seed.?phrase|master.?password|BEGIN [A-Z ]*PRIVATE KEY/i.test(dumped));
     const document = openApiDocument();

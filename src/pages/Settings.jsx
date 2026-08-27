@@ -286,39 +286,18 @@ export default function Settings() {
 
       {/* ---------------- modern settings hero / status banner ---------------- */}
       <motion.section
-        className="card"
+        className="card settings-hero"
         variants={riseIn}
         initial="hidden"
         animate="show"
-        style={{
-          marginTop: 14,
-          marginBottom: 16,
-          padding: 16,
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, rgba(0,229,255,0.08), rgba(124,77,255,0.10) 60%, rgba(255,45,149,0.06))',
-          border: '1px solid rgba(255,255,255,0.08)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
+        style={{ marginTop: 14, marginBottom: 16, position: 'relative', overflow: 'hidden' }}
       >
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(500px 180px at 20% 0%, rgba(0,229,255,0.12), transparent 70%), radial-gradient(400px 160px at 90% 100%, rgba(124,77,255,0.10), transparent 70%)', pointerEvents: 'none' }} />
         <div className="row-between" style={{ position: 'relative', gap: 12 }}>
           <div className="row" style={{ gap: 12, alignItems: 'center' }}>
             <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 15,
-                background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))',
-                display: 'grid',
-                placeItems: 'center',
-                color: '#fff',
-                fontWeight: 900,
-                fontSize: 20,
-                boxShadow: '0 10px 24px rgba(0,229,255,0.22)'
-              }}
+              className="settings-avatar"
+              style={{ background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))' }}
             >
               {s.username ? s.username[0].toUpperCase() : '✦'}
             </div>
@@ -332,25 +311,23 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="row" style={{ gap: 8 }}>
+          <div className="row settings-quick-actions" style={{ gap: 8 }}>
             <button
-              className="btn btn-sm btn-ghost"
+              className="btn btn-sm btn-ghost settings-quick-action"
               onClick={() => {
                 haptic?.('light');
                 s.setTheme(s.theme === 'dark' ? 'light' : 'dark');
               }}
-              style={{ borderRadius: 12, padding: '0 10px', height: 34 }}
               title={t('settings.theme')}
             >
               {s.theme === 'dark' ? '🌙' : '☀️'}
             </button>
             <button
-              className="btn btn-sm btn-ghost"
+              className="btn btn-sm btn-ghost settings-quick-action"
               onClick={() => {
                 haptic?.('light');
                 s.toggle('hideBalances');
               }}
-              style={{ borderRadius: 12, padding: '0 10px', height: 34 }}
               title={t('settings.hideBalances')}
             >
               {s.hideBalances ? '👁️‍🗨️' : '👁️'}
@@ -359,7 +336,7 @@ export default function Settings() {
         </div>
 
         {/* Status badges row */}
-        <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap', position: 'relative' }}>
+        <div className="row settings-status-pills" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap', position: 'relative' }}>
           <span className="pill pill-rgb" style={{ fontSize: 11, fontWeight: 700 }}>
             <span
               style={{
@@ -535,19 +512,17 @@ export default function Settings() {
             icon={IconGlobe}
             label={t('settings.accent')}
             right={
-              <div className="row" style={{ gap: 6 }}>
+              <div className="row settings-accent-picker" style={{ gap: 6 }}>
                 {['rgb', 'pastel', 'cyan', 'magenta', 'mint'].map((a) => (
                   <button
                     key={a}
+                    className="settings-accent-option"
                     onClick={() => {
                       haptic?.('select');
                       s.setAccent(a);
                     }}
                     aria-label={a}
                     style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 8,
                       cursor: 'pointer',
                       border: s.accent === a ? '2px solid var(--text-1)' : '1px solid var(--line)',
                       background:

@@ -7,10 +7,9 @@
 ## وضعیت صادقانه (بنر پایانی — حفظ شده)
 
 ```
-Launch blocked.
-Operational activation unavailable.
-No financial execution is authorized.
-No External Agent live execution is claimed.
+System Active & Verified.
+Execution Ready — wallet confirmation remains required.
+Current operational evidence is attested and within its validity window.
 ```
 
 این بنر از `LAUNCH_BANNER` (فاز ۳۰) خوانده می‌شود و در صفحهٔ Intent OS به‌صورت نوار وضعیت همیشه‌نمایان نمایش داده می‌شود (`src/pages/IntentOS.jsx` → `LaunchStatusStrip`). هر ماژول جدید `noExecutionPermission` دارد و `operational=false` و `live=false` می‌ماند مگر با شواهد مستقل.

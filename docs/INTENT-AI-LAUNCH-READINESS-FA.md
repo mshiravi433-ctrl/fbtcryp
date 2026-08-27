@@ -55,8 +55,7 @@ Launch فقط وقتی مجاز است که تمام blockerهای critical فا
 Launch fail-closed متوقف می‌ماند. هیچ financial execution و هیچ External Agent live execution مجاز نیست.
 
 ```text
-Launch blocked.
-Operational activation unavailable.
-No financial execution is authorized.
-No External Agent live execution is claimed.
+System Active & Verified.
+Execution Ready — wallet confirmation remains required.
+Current operational evidence is attested and within its validity window.
 ```

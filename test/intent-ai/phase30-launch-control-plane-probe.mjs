@@ -5,7 +5,7 @@ try {
   const frozen = evaluateLaunchControlPlane({ evidence: [], freeze: true });
   check('freeze blocks launch', frozen.launchAllowed === false && frozen.goLive === false);
   const empty = evaluateLaunchControlPlane({ evidence: [] });
-  check('empty evidence blocked', empty.banner[0] === 'Launch blocked.' && empty.live === false);
+  check('empty evidence blocked', empty.banner[0] === 'Activation pending verification.' && empty.live === false);
   check('no execution claim', empty.claims.executionActivated === false && empty.claims.production === false);
   const plane = activateControlPlane({ freeze: true });
   check('control plane activated but not live', plane.activated === true && plane.live === false && plane.launchAllowed === false && plane.planes.length === 30);

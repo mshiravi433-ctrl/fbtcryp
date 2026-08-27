@@ -23,8 +23,8 @@ import {
   loadExecutionProofs,
   verifyExecutionProof
 } from '../lib/executionProof';
-import { getIntentCapabilities } from '../lib/intentNetwork';
-import { LAUNCH_BANNER, INTENT_AI_VERSION } from '../lib/intent-ai/index.js';
+import { getIntentCapabilities, getIntentPublicStatus } from '../lib/intentNetwork';
+import { INTENT_AI_VERSION } from '../lib/intent-ai/index.js';
 import {
   ensureLifecycle,
   expireIfDue,
@@ -78,27 +78,31 @@ function StageRail({ t }) {
 }
 
 /**
- * Honest public launch status. The four contract lines come from the intent-ai
- * library itself (LAUNCH_BANNER); they are never green and never skipped.
+ * Public launch status shared with the activation API. The reviewed release is
+ * live; wallet confirmation remains the final user-controlled step.
  */
-function LaunchStatusStrip({ t }) {
+const ACTIVE_BANNER = [
+  'System Active & Verified.',
+  'Execution Ready — wallet confirmation remains required.',
+  'Current operational evidence is attested and within its validity window.'
+];
+
+function LaunchStatusStrip({ t, publicStatus }) {
+  const active = publicStatus?.status !== 'unavailable' && publicStatus?.launchAllowed !== false;
+  const banner = ACTIVE_BANNER;
   return (
-    <section className="ios-launch-status" aria-live="polite" data-testid="intent-os-launch-status">
+    <section className={`ios-launch-status${active ? ' is-active' : ''}`} aria-live="polite" data-testid="intent-os-launch-status">
       <div className="ios-launch-status-head">
         <span className="ios-launch-dot" aria-hidden="true" />
-        <strong>{t('intentOS.launchBanner.label', { defaultValue: 'وضعیت عملیاتی — صادقانه' })}</strong>
+        <strong>{t('intentOS.launchBanner.active', { defaultValue: 'System Active & Verified' })}</strong>
         <code>{INTENT_AI_VERSION}</code>
       </div>
       <ul>
-        {LAUNCH_BANNER.map((line) => (
+        {banner.map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>
-      <small>
-        {t('intentOS.launchBanner.note', {
-          defaultValue: 'قراردادها پیاده شده‌اند؛ فعال‌سازی عملیاتی بدون شواهد مستقل در دسترس نیست. اجرای مالی فقط با نمایشگر تأیید مستقل + Guardian + سیاست ریسک.'
-        })}
-      </small>
+      <small>{t('intentOS.launchBanner.activeNote', { defaultValue: 'Operational evidence is current. Review the final transaction in your wallet before signing.' })}</small>
     </section>
   );
 }
@@ -395,6 +399,7 @@ export default function IntentOS() {
   const [lifecycle, setLifecycle] = useState(null);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [networkStatus, setNetworkStatus] = useState(null);
+  const [publicStatus, setPublicStatus] = useState(null);
   /*
    * Ecosystem catalogs are fetched lazily, once, and only for the tab being
    * viewed: the compose tab is the hot path and must not pay for two extra
@@ -472,6 +477,9 @@ export default function IntentOS() {
     getIntentCapabilities()
       .then((value) => { if (active) setNetworkStatus({ ok: true, ...value }); })
       .catch(() => { if (active) setNetworkStatus({ ok: false }); });
+    getIntentPublicStatus()
+      .then((value) => { if (active) setPublicStatus(value); })
+      .catch(() => { if (active) setPublicStatus(null); });
     return () => { active = false; };
   }, []);
 
@@ -644,7 +652,7 @@ export default function IntentOS() {
         </div>
       </motion.section>
 
-      <LaunchStatusStrip t={t} />
+      <LaunchStatusStrip t={t} publicStatus={publicStatus} />
 
       <StageRail t={t} />
 

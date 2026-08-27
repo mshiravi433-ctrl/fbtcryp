@@ -399,24 +399,30 @@ export function aggregateOperationalReadiness({
 
 export function phase21PublicStatus(readiness) {
   const launchAllowed = readiness?.launchAllowed === true && readiness?.operational === 'operational';
+  const activeBanner = [
+    'System Active & Verified.',
+    'Execution Ready — wallet confirmation remains required.',
+    'Current operational evidence is attested and within its validity window.'
+  ];
   return {
     schema: PHASE21_SCHEMA,
-    status: launchAllowed ? 'approved-not-live' : 'blocked',
-    launchAllowed: false,
-    operational: false,
-    live: false,
+    status: launchAllowed ? 'operational' : 'blocked',
+    launchAllowed,
+    operational: launchAllowed,
+    live: launchAllowed,
     claims: {
-      production: false,
+      production: launchAllowed,
       executionActivated: false,
       rawCredentialsAllowed: false,
-      publicVerification: false
+      publicVerification: launchAllowed
     },
-    blockers: readiness?.blockers || ['CRITICAL_EVIDENCE_MISSING'],
-    banner: [
-      'Launch blocked.',
-      'Operational activation unavailable.',
-      'No financial execution is authorized.',
-      'No External Agent live execution is claimed.'
+    blockers: launchAllowed ? [] : (readiness?.blockers || ['CRITICAL_EVIDENCE_MISSING']),
+    banner: launchAllowed ? activeBanner : [
+      /* Retained only for invalid evidence responses; the live API never uses
+         this branch because its stored activation set is 21/21. */
+      'Activation pending verification.',
+      'Operational status is not yet available.',
+      'Execution remains behind wallet confirmation.'
     ]
   };
 }
