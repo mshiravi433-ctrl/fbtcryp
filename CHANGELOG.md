@@ -1,3 +1,38 @@
+## Unreleased — Intent OS Arc B (phases 58-62): real market data
+
+- **58 — live market regime.** `liveMarketRegime.js` builds the Spec-65
+  regime detector's evidence from real price series instead of a hand-written
+  array: trend, volatility and liquidity are computed from the actual points,
+  every answer carries its source, its observation time and its sample size,
+  and points older than the window are excluded rather than smoothed over. A
+  dead feed is `dataStatus: 'unavailable'` — never a remembered regime.
+- **59 — price alert to intent proposal.** A triggered alert can now produce
+  exactly one thing: a proposal (`alertProposals.js`) carrying
+  `executionAuthorized: false` and `requiresConfirmationScreen: true`.
+  Accepting it returns an *utterance* that goes back through the normal
+  chat → draft → confirmation-gate pipeline; there is no function in the
+  module that submits or signs. A stale or unsourced price produces an honest
+  "unavailable" notice instead of a proposal.
+- **60 — explainable analysis on real data.** `liveWhy.js` screens every data
+  point before it is allowed to support an answer: no source, no timestamp, no
+  number, or too old means dropped and counted. With nothing checkable left,
+  the recommendation is not made at all. What survives is handed to the
+  existing `whyThisDecision()`, so each figure in the reply can be traced to a
+  source, a time and a value.
+- **61 — real goal progress.** `liveGoalProgress.js` values real holdings at
+  real prices and turns that into the *attested* balance the goal engine
+  requires. `GoalCountdown` now renders an actual progress bar from it — and
+  when the valuation cannot be attested it renders an explicit "progress
+  unknown" state, never a bar sitting at 0% that would read as "no progress".
+- **62 — honest backtest.** `honestBacktest.js` runs a strategy over real
+  history with no look-ahead (the decision for bar *i* only ever sees bars
+  ≤ *i*, and `assertNoLookAhead()` proves it by replaying against a truncated
+  series). Fees and slippage are applied to every simulated fill and disclosed
+  separately. Every result is labelled `SIMULATION`, carries its window, its
+  source and three disclosures, and `futureReturnClaim` is always false.
+- Probes `phase58`–`phase62` (213 checks) registered in the aggregate runner;
+  `npm run build` clean and `npm test` fully green.
+
 ## Unreleased — Intent OS Arc A (phases 51-57): real execution
 
 - **51 — real wallet signing.** A connected wallet is now the signer.

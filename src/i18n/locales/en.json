@@ -5307,6 +5307,38 @@
     "wallet": {
       "signRequired": "Your wallet will ask you to sign the terms shown above.",
       "notConnected": "No wallet is connected, so nothing can be signed or sent."
+    },
+    "regime": {
+      "unavailable": "Market conditions are unavailable right now — the price feed did not return usable data, so no read is offered.",
+      "summary": "Current market read: {{labels}} (trend {{trend}}%, movement {{volatility}}%). Source: {{sources}}."
+    },
+    "proposal": {
+      "priceUp": "{{symbol}} moved up {{changePct}}% to {{price}} (source: {{source}}). Would you like me to prepare a draft? Nothing runs until you confirm.",
+      "priceDown": "{{symbol}} moved down {{changePct}}% to {{price}} (source: {{source}}). Would you like me to prepare a draft? Nothing runs until you confirm.",
+      "feedUnavailable": "The price feed for {{symbol}} is unavailable, so no suggestion is made.",
+      "accepted": "Accepted. The request now goes through the normal review and confirmation steps.",
+      "declined": "Dismissed. Nothing was prepared."
+    },
+    "why": {
+      "noData": "There is not enough checkable data behind this, so no recommendation is made.",
+      "basis": "Based on {{count}} checkable data points from {{sources}}, last observed at {{observedAt}}."
+    },
+    "goalProgress": {
+      "title": "Goal progress",
+      "percent": "{{pct}}%",
+      "unknownShort": "unknown",
+      "unknown": "Progress cannot be verified yet — no confirmed balance reading is available, so no percentage is shown.",
+      "summary": "{{pct}}% of the goal: {{current}} of {{target}} (source: {{sources}}).",
+      "source": "Balance source: {{source}}"
+    },
+    "backtest": {
+      "unavailable": "Not enough historical data to run a simulation.",
+      "summary": "{{label}}: {{returnPct}}% over the tested window ({{fromAt}} to {{toAt}}), {{trades}} trades, {{costUsd}} in fees and slippage, largest dip {{drawdownPct}}%. Source: {{source}}.",
+      "disclosure": {
+        "simulation": "This is a simulation on past data. Past behaviour is not a statement about the future.",
+        "costs": "Trading fees and slippage are included in every simulated fill and shown separately.",
+        "noForecast": "No future outcome is claimed or implied."
+      }
     }
   }
 }

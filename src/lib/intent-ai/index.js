@@ -870,4 +870,51 @@ export {
 } from './capabilityScanner.js';
 export { createNonBypassableControls } from './phaseBoundary.js';
 
+/* Arc B — live market data (phases 58-62) */
+export {
+  LIVE_REGIME_SCHEMA,
+  DEFAULT_REGIME_MAX_AGE_HRS,
+  MIN_REGIME_POINTS,
+  normalizeSeries,
+  seriesMetrics,
+  buildRegimeEvidence,
+  detectLiveMarketRegime,
+  describeLiveRegime
+} from './liveMarketRegime.js';
+export {
+  ALERT_PROPOSAL_SCHEMA,
+  PROPOSAL_STATUSES,
+  PROPOSAL_MAX_PRICE_AGE_MS,
+  PROPOSAL_TTL_MS,
+  proposalFromAlert,
+  informedUnavailable,
+  acceptProposal,
+  declineProposal,
+  assertNoAlertShortcut
+} from './alertProposals.js';
+export {
+  LIVE_WHY_SCHEMA,
+  DEFAULT_DATA_MAX_AGE_MS,
+  screenDataPoints,
+  whyFromLiveData,
+  assertExplainable
+} from './liveWhy.js';
+export {
+  LIVE_GOAL_PROGRESS_SCHEMA,
+  DEFAULT_PRICE_MAX_AGE_MS,
+  valueHoldings,
+  liveGoalProgress,
+  progressBarState
+} from './liveGoalProgress.js';
+export {
+  BACKTEST_SCHEMA,
+  BACKTEST_LABEL,
+  MIN_BACKTEST_POINTS,
+  movingAverageStrategy,
+  runHonestBacktest,
+  assertNoLookAhead,
+  describeBacktest,
+  assertNoProfitPromise
+} from './honestBacktest.js';
+
 export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';

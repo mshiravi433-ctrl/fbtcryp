@@ -36,6 +36,7 @@ import {
   evaluateRisk, venueHealth, reconcile, executeConfirmed,
   describeWalletRuntime, signIntentWithWallet,
   sessionPolicyCaps, checkSessionPolicy, explainExecutionFailure,
+  goalProgress,
   PRIMARY_MODES, MODE_LABELS, MODE_DEFINITIONS,
   INTENT_LIMITS, MAX_GOAL_DURATION_HRS,
   FLOW_CHAIN_SUGGESTIONS, FLOW_TASK_SUGGESTIONS, FLOW_TOOL_SUGGESTIONS
@@ -536,6 +537,26 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     : { ok: true, caps: policyCaps, violations: [] }),
   [screen, session?.policy, policyCaps]);
   const policyViolations = policyCheck.violations || [];
+
+  /*
+   * Phase 61 — goal progress is only shown when it is ATTESTED. The session
+   * carries an attested balance observation only when a real provider has
+   * confirmed it; without one the bar renders an explicit "unknown" instead
+   * of an empty bar that would read as "0% done".
+   */
+  const goalProgressView = useMemo(() => {
+    const attested = session?.goalMeta?.attestedBalance || null;
+    const target = Number(session?.goalMeta?.capital);
+    if (!attested || !Number.isFinite(target) || target <= 0) return null;
+    const computed = goalProgress({
+      targetCapital: target,
+      currentBalance: attested,
+      capitalUsd: session?.goalMeta?.initialCapital ?? null
+    });
+    if (computed?.progressComputable !== true) return null;
+    return { progressPct: computed.progressPct, source: attested.providerId || null };
+  }, [session?.goalMeta]);
+
   const confirmBlocked = Object.keys(screen?.errors || {}).length > 0
     || policyViolations.length > 0
     || session?.status === 'STOPPED';
@@ -682,6 +703,8 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           deadline={session.goalDeadline}
           goalPct={session.goalMeta?.pct ?? null}
           capitalUsd={session.goalMeta?.capital ?? null}
+          progressPct={goalProgressView?.progressPct ?? null}
+          progressSource={goalProgressView?.source ?? null}
         />
       )}
 
