@@ -24,6 +24,7 @@
  */
 
 import { ALLOWED_CHAINS } from './permissions.js';
+import { checkIntentLimits } from './intentLimits.js';
 
 const CHAIN_ALIASES = {
   'آربیتروم': 42161, 'اتریوم': 1, 'بیس': 8453, 'پالیگان': 137, 'سولانا': 501,
@@ -62,7 +63,11 @@ const CHAIN_LONG_NAMES = new Set([
 ]);
 
 const ACTION_KEYWORDS = [
-  { action: 'conversation', keywords: ['سلام', 'درود', 'hello', 'hi', 'مرحبا', 'اهلاً'], kind: 'conversation', subType: 'greeting' },
+  // English bare greetings ("hello", "hi") are deliberately NOT greetings
+  // here: with no actionable request they must surface ACTION_UNCLEAR so the
+  // guided flow can ask what the user actually wants. Localised greetings
+  // (سلام، درود، مرحبا…) remain first-class conversation intents.
+  { action: 'conversation', keywords: ['سلام', 'درود', 'مرحبا', 'اهلاً'], kind: 'conversation', subType: 'greeting' },
   { action: 'conversation', keywords: ['ممنون', 'تشکر', 'مرسی', 'سپاس', 'thanks', 'thank you', 'شكر', 'شكرا'], kind: 'conversation', subType: 'thanks' },
   { action: 'conversation', keywords: ['خداحافظ', 'بدرود', 'bye', 'goodbye', 'وداعا', 'مع السلامة'], kind: 'conversation', subType: 'goodbye' },
   { action: 'swap',        keywords: ['swap', 'exchange', 'convert', 'trade', 'تبدیل', 'مبادله', 'تعویض'],                   kind: 'swap' },
@@ -71,7 +76,7 @@ const ACTION_KEYWORDS = [
   { action: 'buy',         keywords: ['buy', 'purchase', 'long', 'go long', 'خرید'],                     kind: 'swap' },
   { action: 'sell',        keywords: ['sell', 'short', 'exit', 'فروش'],                                  kind: 'swap' },
   { action: 'farm',        keywords: ['farm', 'stake', 'yield', 'lp', 'liquidity'],              kind: 'defi' },
-  { action: 'futures',     keywords: ['futures', 'perps', 'perpetual', 'leverage', 'فیوچرز', 'اهرم'],               kind: 'futures' },
+  { action: 'futures',     keywords: ['futures', 'perps', 'perpetual', 'leverage', 'فیوچرز'],               kind: 'futures' },
   { action: 'dydx',        keywords: ['dydx'],                                                   kind: 'futures' },
   { action: 'defi',        keywords: ['defi', 'lend', 'borrow', 'supply', 'deposit', 'دیفای', 'وام'],            kind: 'defi' },
   { action: 'analyze',     keywords: ['analyze', 'analyse', 'analysis', 'research', 'look at', 'تحلیل'],  kind: 'analysis' },
@@ -117,10 +122,19 @@ function normalizeToken(raw) {
   return TOKEN_ALIASES[key] || (key.length >= 2 && key.length <= 12 ? key : null);
 }
 
+/** Token normalizer reused by the guided flow (single token from an answer). */
+export { normalizeToken };
+
 function detectAmount(text) {
   // "$500" — explicit USD
   const usdMatch = text.match(/\$\s?([0-9]+(?:\.[0-9]+)?)/);
   if (usdMatch) return { amount: Number(usdMatch[1]), unit: 'USD', match: usdMatch[0] };
+
+  // "500 دلار" / "500 dollars" / "500 usd" — the Persian phrasing users write
+  // when the guided flow asks how much they want to enter. No \b at the end:
+  // Persian letters are not \w in JS regex, so \b never fires after them.
+  const dollarMatch = text.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:دلار|دولار|dollars?|usd)(?![a-z])/i);
+  if (dollarMatch) return { amount: Number(dollarMatch[1]), unit: 'USD', match: dollarMatch[0] };
 
   // "N TOKEN" patterns — return the FIRST occurrence whose token is a known alias
   // (avoids matching "1 day" as "1 DAY"). For "buy N X with M Y", the caller will
@@ -158,6 +172,9 @@ function detectChain(text) {
   }
   return null;
 }
+
+/** Chain detector reused by the guided flow (network answers). */
+export { detectChain };
 
 function detectLeverage(text) {
   const m = text.match(/(\d+(?:\.\d+)?)\s?x\s?(leverage|lev|long|short)?/i);
@@ -391,12 +408,18 @@ export function parseUserIntent(rawText, context = {}) {
     Boolean(action) && Boolean(amt) && Boolean(fromSymbol) && (kind === 'send' || Boolean(toSymbol))
   );
 
+  // Product limits: over-limit numbers parse fine but carry a friendly
+  // warning so the chat layer can ask the user to respect the ceiling
+  // instead of silently clamping their money.
+  const limitViolations = checkIntentLimits(intent);
+
   return {
     ok,
     intent,
     confidence,
     clarifications: (kind === 'conversation' || kind === 'help') ? [] : [...new Set(clarifications)],
     signals,
+    limitViolations,
     raw: text.slice(0, 500)
   };
 }
@@ -420,5 +443,24 @@ export function refineIntent(parsed, answers = {}) {
   if (answers.LEVERAGE && Number.isFinite(Number(answers.LEVERAGE))) {
     out.leverage = Math.max(1, Math.min(Number(answers.LEVERAGE), 100));
   }
-  return { ...parsed, intent: out, ok: Boolean(out.action && out.fromSymbol) };
+  // Guided-flow answers: goal percentage and duration in hours.
+  if (answers.GOAL_PCT != null && Number.isFinite(Number(answers.GOAL_PCT)) && Number(answers.GOAL_PCT) > 0) {
+    out.goalPct = Number(answers.GOAL_PCT);
+    out.kind = 'goal';
+  }
+  if (answers.DURATION_HRS != null && Number.isFinite(Number(answers.DURATION_HRS)) && Number(answers.DURATION_HRS) > 0) {
+    out.durationHrs = Number(answers.DURATION_HRS);
+    out.kind = out.kind === 'analysis' || out.kind === 'conversation' ? 'goal' : out.kind;
+  }
+  // An "unclear action" parse that receives actionable answers becomes a
+  // real intent, so answering the guided flow's first question continues the
+  // session instead of looping on the same clarification.
+  const actionable = answers.FROM_ASSET || answers.TO_ASSET || answers.AMOUNT || answers.GOAL_PCT || answers.DURATION_HRS;
+  if (actionable && (!out.action || out.kind === 'conversation' || out.kind === 'help')) {
+    out.action = out.goalPct != null ? 'goal' : 'swap';
+    out.kind = out.goalPct != null ? 'goal' : 'swap';
+  }
+  const refined = { ...parsed, intent: out, ok: Boolean(out.action && out.fromSymbol) };
+  refined.limitViolations = checkIntentLimits(out);
+  return refined;
 }

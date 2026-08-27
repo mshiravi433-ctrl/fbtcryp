@@ -5044,7 +5044,8 @@
       "thanks": "You're welcome. Whenever you are ready, write your request in a structured format.",
       "goodbye": "Goodbye! Let me know if you need anything else.",
       "help": "Try writing your request like this:\n\n• Swap 100 USDC to ETH on Arbitrum\n• Analyze BTC\n• Send 10 USDC to a specific address\n• Target 10% on 500 USDC in 4 hours\n• Move an asset between two networks",
-      "clarifyMissing": "To prepare this request, please specify the amount, source asset, target asset, and network."
+      "clarifyMissing": "To prepare this request, please specify the amount, source asset, target asset, and network.",
+      "welcome": "Hello! I am Intent AI. What would you like to do? You can swap, bridge, send, set a profit goal, or ask for market analysis."
     },
     "msg": {
       "clarifications": "A few things are unclear:",
@@ -5066,7 +5067,13 @@
       "drafts": "{{n}} draft order(s)",
       "openGate": "Open confirmation gate",
       "cannotProceed": "Cannot proceed",
-      "policyConfirm": "Please confirm the session policy in the panel above."
+      "policyConfirm": "Please confirm the session policy in the panel above.",
+      "nextStep": "Step {{step}} of {{total}} is ready",
+      "nextStepConfirm": "Answer \"yes\" here or press the confirm button below to run this step.",
+      "executionDeclined": "Understood — nothing was executed. The authorization stays with you.",
+      "executionRequiresL3": "I prepared everything, but automatic execution needs Level 3 (Controlled) with a confirmed policy.",
+      "executionL3Hint": "Switch to L3 above, confirm the policy, then approve the action.",
+      "handOff": "Open in swap screen"
     },
     "participants": {
       "user": "you",
@@ -5080,6 +5087,171 @@
       "participants": "participants",
       "externalSource": "discovery source",
       "notDiscovered": "No external agent participates in this mode."
+    },
+    "flow": {
+      "yes": "Yes",
+      "no": "No",
+      "confirmExecution": "I confirm — execute",
+      "allTools": "All of them",
+      "swapBridge": "Swap + Bridge",
+      "swapOnly": "Only Swap",
+      "noTools": "None of them",
+      "retry": "I did not quite catch that — let me ask again:",
+      "executionConfirm": "Do you confirm this action? I will run it right after your yes.",
+      "durationDays": "{{n}} days",
+      "durationHours": "{{n}} hours",
+      "tasks": {
+        "swap": "Swap",
+        "bridge": "Bridge",
+        "send": "Send",
+        "goal": "Profit goal",
+        "analyze": "Market analysis"
+      },
+      "chains": {
+        "arbitrum": "Arbitrum",
+        "ethereum": "Ethereum",
+        "base": "Base",
+        "bsc": "BNB Chain",
+        "polygon": "Polygon",
+        "optimism": "Optimism",
+        "avalanche": "Avalanche",
+        "linea": "Linea",
+        "solana": "Solana",
+        "tron": "Tron",
+        "ton": "TON",
+        "sonic": "Sonic"
+      },
+      "questions": {
+        "task": "What would you like to do?",
+        "amount": "How much (in dollars) would you like to enter?",
+        "confirmAmount": "You want to enter ${{amount}}. Do you confirm?",
+        "goal": "What profit target are you aiming for?",
+        "confirmGoal": "For a {{pct}}% gain?",
+        "duration": "How long should this goal run?",
+        "confirmDuration": "So the goal runs {{days}} days ({{hours}}h). Do you confirm?",
+        "from": "Which asset are you starting from?",
+        "to": "Which asset do you want to end up with?",
+        "network": "Which network? Here are the ones I support:",
+        "tools": "May I use Swap and Bridge if needed?"
+      },
+      "answers": {
+        "yes": "yes",
+        "no": "no",
+        "allTools": "yes, use all of them",
+        "swapBridge": "swap and bridge",
+        "swapOnly": "only swap",
+        "noTools": "none",
+        "durationDays": "{{n}} days",
+        "durationHours": "{{n}} hours",
+        "task": {
+          "swap": "swap",
+          "bridge": "bridge",
+          "send": "send",
+          "goal": "profit goal",
+          "analyze": "market analysis"
+        }
+      }
+    },
+    "limits": {
+      "warningTitle": "Just a friendly heads-up about the allowed limits",
+      "friendly": "Please restate your request within the allowed ceiling — I will take it from there.",
+      "TOTAL_INPUT_OVER_LIMIT": "The total amount you entered (${{value}}) is above the allowed ceiling of ${{limit}}.",
+      "PER_TX_OVER_LIMIT": "A single transaction of ${{value}} is above the per-transaction ceiling of ${{limit}}.",
+      "GOAL_PCT_OVER_LIMIT": "A {{value}}% target is above the maximum allowed goal of {{limit}}%.",
+      "GOAL_DURATION_OVER_LIMIT": "That duration works out to more than the maximum of {{days}} days.",
+      "hintAmount": "Maximum allowed total: ${{limit}}",
+      "hintPerTx": "Maximum per transaction: ${{limit}}",
+      "hintGoal": "Maximum goal: {{pct}}%",
+      "hintDuration": "Maximum duration: {{days}} days"
+    },
+    "agents": {
+      "analyzing": "Two AI agents are analysing together to find the best route…",
+      "analyzingNote": "The strategy engine and the execution engine independently review the request, challenge each other, and agree on the best next action.",
+      "result": "Based on the analysis, the best move right now is {{action}}: {{from}} → {{to}}."
+    },
+    "confirm": {
+      "title": "Confirm & adjust",
+      "edited": "edited",
+      "amount": "Amount (USD)",
+      "duration": "Duration (hours)",
+      "durationPlaceholder": "e.g. 720 = 30 days",
+      "goal": "Goal / target (%)",
+      "goalPlaceholder": "e.g. 20",
+      "route": "Route",
+      "chain": "chain",
+      "toolsTitle": "Which of these am I allowed to use?",
+      "toolsNote": "Unchecked tools are declined for this run — the plan is safely re-made without them.",
+      "final": "Final confirm",
+      "fixLimits": "Please correct the highlighted fields to stay within the allowed limits.",
+      "tool": {
+        "swap": "Swap",
+        "bridge": "Bridge",
+        "dca": "DCA"
+      }
+    },
+    "countdown": {
+      "title": "Goal countdown",
+      "goal": "target +{{pct}}%",
+      "days": "days",
+      "hours": "hours",
+      "minutes": "min",
+      "seconds": "sec",
+      "d": "d",
+      "expired": "expired",
+      "expiredNote": "This goal window has ended. Execution is no longer possible for it.",
+      "capital": "Capital at work: ${{amount}}",
+      "note": "Live estimate — market moves can end a goal earlier or later than planned.",
+      "attached": "A live countdown for this goal is shown above."
+    },
+    "examples": {
+      "title": "Prompt examples — tap to use",
+      "swap": {
+        "title": "Swap",
+        "e1": "swap 100 USDC to ETH on Arbitrum",
+        "e2": "convert 0.5 ETH to USDT on Base",
+        "e3": "trade 250 USDC for BTC on Optimism"
+      },
+      "bridge": {
+        "title": "Bridge",
+        "e1": "bridge 200 USDC from Arbitrum to Base",
+        "e2": "move 50 USDT cross-chain to Polygon",
+        "e3": "bridge 1000 USDC to Ethereum"
+      },
+      "send": {
+        "title": "Send",
+        "e1": "send 25 USDC to a saved address",
+        "e2": "transfer 10 USDT on Tron",
+        "e3": "pay 5 USDC from my wallet"
+      },
+      "goal": {
+        "title": "Goal",
+        "e1": "goal 20% profit on 500 USDT in 7 days on Arbitrum",
+        "e2": "target 10% on 1000 USDC in 4 hours",
+        "e3": "goal 15% on 2000 USDT to ETH in 30 days"
+      },
+      "analyze": {
+        "title": "Analyze",
+        "e1": "analyze BTC",
+        "e2": "research the ETH portfolio",
+        "e3": "look at SOL market news"
+      }
+    },
+    "externalInfo": {
+      "button": "How the external agent mode works",
+      "title": "External Agent mode",
+      "close": "Close",
+      "intro": "This mode lets FBT AI cooperate with an external AI agent you choose. It is deliberately the most restricted mode in the product.",
+      "howTitle": "How it works",
+      "howBody": "Discovery runs first: only agents listed in the reviewed server catalog (or explicitly supplied at runtime with a verified passport) can appear. A matching agent is admitted for analysis and preparation only — never automatically for execution.",
+      "securityTitle": "Security boundaries",
+      "securityPassport": "A verified passport with an explicit capability scope is required; unknown agents never enter the session.",
+      "securityNoCredentials": "No keys, seed phrases or secrets are ever shared — the chat itself rejects credential-shaped input.",
+      "securityScoped": "Every interaction runs through a scoped, time-limited session with per-request class checks (analysis vs preparation).",
+      "securityGuardian": "The independent Guardian reviews every step; an unverified or out-of-scope participant is blocked fail-closed.",
+      "securityGate": "Financial execution still requires the per-action authorization screen plus your wallet confirmation — an external agent can never trigger it alone.",
+      "securityReadonly": "Discovery is read-only: listing an agent grants no access by itself.",
+      "interactionTitle": "How you interact with it",
+      "interactionBody": "You keep talking to the same assistant. When a verified external agent participates, its identity and trust status are shown in the mode card, and you can stop, pause or revoke the session at any time with the controls above."
     }
   }
 }

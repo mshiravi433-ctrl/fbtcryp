@@ -27,15 +27,19 @@ export const PERMISSION_LEVEL_NAMES = Object.freeze({
   3: 'CONTROLLED_AUTONOMOUS'
 });
 
-/** Hard caps — a session can never request more than these, even at L3. */
+/**
+ * Hard caps — a session can never request more than these, even at L3.
+ * The financial ceilings mirror the user-facing product limits in
+ * intentLimits.js (single source of truth for what a user may ask for).
+ */
 export const DEFAULT_POLICY_CAPS = Object.freeze({
-  maxCapitalUsd: 100_000,
-  maxTransactionUsd: 10_000,
+  maxCapitalUsd: 400_000,
+  maxTransactionUsd: 5_000,
   maxLossUsd: 1_000,
   maxLeverage: 5,
   maxSlippagePct: 3,
   maxFeeBps: 500,        // 5%
-  maxDurationMs: 24 * 60 * 60 * 1000, // 24h
+  maxDurationMs: 24 * 60 * 60 * 1000, // 24h session bound; goals may run 30 days
   maxChains: 8,
   maxProtocols: 16,
   maxAssets: 32

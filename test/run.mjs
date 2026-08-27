@@ -194,6 +194,18 @@ console.log('▸ probing FBT Intent AI — Phase 1 Foundation (parser · permiss
   report('intent-ai phase-1 foundation', await runIntentAI());
 }
 
+/* Pure logic + source wiring, no DOM and no network: the product limits
+   (400k total / 5k per tx / 60% goal / 30 days) enforced with a friendly
+   warning, the step-by-step guided chat flow, the visible two-agent
+   routing with chat execution, the multi-step continuation, and the UI
+   wiring for the interactive confirmation screen, countdown, examples
+   accordion, external-agent info modal and dvh chat layout. */
+console.log('▸ probing FBT Intent AI — guided flow, product limits & interactive confirmation UI…');
+{
+  const { default: runGuidedFlow } = await import('./intent-ai/guided-flow-limits-probe.mjs');
+  report('intent-ai guided flow & limits', await runGuidedFlow());
+}
+
 console.log('▸ probing FBT Intent AI — Phase 2 Controlled Execution…');
 {
   const { default: runGate } = await import('./intent-ai/phase2-confirmation-gate-probe.mjs');
@@ -517,6 +529,30 @@ npx(['vite', 'build', '-c', 'test/vite.coindetail.mjs', '--logLevel', 'error']);
 installDom();
 const { run: runCoinDetail } = await import('./.out/coindetail/coindetail-probe.js');
 report('coin detail (real data shapes · chunk recovery)', await runCoinDetail(document.getElementById('r')));
+
+/* ------------------ 4c. Intent AI panel, driven like a user ------------------ */
+/*
+ * Every intent-ai probe so far tests the LOGIC. None of them can catch the
+ * wiring bug the user actually reported: «the Confirm and Reauthorize
+ * buttons do not work» — an onClick nobody wired, a state flag nobody
+ * sets, a handler that silently returns. Source-level greps prove a
+ * literal exists somewhere in the file; they cannot prove the button
+ * does anything when pressed.
+ *
+ * So this mounts the REAL panel and drives it through the keyboard:
+ * greeting + task chips, a guided-flow quick reply, the interactive
+ * confirmation screen with an over-limit edit (warning + blocked
+ * confirm), the final confirm that runs the real executeConfirmed path,
+ * REAUTHORIZE re-opening the gate, a timed goal's live countdown, the
+ * examples accordion, and the external-agent info modal. The network is
+ * dead on purpose — the panel must work with discovery unavailable.
+ */
+console.log('\n▸ building intent-ai panel interaction suite…');
+npx(['vite', 'build', '-c', 'test/vite.intentai.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runIntentAIPanel } = await import('./.out/intentai/intent-ai-panel-probe.js');
+report('intent AI panel (guided flow · interactive confirm · real execution)', await runIntentAIPanel(document.getElementById('r')));
+
 
 /* --------------------------- 5. store-safe build -------------------------- */
 /*
