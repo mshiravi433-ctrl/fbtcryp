@@ -190,7 +190,7 @@ export default function Header() {
         </button>
       </motion.div>
 
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row" style={{ gap: 7, alignItems: 'center' }}>
         {/* Medal only: a points number beside the brand would look like a
             custodial balance. The points screen explains the tier on tap. */}
         <motion.button
@@ -221,7 +221,7 @@ export default function Header() {
           transition={{ delay: 0.14 }}
           aria-label={t('nav.settings')}
         >
-          <AnimatedSettings active={cogSpin} still={still} width={17} height={17} />
+          <AnimatedSettings active={cogSpin} still={still} width={16} height={16} />
         </motion.button>
       </div>
     </header>

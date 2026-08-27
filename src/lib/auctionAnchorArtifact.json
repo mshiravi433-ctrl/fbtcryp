@@ -1,0 +1,124 @@
+{
+  "contractName": "IntentAuctionAnchor",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "anchorKey",
+          "type": "bytes32"
+        }
+      ],
+      "name": "AlreadyAnchored",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "EmptyValue",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "closeId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "logRoot",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "logSize",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "closedAt",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "anchorer",
+          "type": "address"
+        }
+      ],
+      "name": "AuctionRootAnchored",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "closeId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "logRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "logSize",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "closedAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "anchor",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "anchorKey",
+          "type": "bytes32"
+        }
+      ],
+      "name": "anchored",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608060405234801561001057600080fd5b50610271806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063dd6491461461003b578063fb86999114610072575b600080fd5b61005e6100493660046101b5565b60006020819052908152604090205460ff1681565b604051901515815260200160405180910390f35b6100856100803660046101eb565b610087565b005b841580610092575083155b8061009b575082155b156100b957604051631208b21b60e01b815260040160405180910390fd5b60408051602081018790529081018590526060810184905267ffffffffffffffff8084166080830152821660a082015260009060c00160408051601f19818403018152918152815160209283012060008181529283905291205490915060ff161561013e576040516330d2381360e01b81526004810182905260240160405180910390fd5b60008181526020818152604091829020805460ff19166001179055815167ffffffffffffffff868116825285169181019190915233918101919091528490869088907f3da35653b56dceb60b8c3f780614dceb281c79320ae160ae917a28de65902d069060600160405180910390a4505050505050565b6000602082840312156101c757600080fd5b5035919050565b803567ffffffffffffffff811681146101e657600080fd5b919050565b600080600080600060a0868803121561020357600080fd5b853594506020860135935060408601359250610221606087016101ce565b915061022f608087016101ce565b9050929550929590935056fea2646970667358221220b249bad718a48bf9f7053aba3e0b106d355dda88a7ccd6ae1d315e9525bb34d664736f6c63430008180033",
+  "deployedBytecode": "0x608060405234801561001057600080fd5b50600436106100365760003560e01c8063dd6491461461003b578063fb86999114610072575b600080fd5b61005e6100493660046101b5565b60006020819052908152604090205460ff1681565b604051901515815260200160405180910390f35b6100856100803660046101eb565b610087565b005b841580610092575083155b8061009b575082155b156100b957604051631208b21b60e01b815260040160405180910390fd5b60408051602081018790529081018590526060810184905267ffffffffffffffff8084166080830152821660a082015260009060c00160408051601f19818403018152918152815160209283012060008181529283905291205490915060ff161561013e576040516330d2381360e01b81526004810182905260240160405180910390fd5b60008181526020818152604091829020805460ff19166001179055815167ffffffffffffffff868116825285169181019190915233918101919091528490869088907f3da35653b56dceb60b8c3f780614dceb281c79320ae160ae917a28de65902d069060600160405180910390a4505050505050565b6000602082840312156101c757600080fd5b5035919050565b803567ffffffffffffffff811681146101e657600080fd5b919050565b600080600080600060a0868803121561020357600080fd5b853594506020860135935060408601359250610221606087016101ce565b915061022f608087016101ce565b9050929550929590935056fea2646970667358221220b249bad718a48bf9f7053aba3e0b106d355dda88a7ccd6ae1d315e9525bb34d664736f6c63430008180033",
+  "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+  "evmVersion": "paris",
+  "optimizer": {
+    "enabled": true,
+    "runs": 200
+  }
+}

@@ -4707,23 +4707,21 @@ app.use((req, res) => {
    Only runs in production (Vercel or explicit opt-in) — never in tests. */
 if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
   setTimeout(() => {
-    import('./intentAutoEvidence.js').then(({ collectLocalEvidence }) => {
-      collectLocalEvidence().then((evidence) => {
-        globalThis.__fbtOperatorEvidence = evidence;
+    import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
+      autoInjectEvidence().then((evidence) => {
         if (typeof process.stdout.write === 'function') {
-          console.log(`[activation] auto-collected ${evidence.length}/21 evidence kinds`);
+          console.log(`[activation] auto-collected ${evidence?.length || 0}/21 evidence kinds`);
         }
       }).catch(() => {});
     }).catch(() => {});
 
     /* Re-collect every 4 hours to keep evidence fresh */
-    setInterval(() => {
-      import('./intentAutoEvidence.js').then(({ collectLocalEvidence }) => {
-        collectLocalEvidence().then((evidence) => {
-          globalThis.__fbtOperatorEvidence = evidence;
-        }).catch(() => {});
+    const timer = setInterval(() => {
+      import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
+        autoInjectEvidence().catch(() => {});
       }).catch(() => {});
     }, 4 * 3600_000);
+    if (timer.unref) timer.unref();
   }, 200);
 }
 
