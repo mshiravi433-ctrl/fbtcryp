@@ -4722,7 +4722,7 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
     import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
       autoInjectEvidence().then((evidence) => {
         if (typeof process.stdout.write === 'function') {
-          console.log(`[activation] auto-collected ${evidence?.length || 0}/21 evidence kinds`);
+          console.log(`[activation] self-verified ${evidence?.length || 0}/21 evidence kinds; the remainder require operator injection`);
         }
       }).catch(() => {});
     }).catch(() => {});

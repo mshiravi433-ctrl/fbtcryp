@@ -27,9 +27,12 @@ export default async function run() {
     && report.product.completedPhases.length === 7);
   t('phase 8 is implementation-complete but operationally honest', report.phase8.implementation === 'implemented'
     && report.phase8.operational === 'partial');
-  t('the reviewed specification is live while the historical Secret Manager remains isolated', report.phase8.secretManager.operational === false
-    && report.product.launchAllowed === true
-    && report.blockers.length === 0);
+  /* Without injected operator evidence the report must stay fail-closed and
+     name its blockers. This previously asserted launchAllowed === true with an
+     empty blocker list on a deployment holding no evidence at all. */
+  t('an unattested deployment is not launch-allowed and says why', report.phase8.secretManager.operational === false
+    && report.product.launchAllowed === false
+    && report.blockers.length > 0);
   t('future phases 9-20 are not falsely marked done', report.roadmap.length === 13
     && report.roadmap[0].phase === 8
     && report.roadmap.at(-1).phase === 20
