@@ -476,3 +476,64 @@ function generateFakePrices(n) {
   }
   return out;
 }
+
+async function testPersianAndConversation(parser, human) {
+  console.log('\\n--- Regression: Persian & Conversation ---');
+  let errs = 0;
+  const assert = (cond, msg) => {
+    if (!cond) { console.error('  ❌ FAIL:', msg); errs++; }
+    else { console.log('  ✅ PASS:', msg); }
+  };
+
+  // Parser tests
+  const t1 = parser.parseUserIntent('سلام');
+  assert(t1.ok && t1.intent.kind === 'conversation' && t1.intent.subType === 'greeting', 'Parsed Persian greeting');
+  
+  const t2 = parser.parseUserIntent('ممنون');
+  assert(t2.ok && t2.intent.kind === 'conversation' && t2.intent.subType === 'thanks', 'Parsed Persian thanks');
+  
+  const t3 = parser.parseUserIntent('خداحافظ');
+  assert(t3.ok && t3.intent.kind === 'conversation' && t3.intent.subType === 'goodbye', 'Parsed Persian goodbye');
+  
+  const t4 = parser.parseUserIntent('تبدیل ۱۰۰ USDC به ETH در آربیتروم');
+  assert(t4.ok && t4.intent.action === 'swap' && t4.intent.amount === 100 && t4.intent.fromSymbol === 'USDC' && t4.intent.toSymbol === 'ETH' && t4.intent.chainId === 42161, 'Parsed full Persian swap');
+  
+  const t5 = parser.parseUserIntent('100 USDC به ETH', { defaultChainId: 42161 });
+  assert(t5.ok && t5.intent.action === 'swap' && t5.intent.amount === 100 && t5.intent.fromSymbol === 'USDC' && t5.intent.toSymbol === 'ETH' && t5.intent.chainId === 42161, 'Parsed minimal swap with "به"');
+
+  const t6 = parser.parseUserIntent('تحلیل BTC');
+  assert(t6.ok && t6.intent.action === 'analyze' && t6.intent.fromSymbol === 'BTC', 'Parsed Persian analyze');
+
+  // English regression
+  const t7 = parser.parseUserIntent('swap 500 USDC to ETH on Arbitrum');
+  assert(t7.ok && t7.intent.action === 'swap' && t7.intent.amount === 500 && t7.intent.fromSymbol === 'USDC' && t7.intent.toSymbol === 'ETH' && t7.intent.chainId === 42161, 'English swap preserved');
+  
+  const t8 = parser.parseUserIntent('buy 0.5 BTC with 30000 USDT on Ethereum');
+  if (!(t8.ok && t8.intent.action === 'buy' && t8.intent.amount === 0.5 && t8.intent.toSymbol === 'BTC' && t8.intent.fromSymbol === 'USDT' && t8.intent.chainId === 1)) {
+     console.error('t8 failed:', JSON.stringify(t8, null, 2));
+   }
+   assert(t8.ok && t8.intent.action === 'buy' && t8.intent.amount === 0.5 && t8.intent.toSymbol === 'BTC' && t8.intent.fromSymbol === 'USDT' && t8.intent.chainId === 1, 'English buy preserved');
+
+  // Unclear / Fallback tests
+  const t9 = parser.parseUserIntent('سؤال نامفهوم');
+  assert(!t9.ok && t9.clarifications.length > 0, 'Unclear request fails parsing');
+
+  // Human AI Chat Turn tests
+  let session = human.startSession({ mode: 'human-ai', level: 2 });
+  
+  let res = human.chatTurn(session, 'سلام');
+  session = res.session;
+  assert(res.reply.type === 'conversation' && res.reply.payload.conversationType === 'greeting', 'ChatTurn returns conversation type for greeting');
+
+  res = human.chatTurn(session, 'تبدیل کن');
+  session = res.session;
+  assert(res.reply.type === 'clarifications-needed' && res.reply.payload.clarifications.includes('AMOUNT_MISSING'), 'ChatTurn handles incomplete request by asking clarifications (no execution)');
+  
+  if (errs > 0) throw new Error('Regression tests failed');
+}
+
+(async () => {
+    const parser = await import('../../src/lib/intent-ai/intentParser.js');
+    const human = await import('../../src/lib/intent-ai/humanAi.js');
+    await testPersianAndConversation(parser, human);
+  })();
