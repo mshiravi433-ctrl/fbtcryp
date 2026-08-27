@@ -1,3 +1,81 @@
+## Unreleased — Intent OS Arc E (phases 75-79): trust and proof
+
+- **75 — on-chain receipt.** `onchainReceipt.js` commits a hash of the agreed
+  terms and the observed outcome to a chain, so a receipt stops being this
+  app's word about itself. Only hashes travel — never the terms, never an
+  address — and receipts are Merkle-batched so one transaction anchors many
+  and gas never prices honesty out of the product. A submitted anchor is
+  `pending`, not `anchored`: the verification link appears only once there is a
+  mined transaction. `verifyAgainstAnchor()` recomputes the leaf from the
+  receipt on screen, so a receipt altered after the fact fails to verify.
+- **76 — user-visible audit timeline.** `auditTimeline.js` turns the
+  append-only `audit.js` log into something a person reads: one translatable
+  row per event, grouped and newest-first. Own events only — an entry with
+  another owner, or with no owner at all, is dropped rather than assumed, and
+  the count of what was withheld is stated out loud. `assertAppendOnly()`
+  catches a removed or rewritten entry, and `assertTimelineSafe()` refuses to
+  render duplicates, foreign rows, raw prose or a leaked address.
+- **77 — human-readable terms diff.** `termsDiff.js` replaces "termsHash
+  changed" with "amount changed from 100 to 500": every change becomes a row
+  with field, before, after, direction and percentage, expressed as i18n keys
+  so translators write the sentence. Anything that moves money, risk or
+  destination is MATERIAL and forces a fresh confirmation; an unknown field is
+  material too, because fail-closed. A hash that moved with no visible diff
+  stops execution rather than being waved through.
+- **78 — independent third-party verification.** `thirdPartyVerification.js`
+  publishes a hashes-only packet to the phase-29 assurance network. Quorum is
+  two *independent* operators — the same operator answering twice is one voice
+  — and a single disagreement makes the whole result `disputed`; majority does
+  not win when the question is whether something happened. Verifiers that
+  throw, time out or answer about a different receipt are discarded, never
+  counted as agreement, and `assertVerificationHonest()` gates the badge.
+- **79 — bug bounty and disclosure policy.** `bugBounty.js` publishes a
+  machine-readable policy on top of `phase35PublicDisclosure.js`: explicit safe
+  harbour, published scope, banded and capped rewards, and stated acknowledge,
+  triage and fix windows. Rewards are discretionary thank-yous —
+  `financialLiabilityAccepted` and `compensatesLosses` are false by
+  construction and `assertNoLiabilityPromise()` blocks any document that flips
+  them. Coordinated disclosure publishes either way: fixed, or after the
+  window with exploit details withheld.
+- Probes `phase75`-`phase79` (248 checks) cover anchoring, timeline ownership,
+  material diffs, verifier quorum and the liability guard; en/fa/ar copy added
+  for every new string.
+
+## Unreleased — Intent OS Arc C (phases 63-68): the user and their memory
+
+- **63 — session persistence.** `sessionPersistence.js` saves and restores a
+  session client-side under PBKDF2 + AES-GCM. Secrets are stripped before the
+  snapshot is built, a STOPPED session and its permissions come back exactly as
+  they were, and any failure — wrong passphrase, corrupt blob, stale snapshot —
+  is a clean start with a translatable notice, never a crash and never an
+  escalation of what the user had authorised.
+- **64 — cross-device continuity.** `crossDeviceContinuity.js` links a session
+  to the existing Telegram login, so the work resumes on a second device — but
+  authority does not travel. Session keys, signatures, gate decisions,
+  confirmations and approvals are stripped from the handoff and re-taken on the
+  new device; the handoff expires in ten minutes and is single-use.
+- **65 — portfolio and history from receipts.** `portfolioLedger.js` builds
+  positions only from confirmed receipts that carry a real transaction hash.
+  Pending, submitted and failed appear as themselves and never move a balance;
+  a confirmed receipt without proof is excluded and the view reports itself
+  incomplete rather than quietly totalling less than the truth.
+- **66 — consented memory.** `consentedMemory.js` keeps `adaptiveMemory.js`
+  across sessions only with dated, scoped, revocable opt-in. Off means nothing
+  is produced at all — not stored-then-hidden — export hands everything back or
+  refuses, and a revoke that could not wipe is reported as a failed revoke.
+- **67 — notification and handing control back.** `intentNotifications.js`
+  delivers completion, failure and re-authorization over web-push, Telegram or
+  in-app. An authorization request always carries a deadline, and a lapsed
+  deadline HALTS: silence is never a yes. A user who could not be reached on
+  any channel stops a long-running program.
+- **68 — access recovery.** `accessRecovery.js` lets a proven identity revoke
+  keys from another device. Tombstones are frozen and permanent, they kill
+  every key issued before them — including one a stale client still holds — and
+  `assertNothingSurvives()` proves that after a revoke, nothing works.
+- Probes `phase63`-`phase68` (256 checks) cover restore-from-corrupt, authority
+  stripping, receipt-only ledgers, memory-off, authorization timeouts and
+  post-revoke key death; en/fa/ar copy added for every new string.
+
 ## Unreleased — Intent OS Arc F (phases 80-84): product risk and security
 
 - **80 — real-time risk engine.** `adaptiveRisk.js` makes the ceilings a

@@ -870,6 +870,62 @@ export {
 } from './capabilityScanner.js';
 export { createNonBypassableControls } from './phaseBoundary.js';
 
+/* Arc C — user and memory (phases 63-68) */
+export {
+  PERSISTENCE_SCHEMA, SNAPSHOT_MAX_AGE_MS, FORBIDDEN_FIELDS, SAFETY_FIELDS,
+  stripSecrets, snapshotDigest, buildSnapshot, encryptSnapshot, restoreSnapshot,
+  assertRestoreNotEscalated
+} from './sessionPersistence.js';
+export {
+  CONTINUITY_SCHEMA, HANDOFF_TTL_MS, NON_TRANSFERABLE,
+  resolveLinkedIdentity, createHandoff, acceptHandoff, assertNoTransferredAuthority
+} from './crossDeviceContinuity.js';
+export {
+  LEDGER_SCHEMA, RECEIPT_STATES, SETTLED_STATE,
+  validateReceipt, buildLedger, assertLedgerHonest
+} from './portfolioLedger.js';
+export {
+  CONSENT_MEMORY_SCHEMA, MEMORY_SCOPES, CONSENT_MAX_AGE_MS,
+  grantMemoryConsent, memoryOff, consentCovers, recordWithConsent,
+  exportMemory, revokeMemoryConsent, assertNothingStored
+} from './consentedMemory.js';
+export {
+  NOTIFY_SCHEMA,
+  CHANNELS as NOTIFY_CHANNELS,
+  EVENTS as NOTIFY_EVENTS,
+  DEFAULT_AUTHORIZATION_WINDOW_MS,
+  buildNotification, deliverNotification, requestReauthorization,
+  resolveAuthorizationTimeout, programMayContinue
+} from './intentNotifications.js';
+export {
+  RECOVERY_SCHEMA as ACCESS_RECOVERY_SCHEMA,
+  REVOKE_SCOPES, REVOCATION_REASONS,
+  revokeAccess, revokeEverything, assertKeyUsable, applyRevocation, assertNothingSurvives
+} from './accessRecovery.js';
+
+/* Arc E — trust and proof (phases 75-79) */
+export {
+  ANCHOR_SCHEMA, ANCHOR_STATES, MAX_BATCH_SIZE, digest, buildReceiptLeaf, buildBatch,
+  merkleProof, verifyProof, anchorBatch, explorerUrl, verifyAgainstAnchor
+} from './onchainReceipt.js';
+export {
+  TIMELINE_SCHEMA, TIMELINE_MAX_ROWS, TIMELINE_GROUPS, toTimelineRow, buildTimeline,
+  assertAppendOnly, assertTimelineSafe
+} from './auditTimeline.js';
+export {
+  TERMS_DIFF_SCHEMA, MATERIAL_FIELDS, COSMETIC_FIELDS, SEVERITIES as TERMS_DIFF_SEVERITIES,
+  diffTerms, summarizeDiff, assertTermsUnchanged
+} from './termsDiff.js';
+export {
+  VERIFICATION_SCHEMA, MIN_INDEPENDENT_VERIFIERS, VERIFICATION_TIMEOUT_MS, VERDICTS,
+  buildVerificationPacket, requestIndependentVerification, assurancePlaneReady, assertVerificationHonest
+} from './thirdPartyVerification.js';
+export {
+  BOUNTY_SCHEMA, SEVERITY_BANDS, REWARD_BANDS, REWARD_CAP_USD, RESPONSE_WINDOW_MS,
+  IN_SCOPE as BOUNTY_IN_SCOPE, OUT_OF_SCOPE as BOUNTY_OUT_OF_SCOPE, REPORT_STATES,
+  buildBountyPolicy, submitReport, assessReward, disclosureDecision, assertNoLiabilityPromise
+} from './bugBounty.js';
+
 /* Arc F — product risk and security (phases 80-84) */
 export {
   ADAPTIVE_RISK_SCHEMA,

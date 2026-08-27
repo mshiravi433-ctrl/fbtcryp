@@ -5422,6 +5422,126 @@
         "transferFailed": "The network check says this fails: the token transfer is rejected. Nothing was signed.",
         "unknown": "The network check says this fails ({{reason}}). Nothing was signed."
       }
+    },
+    "persistence": {
+      "cleanStart": "The saved session could not be read, so a fresh one was started. Nothing was lost that had been confirmed on-chain."
+    },
+    "continuity": {
+      "resumed": "Your session continues here. Every financial confirmation is taken again on this device."
+    },
+    "ledger": {
+      "complete": "Built from {{pending}} open and all confirmed receipts.",
+      "partial": "Some receipts could not be verified ({{excluded}}), so this view is incomplete.",
+      "pendingTitle": "Not yet settled",
+      "failedTitle": "Failed"
+    },
+    "memory": {
+      "off": "Memory is off. Nothing is being kept between sessions.",
+      "consentGranted": "Memory is on for: {{scopes}}. You can export or delete it at any time.",
+      "notStored": "Memory is off, so nothing from this was kept.",
+      "stored": "Saved to your memory.",
+      "revoked": "Memory was turned off and everything kept was deleted.",
+      "revokeFailed": "Memory was turned off, but the stored data could not be deleted. Please try again."
+    },
+    "notify": {
+      "completed": "Your request finished.",
+      "failed": "Your request did not go through.",
+      "reauthorize": "Something changed and needs your confirmation again: {{reason}}",
+      "halted": "The program was stopped and is waiting for you.",
+      "authorizationExpired": "No answer arrived in time, so the program stopped instead of continuing."
+    },
+    "recovery": {
+      "revoked": "Access was revoked ({{scope}}, {{reason}}).",
+      "keyDead": "This session key was revoked and no longer works.",
+      "summary": "{{revoked}} keys revoked, {{remaining}} still active."
+    },
+    "anchor": {
+      "anchored": "Receipt anchored on chain ({{count}} in this batch).",
+      "pending": "Anchor submitted — waiting for it to be mined. Not proven yet.",
+      "verified": "This receipt matches the on-chain anchor.",
+      "mismatch": "This receipt does not match the on-chain anchor.",
+      "unavailable": "On-chain anchoring is unavailable right now.",
+      "viewOnExplorer": "View on explorer"
+    },
+    "timeline": {
+      "title": "Your activity",
+      "complete": "Showing all {{shown}} of your events.",
+      "filtered": "Showing {{shown}} of your events. {{hidden}} entries are not yours and are not shown.",
+      "unavailable": "Your activity cannot be shown without a signed-in identity.",
+      "empty": "No activity recorded yet.",
+      "action": {
+        "intent_created": "You described an intent.",
+        "intent_parsed": "The intent was read into a plan.",
+        "plan_built": "A plan was prepared for your review.",
+        "gate_opened": "A confirmation was requested.",
+        "gate_confirmed": "You confirmed.",
+        "gate_rejected": "You rejected.",
+        "reauthorization_requested": "Re-authorization was requested.",
+        "order_submitted": "An order was submitted.",
+        "order_confirmed": "An order was confirmed on chain.",
+        "order_failed": "An order failed.",
+        "guardian_review": "A safety review ran.",
+        "risk_blocked": "A safety rule blocked the action.",
+        "emergency_stop": "Everything was stopped.",
+        "session_key_revoked": "A session key was revoked.",
+        "simulation_failed": "The pre-execution check failed.",
+        "unknown": "An event was recorded."
+      }
+    },
+    "termsDiff": {
+      "identical": "The terms are exactly what you approved.",
+      "cosmetic": "Only display details changed.",
+      "material": "The terms changed. Please read and confirm again.",
+      "unexplained": "The terms fingerprint changed but the change cannot be shown. Stopped.",
+      "unreadable": "The terms cannot be read, so nothing will run.",
+      "summary": "{{field}} changed from {{before}} to {{after}} (+{{more}} more).",
+      "row": {
+        "changed": "{{field}}: {{before}} changed to {{after}}",
+        "added": "{{field}}: added {{after}}",
+        "removed": "{{field}}: {{before}} removed"
+      },
+      "field": {
+        "amount": "Amount",
+        "amountIn": "Amount in",
+        "amountOut": "Amount out",
+        "minReceived": "Minimum received",
+        "token": "Token",
+        "tokenIn": "From token",
+        "tokenOut": "To token",
+        "recipient": "Recipient",
+        "to": "Destination",
+        "chainId": "Network",
+        "slippageBps": "Slippage",
+        "deadline": "Deadline",
+        "venue": "Venue",
+        "route": "Route",
+        "price": "Price",
+        "limitPrice": "Limit price",
+        "feeBps": "Fee",
+        "spender": "Spender",
+        "allowance": "Allowance"
+      }
+    },
+    "verify": {
+      "verified": "Checked independently by {{count}} verifiers.",
+      "unverified": "Not enough independent checks yet.",
+      "disputed": "Independent verifiers disagree about this receipt.",
+      "unavailable": "Independent verification is unavailable right now.",
+      "networkReady": "The verification network is available.",
+      "networkDegraded": "The verification network is degraded."
+    },
+    "bounty": {
+      "policy": "Security reports are welcome. Good-faith research is protected.",
+      "policyIncomplete": "The disclosure policy is incomplete and is not published.",
+      "received": "Report {{id}} received. You will hear back within the stated window.",
+      "rejected": "This report cannot be accepted: {{reason}}.",
+      "reward": "A discretionary reward of {{amount}} USD is offered for this {{severity}} report.",
+      "noReward": "No reward applies to this report.",
+      "noReport": "No report was provided.",
+      "embargoed": "Details are withheld until the fix window ends.",
+      "disclosedFixed": "Fixed and published.",
+      "disclosedUnfixed": "Published after the fix window; exploit details withheld.",
+      "liabilityNote": "A reward is a thank-you. It is not an admission of liability and does not cover losses."
     }
   }
 }
