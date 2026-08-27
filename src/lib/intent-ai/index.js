@@ -152,6 +152,80 @@ export { buildConfirmationBlock, GATE_BUTTONS } from './confirmationUI.js';
 export { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
 export { executeConfirmed } from './humanAi.js';
 
+// ── Phases 51-57: real execution ────────────────────────────────────────────
+// Phase 51 — a connected wallet becomes the actual signer.
+export {
+  WALLET_RUNTIME_SCHEMA,
+  describeWalletRuntime,
+  intentOrderTypedData,
+  signIntentWithWallet,
+  signerFromWalletSignature,
+  resolveExecutionSigner,
+  createEip1193Broadcaster,
+  stubSigner,
+  stubSignerAllowed,
+  isStubSigner
+} from './walletRuntime.js';
+// Phase 52 — live quote locked into the terms + slippage re-check.
+export {
+  LIVE_QUOTE_SCHEMA,
+  QUOTE_MAX_AGE_MS,
+  DEFAULT_MAX_SLIPPAGE_PCT,
+  normalizeQuote,
+  fetchExecutionQuote,
+  lockQuoteIntoTerms,
+  effectiveSlippageLimit,
+  recheckQuoteBeforeExecute
+} from './liveQuote.js';
+// Phase 53 — real broadcast and block-by-block tracking.
+export {
+  BROADCAST_SCHEMA,
+  TX_STATUSES,
+  normalizeTxHash,
+  broadcastSigned,
+  trackTransaction,
+  receiptStatusFor
+} from './broadcastAdapter.js';
+// Phase 54 — bridge execution behind its own explicit approval.
+export {
+  BRIDGE_EXECUTION_SCHEMA,
+  bridgeWired,
+  bridgeHealth,
+  assertBridgeApproval,
+  executeBridge,
+  trackBridgeDelivery
+} from './bridgeExecution.js';
+// Phase 55 — MEV / slippage shield.
+export {
+  MEV_SHIELD_SCHEMA,
+  DEFAULT_DEADLINE_SECS,
+  HARD_MAX_SLIPPAGE_PCT,
+  SUBMISSION_CHANNELS,
+  applyMevShield,
+  assertProtected,
+  shieldTransaction
+} from './mevShield.js';
+// Phase 56 — honest receipt error taxonomy + session-policy ceilings.
+export {
+  RECEIPT_REASONS,
+  RECEIPT_REASON_SCHEMA,
+  sessionPolicyCaps,
+  checkSessionPolicy,
+  explainExecutionFailure,
+  receiptStatusForReason,
+  normalizeGuardianReasons,
+  guardianReasonsFromError
+} from './executionErrorTaxonomy.js';
+// Phase 57 — live DCA trigger.
+export {
+  LIVE_DCA_SCHEMA,
+  DCA_HALT_REASONS,
+  armLiveDcaProgram,
+  assertDcaAuthorization,
+  tickLiveDca,
+  stopLiveDca
+} from './liveDcaTrigger.js';
+
 // ── Phase 3: Multi-Agent Ecosystem ──────────────────────────────────────────
 export {
   issueCapabilityToken,

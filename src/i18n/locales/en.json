@@ -5019,7 +5019,42 @@
       "rejected": "Rejected by user",
       "cancelled": "Cancelled",
       "unconfirmed": "Gate not confirmed",
-      "emergency-stop": "Emergency stop"
+      "emergency-stop": "Emergency stop",
+      "blocked": "Blocked by your session policy — not executed",
+      "txHash": "Transaction: {{hash}}",
+      "reason": {
+        "policyPerTx": "The amount (${{value}}) is above this session policy limit of ${{limit}} per transaction.",
+        "policyCapital": "The amount (${{value}}) is above this session policy total capital limit of ${{limit}}.",
+        "policyAsset": "This asset ({{value}}) is not in the assets you allowed for this session ({{allowed}}).",
+        "policyChain": "This network ({{value}}) is not in the networks you allowed for this session ({{allowed}}).",
+        "policyProtocol": "This protocol ({{value}}) is not in the protocols you allowed for this session ({{allowed}}).",
+        "policyLoss": "This would pass the loss limit you set for this session (${{limit}}).",
+        "policySlippage": "The slippage or fee is above the limit set for this session.",
+        "policyLeverage": "The leverage is above the limit set for this session.",
+        "policyExpired": "This session policy has expired — please start a new session.",
+        "policyDestination": "That destination is not in the list you allowed for this session.",
+        "productLimit": "This request is above a product-wide ceiling, so it was not executed.",
+        "permission": "This permission level cannot execute. Level 3 with a confirmed policy is required.",
+        "authorization": "The authorization step was not completed, so nothing was executed.",
+        "emergencyStop": "The emergency stop is active — execution was halted.",
+        "termsChanged": "The terms changed since you approved them, so reauthorization is required.",
+        "slippageMoved": "The rate moved beyond your slippage limit before execution, so it was not executed.",
+        "noSigner": "No wallet signature — connect your wallet and approve the request to execute.",
+        "noProvider": "No network connection to a provider, so nothing was submitted.",
+        "noQuote": "No live executable rate is available right now, so nothing was executed.",
+        "noBroadcaster": "There is no live path to broadcast this transaction yet.",
+        "bridgeUnavailable": "Bridge execution is not connected yet — only bridge quotes are available.",
+        "bridgeApproval": "A bridge needs its own separate approval before it can run.",
+        "noRoute": "There is no live route for this request.",
+        "riskBlocked": "The risk check blocked this execution.",
+        "deadline": "The deadline for this order passed before it could run.",
+        "reverted": "The transaction was rejected on-chain, so nothing changed.",
+        "submitRejected": "The transaction was not accepted for submission.",
+        "provider": "The provider did not answer in time, so nothing was confirmed.",
+        "partial": "Only part of this order was filled.",
+        "sessionKey": "The session key is expired or revoked, so nothing was signed.",
+        "unknown": "Execution did not complete, and the exact cause is not known."
+      }
     },
     "readiness": {
       "title": "Capabilities & readiness",
@@ -5252,6 +5287,26 @@
       "securityReadonly": "Discovery is read-only: listing an agent grants no access by itself.",
       "interactionTitle": "How you interact with it",
       "interactionBody": "You keep talking to the same assistant. When a verified external agent participates, its identity and trust status are shown in the mode card, and you can stop, pause or revoke the session at any time with the controls above."
+    },
+    "policyLimits": {
+      "title": "Active session policy",
+      "hintPerTx": "Session policy — max per transaction: ${{limit}}",
+      "hintCapital": "Session policy — max total capital: ${{limit}}",
+      "violationTitle": "This is outside the policy you confirmed for this session"
+    },
+    "dca": {
+      "halt": {
+        "POLICY_VIOLATION": "The recurring plan was stopped: a run fell outside your session policy.",
+        "AUTHORIZATION_MISSING": "The recurring plan was stopped: it has no prior explicit authorization.",
+        "AUTHORIZATION_EXPIRED": "The recurring plan was stopped: its authorization expired.",
+        "RUNS_EXHAUSTED": "The recurring plan finished: it used every run you authorized.",
+        "CONTROL_ACTIVE": "The recurring plan was stopped because you paused or stopped the session.",
+        "USER_STOPPED": "You stopped the recurring plan."
+      }
+    },
+    "wallet": {
+      "signRequired": "Your wallet will ask you to sign the terms shown above.",
+      "notConnected": "No wallet is connected, so nothing can be signed or sent."
     }
   }
 }

@@ -330,7 +330,15 @@ const laterPhaseProbes = [
   [47, './intent-ai/phase47-agent-fleet-probe.mjs'],
   [48, './intent-ai/phase48-capital-bond-probe.mjs'],
   [49, './intent-ai/phase49-regulatory-reporting-probe.mjs'],
-  [50, './intent-ai/phase50-program-control-probe.mjs']
+  [50, './intent-ai/phase50-program-control-probe.mjs'],
+  /* Arc A — real execution (phases 51-57). */
+  [51, './intent-ai/phase51-wallet-signing-probe.mjs'],
+  [52, './intent-ai/phase52-live-quote-probe.mjs'],
+  [53, './intent-ai/phase53-broadcast-tracking-probe.mjs'],
+  [54, './intent-ai/phase54-bridge-execution-probe.mjs'],
+  [55, './intent-ai/phase55-mev-shield-probe.mjs'],
+  [56, './intent-ai/phase56-receipt-taxonomy-probe.mjs'],
+  [57, './intent-ai/phase57-live-dca-probe.mjs']
 ];
 for (const [phase, probe] of laterPhaseProbes) {
   console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);

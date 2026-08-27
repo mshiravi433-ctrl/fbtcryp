@@ -1,3 +1,54 @@
+## Unreleased — Intent OS Arc A (phases 51-57): real execution
+
+- **51 — real wallet signing.** A connected wallet is now the signer.
+  `walletRuntime.js` asks the real EIP-1193 wallet to sign the locked terms
+  (`eth_signTypedData_v4`, `personal_sign` fallback) and hands that signature
+  to the existing synchronous pipeline; `WalletContext` exposes the raw
+  provider through `getWalletRuntime()` and the new `IntentAIRoute` wrapper
+  passes it to the panel (which stays free of wallet-library imports so the
+  suite can still mount it headless). The stub signer is now test-only:
+  `stubSignerAllowed()` is false in any browser-like runtime, so a real user
+  can never receive a stub signature dressed up as an execution. `venueHealth`
+  no longer reports NO_SIGNER/NO_PROVIDER against a wallet that is connected.
+- **52 — live rate and slippage re-check.** `liveQuote.js` takes a real,
+  sourced, non-stale quote, freezes it into the locked terms, and re-checks it
+  at the instant of the final confirm. An adverse move past the slippage limit
+  is refused and routed back through the EXISTING Confirmation Gate as
+  REAUTHORIZE; a favourable move never blocks.
+- **53 — real broadcast and tracking.** `broadcastAdapter.js` only reports
+  `submitted` with a real 32-byte transaction hash and only `confirmed` with a
+  real receipt and enough confirmations counted from the chain head. A dead RPC
+  leaves the transaction at `submitted`; a revert is `failed`. COMPLETED is
+  never fabricated, and the hash now appears on the receipt.
+- **54 — bridge execution.** `bridgeExecution.js` is the real adapter seam:
+  `BRIDGE_EXECUTE_UNAVAILABLE` disappears only when an adapter with `execute`
+  is actually attached, a bridge never rides on the swap step's approval
+  (its approval is scoped `bridge` and bound to the bridge terms hash), and
+  source-chain submission is never reported as destination-chain delivery.
+- **55 — MEV and slippage shield.** Every transaction now carries an explicit
+  deadline, an explicit slippage ceiling (policy can only tighten it; a hard
+  cap bounds everything), a derived `minAmountOut`, and a declared submission
+  channel with real private-relay support. `assertProtected()` runs
+  fail-closed immediately before signing.
+- **56 — receipt error taxonomy (the reported bug).** Every execution failure
+  used to collapse into "Unavailable — no live venue".
+  `executionErrorTaxonomy.js` maps Guardian reasons, permission errors,
+  emergency stops, dead feeds and reverts onto their own translatable receipt
+  lines, and the interactive confirmation screen now shows the ACTIVE SESSION
+  POLICY ceilings under the fields next to the product ceilings, locking the
+  final confirm on a breach. Reproduction now proven in the panel probe: a
+  $100 swap edited to $500 (under the $5k product cap, over the $200 L3 policy
+  cap) says «above the session policy limit of $200», not «no live venue».
+- **57 — live DCA.** `liveDcaTrigger.js` turns the Phase-13 recurring
+  lifecycle into a real trigger: every run needs a prior explicit, bounded
+  authorization plus a policy re-check AT TRIGGER TIME, and the first
+  violation halts the whole program with a translated user notice — there is
+  no "skip and continue", and a halted program never resumes on its own.
+- Tests: seven new probes (`test/intent-ai/phase51..57-*.mjs`, 156 checks)
+  registered in `test/run.mjs` and as `npm run test:phaseNN`, plus three new
+  interaction checks in the panel probe. All new user-facing copy is en/fa/ar
+  only through i18n keys.
+
 ## Unreleased — Intent AI panel: glass session controls, live mode cards, en↔fa sync
 
 - Reported: «شکل بعضی از دکمه‌ها مثل توقف/توقف موقت/قطع اتصال/لغو مجوز/

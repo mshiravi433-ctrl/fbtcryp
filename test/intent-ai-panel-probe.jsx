@@ -156,6 +156,25 @@ export async function run(container) {
       /above the per-transaction ceiling/i.test(screen?.textContent || '')
       && q('[data-testid="final-confirm-button"]').disabled === true);
 
+    /*
+     * Phase 56 — the reported bug, driven through the keyboard: $500 clears
+     * every product ceiling but breaks the ACTIVE L3 session policy ($200 per
+     * transaction). The screen must say so under the fields and lock the
+     * final confirm; it must NOT wait and answer "no live venue" afterwards.
+     */
+    t('the screen shows the ACTIVE session policy ceiling next to the product one',
+      !!q('[data-testid="session-policy-per-tx"]')
+      && /session policy/i.test(q('[data-testid="session-policy-per-tx"]').textContent || ''));
+
+    await act(async () => { setInputValue(amountInput, '500'); });
+    await act(async () => { await sleep(10); });
+    t('a $500 edit is named as a session-policy breach, not as an unavailable venue',
+      !!q('[data-testid="session-policy-violation"]')
+      && /session policy limit of \$200/i.test(q('[data-testid="session-policy-violation"]').textContent || '')
+      && !/no live venue/i.test(q('[data-testid="session-policy-violation"]').textContent || ''));
+    t('the session-policy breach locks the final confirm',
+      q('[data-testid="final-confirm-button"]').disabled === true);
+
     // Back within limits → confirm executes for real.
     await act(async () => { setInputValue(amountInput, '100'); });
     await act(async () => { await sleep(10); });
@@ -166,6 +185,8 @@ export async function run(container) {
     await act(async () => { await sleep(40); });
     t('final confirm executes through executeConfirmed and shows the honest receipt',
       /Submitted — awaiting confirmation|Receipt/i.test(container.textContent || ''));
+    t('the session-policy warning is gone once the value is back inside the policy',
+      !q('[data-testid="session-policy-violation"]'));
 
     // REAUTHORIZE re-opens the gate (the previously dead button).
     const reauthBtn = qa('button').find((b) => /^REAUTHORIZE$/i.test((b.textContent || '').trim()));

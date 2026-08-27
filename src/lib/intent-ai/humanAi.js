@@ -24,6 +24,7 @@ import { createDraftOrder, draftOrderFromPlanStep } from './draftOrder.js';
 import { createPolicy, confirmPolicy, policyIsValid, policyPreview } from './policyModel.js';
 import { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
 import { classifyFailure } from './failureModes.js';
+import { explainExecutionFailure } from './executionErrorTaxonomy.js';
 import { checkIntentLimits, INTENT_LIMITS } from './intentLimits.js';
 import {
   createFlowFromParsed,
@@ -907,15 +908,30 @@ export function answerClarifications(session, answers) {
 /**
  * After ConfirmationGate: sign → submit → monitor → reconcile.
  */
-export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, signer, brokerHandle, idempotencyKey, observation, submitVia = 'wallet', draftId = null } = {}) {
+export function executeConfirmed(session, {
+  action = 'CONFIRM', riskInput = {}, signer, brokerHandle, idempotencyKey, observation,
+  submitVia = 'wallet', draftId = null,
+  /* Phase 51-55 runtime wiring — all optional, all fail-closed when absent. */
+  walletSignature = null, walletAccount = null, allowStubSigner,
+  lockedQuote = null, freshQuote = null, broadcastResult = null,
+  deadlineSecs, privateRelay = null
+} = {}) {
   if (!session || !PRIMARY_MODES.includes(session.mode || 'human-ai')) {
     const err = classifyFailure('INSUFFICIENT_PERMISSION');
-    return { session, reply: assistantMessage('error', { code: err.code, translatable: err.translatable }), ok: false, error: err };
+    const explained = explainExecutionFailure({ error: err });
+    return {
+      session,
+      reply: assistantMessage('error', { code: err.code, translatable: err.translatable, reason: explained.reason, reasonKey: explained.i18nKey }),
+      ok: false,
+      error: err,
+      explain: explained
+    };
   }
   if (session.status === 'STOPPED' || session.policy?.emergencyStop || session.controls?.paused || session.controls?.revoked || session.controls?.disconnected || session.controls?.emergency) {
     const err = classifyFailure('EMERGENCY_STOP');
-    session = push(session, assistantMessage('error', { code: err.code, class: err.class, translatable: err.translatable }));
-    return { session, reply: session.messages.at(-1), ok: false, error: err };
+    const explained = explainExecutionFailure({ error: err });
+    session = push(session, assistantMessage('error', { code: err.code, class: err.class, translatable: err.translatable, reason: explained.reason, reasonKey: explained.i18nKey }));
+    return { session, reply: session.messages.at(-1), ok: false, error: err, explain: explained };
   }
 
   // A caller cannot turn a draft, Guardian approval or policy confirmation
@@ -936,11 +952,14 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
     && screen.buttons.includes(requestedAction);
   if (!screenIsValid) {
     const err = classifyFailure('USER_AUTHORIZATION_REQUIRED', { detail: 'AUTHORIZATION_SCREEN_NOT_CONFIRMED' });
+    const explained = explainExecutionFailure({ error: err });
     session = push(session, assistantMessage('error', {
       code: err.code,
       translatable: err.translatable,
       authorizationScreenRequired: true,
-      financialExecutionAuthorized: false
+      financialExecutionAuthorized: false,
+      reason: explained.reason,
+      reasonKey: explained.i18nKey
     }));
     appendAudit(session, {
       type: 'authorization_screen',
@@ -948,7 +967,7 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
       action: requestedAction,
       reason: 'AUTHORIZATION_SCREEN_NOT_CONFIRMED'
     });
-    return { session, reply: session.messages.at(-1), ok: false, error: err };
+    return { session, reply: session.messages.at(-1), ok: false, error: err, explain: explainExecutionFailure({ error: err }) };
   }
   appendAudit(session, {
     type: 'authorization_screen',
@@ -971,8 +990,23 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
     termsHash
   });
   if (!prepared.ok) {
-    session = push(session, assistantMessage('error', { code: prepared.error.code, translatable: prepared.error.translatable }));
-    return { session, reply: session.messages.at(-1), ok: false, error: prepared.error };
+    // Phase 56: the receipt must state the REAL reason — a Guardian rejection
+    // names its policy reasons instead of collapsing into "no live venue".
+    const explained = explainExecutionFailure({
+      error: prepared.error,
+      guardianReasons: prepared.reasons,
+      policy: session.policy,
+      terms: draft ? termsFromDraft(draft) : null
+    });
+    session = push(session, assistantMessage('error', {
+      code: prepared.error.code,
+      translatable: prepared.error.translatable,
+      reason: explained.reason,
+      reasonKey: explained.i18nKey,
+      reasonParams: explained.params,
+      guardianReasons: explained.reasons
+    }));
+    return { session, reply: session.messages.at(-1), ok: false, error: prepared.error, reasons: prepared.reasons || [], explain: explained };
   }
   const submitted = confirmAndSubmit({
     prepared,
@@ -983,16 +1017,33 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
     brokerHandle,
     idempotencyKey,
     currentTerms: prepared.gate.lockedTerms,
-    submitVia
+    submitVia,
+    walletSignature,
+    walletAccount,
+    allowStubSigner,
+    lockedQuote,
+    freshQuote,
+    broadcastResult,
+    deadlineSecs,
+    privateRelay
   });
   if (!submitted.ok) {
     const kind = submitted.reauthoriseRequired ? 'status' : 'error';
+    const explained = explainExecutionFailure({
+      error: submitted.error,
+      policy: session.policy,
+      terms: prepared.gate?.lockedTerms || null,
+      reauthoriseRequired: !!submitted.reauthoriseRequired
+    });
     session = push(session, assistantMessage(kind, {
       code: submitted.error?.code,
       translatable: submitted.error?.translatable,
-      reauthoriseRequired: !!submitted.reauthoriseRequired
+      reauthoriseRequired: !!submitted.reauthoriseRequired,
+      reason: explained.reason,
+      reasonKey: explained.i18nKey,
+      reasonParams: explained.params
     }));
-    return { session, reply: session.messages.at(-1), ok: false, error: submitted.error, reauthoriseRequired: submitted.reauthoriseRequired };
+    return { session, reply: session.messages.at(-1), ok: false, error: submitted.error, reauthoriseRequired: submitted.reauthoriseRequired, explain: explained };
   }
   const rec = observeAndReconcile({
     submitted,
@@ -1023,6 +1074,8 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
     partial: !!rec.partial,
     filledAmount: rec.receipt?.filledAmount,
     fabricated: false,
+    txHash: submitted.txHash || null,
+    signerKind: submitted.signed?.signerKind || null,
     translatable: rec.error?.translatable || 'intentAi.status.ok'
   }));
 
@@ -1030,7 +1083,18 @@ export function executeConfirmed(session, { action = 'CONFIRM', riskInput = {}, 
   // continues with its next step. Each next step gets its own authorization
   // screen with its own terms hash — execution never chains silently.
   session = advanceFlowAfterExecution(session, draft?.id);
-  return { session, reply: session.messages.at(-1), ok: rec.ok, receipt: rec.receipt };
+  return {
+    session,
+    reply: session.messages.at(-1),
+    ok: rec.ok,
+    receipt: rec.receipt,
+    // Phase 53/55: the receipt can point at real evidence when it exists.
+    txHash: submitted.txHash || null,
+    signerKind: submitted.signed?.signerKind || (submitVia === 'broker' ? 'broker' : null),
+    stubSigned: submitted.signed?.stubSigned === true,
+    mevGuard: submitted.mevGuard || null,
+    quoteCheck: submitted.quoteCheck || null
+  };
 }
 
 /**

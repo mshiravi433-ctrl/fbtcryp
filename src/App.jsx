@@ -92,7 +92,7 @@ const Buy = lazyRetry(() => import('./pages/Buy'));
 const SmartWallet = lazyRetry(() => import('./pages/SmartWallet'));
 const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
-const IntentAIPanel = lazyRetry(() => import('./components/IntentAIPanel'));
+const IntentAIPanel = lazyRetry(() => import('./components/IntentAIRoute'));
 /*
  * The vault's own route, so the Earn row for it has somewhere to go. The page
  * renders the live <VaultCard /> when a vault is deployed and an honest "none

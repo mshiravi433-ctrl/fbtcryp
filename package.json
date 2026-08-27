@@ -67,6 +67,13 @@
     "test:phase48": "node test/intent-ai/phase48-capital-bond-probe.mjs",
     "test:phase49": "node test/intent-ai/phase49-regulatory-reporting-probe.mjs",
     "test:phase50": "node test/intent-ai/phase50-program-control-probe.mjs",
+    "test:phase51": "node test/intent-ai/phase51-wallet-signing-probe.mjs",
+    "test:phase52": "node test/intent-ai/phase52-live-quote-probe.mjs",
+    "test:phase53": "node test/intent-ai/phase53-broadcast-tracking-probe.mjs",
+    "test:phase54": "node test/intent-ai/phase54-bridge-execution-probe.mjs",
+    "test:phase55": "node test/intent-ai/phase55-mev-shield-probe.mjs",
+    "test:phase56": "node test/intent-ai/phase56-receipt-taxonomy-probe.mjs",
+    "test:phase57": "node test/intent-ai/phase57-live-dca-probe.mjs",
     "test:spec65-core": "node test/intent-ai/spec65-priority-core-probe.mjs",
     "test:spec65-capability": "node test/intent-ai/spec65-capability-probe.mjs",
     "test:spec65-specialists": "node test/intent-ai/spec65-specialists-probe.mjs",
@@ -86,7 +93,8 @@
     "test:wave3": "node test/intent-ai/wave3-third-party-probe.mjs",
     "test:wave4": "node test/intent-ai/wave4-evidence-unfreeze-probe.mjs",
     "test:waves": "npm run test:wave0 && npm run test:wave1 && npm run test:wave2 && npm run test:wave3 && npm run test:wave4",
-    "build:full": "VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs"
+    "build:full": "VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs",
+    "test:phases51-57": "npm run test:phase51 && npm run test:phase52 && npm run test:phase53 && npm run test:phase54 && npm run test:phase55 && npm run test:phase56 && npm run test:phase57"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
