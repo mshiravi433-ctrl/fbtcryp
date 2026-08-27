@@ -2501,7 +2501,8 @@
       "REJECTED": "You rejected the request in your wallet.",
       "FAILED": "The transfer failed. Nothing was sent.",
       "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
-      "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again."
+      "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again.",
+      "RECIPIENT_BLOCKED": "This recipient did not pass the address check, so nothing was sent."
     },
     "asset": "Asset",
     "ensResolving": "Resolving ENS name…",
@@ -5004,7 +5005,25 @@
       "reauthorize": "REAUTHORIZE"
     },
     "risk": {
-      "summary": "Risk: level {{level}} · decision {{decision}}"
+      "summary": "Risk: level {{level}} · decision {{decision}}",
+      "reason": {
+        "calm": "The market is calm right now, so the standard caps apply.",
+        "normal": "Normal market movement — caps tightened slightly.",
+        "elevated": "Movement is elevated, so the slippage cap and position size were tightened.",
+        "high": "The market is moving fast; caps were tightened sharply.",
+        "extreme": "Movement is extreme, so the tightest caps apply.",
+        "noVolatility": "No usable market movement reading is available, so the strictest caps apply.",
+        "unsourced": "The market movement reading has no source, so the strictest caps apply.",
+        "stale": "The market movement reading is too old to rely on, so the strictest caps apply."
+      },
+      "violation": {
+        "slippage": "The requested slippage of {{requested}}% is above the current cap of {{cap}}% for a {{tier}} market.",
+        "size": "The requested size of {{requested}} is above the current cap of {{cap}} for a {{tier}} market."
+      },
+      "tierTitle": "Current market condition",
+      "capsTitle": "Caps in force now",
+      "capSlippage": "Slippage cap: {{cap}}%",
+      "capSize": "Size cap: {{cap}}"
     },
     "receipt": {
       "title": "Receipt",
@@ -5019,7 +5038,42 @@
       "rejected": "Rejected by user",
       "cancelled": "Cancelled",
       "unconfirmed": "Gate not confirmed",
-      "emergency-stop": "Emergency stop"
+      "emergency-stop": "Emergency stop",
+      "blocked": "Blocked by your session policy — not executed",
+      "txHash": "Transaction: {{hash}}",
+      "reason": {
+        "policyPerTx": "The amount (${{value}}) is above this session policy limit of ${{limit}} per transaction.",
+        "policyCapital": "The amount (${{value}}) is above this session policy total capital limit of ${{limit}}.",
+        "policyAsset": "This asset ({{value}}) is not in the assets you allowed for this session ({{allowed}}).",
+        "policyChain": "This network ({{value}}) is not in the networks you allowed for this session ({{allowed}}).",
+        "policyProtocol": "This protocol ({{value}}) is not in the protocols you allowed for this session ({{allowed}}).",
+        "policyLoss": "This would pass the loss limit you set for this session (${{limit}}).",
+        "policySlippage": "The slippage or fee is above the limit set for this session.",
+        "policyLeverage": "The leverage is above the limit set for this session.",
+        "policyExpired": "This session policy has expired — please start a new session.",
+        "policyDestination": "That destination is not in the list you allowed for this session.",
+        "productLimit": "This request is above a product-wide ceiling, so it was not executed.",
+        "permission": "This permission level cannot execute. Level 3 with a confirmed policy is required.",
+        "authorization": "The authorization step was not completed, so nothing was executed.",
+        "emergencyStop": "The emergency stop is active — execution was halted.",
+        "termsChanged": "The terms changed since you approved them, so reauthorization is required.",
+        "slippageMoved": "The rate moved beyond your slippage limit before execution, so it was not executed.",
+        "noSigner": "No wallet signature — connect your wallet and approve the request to execute.",
+        "noProvider": "No network connection to a provider, so nothing was submitted.",
+        "noQuote": "No live executable rate is available right now, so nothing was executed.",
+        "noBroadcaster": "There is no live path to broadcast this transaction yet.",
+        "bridgeUnavailable": "Bridge execution is not connected yet — only bridge quotes are available.",
+        "bridgeApproval": "A bridge needs its own separate approval before it can run.",
+        "noRoute": "There is no live route for this request.",
+        "riskBlocked": "The risk check blocked this execution.",
+        "deadline": "The deadline for this order passed before it could run.",
+        "reverted": "The transaction was rejected on-chain, so nothing changed.",
+        "submitRejected": "The transaction was not accepted for submission.",
+        "provider": "The provider did not answer in time, so nothing was confirmed.",
+        "partial": "Only part of this order was filled.",
+        "sessionKey": "The session key is expired or revoked, so nothing was signed.",
+        "unknown": "Execution did not complete, and the exact cause is not known."
+      }
     },
     "readiness": {
       "title": "Capabilities & readiness",
@@ -5252,6 +5306,388 @@
       "securityReadonly": "Discovery is read-only: listing an agent grants no access by itself.",
       "interactionTitle": "How you interact with it",
       "interactionBody": "You keep talking to the same assistant. When a verified external agent participates, its identity and trust status are shown in the mode card, and you can stop, pause or revoke the session at any time with the controls above."
+    },
+    "policyLimits": {
+      "title": "Active session policy",
+      "hintPerTx": "Session policy — max per transaction: ${{limit}}",
+      "hintCapital": "Session policy — max total capital: ${{limit}}",
+      "violationTitle": "This is outside the policy you confirmed for this session"
+    },
+    "dca": {
+      "halt": {
+        "POLICY_VIOLATION": "The recurring plan was stopped: a run fell outside your session policy.",
+        "AUTHORIZATION_MISSING": "The recurring plan was stopped: it has no prior explicit authorization.",
+        "AUTHORIZATION_EXPIRED": "The recurring plan was stopped: its authorization expired.",
+        "RUNS_EXHAUSTED": "The recurring plan finished: it used every run you authorized.",
+        "CONTROL_ACTIVE": "The recurring plan was stopped because you paused or stopped the session.",
+        "USER_STOPPED": "You stopped the recurring plan."
+      }
+    },
+    "wallet": {
+      "signRequired": "Your wallet will ask you to sign the terms shown above.",
+      "notConnected": "No wallet is connected, so nothing can be signed or sent."
+    },
+    "regime": {
+      "unavailable": "Market conditions are unavailable right now — the price feed did not return usable data, so no read is offered.",
+      "summary": "Current market read: {{labels}} (trend {{trend}}%, movement {{volatility}}%). Source: {{sources}}."
+    },
+    "proposal": {
+      "priceUp": "{{symbol}} moved up {{changePct}}% to {{price}} (source: {{source}}). Would you like me to prepare a draft? Nothing runs until you confirm.",
+      "priceDown": "{{symbol}} moved down {{changePct}}% to {{price}} (source: {{source}}). Would you like me to prepare a draft? Nothing runs until you confirm.",
+      "feedUnavailable": "The price feed for {{symbol}} is unavailable, so no suggestion is made.",
+      "accepted": "Accepted. The request now goes through the normal review and confirmation steps.",
+      "declined": "Dismissed. Nothing was prepared."
+    },
+    "why": {
+      "noData": "There is not enough checkable data behind this, so no recommendation is made.",
+      "basis": "Based on {{count}} checkable data points from {{sources}}, last observed at {{observedAt}}."
+    },
+    "goalProgress": {
+      "title": "Goal progress",
+      "percent": "{{pct}}%",
+      "unknownShort": "unknown",
+      "unknown": "Progress cannot be verified yet — no confirmed balance reading is available, so no percentage is shown.",
+      "summary": "{{pct}}% of the goal: {{current}} of {{target}} (source: {{sources}}).",
+      "source": "Balance source: {{source}}"
+    },
+    "backtest": {
+      "unavailable": "Not enough historical data to run a simulation.",
+      "summary": "{{label}}: {{returnPct}}% over the tested window ({{fromAt}} to {{toAt}}), {{trades}} trades, {{costUsd}} in fees and slippage, largest dip {{drawdownPct}}%. Source: {{source}}.",
+      "disclosure": {
+        "simulation": "This is a simulation on past data. Past behaviour is not a statement about the future.",
+        "costs": "Trading fees and slippage are included in every simulated fill and shown separately.",
+        "noForecast": "No future outcome is claimed or implied."
+      }
+    },
+    "screen": {
+      "title": "Asset check",
+      "passed": "Checks passed.",
+      "reason": {
+        "impostor": "{{symbol}} at {{presented}} is not the {{symbol}} contract. The real one is {{canonical}}. This swap is refused.",
+        "blocklisted": "This contract is on the blocked list, so the swap is refused.",
+        "noLiquidity": "There is no pool liquidity for {{symbol}}, so this swap cannot be filled.",
+        "thinLiquidity": "Pool liquidity for {{symbol}} is {{liquidity}}, below the {{required}} needed for this size.",
+        "honeypot": "This contract cannot be sold once bought, so the swap is refused.",
+        "cannotSell": "Selling this token is blocked by the contract itself, so the swap is refused.",
+        "unverified": "This contract source is not verified. Please look before continuing.",
+        "notListed": "{{symbol}} at {{address}} is not on any known token list. Please look before continuing.",
+        "noAddress": "No contract address was given for {{symbol}}, so it cannot be checked.",
+        "chainMismatch": "{{symbol}} belongs to chain {{got}}, not the selected chain {{expected}}.",
+        "liquidityUnknown": "Pool liquidity for {{symbol}} could not be read."
+      }
+    },
+    "addressShield": {
+      "title": "Recipient check",
+      "confirmNew": "I have checked this address",
+      "flag": {
+        "lookalike": "This address looks like one in your history but is a different address. Yours: {{similar}} — this one: {{recipient}}. Sending is blocked.",
+        "dustOrigin": "This address only ever appeared in your history as a tiny incoming transfer. That is a known trick. Sending is blocked.",
+        "firstTime": "You have never sent to {{fingerprint}} before. Please confirm this address separately.",
+        "selfSend": "This is your own address.",
+        "invalid": "That is not a valid address."
+      }
+    },
+    "approvals": {
+      "title": "Token permissions",
+      "subtitle": "What you have allowed, and to which contract.",
+      "empty": "No active token permissions were found.",
+      "unavailable": "Token permissions could not be read right now.",
+      "exposure": "At risk: {{amount}}",
+      "exposureUnknown": "Amount at risk unknown",
+      "unlimitedBadge": "Unlimited",
+      "staleBadge": "Old",
+      "revoke": "Revoke",
+      "revokePrompt": "Revoke the permission for {{spender}} on {{symbol}}? This removes {{exposure}} of exposure and needs its own confirmation.",
+      "totals": "{{active}} active, {{unlimited}} unlimited.",
+      "reason": {
+        "unlimited": "This contract may move any amount of this token.",
+        "bounded": "This contract may move up to a set amount.",
+        "none": "No permission is in place.",
+        "stale": "This permission has not been touched in a long time.",
+        "unreadable": "This permission could not be read, so it is treated as risky.",
+        "sufficient": "The existing permission already covers this swap.",
+        "needed": "A permission for exactly this swap amount is needed."
+      }
+    },
+    "presign": {
+      "clean": "Checked against the network: this transaction runs. Estimated gas {{gas}}.",
+      "unavailable": "This transaction could not be checked against the network, so it is not proven to work.",
+      "noTransaction": "There is no complete transaction to check.",
+      "overrideAccepted": "You chose to continue without a network check. This is recorded.",
+      "revert": {
+        "insufficientBalance": "The network check says this fails: the balance is not enough. Nothing was signed.",
+        "insufficientAllowance": "The network check says this fails: the token permission is not enough. Nothing was signed.",
+        "slippage": "The network check says this fails: the price moved past your limit. Nothing was signed.",
+        "deadline": "The network check says this fails: the time limit has passed. Nothing was signed.",
+        "transferFailed": "The network check says this fails: the token transfer is rejected. Nothing was signed.",
+        "unknown": "The network check says this fails ({{reason}}). Nothing was signed."
+      }
+    },
+    "persistence": {
+      "cleanStart": "The saved session could not be read, so a fresh one was started. Nothing was lost that had been confirmed on-chain."
+    },
+    "continuity": {
+      "resumed": "Your session continues here. Every financial confirmation is taken again on this device."
+    },
+    "ledger": {
+      "complete": "Built from {{pending}} open and all confirmed receipts.",
+      "partial": "Some receipts could not be verified ({{excluded}}), so this view is incomplete.",
+      "pendingTitle": "Not yet settled",
+      "failedTitle": "Failed"
+    },
+    "memory": {
+      "off": "Memory is off. Nothing is being kept between sessions.",
+      "consentGranted": "Memory is on for: {{scopes}}. You can export or delete it at any time.",
+      "notStored": "Memory is off, so nothing from this was kept.",
+      "stored": "Saved to your memory.",
+      "revoked": "Memory was turned off and everything kept was deleted.",
+      "revokeFailed": "Memory was turned off, but the stored data could not be deleted. Please try again."
+    },
+    "notify": {
+      "completed": "Your request finished.",
+      "failed": "Your request did not go through.",
+      "reauthorize": "Something changed and needs your confirmation again: {{reason}}",
+      "halted": "The program was stopped and is waiting for you.",
+      "authorizationExpired": "No answer arrived in time, so the program stopped instead of continuing."
+    },
+    "recovery": {
+      "revoked": "Access was revoked ({{scope}}, {{reason}}).",
+      "keyDead": "This session key was revoked and no longer works.",
+      "summary": "{{revoked}} keys revoked, {{remaining}} still active."
+    },
+    "anchor": {
+      "anchored": "Receipt anchored on chain ({{count}} in this batch).",
+      "pending": "Anchor submitted — waiting for it to be mined. Not proven yet.",
+      "verified": "This receipt matches the on-chain anchor.",
+      "mismatch": "This receipt does not match the on-chain anchor.",
+      "unavailable": "On-chain anchoring is unavailable right now.",
+      "viewOnExplorer": "View on explorer"
+    },
+    "timeline": {
+      "title": "Your activity",
+      "complete": "Showing all {{shown}} of your events.",
+      "filtered": "Showing {{shown}} of your events. {{hidden}} entries are not yours and are not shown.",
+      "unavailable": "Your activity cannot be shown without a signed-in identity.",
+      "empty": "No activity recorded yet.",
+      "action": {
+        "intent_created": "You described an intent.",
+        "intent_parsed": "The intent was read into a plan.",
+        "plan_built": "A plan was prepared for your review.",
+        "gate_opened": "A confirmation was requested.",
+        "gate_confirmed": "You confirmed.",
+        "gate_rejected": "You rejected.",
+        "reauthorization_requested": "Re-authorization was requested.",
+        "order_submitted": "An order was submitted.",
+        "order_confirmed": "An order was confirmed on chain.",
+        "order_failed": "An order failed.",
+        "guardian_review": "A safety review ran.",
+        "risk_blocked": "A safety rule blocked the action.",
+        "emergency_stop": "Everything was stopped.",
+        "session_key_revoked": "A session key was revoked.",
+        "simulation_failed": "The pre-execution check failed.",
+        "unknown": "An event was recorded."
+      }
+    },
+    "termsDiff": {
+      "identical": "The terms are exactly what you approved.",
+      "cosmetic": "Only display details changed.",
+      "material": "The terms changed. Please read and confirm again.",
+      "unexplained": "The terms fingerprint changed but the change cannot be shown. Stopped.",
+      "unreadable": "The terms cannot be read, so nothing will run.",
+      "summary": "{{field}} changed from {{before}} to {{after}} (+{{more}} more).",
+      "row": {
+        "changed": "{{field}}: {{before}} changed to {{after}}",
+        "added": "{{field}}: added {{after}}",
+        "removed": "{{field}}: {{before}} removed"
+      },
+      "field": {
+        "amount": "Amount",
+        "amountIn": "Amount in",
+        "amountOut": "Amount out",
+        "minReceived": "Minimum received",
+        "token": "Token",
+        "tokenIn": "From token",
+        "tokenOut": "To token",
+        "recipient": "Recipient",
+        "to": "Destination",
+        "chainId": "Network",
+        "slippageBps": "Slippage",
+        "deadline": "Deadline",
+        "venue": "Venue",
+        "route": "Route",
+        "price": "Price",
+        "limitPrice": "Limit price",
+        "feeBps": "Fee",
+        "spender": "Spender",
+        "allowance": "Allowance"
+      }
+    },
+    "verify": {
+      "verified": "Checked independently by {{count}} verifiers.",
+      "unverified": "Not enough independent checks yet.",
+      "disputed": "Independent verifiers disagree about this receipt.",
+      "unavailable": "Independent verification is unavailable right now.",
+      "networkReady": "The verification network is available.",
+      "networkDegraded": "The verification network is degraded."
+    },
+    "bounty": {
+      "policy": "Security reports are welcome. Good-faith research is protected.",
+      "policyIncomplete": "The disclosure policy is incomplete and is not published.",
+      "received": "Report {{id}} received. You will hear back within the stated window.",
+      "rejected": "This report cannot be accepted: {{reason}}.",
+      "reward": "A discretionary reward of {{amount}} USD is offered for this {{severity}} report.",
+      "noReward": "No reward applies to this report.",
+      "noReport": "No report was provided.",
+      "embargoed": "Details are withheld until the fix window ends.",
+      "disclosedFixed": "Fixed and published.",
+      "disclosedUnfixed": "Published after the fix window; exploit details withheld.",
+      "liabilityNote": "A reward is a thank-you. It is not an admission of liability and does not cover losses."
+    },
+    "protocol": {
+      "established": "A signed session with this agent is open.",
+      "handshakeFailed": "The agent handshake failed, so no session was opened.",
+      "versionMismatch": "This agent speaks no protocol version we support.",
+      "rejected": "A message from this agent was rejected.",
+      "expired": "The agent session has expired.",
+      "notPermitted": "This agent is not permitted to do that."
+    },
+    "escrow": {
+      "funded": "{{amount}} USD is held in escrow for this job.",
+      "notOpened": "The escrow was not opened.",
+      "delivered": "Delivery was submitted and independently proven.",
+      "deliveredUnproven": "Delivery was submitted but is not independently proven yet.",
+      "mismatch": "What was delivered does not match what was agreed.",
+      "late": "The delivery window has passed.",
+      "released": "{{amount}} USD was released to the agent.",
+      "notReleased": "Nothing was released.",
+      "disputed": "This job is under dispute. The funds are frozen.",
+      "refunded": "{{amount}} USD was refunded to you."
+    },
+    "sandbox": {
+      "completed": "The agent ran inside the sandbox and finished.",
+      "denied": "The agent asked for something outside its permissions.",
+      "escape": "The agent tried to leave its sandbox. It was cut off and reported.",
+      "failed": "The agent run failed inside the sandbox.",
+      "capabilityRefused": "That permission cannot be granted to an agent.",
+      "suspended": "This agent is suspended after {{count}} incidents and needs a human review."
+    },
+    "dispute": {
+      "provisional": "This score is provisional and can still be appealed.",
+      "final": "This score is final.",
+      "insufficientEvidence": "There is not enough evidence to show a score.",
+      "appealFiled": "The appeal was filed. The penalty is frozen while it is reviewed.",
+      "appealRefused": "The appeal could not be filed.",
+      "appealUpheld": "The appeal was upheld and the penalty was reversed.",
+      "appealRejected": "The appeal was reviewed and rejected.",
+      "appealExpired": "The appeal window closed without a decision.",
+      "needsEvidence": "A decision needs reviewed evidence on the record.",
+      "slashed": "A penalty of {{amount}} USD was applied for {{reason}}. It can be appealed.",
+      "slashRefused": "That penalty is not valid and was not applied."
+    },
+    "routing": {
+      "selected": "Routing to {{venue}} out of {{count}} live venues.",
+      "noVenue": "No venue is live right now, so nothing can be routed.",
+      "noFillableQuote": "No live venue can fill this size right now.",
+      "venueRemoved": "A venue was removed from routing because it is not answering."
+    },
+    "market": {
+      "suggestions": "{{count}} specialists with proven work in this area.",
+      "noneQualified": "No specialist has proven work in this area yet.",
+      "unproven": "This agent has not proven this skill.",
+      "unknown": "Market conditions are unavailable.",
+      "noSupply": "No specialist is available right now.",
+      "noDemand": "There are no open requests right now.",
+      "tight": "Demand is higher than the proven supply.",
+      "balanced": "Supply and demand are roughly balanced.",
+      "ample": "There is more proven supply than demand."
+    },
+    "edge": {
+      "serving": "Served from {{region}} ({{ms}} ms).",
+      "healthy": "The {{region}} edge is responding normally.",
+      "slow": "The {{region}} edge is slow right now ({{ms}} ms).",
+      "latencyUnknown": "Not enough requests yet to report a speed.",
+      "failover": "You were moved from {{from}} to {{to}} to keep things working.",
+      "drained": "The {{region}} edge was taken out of rotation.",
+      "noRegion": "No edge region is healthy right now."
+    },
+    "parser": {
+      "localeParity": "Your language is fully supported in the intent box.",
+      "localeGap": "The intent box does not yet understand every supported language.",
+      "localeUnsupported": "The intent box does not understand this language yet. Use the guided steps instead.",
+      "guidedFallback": "Let us go step by step instead."
+    },
+    "compliance": {
+      "mapTitle": "What is available in your region",
+      "regionUnknown": "Your region could not be determined, so the strictest rules apply.",
+      "available": "Available here.",
+      "restricted": "Available here with an extra confirmation.",
+      "blocked": "Not available in your region.",
+      "legalHold": "Not available right now for legal reasons.",
+      "unknownFeature": "This feature is not recognised."
+    },
+    "ramp": {
+      "noOnramp": "We cannot buy crypto with a bank card or bank transfer. This app only swaps crypto you already hold.",
+      "noOfframp": "We cannot send money to a bank account. This app only swaps crypto you already hold.",
+      "alternative": "You can swap between the tokens already in your wallet.",
+      "thirdPartyDisclaimer": "This is a separate company. We do not operate it and cannot support it.",
+      "routesRemoved": "Some routes were hidden because they need a service we do not provide."
+    },
+    "chaos": {
+      "passed": "The {{fault}} drill behaved honestly.",
+      "failed": "The {{fault}} drill did not behave honestly.",
+      "drillPassed": "Every fault drill behaved honestly.",
+      "drillFailed": "{{failed}} drills failed and {{untested}} were not run.",
+      "unavailable": "This is unavailable right now. Nothing was sent."
+    },
+    "fee": {
+      "line": "Fee {{percent}}% ({{amount}} {{symbol}}).",
+      "unavailable": "The fee cannot be calculated right now.",
+      "aboveMax": "That fee is above the allowed maximum and was refused.",
+      "mismatch": "The fee charged does not match the fee quoted. Stopped.",
+      "accountingComplete": "All {{counted}} settled fees are accounted for.",
+      "accountingPartial": "{{counted}} settled fees counted; {{excluded}} could not be verified."
+    },
+    "plan": {
+      "entitlements": "Your {{tier}} plan includes {{count}} analysis features.",
+      "notPurchasable": "This is a safety setting. It is the same on every plan and cannot be bought.",
+      "unknownEntitlement": "That feature is not recognised.",
+      "upgradeForAnalysis": "This analysis feature is on a higher plan.",
+      "policyUnavailable": "The session policy is unavailable, so nothing runs.",
+      "downgraded": "Your plan changed. Safety limits are unchanged.",
+      "sameLimitsNote": "Execution limits and safety checks are identical on every plan."
+    },
+    "lifecycle": {
+      "exportReady": "Your data is ready to download.",
+      "exportPartial": "Some of your data could not be read, so no partial file is offered.",
+      "exportFailed": "The export could not be prepared.",
+      "deleted": "Everything was deleted and the deletion was verified.",
+      "deletePartial": "{{cleared}} stores were cleared, {{remaining}} could not be.",
+      "deleteFailed": "Nothing was deleted.",
+      "deleteNeedsConfirmation": "Deleting is permanent. Please confirm.",
+      "deletionProven": "We read every store back and nothing of yours remains.",
+      "deletionUnproven": "The deletion could not be fully verified."
+    },
+    "a11y": {
+      "screenOk": "This screen passed the accessibility checks.",
+      "screenFails": "{{failing}} elements failed the accessibility checks.",
+      "controlOk": "This control is accessible.",
+      "controlFails": "This control is not accessible.",
+      "contrastOk": "Contrast is sufficient.",
+      "contrastLow": "Contrast is too low to read comfortably.",
+      "contrastUnknown": "Contrast could not be measured."
+    },
+    "offline": {
+      "offline": "You are offline. Nothing has been sent.",
+      "online": "You are back online.",
+      "waiting": "{{count}} confirmed intents are waiting for the network.",
+      "sending": "Sending {{count}} waiting intents.",
+      "sent": "{{sent}} waiting intents were sent.",
+      "stillQueued": "Still waiting for the network.",
+      "queued": "Saved to send when you are back online ({{count}} waiting).",
+      "notQueued": "This was not queued.",
+      "needsReconfirmation": "The terms changed while you were offline. Please confirm again.",
+      "cachedPage": "Showing a saved copy of this page.",
+      "pageUnavailable": "This page needs a connection."
     }
   }
 }

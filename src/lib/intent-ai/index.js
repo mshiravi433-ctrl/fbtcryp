@@ -152,6 +152,80 @@ export { buildConfirmationBlock, GATE_BUTTONS } from './confirmationUI.js';
 export { prepareExecution, confirmAndSubmit, observeAndReconcile, emergencyHalt } from './controlledExecution.js';
 export { executeConfirmed } from './humanAi.js';
 
+// ── Phases 51-57: real execution ────────────────────────────────────────────
+// Phase 51 — a connected wallet becomes the actual signer.
+export {
+  WALLET_RUNTIME_SCHEMA,
+  describeWalletRuntime,
+  intentOrderTypedData,
+  signIntentWithWallet,
+  signerFromWalletSignature,
+  resolveExecutionSigner,
+  createEip1193Broadcaster,
+  stubSigner,
+  stubSignerAllowed,
+  isStubSigner
+} from './walletRuntime.js';
+// Phase 52 — live quote locked into the terms + slippage re-check.
+export {
+  LIVE_QUOTE_SCHEMA,
+  QUOTE_MAX_AGE_MS,
+  DEFAULT_MAX_SLIPPAGE_PCT,
+  normalizeQuote,
+  fetchExecutionQuote,
+  lockQuoteIntoTerms,
+  effectiveSlippageLimit,
+  recheckQuoteBeforeExecute
+} from './liveQuote.js';
+// Phase 53 — real broadcast and block-by-block tracking.
+export {
+  BROADCAST_SCHEMA,
+  TX_STATUSES,
+  normalizeTxHash,
+  broadcastSigned,
+  trackTransaction,
+  receiptStatusFor
+} from './broadcastAdapter.js';
+// Phase 54 — bridge execution behind its own explicit approval.
+export {
+  BRIDGE_EXECUTION_SCHEMA,
+  bridgeWired,
+  bridgeHealth,
+  assertBridgeApproval,
+  executeBridge,
+  trackBridgeDelivery
+} from './bridgeExecution.js';
+// Phase 55 — MEV / slippage shield.
+export {
+  MEV_SHIELD_SCHEMA,
+  DEFAULT_DEADLINE_SECS,
+  HARD_MAX_SLIPPAGE_PCT,
+  SUBMISSION_CHANNELS,
+  applyMevShield,
+  assertProtected,
+  shieldTransaction
+} from './mevShield.js';
+// Phase 56 — honest receipt error taxonomy + session-policy ceilings.
+export {
+  RECEIPT_REASONS,
+  RECEIPT_REASON_SCHEMA,
+  sessionPolicyCaps,
+  checkSessionPolicy,
+  explainExecutionFailure,
+  receiptStatusForReason,
+  normalizeGuardianReasons,
+  guardianReasonsFromError
+} from './executionErrorTaxonomy.js';
+// Phase 57 — live DCA trigger.
+export {
+  LIVE_DCA_SCHEMA,
+  DCA_HALT_REASONS,
+  armLiveDcaProgram,
+  assertDcaAuthorization,
+  tickLiveDca,
+  stopLiveDca
+} from './liveDcaTrigger.js';
+
 // ── Phase 3: Multi-Agent Ecosystem ──────────────────────────────────────────
 export {
   issueCapabilityToken,
@@ -795,5 +869,236 @@ export {
   assertScanBeforeStart
 } from './capabilityScanner.js';
 export { createNonBypassableControls } from './phaseBoundary.js';
+
+/* Arc C — user and memory (phases 63-68) */
+export {
+  PERSISTENCE_SCHEMA, SNAPSHOT_MAX_AGE_MS, FORBIDDEN_FIELDS, SAFETY_FIELDS,
+  stripSecrets, snapshotDigest, buildSnapshot, encryptSnapshot, restoreSnapshot,
+  assertRestoreNotEscalated
+} from './sessionPersistence.js';
+export {
+  CONTINUITY_SCHEMA, HANDOFF_TTL_MS, NON_TRANSFERABLE,
+  resolveLinkedIdentity, createHandoff, acceptHandoff, assertNoTransferredAuthority
+} from './crossDeviceContinuity.js';
+export {
+  LEDGER_SCHEMA, RECEIPT_STATES, SETTLED_STATE,
+  validateReceipt, buildLedger, assertLedgerHonest
+} from './portfolioLedger.js';
+export {
+  CONSENT_MEMORY_SCHEMA, MEMORY_SCOPES, CONSENT_MAX_AGE_MS,
+  grantMemoryConsent, memoryOff, consentCovers, recordWithConsent,
+  exportMemory, revokeMemoryConsent, assertNothingStored
+} from './consentedMemory.js';
+export {
+  NOTIFY_SCHEMA,
+  CHANNELS as NOTIFY_CHANNELS,
+  EVENTS as NOTIFY_EVENTS,
+  DEFAULT_AUTHORIZATION_WINDOW_MS,
+  buildNotification, deliverNotification, requestReauthorization,
+  resolveAuthorizationTimeout, programMayContinue
+} from './intentNotifications.js';
+export {
+  RECOVERY_SCHEMA as ACCESS_RECOVERY_SCHEMA,
+  REVOKE_SCOPES, REVOCATION_REASONS,
+  revokeAccess, revokeEverything, assertKeyUsable, applyRevocation, assertNothingSurvives
+} from './accessRecovery.js';
+
+/* Arc H — product durability (phases 90-94) */
+export {
+  FEE_SCHEMA, FEE_TOLERANCE, computeFee, attachFeeToReceipt, accountCollectedFees, assertFeeHonest
+} from './feeIntegrity.js';
+export {
+  PLAN_SCHEMA, TIERS, ANALYTICAL_ENTITLEMENTS, FORBIDDEN_ENTITLEMENTS, PLAN_ENTITLEMENTS,
+  resolveEntitlements, executionPolicyFor, entitlementAllows, applyDowngrade, assertPlanBuysNoPermission
+} from './planGovernance.js';
+export {
+  LIFECYCLE_SCHEMA, DATA_STORES, exportUserData, deleteUserData, verifyDeletion, assertErasureProven
+} from './dataLifecycle.js';
+export {
+  A11Y_SCHEMA, CONTRAST_AA, CONTRAST_AA_LARGE, MIN_TARGET_PX, contrastRatio, meetsContrast,
+  auditControl, auditDialog, auditScreen, assertAccessible
+} from './accessibilityAudit.js';
+export {
+  QUEUE_SCHEMA, QUEUE_STATES, QUEUE_TTL_MS, MAX_QUEUE_LENGTH, CACHEABLE_ROUTES,
+  cachePolicyFor, enqueueIntent, flushQueue, offlineStatus, assertNoOfflineExecution
+} from './offlineQueue.js';
+
+/* Arc G — scale and globalisation (phases 85-89) */
+export {
+  EDGE_SCHEMA, REGIONS, MIN_LATENCY_SAMPLES, SLOW_P95_MS, SAMPLE_MAX_AGE_MS,
+  measureRegion, selectRegion, recordFailover, drainRegion, assertEdgeHonest
+} from './regionalEdge.js';
+export {
+  PARSER_LOCALE_SCHEMA, SUPPORTED_LOCALES, normalizeDigits, isLocaleSupported,
+  canonicalizeUtterance, parseLocalizedIntent, localeCoverage, assertNoSilentFallback
+} from './parserLocales.js';
+export {
+  COMPLIANCE_SCHEMA as REGIONAL_COMPLIANCE_SCHEMA, FEATURE_STATES, GATED_FEATURES, REGION_POLICY,
+  featureState, legalHoldCovers, availabilityMap, assertFeaturePermitted, assertGateOnlyRestricts
+} from './regionalCompliance.js';
+export {
+  RAMP_SCHEMA, RAMP_SUPPORTED, FIAT_CURRENCIES, detectFiatIntent, fiatBoundaryResponse,
+  filterMisleadingRoutes, assertNoRampPromise
+} from './fiatRampBoundary.js';
+export {
+  CHAOS_SCHEMA, FAULTS, REQUIRED_BEHAVIOUR, injectFault, runChaosDrill,
+  honestUnavailable, assertDrillHonest
+} from './intentChaos.js';
+
+/* Arc D — agent ecosystem at scale (phases 69-74) */
+export {
+  HANDSHAKE_SCHEMA, PROTOCOL_VERSIONS, MIN_PROTOCOL_VERSION, HANDSHAKE_TTL_MS,
+  SESSION_TTL_MS, NONCE_BYTES, MESSAGE_KINDS, canonicalPayload, signMessage,
+  verifyMessage, negotiateVersion, startHandshake, completeHandshake, assertSessionUsable
+} from './agentHandshake.js';
+export {
+  ESCROW_SCHEMA, ESCROW_STATES, DELIVERY_WINDOW_MS, DISPUTE_WINDOW_MS, MAX_ESCROW_USD,
+  openEscrow, submitDelivery, releaseEscrow, openDispute, resolveDispute, expireEscrow, assertEscrowSound
+} from './agentEscrow.js';
+export {
+  SANDBOX_SCHEMA, CAPABILITIES, FORBIDDEN_CAPABILITIES, TOKEN_TTL_MS, MAX_CALLS, MAX_RUNTIME_MS,
+  mintCapabilityToken, checkCall, runInSandbox, applyAutoCut, assertContained
+} from './agentSandboxRuntime.js';
+export {
+  DISPUTE_SCHEMA, APPEAL_WINDOW_MS, APPEAL_STATES, SLASH_REASONS, MAX_SLASH_FRACTION, SLASH_TTL_MS,
+  provisionalScore, fileAppeal, decideAppeal, finalizeScore, applySlash, assertDueProcess
+} from './agentDispute.js';
+export {
+  ROUTING_SCHEMA, VENUE_STATES, PROBE_TIMEOUT_MS, HEALTH_MAX_AGE_MS, MAX_LATENCY_MS,
+  MIN_SUCCESS_RATE as MIN_VENUE_SUCCESS_RATE, probeVenues, isRoutable, routeOrder, assertNoDeadVenue
+} from './liveVenueRouting.js';
+export {
+  MARKETPLACE_SCHEMA, MIN_PROVEN_JOBS, PROOF_MAX_AGE_MS, MIN_SUCCESS_RATE as MIN_AGENT_SUCCESS_RATE,
+  proveSkill, computeSupply, computeDemand, marketConditions, suggestSpecialists, assertOnlyProvenSuggested
+} from './liveMarketplace.js';
+
+/* Arc E — trust and proof (phases 75-79) */
+export {
+  ANCHOR_SCHEMA, ANCHOR_STATES, MAX_BATCH_SIZE, digest, buildReceiptLeaf, buildBatch,
+  merkleProof, verifyProof, anchorBatch, explorerUrl, verifyAgainstAnchor
+} from './onchainReceipt.js';
+export {
+  TIMELINE_SCHEMA, TIMELINE_MAX_ROWS, TIMELINE_GROUPS, toTimelineRow, buildTimeline,
+  assertAppendOnly, assertTimelineSafe
+} from './auditTimeline.js';
+export {
+  TERMS_DIFF_SCHEMA, MATERIAL_FIELDS, COSMETIC_FIELDS, SEVERITIES as TERMS_DIFF_SEVERITIES,
+  diffTerms, summarizeDiff, assertTermsUnchanged
+} from './termsDiff.js';
+export {
+  VERIFICATION_SCHEMA, MIN_INDEPENDENT_VERIFIERS, VERIFICATION_TIMEOUT_MS, VERDICTS,
+  buildVerificationPacket, requestIndependentVerification, assurancePlaneReady, assertVerificationHonest
+} from './thirdPartyVerification.js';
+export {
+  BOUNTY_SCHEMA, SEVERITY_BANDS, REWARD_BANDS, REWARD_CAP_USD, RESPONSE_WINDOW_MS,
+  IN_SCOPE as BOUNTY_IN_SCOPE, OUT_OF_SCOPE as BOUNTY_OUT_OF_SCOPE, REPORT_STATES,
+  buildBountyPolicy, submitReport, assessReward, disclosureDecision, assertNoLiabilityPromise
+} from './bugBounty.js';
+
+/* Arc F — product risk and security (phases 80-84) */
+export {
+  ADAPTIVE_RISK_SCHEMA,
+  VOLATILITY_TIERS,
+  VOLATILITY_MAX_AGE_MS,
+  UNKNOWN_TIER,
+  classifyVolatility,
+  adaptiveLimits,
+  assessAdaptiveRisk,
+  riskDecisionRecord,
+  assertNeverLoosens
+} from './adaptiveRisk.js';
+export {
+  ASSET_SCREEN_SCHEMA,
+  SCREEN_VERDICTS,
+  SCREEN_REASONS,
+  LIQUIDITY_DEPTH_MULTIPLE,
+  MIN_POOL_LIQUIDITY_USD,
+  detectImpostor,
+  assessLiquidity,
+  screenAsset,
+  assertScreenedBeforeQuote
+} from './assetScreening.js';
+export {
+  ADDRESS_SHIELD_SCHEMA,
+  HEAD_CHARS,
+  TAIL_CHARS,
+  DUST_THRESHOLD_USD,
+  SHIELD_FLAGS,
+  addressFingerprint,
+  looksAlike,
+  screenRecipient,
+  assertRecipientCleared
+} from './addressShield.js';
+export {
+  APPROVAL_SCHEMA,
+  MAX_UINT256,
+  EFFECTIVELY_UNLIMITED,
+  STALE_APPROVAL_MS,
+  APPROVAL_HEADROOM_PCT,
+  APPROVAL_RISKS,
+  classifyAllowance,
+  approvalInventory,
+  minimalApproval,
+  revokePlan,
+  assertNoUnlimitedApproval
+} from './approvalHygiene.js';
+export {
+  PRESIGN_SCHEMA,
+  SIMULATION_MAX_AGE_MS,
+  SIMULATION_STATUSES,
+  REVERT_REASON_KEYS,
+  txFingerprint,
+  classifyRevert,
+  simulateBeforeSign,
+  assertSimulatedBeforeSign,
+  describeSimulation
+} from './simulationGate.js';
+
+/* Arc B — live market data (phases 58-62) */
+export {
+  LIVE_REGIME_SCHEMA,
+  DEFAULT_REGIME_MAX_AGE_HRS,
+  MIN_REGIME_POINTS,
+  normalizeSeries,
+  seriesMetrics,
+  buildRegimeEvidence,
+  detectLiveMarketRegime,
+  describeLiveRegime
+} from './liveMarketRegime.js';
+export {
+  ALERT_PROPOSAL_SCHEMA,
+  PROPOSAL_STATUSES,
+  PROPOSAL_MAX_PRICE_AGE_MS,
+  PROPOSAL_TTL_MS,
+  proposalFromAlert,
+  informedUnavailable,
+  acceptProposal,
+  declineProposal,
+  assertNoAlertShortcut
+} from './alertProposals.js';
+export {
+  LIVE_WHY_SCHEMA,
+  DEFAULT_DATA_MAX_AGE_MS,
+  screenDataPoints,
+  whyFromLiveData,
+  assertExplainable
+} from './liveWhy.js';
+export {
+  LIVE_GOAL_PROGRESS_SCHEMA,
+  DEFAULT_PRICE_MAX_AGE_MS,
+  valueHoldings,
+  liveGoalProgress,
+  progressBarState
+} from './liveGoalProgress.js';
+export {
+  BACKTEST_SCHEMA,
+  BACKTEST_LABEL,
+  MIN_BACKTEST_POINTS,
+  movingAverageStrategy,
+  runHonestBacktest,
+  assertNoLookAhead,
+  describeBacktest,
+  assertNoProfitPromise
+} from './honestBacktest.js';
 
 export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';

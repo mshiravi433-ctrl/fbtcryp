@@ -34,12 +34,16 @@ import {
   describeLevel, policyPreview, INTENT_AI_VERSION,
   openConfirmationGate, decideGate, assertGateAllowsSubmit, termsFromDraft,
   evaluateRisk, venueHealth, reconcile, executeConfirmed,
+  describeWalletRuntime, signIntentWithWallet,
+  sessionPolicyCaps, checkSessionPolicy, explainExecutionFailure,
+  goalProgress,
   PRIMARY_MODES, MODE_LABELS, MODE_DEFINITIONS,
   INTENT_LIMITS, MAX_GOAL_DURATION_HRS,
   FLOW_CHAIN_SUGGESTIONS, FLOW_TASK_SUGGESTIONS, FLOW_TOOL_SUGGESTIONS
 } from '../lib/intent-ai';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
+import TokenApprovals from './TokenApprovals';
 import '../styles/intent-os.css';
 
 const LEVELS = [
@@ -135,7 +139,7 @@ function applyScreenEdits(session, screen) {
   return { ...session, drafts };
 }
 
-export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) {
+export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, walletRuntime = null, tokenApprovals = null }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState(PRIMARY_MODES[0]);
   const [level, setLevel] = useState(1);
@@ -310,7 +314,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
     if (action === 'CONFIRM') {
       const allowed = decided ? assertGateAllowsSubmit(decided.gate) : { ok: true };
       if (!allowed.ok) { setReceipt({ status: 'unconfirmed', confirmed: false }); return; }
-      runExecution();
+      void runExecution();
     }
   }
 
@@ -339,6 +343,32 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   function handleFinalConfirm() {
     if (!screen) return;
     if (Object.keys(screen.errors || {}).length) return;
+    /*
+     * Phase 56 — a value that clears the product ceilings can still break the
+     * ACTIVE session policy (the reproduction case: $500 under the $5k product
+     * cap but over the $200 L3 policy cap). Say so here, in the user's own
+     * language, instead of letting the pipeline answer with "no live venue".
+     */
+    const violated = checkSessionPolicy({
+      amountUsd: screen.amountUsd,
+      chainId: screen.chainId,
+      protocol: screen.protocol,
+      fromSymbol: screen.fromSymbol,
+      toSymbol: screen.toSymbol
+    }, session?.policy || null);
+    if (!violated.ok) {
+      const first = violated.violations[0];
+      setReceipt({
+        status: 'blocked',
+        confirmed: false,
+        ok: false,
+        reason: first.reason,
+        reasonKey: first.i18nKey,
+        reasonParams: first.params,
+        policyViolations: violated.violations
+      });
+      return;
+    }
     const updated = applyScreenEdits(session, screen);
     const draft = (updated.drafts || []).find((d) => d.id === screen.draftId) || (updated.drafts || []).at(-1);
     if (draft) {
@@ -351,20 +381,57 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         }));
       }
     }
-    runExecution(updated);
+    void runExecution(updated);
   }
 
-  /** Execute through executeConfirmed and render the honest receipt. */
-  function runExecution(sessionArg) {
+  /**
+   * Execute through executeConfirmed and render the honest receipt.
+   *
+   * Phase 51: with a wallet connected, the locked terms are signed by the REAL
+   * wallet over EIP-1193 before the pipeline runs. Phase 56: whatever comes
+   * back, the receipt states the actual reason.
+   */
+  async function runExecution(sessionArg) {
     const base = sessionArg || session;
     const draftId = screen?.draftId || null;
-    const result = executeConfirmed(base, { action: 'CONFIRM', draftId });
-    setSession(result.session);
-    setGateAction('CONFIRM');
     const activeGate = gate;
     const health = activeGate
-      ? venueHealth({ kind: draftKind(activeGate), chainId: activeGate.lockedTerms?.chainId, protocol: activeGate.lockedTerms?.protocol }, {})
-      : { ok: false, venue: null };
+      ? venueHealth(
+        { kind: draftKind(activeGate), chainId: activeGate.lockedTerms?.chainId, protocol: activeGate.lockedTerms?.protocol },
+        { walletRuntime }
+      )
+      : { ok: false, venue: null, reasons: [] };
+
+    let walletSignature = null;
+    if (wallet.canSign) {
+      const asked = await signIntentWithWallet({
+        runtime: walletRuntime,
+        terms: { ...(activeGate?.lockedTerms || {}), termsHash: activeGate?.termsHash || null, draftId }
+      });
+      if (!asked.ok) {
+        const explained = explainExecutionFailure({ error: asked.error, policy: base?.policy || null });
+        setReceipt({
+          status: explained.status,
+          confirmed: false,
+          ok: false,
+          venue: health.venue || null,
+          reason: explained.reason,
+          reasonKey: explained.i18nKey,
+          reasonParams: explained.params
+        });
+        return;
+      }
+      walletSignature = asked.signature;
+    }
+
+    const result = executeConfirmed(base, {
+      action: 'CONFIRM',
+      draftId,
+      walletSignature,
+      walletAccount: wallet.account
+    });
+    setSession(result.session);
+    setGateAction('CONFIRM');
     const rec = reconcile({
       lifecycleStatus: result.receipt?.status || (result.ok ? 'WATCHING' : 'FAILED'),
       observation: {
@@ -373,14 +440,36 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         requestedAmount: Number(activeGate?.lockedTerms?.amountIn ?? screen?.amountUsd ?? 0)
       }
     });
+    if (result.ok) {
+      setReceipt({
+        status: rec.receipt?.status === 'COMPLETED' ? 'completed' : 'submitted',
+        confirmed: rec.receipt?.confirmed === true,
+        venue: health.venue || null,
+        receipt: rec.receipt,
+        txHash: result.txHash || null,
+        signerKind: result.signerKind || null,
+        ok: true
+      });
+      return;
+    }
+    const explained = result.explain || explainExecutionFailure({
+      error: result.error,
+      guardianReasons: result.reasons,
+      policy: base?.policy || null,
+      terms: activeGate?.lockedTerms || null,
+      reauthoriseRequired: result.reauthoriseRequired,
+      venueReasons: health.reasons
+    });
     setReceipt({
-      status: result.ok
-        ? (rec.receipt?.status === 'COMPLETED' ? 'completed' : 'submitted')
-        : (result.reauthoriseRequired ? 'reauthorize' : 'unavailable'),
-      confirmed: rec.receipt?.confirmed === true,
+      status: result.reauthoriseRequired ? 'reauthorize' : explained.status,
+      confirmed: false,
       venue: health.venue || null,
       receipt: rec.receipt,
-      ok: result.ok
+      reason: explained.reason,
+      reasonKey: explained.i18nKey,
+      reasonParams: explained.params,
+      guardianReasons: explained.reasons,
+      ok: false
     });
   }
 
@@ -424,6 +513,54 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
   const l3NeedsConfirm = level === 3 && session?.policy && !session.policy.userConfirmed;
 
   const visibleMessages = useMemo(() => msgs.filter((m) => m.role !== 'system' || !/^(session\.started|policy\.confirmed)$/.test(m.type)), [msgs]);
+
+  /*
+   * Phase 51 — the CONNECTED wallet, described honestly. `canSign` false means
+   * the final confirm will report "wallet signature required", not a stub.
+   */
+  const wallet = useMemo(() => describeWalletRuntime(walletRuntime || {}), [walletRuntime]);
+
+  /*
+   * Phase 56 — the ACTIVE session-policy ceilings. The product ceilings
+   * ($400k / $5k / 60% / 30 days) are not the only limits that bind: an L3
+   * session policy is usually much tighter, and the user must see it BEFORE
+   * confirming, not discover it inside a rejected receipt.
+   */
+  const policyCaps = useMemo(() => sessionPolicyCaps(session?.policy || null), [session?.policy]);
+  const policyCheck = useMemo(() => (screen
+    ? checkSessionPolicy({
+      amountUsd: screen.amountUsd,
+      chainId: screen.chainId,
+      protocol: screen.protocol,
+      fromSymbol: screen.fromSymbol,
+      toSymbol: screen.toSymbol
+    }, session?.policy || null)
+    : { ok: true, caps: policyCaps, violations: [] }),
+  [screen, session?.policy, policyCaps]);
+  const policyViolations = policyCheck.violations || [];
+
+  /*
+   * Phase 61 — goal progress is only shown when it is ATTESTED. The session
+   * carries an attested balance observation only when a real provider has
+   * confirmed it; without one the bar renders an explicit "unknown" instead
+   * of an empty bar that would read as "0% done".
+   */
+  const goalProgressView = useMemo(() => {
+    const attested = session?.goalMeta?.attestedBalance || null;
+    const target = Number(session?.goalMeta?.capital);
+    if (!attested || !Number.isFinite(target) || target <= 0) return null;
+    const computed = goalProgress({
+      targetCapital: target,
+      currentBalance: attested,
+      capitalUsd: session?.goalMeta?.initialCapital ?? null
+    });
+    if (computed?.progressComputable !== true) return null;
+    return { progressPct: computed.progressPct, source: attested.providerId || null };
+  }, [session?.goalMeta]);
+
+  const confirmBlocked = Object.keys(screen?.errors || {}).length > 0
+    || policyViolations.length > 0
+    || session?.status === 'STOPPED';
 
   return (
     <motion.section className="card ia-panel ia-chat" variants={riseIn} initial="hidden" animate="show">
@@ -561,12 +698,30 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
         </p>
       )}
 
+      {/*
+        Phase 83 — the token permissions the wallet has already handed out.
+        Read-only plus one intent: Revoke raises a plan that still has to go
+        through the same confirmation as any other transaction. Rendered only
+        when an inventory was actually supplied, so the offline panel is
+        unchanged.
+      */}
+      {Array.isArray(tokenApprovals) && (
+        <TokenApprovals
+          entries={tokenApprovals}
+          onRevoke={(plan) => {
+            if (plan?.ok === true) setInput(`revoke ${plan.symbol || ''} ${plan.spender}`.trim());
+          }}
+        />
+      )}
+
       {/* Live countdown for a timed goal the user set and confirmed. */}
       {session?.goalDeadline && (
         <GoalCountdown
           deadline={session.goalDeadline}
           goalPct={session.goalMeta?.pct ?? null}
           capitalUsd={session.goalMeta?.capital ?? null}
+          progressPct={goalProgressView?.progressPct ?? null}
+          progressSource={goalProgressView?.source ?? null}
         />
       )}
 
@@ -679,6 +834,17 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
               />
               <small className="ia-hint">{t('intentAI.limits.hintAmount', { limit: INTENT_LIMITS.maxTotalInputUsd.toLocaleString() })}</small>
               <small className="ia-hint">{t('intentAI.limits.hintPerTx', { limit: INTENT_LIMITS.maxPerTransactionUsd.toLocaleString() })}</small>
+              {/* Phase 56 — the ACTIVE session policy, shown next to the product ceilings. */}
+              {policyCaps?.maxTransactionUsd != null && (
+                <small className="ia-hint" data-testid="session-policy-per-tx">
+                  {t('intentAI.policyLimits.hintPerTx', { limit: policyCaps.maxTransactionUsd.toLocaleString() })}
+                </small>
+              )}
+              {policyCaps?.maxCapitalUsd != null && (
+                <small className="ia-hint" data-testid="session-policy-capital">
+                  {t('intentAI.policyLimits.hintCapital', { limit: policyCaps.maxCapitalUsd.toLocaleString() })}
+                </small>
+              )}
               {screen.errors.amountUsd && (
                 <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.amountUsd}`, { value: Number(screen.amountUsd).toLocaleString(), limit: INTENT_LIMITS.maxPerTransactionUsd.toLocaleString() })}</small>
               )}
@@ -749,11 +915,24 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
             <small className="ia-hint">{t('intentAI.confirm.toolsNote')}</small>
           </div>
 
+          {/* Phase 56 — a session-policy breach is named here and locks the
+              final confirm, instead of surfacing later as "no live venue". */}
+          {policyViolations.length > 0 && (
+            <div className="ia-limit-warning" data-testid="session-policy-violation" style={{ marginTop: 8 }}>
+              <strong style={{ display: 'block' }}>{t('intentAI.policyLimits.violationTitle')}</strong>
+              {policyViolations.map((violation) => (
+                <small key={violation.code} style={{ display: 'block' }}>
+                  {t(violation.i18nKey, violation.params)}
+                </small>
+              ))}
+            </div>
+          )}
+
           <div className="ia-controls" style={{ marginTop: 10 }}>
             <button
               type="button"
               className="ia-ctl ia-go"
-              disabled={Object.keys(screen.errors || {}).length > 0 || session?.status === 'STOPPED'}
+              disabled={confirmBlocked}
               onClick={handleFinalConfirm}
               data-testid="final-confirm-button"
             >
@@ -787,6 +966,17 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady }) 
             <span className={['completed', 'success'].includes(receipt.status) ? '' : 'faint'}>{t(`intentAI.receipt.${receipt.status || 'pending'}`)}</span>
             {receipt.venue ? ` · ${t('intentAI.receipt.venue', { venue: receipt.venue })}` : ''}
           </p>
+          {/* Phase 56 — the receipt says WHY, with the real reason. */}
+          {receipt.reasonKey && (
+            <p style={{ fontSize: 12, margin: '4px 0 0' }} data-testid="receipt-reason">
+              {t(receipt.reasonKey, receipt.reasonParams || {})}
+            </p>
+          )}
+          {receipt.txHash && (
+            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-tx-hash">
+              {t('intentAI.receipt.txHash', { hash: receipt.txHash })}
+            </p>
+          )}
         </div>
       )}
 

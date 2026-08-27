@@ -1,3 +1,336 @@
+## Unreleased — Intent OS Arc H (phases 90-94): product durability
+
+- **90 — fee integrity.** `feeIntegrity.js` turns `VITE_FEE_BPS` into a fee the
+  user can check: every quote carries its basis points, its amount, its net
+  amount and the formula that produced them. Quoted must equal charged — any
+  drift stops the flow as `TERMS_CHANGED` instead of silently taking more. Fee
+  accounting counts only fees on confirmed receipts with a real transaction
+  hash; anything pending, unhashed or undisclosed is excluded by name, and an
+  accounting with exclusions reports itself as partial rather than complete.
+- **91 — plan governance.** `planGovernance.js` states the rule in code: a plan
+  buys analysis, never permission. Entitlements are drawn from an analytical
+  list only; a forbidden list (higher caps, skipping the confirmation gate,
+  skipping simulation, bypassing the guardian, L3 autonomy, longer session
+  keys) is refused on every tier including the most expensive one. The
+  execution policy is read from the session and is byte-identical across free,
+  plus and pro. The probe asserts the claim "a more expensive plan grants more
+  authority" fails, for every forbidden entitlement.
+- **92 — data lifecycle.** `dataLifecycle.js` makes export and erasure real
+  operations with evidence. Export enumerates every store, scrubs anything
+  key-like, and refuses to hand over a partial file dressed up as everything.
+  Deletion needs an explicit confirmation, runs across all seven stores, and is
+  then verified by reading each store back; leftovers and unverifiable stores
+  are named, and only a fully verified run produces a proof receipt.
+- **93 — accessibility.** `accessibilityAudit.js` adds an automated a11y probe:
+  WCAG contrast computed rather than eyeballed, accessible names required for
+  every interactive control, icon-only buttons required to carry `aria-label`,
+  clickable non-buttons flagged as mouse-only, and dialogs checked for role,
+  name, focus trapping, focus restoration and Escape. The probe also scans the
+  real Intent AI panel source — every control is a native focusable element,
+  every `aria-label` comes from i18n, no positive tabindex, no removed focus
+  outlines, and the modal is a named, modal dialog.
+- **94 — offline-first.** `offlineQueue.js` keeps public pages available from
+  cache (never personal or price-bearing routes) and lets a confirmed intent
+  wait for the network. Queuing is not executing: a queued item has no
+  transaction hash, no receipt, no execution authority, and it expires. On
+  reconnect every item is re-diffed against current terms, and anything that
+  moved goes back to the user for a fresh confirmation instead of being sent.
+
+Arc H adds 252 probe checks (90 → 47, 91 → 45, 92 → 44, 93 → 58, 94 → 58),
+registered in `test/run.mjs` and `npm run test:phases90-94`. New copy is
+translated in English, Persian and Arabic. `npm run build` is clean and the
+full suite is green.
+
+## Unreleased — Intent OS Arc G (phases 85-89): scale and globalisation
+
+- **85 — multi-region edge, product level.** `regionalEdge.js` measures the
+  latency the user actually experiences and reports percentiles from real
+  samples. Fewer than five fresh samples is "unknown", never a comforting
+  default; a slow or erroring region is drained; a failover is announced to the
+  user with its reason instead of happening silently; and zero healthy regions
+  is an honest "no region available".
+- **86 — parser language parity.** The UI shipped twelve languages while the
+  intent box understood three. `parserLocales.js` canonicalises an utterance in
+  any of the twelve into the vocabulary `intentParser.js` already knows:
+  Persian, Arabic-Indic and Devanagari digits become ASCII, action verbs, chain
+  names and connectors are mapped per language, and every substitution is
+  recorded so an audit can see nothing was invented. A language with no lexicon
+  hands over to the guided flow rather than guessing an English word out of a
+  foreign sentence. The probe asserts each of the twelve separately.
+- **87 — regional compliance gate.** `regionalCompliance.js` gates features by
+  region and wires that to the phase-36 legal hold. An unknown region gets the
+  STRICTEST policy, a legal hold overrides every allow and is explained rather
+  than hidden behind a disabled button, the availability map is complete and
+  user-visible, and `assertGateOnlyRestricts()` proves geo-gating can only
+  subtract features, never grant one.
+- **88 — honest fiat ramp boundary.** `fiatRampBoundary.js` detects a fiat
+  request — card, wire, IBAN, "cash out", a fiat currency symbol — and answers
+  plainly that this app only swaps crypto you already hold, offering what we DO
+  support instead of a dead end. Routes that need a ramp are removed, a
+  third-party provider is only shown when explicitly configured over https and
+  is labelled as somebody else's service, and `assertNoRampPromise()` blocks
+  any copy that implies we touch a bank account.
+- **89 — chaos testing for the intent plane.** `intentChaos.js` injects ten
+  faults — RPC down, dead feed, disconnected wallet, quote timeout, missing
+  receipt, revoked session key, corrupt storage and more — and demands exactly
+  one outcome from each: honest-unavailable. A crash, a fabricated COMPLETED
+  receipt, an invented price, a silent authorization or an untranslated message
+  all fail the drill, one failure fails the whole drill, and a partial run is
+  never reported as a pass.
+- Probes `phase85`-`phase89` (224 checks) cover measured latency, all twelve
+  parser languages, unknown-region strictness, the ramp refusal and every fault
+  drill; en/fa/ar copy added for every new string.
+
+## Unreleased — Intent OS Arc D (phases 69-74): the agent ecosystem at scale
+
+- **69 — agent protocol v2.** `agentHandshake.js` replaces "we list this agent"
+  with a real, signed, versioned handshake: fresh nonce, echoed nonce, highest
+  common version or no session at all. An unsigned message is rejected
+  fail-closed — not accepted with a warning — as are forged signatures,
+  tampered payloads, replayed nonces, stale timestamps and unknown versions. A
+  session carries only capabilities we chose to grant, expires, and
+  `executionAuthorized` is false by construction.
+- **70 — agent payment rail with escrow.** `agentEscrow.js` holds the fee. The
+  buyer funds it explicitly; the agent claiming "done" releases nothing.
+  Release requires a delivery receipt issued by someone other than the agent,
+  matching the hash of what was agreed. A dispute freezes the funds and
+  defaults to refunding the buyer — including when a release is requested with
+  insufficient evidence — an undelivered escrow refunds when the window ends,
+  and `assertEscrowSound()` keeps funded = released + refunded + held.
+- **71 — real agent sandbox.** `agentSandboxRuntime.js` runs external agents
+  behind capability tokens minted from a closed list; `sign`, `submit`,
+  `transfer` and `*` are refused at mint time. Every call is checked before it
+  happens, including the host on a fetch. The first escape ends the run: the
+  remaining calls never execute, an incident is recorded and the agent is cut
+  automatically until a human reinstates it. An agent that returns
+  `executionAuthorized: true` is itself treated as an escape.
+- **72 — agent dispute resolution.** `agentDispute.js` gives a score somewhere
+  to be contested. Scores start provisional with a stated appeal window; an
+  agent appeals with evidence; a decision taken without reviewed evidence
+  finalises nothing. Slashing is transparent, capped at half the stake, tied to
+  an appealable case and time-limited — `assertDueProcess()` rejects a penalty
+  that is secret, uncapped, caseless or permanent.
+- **73 — live venue federation.** `liveVenueRouting.js` probes venues in
+  parallel with a deadline and timestamps every answer. Dead, degraded,
+  unknown and stale venues are removed from routing rather than ranked last,
+  quotes that cannot carry the order are not candidates, and when nothing is
+  routable the answer is an honest "no venue" instead of a remembered one.
+- **74 — live marketplace.** `liveMarketplace.js` computes real supply and
+  demand. An agent is only suggested with enough recent jobs in that exact
+  capability, each attested by somebody other than itself; unproven, suspended
+  and at-capacity agents are absent from the list rather than ranked low, and
+  an empty market says so instead of padding.
+- Probes `phase69`-`phase74` (323 checks) cover unsigned-message rejection,
+  escrow proof-of-delivery, sandbox escapes, due process, dead-venue removal
+  and unproven-agent exclusion; en/fa/ar copy added for every new string.
+
+## Unreleased — Intent OS Arc E (phases 75-79): trust and proof
+
+- **75 — on-chain receipt.** `onchainReceipt.js` commits a hash of the agreed
+  terms and the observed outcome to a chain, so a receipt stops being this
+  app's word about itself. Only hashes travel — never the terms, never an
+  address — and receipts are Merkle-batched so one transaction anchors many
+  and gas never prices honesty out of the product. A submitted anchor is
+  `pending`, not `anchored`: the verification link appears only once there is a
+  mined transaction. `verifyAgainstAnchor()` recomputes the leaf from the
+  receipt on screen, so a receipt altered after the fact fails to verify.
+- **76 — user-visible audit timeline.** `auditTimeline.js` turns the
+  append-only `audit.js` log into something a person reads: one translatable
+  row per event, grouped and newest-first. Own events only — an entry with
+  another owner, or with no owner at all, is dropped rather than assumed, and
+  the count of what was withheld is stated out loud. `assertAppendOnly()`
+  catches a removed or rewritten entry, and `assertTimelineSafe()` refuses to
+  render duplicates, foreign rows, raw prose or a leaked address.
+- **77 — human-readable terms diff.** `termsDiff.js` replaces "termsHash
+  changed" with "amount changed from 100 to 500": every change becomes a row
+  with field, before, after, direction and percentage, expressed as i18n keys
+  so translators write the sentence. Anything that moves money, risk or
+  destination is MATERIAL and forces a fresh confirmation; an unknown field is
+  material too, because fail-closed. A hash that moved with no visible diff
+  stops execution rather than being waved through.
+- **78 — independent third-party verification.** `thirdPartyVerification.js`
+  publishes a hashes-only packet to the phase-29 assurance network. Quorum is
+  two *independent* operators — the same operator answering twice is one voice
+  — and a single disagreement makes the whole result `disputed`; majority does
+  not win when the question is whether something happened. Verifiers that
+  throw, time out or answer about a different receipt are discarded, never
+  counted as agreement, and `assertVerificationHonest()` gates the badge.
+- **79 — bug bounty and disclosure policy.** `bugBounty.js` publishes a
+  machine-readable policy on top of `phase35PublicDisclosure.js`: explicit safe
+  harbour, published scope, banded and capped rewards, and stated acknowledge,
+  triage and fix windows. Rewards are discretionary thank-yous —
+  `financialLiabilityAccepted` and `compensatesLosses` are false by
+  construction and `assertNoLiabilityPromise()` blocks any document that flips
+  them. Coordinated disclosure publishes either way: fixed, or after the
+  window with exploit details withheld.
+- Probes `phase75`-`phase79` (248 checks) cover anchoring, timeline ownership,
+  material diffs, verifier quorum and the liability guard; en/fa/ar copy added
+  for every new string.
+
+## Unreleased — Intent OS Arc C (phases 63-68): the user and their memory
+
+- **63 — session persistence.** `sessionPersistence.js` saves and restores a
+  session client-side under PBKDF2 + AES-GCM. Secrets are stripped before the
+  snapshot is built, a STOPPED session and its permissions come back exactly as
+  they were, and any failure — wrong passphrase, corrupt blob, stale snapshot —
+  is a clean start with a translatable notice, never a crash and never an
+  escalation of what the user had authorised.
+- **64 — cross-device continuity.** `crossDeviceContinuity.js` links a session
+  to the existing Telegram login, so the work resumes on a second device — but
+  authority does not travel. Session keys, signatures, gate decisions,
+  confirmations and approvals are stripped from the handoff and re-taken on the
+  new device; the handoff expires in ten minutes and is single-use.
+- **65 — portfolio and history from receipts.** `portfolioLedger.js` builds
+  positions only from confirmed receipts that carry a real transaction hash.
+  Pending, submitted and failed appear as themselves and never move a balance;
+  a confirmed receipt without proof is excluded and the view reports itself
+  incomplete rather than quietly totalling less than the truth.
+- **66 — consented memory.** `consentedMemory.js` keeps `adaptiveMemory.js`
+  across sessions only with dated, scoped, revocable opt-in. Off means nothing
+  is produced at all — not stored-then-hidden — export hands everything back or
+  refuses, and a revoke that could not wipe is reported as a failed revoke.
+- **67 — notification and handing control back.** `intentNotifications.js`
+  delivers completion, failure and re-authorization over web-push, Telegram or
+  in-app. An authorization request always carries a deadline, and a lapsed
+  deadline HALTS: silence is never a yes. A user who could not be reached on
+  any channel stops a long-running program.
+- **68 — access recovery.** `accessRecovery.js` lets a proven identity revoke
+  keys from another device. Tombstones are frozen and permanent, they kill
+  every key issued before them — including one a stale client still holds — and
+  `assertNothingSurvives()` proves that after a revoke, nothing works.
+- Probes `phase63`-`phase68` (256 checks) cover restore-from-corrupt, authority
+  stripping, receipt-only ledgers, memory-off, authorization timeouts and
+  post-revoke key death; en/fa/ar copy added for every new string.
+
+## Unreleased — Intent OS Arc F (phases 80-84): product risk and security
+
+- **80 — real-time risk engine.** `adaptiveRisk.js` makes the ceilings a
+  function of the market that is actually happening: realised volatility picks
+  a tier, and each tier tightens the slippage cap and the position size. The
+  factors are all ≤ 1, so the engine can only ratchet DOWN — never above the
+  session policy — and unknown or stale volatility selects the STRICTEST tier,
+  because not knowing is the riskiest state. Every adjustment is recorded with
+  the number that caused it, its source, its observation time and a
+  translatable reason.
+- **81 — asset screening.** A ticker is not an asset. `assetScreening.js` runs
+  before a quote is offered: a contract wearing a known symbol at the wrong
+  address is a hard reject naming both addresses, as are blocklisted
+  contracts, honeypots and pools that cannot fill the size. A token on no list
+  is not waved through either — it needs an explicit acknowledgement, and
+  acknowledging never overrides a hard reject.
+- **82 — address poisoning shield.** `addressShield.js` compares the head and
+  tail a human actually reads: an address that mimics one in your history, or
+  that only ever arrived as dust, blocks the send outright with both addresses
+  shown in full. A never-paid address gets its own confirmation, separate from
+  the transaction confirmation and reset whenever the address changes. Wired
+  into `SendSheet` with `sendHistory.js` as the local counterparty record; the
+  gate is re-asserted at send time, not only in the button's disabled state.
+- **83 — approval hygiene.** `approvalHygiene.js` plus the new `TokenApprovals`
+  panel answer "what did I allow, and to whom?" with real addresses, real
+  exposure and a revoke path. Swaps ask for the minimum allowance that covers
+  the trade — `assertNoUnlimitedApproval()` refuses `MaxUint256` and anything
+  unlimited in practice — an existing unlimited approval is flagged for
+  replacement rather than accepted as "already fine", and an allowance that
+  could not be read is reported as unreadable, never as zero.
+- **84 — simulation before signature.** `simulationGate.js` makes the phase-24
+  simulator a precondition of signing. A detected revert means no signature
+  request at all, plus the decoded reason in the user's language. A missing,
+  busy or throwing provider is `unavailable` — which is not clean: continuing
+  needs an explicit user override that is recorded and never claims the
+  transaction is proven safe. Each result is bound to the exact transaction it
+  ran, so changing the calldata, value, sender or chain invalidates it.
+- Probes `phase80`–`phase84` (261 checks) registered in the aggregate runner;
+  `npm run build` clean and `npm test` fully green.
+- Hardened the shared numeric helper across all Arc B and Arc F modules:
+  `Number(null) === 0`, so an absent value is now rejected before the finite
+  check instead of silently reading as zero.
+
+## Unreleased — Intent OS Arc B (phases 58-62): real market data
+
+- **58 — live market regime.** `liveMarketRegime.js` builds the Spec-65
+  regime detector's evidence from real price series instead of a hand-written
+  array: trend, volatility and liquidity are computed from the actual points,
+  every answer carries its source, its observation time and its sample size,
+  and points older than the window are excluded rather than smoothed over. A
+  dead feed is `dataStatus: 'unavailable'` — never a remembered regime.
+- **59 — price alert to intent proposal.** A triggered alert can now produce
+  exactly one thing: a proposal (`alertProposals.js`) carrying
+  `executionAuthorized: false` and `requiresConfirmationScreen: true`.
+  Accepting it returns an *utterance* that goes back through the normal
+  chat → draft → confirmation-gate pipeline; there is no function in the
+  module that submits or signs. A stale or unsourced price produces an honest
+  "unavailable" notice instead of a proposal.
+- **60 — explainable analysis on real data.** `liveWhy.js` screens every data
+  point before it is allowed to support an answer: no source, no timestamp, no
+  number, or too old means dropped and counted. With nothing checkable left,
+  the recommendation is not made at all. What survives is handed to the
+  existing `whyThisDecision()`, so each figure in the reply can be traced to a
+  source, a time and a value.
+- **61 — real goal progress.** `liveGoalProgress.js` values real holdings at
+  real prices and turns that into the *attested* balance the goal engine
+  requires. `GoalCountdown` now renders an actual progress bar from it — and
+  when the valuation cannot be attested it renders an explicit "progress
+  unknown" state, never a bar sitting at 0% that would read as "no progress".
+- **62 — honest backtest.** `honestBacktest.js` runs a strategy over real
+  history with no look-ahead (the decision for bar *i* only ever sees bars
+  ≤ *i*, and `assertNoLookAhead()` proves it by replaying against a truncated
+  series). Fees and slippage are applied to every simulated fill and disclosed
+  separately. Every result is labelled `SIMULATION`, carries its window, its
+  source and three disclosures, and `futureReturnClaim` is always false.
+- Probes `phase58`–`phase62` (213 checks) registered in the aggregate runner;
+  `npm run build` clean and `npm test` fully green.
+
+## Unreleased — Intent OS Arc A (phases 51-57): real execution
+
+- **51 — real wallet signing.** A connected wallet is now the signer.
+  `walletRuntime.js` asks the real EIP-1193 wallet to sign the locked terms
+  (`eth_signTypedData_v4`, `personal_sign` fallback) and hands that signature
+  to the existing synchronous pipeline; `WalletContext` exposes the raw
+  provider through `getWalletRuntime()` and the new `IntentAIRoute` wrapper
+  passes it to the panel (which stays free of wallet-library imports so the
+  suite can still mount it headless). The stub signer is now test-only:
+  `stubSignerAllowed()` is false in any browser-like runtime, so a real user
+  can never receive a stub signature dressed up as an execution. `venueHealth`
+  no longer reports NO_SIGNER/NO_PROVIDER against a wallet that is connected.
+- **52 — live rate and slippage re-check.** `liveQuote.js` takes a real,
+  sourced, non-stale quote, freezes it into the locked terms, and re-checks it
+  at the instant of the final confirm. An adverse move past the slippage limit
+  is refused and routed back through the EXISTING Confirmation Gate as
+  REAUTHORIZE; a favourable move never blocks.
+- **53 — real broadcast and tracking.** `broadcastAdapter.js` only reports
+  `submitted` with a real 32-byte transaction hash and only `confirmed` with a
+  real receipt and enough confirmations counted from the chain head. A dead RPC
+  leaves the transaction at `submitted`; a revert is `failed`. COMPLETED is
+  never fabricated, and the hash now appears on the receipt.
+- **54 — bridge execution.** `bridgeExecution.js` is the real adapter seam:
+  `BRIDGE_EXECUTE_UNAVAILABLE` disappears only when an adapter with `execute`
+  is actually attached, a bridge never rides on the swap step's approval
+  (its approval is scoped `bridge` and bound to the bridge terms hash), and
+  source-chain submission is never reported as destination-chain delivery.
+- **55 — MEV and slippage shield.** Every transaction now carries an explicit
+  deadline, an explicit slippage ceiling (policy can only tighten it; a hard
+  cap bounds everything), a derived `minAmountOut`, and a declared submission
+  channel with real private-relay support. `assertProtected()` runs
+  fail-closed immediately before signing.
+- **56 — receipt error taxonomy (the reported bug).** Every execution failure
+  used to collapse into "Unavailable — no live venue".
+  `executionErrorTaxonomy.js` maps Guardian reasons, permission errors,
+  emergency stops, dead feeds and reverts onto their own translatable receipt
+  lines, and the interactive confirmation screen now shows the ACTIVE SESSION
+  POLICY ceilings under the fields next to the product ceilings, locking the
+  final confirm on a breach. Reproduction now proven in the panel probe: a
+  $100 swap edited to $500 (under the $5k product cap, over the $200 L3 policy
+  cap) says «above the session policy limit of $200», not «no live venue».
+- **57 — live DCA.** `liveDcaTrigger.js` turns the Phase-13 recurring
+  lifecycle into a real trigger: every run needs a prior explicit, bounded
+  authorization plus a policy re-check AT TRIGGER TIME, and the first
+  violation halts the whole program with a translated user notice — there is
+  no "skip and continue", and a halted program never resumes on its own.
+- Tests: seven new probes (`test/intent-ai/phase51..57-*.mjs`, 156 checks)
+  registered in `test/run.mjs` and as `npm run test:phaseNN`, plus three new
+  interaction checks in the panel probe. All new user-facing copy is en/fa/ar
+  only through i18n keys.
+
 ## Unreleased — Intent AI panel: glass session controls, live mode cards, en↔fa sync
 
 - Reported: «شکل بعضی از دکمه‌ها مثل توقف/توقف موقت/قطع اتصال/لغو مجوز/

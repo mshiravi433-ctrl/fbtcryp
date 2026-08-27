@@ -21,6 +21,8 @@ import { IconQr, IconCheck, IconExternal, IconWallet, IconShield } from './Icons
 import { IconSend } from './WalletArt';
 import TokenIcon from '../lib/tokenIcon';
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
+import { screenRecipient, assertRecipientCleared } from '../lib/intent-ai';
+import { readSendHistory, recordSend } from '../lib/sendHistory';
 
 const loadEthers = () => import('ethers');
 
@@ -72,6 +74,14 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
   const ensSeq = useRef(0);
   const riskSeq = useRef(0);
 
+  /*
+   * PHASE 82 — the address-poisoning shield. A separate decision from the
+   * transaction confirmation: `addressOk` is the user saying "yes, this is
+   * really the address I mean", and it is reset the moment the address
+   * changes so it can never carry over to a different recipient.
+   */
+  const [addressOk, setAddressOk] = useState(false);
+
   const chain = EVM_CHAINS[wallet.chainId];
 
   /*
@@ -116,6 +126,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
     setEns(null);
     setRisk(null);
     setGas(null);
+    setAddressOk(false);
   }, [open]);
 
   /*
@@ -288,7 +299,25 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
   const addressLooksValid = /^0x[a-fA-F0-9]{40}$/.test(to.trim());
   const amountValid = Number(amount) > 0;
   const overBalance = balanceText != null && Number(amount) > Number(balanceText);
-  const canReview = addressLooksValid && amountValid && !overBalance;
+  /*
+   * The shield reads the wallet's own history: an address that has been paid
+   * before is a counterparty, anything else is a stranger. A lookalike of a
+   * known address, or an address that only ever arrived as dust, is a hard
+   * stop — not a warning next to a live button.
+   */
+  const shield = useMemo(() => {
+    if (!addressLooksValid) return null;
+    return screenRecipient({
+      recipient: to.trim(),
+      history: readSendHistory(wallet.address),
+      self: wallet.address,
+      confirmedNewAddress: addressOk
+    });
+  }, [to, addressLooksValid, wallet.address, addressOk]);
+
+  // A new address must be confirmed on its own before the amount even matters.
+  const recipientCleared = shield ? assertRecipientCleared(shield).ok : false;
+  const canReview = addressLooksValid && amountValid && !overBalance && recipientCleared;
 
   /*
    * TRANSACTION FIREWALL — the verification shown before signing.
@@ -333,11 +362,22 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
           return;
         }
       }
+      // The shield is re-asserted here, not just in the button's disabled
+      // state: a UI flag is a hint, this is the gate.
+      const cleared = assertRecipientCleared(shield);
+      if (!cleared.ok) {
+        setError('RECIPIENT_BLOCKED');
+        setStage('confirm');
+        return;
+      }
       const signer = wallet.getSigner();
       if (!signer) throw new Error('NO_SIGNER');
       const tx = await sendToken({ signer, token, to: to.trim(), amount });
       setHash(tx.hash);
       setStage('done');
+      // Now this address is a counterparty, so the next send to it is not a
+      // first-time send.
+      recordSend({ owner: wallet.address, address: to.trim(), valueUsd: usd, chainId: wallet.chainId });
       if (usd != null) recordSpend(usd);
       wallet.refreshBalance?.();
     } catch (e) {
@@ -508,7 +548,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
               <input
                 type="text"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => { setTo(e.target.value); setAddressOk(false); }}
                 placeholder="0x…"
                 spellCheck={false}
                 autoComplete="off"
@@ -544,6 +584,34 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
             )}
             {risk && !risk.loading && risk.flags.length === 0 && addressLooksValid && (
               <p className="faint" style={{ fontSize: 11, marginTop: 6 }}>✓ {t('send.risk.clean')}</p>
+            )}
+
+            {/*
+              PHASE 82 — poisoning shield. Hard stops render as blocking
+              notices with BOTH addresses in full, because the abbreviation is
+              exactly what the attack exploits. A first-time address gets its
+              own checkbox, separate from the transaction confirmation.
+            */}
+            {shield && shield.flags.length > 0 && (
+              <div className="xfer-shield" data-testid="address-shield">
+                {shield.flags.filter((f) => f.severity === 'reject').map((f) => (
+                  <p key={f.code} className="notice notice-danger" style={{ marginTop: 0 }} data-testid="address-shield-block">
+                    {t(f.i18nKey, f.params)}
+                  </p>
+                ))}
+                {shield.verdict !== 'reject' && shield.requiresSeparateAddressConfirmation && (
+                  <label className="xfer-shield-confirm" data-testid="address-shield-confirm">
+                    <input
+                      type="checkbox"
+                      checked={addressOk}
+                      onChange={(e) => setAddressOk(e.target.checked)}
+                    />
+                    <span>
+                      {t('intentAI.addressShield.flag.firstTime', { fingerprint: shield.fingerprint })}
+                    </span>
+                  </label>
+                )}
+              </div>
             )}
 
             {/*

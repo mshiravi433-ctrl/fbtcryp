@@ -11,6 +11,9 @@ import { brokerSubmit } from './brokerAdapter.js';
 import { createMonitor, heartbeat } from './executionMonitor.js';
 import { reconcile } from './reconciliation.js';
 import { classifyFailure, lifecycleStatusForFailure } from './failureModes.js';
+import { applyMevShield, assertProtected, shieldTransaction } from './mevShield.js';
+import { recheckQuoteBeforeExecute, effectiveSlippageLimit } from './liveQuote.js';
+import { normalizeTxHash } from './broadcastAdapter.js';
 import {
   createLifecycle, transition, recordReview, applyMaterialChange, termsFingerprint
 } from '../intentLifecycle.js';
@@ -45,7 +48,7 @@ export function prepareExecution({
     termsHash,
     approvedTermsHash: termsHash
   });
-  if (!g.approved) return fail(session, 'GUARDIAN_REJECTED', { reasons: g.reasons });
+  if (!g.approved) return fail(session, 'GUARDIAN_REJECTED', { reasons: g.reasons }, { reasons: g.reasons });
 
   const risk = evaluateRisk({
     ...riskInput,
@@ -86,7 +89,20 @@ export function confirmAndSubmit({
   brokerHandle,
   idempotencyKey,
   currentTerms,
-  submitVia = 'wallet'
+  submitVia = 'wallet',
+  /* Phase 51 — a real wallet signature (from walletRuntime.signIntentWithWallet). */
+  walletSignature = null,
+  walletAccount = null,
+  allowStubSigner,
+  /* Phase 52 — the quote locked into the terms and the one taken right now. */
+  lockedQuote = null,
+  freshQuote = null,
+  /* Phase 53 — a real broadcast result ({ txHash }) produced by the caller. */
+  broadcastResult = null,
+  /* Phase 55 — deadline / private-relay preferences. */
+  deadlineSecs,
+  privateRelay = null,
+  now = Date.now()
 } = {}) {
   const stop = emergencyStopCheck(policy?.emergencyStop === true);
   if (!stop.ok) return fail(session, 'EMERGENCY_STOP');
@@ -115,10 +131,53 @@ export function confirmAndSubmit({
     chainId: decided.gate.lockedTerms.chainId,
     protocol: decided.gate.lockedTerms.protocol,
     amountUsd: Number(decided.gate.lockedTerms.amountIn),
-    amountIn: decided.gate.lockedTerms.amountIn
+    amountIn: decided.gate.lockedTerms.amountIn,
+    slippagePct: decided.gate.lockedTerms.slippagePct,
+    fromSymbol: decided.gate.lockedTerms.fromSymbol,
+    toSymbol: decided.gate.lockedTerms.toSymbol
   };
   const scoped2 = scopeFor(sk.sessionKey, draftLike);
   if (!scoped2.ok) return { ok: false, error: scoped2.error };
+
+  /* ---- Phase 52: the rate is re-checked at the instant of the confirm ----
+     An adverse move past the slippage limit is refused and routed back into
+     the EXISTING Confirmation Gate as REAUTHORIZE — never executed on hope. */
+  let quoteCheck = null;
+  if (lockedQuote || freshQuote) {
+    quoteCheck = recheckQuoteBeforeExecute({
+      lockedQuote,
+      freshQuote,
+      maxSlippagePct: effectiveSlippageLimit({ draft: draftLike, policy }),
+      now
+    });
+    if (!quoteCheck.ok) {
+      const lifecycle = prepared.lifecycle && quoteCheck.action === 'REAUTHORIZE'
+        ? applyMaterialChange(prepared.lifecycle, ['TERMS']).record
+        : prepared.lifecycle;
+      return {
+        ok: false,
+        error: quoteCheck.error,
+        gate: decided.gate,
+        lifecycle,
+        quoteCheck,
+        reauthoriseRequired: quoteCheck.action === 'REAUTHORIZE'
+      };
+    }
+  }
+
+  /* ---- Phase 55: nothing is signed without an explicit protection envelope ---- */
+  const shield = applyMevShield({
+    draft: draftLike,
+    quote: lockedQuote,
+    policy,
+    now,
+    deadlineSecs,
+    privateRelay
+  });
+  const protection = assertProtected(shield.guard, { now });
+  if (!protection.ok) return { ok: false, error: protection.error, gate: decided.gate };
+  const shielded = shieldTransaction({ chainId: draftLike.chainId }, shield.guard);
+  if (!shielded.ok) return { ok: false, error: shielded.error, gate: decided.gate };
 
   let signed = null;
   let submit = null;
@@ -133,10 +192,25 @@ export function confirmAndSubmit({
     signed = signDraft(
       { id: prepared.lifecycle.intentId, kind: 'swap', chainId: draftLike.chainId, protocol: draftLike.protocol, amountUsd: draftLike.amountUsd },
       sk.sessionKey,
-      { signer: signer || (() => ({ signedTx: 'stub-signed' })) }
+      { signer, walletSignature, walletAccount, allowStub: allowStubSigner }
     );
-    if (!signed.ok) return { ok: false, error: signed.error };
-    submit = { ok: true, submitted: true, receiptRef: `tx_${Date.now().toString(36)}`, confirmed: false };
+    if (!signed.ok) return { ok: false, error: signed.error, gate: decided.gate };
+
+    /* ---- Phase 53: a real broadcast result carries a real transaction hash.
+       Without one the submission is honestly local: `submitted` never means
+       `confirmed`, and no receipt is promoted without on-chain evidence. ---- */
+    const txHash = normalizeTxHash(broadcastResult?.txHash);
+    if (broadcastResult && !broadcastResult.ok) {
+      return { ok: false, error: broadcastResult.error || classifyFailure('SUBMIT_REJECTED', { detail: 'BROADCAST_FAILED' }), gate: decided.gate, signed };
+    }
+    submit = {
+      ok: true,
+      submitted: true,
+      broadcast: Boolean(txHash),
+      txHash: txHash || null,
+      receiptRef: txHash || `tx_${Date.now().toString(36)}`,
+      confirmed: false
+    };
   }
 
   let lc = prepared.lifecycle;
@@ -154,6 +228,10 @@ export function confirmAndSubmit({
     sessionKey: sk.sessionKey,
     signed,
     submit,
+    txHash: submit.txHash || null,
+    mevGuard: shield.guard,
+    protectedTx: shielded.tx,
+    quoteCheck,
     lifecycle: lc,
     monitor: mon.monitor
   };
@@ -188,10 +266,10 @@ function walk(lc, statuses) {
   return cur;
 }
 
-function fail(session, code, detail) {
+function fail(session, code, detail, extra = {}) {
   const error = classifyFailure(code, { detail: detail ? JSON.stringify(detail).slice(0, 180) : null });
   if (session) audit(session, 'guardian', 'blocked', { code }, 'rejected');
-  return { ok: false, error, lifecycleStatus: lifecycleStatusForFailure(error) };
+  return { ok: false, error, lifecycleStatus: lifecycleStatusForFailure(error), ...extra };
 }
 
 export { termsFingerprint };

@@ -1323,6 +1323,19 @@ export function WalletProvider({ children }) {
       getReadProvider,
       getReadProviders,
       getSigner: () => signerRef.current,
+      /*
+       * Phase 51 — the Intent AI execution path needs the RAW EIP-1193
+       * provider, not an ethers wrapper: it asks the connected wallet to sign
+       * the locked terms itself. Returning null (rather than a stand-in) is
+       * what keeps `venueHealth` honest when nothing is connected.
+       */
+      getEip1193Provider: () => eip1193Ref.current || null,
+      getWalletRuntime: () => ({
+        provider: eip1193Ref.current || null,
+        account: address || null,
+        chainId: chainId ?? DEFAULT_CHAIN,
+        connected: Boolean(address) && !locked && Boolean(eip1193Ref.current)
+      }),
       clearError: () => setError(null)
     }),
     [

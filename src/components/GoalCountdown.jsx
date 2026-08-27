@@ -21,7 +21,16 @@ function splitRemaining(ms) {
 
 const pad = (n) => String(n).padStart(2, '0');
 
-export default function GoalCountdown({ deadline, goalPct = null, capitalUsd = null, compact = false }) {
+export default function GoalCountdown({
+  deadline,
+  goalPct = null,
+  capitalUsd = null,
+  compact = false,
+  // Real, attested progress toward the goal. `null` means "we do not know" —
+  // it is rendered as an explicit unknown state, never as a bar at 0%.
+  progressPct = null,
+  progressSource = null
+}) {
   const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
 
@@ -35,6 +44,9 @@ export default function GoalCountdown({ deadline, goalPct = null, capitalUsd = n
   const remaining = deadline - now;
   const expired = remaining <= 0;
   const { days, hours, minutes, seconds } = splitRemaining(remaining);
+  const progressKnown = Number.isFinite(Number(progressPct));
+  const progressValue = progressKnown ? Math.round(Number(progressPct) * 100) / 100 : null;
+  const progressWidth = progressKnown ? Math.max(0, Math.min(100, progressValue)) : 0;
 
   if (compact) {
     return (
@@ -81,6 +93,38 @@ export default function GoalCountdown({ deadline, goalPct = null, capitalUsd = n
       {capitalUsd != null && !expired && (
         <p className="ia-cd-note">{t('intentAI.countdown.capital', { amount: capitalUsd.toLocaleString() })}</p>
       )}
+
+      {/* Phase 61 — real progress from an attested balance, or an honest unknown. */}
+      <div className="ia-cd-progress" data-testid="goal-progress">
+        <div className="ia-cd-progress-head">
+          <span>{t('intentAI.goalProgress.title')}</span>
+          <b data-testid="goal-progress-value">
+            {progressKnown
+              ? t('intentAI.goalProgress.percent', { pct: progressValue })
+              : t('intentAI.goalProgress.unknownShort')}
+          </b>
+        </div>
+        {progressKnown ? (
+          <div
+            className="ia-cd-progress-track"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressWidth}
+            data-testid="goal-progress-bar"
+          >
+            <span className="ia-cd-progress-fill" style={{ width: `${progressWidth}%` }} />
+          </div>
+        ) : (
+          <p className="ia-cd-note faint" data-testid="goal-progress-unknown">
+            {t('intentAI.goalProgress.unknown')}
+          </p>
+        )}
+        {progressKnown && progressSource && (
+          <p className="ia-cd-note faint">{t('intentAI.goalProgress.source', { source: progressSource })}</p>
+        )}
+      </div>
+
       <p className="ia-cd-note faint">{t('intentAI.countdown.note')}</p>
     </div>
   );
