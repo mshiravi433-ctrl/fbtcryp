@@ -903,6 +903,26 @@ export {
   revokeAccess, revokeEverything, assertKeyUsable, applyRevocation, assertNothingSurvives
 } from './accessRecovery.js';
 
+/* Arc H — product durability (phases 90-94) */
+export {
+  FEE_SCHEMA, FEE_TOLERANCE, computeFee, attachFeeToReceipt, accountCollectedFees, assertFeeHonest
+} from './feeIntegrity.js';
+export {
+  PLAN_SCHEMA, TIERS, ANALYTICAL_ENTITLEMENTS, FORBIDDEN_ENTITLEMENTS, PLAN_ENTITLEMENTS,
+  resolveEntitlements, executionPolicyFor, entitlementAllows, applyDowngrade, assertPlanBuysNoPermission
+} from './planGovernance.js';
+export {
+  LIFECYCLE_SCHEMA, DATA_STORES, exportUserData, deleteUserData, verifyDeletion, assertErasureProven
+} from './dataLifecycle.js';
+export {
+  A11Y_SCHEMA, CONTRAST_AA, CONTRAST_AA_LARGE, MIN_TARGET_PX, contrastRatio, meetsContrast,
+  auditControl, auditDialog, auditScreen, assertAccessible
+} from './accessibilityAudit.js';
+export {
+  QUEUE_SCHEMA, QUEUE_STATES, QUEUE_TTL_MS, MAX_QUEUE_LENGTH, CACHEABLE_ROUTES,
+  cachePolicyFor, enqueueIntent, flushQueue, offlineStatus, assertNoOfflineExecution
+} from './offlineQueue.js';
+
 /* Arc G — scale and globalisation (phases 85-89) */
 export {
   EDGE_SCHEMA, REGIONS, MIN_LATENCY_SAMPLES, SLOW_P95_MS, SAMPLE_MAX_AGE_MS,

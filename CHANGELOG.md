@@ -1,3 +1,46 @@
+## Unreleased — Intent OS Arc H (phases 90-94): product durability
+
+- **90 — fee integrity.** `feeIntegrity.js` turns `VITE_FEE_BPS` into a fee the
+  user can check: every quote carries its basis points, its amount, its net
+  amount and the formula that produced them. Quoted must equal charged — any
+  drift stops the flow as `TERMS_CHANGED` instead of silently taking more. Fee
+  accounting counts only fees on confirmed receipts with a real transaction
+  hash; anything pending, unhashed or undisclosed is excluded by name, and an
+  accounting with exclusions reports itself as partial rather than complete.
+- **91 — plan governance.** `planGovernance.js` states the rule in code: a plan
+  buys analysis, never permission. Entitlements are drawn from an analytical
+  list only; a forbidden list (higher caps, skipping the confirmation gate,
+  skipping simulation, bypassing the guardian, L3 autonomy, longer session
+  keys) is refused on every tier including the most expensive one. The
+  execution policy is read from the session and is byte-identical across free,
+  plus and pro. The probe asserts the claim "a more expensive plan grants more
+  authority" fails, for every forbidden entitlement.
+- **92 — data lifecycle.** `dataLifecycle.js` makes export and erasure real
+  operations with evidence. Export enumerates every store, scrubs anything
+  key-like, and refuses to hand over a partial file dressed up as everything.
+  Deletion needs an explicit confirmation, runs across all seven stores, and is
+  then verified by reading each store back; leftovers and unverifiable stores
+  are named, and only a fully verified run produces a proof receipt.
+- **93 — accessibility.** `accessibilityAudit.js` adds an automated a11y probe:
+  WCAG contrast computed rather than eyeballed, accessible names required for
+  every interactive control, icon-only buttons required to carry `aria-label`,
+  clickable non-buttons flagged as mouse-only, and dialogs checked for role,
+  name, focus trapping, focus restoration and Escape. The probe also scans the
+  real Intent AI panel source — every control is a native focusable element,
+  every `aria-label` comes from i18n, no positive tabindex, no removed focus
+  outlines, and the modal is a named, modal dialog.
+- **94 — offline-first.** `offlineQueue.js` keeps public pages available from
+  cache (never personal or price-bearing routes) and lets a confirmed intent
+  wait for the network. Queuing is not executing: a queued item has no
+  transaction hash, no receipt, no execution authority, and it expires. On
+  reconnect every item is re-diffed against current terms, and anything that
+  moved goes back to the user for a fresh confirmation instead of being sent.
+
+Arc H adds 252 probe checks (90 → 47, 91 → 45, 92 → 44, 93 → 58, 94 → 58),
+registered in `test/run.mjs` and `npm run test:phases90-94`. New copy is
+translated in English, Persian and Arabic. `npm run build` is clean and the
+full suite is green.
+
 ## Unreleased — Intent OS Arc G (phases 85-89): scale and globalisation
 
 - **85 — multi-region edge, product level.** `regionalEdge.js` measures the

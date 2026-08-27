@@ -5638,6 +5638,56 @@
       "drillPassed": "Every fault drill behaved honestly.",
       "drillFailed": "{{failed}} drills failed and {{untested}} were not run.",
       "unavailable": "This is unavailable right now. Nothing was sent."
+    },
+    "fee": {
+      "line": "Fee {{percent}}% ({{amount}} {{symbol}}).",
+      "unavailable": "The fee cannot be calculated right now.",
+      "aboveMax": "That fee is above the allowed maximum and was refused.",
+      "mismatch": "The fee charged does not match the fee quoted. Stopped.",
+      "accountingComplete": "All {{counted}} settled fees are accounted for.",
+      "accountingPartial": "{{counted}} settled fees counted; {{excluded}} could not be verified."
+    },
+    "plan": {
+      "entitlements": "Your {{tier}} plan includes {{count}} analysis features.",
+      "notPurchasable": "This is a safety setting. It is the same on every plan and cannot be bought.",
+      "unknownEntitlement": "That feature is not recognised.",
+      "upgradeForAnalysis": "This analysis feature is on a higher plan.",
+      "policyUnavailable": "The session policy is unavailable, so nothing runs.",
+      "downgraded": "Your plan changed. Safety limits are unchanged.",
+      "sameLimitsNote": "Execution limits and safety checks are identical on every plan."
+    },
+    "lifecycle": {
+      "exportReady": "Your data is ready to download.",
+      "exportPartial": "Some of your data could not be read, so no partial file is offered.",
+      "exportFailed": "The export could not be prepared.",
+      "deleted": "Everything was deleted and the deletion was verified.",
+      "deletePartial": "{{cleared}} stores were cleared, {{remaining}} could not be.",
+      "deleteFailed": "Nothing was deleted.",
+      "deleteNeedsConfirmation": "Deleting is permanent. Please confirm.",
+      "deletionProven": "We read every store back and nothing of yours remains.",
+      "deletionUnproven": "The deletion could not be fully verified."
+    },
+    "a11y": {
+      "screenOk": "This screen passed the accessibility checks.",
+      "screenFails": "{{failing}} elements failed the accessibility checks.",
+      "controlOk": "This control is accessible.",
+      "controlFails": "This control is not accessible.",
+      "contrastOk": "Contrast is sufficient.",
+      "contrastLow": "Contrast is too low to read comfortably.",
+      "contrastUnknown": "Contrast could not be measured."
+    },
+    "offline": {
+      "offline": "You are offline. Nothing has been sent.",
+      "online": "You are back online.",
+      "waiting": "{{count}} confirmed intents are waiting for the network.",
+      "sending": "Sending {{count}} waiting intents.",
+      "sent": "{{sent}} waiting intents were sent.",
+      "stillQueued": "Still waiting for the network.",
+      "queued": "Saved to send when you are back online ({{count}} waiting).",
+      "notQueued": "This was not queued.",
+      "needsReconfirmation": "The terms changed while you were offline. Please confirm again.",
+      "cachedPage": "Showing a saved copy of this page.",
+      "pageUnavailable": "This page needs a connection."
     }
   }
 }
