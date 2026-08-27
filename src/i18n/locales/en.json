@@ -5542,6 +5542,64 @@
       "disclosedFixed": "Fixed and published.",
       "disclosedUnfixed": "Published after the fix window; exploit details withheld.",
       "liabilityNote": "A reward is a thank-you. It is not an admission of liability and does not cover losses."
+    },
+    "protocol": {
+      "established": "A signed session with this agent is open.",
+      "handshakeFailed": "The agent handshake failed, so no session was opened.",
+      "versionMismatch": "This agent speaks no protocol version we support.",
+      "rejected": "A message from this agent was rejected.",
+      "expired": "The agent session has expired.",
+      "notPermitted": "This agent is not permitted to do that."
+    },
+    "escrow": {
+      "funded": "{{amount}} USD is held in escrow for this job.",
+      "notOpened": "The escrow was not opened.",
+      "delivered": "Delivery was submitted and independently proven.",
+      "deliveredUnproven": "Delivery was submitted but is not independently proven yet.",
+      "mismatch": "What was delivered does not match what was agreed.",
+      "late": "The delivery window has passed.",
+      "released": "{{amount}} USD was released to the agent.",
+      "notReleased": "Nothing was released.",
+      "disputed": "This job is under dispute. The funds are frozen.",
+      "refunded": "{{amount}} USD was refunded to you."
+    },
+    "sandbox": {
+      "completed": "The agent ran inside the sandbox and finished.",
+      "denied": "The agent asked for something outside its permissions.",
+      "escape": "The agent tried to leave its sandbox. It was cut off and reported.",
+      "failed": "The agent run failed inside the sandbox.",
+      "capabilityRefused": "That permission cannot be granted to an agent.",
+      "suspended": "This agent is suspended after {{count}} incidents and needs a human review."
+    },
+    "dispute": {
+      "provisional": "This score is provisional and can still be appealed.",
+      "final": "This score is final.",
+      "insufficientEvidence": "There is not enough evidence to show a score.",
+      "appealFiled": "The appeal was filed. The penalty is frozen while it is reviewed.",
+      "appealRefused": "The appeal could not be filed.",
+      "appealUpheld": "The appeal was upheld and the penalty was reversed.",
+      "appealRejected": "The appeal was reviewed and rejected.",
+      "appealExpired": "The appeal window closed without a decision.",
+      "needsEvidence": "A decision needs reviewed evidence on the record.",
+      "slashed": "A penalty of {{amount}} USD was applied for {{reason}}. It can be appealed.",
+      "slashRefused": "That penalty is not valid and was not applied."
+    },
+    "routing": {
+      "selected": "Routing to {{venue}} out of {{count}} live venues.",
+      "noVenue": "No venue is live right now, so nothing can be routed.",
+      "noFillableQuote": "No live venue can fill this size right now.",
+      "venueRemoved": "A venue was removed from routing because it is not answering."
+    },
+    "market": {
+      "suggestions": "{{count}} specialists with proven work in this area.",
+      "noneQualified": "No specialist has proven work in this area yet.",
+      "unproven": "This agent has not proven this skill.",
+      "unknown": "Market conditions are unavailable.",
+      "noSupply": "No specialist is available right now.",
+      "noDemand": "There are no open requests right now.",
+      "tight": "Demand is higher than the proven supply.",
+      "balanced": "Supply and demand are roughly balanced.",
+      "ample": "There is more proven supply than demand."
     }
   }
 }

@@ -359,7 +359,13 @@ const laterPhaseProbes = [
   [76, './intent-ai/phase76-audit-timeline-probe.mjs'],
   [77, './intent-ai/phase77-terms-diff-probe.mjs'],
   [78, './intent-ai/phase78-third-party-verification-probe.mjs'],
-  [79, './intent-ai/phase79-bug-bounty-probe.mjs']
+  [79, './intent-ai/phase79-bug-bounty-probe.mjs'],
+  [69, './intent-ai/phase69-agent-protocol-v2-probe.mjs'],
+  [70, './intent-ai/phase70-agent-escrow-probe.mjs'],
+  [71, './intent-ai/phase71-agent-sandbox-probe.mjs'],
+  [72, './intent-ai/phase72-agent-dispute-probe.mjs'],
+  [73, './intent-ai/phase73-live-venue-routing-probe.mjs'],
+  [74, './intent-ai/phase74-live-marketplace-probe.mjs']
 ];
 for (const [phase, probe] of laterPhaseProbes) {
   console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);

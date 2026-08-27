@@ -1,3 +1,46 @@
+## Unreleased — Intent OS Arc D (phases 69-74): the agent ecosystem at scale
+
+- **69 — agent protocol v2.** `agentHandshake.js` replaces "we list this agent"
+  with a real, signed, versioned handshake: fresh nonce, echoed nonce, highest
+  common version or no session at all. An unsigned message is rejected
+  fail-closed — not accepted with a warning — as are forged signatures,
+  tampered payloads, replayed nonces, stale timestamps and unknown versions. A
+  session carries only capabilities we chose to grant, expires, and
+  `executionAuthorized` is false by construction.
+- **70 — agent payment rail with escrow.** `agentEscrow.js` holds the fee. The
+  buyer funds it explicitly; the agent claiming "done" releases nothing.
+  Release requires a delivery receipt issued by someone other than the agent,
+  matching the hash of what was agreed. A dispute freezes the funds and
+  defaults to refunding the buyer — including when a release is requested with
+  insufficient evidence — an undelivered escrow refunds when the window ends,
+  and `assertEscrowSound()` keeps funded = released + refunded + held.
+- **71 — real agent sandbox.** `agentSandboxRuntime.js` runs external agents
+  behind capability tokens minted from a closed list; `sign`, `submit`,
+  `transfer` and `*` are refused at mint time. Every call is checked before it
+  happens, including the host on a fetch. The first escape ends the run: the
+  remaining calls never execute, an incident is recorded and the agent is cut
+  automatically until a human reinstates it. An agent that returns
+  `executionAuthorized: true` is itself treated as an escape.
+- **72 — agent dispute resolution.** `agentDispute.js` gives a score somewhere
+  to be contested. Scores start provisional with a stated appeal window; an
+  agent appeals with evidence; a decision taken without reviewed evidence
+  finalises nothing. Slashing is transparent, capped at half the stake, tied to
+  an appealable case and time-limited — `assertDueProcess()` rejects a penalty
+  that is secret, uncapped, caseless or permanent.
+- **73 — live venue federation.** `liveVenueRouting.js` probes venues in
+  parallel with a deadline and timestamps every answer. Dead, degraded,
+  unknown and stale venues are removed from routing rather than ranked last,
+  quotes that cannot carry the order are not candidates, and when nothing is
+  routable the answer is an honest "no venue" instead of a remembered one.
+- **74 — live marketplace.** `liveMarketplace.js` computes real supply and
+  demand. An agent is only suggested with enough recent jobs in that exact
+  capability, each attested by somebody other than itself; unproven, suspended
+  and at-capacity agents are absent from the list rather than ranked low, and
+  an empty market says so instead of padding.
+- Probes `phase69`-`phase74` (323 checks) cover unsigned-message rejection,
+  escrow proof-of-delivery, sandbox escapes, due process, dead-venue removal
+  and unproven-agent exclusion; en/fa/ar copy added for every new string.
+
 ## Unreleased — Intent OS Arc E (phases 75-79): trust and proof
 
 - **75 — on-chain receipt.** `onchainReceipt.js` commits a hash of the agreed

@@ -903,6 +903,33 @@ export {
   revokeAccess, revokeEverything, assertKeyUsable, applyRevocation, assertNothingSurvives
 } from './accessRecovery.js';
 
+/* Arc D — agent ecosystem at scale (phases 69-74) */
+export {
+  HANDSHAKE_SCHEMA, PROTOCOL_VERSIONS, MIN_PROTOCOL_VERSION, HANDSHAKE_TTL_MS,
+  SESSION_TTL_MS, NONCE_BYTES, MESSAGE_KINDS, canonicalPayload, signMessage,
+  verifyMessage, negotiateVersion, startHandshake, completeHandshake, assertSessionUsable
+} from './agentHandshake.js';
+export {
+  ESCROW_SCHEMA, ESCROW_STATES, DELIVERY_WINDOW_MS, DISPUTE_WINDOW_MS, MAX_ESCROW_USD,
+  openEscrow, submitDelivery, releaseEscrow, openDispute, resolveDispute, expireEscrow, assertEscrowSound
+} from './agentEscrow.js';
+export {
+  SANDBOX_SCHEMA, CAPABILITIES, FORBIDDEN_CAPABILITIES, TOKEN_TTL_MS, MAX_CALLS, MAX_RUNTIME_MS,
+  mintCapabilityToken, checkCall, runInSandbox, applyAutoCut, assertContained
+} from './agentSandboxRuntime.js';
+export {
+  DISPUTE_SCHEMA, APPEAL_WINDOW_MS, APPEAL_STATES, SLASH_REASONS, MAX_SLASH_FRACTION, SLASH_TTL_MS,
+  provisionalScore, fileAppeal, decideAppeal, finalizeScore, applySlash, assertDueProcess
+} from './agentDispute.js';
+export {
+  ROUTING_SCHEMA, VENUE_STATES, PROBE_TIMEOUT_MS, HEALTH_MAX_AGE_MS, MAX_LATENCY_MS,
+  MIN_SUCCESS_RATE as MIN_VENUE_SUCCESS_RATE, probeVenues, isRoutable, routeOrder, assertNoDeadVenue
+} from './liveVenueRouting.js';
+export {
+  MARKETPLACE_SCHEMA, MIN_PROVEN_JOBS, PROOF_MAX_AGE_MS, MIN_SUCCESS_RATE as MIN_AGENT_SUCCESS_RATE,
+  proveSkill, computeSupply, computeDemand, marketConditions, suggestSpecialists, assertOnlyProvenSuggested
+} from './liveMarketplace.js';
+
 /* Arc E — trust and proof (phases 75-79) */
 export {
   ANCHOR_SCHEMA, ANCHOR_STATES, MAX_BATCH_SIZE, digest, buildReceiptLeaf, buildBatch,
