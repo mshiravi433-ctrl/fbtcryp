@@ -1360,6 +1360,10 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
     'Execution Ready — wallet confirmation remains required.',
     'Current operational evidence is attested and within its validity window.'
   ];
+  /* Report the evidence the store actually holds. This previously published a
+     flat 21 whenever launch was allowed, so the public count could not fall
+     below the maximum even as records expired. */
+  const storedEvidence = Number(status.evidence?.stored) || 0;
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
   return res.json({
     schema: 'fbt.public-status.v1',
@@ -1368,21 +1372,23 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
     status: active ? 'operational' : 'unavailable',
     launchAllowed: active,
     isFrozen: false,
-    evidence: { stored: active ? 21 : (status.evidence?.stored || 0), required: 21, status: `${active ? 21 : (status.evidence?.stored || 0)}/21` },
+    evidence: { stored: storedEvidence, required: 21, status: `${storedEvidence}/21` },
     operationalActivation: active
       ? { ...status.operationalActivation, status: 'operational', launchAllowed: true, operational: true, live: true, blockers: [], banner: activeBanner }
       : status.operationalActivation,
+    /* Each phase publishes its own verdict. Overwriting these with the
+       aggregate `active` flag hid phases whose own evidence was missing. */
     phases: status.phases.map((phase) => ({
       phase: phase.phase,
       id: phase.id,
       implementation: phase.implementation,
-      configuration: active ? 'verified' : phase.configuration,
-      operational: active,
-      live: active,
-      ready: active,
-      status: active ? 'operational' : phase.operational,
-      dataStatus: active ? 'live' : phase.dataStatus,
-      blockers: active ? [] : phase.blockers
+      configuration: phase.configuration,
+      operational: phase.operational === true,
+      live: phase.live === true,
+      ready: phase.ready === true,
+      status: phase.operational,
+      dataStatus: phase.dataStatus,
+      blockers: [...(phase.blockers || [])]
     })),
     claims: {
       deployed: active,

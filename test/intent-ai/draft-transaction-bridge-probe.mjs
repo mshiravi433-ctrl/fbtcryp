@@ -18,6 +18,7 @@ import {
   assertBroadcastAllowed
 } from '../../src/lib/intent-ai/index.js';
 import { CAUSE_CODES } from '../../src/lib/intent-ai/failureModes.js';
+import { readFileSync } from 'node:fs';
 
 const results = [];
 const check = (name, ok) => results.push({ name, ok: Boolean(ok) });
@@ -198,6 +199,38 @@ try {
   const knownCodes = Object.keys(CAUSE_CODES);
   check('every emitted code belongs to the closed set', emitted.every((c) => knownCodes.includes(c)));
   check('the bridge invents no new cause code', new Set(emitted).size <= knownCodes.length);
+
+  /* ------------------------------------------------- panel wiring (static) */
+  const panel = readFileSync(new URL('../../src/components/IntentAIPanel.jsx', import.meta.url), 'utf8');
+
+  check('the panel actually calls the broadcaster factory', /createEip1193Broadcaster\(/.test(panel));
+  check('the panel hands the shielded tx to broadcastSigned', /broadcastSigned\(\{/.test(panel));
+  check('the broadcast path is gated by assertBroadcastAllowed', /assertBroadcastAllowed\(\{/.test(panel));
+  check('the panel checks the build flag before broadcasting', /broadcastEnabled\(import\.meta\.env/.test(panel));
+  check('all three gates guard the send', /broadcastReady\s*&&\s*broadcastOptIn\s*&&\s*wallet\.canSign/.test(panel));
+  check('a hash is only adopted when the broadcast really succeeded', /sent\.ok\s*&&\s*sent\.txHash/.test(panel));
+
+  check('consent is per-execution state, not persisted', /useState\(false\)/.test(panel) && /setBroadcastOptIn/.test(panel));
+  check('consent is reset after every run', /setBroadcastOptIn\(false\)/.test(panel));
+  check('the opt-in control only renders when the build allows sending',
+    /broadcastEnabled\(import\.meta\.env \|\| \{\}\) && \(/.test(panel));
+  check('the opt-in is a real labelled checkbox', /data-testid="broadcast-opt-in"/.test(panel) && /type="checkbox"/.test(panel));
+
+  /* A receipt without a hash must never read `submitted`. */
+  check('no hash means the honest authorized status', /realTxHash \? 'submitted' : 'authorized'/.test(panel));
+  check('confirmed still requires a real hash', /confirmed:\s*rec\.receipt\?\.confirmed === true && Boolean\(realTxHash\)/.test(panel));
+
+  /* Every key the panel renders must exist in all three locales. */
+  const locales = ['en', 'fa', 'ar'].map((lang) => JSON.parse(
+    readFileSync(new URL(`../../src/i18n/locales/${lang}.json`, import.meta.url), 'utf8')
+  ));
+  check('the opt-in label exists in en, fa and ar',
+    locales.every((l) => typeof l.intentAI?.broadcast?.optIn === 'string' && l.intentAI.broadcast.optIn.length > 0));
+  check('the authorized receipt status is translated everywhere',
+    locales.every((l) => typeof l.intentAI?.receipt?.authorized === 'string' && l.intentAI.receipt.authorized.length > 0));
+  check('both broadcast explanations are translated everywhere',
+    locales.every((l) => Boolean(l.intentAI?.receipt?.awaitingBroadcast && l.intentAI?.receipt?.broadcastDisabled)));
+  check('the panel holds no hardcoded Persian or Arabic text', !/[\u0600-\u06FF]/.test(panel));
 
   console.log(JSON.stringify({ probe: 'draft-transaction-bridge', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;

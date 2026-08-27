@@ -19,7 +19,9 @@ let freezeState = {
   reason: 'launch-freeze-retired',
   changedAt: Date.now(),
   changedBy: ['activation-review'],
-  evidenceAtChange: 21
+  /* No evidence has been seen at module load; the real count is read from the
+     store whenever this state is reported. */
+  evidenceAtChange: 0
 };
 
 /**
@@ -88,14 +90,14 @@ export function refreeze({ operator = 'system', reason = 'legacy-freeze-request'
     reason: `freeze request ignored: ${String(reason).slice(0, 200)}`,
     changedAt: now,
     changedBy: [operator],
-    evidenceAtChange: 21
+    evidenceAtChange: (getStoredEvidence({ now }) || []).length
   };
   return {
     ok: true,
     schema: FREEZE_CONTROL_SCHEMA,
     frozen: false,
     isFrozen: false,
-    launchAllowed: true,
+    launchAllowed: freezeStateReport({ now }).launchAllowed,
     reason: freezeState.reason,
     changedAt: now
   };
@@ -117,6 +119,14 @@ export function isFrozen({ now = Date.now() } = {}) {
  */
 export function freezeStateReport({ now = Date.now() } = {}) {
   isFrozen({ now });
+  /* Report the evidence actually held, and derive launchAllowed from it.
+     These were the constants 21, true and '21/21', so the freeze surface
+     announced a complete evidence set and an allowed launch on a deployment
+     that had neither. Freeze itself remains retired; that is a separate
+     concern from lying about the evidence count. */
+  const evidence = getStoredEvidence({ now });
+  const readiness = aggregateOperationalReadiness({ evidence, now });
+  const stored = Array.isArray(evidence) ? evidence.length : 0;
   return {
     schema: FREEZE_CONTROL_SCHEMA,
     frozen: false,
@@ -124,9 +134,9 @@ export function freezeStateReport({ now = Date.now() } = {}) {
     reason: freezeState.reason,
     changedAt: freezeState.changedAt,
     changedBy: freezeState.changedBy,
-    evidenceAtChange: 21,
-    launchAllowed: true,
-    evidence: '21/21'
+    evidenceAtChange: stored,
+    launchAllowed: readiness.launchAllowed === true && readiness.operational === 'operational',
+    evidence: `${stored}/21`
   };
 }
 

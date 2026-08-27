@@ -23,6 +23,7 @@ import {
   verifySmartWalletAndGuardian
 } from '../../src/lib/intent-ai/index.js';
 import app from '../../server/app.js';
+import { evidenceStoreStatus } from '../../server/intentOperatorEvidence.js';
 import { scanOperationalProviders } from '../../server/intentOperationalEvidence.js';
 import { openApiDocument } from '../../server/openapi.js';
 
@@ -116,7 +117,15 @@ try {
     check('phase-status reports phase 21 implemented but not live without evidence', phaseStatus.body.phases.some((row) => row.phase === 21 && row.implementation === 'implemented' && row.operational === false && row.live === false));
     check('phase-status names the missing evidence instead of going quiet', phaseStatus.body.phases.some((row) => row.phase === 21 && Array.isArray(row.blockers) && row.blockers.length > 0));
     check('public-status refuses launch while operator evidence is absent', publicStatus.body.launchAllowed === false && publicStatus.body.claims.executionActivated === false);
-    check('activation reports the real stored-evidence count', activation.body.product.specificationImplementedThrough === 50 && activation.body.product.storedEvidence === '0/21' && activation.body.product.operationalActivationRequired === true);
+    /* The evidence store is module-level and shared across probes in one run,
+       so an earlier suite may legitimately have injected records. Assert that
+       the reported count MATCHES the store rather than pinning a literal —
+       the point is that the number is real, not that it is zero. */
+    const liveCount = evidenceStoreStatus().storedCount;
+    check('activation reports the real stored-evidence count',
+      activation.body.product.specificationImplementedThrough === 50
+      && activation.body.product.storedEvidence === `${liveCount}/21`
+      && activation.body.product.operationalActivationRequired === (liveCount < 21));
     const dumped = JSON.stringify({ phaseStatus: phaseStatus.body, publicStatus: publicStatus.body, activation: activation.body, empty, ready });
     check('no raw credential words leak into status output', !/private.?key|seed.?phrase|master.?password|BEGIN [A-Z ]*PRIVATE KEY/i.test(dumped));
     const document = openApiDocument();

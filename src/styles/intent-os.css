@@ -1171,6 +1171,22 @@
   border-radius: 10px;
   border: 1px dashed rgba(66, 232, 255, 0.25);
 }
+/* Broadcast consent — visually distinct from ordinary options because
+   ticking it is what turns a simulation into a real transfer of funds. */
+.ia-broadcast-optin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.07);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ia-broadcast-optin input { width: 16px; height: 16px; accent-color: #ffb020; cursor: pointer; }
+
 .ia-check-row { display: flex; flex-wrap: wrap; gap: 12px; }
 .ia-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; cursor: pointer; }
 .ia-check input { width: 16px; height: 16px; accent-color: #42e8ff; cursor: pointer; }

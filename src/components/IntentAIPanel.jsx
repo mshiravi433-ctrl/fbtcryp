@@ -47,7 +47,8 @@ import {
   /* Phase 88 — a swap is not a ramp; say so before anything is drafted. */
   detectFiatIntent, fiatBoundaryResponse,
   /* Draft to transaction: broadcasting stays off unless the build enables it. */
-  broadcastEnabled, assertBroadcastAllowed
+  broadcastEnabled, assertBroadcastAllowed, prepareDraftTransaction,
+  createEip1193Broadcaster, broadcastSigned
 } from '../lib/intent-ai';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
@@ -162,6 +163,9 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
   const [publicStatus, setPublicStatus] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [gateAction, setGateAction] = useState(null);
+  /* Per-execution broadcast consent. Deliberately NOT persisted and reset
+     after every run: a standing "yes" to sending funds is not consent. */
+  const [broadcastOptIn, setBroadcastOptIn] = useState(false);
   const [screen, setScreen] = useState(null);
   const [showExtInfo, setShowExtInfo] = useState(false);
   /*
@@ -533,6 +537,8 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     });
     setSession(result.session);
     setGateAction('CONFIRM');
+    /* Consent is spent. The next execution must ask again. */
+    setBroadcastOptIn(false);
     const rec = reconcile({
       lifecycleStatus: result.receipt?.status || (result.ok ? 'WATCHING' : 'FAILED'),
       observation: {
@@ -579,8 +585,41 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
        * With a hash: submitted (or completed once the chain confirms).
        * Without one: authorized — signed, policy-checked, not yet broadcast.
        */
-      const realTxHash = result.txHash || null;
+      /*
+       * Real broadcast, and only when every gate agrees.
+       *
+       * `confirmAndSubmit` sets `txHash` solely from a `broadcastResult`, and
+       * nothing used to supply one — so Intent OS could sign but never reach a
+       * network. The bridge below closes that gap, behind three independent
+       * conditions that must ALL hold:
+       *
+       *   1. the build enables it (VITE_INTENT_BROADCAST_ENABLED === 'true')
+       *   2. the user opted in for this specific execution
+       *   3. the wallet is genuinely connected and can sign
+       *
+       * A failure here never becomes a success: the receipt keeps the honest
+       * `authorized` status and states the reason.
+       */
+      let realTxHash = result.txHash || null;
       const broadcastReady = broadcastEnabled(import.meta.env || {});
+      if (!realTxHash && broadcastReady && broadcastOptIn && wallet.canSign) {
+        const gateOk = assertBroadcastAllowed({
+          env: import.meta.env || {},
+          userOptIn: broadcastOptIn === true
+        });
+        if (gateOk.ok) {
+          const broadcaster = createEip1193Broadcaster(walletRuntime || {});
+          if (broadcaster && result.protectedTx) {
+            const sent = await broadcastSigned({
+              tx: result.protectedTx,
+              broadcaster,
+              idempotencyKey: activeGate?.termsHash || null
+            });
+            /* Only a real 32-byte hash counts; anything else stays authorized. */
+            if (sent.ok && sent.txHash) realTxHash = sent.txHash;
+          }
+        }
+      }
       setReceipt({
         status: rec.receipt?.status === 'COMPLETED' && realTxHash
           ? 'completed'
@@ -1097,6 +1136,23 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
                 </small>
               ))}
             </div>
+          )}
+
+          {/*
+            Broadcast consent. Only rendered when the build actually permits
+            sending, so a deployment that cannot broadcast never shows a
+            control implying it can. Consent is per-execution and resets after
+            every run.
+          */}
+          {broadcastEnabled(import.meta.env || {}) && (
+            <label className="ia-broadcast-optin" data-testid="broadcast-opt-in">
+              <input
+                type="checkbox"
+                checked={broadcastOptIn}
+                onChange={(e) => setBroadcastOptIn(e.target.checked)}
+              />
+              <span>{t('intentAI.broadcast.optIn')}</span>
+            </label>
           )}
 
           <div className="ia-controls" style={{ marginTop: 10 }}>

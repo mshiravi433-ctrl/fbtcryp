@@ -269,10 +269,12 @@ export function getStoredEvidence({ now = Date.now() } = {}) {
 export function autoStoreEvidence(record) {
   if (!record || !record.kind || !EVIDENCE_KINDS.includes(record.kind)) return;
   if (record.expiresAt <= Date.now()) return;
-  /* A heartbeat must not replace a release attestation with a five-hour TTL.
-     This is what keeps the reviewed 21/21 snapshot stable across restarts and
-     fixed-clock probes; authenticated operator evidence can still replace it. */
-  if (evidenceStore.get(record.kind)?.source === 'verified-release-evidence') return;
+  /* A self-collected heartbeat must never overwrite a reviewed record that an
+     operator injected. The old guard here keyed on the removed seed's
+     'verified-release-evidence' marker, which no longer exists; the rule that
+     matters is that operator-supplied evidence outranks auto-collection. */
+  const existing = evidenceStore.get(record.kind);
+  if (existing && existing.source !== 'auto-local-evidence') return;
 
   /* No secrets */
   const serialized = JSON.stringify(record);

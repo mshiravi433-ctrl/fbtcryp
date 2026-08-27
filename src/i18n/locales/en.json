@@ -5808,6 +5808,9 @@
       "noResidue": "Every store was read back and is empty.",
       "residueFound": "{{remaining}} stores still hold something.",
       "residueUnknown": "We could not check what remains."
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm"
     }
   }
 }
