@@ -249,6 +249,21 @@ export function chatTurn(session, text, ctx = {}) {
     : parsedInput;
   appendAudit(session, { type: 'parse', ok: parsed.ok, confidence: parsed.confidence, clarifications: parsed.clarifications });
 
+  if (parsed.intent?.kind === 'conversation' || parsed.intent?.kind === 'help') {
+    let replyCode = 'help';
+    if (parsed.intent?.subType === 'greeting') replyCode = 'greeting';
+    else if (parsed.intent?.subType === 'thanks') replyCode = 'thanks';
+    else if (parsed.intent?.subType === 'goodbye') replyCode = 'goodbye';
+
+    const reply = assistantMessage('conversation', {
+      conversationType: replyCode,
+      financialExecutionAuthorized: false
+    });
+    session = push(session, reply);
+    return { session, reply };
+  }
+
+
   // Capability discovery is refreshed per request. Runtime evidence is passed
   // in by the adapter boundary; no green status is inferred locally.
   const capabilityScan = scanCapabilities({

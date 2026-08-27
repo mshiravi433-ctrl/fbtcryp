@@ -535,13 +535,31 @@ function MessageContent({ msg, onDraftReady }) {
   if (msg.role === 'user') return <span>{msg.text}</span>;
   const { type, payload = {} } = msg;
 
-  if (type === 'clarifications-needed') {
+  if (type === 'conversation') {
+    const fallbackText = t(`intentAI.chat.${payload.conversationType}`);
     return (
-      <div>
-        <span>{t('intentAI.msg.clarifications')}</span>
-        <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
-          {(payload.clarifications || []).map((c) => <li key={c}>{c}</li>)}
-        </ul>
+      <div style={{ whiteSpace: 'pre-line' }}>
+        {fallbackText}
+      </div>
+    );
+  }
+
+  if (type === 'clarifications-needed') {
+    const isUnclear = payload.clarifications?.some(c => c === 'ACTION_UNCLEAR' || c === 'NO_INTENT' || c === 'EMPTY_INPUT');
+    const hasMissingFields = payload.clarifications?.some(c => c === 'AMOUNT_MISSING' || c === 'CHAIN_UNCLEAR' || c === 'FROM_ASSET_MISSING' || c === 'TO_ASSET_MISSING');
+    
+    let msgText = '';
+    if (isUnclear) {
+      msgText = t('intentAI.chat.help');
+    } else if (hasMissingFields) {
+      msgText = t('intentAI.chat.clarifyMissing');
+    } else {
+      msgText = t('intentAI.chat.help');
+    }
+    
+    return (
+      <div style={{ whiteSpace: 'pre-line' }}>
+        {msgText}
       </div>
     );
   }

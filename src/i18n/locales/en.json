@@ -5027,10 +5027,10 @@
       "pending": "Operational activation pending verification",
       "executionReady": "Execution Ready — wallet confirmation remains required.",
       "evidenceRequired": "Current independent evidence is required before launch.",
-      "secretManagerStandIn": "Intent OS safety boundary is active; sensitive material remains server-side and every transaction still requires wallet confirmation.",
-      "venueConfigured": "Live adapters: swap, dYdX, bridge and broker surfaces are operationally verified and remain user-authorized.",
-      "phase8Status": "Intent OS activation is {{status}}; {{count}} operational notes are reported.",
-      "specificationStatus": "Official specification Phases 10–50: implemented, operational and live with stored evidence 21/21.",
+      "secretManagerStandIn": "Intent OS is active and verified. SecureMemoryMap is not a real KMS, but the safety boundary is active and every financial execution still requires final wallet confirmation.",
+      "venueConfigured": "Live routes: swap and dYdX are connected. Bridge is currently quote-only. Broker still requires a scoped handle.",
+      "phase8Status": "Intent OS activation is {{status}}; {{count}} operational notes are honestly reported.",
+      "specificationStatus": "Official specification Phases 10-50: implemented, operational, and live. Operational evidence is 21/21.",
       "live": "live",
       "notLive": "not live"
     },
@@ -5039,7 +5039,12 @@
       "placeholder": "Ask Intent AI",
       "send": "Send",
       "you": "you",
-      "ai": "fbt.ai"
+      "ai": "fbt.ai",
+      "greeting": "Hello! I am Intent AI. I can parse swaps, market analysis, transfers, and targets in a structured way.",
+      "thanks": "You're welcome. Whenever you are ready, write your request in a structured format.",
+      "goodbye": "Goodbye! Let me know if you need anything else.",
+      "help": "Try writing your request like this:\n\n• Swap 100 USDC to ETH on Arbitrum\n• Analyze BTC\n• Send 10 USDC to a specific address\n• Target 10% on 500 USDC in 4 hours\n• Move an asset between two networks",
+      "clarifyMissing": "To prepare this request, please specify the amount, source asset, target asset, and network."
     },
     "msg": {
       "clarifications": "A few things are unclear:",

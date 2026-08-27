@@ -114,6 +114,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^15.0.1",
+    "react-is": "^19.2.8",
     "react-router-dom": "^6.26.0",
     "recharts": "^3.10.1",
     "telegraf": "^4.16.3",
@@ -126,7 +127,7 @@
     "@capacitor/core": "^6.2.1",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^10.0.4",
-    "jsdom": "^30.0.0",
+    "jsdom": "^30.0.1",
     "solc": "0.8.24",
     "vite": "^5.4.1"
   },

@@ -26,7 +26,8 @@
 import { ALLOWED_CHAINS } from './permissions.js';
 
 const CHAIN_ALIASES = {
-  ethereum: 1, eth: 1, mainnet: 1,
+  'آربیتروم': 42161, 'اتریوم': 1, 'بیس': 8453, 'پالیگان': 137, 'سولانا': 501,
+  ethereum: 1, mainnet: 1,
   optimism: 10, op: 10,
   bsc: 56, binance: 56, 'bnb-chain': 56, 'bnb chain': 56, bnb: 56,
   polygon: 137, matic: 137,
@@ -42,6 +43,7 @@ const CHAIN_ALIASES = {
 
 /* Action keywords and prepositions must never be mistaken for tokens. */
 const ACTION_STOPWORDS = new Set([
+  'به', 'در', 'با', 'از', 'برای', 'روی',
   'SWAP', 'EXCHANGE', 'CONVERT', 'TRADE', 'BRIDGE', 'SEND', 'TRANSFER',
   'PAY', 'BUY', 'PURCHASE', 'LONG', 'SELL', 'SHORT', 'EXIT', 'FARM',
   'STAKE', 'YIELD', 'LP', 'LIQUIDITY', 'FUTURES', 'PERPS', 'PERPETUAL',
@@ -60,6 +62,19 @@ const CHAIN_LONG_NAMES = new Set([
 ]);
 
 const ACTION_KEYWORDS = [
+  { action: 'conversation', keywords: ['سلام', 'درود', 'hello', 'hi', 'مرحبا', 'اهلاً'], kind: 'conversation', subType: 'greeting' },
+  { action: 'conversation', keywords: ['ممنون', 'تشکر', 'مرسی', 'سپاس', 'thanks', 'thank you', 'شكر', 'شكرا'], kind: 'conversation', subType: 'thanks' },
+  { action: 'conversation', keywords: ['خداحافظ', 'بدرود', 'bye', 'goodbye', 'وداعا', 'مع السلامة'], kind: 'conversation', subType: 'goodbye' },
+  { action: 'swap',        keywords: ['swap', 'exchange', 'convert', 'trade', 'تبدیل', 'مبادله', 'تعویض'],                   kind: 'swap' },
+  { action: 'bridge',      keywords: ['bridge', 'cross-chain', 'cross chain', 'move to', 'پل'],        kind: 'bridge' },
+  { action: 'send',        keywords: ['send', 'transfer', 'pay', 'ارسال'],                                kind: 'send' },
+  { action: 'buy',         keywords: ['buy', 'purchase', 'long', 'go long', 'خرید'],                     kind: 'swap' },
+  { action: 'sell',        keywords: ['sell', 'short', 'exit', 'فروش'],                                  kind: 'swap' },
+  { action: 'farm',        keywords: ['farm', 'stake', 'yield', 'lp', 'liquidity'],              kind: 'defi' },
+  { action: 'futures',     keywords: ['futures', 'perps', 'perpetual', 'leverage', 'فیوچرز', 'اهرم'],               kind: 'futures' },
+  { action: 'dydx',        keywords: ['dydx'],                                                   kind: 'futures' },
+  { action: 'defi',        keywords: ['defi', 'lend', 'borrow', 'supply', 'deposit', 'دیفای', 'وام'],            kind: 'defi' },
+  { action: 'analyze',     keywords: ['analyze', 'analyse', 'analysis', 'research', 'look at', 'تحلیل'],  kind: 'analysis' },
   // action -> [keywords], kind
   { action: 'swap',        keywords: ['swap', 'exchange', 'convert', 'trade'],                   kind: 'swap' },
   { action: 'bridge',      keywords: ['bridge', 'cross-chain', 'cross chain', 'move to'],        kind: 'bridge' },
@@ -120,7 +135,7 @@ function detectAmount(text) {
     if (ACTION_STOPWORDS.has(unit)) continue;
     if (TOKEN_ALIASES[unit] || STABLES.has(unit)) {
       const before = text.slice(0, m.index).toLowerCase();
-      const isPayWith = /\bwith\s*$/.test(before);
+      const isPayWith = /\b(with|با)\s*$/.test(before);
       return { amount: n, unit, match: m[0], isPayWith };
     }
   }
@@ -136,7 +151,7 @@ function detectChain(text) {
     const tokens = alias.split(/\s+/);
     // Find the alias as a standalone phrase in the lowercased text.
     const re = new RegExp(
-      `(^|\\s|on\\s)${tokens.map(t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')).join('\\s+')}(\\s+chain)?(\\s|$|\\.|,|!|\\?)`,
+      `(^|\\s|(on|در|روی)\\s)${tokens.map(t => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')).join('\\s+')}(\\s+chain)?(\\s|$|\\.|,|!|\\?)`,
       'i'
     );
     if (re.test(lower) && ALLOWED_CHAINS.has(id)) return id;
@@ -173,8 +188,8 @@ function detectDuration(text) {
 }
 
 function detectDirection(text) {
-  if (/\b(buy|long|purchase|accumulate)\b/i.test(text)) return 'buy';
-  if (/\b(sell|short|exit|dump)\b/i.test(text)) return 'sell';
+  if (/(?:^|\s|[.,!?؛،])(buy|long|purchase|accumulate|خرید)(?:\s|[.,!?؛،]|$)/i.test(text)) return 'buy';
+  if (/(?:^|\s|[.,!?؛،])(sell|short|exit|dump|فروش)(?:\s|[.,!?؛،]|$)/i.test(text)) return 'sell';
   return null;
 }
 
@@ -185,7 +200,12 @@ function detectDirection(text) {
  * @param {object} [context] — { defaultChainId, balances: {...}, locale }
  */
 export function parseUserIntent(rawText, context = {}) {
-  const text = String(rawText ?? '').trim();
+  let text = String(rawText ?? '').trim();
+  const persianNums = [/۰/g, /۱/g, /۲/g, /۳/g, /۴/g, /۵/g, /۶/g, /۷/g, /۸/g, /۹/g];
+  const arabicNums  = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+  for (let i = 0; i < 10; i++) {
+    text = text.replace(persianNums[i], i).replace(arabicNums[i], i);
+  }
   const signals = [];
   const clarifications = [];
 
@@ -203,16 +223,18 @@ export function parseUserIntent(rawText, context = {}) {
   // 1. Detect action
   let action = null;
   let kind = 'analysis';
+  let subType = null;
   let bestHits = 0;
   for (const row of ACTION_KEYWORDS) {
     let hits = 0;
     for (const kw of row.keywords) {
-      if (new RegExp(`\\b${kw.replace(/ /g, '\\s+')}\\b`, 'i').test(text)) hits += 1;
+      if (new RegExp(`(?:^|\\s|[.,!?؛،])${kw.replace(/ /g, '\\s+')}(?:\\s|[.,!?؛،]|$)`, 'i').test(text)) hits += 1;
     }
     if (hits > bestHits) {
       bestHits = hits;
       action = row.action;
       kind = row.kind;
+      subType = row.subType || null;
     }
   }
   if (action) signals.push(`action:${action}`);
@@ -261,9 +283,9 @@ export function parseUserIntent(rawText, context = {}) {
   }
 
   // Find the "with Y"/"for Y" clause (the opposite side).
-  const withIdx = words.findIndex((w) => /^with$/i.test(w));
-  const forIdx  = words.findIndex((w) => /^for$/i.test(w));
-  const toIdx   = words.findIndex((w) => /^to$/i.test(w));
+  const withIdx = words.findIndex((w) => /^(with|با)$/i.test(w));
+  const forIdx  = words.findIndex((w) => /^(for|برای)$/i.test(w));
+  const toIdx   = words.findIndex((w) => /^(to|به)$/i.test(w));
 
   const tokensAfter = (idx) => {
     if (idx < 0) return null;
@@ -297,13 +319,26 @@ export function parseUserIntent(rawText, context = {}) {
     // If amount gave us the source, the other candidate is the target (and vice versa).
     const other = tokenCandidates.filter((t) => t !== fromSymbol && t !== toSymbol);
     if (fromSymbol && !toSymbol && other[0]) toSymbol = other[0];
-    if (!fromSymbol && !toSymbol && other.length >= 2) {
-      fromSymbol = other[0]; toSymbol = other[1];
+    if (!fromSymbol && !toSymbol) {
+      if (other.length >= 2) {
+        fromSymbol = other[0]; toSymbol = other[1];
+      } else if (other.length === 1) {
+        fromSymbol = other[0];
+      }
     }
   }
 
   if (fromSymbol) signals.push(`from:${fromSymbol}`); else if (kind !== 'analysis') clarifications.push('FROM_ASSET_MISSING');
   if (toSymbol) signals.push(`to:${toSymbol}`);     else if (kind !== 'analysis' && action !== 'send') clarifications.push('TO_ASSET_MISSING');
+
+  // Implicit swap detection: if no explicit action but we have amount + from + to (via 'به' / 'to')
+  if (!action && amt && fromSymbol && toSymbol) {
+    action = 'swap';
+    kind = 'swap';
+    const clIdx = clarifications.indexOf('ACTION_UNCLEAR');
+    if (clIdx >= 0) clarifications.splice(clIdx, 1);
+    signals.push('action:swap (inferred)');
+  }
 
   // 4. Chain
   let chainId = detectChain(text);
@@ -336,6 +371,7 @@ export function parseUserIntent(rawText, context = {}) {
   // Build structured intent draft
   const intent = {
     kind,
+    subType,
     action: action || 'analyze',
     fromSymbol,
     toSymbol,
@@ -351,7 +387,7 @@ export function parseUserIntent(rawText, context = {}) {
   };
 
   // analysis-only intents don't require all fields
-  const ok = kind === 'analysis' ? Boolean(action) : (
+  const ok = (kind === 'analysis' || kind === 'conversation' || kind === 'help') ? Boolean(action) : (
     Boolean(action) && Boolean(amt) && Boolean(fromSymbol) && (kind === 'send' || Boolean(toSymbol))
   );
 
@@ -359,7 +395,7 @@ export function parseUserIntent(rawText, context = {}) {
     ok,
     intent,
     confidence,
-    clarifications: [...new Set(clarifications)],
+    clarifications: (kind === 'conversation' || kind === 'help') ? [] : [...new Set(clarifications)],
     signals,
     raw: text.slice(0, 500)
   };
