@@ -38,8 +38,26 @@ export {
 // Intent Parser (natural language → structured intent)
 export {
   parseUserIntent,
-  refineIntent
+  refineIntent,
+  detectChain,
+  normalizeToken
 } from './intentParser.js';
+
+// User-facing financial & time limits + guided step-by-step chat flow
+export { INTENT_LIMITS, MAX_GOAL_DURATION_HRS, checkIntentLimits, usdValueOf, limitHintFor } from './intentLimits.js';
+export {
+  FLOW_SCHEMA,
+  FLOW_STEPS,
+  FLOW_CHAIN_SUGGESTIONS,
+  FLOW_TASK_SUGGESTIONS,
+  FLOW_TOOL_SUGGESTIONS,
+  createFlowFromParsed,
+  applyFlowAnswer,
+  flowQuestionPayload,
+  assembleUtterance,
+  declinedFromTools,
+  detectYesNo
+} from './guidedFlow.js';
 
 // Guardian (independent, non-disableable pre-execution gate)
 export {

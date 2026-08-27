@@ -986,3 +986,261 @@
   background: var(--ios-mint, #00ff9d);
   box-shadow: 0 0 7px rgba(0, 255, 157, .6);
 }
+
+/* ==========================================================================
+   GUIDED CHAT FLOW · INTERACTIVE CONFIRMATION · COUNTDOWN · INFO MODAL
+   Everything the step-by-step conversation, the editable confirmation
+   screen, the goal countdown and the external-agent info modal need.
+   ========================================================================== */
+
+/* --- chat layout: dvh-based so the mobile keyboard cannot eat the page ---
+   The thread takes the remaining height and scrolls; the composer is
+   sticky at the bottom, so it always sits right above the keyboard
+   (index.html sets interactive-widget=resizes-content, which makes the
+   layout viewport — and therefore 100dvh — shrink with the keyboard). */
+.ia-panel.ia-chat {
+  min-height: calc(100dvh - var(--nav-h, 64px) - 140px);
+  display: flex;
+  flex-direction: column;
+}
+.ia-panel.ia-chat .intent-ai-thread {
+  flex: 1 1 auto;
+  min-height: 230px;
+  max-height: none;
+  overscroll-behavior: contain;
+}
+.ia-panel.ia-chat .ia-composer {
+  position: sticky;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  z-index: 6;
+  padding: 8px;
+  margin-top: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(66, 232, 255, 0.18);
+  background: rgba(10, 16, 26, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+/* 16px stops iOS Safari from zooming the whole page when the input focuses. */
+.ia-composer input { font-size: 16px; }
+:root[data-theme='light'] .ia-panel.ia-chat .ia-composer {
+  border-color: rgba(35, 62, 91, 0.18);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+/* --- quick-reply chips --- */
+.ia-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ia-chips-wrap { max-height: 132px; overflow-y: auto; }
+.ia-chip {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(66, 232, 255, 0.35);
+  background: rgba(66, 232, 255, 0.08);
+  color: var(--text-1);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: transform .12s ease, background .12s ease;
+}
+.ia-chip:hover { background: rgba(66, 232, 255, 0.16); }
+.ia-chip:active { transform: scale(0.96); }
+.ia-chip.ia-yes { border-color: rgba(98, 230, 167, 0.45); background: rgba(98, 230, 167, 0.1); }
+.ia-chip.ia-no { border-color: rgba(255, 107, 107, 0.4); background: rgba(255, 107, 107, 0.08); }
+:root[data-theme='light'] .ia-chip { border-color: rgba(35, 62, 91, 0.22); background: rgba(240, 246, 255, 0.9); color: #10233a; }
+:root[data-theme='light'] .ia-chip.ia-yes { border-color: rgba(8, 123, 87, 0.4); background: rgba(8, 179, 122, 0.12); }
+:root[data-theme='light'] .ia-chip.ia-no { border-color: rgba(207, 27, 62, 0.35); background: rgba(255, 226, 230, 0.8); }
+
+/* --- friendly limit warnings --- */
+.ia-limit-box {
+  border: 1px solid rgba(255, 180, 84, 0.38);
+  background: rgba(255, 180, 84, 0.07);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.ia-limit-title { color: var(--warn, #ffb454); font-weight: 600; font-size: 12px; }
+.ia-limit-line { font-size: 11.5px; margin-top: 4px; line-height: 1.6; color: var(--text-2); }
+.ia-limit-warning { display: block; margin-top: 3px; color: var(--warn, #ffb454); font-size: 10.5px; line-height: 1.5; }
+.ia-hint { display: block; margin-top: 3px; color: var(--text-3); font-size: 10.5px; line-height: 1.5; }
+
+/* --- two agents analysing (multi-agent routing, visible in chat) --- */
+.ia-agents {
+  border: 1px solid rgba(157, 123, 255, 0.3);
+  background: rgba(157, 123, 255, 0.06);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.ia-agents-head { display: flex; align-items: center; gap: 7px; }
+.ia-agent-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #42e8ff;
+  box-shadow: 0 0 8px rgba(66, 232, 255, 0.8);
+  animation: ia-pulse 1.4s ease-in-out infinite;
+}
+.ia-agent-dot.second { background: #9d7bff; box-shadow: 0 0 8px rgba(157, 123, 255, 0.8); animation-delay: .35s; }
+@keyframes ia-pulse { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
+.ia-agents-roles { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 10.5px; color: var(--text-3); }
+.ia-best-route {
+  margin: 2px 0 6px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(0, 255, 157, 0.25);
+  background: rgba(0, 255, 157, 0.06);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* --- interactive confirmation screen --- */
+.ia-confirm-screen { padding: 12px; border-radius: 12px; margin-bottom: 10px; background: rgba(255, 255, 255, 0.04); }
+.ia-confirm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
+@media (max-width: 420px) { .ia-confirm-grid { grid-template-columns: 1fr; } }
+.ia-badge-edit {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 180, 84, 0.45);
+  color: var(--warn, #ffb454);
+  background: rgba(255, 180, 84, 0.08);
+}
+.ia-tools-box {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(66, 232, 255, 0.25);
+}
+.ia-check-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.ia-check { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; cursor: pointer; }
+.ia-check input { width: 16px; height: 16px; accent-color: #42e8ff; cursor: pointer; }
+
+/* --- goal countdown --- */
+.ia-countdown {
+  border: 1px solid rgba(66, 232, 255, 0.22);
+  background: linear-gradient(140deg, rgba(66, 232, 255, 0.07), rgba(157, 123, 255, 0.06));
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.ia-cd-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ia-cd-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ios-mint, #00ff9d);
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.7);
+  animation: ia-pulse 1.6s ease-in-out infinite;
+}
+.ia-cd-title { font-weight: 600; font-size: 12px; color: var(--text-1); }
+.ia-cd-goal {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 157, 0.3);
+  color: var(--ios-mint, #00ff9d);
+}
+.ia-cd-boxes { display: flex; gap: 8px; margin-top: 9px; }
+.ia-cd-box {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 11px;
+  border: 1px solid rgba(66, 232, 255, 0.2);
+  background: rgba(66, 232, 255, 0.05);
+}
+.ia-cd-box b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--text-1); }
+.ia-cd-box small { font-size: 9.5px; color: var(--text-3); }
+.ia-cd-box.is-sec { opacity: 0.75; }
+.ia-cd-note { margin: 8px 0 0; font-size: 10.5px; line-height: 1.55; color: var(--text-3); }
+.ia-cd-expired { margin: 8px 0 0; font-size: 12px; color: var(--warn, #ffb454); }
+.ia-countdown.is-expired { border-color: rgba(255, 180, 84, 0.4); }
+.ia-countdown.is-expired .ia-cd-dot { background: var(--warn, #ffb454); box-shadow: 0 0 8px rgba(255, 180, 84, 0.6); }
+.ia-countdown.is-compact { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; }
+.ia-cd-compact-value { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-1); }
+
+/* --- prompt examples accordion --- */
+.ia-examples summary { cursor: pointer; }
+.ia-examples-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+@media (max-width: 420px) { .ia-examples-grid { grid-template-columns: 1fr; } }
+.ia-example-group { padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+.ia-example-chip {
+  display: block;
+  width: 100%;
+  text-align: start;
+  margin-top: 5px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(66, 232, 255, 0.05);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.ia-example-chip:hover { background: rgba(66, 232, 255, 0.12); color: var(--text-1); }
+:root[data-theme='light'] .ia-example-group { background: rgba(240, 246, 255, 0.7); }
+:root[data-theme='light'] .ia-example-chip { border-color: rgba(35, 62, 91, 0.16); color: #34445f; }
+
+/* --- info button + external-agent modal --- */
+.ia-info-btn {
+  flex: 0 0 auto;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(66, 232, 255, 0.4);
+  background: rgba(66, 232, 255, 0.08);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ia-info-btn:hover { background: rgba(66, 232, 255, 0.18); }
+.ia-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(4, 8, 14, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.ia-modal {
+  width: min(480px, 100%);
+  max-height: min(78dvh, 620px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid rgba(66, 232, 255, 0.25);
+  background: linear-gradient(150deg, rgba(14, 22, 34, 0.97), rgba(18, 26, 44, 0.97));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.ia-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.ia-modal-head strong { font-size: 13px; color: var(--text-1); }
+.ia-modal-close {
+  width: 26px; height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.ia-modal-body { padding: 12px 14px 16px; overflow-y: auto; }
+:root[data-theme='light'] .ia-modal {
+  border-color: rgba(35, 62, 91, 0.2);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 255, 0.98));
+}
+:root[data-theme='light'] .ia-modal-head { border-bottom-color: rgba(35, 62, 91, 0.12); }
+:root[data-theme='light'] .ia-modal-close { border-color: rgba(35, 62, 91, 0.2); color: #34445f; }
+
+/* --- guided flow question bubble --- */
+.ia-flow-question { font-size: 12.5px; line-height: 1.65; }
