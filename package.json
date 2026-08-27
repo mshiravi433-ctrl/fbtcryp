@@ -95,6 +95,7 @@
     "test:phase98": "node test/intent-ai/phase98-human-oversight-probe.mjs",
     "test:phase99": "node test/intent-ai/phase99-long-term-survival-probe.mjs",
     "test:phase100": "node test/intent-ai/phase100-user-sovereignty-probe.mjs",
+    "test:bridge": "node test/intent-ai/draft-transaction-bridge-probe.mjs",
     "test:phase85": "node test/intent-ai/phase85-regional-edge-probe.mjs",
     "test:phase86": "node test/intent-ai/phase86-parser-locale-parity-probe.mjs",
     "test:phase87": "node test/intent-ai/phase87-regional-compliance-probe.mjs",

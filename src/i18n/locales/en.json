@@ -5074,7 +5074,10 @@
         "sessionKey": "The session key is expired or revoked, so nothing was signed.",
         "unknown": "Execution did not complete, and the exact cause is not known."
       },
-      "queued": "Saved to send when you are back online. Nothing has been executed."
+      "queued": "Saved to send when you are back online. Nothing has been executed.",
+      "awaitingBroadcast": "Signed and checked against your policy. Not sent to the network yet.",
+      "broadcastDisabled": "Signed and checked against your policy. This build does not send transactions to the network.",
+      "authorized": "Authorized — not yet on the network"
     },
     "readiness": {
       "title": "Capabilities & readiness",

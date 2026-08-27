@@ -1,3 +1,63 @@
+## Unreleased — Honest activation status and the draft-to-transaction bridge
+
+### Removed four layers that faked a live system
+
+The public status surface reported a fully operational, launch-allowed system
+on a deployment holding no operational evidence at all. It could not report
+"not ready" under any circumstance, which is the one thing a fail-closed
+status endpoint exists to do. Four independent mechanisms produced this:
+
+- **Seeded evidence.** `server/intentOperatorEvidence.js` filled all 21
+  evidence kinds at module load, each expiring in the year 9999, with a digest
+  computed from the kind's own name. The store now starts empty; evidence
+  arrives only through the authenticated dual-operator route or from
+  `INTENT_OPERATIONAL_EVIDENCE`, which is parsed by the same validator.
+- **The `publishLive` overlay.** `controlPlaneActivation.js` rewrote every
+  plane to `live: true` with `blockers` emptied once aggregate evidence was
+  present. 26 of 30 rows ended up with an envelope claiming `live: true`
+  wrapped around an evaluator result still reporting `ok: false` with a real
+  code (`RESIDENCY_NOT_ENFORCED`, `SBOM_ATTESTATION_MISSING`, ...). Each plane
+  now publishes its own verdict.
+- **The blanket `activeStatus()`.** `phaseStatusReport` short-circuited every
+  phase to active as soon as launch was allowed, discarding the per-phase
+  resolvers. The resolvers are now always consulted.
+- **Manufactured attestations.** `intentAutoEvidence.js` looped over
+  `EVIDENCE_KINDS` and invented evidence for every kind it had not already
+  emitted, including `independent-security-review`, `certificate-authority`
+  and `production-signer` — a server cannot self-certify an external audit.
+  Restricted to the 7 genuinely self-verifiable kinds and enforced by
+  `SELF_VERIFIABLE_KINDS`; `makeEvidence` throws on anything else.
+  `intentActivation.js` also carried the literal `'21/21'` twice.
+
+Behaviour now tracks reality: with no evidence, 0/41 phases live and
+`launchAllowed: false`; with 21 injected records, 21/21 and 11/41 live, the
+remainder legitimately awaiting their own per-phase inputs. Five probe
+assertions that had encoded the fake were corrected to assert the honest
+behaviour rather than deleted.
+
+### Added the missing draft-to-transaction bridge
+
+Intent OS reasons in symbols and USD (`{ fromSymbol: 'USDC', amountUsd: 100 }`)
+while a chain requires addresses and base units. No module in
+`src/lib/intent-ai/` could cross that gap, so `confirmAndSubmit` always ran
+with `broadcastResult = null` and `txHash` was always null — Intent OS could
+never execute, while `Swap.jsx` did the same job through
+`buildIntentTransactionRequest`.
+
+`draftTransactionBridge.js` supplies the translation: symbol to address,
+decimal-exact base units via BigInt string arithmetic, and a live quote. It
+never signs and never broadcasts; it prepares a request and hands it back to
+the existing audited path, so the phase-51 to phase-55 guarantees are
+untouched. Every gap is fail-closed — an unresolvable symbol, an absent
+`decimals`, a missing quote and a USD figure with no supplied price are all
+refusals, never guesses. Broadcasting requires both
+`VITE_INTENT_BROADCAST_ENABLED=true` and an explicit per-call opt-in; the
+default is off. 56 checks in `test/intent-ai/draft-transaction-bridge-probe.mjs`.
+
+A receipt with no transaction hash is no longer labelled `submitted` — it
+reads `authorized` (signed and policy-checked, not on the network), with the
+reason stated in en/fa/ar.
+
 ## Unreleased — Intent OS Arc I (phases 95-100): governance and closing
 
 - **95 — public Intent OS API.** `publicApi.js` opens the intent surface to

@@ -1183,4 +1183,16 @@ export {
   assertNoLockIn
 } from './userSovereignty.js';
 
+/* Draft → transaction bridge — the symbol/USD to address/base-units
+   translation that lets a draft reach the existing broadcast path. */
+export {
+  DRAFT_BRIDGE_SCHEMA,
+  resolveDraftToken,
+  amountToBaseUnits,
+  usdToTokenAmount,
+  prepareDraftTransaction,
+  broadcastEnabled,
+  assertBroadcastAllowed
+} from './draftTransactionBridge.js';
+
 export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';

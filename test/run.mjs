@@ -389,6 +389,12 @@ for (const [phase, probe] of laterPhaseProbes) {
   const module = await import(probe);
   if (Array.isArray(module.default)) report(`intent-ai phase-${phase}`, module.default);
 }
+console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
+{
+  const { default: bridgeResults } = await import('./intent-ai/draft-transaction-bridge-probe.mjs');
+  if (Array.isArray(bridgeResults)) report('intent-ai draft-transaction-bridge', bridgeResults);
+}
+
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
 await import('./intent-ai/phase-status-probe.mjs');
 

@@ -45,7 +45,9 @@ import {
   /* Phase 94 — offline is a waiting room, never an outbox. */
   enqueueIntent, offlineStatus,
   /* Phase 88 — a swap is not a ramp; say so before anything is drafted. */
-  detectFiatIntent, fiatBoundaryResponse
+  detectFiatIntent, fiatBoundaryResponse,
+  /* Draft to transaction: broadcasting stays off unless the build enables it. */
+  broadcastEnabled, assertBroadcastAllowed
 } from '../lib/intent-ai';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
@@ -564,14 +566,35 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         });
         return;
       }
+      /*
+       * The intent is signed and policy-checked, but nothing has been handed
+       * to a network unless a real broadcaster produced a transaction hash.
+       *
+       * Calling that state "submitted" was the last dishonest label in this
+       * flow: `confirmAndSubmit` only sets `txHash` when it receives a
+       * `broadcastResult`, and no caller supplies one while broadcasting is
+       * disabled. Saying "submitted" with `txHash === null` invited the user
+       * to go looking for a transaction that does not exist.
+       *
+       * With a hash: submitted (or completed once the chain confirms).
+       * Without one: authorized — signed, policy-checked, not yet broadcast.
+       */
+      const realTxHash = result.txHash || null;
+      const broadcastReady = broadcastEnabled(import.meta.env || {});
       setReceipt({
-        status: rec.receipt?.status === 'COMPLETED' ? 'completed' : 'submitted',
-        confirmed: rec.receipt?.confirmed === true,
+        status: rec.receipt?.status === 'COMPLETED' && realTxHash
+          ? 'completed'
+          : realTxHash ? 'submitted' : 'authorized',
+        confirmed: rec.receipt?.confirmed === true && Boolean(realTxHash),
         venue: health.venue || null,
         receipt: settled.ok ? settled.receipt : rec.receipt,
         fee: feeQuote?.ok ? feeQuote : null,
-        txHash: result.txHash || null,
+        txHash: realTxHash,
         signerKind: result.signerKind || null,
+        /* Explain the stop rather than leaving a silent dead end. */
+        reasonKey: realTxHash
+          ? null
+          : broadcastReady ? 'intentAI.receipt.awaitingBroadcast' : 'intentAI.receipt.broadcastDisabled',
         ok: true
       });
       return;
