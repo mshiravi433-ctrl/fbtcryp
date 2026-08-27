@@ -1261,3 +1261,30 @@
 
 /* --- guided flow question bubble --- */
 .ia-flow-question { font-size: 12.5px; line-height: 1.65; }
+
+/* --- phase 83: token approvals (allowance hygiene) --- */
+.ia-approvals { margin-top: 12px; }
+.ia-approval-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ia-approval-row {
+  padding: 9px 11px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ia-approval-row.is-high { border-color: rgba(255, 107, 107, 0.35); }
+.ia-approval-row.is-medium { border-color: rgba(255, 180, 84, 0.3); }
+.ia-approval-head { display: flex; align-items: center; gap: 7px; }
+.ia-approval-head b { font-size: 13px; color: var(--text-1); }
+.ia-approval-badge {
+  font-size: 9.5px; padding: 2px 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08); color: var(--text-3);
+}
+.ia-approval-badge.is-unlimited { background: rgba(255, 107, 107, 0.16); color: #ff9b9b; }
+.ia-approval-spender {
+  margin: 4px 0 0; font-size: 11px; color: var(--text-3);
+  font-variant-numeric: tabular-nums; word-break: break-all;
+}
+
+/* --- phase 82: recipient shield --- */
+.xfer-shield { margin-top: 8px; display: grid; gap: 6px; }
+.xfer-shield-confirm { display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; line-height: 1.5; }
+.xfer-shield-confirm input { margin-top: 2px; flex: none; }

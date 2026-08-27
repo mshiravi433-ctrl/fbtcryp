@@ -23,7 +23,11 @@ export const BACKTEST_SCHEMA = 'fbt.honest-backtest.v1';
 export const BACKTEST_LABEL = 'SIMULATION';
 export const MIN_BACKTEST_POINTS = 10;
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+// Number(null) === 0 and Number('') === 0, so an absent value must be
+// rejected BEFORE the finite check or "missing" silently reads as zero.
+const num = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean'
+  ? null
+  : (Number.isFinite(Number(v)) ? Number(v) : null));
 const round = (v, dp = 4) => Math.round(v * 10 ** dp) / 10 ** dp;
 
 function unavailable(detail) {

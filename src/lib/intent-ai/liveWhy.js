@@ -21,7 +21,11 @@ import { classifyFailure } from './failureModes.js';
 export const LIVE_WHY_SCHEMA = 'fbt.live-why.v1';
 export const DEFAULT_DATA_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+// Number(null) === 0 and Number('') === 0, so an absent value must be
+// rejected BEFORE the finite check or "missing" silently reads as zero.
+const num = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean'
+  ? null
+  : (Number.isFinite(Number(v)) ? Number(v) : null));
 
 /**
  * Keep only data points that can be checked.

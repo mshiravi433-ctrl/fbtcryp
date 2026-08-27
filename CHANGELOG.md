@@ -1,3 +1,46 @@
+## Unreleased — Intent OS Arc F (phases 80-84): product risk and security
+
+- **80 — real-time risk engine.** `adaptiveRisk.js` makes the ceilings a
+  function of the market that is actually happening: realised volatility picks
+  a tier, and each tier tightens the slippage cap and the position size. The
+  factors are all ≤ 1, so the engine can only ratchet DOWN — never above the
+  session policy — and unknown or stale volatility selects the STRICTEST tier,
+  because not knowing is the riskiest state. Every adjustment is recorded with
+  the number that caused it, its source, its observation time and a
+  translatable reason.
+- **81 — asset screening.** A ticker is not an asset. `assetScreening.js` runs
+  before a quote is offered: a contract wearing a known symbol at the wrong
+  address is a hard reject naming both addresses, as are blocklisted
+  contracts, honeypots and pools that cannot fill the size. A token on no list
+  is not waved through either — it needs an explicit acknowledgement, and
+  acknowledging never overrides a hard reject.
+- **82 — address poisoning shield.** `addressShield.js` compares the head and
+  tail a human actually reads: an address that mimics one in your history, or
+  that only ever arrived as dust, blocks the send outright with both addresses
+  shown in full. A never-paid address gets its own confirmation, separate from
+  the transaction confirmation and reset whenever the address changes. Wired
+  into `SendSheet` with `sendHistory.js` as the local counterparty record; the
+  gate is re-asserted at send time, not only in the button's disabled state.
+- **83 — approval hygiene.** `approvalHygiene.js` plus the new `TokenApprovals`
+  panel answer "what did I allow, and to whom?" with real addresses, real
+  exposure and a revoke path. Swaps ask for the minimum allowance that covers
+  the trade — `assertNoUnlimitedApproval()` refuses `MaxUint256` and anything
+  unlimited in practice — an existing unlimited approval is flagged for
+  replacement rather than accepted as "already fine", and an allowance that
+  could not be read is reported as unreadable, never as zero.
+- **84 — simulation before signature.** `simulationGate.js` makes the phase-24
+  simulator a precondition of signing. A detected revert means no signature
+  request at all, plus the decoded reason in the user's language. A missing,
+  busy or throwing provider is `unavailable` — which is not clean: continuing
+  needs an explicit user override that is recorded and never claims the
+  transaction is proven safe. Each result is bound to the exact transaction it
+  ran, so changing the calldata, value, sender or chain invalidates it.
+- Probes `phase80`–`phase84` (261 checks) registered in the aggregate runner;
+  `npm run build` clean and `npm test` fully green.
+- Hardened the shared numeric helper across all Arc B and Arc F modules:
+  `Number(null) === 0`, so an absent value is now rejected before the finite
+  check instead of silently reading as zero.
+
 ## Unreleased — Intent OS Arc B (phases 58-62): real market data
 
 - **58 — live market regime.** `liveMarketRegime.js` builds the Spec-65

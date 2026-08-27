@@ -21,7 +21,11 @@ export const PROPOSAL_STATUSES = Object.freeze(['proposed', 'accepted', 'decline
 export const PROPOSAL_MAX_PRICE_AGE_MS = 15 * 60 * 1000;
 export const PROPOSAL_TTL_MS = 30 * 60 * 1000;
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+// Number(null) === 0 and Number('') === 0, so an absent value must be
+// rejected BEFORE the finite check or "missing" silently reads as zero.
+const num = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean'
+  ? null
+  : (Number.isFinite(Number(v)) ? Number(v) : null));
 
 /**
  * Turn a triggered alert into a PROPOSAL (never into an execution).

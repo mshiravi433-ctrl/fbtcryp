@@ -2501,7 +2501,8 @@
       "REJECTED": "You rejected the request in your wallet.",
       "FAILED": "The transfer failed. Nothing was sent.",
       "NO_SIGNER": "Wallet is locked. Unlock it and try again.",
-      "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again."
+      "WRONG_NETWORK": "Your wallet is on a network this app does not support. Switch to BNB Smart Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea or Sonic and try again.",
+      "RECIPIENT_BLOCKED": "This recipient did not pass the address check, so nothing was sent."
     },
     "asset": "Asset",
     "ensResolving": "Resolving ENS name…",
@@ -5004,7 +5005,25 @@
       "reauthorize": "REAUTHORIZE"
     },
     "risk": {
-      "summary": "Risk: level {{level}} · decision {{decision}}"
+      "summary": "Risk: level {{level}} · decision {{decision}}",
+      "reason": {
+        "calm": "The market is calm right now, so the standard caps apply.",
+        "normal": "Normal market movement — caps tightened slightly.",
+        "elevated": "Movement is elevated, so the slippage cap and position size were tightened.",
+        "high": "The market is moving fast; caps were tightened sharply.",
+        "extreme": "Movement is extreme, so the tightest caps apply.",
+        "noVolatility": "No usable market movement reading is available, so the strictest caps apply.",
+        "unsourced": "The market movement reading has no source, so the strictest caps apply.",
+        "stale": "The market movement reading is too old to rely on, so the strictest caps apply."
+      },
+      "violation": {
+        "slippage": "The requested slippage of {{requested}}% is above the current cap of {{cap}}% for a {{tier}} market.",
+        "size": "The requested size of {{requested}} is above the current cap of {{cap}} for a {{tier}} market."
+      },
+      "tierTitle": "Current market condition",
+      "capsTitle": "Caps in force now",
+      "capSlippage": "Slippage cap: {{cap}}%",
+      "capSize": "Size cap: {{cap}}"
     },
     "receipt": {
       "title": "Receipt",
@@ -5338,6 +5357,70 @@
         "simulation": "This is a simulation on past data. Past behaviour is not a statement about the future.",
         "costs": "Trading fees and slippage are included in every simulated fill and shown separately.",
         "noForecast": "No future outcome is claimed or implied."
+      }
+    },
+    "screen": {
+      "title": "Asset check",
+      "passed": "Checks passed.",
+      "reason": {
+        "impostor": "{{symbol}} at {{presented}} is not the {{symbol}} contract. The real one is {{canonical}}. This swap is refused.",
+        "blocklisted": "This contract is on the blocked list, so the swap is refused.",
+        "noLiquidity": "There is no pool liquidity for {{symbol}}, so this swap cannot be filled.",
+        "thinLiquidity": "Pool liquidity for {{symbol}} is {{liquidity}}, below the {{required}} needed for this size.",
+        "honeypot": "This contract cannot be sold once bought, so the swap is refused.",
+        "cannotSell": "Selling this token is blocked by the contract itself, so the swap is refused.",
+        "unverified": "This contract source is not verified. Please look before continuing.",
+        "notListed": "{{symbol}} at {{address}} is not on any known token list. Please look before continuing.",
+        "noAddress": "No contract address was given for {{symbol}}, so it cannot be checked.",
+        "chainMismatch": "{{symbol}} belongs to chain {{got}}, not the selected chain {{expected}}.",
+        "liquidityUnknown": "Pool liquidity for {{symbol}} could not be read."
+      }
+    },
+    "addressShield": {
+      "title": "Recipient check",
+      "confirmNew": "I have checked this address",
+      "flag": {
+        "lookalike": "This address looks like one in your history but is a different address. Yours: {{similar}} — this one: {{recipient}}. Sending is blocked.",
+        "dustOrigin": "This address only ever appeared in your history as a tiny incoming transfer. That is a known trick. Sending is blocked.",
+        "firstTime": "You have never sent to {{fingerprint}} before. Please confirm this address separately.",
+        "selfSend": "This is your own address.",
+        "invalid": "That is not a valid address."
+      }
+    },
+    "approvals": {
+      "title": "Token permissions",
+      "subtitle": "What you have allowed, and to which contract.",
+      "empty": "No active token permissions were found.",
+      "unavailable": "Token permissions could not be read right now.",
+      "exposure": "At risk: {{amount}}",
+      "exposureUnknown": "Amount at risk unknown",
+      "unlimitedBadge": "Unlimited",
+      "staleBadge": "Old",
+      "revoke": "Revoke",
+      "revokePrompt": "Revoke the permission for {{spender}} on {{symbol}}? This removes {{exposure}} of exposure and needs its own confirmation.",
+      "totals": "{{active}} active, {{unlimited}} unlimited.",
+      "reason": {
+        "unlimited": "This contract may move any amount of this token.",
+        "bounded": "This contract may move up to a set amount.",
+        "none": "No permission is in place.",
+        "stale": "This permission has not been touched in a long time.",
+        "unreadable": "This permission could not be read, so it is treated as risky.",
+        "sufficient": "The existing permission already covers this swap.",
+        "needed": "A permission for exactly this swap amount is needed."
+      }
+    },
+    "presign": {
+      "clean": "Checked against the network: this transaction runs. Estimated gas {{gas}}.",
+      "unavailable": "This transaction could not be checked against the network, so it is not proven to work.",
+      "noTransaction": "There is no complete transaction to check.",
+      "overrideAccepted": "You chose to continue without a network check. This is recorded.",
+      "revert": {
+        "insufficientBalance": "The network check says this fails: the balance is not enough. Nothing was signed.",
+        "insufficientAllowance": "The network check says this fails: the token permission is not enough. Nothing was signed.",
+        "slippage": "The network check says this fails: the price moved past your limit. Nothing was signed.",
+        "deadline": "The network check says this fails: the time limit has passed. Nothing was signed.",
+        "transferFailed": "The network check says this fails: the token transfer is rejected. Nothing was signed.",
+        "unknown": "The network check says this fails ({{reason}}). Nothing was signed."
       }
     }
   }

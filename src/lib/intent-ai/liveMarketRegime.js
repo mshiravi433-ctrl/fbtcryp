@@ -23,7 +23,11 @@ export const DEFAULT_REGIME_MAX_AGE_HRS = 24;
 export const MIN_REGIME_POINTS = 8;
 
 const HOUR = 3_600_000;
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+// Number(null) === 0 and Number('') === 0, so an absent value must be
+// rejected BEFORE the finite check or "missing" silently reads as zero.
+const num = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean'
+  ? null
+  : (Number.isFinite(Number(v)) ? Number(v) : null));
 
 /** Normalise a chart series ([{t,p}] or [[t,p]]) into sorted, finite points. */
 export function normalizeSeries(series) {

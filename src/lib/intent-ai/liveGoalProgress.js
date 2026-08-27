@@ -20,7 +20,11 @@ import { classifyFailure } from './failureModes.js';
 export const LIVE_GOAL_PROGRESS_SCHEMA = 'fbt.live-goal-progress.v1';
 export const DEFAULT_PRICE_MAX_AGE_MS = 10 * 60 * 1000;
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+// Number(null) === 0 and Number('') === 0, so an absent value must be
+// rejected BEFORE the finite check or "missing" silently reads as zero.
+const num = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean'
+  ? null
+  : (Number.isFinite(Number(v)) ? Number(v) : null));
 
 function unattested(detail, extra = {}) {
   return {

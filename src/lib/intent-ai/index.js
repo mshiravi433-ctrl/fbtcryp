@@ -870,6 +870,65 @@ export {
 } from './capabilityScanner.js';
 export { createNonBypassableControls } from './phaseBoundary.js';
 
+/* Arc F — product risk and security (phases 80-84) */
+export {
+  ADAPTIVE_RISK_SCHEMA,
+  VOLATILITY_TIERS,
+  VOLATILITY_MAX_AGE_MS,
+  UNKNOWN_TIER,
+  classifyVolatility,
+  adaptiveLimits,
+  assessAdaptiveRisk,
+  riskDecisionRecord,
+  assertNeverLoosens
+} from './adaptiveRisk.js';
+export {
+  ASSET_SCREEN_SCHEMA,
+  SCREEN_VERDICTS,
+  SCREEN_REASONS,
+  LIQUIDITY_DEPTH_MULTIPLE,
+  MIN_POOL_LIQUIDITY_USD,
+  detectImpostor,
+  assessLiquidity,
+  screenAsset,
+  assertScreenedBeforeQuote
+} from './assetScreening.js';
+export {
+  ADDRESS_SHIELD_SCHEMA,
+  HEAD_CHARS,
+  TAIL_CHARS,
+  DUST_THRESHOLD_USD,
+  SHIELD_FLAGS,
+  addressFingerprint,
+  looksAlike,
+  screenRecipient,
+  assertRecipientCleared
+} from './addressShield.js';
+export {
+  APPROVAL_SCHEMA,
+  MAX_UINT256,
+  EFFECTIVELY_UNLIMITED,
+  STALE_APPROVAL_MS,
+  APPROVAL_HEADROOM_PCT,
+  APPROVAL_RISKS,
+  classifyAllowance,
+  approvalInventory,
+  minimalApproval,
+  revokePlan,
+  assertNoUnlimitedApproval
+} from './approvalHygiene.js';
+export {
+  PRESIGN_SCHEMA,
+  SIMULATION_MAX_AGE_MS,
+  SIMULATION_STATUSES,
+  REVERT_REASON_KEYS,
+  txFingerprint,
+  classifyRevert,
+  simulateBeforeSign,
+  assertSimulatedBeforeSign,
+  describeSimulation
+} from './simulationGate.js';
+
 /* Arc B — live market data (phases 58-62) */
 export {
   LIVE_REGIME_SCHEMA,

@@ -79,6 +79,11 @@
     "test:phase60": "node test/intent-ai/phase60-live-why-probe.mjs",
     "test:phase61": "node test/intent-ai/phase61-live-goal-progress-probe.mjs",
     "test:phase62": "node test/intent-ai/phase62-honest-backtest-probe.mjs",
+    "test:phase80": "node test/intent-ai/phase80-adaptive-risk-probe.mjs",
+    "test:phase81": "node test/intent-ai/phase81-asset-screening-probe.mjs",
+    "test:phase82": "node test/intent-ai/phase82-address-shield-probe.mjs",
+    "test:phase83": "node test/intent-ai/phase83-approval-hygiene-probe.mjs",
+    "test:phase84": "node test/intent-ai/phase84-simulation-gate-probe.mjs",
     "test:spec65-core": "node test/intent-ai/spec65-priority-core-probe.mjs",
     "test:spec65-capability": "node test/intent-ai/spec65-capability-probe.mjs",
     "test:spec65-specialists": "node test/intent-ai/spec65-specialists-probe.mjs",
@@ -100,7 +105,8 @@
     "test:waves": "npm run test:wave0 && npm run test:wave1 && npm run test:wave2 && npm run test:wave3 && npm run test:wave4",
     "build:full": "VITE_ENABLE_SPECULATION=true vite build && node scripts/gen-landing.mjs && node scripts/submit-indexnow.mjs",
     "test:phases51-57": "npm run test:phase51 && npm run test:phase52 && npm run test:phase53 && npm run test:phase54 && npm run test:phase55 && npm run test:phase56 && npm run test:phase57",
-    "test:phases58-62": "npm run test:phase58 && npm run test:phase59 && npm run test:phase60 && npm run test:phase61 && npm run test:phase62"
+    "test:phases58-62": "npm run test:phase58 && npm run test:phase59 && npm run test:phase60 && npm run test:phase61 && npm run test:phase62",
+    "test:phases80-84": "npm run test:phase80 && npm run test:phase81 && npm run test:phase82 && npm run test:phase83 && npm run test:phase84"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

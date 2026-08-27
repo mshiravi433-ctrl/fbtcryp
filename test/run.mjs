@@ -343,7 +343,12 @@ const laterPhaseProbes = [
   [59, './intent-ai/phase59-alert-proposals-probe.mjs'],
   [60, './intent-ai/phase60-live-why-probe.mjs'],
   [61, './intent-ai/phase61-live-goal-progress-probe.mjs'],
-  [62, './intent-ai/phase62-honest-backtest-probe.mjs']
+  [62, './intent-ai/phase62-honest-backtest-probe.mjs'],
+  [80, './intent-ai/phase80-adaptive-risk-probe.mjs'],
+  [81, './intent-ai/phase81-asset-screening-probe.mjs'],
+  [82, './intent-ai/phase82-address-shield-probe.mjs'],
+  [83, './intent-ai/phase83-approval-hygiene-probe.mjs'],
+  [84, './intent-ai/phase84-simulation-gate-probe.mjs']
 ];
 for (const [phase, probe] of laterPhaseProbes) {
   console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);

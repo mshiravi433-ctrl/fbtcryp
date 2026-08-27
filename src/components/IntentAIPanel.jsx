@@ -43,6 +43,7 @@ import {
 } from '../lib/intent-ai';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
+import TokenApprovals from './TokenApprovals';
 import '../styles/intent-os.css';
 
 const LEVELS = [
@@ -138,7 +139,7 @@ function applyScreenEdits(session, screen) {
   return { ...session, drafts };
 }
 
-export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, walletRuntime = null }) {
+export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, walletRuntime = null, tokenApprovals = null }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState(PRIMARY_MODES[0]);
   const [level, setLevel] = useState(1);
@@ -695,6 +696,22 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         <p className="notice" style={{ color: 'var(--bad, #ff6b6b)' }}>
           {t('intentAI.stop.active')}
         </p>
+      )}
+
+      {/*
+        Phase 83 — the token permissions the wallet has already handed out.
+        Read-only plus one intent: Revoke raises a plan that still has to go
+        through the same confirmation as any other transaction. Rendered only
+        when an inventory was actually supplied, so the offline panel is
+        unchanged.
+      */}
+      {Array.isArray(tokenApprovals) && (
+        <TokenApprovals
+          entries={tokenApprovals}
+          onRevoke={(plan) => {
+            if (plan?.ok === true) setInput(`revoke ${plan.symbol || ''} ${plan.spender}`.trim());
+          }}
+        />
       )}
 
       {/* Live countdown for a timed goal the user set and confirmed. */}
