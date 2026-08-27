@@ -399,21 +399,22 @@ body {
 
 @keyframes spin-hue { to { transform: rotate(360deg); } }
 
-.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
-.brand-name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; }
-.brand-sub { font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.2em; color: var(--text-3); text-transform: uppercase; }
+.brand-text { display: flex; flex-direction: column; justify-content: center; line-height: 1.1; overflow: hidden; }
+.brand-name { font-weight: 800; font-size: 14.5px; letter-spacing: 0.01em; line-height: 1.15; white-space: nowrap; }
+.brand-sub { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-3); text-transform: uppercase; line-height: 1; white-space: nowrap; margin-top: 2px; }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--bg-panel);
   color: var(--text-2);
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
+  flex-shrink: 0;
   transition: border-color 0.2s, color 0.2s;
 }
 .icon-btn:active { transform: scale(0.94); }
@@ -421,7 +422,7 @@ body {
 /*
  * RANK MEDAL in the header, between the brand and the settings cog.
  *
- * Sized to match .icon-btn exactly (34px) so the two sit on one optical line;
+ * Sized to match .icon-btn exactly (32px) so the two sit on one optical line;
  * a badge even two pixels taller makes the row look misaligned on a phone.
  *
  * The tier colour arrives as an inline `border-color` and `--rank-glow`, set
@@ -429,18 +430,19 @@ body {
  * without six CSS classes that could drift out of sync with the data.
  */
 .rank-chip {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--bg-panel);
   /* The emoji medal renders at its own colour; font-size is what sizes it. */
-  font-size: 16px;
+  font-size: 14.5px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
   box-shadow: 0 0 0 0 var(--rank-glow, transparent);
   transition: box-shadow 0.25s, border-color 0.2s;
 }
@@ -2269,26 +2271,30 @@ input, select, textarea { font-size: 16px !important; }
 /* iOS-style switch */
 .switch {
   position: relative;
-  width: 46px;
-  height: 27px;
-  border-radius: 999px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 25px;
+  border-radius: 13px;
   background: rgba(127, 127, 127, 0.28);
   border: none;
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
-  transition: background 0.22s;
+  box-sizing: border-box;
+  transition: background 0.22s ease;
 }
 .switch[data-on='true'] { background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2)); }
 .switch-knob {
   position: absolute;
   top: 3px;
   inset-inline-start: 3px;
-  width: 21px;
-  height: 21px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
 }
 
 /* Onboarding */
