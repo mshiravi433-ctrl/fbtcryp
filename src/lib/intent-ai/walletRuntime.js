@@ -50,8 +50,10 @@ export function stubSigner() {
 }
 stubSigner.isStub = true;
 
-/** True only where no real user wallet can exist (Node probes / CI). */
+/** True only where no real user wallet can exist (Node probes / CI). Production never allows a stub. */
 export function stubSignerAllowed(env = {}) {
+  const nodeEnv = env.NODE_ENV || (typeof process !== 'undefined' ? process.env.NODE_ENV : '');
+  if (nodeEnv === 'production') return false;
   if (env.allowStub === true) return true;
   if (env.allowStub === false) return false;
   const hasWindow = typeof globalThis !== 'undefined' && typeof globalThis.window !== 'undefined';

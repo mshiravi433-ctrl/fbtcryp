@@ -410,6 +410,12 @@ console.log('▸ probing FBT Intent AI — stage 3 (signer · guardian · broker
   if (Array.isArray(stage3Rows)) report('intent-ai stage 3', stage3Rows);
 }
 
+console.log('▸ probing FBT Intent AI — later-phase 31–100 (in-process work, honest third-party gaps)…');
+{
+  const { default: laterRows } = await import('./intent-ai/later-phase-probe.mjs');
+  if (Array.isArray(laterRows)) report('intent-ai later-phase', laterRows);
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

@@ -308,6 +308,13 @@ import {
   publicReviewPackage,
   STAGE3_KINDS
 } from './intentStage3Probe.js';
+import {
+  runLaterPhaseProbe,
+  laterPhaseProbeReport,
+  laterPhasePublicSummary,
+  runExternalProviderDigest,
+  LATER_PHASE_SCHEMA
+} from './intentLaterPhaseProbe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1579,6 +1586,30 @@ app.get('/api/intents/v1/stage3-review-package', (_req, res) => {
 });
 
 app.post('/api/intents/v1/stage3-review', (req, res) => handleStage3Review(req, res));
+
+/* ── Later-phase: 31–100 in-process work; third-party stays missing ─ */
+app.get('/api/intents/v1/later-phase-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await runLaterPhaseProbe({})
+      : await laterPhaseProbeReport({ force: req.query.force === '1' });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...laterPhasePublicSummary(report), schema: LATER_PHASE_SCHEMA });
+  } catch (e) {
+    return res.status(500).json({ schema: LATER_PHASE_SCHEMA, ok: false, code: 'LATER_PHASE_PROBE_FAILED', detail: e.message });
+  }
+});
+
+app.get('/api/intents/v1/external-providers', async (_req, res) => {
+  try {
+    const digest = await runExternalProviderDigest({});
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json(digest);
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.external-provider-digest.v1', ok: false, code: 'EXTERNAL_PROVIDER_DIGEST_FAILED', detail: e.message });
+  }
+});
 
 /* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
 app.get('/api/intents/v1/slo-status', (_req, res) => {
@@ -4882,6 +4913,13 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
     }).catch(() => {});
 
+    /* Later-phase 31–100: in-process proofs only. Never stored as 21/21 kinds. */
+    import('./intentLaterPhaseProbe.js').then(({ runLaterPhaseProbe: runLater }) => {
+      runLater({}).then((report) => {
+        console.log(`[activation] later-phase proven ${report.provenCount}/${report.totalChecks} checks; launchAllowed=false`);
+      }).catch(() => {});
+    }).catch(() => {});
+
     /* Re-collect every 4 hours to keep evidence fresh */
     const timer = setInterval(() => {
       import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
@@ -4895,6 +4933,9 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
       import('./intentStage3Probe.js').then(({ runStage3Probe }) => {
         runStage3Probe({}).catch(() => {});
+      }).catch(() => {});
+      import('./intentLaterPhaseProbe.js').then(({ runLaterPhaseProbe: runLater }) => {
+        runLater({}).catch(() => {});
       }).catch(() => {});
     }, 4 * 3600_000);
     if (timer.unref) timer.unref();
