@@ -298,6 +298,8 @@ import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
 import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
 import { selfProbeReport, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
+import { opsProbeReport, runOpsProbe, ensureOpsHydrated, OPS_DRILL_KINDS } from './intentOpsProbe.js';
+import { runStage3Digest, STAGE3_KINDS } from './intentStage3Probe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1433,11 +1435,14 @@ app.get('/api/intents/v1/freeze-status', (_req, res) => {
 
 /* ── Wave 2/4: Evidence Status Dashboard ──────────────────────────────── */
 app.get('/api/intents/v1/evidence-status', async (_req, res) => {
-  /* Pull previously measured, still-valid self-probe records into this
-     instance first. Without it a cold instance reports fewer kinds than the
-     deployment has actually earned — the same fact would flip between
-     requests depending on which lambda answered. */
-  await ensureHydrated().catch(() => {});
+  /* Pull previously measured, still-valid self-probe and ops-probe records
+     into this instance first. Without it a cold instance reports fewer kinds
+     than the deployment has actually earned — the same fact would flip
+     between requests depending on which lambda answered. */
+  await Promise.all([
+    ensureHydrated().catch(() => {}),
+    ensureOpsHydrated().catch(() => {})
+  ]);
   res.set('cache-control', 'public, max-age=10, s-maxage=10');
   return res.json(evidenceStoreStatus());
 });
@@ -1509,18 +1514,53 @@ app.get('/api/intents/v1/self-probe', async (req, res) => {
   }
 });
 
+/* ── Ops-probe: actually run backup/restore, rollback, sandbox, policy ── */
+/*
+ * These four kinds used to be simulated booleans. Opening this URL runs the
+ * real drills: a snapshot is written and restored, a broken release is rolled
+ * back, an isolated child is spawned, and the committed FeeRouter bytecode is
+ * hashed. ?dry=1 reports without storing.
+ */
+app.get('/api/intents/v1/ops-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await runOpsProbe({ store: false })
+      : await opsProbeReport({ force: req.query.force === '1' });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...OPS_DRILL_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.ops-probe.v1', ok: false, code: 'OPS_PROBE_FAILED', detail: e.message });
+  }
+});
+
+/* ── Stage 3 digest: what still needs a third party, with real digests ── */
+app.get('/api/intents/v1/stage3-digest', async (_req, res) => {
+  try {
+    const report = await runStage3Digest();
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...STAGE3_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.stage3-digest.v1', ok: false, code: 'STAGE3_DIGEST_FAILED', detail: e.message });
+  }
+});
+
 /* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
 app.get('/api/intents/v1/slo-status', (_req, res) => {
   res.set('cache-control', 'public, max-age=5, s-maxage=5');
   return res.json(sloSnapshot());
 });
 
-app.get('/api/intents/v1/drill-status', (_req, res) => {
+app.get('/api/intents/v1/drill-status', async (_req, res) => {
+  const [backupRestore, rollback] = await Promise.all([
+    backupRestoreDrill(),
+    rollbackDrill()
+  ]);
   return res.json({
     schema: 'fbt.drill-status.v1',
-    backupRestore: backupRestoreDrill(),
+    backupRestore,
     reproducibleBuild: reproducibleBuildCheck(),
-    rollbackDrill: rollbackDrill(),
+    rollbackDrill: rollback,
     sloMeasurement: sloMeasurement()
   });
 });
@@ -4789,6 +4829,15 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
     }).catch(() => {});
 
+    /* The four operational drills actually write, restore, isolate and hash.
+       Boot is the earliest honest moment; failures stay silent. */
+    import('./intentOpsProbe.js').then(({ runOpsProbe, ensureOpsHydrated: hydrateOps }) => {
+      hydrateOps().catch(() => {});
+      runOpsProbe({}).then((report) => {
+        console.log(`[activation] ops-probe earned ${report.earnedCount}/${report.totalKinds} operational drills`);
+      }).catch(() => {});
+    }).catch(() => {});
+
     /* Re-collect every 4 hours to keep evidence fresh */
     const timer = setInterval(() => {
       import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
@@ -4796,6 +4845,9 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
       import('./intentSelfProbe.js').then(({ runSelfProbe }) => {
         runSelfProbe({}).catch(() => {});
+      }).catch(() => {});
+      import('./intentOpsProbe.js').then(({ runOpsProbe }) => {
+        runOpsProbe({}).catch(() => {});
       }).catch(() => {});
     }, 4 * 3600_000);
     if (timer.unref) timer.unref();

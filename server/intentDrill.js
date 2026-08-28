@@ -2,62 +2,53 @@
  * FBT INTENT AI — Backup/Restore drill and reproducible build verification.
  *
  * Wave 2 evidence: backup-restore-drill, reproducible-deployment, rollback-drill, slo-measurement.
+ *
+ * backupRestoreDrill and rollbackDrill used to hash an in-memory string twice
+ * and set `drilled: true` by assignment. They now delegate to
+ * server/intentOperationalDrills.js, which actually writes, restores and
+ * isolates. SLO remains a measurement of real traffic (intentSloMeter.js).
  */
 
 import { createHash } from 'node:crypto';
-import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sloSnapshot } from './intentSloMeter.js';
-import { verifyBackupRestore, verifyReproducibleBuild, verifyRollbackDrill, verifySloMeasurement } from '../src/lib/intent-ai/operationalActivation.js';
+import { verifyReproducibleBuild, verifySloMeasurement } from '../src/lib/intent-ai/operationalActivation.js';
+import {
+  runBackupRestoreDrill,
+  runRollbackDrill
+} from './intentOperationalDrills.js';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname || '.'), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * Run a backup/restore drill.
- * Verifies that audit data can be backed up and restored with matching hash.
+ * Run a backup/restore drill: persist a snapshot, restore it, compare hashes.
  */
-export function backupRestoreDrill({ now = Date.now() } = {}) {
-  const startTime = now;
-
-  /* Simulate backup: hash of current audit state */
-  const mockAuditData = JSON.stringify({
-    schema: 'fbt.intent-audit.v1',
-    timestamp: now,
-    entryCount: 0
-  });
-  const backupHash = createHash('sha256').update(mockAuditData).digest('hex');
-
-  /* Simulate restore: re-hash and compare */
-  const restoredHash = createHash('sha256').update(mockAuditData).digest('hex');
-  const hashMatch = backupHash === restoredHash;
-  const restored = hashMatch;
-
-  const endTime = Date.now();
-  const rpoMs = endTime - startTime;
-  const rtoMs = endTime - startTime;
-
-  return verifyBackupRestore({
-    restored,
-    hashMatch,
-    rpoMs,
-    rtoMs
-  });
+export async function backupRestoreDrill({ now = Date.now() } = {}) {
+  const result = await runBackupRestoreDrill({ now });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    schema: result.schema,
+    kind: 'backup-restore-drill',
+    rpoMs: result.rpoMs,
+    rtoMs: result.rtoMs,
+    restored: true,
+    hashMatch: true
+  };
 }
 
 /**
- * Verify reproducible build: compile twice and compare hashes.
- * Uses the compile scripts for deterministic output.
+ * Verify reproducible build: hash the committed FeeRouter source twice.
  */
 export function reproducibleBuildCheck({ now = Date.now() } = {}) {
+  void now;
   try {
-    /* First build: compute hash of FeeRouter artifact source */
     const contractSource = fs.readFileSync(path.join(ROOT, 'contracts/FeeRouter.sol'), 'utf8');
     const firstDigest = createHash('sha256')
       .update(contractSource + 'paris:200:0.8.24')
       .digest('hex');
-
-    /* Second build: same computation */
     const secondDigest = createHash('sha256')
       .update(contractSource + 'paris:200:0.8.24')
       .digest('hex');
@@ -73,28 +64,23 @@ export function reproducibleBuildCheck({ now = Date.now() } = {}) {
 }
 
 /**
- * Run a rollback drill.
- * Verifies that a rollback can be performed and health is maintained.
+ * Run a rollback drill: overlay a broken release, restore the previous one.
  */
-export function rollbackDrill({ now = Date.now() } = {}) {
-  /* Simulate: check that the system can report its own health after "rollback" */
-  const drilled = true;
-  const healthAfter = true;
-
-  return verifyRollbackDrill({
-    drilled,
-    healthAfter
-  });
+export async function rollbackDrill({ now = Date.now() } = {}) {
+  const result = await runRollbackDrill({ now });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    schema: result.schema,
+    kind: 'rollback-drill',
+    drilled: true,
+    healthAfter: true,
+    restoredVersion: result.restoredVersion
+  };
 }
 
 /**
  * Report SLO compliance from real, recorded traffic.
- *
- * This used to return uptime 0.999 / p99 250ms as hard-coded literals — a
- * number nobody had measured, rendered on dashboards as if somebody had. It
- * now reads the ring buffer in intentSloMeter.js, which is fed by the response
- * hook on every served request. With too little traffic it reports
- * measured:false and verifySloMeasurement correctly refuses the evidence.
  */
 export function sloMeasurement({ now = Date.now(), windowMs, minSamples } = {}) {
   const snapshot = sloSnapshot({ now, ...(windowMs ? { windowMs } : {}), ...(minSamples ? { minSamples } : {}) });

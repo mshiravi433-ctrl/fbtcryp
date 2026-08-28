@@ -398,6 +398,12 @@ console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
 await import('./intent-ai/phase-status-probe.mjs');
 
+console.log('▸ probing FBT Intent AI — operational drills (backup/restore · rollback · sandbox · policy)…');
+{
+  const { default: opsRows } = await import('./intent-ai/ops-drill-probe.mjs');
+  if (Array.isArray(opsRows)) report('intent-ai ops drills', opsRows);
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

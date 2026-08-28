@@ -203,9 +203,18 @@ curl -s $TARGET/api/intents/v1/evidence-status | jq '{stored, missing}'
 curl -s $TARGET/api/intents/v1/slo-status | jq
 ```
 
-باید هر چهار شاهد در `stored` باشند. ۱۷ شاهد باقی‌مانده هنوز
-`OPERATOR_REQUIRED` هستند (CA سازمانی، sandbox، security review، signer، …) —
-آن‌ها با هیچ اسکریپتی کسب نمی‌شوند و به شخص ثالث نیاز دارند.
+باید هر چهار شاهد در `stored` باشند.
+
+چهار شاهد عملیاتی دیگر (`backup-restore-drill`، `rollback-drill`،
+`sandbox-operator`، `policy-contract`) حالا با drill واقعی کسب می‌شوند — جدا از
+این چهار probe شبکه‌ای. مسیر:
+
+```
+https://YOUR-APP.vercel.app/api/intents/v1/ops-probe
+```
+
+راهنما: `docs/INTENT-AI-OPS-DRILLS-FA.md`. مرحلهٔ ۳ (ممیزی مستقل، KMS،
+guardian، broker) خودگواهی نمی‌شود: `docs/INTENT-AI-STAGE3-DIGEST-FA.md`.
 
 ## گام ۸ — تازه نگه داشتن (چون شاهد منقضی می‌شود)
 

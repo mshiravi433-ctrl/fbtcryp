@@ -37,6 +37,8 @@
     "test:phase20": "node test/intent-ai/phase20-launch-governance-probe.mjs",
     "test:phase-status": "node test/intent-ai/phase-status-probe.mjs",
     "test:earnable-evidence": "node test/intent-ai/earnable-evidence-probe.mjs",
+    "test:ops-drills": "node test/intent-ai/ops-drill-probe.mjs",
+    "ops:drill": "node scripts/run-ops-drills.mjs",
     "evidence:collect": "node scripts/collect-evidence.mjs",
     "evidence:check-env": "node scripts/check-deployment-env.mjs",
     "test:phase21": "node test/intent-ai/phase21-operational-activation-probe.mjs",

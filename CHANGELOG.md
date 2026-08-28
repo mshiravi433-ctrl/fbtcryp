@@ -1,3 +1,26 @@
+## Unreleased — Stage 2 operational drills actually run
+
+Four evidence kinds that used to return `ok: true` by assignment now do the
+work, and only issue a digest when the work succeeded:
+
+- **backup-restore-drill** writes an operational snapshot to the store, reads
+  it back and compares SHA-256 hashes. RPO/RTO are the measured elapsed time.
+- **rollback-drill** installs a broken release overlay, restores the previous
+  snapshot, and checks that the restored artifact is the good one and the
+  process is still healthy.
+- **sandbox-operator** spawns a child (falling back to `node:vm`) with
+  production credentials stripped and attests `mainnetAccess`,
+  `productionSigner` and `realCustody` are all false.
+- **policy-contract** hashes the committed FeeRouter `deployedBytecode`. When
+  `RPC_URL` and a contract address are set, on-chain code is compared and a
+  mismatch issues no evidence.
+
+`GET /api/intents/v1/ops-probe` runs them (boot + every 4 hours, same honesty
+rule as self-probe). `GET /api/intents/v1/stage3-digest` reports the third-party
+kinds without self-issuing them; `bridge-provider` is the one exception that
+can be earned from a real deBridge quote. CLI: `npm run ops:drill`. Probe:
+`npm run test:ops-drills`.
+
 ## Unreleased — Honest activation status and the draft-to-transaction bridge
 
 ### Removed four layers that faked a live system
