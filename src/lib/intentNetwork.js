@@ -44,7 +44,7 @@ export const getExternalAgents = () => cachedGet('/intents/v1/external-agents', 
    from protocol capabilities and is safe to cache with the same short TTL. */
 export const getIntentActivation = () => cachedGet('/intents/v1/activation', 6000);
 /* Authoritative implementation/configuration/operational separation for the
-   official specification Phases 10–20. This is read-only and cannot issue a
+   official specification Phases 10–100. This is read-only and cannot issue a
    permission or make a provider appear live. */
 export const getIntentPhaseStatus = () => cachedGet('/intents/v1/phase-status', 6000);
 export const getIntentPublicStatus = () => cachedGet('/intents/v1/public-status', 6000);

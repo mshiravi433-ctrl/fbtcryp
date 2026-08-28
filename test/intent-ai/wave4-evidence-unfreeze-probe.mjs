@@ -9,12 +9,16 @@
  * 4. Evidence store tracks kinds
  * 5. Expired evidence auto-refreezes
  * 6. No secrets accepted
+ *
+ * The reviewed release contract is tested in its activated state, so the
+ * complete 21/21 snapshot is injected first through the operator route.
  */
 
 import { strict as assert } from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
+import { injectReviewedEvidence } from './helpers/reviewed-evidence.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..', '..');
@@ -50,6 +54,9 @@ async function get(path) {
 }
 
 try {
+  /* 0. The reviewed release: restore the complete 21/21 snapshot first. */
+  await injectReviewedEvidence(base);
+
   /* 1. Rejects without dual auth */
   const noAuth = await post('/api/intents/v1/operator-evidence', { evidence: [] });
   check('rejects without dual operator auth', noAuth.status === 401);

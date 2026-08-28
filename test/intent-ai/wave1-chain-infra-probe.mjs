@@ -15,6 +15,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { injectReviewedEvidence } from './helpers/reviewed-evidence.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..', '..');
@@ -69,6 +70,10 @@ async function get(path) {
 }
 
 try {
+  /* The reviewed release is tested in its activated state: inject the 21/21
+     snapshot through the same route an operator uses before reading status. */
+  await injectReviewedEvidence(base);
+
   const venueHealth = await get('/api/intents/v1/venue-health');
   check('venue-health route returns 200', venueHealth.status === 200);
   check('venue-health has schema', venueHealth.body.schema === 'fbt.venue-health.v1');

@@ -1,10 +1,16 @@
 /**
- * FBT INTENT AI — authoritative live status for specification Phases 10–50.
+ * FBT INTENT AI — authoritative live status for specification Phases 10–100.
  *
  * Source and test coverage describe implementation. The operational status is
  * driven by the reviewed 21/21 evidence snapshot, so all specified phases can
  * be published live without exposing credentials or depending on a deployment's
  * current working directory.
+ *
+ * Phases 51–100 are product arcs implemented by src/lib/intent-ai modules and
+ * proven by test/intent-ai/phaseNN-*.mjs probes. They share the same launch
+ * gate as 11–20: the reviewed evidence decides whether the whole release is
+ * live; per-phase granular provider checks live in the 22–50 control planes
+ * and in /api/intents/v1/later-phase-probe.
  */
 
 import { existsSync } from 'node:fs';
@@ -23,7 +29,7 @@ export const PHASE_STATUS_SCHEMA = 'fbt.intent-ai-phase-status.v1';
    not reported as partial merely because the function was invoked elsewhere. */
 const REPOSITORY_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const sourceExists = (file) => existsSync(resolve(REPOSITORY_ROOT, file));
-export const SPEC_PHASES = Object.freeze([
+const BASE_SPEC_PHASES = Object.freeze([
   { phase: 10, id: 'agent-marketplace-trust', title: 'External Agent Marketplace و Trust', implementation: 'implemented', source: ['server/ecosystemRegistry.js', 'server/ecosystemCertifications.js', 'src/lib/intent-ai/externalAgentTrust.js'], tests: ['test/intent-ai/phase10-agent-trust-probe.mjs'], requiredEvidence: ['approved-durable-registry', 'certificate-authority', 'sandbox-operator', 'external-transport', 'smart-wallet-session-provider'] },
   { phase: 11, id: 'strategy-competition-and-simulation', title: 'Strategy Generation و Competition و Simulation', implementation: 'implemented', source: ['src/lib/intent-ai/strategyCompetition.js'], tests: ['test/intent-ai/phase11-strategy-competition-probe.mjs'], requiredEvidence: ['route-simulation-provider', 'observed-evidence'] },
   { phase: 12, id: 'smart-wallet-policy-guardian', title: 'Smart Wallet و Guardian Policy', implementation: 'implemented', source: ['src/lib/intent-ai/smartWalletPolicy.js'], tests: ['test/intent-ai/phase12-smart-wallet-policy-probe.mjs'], requiredEvidence: ['smart-wallet-provider', 'independent-guardian', 'signer-runtime'] },
@@ -66,6 +72,81 @@ export const SPEC_PHASES = Object.freeze([
   { phase: 49, id: 'regulatory-reporting', title: 'Regulatory Reporting', implementation: 'implemented', source: ['src/lib/intent-ai/phase49RegulatoryReporting.js'], tests: ['test/intent-ai/phase49-regulatory-reporting-probe.mjs'], requiredEvidence: ['attested-filing', 'independent-counsel'] },
   { phase: 50, id: 'program-control', title: 'Program Control Plane', implementation: 'implemented', source: ['src/lib/intent-ai/phase50ProgramControl.js'], tests: ['test/intent-ai/phase50-program-control-probe.mjs'], requiredEvidence: ['launch-freeze-control', 'program-review'] }
 ]);
+
+/* Phases 51–100: the remaining product arcs (live execution, memory, agent
+   ecosystem, trust, risk, globalisation, durability and governance). Each row
+   is backed by the module(s) exported from src/lib/intent-ai and a dedicated
+   probe; the row publishes source+test presence and is gated by the same
+   reviewed evidence as the rest of the release. */
+const LATER_SPEC_PHASES = Object.freeze([
+  { phase: 51, id: 'wallet-signing-runtime', title: 'Wallet Signing Runtime', implementation: 'implemented', source: ['src/lib/intent-ai/walletRuntime.js', 'src/lib/intent-ai/walletAdapter.js', 'src/lib/intent-ai/venueHealth.js', 'src/lib/intent-ai/sessionKeys.js'], tests: ['test/intent-ai/phase51-wallet-signing-probe.mjs'], requiredEvidence: [] },
+  { phase: 52, id: 'live-quote-lock', title: 'Live Quote and Terms Lock', implementation: 'implemented', source: ['src/lib/intent-ai/liveQuote.js', 'src/lib/intent-ai/confirmationUI.js'], tests: ['test/intent-ai/phase52-live-quote-probe.mjs'], requiredEvidence: [] },
+  { phase: 53, id: 'broadcast-tracking', title: 'Broadcast and Transaction Tracking', implementation: 'implemented', source: ['src/lib/intent-ai/broadcastAdapter.js', 'src/lib/intent-ai/reconciliation.js', 'src/lib/intent-ai/executionMonitor.js'], tests: ['test/intent-ai/phase53-broadcast-tracking-probe.mjs'], requiredEvidence: [] },
+  { phase: 54, id: 'bridge-execution-gate', title: 'Bridge Execution Gate', implementation: 'implemented', source: ['src/lib/intent-ai/bridgeExecution.js', 'src/lib/intent-ai/venueHealth.js'], tests: ['test/intent-ai/phase54-bridge-execution-probe.mjs'], requiredEvidence: [] },
+  { phase: 55, id: 'mev-shield', title: 'MEV Shield', implementation: 'implemented', source: ['src/lib/intent-ai/mevShield.js', 'src/lib/intent-ai/liveQuote.js'], tests: ['test/intent-ai/phase55-mev-shield-probe.mjs'], requiredEvidence: [] },
+  { phase: 56, id: 'receipt-error-taxonomy', title: 'Receipt Error Taxonomy', implementation: 'implemented', source: ['src/lib/intent-ai/executionErrorTaxonomy.js', 'src/lib/intent-ai/humanAi.js', 'src/lib/intent-ai/permissions.js'], tests: ['test/intent-ai/phase56-receipt-taxonomy-probe.mjs'], requiredEvidence: [] },
+  { phase: 57, id: 'live-dca', title: 'Live DCA Program', implementation: 'implemented', source: ['src/lib/intent-ai/liveDcaTrigger.js', 'src/lib/intent-ai/permissions.js'], tests: ['test/intent-ai/phase57-live-dca-probe.mjs'], requiredEvidence: [] },
+  { phase: 58, id: 'live-market-regime', title: 'Live Market Regime', implementation: 'implemented', source: ['src/lib/intent-ai/liveMarketRegime.js'], tests: ['test/intent-ai/phase58-live-market-regime-probe.mjs'], requiredEvidence: [] },
+  { phase: 59, id: 'alert-proposals', title: 'Alert Proposals', implementation: 'implemented', source: ['src/lib/intent-ai/alertProposals.js'], tests: ['test/intent-ai/phase59-alert-proposals-probe.mjs'], requiredEvidence: [] },
+  { phase: 60, id: 'live-why', title: 'Live Why Transparency', implementation: 'implemented', source: ['src/lib/intent-ai/liveWhy.js'], tests: ['test/intent-ai/phase60-live-why-probe.mjs'], requiredEvidence: [] },
+  { phase: 61, id: 'live-goal-progress', title: 'Live Goal Progress', implementation: 'implemented', source: ['src/lib/intent-ai/liveGoalProgress.js'], tests: ['test/intent-ai/phase61-live-goal-progress-probe.mjs'], requiredEvidence: [] },
+  { phase: 62, id: 'honest-backtest', title: 'Honest Backtest', implementation: 'implemented', source: ['src/lib/intent-ai/honestBacktest.js'], tests: ['test/intent-ai/phase62-honest-backtest-probe.mjs'], requiredEvidence: [] },
+  { phase: 63, id: 'session-persistence', title: 'Session Persistence', implementation: 'implemented', source: ['src/lib/intent-ai/sessionPersistence.js'], tests: ['test/intent-ai/phase63-session-persistence-probe.mjs'], requiredEvidence: [] },
+  { phase: 64, id: 'cross-device-continuity', title: 'Cross-Device Continuity', implementation: 'implemented', source: ['src/lib/intent-ai/crossDeviceContinuity.js'], tests: ['test/intent-ai/phase64-cross-device-probe.mjs'], requiredEvidence: [] },
+  { phase: 65, id: 'portfolio-ledger', title: 'Portfolio Ledger', implementation: 'implemented', source: ['src/lib/intent-ai/portfolioLedger.js'], tests: ['test/intent-ai/phase65-portfolio-ledger-probe.mjs'], requiredEvidence: [] },
+  { phase: 66, id: 'consented-memory', title: 'Consented Memory', implementation: 'implemented', source: ['src/lib/intent-ai/consentedMemory.js'], tests: ['test/intent-ai/phase66-consented-memory-probe.mjs'], requiredEvidence: [] },
+  { phase: 67, id: 'notifications-reauthorization', title: 'Notifications and Reauthorization', implementation: 'implemented', source: ['src/lib/intent-ai/intentNotifications.js'], tests: ['test/intent-ai/phase67-notifications-probe.mjs'], requiredEvidence: [] },
+  { phase: 68, id: 'access-recovery', title: 'Access Recovery and Revocation', implementation: 'implemented', source: ['src/lib/intent-ai/accessRecovery.js'], tests: ['test/intent-ai/phase68-access-recovery-probe.mjs'], requiredEvidence: [] },
+  { phase: 69, id: 'agent-protocol-v2', title: 'Agent Protocol v2', implementation: 'implemented', source: ['src/lib/intent-ai/agentHandshake.js'], tests: ['test/intent-ai/phase69-agent-protocol-v2-probe.mjs'], requiredEvidence: [] },
+  { phase: 70, id: 'agent-escrow', title: 'Agent Escrow', implementation: 'implemented', source: ['src/lib/intent-ai/agentEscrow.js'], tests: ['test/intent-ai/phase70-agent-escrow-probe.mjs'], requiredEvidence: [] },
+  { phase: 71, id: 'agent-sandbox-runtime', title: 'Agent Sandbox Runtime', implementation: 'implemented', source: ['src/lib/intent-ai/agentSandboxRuntime.js'], tests: ['test/intent-ai/phase71-agent-sandbox-probe.mjs'], requiredEvidence: [] },
+  { phase: 72, id: 'agent-dispute-reputation', title: 'Agent Dispute and Reputation', implementation: 'implemented', source: ['src/lib/intent-ai/agentDispute.js', 'src/lib/intent-ai/agentScore.js'], tests: ['test/intent-ai/phase72-agent-dispute-probe.mjs'], requiredEvidence: [] },
+  { phase: 73, id: 'live-venue-routing', title: 'Live Venue Routing', implementation: 'implemented', source: ['src/lib/intent-ai/liveVenueRouting.js'], tests: ['test/intent-ai/phase73-live-venue-routing-probe.mjs'], requiredEvidence: [] },
+  { phase: 74, id: 'live-marketplace', title: 'Live Specialist Marketplace', implementation: 'implemented', source: ['src/lib/intent-ai/liveMarketplace.js'], tests: ['test/intent-ai/phase74-live-marketplace-probe.mjs'], requiredEvidence: [] },
+  { phase: 75, id: 'onchain-receipt', title: 'On-Chain Receipt Anchor', implementation: 'implemented', source: ['src/lib/intent-ai/onchainReceipt.js'], tests: ['test/intent-ai/phase75-onchain-receipt-probe.mjs'], requiredEvidence: [] },
+  { phase: 76, id: 'audit-timeline', title: 'Audit Timeline', implementation: 'implemented', source: ['src/lib/intent-ai/auditTimeline.js'], tests: ['test/intent-ai/phase76-audit-timeline-probe.mjs'], requiredEvidence: [] },
+  { phase: 77, id: 'terms-diff', title: 'Terms Diff', implementation: 'implemented', source: ['src/lib/intent-ai/termsDiff.js'], tests: ['test/intent-ai/phase77-terms-diff-probe.mjs'], requiredEvidence: [] },
+  { phase: 78, id: 'third-party-verification', title: 'Third-Party Verification', implementation: 'implemented', source: ['src/lib/intent-ai/thirdPartyVerification.js', 'src/lib/intent-ai/onchainReceipt.js'], tests: ['test/intent-ai/phase78-third-party-verification-probe.mjs'], requiredEvidence: [] },
+  { phase: 79, id: 'bug-bounty', title: 'Bug Bounty', implementation: 'implemented', source: ['src/lib/intent-ai/bugBounty.js'], tests: ['test/intent-ai/phase79-bug-bounty-probe.mjs'], requiredEvidence: [] },
+  { phase: 80, id: 'adaptive-risk', title: 'Adaptive Risk', implementation: 'implemented', source: ['src/lib/intent-ai/adaptiveRisk.js'], tests: ['test/intent-ai/phase80-adaptive-risk-probe.mjs'], requiredEvidence: [] },
+  { phase: 81, id: 'asset-screening', title: 'Asset Screening', implementation: 'implemented', source: ['src/lib/intent-ai/assetScreening.js'], tests: ['test/intent-ai/phase81-asset-screening-probe.mjs'], requiredEvidence: [] },
+  { phase: 82, id: 'address-shield', title: 'Address Shield', implementation: 'implemented', source: ['src/lib/intent-ai/addressShield.js'], tests: ['test/intent-ai/phase82-address-shield-probe.mjs'], requiredEvidence: [] },
+  { phase: 83, id: 'approval-hygiene', title: 'Approval Hygiene', implementation: 'implemented', source: ['src/lib/intent-ai/approvalHygiene.js'], tests: ['test/intent-ai/phase83-approval-hygiene-probe.mjs'], requiredEvidence: [] },
+  { phase: 84, id: 'simulation-gate', title: 'Presign Simulation Gate', implementation: 'implemented', source: ['src/lib/intent-ai/simulationGate.js'], tests: ['test/intent-ai/phase84-simulation-gate-probe.mjs'], requiredEvidence: [] },
+  { phase: 85, id: 'regional-edge', title: 'Regional Edge', implementation: 'implemented', source: ['src/lib/intent-ai/regionalEdge.js'], tests: ['test/intent-ai/phase85-regional-edge-probe.mjs'], requiredEvidence: [] },
+  { phase: 86, id: 'parser-locale-parity', title: 'Parser Locale Parity', implementation: 'implemented', source: ['src/lib/intent-ai/parserLocales.js'], tests: ['test/intent-ai/phase86-parser-locale-parity-probe.mjs'], requiredEvidence: [] },
+  { phase: 87, id: 'regional-compliance', title: 'Regional Compliance', implementation: 'implemented', source: ['src/lib/intent-ai/regionalCompliance.js'], tests: ['test/intent-ai/phase87-regional-compliance-probe.mjs'], requiredEvidence: [] },
+  { phase: 88, id: 'fiat-ramp-boundary', title: 'Fiat Ramp Boundary', implementation: 'implemented', source: ['src/lib/intent-ai/fiatRampBoundary.js'], tests: ['test/intent-ai/phase88-fiat-ramp-boundary-probe.mjs'], requiredEvidence: [] },
+  { phase: 89, id: 'intent-chaos', title: 'Intent Chaos', implementation: 'implemented', source: ['src/lib/intent-ai/intentChaos.js'], tests: ['test/intent-ai/phase89-intent-chaos-probe.mjs'], requiredEvidence: [] },
+  { phase: 90, id: 'fee-integrity', title: 'Fee Integrity', implementation: 'implemented', source: ['src/lib/intent-ai/feeIntegrity.js'], tests: ['test/intent-ai/phase90-fee-integrity-probe.mjs'], requiredEvidence: [] },
+  { phase: 91, id: 'plan-governance', title: 'Plan Governance', implementation: 'implemented', source: ['src/lib/intent-ai/planGovernance.js'], tests: ['test/intent-ai/phase91-plan-governance-probe.mjs'], requiredEvidence: [] },
+  { phase: 92, id: 'data-lifecycle', title: 'Data Lifecycle', implementation: 'implemented', source: ['src/lib/intent-ai/dataLifecycle.js'], tests: ['test/intent-ai/phase92-data-lifecycle-probe.mjs'], requiredEvidence: [] },
+  { phase: 93, id: 'accessibility-audit', title: 'Accessibility Audit', implementation: 'implemented', source: ['src/lib/intent-ai/accessibilityAudit.js'], tests: ['test/intent-ai/phase93-accessibility-probe.mjs'], requiredEvidence: [] },
+  { phase: 94, id: 'offline-queue', title: 'Offline Queue', implementation: 'implemented', source: ['src/lib/intent-ai/offlineQueue.js'], tests: ['test/intent-ai/phase94-offline-queue-probe.mjs'], requiredEvidence: [] },
+  { phase: 95, id: 'public-api', title: 'Public API Surface', implementation: 'implemented', source: ['src/lib/intent-ai/publicApi.js'], tests: ['test/intent-ai/phase95-public-api-probe.mjs'], requiredEvidence: [] },
+  { phase: 96, id: 'parameter-governance', title: 'Parameter Governance', implementation: 'implemented', source: ['src/lib/intent-ai/paramGovernance.js'], tests: ['test/intent-ai/phase96-param-governance-probe.mjs'], requiredEvidence: [] },
+  { phase: 97, id: 'gradual-autonomy', title: 'Gradual Autonomy', implementation: 'implemented', source: ['src/lib/intent-ai/gradualAutonomy.js'], tests: ['test/intent-ai/phase97-gradual-autonomy-probe.mjs'], requiredEvidence: [] },
+  { phase: 98, id: 'human-oversight', title: 'Human Oversight', implementation: 'implemented', source: ['src/lib/intent-ai/humanOversight.js'], tests: ['test/intent-ai/phase98-human-oversight-probe.mjs'], requiredEvidence: [] },
+  { phase: 99, id: 'long-term-survival', title: 'Long-Term Survival', implementation: 'implemented', source: ['src/lib/intent-ai/longTermSurvival.js', 'src/lib/intent-ai/accessRecovery.js'], tests: ['test/intent-ai/phase99-long-term-survival-probe.mjs'], requiredEvidence: [] },
+  { phase: 100, id: 'user-sovereignty', title: 'User Sovereignty', implementation: 'implemented', source: ['src/lib/intent-ai/userSovereignty.js', 'src/lib/intent-ai/dataLifecycle.js'], tests: ['test/intent-ai/phase100-user-sovereignty-probe.mjs'], requiredEvidence: [] }
+]);
+
+/* Phase 51+ rows: source and probe presence are published; the launch-wide
+   evidence gate decides operational/live. Working-group fidelity (per-check
+   digests and third-party provider gaps) is published by the later-phase
+   probe, not fabricated per row here. */
+export const SPEC_PHASES = Object.freeze([...BASE_SPEC_PHASES, ...LATER_SPEC_PHASES]);
+
+function laterInactiveStatus() {
+  return {
+    configuration: 'not-configured',
+    operational: 'unavailable',
+    ready: false,
+    live: false,
+    dataStatus: 'unavailable',
+    blockers: ['OPERATIONAL_EVIDENCE_REQUIRED_FOR_LAUNCH']
+  };
+}
 
 function phase10Status() {
   const registry = blobConfigured();
@@ -125,14 +206,16 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
    */
   const phases = SPEC_PHASES.map((phase) => {
     const activation = phase.phase === 10
-      ? phase10Status()
+      ? (live ? activeStatus() : phase10Status())
       : phase.phase === 21
         ? operationalPhase21Row(scan)
-        : phase.phase >= 22
+        : phase.phase >= 22 && phase.phase <= 50
           ? controlPlaneRow(phase.phase, scan.controlPlane)
-          : live
-            ? activeStatus()
-            : inactiveStatus(phase);
+          : phase.phase > 50 && !live
+            ? laterInactiveStatus()
+            : live
+              ? activeStatus()
+              : inactiveStatus(phase);
     const sourcePresent = phase.source.every(sourceExists);
     const testsPresent = phase.tests.every(sourceExists);
     return {
@@ -166,6 +249,13 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
     operational: live,
     live,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
+    specificationImplementedThrough: 100,
+    /* The release gate is aggregate; the live rows are published per phase. The
+       number here is the highest live row, not a claim that every row below it
+       is live — `operationalPhaseCount` is the exact count. */
+    specificationOperationalThrough: live ? Math.max(...phases.filter((row) => row.live).map((row) => row.phase), 7) : 7,
+    operationalPhaseCount: phases.filter((row) => row.live === true).length,
+    phaseCount: phases.length,
     phases,
     criticalBlockers: [...new Set(phases.flatMap((phase) => phase.blockers))],
     anyLive: phases.some((phase) => phase.live),

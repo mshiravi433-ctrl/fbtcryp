@@ -156,7 +156,10 @@
     "test:phases85-89": "npm run test:phase85 && npm run test:phase86 && npm run test:phase87 && npm run test:phase88 && npm run test:phase89",
     "test:phases69-74": "npm run test:phase69 && npm run test:phase70 && npm run test:phase71 && npm run test:phase72 && npm run test:phase73 && npm run test:phase74",
     "test:phases75-79": "npm run test:phase75 && npm run test:phase76 && npm run test:phase77 && npm run test:phase78 && npm run test:phase79",
-    "test:phases63-68": "npm run test:phase63 && npm run test:phase64 && npm run test:phase65 && npm run test:phase66 && npm run test:phase67 && npm run test:phase68"
+    "test:phases63-68": "npm run test:phase63 && npm run test:phase64 && npm run test:phase65 && npm run test:phase66 && npm run test:phase67 && npm run test:phase68",
+    "test:durable-evidence": "node test/intent-ai/durable-evidence-probe.mjs",
+    "activate:release": "node scripts/activate-release.mjs",
+    "test:activation-config": "node test/intent-ai/activation-config-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

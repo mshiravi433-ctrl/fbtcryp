@@ -107,17 +107,29 @@
 - [x] Cron تمدید freshness
 - [x] فرمان unfreeze
 - [x] Dashboard بلوکرهای عمومی
+- [x] ذخیرهٔ خودکار شواهد در Blob (`intent-evidence/v1/operator-evidence.json`)
+      و بازیابی در cold start — `npm run test:durable-evidence`
+- [x] اسمبلر one-command: `npm run activate:release -- --target https://YOUR-APP.vercel.app
+      --external operator-evidence.json --env [--submit --op1 A --op2 B]`
+      (همهٔ ۲۱ رکورد را جمع، اعتبارسنجی و در یک مقدار INTENT_OPERATIONAL_EVIDENCE
+      ادغام می‌کند؛ هیچ digest ای را جعل نمی‌کند؛ خروجی ۰ فقط با ۲۱/۲۱)
 
 ### Operator
-- تزریق شواهد واقعی از طریق operator-evidence
+- تزریق شواهد واقعی از طریق operator-evidence یا `npm run activate:release`
 - صدور فرمان unfreeze با تأیید دو اپراتور
 
 ## معیار موفقیت نهایی
 
 - `GET /api/intents/v1/phase-status`:
-  - `aggregateOperationalReadiness.launchAllowed: true`
-  - `blockers: []`
-  - تمام فازهای ۱۰–۵۰ `operational: true`
-- بنر LaunchStatusStrip از UI عمومی برداشته شود
-- `npm run test:spec65` سبز
+  - `launchAllowed: true` و `evidence.status: "21/21"` (سند Reviewed)
+  - `specificationImplementedThrough: 100` و `phaseCount: 91` (فازهای ۱۰–۱۰۰)
+  - `blockers: []` در دروازهٔ release؛ «زنده» فقط در فازهایی که verdict خودشان را دارند
+  - فازهای محصول (۱۱–۲۰ و ۵۱–۱۰۰) و فاز ۲۱ `operational/live: true`
+  - فازهای کنترل/تحقیق ۲۲–۵۰ طبق ارزیاب خودشان منتشر می‌شوند — هیچ ردی `live` با
+    blocker حل‌نشده ندارد
+- صفحهٔ «وضعیت فعال‌سازی» (Settings → Intent AI Activation) ۹۱/۹۱ پیاده‌سازی و تعداد
+  فازهای live را نمایش می‌دهد؛ `workspace` نوار وضعیت پنهان‌کاری نمی‌کند
+- شواهد تزریق‌شده در Blob ذخیره و در cold start برمی‌گردند
+  (`intent-evidence/v1/operator-evidence.json`) — «سیو کشی» شواهد بخشی از موفقیت است
+- `npm run test:spec65` و کل سوئیت probe سبز
 - `vite build` سبز

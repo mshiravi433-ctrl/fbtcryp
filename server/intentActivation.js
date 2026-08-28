@@ -204,7 +204,7 @@ function buildBlockers(secretManager, env) {
 /**
  * Public activation report. `secretManagerStatus` is an internal injection
  * seam for the historical Phase-8 provider report and deterministic tests; the
- * HTTP route publishes the reviewed Phases 10–50 status.
+ * HTTP route publishes the reviewed Phases 10–100 status.
  */
 export function activationReport({ env = process.env, now = Date.now(), secretManagerStatus = null } = {}) {
   const secretManager = safeSecretManagerStatus(secretManagerStatus, env);
@@ -230,16 +230,18 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
     product: {
       name: 'FBT Intent AI',
       completedPhases: [1, 2, 3, 4, 5, 6, 7],
-      specificationCompletedThrough: 50,
+      specificationCompletedThrough: 100,
       numberedPhasesRemaining: 0,
       originalRoadmapComplete: true,
       /* Backwards-compatible Phase 8 fields remain above; the authoritative
          specification status is exposed separately below. */
-      currentPhase: 50,
+      currentPhase: 100,
       currentPhaseImplementation: 'implemented',
       currentPhaseOperational: live ? 'operational' : phase8Operational ? 'ready' : 'partial',
-      specificationImplementedThrough: 50,
-      specificationOperationalThrough: live ? 50 : 7,
+      specificationImplementedThrough: 100,
+      specificationOperationalThrough: specificationStatus.specificationOperationalThrough ?? (live ? 100 : 7),
+      specificationPhaseCount: specificationStatus.phases.length,
+      operationalPhaseCount: specificationStatus.operationalPhaseCount ?? 0,
       operationalActivationRequired: !live,
       launchAllowed: live,
       isFrozen: false,
@@ -299,7 +301,7 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       bridge: { implementation: 'wired', operational: live ? 'live' : 'unavailable' }
     },
     blockers: live ? [] : [...blockers, ...specificationStatus.criticalBlockers.map((code) => blocker(code, Number(String(code).match(/PHASE_(\d+)/)?.[1] || 10), 'operational', true, 'Required external provider, deployment evidence or runtime proof is not configured.'))],
-    /* Authoritative status for Phases 10–50. Source and probes are present;
+    /* Authoritative status for Phases 10–100. Source and probes are present;
        the reviewed evidence snapshot drives the public live state. */
     specificationStatus,
     roadmap: INTENT_AI_ROADMAP_8_20.map((item) => ({ ...item })),
