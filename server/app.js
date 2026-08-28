@@ -299,7 +299,15 @@ import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasureme
 import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
 import { selfProbeReport, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
 import { opsProbeReport, runOpsProbe, ensureOpsHydrated, OPS_DRILL_KINDS } from './intentOpsProbe.js';
-import { runStage3Digest, STAGE3_KINDS } from './intentStage3Probe.js';
+import {
+  runStage3Digest,
+  runStage3Probe,
+  stage3ProbeReport,
+  ensureStage3Hydrated,
+  handleStage3Review,
+  publicReviewPackage,
+  STAGE3_KINDS
+} from './intentStage3Probe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1441,7 +1449,8 @@ app.get('/api/intents/v1/evidence-status', async (_req, res) => {
      between requests depending on which lambda answered. */
   await Promise.all([
     ensureHydrated().catch(() => {}),
-    ensureOpsHydrated().catch(() => {})
+    ensureOpsHydrated().catch(() => {}),
+    ensureStage3Hydrated().catch(() => {})
   ]);
   res.set('cache-control', 'public, max-age=10, s-maxage=10');
   return res.json(evidenceStoreStatus());
@@ -1534,7 +1543,13 @@ app.get('/api/intents/v1/ops-probe', async (req, res) => {
   }
 });
 
-/* ── Stage 3 digest: what still needs a third party, with real digests ── */
+/* ── Stage 3: live probe + independent-review intake ─────────────────── */
+/*
+ * production-signer, smart-wallet, independent-guardian, broker-provider and
+ * bridge-provider are earned by real work in this process. independent-security-
+ * review is never self-issued: GET the package digest, POST an Ed25519
+ * signature from INTENT_INDEPENDENT_REVIEWERS.
+ */
 app.get('/api/intents/v1/stage3-digest', async (_req, res) => {
   try {
     const report = await runStage3Digest();
@@ -1544,6 +1559,26 @@ app.get('/api/intents/v1/stage3-digest', async (_req, res) => {
     return res.status(500).json({ schema: 'fbt.stage3-digest.v1', ok: false, code: 'STAGE3_DIGEST_FAILED', detail: e.message });
   }
 });
+
+app.get('/api/intents/v1/stage3-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await runStage3Probe({ store: false })
+      : await stage3ProbeReport({ force: req.query.force === '1' });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...STAGE3_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.stage3-probe.v1', ok: false, code: 'STAGE3_PROBE_FAILED', detail: e.message });
+  }
+});
+
+app.get('/api/intents/v1/stage3-review-package', (_req, res) => {
+  res.set('cache-control', 'public, max-age=30, s-maxage=30');
+  return res.json(publicReviewPackage());
+});
+
+app.post('/api/intents/v1/stage3-review', (req, res) => handleStage3Review(req, res));
 
 /* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
 app.get('/api/intents/v1/slo-status', (_req, res) => {
@@ -4838,6 +4873,15 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
     }).catch(() => {});
 
+    /* Stage 3: policy-bound signer, guardian, broker, live bridge quote.
+       independent-security-review stays missing until a signed intake lands. */
+    import('./intentStage3Probe.js').then(({ runStage3Probe, ensureStage3Hydrated: hydrateStage3 }) => {
+      hydrateStage3().catch(() => {});
+      runStage3Probe({}).then((report) => {
+        console.log(`[activation] stage3-probe earned ${report.earnedCount}/${report.totalKinds} kinds`);
+      }).catch(() => {});
+    }).catch(() => {});
+
     /* Re-collect every 4 hours to keep evidence fresh */
     const timer = setInterval(() => {
       import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
@@ -4848,6 +4892,9 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
       import('./intentOpsProbe.js').then(({ runOpsProbe }) => {
         runOpsProbe({}).catch(() => {});
+      }).catch(() => {});
+      import('./intentStage3Probe.js').then(({ runStage3Probe }) => {
+        runStage3Probe({}).catch(() => {});
       }).catch(() => {});
     }, 4 * 3600_000);
     if (timer.unref) timer.unref();

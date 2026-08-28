@@ -31,7 +31,7 @@ for (const kind of ['backup-restore-drill', 'rollback-drill', 'sandbox-operator'
   }
 }
 
-console.log('\nFBT stage-3 digest (third-party kinds — not self-issued)');
+console.log('\nFBT stage-3 (live work; independent-security-review is never self-issued)');
 console.log('─'.repeat(72));
 console.log(`    reviewPackage  ${stage3.digests.reviewPackage}`);
 console.log(`    kmsAdapter     ${stage3.digests.productionSignerAdapter}`);

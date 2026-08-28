@@ -1,3 +1,29 @@
+## Unreleased — Stage 3 live work (signer, guardian, broker, bridge, review intake)
+
+Five of the six stage-3 evidence kinds are now earned by work this process
+actually runs. `independent-security-review` still cannot be self-issued.
+
+- **production-signer** signs a policy-bound Ed25519 envelope and refuses a
+  mutated one. Provider id is `policy-bound-local` (the Stage-2 analog of
+  `local-backup-store`). When `DEPLOYER_KMS_KEY_ID` + `AWS_REGION` answer
+  GetPublicKey, the provider id becomes `aws-kms`. The private key is never
+  exported or logged.
+- **smart-wallet** + **independent-guardian** create a live policy, take an
+  independent guardian decision, refuse `guardian.identity === userId`, and
+  refuse a guardian that tries to replace user confirmation.
+- **broker-provider** binds a trade-only handle and proves `withdraw` is
+  refused while `place` submits unconfirmed.
+- **bridge-provider** still requires a real deBridge DLN quote (USDC Arb→Eth,
+  1 USDC). The simulated `intentBridgeQuote` helper is not used.
+- **independent-security-review** is intake-only: `GET
+  /api/intents/v1/stage3-review-package` publishes the digest;
+  `POST /api/intents/v1/stage3-review` accepts an Ed25519 signature over the
+  raw 32-byte digest from `INTENT_INDEPENDENT_REVIEWERS=id:base64spki`. A
+  stale signature is dropped when the package moves.
+
+`GET /api/intents/v1/stage3-probe` runs the work (boot + every 4 hours).
+`?dry=1` reports without storing. Probe: `npm run test:stage3`.
+
 ## Unreleased — Stage 2 operational drills actually run
 
 Four evidence kinds that used to return `ok: true` by assignment now do the

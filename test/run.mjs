@@ -404,6 +404,12 @@ console.log('▸ probing FBT Intent AI — operational drills (backup/restore ·
   if (Array.isArray(opsRows)) report('intent-ai ops drills', opsRows);
 }
 
+console.log('▸ probing FBT Intent AI — stage 3 (signer · guardian · broker · bridge · review intake)…');
+{
+  const { default: stage3Rows } = await import('./intent-ai/stage3-probe.mjs');
+  if (Array.isArray(stage3Rows)) report('intent-ai stage 3', stage3Rows);
+}
+
 /* ------------------------------ 0b. WalletConnect wiring -------------------- */
 /* Static analysis of WalletContext.jsx for the two historical bugs (localhost
    origin, icon 404) and the project-id single-source-of-truth rule. */

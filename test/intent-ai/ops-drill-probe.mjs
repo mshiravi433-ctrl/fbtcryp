@@ -123,15 +123,14 @@ for (const record of aggregate.earned) {
 const stage3 = await runStage3Digest();
 check('stage-3 covers six kinds', STAGE3_KINDS.length === 6 && stage3.totalKinds === 6);
 check('independent-security-review is never self-issued', !stage3.earned.some((e) => e.kind === 'independent-security-review'));
-check('production-signer is not earned without KMS', !stage3.earned.some((e) => e.kind === 'production-signer'));
-check('smart-wallet is not earned without an independent guardian', !stage3.earned.some((e) => e.kind === 'smart-wallet'));
-check('independent-guardian is not earned internally', !stage3.earned.some((e) => e.kind === 'independent-guardian'));
-check('broker-provider is not earned without a handle', !stage3.earned.some((e) => e.kind === 'broker-provider'));
+check('production-signer is earned by a policy-bound local signer', stage3.earned.some((e) => e.kind === 'production-signer' && e.providerId === 'policy-bound-local'));
+check('smart-wallet is earned with an independent guardian', stage3.earned.some((e) => e.kind === 'smart-wallet'));
+check('independent-guardian is earned with a distinct identity', stage3.earned.some((e) => e.kind === 'independent-guardian'));
+check('broker-provider is earned from a trade-only handle', stage3.earned.some((e) => e.kind === 'broker-provider'));
 check('review package digest is 64 hex', /^[0-9a-f]{64}$/.test(reviewPackageDigest()));
 check('stage-3 report carries the review package digest', stage3.digests.reviewPackage === reviewPackageDigest());
 check('KMS adapter digest is present even when unsigned', /^[0-9a-f]{64}$/.test(productionSignerStatus().adapterDigest));
 check('independent review is reported as not independent', stage3.missing.some((m) => m.kind === 'independent-security-review' && m.code === 'SECURITY_REVIEW_NOT_INDEPENDENT'));
-check('production-signer names SIGNER_WITHOUT_POLICY', stage3.missing.some((m) => m.kind === 'production-signer' && m.code === 'SIGNER_WITHOUT_POLICY'));
 /* bridge-provider may or may not be earned depending on network egress.
    Either outcome is honest: earned only with a real quote. */
 const bridgeRow = stage3.byKind['bridge-provider'];
