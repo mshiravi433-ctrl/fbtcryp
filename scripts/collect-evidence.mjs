@@ -58,6 +58,8 @@ Usage: node scripts/collect-evidence.mjs --target https://host [options]
   --op1 / --op2      operator ids for dual auth        (env: OPERATOR_1 / OPERATOR_2)
   --env              also print an INTENT_OPERATIONAL_EVIDENCE value to paste
                      into Vercel, so the records survive cold starts
+  --merge <files>    comma separated earlier evidence files to fold into --env
+                     (expired records are dropped, fresh ones win)
   --json             machine readable output only
 `);
   process.exit(0);
@@ -178,13 +180,46 @@ if (args.submit) {
    injected one, so an expired or malformed entry is dropped, never trusted. */
 if (args.env) {
   const envFile = outFile.replace(/\.json$/, '') + '.env.txt';
-  const value = JSON.stringify(report.earned);
+
+  /* --merge lets the value be assembled across runs. durable-immutable-audit
+     only becomes earnable AFTER a first injection has written an audit entry,
+     so a complete four-record value physically cannot come from a single run.
+     Merged records are re-checked here: an expired or unknown-kind leftover is
+     dropped, and a fresh record always wins over an older one of the same kind. */
+  const merged = new Map();
+  let droppedExpired = 0;
+  if (args.merge) {
+    for (const file of String(args.merge).split(',').map((f) => f.trim()).filter(Boolean)) {
+      let prior = [];
+      try {
+        const parsed = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+        prior = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.evidence) ? parsed.evidence : [];
+      } catch (e) {
+        console.error(`✗ --merge could not read ${file}: ${e.message}`);
+        process.exit(6);
+      }
+      for (const record of prior) {
+        if (!record || typeof record !== 'object') continue;
+        if (!/^[0-9a-f]{64}$/.test(String(record.digest || ''))) continue;
+        if (!Number.isFinite(Number(record.expiresAt)) || Number(record.expiresAt) <= now) { droppedExpired += 1; continue; }
+        merged.set(record.kind, record);
+      }
+    }
+  }
+  for (const record of report.earned) merged.set(record.kind, record);
+
+  const value = JSON.stringify([...merged.values()]);
   fs.writeFileSync(envFile, `INTENT_OPERATIONAL_EVIDENCE=${value}\n`);
+
   log(`\nINTENT_OPERATIONAL_EVIDENCE (paste into Vercel → Settings → Environment Variables):`);
   log(value);
-  log(`\nalso written to → ${envFile}`);
+  log(`\ncontains ${merged.size} record(s): ${[...merged.keys()].join(', ') || 'none'}`);
+  if (droppedExpired > 0) log(`dropped ${droppedExpired} expired record(s) from --merge`);
+  log(`also written to → ${envFile}`);
   log('note: these records carry real expiry timestamps — re-run and update the');
   log('      variable before they lapse, or use --ttl-hours to widen the window.');
+  log('note: after saving the variable in Vercel you MUST redeploy; env changes');
+  log('      do not reach a running deployment.');
 }
 
 if (quiet) console.log(JSON.stringify(report, null, 2));

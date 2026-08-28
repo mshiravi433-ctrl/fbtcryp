@@ -229,16 +229,56 @@ instance می‌مانند و با هر cold start **پاک می‌شوند**. �
 دقیقاً مثل رکورد تزریق‌شده اعتبارسنجی می‌کند (منقضی یا خراب باشد، دور انداخته
 می‌شود، نه اینکه باور شود).
 
+### ⚠️ چرا کسی نمی‌تواند این مقدار را برای شما بنویسد
+
+محتوای این متغیر باید digestهای **واقعی** باشد:
+
+| رکورد | digest دقیقاً چیست |
+|-------|--------------------|
+| `certificate-authority` | fingerprint SHA-256 گواهی‌ای که سرور شما همین الان سرو می‌کند |
+| `venue-health` | هش پاسخ واقعی صرافی + latency اندازه‌گیری‌شده |
+| `slo-measurement` | هش اندازه‌گیری واقعی uptime و p95 |
+| `durable-immutable-audit` | همان rootHash واقعی لاگ audit شما |
+
+هیچ‌کدام از روی متن قابل حدس نیست؛ باید از ماشینی گرفته شود که واقعاً به دیپلوی
+شما و به اینترنت وصل است. هر مقداری که کسی «آماده» به شما بدهد، جعلی است.
+
+### ساختن مقدار — دو اجرا (چون audit دو‌نوبتی است)
+
+`durable-immutable-audit` تا وقتی لاگ audit خالی است قابل کسب نیست، و لاگ با
+**اولین تزریق موفق** پر می‌شود. پس ترتیب اجباری است:
+
 ```bash
-npm run evidence:collect -- --target $TARGET --samples 50 --ttl-hours 168 --env
+export TARGET=https://YOUR-APP.vercel.app
+export OPERATOR_1=alice.ops
+export OPERATOR_2=bob.ops
+
+# اجرای ۱ — CA + venue + SLO کسب و تزریق می‌شوند؛ همین تزریق، اولین entry
+#           لاگ audit را می‌نویسد و rootHash می‌سازد
+node scripts/collect-evidence.mjs --target $TARGET \
+  --samples 50 --ttl-hours 24 --out evidence-1.json --submit
+
+# اجرای ۲ — حالا rootHash وجود دارد، پس شاهد چهارم هم کسب می‌شود.
+#           --merge سه رکورد اجرای اول را با آن ادغام می‌کند.
+node scripts/collect-evidence.mjs --target $TARGET \
+  --samples 50 --ttl-hours 24 --out evidence-2.json --submit \
+  --env --merge evidence-1.json
 ```
 
-خروجی یک خط JSON آرایه‌ای می‌دهد؛ آن را در
+خروجی اجرای دوم یک خط JSON با هر چهار رکورد است و در `evidence-2.env.txt` هم
+ذخیره می‌شود. همان یک خط را در
 `Vercel → Settings → Environment Variables → INTENT_OPERATIONAL_EVIDENCE`
-بگذارید و Redeploy کنید.
+بگذارید و **Redeploy** کنید (تغییر متغیر به دیپلوی در حال اجرا نمی‌رسد).
 
-> ⚠️ `--ttl-hours 168` (یک هفته) فقط زمانی صادقانه است که واقعاً هفته‌ای یک بار
-> دوباره اندازه بگیرید. TTL کوتاه‌تر + cron گام ۸ صادقانه‌تر است.
+تأیید نهایی:
+
+```bash
+npm run evidence:check-env -- --target $TARGET
+curl -s $TARGET/api/intents/v1/evidence-status | jq '.evidence'   # باید 11/21 شود
+```
+
+`--merge` رکوردهای منقضی را دور می‌اندازد و رکورد تازه‌تر همیشه برندهٔ رکورد
+قدیمی‌ترِ هم‌نوع است؛ پس می‌توانید همین دستور را هفته‌ها پشت سر هم اجرا کنید.
 
 ## ۳. `ECOSYSTEM_CERTIFIERS` — مربوط به موج ۰، نه این چهار شاهد
 
