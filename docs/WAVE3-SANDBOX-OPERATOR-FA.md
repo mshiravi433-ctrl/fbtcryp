@@ -61,7 +61,14 @@ const result = verifySandboxOperator({
 - [ ] هیچ دسترسی mainnet از sandbox نیست
 - [ ] Attestation record ایجاد شده
 
-## OPERATOR_REQUIRED
+## مسیر محلی که همین الان اجرا می‌شود
+
+`GET /api/intents/v1/ops-probe` یک sandbox واقعی با
+`providerId: node-isolated-sandbox` اجرا می‌کند: child process (یا `node:vm`)
+با env تهی از کلید production. این Firecracker/gVisor نیست، اما isolation
+attested است و اگر mainnet/signer/custody دیده شود شاهد صادر نمی‌شود.
+
+## OPERATOR_REQUIRED (سخت‌گیرانه‌تر، برای production)
 
 1. راه‌اندازی sandbox (Firecracker/gVisor)
 2. تأیید isolation

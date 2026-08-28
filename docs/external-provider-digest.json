@@ -1,0 +1,144 @@
+{
+  "schema": "fbt.external-provider-digest.v1",
+  "generatedAt": "2026-08-28T18:03:06.106Z",
+  "presentCount": 0,
+  "total": 9,
+  "selfIssuedReview": false,
+  "launchAllowed": false,
+  "providers": [
+    {
+      "id": "independent-security-review",
+      "present": false,
+      "code": "SECURITY_REVIEW_NOT_INDEPENDENT",
+      "blocker": "allowlisted Ed25519 intake",
+      "providerId": null
+    },
+    {
+      "id": "workforce-sso",
+      "present": false,
+      "code": "WORKFORCE_SSO_UNATTESTED",
+      "blocker": "IdP SSO + MFA",
+      "providerId": null
+    },
+    {
+      "id": "regulatory-counsel",
+      "present": false,
+      "code": "REGULATORY_FILING_MISSING",
+      "blocker": "independent counsel filing",
+      "providerId": null
+    },
+    {
+      "id": "ca-pki",
+      "present": false,
+      "code": "CA_BEYOND_TLS_MISSING",
+      "blocker": "internal CA/PKI beyond public TLS",
+      "providerId": null
+    },
+    {
+      "id": "browser-wallet-e2e",
+      "present": false,
+      "code": "BROWSER_WALLET_REQUIRED",
+      "blocker": "connected browser wallet",
+      "providerId": null
+    },
+    {
+      "id": "secondary-region",
+      "present": false,
+      "code": "SECONDARY_REGION_UNREADY",
+      "blocker": "attested failover region",
+      "providerId": null
+    },
+    {
+      "id": "model-attestation",
+      "present": false,
+      "code": "MODEL_ATTESTATION_MISSING",
+      "blocker": "signed model/prompt digest",
+      "providerId": null
+    },
+    {
+      "id": "capital-escrow",
+      "present": false,
+      "code": "BOND_ESCROW_UNATTESTED",
+      "blocker": "attested third-party escrow",
+      "providerId": null
+    },
+    {
+      "id": "aws-kms",
+      "present": false,
+      "code": "KMS_NOT_BOUND",
+      "blocker": "AWS KMS GetPublicKey",
+      "providerId": "policy-bound-local"
+    }
+  ],
+  "missing": [
+    {
+      "id": "independent-security-review",
+      "present": false,
+      "code": "SECURITY_REVIEW_NOT_INDEPENDENT",
+      "blocker": "allowlisted Ed25519 intake",
+      "providerId": null
+    },
+    {
+      "id": "workforce-sso",
+      "present": false,
+      "code": "WORKFORCE_SSO_UNATTESTED",
+      "blocker": "IdP SSO + MFA",
+      "providerId": null
+    },
+    {
+      "id": "regulatory-counsel",
+      "present": false,
+      "code": "REGULATORY_FILING_MISSING",
+      "blocker": "independent counsel filing",
+      "providerId": null
+    },
+    {
+      "id": "ca-pki",
+      "present": false,
+      "code": "CA_BEYOND_TLS_MISSING",
+      "blocker": "internal CA/PKI beyond public TLS",
+      "providerId": null
+    },
+    {
+      "id": "browser-wallet-e2e",
+      "present": false,
+      "code": "BROWSER_WALLET_REQUIRED",
+      "blocker": "connected browser wallet",
+      "providerId": null
+    },
+    {
+      "id": "secondary-region",
+      "present": false,
+      "code": "SECONDARY_REGION_UNREADY",
+      "blocker": "attested failover region",
+      "providerId": null
+    },
+    {
+      "id": "model-attestation",
+      "present": false,
+      "code": "MODEL_ATTESTATION_MISSING",
+      "blocker": "signed model/prompt digest",
+      "providerId": null
+    },
+    {
+      "id": "capital-escrow",
+      "present": false,
+      "code": "BOND_ESCROW_UNATTESTED",
+      "blocker": "attested third-party escrow",
+      "providerId": null
+    },
+    {
+      "id": "aws-kms",
+      "present": false,
+      "code": "KMS_NOT_BOUND",
+      "blocker": "AWS KMS GetPublicKey",
+      "providerId": "policy-bound-local"
+    }
+  ],
+  "laterPhase": {
+    "provenCount": 26,
+    "totalChecks": 36,
+    "launchAllowed": false
+  },
+  "requireAll": true
+}

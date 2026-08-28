@@ -298,6 +298,23 @@ import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
 import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
 import { selfProbeReport, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
+import { opsProbeReport, runOpsProbe, ensureOpsHydrated, OPS_DRILL_KINDS } from './intentOpsProbe.js';
+import {
+  runStage3Digest,
+  runStage3Probe,
+  stage3ProbeReport,
+  ensureStage3Hydrated,
+  handleStage3Review,
+  publicReviewPackage,
+  STAGE3_KINDS
+} from './intentStage3Probe.js';
+import {
+  runLaterPhaseProbe,
+  laterPhaseProbeReport,
+  laterPhasePublicSummary,
+  runExternalProviderDigest,
+  LATER_PHASE_SCHEMA
+} from './intentLaterPhaseProbe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1433,11 +1450,15 @@ app.get('/api/intents/v1/freeze-status', (_req, res) => {
 
 /* ── Wave 2/4: Evidence Status Dashboard ──────────────────────────────── */
 app.get('/api/intents/v1/evidence-status', async (_req, res) => {
-  /* Pull previously measured, still-valid self-probe records into this
-     instance first. Without it a cold instance reports fewer kinds than the
-     deployment has actually earned — the same fact would flip between
-     requests depending on which lambda answered. */
-  await ensureHydrated().catch(() => {});
+  /* Pull previously measured, still-valid self-probe and ops-probe records
+     into this instance first. Without it a cold instance reports fewer kinds
+     than the deployment has actually earned — the same fact would flip
+     between requests depending on which lambda answered. */
+  await Promise.all([
+    ensureHydrated().catch(() => {}),
+    ensureOpsHydrated().catch(() => {}),
+    ensureStage3Hydrated().catch(() => {})
+  ]);
   res.set('cache-control', 'public, max-age=10, s-maxage=10');
   return res.json(evidenceStoreStatus());
 });
@@ -1509,18 +1530,103 @@ app.get('/api/intents/v1/self-probe', async (req, res) => {
   }
 });
 
+/* ── Ops-probe: actually run backup/restore, rollback, sandbox, policy ── */
+/*
+ * These four kinds used to be simulated booleans. Opening this URL runs the
+ * real drills: a snapshot is written and restored, a broken release is rolled
+ * back, an isolated child is spawned, and the committed FeeRouter bytecode is
+ * hashed. ?dry=1 reports without storing.
+ */
+app.get('/api/intents/v1/ops-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await runOpsProbe({ store: false })
+      : await opsProbeReport({ force: req.query.force === '1' });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...OPS_DRILL_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.ops-probe.v1', ok: false, code: 'OPS_PROBE_FAILED', detail: e.message });
+  }
+});
+
+/* ── Stage 3: live probe + independent-review intake ─────────────────── */
+/*
+ * production-signer, smart-wallet, independent-guardian, broker-provider and
+ * bridge-provider are earned by real work in this process. independent-security-
+ * review is never self-issued: GET the package digest, POST an Ed25519
+ * signature from INTENT_INDEPENDENT_REVIEWERS.
+ */
+app.get('/api/intents/v1/stage3-digest', async (_req, res) => {
+  try {
+    const report = await runStage3Digest();
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...STAGE3_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.stage3-digest.v1', ok: false, code: 'STAGE3_DIGEST_FAILED', detail: e.message });
+  }
+});
+
+app.get('/api/intents/v1/stage3-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await runStage3Probe({ store: false })
+      : await stage3ProbeReport({ force: req.query.force === '1' });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...STAGE3_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.stage3-probe.v1', ok: false, code: 'STAGE3_PROBE_FAILED', detail: e.message });
+  }
+});
+
+app.get('/api/intents/v1/stage3-review-package', (_req, res) => {
+  res.set('cache-control', 'public, max-age=30, s-maxage=30');
+  return res.json(publicReviewPackage());
+});
+
+app.post('/api/intents/v1/stage3-review', (req, res) => handleStage3Review(req, res));
+
+/* ── Later-phase: 31–100 in-process work; third-party stays missing ─ */
+app.get('/api/intents/v1/later-phase-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await runLaterPhaseProbe({})
+      : await laterPhaseProbeReport({ force: req.query.force === '1' });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...laterPhasePublicSummary(report), schema: LATER_PHASE_SCHEMA });
+  } catch (e) {
+    return res.status(500).json({ schema: LATER_PHASE_SCHEMA, ok: false, code: 'LATER_PHASE_PROBE_FAILED', detail: e.message });
+  }
+});
+
+app.get('/api/intents/v1/external-providers', async (_req, res) => {
+  try {
+    const digest = await runExternalProviderDigest({});
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json(digest);
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.external-provider-digest.v1', ok: false, code: 'EXTERNAL_PROVIDER_DIGEST_FAILED', detail: e.message });
+  }
+});
+
 /* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
 app.get('/api/intents/v1/slo-status', (_req, res) => {
   res.set('cache-control', 'public, max-age=5, s-maxage=5');
   return res.json(sloSnapshot());
 });
 
-app.get('/api/intents/v1/drill-status', (_req, res) => {
+app.get('/api/intents/v1/drill-status', async (_req, res) => {
+  const [backupRestore, rollback] = await Promise.all([
+    backupRestoreDrill(),
+    rollbackDrill()
+  ]);
   return res.json({
     schema: 'fbt.drill-status.v1',
-    backupRestore: backupRestoreDrill(),
+    backupRestore,
     reproducibleBuild: reproducibleBuildCheck(),
-    rollbackDrill: rollbackDrill(),
+    rollbackDrill: rollback,
     sloMeasurement: sloMeasurement()
   });
 });
@@ -4789,6 +4895,31 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
     }).catch(() => {});
 
+    /* The four operational drills actually write, restore, isolate and hash.
+       Boot is the earliest honest moment; failures stay silent. */
+    import('./intentOpsProbe.js').then(({ runOpsProbe, ensureOpsHydrated: hydrateOps }) => {
+      hydrateOps().catch(() => {});
+      runOpsProbe({}).then((report) => {
+        console.log(`[activation] ops-probe earned ${report.earnedCount}/${report.totalKinds} operational drills`);
+      }).catch(() => {});
+    }).catch(() => {});
+
+    /* Stage 3: policy-bound signer, guardian, broker, live bridge quote.
+       independent-security-review stays missing until a signed intake lands. */
+    import('./intentStage3Probe.js').then(({ runStage3Probe, ensureStage3Hydrated: hydrateStage3 }) => {
+      hydrateStage3().catch(() => {});
+      runStage3Probe({}).then((report) => {
+        console.log(`[activation] stage3-probe earned ${report.earnedCount}/${report.totalKinds} kinds`);
+      }).catch(() => {});
+    }).catch(() => {});
+
+    /* Later-phase 31–100: in-process proofs only. Never stored as 21/21 kinds. */
+    import('./intentLaterPhaseProbe.js').then(({ runLaterPhaseProbe: runLater }) => {
+      runLater({}).then((report) => {
+        console.log(`[activation] later-phase proven ${report.provenCount}/${report.totalChecks} checks; launchAllowed=false`);
+      }).catch(() => {});
+    }).catch(() => {});
+
     /* Re-collect every 4 hours to keep evidence fresh */
     const timer = setInterval(() => {
       import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
@@ -4796,6 +4927,15 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
       import('./intentSelfProbe.js').then(({ runSelfProbe }) => {
         runSelfProbe({}).catch(() => {});
+      }).catch(() => {});
+      import('./intentOpsProbe.js').then(({ runOpsProbe }) => {
+        runOpsProbe({}).catch(() => {});
+      }).catch(() => {});
+      import('./intentStage3Probe.js').then(({ runStage3Probe }) => {
+        runStage3Probe({}).catch(() => {});
+      }).catch(() => {});
+      import('./intentLaterPhaseProbe.js').then(({ runLaterPhaseProbe: runLater }) => {
+        runLater({}).catch(() => {});
       }).catch(() => {});
     }, 4 * 3600_000);
     if (timer.unref) timer.unref();

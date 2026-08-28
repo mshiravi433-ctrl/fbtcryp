@@ -69,11 +69,13 @@ const { auditStatus } = await import('../../server/intentAuditLog.js');
 const auditSt = await auditStatus();
 check('audit status has schema', auditSt.schema === 'fbt.intent-audit.v1');
 
-/* 6. Drills */
+/* 6. Drills — these actually write, restore and roll back. */
 const { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } = await import('../../server/intentDrill.js');
-check('backup/restore drill passes', backupRestoreDrill().ok === true);
+const backupResult = await backupRestoreDrill();
+check('backup/restore drill passes', backupResult.ok === true && backupResult.hashMatch !== false);
 check('reproducible build passes', reproducibleBuildCheck().ok === true);
-check('rollback drill passes', rollbackDrill().ok === true);
+const rollbackResult = await rollbackDrill();
+check('rollback drill passes', rollbackResult.ok === true && rollbackResult.drilled === true);
 /* SLO is a measurement, not a constant: with no traffic it must refuse to
    report, and it may only pass once real samples exist. */
 const { recordSloSample, resetSloMeter } = await import('../../server/intentSloMeter.js');

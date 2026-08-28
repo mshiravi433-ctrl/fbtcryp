@@ -1,0 +1,357 @@
+{
+  "schema": "fbt.operational-drill-digest.v1",
+  "generatedAt": "2026-08-28T18:02:58.893Z",
+  "drills": {
+    "earnedCount": 4,
+    "totalKinds": 4,
+    "earned": [
+      {
+        "kind": "backup-restore-drill",
+        "providerId": "local-backup-store",
+        "digest": "8257c50e61fbdeef936ae5503e5f151b01c56a6793c7b3c88d3653cd3ee12c29",
+        "checkedAt": 1787940178893,
+        "expiresAt": 1787961778893,
+        "status": "verified",
+        "health": "healthy",
+        "attested": true
+      },
+      {
+        "kind": "rollback-drill",
+        "providerId": "local-release-plane",
+        "digest": "63a32a70728ea088ecb33604a57551efc1a11e17eb4d895ec3a50f4686c3ee09",
+        "checkedAt": 1787940178893,
+        "expiresAt": 1787961778893,
+        "status": "verified",
+        "health": "healthy",
+        "attested": true
+      },
+      {
+        "kind": "sandbox-operator",
+        "providerId": "node-isolated-sandbox",
+        "digest": "ac91502bfd40508153ad072c364fcfce4d9bc8fc926f90c796ea9837e1b5b20f",
+        "checkedAt": 1787940178893,
+        "expiresAt": 1787961778893,
+        "status": "verified",
+        "health": "healthy",
+        "attested": true
+      },
+      {
+        "kind": "policy-contract",
+        "providerId": "compiled-FeeRouter",
+        "digest": "ea1acb24c53cf6fcbff78287e2688057e0b89c25674104e34bfea88aebaf1d16",
+        "checkedAt": 1787940178893,
+        "expiresAt": 1787961778893,
+        "status": "verified",
+        "health": "healthy",
+        "attested": true
+      }
+    ],
+    "missing": [],
+    "byKind": {
+      "backup-restore-drill": {
+        "ok": true,
+        "code": null,
+        "providerId": "local-backup-store",
+        "digest": "8257c50e61fbdeef936ae5503e5f151b01c56a6793c7b3c88d3653cd3ee12c29"
+      },
+      "rollback-drill": {
+        "ok": true,
+        "code": null,
+        "providerId": "local-release-plane",
+        "digest": "63a32a70728ea088ecb33604a57551efc1a11e17eb4d895ec3a50f4686c3ee09"
+      },
+      "sandbox-operator": {
+        "ok": true,
+        "code": null,
+        "providerId": "node-isolated-sandbox",
+        "digest": "ac91502bfd40508153ad072c364fcfce4d9bc8fc926f90c796ea9837e1b5b20f"
+      },
+      "policy-contract": {
+        "ok": true,
+        "code": null,
+        "providerId": "compiled-FeeRouter",
+        "digest": "ea1acb24c53cf6fcbff78287e2688057e0b89c25674104e34bfea88aebaf1d16"
+      }
+    }
+  },
+  "stage3": {
+    "earnedCount": 4,
+    "totalKinds": 6,
+    "earned": [
+      {
+        "kind": "production-signer",
+        "providerId": "policy-bound-local",
+        "digest": "257fef060bfde45f86c3c51280e337fdf00a283997da60b1d3527893b5b2846c",
+        "expiresAt": 1788026578893
+      },
+      {
+        "kind": "smart-wallet",
+        "providerId": "policy-smart-wallet",
+        "digest": "02596fb2c43bae7d5717b5d7fd3d4c21de1d70f6e3b1ff7cceeb10010b576cc1",
+        "expiresAt": 1788026578893
+      },
+      {
+        "kind": "independent-guardian",
+        "providerId": "process-guardian",
+        "digest": "02596fb2c43bae7d5717b5d7fd3d4c21de1d70f6e3b1ff7cceeb10010b576cc1",
+        "expiresAt": 1788026578893
+      },
+      {
+        "kind": "broker-provider",
+        "providerId": "trade-only-local",
+        "digest": "6afdbf04d477cbae2a29bd11bb108caf480456e14aef5689d1b016f72f8576f5",
+        "expiresAt": 1788026578893
+      }
+    ],
+    "missing": [
+      {
+        "kind": "independent-security-review",
+        "code": "SECURITY_REVIEW_NOT_INDEPENDENT",
+        "hint": "Submit a signed Ed25519 attestation over the review-package digest from INTENT_INDEPENDENT_REVIEWERS."
+      },
+      {
+        "kind": "bridge-provider",
+        "code": "BRIDGE_QUOTE_UNREACHABLE",
+        "hint": "fetch failed"
+      }
+    ]
+  },
+  "laterPhase": {
+    "schema": "fbt.later-phase-probe.v1",
+    "provenCount": 26,
+    "missingCount": 10,
+    "totalChecks": 36,
+    "launchAllowed": false,
+    "live": false,
+    "proven": [
+      {
+        "id": "production-stub-forbidden",
+        "band": "1-9",
+        "code": "PROVEN",
+        "digest": "3c5dc470bfa1c56233fc0e86925b226886243dbf8442987117fe474659fd1462"
+      },
+      {
+        "id": "wallet-no-provider-honest",
+        "band": "1-9",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "execution-signer-fail-closed",
+        "band": "1-9",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "incident-assumed-refused",
+        "band": "31-40",
+        "code": "INCIDENT_ASSUMED_NOT_VERIFIED",
+        "digest": null
+      },
+      {
+        "id": "local-key-rotation",
+        "band": "31-40",
+        "code": "PROVEN",
+        "digest": "e32a6e2612d68f3261914de5a193e45859de118d5b1265074142be71be3f2391"
+      },
+      {
+        "id": "abuse-rate-limits",
+        "band": "31-40",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "public-disclosure-honest",
+        "band": "31-40",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "residency-legal-hold",
+        "band": "31-40",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "gameday-rehearsal",
+        "band": "31-40",
+        "code": "PROVEN",
+        "digest": "b9020b3ee9dbf718ff84b661d94d783291b58ec00f1f75a05d0727796703c47c"
+      },
+      {
+        "id": "continuous-verification",
+        "band": "31-40",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "change-freeze-blocks-deploy",
+        "band": "41-50",
+        "code": "CHANGE_FREEZE_ACTIVE",
+        "digest": null
+      },
+      {
+        "id": "break-glass-guardian",
+        "band": "41-50",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "cost-kill-spend",
+        "band": "41-50",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "telemetry-integrity",
+        "band": "41-50",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "capital-bond",
+        "band": "41-50",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "program-control",
+        "band": "41-50",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "chaos-drill",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "data-lifecycle",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": "0x4a1b73073f0d4e2338db3cb8be3d3c6a"
+      },
+      {
+        "id": "public-api-no-execute",
+        "band": "51-100",
+        "code": "EXECUTION_NEVER_DELEGATED",
+        "digest": null
+      },
+      {
+        "id": "fee-integrity",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "terms-diff-material",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "simulation-blocks-sign",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "live-quote-recheck",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "session-stop-survives",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "honest-backtest",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      },
+      {
+        "id": "receipt-anchor-unanchored",
+        "band": "51-100",
+        "code": "PROVEN",
+        "digest": null
+      }
+    ],
+    "missing": [
+      {
+        "id": "incident-command",
+        "band": "31-40",
+        "code": "INCIDENT_COMMANDER_REQUIRED",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "secret-manager",
+        "band": "31-40",
+        "code": "SECRET_MANAGER_NOT_VERIFIED",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "failover-secondary",
+        "band": "31-40",
+        "code": "SECONDARY_REGION_UNREADY",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "dependency-sbom",
+        "band": "31-40",
+        "code": "SBOM_ATTESTATION_MISSING",
+        "thirdParty": true,
+        "detail": "package-lock hash is not an SBOM attestation"
+      },
+      {
+        "id": "sustainment-owner",
+        "band": "31-40",
+        "code": "SUSTAINMENT_OWNER_REQUIRED",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "workforce-sso",
+        "band": "41-50",
+        "code": "WORKFORCE_SSO_UNATTESTED",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "model-supply",
+        "band": "41-50",
+        "code": "MODEL_ATTESTATION_MISSING",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "agent-fleet",
+        "band": "41-50",
+        "code": "FLEET_UNATTESTED",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "regulatory-counsel",
+        "band": "41-50",
+        "code": "REGULATORY_FILING_MISSING",
+        "thirdParty": true,
+        "detail": null
+      },
+      {
+        "id": "browser-wallet-e2e",
+        "band": "51-100",
+        "code": "BROWSER_WALLET_REQUIRED",
+        "thirdParty": true,
+        "detail": null
+      }
+    ]
+  }
+}
