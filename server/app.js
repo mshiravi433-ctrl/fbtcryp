@@ -297,7 +297,7 @@ import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
 import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
 import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
-import { selfProbeReport, SELF_PROBE_KINDS } from './intentSelfProbe.js';
+import { selfProbeReport, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1432,7 +1432,12 @@ app.get('/api/intents/v1/freeze-status', (_req, res) => {
 });
 
 /* ── Wave 2/4: Evidence Status Dashboard ──────────────────────────────── */
-app.get('/api/intents/v1/evidence-status', (_req, res) => {
+app.get('/api/intents/v1/evidence-status', async (_req, res) => {
+  /* Pull previously measured, still-valid self-probe records into this
+     instance first. Without it a cold instance reports fewer kinds than the
+     deployment has actually earned — the same fact would flip between
+     requests depending on which lambda answered. */
+  await ensureHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=10, s-maxage=10');
   return res.json(evidenceStoreStatus());
 });
@@ -4777,7 +4782,8 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
        network access, while SLO and audit stay unearned until there is real
        traffic and a durable store. Failures are silent by design — an
        unreachable venue must not make the process noisy or unhealthy. */
-    import('./intentSelfProbe.js').then(({ runSelfProbe }) => {
+    import('./intentSelfProbe.js').then(({ runSelfProbe, ensureHydrated: hydrate }) => {
+      hydrate().catch(() => {});
       runSelfProbe({}).then((report) => {
         console.log(`[activation] self-probe earned ${report.earnedCount}/${report.totalKinds} measurable kinds`);
       }).catch(() => {});

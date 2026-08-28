@@ -189,6 +189,42 @@ check('self-probe refuses evidence for a failing SLO',
 resetSloMeter();
 resetSelfProbeCache();
 
+/* ── persistence across instances (the serverless failure mode) ─────────── */
+/*
+ * Each Vercel lambda has its own memory: a record earned by one instance was
+ * invisible to the next, so /evidence-status kept reporting fewer kinds than
+ * had really been measured. Earned records are therefore written to the same
+ * durable store as the audit log and re-hydrated on boot. Here the store is
+ * exercised through its in-memory fallback, which is the same code path.
+ */
+const { storeGet, storeSet } = await import('../../server/store.js');
+const { SELF_PROBE_STORE_KEY, hydrateSelfProbeEvidence } = await import('../../server/intentSelfProbe.js');
+const { getStoredEvidence } = await import('../../server/intentOperatorEvidence.js');
+
+const future = Date.now() + 3600_000;
+const persistedRecords = [
+  { kind: 'certificate-authority', providerId: 'Let-s-Encrypt', digest: 'a1'.repeat(32), checkedAt: Date.now(), expiresAt: future, status: 'verified', health: 'healthy', attested: true },
+  { kind: 'venue-health', providerId: 'coinbase', digest: 'b2'.repeat(32), checkedAt: Date.now(), expiresAt: future, status: 'verified', health: 'healthy', attested: true },
+  /* expired: must never come back to life */
+  { kind: 'durable-immutable-audit', providerId: 'blob-audit-log', digest: 'c3'.repeat(32), checkedAt: Date.now() - 7200_000, expiresAt: Date.now() - 1000, status: 'verified', health: 'healthy', attested: true },
+  /* not a self-probe kind: must be ignored, only injection can supply it */
+  { kind: 'independent-security-review', providerId: 'audit-firm', digest: 'd4'.repeat(32), checkedAt: Date.now(), expiresAt: future, status: 'verified', health: 'healthy', attested: true }
+];
+await storeSet(SELF_PROBE_STORE_KEY, JSON.stringify(persistedRecords));
+check('persisted payload is readable', typeof (await storeGet(SELF_PROBE_STORE_KEY)) === 'string');
+
+const hydrated = await hydrateSelfProbeEvidence();
+check('hydration restores only valid self-probe kinds', hydrated.hydrated === 2);
+check('hydration drops the expired record', !(hydrated.kinds || []).includes('durable-immutable-audit'));
+check('hydration refuses a kind the probe cannot earn', !(hydrated.kinds || []).includes('independent-security-review'));
+
+const storedKinds = getStoredEvidence().map((e) => e.kind);
+check('a fresh instance now reports the measured certificate', storedKinds.includes('certificate-authority'));
+check('a fresh instance now reports the measured venue', storedKinds.includes('venue-health'));
+check('an expired record never reaches the evidence store', !storedKinds.includes('durable-immutable-audit'));
+
+await storeSet(SELF_PROBE_STORE_KEY, JSON.stringify([]));
+
 /* ── optional live network paths ────────────────────────────────────────── */
 if (process.env.FBT_PROBE_NETWORK === '1') {
   const liveCa = await probeCertificateAuthority('https://vercel.com');
