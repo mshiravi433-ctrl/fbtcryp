@@ -23,7 +23,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { probeAllEarnable, EARNABLE_KINDS } from './lib/evidenceProbes.mjs';
+import { probeAllEarnable, EARNABLE_KINDS } from '../server/evidenceProbes.js';
 
 function parseArgs(argv) {
   const args = { _: [] };

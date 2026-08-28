@@ -12,6 +12,57 @@
 | `slo-measurement` | uptime و p95 را اندازه گرفتید | N درخواست واقعی |
 | `durable-immutable-audit` | Blob فعال + root تأیید شده | خواندن audit-status |
 
+## 📱 بدون کامپیوتر؟ کاری لازم نیست بکنید
+
+اگر فقط موبایل دارید، مسیر CLI را **نادیده بگیرید**. خود دیپلوی این چهار شاهد را
+اندازه می‌گیرد: موقع بوت و هر ۴ ساعت، و هر وقت این آدرس را باز کنید:
+
+```
+https://YOUR-APP.vercel.app/api/intents/v1/self-probe
+```
+
+با `?dry=1` فقط گزارش می‌دهد و چیزی ذخیره نمی‌کند. نمونهٔ خروجی:
+
+```json
+{
+  "earnedCount": 3,
+  "earned": [
+    { "kind": "certificate-authority", "providerId": "Let-s-Encrypt", "digest": "3f9c…" },
+    { "kind": "venue-health", "providerId": "binance", "digest": "8b21…" },
+    { "kind": "durable-immutable-audit", "providerId": "blob-audit-log", "digest": "c704…" }
+  ],
+  "missing": [ { "kind": "slo-measurement", "code": "SLO_NOT_MEASURED" } ],
+  "detail": { "slo": { "samples": 7, "reason": "INSUFFICIENT_SAMPLES" } }
+}
+```
+
+سرور همان چهار probe را اجرا می‌کند که CLI اجرا می‌کرد — TLS handshake واقعی به
+دامنهٔ خودش، درخواست واقعی به صرافی، متر SLO روی ترافیکی که واقعاً سرو کرده، و
+append + verify روی لاگ audit. هیچ‌کدام «خودگواهی» نیست: اگر probe رد شود، هیچ
+شاهدی صادر نمی‌شود.
+
+نتیجهٔ مهم: **برای این چهار شاهد دیگر به `INTENT_OPERATIONAL_EVIDENCE` نیاز
+ندارید.** با هر cold start دوباره اندازه گرفته می‌شوند؛ چیزی برای paste کردن
+نمانده. (آن متغیر فقط برای ۱۷ شاهد بیرونی می‌ماند که به شخص ثالث نیاز دارند.)
+
+### تنها نکته: `slo-measurement` به ترافیک نیاز دارد
+
+متر SLO داخل همان instance زندگی می‌کند و حداقل **۲۰ درخواست واقعی** می‌خواهد.
+روی موبایل: چند بار اپ را باز کنید یا چند بار همان URL را refresh کنید، بعد
+`self-probe` را صدا بزنید. اگر instance سرد شود، شمارش از صفر شروع می‌شود —
+این عمدی است: SLO یعنی اندازه‌گیری همین instance، نه یک عدد ذخیره‌شده.
+
+### آیا متغیری لازم است؟
+
+نه. ورسل خودش `VERCEL_URL` را ست می‌کند و probe از همان دامنهٔ عمومی استفاده
+می‌کند. فقط اگر دامنهٔ اختصاصی دارید و می‌خواهید گواهی *آن* سنجیده شود:
+
+```
+PUBLIC_ORIGIN = https://your-custom-domain.com
+```
+
+---
+
 ## وضعیت قبل از این تغییر — کدام نبود
 
 | شاهد | قبلاً | حالا |
@@ -218,7 +269,11 @@ curl -s $TARGET/api/intents/v1/audit-status | jq '{configured, durable}'
 # باید: { "configured": true, "durable": true }
 ```
 
-## ۲. `INTENT_OPERATIONAL_EVIDENCE` — **عملاً الزامی روی ورسل**
+## ۲. `INTENT_OPERATIONAL_EVIDENCE` — فقط اگر CLI را ترجیح می‌دهید
+
+> از وقتی `self-probe` اضافه شد، این متغیر برای **این چهار شاهد لازم نیست** —
+> سرور بعد از هر cold start دوباره اندازه‌شان می‌گیرد. بخش زیر برای کسی است که
+> از کامپیوتر کار می‌کند یا می‌خواهد شواهد بیرونی (۱۷ تای دیگر) را ماندگار کند.
 
 این نکته را از قلم نیندازید: روی ورسل API به‌صورت **stateless function** اجرا
 می‌شود. شواهدی که با `POST /operator-evidence` تزریق می‌کنید در حافظهٔ همان
@@ -324,7 +379,8 @@ slo meter    not yet measured (INSUFFICIENT_SAMPLES)
 | متغیر | لازم؟ | چرا |
 |-------|-------|-----|
 | `BLOB_READ_WRITE_TOKEN` | ✅ | تنها پیش‌نیاز `durable-immutable-audit` |
-| `INTENT_OPERATIONAL_EVIDENCE` | ✅ عملاً | وگرنه شواهد با cold start می‌پرند |
+| `INTENT_OPERATIONAL_EVIDENCE` | ➖ | برای این چهارتا لازم نیست (self-probe)؛ فقط برای شواهد بیرونی |
+| `PUBLIC_ORIGIN` | ➖ | فقط اگر دامنهٔ اختصاصی دارید |
 | `ECOSYSTEM_CERTIFIERS` | ➖ | موج ۰، ربطی به این چهارتا ندارد |
 | بقیه | ❌ | موج‌های بعدی / نیاز به شخص ثالث |
 

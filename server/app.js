@@ -297,6 +297,7 @@ import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
 import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
 import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
+import { selfProbeReport, SELF_PROBE_KINDS } from './intentSelfProbe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -1480,6 +1481,29 @@ app.get('/api/intents/v1/scheduler-status', (_req, res) => {
 });
 
 /* ── Wave 2: Drill Status ─────────────────────────────────────────────── */
+/* ── Self-probe: earn the four measurable evidence kinds from the server ─ */
+/*
+ * An operator with only a phone cannot run the collection CLI, so the
+ * deployment measures these four itself: a real TLS handshake against its own
+ * public hostname, a real venue request, the SLO of really served traffic and
+ * an append-plus-verify against the durable audit log. Results are cached for
+ * a minute, so opening this URL repeatedly cannot amplify outbound requests.
+ *
+ * ?dry=1 reports without storing anything.
+ */
+app.get('/api/intents/v1/self-probe', async (req, res) => {
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const report = dry
+      ? await (await import('./intentSelfProbe.js')).runSelfProbe({ req, store: false })
+      : await selfProbeReport({ req });
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...report, kinds: [...SELF_PROBE_KINDS] });
+  } catch (e) {
+    return res.status(500).json({ schema: 'fbt.self-probe.v1', ok: false, code: 'SELF_PROBE_FAILED', detail: e.message });
+  }
+});
+
 /* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
 app.get('/api/intents/v1/slo-status', (_req, res) => {
   res.set('cache-control', 'public, max-age=5, s-maxage=5');
@@ -4748,10 +4772,24 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
       }).catch(() => {});
     }).catch(() => {});
 
+    /* The four measurable kinds are earned by the deployment itself. Boot is
+       the earliest honest moment to try: the TLS and venue probes need only
+       network access, while SLO and audit stay unearned until there is real
+       traffic and a durable store. Failures are silent by design — an
+       unreachable venue must not make the process noisy or unhealthy. */
+    import('./intentSelfProbe.js').then(({ runSelfProbe }) => {
+      runSelfProbe({}).then((report) => {
+        console.log(`[activation] self-probe earned ${report.earnedCount}/${report.totalKinds} measurable kinds`);
+      }).catch(() => {});
+    }).catch(() => {});
+
     /* Re-collect every 4 hours to keep evidence fresh */
     const timer = setInterval(() => {
       import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
         autoInjectEvidence().catch(() => {});
+      }).catch(() => {});
+      import('./intentSelfProbe.js').then(({ runSelfProbe }) => {
+        runSelfProbe({}).catch(() => {});
       }).catch(() => {});
     }, 4 * 3600_000);
     if (timer.unref) timer.unref();

@@ -123,6 +123,72 @@ check('SLO meter measures once the floor is reached', warm.measured === true && 
 check('SLO meter counts 5xx against uptime', warm.uptime === 0.95);
 resetSloMeter();
 
+/* ── the server-side self-probe: same rules, run inside the deployment ──── */
+const { runSelfProbe, resolveOrigin, SELF_PROBE_KINDS, resetSelfProbeCache } =
+  await import('../../server/intentSelfProbe.js');
+
+check('self-probe covers exactly the four measurable kinds',
+  SELF_PROBE_KINDS.length === 4 && SELF_PROBE_KINDS.every((k) => EARNABLE_KINDS.includes(k)));
+
+/* Origin resolution: explicit wins, Vercel's own variables are used without any
+   operator configuration, and localhost is refused (it has no certificate). */
+const savedEnv = {
+  PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN,
+  VERCEL_URL: process.env.VERCEL_URL,
+  VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL
+};
+delete process.env.PUBLIC_ORIGIN;
+delete process.env.VERCEL_URL;
+delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
+check('origin is unknown with nothing configured', resolveOrigin(null) === null);
+check('origin refuses localhost host headers',
+  resolveOrigin({ headers: { host: 'localhost:3000' } }) === null);
+check('origin accepts a real forwarded host',
+  resolveOrigin({ headers: { host: 'fbt.example.com', 'x-forwarded-proto': 'https' } }) === 'https://fbt.example.com');
+
+process.env.VERCEL_URL = 'fbt-abc123.vercel.app';
+check('origin uses VERCEL_URL with no operator configuration',
+  resolveOrigin(null) === 'https://fbt-abc123.vercel.app');
+process.env.PUBLIC_ORIGIN = 'https://custom.example.com/';
+check('PUBLIC_ORIGIN overrides and is normalised',
+  resolveOrigin(null) === 'https://custom.example.com');
+
+delete process.env.PUBLIC_ORIGIN;
+delete process.env.VERCEL_URL;
+for (const [k, v] of Object.entries(savedEnv)) if (v !== undefined) process.env[k] = v;
+
+resetSelfProbeCache();
+resetSloMeter();
+const coldProbe = await runSelfProbe({ origin: null, store: false });
+check('self-probe reports every kind it could not earn',
+  coldProbe.earnedCount === 0 && coldProbe.missing.length === 4);
+check('self-probe names the missing origin rather than guessing',
+  coldProbe.missing.find((m) => m.kind === 'certificate-authority').code === 'ORIGIN_UNKNOWN');
+check('self-probe refuses SLO evidence without samples',
+  coldProbe.missing.find((m) => m.kind === 'slo-measurement').code === 'SLO_NOT_MEASURED');
+check('self-probe refuses audit evidence without a durable store',
+  coldProbe.missing.find((m) => m.kind === 'durable-immutable-audit').code === 'DURABLE_STORE_NOT_CONFIGURED');
+check('a dry run stores nothing', coldProbe.stored === false);
+
+/* Feed the meter real samples: now — and only now — SLO becomes earnable. */
+for (let i = 0; i < 25; i += 1) recordSloSample({ durationMs: 20 + i, ok: true });
+const warmProbe = await runSelfProbe({ origin: null, store: false });
+const sloEarned = warmProbe.earned.find((e) => e.kind === 'slo-measurement');
+check('self-probe earns SLO once real traffic exists', Boolean(sloEarned));
+check('self-probe SLO digest is a 64-hex value', /^[0-9a-f]{64}$/.test(sloEarned?.digest || ''));
+check('self-probe reports the measurement it used',
+  warmProbe.detail.slo.samples === 25 && warmProbe.detail.slo.uptime === 1);
+
+/* A bad SLO must not be rounded up into evidence. */
+resetSloMeter();
+for (let i = 0; i < 20; i += 1) recordSloSample({ durationMs: 20, ok: i % 2 === 0 });
+const badProbe = await runSelfProbe({ origin: null, store: false });
+check('self-probe refuses evidence for a failing SLO',
+  badProbe.missing.find((m) => m.kind === 'slo-measurement').code === 'SLO_UPTIME_BELOW_TARGET');
+resetSloMeter();
+resetSelfProbeCache();
+
 /* ── optional live network paths ────────────────────────────────────────── */
 if (process.env.FBT_PROBE_NETWORK === '1') {
   const liveCa = await probeCertificateAuthority('https://vercel.com');
