@@ -89,7 +89,12 @@ try {
   check('backup drill passes', drillStatus.body.backupRestore?.ok === true);
   check('reproducible build passes', drillStatus.body.reproducibleBuild?.ok === true);
   check('rollback drill passes', drillStatus.body.rollbackDrill?.ok === true);
-  check('SLO measurement passes', drillStatus.body.sloMeasurement?.ok === true);
+  check('SLO measurement reports its own provenance', drillStatus.body.sloMeasurement?.measurement?.schema === 'fbt.slo-measurement.v1');
+  check('SLO verdict matches the measurement', drillStatus.body.sloMeasurement?.ok === (drillStatus.body.sloMeasurement?.measurement?.measured === true));
+
+  const sloStatus = await get('/api/intents/v1/slo-status');
+  check('slo-status route returns 200', sloStatus.status === 200);
+  check('slo-status counts real served requests', Number(sloStatus.body.samples) > 0);
 } finally {
   server.close();
 }

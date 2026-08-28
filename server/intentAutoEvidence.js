@@ -29,8 +29,18 @@
  * Everything else — CA, sandbox operator, smart wallet, guardian, production
  * signer, broker, bridge, venue health, policy contract, immutable audit,
  * backup/restore and rollback drills, SLO measurement, independent security
- * review — requires an external, reviewed attestation and must be injected
- * through POST /api/intents/v1/operator-evidence (or restored from
+ * review — is not self-issued here.
+ *
+ * Four of those — certificate-authority, venue-health, slo-measurement and
+ * durable-immutable-audit — are nevertheless *measurable*: they are facts about
+ * things this deployment can actually contact. They are earned by
+ * server/intentSelfProbe.js, but only from a real TLS handshake, a real venue
+ * request, really served traffic and a real append-and-verify against the
+ * durable log. That is the same rule as here, applied to network checks rather
+ * than local ones — never a default, never a constant.
+ *
+ * The remaining kinds are attestations about external parties and must be
+ * injected through POST /api/intents/v1/operator-evidence (or restored from
  * INTENT_OPERATIONAL_EVIDENCE). See docs/INTENT-AI-OPERATIONAL-EVIDENCE-FA.md.
  */
 

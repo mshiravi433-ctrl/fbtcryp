@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { sloSnapshot } from './intentSloMeter.js';
 import { verifyBackupRestore, verifyReproducibleBuild, verifyRollbackDrill, verifySloMeasurement } from '../src/lib/intent-ai/operationalActivation.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname || '.'), '..');
@@ -87,16 +88,23 @@ export function rollbackDrill({ now = Date.now() } = {}) {
 }
 
 /**
- * Measure SLO compliance.
- * Checks that key metrics are defined and measured.
+ * Report SLO compliance from real, recorded traffic.
+ *
+ * This used to return uptime 0.999 / p99 250ms as hard-coded literals — a
+ * number nobody had measured, rendered on dashboards as if somebody had. It
+ * now reads the ring buffer in intentSloMeter.js, which is fed by the response
+ * hook on every served request. With too little traffic it reports
+ * measured:false and verifySloMeasurement correctly refuses the evidence.
  */
-export function sloMeasurement({ now = Date.now() } = {}) {
-  return verifySloMeasurement({
-    defined: true,
-    measured: true,
-    window: '24h',
-    uptime: 0.999,
-    p99LatencyMs: 250,
-    errorRate: 0.001
+export function sloMeasurement({ now = Date.now(), windowMs, minSamples } = {}) {
+  const snapshot = sloSnapshot({ now, ...(windowMs ? { windowMs } : {}), ...(minSamples ? { minSamples } : {}) });
+  const verdict = verifySloMeasurement({
+    defined: snapshot.defined,
+    measured: snapshot.measured,
+    window: snapshot.window,
+    uptime: snapshot.uptime,
+    p99LatencyMs: snapshot.p99LatencyMs,
+    errorRate: snapshot.errorRate
   });
+  return { ...verdict, measurement: snapshot };
 }

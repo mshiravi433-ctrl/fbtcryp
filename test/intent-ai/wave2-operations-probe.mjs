@@ -74,7 +74,17 @@ const { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasuremen
 check('backup/restore drill passes', backupRestoreDrill().ok === true);
 check('reproducible build passes', reproducibleBuildCheck().ok === true);
 check('rollback drill passes', rollbackDrill().ok === true);
-check('SLO measurement passes', sloMeasurement().ok === true);
+/* SLO is a measurement, not a constant: with no traffic it must refuse to
+   report, and it may only pass once real samples exist. */
+const { recordSloSample, resetSloMeter } = await import('../../server/intentSloMeter.js');
+resetSloMeter();
+const coldSlo = sloMeasurement();
+check('SLO refuses to report without samples', coldSlo.ok === false && coldSlo.measurement.measured === false);
+for (let i = 0; i < 25; i += 1) recordSloSample({ durationMs: 30 + i, ok: true });
+const warmSlo = sloMeasurement();
+check('SLO measurement passes on real samples', warmSlo.ok === true && warmSlo.measurement.samples >= 20);
+check('SLO uptime is computed, not defaulted', warmSlo.measurement.uptime === 1 && warmSlo.measurement.p95LatencyMs !== null);
+resetSloMeter();
 
 const passed = results.filter(r => r.ok).length;
 console.log(JSON.stringify({ probe: 'wave2-operations', passed, total: results.length, results }, null, 2));
