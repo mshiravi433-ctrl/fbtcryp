@@ -115,15 +115,23 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
   const launchAllowed = scan.readiness?.launchAllowed === true
     && scan.readiness?.operational === 'operational';
   const live = launchAllowed;
+  /*
+   * Every phase reports its own activation state. A previous revision short-
+   * circuited to activeStatus() for ALL phases the moment the aggregate
+   * evidence allowed launch, which discarded each phase's real evaluation and
+   * published `operational: true` for phases whose own evidence was missing.
+   * The per-phase resolvers below are the source of truth; `live` only decides
+   * whether a phase is ALLOWED to be live, never that it IS.
+   */
   const phases = SPEC_PHASES.map((phase) => {
-    const activation = live
-      ? activeStatus()
-      : phase.phase === 10
-        ? phase10Status()
-        : phase.phase === 21
-          ? operationalPhase21Row(scan)
-          : phase.phase >= 22
-            ? controlPlaneRow(phase.phase, scan.controlPlane)
+    const activation = phase.phase === 10
+      ? phase10Status()
+      : phase.phase === 21
+        ? operationalPhase21Row(scan)
+        : phase.phase >= 22
+          ? controlPlaneRow(phase.phase, scan.controlPlane)
+          : live
+            ? activeStatus()
             : inactiveStatus(phase);
     const sourcePresent = phase.source.every(sourceExists);
     const testsPresent = phase.tests.every(sourceExists);

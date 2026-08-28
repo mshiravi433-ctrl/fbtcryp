@@ -5073,7 +5073,11 @@
         "partial": "Only part of this order was filled.",
         "sessionKey": "The session key is expired or revoked, so nothing was signed.",
         "unknown": "Execution did not complete, and the exact cause is not known."
-      }
+      },
+      "queued": "Saved to send when you are back online. Nothing has been executed.",
+      "awaitingBroadcast": "Signed and checked against your policy. Not sent to the network yet.",
+      "broadcastDisabled": "Signed and checked against your policy. This build does not send transactions to the network.",
+      "authorized": "Authorized — not yet on the network"
     },
     "readiness": {
       "title": "Capabilities & readiness",
@@ -5623,14 +5627,31 @@
       "restricted": "Available here with an extra confirmation.",
       "blocked": "Not available in your region.",
       "legalHold": "Not available right now for legal reasons.",
-      "unknownFeature": "This feature is not recognised."
+      "unknownFeature": "This feature is not recognised.",
+      "sectionTitle": "What is available in your region",
+      "feature": {
+        "swap": "Swap",
+        "bridge": "Bridge",
+        "send": "Send",
+        "automation": "Automation",
+        "agent-market": "Agent market",
+        "fiat-onramp": "Buying with money",
+        "fiat-offramp": "Cashing out to money"
+      },
+      "state": {
+        "available": "On",
+        "restricted": "Limited",
+        "blocked": "Off",
+        "unknown": "Unknown"
+      }
     },
     "ramp": {
       "noOnramp": "We cannot buy crypto with a bank card or bank transfer. This app only swaps crypto you already hold.",
       "noOfframp": "We cannot send money to a bank account. This app only swaps crypto you already hold.",
       "alternative": "You can swap between the tokens already in your wallet.",
       "thirdPartyDisclaimer": "This is a separate company. We do not operate it and cannot support it.",
-      "routesRemoved": "Some routes were hidden because they need a service we do not provide."
+      "routesRemoved": "Some routes were hidden because they need a service we do not provide.",
+      "title": "Money in and out"
     },
     "chaos": {
       "passed": "The {{fault}} drill behaved honestly.",
@@ -5645,7 +5666,10 @@
       "aboveMax": "That fee is above the allowed maximum and was refused.",
       "mismatch": "The fee charged does not match the fee quoted. Stopped.",
       "accountingComplete": "All {{counted}} settled fees are accounted for.",
-      "accountingPartial": "{{counted}} settled fees counted; {{excluded}} could not be verified."
+      "accountingPartial": "{{counted}} settled fees counted; {{excluded}} could not be verified.",
+      "title": "Fee",
+      "net": "You keep about {{amount}} {{symbol}} after the fee.",
+      "onReceipt": "Fee charged: {{amount}} {{symbol}} ({{percent}}%)."
     },
     "plan": {
       "entitlements": "Your {{tier}} plan includes {{count}} analysis features.",
@@ -5665,7 +5689,19 @@
       "deleteFailed": "Nothing was deleted.",
       "deleteNeedsConfirmation": "Deleting is permanent. Please confirm.",
       "deletionProven": "We read every store back and nothing of yours remains.",
-      "deletionUnproven": "The deletion could not be fully verified."
+      "deletionUnproven": "The deletion could not be fully verified.",
+      "title": "My data",
+      "subtitle": "Take a copy of everything, or delete it. Your wallet keys are never touched.",
+      "exportAction": "Export",
+      "exportDownload": "Download my data",
+      "deleteAction": "Delete",
+      "deleteTitle": "Delete my data",
+      "deleteBody": "This removes your Intent AI memory, sessions, personal audit, preferences, receipts, alerts and cache from this device. It cannot be undone, and it does not touch your wallet.",
+      "deleteConfirmLabel": "Yes, delete everything",
+      "cancel": "Cancel",
+      "proofTitle": "Proof of deletion",
+      "proofRef": "Reference {{proof}}",
+      "proofStores": "Every one of the {{stores}} stores was read back and is empty."
     },
     "a11y": {
       "screenOk": "This screen passed the accessibility checks.",
@@ -5687,7 +5723,94 @@
       "notQueued": "This was not queued.",
       "needsReconfirmation": "The terms changed while you were offline. Please confirm again.",
       "cachedPage": "Showing a saved copy of this page.",
-      "pageUnavailable": "This page needs a connection."
+      "pageUnavailable": "This page needs a connection.",
+      "title": "Connection",
+      "reviewAgain": "Review and confirm again",
+      "reviewNote": "A waiting intent is never sent on its own. You confirm it again when you are back."
+    },
+    "api": {
+      "keyIssued": "Developer key created with {{scopes}} scopes. Copy it now — it is shown only once.",
+      "keyRefused": "That developer key could not be created.",
+      "keyRevoked": "This key is revoked. It has no access at all.",
+      "keyExpired": "This key has expired.",
+      "keyUnknown": "This key is not recognised.",
+      "scopeRefused": "That scope is not available on the public API.",
+      "operationUnknown": "That operation is not part of the public API.",
+      "executionRefused": "The public API never executes or signs. Only the person holding the wallet can confirm that.",
+      "manifest": "Read-only and draft-only. Execution always stays with the user.",
+      "unavailable": "The public API cannot answer right now."
+    },
+    "governance": {
+      "proposalOpen": "Proposal open: {{parameter}} to {{value}}.",
+      "proposalRefused": "That proposal could not be opened.",
+      "notVotable": "This is a safety proof, not a setting. No vote can change it.",
+      "unknownParameter": "That setting is not open to community votes.",
+      "outOfBounds": "That value is outside the allowed range ({{min}} to {{max}}).",
+      "voteRecorded": "Your vote is recorded. {{count}} votes so far.",
+      "voteRefused": "That vote could not be recorded.",
+      "votingOpen": "Voting is open: {{for}} for, {{against}} against.",
+      "votingClosed": "Voting is closed for this proposal.",
+      "approved": "The proposal was approved by {{for}} of {{counted}} votes.",
+      "rejected": "The proposal did not pass.",
+      "applied": "{{parameter}} is now {{value}}.",
+      "applyRefused": "This change was not applied.",
+      "blockedByProgramControl": "Approved, but the launch rules still hold it. Nothing changed yet."
+    },
+    "autonomy": {
+      "level1": "Level 1 — you confirm every step.",
+      "level2": "Level 2 — the assistant may prepare, you still confirm.",
+      "level3": "Level 3 — wider preparation inside your policy, you still confirm.",
+      "eligible": "You now qualify for level {{level}}. Ask for it when you are ready.",
+      "notEligible": "Level {{level}} is not open yet: {{missing}} things are still needed.",
+      "needsRequest": "Levels never rise on their own. Ask for it explicitly.",
+      "noSkipping": "Levels go up one at a time.",
+      "promoted": "You are now on level {{level}}. You can return to level 1 whenever you want.",
+      "demoted": "You are back on level 1.",
+      "promotionRefused": "That level change was refused.",
+      "atMax": "You are already on the highest level."
+    },
+    "oversight": {
+      "scheduled": "A check-in is set for every {{days}} days. Long plans need it.",
+      "notScheduled": "This plan has no check-in, so it cannot run.",
+      "intervalRefused": "That check-in interval is too long.",
+      "active": "Running. Your next check-in is scheduled.",
+      "due": "Your check-in is due. Please answer to keep this plan running.",
+      "autoPaused": "No answer to the check-in, so the plan stopped by itself.",
+      "paused": "This plan is paused.",
+      "pausedNeedsAnswer": "This plan is paused and waiting for your answer.",
+      "continued": "Thank you. The plan continues.",
+      "ended": "This plan has ended.",
+      "answerRefused": "That answer was not recorded.",
+      "noDate": "This plan has no check-in date, so it will not run."
+    },
+    "survival": {
+      "updateReady": "This update can be installed and rolled back.",
+      "updateBlocked": "This update is held back: {{blockers}} problems.",
+      "rotated": "The key was replaced and the old one no longer works.",
+      "oldKeyAlive": "The old key still works, so the rotation did not finish.",
+      "newKeyUnusable": "The new key is not usable, so nothing was rotated.",
+      "rotationFailed": "The key could not be rotated.",
+      "drillCurrent": "The recovery drill is current.",
+      "drillStale": "The last recovery drill was {{days}} days ago and no longer counts.",
+      "neverDrilled": "No recovery drill has been run.",
+      "ready": "All {{met}} of {{total}} long-term conditions are met.",
+      "notReady": "{{met}} of {{total}} long-term conditions are met."
+    },
+    "sovereignty": {
+      "exitExplained": "You can take everything and leave. Two steps, no fee, no waiting period.",
+      "packageReady": "Your full export is ready: {{stores}} stores, open JSON.",
+      "exportIncomplete": "The export is missing {{missing}} stores, so nothing was deleted.",
+      "exportFailed": "The export could not be prepared.",
+      "needsConfirmation": "Leaving deletes everything here. Please confirm.",
+      "exitComplete": "You have your data and nothing of yours remains here.",
+      "exitIncomplete": "{{remaining}} stores could not be cleared or checked.",
+      "exitFailed": "The exit could not be completed.",
+      "noResidue": "Every store was read back and is empty.",
+      "residueFound": "{{remaining}} stores still hold something.",
+      "residueUnknown": "We could not check what remains."
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm"
     }
   }
 }

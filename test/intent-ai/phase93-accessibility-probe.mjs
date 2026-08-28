@@ -115,6 +115,51 @@ try {
     locales.every((loc) => ['screenOk', 'screenFails', 'controlOk', 'controlFails', 'contrastOk', 'contrastLow', 'contrastUnknown']
       .every((k) => typeof loc?.intentAI?.a11y?.[k] === 'string')));
 
+  /* ------------------------------------------------------------------ */
+  /* The newly-wired surfaces are held to the same phase-93 bar.          */
+  /* ------------------------------------------------------------------ */
+  /*
+   * Wiring a module into the UI is where accessibility regressions get in:
+   * a new "Delete" affordance built out of a clickable div, or a dialog with
+   * no role, passes every module-level test and is still unusable with a
+   * keyboard. These checks cover the phase-92 and phase-87 sections added to
+   * settings, and the phase-88/94 strips added to the panel.
+   */
+  const settings = readFileSync('src/pages/Settings.jsx', 'utf8');
+
+  check('every my-data control is a real button',
+    ['my-data-export', 'my-data-delete', 'delete-confirm-button', 'delete-cancel-button']
+      .every((id) => new RegExp(`<button[^>]*data-testid="${id}"|data-testid="${id}"[^>]*>`, 's').test(settings)
+        && new RegExp(`type="button"[\\s\\S]{0,200}data-testid="${id}"`).test(settings)));
+  check('the my-data controls carry visible text labels, not bare icons',
+    /data-testid="my-data-export"[\s\S]{0,120}\{t\('intentAI\.lifecycle\.exportAction'\)\}/.test(settings)
+    && /data-testid="my-data-delete"[\s\S]{0,120}\{t\('intentAI\.lifecycle\.deleteAction'\)\}/.test(settings));
+  check('the delete dialog is a Sheet, which supplies role and aria-modal',
+    /<Sheet open=\{deleteOpen\}/.test(settings));
+  check('the delete dialog can be dismissed without confirming',
+    /<Sheet open=\{deleteOpen\} onClose=\{\(\) => setDeleteOpen\(false\)\}/.test(settings));
+  const sheet = readFileSync('src/components/Sheet.jsx', 'utf8');
+  check('Sheet still declares role="dialog" and aria-modal',
+    /role="dialog"/.test(sheet) && /aria-modal="true"/.test(sheet));
+  check('Sheet still closes on Escape',
+    /e\.key === 'Escape'/.test(sheet));
+  check('the region availability rows use no positive tabindex',
+    /tabIndex=\{[1-9]/.test(settings) === false);
+  check('the new settings sections remove no focus outline',
+    /outline:\s*(none|0)/.test(settings) === false);
+  check('the region state is exposed as data, not colour alone',
+    /data-state=\{feature\.state\}/.test(settings)
+    && /\{t\(`intentAI\.compliance\.state\./.test(settings));
+
+  check('the offline strip is a live region',
+    /className=\{`ia-connection[\s\S]{0,200}role="status"/.test(panel));
+  check('the fiat boundary notice is announced as a note',
+    /className="ia-ramp-notice"[\s\S]{0,80}role="note"/.test(panel));
+  check('neither new panel strip introduces a clickable div',
+    (panel.match(/<div[^>]*onClick=/g) || []).length <= 2);
+  check('the new panel strips add no hardcoded aria-label',
+    (panel.match(/aria-label=[^\s>]*/g) || []).every((m) => m.startsWith('aria-label={t(')));
+
   console.log(JSON.stringify({ probe: 'phase93-accessibility', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

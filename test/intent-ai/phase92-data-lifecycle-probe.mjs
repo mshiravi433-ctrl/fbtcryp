@@ -107,6 +107,77 @@ try {
   check('the english deletion copy claims verification, not just deletion',
     /verified/i.test(locales[0].intentAI.lifecycle.deleted));
 
+  /* ------------------------------------------------------------------ */
+  /* UI WIRING — "My data" in settings, and the real store adapter.       */
+  /* ------------------------------------------------------------------ */
+  const settings = readFileSync('src/pages/Settings.jsx', 'utf8');
+
+  check('settings imports the lifecycle functions',
+    /exportUserData/.test(settings) && /deleteUserData/.test(settings) && /verifyDeletion/.test(settings));
+  check('settings renders a "my data" section',
+    settings.includes('data-testid="my-data-section"') && settings.includes('intentAI.lifecycle.title'));
+  check('the section offers an export control',
+    settings.includes('data-testid="my-data-export"'));
+  check('the section offers a delete control',
+    settings.includes('data-testid="my-data-delete"'));
+  /*
+   * The delete row must OPEN a dialog, never call the eraser. The two regexes
+   * cover both source orders (onClick before or after the test id), because
+   * which one JSX happens to put first is not the property under test.
+   */
+  check('delete opens an explicit confirmation dialog rather than firing immediately',
+    (/data-testid="my-data-delete"[\s\S]{0,300}setDeleteOpen\(true\)/.test(settings)
+      || /setDeleteOpen\(true\)[\s\S]{0,300}data-testid="my-data-delete"/.test(settings))
+    && settings.includes('data-testid="delete-confirm-button"')
+    && settings.includes('data-testid="delete-cancel-button"'));
+  check('the delete row itself never calls deleteUserData',
+    !/data-testid="my-data-delete"[\s\S]{0,200}deleteUserData/.test(settings));
+  check('the confirmation dialog states what will be removed',
+    settings.includes('data-testid="delete-confirm-body"') && settings.includes('intentAI.lifecycle.deleteBody'));
+  check('the deletion passes confirmed: true only from that dialog',
+    /deleteUserData\(\{[\s\S]{0,160}confirmed: true/.test(settings));
+  check('the proof receipt is rendered only after verifyDeletion proves it',
+    /verification\.proven && deletion\.complete[\s\S]{0,300}setDeleteProof\(verification\.receipt\)/.test(settings)
+    && settings.includes('data-testid="deletion-proof"'));
+  check('an unproven deletion shows the problem instead of a proof',
+    /setDeleteProof\(null\)[\s\S]{0,300}setDeleteProblem\(/.test(settings)
+    && settings.includes('data-testid="deletion-problem"'));
+  check('a partial export is never offered as a complete one',
+    /!result\.ok \|\| !result\.complete/.test(settings));
+  check('the export refuses rather than downloading a partial file',
+    /!result\.ok \|\| !result\.complete\)\s*\{[\s\S]{0,160}return;/.test(settings));
+
+  /*
+   * The browser adapter is where the seven logical stores become real keys.
+   * If a store is added upstream and forgotten here, the deletion would report
+   * success for something it never touched — so the two lists must match.
+   */
+  const adapter = readFileSync('src/lib/userDataStores.js', 'utf8');
+  const mapped = [...adapter.matchAll(/^\s{2}([a-z]+): Object\.freeze\(\{ exact:/gm)].map((m) => m[1]);
+
+  check(`the adapter maps every DATA_STORES entry (mapped: ${mapped.length}, stores: ${DATA_STORES.length})`,
+    mapped.length === DATA_STORES.length && DATA_STORES.every((s) => mapped.includes(s)));
+  check('the adapter maps no store that does not exist upstream',
+    mapped.every((s) => DATA_STORES.includes(s)));
+  check('the adapter refuses to delete the wallet vault',
+    /PROTECTED_KEYS[\s\S]{0,120}'fbt-wallet-v1'/.test(adapter));
+  check('the adapter throws rather than reporting an unreadable store as empty',
+    /throw new Error\('NO_LOCAL_STORAGE'\)/.test(adapter));
+  check('an eraser reports how many keys it actually removed',
+    /removed \+= 1/.test(adapter) && /return \{ ok: true, removed \}/.test(adapter));
+  check('the local id is forgotten as part of the wipe',
+    /forgetLocalUserId/.test(adapter) && /forgetLocalUserId\(\)/.test(settings));
+
+  check('the my-data copy exists in en, fa and ar',
+    locales.every((loc) => ['title', 'subtitle', 'exportAction', 'exportDownload', 'deleteAction',
+      'deleteTitle', 'deleteBody', 'deleteConfirmLabel', 'cancel', 'proofTitle', 'proofRef', 'proofStores']
+      .every((k) => typeof loc?.intentAI?.lifecycle?.[k] === 'string')));
+  check('the english delete copy says it cannot be undone and spares the wallet',
+    /cannot be undone/i.test(locales[0].intentAI.lifecycle.deleteBody)
+    && /wallet/i.test(locales[0].intentAI.lifecycle.deleteBody));
+  check('the confirm label is an explicit affirmative, not a bare OK',
+    /delete/i.test(locales[0].intentAI.lifecycle.deleteConfirmLabel));
+
   console.log(JSON.stringify({ probe: 'phase92-data-lifecycle', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

@@ -41,13 +41,6 @@ const LIVE_BANNER = Object.freeze([
   'Current operational evidence is attested and within its validity window.'
 ]);
 
-function publishLive(value, key = '') {
-  if (key === 'banner') return [...LIVE_BANNER];
-  if (Array.isArray(value)) return value.map((item) => publishLive(item));
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([childKey, child]) => [childKey, publishLive(child, childKey)]));
-}
-
 export function activateControlPlane({
   evidence = [],
   registry = {},
@@ -129,29 +122,40 @@ export function activateControlPlane({
     evaluateRegulatoryReportingPlane(regulatory),
     evaluateProgramControlPlane({ ...program, evidence, freeze, now })
   ];
-  const live = readiness.launchAllowed === true && readiness.operational === 'operational';
-  /* The activation review publishes one coherent state for every operational
-     plane. Individual evaluators still keep their strict validation behavior
-     when called directly; the reviewed release snapshot is what the public
-     control plane reports. */
-  const publishedPlanes = live
-    ? planes.map((row) => ({
-      ...publishLive(row),
-      operational: true,
-      live: true,
-      ready: true,
-      launchAllowed: true,
-      blockers: [],
+  const aggregateLive = readiness.launchAllowed === true && readiness.operational === 'operational';
+  /*
+   * Each plane reports its OWN evaluation. A previous revision overwrote every
+   * row with operational/live/ready = true (and emptied `blockers`) as soon as
+   * the 21 aggregate evidence kinds were present. That produced rows whose
+   * envelope said `live: true` while the evaluator result nested inside the
+   * same object still said `ok: false` with a real blocker code such as
+   * RESIDENCY_NOT_ENFORCED or SBOM_ATTESTATION_MISSING — 26 of 30 rows were
+   * self-contradictory, and the contradiction was served publicly.
+   *
+   * A plane is live only when the aggregate evidence allows launch AND that
+   * plane's own evaluator returned a live result. Nothing is painted over.
+   */
+  const publishedPlanes = planes.map((row) => {
+    const planeLive = aggregateLive && row.live === true && !(row.blockers || []).length;
+    return {
+      ...row,
+      operational: planeLive,
+      live: planeLive,
+      ready: planeLive,
+      launchAllowed: planeLive,
+      blockers: [...(row.blockers || [])],
       claims: {
         ...(row.claims || {}),
-        verified: true,
-        production: true,
+        verified: planeLive,
+        production: planeLive,
         executionActivated: false,
         rawCredentialsAllowed: false
       }
-    }))
-    : planes;
-  const blockers = live ? [] : [...new Set(publishedPlanes.flatMap((row) => row.blockers || []))];
+    };
+  });
+  const blockers = [...new Set(publishedPlanes.flatMap((row) => row.blockers || []))];
+  /* The plane as a whole is live only when every constituent plane is. */
+  const live = aggregateLive && publishedPlanes.every((row) => row.live === true);
   return {
     schema: CONTROL_PLANE_SCHEMA,
     generatedAt: new Date(now).toISOString(),

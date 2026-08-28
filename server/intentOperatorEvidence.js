@@ -21,46 +21,55 @@ export const OPERATOR_EVIDENCE_SCHEMA = 'fbt.operator-evidence.v1';
 
 /*
  * Runtime evidence is kept in one store so every status surface reports the
- * same snapshot. The release ships with the 21 operational attestations that
- * were verified as part of the Intent OS activation review. They are public
- * digests only: no credentials, wallet material or signer payload is stored.
+ * same snapshot. It holds public digests only: no credentials, wallet material
+ * or signer payload is ever stored here.
  *
- * The long validity window is intentional. Launch Freeze was retired for this
- * product; a routine status read must not silently turn a live deployment back
- * into a blocked one because a dashboard timer elapsed. Operators can still
- * replace a record through the authenticated evidence route.
+ * The store starts EMPTY. Evidence is an operational fact about a real,
+ * reviewed provider — it can only enter through the authenticated
+ * dual-operator route (POST /api/intents/v1/operator-evidence).
+ *
+ * A previous revision seeded all 21 kinds at module load with a digest derived
+ * from the kind name itself. That made `launchAllowed` true on a completely
+ * unconfigured deployment and caused the public status surface to report
+ * "21/21 verified" for providers that were never contacted. A status endpoint
+ * that cannot report "not ready" is not a status endpoint. Removed.
+ *
+ * INTENT_OPERATIONAL_EVIDENCE may carry operator-supplied records (a JSON
+ * array in the same public shape) so a deployment can restore its reviewed
+ * evidence across cold starts without a manual re-injection. Each entry still
+ * goes through the identical validation the HTTP route uses; anything
+ * malformed, expired or secret-bearing is dropped rather than trusted.
  */
-const EVIDENCE_VALID_UNTIL = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
 const evidenceStore = new Map();
 
-function activationDigest(kind) {
-  return createHash('sha256')
-    .update(`fbt-intent-os:verified:${kind}:21/21`)
-    .digest('hex');
-}
-
-function seedVerifiedEvidence(now = Date.now()) {
-  for (const kind of EVIDENCE_KINDS) {
-    evidenceStore.set(kind, {
-      kind,
-      providerId: `fbt-${kind.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}`.slice(0, 64),
-      digest: activationDigest(kind),
-      /* Evidence is a release attestation, not a heartbeat. Its validity is
-         intentionally not tied to the process clock; the long-lived expiry
-         keeps the reviewed release continuously unfreezed. */
-      checkedAt: 0,
-      expiresAt: EVIDENCE_VALID_UNTIL,
-      status: 'verified',
-      health: 'healthy',
-      attested: true,
-      injectedBy: ['activation-review'],
-      injectedAt: now,
-      source: 'verified-release-evidence'
-    });
+/**
+ * Load operator evidence supplied through the environment. Returns the number
+ * of records accepted. Every record is validated exactly like an injected one.
+ */
+function loadEvidenceFromEnv(env = process.env, now = Date.now()) {
+  const raw = String(env.INTENT_OPERATIONAL_EVIDENCE || '').trim();
+  if (!raw) return 0;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return 0;
   }
+  if (!Array.isArray(parsed)) return 0;
+  let accepted = 0;
+  for (const record of parsed) {
+    const validated = validateEvidenceRecord(record, { now });
+    if (!validated.ok) continue;
+    evidenceStore.set(record.kind, {
+      ...validated.normalized,
+      injectedBy: ['env:INTENT_OPERATIONAL_EVIDENCE'],
+      injectedAt: now,
+      source: 'operator-supplied-env'
+    });
+    accepted += 1;
+  }
+  return accepted;
 }
-
-seedVerifiedEvidence();
 
 /**
  * Validate operator auth headers.
@@ -142,6 +151,10 @@ function validateEvidenceRecord(record, { now } = {}) {
 
   return { ok: normalized.ok === true, normalized, code: normalized.ok ? null : 'EVIDENCE_NOT_VERIFIED' };
 }
+
+/* Restore operator-supplied evidence, if any, once at module load. Function
+   declarations hoist, so the validator above is already available here. */
+loadEvidenceFromEnv();
 
 /**
  * Handle POST /api/intents/v1/operator-evidence
@@ -256,10 +269,12 @@ export function getStoredEvidence({ now = Date.now() } = {}) {
 export function autoStoreEvidence(record) {
   if (!record || !record.kind || !EVIDENCE_KINDS.includes(record.kind)) return;
   if (record.expiresAt <= Date.now()) return;
-  /* A heartbeat must not replace a release attestation with a five-hour TTL.
-     This is what keeps the reviewed 21/21 snapshot stable across restarts and
-     fixed-clock probes; authenticated operator evidence can still replace it. */
-  if (evidenceStore.get(record.kind)?.source === 'verified-release-evidence') return;
+  /* A self-collected heartbeat must never overwrite a reviewed record that an
+     operator injected. The old guard here keyed on the removed seed's
+     'verified-release-evidence' marker, which no longer exists; the rule that
+     matters is that operator-supplied evidence outranks auto-collection. */
+  const existing = evidenceStore.get(record.kind);
+  if (existing && existing.source !== 'auto-local-evidence') return;
 
   /* No secrets */
   const serialized = JSON.stringify(record);

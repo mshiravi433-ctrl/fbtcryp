@@ -375,13 +375,26 @@ const laterPhaseProbes = [
   [91, './intent-ai/phase91-plan-governance-probe.mjs'],
   [92, './intent-ai/phase92-data-lifecycle-probe.mjs'],
   [93, './intent-ai/phase93-accessibility-probe.mjs'],
-  [94, './intent-ai/phase94-offline-queue-probe.mjs']
+  [94, './intent-ai/phase94-offline-queue-probe.mjs'],
+  /* Arc I — governance and closing (phases 95-100). */
+  [95, './intent-ai/phase95-public-api-probe.mjs'],
+  [96, './intent-ai/phase96-param-governance-probe.mjs'],
+  [97, './intent-ai/phase97-gradual-autonomy-probe.mjs'],
+  [98, './intent-ai/phase98-human-oversight-probe.mjs'],
+  [99, './intent-ai/phase99-long-term-survival-probe.mjs'],
+  [100, './intent-ai/phase100-user-sovereignty-probe.mjs']
 ];
 for (const [phase, probe] of laterPhaseProbes) {
   console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);
   const module = await import(probe);
   if (Array.isArray(module.default)) report(`intent-ai phase-${phase}`, module.default);
 }
+console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
+{
+  const { default: bridgeResults } = await import('./intent-ai/draft-transaction-bridge-probe.mjs');
+  if (Array.isArray(bridgeResults)) report('intent-ai draft-transaction-bridge', bridgeResults);
+}
+
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
 await import('./intent-ai/phase-status-probe.mjs');
 

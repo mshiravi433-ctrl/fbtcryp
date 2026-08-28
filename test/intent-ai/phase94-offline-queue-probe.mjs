@@ -122,6 +122,65 @@ try {
   check('the queued copy is about sending later, not about success',
     /when you are back online/i.test(locales[0].intentAI.offline.queued));
 
+  /* ------------------------------------------------------------------ */
+  /* UI WIRING — the panel shows the connection, the SW gates the cache.  */
+  /* ------------------------------------------------------------------ */
+  const panel = readFileSync('src/components/IntentAIPanel.jsx', 'utf8');
+
+  check('the panel imports offlineStatus and enqueueIntent',
+    /offlineStatus/.test(panel) && /enqueueIntent/.test(panel));
+  check('the panel reads the real connection state from the browser',
+    /navigator\.onLine/.test(panel));
+  check('the panel follows online and offline events',
+    /addEventListener\('online'/.test(panel) && /addEventListener\('offline'/.test(panel));
+  check('the panel renders an offline status strip',
+    panel.includes('data-testid="offline-status"'));
+  check('the offline strip is announced to assistive tech',
+    /data-testid="offline-status"[\s\S]{0,200}|role="status"[\s\S]{0,200}data-testid="offline-status"/.test(panel)
+    && /className=\{`ia-connection[\s\S]{0,160}role="status"/.test(panel));
+  check('an offline confirm queues instead of executing',
+    /if \(!online\) \{[\s\S]{0,600}enqueueIntent\(/.test(panel));
+  check('the offline receipt is never completed or submitted',
+    /if \(!online\) \{[\s\S]{0,900}status: 'unavailable'/.test(panel));
+  check('the queued receipt says nothing was sent',
+    panel.includes('data-testid="receipt-queued-note"') && panel.includes('intentAI.offline.reviewNote'));
+  check('the panel never flushes the queue on its own',
+    !/flushQueue/.test(panel));
+  check('the review-again copy exists in en, fa and ar',
+    locales.every((loc) => typeof loc?.intentAI?.offline?.reviewNote === 'string'
+      && typeof loc?.intentAI?.offline?.title === 'string'));
+  check('the queued receipt copy exists in en, fa and ar',
+    locales.every((loc) => typeof loc?.intentAI?.receipt?.queued === 'string'));
+  check('the english queued receipt says nothing was executed',
+    /nothing has been executed/i.test(locales[0].intentAI.receipt.queued));
+
+  /*
+   * The service worker cannot import this module (it is not part of the bundle
+   * graph), so it repeats the route list. That duplication is only safe if the
+   * two lists cannot drift — which is what these checks enforce.
+   */
+  const sw = readFileSync('public/sw.js', 'utf8');
+
+  check('the service worker carries a cachePolicyFor function',
+    /function cachePolicyFor\(/.test(sw));
+  check('the service worker consults cachePolicyFor before caching',
+    /cachePolicyFor\(url\.pathname\)/.test(sw));
+  check('only a cacheable route is written to the cache',
+    /policy\.cacheable && res && res\.ok/.test(sw));
+  const swRoutes = (sw.match(/const CACHEABLE_ROUTES = \[([^\]]*)\]/) || [])[1] || '';
+  const swList = swRoutes.split(',').map((r) => r.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  check(`the service-worker route list matches CACHEABLE_ROUTES exactly (sw: ${swList.length}, module: ${CACHEABLE_ROUTES.length})`,
+    swList.length === CACHEABLE_ROUTES.length && swList.every((r, i) => r === CACHEABLE_ROUTES[i]));
+  check('the service worker never caches a personal or live route',
+    swList.every((r) => cachePolicyFor(r).cacheable === true));
+  check('a private route is not cacheable in either implementation',
+    ['/wallet', '/settings', '/swap', '/portfolio'].every((r) => cachePolicyFor(r).cacheable === false
+      && !swList.includes(r)));
+  check('the service worker still refuses to cache API responses',
+    /pathname\.startsWith\('\/api\/'\)/.test(sw));
+  check('the service worker still handles fetch and keeps the v4 shell',
+    /addEventListener\('fetch'/.test(sw) && /fbt-shell-v4/.test(sw));
+
   console.log(JSON.stringify({ probe: 'phase94-offline-queue', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

@@ -212,6 +212,10 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
   const live = specificationStatus.launchAllowed === true;
   const blockers = live ? [] : buildBlockers(secretManager, env);
   const phase8Operational = secretManager.operational;
+  /* Report the evidence count actually held by the store. This was previously
+     the string literal '21/21' in both places below, so the activation report
+     claimed a complete evidence set on a deployment that had none. */
+  const storedEvidence = specificationStatus.evidence?.status || '0/21';
 
   return {
     schema: ACTIVATION_SCHEMA,
@@ -222,7 +226,7 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
     live,
     launchAllowed: live,
     isFrozen: false,
-    evidence: '21/21',
+    evidence: storedEvidence,
     product: {
       name: 'FBT Intent AI',
       completedPhases: [1, 2, 3, 4, 5, 6, 7],
@@ -239,7 +243,7 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
       operationalActivationRequired: !live,
       launchAllowed: live,
       isFrozen: false,
-      storedEvidence: '21/21'
+      storedEvidence
     },
     securityBoundary: {
       guardianNonDisableable: true,

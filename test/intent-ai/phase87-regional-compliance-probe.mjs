@@ -99,6 +99,46 @@ try {
     locales.every((loc) => ['mapTitle', 'regionUnknown', 'available', 'restricted', 'blocked', 'legalHold']
       .every((k) => typeof loc?.intentAI?.compliance?.[k] === 'string')));
 
+  /* ------------------------------------------------------------------ */
+  /* UI WIRING — the availability map is on screen, complete and honest.  */
+  /* ------------------------------------------------------------------ */
+  const settings = readFileSync('src/pages/Settings.jsx', 'utf8');
+
+  check('settings imports availabilityMap', /availabilityMap/.test(settings));
+  check('settings renders the region availability section',
+    settings.includes('data-testid="region-availability-section"')
+    && settings.includes('intentAI.compliance.sectionTitle'));
+  check('the map is rendered from availabilityMap, not a hand-written list',
+    /regionMap\.features\.map\(/.test(settings));
+  check('every gated feature gets its own row',
+    GATED_FEATURES.every((f) => settings.includes('data-testid={`region-feature-')
+      || settings.includes(`region-feature-${f}`)));
+  check('each row carries its state as data, not only as colour',
+    /data-state=\{feature\.state\}/.test(settings));
+  check('each row states its reason in words',
+    /sub=\{t\(feature\.i18nKey\)\}/.test(settings));
+  check('an unknown region is admitted rather than silently strict',
+    /!regionMap\.regionKnown/.test(settings) && settings.includes('data-testid="region-unknown-note"'));
+  check('the region is derived from a locale hint, never asserted as legal fact',
+    /navigator\.language/.test(settings));
+  check('the UI cannot grant a feature the policy denies (render-only)',
+    !/REGION_POLICY\s*\[/.test(settings) && !/assertGateOnlyRestricts/.test(settings));
+
+  /* The rendered map must cover the same features the module gates. */
+  const uiMap = availabilityMap({ region: null });
+  check('the rendered map is complete for an unknown region', uiMap.complete === true);
+  check('an unknown region falls back to the strictest policy',
+    uiMap.regionKnown === false
+    && uiMap.blocked.includes('fiat-onramp') && uiMap.blocked.includes('fiat-offramp'));
+  check('every feature in the rendered map has a state chip key',
+    uiMap.features.every((f) => FEATURE_STATES.includes(f.state)));
+
+  check('the section title and feature names exist in en, fa and ar',
+    locales.every((loc) => typeof loc?.intentAI?.compliance?.sectionTitle === 'string'
+      && GATED_FEATURES.every((f) => typeof loc?.intentAI?.compliance?.feature?.[f] === 'string')));
+  check('every feature state chip is translated in en, fa and ar',
+    locales.every((loc) => FEATURE_STATES.every((s) => typeof loc?.intentAI?.compliance?.state?.[s] === 'string')));
+
   console.log(JSON.stringify({ probe: 'phase87-regional-compliance', passed: results.filter((r) => r.ok).length, results }, null, 2));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 } catch (e) {

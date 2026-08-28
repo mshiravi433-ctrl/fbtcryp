@@ -1,3 +1,161 @@
+## Unreleased — Honest activation status and the draft-to-transaction bridge
+
+### Removed four layers that faked a live system
+
+The public status surface reported a fully operational, launch-allowed system
+on a deployment holding no operational evidence at all. It could not report
+"not ready" under any circumstance, which is the one thing a fail-closed
+status endpoint exists to do. Four independent mechanisms produced this:
+
+- **Seeded evidence.** `server/intentOperatorEvidence.js` filled all 21
+  evidence kinds at module load, each expiring in the year 9999, with a digest
+  computed from the kind's own name. The store now starts empty; evidence
+  arrives only through the authenticated dual-operator route or from
+  `INTENT_OPERATIONAL_EVIDENCE`, which is parsed by the same validator.
+- **The `publishLive` overlay.** `controlPlaneActivation.js` rewrote every
+  plane to `live: true` with `blockers` emptied once aggregate evidence was
+  present. 26 of 30 rows ended up with an envelope claiming `live: true`
+  wrapped around an evaluator result still reporting `ok: false` with a real
+  code (`RESIDENCY_NOT_ENFORCED`, `SBOM_ATTESTATION_MISSING`, ...). Each plane
+  now publishes its own verdict.
+- **The blanket `activeStatus()`.** `phaseStatusReport` short-circuited every
+  phase to active as soon as launch was allowed, discarding the per-phase
+  resolvers. The resolvers are now always consulted.
+- **Manufactured attestations.** `intentAutoEvidence.js` looped over
+  `EVIDENCE_KINDS` and invented evidence for every kind it had not already
+  emitted, including `independent-security-review`, `certificate-authority`
+  and `production-signer` — a server cannot self-certify an external audit.
+  Restricted to the 7 genuinely self-verifiable kinds and enforced by
+  `SELF_VERIFIABLE_KINDS`; `makeEvidence` throws on anything else.
+  `intentActivation.js` also carried the literal `'21/21'` twice.
+
+Behaviour now tracks reality: with no evidence, 0/41 phases live and
+`launchAllowed: false`; with 21 injected records, 21/21 and 11/41 live, the
+remainder legitimately awaiting their own per-phase inputs. Five probe
+assertions that had encoded the fake were corrected to assert the honest
+behaviour rather than deleted.
+
+### Added the missing draft-to-transaction bridge
+
+Intent OS reasons in symbols and USD (`{ fromSymbol: 'USDC', amountUsd: 100 }`)
+while a chain requires addresses and base units. No module in
+`src/lib/intent-ai/` could cross that gap, so `confirmAndSubmit` always ran
+with `broadcastResult = null` and `txHash` was always null — Intent OS could
+never execute, while `Swap.jsx` did the same job through
+`buildIntentTransactionRequest`.
+
+`draftTransactionBridge.js` supplies the translation: symbol to address,
+decimal-exact base units via BigInt string arithmetic, and a live quote. It
+never signs and never broadcasts; it prepares a request and hands it back to
+the existing audited path, so the phase-51 to phase-55 guarantees are
+untouched. Every gap is fail-closed — an unresolvable symbol, an absent
+`decimals`, a missing quote and a USD figure with no supplied price are all
+refusals, never guesses. Broadcasting requires both
+`VITE_INTENT_BROADCAST_ENABLED=true` and an explicit per-call opt-in; the
+default is off. 56 checks in `test/intent-ai/draft-transaction-bridge-probe.mjs`.
+
+A receipt with no transaction hash is no longer labelled `submitted` — it
+reads `authorized` (signed and policy-checked, not on the network), with the
+reason stated in en/fa/ar.
+
+## Unreleased — Intent OS Arc I (phases 95-100): governance and closing
+
+- **95 — public Intent OS API.** `publicApi.js` opens the intent surface to
+  third-party developers under exactly the internal rules. Every key is scoped
+  at issue time and revocable instantly; `assertKeyUsable` refuses a revoked
+  key on every path, so revocation is not a flag somebody can forget to check.
+  `authorizeApiCall` refuses `intent.execute` and `intent.sign` outright with
+  `EXECUTION_NEVER_DELEGATED` — a third party can prepare and read, never sign.
+  `handleApiCall` strips `txHash`, `receipt` and `signature` from whatever a
+  handler returns, so an integrator cannot manufacture a receipt through us.
+- **96 — community parameter governance.** `paramGovernance.js` puts policy
+  parameters (caps, fees) up for proposal and vote, with a 25-vote quorum and a
+  60% approval threshold. What a vote can never do is remove a security proof:
+  the phase-50 rules, the confirmation gate, simulation and the guardian are
+  outside the governable set, and a proposal touching them is rejected before
+  it is ever tallied. `GOVERNED_PARAMETERS.feeBps.max` is pinned to the same
+  `FEE_BPS_MAX` the fee code enforces, so governance cannot vote past the cap.
+- **97 — gradual autonomy.** `gradualAutonomy.js` moves a user L1 → L2 → L3 on
+  their own confirmation history and demonstrated risk comprehension. Promotion
+  is never automatic: it requires an explicit `userConfirmed` decision with a
+  timestamp, levels cannot be skipped, and a cooldown separates them. Returning
+  to L1 always works, immediately, and resets the cooldown — the way down is
+  never harder than the way up.
+- **98 — human oversight charter.** `humanOversight.js` gives every long-running
+  program (DCA, goal) a mandatory periodic check-in. The three answers are
+  continue, pause and stop. Silence past the grace window is not consent: the
+  program auto-pauses and `mayRun` becomes false. A program nobody is watching
+  stops on its own rather than running unattended.
+- **99 — long-term survival.** `longTermSurvival.js` converts the phase-40
+  one-year stability proof into conditions the product must actually meet:
+  update path, key rotation, recovery drill, data portability and a named
+  accountable owner. `rotateAndRevoke` proves the retired key is dead through
+  the phase-68 `assertKeyUsable` tombstone path rather than asserting it.
+- **100 — user sovereignty and closure.** `userSovereignty.js` makes leaving a
+  first-class operation: a two-step exit with no fee, no cooling-off period and
+  no retention hook, producing a portable `application/json` package of memory,
+  history and settings. `verifyNoResidue` re-reads every store afterwards and
+  the probe proves the exit path leaves nothing behind. `assertNoLockIn`
+  refuses the patterns that make leaving expensive.
+
+Arc I adds 420 probe checks (95 → 72, 96 → 81, 97 → 68, 98 → 63, 99 → 60,
+100 → 76), registered in `test/run.mjs` and `npm run test:phases95-100`.
+
+### UI wiring — five modules brought to the surface
+
+156 intent-ai modules existed and 16 were reachable from the UI. Five that
+change what the user sees are now wired, each with new checks in its own phase
+probe rather than a separate test file:
+
+- **Fee integrity (90) in the Intent AI panel.** The confirmation preview shows
+  the fee percentage, the fee amount and the net amount, derived from the
+  amount currently in the field so an edit moves the fee in the same render.
+  The receipt restates the same fee. If the charged fee drifts from the quoted
+  one beyond `FEE_TOLERANCE`, the flow halts with `TERMS_CHANGED` and asks for
+  reauthorization instead of printing a success nobody agreed to.
+- **Data lifecycle (92) in settings.** A "My data" section exports everything
+  we hold or deletes it. Deletion sits behind an explicit confirmation dialog,
+  and the proof receipt appears only after `verifyDeletion` has read every
+  store back and found it empty; an unproven or partial deletion names what is
+  left instead. `src/lib/userDataStores.js` maps the seven logical stores onto
+  real localStorage keys and deliberately excludes the wallet vault — no
+  settings button may destroy the only copy of somebody's keys.
+- **Offline queue (94) in the panel and the service worker.** The panel shows
+  real connection state and, offline, parks a confirmed intent as `queued`:
+  no hash, no receipt, no authority, and no auto-send on reconnect. `sw.js`
+  now consults a `cachePolicyFor` mirror before writing anything to the cache,
+  so only public static routes are cached; the probe asserts the mirrored route
+  list is byte-identical to `CACHEABLE_ROUTES`.
+- **Fiat ramp boundary (88) in the panel.** A request about a bank, a card or a
+  national currency that produces no crypto draft gets the plain answer: we do
+  not move real money, here is what we can do instead. No hopeful link.
+- **Regional compliance (87) in settings.** A "what is available in your region"
+  map rendered from `availabilityMap`, every gated feature listed with its
+  state and reason. The region is a locale hint, so an unrecognised one falls
+  back to the strictest policy and says so.
+
+Phase 93 accessibility is enforced on the new surfaces: real buttons with
+visible labels, dialogs through `Sheet` (role, `aria-modal`, Escape), no
+positive tabindex, no removed focus outlines, and region state exposed as data
+rather than colour alone. Wiring added 61 checks across phases 87, 88, 90, 92,
+93 and 94.
+
+### Environment variable documentation
+
+`.env.example` is rewritten from a source scan of every `VITE_*` read in `src`
+and every `process.env.*` read in `server`, `api`, `scripts` and `ci` — 170
+variables, grouped as required-for-activation, required-for-one-capability,
+optional-with-a-default, and never-put-in-Vercel. Each carries a Persian line,
+the real default read from the code with its file, and exactly which capability
+turns off when it is empty. No real values; placeholders only. `docs/ENV-FA.md`
+now points at it, references `scripts/validate-activation-env.mjs`, and lists
+the three variables whose absence stops a script (`RPC_URL`, `CHAIN_ID`, and
+`DEPLOYER_PRIVATE_KEY`/`DEPLOYER_KMS_KEY_ID`) — all three in local deploy
+scripts, none in the app or server.
+
+New copy is translated in English, Persian and Arabic. `npm run build` is clean
+and the full suite is green.
+
 ## Unreleased — Intent OS Arc H (phases 90-94): product durability
 
 - **90 — fee integrity.** `feeIntegrity.js` turns `VITE_FEE_BPS` into a fee the

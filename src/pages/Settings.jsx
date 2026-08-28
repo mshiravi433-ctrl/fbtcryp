@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 /*
  * The footer read a hardcoded 'v1.0.0' while the app shipped 1.5.x — a version
@@ -55,6 +55,9 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
 import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
 import { isIOS, isWebView, isStandalone } from '../lib/platform';
 import { clearAppCache, exportSettingsBackup } from '../lib/dataStorage';
+/* Phase 92 — export, delete, and prove the deletion. */
+import { exportUserData, deleteUserData, verifyDeletion, DATA_STORES, availabilityMap } from '../lib/intent-ai';
+import { buildReaders, buildErasers, localUserId, forgetLocalUserId } from '../lib/userDataStores';
 import {
   IconBell,
   IconClock,
@@ -117,6 +120,38 @@ export default function Settings() {
   const [syncing, setSyncing] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [nameOpen, setNameOpen] = useState(false);
+
+  /*
+   * Phase 92 — "My data". `deleteOpen` gates the irreversible action behind an
+   * explicit confirmation dialog; `deleteProof` holds the verified receipt,
+   * which is only ever set from `verifyDeletion` after every store has been
+   * read back. It is never set optimistically: no proof, no proof shown.
+   */
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteProof, setDeleteProof] = useState(null);
+  const [deleteProblem, setDeleteProblem] = useState(null);
+
+  /*
+   * Phase 87 — what is actually available where this person is.
+   *
+   * The region comes from the browser's own locale, which is a hint and not a
+   * legal determination — so when it yields nothing recognisable, `featureState`
+   * falls back to the STRICTEST policy rather than the most permissive, and the
+   * map says out loud that the region could not be determined. Nothing here
+   * grants a feature; it can only ever show one as restricted or blocked.
+   */
+  const regionMap = useMemo(() => {
+    let region = null;
+    try {
+      const tag = typeof navigator !== 'undefined' ? (navigator.language || '') : '';
+      const parts = String(tag).split('-');
+      region = parts.length > 1 ? parts[parts.length - 1] : null;
+    } catch {
+      region = null;
+    }
+    return availabilityMap({ region });
+  }, []);
 
   /*
    * One-time telemetry prompt state. localStorage (not the store) because it
@@ -259,6 +294,85 @@ export default function Settings() {
         : 'FAILED'
       );
       haptic?.('error');
+    }
+  };
+
+  /*
+   * Phase 92 — export everything we hold, as a file the user keeps.
+   *
+   * `exportUserData` refuses a partial export rather than handing over
+   * something that looks complete but is not, so an unreadable store here
+   * produces an honest error toast and no download at all.
+   */
+  const doExportMyData = async () => {
+    haptic?.('light');
+    try {
+      const result = await exportUserData({ userId: localUserId(), readers: buildReaders() });
+      if (!result.ok || !result.complete) {
+        useAppStore.getState().notify('toast.error', 'error');
+        return;
+      }
+      const payload = JSON.stringify(
+        {
+          _type: 'fbt-my-data-export',
+          _version: 1,
+          exportedAt: result.at,
+          checksum: result.checksum,
+          stores: result.data
+        },
+        null,
+        2
+      );
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fbt-my-data.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      useAppStore.getState().notify('settingsBackedUp', 'success');
+    } catch {
+      useAppStore.getState().notify('toast.error', 'error');
+    }
+  };
+
+  /*
+   * Phase 92 — delete, then PROVE it. The confirmation flag is passed
+   * explicitly (`deleteUserData` refuses without it), and the receipt is only
+   * rendered once `verifyDeletion` has re-read every store and found them
+   * empty. An unproven or partial deletion shows what remains instead of a
+   * green tick.
+   */
+  const doDeleteMyData = async () => {
+    setDeleteBusy(true);
+    setDeleteProblem(null);
+    try {
+      const userId = localUserId();
+      const deletion = await deleteUserData({ userId, erasers: buildErasers(), confirmed: true });
+      const verification = await verifyDeletion({ userId, readers: buildReaders(), deletion });
+      if (verification.proven && deletion.complete) {
+        // The local id goes last, so a wipe cannot be linked to what came before.
+        forgetLocalUserId();
+        setDeleteProof(verification.receipt);
+        setDeleteOpen(false);
+        haptic?.('success');
+        useAppStore.getState().notify('cacheCleared', 'success');
+        return;
+      }
+      setDeleteProof(null);
+      setDeleteProblem({
+        i18nKey: verification.proven ? deletion.i18nKey : verification.i18nKey,
+        leftovers: [...(verification.leftovers || []), ...(verification.unverifiable || [])].map((l) => l.store)
+      });
+      haptic?.('error');
+    } catch {
+      setDeleteProof(null);
+      setDeleteProblem({ i18nKey: 'intentAI.lifecycle.deleteFailed', leftovers: [] });
+      haptic?.('error');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -905,6 +1019,93 @@ export default function Settings() {
         </p>
       </motion.section>
 
+      {/* ---------------- phase 92: my data ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="my-data-section">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.lifecycle.title')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconDoc}
+            label={t('intentAI.lifecycle.exportDownload')}
+            sub={t('intentAI.lifecycle.subtitle')}
+            right={
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={doExportMyData}
+                data-testid="my-data-export"
+              >
+                {t('intentAI.lifecycle.exportAction')}
+              </button>
+            }
+          />
+          <Row
+            icon={IconShield}
+            label={t('intentAI.lifecycle.deleteTitle')}
+            sub={t('intentAI.lifecycle.deleteBody')}
+            right={
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => { haptic?.('light'); setDeleteProblem(null); setDeleteOpen(true); }}
+                data-testid="my-data-delete"
+              >
+                {t('intentAI.lifecycle.deleteAction')}
+              </button>
+            }
+          />
+        </div>
+
+        {/* The proof, shown only after every store was read back and was empty. */}
+        {deleteProof && (
+          <div className="card card-tight" style={{ marginTop: 10 }} data-testid="deletion-proof">
+            <div className="field-label">{t('intentAI.lifecycle.proofTitle')}</div>
+            <p className="muted" style={{ fontSize: 12.3, margin: '4px 0 0', lineHeight: 1.7 }}>
+              {t('intentAI.lifecycle.proofStores', { stores: deleteProof.stores })}
+            </p>
+            <p className="mono faint" style={{ fontSize: 11.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
+              {t('intentAI.lifecycle.proofRef', { proof: deleteProof.proof })}
+            </p>
+          </div>
+        )}
+
+        {/* A deletion we could not prove says so, and names what is left. */}
+        {deleteProblem && (
+          <InfoBox title={t('intentAI.lifecycle.deleteTitle')} tone="warn" id="set-my-data-problem">
+            <p data-testid="deletion-problem">{t(deleteProblem.i18nKey, { cleared: 0, remaining: deleteProblem.leftovers.length })}</p>
+          </InfoBox>
+        )}
+      </motion.section>
+
+      {/* ---------------- phase 87: what is available in your region ------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="region-availability-section">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.compliance.sectionTitle')}</p>
+        <div className="set-group">
+          {regionMap.features.map((feature) => (
+            <Row
+              key={feature.feature}
+              icon={IconGlobe}
+              label={t(`intentAI.compliance.feature.${feature.feature}`)}
+              sub={t(feature.i18nKey)}
+              right={
+                <span
+                  className={`region-state region-state-${feature.state}`}
+                  data-testid={`region-feature-${feature.feature}`}
+                  data-state={feature.state}
+                >
+                  {t(`intentAI.compliance.state.${feature.state}`)}
+                </span>
+              }
+            />
+          ))}
+        </div>
+        {/* An unknown region is stated, not hidden behind the strict defaults. */}
+        {!regionMap.regionKnown && (
+          <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }} data-testid="region-unknown-note">
+            {t('intentAI.compliance.regionUnknown')}
+          </p>
+        )}
+      </motion.section>
+
       {/* ---------------- sync ---------------- */}
       {firebaseConfigured && (
         <motion.section variants={riseIn} initial="hidden" animate="show">
@@ -954,6 +1155,36 @@ export default function Settings() {
       <p className="faint" style={{ textAlign: 'center', marginTop: 4 }}>{t('about.companyFull')} · v{APP_VERSION}</p>
 
       {/* ---------------- custom RPC ---------------- */}
+      {/*
+        Phase 92 — deletion is irreversible, so it gets its own dialog with an
+        explicit affirmative ("Yes, delete everything") rather than a bare OK.
+        Sheet supplies role="dialog", aria-modal="true" and Escape-to-close.
+      */}
+      <Sheet open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t('intentAI.lifecycle.deleteTitle')}>
+        <p className="muted" style={{ fontSize: 12.3, lineHeight: 1.75 }} data-testid="delete-confirm-body">
+          {t('intentAI.lifecycle.deleteBody')}
+        </p>
+        <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={deleteBusy}
+            onClick={doDeleteMyData}
+            data-testid="delete-confirm-button"
+          >
+            {t('intentAI.lifecycle.deleteConfirmLabel')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setDeleteOpen(false)}
+            data-testid="delete-cancel-button"
+          >
+            {t('intentAI.lifecycle.cancel')}
+          </button>
+        </div>
+      </Sheet>
+
       <Sheet open={rpcSheet} onClose={() => setRpcSheet(false)} title={t('settings.customRpc')}>
         <p className="muted" style={{ fontSize: 12.3 }}>{t('settings.customRpcHelp')}</p>
         <label className="field-label" style={{ marginTop: 11 }}>EVM RPC</label>

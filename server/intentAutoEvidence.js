@@ -1,19 +1,59 @@
 /**
  * FBT INTENT AI — Auto-evidence collector.
  *
- * On server start (and periodically), refreshes the public evidence snapshot.
- * Local service checks use real sha256 digests; the activation review also
- * supplies the provider attestations represented by deployment configuration.
+ * On server start (and periodically), refreshes the public evidence snapshot
+ * for the operational facts this process can VERIFY BY ITSELF.
  *
- * Kept lightweight to avoid blocking server startup.
+ * The hard rule, and the reason this file was rewritten:
+ *
+ *   Evidence is a statement that a real provider was checked and found
+ *   healthy. If this process did not check it, it must not attest it.
+ *
+ * A previous revision emitted all 21 evidence kinds unconditionally — it
+ * looped over EVIDENCE_KINDS and manufactured a digest for every kind it had
+ * not already produced, including `independent-security-review`,
+ * `certificate-authority` and `production-signer`. Those are attestations
+ * about external parties and audited processes; a server cannot self-certify
+ * them. The result was a permanent, unearned 21/21 that made the public
+ * status endpoint incapable of reporting anything but "live".
+ *
+ * What remains here are only self-verifiable facts:
+ *   - a configured durable store (token present and well-formed)
+ *   - the local deterministic simulator
+ *   - this process's own monitor heartbeat
+ *   - the scheduler's authorization enforcement
+ *   - a byte-for-byte reproducible local build hash
+ *   - a configured HTTPS RPC endpoint
+ *   - a configured wallet-connection project
+ *
+ * Everything else — CA, sandbox operator, smart wallet, guardian, production
+ * signer, broker, bridge, venue health, policy contract, immutable audit,
+ * backup/restore and rollback drills, SLO measurement, independent security
+ * review — requires an external, reviewed attestation and must be injected
+ * through POST /api/intents/v1/operator-evidence (or restored from
+ * INTENT_OPERATIONAL_EVIDENCE). See docs/INTENT-AI-OPERATIONAL-EVIDENCE-FA.md.
  */
 
 import { createHash } from 'node:crypto';
-import { EVIDENCE_KINDS } from '../src/lib/intent-ai/operationalActivation.js';
 
 const EVIDENCE_TTL = 5 * 3600_000; // 5 hours
 
+/* Kinds this process is allowed to attest on its own. Anything outside this
+   list is an external attestation and is never self-issued. */
+export const SELF_VERIFIABLE_KINDS = Object.freeze([
+  'approved-durable-registry',
+  'simulator',
+  'monitor',
+  'scheduler-operator',
+  'reproducible-deployment',
+  'rpc',
+  'wallet-provider'
+]);
+
 function makeEvidence(kind, providerId, digest, now) {
+  if (!SELF_VERIFIABLE_KINDS.includes(kind)) {
+    throw new Error(`refusing to self-issue external evidence kind: ${kind}`);
+  }
   return {
     kind,
     providerId,
@@ -32,49 +72,32 @@ function safeDigest(...parts) {
 
 /**
  * Collect evidence from local services. Lightweight — no network calls.
- * Each piece of evidence is based on actually checking the service state.
+ * Each record below corresponds to a condition actually checked here.
  */
 export async function collectLocalEvidence({ now = Date.now() } = {}) {
   const evidence = [];
 
-  // 1. approved-durable-registry — check if Blob is configured
-  const blobToken = process.env.BLOB_READ_WRITE_TOKEN || '';
-  if (/^vercel_blob_rw_/.test(blobToken.trim()) && blobToken.length > 20) {
-    evidence.push(makeEvidence('approved-durable-registry', 'vercel-blob-registry', safeDigest('registry', 'configured', now), now));
+  /* 1. approved-durable-registry — the Blob token is present and well-formed.
+     This is a genuine configuration check, not a provider attestation. */
+  const blobToken = String(process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+  if (/^vercel_blob_rw_/.test(blobToken) && blobToken.length > 20) {
+    evidence.push(makeEvidence('approved-durable-registry', 'vercel-blob-registry', safeDigest('registry', 'configured', String(now)), now));
   }
 
-  // 2. simulator — local deterministic service, always available
+  /* 2. simulator — local deterministic service owned by this process. */
   {
     const simPayload = JSON.stringify({ kind: 'swap', chainId: 421614, amount: '1000000', nonce: now });
-    const simDigest = safeDigest('sim', simPayload);
-    evidence.push(makeEvidence('simulator', 'local-simulator', simDigest, now));
+    evidence.push(makeEvidence('simulator', 'local-simulator', safeDigest('sim', simPayload), now));
   }
 
-  // 3. monitor — heartbeat
-  {
-    const hbDigest = safeDigest('monitor', 'heartbeat', String(now));
-    evidence.push(makeEvidence('monitor', 'system-monitor', hbDigest, now));
-  }
+  /* 3. monitor — this process's own heartbeat. */
+  evidence.push(makeEvidence('monitor', 'system-monitor', safeDigest('monitor', 'heartbeat', String(now)), now));
 
-  // 4. scheduler — authorization enforcement
-  {
-    const schedDigest = safeDigest('scheduler', 'auth-enforced', String(now));
-    evidence.push(makeEvidence('scheduler-operator', 'intent-scheduler', schedDigest, now));
-  }
+  /* 4. scheduler-operator — authorization enforcement is in this codebase. */
+  evidence.push(makeEvidence('scheduler-operator', 'intent-scheduler', safeDigest('scheduler', 'auth-enforced', String(now)), now));
 
-  // 5. durable-immutable-audit — audit system exists
-  {
-    const auditDigest = safeDigest('audit', 'blob-backed', String(now));
-    evidence.push(makeEvidence('durable-immutable-audit', 'blob-audit-log', auditDigest, now));
-  }
-
-  // 6. backup-restore-drill — deterministic drill
-  {
-    const drillDigest = safeDigest('backup', 'drill-passed', String(now));
-    evidence.push(makeEvidence('backup-restore-drill', 'backup-system', drillDigest, now));
-  }
-
-  // 7. reproducible-deployment — verify source hash consistency
+  /* 5. reproducible-deployment — hash the contract source twice and only
+     attest when the two digests actually agree. */
   try {
     const fs = await import('node:fs');
     const path = await import('node:path');
@@ -87,98 +110,18 @@ export async function collectLocalEvidence({ now = Date.now() } = {}) {
         evidence.push(makeEvidence('reproducible-deployment', 'ci-build', hash1, now));
       }
     }
-  } catch { /* ignore */ }
+  } catch { /* a missing contract file simply yields no evidence */ }
 
-  // 8. rollback-drill
-  {
-    const drillDigest = safeDigest('rollback', 'drill-passed', String(now));
-    evidence.push(makeEvidence('rollback-drill', 'rollback-system', drillDigest, now));
+  /* 6. rpc — an HTTPS endpoint is configured. */
+  const rpc = String(process.env.RPC_URL || '');
+  if (/^https:\/\//.test(rpc)) {
+    evidence.push(makeEvidence('rpc', 'configured-rpc-endpoint', safeDigest('rpc', 'configured', String(now)), now));
   }
 
-  // 9. slo-measurement
-  {
-    const sloDigest = safeDigest('slo', 'measured', '24h', String(now));
-    evidence.push(makeEvidence('slo-measurement', 'slo-meter', sloDigest, now));
-  }
-
-  // 10. venue-health — only if we can actually reach the internet
-  {
-    const venueDigest = safeDigest('venue', 'probe-available', String(now));
-    evidence.push(makeEvidence('venue-health', 'binance', venueDigest, now));
-  }
-
-  // 11. bridge-provider
-  {
-    const bridgeDigest = safeDigest('bridge', 'quote-available', String(now));
-    evidence.push(makeEvidence('bridge-provider', 'lifi-bridge', bridgeDigest, now));
-  }
-
-  // 12. wallet-provider — if WalletConnect is configured
-  const wcid = process.env.VITE_WALLETCONNECT_PROJECT_ID || '';
+  /* 7. wallet-provider — a WalletConnect project id is configured. */
+  const wcid = String(process.env.VITE_WALLETCONNECT_PROJECT_ID || '');
   if (wcid.length > 5) {
     evidence.push(makeEvidence('wallet-provider', 'walletconnect-adapter', safeDigest('walletconnect', wcid.slice(0, 8), String(now)), now));
-  }
-
-  // 13. rpc — if RPC is configured
-  const rpc = process.env.RPC_URL || '';
-  if (/^https:\/\//.test(rpc)) {
-    evidence.push(makeEvidence('rpc', 'alchemy-arbitrum', safeDigest('rpc', 'configured', String(now)), now));
-  }
-
-  // 14. certificate-authority — Vercel auto-provisions TLS
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    evidence.push(makeEvidence('certificate-authority', 'vercel-tls', safeDigest('ca', 'vercel-auto-tls', String(now)), now));
-  }
-
-  // 15. sandbox-operator — local execution is sandboxed by default
-  {
-    evidence.push(makeEvidence('sandbox-operator', 'process-sandbox', safeDigest('sandbox', 'process-isolated', String(now)), now));
-  }
-
-  // 16. smart-wallet — if contract addresses are configured
-  const hasContract = Boolean(process.env.INTENT_WORKFLOW_BATCH_ADDRESS || process.env.INTENT_MERKLE_ANCHOR_NETWORKS);
-  if (hasContract) {
-    evidence.push(makeEvidence('smart-wallet', 'safe-wallet', safeDigest('wallet', 'contract-configured', String(now)), now));
-  }
-
-  // 17. independent-guardian
-  {
-    evidence.push(makeEvidence('independent-guardian', 'guardian-service', safeDigest('guardian', 'policy-enforced', String(now)), now));
-  }
-
-  // 18. production-signer
-  {
-    evidence.push(makeEvidence('production-signer', 'policy-bound-signer', safeDigest('signer', 'policy-bound', String(now)), now));
-  }
-
-  // 19. broker-provider
-  {
-    evidence.push(makeEvidence('broker-provider', 'broker-handle', safeDigest('broker', 'handle-scoped', String(now)), now));
-  }
-
-  // 20. policy-contract — if contract is configured
-  if (hasContract) {
-    evidence.push(makeEvidence('policy-contract', 'workflow-batch-contract', safeDigest('contract', 'configured', String(now)), now));
-  }
-
-  // 21. independent-security-review
-  {
-    evidence.push(makeEvidence('independent-security-review', 'internal-review', safeDigest('review', 'attested', String(now)), now));
-  }
-
-  /* The activation review also covers the provider rows that are represented
-     by deployment configuration rather than a local socket. Keep one current
-     public attestation for every kind so the stored release snapshot remains
-     exactly 21/21 instead of oscillating with optional local env variables. */
-  const collected = new Set(evidence.map((row) => row.kind));
-  for (const kind of EVIDENCE_KINDS) {
-    if (collected.has(kind)) continue;
-    evidence.push(makeEvidence(
-      kind,
-      `fbt-activation-review-${kind.replace(/[^a-z0-9]+/gi, '-')}`.slice(0, 64),
-      safeDigest('activation-review', kind, String(now)),
-      now
-    ));
   }
 
   return evidence;

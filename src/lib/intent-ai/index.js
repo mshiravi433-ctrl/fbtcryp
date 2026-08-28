@@ -1101,4 +1101,98 @@ export {
   assertNoProfitPromise
 } from './honestBacktest.js';
 
+/* Arc I — governance and closing (phases 95-100) */
+export {
+  PUBLIC_API_SCHEMA,
+  API_SCOPES,
+  FORBIDDEN_API_SCOPES,
+  API_OPERATIONS,
+  API_KEY_MAX_TTL_MS,
+  API_KEY_MIN_TTL_MS,
+  issueApiKey,
+  revokeApiKey,
+  isKeyRevoked,
+  describeApiKey,
+  authorizeApiCall,
+  handleApiCall,
+  publicApiManifest,
+  assertNoBypass,
+  _resetPublicApiStore
+} from './publicApi.js';
+export {
+  PARAM_GOVERNANCE_SCHEMA,
+  GOVERNED_PARAMETERS,
+  NON_GOVERNABLE,
+  PROPOSAL_STATES as PARAM_PROPOSAL_STATES,
+  VOTE_CHOICES,
+  VOTING_PERIOD_MS,
+  QUORUM_VOTES,
+  APPROVAL_THRESHOLD,
+  parameterIsGovernable,
+  proposeParameterChange,
+  castParameterVote,
+  tallyParameterVotes,
+  applyParameterChange,
+  assertProofsIntact
+} from './paramGovernance.js';
+export {
+  AUTONOMY_SCHEMA,
+  AUTONOMY_LEVELS,
+  PROMOTION_REQUIREMENTS,
+  PROMOTION_COOLDOWN_MS,
+  autonomyProfile,
+  evaluatePromotion,
+  requestPromotion,
+  demoteToL1,
+  assertNoAutoPromotion
+} from './gradualAutonomy.js';
+export {
+  OVERSIGHT_SCHEMA,
+  OVERSIGHT_STATES,
+  PROGRAM_KINDS,
+  CHECKIN_INTERVAL_MS,
+  CHECKIN_GRACE_MS,
+  CHECKIN_RESPONSES,
+  scheduleCheckIn,
+  recordCheckInResponse,
+  evaluateOversight,
+  assertStopOnSilence
+} from './humanOversight.js';
+export {
+  SURVIVAL_SCHEMA,
+  SURVIVAL_CONDITIONS,
+  SURVIVAL_YEAR_MS,
+  DRILL_CADENCE_MS,
+  KEY_MAX_AGE_MS,
+  planUpdate,
+  rotateAndRevoke,
+  recoveryDrill,
+  survivalReadiness,
+  assertSurvivable
+} from './longTermSurvival.js';
+export {
+  SOVEREIGNTY_SCHEMA,
+  EXIT_STATES,
+  EXIT_SURFACES,
+  PORTABLE_FORMATS,
+  LOCK_IN_PATTERNS,
+  describeExitPath,
+  buildExitPackage,
+  performExit,
+  verifyNoResidue,
+  assertNoLockIn
+} from './userSovereignty.js';
+
+/* Draft → transaction bridge — the symbol/USD to address/base-units
+   translation that lets a draft reach the existing broadcast path. */
+export {
+  DRAFT_BRIDGE_SCHEMA,
+  resolveDraftToken,
+  amountToBaseUnits,
+  usdToTokenAmount,
+  prepareDraftTransaction,
+  broadcastEnabled,
+  assertBroadcastAllowed
+} from './draftTransactionBridge.js';
+
 export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';
