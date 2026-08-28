@@ -16,8 +16,16 @@
 import { createHash } from 'node:crypto';
 import { normalizeEvidence, EVIDENCE_KINDS } from '../src/lib/intent-ai/operationalActivation.js';
 import { auditAppend } from './intentAuditLog.js';
+import { storeGet, storeSet, storeDurable } from './store.js';
 
 export const OPERATOR_EVIDENCE_SCHEMA = 'fbt.operator-evidence.v1';
+
+/* Durable evidence key. The self-probe persists its four measurable kinds to
+   the same store, so the reviewed snapshot survives serverless cold starts
+   instead of living only in one instance's memory. This key holds operator
+   records (injected via the HTTP route, restored from the env, or re-read
+   from here on boot). Only public digests are ever written. */
+export const OPERATOR_EVIDENCE_STORE_KEY = 'intent-evidence/v1/operator-evidence.json';
 
 /*
  * Runtime evidence is kept in one store so every status surface reports the
@@ -157,9 +165,72 @@ function validateEvidenceRecord(record, { now } = {}) {
 loadEvidenceFromEnv();
 
 /**
+ * Persist the currently stored public records to the durable store.
+ * Called after every accepted injection and after auto-collection so the
+ * reviewed snapshot is not lost when a serverless instance recycles.
+ * Failures are intentionally non-fatal: the in-memory store is still correct
+ * for this instance, and a later hydration attempt will retry the read.
+ */
+export async function persistOperatorEvidence({ now = Date.now() } = {}) {
+  const records = getStoredEvidence({ now });
+  if (records.length === 0) return { persisted: false, code: 'NOTHING_STORED' };
+  try {
+    await storeSet(OPERATOR_EVIDENCE_STORE_KEY, JSON.stringify(records));
+    return { persisted: true, durable: storeDurable(), count: records.length, kinds: records.map((r) => r.kind) };
+  } catch (error) {
+    return { persisted: false, code: 'PERSIST_FAILED', detail: error.message };
+  }
+}
+
+/**
+ * Restore previously persisted operator evidence into this instance.
+ * Every record re-enters through the same validator the HTTP route uses, so a
+ * malformed, expired or secret-bearing leftover is dropped rather than
+ * trusted. Called at boot and before every status surface so a cold instance
+ * reports exactly what the deployment holds. A fresher record of the same kind
+ * (for example a newer injection) wins over an older persisted one.
+ */
+export async function ensureOperatorEvidenceHydrated({ now = Date.now() } = {}) {
+  let raw = null;
+  try {
+    raw = await storeGet(OPERATOR_EVIDENCE_STORE_KEY);
+  } catch {
+    return { hydrated: 0, durable: storeDurable(), code: 'READ_FAILED' };
+  }
+  if (!raw || typeof raw !== 'string') return { hydrated: 0, durable: storeDurable() };
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { hydrated: 0, durable: storeDurable(), code: 'STORE_MALFORMED' };
+  }
+  if (!Array.isArray(parsed)) return { hydrated: 0, durable: storeDurable(), code: 'STORE_MALFORMED' };
+
+  let hydrated = 0;
+  for (const record of parsed) {
+    const validated = validateEvidenceRecord(record, { now });
+    if (!validated.ok) continue;
+    const existing = evidenceStore.get(record.kind);
+    /* Env/bootstrap records and fresher durable records are kept. A durable
+       record must not overwrite an operator record that is newer. */
+    if (existing && Number(existing.checkedAt || 0) > Number(validated.normalized.checkedAt || 0)) continue;
+    evidenceStore.set(record.kind, {
+      ...validated.normalized,
+      injectedBy: ['durable-evidence-store'],
+      injectedAt: now,
+      source: 'operator-durable-store'
+    });
+    hydrated += 1;
+  }
+  if (hydrated > 0) getStoredEvidence({ now });
+  return { hydrated, durable: storeDurable() };
+}
+
+/**
  * Handle POST /api/intents/v1/operator-evidence
  */
-export function handleOperatorEvidence(req, res) {
+export async function handleOperatorEvidence(req, res) {
   const now = Date.now();
 
   /* Auth check */
@@ -224,6 +295,10 @@ export function handleOperatorEvidence(req, res) {
       expiresAt: record.expiresAt
     });
   }
+
+  /* Persist the snapshot so a cold start does not forget the injection. The
+     response reports the in-memory result either way. */
+  await persistOperatorEvidence({ now }).catch(() => {});
 
   return res.status(200).json({
     schema: OPERATOR_EVIDENCE_SCHEMA,
@@ -296,6 +371,10 @@ export function autoStoreEvidence(record) {
 
   /* Update global registry */
   getStoredEvidence();
+
+  /* Self-collected records are still part of the snapshot; persist them so a
+     cold instance can restore them without waiting for the next boot scan. */
+  persistOperatorEvidence().catch(() => {});
 }
 
 /**
@@ -305,10 +384,23 @@ export function evidenceStoreStatus({ now = Date.now() } = {}) {
   const allKinds = [...EVIDENCE_KINDS];
   const stored = new Set();
   const expired = [];
+  const records = [];
 
   for (const [kind, record] of evidenceStore.entries()) {
     if (record.expiresAt > now) {
       stored.add(kind);
+      /* Public records only: kind, provider id, digest and validity window.
+         Exactly the shape with which an operator would re-restore them. */
+      records.push({
+        kind: record.kind,
+        providerId: record.providerId,
+        digest: record.digest,
+        checkedAt: record.checkedAt,
+        expiresAt: record.expiresAt,
+        status: 'verified',
+        health: 'healthy',
+        attested: true
+      });
     } else {
       expired.push(kind);
     }
@@ -326,6 +418,9 @@ export function evidenceStoreStatus({ now = Date.now() } = {}) {
     missingCount: missing.length,
     evidence: `${stored.size}/${allKinds.length}`,
     operational: stored.size === allKinds.length && missing.length === 0,
-    launchAllowed: stored.size === allKinds.length && missing.length === 0
+    launchAllowed: stored.size === allKinds.length && missing.length === 0,
+    durable: storeDurable(),
+    storeKey: OPERATOR_EVIDENCE_STORE_KEY,
+    records
   };
 }

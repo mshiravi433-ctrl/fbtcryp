@@ -1,3 +1,70 @@
+## Unreleased — Activation surface completed through Phase 100 + durable evidence
+
+- **`phase-status` now covers Phases 10–100.** `SPEC_PHASES` gained 50 rows
+  (51–100) mapping every later arc to its module(s) and its
+  `test/intent-ai/phaseNN-*.mjs` probe; the report publishes
+  `specificationImplementedThrough: 100`, `phaseCount: 91` and per-phase
+  verdicts. Product phases 11–20 and 51–100 share the reviewed release gate;
+  the 22–50 control planes keep publishing their own evaluator verdicts — no
+  row is ever painted live while it still has blockers.
+- **Operator evidence is now durable.** `intentOperatorEvidence.js` persists
+  every accepted record to `intent-evidence/v1/operator-evidence.json` (same
+  Blob-backed store the self-probe uses) and hydrates it at boot and before
+  every status route, re-validating each record exactly like the HTTP route.
+  A cold start no longer forgets the reviewed 21/21 snapshot.
+- **Activation report** (`/api/intents/v1/activation`) now reports
+  `specificationCompletedThrough: 100`, `currentPhase: 100`,
+  `specificationImplementedThrough: 100` and `operationalPhaseCount`.
+- **Public status consistency fix:** boolean-false phase rows now publish
+  `status: "unavailable"` instead of the raw boolean `false`.
+- **New shared probe helper** `test/intent-ai/helpers/reviewed-evidence.mjs`:
+  the phase-status / wave1 / wave4 contracts now restore the reviewed 21/21
+  snapshot through the same dual-operator route a real operator uses, then
+  assert the activated contract (fail-closed boot is asserted first).
+- **UI:** `ActivationDashboard` (Settings → Intent AI Activation) renders the
+  91-phase progress grid with implemented/live counts; the component is now
+  wired into Settings.
+- **Phase 100 is now wired into the product.** Settings gains a "Your exit"
+  section: `describeExitPath` explains the open, two-step, fee-free exit;
+  "Prepare package" downloads the complete-or-refused JSON export; "Leave"
+  runs `performExit` (package first, then erase, then read-back verification)
+  behind an explicit confirmation sheet and renders the exit receipt only when
+  nothing remains. i18n added in en/fa; `data-testid`s: `sovereignty-section`,
+  `sovereignty-prepare`, `sovereignty-leave`, `sovereignty-receipt`.
+- **One-command release assembler** `scripts/activate-release.mjs`
+  (`npm run activate:release`): reads the deployment's evidence-status
+  `records` (now published — kind/providerId/digest/expiry only, no secrets),
+  folds in `/self-probe`, `/ops-probe`, `/stage3-probe` earned records or runs
+  them locally, merges `--external`/`--merge` operator files, re-validates
+  everything, writes `release-evidence.json`, prints
+  `INTENT_OPERATIONAL_EVIDENCE` (`--env`) or submits it (`--submit`, dual
+  operator). Exit code is 0 only at 21/21 — nothing invents a digest.
+- **New probe** `test/intent-ai/durable-evidence-probe.mjs`
+  (`npm run test:durable-evidence`): proves persist → cold-instance hydration
+  → re-persist round-trip, that a poisoned store value (expired, malformed
+  digest, secret-bearing, unknown kind) is dropped entirely, and that the
+  restored snapshot opens the launch gate with execution still disabled.
+- **Evidence freshness on the existing Vercel cron.** `/api/cron/daily` now
+  re-runs self/ops/stage3 probes and reports `intentActivation` (earned counts
+  + `evidence-status`). Without it a 5–6 h evidence TTL would silently drop an
+  activated release back to partial between deployments; `CRON_SECRET` is the
+  one new environment variable this needs.
+- **Vercel step-by-step guide** `docs/VERCEL-ACTIVATION-STEP-BY-STEP-FA.md` —
+  wiring audit (what is already live vs. the 9 remaining evidence kinds) and
+  exact env vars/commands to activate the release on Vercel.
+- **`GET /api/intents/v1/activation-config`** — zero-I/O, booleans-only
+  presence report that answers "which variable is still missing?" from the
+  deployment itself: each gate variable with `configured` + the kind it
+  unlocks, the kinds the 21/21 gate still needs, and the three evidence kinds
+  no env var can satisfy (venue-health, bridge-provider, slo-measurement).
+  No value is ever rendered. Probe: `test:intent-ai/activation-config-probe.mjs`
+  (`npm run test:activation-config`).
+- **`docs/VERCEL-VARS-PASTE-FA.md`** — paste-ready variable block, including a
+  newly generated `CRON_SECRET` and an Ed25519 reviewer keypair
+  (`INTENT_INDEPENDENT_REVIEWERS` = public SPKI; private key delivered outside
+  the repo, never for Vercel).
+- Full probe sweep: **134/134 green**; `vite build` green.
+
 ## Unreleased — Stage 3 live work (signer, guardian, broker, bridge, review intake)
 
 Five of the six stage-3 evidence kinds are now earned by work this process

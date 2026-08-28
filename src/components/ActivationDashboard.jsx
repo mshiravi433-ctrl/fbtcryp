@@ -1,12 +1,45 @@
 /**
  * Activation Dashboard — live Intent OS status.
  *
- * Shows the reviewed 21/21 evidence snapshot and the operational state shared
- * by every Intent OS surface. Launch Freeze is retired; wallet confirmation is
- * still required for each user transaction.
+ * Shows the reviewed 21/21 evidence snapshot, the operational state shared by
+ * every Intent OS surface, and the authoritative specification progress for
+ * Phases 10–100. Launch Freeze is retired; wallet confirmation is still
+ * required for each user transaction.
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
+/* Compact chip grid: one dot per specification phase. Honest coloring —
+ * a phase is green only when the reviewed evidence makes the release live. */
+function PhaseGrid({ rows = [] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div
+      className="activation-phase-grid"
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 'var(--sp-2)' }}
+      role="list"
+      aria-label={`Specification phases ${rows[0]?.phase ?? ''}–${rows[rows.length - 1]?.phase ?? ''}`}
+    >
+      {rows.map((row) => (
+        <span
+          key={row.phase}
+          role="listitem"
+          title={`${row.phase} · ${row.id || ''} · ${row.operational ? 'live' : row.implementation || 'pending'}`}
+          data-testid={`phase-chip-${row.phase}`}
+          data-state={row.live ? 'live' : row.implementation === 'implemented' ? 'implemented' : 'partial'}
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 2,
+            background: row.live ? 'var(--up)' : row.implementation === 'implemented' ? 'var(--rgb-1)' : 'var(--line)',
+            opacity: row.live ? 1 : 0.55,
+            display: 'inline-block'
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export function ActivationDashboard() {
   const { t } = useTranslation();
@@ -52,6 +85,9 @@ export function ActivationDashboard() {
   const evidenceStored = evidence?.storedCount ?? data?.evidence?.stored ?? 0;
   const evidenceRequired = evidence?.totalKindsRequired ?? data?.evidence?.required ?? 21;
   const launchAllowed = data?.launchAllowed === true && !isFrozen;
+  const phases = data?.phases || [];
+  const implementedCount = phases.filter((row) => row.implementation === 'implemented').length;
+  const liveCount = phases.filter((row) => row.live === true).length;
 
   return (
     <div className="activation-dashboard glass" style={{ padding: 'var(--sp-4)' }}>
@@ -68,7 +104,7 @@ export function ActivationDashboard() {
       </div>
 
       {/* Evidence Progress */}
-      <div style={{ marginBottom: 'var(--sp-4)' }}>
+      <div style={{ marginBottom: 'var(--sp-3)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--fs-sm)', color: 'var(--text-2)', marginBottom: 'var(--sp-1)' }}>
           <span>{t('activation.evidence', 'Operational Evidence')}</span>
           <span>{evidenceStored}/{evidenceRequired}</span>
@@ -85,6 +121,17 @@ export function ActivationDashboard() {
           }} />
         </div>
       </div>
+
+      {/* Specification phases 10–100 */}
+      {phases.length > 0 && (
+        <div style={{ marginBottom: 'var(--sp-3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--fs-sm)', color: 'var(--text-2)', marginBottom: 'var(--sp-1)' }}>
+            <span>{t('activation.phases', 'Specification Phases')}</span>
+            <span data-testid="phase-progress-label">{implementedCount}/{phases.length} implemented · {liveCount}/{phases.length} live</span>
+          </div>
+          <PhaseGrid rows={phases} />
+        </div>
+      )}
 
       {/* Freeze Status */}
       <div style={{

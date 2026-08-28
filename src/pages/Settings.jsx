@@ -38,6 +38,7 @@ import { langMeta } from '../i18n/languages';
 import { CURRENCIES, currencyOf } from '../lib/currency';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
+import ActivationDashboard from '../components/ActivationDashboard';
 import {
   getNotifySettings,
   notificationPermission,
@@ -57,6 +58,8 @@ import { isIOS, isWebView, isStandalone } from '../lib/platform';
 import { clearAppCache, exportSettingsBackup } from '../lib/dataStorage';
 /* Phase 92 — export, delete, and prove the deletion. */
 import { exportUserData, deleteUserData, verifyDeletion, DATA_STORES, availabilityMap } from '../lib/intent-ai';
+/* Phase 100 — user sovereignty: take everything and leave, proven empty. */
+import { describeExitPath, buildExitPackage, performExit } from '../lib/intent-ai';
 import { buildReaders, buildErasers, localUserId, forgetLocalUserId } from '../lib/userDataStores';
 import {
   IconBell,
@@ -131,6 +134,17 @@ export default function Settings() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteProof, setDeleteProof] = useState(null);
   const [deleteProblem, setDeleteProblem] = useState(null);
+
+  /*
+   * Phase 100 — user sovereignty, the last phase. One explicit confirmation,
+   * no fee, no waiting period; the package is built BEFORE anything is erased,
+   * and the receipt is only shown after every store has been read back empty.
+   */
+  const [exitOpen, setExitOpen] = useState(false);
+  const [exitBusy, setExitBusy] = useState(false);
+  const [exitReceipt, setExitReceipt] = useState(null);
+  const [exitProblem, setExitProblem] = useState(null);
+  const exitPath = useMemo(() => describeExitPath(), []);
 
   /*
    * Phase 87 — what is actually available where this person is.
@@ -373,6 +387,82 @@ export default function Settings() {
       haptic?.('error');
     } finally {
       setDeleteBusy(false);
+    }
+  };
+
+  /*
+   * Phase 100 — prepare the take-everything package. `buildExitPackage` is
+   * complete-or-refused, so a hole in any store means no download at all
+   * rather than a partial file that pretends to be the whole truth.
+   */
+  const doPrepareExit = async () => {
+    haptic?.('light');
+    try {
+      const pkg = await buildExitPackage({ userId: localUserId(), readers: buildReaders() });
+      if (!pkg.ok || !pkg.complete) {
+        setExitProblem({ i18nKey: pkg.i18nKey || 'intentAI.sovereignty.exportIncomplete', params: { missing: (pkg.failedStores || []).length } });
+        return;
+      }
+      const payload = JSON.stringify({
+        _type: 'fbt-sovereignty-exit',
+        _version: 1,
+        schema: pkg.schema,
+        exportedAt: pkg.payload.exportedAt,
+        checksum: pkg.checksum,
+        stores: pkg.payload.stores,
+        data: pkg.payload.data
+      }, null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fbt-my-data.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setExitProblem(null);
+      useAppStore.getState().notify('settingsBackedUp', 'success');
+    } catch {
+      setExitProblem({ i18nKey: 'intentAI.sovereignty.exportFailed' });
+    }
+  };
+
+  /*
+   * Phase 100 — leave. The package is built first (you cannot lose data on
+   * the way out), then everything is erased, then the erasure is verified by
+   * reading every store back. The receipt only exists when nothing remains.
+   */
+  const doPerformExit = async () => {
+    setExitBusy(true);
+    setExitProblem(null);
+    try {
+      const exit = await performExit({
+        userId: localUserId(),
+        readers: buildReaders(),
+        erasers: buildErasers(),
+        confirmed: true
+      });
+      if (exit.exited && exit.receipt) {
+        forgetLocalUserId();
+        setExitReceipt(exit.receipt);
+        setExitOpen(false);
+        haptic?.('success');
+        useAppStore.getState().notify('cacheCleared', 'success');
+        return;
+      }
+      setExitReceipt(null);
+      setExitProblem({
+        i18nKey: exit.i18nKey || 'intentAI.sovereignty.exitIncomplete',
+        params: exit.i18nParams || { remaining: (exit.leftovers || []).length + (exit.unverifiable || []).length }
+      });
+      haptic?.('error');
+    } catch {
+      setExitReceipt(null);
+      setExitProblem({ i18nKey: 'intentAI.sovereignty.exitFailed' });
+      haptic?.('error');
+    } finally {
+      setExitBusy(false);
     }
   };
 
@@ -1076,6 +1166,71 @@ export default function Settings() {
         )}
       </motion.section>
 
+      {/* ---------------- phase 100: user sovereignty ---------------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="sovereignty-section">
+        <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.sovereignty.title')}</p>
+        <div className="set-group">
+          <Row
+            icon={IconInfo}
+            label={t('intentAI.sovereignty.exitExplained')}
+            sub={t('intentAI.sovereignty.exitDetails', {
+              steps: exitPath.stepsRequired,
+              fee: exitPath.requiresFee ? t('intentAI.flow.yes') : t('intentAI.flow.no')
+            })}
+            right={<span className="region-state region-state-available" data-testid="sovereignty-path">{t('intentAI.sovereignty.pathOpen')}</span>}
+          />
+          <Row
+            icon={IconDoc}
+            label={t('intentAI.sovereignty.prepareTitle')}
+            sub={t('intentAI.sovereignty.prepareBody')}
+            right={
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={doPrepareExit}
+                data-testid="sovereignty-prepare"
+              >
+                {t('intentAI.sovereignty.prepareAction')}
+              </button>
+            }
+          />
+          <Row
+            icon={IconShield}
+            label={t('intentAI.sovereignty.leaveTitle')}
+            sub={t('intentAI.sovereignty.leaveBody')}
+            right={
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={() => { haptic?.('light'); setExitProblem(null); setExitOpen(true); }}
+                data-testid="sovereignty-leave"
+              >
+                {t('intentAI.sovereignty.leaveAction')}
+              </button>
+            }
+          />
+        </div>
+
+        {/* The receipt, shown only after every store was read back and was empty. */}
+        {exitReceipt && (
+          <div className="card card-tight" style={{ marginTop: 10 }} data-testid="sovereignty-receipt">
+            <div className="field-label">{t('intentAI.sovereignty.receiptTitle')}</div>
+            <p className="muted" style={{ fontSize: 12.3, margin: '4px 0 0', lineHeight: 1.7 }}>
+              {t('intentAI.sovereignty.exitComplete')}
+            </p>
+            <p className="mono faint" style={{ fontSize: 11.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
+              {t('intentAI.sovereignty.receiptRef', { proof: exitReceipt.proof })}
+            </p>
+          </div>
+        )}
+
+        {exitProblem && (
+          <InfoBox title={t('intentAI.sovereignty.leaveTitle')} tone="warn" id="sovereignty-problem">
+            <p data-testid="sovereignty-problem">{t(exitProblem.i18nKey, exitProblem.params || {})}</p>
+          </InfoBox>
+        )}
+      </motion.section>
+
       {/* ---------------- phase 87: what is available in your region ------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="region-availability-section">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.compliance.sectionTitle')}</p>
@@ -1104,6 +1259,14 @@ export default function Settings() {
             {t('intentAI.compliance.regionUnknown')}
           </p>
         )}
+      </motion.section>
+
+      {/* ---------------- Intent AI activation (Phases 10–100) ----------- */}
+      <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="intent-ai-activation-section">
+        <p className="section-label" style={{ marginBottom: 8 }}>
+          {t('intentAI.activation.title', 'Intent AI Activation')}
+        </p>
+        <ActivationDashboard />
       </motion.section>
 
       {/* ---------------- sync ---------------- */}
@@ -1179,6 +1342,33 @@ export default function Settings() {
             className="btn btn-ghost"
             onClick={() => setDeleteOpen(false)}
             data-testid="delete-cancel-button"
+          >
+            {t('intentAI.lifecycle.cancel')}
+          </button>
+        </div>
+      </Sheet>
+
+      {/* Phase 100: explicit confirmation for the full exit, same rules as
+          deletion — no affirmative, no exit. */}
+      <Sheet open={exitOpen} onClose={() => setExitOpen(false)} title={t('intentAI.sovereignty.leaveTitle')}>
+        <p className="muted" style={{ fontSize: 12.3, lineHeight: 1.75 }} data-testid="sovereignty-confirm-body">
+          {t('intentAI.sovereignty.needsConfirmation')}
+        </p>
+        <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={exitBusy}
+            onClick={doPerformExit}
+            data-testid="sovereignty-confirm-button"
+          >
+            {t('intentAI.sovereignty.confirmLabel')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setExitOpen(false)}
+            data-testid="sovereignty-cancel-button"
           >
             {t('intentAI.lifecycle.cancel')}
           </button>

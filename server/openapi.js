@@ -296,8 +296,15 @@ export function openApiDocument({ certificationIssuerConfigured = false, durable
       '/intents/v1/phase-status': {
         get: {
           summary: 'Authoritative Phase 10–20 status',
-          description: 'Read-only implementation/configuration/operational status for Phases 10–21. Source files, mocks and env names never become live evidence.',
+          description: 'Read-only implementation/configuration/operational status for Phases 10–100. Source files, mocks and env names never become live evidence.',
           responses: { 200: { description: 'Status with explicit unavailable blockers' }, ...ERROR_RESPONSE }
+        }
+      },
+      '/intents/v1/activation-config': {
+        get: {
+          summary: 'Which operator env variables are configured',
+          description: 'Booleans only — never a value. Maps each missing evidence kind to the variable (or external action) that satisfies it.',
+          responses: { 200: { description: 'Configuration presence report' }, ...ERROR_RESPONSE }
         }
       },
       '/intents/v1/public-status': {

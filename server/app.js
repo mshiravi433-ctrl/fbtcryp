@@ -289,7 +289,8 @@ import {
 } from './intentConfidential.js';
 import { activationReport } from './intentActivation.js';
 import { phaseStatusReport } from './intentPhaseStatus.js';
-import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence } from './intentOperatorEvidence.js';
+import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
+import { activationConfigPresence } from './intentActivationConfig.js';
 import { handleUnfreeze, handleFreeze, freezeStateReport } from './intentFreezeControl.js';
 import { auditStatus } from './intentAuditLog.js';
 import { simulatorEvidence } from './intentSimulator.js';
@@ -297,7 +298,7 @@ import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
 import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
 import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
-import { selfProbeReport, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
+import { selfProbeReport, runSelfProbe, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
 import { opsProbeReport, runOpsProbe, ensureOpsHydrated, OPS_DRILL_KINDS } from './intentOpsProbe.js';
 import {
   runStage3Digest,
@@ -1366,19 +1367,22 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
  * distinguishes implemented, wired, configured and operational. It contains
  * no env values, URLs, key references or secret material.
  */
-app.get('/api/intents/v1/activation', (_req, res) => {
+app.get('/api/intents/v1/activation', async (_req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
   return res.json(activationReport());
 });
 
-/* Phases 10–50: the read-only status contract publishes the reviewed live
+/* Phases 10–100: the read-only status contract publishes the reviewed live
  * release and its 21/21 evidence summary. */
-app.get('/api/intents/v1/phase-status', (_req, res) => {
+app.get('/api/intents/v1/phase-status', async (_req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
   return res.json(phaseStatusReport());
 });
 
-app.get('/api/intents/v1/public-status', (_req, res) => {
+app.get('/api/intents/v1/public-status', async (_req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   const status = phaseStatusReport();
   const activation = status.phase21?.readiness;
   const active = status.launchAllowed === true;
@@ -1413,7 +1417,7 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
       operational: phase.operational === true,
       live: phase.live === true,
       ready: phase.ready === true,
-      status: phase.operational,
+      status: phase.operational === true ? 'operational' : 'unavailable',
       dataStatus: phase.dataStatus,
       blockers: [...(phase.blockers || [])]
     })),
@@ -1430,22 +1434,36 @@ app.get('/api/intents/v1/public-status', (_req, res) => {
 });
 
 /* ── Wave 4: Operator Evidence Injection ──────────────────────────────── */
-app.post('/api/intents/v1/operator-evidence', (req, res) => {
+app.post('/api/intents/v1/operator-evidence', async (req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   return handleOperatorEvidence(req, res);
 });
 
 /* ── Compatibility status controls (Launch Freeze is retired) ──────────── */
-app.post('/api/intents/v1/unfreeze', (req, res) => {
+app.post('/api/intents/v1/unfreeze', async (req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   return handleUnfreeze(req, res);
 });
 
-app.post('/api/intents/v1/freeze', (req, res) => {
+app.post('/api/intents/v1/freeze', async (req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   return handleFreeze(req, res);
 });
 
-app.get('/api/intents/v1/freeze-status', (_req, res) => {
+app.get('/api/intents/v1/freeze-status', async (_req, res) => {
+  await ensureOperatorEvidenceHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=5, s-maxage=5');
   return res.json(freezeStateReport());
+});
+
+/* ── Wave 0/4: Activation configuration presence (booleans only) ───────── */
+app.get('/api/intents/v1/activation-config', (_req, res) => {
+  /* Deliberately zero I/O: this is a pure process.env presence report, so it
+     must never touch the Blob store or a network probe — those live on
+     evidence-status / self-probe. Presence is the answer to "which variable
+     is still missing" and it is available even when storage is down. */
+  res.set('cache-control', 'public, max-age=10, s-maxage=10');
+  return res.json(activationConfigPresence());
 });
 
 /* ── Wave 2/4: Evidence Status Dashboard ──────────────────────────────── */
@@ -1457,7 +1475,8 @@ app.get('/api/intents/v1/evidence-status', async (_req, res) => {
   await Promise.all([
     ensureHydrated().catch(() => {}),
     ensureOpsHydrated().catch(() => {}),
-    ensureStage3Hydrated().catch(() => {})
+    ensureStage3Hydrated().catch(() => {}),
+    ensureOperatorEvidenceHydrated().catch(() => {})
   ]);
   res.set('cache-control', 'public, max-age=10, s-maxage=10');
   return res.json(evidenceStoreStatus());
@@ -4602,12 +4621,27 @@ app.get('/api/cron/daily', async (req, res) => {
    * Both are settled, never awaited into the failure path: a registry chore
    * must not be able to stop the daily notifications from going out.
    */
-  const [web, fcm, watch, certs, reputation] = await Promise.allSettled([
+  /* Evidence freshness. On Vercel the only re-runs happen at cold start, so a
+     5–6 h TTL would silently drop an activated release back to partial before
+     the next deployment. Re-verify the four measurable kinds, the four
+     operational drills and the stage-3 kinds here, on the existing daily
+     slot — self-verifiable facts only, never a manufactured record. Each run
+     rebuilds the durable snapshot through the normal store. */
+  await Promise.all([
+    ensureOperatorEvidenceHydrated().catch(() => {}),
+    ensureHydrated().catch(() => {}),
+    ensureOpsHydrated().catch(() => {}),
+    ensureStage3Hydrated().catch(() => {})
+  ]);
+  const [web, fcm, watch, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
     runWatchCycle(sendWatchAlert),
     sweepCertifications(),
-    getReputationSnapshot({ force: true })
+    getReputationSnapshot({ force: true }),
+    runSelfProbe({}),
+    runOpsProbe({}),
+    runStage3Probe({})
   ]);
   const settled = (result, shape) => result.status === 'fulfilled' ? shape(result.value) : { error: String(result.reason).slice(0, 120) };
   res.json({
@@ -4615,7 +4649,14 @@ app.get('/api/cron/daily', async (req, res) => {
     fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
     watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
     certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
-    reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 }))
+    reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 })),
+    intentActivation: {
+      selfProbe: settled(selfProbe, (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })),
+      opsProbe: settled(opsProbe, (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })),
+      stage3: settled(stage3, (value) => ({ earnedCount: value.earnedCount, totalKinds: value.totalKinds })),
+      evidence: evidenceStoreStatus(),
+      refreshedAt: new Date().toISOString()
+    }
   });
 });
 
