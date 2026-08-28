@@ -42,8 +42,25 @@ import { probeCertificateAuthority, probeVenueHealth } from './evidenceProbes.js
 import { sloSnapshot } from './intentSloMeter.js';
 import { auditAppend, auditVerify, auditStatus } from './intentAuditLog.js';
 import { blobConfigured } from './blobCache.js';
+import { storeGet, storeSet } from './store.js';
 
 export const SELF_PROBE_SCHEMA = 'fbt.self-probe.v1';
+
+/*
+ * Where earned records are persisted.
+ *
+ * On Vercel every instance has its own memory, so a record earned by the
+ * instance that answered /self-probe was invisible to the instance that
+ * answered /evidence-status one second later — the status surface kept
+ * reporting 7/21 while three more kinds had genuinely been measured. Writing
+ * the records to the same durable store the audit log uses makes the answer
+ * consistent across instances and across cold starts, which is exactly what
+ * INTENT_OPERATIONAL_EVIDENCE did by hand.
+ *
+ * Only public digests are written. Records are re-validated on read: an entry
+ * whose expiresAt has passed is dropped, never resurrected.
+ */
+export const SELF_PROBE_STORE_KEY = 'intent-evidence/v1/self-probe.json';
 
 /** Kinds this probe can earn. Anything else is out of scope by design. */
 export const SELF_PROBE_KINDS = Object.freeze([
@@ -200,6 +217,70 @@ async function auditEvidenceInner({ now, ttlHours }) {
 }
 
 /**
+ * Persist earned records so every instance sees the same evidence.
+ *
+ * The write goes through store.js either way; what changes with the Blob token
+ * is whether that store is shared. Without it the write lands in this
+ * instance's memory and `persisted` stays false — the report must not claim
+ * durability the deployment does not have.
+ */
+async function persistEarned(records, { now }) {
+  if (records.length === 0) return { persisted: false, code: 'NOTHING_EARNED' };
+  try {
+    /* Merge with what is already stored so a run that earns three kinds does
+       not erase a fourth earned by an earlier run that is still valid. */
+    const existing = await readPersisted({ now });
+    const merged = new Map(existing.map((r) => [r.kind, r]));
+    for (const record of records) merged.set(record.kind, record);
+    const result = await withDeadline(
+      storeSet(SELF_PROBE_STORE_KEY, JSON.stringify([...merged.values()])),
+      AUDIT_TIMEOUT_MS,
+      'PERSIST_TIMEOUT'
+    );
+    if (result?.__timedOut) return { persisted: false, code: result.code };
+    return blobConfigured()
+      ? { persisted: true, count: merged.size }
+      : { persisted: false, code: 'DURABLE_STORE_NOT_CONFIGURED', count: merged.size };
+  } catch (e) {
+    return { persisted: false, code: 'PERSIST_FAILED', detail: e.message };
+  }
+}
+
+async function readPersisted({ now }) {
+  try {
+    const raw = await withDeadline(storeGet(SELF_PROBE_STORE_KEY), AUDIT_TIMEOUT_MS, 'READ_TIMEOUT');
+    if (!raw || raw.__timedOut || typeof raw !== 'string') return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((record) =>
+      record
+      && SELF_PROBE_KINDS.includes(record.kind)
+      && /^[0-9a-f]{64}$/.test(String(record.digest || ''))
+      && Number(record.expiresAt) > now
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Load previously earned, still-valid records into this instance's evidence
+ * store. Called at boot so a fresh instance reports what the deployment has
+ * measured instead of pretending nothing was ever checked.
+ */
+export async function hydrateSelfProbeEvidence({ now = Date.now() } = {}) {
+  const records = await readPersisted({ now });
+  if (records.length === 0) return { hydrated: 0 };
+  try {
+    const { autoStoreEvidence } = await import('./intentOperatorEvidence.js');
+    for (const record of records) autoStoreEvidence(record);
+  } catch {
+    return { hydrated: 0 };
+  }
+  return { hydrated: records.length, kinds: records.map((r) => r.kind) };
+}
+
+/**
  * Run all four probes and store whatever was genuinely earned.
  * `store:false` makes it a pure read — useful for a dry run from a browser.
  */
@@ -229,11 +310,13 @@ export async function runSelfProbe({
 
   const earned = Object.values(byKind).filter((r) => r.ok).map((r) => r.evidence);
 
+  let persistence = { persisted: false, code: 'NOT_ATTEMPTED' };
   if (store && earned.length > 0) {
     try {
       const { autoStoreEvidence } = await import('./intentOperatorEvidence.js');
       for (const record of earned) autoStoreEvidence(record);
     } catch { /* store unavailable — the report is still accurate */ }
+    persistence = await persistEarned(earned, { now });
   }
 
   /* Public report: verdicts, digests and measurements only. No secrets exist
@@ -243,6 +326,8 @@ export async function runSelfProbe({
     origin: target,
     checkedAt: now,
     stored: store,
+    durable: persistence.persisted === true,
+    durableDetail: persistence.persisted ? undefined : persistence.code,
     earnedCount: earned.length,
     totalKinds: SELF_PROBE_KINDS.length,
     earned: earned.map((e) => ({ kind: e.kind, providerId: e.providerId, digest: e.digest, expiresAt: e.expiresAt })),
@@ -284,9 +369,25 @@ export async function selfProbeReport({ req = null, now = Date.now(), force = fa
   return { ...(await inFlight), cached: false };
 }
 
+/*
+ * Hydration is attempted once per instance and then remembered. A status route
+ * can await it without turning every request into a Blob read, and a cold
+ * instance answers with the evidence the deployment has actually measured
+ * rather than with an empty store.
+ */
+let hydration = null;
+
+export function ensureHydrated({ now = Date.now() } = {}) {
+  if (!hydration) {
+    hydration = hydrateSelfProbeEvidence({ now }).catch(() => ({ hydrated: 0 }));
+  }
+  return hydration;
+}
+
 /** Tests only. */
 export function resetSelfProbeCache() {
   lastReport = null;
   lastRunAt = 0;
   inFlight = null;
+  hydration = null;
 }
