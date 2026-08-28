@@ -296,6 +296,7 @@ import { simulatorEvidence } from './intentSimulator.js';
 import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
 import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
+import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
 
@@ -341,6 +342,14 @@ app.post('/api/intents/v1/confidential/reveal', rejectUnavailableConfidentialWri
  * reach tens of kilobytes on multi-hop trades. Still far too small to be a
  * DoS vector.
  */
+/*
+ * SLO meter. Mounted before everything else so uptime and latency are measured
+ * over the traffic the process really served — the numbers reported by
+ * /api/intents/v1/slo-status and by the slo-measurement evidence come from
+ * here, not from a constant.
+ */
+app.use(sloMeterMiddleware());
+
 app.use(express.json({ limit: '256kb' }));
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(telegramAuth(BOT_TOKEN)); // optional — populates req.tgUser when present
@@ -1471,6 +1480,12 @@ app.get('/api/intents/v1/scheduler-status', (_req, res) => {
 });
 
 /* ── Wave 2: Drill Status ─────────────────────────────────────────────── */
+/* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
+app.get('/api/intents/v1/slo-status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=5, s-maxage=5');
+  return res.json(sloSnapshot());
+});
+
 app.get('/api/intents/v1/drill-status', (_req, res) => {
   return res.json({
     schema: 'fbt.drill-status.v1',

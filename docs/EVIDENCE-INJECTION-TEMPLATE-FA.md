@@ -2,6 +2,12 @@
 
 تاریخ: ۲۰۲۶-۰۸-۲۶
 
+> ✅ **چهار شاهد از این ۲۱ تا را لازم نیست دستی پر کنید.**
+> `certificate-authority`، `venue-health`، `slo-measurement` و
+> `durable-immutable-audit` با اندازه‌گیری واقعی به دست می‌آیند:
+> `npm run evidence:collect -- --target https://YOUR-APP.vercel.app`
+> راهنمای گام‌به‌گام: [`docs/EVIDENCE-EARN-4-FA.md`](./EVIDENCE-EARN-4-FA.md)
+
 ## ⚠️ هشدار مهم
 
 هر شاهد باید از یک **provider واقعی** به دست آمده باشد. این فایل فقط **قالب**
