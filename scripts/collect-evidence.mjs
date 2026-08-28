@@ -56,6 +56,8 @@ Usage: node scripts/collect-evidence.mjs --target https://host [options]
   --cert-ttl-hours   certificate evidence lifetime     (default: 24)
   --submit           POST the earned records to --target
   --op1 / --op2      operator ids for dual auth        (env: OPERATOR_1 / OPERATOR_2)
+  --env              also print an INTENT_OPERATIONAL_EVIDENCE value to paste
+                     into Vercel, so the records survive cold starts
   --json             machine readable output only
 `);
   process.exit(0);
@@ -168,6 +170,21 @@ if (args.submit) {
   log(`\nsubmit → ${response.status}`);
   log(body);
   if (!response.ok) process.exit(5);
+}
+
+/* Vercel runs this API as stateless functions: the in-memory evidence store is
+   per-instance and empties on every cold start. INTENT_OPERATIONAL_EVIDENCE is
+   the durable path — the server revalidates each record at boot exactly like an
+   injected one, so an expired or malformed entry is dropped, never trusted. */
+if (args.env) {
+  const envFile = outFile.replace(/\.json$/, '') + '.env.txt';
+  const value = JSON.stringify(report.earned);
+  fs.writeFileSync(envFile, `INTENT_OPERATIONAL_EVIDENCE=${value}\n`);
+  log(`\nINTENT_OPERATIONAL_EVIDENCE (paste into Vercel → Settings → Environment Variables):`);
+  log(value);
+  log(`\nalso written to → ${envFile}`);
+  log('note: these records carry real expiry timestamps — re-run and update the');
+  log('      variable before they lapse, or use --ttl-hours to widen the window.');
 }
 
 if (quiet) console.log(JSON.stringify(report, null, 2));

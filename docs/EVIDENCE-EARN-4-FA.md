@@ -187,6 +187,82 @@ TTL پیش‌فرض: ۶ ساعت (گواهی ۲۴ ساعت). یک cron هر ۴ �
 
 کد خروج: `0` یعنی هر چهار شاهد کسب شد، `1` یعنی حداقل یکی نشد (برای CI مناسب است).
 
+---
+
+# متغیرهای Vercel — دقیقاً چه چیزی لازم است
+
+## ۱. `BLOB_READ_WRITE_TOKEN` — **الزامی، فقط برای یکی از چهار شاهد**
+
+تنها متغیری که برای این چهار شاهد واقعاً لازم است.
+
+| برای | لازم است؟ |
+|------|-----------|
+| `certificate-authority` | ❌ خیر — ورسل خودش گواهی می‌دهد |
+| `venue-health` | ❌ خیر — endpoint عمومی صرافی است |
+| `slo-measurement` | ❌ خیر — از ترافیک خود سرویس اندازه گرفته می‌شود |
+| `durable-immutable-audit` | ✅ **بله** — بدون Blob، لاگ ماندگار وجود ندارد |
+
+روش:
+
+```
+Vercel Dashboard → Storage → Create → Blob
+→ Connect to Project → روی fbtcryp
+```
+
+با اتصال Store، ورسل خودش `BLOB_READ_WRITE_TOKEN` را به پروژه تزریق می‌کند
+(لازم نیست دستی بنویسید). بعدش حتماً **Redeploy** کنید — متغیر جدید فقط در
+دیپلوی بعدی اعمال می‌شود. تأیید:
+
+```bash
+curl -s $TARGET/api/intents/v1/audit-status | jq '{configured, durable}'
+# باید: { "configured": true, "durable": true }
+```
+
+## ۲. `INTENT_OPERATIONAL_EVIDENCE` — **عملاً الزامی روی ورسل**
+
+این نکته را از قلم نیندازید: روی ورسل API به‌صورت **stateless function** اجرا
+می‌شود. شواهدی که با `POST /operator-evidence` تزریق می‌کنید در حافظهٔ همان
+instance می‌مانند و با هر cold start **پاک می‌شوند**. یعنی ممکن است ساعتی بعد
+دوباره ببینید `stored: 0`.
+
+راه ماندگار: همان رکوردها را در این متغیر بگذارید. سرور موقع بوت هر رکورد را
+دقیقاً مثل رکورد تزریق‌شده اعتبارسنجی می‌کند (منقضی یا خراب باشد، دور انداخته
+می‌شود، نه اینکه باور شود).
+
+```bash
+npm run evidence:collect -- --target $TARGET --samples 50 --ttl-hours 168 --env
+```
+
+خروجی یک خط JSON آرایه‌ای می‌دهد؛ آن را در
+`Vercel → Settings → Environment Variables → INTENT_OPERATIONAL_EVIDENCE`
+بگذارید و Redeploy کنید.
+
+> ⚠️ `--ttl-hours 168` (یک هفته) فقط زمانی صادقانه است که واقعاً هفته‌ای یک بار
+> دوباره اندازه بگیرید. TTL کوتاه‌تر + cron گام ۸ صادقانه‌تر است.
+
+## ۳. `ECOSYSTEM_CERTIFIERS` — مربوط به موج ۰، نه این چهار شاهد
+
+فرمت `telegramUserId:Label`. برای گواهی‌دهندگان اکوسیستم است؛ هیچ‌کدام از این
+چهار probe به آن نگاه نمی‌کند. اگر می‌خواهید `npm run validate:activation-env`
+سبز شود لازم است.
+
+## ۴. چیزی که **نباید** ست کنید
+
+`INTENT_SECRET_MANAGER_PROVIDER`، `INTENT_SECRET_MANAGER_KEY_REF` — این‌ها به
+KMS و ارائه‌دهندهٔ attested نیاز دارند (موج ۳). ست کردنشان بدون آن زیرساخت،
+دقیقاً همان دروغی است که این کار برای حذفش انجام شد.
+
+## جمع‌بندی
+
+| متغیر | لازم؟ | چرا |
+|-------|-------|-----|
+| `BLOB_READ_WRITE_TOKEN` | ✅ | تنها پیش‌نیاز `durable-immutable-audit` |
+| `INTENT_OPERATIONAL_EVIDENCE` | ✅ عملاً | وگرنه شواهد با cold start می‌پرند |
+| `ECOSYSTEM_CERTIFIERS` | ➖ | موج ۰، ربطی به این چهارتا ندارد |
+| بقیه | ❌ | موج‌های بعدی / نیاز به شخص ثالث |
+
+---
+
 ## قوانینی که این ابزار نقض نمی‌کند
 
 - هیچ digest ساختگی تولید نمی‌شود؛ اگر چک رد شود، هیچ رکوردی نوشته نمی‌شود.
