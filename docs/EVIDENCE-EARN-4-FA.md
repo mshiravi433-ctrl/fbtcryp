@@ -252,6 +252,33 @@ npm run evidence:collect -- --target $TARGET --samples 50 --ttl-hours 168 --env
 KMS و ارائه‌دهندهٔ attested نیاز دارند (موج ۳). ست کردنشان بدون آن زیرساخت،
 دقیقاً همان دروغی است که این کار برای حذفش انجام شد.
 
+## چطور بفهمم روی ورسل واقعاً ست شده؟
+
+دیدن داشبورد ورسل کافی نیست: متغیری که ذخیره شده ولی **redeploy** نشده، در
+داشبورد «ست» نشان داده می‌شود ولی کد آن را نمی‌بیند. این دستور از خودِ دیپلوی
+زنده می‌پرسد:
+
+```bash
+npm run evidence:check-env -- --target $TARGET
+```
+
+خروجی نمونه:
+
+```
+✗ BLOB_READ_WRITE_TOKEN
+    observed  audit-status.configured=false durable=false
+    fix       Vercel → Storage → Blob → Connect to Project, then REDEPLOY.
+✗ INTENT_OPERATIONAL_EVIDENCE
+    observed  0 externally-supplied evidence kind(s) live
+──────────────────────────────────────────────────────────
+evidence     4/21   (stored 4, missing 17)
+audit log    entries 0, root none
+slo meter    not yet measured (INSUFFICIENT_SAMPLES)
+```
+
+هیچ secret ای خوانده یا چاپ نمی‌شود؛ همهٔ سیگنال‌ها boolean و شمارنده‌های عمومی
+هستند. کد خروج `0` یعنی متغیرهای الزامی فعال‌اند، `1` یعنی نه.
+
 ## جمع‌بندی
 
 | متغیر | لازم؟ | چرا |

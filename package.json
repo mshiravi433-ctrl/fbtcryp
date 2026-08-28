@@ -38,6 +38,7 @@
     "test:phase-status": "node test/intent-ai/phase-status-probe.mjs",
     "test:earnable-evidence": "node test/intent-ai/earnable-evidence-probe.mjs",
     "evidence:collect": "node scripts/collect-evidence.mjs",
+    "evidence:check-env": "node scripts/check-deployment-env.mjs",
     "test:phase21": "node test/intent-ai/phase21-operational-activation-probe.mjs",
     "test:phase21-operational-activation": "node test/intent-ai/phase21-operational-activation-probe.mjs",
     "test:phase22": "node test/intent-ai/phase22-registry-ca-ops-probe.mjs",
