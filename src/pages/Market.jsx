@@ -230,9 +230,9 @@ export default function Market() {
         </div>
 
         {/*
-          7-day shape of the total. Reported: «بازار جهانی ... احتیاج به نمودار
-          ندارد؟» — it did. Five figures about right now, with no way to see
-          whether the number was climbing or falling into them.
+          7-day shape of the total. Reported as: "does the global market
+          card not need a chart?" It did. Five figures about right now, with no
+          way to see whether the number was climbing or falling into them.
 
           The series is rebuilt from the loaded coins, not fetched: there is no
           free historical endpoint for total market cap. The caption names the
@@ -243,7 +243,10 @@ export default function Market() {
           <div className="market-trend" data-testid="global-market-trend">
             <div className="market-trend-head">
               <span className="faint">
-                {t('market.trendTitle', { defaultValue: 'Total market cap · 7 days' })}
+                {t('market.trendTitle', {
+                  defaultValue: `Total market cap · ${trend.days} days`,
+                  days: trend.days
+                })}
               </span>
               <span className={`mono ${trend.changePct >= 0 ? 'up' : 'down'}`}>
                 {fmtPct(trend.changePct, 2)}
@@ -258,7 +261,7 @@ export default function Market() {
             />
             <p className="faint market-trend-note">
               {t('market.trendNote', {
-                defaultValue: 'Rebuilt from the {{n}} largest coins already on this page — each one’s 7-day hourly price × its circulating supply. It is the top of the market, not the whole market.',
+                defaultValue: 'Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window.',
                 n: trend.coins
               })}
             </p>

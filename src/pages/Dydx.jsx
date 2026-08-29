@@ -240,8 +240,8 @@ export default function Dydx() {
 
           {/*
             ─── THE MARKET HAD NO HISTORY AT ALL ──────────────────────────────
-            Reported: «نمودار dydx احتیاج به نمودار ندارد؟» It did not have
-            one. A leveraged position was being sized from a single oracle
+            Reported as: "does the dYdX market not need a chart?" It did not
+            have one. A leveraged position was being sized from a single oracle
             price and an open-interest figure — the two numbers that say least
             about whether the market has been trending or chopping sideways.
 

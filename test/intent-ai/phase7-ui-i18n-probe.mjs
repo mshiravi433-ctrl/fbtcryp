@@ -22,21 +22,9 @@ export default async function run() {
   const missing = [...new Set([...staticKeys(panel), ...staticKeys(intentOs)])].filter((k) => !have(k));
   t(`every static t() key exists in en.json${missing.length ? ` — missing: ${missing.slice(0, 4).join(', ')}` : ''}`, missing.length === 0);
 
-  /*
-   * No hardcoded Persian/Arabic in the panel or the Intent OS entry — meaning
-   * no user-facing copy. Comments are exempt, and deliberately so: this repo
-   * quotes the reporter's own words at each fix site (see server/app.js,
-   * src/index.css, src/styles/intent-os.css), and a Persian quote inside a
-   * comment is documentation, not a string a reader will ever be shown.
-   *
-   * Strip comments rather than skipping the check: real JSX copy such as
-   * <span>سلام</span> survives the strip and is still caught.
-   */
-  const stripComments = (src) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-
-  t('IntentAIPanel holds no hardcoded fa/ar', !/[\u0600-\u06ff]/.test(stripComments(panel)));
-  t('Intent OS entry holds no hardcoded fa/ar', !/[\u0600-\u06ff]/.test(stripComments(intentOs)));
+  // No hardcoded Persian/Arabic in the panel or the Intent OS entry.
+  t('IntentAIPanel holds no hardcoded fa/ar', !/[\u0600-\u06ff]/.test(panel));
+  t('Intent OS entry holds no hardcoded fa/ar', !/[\u0600-\u06ff]/.test(intentOs));
 
   // The panel exposes the full Confirmation Gate actions.
   for (const action of ['CONFIRM', 'REJECT', 'CANCEL', 'REAUTHORIZE']) {

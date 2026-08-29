@@ -1677,11 +1677,6 @@
 .ios-rail-unwind { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-2); }
 .ios-rail-unwind input { accent-color: var(--ios-red); }
 
-.ios-rail-statusline {
-  margin-top: 6px;
-  color: var(--text-3);
-  font: 600 9px/1.5 var(--font-display);
-}
 .ios-rail-notice {
   margin-top: 8px;
   padding: 7px 10px;

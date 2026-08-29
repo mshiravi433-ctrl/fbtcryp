@@ -97,7 +97,9 @@
     },
     "sectorEmpty": "Nothing to show for this sector right now.",
     "swap": "Swap",
-    "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network"
+    "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network",
+    "trendTitle": "Total market cap · {{days}} days",
+    "trendNote": "Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window."
   },
   "coin": {
     "notFound": "Coin not found",
@@ -3848,7 +3850,14 @@
     "fundingHelp": {
       "title": "Where do I fund the account?",
       "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
-    }
+    },
+    "chartTitle": "Price · last 4 days",
+    "res": {
+      "4h": "4h",
+      "1d": "1d"
+    },
+    "chartUnavailable": "The dYdX indexer did not return candles for this market.",
+    "chartSource": "dYdX indexer candles"
   },
   "derivatives": {
     "title": "Derivatives Hall",
@@ -4627,7 +4636,12 @@
       "honestHead": "Honest notes",
       "notGuaranteed": "These figures are estimates from live venue data, not promises — returns are not guaranteed.",
       "noAutoExecution": "This plan executes nothing. Every action still requires your confirmation and wallet signature.",
-      "partialFeeds": "Some venue feeds are currently unavailable; the plan reports them instead of guessing."
+      "partialFeeds": "Some venue feeds are currently unavailable; the plan reports them instead of guessing.",
+      "badResponse": "The server answered with something that was not a plan.",
+      "timedOut": "The venue feeds did not answer within 30 seconds.",
+      "buildHint": "Reading stocks, dYdX, perpetuals and farm yields. Nothing is executed.",
+      "retry": "Try again",
+      "why": "Why"
     }
   },
   "whales": {
@@ -5073,7 +5087,8 @@
       "pause": "PAUSE",
       "revoke": "REVOKE",
       "disconnect": "DISCONNECT",
-      "emergency_exit": "EMERGENCY EXIT"
+      "emergency_exit": "EMERGENCY EXIT",
+      "railCollapse": "Collapse rail"
     },
     "capabilities": {
       "title": "Runtime capability discovery",

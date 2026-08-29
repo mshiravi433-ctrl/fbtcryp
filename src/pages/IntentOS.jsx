@@ -82,9 +82,10 @@ function StageRail({ t }) {
 
 /**
  * ─── THIS BANNER USED TO LIE, AND THE FIX IS THE WHOLE POINT ───────────────
- * Reported: «این چرا — System Active & Verified ... شواهد عملیاتی فعلی معتبر
- * است» while the settings screen was simultaneously reporting
- * «وضعیت فعال‌سازی در دسترس نیست» and 80 unmet operational notes.
+ * Reported as "why is this here?" — a strip reading "System Active &
+ * Verified ... Current operational evidence is attested", while the settings
+ * screen was simultaneously reporting "activation status unavailable" and 80
+ * unmet operational notes.
  *
  * The cause is one line: `const banner = ACTIVE_BANNER`. The three "everything
  * is verified" sentences were a module-level constant rendered unconditionally,

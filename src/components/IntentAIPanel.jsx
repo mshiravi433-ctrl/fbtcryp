@@ -916,7 +916,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       </div>
 
       {/*
-        Autonomy level. Three bare "L1 · تحلیل" chips said nothing about what
+        Autonomy level. Three bare "L1" chips said nothing about what
         the levels mean, and they were plain `.chip` — a different visual
         language from the glass controls two blocks below. Each level now
         carries the same glyph the Intent OS rail uses, so the two screens read
