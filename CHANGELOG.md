@@ -51,6 +51,11 @@
   and inflated the first-paint budget measurement to the dev artifact. Vite
   already defaults `vite build` to production; the boot, budget and
   arcade/speculation builds now measure what ships.
+- **Probe fixture fix:** `activation-config-probe` now uses a format-valid
+  Vercel Blob token fixture (`vercel_blob_rw_…`) — the server accepts only
+  the real token format, so the old fixture could never exercise the
+  configured path (pre-existing 10/12 on main; now 12/12, and the leak
+  checks still prove no value is ever rendered).
 
 ## Unreleased — Activation surface completed through Phase 100 + durable evidence
 
