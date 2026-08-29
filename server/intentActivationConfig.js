@@ -56,6 +56,10 @@ export function activationConfigPresence({ now = Date.now() } = {}) {
   const env = process.env;
 
   const blob = flag(env.BLOB_READ_WRITE_TOKEN, { pattern: /^vercel_blob_rw_/, minLength: 20 });
+  const upstashUrl = flag(env.UPSTASH_REDIS_REST_URL, { pattern: /^https:\/\/[a-z0-9-]+\.upstash\.io\/?$/i, minLength: 8 });
+  const upstashToken = flag(env.UPSTASH_REDIS_REST_TOKEN, { minLength: 20 });
+  const upstash = { configured: upstashUrl.configured && upstashToken.configured, validFormat: upstashUrl.validFormat && upstashToken.validFormat };
+  const durableStoreConfigured = blob.configured || upstash.configured;
   const rpc = flag(env.RPC_URL, { pattern: /^https:\/\//, minLength: 8 });
   const walletConnect = flag(env.VITE_WALLETCONNECT_PROJECT_ID, { minLength: 5 });
   const publicOrigin = flag(env.PUBLIC_ORIGIN, { pattern: /^https:\/\/[^/]+/, minLength: 8 });
@@ -74,7 +78,20 @@ export function activationConfigPresence({ now = Date.now() } = {}) {
   const variables = {
     BLOB_READ_WRITE_TOKEN: {
       ...blob,
-      source: 'Vercel → Storage → Blob → Create',
+      active: blob.configured && !upstash.configured,
+      source: 'Vercel → Storage → Blob → Create (optional when Upstash is configured)',
+      requiredFor: upstash.configured ? [] : ['approved-durable-registry', 'durable-immutable-audit']
+    },
+    UPSTASH_REDIS_REST_URL: {
+      ...upstashUrl,
+      active: upstash.configured,
+      source: 'Upstash Console → Redis database → REST API',
+      requiredFor: ['approved-durable-registry', 'durable-immutable-audit']
+    },
+    UPSTASH_REDIS_REST_TOKEN: {
+      ...upstashToken,
+      active: upstash.configured,
+      source: 'Upstash Console → Redis database → REST API (server secret)',
       requiredFor: ['approved-durable-registry', 'durable-immutable-audit']
     },
     RPC_URL: {
@@ -131,8 +148,8 @@ export function activationConfigPresence({ now = Date.now() } = {}) {
 
   /* What the 21-kind gate still needs, with the satisfaction path. */
   const needed = [];
-  if (!blob.configured) needed.push({ kind: 'approved-durable-registry', env: 'BLOB_READ_WRITE_TOKEN' });
-  if (!blob.configured) needed.push({ kind: 'durable-immutable-audit', env: 'BLOB_READ_WRITE_TOKEN' });
+  if (!durableStoreConfigured) needed.push({ kind: 'approved-durable-registry', env: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (or BLOB_READ_WRITE_TOKEN)' });
+  if (!durableStoreConfigured) needed.push({ kind: 'durable-immutable-audit', env: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (or BLOB_READ_WRITE_TOKEN)' });
   if (!rpc.configured) needed.push({ kind: 'rpc', env: 'RPC_URL' });
   if (!walletConnect.configured) needed.push({ kind: 'wallet-provider', env: 'VITE_WALLETCONNECT_PROJECT_ID' });
   if (!publicOrigin.configured && !vercelOrigin.configured) {

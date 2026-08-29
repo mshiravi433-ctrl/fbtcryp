@@ -1,3 +1,18 @@
+## Unreleased — Free Upstash durable-store fallback
+
+- `server/blobCache.js` now supports Upstash Redis REST through server-only
+  `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. When both are valid,
+  Upstash fully replaces Blob reads and writes—even if the paused legacy Blob
+  token remains—so cache misses cannot silently consume more Advanced Requests.
+- Redis writes carry a real `EX` TTL, provider calls are bounded to six seconds,
+  failures stay fail-closed, and public diagnostics expose only booleans/backend
+  names, never the REST URL or token.
+- Activation configuration now reports both Upstash variables, treats either
+  Upstash or Blob as a durable store, and self-evidence identifies the selected
+  provider. `test:upstash-store` proves SET/GET, TTL, secret non-disclosure and
+  zero Blob calls while Upstash is active.
+- Migration runbook: `docs/UPSTASH-MIGRATION-FA.md`.
+
 ## Unreleased — Phases 151–200: durable recovery and bounded autonomy
 
 - Added a sanitized, corruption-checked recovery journal with Storage-like

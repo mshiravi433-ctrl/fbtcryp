@@ -465,6 +465,12 @@ console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
 }
 
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
+console.log('▸ probing the free Upstash durable-store fallback…');
+{
+  const module = await import('./upstash-store-probe.mjs');
+  if (Array.isArray(module.default)) report('upstash durable store', module.default);
+}
+
 await import('./intent-ai/phase-status-probe.mjs');
 
 console.log('▸ probing FBT Intent AI — operational drills (backup/restore · rollback · sandbox · policy)…');

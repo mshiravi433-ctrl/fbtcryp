@@ -90,8 +90,12 @@ export async function collectLocalEvidence({ now = Date.now() } = {}) {
   /* 1. approved-durable-registry — the Blob token is present and well-formed.
      This is a genuine configuration check, not a provider attestation. */
   const blobToken = String(process.env.BLOB_READ_WRITE_TOKEN || '').trim();
-  if (/^vercel_blob_rw_/.test(blobToken) && blobToken.length > 20) {
-    evidence.push(makeEvidence('approved-durable-registry', 'vercel-blob-registry', safeDigest('registry', 'configured', String(now)), now));
+  const upstashUrl = String(process.env.UPSTASH_REDIS_REST_URL || '').trim();
+  const upstashToken = String(process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+  const upstashReady = /^https:\/\/[a-z0-9-]+\.upstash\.io\/?$/i.test(upstashUrl) && upstashToken.length >= 20;
+  if (upstashReady || (/^vercel_blob_rw_/.test(blobToken) && blobToken.length > 20)) {
+    const providerId = upstashReady ? 'upstash-redis-store' : 'vercel-blob-registry';
+    evidence.push(makeEvidence('approved-durable-registry', providerId, safeDigest('registry', providerId, 'configured', String(now)), now));
   }
 
   /* 2. simulator — local deterministic service owned by this process. */
