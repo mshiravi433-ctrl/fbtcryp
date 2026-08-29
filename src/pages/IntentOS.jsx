@@ -24,7 +24,10 @@ import {
   verifyExecutionProof
 } from '../lib/executionProof';
 import { getIntentCapabilities, getIntentPublicStatus } from '../lib/intentNetwork';
-import { INTENT_AI_VERSION } from '../lib/intent-ai/index.js';
+import { INTENT_AI_VERSION, mayExecute, verifyWalletChain, multichainCoverage, walletSecurityPosture } from '../lib/intent-ai/index.js';
+import IntentRail from '../components/IntentRail';
+import ProfitPlanner from '../components/ProfitPlanner';
+import { useWallet } from '../context/WalletContext';
 import {
   ensureLifecycle,
   expireIfDue,
@@ -37,7 +40,7 @@ import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import { fetchCatalog, fetchCertifications, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
-const TABS = ['compose', 'memory', 'proofs', 'agents', 'strategies', 'network'];
+const TABS = ['compose', 'plan', 'memory', 'proofs', 'agents', 'strategies', 'network'];
 /* Which registry each tab reads. Only these two tabs fetch a catalog. */
 const TAB_CATALOG = { agents: 'agent', strategies: 'strategy' };
 const TEMPLATES = [
@@ -634,6 +637,58 @@ export default function IntentOS() {
       ?? networkStatus?.crossChain?.txVerification ?? null,
     [networkStatus]
   );
+
+  /* ── Phases 141–150: the horizontal rail gates the compose surface. ─── */
+  const [railState, setRailState] = useState(null);
+  const railGate = useMemo(() => mayExecute(railState || undefined), [railState]);
+  const railBlocked = railGate.allowed !== true;
+
+  /* ── Phases 131–140: wallet & multichain verification. ────────────────── */
+  const wallet = useWallet();
+  const [checksumVerify, setChecksumVerify] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    import('ethers')
+      .then(({ getAddress }) => {
+        if (!cancelled) {
+          setChecksumVerify(() => (a) => {
+            try { getAddress(a); return true; } catch { return false; }
+          });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const walletVerification = useMemo(() => {
+    const providerKind = wallet.mode === 'injected' ? 'injected'
+      : wallet.mode === 'wc' ? 'walletconnect'
+        : wallet.mode === 'local' ? 'embedded' : 'none';
+    const supportedChains = EVM_CHAIN_ORDER;
+    const entry = wallet.address
+      ? verifyWalletChain({
+        address: wallet.address,
+        chainId: wallet.chainId,
+        chainName: EVM_CHAINS[wallet.chainId]?.name || null,
+        providerKind,
+        supportedChains,
+        checksumVerify,
+        rpcProbe: () => wallet.isConnected === true,
+        balanceProbe: () => (wallet.nativeBalance !== undefined && wallet.nativeBalance !== null ? Number(wallet.nativeBalance) : null)
+      })
+      : null;
+    return {
+      connected: Boolean(wallet.address),
+      entry,
+      coverage: multichainCoverage({
+        entries: entry && entry.verified ? [{ chainId: entry.chainId, verified: true }] : [],
+        supportedChains
+      }),
+      posture: walletSecurityPosture({
+        rawCredentialsToAgents: false,
+        executionRequiresWalletConfirmation: true
+      })
+    };
+  }, [wallet.address, wallet.chainId, wallet.mode, wallet.isConnected, wallet.nativeBalance, checksumVerify]);
   return (
     <PageTransition className="page ios-page">
       <motion.section className="ios-hero" variants={riseIn} initial="hidden" animate="show">
@@ -656,6 +711,8 @@ export default function IntentOS() {
 
       <StageRail t={t} />
 
+      <IntentRail t={t} onStateChange={setRailState} />
+
       <div className="ios-tabs" role="tablist">
         {TABS.map((name) => (
           <button
@@ -674,6 +731,20 @@ export default function IntentOS() {
 
       {tab === 'compose' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          {railBlocked && (
+            <section className="ios-rail-blocked" role="alert">
+              <strong>
+                {railGate.reason === 'EMERGENCY_STOP'
+                  ? t('intentOS.rail.composeBlockedStop', { defaultValue: 'Emergency stop is engaged — execution is blocked.' })
+                  : t('intentOS.rail.composeBlockedPause', { defaultValue: 'The system is paused — execution is blocked.' })}
+              </strong>
+              <span>
+                {railGate.reason === 'PAUSED' && railGate.resumesAt
+                  ? t('intentOS.rail.composeResumes', { defaultValue: 'You can keep composing; sending resumes automatically at' }) + ` ${new Date(railGate.resumesAt).toLocaleTimeString()}`
+                  : t('intentOS.rail.composeNote', { defaultValue: 'You can keep composing, but no intent can be sent until the rail is released.' })}
+              </span>
+            </section>
+          )}
           <section>
             <div className="row-between ios-section-head">
               <div>
@@ -957,8 +1028,14 @@ export default function IntentOS() {
 
                   {compiled.handoff ? (
                     <div>
-                    <button className="btn btn-primary ios-compile" onClick={() => setConfirmationOpen(true)}>
-                      {t('intentOS.result.reviewHandoff')} <span>→</span>
+                    <button
+                      className="btn btn-primary ios-compile"
+                      onClick={() => setConfirmationOpen(true)}
+                      disabled={railBlocked}
+                    >
+                      {railBlocked
+                        ? t('intentOS.rail.blocked', { defaultValue: 'Rail paused/stopped — release to send' })
+                        : t('intentOS.result.reviewHandoff')} <span>→</span>
                     </button>
                   {confirmationOpen && (
                     <div className="ios-confirm-gate" role="dialog" aria-modal="true" aria-labelledby="ios-confirm-title">
@@ -971,7 +1048,7 @@ export default function IntentOS() {
                         <span>Deadline: {new Date(compiled.intent.deadlineAt).toLocaleString()}</span>
                       </div>
                       <p className="ios-guardian-pass">✓ Guardian review passed · explicit wallet confirmation still required</p>
-                      <div className="ios-confirm-actions"><button className="btn btn-ghost btn-sm" onClick={() => setConfirmationOpen(false)}>Cancel</button><button className="btn btn-primary btn-sm" onClick={() => navigate(compiled.handoff)}>Review in wallet</button></div>
+                      <div className="ios-confirm-actions"><button className="btn btn-ghost btn-sm" onClick={() => setConfirmationOpen(false)}>Cancel</button><button className="btn btn-primary btn-sm" disabled={railBlocked} onClick={() => navigate(compiled.handoff)}>{railBlocked ? t('intentOS.rail.blocked', { defaultValue: 'Blocked by rail' }) : 'Review in wallet'}</button></div>
                     </div>
                   )}
                     </div>
@@ -1004,6 +1081,12 @@ export default function IntentOS() {
               ))}
             </section>
           )}
+        </motion.div>
+      )}
+
+      {tab === 'plan' && (
+        <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <ProfitPlanner />
         </motion.div>
       )}
 
@@ -1121,6 +1204,38 @@ export default function IntentOS() {
           <section className="ios-network-hero">
             <div className="ios-network-glyph"><span>FBT</span><i /><i /><i /></div>
             <div><h2>{t('intentOS.network.title')}</h2><p>{t('intentOS.network.subtitle')}</p></div>
+          </section>
+
+          <section className="ios-auction-status" data-testid="intent-os-wallet-verification">
+            <div className="row-between">
+              <div>
+                <span className="ios-eyebrow">{t('intentOS.network.walletVerification', { defaultValue: 'Wallet & multichain verification' })}</span>
+                <strong>
+                  {!walletVerification.connected
+                    ? t('intentOS.network.walletNotConnected', { defaultValue: 'No wallet connected — verification waits for a real wallet.' })
+                    : walletVerification.entry?.verified
+                      ? t('intentOS.network.walletVerified', { defaultValue: 'Wallet verified on the current chain' })
+                      : t('intentOS.network.walletUnverified', { defaultValue: 'Wallet connected — some checks failed' })}
+                </strong>
+              </div>
+              <span className={`ios-status ${walletVerification.entry?.verified ? 'eligible' : 'unavailable'}`}>
+                {walletVerification.entry?.verified
+                  ? t('intentOS.network.verified', { defaultValue: 'verified' })
+                  : t('intentOS.network.unverified', { defaultValue: 'unverified' })}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{walletVerification.connected ? wallet.address.slice(0, 10) + '…' : '—'}</b>{t('intentOS.network.walletAddress', { defaultValue: 'address' })}</span>
+              <span><b>{walletVerification.entry?.chainId ?? '—'}</b>{t('intentOS.network.walletChain', { defaultValue: 'chain' })}</span>
+              <span><b>{walletVerification.coverage.coverage === null ? '—' : `${walletVerification.coverage.coverage}%`}</b>{t('intentOS.network.walletCoverage', { defaultValue: 'multichain coverage' })}</span>
+              <span><b>{walletVerification.posture.ok ? t('intentOS.network.verified') : t('intentOS.network.unverified')}</b>{t('intentOS.network.walletBoundary', { defaultValue: 'AI credential boundary' })}</span>
+            </div>
+            {walletVerification.entry && walletVerification.entry.failed.length > 0 && (
+              <div className="ios-rail-statusline">
+                {walletVerification.entry.failed.map((id) => t(`intentOS.network.check.${id}`, { defaultValue: id })).join(' · ')}
+              </div>
+            )}
+            <p>{t('intentOS.network.walletVerifyNote', { defaultValue: 'Verification is per-chain and fail-closed: address format, chain membership, provider, RPC answer and balance must all check out. Raw credentials never reach any AI agent.' })}</p>
           </section>
 
           <section className={`ios-network-status ${networkStatus?.ok ? 'is-online' : ''}`}>

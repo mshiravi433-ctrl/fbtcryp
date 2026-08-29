@@ -868,7 +868,8 @@
       "operational": "Execution Ready — wallet confirmation remains required.",
       "execution": "Current operational evidence is attested and within its validity window.",
       "agent": "Wallet confirmation remains required for every transaction."
-    }
+    },
+    "phases": "Specification Phases"
   },
   "about": {
     "title": "About us",
@@ -4026,7 +4027,8 @@
       "proofs": "Proofs",
       "network": "Network",
       "agents": "Agent",
-      "strategies": "Strategy"
+      "strategies": "Strategy",
+      "plan": "Profit plan"
     },
     "compose": {
       "choose": "Choose an outcome",
@@ -4388,7 +4390,27 @@
       "txVerificationBindings": "Signed account bindings",
       "txVerificationSchema": "Verification report schema",
       "txVerificationWalletProof": "Wallet proof scheme",
-      "txVerificationProviderIndependence": "Provider independence"
+      "txVerificationProviderIndependence": "Provider independence",
+      "walletVerification": "Wallet & multichain verification",
+      "walletNotConnected": "No wallet connected — verification waits for a real wallet.",
+      "walletVerified": "Wallet verified on the current chain",
+      "walletUnverified": "Wallet connected — some checks failed",
+      "verified": "verified",
+      "unverified": "unverified",
+      "walletAddress": "address",
+      "walletChain": "chain",
+      "walletCoverage": "multichain coverage",
+      "walletBoundary": "AI credential boundary",
+      "walletVerifyNote": "Verification is per-chain and fail-closed: address format, chain membership, provider, RPC answer and balance must all check out. Raw credentials never reach any AI agent.",
+      "check": {
+        "provider-present": "no wallet provider",
+        "chain-id-present": "no chain id",
+        "chain-supported": "chain not supported",
+        "address-format": "bad address format",
+        "rpc-reachable": "RPC did not answer",
+        "balance-fetched": "balance unavailable",
+        "no-raw-credentials": "raw credential material present"
+      }
     },
     "revert": {
       "abort-all": "Abort all",
@@ -4496,6 +4518,78 @@
       "note": "Operational evidence is current. Review the final transaction in your wallet before signing.",
       "active": "System Active & Verified",
       "activeNote": "Operational evidence is current. Review the final transaction in your wallet before signing."
+    },
+    "rail": {
+      "label": "Intent OS control rail",
+      "autonomy": "Autonomy level",
+      "resume": "Resume",
+      "pauseReason": "Reason (optional)",
+      "applyPause": "Pause for 1 hour",
+      "paused": "Paused",
+      "pausedUntil": "Paused · resumes in",
+      "stopped": "STOPPED",
+      "stoppedShort": "STOPPED",
+      "pausedShort": "PAUSED",
+      "running": "RUNNING",
+      "stopReason": "Reason (optional)",
+      "requestUnwind": "Request unwind of open positions",
+      "applyStop": "EMERGENCY STOP",
+      "stopActive": "Execution blocked",
+      "confirmRelease": "Tap again to confirm release",
+      "agentRequested": "Requested…",
+      "agentConnected": "Agent connected",
+      "restoredSafe": "Rail state restored from a modified record — running in the safest (stopped) state.",
+      "composeBlockedStop": "Emergency stop is engaged — execution is blocked.",
+      "composeBlockedPause": "The system is paused — execution is blocked.",
+      "composeResumes": "You can keep composing; sending resumes automatically at",
+      "composeNote": "You can keep composing, but no intent can be sent until the rail is released.",
+      "blocked": "Rail paused/stopped — release to send"
+    },
+    "controls": {
+      "humanAgent": "Human agent",
+      "railCollapse": "Collapse rail",
+      "pause": "Pause",
+      "emergency_exit": "Emergency stop"
+    },
+    "plan": {
+      "title": "Profit target plan",
+      "readOnly": "read-only proposal",
+      "targetMode": "Target in",
+      "pct": "Growth %",
+      "usd": "Final USDC",
+      "targetValue": "Target value",
+      "capital": "Capital (USDC)",
+      "horizon": "Horizon (days)",
+      "risk": {
+        "conservative": "Conservative",
+        "balanced": "Balanced",
+        "aggressive": "Aggressive"
+      },
+      "build": "Build the plan",
+      "building": "Asking the live venues…",
+      "failed": "The plan could not be built — the venue feeds did not answer. Try again in a moment.",
+      "reachable": "Reachable",
+      "unreachable": "Not reachable honestly",
+      "summaryMissing": "Plan",
+      "projectedYearly": "expected / year",
+      "targetAtHorizon": "target at horizon",
+      "venuesLive": "venue classes live",
+      "yearsEstimate": "years at current rates",
+      "allocation": "Allocation",
+      "yieldHaircut": "yields are haircut, funding needs a known interval",
+      "class": {
+        "spot": "Spot exposure",
+        "stocks": "Stocks",
+        "dydx-global": "dYdX global",
+        "futures": "Futures",
+        "yield-farm": "Yield farm"
+      },
+      "live": "live",
+      "noData": "no data",
+      "honestHead": "Honest notes",
+      "notGuaranteed": "These figures are estimates from live venue data, not promises — returns are not guaranteed.",
+      "noAutoExecution": "This plan executes nothing. Every action still requires your confirmation and wallet signature.",
+      "partialFeeds": "Some venue feeds are currently unavailable; the plan reports them instead of guessing."
     }
   },
   "whales": {
@@ -5798,7 +5892,7 @@
     },
     "sovereignty": {
       "title": "Your exit — take everything and leave",
-      "exitExplained": "Take everything and leave in two steps. No fee, no waiting period, no ticket.",
+      "exitExplained": "You can take everything and leave. Two steps, no fee, no waiting period.",
       "exitDetails": "{{steps}} steps · open format · fee: {{fee}}",
       "pathOpen": "Open exit",
       "prepareTitle": "Prepare my full package",
@@ -5810,7 +5904,6 @@
       "confirmLabel": "Yes, take everything and leave",
       "receiptTitle": "Proof of exit",
       "receiptRef": "Reference {{proof}}",
-      "exitExplained": "You can take everything and leave. Two steps, no fee, no waiting period.",
       "packageReady": "Your full export is ready: {{stores}} stores, open JSON.",
       "exportIncomplete": "The export is missing {{missing}} stores, so nothing was deleted.",
       "exportFailed": "The export could not be prepared.",
@@ -5824,6 +5917,9 @@
     },
     "broadcast": {
       "optIn": "Send this transaction to the network after I confirm"
+    },
+    "activation": {
+      "title": "Intent AI Activation"
     }
   }
 }
