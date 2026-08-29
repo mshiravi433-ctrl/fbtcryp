@@ -121,7 +121,13 @@ export async function run(container) {
 
     /* ---------------- 5. L3: interactive confirmation + real execution ---------------- */
     // Switch to L3, confirm the default policy, then request a swap.
-    const l3chip = qa('.chip').find((b) => /^L3/.test((b.textContent || '').trim()));
+    /* The level control used to be a bare `.chip`; it is now a labelled
+       button carrying its own testid (see the autonomy-level row in the
+       panel). Prefer the testid — a text regex over `.chip` stopped matching
+       the moment the levels got real labels, and silently skipped the L3
+       switch, which is what the next five assertions actually test. */
+    const l3chip = q('[data-testid="intent-ai-level-3"]')
+      || qa('.chip').find((b) => /^L3/.test((b.textContent || '').trim()));
     await act(async () => { l3chip?.click(); });
     await act(async () => { await sleep(20); });
     const confirmPolicy = qa('button').find((b) => /CONFIRM & START/i.test(b.textContent || ''));

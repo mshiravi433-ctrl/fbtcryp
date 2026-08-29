@@ -147,15 +147,15 @@ export default {
     pt: 'O gás é sempre pago na moeda nativa da rede, a partir da mesma carteira — não é só BNB. Para trocar numa cadeia precisa da moeda indicada abaixo.'
   },
   'swap.gasNote': {
-    zh: 'Gas 归区块链验证者所有，不归我们，且与 0.5% 平台费无关。如果你在某条链上没有原生币，请切换到你持有原生币的链。',
-    hi: 'गैस ब्लॉकचेन वैलिडेटर को जाता है, हमें नहीं, और यह 0.5% प्लेटफ़ॉर्म फ़ीस से अलग है। किसी चेन का मूल सिक्का न हो तो दूसरी चेन चुनें।',
-    es: 'El gas va a los validadores de la cadena, no a nosotros, y es independiente de la comisión del 0,5%. Si no tienes la moneda nativa de una cadena, cambia a otra donde sí la tengas.',
-    fr: 'Le gas revient aux validateurs, pas à nous, et il est distinct des 0,5 % de frais. Si vous n\'avez pas la monnaie native d\'une chaîne, changez de réseau.',
-    ru: 'Газ идёт валидаторам сети, а не нам, и не связан с комиссией 0,5%. Если родной монеты нет — переключитесь на сеть, где она есть.',
-    tr: 'Gas ağ doğrulayıcılarına gider, bize değil, ve %0,5 platform ücretinden ayrıdır. Bir zincirin yerel coini yoksa sahip olduğunuz bir zincire geçin.',
-    ur: 'گیس بلاک چین ویلیڈیٹرز کو جاتی ہے، ہمیں نہیں، اور ٠٫٥٪ پلیٹ فارم فیس سے الگ ہے۔',
-    id: 'Gas untuk validator jaringan, bukan kami, dan terpisah dari biaya platform 0,5%. Jika tak punya koin asli suatu rantai, pindah ke rantai lain.',
-    pt: 'O gás vai para os validadores da rede, não para nós, e é separado da taxa de 0,5%. Se não tiver a moeda nativa de uma cadeia, mude para outra.'
+    zh: 'Gas 归区块链验证者所有，不归我们，且与 {{fee}}% 平台费无关。如果你在某条链上没有原生币，请切换到你持有原生币的链。',
+    hi: 'गैस ब्लॉकचेन वैलिडेटर को जाता है, हमें नहीं, और यह {{fee}}% प्लेटफ़ॉर्म फ़ीस से अलग है। किसी चेन का मूल सिक्का न हो तो दूसरी चेन चुनें।',
+    es: 'El gas va a los validadores de la cadena, no a nosotros, y es independiente de la comisión del {{fee}}%. Si no tienes la moneda nativa de una cadena, cambia a otra donde sí la tengas.',
+    fr: 'Le gas revient aux validateurs, pas à nous, et il est distinct des {{fee}}% de frais. Si vous n\'avez pas la monnaie native d\'une chaîne, changez de réseau.',
+    ru: 'Газ идёт валидаторам сети, а не нам, и не связан с комиссией {{fee}}%. Если родной монеты нет — переключитесь на сеть, где она есть.',
+    tr: 'Gas ağ doğrulayıcılarına gider, bize değil, ve {{fee}}% platform ücretinden ayrıdır. Bir zincirin yerel coini yoksa sahip olduğunuz bir zincire geçin.',
+    ur: 'گیس بلاک چین ویلیڈیٹرز کو جاتی ہے، ہمیں نہیں، اور {{fee}}٪ پلیٹ فارم فیس سے الگ ہے۔',
+    id: 'Gas untuk validator jaringan, bukan kami, dan terpisah dari biaya platform {{fee}}%. Jika tak punya koin asli suatu rantai, pindah ke rantai lain.',
+    pt: 'O gás vai para os validadores da rede, não para nós, e é separado da taxa de {{fee}}%. Se não tiver a moeda nativa de uma cadeia, mude para outra.'
   },
   'swap.needGas': {
     zh: '这笔交易需要 {{chain}} 上的 {{coin}} 作为手续费，你的余额不足。请补充少量 {{coin}}，或切换到你已持有原生币的链。',
@@ -376,39 +376,14 @@ export default {
     id: 'Modul ini untuk belajar: imbal hasilnya simulasi dan dibayar dari kredit virtual dengan rumus tetap, jadi tidak ada uang nyata yang dikumpulkan atau dipertaruhkan. Produk investasi nyata butuh izin resmi — Fanous Bazaar Pishgam memilikinya dan versi nyata ada di peta jalan; sampai saat itu, ini latihan.',
     pt: 'Este módulo existe para aprender: o rendimento é simulado e pago em crédito virtual por uma fórmula fixa, pelo que não se junta nem arrisca dinheiro real. Um produto de investimento real exige autorização formal — a Fanous Bazaar Pishgam tem essa licença e uma versão real está planeada; até lá, isto é prática.'
   },
-  'stocks.honestBody': {
-    zh: '我们一贯希望以全球化的方式提供这项服务，而不是局限于单一本地市场。代表苹果股票的代币在任何司法辖区都属于证券：发行它需要持牌发行人实际托管股票、招股说明书，以及分销所需的券商牌照。这是一项国际法律工程，而非软件功能——在那套全球架构就位之前，我们不会声称拥有它，而是直接把你引向今天已经持有这些牌照的发行人。',
-    hi: 'हमारी प्राथमिकता हमेशा इसे वैश्विक स्तर पर पेश करने की रही है, न कि किसी एक स्थानीय बाज़ार तक सीमित रखने की। एप्पल शेयर का प्रतिनिधित्व करने वाला टोकन हर अधिकार क्षेत्र में प्रतिभूति है: इसके निर्गम के लिए लाइसेंसधारी जारीकर्ता, वास्तविक शेयरों की अभिरक्षा, विवरण-पत्र और वितरण हेतु ब्रोकर-डीलर लाइसेंस चाहिए। यह अंतरराष्ट्रीय कानूनी काम है, सॉफ़्टवेयर सुविधा नहीं — इसलिए हम वह दावा नहीं करते, बल्कि आपको उन जारीकर्ताओं से जोड़ते हैं जिनके पास आज ये लाइसेंस हैं।',
-    es: 'Nuestra preferencia siempre ha sido ofrecer esto a escala global y no dentro de un único mercado local. Un token que representa acciones de Apple es un valor en todas las jurisdicciones: emitirlo exige un emisor autorizado que custodie las acciones reales, un folleto y una licencia de intermediación para distribuirlo. Eso es una construcción jurídica internacional, no una función de software; hasta que esa estructura global exista, en lugar de afirmar algo que no tenemos, te conectamos con emisores que ya poseen esas licencias.',
-    fr: 'Notre préférence a toujours été de proposer cela à l\'échelle mondiale plutôt que dans un seul marché local. Un token représentant une action Apple est un titre financier dans toutes les juridictions : l\'émettre exige un émetteur agréé détenant les actions réelles, un prospectus et une licence de courtage pour le distribuer. C\'est un chantier juridique international, pas une fonctionnalité logicielle — d\'ici là, plutôt que de prétendre le contraire, nous vous orientons vers des émetteurs qui détiennent déjà ces agréments.',
-    ru: 'Мы всегда предпочитали предлагать это глобально, а не в рамках одного локального рынка. Токен, представляющий акцию Apple, является ценной бумагой в любой юрисдикции: для выпуска нужен лицензированный эмитент, реально хранящий акции, проспект эмиссии и брокерская лицензия для распространения. Это международная юридическая работа, а не функция приложения — поэтому вместо того, чтобы заявлять о том, чего у нас нет, мы направляем вас к эмитентам, у которых эти лицензии уже есть.',
-    tr: 'Tercihimiz bunu tek bir yerel pazarda değil, küresel olarak sunmak oldu. Apple hissesini temsil eden bir token her yargı alanında menkul kıymettir: ihracı için gerçek hisseleri saklayan lisanslı bir ihraççı, izahname ve dağıtım için aracı kurum lisansı gerekir. Bu uluslararası bir hukuk projesidir, bir yazılım özelliği değil — o yapı kurulana kadar sahip olmadığımız bir şeyi iddia etmek yerine sizi bu lisanslara bugün sahip olan ihraççılara yönlendiriyoruz.',
-    ur: 'ہماری ترجیح ہمیشہ یہ رہی ہے کہ یہ خدمت عالمی سطح پر پیش کی جائے، کسی ایک مقامی مارکیٹ تک محدود نہ ہو۔ ایپل کے حصص کی نمائندگی کرنے والا ٹوکن ہر دائرہ اختیار میں سیکیورٹی ہے: اس کے اجرا کے لیے لائسنس یافتہ جاری کنندہ، اصل حصص کی تحویل، اور تقسیم کے لیے بروکر لائسنس درکار ہے۔ اس لیے ہم آپ کو ان جاری کنندگان سے جوڑتے ہیں جن کے پاس یہ لائسنس پہلے سے موجود ہیں۔',
-    id: 'Preferensi kami selalu menawarkan ini secara global, bukan dalam satu pasar lokal. Token yang mewakili saham Apple adalah efek di setiap yurisdiksi: penerbitannya butuh penerbit berlisensi yang benar-benar menyimpan sahamnya, prospektus, dan izin pialang untuk mendistribusikannya. Itu pekerjaan hukum internasional, bukan fitur perangkat lunak — jadi alih-alih mengklaim sesuatu yang tidak kami miliki, kami mengarahkan Anda ke penerbit yang sudah memegang lisensi tersebut.',
-    pt: 'A nossa preferência sempre foi oferecer isto globalmente e não dentro de um único mercado local. Um token que representa ações da Apple é um valor mobiliário em qualquer jurisdição: emiti-lo exige um emitente licenciado que detenha as ações reais, um prospeto e uma licença de intermediação para o distribuir. Isso é uma construção jurídica internacional, não uma funcionalidade de software — por isso, em vez de afirmar algo que não temos, encaminhamo-lo para emitentes que já detêm essas licenças.'
-  },
-  'rank.demoNotice': {
-    zh: '排名根据真实用户活动计算，每次打开应用时从服务器刷新。',
-    hi: 'रैंकिंग असली उपयोगकर्ता गतिविधि से बनती है और हर बार ऐप खोलने पर सर्वर से अपडेट होती है।',
-    es: 'La clasificación se calcula con actividad real de usuarios y se actualiza desde el servidor cada vez que abres la app.',
-    fr: 'Le classement est calculé à partir de l\'activité réelle des utilisateurs et actualisé depuis le serveur à chaque ouverture.',
-    ru: 'Рейтинг рассчитывается по реальной активности пользователей и обновляется с сервера при каждом открытии приложения.',
-    tr: 'Sıralama gerçek kullanıcı etkinliğinden hesaplanır ve uygulamayı her açtığınızda sunucudan yenilenir.',
-    ur: 'درجہ بندی حقیقی صارف سرگرمی سے شمار ہوتی ہے اور ہر بار ایپ کھولنے پر سرور سے تازہ ہوتی ہے۔',
-    id: 'Peringkat dihitung dari aktivitas pengguna nyata dan disegarkan dari server setiap kali Anda membuka aplikasi.',
-    pt: 'A classificação é calculada a partir da atividade real dos utilizadores e atualizada do servidor sempre que abre a app.'
-  },
-  'rank.emptyBoard': {
-    zh: '还没有人上榜。完成一次兑换或每日签到，你就是这个榜单上的第一个名字。',
-    hi: 'अभी किसी ने स्कोर दर्ज नहीं किया। एक स्वैप करें या डेली चेक-इन करें — इस बोर्ड पर पहला नाम आपका होगा।',
-    es: 'Nadie ha publicado una puntuación todavía. Haz un intercambio o registra tu visita diaria y serás el primer nombre del tablero.',
-    fr: 'Personne n\'a encore de score. Faites un échange ou une connexion quotidienne et vous serez le premier nom du classement.',
-    ru: 'Пока никто не набрал очков. Совершите обмен или ежедневный вход — и вы станете первым в этой таблице.',
-    tr: 'Henüz kimse puan göndermedi. Bir takas yapın veya günlük giriş yapın; bu tablodaki ilk isim siz olun.',
-    ur: 'ابھی کسی نے اسکور درج نہیں کیا۔ ایک سویپ کریں یا روزانہ چیک اِن کریں — اس بورڈ پر پہلا نام آپ کا ہوگا۔',
-    id: 'Belum ada yang mencatat skor. Lakukan satu pertukaran atau check-in harian dan nama Anda jadi yang pertama.',
-    pt: 'Ainda ninguém publicou uma pontuação. Faça uma troca ou o registo diário e será o primeiro nome deste quadro.'
-  },
+  /*
+   * REMOVED — stocks.honestBody, rank.demoNotice, rank.emptyBoard.
+   *
+   * Three unreachable strings. en.json has no `stocks.honest*` namespace at
+   * all and nothing renders these two rank notices — same missing public
+   * board as the rank.* keys in wallet.mjs. All nine translations are in git
+   * history; the generator refuses to carry strings no screen can reach.
+   */
   /* -------------------------------- bridge ----------------------------- */
   'bridge.emptyHint': {
     zh: '输入金额以查看最佳路径和费用。',

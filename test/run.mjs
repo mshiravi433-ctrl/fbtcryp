@@ -424,6 +424,38 @@ for (const [phase, probe] of laterPhaseProbes) {
   const module = await import(probe);
   if (Array.isArray(module.default)) report(`intent-ai phase-${phase}`, module.default);
 }
+
+/*
+ * Arc K — the control rail and whether it can be operated (phases 141-142).
+ *
+ * These two are run as child processes rather than imported, because they
+ * self-execute and report through their exit code instead of exporting rows.
+ * They were also NOT part of `npm test` until now, which is how a control
+ * could be deleted from one screen and never rebuilt on another while every
+ * imported probe stayed green. Phase 142 exists for exactly that regression:
+ * it asserts the gate is reachable from a screen, not merely that the state
+ * machine works when called directly.
+ */
+const RAIL_PROBES = [
+  [141, './intent-ai/phase141-rail-layout-probe.mjs'],
+  [142, './intent-ai/phase142-reachability-probe.mjs']
+];
+for (const [phase, probe] of RAIL_PROBES) {
+  console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);
+  let ok = false;
+  let detail = '';
+  try {
+    const out = execFileSync(process.execPath, [new URL(probe, import.meta.url).pathname], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8'
+    });
+    ok = true;
+    detail = String(out).trim().split('\n').slice(-1)[0].slice(0, 80);
+  } catch (error) {
+    detail = String(error?.stdout || error?.message || '').trim().split('\n').slice(-1)[0].slice(0, 160);
+  }
+  report(`intent-ai phase-${phase}`, [[`phase ${phase} passes${detail ? ` — ${detail}` : ''}`, ok]]);
+}
 console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
 {
   const { default: bridgeResults } = await import('./intent-ai/draft-transaction-bridge-probe.mjs');

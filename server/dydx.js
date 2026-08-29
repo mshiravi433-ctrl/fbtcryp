@@ -61,6 +61,62 @@ export function fetchDydxOrderbook(ticker) {
   return request(`/v4/orderbooks/perpetualMarket/${encodeURIComponent(ticker)}`);
 }
 
+export const DYDX_CANDLE_RESOLUTIONS = Object.freeze([
+  '1MIN', '5MINS', '15MINS', '30MINS', '1HOUR', '4HOURS', '1DAY'
+]);
+export const DYDX_CANDLE_RESOLUTION_DEFAULT = '1HOUR';
+export const DYDX_CANDLE_LIMIT_DEFAULT = 96;
+export const DYDX_CANDLE_LIMIT_MAX = 500;
+
+/**
+ * Clamp a caller's resolution/limit to what we will actually ask upstream for.
+ *
+ * The route calls this BEFORE it builds a cache key, which is the whole point.
+ * The response cache (server/cache.js) is an unbounded Map — entries expire but
+ * are never swept, so a stale key stays resident forever. An endpoint that
+ * interpolated raw query strings into its key would let any anonymous caller
+ * allocate permanent entries one request at a time. Every other route here
+ * clamps before keying (`/api/markets` bounds page/per_page, `/api/chart/:id`
+ * bounds days, `/api/search` slices q); this keeps candles to the same rule.
+ *
+ * Shared with the fetch below so the two can never drift: what is cached is
+ * exactly what was requested.
+ */
+export function normaliseCandleQuery(resolution, limit) {
+  const asked = String(resolution || '').toUpperCase();
+  /* `?limit=` (empty) must fall back to the default, not to the floor:
+     Number('') is 0, which would clamp to 2 and quietly return two candles. */
+  const raw = typeof limit === 'string' ? limit.trim() : limit;
+  const n = raw === '' || raw === null || raw === undefined ? NaN : Number(raw);
+  return {
+    resolution: DYDX_CANDLE_RESOLUTIONS.includes(asked) ? asked : DYDX_CANDLE_RESOLUTION_DEFAULT,
+    limit: Number.isFinite(n)
+      ? Math.min(DYDX_CANDLE_LIMIT_MAX, Math.max(2, Math.trunc(n)))
+      : DYDX_CANDLE_LIMIT_DEFAULT
+  };
+}
+
+/**
+ * Historical candles for one perpetual market.
+ *
+ * Added because the dYdX screen asked a person to size a leveraged position
+ * with nothing but a single oracle price and an open-interest figure — no shape
+ * of the market at all. This is the same read-only indexer the other three
+ * routes use; no wallet keys and no order submission pass through it.
+ *
+ * The upstream response is `{ candles: [{ startedAt, ticker, resolution, low,
+ * high, open, close, baseTokenVolume, ... }] }`, newest first. It is normalised
+ * oldest-first with numbers, because a chart that has to remember the upstream
+ * sort order is a chart that will one day draw backwards.
+ */
+export function fetchDydxCandles(ticker, resolution = DYDX_CANDLE_RESOLUTION_DEFAULT, limit = DYDX_CANDLE_LIMIT_DEFAULT) {
+  if (!validTicker(ticker)) throw upstreamError('BAD_DYDX_TICKER', 400);
+  const { resolution: res, limit: count } = normaliseCandleQuery(resolution, limit);
+  return request(
+    `/v4/candles/perpetualMarkets/${encodeURIComponent(ticker)}?resolution=${res}&limit=${count}`
+  );
+}
+
 export function fetchDydxAccount(address, number = 0) {
   if (!validAddress(address)) throw upstreamError('BAD_DYDX_ADDRESS', 400);
   const subaccount = Number(number);

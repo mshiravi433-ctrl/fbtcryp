@@ -89,42 +89,71 @@ function ConfidenceBar({ value, horizon }) {
   );
 }
 
-/** One horizon card: the plain-language line, then the evidence. */
-function HorizonCard({ read, t, formatReason }) {
+/**
+ * One horizon card: the plain-language line, then the evidence.
+ *
+ * ─── WHY IT COLLAPSES ──────────────────────────────────────────────────────
+ * Reported: «دو قسمت را بازشونده بزار تا شلوغی صفحه کاسته شود — نمای هفتگی /
+ * نمای ماهانه». Both horizons rendered in full, always: two headings, two
+ * plain-language paragraphs, two confidence bars and up to eight reason rows
+ * between them. On a phone that is most of a screen before the reader reaches
+ * the sentence that says the two disagree.
+ *
+ * The heading stays — the horizon and its stance are the summary, and they are
+ * what someone scans for. Everything below the heading folds away, and the
+ * weekly view starts open because it is the one most people came for.
+ */
+function HorizonCard({ read, t, formatReason, open, onToggle }) {
   const accent = ACCENT[read.stance] ?? 'var(--text-3)';
+  const panelId = `verd-panel-${read.horizon}`;
 
   return (
-    <div className="verd-card" style={{ '--verd-accent': accent }}>
-      <div className="verd-card-head">
-        <div>
-          <div className="verd-card-when">
+    <div className="verd-card" style={{ '--verd-accent': accent }} data-open={open ? 'true' : 'false'}>
+      <button
+        type="button"
+        className="verd-card-head"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        data-testid={`verdict-toggle-${read.horizon}`}
+      >
+        <span className="verd-card-title">
+          <span className="verd-card-when">
             {t(read.horizon === 'long' ? 'verdict.long' : 'verdict.short')}
-          </div>
-          <div className="verd-card-sub faint">
+          </span>
+          <span className="verd-card-sub faint">
             {t(read.horizon === 'long' ? 'verdict.longSub' : 'verdict.shortSub', { d: read.days })}
-          </div>
-        </div>
+          </span>
+        </span>
         <span className="verd-stance">{t(`verdict.stance.${read.stance}`)}</span>
-      </div>
+        <span className="verd-chevron" aria-hidden="true">{open ? '−' : '+'}</span>
+      </button>
 
-      {/* The line that has to work for someone who has never traded. */}
-      <p className="verd-plain">{t(`verdict.plain.${read.stance}`)}</p>
+      <motion.div
+        id={panelId}
+        initial={false}
+        animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }}
+        style={{ overflow: 'hidden' }}
+      >
+        {/* The line that has to work for someone who has never traded. */}
+        <p className="verd-plain">{t(`verdict.plain.${read.stance}`)}</p>
 
-      <div className="verd-conf-row">
-        <span className="faint">{t('verdict.confidence')}</span>
-        <ConfidenceBar value={read.confidence} horizon={read.horizon} />
-      </div>
+        <div className="verd-conf-row">
+          <span className="faint">{t('verdict.confidence')}</span>
+          <ConfidenceBar value={read.confidence} horizon={read.horizon} />
+        </div>
 
-      {read.reasons.length > 0 && (
-        <ul className="verd-reasons">
-          {read.reasons.map((r) => (
-            <li key={r.id} className={`verd-reason verd-${r.kind}`}>
-              <span className="verd-dot" aria-hidden="true" />
-              <span>{formatReason(r)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+        {read.reasons.length > 0 && (
+          <ul className="verd-reasons">
+            {read.reasons.map((r) => (
+              <li key={r.id} className={`verd-reason verd-${r.kind}`}>
+                <span className="verd-dot" aria-hidden="true" />
+                <span>{formatReason(r)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </motion.div>
     </div>
   );
 }
@@ -132,6 +161,13 @@ function HorizonCard({ read, t, formatReason }) {
 export default function VerdictPanel({ analysis, series, btcSeries, coin, global, compact = false }) {
   const { t } = useTranslation();
   const [showLayers, setShowLayers] = useState(false);
+  /*
+   * Weekly open, monthly closed. Both at once is the clutter being reported;
+   * both closed would hide the one read most people opened the page for.
+   */
+  const [openHorizons, setOpenHorizons] = useState({ short: true, long: false });
+  const toggleHorizon = (horizon) =>
+    setOpenHorizons((current) => ({ ...current, [horizon]: !current[horizon] }));
   /*
    * The learning core's published params — via useLearningParams: session-
    * cached, stale-while-revalidate, never blocks first render. While it is
@@ -232,8 +268,20 @@ export default function VerdictPanel({ analysis, series, btcSeries, coin, global
       {!compact && <p className="verd-sub faint">{t('verdict.subtitle')}</p>}
 
       <div className="verd-grid">
-        <HorizonCard read={v.short} t={t} formatReason={formatReason} />
-        <HorizonCard read={v.long} t={t} formatReason={formatReason} />
+        <HorizonCard
+          read={v.short}
+          t={t}
+          formatReason={formatReason}
+          open={openHorizons.short}
+          onToggle={() => toggleHorizon('short')}
+        />
+        <HorizonCard
+          read={v.long}
+          t={t}
+          formatReason={formatReason}
+          open={openHorizons.long}
+          onToggle={() => toggleHorizon('long')}
+        />
       </div>
 
       {/* The sentence a user cannot derive by looking at two cards. */}

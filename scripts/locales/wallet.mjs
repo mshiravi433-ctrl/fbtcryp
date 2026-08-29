@@ -59,39 +59,24 @@ export default {
   'wallet.backupTitle': { zh: '备份你的助记词', hi: 'अपना सीड फ़्रेज़ बैकअप करें', es: 'Guarda tu frase semilla', fr: 'Sauvegardez votre phrase de récupération', ru: 'Сохраните seed-фразу', tr: 'Kurtarma ifadenizi yedekleyin', ur: 'اپنا ریکوری فقرہ محفوظ کریں', id: 'Cadangkan frasa pemulihan', pt: 'Faça cópia da frase de recuperação' },
 
   /* --- Safety-critical: translated in full, never abbreviated --------- */
-  'wallet.backupWarning': {
-    zh: '请把这 12 个词按顺序抄在纸上，离线保存。拥有这串词的人就永久拥有你的资产。一旦丢失，没有任何人能找回——我们不能，Telegram 也不能。永远不要把它输入任何网站或发送给任何人。',
-    hi: 'इन 12 शब्दों को क्रम से काग़ज़ पर लिखें और ऑफ़लाइन रखें। जिसके पास यह फ़्रेज़ है, आपके फंड हमेशा के लिए उसके हैं। खो जाने पर कोई भी इसे वापस नहीं ला सकता — न हम, न Telegram। इसे कभी किसी वेबसाइट पर न लिखें और किसी को न भेजें।',
-    es: 'Escribe estas 12 palabras en papel, en orden, y guárdalas sin conexión. Quien tenga esta frase es dueño de tus fondos para siempre. Si la pierdes, nadie puede recuperarla: ni nosotros, ni Telegram. Nunca la escribas en ninguna web ni se la envíes a nadie.',
-    fr: 'Notez ces 12 mots sur papier, dans l\'ordre, et conservez-les hors ligne. Quiconque possède cette phrase possède vos fonds, définitivement. Si vous la perdez, personne ne peut la récupérer — ni nous, ni Telegram. Ne la saisissez jamais sur un site et ne l\'envoyez à personne.',
-    ru: 'Запишите эти 12 слов на бумаге по порядку и храните офлайн. Тот, у кого есть эта фраза, владеет вашими средствами навсегда. Если вы её потеряете, восстановить не сможет никто — ни мы, ни Telegram. Никогда не вводите её на сайтах и никому не отправляйте.',
-    tr: 'Bu 12 kelimeyi sırasıyla kâğıda yazın ve çevrimdışı saklayın. Bu ifadeye sahip olan kişi paranıza kalıcı olarak sahip olur. Kaybederseniz kimse geri getiremez — ne biz ne Telegram. Asla bir siteye yazmayın, kimseye göndermeyin.',
-    ur: 'ان ١٢ الفاظ کو ترتیب سے کاغذ پر لکھیں اور آف لائن محفوظ رکھیں۔ جس کے پاس یہ فقرہ ہو وہ ہمیشہ کے لیے آپ کے فنڈز کا مالک ہے۔ کھو جانے پر کوئی واپس نہیں لا سکتا — نہ ہم، نہ ٹیلیگرام۔ اسے کبھی کسی ویب سائٹ پر نہ لکھیں اور کسی کو نہ بھیجیں۔',
-    id: 'Tulis 12 kata ini di kertas, sesuai urutan, dan simpan offline. Siapa pun yang memiliki frasa ini memiliki dana Anda selamanya. Jika hilang, tidak ada yang bisa memulihkannya — kami tidak, Telegram tidak. Jangan pernah mengetiknya di situs mana pun atau mengirimkannya ke siapa pun.',
-    pt: 'Escreva estas 12 palavras em papel, por ordem, e guarde-as offline. Quem tiver esta frase é dono dos seus fundos para sempre. Se a perder, ninguém a pode recuperar — nem nós, nem o Telegram. Nunca a escreva num site nem a envie a ninguém.'
-  },
-  'wallet.localRisk': {
-    zh: '应用内钱包把加密后的私钥存在 Telegram WebView 里——没有安全隔区，也没有硬件隔离。放小额可以，但任何你会心疼的金额都应该放在 MetaMask/Trust（通过 WalletConnect）或硬件钱包里。',
-    hi: 'ऐप वॉलेट एन्क्रिप्टेड कुंजी Telegram WebView में रखता है — न सिक्योर एन्क्लेव, न हार्डवेयर आइसोलेशन। छोटी रकम के लिए ठीक है, पर जो रकम खोने पर आपको दुख हो वह MetaMask/Trust (WalletConnect) या हार्डवेयर वॉलेट में रखें।',
-    es: 'La cartera integrada guarda una clave cifrada dentro de un WebView de Telegram: sin enclave seguro ni aislamiento por hardware. Está bien para cantidades pequeñas, pero cualquier cantidad que te dolería perder debe estar en MetaMask/Trust vía WalletConnect, o en una cartera hardware.',
-    fr: 'Le portefeuille intégré stocke une clé chiffrée dans une WebView Telegram : ni enclave sécurisée, ni isolation matérielle. Acceptable pour de petits montants, mais tout ce que vous seriez triste de perdre doit aller sur MetaMask/Trust via WalletConnect, ou un portefeuille matériel.',
-    ru: 'Встроенный кошелёк хранит зашифрованный ключ внутри Telegram WebView — без защищённого анклава и аппаратной изоляции. Для небольших сумм это нормально, но всё, что жалко потерять, держите в MetaMask/Trust через WalletConnect или на аппаратном кошельке.',
-    tr: 'Uygulama içi cüzdan, şifreli anahtarı bir Telegram WebView içinde saklar — güvenli bölge yok, donanım yalıtımı yok. Küçük tutarlar için uygundur; kaybetmeye üzüleceğiniz her tutar WalletConnect ile MetaMask/Trust\'ta veya donanım cüzdanında olmalıdır.',
-    ur: 'ایپ والٹ خفیہ کلید ٹیلیگرام WebView میں رکھتا ہے — نہ سیکیور اینکلیو، نہ ہارڈویئر تنہائی۔ چھوٹی رقم کے لیے ٹھیک ہے، مگر جو رقم کھونا تکلیف دے وہ WalletConnect کے ذریعے MetaMask/Trust یا ہارڈویئر والٹ میں رکھیں۔',
-    id: 'Dompet dalam aplikasi menyimpan kunci terenkripsi di dalam WebView Telegram — tanpa secure enclave, tanpa isolasi perangkat keras. Cukup untuk jumlah kecil, tetapi apa pun yang sayang hilang sebaiknya di MetaMask/Trust lewat WalletConnect, atau dompet perangkat keras.',
-    pt: 'A carteira integrada guarda uma chave cifrada dentro de uma WebView do Telegram — sem enclave seguro nem isolamento por hardware. Serve para quantias pequenas, mas tudo o que lhe custaria perder deve estar no MetaMask/Trust via WalletConnect, ou numa carteira de hardware.'
-  },
-  'wallet.noProvider': {
-    zh: '未检测到浏览器钱包。Telegram 内置浏览器没有钱包插件——请改用 WalletConnect 或应用内钱包。',
-    hi: 'कोई ब्राउज़र वॉलेट नहीं मिला। Telegram के इन-ऐप ब्राउज़र में वॉलेट नहीं होता — WalletConnect या ऐप वॉलेट इस्तेमाल करें।',
-    es: 'No se detectó ninguna cartera del navegador. El navegador interno de Telegram no tiene una: usa WalletConnect o la cartera de la app.',
-    fr: 'Aucun portefeuille détecté dans le navigateur. Le navigateur intégré de Telegram n\'en a pas — utilisez WalletConnect ou le portefeuille de l\'app.',
-    ru: 'Кошелёк в браузере не найден. Во встроенном браузере Telegram его нет — используйте WalletConnect или кошелёк приложения.',
-    tr: 'Tarayıcıda cüzdan bulunamadı. Telegram\'ın dahili tarayıcısında cüzdan yoktur — WalletConnect veya uygulama cüzdanını kullanın.',
-    ur: 'براؤزر میں کوئی والٹ نہیں ملا۔ ٹیلیگرام کے اندرونی براؤزر میں والٹ نہیں ہوتا — WalletConnect یا ایپ والٹ استعمال کریں۔',
-    id: 'Tidak ada dompet peramban. Peramban dalam Telegram tidak punya — gunakan WalletConnect atau dompet aplikasi.',
-    pt: 'Nenhuma carteira detetada no navegador. O navegador interno do Telegram não tem — use WalletConnect ou a carteira da app.'
-  },
+  /*
+   * REMOVED — wallet.localRisk, wallet.noProvider, wallet.backupWarning.
+   *
+   * These three made a claim that is not true: that the in-app wallet keeps
+   * its key "inside the Telegram WebView", and that "not us, not Telegram"
+   * can recover a lost phrase. This app is a website and an Android APK; it
+   * is not a Telegram Mini App, and the Telegram support channel was removed
+   * earlier for exactly this reason.
+   *
+   * A user who reads a security warning naming a product they are not using
+   * is given a reason to distrust the whole warning — and this one is the
+   * difference between keeping $50 and keeping $50,000 in a browser-stored
+   * key. The strings were rewritten in en/fa/ar and deleted from the nine
+   * partial languages so they fall back to the CORRECTED English rather than
+   * carrying a false statement in their own words. Safety copy is not
+   * machine-translated, and a stale module must not be able to reintroduce
+   * it, so it is gone from here too.
+   */
   'wallet.connectFailed': { zh: '连接失败或被拒绝。', hi: 'कनेक्शन विफल या अस्वीकृत।', es: 'La conexión falló o fue rechazada.', fr: 'Connexion échouée ou refusée.', ru: 'Подключение не удалось или было отклонено.', tr: 'Bağlantı başarısız oldu veya reddedildi.', ur: 'کنکشن ناکام یا مسترد۔', id: 'Koneksi gagal atau ditolak.', pt: 'A ligação falhou ou foi recusada.' },
   'wallet.wcOriginBlocked': {
     zh: 'WalletConnect 拒绝了此应用的来源。请在 Reown 控制台确认 Allowed Domains 包含 https://fbtswap.ir 和 https://localhost，且 App IDs 包含 ir.fbtswap.app。',
@@ -178,11 +163,16 @@ export default {
   /* --------------------------- ranking / rank ------------------------- */
   'rank.title': { zh: '排行榜', hi: 'रैंकिंग', es: 'Clasificación', fr: 'Classement', ru: 'Рейтинг', tr: 'Sıralama', ur: 'درجہ بندی', id: 'Peringkat', pt: 'Classificação' },
   'rank.points': { zh: '积分', hi: 'अंक', es: 'puntos', fr: 'points', ru: 'очки', tr: 'puan', ur: 'پوائنٹس', id: 'poin', pt: 'pontos' },
-  'rank.you': { zh: '你', hi: 'आप', es: 'Tú', fr: 'Vous', ru: 'Вы', tr: 'Siz', ur: 'آپ', id: 'Anda', pt: 'Você' },
-  'rank.yourRank': { zh: '第 {{n}} 名', hi: 'रैंक #{{n}}', es: 'Puesto #{{n}}', fr: 'Rang #{{n}}', ru: 'Место #{{n}}', tr: 'Sıra #{{n}}', ur: 'درجہ #{{n}}', id: 'Peringkat #{{n}}', pt: 'Posição #{{n}}' },
-  'rank.unranked': { zh: '尚未上榜', hi: 'अभी रैंक नहीं', es: 'Sin clasificar aún', fr: 'Pas encore classé', ru: 'Пока без рейтинга', tr: 'Henüz sıralanmadı', ur: 'ابھی درجہ نہیں', id: 'Belum berperingkat', pt: 'Ainda sem posição' },
+  /*
+   * REMOVED — rank.you / rank.yourRank / rank.unranked / rank.top.
+   *
+   * These belong to a public leaderBOARD ("you are #n", "top traders") that
+   * was never shipped: pages/Leaderboard.jsx shows the reader their own tier,
+   * points and history, and deliberately does not publish a ranking of other
+   * people. The nine translations were unreachable; they are in git history
+   * if a board is ever built.
+   */
   'rank.tiers': { zh: '等级', hi: 'स्तर', es: 'Niveles', fr: 'Paliers', ru: 'Уровни', tr: 'Seviyeler', ur: 'درجات', id: 'Tingkatan', pt: 'Níveis' },
-  'rank.top': { zh: '顶尖交易者', hi: 'शीर्ष ट्रेडर', es: 'Mejores traders', fr: 'Meilleurs traders', ru: 'Лучшие трейдеры', tr: 'En iyi yatırımcılar', ur: 'بہترین ٹریڈرز', id: 'Trader teratas', pt: 'Melhores traders' },
 
   /* ------------------------------- FAQ -------------------------------- */
   /*

@@ -11979,9 +11979,25 @@ export default function run() {
     const layerCss = css.match(/\.header-brand-layer,\s*\.header-spotlight-layer\s*\{[^}]*}/)?.[0] ?? '';
     t('brand and spotlight share one clipped fixed-height header stage',
       /header-brand-stage[\s\S]*header-brand-layer[\s\S]*header-spotlight-layer/.test(header) &&
-      /position:\s*relative/.test(stageCss) && /height:\s*34px/.test(stageCss) &&
+      /position:\s*relative/.test(stageCss) && /height:\s*\d+px/.test(stageCss) &&
       /overflow:\s*hidden/.test(stageCss) && /contain:\s*layout paint/.test(stageCss) &&
       /position:\s*absolute/.test(layerCss) && /inset:\s*0/.test(layerCss));
+
+    /*
+     * The stage used to be 34px and this suite asserted that number, which is
+     * how a real bug got a green tick: the brand mark SPINS, so the stage has
+     * to clear the mark's ROTATED bounding box — a 30px square at 45° spans
+     * 30√2 ≈ 42.4px. At 34px with `overflow: hidden` + `contain: paint`, every
+     * rotation clipped the corners to a hard edge, reported as the bottom of
+     * the icon being eaten.
+     *
+     * Assert the relationship rather than a number, so a future change that
+     * shrinks the stage (or grows the mark) fails here instead of in the app.
+     */
+    const brandSize = Number((css.match(/\.brand-mark\s*\{[^}]*?width:\s*(\d+)px/) || [])[1] || 30);
+    const stageHeight = Number((stageCss.match(/height:\s*(\d+)px/) || [])[1] || 0);
+    t('the header stage clears the spinning brand mark on its diagonal',
+      stageHeight >= Math.ceil(brandSize * Math.SQRT2));
     t('header timing returns to the brand between one-minute insight cards',
       /BRAND_MS = 2 \* 60 \* 1000/.test(header) &&
       /SPOTLIGHT_MS = 60 \* 1000/.test(header) &&

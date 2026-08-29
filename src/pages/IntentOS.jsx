@@ -81,10 +81,35 @@ function StageRail({ t }) {
 }
 
 /**
- * Public launch status shared with the activation API. The reviewed release is
- * live; wallet confirmation remains the final user-controlled step.
+ * ─── THIS BANNER USED TO LIE, AND THE FIX IS THE WHOLE POINT ───────────────
+ * Reported as "why is this here?" — a strip reading "System Active &
+ * Verified ... Current operational evidence is attested", while the settings
+ * screen was simultaneously reporting "activation status unavailable" and 80
+ * unmet operational notes.
+ *
+ * The cause is one line: `const banner = ACTIVE_BANNER`. The three "everything
+ * is verified" sentences were a module-level constant rendered unconditionally,
+ * while `active` — the flag that actually knows better — only ever tinted the
+ * border. So a deployment with 12 of 21 evidence kinds, 0 live phases and
+ * `launchAllowed: false` greeted the user with "System Active & Verified."
+ *
+ * On a wallet screen that is not a cosmetic bug. The strip is the first thing
+ * above the compose form, and it is the sentence a person reads to decide how
+ * much they trust what follows.
+ *
+ * The copy now comes from the same server state that drives settings:
+ *   · `launchAllowed` false → the honest "activation pending" lines, in the
+ *     user's language, with the evidence count that explains why
+ *   · the server's own `banner` array is kept as the fallback for a status we
+ *     have not translated yet — an untranslated English sentence that is TRUE
+ *     beats a translated one that is not
+ * The internal spec id stays on screen, but as a build identifier, not as part
+ * of the claim.
  */
-const ACTIVE_BANNER = [
+const ACTIVE_BANNER_KEYS = ['intentOS.launchBanner.b1', 'intentOS.launchBanner.b2', 'intentOS.launchBanner.b3'];
+const PENDING_BANNER_KEYS = ['intentOS.launchBanner.p1', 'intentOS.launchBanner.p2', 'intentOS.launchBanner.p3'];
+
+const ACTIVE_BANNER_FALLBACK = [
   'System Active & Verified.',
   'Execution Ready — wallet confirmation remains required.',
   'Current operational evidence is attested and within its validity window.'
@@ -92,20 +117,44 @@ const ACTIVE_BANNER = [
 
 function LaunchStatusStrip({ t, publicStatus }) {
   const active = publicStatus?.status !== 'unavailable' && publicStatus?.launchAllowed !== false;
-  const banner = ACTIVE_BANNER;
+  const evidence = publicStatus?.evidence?.status || publicStatus?.evidence || null;
+
+  /* The server's own lines, used when we have no translation for this state —
+     see the note above on why an untranslated truth wins. */
+  const serverBanner = publicStatus?.operationalActivation?.banner;
+  const lines = active
+    ? ACTIVE_BANNER_KEYS.map((key, i) => t(key, { defaultValue: ACTIVE_BANNER_FALLBACK[i] }))
+    : PENDING_BANNER_KEYS.map((key, i) => t(key, { defaultValue: serverBanner?.[i] || '' })).filter(Boolean);
+
   return (
-    <section className={`ios-launch-status${active ? ' is-active' : ''}`} aria-live="polite" data-testid="intent-os-launch-status">
+    <section
+      className={`ios-launch-status${active ? ' is-active' : ' is-pending'}`}
+      aria-live="polite"
+      data-testid="intent-os-launch-status"
+      data-active={active ? 'true' : 'false'}
+    >
       <div className="ios-launch-status-head">
         <span className="ios-launch-dot" aria-hidden="true" />
-        <strong>{t('intentOS.launchBanner.active', { defaultValue: 'System Active & Verified' })}</strong>
-        <code>{INTENT_AI_VERSION}</code>
+        <strong>
+          {active
+            ? t('intentOS.launchBanner.active', { defaultValue: 'System Active & Verified' })
+            : t('intentOS.launchBanner.pending', { defaultValue: 'Activation pending verification' })}
+        </strong>
+        <code className="ios-build-id" title={t('intentOS.launchBanner.buildId', { defaultValue: 'Intent AI build identifier' })}>
+          {t('intentOS.launchBanner.build', { defaultValue: 'build' })} {INTENT_AI_VERSION}
+        </code>
       </div>
       <ul>
-        {banner.map((line) => (
+        {(lines.length ? lines : (serverBanner || ACTIVE_BANNER_FALLBACK)).map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>
-      <small>{t('intentOS.launchBanner.activeNote', { defaultValue: 'Operational evidence is current. Review the final transaction in your wallet before signing.' })}</small>
+      <small>
+        {active
+          ? t('intentOS.launchBanner.activeNote', { defaultValue: 'Operational evidence is current. Review the final transaction in your wallet before signing.' })
+          : t('intentOS.launchBanner.pendingNote', { defaultValue: 'This deployment has not earned operational activation yet. Nothing here executes on its own — and any execution would still need your wallet.' })}
+        {evidence ? ` (${t('intentOS.launchBanner.evidence', { defaultValue: 'evidence' })} ${evidence})` : ''}
+      </small>
     </section>
   );
 }

@@ -670,8 +670,95 @@
    ========================================================================== */
 .ia-panel { display: flex; flex-direction: column; gap: 10px; }
 
-/* --- session control buttons: توقف · توقف موقت · لغو مجوز · قطع اتصال · خروج اضطراری --- */
-.ia-controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+/* --- session control buttons: توقف · توقف موقت · لغو مجوز · قطع اتصال · خروج اضطراری ---
+   The row is a ScrollRail now (see components/ScrollRail.jsx): one line,
+   scrolls horizontally, never wraps and never widens the page. The gap lives
+   on the track, so this rule only carries what a rail cannot own. */
+.ia-controls { align-items: center; padding-inline: 1px; }
+
+/* --- autonomy level picker: L1 · L2 · L3 --- */
+.ia-level-row { display: flex; align-items: center; gap: 9px; margin: 0 0 10px; flex-wrap: wrap; }
+.ia-level-label {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font: 650 9.5px/1 var(--font-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.ia-levels { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.ia-level {
+  display: grid;
+  grid-template-columns: auto;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  min-width: 62px;
+  padding: 6px 8px 7px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 13px;
+  background: linear-gradient(165deg, rgba(255,255,255,.06), rgba(255,255,255,.018));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px rgba(255,255,255,.07), 0 10px 26px -20px rgba(0,0,0,.9);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease, transform .12s ease;
+}
+.ia-level:active { transform: scale(.98); }
+.ia-level-icon {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.05);
+  color: inherit;
+}
+.ia-level b { font: 800 9.5px/1 var(--font-mono); letter-spacing: .09em; }
+.ia-level small { font-size: 9px; line-height: 1.15; white-space: nowrap; color: var(--text-3); }
+.ia-level.is-below { border-color: rgba(66,232,255,.28); color: var(--ios-cyan); }
+.ia-level.is-below .ia-level-icon { background: rgba(66,232,255,.1); }
+.ia-level.is-current {
+  border-color: rgba(66,232,255,.6);
+  background: linear-gradient(160deg, rgba(66,232,255,.16), rgba(157,123,255,.1));
+  color: var(--text-1);
+  box-shadow: inset 0 1px rgba(255,255,255,.14), 0 12px 30px -16px rgba(0,229,255,.5);
+}
+.ia-level.is-current .ia-level-icon { background: rgba(66,232,255,.2); color: var(--ios-cyan); }
+.ia-level.is-current small { color: #9fe8f5; }
+
+/* --- authorization boundary: تحلیل · آماده‌سازی · اجرای مالی --- */
+.ia-auth-list { display: grid; gap: 5px; margin-top: 7px; }
+.ia-auth-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 10px;
+  background: rgba(255,255,255,.022);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.ia-auth-mark {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font: 800 10px/1 var(--font-mono);
+  color: var(--text-3);
+  background: rgba(255,255,255,.05);
+}
+.ia-auth-name { color: var(--text-2); min-width: 0; }
+.ia-auth-value { color: var(--text-3); font-size: 10.5px; text-align: end; }
+.ia-auth-item.is-ok { border-color: rgba(101,245,188,.22); }
+.ia-auth-item.is-ok .ia-auth-mark { background: rgba(101,245,188,.16); color: var(--ok, #62e6a7); }
+.ia-auth-item.is-off .ia-auth-mark { background: rgba(255,255,255,.04); color: var(--text-3); }
+.ia-auth-item.is-warn { border-color: rgba(255,179,0,.26); }
+.ia-auth-item.is-warn .ia-auth-mark { background: rgba(255,179,0,.16); color: var(--warn, #ffb454); }
+.ia-auth-item.is-warn .ia-auth-value { color: var(--warn, #ffb454); }
 
 .ia-ctl {
   flex: 0 1 auto;
@@ -734,12 +821,19 @@
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 10px 30px -14px rgba(0, 229, 255, 0.55);
 }
 
-/* --- primary mode selector: HUMAN↔AI · AI↔AI INSIDE FBT · FBT↔EXTERNAL AI --- */
-.ia-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-@media (max-width: 460px) { .ia-modes { grid-template-columns: 1fr; } }
+/* --- primary mode selector: HUMAN↔AI · AI↔AI INSIDE FBT · FBT↔EXTERNAL AI ---
+   Rendered inside a ScrollRail: the three modes stay on ONE line at every
+   width and the row scrolls sideways. The old 3-column grid collapsed to a
+   single column under 460px, which stacked three cards and pushed everything
+   below them off the screen. `min-width` on the cards keeps the third one
+   peeking in, so the rail is visibly scrollable rather than looking like the
+   last mode is missing. */
+.ia-modes { align-items: stretch; padding-block: 3px 5px; }
+.ia-modes > .ia-mode { min-width: 132px; max-width: 68%; }
 
 .ia-mode {
   display: grid;
+  align-content: start;
   gap: 4px;
   min-width: 0;
   padding: 10px 11px;
@@ -957,6 +1051,30 @@
 }
 .ios-launch-status.is-active li::before { color: var(--ios-mint); }
 
+/*
+ * The pending state used to be styled identically to the active one — amber
+ * border, amber bullets — while SAYING "System Active & Verified". The colour
+ * now matches the words: mint only when the deployment has actually earned
+ * activation, amber and a hollow dot when it has not.
+ */
+.ios-launch-status.is-pending .ios-launch-dot {
+  background: transparent;
+  border: 1.5px solid #ffb020;
+  box-shadow: none;
+}
+.ios-launch-status.is-pending strong { color: #ffb020; }
+.ios-launch-status.is-pending li { color: var(--text-2); }
+
+/* The spec id is a build identifier, not part of the claim: sized and labelled
+   as one so it reads as metadata instead of evidence. */
+.ios-build-id {
+  font-size: 8px !important;
+  color: var(--text-3);
+  opacity: .8;
+  overflow-wrap: anywhere;
+  letter-spacing: .02em;
+}
+
 .ia-activation-state {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr);
@@ -1060,16 +1178,45 @@
    sticky at the bottom, so it always sits right above the keyboard
    (index.html sets interactive-widget=resizes-content, which makes the
    layout viewport — and therefore 100dvh — shrink with the keyboard). */
+/*
+ * ─── THE CHAT PANEL USED TO OWN THE WHOLE VIEWPORT ─────────────────────────
+ * Reported: «صفحه چت ... برای بالا رفتن و پایین رفتن در چت مشکل می‌شود».
+ *
+ * `min-height: calc(100dvh - nav - 140px)` made the card a full screen tall, so
+ * the panel — not the page — was the thing that scrolled, and the thread inside
+ * it was a second, nested scroller with `overscroll-behavior: contain`. Two
+ * consequences, both reported as "scrolling does not work":
+ *
+ *   1. `contain` blocks scroll CHAINING. Once a finger was inside the thread,
+ *      the same gesture could never continue on to the page, so the controls
+ *      above and the composer below were unreachable without lifting the thumb
+ *      and starting again outside the box.
+ *   2. The thread had `max-height: none` with `flex: 1 1 auto`, so it grew to
+ *      its content: on a short conversation it did not scroll at all, and the
+ *      swipe moved the whole page instead — the chat appeared to ignore it.
+ *
+ * The panel now takes only the height it needs, the thread is a BOUNDED
+ * scroller, and chaining is restored so one continuous gesture travels from the
+ * thread out to the page. `max-width` keeps a line of chat readable on a tablet
+ * instead of stretching across the full column.
+ */
 .ia-panel.ia-chat {
-  min-height: calc(100dvh - var(--nav-h, 64px) - 140px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
 }
 .ia-panel.ia-chat .intent-ai-thread {
-  flex: 1 1 auto;
-  min-height: 230px;
-  max-height: none;
-  overscroll-behavior: contain;
+  flex: 0 1 auto;
+  min-height: 200px;
+  max-height: min(52dvh, 420px);
+  /* Vertical chaining ON: a swipe that reaches the end of the thread carries
+     on to the page. `contain` on the X axis still stops a sideways swipe from
+     triggering a browser back-navigation. */
+  overscroll-behavior-y: auto;
+  overscroll-behavior-x: contain;
 }
 .ia-panel.ia-chat .ia-composer {
   position: sticky;
@@ -1387,24 +1534,68 @@
   min-height: 44px;
 }
 
-.ios-rail-levels { display: flex; align-items: center; gap: 4px; }
+/*
+ * L1 → L3 autonomy indicator.
+ *
+ * The old box was a 34px-wide chip holding a 9px "L1" and a 6.5px label —
+ * unreadable on a phone, and three of them plus four buttons overflowed the
+ * row. Each level now carries its own glyph (observe / prepare / controlled),
+ * a 22px icon plate and a label at a size that can actually be read.
+ */
+.ios-rail-levels { display: flex; align-items: stretch; gap: 5px; flex: 0 0 auto; }
 .ios-rail-level {
   display: grid;
   justify-items: center;
-  gap: 1px;
-  min-width: 34px;
-  padding: 4px 5px;
-  border: 1px solid rgba(255,255,255,.07);
-  border-radius: 10px;
-  background: rgba(255,255,255,.025);
+  align-content: center;
+  gap: 3px;
+  min-width: 54px;
+  padding: 5px 7px 6px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,.03);
   color: var(--text-3);
+  transition: border-color .18s ease, background .18s ease, color .18s ease;
 }
-.ios-rail-level b { font: 800 9px/1 var(--font-mono); letter-spacing: .08em; }
-.ios-rail-level small { font-size: 6.5px; line-height: 1; white-space: nowrap; }
-.ios-rail-level.is-current { border-color: rgba(101,245,188,.4); color: var(--ios-mint); background: rgba(101,245,188,.06); }
-.ios-rail-level.is-earned { border-color: rgba(66,232,255,.25); color: var(--ios-cyan); }
+.ios-rail-level-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.05);
+  color: inherit;
+}
+.ios-rail-level-icon svg { display: block; }
+.ios-rail-level b { font: 800 9.5px/1 var(--font-mono); letter-spacing: .09em; }
+.ios-rail-level small { font-size: 8.5px; line-height: 1.15; white-space: nowrap; }
+.ios-rail-level.is-earned { border-color: rgba(66,232,255,.32); color: var(--ios-cyan); }
+.ios-rail-level.is-earned .ios-rail-level-icon { background: rgba(66,232,255,.1); }
+.ios-rail-level.is-current {
+  border-color: rgba(101,245,188,.55);
+  color: var(--ios-mint);
+  background: rgba(101,245,188,.09);
+  box-shadow: inset 0 0 18px rgba(101,245,188,.07);
+}
+.ios-rail-level.is-current .ios-rail-level-icon {
+  background: rgba(101,245,188,.16);
+  animation: ios-level-pulse 2.6s ease-in-out infinite;
+}
+/* The only looping motion on the rail: a slow halo on the level the account
+   has actually earned, so the eye finds it without reading the labels. */
+@keyframes ios-level-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(101,245,188,0); }
+  50% { box-shadow: 0 0 0 4px rgba(101,245,188,.13); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ios-rail-level.is-current .ios-rail-level-icon { animation: none; }
+}
 
-.ios-rail-spacer { flex: 1; min-width: 2px; }
+.ios-rail-spacer { flex: 1 1 auto; min-width: 2px; }
+
+/* RELEASE — conditional, and the only action left on the trimmed rail. */
+.ios-rail-btn.is-release { color: #ffdce4; border-color: rgba(255,93,125,.4); background: rgba(255,93,125,.09); }
+.ios-rail-btn.is-release.is-armed { border-color: rgba(255,93,125,.75); background: rgba(255,93,125,.2); }
+.ios-rail:not(.is-stopped) .ios-rail-btn.is-release { color: #ffe9c2; border-color: rgba(210,153,34,.45); background: rgba(210,153,34,.09); }
 
 .ios-rail-action { position: relative; flex: 0 0 auto; }
 .ios-rail-btn {
@@ -1486,11 +1677,6 @@
 .ios-rail-unwind { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-2); }
 .ios-rail-unwind input { accent-color: var(--ios-red); }
 
-.ios-rail-statusline {
-  margin-top: 6px;
-  color: var(--text-3);
-  font: 600 9px/1.5 var(--font-display);
-}
 .ios-rail-notice {
   margin-top: 8px;
   padding: 7px 10px;
@@ -1501,28 +1687,78 @@
   font-size: 10px;
 }
 
+/*
+ * The state pill — the "egg" indicator.
+ *
+ * It used to sit BELOW the row as a 4px-padded chip holding a 6px dot and
+ * 8.5px text: too small to read, and the dot was a bare circle even when the
+ * rail was stopped, so a block and a pause looked nearly identical at a
+ * glance. It is now inline, 26px tall, and the dot grows into a real warning
+ * glyph when execution is blocked.
+ */
 .ios-rail-statechip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 7px;
-  padding: 4px 9px;
-  border: 1px solid rgba(255,255,255,.07);
-  border-radius: 99px;
-  background: rgba(255,255,255,.025);
-  color: var(--text-3);
-  font: 700 8.5px/1 var(--font-mono);
+  gap: 7px;
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 11px 0 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  background: rgba(255,255,255,.045);
+  color: var(--text-2);
+  font: 700 9.5px/1 var(--font-mono);
   letter-spacing: .06em;
-  cursor: pointer;
 }
-.ios-rail-chipdot { width: 6px; height: 6px; border-radius: 50%; background: var(--ios-mint); box-shadow: 0 0 8px var(--ios-mint); }
-.ios-rail-chipdot.pause { background: #eac54f; box-shadow: 0 0 8px #eac54f; }
-.ios-rail-chipdot.stop { background: var(--ios-red); box-shadow: 0 0 8px var(--ios-red); }
+.ios-rail-statechip.is-actionable { cursor: pointer; }
+.ios-rail-statechip.is-actionable:active { transform: scale(.97); }
+.ios-rail-chiptext { white-space: nowrap; }
+
+.ios-rail-chipdot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ios-mint);
+  box-shadow: 0 0 9px rgba(101,245,188,.6);
+  animation: ios-chip-breathe 2.6s ease-in-out infinite;
+}
+.ios-rail-statechip[data-state='paused'] .ios-rail-chipdot {
+  width: 11px;
+  height: 11px;
+  background: #eac54f;
+  box-shadow: 0 0 9px rgba(210,153,34,.6);
+  animation-duration: 1.6s;
+}
+.ios-rail-statechip[data-state='stopped'] .ios-rail-chipdot {
+  width: 15px;
+  height: 15px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ios-red);
+  animation: none;
+}
+@keyframes ios-chip-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ios-rail-chipdot { animation: none; }
+}
 
 .ios-rail.is-collapsed .ios-rail-btn small { display: none; }
 .ios-rail.is-collapsed .ios-rail-level small { display: none; }
-.ios-rail.is-collapsed .ios-rail-level { min-width: 30px; }
-.ios-rail.is-collapsed .ios-rail-statechip { align-self: flex-end; }
+.ios-rail.is-collapsed .ios-rail-level { min-width: 40px; }
+
+/* The status line used to be absolutely positioned inside an action wrapper;
+   with the actions gone it is a plain line under the row. */
+.ios-rail-statusline {
+  margin: 7px 2px 0;
+  color: var(--text-3);
+  font: 600 9.5px/1.5 var(--font-display);
+}
 
 .ios-rail-blocked {
   padding: 11px 13px;
@@ -1562,3 +1798,48 @@
 .ios-alloc-usd { color: var(--text-2); font: 600 9.5px/1 var(--font-mono); }
 .ios-alloc-yield { color: var(--ios-mint); font: 700 9.5px/1 var(--font-mono); }
 .ios-honesty-note.is-error { border-color: rgba(255,93,125,.4); color: #ff9db1; }
+
+/* ── Profit planner: visible progress + a readable failure ─────────────── */
+.ios-build-spinner {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .28);
+  border-top-color: #eafcff;
+  animation: ios-spin .8s linear infinite;
+}
+@keyframes ios-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ios-build-spinner { animation-duration: 2.4s; }
+}
+.ios-build-elapsed {
+  font: 700 10px/1 var(--font-mono);
+  opacity: .75;
+  font-variant-numeric: tabular-nums;
+}
+.ios-build-hint {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.ios-plan-code {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 93, 125, .12);
+  font: 700 9px/1.4 var(--font-mono);
+  letter-spacing: .05em;
+}
+.ios-plan-detail { display: block; margin-top: 5px; font-size: 10px; color: var(--text-3); overflow-wrap: anywhere; }
+.ios-honesty-note.is-error .ia-ctl { margin-top: 9px; }
+.ios-plan-reason {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.ios-plan-reason code { font: 700 9.5px/1 var(--font-mono); color: var(--text-2); }

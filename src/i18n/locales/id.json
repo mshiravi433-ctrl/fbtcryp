@@ -423,19 +423,10 @@
   "invest": {
     "simNotice": "Modul ini untuk belajar: imbal hasilnya simulasi dan dibayar dari kredit virtual dengan rumus tetap, jadi tidak ada uang nyata yang dikumpulkan atau dipertaruhkan. Produk investasi nyata butuh izin resmi — Fanous Bazaar Pishgam memilikinya dan versi nyata ada di peta jalan; sampai saat itu, ini latihan."
   },
-  "stocks": {
-    "honestBody": "Preferensi kami selalu menawarkan ini secara global, bukan dalam satu pasar lokal. Token yang mewakili saham Apple adalah efek di setiap yurisdiksi: penerbitannya butuh penerbit berlisensi yang benar-benar menyimpan sahamnya, prospektus, dan izin pialang untuk mendistribusikannya. Itu pekerjaan hukum internasional, bukan fitur perangkat lunak — jadi alih-alih mengklaim sesuatu yang tidak kami miliki, kami mengarahkan Anda ke penerbit yang sudah memegang lisensi tersebut."
-  },
   "rank": {
-    "demoNotice": "Peringkat dihitung dari aktivitas pengguna nyata dan disegarkan dari server setiap kali Anda membuka aplikasi.",
-    "emptyBoard": "Belum ada yang mencatat skor. Lakukan satu pertukaran atau check-in harian dan nama Anda jadi yang pertama.",
     "title": "Peringkat",
     "points": "poin",
-    "you": "Anda",
-    "yourRank": "Peringkat #{{n}}",
-    "unranked": "Belum berperingkat",
     "tiers": "Tingkatan",
-    "top": "Trader teratas",
     "quick": {
       "title": "Earn points quickly",
       "swap": "Swap +{{points}}",

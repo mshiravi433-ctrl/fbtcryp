@@ -76,6 +76,37 @@ export async function getDydxMarkets() {
   }
 }
 
+/**
+ * Historical candles through the same proxy.
+ *
+ * Added because the dYdX screen asked someone to size a leveraged position
+ * from a single oracle price and an open-interest number — the two least
+ * informative figures on the page — with no view of how the market had moved.
+ *
+ * Returns `{ candles, live, resolution }` and NEVER throws: a chart that can
+ * crash the page it decorates is worse than no chart. `live: false` plus an
+ * empty array is the honest answer when the indexer is unreachable, and the
+ * component says so instead of drawing a flat line at zero.
+ */
+export async function getDydxCandles(ticker, resolution = '1HOUR', limit = 96) {
+  const safe = /^[A-Z0-9]+-[A-Z0-9]+$/.test(String(ticker || '')) ? String(ticker).toUpperCase() : '';
+  if (!safe) return { candles: [], live: false, ticker: null, resolution };
+  try {
+    const body = await timeoutFetch(
+      `${API_BASE}/dydx/candles?ticker=${encodeURIComponent(safe)}&resolution=${encodeURIComponent(resolution)}&limit=${Number(limit) || 96}`
+    );
+    const candles = Array.isArray(body?.candles) ? body.candles : [];
+    return {
+      candles,
+      live: candles.length > 1,
+      ticker: safe,
+      resolution: body?.resolution || resolution
+    };
+  } catch {
+    return { candles: [], live: false, ticker: safe, resolution };
+  }
+}
+
 /** Public orderbook data through our same-origin CORS proxy. */
 export async function getDydxOrderbook(ticker) {
   if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(String(ticker || ''))) return { live: false };

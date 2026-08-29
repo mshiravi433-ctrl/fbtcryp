@@ -423,19 +423,10 @@
   "invest": {
     "simNotice": "Este módulo existe para aprender: o rendimento é simulado e pago em crédito virtual por uma fórmula fixa, pelo que não se junta nem arrisca dinheiro real. Um produto de investimento real exige autorização formal — a Fanous Bazaar Pishgam tem essa licença e uma versão real está planeada; até lá, isto é prática."
   },
-  "stocks": {
-    "honestBody": "A nossa preferência sempre foi oferecer isto globalmente e não dentro de um único mercado local. Um token que representa ações da Apple é um valor mobiliário em qualquer jurisdição: emiti-lo exige um emitente licenciado que detenha as ações reais, um prospeto e uma licença de intermediação para o distribuir. Isso é uma construção jurídica internacional, não uma funcionalidade de software — por isso, em vez de afirmar algo que não temos, encaminhamo-lo para emitentes que já detêm essas licenças."
-  },
   "rank": {
-    "demoNotice": "A classificação é calculada a partir da atividade real dos utilizadores e atualizada do servidor sempre que abre a app.",
-    "emptyBoard": "Ainda ninguém publicou uma pontuação. Faça uma troca ou o registo diário e será o primeiro nome deste quadro.",
     "title": "Classificação",
     "points": "pontos",
-    "you": "Você",
-    "yourRank": "Posição #{{n}}",
-    "unranked": "Ainda sem posição",
     "tiers": "Níveis",
-    "top": "Melhores traders",
     "quick": {
       "title": "Earn points quickly",
       "swap": "Swap +{{points}}",

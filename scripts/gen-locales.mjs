@@ -100,18 +100,82 @@ if (placeholderErrors.length) {
 
 const coverage = {};
 
-for (const lang of LANGS) {
-  const json = {};
-  let n = 0;
-  for (const [key, byLang] of Object.entries(SOURCES)) {
-    if (byLang[lang]) {
-      setPath(json, key, byLang[lang]);
-      n += 1;
+/*
+ * MERGE — never start from `{}` and walk away.
+ * ---------------------------------------------------------------------------
+ * The four source modules define the shared core: navigation, welcome, guide
+ * chrome, swap flow and every safety warning. They are NOT the whole story.
+ * The nine files also carry ~300 keys each that were translated directly into
+ * them and never mirrored back into a module. Rebuilding from SOURCES alone
+ * deleted 303 of them per language — real, rendering strings (`nav.intentOS`,
+ * `toast.walletSessionRestored`, the entire `wallet.stocksBanner` block) that
+ * exist in en.json and are on screen today.
+ *
+ * So: start from what the file already has, layer the modules on top (the
+ * module wins where both define a key — it is the reviewed source), then prune
+ * anything en.json does not contain. That last step is the one deletion that
+ * is always safe: a key English lacks can never render.
+ */
+function pruneToEnglish(obj, allowed, prefix = '') {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const kept = pruneToEnglish(v, allowed, path);
+      if (Object.keys(kept).length) out[k] = kept;
+    } else if (allowed.has(path)) {
+      out[k] = v;
     }
   }
+  return out;
+}
+
+for (const lang of LANGS) {
+  let existing = {};
+  try {
+    existing = JSON.parse(readFileSync(localePath(lang), 'utf8'));
+  } catch {
+    existing = {}; // a missing or corrupt file simply starts from the modules
+  }
+  const merged = existing;
+  const inherited = new Set(leaves(merged));
+
+  /*
+   * Where both define a key, the module wins — it is the reviewed source for
+   * the shared core. But a module can also be STALE, and a stale module
+   * silently overwriting a deliberate fix in a shipped file is worse than
+   * either: wallet.localRisk / noProvider / backupWarning were deleted from
+   * the nine files on purpose (they claimed the key lives "inside the
+   * Telegram WebView", which is false) and the module still carried them, so
+   * a rebuild quietly put the false claim back.
+   *
+   * So every value the module replaces is reported, not absorbed. A diff here
+   * is a decision someone has to look at, never a detail of the run.
+   */
+  const overwritten = [];
+  let fromModules = 0;
+  for (const [key, byLang] of Object.entries(SOURCES)) {
+    if (!byLang[lang]) continue;
+    const before = readValue(merged, key);
+    setPath(merged, key, byLang[lang]);
+    fromModules += 1;
+    if (typeof before === 'string' && before !== byLang[lang]) overwritten.push(key);
+  }
+
+  const json = pruneToEnglish(merged, enSet);
+  const present = leaves(json).length;
+  const pruned = leaves(merged).length - present;
+  const onlyInFile = [...inherited].filter((k) => !SOURCES[k]).length;
+
   writeFileSync(localePath(lang), `${JSON.stringify(json, null, 2)}\n`);
-  coverage[lang] = Math.round((n / enTotal) * 100);
-  console.log(`${lang}.json — ${n}/${enTotal} keys (${coverage[lang]}%)`);
+  coverage[lang] = Math.round((present / enTotal) * 100);
+  console.log(
+    `${lang}.json — ${present}/${enTotal} keys (${coverage[lang]}%) — ${fromModules} from the shared modules, ${onlyInFile} kept from the file${pruned ? `, ${pruned} pruned (absent from en.json)` : ''}`
+  );
+  if (overwritten.length) {
+    console.log(`    ⚠ module overwrote ${overwritten.length} existing value(s): ${overwritten.slice(0, 6).join(', ')}${overwritten.length > 6 ? ', …' : ''}`);
+    overwritten.forEach((k) => console.log(`        ${k}\n          file:   ${String(readValue(existing, k)).slice(0, 90)}\n          module: ${String(readValue(SOURCES[k], lang)).slice(0, 90)}`));
+  }
 }
 
 /**
