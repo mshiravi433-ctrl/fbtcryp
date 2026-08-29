@@ -17,7 +17,7 @@ const input = {
   settings: {
     optimizer: { enabled: true, runs: 200 },
     evmVersion: 'paris', // BSC-safe: avoids PUSH0 from Shanghai
-    outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object', 'evm.gasEstimates'] } }
+    outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object', 'evm.deployedBytecode.immutableReferences', 'evm.gasEstimates'] } }
   }
 };
 
@@ -37,6 +37,7 @@ const artifact = {
   abi: c.abi,
   bytecode: '0x' + c.evm.bytecode.object,
   deployedBytecode: '0x' + c.evm.deployedBytecode.object,
+  immutableReferences: c.evm.deployedBytecode.immutableReferences || {},
   compiler: solc.version(),
   evmVersion: 'paris',
   optimizer: { enabled: true, runs: 200 }

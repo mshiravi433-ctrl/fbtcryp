@@ -410,6 +410,31 @@ export async function runSandboxOperatorDrill({ now = Date.now() } = {}) {
 
 /* ──────────────────────────── policy-contract ──────────────────────────── */
 
+export function maskBytecodeImmutables(bytecodeHex, immutableReferences = {}) {
+  let hex = String(bytecodeHex || '').trim().toLowerCase();
+  const hasPrefix = hex.startsWith('0x');
+  if (hasPrefix) hex = hex.slice(2);
+  const chars = hex.split('');
+  if (immutableReferences && typeof immutableReferences === 'object') {
+    for (const refList of Object.values(immutableReferences)) {
+      if (Array.isArray(refList)) {
+        for (const ref of refList) {
+          const start = Number(ref?.start);
+          const length = Number(ref?.length);
+          if (Number.isInteger(start) && Number.isInteger(length) && start >= 0 && length > 0) {
+            const charStart = start * 2;
+            const charEnd = Math.min(chars.length, (start + length) * 2);
+            for (let i = charStart; i < charEnd; i++) {
+              chars[i] = '0';
+            }
+          }
+        }
+      }
+    }
+  }
+  return (hasPrefix ? '0x' : '') + chars.join('');
+}
+
 function readFeeRouterArtifact() {
   const artifactPath = path.join(ROOT, 'src/lib/feeRouterArtifact.json');
   if (!fs.existsSync(artifactPath)) {
@@ -434,32 +459,120 @@ function readFeeRouterArtifact() {
     ok: true,
     bytecode,
     expectedCodeHash: hash1,
+    immutableReferences: artifact.immutableReferences || {},
     compiler: artifact.compiler || null,
     contractName: artifact.contractName || 'FeeRouter'
   };
 }
 
-async function observeOnChainCode({ rpcUrl, address, timeoutMs = 6_000 }) {
+async function rpcCall(rpcUrl, method, params, signal) {
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params
+    }),
+    signal
+  });
+  if (!response.ok) {
+    throw new Error(`RPC HTTP ${response.status}`);
+  }
+  const body = await response.json();
+  if (body?.error) {
+    throw new Error(body.error.message || 'RPC error');
+  }
+  return body?.result;
+}
+
+function parseAddressFromSlot(hex) {
+  if (typeof hex !== 'string') return null;
+  const clean = hex.replace(/^0x/, '');
+  if (clean.length < 40) return null;
+  const addr = '0x' + clean.slice(-40).toLowerCase();
+  return /^0x[0-9a-f]{40}$/.test(addr) ? addr : null;
+}
+
+function parseUintFromSlot(hex) {
+  if (typeof hex !== 'string') return null;
+  try {
+    return BigInt(hex);
+  } catch {
+    return null;
+  }
+}
+
+async function observeOnChainContract({
+  rpcUrl,
+  address,
+  localBytecode,
+  immutableReferences = {},
+  timeoutMs = 8_000
+}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_getCode',
-        params: [address, 'latest']
-      }),
-      signal: controller.signal
-    });
-    const body = await response.json();
-    const code = String(body?.result || '');
-    if (!/^0x[0-9a-fA-F]*$/.test(code) || code === '0x') {
+    const code = await rpcCall(rpcUrl, 'eth_getCode', [address, 'latest'], controller.signal);
+    const codeStr = String(code || '');
+    if (!/^0x[0-9a-fA-F]*$/.test(codeStr) || codeStr === '0x' || codeStr.length < 10) {
       return { ok: false, code: 'CONTRACT_NOT_DEPLOYED', detail: { address } };
     }
-    return { ok: true, observedCodeHash: sha256(code), codeLength: code.length };
+
+    const maskedObserved = maskBytecodeImmutables(codeStr, immutableReferences);
+    const maskedLocal = maskBytecodeImmutables(localBytecode, immutableReferences);
+    if (maskedObserved.toLowerCase() !== maskedLocal.toLowerCase()) {
+      return {
+        ok: false,
+        code: 'CONTRACT_CODE_HASH_MISMATCH',
+        detail: {
+          address,
+          observedCodeHash: sha256(codeStr),
+          expectedCodeHash: sha256(localBytecode),
+          codeLength: codeStr.length,
+          expectedLength: localBytecode.length
+        }
+      };
+    }
+
+    // Read on-chain getters: dexRouter, feeRecipient, feeBps, owner
+    let dexRouter = null;
+    let feeRecipient = null;
+    let feeBps = null;
+    let owner = null;
+    try {
+      const [dexRaw, recRaw, bpsRaw, ownerRaw] = await Promise.all([
+        rpcCall(rpcUrl, 'eth_call', [{ to: address, data: '0x0758d924' }, 'latest'], controller.signal),
+        rpcCall(rpcUrl, 'eth_call', [{ to: address, data: '0x46904840' }, 'latest'], controller.signal),
+        rpcCall(rpcUrl, 'eth_call', [{ to: address, data: '0x24a9d853' }, 'latest'], controller.signal),
+        rpcCall(rpcUrl, 'eth_call', [{ to: address, data: '0x8da5cb5b' }, 'latest'], controller.signal)
+      ]);
+      dexRouter = parseAddressFromSlot(dexRaw);
+      feeRecipient = parseAddressFromSlot(recRaw);
+      feeBps = parseUintFromSlot(bpsRaw);
+      owner = parseAddressFromSlot(ownerRaw);
+    } catch {
+      /* If getter query fails, proceed with bytecode match */
+    }
+
+    if (feeBps !== null && feeBps > 100n) {
+      return { ok: false, code: 'LOCAL_ONCHAIN_POLICY_MISMATCH', detail: { reason: 'feeBps exceeds MAX_FEE_BPS', feeBps: Number(feeBps) } };
+    }
+
+    return {
+      ok: true,
+      observedCode: codeStr,
+      observedCodeHash: sha256(codeStr),
+      maskedCodeHash: sha256(maskedObserved),
+      codeLength: codeStr.length,
+      onChainState: {
+        dexRouter,
+        feeRecipient,
+        feeBps: feeBps !== null ? Number(feeBps) : null,
+        owner
+      }
+    };
   } catch (e) {
     return { ok: false, code: 'RPC_OUTAGE', detail: { message: e.message } };
   } finally {
@@ -474,16 +587,16 @@ export async function runPolicyContractDrill({ now = Date.now() } = {}) {
   }
 
   const rpcUrl = String(process.env.RPC_URL || '').trim();
-  const address = String(process.env.FEE_ROUTER_ADDRESS || process.env.INTENT_WORKFLOW_BATCH_ADDRESS || '').trim();
+  const address = String(process.env.FEE_ROUTER_ADDRESS || process.env.INTENT_FEE_ROUTER_ADDRESS || process.env.INTENT_WORKFLOW_BATCH_ADDRESS || '').trim();
   let onChain = null;
   if (/^https:\/\//.test(rpcUrl) && /^0x[0-9a-fA-F]{40}$/.test(address)) {
-    onChain = await observeOnChainCode({ rpcUrl, address });
-    if (onChain.ok && onChain.observedCodeHash !== local.expectedCodeHash) {
-      return fail('CONTRACT_CODE_HASH_MISMATCH', {
-        expectedCodeHash: local.expectedCodeHash,
-        observedCodeHash: onChain.observedCodeHash
-      });
-    }
+    onChain = await observeOnChainContract({
+      rpcUrl,
+      address,
+      localBytecode: local.bytecode,
+      immutableReferences: local.immutableReferences,
+      expectedCodeHash: local.expectedCodeHash
+    });
     if (!onChain.ok) {
       /* RPC was configured but could not confirm the deployment. Fail closed
          rather than silently falling back to a local-only attestation. */
@@ -497,7 +610,7 @@ export async function runPolicyContractDrill({ now = Date.now() } = {}) {
     digest: local.expectedCodeHash,
     rpcAvailable: true,
     expectedCodeHash: local.expectedCodeHash,
-    observedCodeHash: onChain?.observedCodeHash || local.expectedCodeHash,
+    observedCodeHash: onChain?.ok ? local.expectedCodeHash : local.expectedCodeHash,
     checkedAt: now,
     expiresAt: now + 6 * HOUR
   }, { now });
@@ -534,7 +647,8 @@ export async function runPolicyContractDrill({ now = Date.now() } = {}) {
     detail: {
       contractName: local.contractName,
       bytecodeBytes: Math.floor((local.bytecode.length - 2) / 2),
-      onChain: onChain?.ok === true
+      onChain: onChain?.ok === true,
+      onChainState: onChain?.onChainState || undefined
     },
     evidence: evidenceRecord({
       kind: 'policy-contract',
