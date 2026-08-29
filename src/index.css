@@ -9509,6 +9509,11 @@ body { overflow-x: clip; }
   min-width: 0;
   max-width: 236px;
   height: 34px;
+  /* The brand sits a touch higher and further left than the bar's default
+     padding places it, so the logo reads as anchored to the screen corner
+     instead of floating mid-header. Margins (not transforms) keep clear of
+     the framer-motion x/y entrance animation on this element. */
+  margin: -2px 0 0 -4px;
   overflow: hidden;
   contain: layout paint;
 }
@@ -9573,11 +9578,12 @@ body { overflow-x: clip; }
 }
 
 .header-spotlight-mark img {
+  /* Contain + a 2px breathing margin: padded artwork (CoinGecko "large")
+     used to render cropped and bottom-shifted under `cover`. Now the whole
+     coin is always inside the mark, centered. */
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  inset: 2px;
+  object-fit: contain;
   background: var(--bg-panel-solid);
 }
 
@@ -10045,6 +10051,7 @@ body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .header-brand-layer,
   .header-spotlight-layer { transition: none; }
+  .header-brand-layer .brand-mark,
   .header-brand-layer .brand-mark svg {
     animation: none !important;
     transform: none !important;
