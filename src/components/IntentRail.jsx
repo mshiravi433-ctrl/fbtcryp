@@ -28,29 +28,13 @@
  * is persisted to localStorage with a tamper-safe restore (a broken record
  * degrades to STOPPED — never to running).
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { railLayoutDescriptor, mayExecute } from '../lib/intent-ai';
 import {
-  initialRailState, mayExecute, resumeExecution,
-  releaseEmergencyStop, toggleRail,
-  restore, snapshot, railLayoutDescriptor
-} from '../lib/intent-ai';
+  subscribeRail, getRailSnapshot,
+  railResume, railReleaseStop, railToggleCollapse
+} from '../lib/intent-ai/railStore.js';
 import AutonomyLevelIcon from './AutonomyLevelIcon';
-
-const RAIL_STORE_KEY = 'fbt-intent-rail-v1';
-
-function loadRailState() {
-  try {
-    const raw = localStorage.getItem(RAIL_STORE_KEY);
-    if (!raw) return { state: initialRailState(), degraded: false };
-    return restore(raw);
-  } catch {
-    return { state: initialRailState(), degraded: false };
-  }
-}
-
-function persistRailState(state) {
-  try { localStorage.setItem(RAIL_STORE_KEY, snapshot(state)); } catch { /* storage full/blocked */ }
-}
 
 const fmt = (ms) => {
   if (!ms) return null;
@@ -76,17 +60,21 @@ function WarnGlyph() {
 }
 
 export default function IntentRail({ t, onStateChange }) {
+  /*
+   * The rail state is NOT this component's. It lives in railStore, which the AI
+   * surface writes to as well — that screen is where pause / emergency stop /
+   * human agent live now, and two components each holding their own copy would
+   * let one say STOPPED while the other says RUNNING. See the header note in
+   * lib/intent-ai/railStore.js.
+   */
   const layout = useMemo(() => railLayoutDescriptor(), []);
-  const boot = useRef(loadRailState());
-  const [state, setState] = useState(() => boot.current.state);
-  const [degraded, setDegraded] = useState(() => boot.current.degraded);
+  const rail = useSyncExternalStore(subscribeRail, getRailSnapshot, getRailSnapshot);
+  const state = rail.state;
+  const degraded = rail.degraded;
   const [releaseArm, setReleaseArm] = useState(false);
   const [clock, setClock] = useState(Date.now());
 
-  useEffect(() => {
-    onStateChange?.(state);
-    persistRailState(state);
-  }, [state, onStateChange]);
+  useEffect(() => { onStateChange?.(state); }, [state, onStateChange]);
 
   /* One-second tick only while paused with a deadline, so the resume
      countdown is real and the auto-resume moment is visible. */
@@ -104,15 +92,11 @@ export default function IntentRail({ t, onStateChange }) {
   const gate = useMemo(() => mayExecute(state), [state, clock]);
   const remaining = state.state === 'paused' ? fmt(state.pausedUntil) : null;
 
-  const apply = (next) => {
-    if (next?.ok) { setState(next.state); setReleaseArm(false); }
-    return next;
-  };
-
-  const onResume = () => apply(resumeExecution(state));
+  const onResume = () => { setReleaseArm(false); railResume(); };
   const onRelease = () => {
     if (!releaseArm) { setReleaseArm(true); return; }
-    apply(releaseEmergencyStop(state, { confirmationToken: 'release-confirmed' }));
+    railReleaseStop();
+    setReleaseArm(false);
   };
 
   const level = state.autonomy?.level ?? 1;
@@ -204,7 +188,7 @@ export default function IntentRail({ t, onStateChange }) {
         <button
           type="button"
           className="ios-rail-btn is-collapse"
-          onClick={() => setState(toggleRail(state).state)}
+          onClick={() => railToggleCollapse()}
           aria-expanded={!state.railCollapsed}
           aria-label={t('intentAI.controls.railCollapse', { defaultValue: 'Collapse rail' })}
         >

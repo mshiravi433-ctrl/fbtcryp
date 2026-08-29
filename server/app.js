@@ -39,7 +39,8 @@ import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
 import { fetchSolanaIntel, fetchSolanaWhales, solscanConfigured, SOLANA_SIGNAL_MINTS } from './solanaIntel.js';
 import {
-  fetchDydxAccount, fetchDydxCandles, fetchDydxMarkets, fetchDydxOrderbook
+  fetchDydxAccount, fetchDydxCandles, fetchDydxMarkets, fetchDydxOrderbook,
+  normaliseCandleQuery
 } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
@@ -3545,8 +3546,10 @@ app.get('/api/dydx/candles', (req, res) => {
   if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(ticker)) {
     return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
   }
-  const resolution = String(req.query.resolution || '1HOUR').toUpperCase();
-  const limit = Number(req.query.limit) || 96;
+  /* Normalised BEFORE the cache key, like /api/markets and /api/chart/:id: the
+     response cache is an unbounded map, so an arbitrary caller-supplied string
+     in a key is a permanent allocation. See normaliseCandleQuery(). */
+  const { resolution, limit } = normaliseCandleQuery(req.query.resolution, req.query.limit);
   return serve(res, 15_000)(async () => {
     const body = await fetchDydxCandles(ticker, resolution, limit);
     const candles = (body?.candles || [])

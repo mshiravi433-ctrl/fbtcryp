@@ -117,6 +117,21 @@ try {
     /data-state=\{feature\.state\}/.test(settings));
   check('each row states its reason in words',
     /sub=\{t\(feature\.i18nKey\)\}/.test(settings));
+  /*
+   * Every row must render EXACTLY ONE state chip, whichever state it is in.
+   *
+   * The acknowledged chip is a REPLACEMENT for the "restricted" one, so it
+   * belongs in the other arm of a ternary — not in a second `&&` block beside
+   * the ordinary chip. Two independent conditions left a hole in the middle:
+   * an AVAILABLE feature is permitted and NOT restricted, so neither block
+   * matched and swap, bridge and send rendered with no state at all. The
+   * wiring probe only greps for the attribute, so it stayed green while the
+   * three most common rows on the screen went blank.
+   */
+  check('every row renders exactly one state chip, in every state',
+    (settings.match(/data-testid=\{`region-feature-/g) || []).length === 2
+    && /\? \([\s\S]{0,700}?region-feature-[\s\S]{0,700}?\) : \([\s\S]{0,700}?region-feature-/.test(settings));
+
   check('an unknown region is admitted rather than silently strict',
     /!regionMap\.regionKnown/.test(settings) && settings.includes('data-testid="region-unknown-note"'));
   check('the region is derived from a locale hint, never asserted as legal fact',

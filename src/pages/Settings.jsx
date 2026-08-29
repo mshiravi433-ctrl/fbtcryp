@@ -1368,17 +1368,25 @@ export default function Settings() {
               sub={t(feature.i18nKey)}
               right={
                 <span className="region-right">
-                  {feature.permitted && feature.restricted && (
+                  {/*
+                    Always exactly one state chip. The acknowledged chip is a
+                    REPLACEMENT for the "restricted" one, not an extra badge —
+                    and the ternary (not two independent `&&` blocks) is what
+                    guarantees it. Two separate conditions left the ordinary
+                    `available` row with no chip at all, because an available
+                    feature is permitted and NOT restricted, so neither branch
+                    matched: swap, bridge and send all rendered blank.
+                  */}
+                  {feature.permitted && feature.restricted ? (
                     <span
                       className="region-state region-state-acknowledged"
                       data-testid={`region-feature-${feature.feature}`}
                       data-state="acknowledged"
-                      title={t('intentAI.compliance.ackedAt', { defaultValue: 'Confirmed' }) + (feature.ack?.at ? ` · ${new Date(feature.ack.at).toLocaleString()}` : '')}
+                      title={t('intentAI.compliance.ackedAt', { defaultValue: 'Confirmed' }) + (feature.ack?.at ? ` · ${fmtSyncedAt(feature.ack.at)}` : '')}
                     >
                       ✓ {t('intentAI.compliance.state.available', { defaultValue: 'Available' })}
                     </span>
-                  )}
-                  {!feature.permitted && (
+                  ) : (
                     <span
                       className={`region-state region-state-${feature.state}`}
                       data-testid={`region-feature-${feature.feature}`}

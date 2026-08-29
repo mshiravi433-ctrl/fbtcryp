@@ -111,7 +111,7 @@
     "test:phase121": "node test/intent-ai/phase121-output-locales-probe.mjs",
     "test:phase131": "node test/intent-ai/phase131-wallet-chain-probe.mjs",
     "test:phase141": "node test/intent-ai/phase141-rail-layout-probe.mjs",
-    "test:phases101-150": "npm run test:phase101 && npm run test:phase117 && npm run test:phase121 && npm run test:phase131 && npm run test:phase141",
+    "test:phases101-150": "npm run test:phase101 && npm run test:phase117 && npm run test:phase121 && npm run test:phase131 && npm run test:phase141 && npm run test:phase142",
     "test:bridge": "node test/intent-ai/draft-transaction-bridge-probe.mjs",
     "test:phase85": "node test/intent-ai/phase85-regional-edge-probe.mjs",
     "test:phase86": "node test/intent-ai/phase86-parser-locale-parity-probe.mjs",
@@ -166,7 +166,8 @@
     "test:phases63-68": "npm run test:phase63 && npm run test:phase64 && npm run test:phase65 && npm run test:phase66 && npm run test:phase67 && npm run test:phase68",
     "test:durable-evidence": "node test/intent-ai/durable-evidence-probe.mjs",
     "activate:release": "node scripts/activate-release.mjs",
-    "test:activation-config": "node test/intent-ai/activation-config-probe.mjs"
+    "test:activation-config": "node test/intent-ai/activation-config-probe.mjs",
+    "test:phase142": "node test/intent-ai/phase142-reachability-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

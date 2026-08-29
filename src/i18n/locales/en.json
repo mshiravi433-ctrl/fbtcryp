@@ -4590,13 +4590,16 @@
       "composeBlockedPause": "The system is paused — execution is blocked.",
       "composeResumes": "You can keep composing; sending resumes automatically at",
       "composeNote": "You can keep composing, but no intent can be sent until the rail is released.",
-      "blocked": "Rail paused/stopped — release to send"
+      "blocked": "Rail paused/stopped — release to send",
+      "confirmStop": "Tap again to stop",
+      "refused": "Not applied"
     },
     "controls": {
       "humanAgent": "Human agent",
       "railCollapse": "Collapse rail",
       "pause": "Pause",
-      "emergency_exit": "Emergency stop"
+      "emergency_exit": "Emergency stop",
+      "humanRequested": "Agent requested"
     },
     "plan": {
       "title": "Profit target plan",
@@ -4642,6 +4645,16 @@
       "buildHint": "Reading stocks, dYdX, perpetuals and farm yields. Nothing is executed.",
       "retry": "Try again",
       "why": "Why"
+    },
+    "execControls": {
+      "title": "Execution controls",
+      "rail": "Execution controls"
+    },
+    "pause": {
+      "duration": "Pause length",
+      "m5": "5 min",
+      "h1": "1 hour",
+      "d1": "1 day"
     }
   },
   "whales": {

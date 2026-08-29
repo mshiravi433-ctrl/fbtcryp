@@ -54,6 +54,7 @@ import { getIntentActivation, getIntentCapabilities, getExternalAgents, getInten
 import GoalCountdown from './GoalCountdown';
 import TokenApprovals from './TokenApprovals';
 import ScrollRail from './ScrollRail';
+import ExecutionControls from './ExecutionControls';
 import AutonomyLevelIcon from './AutonomyLevelIcon';
 import '../styles/intent-os.css';
 
@@ -1001,6 +1002,21 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           ))}
         </ScrollRail>
       </div>
+
+      {/*
+        EXECUTION CONTROLS — pause, emergency stop, human agent.
+        ----------------------------------------------------------------------
+        Reported as: "pause, emergency stop and the human-agent request should
+        be removed from the Intent OS page". They belong here, on the AI
+        surface. They were removed from the
+        Intent OS rail but never rebuilt anywhere, and that rail had been the
+        only caller of pauseExecution / engageEmergencyStop / requestHumanAgent
+        in the whole app, so the gate silently became unreachable.
+
+        They read and write the same store the Intent OS rail renders, so the
+        two screens always agree about whether execution is blocked.
+      */}
+      <ExecutionControls />
 
       {session?.status === 'STOPPED' && (
         <p className="notice" style={{ color: 'var(--bad, #ff6b6b)' }}>
