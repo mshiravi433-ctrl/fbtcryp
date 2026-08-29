@@ -24,6 +24,7 @@
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",
+    "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
     "test:phase10": "node test/intent-ai/phase10-agent-trust-probe.mjs",
     "test:phase11": "node test/intent-ai/phase11-strategy-competition-probe.mjs",
     "test:phase12": "node test/intent-ai/phase12-smart-wallet-policy-probe.mjs",

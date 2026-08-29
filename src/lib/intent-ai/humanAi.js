@@ -16,6 +16,8 @@
  */
 
 import { parseUserIntent, refineIntent, detectChain, normalizeToken } from './intentParser.js';
+import { planFromIntent } from './intentPlanner.js';
+import { localizeIntentPlan, localizeAssumption } from './outputLocales.js';
 import { sanitizePolicy, describeLevel, canPrepare, canExecute } from './permissions.js';
 import { formulateStrategies, STRATEGY_AGENT_IDENTITY } from './strategyAgent.js';
 import { orchestrate, EXECUTION_ORCHESTRATOR_IDENTITY } from './executionOrchestrator.js';
@@ -283,6 +285,52 @@ export function chatTurn(session, text, ctx = {}) {
 }
 
 /**
+ * A concrete plan for an incomplete intent, or null.
+ *
+ * Deliberately defensive: a proposal is a convenience, and a bug in it must
+ * never take down the conversation or, worse, produce a plan that looks
+ * authorised. Anything unexpected yields null and the guided flow carries on
+ * exactly as it did before this existed.
+ */
+function proposeFor(parsed, ctx = {}) {
+  try {
+    const planned = planFromIntent(parsed, {
+      portfolioUsd: Number.isFinite(Number(ctx.portfolioUsd)) ? Number(ctx.portfolioUsd) : null,
+      balances: Array.isArray(ctx.balances) ? ctx.balances : [],
+      apys: ctx.apys || {},
+      disabledCapabilities: ctx.disabledCapabilities || {},
+      speculationEnabled: ctx.speculationEnabled === true,
+      defaultChainId: ctx.defaultChainId ?? null,
+      locale: ctx.locale ?? null
+    });
+    if (!planned?.ok || !planned.plan) return null;
+    /*
+     * Render it in the customer's language. A proposal whose assumptions are
+     * in a language the customer does not read is a proposal nobody checked —
+     * and the assumptions are the whole safety mechanism here.
+     *
+     * Localizing after planning, never before: the numbers are decided once,
+     * in one place, and the twelve locales only ever render them.
+     */
+    const localized = localizeIntentPlan(planned.plan, ctx.locale || 'en');
+    const assumptions = (localized.assumptions || []).map((text, i) => {
+      const record = planned.plan.assumptionRecords?.[i];
+      return record ? (localizeAssumption(record, ctx.locale || 'en') ?? text) : text;
+    });
+    /* Never let a proposal carry authority it does not have. */
+    return {
+      ...localized,
+      assumptions,
+      requiresConfirmation: true,
+      autoExecute: false,
+      executionAuthorized: false
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Everything that happens after a structured intent exists: social replies,
  * capability discovery, mode boundaries, product limits, the guided flow
  * entry point and the strategy/plan/draft pipeline. Shared by the direct
@@ -417,6 +465,20 @@ function respondToParsed(session, parsed, ctx = {}) {
       signals: parsed.signals,
       mode: session.mode,
       flow: flowQuestionPayload(flow),
+      /*
+       * The question AND an answer to it.
+       *
+       * Asking "how much?" of a customer who typed "میخوام پولم رشد کنه"
+       * assumes they knew a number they could have typed. Usually they do not.
+       * So alongside the question the agent proposes a concrete allocation,
+       * sizes it against a stated default, and lists every assumption it had
+       * to make. The customer can accept the proposal, edit it, or answer the
+       * question — but they are never stuck in a form they cannot fill in.
+       *
+       * It stays a proposal: `requiresConfirmation` is true on every plan the
+       * planner can produce, and the confirmation gate is untouched.
+       */
+      proposal: proposeFor(parsed, ctx),
       financialExecutionAuthorized: false
     }));
     session.pendingClarifications = { parsed };
