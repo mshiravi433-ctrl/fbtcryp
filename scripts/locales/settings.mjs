@@ -53,8 +53,22 @@ export default {
   'settings.autoLock': { zh: '自动锁定', hi: 'ऑटो-लॉक', es: 'Bloqueo automático', fr: 'Verrouillage auto', ru: 'Автоблокировка', tr: 'Otomatik kilit', ur: 'خودکار لاک', id: 'Kunci otomatis', pt: 'Bloqueio automático' },
   'settings.never': { zh: '从不', hi: 'कभी नहीं', es: 'Nunca', fr: 'Jamais', ru: 'Никогда', tr: 'Asla', ur: 'کبھی نہیں', id: 'Tidak pernah', pt: 'Nunca' },
   'settings.afterMinutes': { zh: '{{n}} 分钟后', hi: '{{n}} मिनट बाद', es: 'Tras {{n}} minutos', fr: 'Après {{n}} minutes', ru: 'Через {{n}} минут', tr: '{{n}} dakika sonra', ur: '{{n}} منٹ بعد', id: 'Setelah {{n}} menit', pt: 'Após {{n}} minutos' },
-  'settings.txConfirm': { zh: '每笔交易都确认', hi: 'हर ट्रांज़ैक्शन की पुष्टि करें', es: 'Confirmar cada transacción', fr: 'Confirmer chaque transaction', ru: 'Подтверждать каждую транзакцию', tr: 'Her işlemi onayla', ur: 'ہر ٹرانزیکشن کی تصدیق', id: 'Konfirmasi setiap transaksi', pt: 'Confirmar cada transação' },
-  'settings.txConfirmSub': { zh: '签名前始终显示复核界面', hi: 'साइन करने से पहले हमेशा समीक्षा दिखाएँ', es: 'Mostrar siempre una pantalla de revisión antes de firmar', fr: 'Toujours afficher un écran de vérification avant de signer', ru: 'Всегда показывать экран проверки перед подписью', tr: 'İmzalamadan önce daima inceleme ekranı göster', ur: 'سائن کرنے سے پہلے ہمیشہ جائزہ دکھائیں', id: 'Selalu tampilkan layar tinjauan sebelum menandatangani', pt: 'Mostrar sempre um ecrã de revisão antes de assinar' },
+  /*
+   * REMOVED — translations for controls that do not exist.
+   *
+   *   settings.txConfirm / txConfirmSub — "Confirm every transaction" was
+   *     deleted from the settings screen rather than wired: `txConfirmations`
+   *     was read nowhere, and it was the exact inverse of Expert mode, which
+   *     really does decide whether the review step is skipped. Two switches
+   *     fighting over one behaviour, and the losing one looks broken.
+   *
+   *   settings.testnet / testnetOn / testnetOff / testnetWarn — the app is
+   *     MAINNET ONLY by decision, not by omission (see lib/btcAddress.js: a
+   *     testnet address is refused as firmly as a mistyped one). Shipping a
+   *     switch that turns real money into toy money is the opposite of that.
+   *
+   * The strings are in git history if either feature is ever built for real.
+   */
   'settings.bioErr.UNSUPPORTED': { zh: '此设备或浏览器不支持生物识别解锁。', hi: 'यह डिवाइस या ब्राउज़र बायोमेट्रिक अनलॉक सपोर्ट नहीं करता।', es: 'Este dispositivo o navegador no admite desbloqueo biométrico.', fr: 'Cet appareil ou navigateur ne prend pas en charge la biométrie.', ru: 'Это устройство или браузер не поддерживает биометрию.', tr: 'Bu cihaz veya tarayıcı biyometrik kilidi desteklemiyor.', ur: 'یہ آلہ یا براؤزر بایومیٹرک انلاک سپورٹ نہیں کرتا۔', id: 'Perangkat atau peramban ini tidak mendukung biometrik.', pt: 'Este dispositivo ou navegador não suporta desbloqueio biométrico.' },
   'settings.bioErr.FAILED': { zh: '生物识别设置失败或已取消。', hi: 'बायोमेट्रिक सेटअप विफल या रद्द।', es: 'La configuración biométrica falló o se canceló.', fr: 'La configuration biométrique a échoué ou a été annulée.', ru: 'Настройка биометрии не удалась или отменена.', tr: 'Biyometrik kurulum başarısız oldu veya iptal edildi.', ur: 'بایومیٹرک سیٹ اپ ناکام یا منسوخ۔', id: 'Penyiapan biometrik gagal atau dibatalkan.', pt: 'A configuração biométrica falhou ou foi cancelada.' },
   'settings.bioErr.CANCELLED': { zh: '你取消了提示，或设备超时。', hi: 'आपने प्रॉम्प्ट रद्द किया, या डिवाइस टाइमआउट हुआ।', es: 'Cancelaste el aviso o el dispositivo agotó el tiempo.', fr: 'Vous avez annulé, ou l\'appareil a expiré.', ru: 'Вы отменили запрос или устройство прервало ожидание.', tr: 'İstemi iptal ettiniz veya cihaz zaman aşımına uğradı.', ur: 'آپ نے پرامپٹ منسوخ کیا، یا آلہ ٹائم آؤٹ ہوا۔', id: 'Anda membatalkan, atau perangkat kehabisan waktu.', pt: 'Cancelou o pedido, ou o dispositivo expirou.' },
@@ -75,20 +89,6 @@ export default {
   'settings.currency': { zh: '显示货币', hi: 'प्रदर्शित मुद्रा', es: 'Moneda de visualización', fr: 'Devise d\'affichage', ru: 'Валюта отображения', tr: 'Görüntüleme para birimi', ur: 'ظاہری کرنسی', id: 'Mata uang tampilan', pt: 'Moeda de exibição' },
   'settings.reduceMotionSub': { zh: '更少动效，更省电', hi: 'कम एनिमेशन, बेहतर बैटरी', es: 'Menos animaciones, más batería', fr: 'Moins d\'animations, plus d\'autonomie', ru: 'Меньше анимаций, дольше батарея', tr: 'Daha az animasyon, daha uzun pil', ur: 'کم اینیمیشن، زیادہ بیٹری', id: 'Lebih sedikit animasi, baterai lebih awet', pt: 'Menos animações, mais bateria' },
   'settings.compactModeSub': { zh: '一屏显示更多内容', hi: 'स्क्रीन पर ज़्यादा दिखाएँ', es: 'Muestra más en pantalla', fr: 'Afficher plus à l\'écran', ru: 'Больше информации на экране', tr: 'Ekranda daha fazlasını göster', ur: 'اسکرین پر زیادہ دکھائیں', id: 'Tampilkan lebih banyak di layar', pt: 'Mostra mais no ecrã' },
-  'settings.testnet': { zh: '测试网模式', hi: 'टेस्टनेट मोड', es: 'Modo testnet', fr: 'Mode testnet', ru: 'Режим тестовой сети', tr: 'Test ağı modu', ur: 'ٹیسٹ نیٹ موڈ', id: 'Mode testnet', pt: 'Modo testnet' },
-  'settings.testnetOn': { zh: '正在使用测试网络 — 资金非真实', hi: 'टेस्ट नेटवर्क चालू — फंड असली नहीं', es: 'Usando redes de prueba: los fondos no son reales', fr: 'Réseaux de test : les fonds ne sont pas réels', ru: 'Тестовые сети — средства не настоящие', tr: 'Test ağları kullanılıyor — paralar gerçek değil', ur: 'ٹیسٹ نیٹ ورک — رقم اصل نہیں', id: 'Memakai jaringan uji — dana tidak nyata', pt: 'A usar redes de teste — os fundos não são reais' },
-  'settings.testnetOff': { zh: '正在使用真实网络', hi: 'असली नेटवर्क चालू', es: 'Usando redes reales', fr: 'Réseaux réels', ru: 'Используются реальные сети', tr: 'Gerçek ağlar kullanılıyor', ur: 'اصل نیٹ ورک استعمال ہو رہے ہیں', id: 'Memakai jaringan nyata', pt: 'A usar redes reais' },
-  'settings.testnetWarn': {
-    zh: '测试网模式已开启。代币没有价值，兑换不会影响真实资金。要进行真实交易，请关闭此项。',
-    hi: 'टेस्टनेट मोड चालू है। टोकन का कोई मूल्य नहीं और स्वैप असली फंड को नहीं छूते। असली ट्रेड के लिए इसे बंद करें।',
-    es: 'El modo testnet está activado. Los tokens no tienen valor y los intercambios no afectan a fondos reales. Desactívalo para operar de verdad.',
-    fr: 'Le mode testnet est activé. Les tokens n\'ont aucune valeur et les échanges n\'affectent pas de fonds réels. Désactivez-le pour trader réellement.',
-    ru: 'Включён режим тестовой сети. Токены не имеют ценности, обмены не затрагивают реальные средства. Отключите его для реальной торговли.',
-    tr: 'Test ağı modu açık. Tokenlerin değeri yoktur ve takaslar gerçek paraya etki etmez. Gerçek işlem için kapatın.',
-    ur: 'ٹیسٹ نیٹ موڈ آن ہے۔ ٹوکنز کی کوئی قیمت نہیں اور سویپ اصل رقم پر اثر نہیں ڈالتے۔ اصل ٹریڈ کے لیے اسے بند کریں۔',
-    id: 'Mode testnet aktif. Token tidak bernilai dan pertukaran tidak memengaruhi dana nyata. Matikan untuk berdagang sungguhan.',
-    pt: 'O modo testnet está ligado. Os tokens não têm valor e as trocas não afetam fundos reais. Desligue-o para negociar a sério.'
-  },
   'settings.evmNetwork': { zh: 'EVM 网络', hi: 'EVM नेटवर्क', es: 'Red EVM', fr: 'Réseau EVM', ru: 'Сеть EVM', tr: 'EVM ağı', ur: 'EVM نیٹ ورک', id: 'Jaringan EVM', pt: 'Rede EVM' },
   'settings.evmNetworkSub': { zh: '用于兑换的链', hi: 'स्वैप के लिए चेन', es: 'Cadena usada para intercambios', fr: 'Chaîne utilisée pour les échanges', ru: 'Сеть для обменов', tr: 'Takaslarda kullanılan zincir', ur: 'سویپ کے لیے چین', id: 'Rantai untuk pertukaran', pt: 'Cadeia usada nas trocas' },
   'settings.solana': { zh: 'Solana 集群', hi: 'Solana क्लस्टर', es: 'Clúster de Solana', fr: 'Cluster Solana', ru: 'Кластер Solana', tr: 'Solana kümesi', ur: 'Solana کلسٹر', id: 'Klaster Solana', pt: 'Cluster Solana' },

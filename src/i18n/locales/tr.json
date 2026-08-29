@@ -423,19 +423,10 @@
   "invest": {
     "simNotice": "Bu modül öğrenmek içindir: getiri simüledir ve sabit bir formülle sanal krediden ödenir; gerçek para toplanmaz ve riske atılmaz. Gerçek bir yatırım ürünü resmi izin gerektirir — Fanous Bazaar Pishgam bu lisansa sahiptir ve gerçek sürüm yol haritasındadır; o zamana kadar burası pratiktir."
   },
-  "stocks": {
-    "honestBody": "Tercihimiz bunu tek bir yerel pazarda değil, küresel olarak sunmak oldu. Apple hissesini temsil eden bir token her yargı alanında menkul kıymettir: ihracı için gerçek hisseleri saklayan lisanslı bir ihraççı, izahname ve dağıtım için aracı kurum lisansı gerekir. Bu uluslararası bir hukuk projesidir, bir yazılım özelliği değil — o yapı kurulana kadar sahip olmadığımız bir şeyi iddia etmek yerine sizi bu lisanslara bugün sahip olan ihraççılara yönlendiriyoruz."
-  },
   "rank": {
-    "demoNotice": "Sıralama gerçek kullanıcı etkinliğinden hesaplanır ve uygulamayı her açtığınızda sunucudan yenilenir.",
-    "emptyBoard": "Henüz kimse puan göndermedi. Bir takas yapın veya günlük giriş yapın; bu tablodaki ilk isim siz olun.",
     "title": "Sıralama",
     "points": "puan",
-    "you": "Siz",
-    "yourRank": "Sıra #{{n}}",
-    "unranked": "Henüz sıralanmadı",
     "tiers": "Seviyeler",
-    "top": "En iyi yatırımcılar",
     "quick": {
       "title": "Earn points quickly",
       "swap": "Swap +{{points}}",
