@@ -683,7 +683,8 @@
     "evidenceCurrent": "الأدلة التشغيلية الحالية موثّقة وضمن فترة صلاحيتها.",
     "statusUnavailable": "حالة التفعيل غير متاحة",
     "blockers": "Operational Notes",
-    "missing": "Evidence Details"
+    "missing": "Evidence Details",
+    "phases": "مراحل المواصفات"
   },
   "about": {
     "title": "من نحن",
@@ -2996,6 +2997,103 @@
     "confirm": {
       "title": "التأكيد مطلوب قبل التوقيع",
       "body": "راجع الشروط. لا يُوقَّع أي شيء حتى تؤكّده في محفظتك."
+    },
+    "tab": {
+      "plan": "خطة الربح"
+    },
+    "rail": {
+      "label": "شريط تحكم Intent OS",
+      "autonomy": "مستوى الاستقلالية",
+      "resume": "استئناف",
+      "pauseReason": "السبب (اختياري)",
+      "applyPause": "إيقاف لمدة ساعة",
+      "paused": "متوقف",
+      "pausedUntil": "متوقف · يستأنف خلال",
+      "stopped": "إيقاف طارئ",
+      "stoppedShort": "طارئ",
+      "pausedShort": "متوقف",
+      "running": "نشط",
+      "stopReason": "السبب (اختياري)",
+      "requestUnwind": "طلب إغلاق المراكز المفتوحة",
+      "applyStop": "إيقاف طارئ",
+      "stopActive": "التنفيذ محظور",
+      "confirmRelease": "اضغط مجددًا للتأكيد",
+      "agentRequested": "تم الطلب…",
+      "agentConnected": "الوكيل البشري متصل",
+      "restoredSafe": "استُعيدت حالة الشريط من سجل معدّل — يعمل في الحالة الأكثر أمانًا (إيقاف).",
+      "composeBlockedStop": "الإيقاف الطارئ مفعّل — التنفيذ محظور.",
+      "composeBlockedPause": "النظام متوقف — التنفيذ محظور.",
+      "composeResumes": "يمكنك مواصلة الكتابة؛ يُستأنف الإرسال تلقائيًا في",
+      "composeNote": "يمكنك مواصلة الكتابة، لكن لا يُرسل أي نية حتى يُحرَّر الشريط.",
+      "blocked": "الشريط متوقف — حرّره للإرسال"
+    },
+    "controls": {
+      "humanAgent": "وكيل بشري",
+      "railCollapse": "طي الشريط",
+      "pause": "إيقاف مؤقت",
+      "emergency_exit": "إيقاف طارئ"
+    },
+    "plan": {
+      "title": "خطة هدف الربح",
+      "readOnly": "اقتراح للقراءة فقط",
+      "targetMode": "الهدف حسب",
+      "pct": "نمو ٪",
+      "usd": "المبلغ النهائي USDC",
+      "targetValue": "قيمة الهدف",
+      "capital": "رأس المال (USDC)",
+      "horizon": "الأفق (أيام)",
+      "risk": {
+        "conservative": "متحفظ",
+        "balanced": "متوازن",
+        "aggressive": "جريء"
+      },
+      "build": "بناء الخطة",
+      "building": "سؤال الأسواق المباشرة…",
+      "failed": "تعذّر بناء الخطة — لم ترد تغذيات الأسواق. حاول بعد لحظات.",
+      "reachable": "قابل للتحقيق",
+      "unreachable": "بصراحة: غير قابل للتحقيق",
+      "summaryMissing": "الخطة",
+      "projectedYearly": "متوقع / سنة",
+      "targetAtHorizon": "الهدف عند نهاية الأفق",
+      "venuesLive": "فئات أسواق مباشرة",
+      "yearsEstimate": "سنة بالمعدلات الحالية",
+      "allocation": "التوزيع",
+      "yieldHaircut": "العوائد مخفّضة تحفّظًا؛ التمويل يحتاج فاصلًا معروفًا",
+      "class": {
+        "spot": "فوري",
+        "stocks": "الأسهم",
+        "dydx-global": "dYdX عالمي",
+        "futures": "عقود آجلة",
+        "yield-farm": "مزرعة عائد"
+      },
+      "live": "مباشر",
+      "noData": "بلا بيانات",
+      "honestHead": "ملاحظات صادقة",
+      "notGuaranteed": "هذه أرقام تقديرية من بيانات السوق الحية وليست وعودًا — العوائد غير مضمونة.",
+      "noAutoExecution": "هذه الخطة لا تنفّذ شيئًا؛ كل إجراء ما زال يتطلب تأكيدك وتوقيع محفظتك.",
+      "partialFeeds": "بعض تغذيات الأسواق غير متاحة؛ الخطة تبلغ بها بدلًا من التخمين."
+    },
+    "network": {
+      "walletVerification": "تحقق المحفظة وتعدد السلاسل",
+      "walletNotConnected": "لا محفظة متصلة — التحقق بانتظار محفظة حقيقية.",
+      "walletVerified": "تم التحقق من المحفظة على السلسلة الحالية",
+      "walletUnverified": "المحفظة متصلة — فشلت بعض الفحوص",
+      "verified": "متحقق منه",
+      "unverified": "غير متحقق",
+      "walletAddress": "العنوان",
+      "walletChain": "السلسلة",
+      "walletCoverage": "تغطية تعدد السلاسل",
+      "walletBoundary": "حد وصول الذكاء الاصطناعي للبيانات",
+      "walletVerifyNote": "التحقق لكل سلسلة ويفشل مغلقًا: صيغة العنوان، عضوية السلسلة، المزوّد، استجابة RPC والرصيد. لا تصل أي بيانات اعتماد خام لأي وكيل ذكاء اصطناعي.",
+      "check": {
+        "provider-present": "لا مزوّد محفظة",
+        "chain-id-present": "لا معرّف سلسلة",
+        "chain-supported": "سلسلة غير مدعومة",
+        "address-format": "صيغة عنوان خاطئة",
+        "rpc-reachable": "لم يرد RPC",
+        "balance-fetched": "الرصيد غير متاح",
+        "no-raw-credentials": "بيانات اعتماد خام في المدخل"
+      }
     }
   },
   "verdict": {
@@ -4144,6 +4242,9 @@
     },
     "broadcast": {
       "optIn": "أرسل هذه المعاملة إلى الشبكة بعد تأكيدي"
+    },
+    "activation": {
+      "title": "تفعيل Intent AI"
     }
   }
 }

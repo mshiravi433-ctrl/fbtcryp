@@ -291,6 +291,8 @@ import { activationReport } from './intentActivation.js';
 import { phaseStatusReport } from './intentPhaseStatus.js';
 import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
 import { activationConfigPresence } from './intentActivationConfig.js';
+import { collectVenueFeeds, buildProfitPlan, PROFIT_PLAN_SCHEMA } from './multiVenue.js';
+import { outputLocaleSupport } from '../src/lib/intent-ai/outputLocales.js';
 import { handleUnfreeze, handleFreeze, freezeStateReport } from './intentFreezeControl.js';
 import { auditStatus } from './intentAuditLog.js';
 import { simulatorEvidence } from './intentSimulator.js';
@@ -1465,6 +1467,42 @@ app.get('/api/intents/v1/activation-config', (_req, res) => {
   res.set('cache-control', 'public, max-age=10, s-maxage=10');
   return res.json(activationConfigPresence());
 });
+
+/* ── Phases 101–110: Multi-venue data bridge (stocks / dYdX / futures / farms) */
+app.get('/api/intents/v1/multi-venue/status', async (_req, res) => {
+  const status = await collectVenueFeeds();
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json(status);
+});
+
+/* ── Phases 106–108: customer profit-target plan (read-only proposal) ───── */
+app.post('/api/intents/v1/profit-plan', async (req, res) => {
+  const body = req.body || {};
+  const lang = String(body.lang || 'en').slice(0, 5).toLowerCase();
+  const horizonDays = Math.max(1, Math.min(3650, Number(body.horizonDays) || 180));
+  const capitalUsd = Math.max(0, Number(body.capitalUsd) || 0);
+  const riskProfile = ['conservative', 'balanced', 'aggressive'].includes(body.riskProfile)
+    ? body.riskProfile
+    : 'balanced';
+  const target = body.target && typeof body.target === 'object'
+    ? { mode: body.target.mode === 'usd' ? 'usd' : 'pct', value: Math.max(0, Number(body.target.value) || 0) }
+    : { mode: 'pct', value: 0 };
+  try {
+    const result = await buildProfitPlan({ target, horizonDays, capitalUsd, riskProfile, lang });
+    res.set('cache-control', 'no-store');
+    return res.json({ schema: PROFIT_PLAN_SCHEMA, ok: true, ...result });
+  } catch (e) {
+    return res.status(502).json({ schema: PROFIT_PLAN_SCHEMA, ok: false, code: 'PROFIT_PLAN_FAILED', detail: String(e?.message || '').slice(0, 120) });
+  }
+});
+
+/* ── Phases 121–130: Intent OS output locales ───────────────────────────── */
+app.get('/api/intents/v1/output-locales', (req, res) => {
+  const lang = String(req.query.lang || 'en').slice(0, 5).toLowerCase();
+  res.set('cache-control', 'public, max-age=300, s-maxage=300');
+  return res.json(outputLocaleSupport(lang));
+});
+
 
 /* ── Wave 2/4: Evidence Status Dashboard ──────────────────────────────── */
 app.get('/api/intents/v1/evidence-status', async (_req, res) => {

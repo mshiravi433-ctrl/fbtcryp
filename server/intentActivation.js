@@ -230,16 +230,16 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
     product: {
       name: 'FBT Intent AI',
       completedPhases: [1, 2, 3, 4, 5, 6, 7],
-      specificationCompletedThrough: 100,
+      specificationCompletedThrough: 150,
       numberedPhasesRemaining: 0,
       originalRoadmapComplete: true,
       /* Backwards-compatible Phase 8 fields remain above; the authoritative
          specification status is exposed separately below. */
-      currentPhase: 100,
+      currentPhase: 150,
       currentPhaseImplementation: 'implemented',
       currentPhaseOperational: live ? 'operational' : phase8Operational ? 'ready' : 'partial',
-      specificationImplementedThrough: 100,
-      specificationOperationalThrough: specificationStatus.specificationOperationalThrough ?? (live ? 100 : 7),
+      specificationImplementedThrough: 150,
+      specificationOperationalThrough: specificationStatus.specificationOperationalThrough ?? (live ? 150 : 7),
       specificationPhaseCount: specificationStatus.phases.length,
       operationalPhaseCount: specificationStatus.operationalPhaseCount ?? 0,
       operationalActivationRequired: !live,

@@ -37,7 +37,12 @@ try {
   /* ── with the full activation env set ── */
   process.env.NODE_ENV = 'test';
   setEnv({
-    BLOB_READ_WRITE_TOKEN: 'blob_test_token_not_a_real_credential_123456',
+    /* Format-valid fixture (never a real credential): the server only accepts
+       the Vercel Blob token format, so a fixture that doesn't match it would
+       leave every blob-gated kind listed as missing and never exercise the
+       configured path. The leak checks below prove the value itself is never
+       rendered. */
+    BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_fbt_probe_fixture_1234567890abcdef',
     RPC_URL: 'https://arb1.arbitrum.io/rpc',
     VITE_WALLETCONNECT_PROJECT_ID: 'probe-project-id-123456',
     INTENT_INDEPENDENT_REVIEWERS: 'reviewer-1:MCowBQYDK2VwAyEAJY3vKKGrUeKcMEkZHO95SkT55MEWLQDZHZd/jvuZ2AE=',

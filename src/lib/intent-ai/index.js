@@ -1195,4 +1195,65 @@ export {
   assertBroadcastAllowed
 } from './draftTransactionBridge.js';
 
+/* ── Phases 101–150: multi-venue profit engine, output locales, wallet &
+     multichain verification, and the rail control plane. ──────────────── */
+export {
+  PROFIT_PLAN_SCHEMA,
+  MULTI_VENUE_SCHEMA,
+  VENUE_CLASSES,
+  RISK_PROFILES,
+  LEVERAGE_CAPS,
+  ALLOCATION_BASE,
+  YIELD_HAIRCUT,
+  normalizeVenueRows,
+  annualiseFunding,
+  venueClassHealth,
+  planForProfitTarget,
+  trackTargetProgress,
+  suggestVenueSwitch
+} from './multiVenuePlanner.js';
+
+export {
+  OUTPUT_LOCALE_SCHEMA,
+  OUTPUT_LOCALES,
+  formatNumber,
+  formatPct,
+  renderTemplate,
+  localizePlan,
+  localizeProgress,
+  outputLocaleSupport
+} from './outputLocales.js';
+
+export {
+  WALLET_VERIFY_SCHEMA,
+  PROVIDER_KINDS,
+  verifyWalletChain,
+  multichainCoverage,
+  walletSecurityPosture
+} from './walletChainVerify.js';
+
+export {
+  RAIL_CONTROL_SCHEMA,
+  RAIL_LAYOUT_SCHEMA,
+  PAUSE_PRESETS_MS,
+  RAIL_STATES,
+  AUTONOMY_ICONS,
+  RAIL_ACTIONS,
+  RAIL_SPACING,
+  railLayoutDescriptor,
+  initialRailState,
+  mayExecute,
+  pauseExecution,
+  resumeExecution,
+  engageEmergencyStop,
+  releaseEmergencyStop,
+  requestHumanAgent,
+  connectHumanAgent,
+  endHumanAgent,
+  setAutonomyLevel,
+  toggleRail,
+  snapshot,
+  restore
+} from './intentRailControls.js';
+
 export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';

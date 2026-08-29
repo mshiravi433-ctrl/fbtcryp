@@ -11988,10 +11988,12 @@ export default function run() {
       /showSpotlight \? SPOTLIGHT_MS : BRAND_MS/.test(header));
     t('header market polling is slow and does not add a news network request',
       /3 \* 60 \* 1000/.test(header) && !/getNews/.test(header));
-    t('reduced-motion users keep a static brand with no spotlight transition',
-      /<BrandMark still=\{still\}/.test(header) &&
-      /animate=\{still \? \{ rotateY: 0 \}/.test(header) &&
-      /prefers-reduced-motion:\s*reduce[\s\S]*?header-brand-layer[\s\S]*?transition:\s*none/.test(css));
+    t('the brand coin never flips edge-on; reduced-motion users get a fully static brand',
+      /<BrandMark\s*\/>/.test(header) &&
+      !/rotateY/.test(header) &&
+      /transformBox:\s*'fill-box'/.test(header) &&
+      /prefers-reduced-motion:\s*reduce[\s\S]*?header-brand-layer[\s\S]*?transition:\s*none/.test(css) &&
+      /prefers-reduced-motion:\s*reduce[\s\S]*?brand-mark[\s\S]*?animation:\s*none/.test(css));
     t('insight images decode asynchronously and fail back to lightweight icons',
       /decoding="async"/.test(panel) && /onError=\{\(event\) => \{ event\.currentTarget\.hidden = true; \}\}/.test(panel) &&
       /decoding="async"/.test(header) && /IconClock/.test(header) && /IconBuilding/.test(header));

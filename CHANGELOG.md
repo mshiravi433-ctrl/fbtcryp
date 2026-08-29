@@ -1,8 +1,67 @@
+## Unreleased — Phases 101–150: effectiveness wave (multi-venue profit engine, 12-language output, wallet verification, horizontal rail)
+
+- **`phase-status` now covers Phases 10–150.** `SPEC_PHASES` gained the
+  101–150 rows; the report publishes `specificationImplementedThrough: 150`,
+  `phaseCount: 141` and per-phase verdicts. Phases 11–20 and 51–150 share the
+  reviewed release gate; no row is ever painted live while it still has
+  blockers.
+- **Multi-venue profit engine (101–116).** New
+  `src/lib/intent-ai/multiVenuePlanner.js` + `server/multiVenue.js` bridge the
+  four live venue feeds — Avantis equities (stocks), the dYdX indexer
+  (global perp markets), CoinGecko derivatives (interval-aware funding APR)
+  and the safety-filtered DefiLlama pools (farms) — into one honest plan for
+  the customer's profit target (`GET /api/intents/v1/multi-venue/status`,
+  `POST /api/intents/v1/profit-plan`). Funding is annualised only from a
+  known interval; yields are haircut; unreachable targets are reported
+  instead of stretched with leverage; the plan is always a read-only
+  proposal behind the confirmation gate.
+- **Intent OS output locales (121–130).** `outputLocales.js` renders plan
+  summaries, progress lines and honest notes in the twelve UI languages with
+  locale digits/separators and a visible `(EN)` fallback marker
+  (`GET /api/intents/v1/output-locales`).
+- **Wallet & multichain verification (131–140).** `walletChainVerify.js`
+  verifies per-chain, fail-closed: EIP-55/base58 address format, chain
+  membership, provider kind, RPC answer, balance and the no-raw-credentials
+  boundary; `multichainCoverage` reports coverage honestly. The Network tab
+  renders the live verification card.
+- **Horizontal control rail (117–120, 141–150).** `intentRailControls.js`
+  state machine + `IntentRail` component: L1–L3 autonomy icons (display
+  only — promotion stays earned, never tapped), expandable PAUSE (presets +
+  resume countdown) and EMERGENCY STOP (fail-closed, confirm-to-release,
+  optional unwind request), HUMAN AGENT escalation, rail collapse that never
+  collapses the safety state, and a tamper-safe snapshot that degrades to
+  STOPPED. A paused/stopped rail gates the compose surface — composing stays
+  allowed, emitting is blocked with a visible notice.
+- **Intent OS page:** new `plan` tab (`ProfitPlanner`) with the localized
+  proposal, allocation table and honest notes; wallet verification card in
+  the Network tab; compact rail styling in `intent-os.css`.
+- **Probes:** `phase101-multi-venue`, `phase117-rail-controls`,
+  `phase121-output-locales`, `phase131-wallet-chain`,
+  `phase141-rail-layout` (136 checks); `npm run test:phases101-150`.
+  Existing phase-count assertions updated to 141 phases / through 150.
+- **i18n:** 252 new keys merged into `en`, `fa` and `ar`
+  (`scripts/merge-intent-150-i18n.mjs`); the static `t()` scan is clean
+  (`activation.phases` / `intentAI.activation.title` were pre-existing gaps,
+  now closed).
+- **Test-runner fix:** the builds that write the shipped `dist/` in
+  `test/run.mjs` now run with `NODE_ENV` stripped (`npxShip`) — several
+  intent-ai probes set `NODE_ENV=test` in-process and the build subprocesses
+  inherited it, which made vite emit a development JSX transform against a
+  production React bundle (blackout boot crash: "jsxDEV is not a function")
+  and inflated the first-paint budget measurement to the dev artifact. Vite
+  already defaults `vite build` to production; the boot, budget and
+  arcade/speculation builds now measure what ships.
+- **Probe fixture fix:** `activation-config-probe` now uses a format-valid
+  Vercel Blob token fixture (`vercel_blob_rw_…`) — the server accepts only
+  the real token format, so the old fixture could never exercise the
+  configured path (pre-existing 10/12 on main; now 12/12, and the leak
+  checks still prove no value is ever rendered).
+
 ## Unreleased — Activation surface completed through Phase 100 + durable evidence
 
-- **`phase-status` now covers Phases 10–100.** `SPEC_PHASES` gained 50 rows
+- **`phase-status` previously covered Phases 10–100.** `SPEC_PHASES` gained 50 rows
   (51–100) mapping every later arc to its module(s) and its
-  `test/intent-ai/phaseNN-*.mjs` probe; the report publishes
+  `test/intent-ai/phaseNN-*.mjs` probe; the report published
   `specificationImplementedThrough: 100`, `phaseCount: 91` and per-phase
   verdicts. Product phases 11–20 and 51–100 share the reviewed release gate;
   the 22–50 control planes keep publishing their own evaluator verdicts — no

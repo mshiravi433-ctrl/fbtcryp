@@ -62,6 +62,26 @@ process.env.ECOSYSTEM_WRITE_RATE_LIMIT = process.env.ECOSYSTEM_WRITE_RATE_LIMIT 
 
 const npx = (args) => execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
+/*
+ * The shipped-bundle builds must measure what actually ships. Several
+ * intent-ai probes set process.env.NODE_ENV = 'test' in-process (so server
+ * modules take their fail-closed paths), and execFileSync forwards the whole
+ * environment — which makes vite compile a DEVELOPMENT React bundle
+ * (plugin-react keys the JSX transform off NODE_ENV) while the IIFE config's
+ * define pins `production` in the code, crashing the blackout boot test with
+ * "jsxDEV is not a function" and inflating the first-paint budget to the dev
+ * artifact. Vercel builds with NODE_ENV=production, and vite itself defaults
+ * to production for `build`, so strip the inherited value for the builds
+ * that write the shipped `dist/` (boot checks, first-paint budget, and the
+ * arcade/speculation chunk scans). The gate/flow/screens suites intentionally
+ * keep the inherited value: they need react.development for act().
+ */
+const npxShip = (args) => {
+  const env = { ...process.env };
+  delete env.NODE_ENV;
+  return execFileSync('npx', args, { stdio: ['ignore', 'pipe', 'pipe'], env });
+};
+
 /** jsdom lacks a handful of globals React and framer-motion expect. */
 function installDom(html = '<!doctype html><html><body><div id="r"></div></body></html>') {
   const dom = new JSDOM(html, { url: 'https://localhost/', pretendToBeVisual: true });
@@ -558,9 +578,9 @@ report('units (tokens · payout · faq · news)', await runUnits());
    bundle here so `npm test` is self-contained in a fresh clone rather than
    depending on somebody having run `npm run build` first. */
 console.log('▸ building shipped static bundle for boot checks…');
-npx(['vite', 'build', '--logLevel', 'error']);
+npxShip(['vite', 'build', '--logLevel', 'error']);
 console.log('▸ building app as a classic script for jsdom…');
-npx(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);
+npxShip(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);
 console.log('▸ running boot test with all external hosts unreachable…');
 const bootRows = (await import('./boot-e2e.mjs')).default;
 report('boot under a dead network', bootRows);
@@ -668,7 +688,7 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
   }
 
   rmSync('dist', { recursive: true, force: true });
-  npx(['vite', 'build', '--logLevel', 'error']);
+  npxShip(['vite', 'build', '--logLevel', 'error']);
   const defaultAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
   rows.push(['store build emits no arcade chunk', !defaultAssets.some((f) => gameChunk.test(f))]);
   rows.push(['store build emits no speculation chunk', !defaultAssets.some((f) => specChunk.test(f))]);
@@ -676,10 +696,15 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
 
   /* ---- B. the speculation opt-in still works, and still has no games ---- */
   rmSync('dist', { recursive: true, force: true });
-  execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, VITE_ENABLE_SPECULATION: 'true' }
-  });
+  {
+    /* Ship-flavor build too (see npxShip): this writes dist/ for the budget. */
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'true' };
+    delete env.NODE_ENV;
+    execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env
+    });
+  }
   const fullAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
   rows.push([
     'VITE_ENABLE_SPECULATION=true does emit those screens',
@@ -713,7 +738,7 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
 
   // Leave the tree in the store-safe state.
   rmSync('dist', { recursive: true, force: true });
-  npx(['vite', 'build', '--logLevel', 'error']);
+  npxShip(['vite', 'build', '--logLevel', 'error']);
 
   /*
    * ─── THE VOCABULARY A CONTENT FILTER ACTUALLY SEES ────────────────────────

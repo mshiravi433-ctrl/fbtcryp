@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AnimatedSettings, useStill } from './AnimatedIcon';
 import { IconBuilding, IconClock, IconTrend } from './Icons';
+import { coinImage } from '../lib/coinImage';
 import { usePoints } from '../hooks/usePoints';
 import { usePoll } from '../hooks/useMarket';
 import { getMarkets } from '../lib/api';
@@ -18,20 +19,28 @@ import { useSettingsStore } from '../store/useSettingsStore';
 const BRAND_MS = 2 * 60 * 1000;
 const SPOTLIGHT_MS = 60 * 1000;
 
-function BrandMark({ still = false }) {
+/**
+ * The brand coin is drawn STATIC inside the slowly-spinning gradient tile.
+ * It used to flip edge-on (a 0→360° Y-axis spin): every cycle the coin
+ * vanished for the mirrored half of the flip, which read as broken ("the
+ * logo disappears while rotating"). The tile keeps the motion; the coin
+ * never leaves view. `transformBox: fill-box` pins the origin to the
+ * drawing itself so no browser can rotate it around a view-box corner and
+ * swing it sideways.
+ */
+function BrandMark() {
   return (
     <div className="brand-mark">
-      <motion.svg
-        width="19"
-        height="19"
+      <svg
+        width="17"
+        height="17"
         viewBox="0 0 24 24"
         fill="none"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        animate={still ? { rotateY: 0 } : { rotateY: [0, 360] }}
-        transition={still ? { duration: 0 } : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ position: 'relative', zIndex: 2 }}
+        aria-hidden="true"
+        style={{ position: 'relative', zIndex: 2, transformBox: 'fill-box', transformOrigin: '50% 50%' }}
       >
         <defs>
           <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
@@ -45,13 +54,17 @@ function BrandMark({ still = false }) {
         <path d="M15.6 13.4a3.8 3.8 0 0 1-6.5 1.4" stroke="url(#brandGrad)" />
         <path d="M14.6 6.6v2.9h-2.9" stroke="url(#brandGrad)" />
         <path d="M9.4 17.4v-2.9h2.9" stroke="url(#brandGrad)" />
-      </motion.svg>
+      </svg>
     </div>
   );
 }
 
 function SpotlightMark({ spotlight }) {
-  const src = spotlight?.item?.image || spotlight?.item?.icon;
+  /* CoinGecko serves padded 250px "large" artwork; stretched into the 30px
+     mark with `cover` that padding makes the coin look pushed down and
+     cropped. Ask for the tight 50px variant and render it `contain`-ed and
+     centered (CSS) so the whole coin is always visible. */
+  const src = coinImage(spotlight?.item?.image, 'small') || spotlight?.item?.icon;
   const Fallback = spotlight?.kind === 'event' ? IconClock : spotlight?.kind === 'company' ? IconBuilding : IconTrend;
   return (
     <span className="header-spotlight-mark" aria-hidden="true">
@@ -161,7 +174,7 @@ export default function Header() {
         data-spotlight={visibleSpotlight ? 'true' : 'false'}
       >
         <div className="brand header-brand-layer" aria-hidden={visibleSpotlight}>
-          <BrandMark still={still} />
+          <BrandMark />
           <div className="brand-text">
             <span className="brand-name gradient-text">FBT Swap</span>
             <span className="brand-sub">decentralized exchange</span>

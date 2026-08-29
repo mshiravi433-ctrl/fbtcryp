@@ -862,7 +862,8 @@
     "evidenceCurrent": "شواهد عملیاتی فعلی معتبر و در بازهٔ اعتبار هستند.",
     "statusUnavailable": "وضعیت فعال‌سازی در دسترس نیست",
     "blockers": "Operational Notes",
-    "missing": "Evidence Details"
+    "missing": "Evidence Details",
+    "phases": "فازهای مشخصات"
   },
   "about": {
     "title": "درباره ما",
@@ -4020,7 +4021,8 @@
       "proofs": "اثبات‌ها",
       "network": "شبکه",
       "agents": "ایجنت",
-      "strategies": "استراتژی"
+      "strategies": "استراتژی",
+      "plan": "برنامه سود"
     },
     "compose": {
       "choose": "نتیجه را انتخاب کن",
@@ -4382,7 +4384,27 @@
       "txVerificationBindings": "اتصال‌های امضاشدهٔ حساب",
       "txVerificationSchema": "اسکیمای گزارش راستی‌آزمایی",
       "txVerificationWalletProof": "طرح اثبات کیف پول",
-      "txVerificationProviderIndependence": "استقلال provider"
+      "txVerificationProviderIndependence": "استقلال provider",
+      "walletVerification": "بررسی کیف پول و چندزنجیره‌ای",
+      "walletNotConnected": "کیف پولی متصل نیست — بررسی در انتظار یک کیف پول واقعی است.",
+      "walletVerified": "کیف پول روی زنجیرهٔ فعلی تأیید شد",
+      "walletUnverified": "کیف پول متصل است — برخی بررسی‌ها رد شد",
+      "verified": "تأییدشده",
+      "unverified": "تأییدنشده",
+      "walletAddress": "آدرس",
+      "walletChain": "زنجیره",
+      "walletCoverage": "پوشش چندزنجیره‌ای",
+      "walletBoundary": "مرز دسترسی AI به اعتبارنامه",
+      "walletVerifyNote": "بررسی به‌ازای هر زنجیره و fail-closed است: قالب آدرس، عضویت زنجیره، ارائه‌دهنده، پاسخ RPC و موجودی باید همه درست باشند. اعتبارنامهٔ خام هرگز به هیچ عامل هوش مصنوعی نمی‌رسد.",
+      "check": {
+        "provider-present": "بدون ارائه‌دهندهٔ کیف پول",
+        "chain-id-present": "بدون شناسهٔ زنجیره",
+        "chain-supported": "زنجیره پشتیبانی نمی‌شود",
+        "address-format": "قالب آدرس نادرست",
+        "rpc-reachable": "RPC پاسخ نداد",
+        "balance-fetched": "موجودی در دسترس نیست",
+        "no-raw-credentials": "اعتبارنامهٔ خام در ورودی"
+      }
     },
     "revert": {
       "abort-all": "لغو همه",
@@ -4490,6 +4512,78 @@
     "confirm": {
       "title": "پیش از امضا، تأیید لازم است",
       "body": "شرایط را بررسی کن. تا وقتی در کیف پول خودت تأیید نکنی، چیزی امضا نمی‌شود."
+    },
+    "rail": {
+      "label": "ریل کنترل Intent OS",
+      "autonomy": "سطح خودمختاری",
+      "resume": "ادامه",
+      "pauseReason": "دلیل (اختیاری)",
+      "applyPause": "توقف برای ۱ ساعت",
+      "paused": "متوقف‌شده",
+      "pausedUntil": "در حالت توقف · ادامه خودکار تا",
+      "stopped": "توقف اضطراری",
+      "stoppedShort": "اضطرار",
+      "pausedShort": "توقف",
+      "running": "فعال",
+      "stopReason": "دلیل (اختیاری)",
+      "requestUnwind": "درخواست بستن موقعیت‌های باز",
+      "applyStop": "توقف اضطراری",
+      "stopActive": "اجرا مسدود شد",
+      "confirmRelease": "برای آزادسازی دوباره بزن",
+      "agentRequested": "درخواست شد…",
+      "agentConnected": "عامل انسانی متصل",
+      "restoredSafe": "وضعیت ریل از یک رکورد تغییرکرده بازیابی شد — امن‌ترین حالت (توقف) فعال است.",
+      "composeBlockedStop": "توقف اضطراری فعال است — اجرا مسدود است.",
+      "composeBlockedPause": "سیستم در حالت توقف است — اجرا مسدود است.",
+      "composeResumes": "می‌توانید به نوشتن ادامه دهید؛ ارسال به‌صورت خودکار در",
+      "composeNote": "می‌توانید به نوشتن ادامه دهید، اما تا آزادسازی ریل هیچ نیتی ارسال نمی‌شود.",
+      "blocked": "ریل متوقف است — برای ارسال آزادش کنید"
+    },
+    "controls": {
+      "humanAgent": "عامل انسانی",
+      "railCollapse": "جمع‌کردن ریل",
+      "pause": "توقف",
+      "emergency_exit": "توقف اضطراری"
+    },
+    "plan": {
+      "title": "برنامهٔ هدف سود",
+      "readOnly": "پیشنهاد فقط‌خواندنی",
+      "targetMode": "هدف بر حسب",
+      "pct": "رشد ٪",
+      "usd": "مبلغ نهایی USDC",
+      "targetValue": "مقدار هدف",
+      "capital": "سرمایه (USDC)",
+      "horizon": "افق (روز)",
+      "risk": {
+        "conservative": "محافظه‌کار",
+        "balanced": "متوازن",
+        "aggressive": "تهاجمی"
+      },
+      "build": "ساخت برنامه",
+      "building": "در حال پرسش از بازارهای زنده…",
+      "failed": "برنامه ساخته نشد — فید بازارها پاسخ نداد. لحظاتی بعد دوباره تلاش کنید.",
+      "reachable": "دست‌یافتنی",
+      "unreachable": "صادقانه بگوییم دست‌نیافتنی",
+      "summaryMissing": "برنامه",
+      "projectedYearly": "موردانتظار / سال",
+      "targetAtHorizon": "هدف در پایان افق",
+      "venuesLive": "کلاس بازار زنده",
+      "yearsEstimate": "سال با نرخ فعلی",
+      "allocation": "تخصیص",
+      "yieldHaircut": "بازده‌ها محافظه‌کارانه‌اند؛ فاندینگ فقط با بازهٔ معلوم",
+      "class": {
+        "spot": "اسپات",
+        "stocks": "سهام",
+        "dydx-global": "dYdX سراسری",
+        "futures": "فیوچرز",
+        "yield-farm": "فارم سود"
+      },
+      "live": "زنده",
+      "noData": "بدون داده",
+      "honestHead": "یادداشت‌های صادقانه",
+      "notGuaranteed": "این ارقام برآوردِ دادهٔ زندهٔ بازارند، نه وعده — سود تضمین‌شده نیست.",
+      "noAutoExecution": "این برنامه هیچ کاری اجرا نمی‌کند. هر اقدام همچنان به تأیید و امضای کیف پول شما نیاز دارد.",
+      "partialFeeds": "برخی فیدهای بازار در دسترس نیستند؛ برنامه به‌جای حدس‌زدن، همان را گزارش می‌کند."
     }
   },
   "whales": {
@@ -5788,7 +5882,7 @@
     },
     "sovereignty": {
       "title": "خروج شما — همه‌چیز را بردارید و بروید",
-      "exitExplained": "همه‌چیز را در دو مرحله بردارید و بروید. بدون هزینه، بدون دورهٔ انتظار، بدون تیکت پشتیبانی.",
+      "exitExplained": "می‌توانید همه‌چیز را بردارید و بروید. دو مرحله، بدون هزینه، بدون دورهٔ انتظار.",
       "exitDetails": "{{steps}} مرحله · فرمت باز · هزینه: {{fee}}",
       "pathOpen": "خروج باز",
       "prepareTitle": "آماده‌سازی بستهٔ کامل من",
@@ -5800,7 +5894,6 @@
       "confirmLabel": "بله، همه‌چیز را بردار و برو",
       "receiptTitle": "اثبات خروج",
       "receiptRef": "شناسه {{proof}}",
-      "exitExplained": "می‌توانید همه‌چیز را بردارید و بروید. دو مرحله، بدون هزینه، بدون دورهٔ انتظار.",
       "packageReady": "خروجی کامل شما آماده است: {{stores}} انبار داده، با فرمت باز JSON.",
       "exportIncomplete": "خروجی {{missing}} انبار داده را ندارد، پس چیزی حذف نشد.",
       "exportFailed": "خروجی آماده نشد.",
@@ -5814,6 +5907,9 @@
     },
     "broadcast": {
       "optIn": "بعد از تأیید من، این تراکنش به شبکه فرستاده شود"
+    },
+    "activation": {
+      "title": "فعال‌سازی Intent AI"
     }
   }
 }
