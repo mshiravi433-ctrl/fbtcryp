@@ -1256,4 +1256,37 @@ export {
   restore
 } from './intentRailControls.js';
 
-export const INTENT_AI_VERSION = 'spec65.gap-fill.contracts.fail-closed.v1';
+/* ── Phases 151–200: durable recovery, bounded portfolio autonomy, atomic
+   single-chain intents, venue compliance and realised-profit settlement. ── */
+export {
+  AUTONOMOUS_NETWORK_SCHEMA,
+  RECOVERY_JOURNAL_SCHEMA,
+  PORTFOLIO_GUARD_SCHEMA,
+  PERFORMANCE_FEE_BPS,
+  MAX_RECOVERY_JOBS,
+  MAX_JOB_EVENTS,
+  RECOVERY_STORAGE_KEY,
+  createRecoveryJournal,
+  saveRecoveryJob,
+  appendRecoveryEvent,
+  restoreRecoveryJournal,
+  exportRecoveryBundle,
+  importRecoveryBundle,
+  persistRecoveryJournal,
+  loadRecoveryJournal,
+  diagnoseRecovery,
+  VENUE_CAPABILITIES,
+  venueOptions,
+  compileAtomicIntent,
+  createPortfolioGuard,
+  evaluatePortfolioGuard,
+  createWalletAgentProfile,
+  rankAgents,
+  calculatePerformanceFee,
+  buildProfitSettlement,
+  cexEligibility,
+  evidenceLearningChecklist,
+  autonomousScenarios
+} from './autonomousIntentNetwork.js';
+
+export const INTENT_AI_VERSION = 'intent-os.phase200.bounded-autonomy.v1';

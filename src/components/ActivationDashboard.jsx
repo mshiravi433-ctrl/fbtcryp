@@ -302,8 +302,21 @@ export function ActivationDashboard() {
             : t('activation.pendingBody', 'This deployment runs fail-closed: activation is granted by operational evidence, not by a switch. The retired launch-freeze control no longer gates anything — the evidence count above is what gates it.')}
         </p>
         {!launchAllowed && (
-          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', margin: 'var(--sp-1) 0 0' }}>
-            {t('activation.evidenceCurrent', 'Current operational evidence is attested and within its validity window.')}
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', margin: 'var(--sp-1) 0 0' }} data-testid="activation-evidence-verdict">
+            {evidenceStored === 0
+              ? t('activation.evidenceNone', { defaultValue: 'No current operational evidence is stored. {{required}} verified kinds are required.', required: evidenceRequired })
+              : evidenceStored < evidenceRequired
+                ? t('activation.evidencePartial', {
+                    defaultValue: '{{stored}} current evidence kinds are valid, but the set is incomplete: {{missing}} of {{required}} are still missing.',
+                    stored: evidenceStored,
+                    missing: evidenceRequired - evidenceStored,
+                    required: evidenceRequired
+                  })
+                : t('activation.evidenceCompleteBlocked', {
+                    defaultValue: 'All {{required}} evidence kinds are present, but activation is still blocked by {{blockers}} operational checks.',
+                    required: evidenceRequired,
+                    blockers: allBlockers.length
+                  })}
           </p>
         )}
       </div>

@@ -395,7 +395,7 @@ export default function useIntentExecution({
   }, [enforced, lifecycle, advance]);
 
   /** Evidence block for the v2 execution proof. Contains no calldata. */
-  const proofEvidence = useCallback(({ txHash, receipt, approvalTxHash = null, confirmationLatencyMs = null, actualOutput = null, predictedOutput = null }) => ({
+  const proofEvidence = useCallback(({ txHash, receipt, approvalTxHash = null, confirmationLatencyMs = null, actualOutput = null, actualOutputSource = null, predictedOutput = null }) => ({
     lifecycleSchema: lifecycle?.schema ?? 'fbt.intent-lifecycle.v1',
     lifecyclePolicyVersion: lifecycle?.policyVersion ?? null,
     lifecycleFinalStatus: lifecycle?.status ?? null,

@@ -1,5 +1,5 @@
 /**
- * Persistent cache backed by Vercel Blob.
+ * Persistent cache backed by Upstash Redis REST or Vercel Blob.
  *
  * WHY THIS EXISTS
  * ---------------------------------------------------------------------------
@@ -19,9 +19,29 @@
  */
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN || '';
+const UPSTASH_URL = String(process.env.UPSTASH_REDIS_REST_URL || '').trim().replace(/\/+$/, '');
+const UPSTASH_TOKEN = String(process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
 const PREFIX = 'ai-cache/';
+const PROVIDER_TIMEOUT_MS = 6_000;
 
-export const blobConfigured = () => Boolean(TOKEN);
+// Pin credential-bearing requests to Upstash-owned Redis hosts. This rejects
+// paths, query strings, localhost and operator typos before fetch().
+export const upstashConfigured = () => /^https:\/\/[a-z0-9-]+\.upstash\.io$/i.test(UPSTASH_URL) && UPSTASH_TOKEN.length >= 20;
+export const blobConfigured = () => Boolean(TOKEN) || upstashConfigured();
+
+/** Public, secret-free storage status for activation and diagnostics. */
+export function durableBackendStatus() {
+  return {
+    configured: blobConfigured(),
+    vercelBlob: Boolean(TOKEN),
+    upstashRedis: upstashConfigured(),
+    preferred: upstashConfigured() ? 'upstash-redis' : (TOKEN ? 'vercel-blob' : 'memory'),
+    /* Upstash fully suppresses Blob operations when both are configured. This
+       prevents a paused/quota-exhausted Blob account from continuing to burn
+       Advanced Requests. */
+    fallback: null
+  };
+}
 
 let blobApi = null;
 
@@ -43,61 +63,104 @@ function safeKey(key) {
   return PREFIX + encodeURIComponent(key).replace(/%/g, '_') + '.json';
 }
 
-/**
- * Read a cached entry. Returns null on miss, expiry, or any failure —
- * callers treat all three the same way.
- */
-export async function blobGet(key) {
+/** Run one Redis command over Upstash REST without exposing credentials. */
+async function upstashCommand(command) {
+  if (!upstashConfigured()) return { ok: false, result: null };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  try {
+    const response = await fetch(UPSTASH_URL, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${UPSTASH_TOKEN}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(command),
+      signal: controller.signal,
+      cache: 'no-store'
+    });
+    if (!response.ok) return { ok: false, result: null };
+    const body = await response.json();
+    if (body?.error) return { ok: false, result: null };
+    return { ok: true, result: body?.result ?? null };
+  } catch {
+    return { ok: false, result: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function upstashGetEntry(path) {
+  const answer = await upstashCommand(['GET', path]);
+  if (!answer.ok || typeof answer.result !== 'string') return null;
+  try { return JSON.parse(answer.result); } catch { return null; }
+}
+
+async function upstashSetEntry(path, entry, ttlMs) {
+  const seconds = Math.max(60, Math.ceil(Number(ttlMs) / 1000));
+  const answer = await upstashCommand(['SET', path, JSON.stringify(entry), 'EX', seconds]);
+  return answer.ok && answer.result === 'OK';
+}
+
+async function vercelGetEntry(path) {
   const mod = await api();
   if (!mod) return null;
-
   try {
     // `head` gives us the URL without downloading; then a plain fetch.
-    const meta = await mod.head(safeKey(key), { token: TOKEN }).catch(() => null);
+    const meta = await mod.head(path, { token: TOKEN }).catch(() => null);
     if (!meta?.url) return null;
-
     const res = await fetch(meta.url, { cache: 'no-store' });
     if (!res.ok) return null;
-
-    const entry = await res.json();
-    if (!entry || typeof entry.expires !== 'number') return null;
-    if (Date.now() > entry.expires) return null;
-
-    return entry.value;
+    return await res.json();
   } catch {
     return null;
   }
 }
 
-/** Write an entry. Fire-and-forget: never let a cache write fail a request. */
-export async function blobSet(key, value, ttlMs) {
+async function vercelSetEntry(path, entry, ttlMs) {
   const mod = await api();
   if (!mod) return false;
-
   try {
-    await mod.put(
-      safeKey(key),
-      JSON.stringify({ value, expires: Date.now() + ttlMs, at: Date.now() }),
-      {
-        token: TOKEN,
-        access: 'public',
-        contentType: 'application/json',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        // Blob's own retention; generous vs. our logical TTL so we control expiry.
-        cacheControlMaxAge: Math.max(60, Math.floor(ttlMs / 1000))
-      }
-    );
+    await mod.put(path, JSON.stringify(entry), {
+      token: TOKEN,
+      access: 'public',
+      contentType: 'application/json',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      cacheControlMaxAge: Math.max(60, Math.floor(ttlMs / 1000))
+    });
     return true;
-  } catch (e) {
-    console.warn('[blob] write failed:', e?.message);
+  } catch {
     return false;
   }
 }
 
 /**
- * Two-tier cache: memory first (free, instant), then Blob (survives cold
- * starts), then generate.
+ * Read a cached entry. Upstash fully replaces Blob when configured. We do not
+ * fall through on a Redis miss: doing so would turn every legitimate cache
+ * miss into another billable/blocked Blob Advanced Request.
+ */
+export async function blobGet(key) {
+  const path = safeKey(key);
+  const entry = upstashConfigured()
+    ? await upstashGetEntry(path)
+    : await vercelGetEntry(path);
+  if (!entry || typeof entry.expires !== 'number' || Date.now() > entry.expires) return null;
+  return entry.value;
+}
+
+/** Upstash fully suppresses Blob writes when both credentials still exist. */
+export async function blobSet(key, value, ttlMs) {
+  const path = safeKey(key);
+  const entry = { value, expires: Date.now() + ttlMs, at: Date.now() };
+  return upstashConfigured()
+    ? upstashSetEntry(path, entry, ttlMs)
+    : vercelSetEntry(path, entry, ttlMs);
+}
+
+/**
+ * Two-tier cache: memory first (free, instant), then the configured durable
+ * backend (survives cold starts), then generate.
  *
  * `memo` is the Map-based cache from cache.js so a warm function still avoids
  * the network round-trip entirely.
@@ -113,7 +176,7 @@ export async function withPersistentCache(key, ttlMs, producer, memo) {
   const stored = await blobGet(key);
   if (stored) {
     memo?.set(key, { value: stored, expires: Date.now() + ttlMs, at: Date.now() });
-    return { value: stored, cached: true, tier: 'blob' };
+    return { value: stored, cached: true, tier: upstashConfigured() ? 'upstash' : 'blob' };
   }
 
   // 3. actually generate — the expensive path we're trying to avoid
