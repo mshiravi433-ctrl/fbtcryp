@@ -25,6 +25,8 @@
 
 import { ALLOWED_CHAINS } from './permissions.js';
 import { checkIntentLimits } from './intentLimits.js';
+import { analyzeUtterance } from './semanticIntent.js';
+import { normalizeWord, editDistance, typoTolerance, ASSET_ALIAS_INDEX } from './semanticLexicon.js';
 
 const CHAIN_ALIASES = {
   'آربیتروم': 42161, 'اتریوم': 1, 'بیس': 8453, 'پالیگان': 137, 'سولانا': 501,
@@ -52,6 +54,29 @@ const ACTION_STOPWORDS = new Set([
   'PORTFOLIO', 'WALLET', 'HOLDINGS', 'BALANCE', 'NEWS', 'SIGNAL',
   'GOAL', 'TARGET', 'PROFIT', 'ON', 'TO', 'WITH', 'FOR', 'FROM', 'INTO', 'AT',
   'MAKE', 'GET', 'WANT', 'I', 'ME', 'MY'
+]);
+
+/*
+ * English function words the ticker heuristic used to read as symbols.
+ *
+ * `normalizeToken` accepts anything 2-12 chars of A-Z, and `isPlausibleToken`
+ * accepts anything shaped like /^[A-Z]{2,6}$/ — so "buy 200 dollars OF
+ * bitcoin" produced toSymbol: "OF" and "PUT a quarter into ETH" produced
+ * fromSymbol: "PUT". A trade built on a word that is not an asset is worse
+ * than one that asks, so the filler list is explicit.
+ */
+const FILLER_WORDS = new Set([
+  'OF', 'OFF', 'AND', 'THE', 'A', 'AN', 'IN', 'INTO', 'IS', 'IT', 'TO', 'AT', 'AS', 'BE',
+  'PUT', 'GET', 'GOT', 'USE', 'USING', 'WANT', 'NEED', 'HAVE', 'HAS', 'HAD', 'ALL',
+  'ANY', 'SOME', 'MORE', 'LESS', 'NOW', 'THEN', 'WHEN', 'WHAT', 'WHICH', 'WHO', 'HOW',
+  'FOR', 'FROM', 'WITH', 'WITHIN', 'ABOUT', 'AFTER', 'BEFORE', 'BETWEEN', 'AGAINST',
+  'ME', 'MY', 'MINE', 'YOU', 'YOUR', 'WE', 'OUR', 'THEY', 'THEM', 'THEIR', 'HE', 'SHE',
+  'THIS', 'THAT', 'THESE', 'THOSE', 'THERE', 'HERE', 'PLEASE', 'JUST', 'ONLY', 'EACH',
+  'EVERY', 'PER', 'UP', 'DOWN', 'OUT', 'OVER', 'UNDER', 'BY', 'OR', 'NOT', 'NO', 'YES',
+  'DO', 'DOES', 'DID', 'CAN', 'COULD', 'WOULD', 'SHOULD', 'WILL', 'AM', 'ARE', 'WAS',
+  'WERE', 'BEEN', 'BEING', 'MUCH', 'MANY', 'LOT', 'LOTS', 'BIT', 'LITTLE', 'HALF',
+  'QUARTER', 'THIRD', 'TOTAL', 'WHOLE', 'ENTIRE', 'REST', 'OTHER', 'ANOTHER', 'SAME',
+  'IF', 'SO', 'BUT', 'BECAUSE', 'THAN', 'THAT', 'WHILE', 'ONCE', 'TWICE'
 ]);
 
 /* Chain words that should NOT be treated as tokens when used with "on <chain>" context.
@@ -176,6 +201,37 @@ function detectChain(text) {
 /** Chain detector reused by the guided flow (network answers). */
 export { detectChain };
 
+/**
+ * Chain detection with typo tolerance. "arbitrom" is a keystroke away from a
+ * supported network, and refusing to route it while happily routing a
+ * misspelled ticker would be an odd priority.
+ *
+ * Only the LONG aliases are fuzzy-matched. Fuzzing "op" or "sol" would match
+ * half the dictionary; fuzzing "arbitrum" cannot plausibly land anywhere else.
+ */
+function detectChainFuzzy(text) {
+  const exact = detectChain(text);
+  if (exact) return { chainId: exact, via: 'exact' };
+  const folded = normalizeWord(text);
+  const tokens = folded.split(' ').filter(Boolean);
+  const longAliases = Object.entries(CHAIN_ALIASES)
+    .filter(([alias]) => alias.length >= 6 && !alias.includes(' '))
+    .sort((a, b) => b[0].length - a[0].length);
+  for (const token of tokens) {
+    const tol = typoTolerance(token);
+    if (tol === 0) continue;
+    for (const [alias, id] of longAliases) {
+      if (Math.abs(alias.length - token.length) > tol) continue;
+      if (editDistance(token, alias, tol) <= tol && ALLOWED_CHAINS.has(id)) {
+        return { chainId: id, via: 'typo', alias };
+      }
+    }
+  }
+  return { chainId: null, via: null };
+}
+
+export { detectChainFuzzy };
+
 function detectLeverage(text) {
   const m = text.match(/(\d+(?:\.\d+)?)\s?x\s?(leverage|lev|long|short)?/i);
   if (m) {
@@ -208,6 +264,195 @@ function detectDirection(text) {
   if (/(?:^|\s|[.,!?؛،])(buy|long|purchase|accumulate|خرید)(?:\s|[.,!?؛،]|$)/i.test(text)) return 'buy';
   if (/(?:^|\s|[.,!?؛،])(sell|short|exit|dump|فروش)(?:\s|[.,!?؛،]|$)/i.test(text)) return 'sell';
   return null;
+}
+
+/**
+ * Fill the gaps the keyword pass left, from the semantic reading.
+ *
+ * The rule is strict and it is the whole reason this is safe to bolt onto a
+ * money path: SEMANTICS ONLY ADDS. Where the original keyword engine already
+ * produced a value, that value stands untouched — so every utterance the
+ * parser understood before still parses to exactly the same intent, and the
+ * 5,985 assertions that depend on it are unaffected. Semantics only speaks
+ * where the old engine was silent, which is precisely the set of sentences it
+ * was blind to.
+ */
+function applySemantics(intent, sem, existing) {
+  const out = { ...intent };
+  const signals = [];
+
+  if (!sem) return { intent: out, signals };
+
+  /*
+   * Nothing in the sentence was understood — no verb, no asset, no objective,
+   * no number. That is the honest answer, and it has to override whatever the
+   * keyword pass scraped together, because the ticker heuristic reads ANY
+   * 2-6 letter word as a symbol: "xkcd 42 zzz" produced fromSymbol XKCD and
+   * toSymbol ZZZ. Offering a swap on a token the lexicon has never heard of,
+   * out of a sentence nobody understood, is the worst available response to
+   * gibberish. Better to say so and ask.
+   */
+  if (sem.understood === false && !existing.action) {
+    out.kind = null;
+    out.action = null;
+    if (out.fromSymbol && !ASSET_ALIAS_INDEX.has(normalizeWord(out.fromSymbol))) out.fromSymbol = null;
+    if (out.toSymbol && !ASSET_ALIAS_INDEX.has(normalizeWord(out.toSymbol))) out.toSymbol = null;
+    signals.push('understanding:none');
+    return { intent: out, signals };
+  }
+  if (sem.understood === false) return { intent: out, signals };
+
+  /* ── action / kind ─────────────────────────────────────────────────── */
+  const top = sem.actions[0];
+  if (!existing.action && top) {
+    out.action = top.action;
+    out.kind = top.kind;
+    out.subType = top.subType ?? out.subType;
+    signals.push(`action:${top.action} (semantic:${top.source ?? 'lexicon'})`);
+  }
+  /*
+   * A question about whether to act is analysis. "بیت کوین الان بخرم یا نه؟"
+   * contains the verb BUY and means the opposite of an order to buy; routing
+   * it to a swap screen would be the worst possible answer to it.
+   */
+  if (sem.deliberating && out.kind !== 'conversation' && out.kind !== 'help') {
+    out.action = 'analyze';
+    out.kind = 'analysis';
+    signals.push('action:analyze (question, not an order)');
+  }
+  /* An objective with no verb is still a request — for a plan. */
+  if (!out.action || (out.kind === 'analysis' && !existing.action && sem.objective)) {
+    if (sem.objective && !existing.action) {
+      out.action = 'goal';
+      out.kind = 'goal';
+      signals.push(`action:goal (objective:${sem.objective})`);
+    }
+  }
+  if (sem.objective) out.objective = sem.objective;
+  if (sem.riskTolerance) out.riskTolerance = sem.riskTolerance;
+
+  /* ── amount ────────────────────────────────────────────────────────── */
+  if (!existing.amount && sem.capital) {
+    out.amount = sem.capital.value;
+    out.amountUnit = sem.capital.unit;
+    if (sem.capital.unit === 'USD') out.amountUsd = sem.capital.value;
+    signals.push(`amount:${sem.capital.value}${sem.capital.unit} (semantic:${sem.capital.via})`);
+  }
+  /* "half of my money" — a share, not an invented number. */
+  if (sem.amountPct != null) {
+    out.amountPct = sem.amountPct;
+    signals.push(`amountPct:${sem.amountPct}%`);
+  }
+  if (sem.fuzzyAmount) {
+    out.fuzzyAmount = sem.fuzzyAmount;
+    signals.push(`amount:fuzzy(${sem.fuzzyAmount})`);
+  }
+
+  /* ── assets, in the order the customer wrote them ──────────────────── */
+  const stables = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP', 'USDD', 'USD']);
+  /*
+   * "USD" is a unit of account, not something a wallet holds. It becomes a
+   * source only when the customer is actually buying — "buy $200 of bitcoin"
+   * genuinely means pay in dollars. Left in for a sentence with no direction,
+   * it becomes a phantom fromSymbol that makes the guided flow skip the
+   * "which asset are you selling?" question it exists to ask.
+   */
+  const directionForAssets = intent.direction ?? top?.direction ?? null;
+  const semAssets = (sem.assets || [])
+    .map((a) => a.symbol)
+    .filter(Boolean)
+    .filter((sym) => sym !== 'USD' || directionForAssets === 'buy');
+
+  /*
+   * If the keyword pass guessed a symbol the lexicon has never heard of, and
+   * the semantic pass found a real one, the real one wins. "OF" and "PUT" are
+   * not assets; ETH is.
+   */
+  if (semAssets.length) {
+    if (out.fromSymbol && !ASSET_ALIAS_INDEX.has(normalizeWord(out.fromSymbol)) && !stables.has(out.fromSymbol)) {
+      out.fromSymbol = null;
+      signals.push('dropped:invented-from-symbol');
+    }
+    if (out.toSymbol && !ASSET_ALIAS_INDEX.has(normalizeWord(out.toSymbol)) && !stables.has(out.toSymbol)) {
+      out.toSymbol = null;
+      signals.push('dropped:invented-to-symbol');
+    }
+  }
+  const direction = directionForAssets;
+  if (semAssets.length) {
+    if (!out.toSymbol && direction === 'buy') {
+      out.toSymbol = semAssets.find((s) => !stables.has(s)) ?? semAssets[0];
+      if (!out.fromSymbol) out.fromSymbol = semAssets.find((s) => stables.has(s) && s !== out.toSymbol) ?? null;
+    } else if (!out.fromSymbol && direction === 'sell') {
+      /*
+       * "همه رو بفروش و ببر تتر" names only the destination. When the sole
+       * asset mentioned is a stable and the customer is selling everything,
+       * that stable is where the money is GOING, not what is being sold — the
+       * source is whatever they hold, which the confirmation screen lists.
+       */
+      const nonStable = semAssets.find((s) => !stables.has(s));
+      if (nonStable) {
+        out.fromSymbol = nonStable;
+        if (!out.toSymbol) out.toSymbol = semAssets.find((s) => stables.has(s) && s !== out.fromSymbol) ?? null;
+      } else if (out.amountPct != null && semAssets.length === 1) {
+        out.toSymbol = semAssets[0];
+      } else {
+        out.fromSymbol = semAssets[0];
+      }
+    } else if (!out.toSymbol && out.amountPct != null && semAssets.length === 1) {
+      /*
+       * "نصف پولم رو ببر بیت کوین" — a SHARE of the portfolio is being moved
+       * INTO the one asset named. That asset is the destination; the source is
+       * "whatever I hold", which the confirmation screen will show.
+       */
+      out.toSymbol = semAssets[0];
+    } else {
+      if (!out.fromSymbol) out.fromSymbol = semAssets[0];
+      if (!out.toSymbol) out.toSymbol = semAssets.find((s) => s !== out.fromSymbol) ?? null;
+    }
+    if (!existing.from && out.fromSymbol) signals.push(`from:${out.fromSymbol} (semantic)`);
+    if (!existing.to && out.toSymbol) signals.push(`to:${out.toSymbol} (semantic)`);
+  }
+  if (direction && !out.direction) out.direction = direction;
+  if (!out.direction) {
+    const carried = (sem.actions || []).find((a) => a.direction);
+    if (carried) {
+      out.direction = carried.direction;
+      signals.push(`direction:${carried.direction} (semantic:${carried.action})`);
+    }
+  }
+
+  /* ── goal, horizon, leverage, recurrence, loss cap ─────────────────── */
+  if (sem.goalPct != null && out.goalPct == null) {
+    out.goalPct = sem.goalPct;
+    out.kind = 'goal';
+    signals.push(`goal:${sem.goalPct}% (semantic)`);
+  }
+  if (sem.durationHrs != null && out.durationHrs == null) {
+    out.durationHrs = sem.durationHrs;
+    signals.push(`duration:${sem.durationHrs}h (semantic)`);
+  }
+  if (sem.leverage != null && out.leverage == null) {
+    out.leverage = sem.leverage;
+    signals.push(`leverage:${sem.leverage}x (semantic)`);
+  }
+  if (sem.recurring) {
+    out.recurring = sem.recurring;
+    signals.push(`recurring:${sem.recurring}`);
+  }
+  if (sem.maxLossUsd != null) {
+    out.maxLossUsd = sem.maxLossUsd;
+    signals.push(`maxLossUsd:${sem.maxLossUsd}`);
+  }
+
+  /* ── nothing at all: say so instead of defaulting to "analysis" ────── */
+  if (!existing.action && !semAssets.length && !sem.objective && sem.capital == null && !sem.understood) {
+    out.kind = null;
+    out.action = null;
+    signals.push('understanding:none');
+  }
+
+  return { intent: out, signals };
 }
 
 /**
@@ -285,6 +530,7 @@ export function parseUserIntent(rawText, context = {}) {
     if (!tok) return false;
     if (/^\d+$/.test(tok)) return false;
     if (ACTION_STOPWORDS.has(tok)) return false;
+    if (FILLER_WORDS.has(tok)) return false;
     if (CHAIN_LONG_NAMES.has(tok)) return false;
     // English filler words / units that normalize to something but aren't tokens.
     if (/(DAY|HOUR|MINUTE|HOURS|DAYS|MINUTES|WEEK|MONTH|YEAR|WANT|MY|I|ME|THE|A|AN|IN|ON|AT)$/.test(tok)) return false;
@@ -378,15 +624,8 @@ export function parseUserIntent(rawText, context = {}) {
   }
   if (duration) signals.push(`duration:${duration.hrs}h`);
 
-  // 7. Confidence heuristic
-  let confidence = 100;
-  confidence -= clarifications.length * 20;
-  confidence -= bestHits === 0 ? 10 : 0;
-  confidence -= !amt ? 5 : 0;
-  confidence = Math.max(5, Math.min(100, confidence));
-
   // Build structured intent draft
-  const intent = {
+  let intent = {
     kind,
     subType,
     action: action || 'analyze',
@@ -403,10 +642,80 @@ export function parseUserIntent(rawText, context = {}) {
     mode: 'human-ai'
   };
 
-  // analysis-only intents don't require all fields
-  const ok = (kind === 'analysis' || kind === 'conversation' || kind === 'help') ? Boolean(action) : (
-    Boolean(action) && Boolean(amt) && Boolean(fromSymbol) && (kind === 'send' || Boolean(toSymbol))
-  );
+  /* ── SEMANTIC PASS ─────────────────────────────────────────────────────
+   * Runs after the keyword engine and only fills what it left empty. See
+   * applySemantics for why that ordering is the safety property.
+   */
+  const semantic = analyzeUtterance(text, { locale: context.locale ?? null });
+  const enriched = applySemantics(intent, semantic, {
+    action, amount: amt?.amount ?? null, from: fromSymbol, to: toSymbol
+  });
+  intent = enriched.intent;
+  for (const sig of enriched.signals) if (!signals.includes(sig)) signals.push(sig);
+
+  /* A chain the keyword pass missed, allowing one keystroke of sloppiness. */
+  if (!intent.chainId) {
+    const fuzzy = detectChainFuzzy(text);
+    if (fuzzy.chainId) {
+      intent.chainId = fuzzy.chainId;
+      const ci = clarifications.indexOf('CHAIN_UNCLEAR');
+      if (ci >= 0) clarifications.splice(ci, 1);
+      signals.push(`chain:${fuzzy.chainId} (semantic:${fuzzy.via})`);
+    }
+  }
+
+  // 7. Confidence heuristic
+  let confidence = 100;
+  confidence -= clarifications.length * 20;
+  confidence -= bestHits === 0 ? 10 : 0;
+  confidence -= !amt ? 5 : 0;
+  /*
+   * Understanding a sentence in the semantic pass is worth as much as
+   * understanding it by keyword: a customer whose phrasing simply is not in a
+   * 40-word table is not less clear about what they want.
+   */
+  if (bestHits === 0 && semantic.understood) confidence += 10;
+  /* A share of the portfolio stands in for a missing absolute amount. */
+  if (intent.amountPct != null && !amt) confidence += 5;
+  /* A question is a complete request — nothing is missing from it. */
+  if (semantic.deliberating) confidence += 15;
+  confidence = Math.max(5, Math.min(100, confidence));
+
+  /*
+   * `ok` means "this is a COMPLETE instruction", and it deliberately keeps the
+   * original contract: a money intent is only complete with an action, a size
+   * and a source. An incomplete one is not an error — it hands over to the
+   * guided flow, which asks.
+   *
+   * An early draft of this made a goal-shaped sentence `ok` on the strength of
+   * the verb alone, and that silently broke the guided flow: the chip answer
+   * "Goal" parsed as a complete intent and skipped the amount question. So a
+   * goal with no target and no size is still incomplete here. Understanding a
+   * sentence and being ready to execute it are different properties, and only
+   * the second one gates the flow.
+   *
+   * What semantics DID change is what counts as a size: a stated share of the
+   * portfolio ("نصف پولم") or an admitted fuzzy amount ("یکم") both stand in
+   * for an absolute number, and a buy with a named target does not need a
+   * source named — the wallet is the source.
+   */
+  const ok = (intent.kind === 'analysis' || intent.kind === 'conversation' || intent.kind === 'help')
+    /*
+     * `action`, the local — NOT `intent.action`.
+     *
+     * intent.action carries a default ('analyze') so the object is always
+     * well-formed, and testing the defaulted value would make every
+     * unrecognised sentence look like a complete analysis request, skipping
+     * the guided flow. An analysis intent is complete only when the customer
+     * actually asked to analyse something.
+     */
+    ? Boolean(action)
+    : (
+      Boolean(intent.action)
+      && Boolean(amt || intent.amountPct != null || intent.fuzzyAmount)
+      && Boolean(intent.fromSymbol || intent.direction === 'buy')
+      && (intent.kind === 'send' || Boolean(intent.toSymbol) || intent.direction === 'buy')
+    );
 
   // Product limits: over-limit numbers parse fine but carry a friendly
   // warning so the chat layer can ask the user to respect the ceiling
@@ -417,9 +726,10 @@ export function parseUserIntent(rawText, context = {}) {
     ok,
     intent,
     confidence,
-    clarifications: (kind === 'conversation' || kind === 'help') ? [] : [...new Set(clarifications)],
+    clarifications: (intent.kind === 'conversation' || intent.kind === 'help') ? [] : [...new Set(clarifications)],
     signals,
     limitViolations,
+    semantic,
     raw: text.slice(0, 500)
   };
 }

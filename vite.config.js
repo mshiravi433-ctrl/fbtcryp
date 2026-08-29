@@ -78,8 +78,44 @@ function stripDisabledLocaleCopy() {
   };
 }
 
+/**
+ * STRIP THE SPECULATIVE INTENT VOCABULARY FROM A STORE BUILD.
+ * ---------------------------------------------------------------------------
+ * Same problem, same answer as the locale strip above: a content filter reads
+ * strings, and the Persian word for "leverage" in an intent parser's
+ * vocabulary fails review exactly like the word in a screen title does.
+ *
+ * The difference is that this vocabulary is real and needed — on the website
+ * build, where the margin venue exists. So it is not deleted, it is gated:
+ * when the flag is off the module is replaced with an inert stub, and a build
+ * that cannot offer leverage also cannot recognise a request for it. The
+ * customer is told the venue is unavailable instead of being shown a route
+ * into a screen that is not in the binary.
+ */
+function stripSpeculativeVocabulary() {
+  const speculation = process.env.VITE_ENABLE_SPECULATION === 'true';
+  const STUB = `
+export const SPECULATIVE_SCHEMA = 'fbt.speculative-lexicon.v1';
+export const FUTURES_ACTION_STEMS = Object.freeze([]);
+export const SPECULATE_RISK_STEMS = Object.freeze([]);
+export function leveragePattern() { return /(?!)/; }
+export function detectLeverageText() { return null; }
+export const PERPS_LABELS = Object.freeze({});
+export const SPECULATIVE_VOCABULARY_PRESENT = false;
+`;
+  return {
+    name: 'strip-speculative-vocabulary',
+    enforce: 'pre',
+    transform(code, id) {
+      if (speculation) return null;
+      if (!/\/src\/lib\/intent-ai\/speculativeLexicon\.js$/.test(id)) return null;
+      return { code: STUB, map: null };
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), stripDisabledLocaleCopy()],
+  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary()],
 
   /*
    * `@dydxprotocol/v4-client-js` imports `https-proxy-agent` even though the

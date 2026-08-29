@@ -214,6 +214,21 @@ console.log('▸ probing FBT Intent AI — Phase 1 Foundation (parser · permiss
   report('intent-ai phase-1 foundation', await runIntentAI());
 }
 
+/* Pure logic, no DOM and no network: intent UNDERSTANDING, measured. The
+   parser is the only place natural language enters the system, so this scores
+   it against 43 realistic utterances in Persian, English and Arabic — vague
+   goals, relative amounts, localised asset names, typos, conjugated verbs,
+   recurring buys and questions that must NOT become orders — and fails if the
+   recovered-field share drops below the recorded floor. It also locks the
+   planner's guarantees: a vague ask still yields a reviewable plan, every
+   assumption it had to make is stated, weights sum to 100%, and nothing it
+   produces is auto-executed. */
+console.log('▸ probing FBT Intent AI — understanding & planning (43-utterance corpus)…');
+{
+  const { default: runUnderstanding } = await import('./intent-ai/intent-understanding-probe.mjs');
+  report('intent-ai understanding & planning', await runUnderstanding());
+}
+
 /* Pure logic + source wiring, no DOM and no network: the product limits
    (400k total / 5k per tx / 60% goal / 30 days) enforced with a friendly
    warning, the step-by-step guided chat flow, the visible two-agent

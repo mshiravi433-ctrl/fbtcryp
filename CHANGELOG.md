@@ -1,3 +1,60 @@
+## Unreleased — Intent understanding & planning (the parser stopped guessing)
+
+- **Understanding measured, then fixed.** `intentParser.js` was a keyword
+  engine over ~40 tokens: correct on `swap 500 USDC to ETH on Arbitrum`, blind
+  on `میخوام پولم رشد کنه`. Scored against a 43-utterance corpus of realistic
+  Persian/English/Arabic phrasings it recovered **40.8%** of the fields a human
+  reader would extract. It now recovers **100%**, and the floor is locked at
+  95% in `THRESHOLDS` so a change that quietly costs a category fails the
+  suite. See `docs/INTENT-UNDERSTANDING-FA.md`.
+- **New `semanticLexicon.js`.** Vocabulary in the twelve UI languages: asset
+  *names* rather than tickers («تتر» → USDT), conjugated verbs, objectives
+  (growth / income / preserve / speculate / learn), risk stance, fractions
+  («نصف پولم» → 50%), recurrence, time units and multipliers («دو برابر» →
+  100%). Data, not logic — an audit can name the word that made the agent
+  understand SELL.
+- **New `semanticIntent.js`.** Conjugated RTL verbs («بخرم», «ببر»), possessive
+  suffixes («تترهام»), typo tolerance bounded to 5+ characters (below that,
+  «اشتر» — the Arabic verb "buy" — is one deletion from «اتر», ETH), chain-vs-
+  token disambiguation ("on Arbitrum" is a network, not the ARB token), and
+  deliberation detection: «بیت کوین الان بخرم یا نه؟» contains the verb BUY and
+  means the opposite of an order to buy, so it parses as `analyze`.
+- **Gibberish no longer becomes a trade.** The ticker heuristic read any 2–6
+  letter word as a symbol, so `xkcd 42 zzz` produced `fromSymbol: XKCD`,
+  `toSymbol: ZZZ`. An utterance nothing was understood from now yields
+  `kind: null` and an honest "I did not follow that".
+- **New `intentPlanner.js`.** A customer who typed an objective and nothing
+  else used to get a form they could not fill in. They now get a concrete
+  allocation from a *published* table (`PROFILES`), with every assumption it
+  had to make listed, weights summing to exactly 100%, a worst-case drawdown
+  computed without assuming correlations away, and an unrealistic target called
+  unrealistic (20% in 90 days annualises to ~81% → `feasibility: 'unlikely'`).
+  Returns are never invented: `estReturnPct` is populated only from
+  caller-supplied data and is `null` otherwise.
+- **Proposals are never executions.** `requiresConfirmation` is true on every
+  plan the planner can produce and `autoExecute` is never true; the
+  confirmation gate and the Guardian are untouched. `humanAi.js` now sends a
+  proposal *alongside* the guided-flow question, so the customer can accept,
+  edit or answer — but is never stuck.
+- **The `ok` contract is unchanged.** Understanding a sentence and being ready
+  to execute it are different properties, and only the second gates the guided
+  flow. An earlier draft made a goal-shaped sentence complete on the strength
+  of the verb alone, which silently skipped the amount question; that is now a
+  regression test.
+- **Planner output localized to all twelve locales** via `outputLocales.js`,
+  after planning rather than before, so a number is decided once and the twelve
+  locales only render it. A test asserts localizing never changes a figure.
+- **Speculative vocabulary is build-gated.** APKPure rejected this app for
+  "illegal sensitive words", and a content filter reads strings, not call
+  graphs — the Persian word for "leverage" in a parser's vocabulary fails
+  review exactly like the word in a screen title. It now lives only in
+  `speculativeLexicon.js`, which `vite.config.js` replaces with an inert stub
+  when `VITE_ENABLE_SPECULATION` is off: a build that cannot offer leverage
+  also cannot recognise a request for it. Verified: 178 js files, 6,815,484
+  characters, no flagged vocabulary.
+- **Probes:** `intent-understanding-probe` (43 utterances, 125 expected fields,
+  43 assertions) wired into `npm test` and `npm run test:understanding`.
+
 ## Unreleased — Phases 101–150: effectiveness wave (multi-venue profit engine, 12-language output, wallet verification, horizontal rail)
 
 - **`phase-status` now covers Phases 10–150.** `SPEC_PHASES` gained the
