@@ -9,6 +9,8 @@ import CoinRow from '../components/CoinRow';
 import CoinLogo from '../components/CoinLogo';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
+import TrendChart from '../components/TrendChart';
+import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { MARKET_CATEGORIES, getCategory } from '../lib/api';
@@ -168,6 +170,13 @@ export default function Market() {
   }, [remoteHits, list, query]);
 
   const hero = coins?.[0];
+  /*
+   * The 7-day shape of the total, built from the rows already in memory —
+   * see lib/globalTrend.js for why it is rebuilt rather than fetched. Derived
+   * from `coins`, which the page polls every 30s, so it refreshes with them.
+   */
+  const trend = useMemo(() => marketCapSeries(coins || [], { maxCoins: 60 }), [coins]);
+
   const isOffline = global?.offline || coins?.[0]?.offline;
 
   return (
@@ -219,6 +228,42 @@ export default function Market() {
             transition={{ duration: 1, ease: 'easeOut' }}
           />
         </div>
+
+        {/*
+          7-day shape of the total. Reported: «بازار جهانی ... احتیاج به نمودار
+          ندارد؟» — it did. Five figures about right now, with no way to see
+          whether the number was climbing or falling into them.
+
+          The series is rebuilt from the loaded coins, not fetched: there is no
+          free historical endpoint for total market cap. The caption names the
+          coins and the method, because a chart that looks authoritative while
+          covering only the top of the book is worse than none.
+        */}
+        {trend && (
+          <div className="market-trend" data-testid="global-market-trend">
+            <div className="market-trend-head">
+              <span className="faint">
+                {t('market.trendTitle', { defaultValue: 'Total market cap · 7 days' })}
+              </span>
+              <span className={`mono ${trend.changePct >= 0 ? 'up' : 'down'}`}>
+                {fmtPct(trend.changePct, 2)}
+              </span>
+            </div>
+            <TrendChart
+              points={trend.points}
+              height={76}
+              up={trend.changePct >= 0}
+              formatValue={(v) => fmtCompact(v)}
+              testId="global-market-trend-chart"
+            />
+            <p className="faint market-trend-note">
+              {t('market.trendNote', {
+                defaultValue: 'Rebuilt from the {{n}} largest coins already on this page — each one’s 7-day hourly price × its circulating supply. It is the top of the market, not the whole market.',
+                n: trend.coins
+              })}
+            </p>
+          </div>
+        )}
       </motion.section>
 
       <motion.div className="grid-3" variants={stagger} initial="hidden" animate="show">

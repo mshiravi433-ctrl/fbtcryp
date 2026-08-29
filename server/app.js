@@ -38,7 +38,9 @@ import { fetchAvantisEquities } from './avantis.js';
 import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
 import { fetchSolanaIntel, fetchSolanaWhales, solscanConfigured, SOLANA_SIGNAL_MINTS } from './solanaIntel.js';
-import { fetchDydxAccount, fetchDydxMarkets, fetchDydxOrderbook } from './dydx.js';
+import {
+  fetchDydxAccount, fetchDydxCandles, fetchDydxMarkets, fetchDydxOrderbook
+} from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
@@ -3530,6 +3532,37 @@ app.get('/api/dydx/orderbook/:ticker', (req, res) => {
     return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
   }
   return serve(res, 5_000)(() => fetchDydxOrderbook(ticker), `dydx-orderbook:${ticker}`);
+});
+
+/*
+ * Candles for one market. Added so the dYdX screen can show the shape of the
+ * market it is asking someone to take a leveraged position in — see the note
+ * in server/dydx.js. Normalised here rather than in the chart component, so
+ * the client never has to know the upstream sort order or field names.
+ */
+app.get('/api/dydx/candles', (req, res) => {
+  const ticker = String(req.query.ticker || '').toUpperCase();
+  if (!/^[A-Z0-9]+-[A-Z0-9]+$/.test(ticker)) {
+    return res.status(400).json({ error: 'BAD_DYDX_TICKER' });
+  }
+  const resolution = String(req.query.resolution || '1HOUR').toUpperCase();
+  const limit = Number(req.query.limit) || 96;
+  return serve(res, 15_000)(async () => {
+    const body = await fetchDydxCandles(ticker, resolution, limit);
+    const candles = (body?.candles || [])
+      .map((c) => ({
+        startedAt: new Date(c.startedAt).getTime(),
+        open: Number(c.open),
+        high: Number(c.high),
+        low: Number(c.low),
+        close: Number(c.close),
+        volume: Number(c.baseTokenVolume)
+      }))
+      .filter((c) => Number.isFinite(c.startedAt) && Number.isFinite(c.close) && c.close > 0)
+      /* Upstream returns newest first; charts draw left to right. */
+      .sort((a, b) => a.startedAt - b.startedAt);
+    return { schema: 'fbt.dydx-candles.v1', ticker, resolution, candles, live: candles.length > 1 };
+  }, `dydx-candles:${ticker}:${resolution}:${limit}`);
 });
 
 app.get('/api/dydx/account/:address/:number', async (req, res) => {

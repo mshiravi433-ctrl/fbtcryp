@@ -851,7 +851,10 @@
     "contributeTelemetrySub": "No addresses, no keys, no IPs, no user IDs",
     "telemetryNote": "Each record is under 120 bytes: a hashed coin id, the read (stance, confidence, market regime, model version) and the outcome that later occurred. Nothing about you can be recovered from it, and the app behaves identically whether this is on or off.",
     "telemetryPrompt": "New: the signal engine can now learn from anonymous outcomes. If you'd like to help it improve, you can opt in below — it's entirely optional and shares nothing about you.",
-    "walletPrivacyLine": "Wallet connections use the WalletConnect relay. Your private keys, seed phrase and passwords never leave your device — they are never sent, stored or readable by us."
+    "walletPrivacyLine": "Wallet connections use the WalletConnect relay. Your private keys, seed phrase and passwords never leave your device — they are never sent, stored or readable by us.",
+    "syncedAt": "Last synced {{when}}",
+    "syncDone": "Saved to the cloud just now. Settings from this account were pulled first.",
+    "syncFailed": "Sync failed — nothing was saved. {{code}}"
   },
   "activation": {
     "loading": "Loading activation status...",
@@ -869,7 +872,30 @@
       "execution": "Current operational evidence is attested and within its validity window.",
       "agent": "Wallet confirmation remains required for every transaction."
     },
-    "phases": "Specification Phases"
+    "phases": "Specification Phases",
+    "live": "live",
+    "operational": "operational",
+    "configured": "configured",
+    "built": "built",
+    "pending": "Activation not yet earned",
+    "pendingBody": "This deployment runs fail-closed: activation is granted by operational evidence, not by a switch. The retired launch-freeze control no longer gates anything — the evidence count above is what gates it.",
+    "notes": "Operational notes",
+    "check": "Run activation check",
+    "checking": "Running checks…",
+    "checked": "Checks finished: {{earned}} evidence kinds earned across {{total}} probes.",
+    "checkedPartial": "Checks finished: {{earned}} evidence kinds earned, {{failed}} of {{total}} probes could not run.",
+    "nowAllowed": "Activation is allowed.",
+    "stillBlocked": "Still blocked by {{n}} operational note(s).",
+    "whatNeeded": "What this deployment still needs",
+    "configHint": "These are operator settings on the server, not switches in this app. Each one is what unlocks the evidence kinds listed above.",
+    "state": {
+      "live": "live",
+      "operational": "operational",
+      "configured": "configured",
+      "partial": "partially configured",
+      "built": "built, not configured",
+      "missing": "pending"
+    }
   },
   "about": {
     "title": "About us",
@@ -4517,7 +4543,18 @@
       "label": "System Active & Verified",
       "note": "Operational evidence is current. Review the final transaction in your wallet before signing.",
       "active": "System Active & Verified",
-      "activeNote": "Operational evidence is current. Review the final transaction in your wallet before signing."
+      "activeNote": "Operational evidence is current. Review the final transaction in your wallet before signing.",
+      "pending": "Activation pending verification",
+      "p1": "Activation is pending verification.",
+      "p2": "Operational status is not yet available.",
+      "p3": "Execution remains behind wallet confirmation.",
+      "pendingNote": "This deployment has not earned operational activation yet. Nothing here executes on its own — and any execution would still need your wallet.",
+      "b1": "System Active & Verified.",
+      "b2": "Execution Ready — wallet confirmation remains required.",
+      "b3": "Current operational evidence is attested and within its validity window.",
+      "build": "build",
+      "buildId": "Intent AI build identifier",
+      "evidence": "evidence"
     },
     "rail": {
       "label": "Intent OS control rail",
@@ -4536,6 +4573,7 @@
       "applyStop": "EMERGENCY STOP",
       "stopActive": "Execution blocked",
       "confirmRelease": "Tap again to confirm release",
+      "release": "Release",
       "agentRequested": "Requested…",
       "agentConnected": "Agent connected",
       "restoredSafe": "Rail state restored from a modified record — running in the safest (stopped) state.",
@@ -5030,6 +5068,7 @@
       "screenRequired": "authorization screen required"
     },
     "controls": {
+      "title": "Session controls",
       "stop": "STOP",
       "pause": "PAUSE",
       "revoke": "REVOKE",
@@ -5737,7 +5776,13 @@
         "restricted": "Limited",
         "blocked": "Off",
         "unknown": "Unknown"
-      }
+      },
+      "confirmTitle": "One extra confirmation",
+      "confirmBody": "{{feature}} is restricted where you are. Confirming here records that you understand the restriction. It does not authorise any transaction — every action still goes through its own confirmation and your wallet.",
+      "confirmExtra": "Confirm",
+      "withdraw": "Withdraw",
+      "cancel": "Cancel",
+      "ackedAt": "Confirmed"
     },
     "ramp": {
       "noOnramp": "We cannot buy crypto with a bank card or bank transfer. This app only swaps crypto you already hold.",

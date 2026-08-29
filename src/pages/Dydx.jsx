@@ -17,10 +17,12 @@ import {
   connectDydx,
   disconnectDydx,
   dydxFeeUsd,
+  getDydxCandles,
   getDydxMarkets,
   getDydxSubaccount,
   placeDydxOrder
 } from '../lib/dydx';
+import TrendChart from '../components/TrendChart';
 
 export default function Dydx() {
   const { t } = useTranslation();
@@ -58,6 +60,39 @@ export default function Dydx() {
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
   const [result, setResult] = useState(null);
+
+  /* Candles for the selected market — see the chart block below for why. */
+  const [resolution, setResolution] = useState('4HOURS');
+  const [candles, setCandles] = useState([]);
+  const [candlesLoading, setCandlesLoading] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setCandlesLoading(true);
+    getDydxCandles(ticker, resolution, resolution === '1DAY' ? 30 : 24)
+      .then((r) => {
+        if (!alive) return;
+        setCandles(r?.candles || []);
+        setCandlesLoading(false);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCandles([]);
+        setCandlesLoading(false);
+      });
+    return () => { alive = false; };
+  }, [ticker, resolution]);
+
+  const candlePoints = useMemo(
+    () => candles.map((c) => ({ x: c.startedAt, y: c.close })),
+    [candles]
+  );
+  const candleChange = useMemo(() => {
+    if (candles.length < 2) return 0;
+    const first = Number(candles[0].close);
+    const last = Number(candles[candles.length - 1].close);
+    return first > 0 ? ((last - first) / first) * 100 : 0;
+  }, [candles]);
 
   useEffect(() => {
     let alive = true;
@@ -202,6 +237,55 @@ export default function Dydx() {
             <div><div className="faint">{t('dydx.oraclePrice')}</div><div className="stat-mini mono">${fmtPrice(market.oraclePrice)}</div></div>
             <div style={{ textAlign: 'end' }}><div className="faint">{t('dydx.openInterest')}</div><div className="mono">{fmtUsd(market.openInterest * market.oraclePrice)}</div></div>
           </div>}
+
+          {/*
+            ─── THE MARKET HAD NO HISTORY AT ALL ──────────────────────────────
+            Reported: «نمودار dydx احتیاج به نمودار ندارد؟» It did not have
+            one. A leveraged position was being sized from a single oracle
+            price and an open-interest figure — the two numbers that say least
+            about whether the market has been trending or chopping sideways.
+
+            The candles come from the same read-only indexer the rest of this
+            screen uses. When it is unreachable the chart says so; it never
+            draws a flat line at zero, because a flat line reads as "price has
+            not moved" and that is a claim about the market, not about us.
+          */}
+          <div className="dydx-chart" data-testid="dydx-chart">
+            <div className="dydx-chart-head">
+              <span className="faint">
+                {t('dydx.chartTitle', { defaultValue: 'Price · last 4 days' })}
+              </span>
+              <div className="dydx-chart-res">
+                {[['4HOURS', t('dydx.res.4h', { defaultValue: '4h' })], ['1DAY', t('dydx.res.1d', { defaultValue: '1d' })]].map(([res, label]) => (
+                  <button
+                    key={res}
+                    type="button"
+                    className={resolution === res ? 'active' : ''}
+                    onClick={() => setResolution(res)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <TrendChart
+              points={candlePoints}
+              height={92}
+              up={candleChange >= 0}
+              loading={candlesLoading}
+              emptyLabel={candlesLoading ? '' : t('dydx.chartUnavailable', { defaultValue: 'The dYdX indexer did not return candles for this market.' })}
+              formatValue={(v) => `$${fmtPrice(v)}`}
+              testId="dydx-trend"
+            />
+            {candles.length > 1 && (
+              <div className="dydx-chart-foot">
+                <span className={`mono ${candleChange >= 0 ? 'up' : 'down'}`}>
+                  {candleChange >= 0 ? '+' : ''}{candleChange.toFixed(2)}%
+                </span>
+                <span className="faint">{t('dydx.chartSource', { defaultValue: 'dYdX indexer candles' })}</span>
+              </div>
+            )}
+          </div>
 
           <div className="segmented" style={{ marginBottom: 12 }}>
             {['buy', 'sell'].map((s) => <button key={s} className={side === s ? 'active' : ''} onClick={() => setSide(s)} style={{ isolation: 'isolate' }}>

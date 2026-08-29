@@ -275,13 +275,26 @@ export const AUTONOMY_ICONS = Object.freeze([
   { level: 3, key: 'l3-controlled', labelKey: 'intentAI.levels.level3', enabled: true }
 ]);
 
-/** Rail buttons, in rail order. Pause and emergency stop are EXPANDABLE
-    (collapsed = icon-only compact rail; expanded = labeled drawer). */
+/*
+ * Rail buttons, in rail order.
+ *
+ * ─── WHY PAUSE / EMERGENCY STOP / HUMAN AGENT ARE GONE ─────────────────────
+ * Reported: «باکس l1 تا l3 — توقف، توقف اضطرار و درخواست در صفحه intent os
+ * باید پاک شود». The /#/intent screen carried a full control bar; the same
+ * three actions are already one tap away on the AI surface, where they sit in
+ * a proper rail. On the Intent OS page they were a second, cramped copy that
+ * pushed the L1–L3 autonomy indicator off the screen.
+ *
+ * What must NOT disappear with them is the way out. `release` is CONDITIONAL —
+ * it renders only while the rail is paused or stopped — because removing the
+ * buttons that put it there and leaving no way back would turn a temporary
+ * pause into a permanent lock on the compose screen. The underlying state
+ * machine is untouched: pause/stop still gate execution, and the release path
+ * still requires the same confirmation to leave the stopped state.
+ */
 export const RAIL_ACTIONS = Object.freeze([
-  { id: 'pause', kind: 'toggle', expandable: true, labelKey: 'intentAI.controls.pause' },
-  { id: 'emergency-stop', kind: 'fail-closed', expandable: true, labelKey: 'intentAI.controls.emergency_exit' },
-  { id: 'human-agent', kind: 'escalate', expandable: false, labelKey: 'intentAI.controls.humanAgent' },
-  { id: 'rail-collapse', kind: 'layout', expandable: false, labelKey: 'intentAI.controls.railCollapse' }
+  { id: 'release', kind: 'fail-closed', expandable: false, conditional: true, labelKey: 'intentOS.rail.release' },
+  { id: 'rail-collapse', kind: 'layout', expandable: false, conditional: false, labelKey: 'intentAI.controls.railCollapse' }
 ]);
 
 export const RAIL_SPACING = Object.freeze({
@@ -302,16 +315,19 @@ export function railLayoutDescriptor() {
     autonomyIcons: AUTONOMY_ICONS,
     actions: RAIL_ACTIONS,
     spacing: RAIL_SPACING,
-    order: ['autonomy', 'pause', 'emergency-stop', 'human-agent', 'rail-collapse'],
+    order: ['autonomy', 'release', 'rail-collapse'],
     /* Safety rule the UI enforces: collapsing the rail never collapses the
-       safety state, and the emergency stop stays reachable in ONE tap even
-       when the rail is collapsed. */
+       safety state, and a blocked rail always shows its release control — the
+       one action that must stay reachable even when the rail is collapsed. */
     safetyInvariants: Object.freeze({
       emergencyAlwaysReachable: true,
       collapseNeverHidesSafetyState: true,
       pauseShowsResumeTime: true,
       stopRequiresConfirmationToRelease: true,
-      touchTargetsAtLeast44px: true
+      touchTargetsAtLeast44px: true,
+      /* New with the trimmed rail: the three removed actions must leave a
+         reachable way back, or a pause becomes a lock. */
+      releaseAlwaysReachableWhenBlocked: true
     })
   };
 }

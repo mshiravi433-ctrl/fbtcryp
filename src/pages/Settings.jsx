@@ -57,7 +57,10 @@ import { EVM_CHAINS, EVM_CHAIN_ORDER } from '../lib/chains';
 import { isIOS, isWebView, isStandalone } from '../lib/platform';
 import { clearAppCache, exportSettingsBackup } from '../lib/dataStorage';
 /* Phase 92 — export, delete, and prove the deletion. */
-import { exportUserData, deleteUserData, verifyDeletion, DATA_STORES, availabilityMap } from '../lib/intent-ai';
+import {
+  exportUserData, deleteUserData, verifyDeletion, DATA_STORES,
+  availabilityMap, assertFeaturePermitted
+} from '../lib/intent-ai';
 /* Phase 100 — user sovereignty: take everything and leave, proven empty. */
 import { describeExitPath, buildExitPackage, performExit } from '../lib/intent-ai';
 import { buildReaders, buildErasers, localUserId, forgetLocalUserId } from '../lib/userDataStores';
@@ -86,6 +89,46 @@ import {
   IconUser,
   IconWallet
 } from '../components/Icons';
+
+/*
+ * Region acknowledgements live in localStorage, not the settings store: they
+ * are a per-device record of a decision the person made here, never something
+ * to sync to another phone or to a cloud profile. A malformed record degrades
+ * to "nothing acknowledged", which is the strict reading — the same direction
+ * every fail-closed path in this file takes.
+ */
+/*
+ * "27/08/2026, 0" — a raw `toLocaleString()` wedged into a narrow row reads as
+ * a truncated, broken value. Two-digit, fixed-length, and the same shape in
+ * every locale so the row cannot reflow when the language changes.
+ */
+function fmtSyncedAt(ts) {
+  try {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
+}
+
+const REGION_ACK_KEY = 'fbt-region-ack-v1';
+
+function loadRegionAcks() {
+  try {
+    const raw = localStorage.getItem(REGION_ACK_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveRegionAcks(acks) {
+  try { localStorage.setItem(REGION_ACK_KEY, JSON.stringify(acks)); } catch { /* storage full/blocked */ }
+}
 
 function Row({ icon: Icon, label, sub, right, onClick }) {
   const Tag = onClick ? 'button' : 'div';
@@ -121,6 +164,8 @@ export default function Settings() {
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioErr, setBioErr] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  /* The outcome of the last sync attempt. Null until one has been made. */
+  const [syncResult, setSyncResult] = useState(null);
   const [langOpen, setLangOpen] = useState(false);
   const [nameOpen, setNameOpen] = useState(false);
 
@@ -166,6 +211,61 @@ export default function Settings() {
     }
     return availabilityMap({ region });
   }, []);
+
+  /*
+   * ─── THE EXTRA CONFIRMATION A RESTRICTED FEATURE PROMISES ─────────────────
+   * Reported: «خودکارسازی — در اینجا با یک تایید اضافه در دسترس است» sitting
+   * next to a «محدود» badge with nothing to press. `featureState` had been
+   * returning `requiresAcknowledgement: true` for months and
+   * `assertFeaturePermitted` had been accepting `acknowledged: true` — the
+   * gate was built, and the screen simply never offered the acknowledgement.
+   *
+   * So the map now renders what the gate already honours: a restricted feature
+   * gets a real confirm action, and once acknowledged the row reads as
+   * permitted-with-extra-confirmation because that is literally what
+   * `assertFeaturePermitted` returns for it.
+   *
+   * Two rules kept from the lib, on purpose:
+   *   · this can only UNLOCK what policy already allows. `assertGateOnlyRestricts`
+   *     is the invariant — geo-gating may only ever subtract, so no amount of
+   *     acknowledging here turns a blocked feature into an available one.
+   *   · an acknowledgement is recorded with the time it was given and can be
+   *     withdrawn, so it is a decision with a visible state, not a permanent
+   *     grant buried in localStorage.
+   */
+  const [regionAcks, setRegionAcks] = useState(() => loadRegionAcks());
+  const [ackFeature, setAckFeature] = useState(null);
+
+  const regionRows = useMemo(() => regionMap.features.map((feature) => {
+    const ack = regionAcks[feature.feature] || null;
+    const verdict = assertFeaturePermitted({
+      feature: feature.feature,
+      region: regionMap.region,
+      acknowledged: Boolean(ack)
+    });
+    return {
+      ...feature,
+      ack,
+      permitted: verdict.permitted === true,
+      restricted: verdict.restricted === true,
+      needsAck: feature.state === 'restricted' && !ack
+    };
+  }), [regionMap, regionAcks]);
+
+  const acknowledgeFeature = (feature) => {
+    const next = { ...regionAcks, [feature]: { at: Date.now() } };
+    setRegionAcks(next);
+    saveRegionAcks(next);
+    setAckFeature(null);
+    haptic?.('success');
+  };
+
+  const withdrawFeature = (feature) => {
+    const next = { ...regionAcks };
+    delete next[feature];
+    setRegionAcks(next);
+    saveRegionAcks(next);
+  };
 
   /*
    * One-time telemetry prompt state. localStorage (not the store) because it
@@ -466,14 +566,39 @@ export default function Settings() {
     }
   };
 
+  /*
+   * ─── CLOUD SYNC USED TO CLAIM SUCCESS WITHOUT CHECKING ────────────────────
+   * Reported: «همگام‌سازی ابری 27/08/2026, 0 — اصلا کار نمیده و فقط دکمش هست».
+   *
+   * `pushSettings` returns a BOOLEAN and the old handler threw it away, then
+   * called `markSynced()` unconditionally. So the row showed a fresh "last
+   * synced" timestamp after a sync that had failed — anonymous sign-in
+   * refused, Firestore rules rejecting the write, no network, any of them. The
+   * timestamp was not evidence that anything had been saved; it was evidence
+   * that a button had been pressed.
+   *
+   * The push result is now the thing that decides. And the row's sub-line says
+   * which of the two it is, because "3 hours ago" and "never — it failed" must
+   * not look alike on a screen whose whole job is trust.
+   */
   const doSync = async () => {
     setSyncing(true);
+    setSyncResult(null);
     try {
       const remote = await pullSettings();
       if (remote) s.applyRemote(remote);
-      await pushSettings(s.exportSyncable());
+      const pushed = await pushSettings(s.exportSyncable());
+      if (pushed !== true) {
+        setSyncResult({ ok: false, code: 'PUSH_REJECTED' });
+        haptic?.('error');
+        return;
+      }
       s.markSynced();
+      setSyncResult({ ok: true, at: Date.now(), pulled: Boolean(remote) });
       haptic?.('success');
+    } catch (e) {
+      setSyncResult({ ok: false, code: String(e?.code || e?.message || 'SYNC_FAILED').slice(0, 60) });
+      haptic?.('error');
     } finally {
       setSyncing(false);
     }
@@ -1235,19 +1360,59 @@ export default function Settings() {
       <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="region-availability-section">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('intentAI.compliance.sectionTitle')}</p>
         <div className="set-group">
-          {regionMap.features.map((feature) => (
+          {regionRows.map((feature) => (
             <Row
               key={feature.feature}
               icon={IconGlobe}
               label={t(`intentAI.compliance.feature.${feature.feature}`)}
               sub={t(feature.i18nKey)}
               right={
-                <span
-                  className={`region-state region-state-${feature.state}`}
-                  data-testid={`region-feature-${feature.feature}`}
-                  data-state={feature.state}
-                >
-                  {t(`intentAI.compliance.state.${feature.state}`)}
+                <span className="region-right">
+                  {feature.permitted && feature.restricted && (
+                    <span
+                      className="region-state region-state-acknowledged"
+                      data-testid={`region-feature-${feature.feature}`}
+                      data-state="acknowledged"
+                      title={t('intentAI.compliance.ackedAt', { defaultValue: 'Confirmed' }) + (feature.ack?.at ? ` · ${new Date(feature.ack.at).toLocaleString()}` : '')}
+                    >
+                      ✓ {t('intentAI.compliance.state.available', { defaultValue: 'Available' })}
+                    </span>
+                  )}
+                  {!feature.permitted && (
+                    <span
+                      className={`region-state region-state-${feature.state}`}
+                      data-testid={`region-feature-${feature.feature}`}
+                      data-state={feature.state}
+                    >
+                      {t(`intentAI.compliance.state.${feature.state}`)}
+                    </span>
+                  )}
+                  {/*
+                    The extra confirmation the row promises. It appears only on
+                    a restricted feature — a blocked one gets nothing to press,
+                    because no acknowledgement here may grant what policy denies.
+                  */}
+                  {feature.needsAck && (
+                    <button
+                      type="button"
+                      className="region-ack-btn"
+                      onClick={() => setAckFeature(feature.feature)}
+                      data-testid={`region-ack-${feature.feature}`}
+                    >
+                      {t('intentAI.compliance.confirmExtra', { defaultValue: 'Confirm' })}
+                    </button>
+                  )}
+                  {feature.permitted && feature.restricted && (
+                    <button
+                      type="button"
+                      className="region-ack-btn is-ghost"
+                      onClick={() => withdrawFeature(feature.feature)}
+                      aria-label={t('intentAI.compliance.withdraw', { defaultValue: 'Withdraw confirmation' })}
+                      data-testid={`region-withdraw-${feature.feature}`}
+                    >
+                      {t('intentAI.compliance.withdraw', { defaultValue: 'Withdraw' })}
+                    </button>
+                  )}
                 </span>
               }
             />
@@ -1260,6 +1425,41 @@ export default function Settings() {
           </p>
         )}
       </motion.section>
+
+      {/*
+        The extra confirmation itself. It names the feature and the reason the
+        region restricts it, and it says outright that it does not authorise
+        execution — acknowledging a restriction is not a signature, and a sheet
+        that implied otherwise would be worse than no button at all.
+      */}
+      <Sheet
+        open={Boolean(ackFeature)}
+        onClose={() => setAckFeature(null)}
+        title={t('intentAI.compliance.confirmTitle', { defaultValue: 'One extra confirmation' })}
+      >
+        <p className="muted" style={{ fontSize: 12.3, lineHeight: 1.75 }} data-testid="region-ack-body">
+          {t('intentAI.compliance.confirmBody', {
+            defaultValue: '{{feature}} is restricted where you are. Confirming here records that you understand the restriction. It does not authorise any transaction — every action still goes through its own confirmation and your wallet.',
+            feature: ackFeature ? t(`intentAI.compliance.feature.${ackFeature}`) : ''
+          })}
+        </p>
+        <p className="faint" style={{ marginTop: 10, lineHeight: 1.7 }}>
+          {t(regionRows.find((r) => r.feature === ackFeature)?.i18nKey || 'intentAI.compliance.restricted')}
+        </p>
+        <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => acknowledgeFeature(ackFeature)}
+            data-testid="region-ack-confirm"
+          >
+            {t('intentAI.compliance.confirmExtra', { defaultValue: 'Confirm' })}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => setAckFeature(null)}>
+            {t('intentAI.compliance.cancel', { defaultValue: 'Cancel' })}
+          </button>
+        </div>
+      </Sheet>
 
       {/* ---------------- Intent AI activation (Phases 10–100) ----------- */}
       <motion.section variants={riseIn} initial="hidden" animate="show" data-testid="intent-ai-activation-section">
@@ -1277,14 +1477,27 @@ export default function Settings() {
             <Row
               icon={IconGlobe}
               label={t('settings.cloudSync')}
-              sub={s.lastSyncedAt ? new Date(s.lastSyncedAt).toLocaleString() : t('settings.neverSynced')}
+              sub={s.lastSyncedAt
+                ? t('settings.syncedAt', { defaultValue: 'Last synced {{when}}', when: fmtSyncedAt(s.lastSyncedAt) })
+                : t('settings.neverSynced')}
               right={
-                <button className="btn btn-sm btn-ghost" onClick={doSync} disabled={syncing}>
+                <button className="btn btn-sm btn-ghost" onClick={doSync} disabled={syncing} data-testid="cloud-sync-now">
                   {syncing ? '…' : t('settings.syncNow')}
                 </button>
               }
             />
           </div>
+          {syncResult && (
+            <p
+              className={`sync-result${syncResult.ok ? ' is-ok' : ' is-bad'}`}
+              role="status"
+              data-testid="cloud-sync-result"
+            >
+              {syncResult.ok
+                ? t('settings.syncDone', { defaultValue: 'Saved to the cloud just now. Settings from this account were pulled first.' })
+                : t('settings.syncFailed', { defaultValue: 'Sync failed — nothing was saved. {{code}}', code: syncResult.code || 'SYNC_FAILED' })}
+            </p>
+          )}
           <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }}>{t('settings.syncScope')}</p>
         </motion.section>
       )}

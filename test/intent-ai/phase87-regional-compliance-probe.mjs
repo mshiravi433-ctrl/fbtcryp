@@ -121,8 +121,33 @@ try {
     /!regionMap\.regionKnown/.test(settings) && settings.includes('data-testid="region-unknown-note"'));
   check('the region is derived from a locale hint, never asserted as legal fact',
     /navigator\.language/.test(settings));
+  /*
+   * The screen may only READ the gate, never the policy table it is derived
+   * from — importing REGION_POLICY (or the grant-side assertGateOnlyRestricts)
+   * would let a screen widen what the policy allows.
+   *
+   * Scoped to the import block rather than the whole file: the acknowledgement
+   * flow below describes the invariant in a comment, and a comment naming
+   * `assertGateOnlyRestricts` is not the same risk as importing it. Test what
+   * the rule means, not every occurrence of the word.
+   */
+  const settingsImports = settings.slice(0, settings.indexOf('export default function Settings'));
   check('the UI cannot grant a feature the policy denies (render-only)',
-    !/REGION_POLICY\s*\[/.test(settings) && !/assertGateOnlyRestricts/.test(settings));
+    !/REGION_POLICY/.test(settingsImports) && !/assertGateOnlyRestricts/.test(settingsImports));
+
+  /* The extra confirmation the settings row offers (see pages/Settings.jsx).
+     Acknowledgement is honoured by the gate for a RESTRICTED feature — and
+     must do nothing at all for a blocked one. */
+  check('the acknowledgement is checked against the gate, not asserted by the UI',
+    /assertFeaturePermitted\(\{/.test(settings) && /acknowledged:/.test(settings));
+  check('acknowledging a restricted feature permits it, scoped and unexecuted',
+    assertFeaturePermitted({ feature: 'automation', region: 'US', acknowledged: true, now: NOW }).permitted === true
+    && assertFeaturePermitted({ feature: 'automation', region: 'US', acknowledged: true, now: NOW }).executionAuthorized === false);
+  check('an acknowledgement never unlocks a feature the region blocks',
+    assertFeaturePermitted({ feature: 'fiat-onramp', region: 'US', acknowledged: true, now: NOW }).permitted === false
+    && assertFeaturePermitted({ feature: 'fiat-offramp', region: null, acknowledged: true, now: NOW }).permitted === false);
+  check('an unacknowledged restricted feature stays refused',
+    assertFeaturePermitted({ feature: 'automation', region: 'US', acknowledged: false, now: NOW }).permitted === false);
 
   /* The rendered map must cover the same features the module gates. */
   const uiMap = availabilityMap({ region: null });

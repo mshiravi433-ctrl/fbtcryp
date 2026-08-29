@@ -12,11 +12,34 @@
  *     stretched with leverage
  *   · nothing here executes anything; the confirmation gate and the wallet
  *     remain the only execution path (the plan says so, always)
+ *
+ * ─── WHY THE BUILD BUTTON LOOKED DEAD ─────────────────────────────────────
+ * Reported: «برنامه سود پس از زدن دکمه برنامه ساخت در اینتنت os کار نمیده و
+ * کاری انجام نمیده». The request itself was fine — the screen was not:
+ *
+ *   1. The button's only feedback was a text swap to "Asking the live venues…"
+ *      with no spinner, so on a slow connection there was no sign the tap had
+ *      landed at all.
+ *   2. The results rendered BELOW a tall form, outside the viewport. The plan
+ *      arrived, the button reverted to its idle label, and nothing appeared to
+ *      have happened — the evidence was off-screen.
+ *   3. A failure printed one fixed sentence and threw away everything the
+ *      server said, including its own error code, so a 502 and a network
+ *      blackout looked identical.
+ *
+ * The build now has a spinner and an elapsed counter, scrolls its own result
+ * into view, carries a client-side timeout so it can never hang, and reports
+ * the server's actual code alongside the human sentence.
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const RISK_OPTIONS = ['conservative', 'balanced', 'aggressive'];
+
+/* The server caps each venue feed at 12s and answers in parallel, so a healthy
+   build is a couple of seconds. 30s is a ceiling, not an expectation: past it
+   we stop waiting and say so rather than leaving the button spinning. */
+const BUILD_TIMEOUT_MS = 30_000;
 
 export default function ProfitPlanner() {
   const { t, i18n } = useTranslation();
@@ -29,8 +52,38 @@ export default function ProfitPlanner() {
     riskProfile: 'balanced'
   });
   const [state, setState] = useState({ phase: 'idle' }); // idle | loading | done | error
+  const [elapsed, setElapsed] = useState(0);
 
-  const build = async () => {
+  const abortRef = useRef(null);
+  const resultRef = useRef(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  /* A visible clock, not just a disabled button: with four upstream feeds
+     behind it, a build can legitimately take several seconds, and "how long
+     has this been going" is the whole difference between waiting and thinking
+     it is broken. */
+  useEffect(() => {
+    if (state.phase !== 'loading') return undefined;
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [state.phase]);
+
+  const build = useCallback(async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    /* Abandon the request on the client shortly after the server's own feed
+       deadline, so a wedged connection cannot hold the button hostage. */
+    const timer = setTimeout(() => controller.abort(), BUILD_TIMEOUT_MS);
+
     setState({ phase: 'loading' });
     try {
       const res = await fetch('/api/intents/v1/profit-plan', {
@@ -42,14 +95,56 @@ export default function ProfitPlanner() {
           horizonDays: Number(form.horizonDays) || 180,
           riskProfile: form.riskProfile,
           lang
-        })
+        }),
+        signal: controller.signal
       });
-      const body = await res.json();
-      setState(res.ok && body?.ok ? { phase: 'done', body } : { phase: 'error', body });
-    } catch {
-      setState({ phase: 'error', body: null });
+
+      let body = null;
+      try {
+        body = await res.json();
+      } catch {
+        /* An HTML error page from a proxy is not JSON. Say what happened
+           rather than crashing on it. */
+        if (!aliveRef.current) return;
+        setState({
+          phase: 'error',
+          body: null,
+          code: `HTTP_${res.status}`,
+          detail: t('intentOS.plan.badResponse', { defaultValue: 'The server answered with something that was not a plan.' })
+        });
+        return;
+      }
+
+      if (!aliveRef.current) return;
+      setState(res.ok && body?.ok
+        ? { phase: 'done', body }
+        : { phase: 'error', body, code: body?.code || `HTTP_${res.status}`, detail: body?.detail || null });
+    } catch (error) {
+      if (!aliveRef.current) return;
+      const timedOut = error?.name === 'AbortError';
+      setState({
+        phase: 'error',
+        body: null,
+        code: timedOut ? 'BUILD_TIMED_OUT' : 'NETWORK_UNREACHABLE',
+        detail: timedOut
+          ? t('intentOS.plan.timedOut', { defaultValue: 'The venue feeds did not answer within 30 seconds.' })
+          : String(error?.message || '').slice(0, 120)
+      });
+    } finally {
+      clearTimeout(timer);
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  };
+  }, [form.capitalUsd, form.horizonDays, form.riskProfile, form.targetMode, form.targetValue, lang, t]);
+
+  /* The result is rendered below a tall form. Without this, a successful build
+     looks exactly like a failed one: the button goes idle and the screen does
+     not appear to change. */
+  useEffect(() => {
+    if (state.phase !== 'done' && state.phase !== 'error') return;
+    const node = resultRef.current;
+    if (!node || typeof node.scrollIntoView !== 'function') return;
+    node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [state.phase]);
 
   const patch = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
 
@@ -64,6 +159,9 @@ export default function ProfitPlanner() {
       ? (a.expectedYieldPct === null ? '—' : `${a.expectedYieldPct}%`)
       : t('intentOS.plan.noData', { defaultValue: 'no data' })
   })), [plan, t]);
+
+  const reach = plan?.targetReachability || null;
+  const loading = state.phase === 'loading';
 
   return (
     <div className="ios-planner" data-testid="intent-os-planner">
@@ -106,22 +204,43 @@ export default function ProfitPlanner() {
           </label>
         </div>
 
-        <button type="button" className="btn btn-primary ios-compile" onClick={build} disabled={state.phase === 'loading'}>
-          {state.phase === 'loading'
-            ? t('intentOS.plan.building', { defaultValue: 'Asking the live venues…' })
-            : t('intentOS.plan.build', { defaultValue: 'Build the plan' })}
+        <button
+          type="button"
+          className="btn btn-primary ios-compile"
+          onClick={build}
+          disabled={loading}
+          data-testid="profit-plan-build"
+        >
+          {loading ? (
+            <>
+              <span className="ios-build-spinner" aria-hidden="true" />
+              {t('intentOS.plan.building', { defaultValue: 'Asking the live venues…' })}
+              {elapsed > 0 && <span className="ios-build-elapsed">{elapsed}s</span>}
+            </>
+          ) : t('intentOS.plan.build', { defaultValue: 'Build the plan' })}
         </button>
+
+        {loading && (
+          <p className="ios-build-hint" role="status">
+            {t('intentOS.plan.buildHint', { defaultValue: 'Reading stocks, dYdX, perpetuals and farm yields. Nothing is executed.' })}
+          </p>
+        )}
       </section>
 
       {state.phase === 'error' && (
-        <section className="ios-honesty-note is-error">
-          {t('intentOS.plan.failed', { defaultValue: 'The plan could not be built — the venue feeds did not answer. Try again in a moment.' })}
+        <section className="ios-honesty-note is-error" ref={resultRef} data-testid="profit-plan-error">
+          <strong>{t('intentOS.plan.failed', { defaultValue: 'The plan could not be built — the venue feeds did not answer. Try again in a moment.' })}</strong>
+          {state.code && <code className="ios-plan-code">{state.code}</code>}
+          {state.detail && <span className="ios-plan-detail">{state.detail}</span>}
+          <button type="button" className="ia-ctl" onClick={build}>
+            {t('intentOS.plan.retry', { defaultValue: 'Try again' })}
+          </button>
         </section>
       )}
 
       {state.phase === 'done' && plan && (
         <>
-          <section className="ios-plan-summary">
+          <section className="ios-plan-summary" ref={resultRef} data-testid="profit-plan-summary">
             <div className="ios-plan-verdict">
               <span className={`ios-status ${feasible ? 'eligible' : 'unavailable'}`}>
                 {feasible
@@ -134,10 +253,13 @@ export default function ProfitPlanner() {
               <span><b>{plan.projectedAnnualYieldPct}%</b>{t('intentOS.plan.projectedYearly', { defaultValue: 'expected / year' })}</span>
               <span><b>{plan.targetUsdAtHorizon} USDC</b>{t('intentOS.plan.targetAtHorizon', { defaultValue: 'target at horizon' })}</span>
               <span><b>{plan.venuesSeen}/5</b>{t('intentOS.plan.venuesLive', { defaultValue: 'venue classes live' })}</span>
-              {plan.targetReachability?.yearsEstimate !== null && (
-                <span><b>{plan.targetReachability.yearsEstimate}y</b>{t('intentOS.plan.yearsEstimate', { defaultValue: 'years at current rates' })}</span>
+              {reach && reach.yearsEstimate !== null && reach.yearsEstimate !== undefined && (
+                <span><b>{reach.yearsEstimate}y</b>{t('intentOS.plan.yearsEstimate', { defaultValue: 'years at current rates' })}</span>
               )}
             </div>
+            {reach?.reason && (
+              <p className="ios-plan-reason">{t('intentOS.plan.why', { defaultValue: 'Why' })} · <code>{reach.reason}</code></p>
+            )}
           </section>
 
           <section className="ios-form-card">
@@ -158,6 +280,11 @@ export default function ProfitPlanner() {
                 </div>
               ))}
             </div>
+            {Array.isArray(plan.venuesMissing) && plan.venuesMissing.length > 0 && (
+              <p className="ios-plan-reason">
+                {t('intentOS.plan.noData', { defaultValue: 'no data' })}: {plan.venuesMissing.map((k) => t(`intentOS.plan.class.${k}`, { defaultValue: k })).join(' · ')}
+              </p>
+            )}
           </section>
 
           <section className="ios-honesty-note">

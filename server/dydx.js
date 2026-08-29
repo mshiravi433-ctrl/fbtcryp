@@ -61,6 +61,29 @@ export function fetchDydxOrderbook(ticker) {
   return request(`/v4/orderbooks/perpetualMarket/${encodeURIComponent(ticker)}`);
 }
 
+/**
+ * Historical candles for one perpetual market.
+ *
+ * Added because the dYdX screen asked a person to size a leveraged position
+ * with nothing but a single oracle price and an open-interest figure — no shape
+ * of the market at all. This is the same read-only indexer the other three
+ * routes use; no wallet keys and no order submission pass through it.
+ *
+ * The upstream response is `{ candles: [{ startedAt, ticker, resolution, low,
+ * high, open, close, baseTokenVolume, ... }] }`, newest first. It is normalised
+ * oldest-first with numbers, because a chart that has to remember the upstream
+ * sort order is a chart that will one day draw backwards.
+ */
+export function fetchDydxCandles(ticker, resolution = '1HOUR', limit = 96) {
+  if (!validTicker(ticker)) throw upstreamError('BAD_DYDX_TICKER', 400);
+  const RESOLUTIONS = ['1MIN', '5MINS', '15MINS', '30MINS', '1HOUR', '4HOURS', '1DAY'];
+  const res = RESOLUTIONS.includes(resolution) ? resolution : '1HOUR';
+  const count = Math.max(2, Math.min(500, Number(limit) || 96));
+  return request(
+    `/v4/candles/perpetualMarkets/${encodeURIComponent(ticker)}?resolution=${res}&limit=${count}`
+  );
+}
+
 export function fetchDydxAccount(address, number = 0) {
   if (!validAddress(address)) throw upstreamError('BAD_DYDX_ADDRESS', 400);
   const subaccount = Number(number);

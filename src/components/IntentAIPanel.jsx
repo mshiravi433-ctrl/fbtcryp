@@ -53,6 +53,8 @@ import {
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
 import TokenApprovals from './TokenApprovals';
+import ScrollRail from './ScrollRail';
+import AutonomyLevelIcon from './AutonomyLevelIcon';
 import '../styles/intent-os.css';
 
 const LEVELS = [
@@ -60,6 +62,69 @@ const LEVELS = [
   { value: 2, key: 'level2' },
   { value: 3, key: 'level3' }
 ];
+
+/*
+ * Session controls, in rail order.
+ *
+ * STOP and EMERGENCY_EXIT are the two destructive actions, so they sit at the
+ * two ends of the rail rather than next to each other: a thumb reaching for
+ * the harmless REVOKE must never land on the stop.
+ */
+const CONTROL_ORDER = ['STOP', 'PAUSE', 'REVOKE', 'DISCONNECT', 'EMERGENCY_EXIT'];
+
+/**
+ * One glyph per control. Drawn, not emoji: these are the five buttons a person
+ * reaches for when something is going wrong, and an emoji's size and baseline
+ * move with the platform font — which is how a "stop" ends up looking like a
+ * different control on a different phone.
+ */
+function ControlIcon({ action }) {
+  const common = {
+    width: 12,
+    height: 12,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    'aria-hidden': 'true',
+    focusable: 'false'
+  };
+  if (action === 'STOP') {
+    return (
+      <svg {...common}>
+        <rect x="6.6" y="6.6" width="10.8" height="10.8" rx="2.4" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (action === 'PAUSE') {
+    return (
+      <svg {...common}>
+        <rect x="7" y="5.9" width="3.3" height="12.2" rx="1.4" fill="currentColor" />
+        <rect x="13.7" y="5.9" width="3.3" height="12.2" rx="1.4" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (action === 'REVOKE') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="7.4" stroke="currentColor" strokeWidth="1.9" />
+        <path d="M6.9 17.1 17.1 6.9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (action === 'DISCONNECT') {
+    return (
+      <svg {...common}>
+        <path d="M9.4 8.6v6.8M14.6 8.6v6.8M9.4 12H5.9M14.6 12h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M12 4.1 21.3 19.9H2.7L12 4.1Z" fill="currentColor" />
+      <path d="M12 9.9v4.4" stroke="#230a14" strokeWidth="2.1" strokeLinecap="round" />
+      <circle cx="12" cy="17.1" r="1.12" fill="#230a14" />
+    </svg>
+  );
+}
 
 /*
  * Session control buttons — see the .ia-ctl block in intent-os.css.
@@ -771,7 +836,17 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         </div>
         {/* Real mode selector: each chip carries the mode's actual participants
             from MODE_DEFINITIONS, and switching rebuilds the session boundary. */}
-        <div className="ia-modes" role="group" aria-label={t('intentAI.mode.title', { defaultValue: 'Primary mode' })}>
+        {/*
+          One line, scrollable. The three modes used to be a 3-column grid that
+          collapsed to a single column under 460px — three stacked cards, and
+          the third one pushed the boundary note and everything below it past
+          the fold. As a rail they stay side by side on every screen width and
+          the row can never widen the page.
+        */}
+        <ScrollRail
+          className="ia-modes"
+          ariaLabel={t('intentAI.mode.title', { defaultValue: 'Primary mode' })}
+        >
           {PRIMARY_MODES.map((candidate) => {
             const definition = MODE_DEFINITIONS[candidate];
             const who = (definition?.participants || [])
@@ -790,7 +865,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
               </button>
             );
           })}
-        </div>
+        </ScrollRail>
 
         {/* Live mode card — the session's real participants and, in external
             mode, the actual discovery result from the server catalog. */}
@@ -840,18 +915,34 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         </p>
       </div>
 
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-        {LEVELS.map((L) => (
-          <button
-            key={L.key}
-            type="button"
-            className={`chip ${level === L.value ? 'chip-on' : ''}`}
-            onClick={() => setLevel(L.value)}
-            aria-pressed={level === L.value}
-          >
-            L{L.value} · {t(`intentAI.levels.${L.key}`)}
-          </button>
-        ))}
+      {/*
+        Autonomy level. Three bare "L1 · تحلیل" chips said nothing about what
+        the levels mean, and they were plain `.chip` — a different visual
+        language from the glass controls two blocks below. Each level now
+        carries the same glyph the Intent OS rail uses, so the two screens read
+        as one product.
+      */}
+      <div className="ia-level-row">
+        <span className="ia-level-label">{t('intentAI.policy.level', { defaultValue: 'Level' })}</span>
+        <div className="ia-levels" role="group" aria-label={t('intentAI.policy.level', { defaultValue: 'Level' })}>
+          {LEVELS.map((L) => {
+            const isCurrent = level === L.value;
+            return (
+              <button
+                key={L.key}
+                type="button"
+                className={`ia-level${isCurrent ? ' is-current' : level > L.value ? ' is-below' : ''}`}
+                onClick={() => setLevel(L.value)}
+                aria-pressed={isCurrent}
+                data-testid={`intent-ai-level-${L.value}`}
+              >
+                <span className="ia-level-icon" aria-hidden="true"><AutonomyLevelIcon level={L.value} size={14} /></span>
+                <b>{`L${L.value}`}</b>
+                <small>{t(`intentAI.levels.${L.key}`)}</small>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="card-inner" style={{ background: 'rgba(255,255,255,0.035)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
@@ -859,23 +950,56 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           <span className="faint" style={{ fontSize: 10.5 }}>{t('intentAI.authorization.title', { defaultValue: 'Authorization boundary' })}</span>
           <span className="faint" style={{ fontSize: 10.5 }}>{session?.modeLabel || MODE_LABELS[mode]}</span>
         </div>
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap', fontSize: 11.5, marginTop: 6 }}>
-          <span style={{ color: 'var(--ok, #62e6a7)' }}>✓ {t('intentAI.authorization.analysis', { defaultValue: 'Analysis allowed' })}</span>
-          <span style={{ color: level >= 2 ? 'var(--ok, #62e6a7)' : 'var(--muted, #9aa4b2)' }}>✓ {t('intentAI.authorization.preparation', { defaultValue: 'Preparation' })}: {level >= 2 ? t('intentAI.authorization.available', { defaultValue: 'available' }) : t('intentAI.authorization.off', { defaultValue: 'off' })}</span>
-          <span style={{ color: session?.authorization?.financialExecution ? 'var(--ok, #62e6a7)' : 'var(--warn, #ffb454)' }}>! {t('intentAI.authorization.execution', { defaultValue: 'Financial execution' })}: {session?.authorization?.financialExecution ? t('intentAI.authorization.authorized', { defaultValue: 'authorized for this action' }) : t('intentAI.authorization.screenRequired', { defaultValue: 'authorization screen required' })}</span>
+        {/*
+          The boundary was three loose spans with inline colours and a bare
+          "✓"/"!" as its only iconography, wrapping onto as many lines as the
+          translation happened to need. It is now three rows of the same shape
+          — a state glyph, a label, a verdict — so the one that is off can be
+          found without reading all three.
+        */}
+        <div className="ia-auth-list">
+          <div className="ia-auth-item is-ok">
+            <span className="ia-auth-mark" aria-hidden="true">✓</span>
+            <span className="ia-auth-name">{t('intentAI.authorization.analysis', { defaultValue: 'Analysis allowed' })}</span>
+            <span className="ia-auth-value">{t('intentAI.authorization.available', { defaultValue: 'available' })}</span>
+          </div>
+          <div className={`ia-auth-item${level >= 2 ? ' is-ok' : ' is-off'}`}>
+            <span className="ia-auth-mark" aria-hidden="true">{level >= 2 ? '✓' : '·'}</span>
+            <span className="ia-auth-name">{t('intentAI.authorization.preparation', { defaultValue: 'Preparation' })}</span>
+            <span className="ia-auth-value">{level >= 2 ? t('intentAI.authorization.available', { defaultValue: 'available' }) : t('intentAI.authorization.off', { defaultValue: 'off' })}</span>
+          </div>
+          <div className={`ia-auth-item${session?.authorization?.financialExecution ? ' is-ok' : ' is-warn'}`}>
+            <span className="ia-auth-mark" aria-hidden="true">!</span>
+            <span className="ia-auth-name">{t('intentAI.authorization.execution', { defaultValue: 'Financial execution' })}</span>
+            <span className="ia-auth-value">{session?.authorization?.financialExecution ? t('intentAI.authorization.authorized', { defaultValue: 'authorized for this action' }) : t('intentAI.authorization.screenRequired', { defaultValue: 'authorization screen required' })}</span>
+          </div>
         </div>
-        <div className="ia-controls" style={{ marginTop: 8 }}>
-          {['STOP', 'PAUSE', 'REVOKE', 'DISCONNECT', 'EMERGENCY_EXIT'].map((action) => (
+
+        {/*
+          Session controls, in ONE line. `flex-wrap: wrap` here meant the row
+          became a two- or three-line staircase on a narrow phone, and on the
+          widest screens the fifth button sat where nobody looking for a stop
+          would expect it. As a rail the order is stable at every width and the
+          row scrolls instead of growing.
+        */}
+        <ScrollRail
+          className="ia-controls"
+          style={{ marginTop: 9 }}
+          ariaLabel={t('intentAI.controls.title', { defaultValue: 'Session controls' })}
+        >
+          {CONTROL_ORDER.map((action) => (
             <button
               key={action}
               type="button"
               className={`ia-ctl ${CONTROL_VARIANTS[action] || ''}`}
               onClick={() => handleControl(action)}
+              title={t(`intentAI.controls.${action.toLowerCase()}`, { defaultValue: action.replace('_', ' ') })}
             >
-              {action === 'EMERGENCY_EXIT' ? '⚠ ' : ''}{t(`intentAI.controls.${action.toLowerCase()}`, { defaultValue: action.replace('_', ' ') })}
+              <ControlIcon action={action} />
+              {t(`intentAI.controls.${action.toLowerCase()}`, { defaultValue: action.replace('_', ' ') })}
             </button>
           ))}
-        </div>
+        </ScrollRail>
       </div>
 
       {session?.status === 'STOPPED' && (
