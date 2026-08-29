@@ -1,5 +1,5 @@
 /**
- * FBT INTENT AI — authoritative live status for specification Phases 10–150.
+ * FBT INTENT AI — authoritative live status for specification Phases 10–200.
  *
  * Source and test coverage describe implementation. The operational status is
  * driven by the reviewed 21/21 evidence snapshot, so all specified phases can
@@ -183,11 +183,40 @@ const LATER_SPEC_PHASES = Object.freeze([
   { phase: 150, id: 'effectiveness-self-audit', title: 'Effectiveness Self-Audit (usability + functionality pass)', implementation: 'implemented', source: ['src/lib/intent-ai/multiVenuePlanner.js', 'src/lib/intent-ai/outputLocales.js', 'src/lib/intent-ai/walletChainVerify.js', 'src/lib/intent-ai/intentRailControls.js'], tests: ['test/intent-ai/phase101-multi-venue-probe.mjs', 'test/intent-ai/phase117-rail-controls-probe.mjs', 'test/intent-ai/phase121-output-locales-probe.mjs', 'test/intent-ai/phase131-wallet-chain-probe.mjs', 'test/intent-ai/phase141-rail-layout-probe.mjs'], requiredEvidence: [] }
 ]);
 
+/* Phases 151–200 are one reviewed bounded-autonomy control plane. Keeping the
+   title registry data-driven avoids fifty near-identical status declarations;
+   every row still publishes the exact shared source and probe. */
+const AUTONOMY_PHASE_TITLES = Object.freeze([
+  'Sanitized Recovery Journal', 'Device-local Job Persistence', 'Portable Recovery Export', 'Cross-device Recovery Import',
+  'Recovery Corruption Guard', 'Failure Diagnosis', 'Alternative Discovery', 'Terms Recalculation Gate', 'Safe Preflight Retry',
+  'Retry Exhaustion Limit', 'No Automatic Rebroadcast', 'Transaction Replacement Tracking', 'Spot Venue Capability Matrix',
+  '0x Spot Adapter Boundary', 'Venue Health Filtering', 'Options Capability Disclosure', 'Single-chain Atomic Compiler',
+  'Abort-all Atomic Policy', 'Cross-chain Atomicity Refusal', 'Atomic Simulation Gate', 'Portfolio Risk Policy',
+  '20 Percent Risk Guard', 'Continuous Monitor Boundary', 'Rebalance Proposal Engine', 'No Fixed-profit Promise',
+  'Pseudonymous Wallet Agent', 'Agent Signer Isolation', 'Agent Reliability Ranking', 'Recovery-resilience Scoring',
+  'Agent Fail-closed Selection', 'Realised Profit Ledger Boundary', 'Positive Net-profit Calculation', 'Five Percent Performance Fee',
+  'Zero Fee on Loss', 'Fee Consent Disclosure', 'Atomic Fee Collection Gate', 'Same-wallet Profit Destination',
+  'Verified External Destination', 'One Final Wallet Confirmation', 'Non-custodial Settlement Proposal', 'CEX KYC Boundary',
+  'Iran Sanctions Legal Gate', 'No KYC-bypass Policy', 'Compliant Venue Alternative', '21-kind Evidence Curriculum',
+  'Personal Evidence Progress', 'Training-not-evidence Warning', 'Recovery and Risk Scenarios', 'Fee and Atomicity Scenarios',
+  'Bounded Autonomy Self-audit'
+]);
+
+const AUTONOMY_SPEC_PHASES = Object.freeze(AUTONOMY_PHASE_TITLES.map((title, index) => ({
+  phase: 151 + index,
+  id: `bounded-autonomy-${151 + index}`,
+  title,
+  implementation: 'implemented',
+  source: ['src/lib/intent-ai/autonomousIntentNetwork.js'],
+  tests: ['test/intent-ai/phase151-autonomous-recovery-probe.mjs'],
+  requiredEvidence: []
+})));
+
 /* Phase 51+ rows: source and probe presence are published; the launch-wide
    evidence gate decides operational/live. Working-group fidelity (per-check
    digests and third-party provider gaps) is published by the later-phase
    probe, not fabricated per row here. */
-export const SPEC_PHASES = Object.freeze([...BASE_SPEC_PHASES, ...LATER_SPEC_PHASES]);
+export const SPEC_PHASES = Object.freeze([...BASE_SPEC_PHASES, ...LATER_SPEC_PHASES, ...AUTONOMY_SPEC_PHASES]);
 
 function laterInactiveStatus() {
   return {
@@ -301,7 +330,7 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
     operational: live,
     live,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
-    specificationImplementedThrough: 150,
+    specificationImplementedThrough: 200,
     /* The release gate is aggregate; the live rows are published per phase. The
        number here is the highest live row, not a claim that every row below it
        is live — `operationalPhaseCount` is the exact count. */

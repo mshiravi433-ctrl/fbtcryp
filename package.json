@@ -167,7 +167,9 @@
     "test:durable-evidence": "node test/intent-ai/durable-evidence-probe.mjs",
     "activate:release": "node scripts/activate-release.mjs",
     "test:activation-config": "node test/intent-ai/activation-config-probe.mjs",
-    "test:phase142": "node test/intent-ai/phase142-reachability-probe.mjs"
+    "test:phase142": "node test/intent-ai/phase142-reachability-probe.mjs",
+    "test:phase151": "node test/intent-ai/phase151-autonomous-recovery-probe.mjs",
+    "test:phases151-200": "npm run test:phase151"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

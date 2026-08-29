@@ -417,7 +417,9 @@ const laterPhaseProbes = [
   [97, './intent-ai/phase97-gradual-autonomy-probe.mjs'],
   [98, './intent-ai/phase98-human-oversight-probe.mjs'],
   [99, './intent-ai/phase99-long-term-survival-probe.mjs'],
-  [100, './intent-ai/phase100-user-sovereignty-probe.mjs']
+  [100, './intent-ai/phase100-user-sovereignty-probe.mjs'],
+  /* Phases 151–200 share one bounded-autonomy control-plane probe. */
+  [151, './intent-ai/phase151-autonomous-recovery-probe.mjs']
 ];
 for (const [phase, probe] of laterPhaseProbes) {
   console.log(`▸ probing FBT Intent AI — Phase ${phase} contract…`);

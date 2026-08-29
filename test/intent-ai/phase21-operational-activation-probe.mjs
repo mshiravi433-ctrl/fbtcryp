@@ -123,7 +123,7 @@ try {
        the point is that the number is real, not that it is zero. */
     const liveCount = evidenceStoreStatus().storedCount;
     check('activation reports the real stored-evidence count',
-      activation.body.product.specificationImplementedThrough === 150
+      activation.body.product.specificationImplementedThrough === 200
       && activation.body.product.storedEvidence === `${liveCount}/21`
       && activation.body.product.operationalActivationRequired === (liveCount < 21));
     const dumped = JSON.stringify({ phaseStatus: phaseStatus.body, publicStatus: publicStatus.body, activation: activation.body, empty, ready });

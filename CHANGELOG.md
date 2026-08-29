@@ -1,3 +1,27 @@
+## Unreleased — Phases 151–200: durable recovery and bounded autonomy
+
+- Added a sanitized, corruption-checked recovery journal with Storage-like
+  persistence and portable phone/laptop/tablet export; private keys, seed,
+  calldata, raw transactions and signatures are stripped. Recovery follows
+  explain → alternatives → recalculate → preflight retry, never automatic
+  rebroadcast, and stops after three attempts.
+- Added spot venue capability discovery including 0x, an honest single-chain
+  atomic compiler, a 20% portfolio-risk guard that emits proposals only,
+  pseudonymous wallet-agent profiles and evidence-weighted agent ranking.
+- Added an exact 5% performance-fee calculation over realised positive net
+  profit only (zero on loss), verified same/external-wallet destination rules
+  and a final wallet-confirmed settlement proposal. No automatic withdrawal or
+  signer authority was added.
+- Iranian/no-KYC CEX operation fails closed; the module offers no KYC or
+  sanctions bypass. The 21 operational evidence kinds are now also available
+  as a personal Persian curriculum without treating checked lessons as
+  operational evidence.
+- Phase status and activation now cover 10–200 (191 rows). New probe:
+  `npm run test:phases151-200`; full suite and production build pass. Also fixed
+  `proofEvidence()` reading an undeclared `actualOutputSource` variable.
+- Persian design and scenario guide:
+  `docs/INTENT-AI-PHASES-151-200-FA.md`.
+
 ## Unreleased — Intent understanding & planning (the parser stopped guessing)
 
 - **Understanding measured, then fixed.** `intentParser.js` was a keyword
