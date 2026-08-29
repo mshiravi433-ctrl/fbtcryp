@@ -44,7 +44,14 @@ export async function storeGet(key, fallback = null) {
 
 export async function storeSet(key, value) {
   mem.set(key, value);
-  if (blobConfigured()) await blobSet(`kv:${key}`, value, YEAR);
+  if (blobConfigured()) {
+    const persisted = await blobSet(`kv:${key}`, value, YEAR);
+    // A configured provider is a durability contract, not a best-effort cache.
+    // Propagate a failed REST/Blob write so probes cannot report stored:true
+    // merely because credentials were present while the provider was paused,
+    // unreachable or rejected them.
+    if (!persisted) throw new Error('DURABLE_STORE_WRITE_FAILED');
+  }
   return value;
 }
 

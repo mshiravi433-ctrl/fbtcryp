@@ -6,7 +6,9 @@
   token remains—so cache misses cannot silently consume more Advanced Requests.
 - Redis writes carry a real `EX` TTL, provider calls are bounded to six seconds,
   failures stay fail-closed, and public diagnostics expose only booleans/backend
-  names, never the REST URL or token.
+  names, never the REST URL or token. The shared store now propagates failed
+  durable writes, preventing probes from claiming `stored:true` merely because
+  credentials exist while the provider rejected the write.
 - Activation configuration now reports both Upstash variables, treats either
   Upstash or Blob as a durable store, and self-evidence identifies the selected
   provider. `test:upstash-store` proves SET/GET, TTL, secret non-disclosure and
