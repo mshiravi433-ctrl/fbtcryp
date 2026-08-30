@@ -36,6 +36,10 @@ import {
   IconTrend,
   IconPools,
   IconSwap,
+  IconLock,
+  IconCoins,
+  IconUser,
+  IconBank
 } from '../components/Icons';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -766,30 +770,31 @@ function PositionsTab({ t, haptic, navigate }) {
 function HowItWorks({ t }) {
   const [open, setOpen] = useState(false);
   const steps = [
-    { emoji: '🔒', key: 'step1', hue: '#4ade80' },
-    { emoji: '📈', key: 'step2', hue: '#60a5fa' },
-    { emoji: '⚖️', key: 'step3', hue: '#a78bfa' },
-    { emoji: '💸', key: 'step4', hue: '#fbbf24' },
+    { Icon: IconLock, key: 'step1', color: '#4ade80' },
+    { Icon: IconTrend, key: 'step2', color: '#60a5fa' },
+    { Icon: IconBank, key: 'step3', color: '#a78bfa' },
+    { Icon: IconCoins, key: 'step4', color: '#fbbf24' },
   ];
 
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.03)',
-      border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: 15, overflow: 'hidden',
+      background: 'var(--surface-1)',
+      border: '1px solid var(--line)',
+      borderRadius: 14, overflow: 'hidden',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
     }}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '13px 16px', background: 'transparent',
+          width: '100%', padding: '15px 18px', background: 'transparent',
           cursor: 'pointer', gap: 8,
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t('loan.howTitle')}</span>
-        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.18 }}>
-          <IconChevronRight width={15} height={15} style={{ color: 'var(--text-3)' }} />
+        <span style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--text-1)' }}>{t('loan.howTitle')}</span>
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.2 }}>
+          <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
         </motion.span>
       </button>
 
@@ -801,20 +806,29 @@ function HowItWorks({ t }) {
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {steps.map(s => (
-                <div key={s.key} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <span style={{
-                    width: 34, height: 34, borderRadius: 10,
-                    background: `linear-gradient(135deg, ${s.hue}22, ${s.hue}08)`,
-                    border: `1px solid ${s.hue}33`,
-                    display: 'grid', placeItems: 'center', fontSize: 15, flexShrink: 0,
-                  }}>{s.emoji}</span>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 2 }}>
+            <div style={{ padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {steps.map((s, i) => (
+                <div key={s.key} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', position: 'relative' }}>
+                  {i !== steps.length - 1 && (
+                    <div style={{
+                      position: 'absolute', top: 40, bottom: -16, right: 18, width: 2,
+                      background: 'var(--line)', borderRadius: 2
+                    }} />
+                  )}
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 12,
+                    background: `linear-gradient(135deg, ${s.color}22, ${s.color}11)`,
+                    border: `1px solid ${s.color}33`,
+                    display: 'grid', placeItems: 'center', flexShrink: 0,
+                    color: s.color, zIndex: 1
+                  }}>
+                    <s.Icon width={20} height={20} />
+                  </div>
+                  <div style={{ paddingTop: 2 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: 'var(--text-1)' }}>
                       {t(`loan.${s.key}Title`)}
                     </div>
-                    <p className="prose-sm" style={{ lineHeight: 1.7 }}>
+                    <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.7 }}>
                       {t(`loan.${s.key}Body`)}
                     </p>
                   </div>
@@ -834,9 +848,9 @@ function HowItWorks({ t }) {
 
 function HeroStats({ t }) {
   const stats = [
-    { label: t('loan.nonCustodial'), sub: t('loan.nonCustodialSub'), color: '#4ade80', icon: '🔒' },
-    { label: t('loan.fbtFee'),       sub: t('loan.fbtFeeSub'),       color: '#60a5fa', icon: '💸' },
-    { label: t('loan.noKyc'),        sub: t('loan.noKycSub'),        color: '#a78bfa', icon: '✅' },
+    { label: t('loan.nonCustodial'), sub: t('loan.nonCustodialSub'), color: '#4ade80', Icon: IconLock },
+    { label: t('loan.fbtFee'),       sub: t('loan.fbtFeeSub'),       color: '#60a5fa', Icon: IconCoins },
+    { label: t('loan.noKyc'),        sub: t('loan.noKycSub'),        color: '#a78bfa', Icon: IconUser },
   ];
   return (
     <div style={{ display: 'flex', gap: 8 }}>
@@ -845,16 +859,26 @@ function HeroStats({ t }) {
           key={s.label}
           whileTap={{ scale: 0.96 }}
           style={{
-            flex: '1 1 0', padding: '11px 8px', borderRadius: 13, textAlign: 'center',
-            background: `linear-gradient(160deg, ${s.color}14, transparent)`,
-            border: `1px solid ${s.color}28`,
+            flex: '1 1 0', padding: '12px 10px', borderRadius: 14, textAlign: 'center',
+            background: 'var(--surface-1)',
+            border: '1px solid var(--line)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center'
           }}
         >
-          <div style={{ fontSize: 16, marginBottom: 3 }}>{s.icon}</div>
-          <div style={{ fontWeight: 800, fontSize: 10.5, color: s.color, lineHeight: 1.2 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 10, marginBottom: 8, display: 'grid', placeItems: 'center',
+            background: `linear-gradient(135deg, ${s.color}22, ${s.color}11)`,
+            color: s.color
+          }}>
+            <s.Icon width={18} height={18} />
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 11, color: 'var(--text-1)', lineHeight: 1.2 }}>
             {s.label}
           </div>
-          <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2 }}>{s.sub}</div>
+          <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 3, lineHeight: 1.3 }}>
+            {s.sub}
+          </div>
         </motion.div>
       ))}
     </div>

@@ -70,6 +70,7 @@ export const wallexTrades = (symbol) => request('/api/wallex/v1/account/trades',
 export const wallexOtcPrice = (symbol, side) => request('/api/wallex/v1/account/otc/price', { query: { symbol, side } });
 export const wallexCryptoDeposits = () => request('/api/wallex/v1/account/crypto-deposit');
 export const wallexWithdraw = (body) => request('/api/wallex/v1/account/crypto-withdrawal', { method: 'POST', body });
+export const wallexServerIp = () => fetch('/api/wallex/v1/server-ip').then(r => r.json());
 
 export const wallexPlaceOrder = (body) => request('/api/wallex/v1/account/orders', { method: 'POST', body });
 export const wallexPlaceOtcOrder = (body) => request('/api/wallex/v1/account/otc/orders', { method: 'POST', body });
