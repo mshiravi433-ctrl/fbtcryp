@@ -1,0 +1,64 @@
+# ============================================================================
+# ATOMIC SWAP — TESTNET ACTIVATION
+#
+# ⚠️  THIS FILE MUST BE COPIED BY HAND to:
+#     .github/workflows/atomic-swap-activation.yml
+#     GitHub blocks agent tokens from writing anything under
+#     .github/workflows/, so it lives here and a human pastes it — the exact
+#     same pattern as channel-post.yml.
+#
+# ONE-TIME SETUP (all doable from a phone):
+#   1. Copy this file to .github/workflows/atomic-swap-activation.yml
+#      (GitHub web → Add file → Create new file → paste → commit).
+#   2. Create a BURNER wallet (a fresh account in any wallet app) and export
+#      its private key. Never reuse a main wallet. Never paste it in chat.
+#   3. Add it as the repository secret  ATOMIC_SWAP_DEPLOYER_KEY
+#      (Settings → Secrets and variables → Actions → New repository secret).
+#   4. Fund the burner's PUBLIC address with a little testnet gas:
+#        tBNB (chain 97):        https://testnet.bnbchain.org/faucet-smart
+#        Arb Sepolia ETH (421614): https://faucets.chain.link/arbitrum-sepolia
+#   5. Actions → "Atomic Swap Testnet Activation" → Run workflow.
+#
+# WHAT IT DOES: deploys contracts/IntentAtomicSwap on BSC testnet (97) and
+# Arbitrum Sepolia (421614) and prints the exact
+# INTENT_ATOMIC_SWAP_ADDRESSES env for your hosting (Vercel) — set it there,
+# redeploy, and /#/intent flips the HTLC row to فعال/ATOMIC.
+#
+# SECURITY: the private key reaches the process ONLY through the explicit
+# env: block below and is never printed. The contracts have no owner; the
+# deployer key needs only testnet gas and can be discarded afterwards.
+# ============================================================================
+name: Atomic Swap Testnet Activation
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Deploy IntentAtomicSwap on chains 97 + 421614
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.ATOMIC_SWAP_DEPLOYER_KEY }}
+        run: |
+          set -e
+          node scripts/activate-atomic-swap.mjs \
+            --chain 97     --rpc https://data-seed-prebsc-1-s1.binance.org:8545/ \
+            --chain 421614 --rpc https://sepolia-rollup.arbitrum.io/rpc \
+            --write-env .env.atomic.testnet
+      - name: Publish the activation env in the run summary
+        if: always()
+        run: |
+          {
+            echo "## Atomic swap — testnet activation"
+            echo '```env'
+            cat .env.atomic.testnet 2>/dev/null || echo "no env produced — see the deploy log above"
+            echo '```'
+            echo "Next: set INTENT_ATOMIC_SWAP_ADDRESSES (and optionally INTENT_ATOMIC_SWAP_RPC_NETWORKS) in your hosting env (e.g. Vercel) and redeploy. /#/intent then reports the HTLC row as فعال/ATOMIC."
+          } >> "$GITHUB_STEP_SUMMARY"
