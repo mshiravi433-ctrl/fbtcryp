@@ -684,6 +684,16 @@ installDom();
 const { run: runScreens } = await import('./.out/screens/screens.js');
 report('screen smoke (all 12 languages)', await runScreens(document.getElementById('r')));
 
+/* --------------- 4a. the Iranians-only Wallex tab (fa ONLY) --------------- */
+/* The owner's hard rule, proven BEHAVIORALLY: the Buy page is walked through
+   en → fa → ar → tr → fa with the real i18n, and the Wallex tab + panel may
+   exist only while the live language is Persian. */
+console.log('\n▸ building Wallex fa-only gate suite…');
+npx(['vite', 'build', '-c', 'test/vite.wallex-gate.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runWallexGate } = await import('./.out/wallex-gate/wallex-gate.js');
+report('Wallex tab (fa-only gate, live walk)', await runWallexGate(document.getElementById('r')));
+
 /* --------------------- 4b. coin detail under real data -------------------- */
 /*
  * The screen suite mounts `<CoinDetail />` with NO id, which takes the
