@@ -1,26 +1,21 @@
 # ============================================================================
 # ATOMIC SWAP — TESTNET ACTIVATION
 #
-# ⚠️  THIS FILE MUST BE COPIED BY HAND to:
-#     .github/workflows/atomic-swap-activation.yml
-#     GitHub blocks agent tokens from writing anything under
-#     .github/workflows/, so it lives here and a human pastes it — the exact
-#     same pattern as channel-post.yml.
-#
-# ONE-TIME SETUP (all doable from a phone):
-#   1. Copy this file to .github/workflows/atomic-swap-activation.yml
-#      (GitHub web → Add file → Create new file → paste → commit).
+# ONE-TIME SETUP:
+#   1. This file lives at .github/workflows/atomic-swap-activation.yml
+#      (copied by hand from ci/atomic-swap-activation.yml — GitHub blocks
+#      agent tokens from writing under .github/workflows/).
 #   2. Create a BURNER wallet (a fresh account in any wallet app) and export
 #      its private key. Never reuse a main wallet. Never paste it in chat.
 #   3. Add it as the repository secret  ATOMIC_SWAP_DEPLOYER_KEY
 #      (Settings → Secrets and variables → Actions → New repository secret).
 #   4. Fund the burner's PUBLIC address with a little testnet gas:
-#        tBNB (chain 97):        https://testnet.bnbchain.org/faucet-smart
+#        ETH Sepolia (11155111):  https://sepolia-faucet.pk910.de/
 #        Arb Sepolia ETH (421614): https://faucets.chain.link/arbitrum-sepolia
 #   5. Actions → "Atomic Swap Testnet Activation" → Run workflow.
 #
-# WHAT IT DOES: deploys contracts/IntentAtomicSwap on BSC testnet (97) and
-# Arbitrum Sepolia (421614) and prints the exact
+# WHAT IT DOES: deploys contracts/IntentAtomicSwap on Ethereum Sepolia
+# (11155111) and Arbitrum Sepolia (421614) and prints the exact
 # INTENT_ATOMIC_SWAP_ADDRESSES env for your hosting (Vercel) — set it there,
 # redeploy, and /#/intent flips the HTLC row to فعال/ATOMIC.
 #
@@ -43,15 +38,10 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm ci
-      - name: Deploy IntentAtomicSwap on chains 97 + 421614
+      - name: Deploy IntentAtomicSwap on chains 11155111 + 421614
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.ATOMIC_SWAP_DEPLOYER_KEY }}
-        run: |
-          set -e
-          node scripts/activate-atomic-swap.mjs \  
-            --chain 11155111 --rpc https://ethereum-sepolia-rpc.publicnode.com \ \
-            --chain 421614 --rpc https://sepolia-rollup.arbitrum.io/rpc \
-            --write-env .env.atomic.testnet
+        run: node scripts/activate-atomic-swap.mjs --chain 11155111 --rpc https://ethereum-sepolia-rpc.publicnode.com --chain 421614 --rpc https://sepolia-rollup.arbitrum.io/rpc --write-env .env.atomic.testnet
       - name: Publish the activation env in the run summary
         if: always()
         run: |
