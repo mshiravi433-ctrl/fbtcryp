@@ -845,7 +845,7 @@
       "keyOn": "Wallex 密钥：已连接",
       "keyOff": "Wallex 密钥：未设置",
       "keyDevice": "stored on this device only",
-      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). The key stays in this device's storage and is sent only with your own requests — FBT's server forwards it to Wallex and never stores or logs it. Tip: for extra safety allowlist your own IPs in Wallex's panel.",
+      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). IMPORTANT: leave the IP allow-list EMPTY — requests go out from FBT's server, not your device, so a pinned IP would break your own key. The key stays in this device's storage and is sent only with your own requests; FBT's server never stores or logs it.",
       "keyPlaceholder": "Wallex API key",
       "keySave": "Save key",
       "keyRemove": "Remove",
@@ -885,7 +885,24 @@
       "cancelling": "Cancelling…",
       "recentTrades": "Recent trades",
       "disclosure": "Wallex 是一家独立的伊朗交易所，有自己的 KYC 和费用。价格以托曼计；交易有风险 — 这不是财务建议。",
-      "marketPrice": "市场价格"
+      "marketPrice": "市场价格",
+      "syncTitle": "您的钱包 — 直接同步，无需新建",
+      "syncHelp": "Wallex already holds custody wallets for you — nothing new to create. Trade with Toman there, then withdraw straight to this app's wallet address below and continue everything inside FBT.",
+      "myAddress": "本应用的钱包地址",
+      "addressUse": "在 Wallex 提现到该地址；资金直接进入本应用的钱包。",
+      "connectForSync": "连接本应用钱包以同步地址。",
+      "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
+      "withdrawTitle": "从 Wallex 提现到本应用钱包",
+      "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawCoin": "币种",
+      "withdrawNetwork": "网络",
+      "withdrawValue": "数量",
+      "withdrawAddress": "目标地址",
+      "useAppAddress": "使用本应用地址",
+      "withdrawReview": "检查提现",
+      "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
+      "withdrawConfirmYes": "确认提现",
+      "withdrawDone": "提现已提交"
     }
   }
 }

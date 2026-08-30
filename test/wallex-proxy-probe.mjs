@@ -26,6 +26,7 @@ import {
   resolveWallexKey,
   validateWallexOrderBody,
   validateWallexOtcBody,
+  validateWallexWithdrawBody,
   normalizeWallexMarkets,
   createWallexOrderLimiter
 } from '../server/wallex.js';
@@ -154,6 +155,51 @@ await test('every buy.wallex.* key used by the panel exists in ALL 12 locales', 
       assert.ok(locale.buy?.walletTabs?.[key], `${file}: missing buy.walletTabs.${key}`);
     }
   }
+});
+
+await test('withdrawal bodies are validated before egress (real funds upstream)', async () => {
+  let called = 0;
+  const fail = async () => { called += 1; return JSON_FETCH({}); };
+  assert.equal((await wallexUpstream('withdrawCrypto', { body: { coin: '', network: 'TRC20', value: '1', wallet_address: 'TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' }, headerKey: 'k', fetchImpl: fail })).body.error, 'WALLEX_BAD_COIN');
+  assert.equal((await wallexUpstream('withdrawCrypto', { body: { coin: 'USDT', network: 'T R C', value: '1', wallet_address: 'TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' }, headerKey: 'k', fetchImpl: fail })).body.error, 'WALLEX_BAD_NETWORK');
+  assert.equal((await wallexUpstream('withdrawCrypto', { body: { coin: 'USDT', network: 'TRC20', value: '0', wallet_address: 'TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' }, headerKey: 'k', fetchImpl: fail })).body.error, 'WALLEX_BAD_AMOUNT');
+  assert.equal((await wallexUpstream('withdrawCrypto', { body: { coin: 'USDT', network: 'TRC20', value: '1', wallet_address: 'has space in it' }, headerKey: 'k', fetchImpl: fail })).body.error, 'WALLEX_BAD_ADDRESS');
+  assert.equal(called, 0);
+  const spy = SPY({ success: true, result: { id: 1 } });
+  const good = await wallexUpstream('withdrawCrypto', { body: { coin: 'usdt', network: 'trc20', value: '2.5', wallet_address: ' TXWalletAddressForProbe123456 ' }, headerKey: 'k', fetchImpl: spy.impl });
+  assert.equal(good.status, 200);
+  assert.equal(spy.calls[0].init.method, 'POST');
+  const sent = JSON.parse(spy.calls[0].init.body);
+  assert.equal(sent.coin, 'USDT');
+  assert.equal(sent.wallet_address, 'TXWalletAddressForProbe123456');
+  // deposits list: private -> no key, no egress
+  let hit = 0;
+  const noKey = await wallexUpstream('cryptoDeposits', { fetchImpl: async () => { hit += 1; return JSON_FETCH({}); } });
+  assert.equal(noKey.status, 401);
+  assert.equal(hit, 0);
+});
+
+await test('the tab is buy/sell only: no external links, no investment wording', () => {
+  const panel = readFileSync('src/components/WallexPanel.jsx', 'utf8');
+  const buy = readFileSync('src/pages/Buy.jsx', 'utf8');
+  assert.equal(/href="http/.test(panel), false, 'the Wallex panel must not link out');
+  assert.equal(/window\.open\(['"]http/.test(panel), false);
+  assert.equal(/href="http/.test(buy.includes('WallexPanel') ? buy : ''), false);
+  const fa = JSON.parse(readFileSync('src/i18n/locales/fa.json', 'utf8'));
+  const en = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
+  const faText = JSON.stringify(fa.buy.wallex);
+  const enText = JSON.stringify(en.buy.wallex);
+  assert.equal(faText.includes('سرمایه‌گذاری'), false, 'fa copy must not sell investment');
+  assert.equal(/invest/i.test(enText), false, 'en copy must not sell investment');
+});
+
+await test('sizing stays correct on small Persian phones (grid + sync cards)', () => {
+  const css = readFileSync('src/styles/lab-modern.css', 'utf8');
+  const grid = css.match(/\.wallex-markets \{[^}]*\}/);
+  assert.ok(grid, '.wallex-markets rule must exist');
+  assert.ok(/minmax\((1[0-4][0-9]|1[0-5]0)px/.test(grid[0]), 'market grid minmax must stay <= 150px');
+  assert.ok(css.includes('@media (max-width: 360px)'), 'small-phone media query must exist');
+  assert.ok(css.includes(".wallex-copy-row code"), 'sync address rows styled');
 });
 
 await test('the tab carries light-theme overrides (no theme bugs)', () => {

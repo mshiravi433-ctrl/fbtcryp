@@ -845,7 +845,7 @@
       "keyOn": "Clé Wallex : connectée",
       "keyOff": "Clé Wallex : non définie",
       "keyDevice": "stored on this device only",
-      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). The key stays in this device's storage and is sent only with your own requests — FBT's server forwards it to Wallex and never stores or logs it. Tip: for extra safety allowlist your own IPs in Wallex's panel.",
+      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). IMPORTANT: leave the IP allow-list EMPTY — requests go out from FBT's server, not your device, so a pinned IP would break your own key. The key stays in this device's storage and is sent only with your own requests; FBT's server never stores or logs it.",
       "keyPlaceholder": "Wallex API key",
       "keySave": "Save key",
       "keyRemove": "Remove",
@@ -885,7 +885,24 @@
       "cancelling": "Cancelling…",
       "recentTrades": "Recent trades",
       "disclosure": "Wallex est une bourse iranienne distincte avec son propre KYC et ses frais. Les prix sont en Toman ; trader comporte des risques — ceci n'est pas un conseil financier.",
-      "marketPrice": "prix du marché"
+      "marketPrice": "prix du marché",
+      "syncTitle": "Votre portefeuille — synchronisé, sans en créer un nouveau",
+      "syncHelp": "Wallex already holds custody wallets for you — nothing new to create. Trade with Toman there, then withdraw straight to this app's wallet address below and continue everything inside FBT.",
+      "myAddress": "Adresse du portefeuille de l'app",
+      "addressUse": "Dans Wallex, retirez vers cette adresse ; les fonds arrivent directement dans le portefeuille de l'app.",
+      "connectForSync": "Connectez le portefeuille de l'app pour synchroniser l'adresse.",
+      "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
+      "withdrawTitle": "Retirer de Wallex vers le portefeuille de l'app",
+      "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawCoin": "Crypto",
+      "withdrawNetwork": "Réseau",
+      "withdrawValue": "Montant",
+      "withdrawAddress": "Adresse de destination",
+      "useAppAddress": "Utiliser l'adresse de l'app",
+      "withdrawReview": "Vérifier le retrait",
+      "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
+      "withdrawConfirmYes": "Confirmer le retrait",
+      "withdrawDone": "Retrait soumis"
     }
   }
 }

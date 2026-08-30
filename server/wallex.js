@@ -40,9 +40,11 @@ export const WALLEX_ROUTES = Object.freeze({
   openOrders: { method: 'GET', path: '/v1/account/openOrders', auth: true },
   trades: { method: 'GET', path: '/v1/account/trades', auth: true },
   otcPrice: { method: 'GET', path: '/v1/account/otc/price', auth: true },
+  cryptoDeposits: { method: 'GET', path: '/v1/account/crypto-deposit', auth: true },
   placeOrder: { method: 'POST', path: '/v1/account/orders', auth: true, order: true },
   cancelOrder: { method: 'DELETE', path: '/v1/account/orders', auth: true, order: true },
-  placeOtc: { method: 'POST', path: '/v1/account/otc/orders', auth: true, order: true }
+  placeOtc: { method: 'POST', path: '/v1/account/otc/orders', auth: true, order: true },
+  withdrawCrypto: { method: 'POST', path: '/v1/account/crypto-withdrawal', auth: true, order: true }
 });
 
 /**
@@ -89,6 +91,22 @@ export function validateWallexOtcBody(body = {}) {
   return { ok: true, body: { symbol, side, amount } };
 }
 
+/** Body validation for POST /v1/account/crypto-withdrawal — moves REAL funds,
+    so shape discipline happens here, before the upstream sees anything. */
+export function validateWallexWithdrawBody(body = {}) {
+  const coin = String(body.coin || '').toUpperCase();
+  if (!/^[A-Z0-9]{2,12}$/.test(coin)) return { ok: false, code: 'WALLEX_BAD_COIN' };
+  const network = String(body.network || '').toUpperCase();
+  if (!/^[A-Z0-9]{2,16}$/.test(network)) return { ok: false, code: 'WALLEX_BAD_NETWORK' };
+  const value = String(body.value ?? '').trim();
+  if (!NUMERIC_RE.test(value) || Number(value) <= 0) return { ok: false, code: 'WALLEX_BAD_AMOUNT' };
+  const address = String(body.wallet_address || '').trim();
+  if (address.length < 15 || address.length > 160 || /\s/.test(address)) return { ok: false, code: 'WALLEX_BAD_ADDRESS' };
+  const memo = String(body.memo ?? '').trim();
+  if (memo && memo.length > 120) return { ok: false, code: 'WALLEX_BAD_MEMO' };
+  return { ok: true, body: { coin, network, value, wallet_address: address, ...(memo ? { memo } : {}) } };
+}
+
 /**
  * One upstream call. `fetchImpl` is injectable so the probe can prove every
  * property below without network. Returns an express-style { status, body }.
@@ -107,7 +125,9 @@ export async function wallexUpstream(routeName, {
   if (route.order === true) {
     const checked = routeName === 'placeOtc'
       ? validateWallexOtcBody(body)
-      : validateWallexOrderBody(body);
+      : routeName === 'withdrawCrypto'
+        ? validateWallexWithdrawBody(body)
+        : validateWallexOrderBody(body);
     if (!checked.ok) return { status: 400, body: { error: checked.code } };
     outbound = checked.body;
   }

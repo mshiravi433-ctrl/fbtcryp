@@ -497,3 +497,31 @@
 :root[data-theme='light'] .wallex-chg.up { color: #0d7a4f; }
 :root[data-theme='light'] .wallex-chg.down { color: #b3223c; }
 :root[data-theme='light'] .wallex-warn { color: #a15c00 !important; }
+
+/* Wallex wallet-sync */
+.wallex-copy-row { display: flex; align-items: flex-start; gap: 6px; justify-content: space-between; min-width: 0; }
+.wallex-copy-row code {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  font-size: 10px; line-height: 1.5;
+  word-break: break-all;
+  color: var(--text-1);
+}
+.wallex-copy-card {
+  margin-top: 8px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  padding: 10px 12px;
+}
+.wallex-copy-card small {
+  display: block; margin-bottom: 6px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-2);
+}
+.wallex-withdraw summary { color: var(--text-1); }
+@media (max-width: 360px) {
+  .wallex-markets { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+  .wallex-row .wallex-field { min-width: 104px; }
+}
+:root[data-theme='light'] .wallex-copy-card { border-color: rgba(20,35,60,0.14); background: rgba(40,52,80,0.04); }
+:root[data-theme='light'] .wallex-copy-row code { color: #101a2d; }

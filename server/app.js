@@ -3491,6 +3491,7 @@ app.get('/api/wallex/v1/account/balances', wallexAccountCall('balances'));
 app.get('/api/wallex/v1/account/openOrders', wallexAccountCall('openOrders'));
 app.get('/api/wallex/v1/account/trades', wallexAccountCall('trades'));
 app.get('/api/wallex/v1/account/otc/price', wallexAccountCall('otcPrice'));
+app.get('/api/wallex/v1/account/crypto-deposit', wallexAccountCall('cryptoDeposits'));
 
 const wallexOrderCall = (routeName) => async (req, res) => {
   const identity = req.tgUser?.id ?? req.ip;
@@ -3504,6 +3505,7 @@ const wallexOrderCall = (routeName) => async (req, res) => {
 
 app.post('/api/wallex/v1/account/orders', wallexOrderCall('placeOrder'));
 app.post('/api/wallex/v1/account/otc/orders', wallexOrderCall('placeOtc'));
+app.post('/api/wallex/v1/account/crypto-withdrawal', wallexOrderCall('withdrawCrypto'));
 app.delete('/api/wallex/v1/account/orders', wallexOrderCall('cancelOrder'));
 
 /*

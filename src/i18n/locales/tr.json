@@ -845,7 +845,7 @@
       "keyOn": "Wallex anahtarı: bağlı",
       "keyOff": "Wallex anahtarı: ayarlanmadı",
       "keyDevice": "stored on this device only",
-      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). The key stays in this device's storage and is sent only with your own requests — FBT's server forwards it to Wallex and never stores or logs it. Tip: for extra safety allowlist your own IPs in Wallex's panel.",
+      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). IMPORTANT: leave the IP allow-list EMPTY — requests go out from FBT's server, not your device, so a pinned IP would break your own key. The key stays in this device's storage and is sent only with your own requests; FBT's server never stores or logs it.",
       "keyPlaceholder": "Wallex API key",
       "keySave": "Save key",
       "keyRemove": "Remove",
@@ -885,7 +885,24 @@
       "cancelling": "Cancelling…",
       "recentTrades": "Recent trades",
       "disclosure": "Wallex, kendi KYC ve komisyonları olan ayrı bir İran borsasıdır. Fiyatlar Toman cinsindendir; işlem risk içerir — yatırım tavsiyesi değildir.",
-      "marketPrice": "piyasa fiyatı"
+      "marketPrice": "piyasa fiyatı",
+      "syncTitle": "Cüzdanınız — senkron, yeniden oluşturulmaz",
+      "syncHelp": "Wallex already holds custody wallets for you — nothing new to create. Trade with Toman there, then withdraw straight to this app's wallet address below and continue everything inside FBT.",
+      "myAddress": "Bu uygulamanın cüzdan adresi",
+      "addressUse": "Wallex'te bu adrese çekin; fonlar doğrudan uygulama cüzdanına gelir.",
+      "connectForSync": "Adresi senkronize etmek için bu uygulamanın cüzdanını bağlayın.",
+      "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
+      "withdrawTitle": "Wallex'ten bu uygulamanın cüzdanına çekim",
+      "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawCoin": "Coin",
+      "withdrawNetwork": "Ağ",
+      "withdrawValue": "Miktar",
+      "withdrawAddress": "Hedef adres",
+      "useAppAddress": "Uygulamanın adresini kullan",
+      "withdrawReview": "Çekimi gözden geçir",
+      "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
+      "withdrawConfirmYes": "Çekimi onayla",
+      "withdrawDone": "Çekim gönderildi"
     }
   }
 }

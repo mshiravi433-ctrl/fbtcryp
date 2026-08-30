@@ -2,20 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { riseIn } from './PageTransition';
+import { useWallet } from '../context/WalletContext';
 import {
   clearWallexKey,
   formatWallexPrice,
   normalizeWallexBalances,
+  normalizeWallexDepositAddresses,
   normalizeWallexMarkets,
   readWallexKey,
   wallexBalances,
   wallexCancelOrder,
+  wallexCryptoDeposits,
   wallexMarkets,
   wallexOpenOrders,
   wallexOtcPrice,
   wallexPlaceOtcOrder,
   wallexPlaceOrder,
   wallexTrades,
+  wallexWithdraw,
   writeWallexKey
 } from '../lib/wallex';
 
@@ -40,6 +44,25 @@ function fmtAmount(n, max = 8) {
   return num.toLocaleString('en-US', { maximumFractionDigits: max });
 }
 
+function CopyRow({ value, label }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked — the raw address stays selectable */ }
+  };
+  return (
+    <div className="wallex-copy-row">
+      <code dir="ltr">{label ? `${label} ` : ''}{value}</code>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={copy}>
+        {copied ? '✓' : '⧉'}
+      </button>
+    </div>
+  );
+}
+
 function Chg({ value }) {
   const v = Number(value);
   if (!Number.isFinite(v) || v === 0) return <span className="wallex-chg zero">0%</span>;
@@ -50,6 +73,7 @@ function Chg({ value }) {
 export default function WallexPanel() {
   const { t, i18n } = useTranslation();
   const isFa = /^fa\b/i.test(String(i18n.language || ''));
+  const wallet = useWallet();
 
   /* key custody */
   const [keyDraft, setKeyDraft] = useState('');
@@ -80,6 +104,14 @@ export default function WallexPanel() {
   const [ordersError, setOrdersError] = useState(null);
   const [recentTrades, setRecentTrades] = useState(null);
   const [cancelBusy, setCancelBusy] = useState('');
+
+  /* wallet sync: Wallex custody addresses + withdrawal to the app wallet */
+  const [deposits, setDeposits] = useState(null);
+  const [wd, setWd] = useState({ coin: '', network: '', value: '', address: '' });
+  const [wdConfirm, setWdConfirm] = useState(false);
+  const [wdBusy, setWdBusy] = useState(false);
+  const [wdResult, setWdResult] = useState(null);
+  const [wdError, setWdError] = useState(null);
 
   /* Guard: if the language switches away from Persian while this tab is
      mounted, it must render nothing — the gate lives in Buy.jsx too, this is
@@ -116,6 +148,9 @@ export default function WallexPanel() {
     wallexTrades()
       .then((p) => setRecentTrades(Array.isArray(p?.result?.AccountLatestTrades) ? p.result.AccountLatestTrades.slice(0, 8) : []))
       .catch(() => setRecentTrades(null));
+    wallexCryptoDeposits()
+      .then((p) => setDeposits(normalizeWallexDepositAddresses(p?.result)))
+      .catch(() => setDeposits(null));
   }, []);
 
   useEffect(() => { refreshAccount(); }, [refreshAccount]);
@@ -184,6 +219,26 @@ export default function WallexPanel() {
       setOrderError(e.message || e.code);
     } finally {
       setPlacing(false);
+    }
+  };
+
+  const submitWithdraw = async () => {
+    if (!wdConfirm) return;
+    setWdBusy(true);
+    setWdError(null);
+    setWdResult(null);
+    try {
+      const result = await wallexWithdraw({
+        coin: wd.coin, network: wd.network, value: wd.value, wallet_address: wd.address.trim()
+      });
+      if (result?.success === false) throw Object.assign(new Error(result.message || 'WALLEX_REJECTED'), { code: 'WALLEX_REJECTED' });
+      setWdResult(result?.result || null);
+      setWdConfirm(false);
+      refreshAccount();
+    } catch (e) {
+      setWdError(e.message || e.code);
+    } finally {
+      setWdBusy(false);
     }
   };
 
@@ -390,6 +445,103 @@ export default function WallexPanel() {
           )}
         </div>
       )}
+
+      {/* ── wallet sync ── */}
+      <div className="wallex-block">
+        <p className="section-label" style={{ margin: 0 }}>{t('buy.wallex.syncTitle')}</p>
+        <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7, marginTop: 5 }}>{t('buy.wallex.syncHelp')}</p>
+
+        {wallet?.address ? (
+          <div className="wallex-copy-card">
+            <small>{t('buy.wallex.myAddress')}</small>
+            <CopyRow value={wallet.address} />
+            <p className="faint" style={{ fontSize: 10, lineHeight: 1.7, marginTop: 5 }}>{t('buy.wallex.addressUse')}</p>
+          </div>
+        ) : (
+          <p className="faint" style={{ fontSize: 10.5, marginTop: 6, lineHeight: 1.7 }}>{t('buy.wallex.connectForSync')}</p>
+        )}
+
+        {hasKey && deposits && deposits.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <p className="faint" style={{ fontSize: 10.5, margin: '0 0 6px', lineHeight: 1.7 }}>{t('buy.wallex.depositHelp')}</p>
+            <div className="wallex-list">
+              {deposits.map((d) => (
+                <div className="wallex-list-row" key={`${d.coin}:${d.network}:${d.address}`}>
+                  <span><b>{d.coin}</b> <small>{d.network}</small></span>
+                  <CopyRow value={d.address} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hasKey && (
+          <details className="wallex-withdraw" style={{ marginTop: 10 }}>
+            <summary style={{ fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>{t('buy.wallex.withdrawTitle')}</summary>
+            <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7 }}>{t('buy.wallex.withdrawHelp')}</p>
+            <div className="wallex-row">
+              <label className="wallex-field">
+                <span>{t('buy.wallex.withdrawCoin')}</span>
+                <input className="wallex-input" dir="ltr" placeholder="USDT" value={wd.coin}
+                  onChange={(e) => { setWd({ ...wd, coin: e.target.value.toUpperCase() }); setWdConfirm(false); }} />
+              </label>
+              <label className="wallex-field">
+                <span>{t('buy.wallex.withdrawNetwork')}</span>
+                <input className="wallex-input" dir="ltr" placeholder="TRC20" value={wd.network}
+                  onChange={(e) => { setWd({ ...wd, network: e.target.value.toUpperCase() }); setWdConfirm(false); }} />
+              </label>
+            </div>
+            <div className="wallex-row">
+              <label className="wallex-field">
+                <span>{t('buy.wallex.withdrawValue')}</span>
+                <input className="wallex-input" dir="ltr" inputMode="decimal" placeholder="0.00" value={wd.value}
+                  onChange={(e) => { setWd({ ...wd, value: e.target.value }); setWdConfirm(false); }} />
+              </label>
+              <label className="wallex-field">
+                <span>{t('buy.wallex.withdrawAddress')}</span>
+                <input className="wallex-input" dir="ltr" placeholder="0x… / T…" value={wd.address}
+                  onChange={(e) => { setWd({ ...wd, address: e.target.value }); setWdConfirm(false); }} />
+              </label>
+              {wallet?.address && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setWd({ ...wd, address: wallet.address }); setWdConfirm(false); }}>
+                  {t('buy.wallex.useAppAddress')}
+                </button>
+              )}
+            </div>
+            {!wdConfirm ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: 9 }}
+                disabled={!(wd.coin && wd.network && Number(wd.value) > 0 && wd.address.trim().length >= 15)}
+                onClick={() => setWdConfirm(true)}
+              >
+                {t('buy.wallex.withdrawReview')}
+              </button>
+            ) : (
+              <div className="wallex-confirm" style={{ marginTop: 9 }}>
+                <p className="prose-sm" style={{ margin: '0 0 8px' }}>
+                  {t('buy.wallex.withdrawConfirmLine', { value: wd.value, coin: wd.coin, network: wd.network, address: wd.address.trim() })}
+                </p>
+                <div className="wallex-row">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setWdConfirm(false)}>{t('buy.wallex.confirmNo')}</button>
+                  <button type="button" className="btn btn-primary btn-sm" disabled={wdBusy} onClick={submitWithdraw}>
+                    {wdBusy ? t('buy.wallex.placing') : t('buy.wallex.withdrawConfirmYes')}
+                  </button>
+                </div>
+              </div>
+            )}
+            {wdError && <p className="notice notice-danger" style={{ marginTop: 8 }}>{wdError}</p>}
+            {wdResult && (
+              <div className="wallex-result">
+                <b>{t('buy.wallex.withdrawDone')}</b>
+                <code dir="ltr">{String(wdResult.txHash || wdResult.id || '')}</code>
+                <small>{t('buy.wallex.status')}: {String(wdResult.status || '—')}</small>
+              </div>
+            )}
+          </details>
+        )}
+      </div>
 
       {/* ── balances ── */}
       {hasKey && (

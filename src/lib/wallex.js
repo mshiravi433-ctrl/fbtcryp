@@ -68,6 +68,8 @@ export const wallexBalances = () => request('/api/wallex/v1/account/balances');
 export const wallexOpenOrders = (symbol) => request('/api/wallex/v1/account/openOrders', { query: symbol ? { symbol } : {} });
 export const wallexTrades = (symbol) => request('/api/wallex/v1/account/trades', { query: symbol ? { symbol } : {} });
 export const wallexOtcPrice = (symbol, side) => request('/api/wallex/v1/account/otc/price', { query: { symbol, side } });
+export const wallexCryptoDeposits = () => request('/api/wallex/v1/account/crypto-deposit');
+export const wallexWithdraw = (body) => request('/api/wallex/v1/account/crypto-withdrawal', { method: 'POST', body });
 
 export const wallexPlaceOrder = (body) => request('/api/wallex/v1/account/orders', { method: 'POST', body });
 export const wallexPlaceOtcOrder = (body) => request('/api/wallex/v1/account/otc/orders', { method: 'POST', body });
@@ -111,6 +113,25 @@ export function normalizeWallexBalances(result) {
     }))
     .filter((row) => row.asset && (row.value > 0 || row.lockedValue > 0))
     .sort((a, b) => b.value - a.value);
+}
+
+/**
+ * Wallex custody deposit addresses, deduped from the deposit history —
+ * proof for the user that Wallex ALREADY holds wallets for them: nothing new
+ * to create, funding the Wallex account stays exactly where it always was.
+ */
+export function normalizeWallexDepositAddresses(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const seen = new Map();
+  for (const row of list) {
+    const address = String(row?.wallet?.address || '').trim();
+    const coin = String(row?.coin_type?.key || row?.coin?.key || row?.asset || '').toUpperCase();
+    const network = String(row?.network?.name || '').toUpperCase();
+    if (!address || !coin) continue;
+    const key = `${coin}:${network}:${address}`;
+    if (!seen.has(key)) seen.set(key, { coin, network, address });
+  }
+  return [...seen.values()].slice(0, 12);
 }
 
 export function formatWallexPrice(value, tickSize = 2) {

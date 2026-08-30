@@ -845,7 +845,7 @@
       "keyOn": "Ключ Wallex: подключён",
       "keyOff": "Ключ Wallex: не задан",
       "keyDevice": "stored on this device only",
-      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). The key stays in this device's storage and is sent only with your own requests — FBT's server forwards it to Wallex and never stores or logs it. Tip: for extra safety allowlist your own IPs in Wallex's panel.",
+      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). IMPORTANT: leave the IP allow-list EMPTY — requests go out from FBT's server, not your device, so a pinned IP would break your own key. The key stays in this device's storage and is sent only with your own requests; FBT's server never stores or logs it.",
       "keyPlaceholder": "Wallex API key",
       "keySave": "Save key",
       "keyRemove": "Remove",
@@ -885,7 +885,24 @@
       "cancelling": "Cancelling…",
       "recentTrades": "Recent trades",
       "disclosure": "Wallex — отдельная иранская биржа со своим KYC и комиссиями. Цены в туманах; торговля связана с риском — это не финансовая рекомендация.",
-      "marketPrice": "рыночная цена"
+      "marketPrice": "рыночная цена",
+      "syncTitle": "Ваш кошелёк — синхронизирован, без создания нового",
+      "syncHelp": "Wallex already holds custody wallets for you — nothing new to create. Trade with Toman there, then withdraw straight to this app's wallet address below and continue everything inside FBT.",
+      "myAddress": "Адрес кошелька этого приложения",
+      "addressUse": "В Wallex выведите на этот адрес; средства придут прямо в кошелёк приложения.",
+      "connectForSync": "Подключите кошелёк приложения для синхронизации адреса.",
+      "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
+      "withdrawTitle": "Вывод из Wallex в кошелёк приложения",
+      "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawCoin": "Монета",
+      "withdrawNetwork": "Сеть",
+      "withdrawValue": "Сумма",
+      "withdrawAddress": "Адрес получателя",
+      "useAppAddress": "Использовать адрес приложения",
+      "withdrawReview": "Проверить вывод",
+      "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
+      "withdrawConfirmYes": "Подтвердить вывод",
+      "withdrawDone": "Вывод отправлен"
     }
   }
 }
