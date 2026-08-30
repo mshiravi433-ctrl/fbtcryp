@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import P2PMarket from '../components/P2PMarket';
+import WallexPanel from '../components/WallexPanel';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { IconChevronLeft, IconShield } from '../components/Icons';
@@ -46,15 +47,29 @@ import '../styles/lab-modern.css';
 const WARNINGS = ['network', 'reversal', 'escrow', 'rate'];
 
 export default function Buy() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const wallet = useWallet();
 
+  /*
+   * ─── THE IRANIANS-ONLY TAB ───────────────────────────────────────────────
+   * The Wallex tab exists for one audience: users running the app in Persian.
+   * The gate is the LIVE language (not a one-time read) — switching language
+   * re-renders and the tab disappears, and if it was open, the selection
+   * resets so nobody is left on a screen that is no longer theirs.
+   */
+  const isFa = /^fa\b/i.test(String(i18n.language || ''));
+  const walletTabs = isFa ? ['internal', 'external', 'wallex'] : ['internal', 'external'];
+
   /* Controlled side: the page keeps its address card in sync with the tab
      the market is showing (coins arrive -> buy only). */
   const [tab, setTab] = useState('buy');
-  const [walletTab, setWalletTab] = useState('internal');
+  const [walletTab, setWalletTabState] = useState('internal');
+  const setWalletTab = (key) => {
+    if (key === 'wallex' && !isFa) return;
+    setWalletTabState(key);
+  };
 
   return (
     <PageTransition>
@@ -66,7 +81,7 @@ export default function Buy() {
       </div>
 
       <div className="segmented" role="tablist" aria-label={t('buy.walletTabsLabel')}>
-        {['internal', 'external'].map((key) => (
+        {walletTabs.map((key) => (
           <button key={key} role="tab" aria-selected={walletTab === key} className={walletTab === key ? 'active' : ''} onClick={() => setWalletTab(key)}>
             {walletTab === key && <SegIndicator id="buy-wallet-tab" />}
             {t(`buy.walletTabs.${key}`)}
@@ -74,7 +89,9 @@ export default function Buy() {
         ))}
       </div>
 
-      {walletTab === 'external' ? (
+      {walletTab === 'wallex' && isFa ? (
+        <WallexPanel />
+      ) : walletTab === 'external' ? (
         /*
          * ─── WHAT REPLACED THE ON-RAMP FORM ────────────────────────────────
          * Reported: the external tab «ظاهرش خوب نیست، وصل هم نمیشه» and ended

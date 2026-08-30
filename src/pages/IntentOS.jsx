@@ -27,6 +27,7 @@ import { getIntentCapabilities, getIntentPublicStatus } from '../lib/intentNetwo
 import { INTENT_AI_VERSION, mayExecute, verifyWalletChain, multichainCoverage, walletSecurityPosture } from '../lib/intent-ai/index.js';
 import IntentRail from '../components/IntentRail';
 import ProfitPlanner from '../components/ProfitPlanner';
+import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
 import { useWallet } from '../context/WalletContext';
 import {
   ensureLifecycle,
@@ -40,7 +41,7 @@ import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import { fetchCatalog, fetchCertifications, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
-const TABS = ['compose', 'plan', 'memory', 'proofs', 'agents', 'strategies', 'network'];
+const TABS = ['compose', 'plan', 'crosschain', 'memory', 'proofs', 'agents', 'strategies', 'network'];
 /* Which registry each tab reads. Only these two tabs fetch a catalog. */
 const TAB_CATALOG = { agents: 'agent', strategies: 'strategy' };
 const TEMPLATES = [
@@ -753,6 +754,11 @@ export default function IntentOS() {
           <button type="button" className="btn btn-primary" onClick={() => navigate('/intent-ai')}>
             {t('intentOS.aiAssistant')}
           </button>
+          {/* Phase 152: Flash Liquidity lab — planner-only screen for
+              collateral-free flash-loan arbitrage. Nothing here signs. */}
+          <button type="button" className="btn btn-ghost" onClick={() => navigate('/flash-liquidity')}>
+            {t('intentOS.flashLiquidity', { defaultValue: 'Flash Liquidity' })}
+          </button>
         </div>
       </motion.section>
 
@@ -1139,6 +1145,12 @@ export default function IntentOS() {
         </motion.div>
       )}
 
+      {tab === 'crosschain' && (
+        <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <IntentCrossChainPanel networkStatus={networkStatus} />
+        </motion.div>
+      )}
+
       {tab === 'memory' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <section className="ios-memory-hero">
@@ -1423,6 +1435,14 @@ export default function IntentOS() {
               <span><b>{networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
             </div>
             <p>{t('intentOS.network.crossChainNote')}</p>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginTop: 9 }}
+              onClick={() => chooseTab('crosschain')}
+            >
+              {t('intentOS.network.openDesk', { defaultValue: 'Open the cross-chain desk — plan, sign, settle' })} →
+            </button>
           </section>
 
           <section className="ios-auction-status">

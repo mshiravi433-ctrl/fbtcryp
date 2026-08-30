@@ -388,3 +388,140 @@
   box-shadow: 0 0 8px var(--up);
   animation: lab-pulse 1.6s ease-in-out infinite;
 }
+
+/* ------------------------- Wallex (Iranians-only tab) --------------------- */
+/* Follows the same variables as every other card on this page so dark and
+   light both come out right; the light overrides mirror .swap-ticket's. */
+.wallex-panel .wallex-block { margin-top: 14px; }
+.wallex-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.wallex-input {
+  flex: 1;
+  min-width: 130px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-1);
+  font-size: 12.5px;
+  padding: 9px 11px;
+  outline: none;
+}
+.wallex-input:focus { border-color: rgba(255,255,255,0.28); }
+.wallex-search { flex: 0 1 150px; min-width: 110px; margin: 0; }
+.wallex-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 120px; }
+.wallex-field > span { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-2); text-transform: uppercase; }
+.wallex-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wallex-chip {
+  display: inline-flex; align-items: center;
+  padding: 3px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em;
+  color: var(--text-2);
+}
+.wallex-chip.ok { color: #35d08c; box-shadow: inset 0 0 0 1px rgba(53,208,140,0.4); }
+.wallex-chip.warn { color: #ffb65c; box-shadow: inset 0 0 0 1px rgba(255,182,92,0.4); }
+.wallex-markets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 7px; margin-top: 9px; }
+.wallex-market {
+  display: flex; flex-direction: column; gap: 3px;
+  text-align: start;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  padding: 9px 11px;
+  cursor: pointer;
+  color: var(--text-1);
+}
+.wallex-market.active { border-color: rgba(120,190,255,0.55); box-shadow: 0 0 0 1px rgba(120,190,255,0.35); }
+.wallex-market-name { display: flex; flex-direction: column; }
+.wallex-market-name b { font-size: 12px; letter-spacing: 0.02em; }
+.wallex-market-name small { font-size: 9.5px; color: var(--text-2); }
+.wallex-market-price { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.wallex-market-price b { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.wallex-chg { font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wallex-chg.up { color: #35d08c; }
+.wallex-chg.down { color: #ff6b81; }
+.wallex-chg.zero { color: var(--text-2); }
+.wallex-toggle { display: flex; gap: 6px; margin-top: 10px; }
+.wallex-toggle button {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wallex-toggle button.active { color: var(--text-1); border-color: rgba(120,190,255,0.55); box-shadow: 0 0 0 1px rgba(120,190,255,0.3); }
+.wallex-toggle button.buy.active { border-color: rgba(53,208,140,0.55); box-shadow: 0 0 0 1px rgba(53,208,140,0.3); }
+.wallex-toggle button.sell.active { border-color: rgba(255,107,129,0.55); box-shadow: 0 0 0 1px rgba(255,107,129,0.3); }
+.wallex-preview { display: flex; flex-direction: column; gap: 3px; margin-top: 9px; }
+.wallex-preview small { font-size: 10.5px; color: var(--text-2); line-height: 1.6; }
+.wallex-warn { color: #ffb65c !important; font-weight: 700; }
+.wallex-confirm { margin-top: 10px; border-radius: 13px; background: rgba(255,255,255,0.05); padding: 10px 12px; }
+.wallex-result { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; border-radius: 13px; background: rgba(53,208,140,0.09); padding: 10px 12px; }
+.wallex-result b { font-size: 11.5px; color: #35d08c; }
+.wallex-result code { font-size: 9.5px; color: var(--text-2); word-break: break-all; }
+.wallex-result small, .wallex-list small { color: var(--text-2); }
+.wallex-list { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.wallex-list-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  padding: 8px 11px;
+  font-size: 11.5px;
+}
+.wallex-list-row .mono { font-size: 10.5px; }
+
+/* Light theme: the same surfaces the light swap ticket uses — no bespoke
+   colors, just the one honest flip of the glass. */
+:root[data-theme='light'] .wallex-input {
+  border-color: rgba(20,35,60,0.16);
+  background: rgba(40,52,80,0.05);
+}
+:root[data-theme='light'] .wallex-input:focus { border-color: rgba(20,35,60,0.4); }
+:root[data-theme='light'] .wallex-chip { background: rgba(40,52,80,0.06); }
+:root[data-theme='light'] .wallex-chip.ok { color: #0d7a4f; }
+:root[data-theme='light'] .wallex-chip.warn { color: #a15c00; }
+:root[data-theme='light'] .wallex-market,
+:root[data-theme='light'] .wallex-toggle button { border-color: rgba(20,35,60,0.14); background: rgba(40,52,80,0.04); color: #34445f; }
+:root[data-theme='light'] .wallex-market.active,
+:root[data-theme='light'] .wallex-toggle button.active { color: #101a2d; border-color: rgba(20,90,160,0.45); }
+:root[data-theme='light'] .wallex-toggle button.buy.active { border-color: rgba(13,122,79,0.5); }
+:root[data-theme='light'] .wallex-toggle button.sell.active { border-color: rgba(163,34,60,0.5); }
+:root[data-theme='light'] .wallex-confirm { background: rgba(40,52,80,0.05); }
+:root[data-theme='light'] .wallex-result { background: rgba(13,122,79,0.09); }
+:root[data-theme='light'] .wallex-result b { color: #0d7a4f; }
+:root[data-theme='light'] .wallex-list-row { border-color: rgba(20,35,60,0.12); background: rgba(40,52,80,0.03); }
+:root[data-theme='light'] .wallex-chg.up { color: #0d7a4f; }
+:root[data-theme='light'] .wallex-chg.down { color: #b3223c; }
+:root[data-theme='light'] .wallex-warn { color: #a15c00 !important; }
+
+/* Wallex wallet-sync */
+.wallex-copy-row { display: flex; align-items: flex-start; gap: 6px; justify-content: space-between; min-width: 0; }
+.wallex-copy-row code {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  font-size: 10px; line-height: 1.5;
+  word-break: break-all;
+  color: var(--text-1);
+}
+.wallex-copy-card {
+  margin-top: 8px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  padding: 10px 12px;
+}
+.wallex-copy-card small {
+  display: block; margin-bottom: 6px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-2);
+}
+.wallex-withdraw summary { color: var(--text-1); }
+@media (max-width: 360px) {
+  .wallex-markets { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+  .wallex-row .wallex-field { min-width: 104px; }
+}
+:root[data-theme='light'] .wallex-copy-card { border-color: rgba(20,35,60,0.14); background: rgba(40,52,80,0.04); }
+:root[data-theme='light'] .wallex-copy-row code { color: #101a2d; }

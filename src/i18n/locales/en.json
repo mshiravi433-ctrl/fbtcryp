@@ -41,7 +41,8 @@
     "derivatives": "Derivatives Hall",
     "portfolio": "Portfolio",
     "smartWallet": "Smart Wallet",
-    "intentOS": "Intent OS"
+    "intentOS": "Intent OS",
+    "loan": "Loans"
   },
   "common": {
     "balance": "Balance",
@@ -290,7 +291,13 @@
         "tag": "Not a yield — a route",
         "note": "Cross-chain moves are not instant and every leg is final once it lands."
       },
-      "buy": "Buy {{sym}}"
+      "buy": "Buy {{sym}}",
+      "loan": {
+        "title": "Lending & Borrowing",
+        "body": "Supply assets to the lending pool and earn from borrower interest. Borrow against collateral on the same platform.",
+        "tag": "Lending yield — from borrower interest",
+        "note": "Liquidation is irreversible. Only supply amounts you can afford to lose."
+      }
     },
     "aprNote": "No rate on this list is written down in advance, and that is deliberate. A staking or pool rate is a live number that moves with the network, so it is shown on the screen that measures it rather than printed here where it would be stale within a week. Gold pays no yield at all — you are holding a price, not earning a rate.",
     "realRisk": "Each of these carries a real risk and they are not the same risk. A gold token can be frozen or burned by its issuer, which is not the same as owning a bar. A staking token can trade below the asset it tracks while a withdrawal queue clears. Tokenized stocks settle in USDT, are not shares, and give you no vote or dividend. Forex can take the whole margin on one move. And any contract can be drained however long it has run without trouble. So read the issuer's terms before you buy rather than after, and put in an amount you could lose without it changing your month.",
@@ -1743,6 +1750,96 @@
     "disclosure": "Responsible disclosure",
     "bounty": "Found a security issue? Email fbtswap@gmail.com before disclosing it publicly, and you will get a reply within 48 hours. We have no cash bounty programme and will not pretend otherwise — what we can offer is a fast fix, public credit if you want it, and a straight answer if we disagree with your assessment."
   },
+  "flashLiquidity": {
+    "title": "Flash Liquidity — Collateral-Free Arbitrage",
+    "subtitle": "A flash loan is not free money: principal + premium must be back within the same transaction, or everything reverts and gas is still spent. This screen is a planner and judge only — it never sends a transaction.",
+    "badges": {
+      "atomic": "Atomic — one transaction",
+      "noFreeMoney": "Not free money, not guaranteed profit",
+      "mev": "Private submission only",
+      "audit": "Requires an audited contract"
+    },
+    "server": {
+      "status": "Deployment status (server)",
+      "offline": "Server unavailable — the planner runs locally on this device."
+    },
+    "intent": {
+      "title": "1) Write your intent",
+      "parsed": "Valid intent",
+      "invalid": "Not recognized as a flash-loan intent",
+      "zeroCapital": "Initial capital: 0",
+      "minProfit": "Minimum net profit",
+      "atomic": "Settlement: same transaction",
+      "fallback": "Invalid intent — the minimum profit below is used instead."
+    },
+    "market": {
+      "title": "2) Market data (educational demo)",
+      "demoNote": "These scenarios are not live data — synthetic reserves exist to teach the pipeline math. Until a real snapshot feed is connected, any \"profit\" here is practice only.",
+      "profitable": "Profitable spread",
+      "flat": "Equal prices",
+      "inverted": "Negative spread",
+      "custom": "My JSON",
+      "gasPrice": "Gas price (gwei)"
+    },
+    "run": "Run — simulate the 9-step pipeline",
+    "decision": {
+      "ready": "Signature-ready — a live simulation + wallet signature are still required",
+      "gated": "Held — safety gates are not all green yet",
+      "noTrade": "Nothing was sent — net profit was below the intent threshold",
+      "blocked": "Blocked"
+    },
+    "pipeline": {
+      "title": "The 9-step pipeline"
+    },
+    "steps": {
+      "collect-prices": "Collect prices",
+      "find-arbitrage": "Find arbitrage",
+      "optimal-size": "Optimal flash-loan size",
+      "gas-estimate": "Gas estimate",
+      "flash-fee": "Flash-loan fee",
+      "slippage": "Slippage & deadline",
+      "simulation": "Mandatory simulation",
+      "send-gate": "Send gate",
+      "abort-or-emit": "Abort or emit preparation"
+    },
+    "provider": {
+      "title": "Flash-loan source",
+      "premium": "Flash premium",
+      "source": "Source contract",
+      "verified": "Address verified"
+    },
+    "economics": {
+      "title": "Profit accounting (estimated)",
+      "loan": "Loan size",
+      "gross": "Gross profit (after flash fee)",
+      "gas": "Gas",
+      "platform": "Platform fee ({{bps}} bps)",
+      "mev": "MEV protection",
+      "net": "Net profit",
+      "netBps": "Net profit vs loan",
+      "estimateNote": "These numbers come from the labeled reserves — they are estimates, not promises. In real execution, the on-chain min-profit check reverts the whole transaction instead of settling at a loss."
+    },
+    "route": {
+      "title": "Route & slippage",
+      "revertPolicy": "Revert policy: abort-all — any failed hop reverts the whole transaction."
+    },
+    "receipt": {
+      "notSent": "Build a “not sent” receipt",
+      "simulatedRevert": "Build a “reverted in simulation” receipt",
+      "title": "Execution-proof receipt (simulated)",
+      "note": "The fingerprint is content addressing, not a cryptographic signature; the enforceable proof path is Proof-of-Execution."
+    },
+    "guarantees": {
+      "title": "What is certain and what is not",
+      "atomic": "Everything happens in one transaction: a repayment shortfall = full revert.",
+      "noTrade": "If net profit after gas + flash fee + platform fee is under the intent threshold, no transaction is built at all.",
+      "wallet": "Real execution happens only with your explicit wallet signature after a passing simulation.",
+      "notGuaranteed": "No profit is guaranteed; every number comes from indicative data.",
+      "noFreeMoney": "A flash loan is not spendable credit — it is temporary capital inside one transaction.",
+      "noPublicMempool": "Public-mempool submission is refused for arbitrage (sandwich risk); private route only.",
+      "auditNote": "The reference contract FlashLiquidityRouter.sol is compiled and bundled, but not independently audited. Until an audit exists and an address is configured, this capability stays planning-only."
+    }
+  },
   "dev": {
     "title": "Developers",
     "intro": "A read-only market API, no key and no signup. Everything below is a real registered route on this server, checked rather than remembered — the previous version of this page advertised an endpoint that had been deleted, which is the one mistake documentation must not make.",
@@ -2989,7 +3086,8 @@
     "walletTabsLabel": "Purchase wallet type",
     "walletTabs": {
       "internal": "Internal wallet",
-      "external": "External wallet"
+      "external": "External wallet",
+      "wallex": "Iranians only"
     },
     "ext": {
       "title": "Buying with an external wallet",
@@ -3010,6 +3108,71 @@
       },
       "solanaCta": "Go to Solana swap",
       "disclosure": "No third party ever receives your private key, seed phrase or card details from this app, because this app never asks for them."
+    },
+    "wallex": {
+      "title": "Wallex — buy & sell with Toman",
+      "subtitle": "Real spot and instant trading against your own Wallex account, through FBT's encrypted proxy. FBT never touches your funds.",
+      "keyOn": "Wallex key: connected",
+      "keyOff": "Wallex key: not set",
+      "keyDevice": "stored on this device only",
+      "keyHelp": "Create a key in Wallex → API Management (valid max 90 days). IMPORTANT: leave the IP allow-list EMPTY — requests go out from FBT's server, not your device, so a pinned IP would break your own key. The key stays in this device's storage and is sent only with your own requests; FBT's server never stores or logs it.",
+      "keyPlaceholder": "Wallex API key",
+      "keySave": "Save key",
+      "keyRemove": "Remove",
+      "markets": "Markets",
+      "search": "Search…",
+      "loading": "Loading markets…",
+      "trade": "Trade",
+      "side": "Side",
+      "buy": "Buy",
+      "sell": "Sell",
+      "kind": "Order type",
+      "instant": "Instant (market)",
+      "limitOrder": "Limit",
+      "amount": "Amount ({asset})",
+      "price": "Price ({asset})",
+      "livePrice": "Live price",
+      "livePricePending": "Fetching the live instant price…",
+      "expiresAt": "expires",
+      "total": "Total",
+      "minNotional": "min order",
+      "belowMin": "Below the market minimum — raise the amount.",
+      "review": "Review order",
+      "needKey": "Enter your Wallex key first",
+      "confirmLine": "{side} {amount} {asset} — {price} · total ≈ {total} {quote}. The order is placed on YOUR Wallex account for real.",
+      "confirmNo": "Edit",
+      "confirmYes": "Confirm & place",
+      "placing": "Placing…",
+      "noKeyNote": "Without your own key only public market data loads; balances and orders need the key. The operator's server key, if configured, is used only when the operator explicitly allowed it.",
+      "orderPlaced": "Order placed on Wallex",
+      "status": "Status",
+      "executed": "Executed at",
+      "balances": "Your Wallex balances",
+      "noBalances": "No non-zero balances.",
+      "locked": "locked",
+      "openOrders": "Open orders",
+      "cancel": "Cancel",
+      "cancelling": "Cancelling…",
+      "recentTrades": "Recent trades",
+      "disclosure": "Wallex is a separate Iranian exchange with its own KYC, fees and settlement. Rates are in Toman; instant prices expire within seconds and the filled price may differ from the preview. Trading involves risk — this is not financial advice.",
+      "marketPrice": "market price",
+      "syncTitle": "Your wallet — synced, not recreated",
+      "syncHelp": "Wallex already holds custody wallets for you — nothing new to create. Trade with Toman there, then withdraw straight to this app's wallet address below and continue everything inside FBT.",
+      "myAddress": "This app's wallet address",
+      "addressUse": "In Wallex, withdraw to this address; the funds land in this app's wallet — no extra wallet, no new seed to manage.",
+      "connectForSync": "Connect this app's wallet to sync the address for withdrawals.",
+      "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
+      "withdrawTitle": "Withdraw from Wallex to this app's wallet",
+      "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawCoin": "Coin",
+      "withdrawNetwork": "Network",
+      "withdrawValue": "Amount",
+      "withdrawAddress": "Destination address",
+      "useAppAddress": "Use this app's address",
+      "withdrawReview": "Review withdrawal",
+      "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
+      "withdrawConfirmYes": "Confirm withdrawal",
+      "withdrawDone": "Withdrawal submitted"
     }
   },
   "install": {
@@ -4021,9 +4184,9 @@
     "retryEquities": "Retry verified share data",
     "indicatorsTitle": "Key Market & Liquidity Indicators",
     "indicatorsSub": "Live market and liquidity flow analysis",
-    "volumeLeader": "Top 24h Trading Volume",
-    "volumeSource": "24h Volume: {{vol}}",
-    "marketCapLeader": "Market Cap Leader",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
     "mcapSource": "Total Market Cap: {{mcap}}",
     "volatilityLeader": "Highest Daily Volatility",
     "spreadSource": "24h High/Low Spread: {{spread}}",
@@ -4048,9 +4211,6 @@
       "event": "Market event"
     },
     "marketUnavailable": "Live market data unavailable",
-    "volumeLeader": "24h volume leader",
-    "volumeSource": "Live crypto market coverage · 24h volume",
-    "marketCapLeader": "Market cap leader",
     "marketCapSource": "Live market cap of top assets"
   },
   "intentOS": {
@@ -4078,7 +4238,8 @@
       "network": "Network",
       "agents": "Agent",
       "strategies": "Strategy",
-      "plan": "Profit plan"
+      "plan": "Profit plan",
+      "crosschain": "Cross-chain"
     },
     "compose": {
       "choose": "Choose an outcome",
@@ -4469,7 +4630,8 @@
         "rpc-reachable": "RPC did not answer",
         "balance-fetched": "balance unavailable",
         "no-raw-credentials": "raw credential material present"
-      }
+      },
+      "openDesk": "Open the cross-chain desk — plan, sign, settle"
     },
     "revert": {
       "abort-all": "Abort all",
@@ -4679,6 +4841,55 @@
       "m5": "5 min",
       "h1": "1 hour",
       "d1": "1 day"
+    },
+    "flashLiquidity": "Flash Liquidity (flash-loan arbitrage)",
+    "crossChain": {
+      "deskTitle": "Cross-chain desk",
+      "sequentialReady": "Sequential settlement: protocol ready",
+      "sequentialOff": "Sequential settlement: server unavailable",
+      "htlcReady": "HTLC atomic: contracts configured",
+      "htlcOff": "HTLC atomic: contracts not configured",
+      "walletOn": "Wallet connected",
+      "walletOff": "Wallet not connected",
+      "modeNote": "Sequential mode = two user-signed transfers tracked by signed statements (NOT atomic). Atomic mode = HTLC contract escrow, only when configured. Keys never leave this device.",
+      "planTitle": "1) Plan a cross-chain exchange",
+      "from": "From chain",
+      "to": "To chain",
+      "token": "Token",
+      "amount": "Amount",
+      "counterparty": "Counterparty id",
+      "window": "Source window (hours)",
+      "bothSides": "Both sides on this device (rehearsal mode — counterparty key stored locally, clearly labeled)",
+      "quoting": "Quoting…",
+      "getQuote": "Get real bridge quote",
+      "createPlan": "Create settlement plan",
+      "creating": "Creating…",
+      "quoteTitle": "Live quote (LI.FI via FBT server)",
+      "stateTitle": "2) Settlement state",
+      "legRecorded": "recorded",
+      "legOpen": "open",
+      "legWaiting": "awaiting counterparty",
+      "legSource": "Leg 1 — source transfer",
+      "legDest": "Leg 2 — destination transfer",
+      "openBridge": "Open bridge handoff",
+      "signRecord": "Sign & record",
+      "counterpartyNote": "The counterparty signs this leg from their own session with their device key. (Rehearsal mode keeps both keys here, labeled.)",
+      "receipts": "Signed receipts (claims — on-chain verification below)",
+      "verified": "on-chain verified",
+      "unverified": "claim only",
+      "stateNote": "History is immutable: every transition is a signed statement pinned to the plan and the prior receipt. If the destination misses its window, the refund leg returns the source transfer.",
+      "localTitle": "This device’s plans",
+      "forget": "Forget keys locally",
+      "htlcTitle": "Atomic option — HTLC contract escrow",
+      "chainsConfigured": "chains configured",
+      "building": "Building…",
+      "buildHtlc": "Build atomic swap plan (preimage stays on device)",
+      "htlcMissing": "deploy IntentAtomicSwap on ≥2 chains and set the addresses; until then atomic cross-chain stays honestly unavailable.",
+      "htlcPlanTitle": "Two user-signed legs (server never sends)",
+      "htlcPreimage": "The preimage is stored only in this browser session. Losing it before claiming = refund path only.",
+      "htlcStatusUnavailable": "Atomic swap status unavailable from the server.",
+      "derivedStatus": "server status",
+      "htlcCounterparty": "Counterparty address (EVM)"
     }
   },
   "whales": {
@@ -6017,6 +6228,85 @@
     },
     "activation": {
       "title": "Intent AI Activation"
+    },
+    "stages": {
+      "title": "Pipeline stages",
+      "intent": "Intent",
+      "risk": "Risk & policy",
+      "execution": "Execution",
+      "verification": "Verification",
+      "crosschain": "Cross-chain",
+      "memory": "Memory",
+      "here": "Runs in this panel",
+      "open": "Open in Intent OS"
     }
+  },
+  "loan": {
+    "pageTitle": "Loans",
+    "pageSubtitle": "Lending & borrowing — in-app, no middleman",
+    "heroTitle": "Decentralized Lending & Borrowing",
+    "heroSub": "Supply assets to earn yield, or borrow against collateral",
+    "nonCustodial": "Non-Custodial",
+    "nonCustodialSub": "Keys stay with you",
+    "fbtFee": "FBT Fee",
+    "fbtFeeSub": "% of your yield",
+    "noKyc": "No KYC",
+    "noKycSub": "No identity check",
+    "tabSupply": "Supply",
+    "tabBorrow": "Borrow",
+    "tabPositions": "My Positions",
+    "supplySubtitle": "Supply — Earn from borrowers",
+    "supplyDesc": "Deposit your assets into the lending pool. Borrowers pay interest; FBT's fee share comes from that yield. Your keys never leave your wallet — FBT holds nothing.",
+    "chooseAsset": "Asset to supply",
+    "supplyAmount": "Amount of {{symbol}} to supply",
+    "supplyBtn": "Supply {{symbol}}",
+    "borrowSubtitle": "Borrow — Collateral-backed",
+    "borrowDesc": "Lock collateral and borrow against it. If your collateral value drops below the threshold, it gets liquidated. You manage your own risk.",
+    "chooseBorrowAsset": "Asset to borrow",
+    "collateralRatio": "Up to {{pct}}% LTV",
+    "collateralLabel": "Collateral ({{symbol}})",
+    "maxBorrowNote": "With this collateral, max borrow: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "Borrow amount {{symbol}}",
+    "borrowBtn": "Borrow {{symbol}}",
+    "positionsTitle": "Active Loan Positions",
+    "positionsBody": "View and manage your active supply/borrow positions via Intent OS and your wallet. FBT never holds funds or withdrawal permissions.",
+    "openIntentOS": "Open Intent OS",
+    "openWallet": "Wallet",
+    "howTitle": "How it works",
+    "step1Title": "Lock collateral",
+    "step1Body": "Your assets are locked in the lending protocol's smart contract. FBT has no access to them.",
+    "step2Title": "Earn yield",
+    "step2Body": "Lenders receive interest paid by borrowers. The live rate changes based on supply and demand.",
+    "step3Title": "Borrow with collateral",
+    "step3Body": "Borrowers must maintain collateral above the liquidation threshold (over-collateralized). If the value drops, the contract auto-liquidates.",
+    "step4Title": "FBT fee",
+    "step4Body": "FBT takes a % of your earned yield — never the principal. No hidden markup on rates.",
+    "riskTitle": "Lending & borrowing risks",
+    "riskBody": "Liquidation: if collateral value drops below threshold, the smart contract sells it — not FBT. This is irreversible and FBT cannot stop it.",
+    "riskBody2": "Smart contract risk: any lending protocol can have bugs. Only supply or borrow amounts you can afford to lose.",
+    "archTitle": "Architecture — where funds go",
+    "archBody": "FBT is a Router + Fee layer only. Assets go directly into the lending protocol's smart contract — not FBT's accounts. FBT never holds, signs, or broadcasts funds.",
+    "asset": "Asset",
+    "amount": "Amount",
+    "action": "Action",
+    "supply": "Supply",
+    "borrow": "Borrow",
+    "walletSignRequired": "Wallet signature required",
+    "walletSignBody": "This is an on-chain action. Your wallet signs the transaction. FBT never signs or sends anything on your behalf.",
+    "confirmSupplyTitle": "Confirm Supply",
+    "confirmBorrowTitle": "Confirm Borrow",
+    "connectWalletFirst": "Connect your wallet first",
+    "enterAmount": "Enter an amount",
+    "enterCollateral": "Enter collateral amount",
+    "overMaxBorrow": "Borrow amount exceeds maximum allowed",
+    "openIntentForSupply": "Intent OS will open to sign the supply transaction",
+    "openIntentForBorrow": "Intent OS will open to sign the borrow transaction",
+    "warningLiqTitle": "Liquidation risk — read before continuing",
+    "warningLiqBody": "If the value of your supplied asset drops below the threshold, the smart contract auto-sells it. This is irreversible and FBT has no control over it.",
+    "warningLiqBorrowBody": "If your collateral falls below the LTV threshold, the smart contract sells it — not FBT. Irreversible. Keep enough collateral.",
+    "warningScTitle": "Smart contract risk",
+    "warningScBody": "Any lending protocol can have bugs. Only supply amounts you can afford to lose.",
+    "maxBorrowHint": "Max allowed: {{max}}",
+    "chooseAssetFirst": "Choose an asset first"
   }
 }

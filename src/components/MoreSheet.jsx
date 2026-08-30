@@ -126,6 +126,11 @@ const GROUPS = [
     id: 'earn',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
+      /*
+       * Loan — lending & borrowing page.
+       * FBT acts as Router + Fee layer only; non-custodial.
+       */
+      { to: '/loan', key: 'nav.loan', Icon: IconShield, hue: 'var(--rgb-2)' },
       /* Intent OS now owns the raised centre button. Orders therefore needs a
          direct discovery path again; it remains the specialised editor for
          limit, DCA, TWAP and rebalance plans compiled by the OS. */

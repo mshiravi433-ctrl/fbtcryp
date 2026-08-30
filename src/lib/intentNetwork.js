@@ -128,3 +128,9 @@ export function getSettlementReports(intentHash) {
   try { return get(`/intents/v1/auctions/${checkedIntentHash(intentHash)}/settlement-reports`); }
   catch (error) { return Promise.reject(error); }
 }
+
+/* Phase 152: Flash Liquidity provider/limit discovery. Public and read-only;
+   the planner math itself runs fully client-side in
+   src/lib/intent-ai/flashLiquidity.js, so an unavailable backend never blocks
+   the educational pipeline — it only hides the deployment status row. */
+export const getFlashLiquidityCapabilities = () => cachedGet('/flash-liquidity/v1/capabilities', 6000);

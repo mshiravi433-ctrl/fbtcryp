@@ -47,6 +47,7 @@ import { resolveIds } from './coinIndex.js';
 import { resolveVenue } from './coinVenue.js';
 import { fiatOrder, fiatQuote, fiatRange, fiatStatus } from './fiat.js';
 import { bridgeQuote, bridgeStatus } from './bridge.js';
+import { wallexUpstream, createWallexOrderLimiter } from './wallex.js';
 import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
@@ -153,6 +154,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
+import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
 import {
   OBSERVATION_CONSENT_RE,
   observationProtocolStatus,
@@ -1486,6 +1488,18 @@ app.get('/api/intents/v1/multi-venue/status', async (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(status);
 });
+
+/* ── Phase 152: Flash Liquidity — dry-run scan & plan (read-only, no keys,
+   no funds, no broadcast). Execution stays wallet-gated behind an audited
+   router contract; see server/flashLiquidity.js. ── */
+app.get('/api/flash-liquidity/v1/capabilities', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json(flashLiquidityCapabilities());
+});
+app.post('/api/flash-liquidity/v1/scan', flashScan);
+app.post('/api/flash-liquidity/v1/simulate', flashSimulate);
+app.post('/api/flash-liquidity/v1/plan', flashPlan);
+
 
 /* ── Phases 106–108: customer profit-target plan (read-only proposal) ───── */
 app.post('/api/intents/v1/profit-plan', async (req, res) => {
@@ -3433,6 +3447,66 @@ app.get('/api/bridge/quote', async (req, res) => {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
   }
 });
+
+/* ───────────────────────── Wallex (Iranians-only tab) ──────────────────────
+   Whitelisted proxy for the buy/sell tab that only Persian-language users
+   see. Key handling and the never-echo guarantee live in server/wallex.js.
+   Order routes carry their own tight budget on top of the broad /api one. */
+const wallexOrderAllowed = createWallexOrderLimiter();
+
+const wallexMarketCache = new Map();
+async function wallexMarketCall(routeName, query, { ttlMs } = {}) {
+  const key = `${routeName}?${new URLSearchParams(query || {}).toString()}`;
+  const hit = wallexMarketCache.get(key);
+  if (hit && Date.now() < hit.until) return hit.value;
+  const value = await wallexUpstream(routeName, { query });
+  wallexMarketCache.set(key, { until: Date.now() + (ttlMs ?? 4_000), value });
+  return value;
+}
+
+app.get('/api/wallex/v1/markets', async (_req, res) => {
+  const { status, body } = await wallexMarketCall('markets', {}, { ttlMs: 15_000 });
+  return res.status(status).json(body);
+});
+
+app.get('/api/wallex/v1/otc/markets', async (_req, res) => {
+  const { status, body } = await wallexMarketCall('otcMarkets', {}, { ttlMs: 15_000 });
+  return res.status(status).json(body);
+});
+
+app.get('/api/wallex/v1/depth', async (req, res) => {
+  const { status, body } = await wallexMarketCall('depth', { symbol: req.query.symbol });
+  return res.status(status).json(body);
+});
+
+const wallexAccountCall = (routeName) => async (req, res) => {
+  const { status, body } = await wallexUpstream(routeName, {
+    query: req.query,
+    headerKey: req.get('x-wallex-key')
+  });
+  return res.status(status).json(body);
+};
+
+app.get('/api/wallex/v1/account/balances', wallexAccountCall('balances'));
+app.get('/api/wallex/v1/account/openOrders', wallexAccountCall('openOrders'));
+app.get('/api/wallex/v1/account/trades', wallexAccountCall('trades'));
+app.get('/api/wallex/v1/account/otc/price', wallexAccountCall('otcPrice'));
+app.get('/api/wallex/v1/account/crypto-deposit', wallexAccountCall('cryptoDeposits'));
+
+const wallexOrderCall = (routeName) => async (req, res) => {
+  const identity = req.tgUser?.id ?? req.ip;
+  if (!wallexOrderAllowed(identity)) return res.status(429).json({ error: 'WALLEX_ORDER_RATE_LIMITED' });
+  const { status, body } = await wallexUpstream(routeName, {
+    body: req.body,
+    headerKey: req.get('x-wallex-key')
+  });
+  return res.status(status).json(body);
+};
+
+app.post('/api/wallex/v1/account/orders', wallexOrderCall('placeOrder'));
+app.post('/api/wallex/v1/account/otc/orders', wallexOrderCall('placeOtc'));
+app.post('/api/wallex/v1/account/crypto-withdrawal', wallexOrderCall('withdrawCrypto'));
+app.delete('/api/wallex/v1/account/orders', wallexOrderCall('cancelOrder'));
 
 /*
  * ─── THE SECOND BRIDGE, AT MORE THAN TWICE THE FEE ──────────────────────────

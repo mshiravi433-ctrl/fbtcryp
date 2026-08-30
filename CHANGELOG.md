@@ -1,4 +1,92 @@
-## Unreleased — Phase 4d: real cross-chain ATOMIC swap (HTLC)
+# Unreleased — Phase 153: the cross-chain stack is now REACHABLE from the UI
+
+- The Phase 4b/4d cross-chain machine was server-complete but had NO client:
+  receipts need Ed25519 signatures and no browser code could produce them.
+  `src/lib/intentCrossChainClient.js` adds @noble/ed25519 signing whose keys,
+  canonical serialization, deterministic plan ids and signatures the server
+  validator accepts byte-for-byte (proven by `npm run test:phase153`, 8/8).
+- New "Cross-chain" tab in Intent OS (`/#/intent?tab=crosschain`): plan an
+  exchange against a REAL LI.FI quote via the server, create the settlement
+  plan, walk the bridge handoff (Bridge.jsx now deep-link prefills
+  fromChain/toChain/token/amount), sign and record each leg on-device, and
+  request the Phase 4c on-chain verification reports — which stay honest
+  ("claim only") until the server's RPCs are configured.
+- HTLC atomic swap surfaced honestly: while
+  `INTENT_ATOMIC_SWAP_ADDRESSES` is unconfigured the desk says exactly that;
+  once configured it builds real `newSwap` calldata for both legs with a
+  keccak256 hashlock derived from a preimage that never leaves the device and
+  `executableByServer: false`.
+- The Intent AI panel now shows a pipeline-stage rail that routes to the
+  screens where each stage REALLY runs (chat/policy/execution here; proofs,
+  cross-chain and memory in their Intent OS tabs), and the Network tab's
+  cross-chain cards link straight into the desk. Operational launch gates are
+  untouched — no cosmetic enablement anywhere.
+- New probe: `test/intent-ai/phase153-cross-chain-live-probe.mjs`
+  (`npm run test:phase153`; also added to `test:phases151-200`).
+
+# Unreleased — Phase 152 Level 2: real atomic rehearsal, live simulation gate, security review
+
+- The full flash-arbitrage cycle now runs for real on a local EVM:
+  `npm run rehearse:flash-liquidity` deploys the actual bundled
+  FlashLiquidityRouter artifact, creates a real price divergence between two
+  constant-product pools, runs the production planner against REAL chain
+  reserves (optimal loan 14,872.47 USDC, route chosen from live state), passes
+  a real eth_call simulation gate, then executes a wallet-signed transaction:
+  flash loan → two hops → full repayment (vault balance untouched) → 176.16
+  USDC profit swept → router left at exactly zero. The greedy variant is
+  refused by the simulation gate before any signature, and a forced send of it
+  reverts atomically with zero loss. Report: test/flash-liquidity/rehearsal-report.json.
+- The rehearsal caught and fixed a REAL bug: the Balancer path only APPROVED
+  repayment, but Balancer's Vault never pulls — the receiver must transfer
+  principal+fee back and the Vault verifies balances. Lending-model bug fixed
+  in receiveFlashLoan; rehearsal then passed 16/16.
+- The simulation gate (pipeline step 7) is now REAL infrastructure:
+  `POST /api/flash-liquidity/v1/simulate` eth_calls the exact wallet calldata
+  against `FLASH_LIQUIDITY_SIMULATION_RPC` (https required; http only on
+  loopback for local chains/forks). Until configured, capabilities honestly
+  report SIMULATION_UNAVAILABLE and stay fail-closed.
+- Planner supports an operator-attested `flashSourceOverride` (fork/harness or
+  newly verified provider) — the address is used, but the plan labels it
+  `sourceAttestedBy`, never silently as registry-verified.
+- Persian security review: self-review checklist, the found-and-fixed
+  Balancer repayment bug, honest scope limits (harness counterparties, local
+  EVM, no mainnet fork), and the exact focus list for the independent audit.
+  The AUDITED gate stays closed — docs/INTENT-AI-PHASE152-SECURITY-REVIEW-FA.md.
+- Tests: `npm run test:phase152` now 17/17 (flashSourceOverride + simulator
+  pass/revert/refusal/env parsing added).
+
+## Unreleased — Phase 152: Flash Liquidity (collateral-free flash-loan arbitrage planner)
+
+- The flash-loan architecture from the Intent OS spec is now real code: deterministic
+  opportunity scanner + planner in `src/lib/intent-ai/flashLiquidity.js`, dry-run
+  server API (`GET /api/flash-liquidity/v1/capabilities`, `POST …/scan`, `POST …/plan`),
+  an educational pipeline screen at `/#/flash-liquidity`, and a compiled reference
+  executor `contracts/FlashLiquidityRouter.sol` (~11.4KB, Aave `flashLoanSimple` +
+  Balancer Vault `flashLoan` callbacks, per-hop minOut, on-chain min-profit check,
+  allowlisted targets, executor/owner split).
+- Honest core, stated everywhere: a flash loan is NOT free money — principal +
+  premium must return inside the same transaction or everything reverts (gas still
+  spent). Nothing broadcasts: every "ready" plan still requires a passing simulation
+  and an explicit wallet signature; public-mempool submission is refused for
+  arbitrage (sandwich risk); profits are estimates over indicative reserves.
+- The math is exact where it matters: BigInt constant-product hops, a closed-form
+  optimum for 2-pool cycles (`x* = [γ√(A₁A₂B₁B₂/(1+p)) − A₁B₂]/(γB₂ + γ²B₁)`),
+  bounded ternary search + BigInt refinement for N hops, and token-continuity
+  validation so inconsistent routes fail loudly.
+- Provider registry is fail-closed: only verified contract addresses plan
+  executions (Balancer Vault canonical address, Aave V3 mainnet Pool); every other
+  chain reports `PROVIDER_ADDRESS_UNVERIFIED` instead of guessing. Router execution
+  stays `planning-only` until `FLASH_LIQUIDITY_ROUTER_ADDRESSES` is configured AND
+  `FLASH_LIQUIDITY_ROUTER_AUDITED=true` after a real independent audit.
+- The canonical intent «با ۰ سرمایه اولیه، هر آربیتراژی که بعد از Gas + Flash Fee
+  حداقل ۰.۵٪ سود دارد اجرا کن» parses (fa/en, Persian digits) into
+  `{ initialCapital: 0, minNetProfitBps: 50, atomic: true }`, and the pipeline's
+  step 9 is the promise it sounds like: net profit below the threshold → `NO_TRADE`,
+  no transaction is built, no gas is spent.
+- Persian walkthrough: [docs/INTENT-AI-PHASE152-FLASH-LIQUIDITY-FA.md](docs/INTENT-AI-PHASE152-FLASH-LIQUIDITY-FA.md).
+  Tests: `npm run test:phase152` (15 probes), contract compile: `npm run compile:flash-liquidity`.
+
+# Unreleased — Phase 4d: real cross-chain ATOMIC swap (HTLC)
 
 - Cross-chain atomicity is now REAL for EVM↔EVM pairs: `contracts/IntentAtomicSwap.sol`
   is a hash-timelock escrow (no owner, no pause, no rescue) where both legs lock under

@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -153,6 +154,27 @@ export default function Bridge() {
   const [toChain, setToChain] = useState(42161);
   const [tokenSymbol, setTokenSymbol] = useState('USDT');
   const [amount, setAmount] = useState('');
+
+  /*
+   * Deep link prefill (phase 153): the Intent OS cross-chain desk sends the
+   * user here for the real bridge handoff with its planned leg as context —
+   * ?fromChain=&toChain=&token=&amount=. Values are applied ONLY when they
+   * match what this screen can actually quote, and the query is then cleared
+   * so a refresh keeps whatever the user has since edited.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const fc = Number(searchParams.get('fromChain'));
+    const tc = Number(searchParams.get('toChain'));
+    const tk = (searchParams.get('token') || '').toUpperCase();
+    const am = searchParams.get('amount');
+    if (BRIDGE_CHAINS.some((c) => c.id === fc)) setFromChain(fc);
+    if (BRIDGE_CHAINS.some((c) => c.id === tc) && tc !== fc) setToChain(tc);
+    if (tk && tokensFor(fc).some((t) => t.symbol === tk)) setTokenSymbol(tk);
+    if (am && Number(am) > 0) setAmount(String(am));
+    if (searchParams.toString()) setSearchParams(new URLSearchParams(), { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);

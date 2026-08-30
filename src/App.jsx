@@ -92,6 +92,7 @@ const Buy = lazyRetry(() => import('./pages/Buy'));
 const SmartWallet = lazyRetry(() => import('./pages/SmartWallet'));
 const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
+const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIPanel = lazyRetry(() => import('./components/IntentAIRoute'));
 /*
  * The vault's own route, so the Earn row for it has somewhere to go. The page
@@ -99,6 +100,13 @@ const IntentAIPanel = lazyRetry(() => import('./components/IntentAIRoute'));
  * on this deployment" card when it is not — see src/pages/Vault.jsx.
  */
 const Vault = lazyRetry(() => import('./pages/Vault'));
+
+/*
+ * Loan — lending & borrowing page.
+ * FBT acts as Router + Fee layer only; assets go directly into lending
+ * protocol smart contracts (Morpho / Aave style). No funds held by FBT.
+ */
+const Loan = lazyRetry(() => import('./pages/Loan'));
 
 
 /*
@@ -290,8 +298,10 @@ function AnimatedRoutes() {
             <Route path="/smart-wallet" element={<SmartWallet />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/intent" element={<IntentOS />} />
+            <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/intent-ai" element={<IntentAIPanel />} />
             <Route path="/vault" element={<Vault />} />
+            <Route path="/loan" element={<Loan />} />
 
             <Route path="*" element={<Market />} />
           </Routes>
