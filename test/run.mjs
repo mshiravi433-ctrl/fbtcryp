@@ -586,6 +586,20 @@ console.log('▸ probing the P2P market proxy (side mapping · allow-list · ref
   report('P2P market (server: proxy contract)', await p2pRows);
 }
 
+/* ------------------------ 0d₂. Wallex buy/sell proxy ------------------------ */
+/*
+ * The Iranians-only tab: key custody (user header wins; env key only behind
+ * the explicit WALLEX_SERVER_KEY_ALLOW opt-in, trimmed), fail-closed private
+ * routes, order-body validation before egress, the never-echo guarantee, and
+ * the Persian-only gate + full-locale copy + light-theme rules on the client.
+ */
+console.log('▸ probing the Wallex buy/sell proxy (key custody · validation · fa-only gate)…');
+{
+  const { default: wallexRows } = await import('./wallex-proxy-probe.mjs');
+  report('Wallex proxy (key custody · fa-only tab)', wallexRows);
+}
+
+
 /* ------------------------- 0d₃. Internal BTC wallet ------------------------- */
 /*
  * The BIP-84 leg on the same seed: derivation pinned to the official BIP-84

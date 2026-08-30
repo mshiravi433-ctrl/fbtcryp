@@ -175,7 +175,8 @@
     "compile:flash-liquidity": "node scripts/compile-flash-liquidity.mjs",
     "deploy:flash-liquidity": "node scripts/deploy-flash-liquidity.mjs",
     "rehearse:flash-liquidity": "node scripts/rehearse-flash-liquidity.mjs",
-    "test:phase153": "node test/intent-ai/phase153-cross-chain-live-probe.mjs"
+    "test:phase153": "node test/intent-ai/phase153-cross-chain-live-probe.mjs",
+    "test:wallex": "node test/wallex-proxy-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
