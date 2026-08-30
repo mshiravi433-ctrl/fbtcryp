@@ -48,8 +48,8 @@ jobs:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.ATOMIC_SWAP_DEPLOYER_KEY }}
         run: |
           set -e
-          node scripts/activate-atomic-swap.mjs \
-            --chain 97     --rpc https://data-seed-prebsc-1-s1.binance.org:8545/ \
+          node scripts/activate-atomic-swap.mjs \  
+            --chain 11155111 --rpc https://ethereum-sepolia-rpc.publicnode.com \ \
             --chain 421614 --rpc https://sepolia-rollup.arbitrum.io/rpc \
             --write-env .env.atomic.testnet
       - name: Publish the activation env in the run summary
