@@ -973,6 +973,13 @@
     "enterCollateral": "输入抵押品",
     "overMaxBorrow": "超过最大值",
     "openIntentForSupply": "Intent OS将打开",
-    "openIntentForBorrow": "Intent OS将打开"
+    "openIntentForBorrow": "Intent OS将打开",
+    "warningLiqTitle": "清算风险",
+    "warningLiqBody": "如果价值低于阈值，智能合约会自动出售。不可逆。",
+    "warningLiqBorrowBody": "如果抵押品低于LTV，合约出售。不可逆。",
+    "warningScTitle": "智能合约风险",
+    "warningScBody": "任何协议都可能存在漏洞。",
+    "maxBorrowHint": "最大: {{max}}",
+    "chooseAssetFirst": "请先选择资产"
   }
 }

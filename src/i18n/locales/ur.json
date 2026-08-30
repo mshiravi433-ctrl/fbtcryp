@@ -976,6 +976,13 @@
     "enterCollateral": "ضمانت درج کریں",
     "overMaxBorrow": "زیادہ سے زیادہ سے زیادہ",
     "openIntentForSupply": "Intent OS کھلے گا",
-    "openIntentForBorrow": "Intent OS کھلے گا"
+    "openIntentForBorrow": "Intent OS کھلے گا",
+    "warningLiqTitle": "لیکویڈیشن خطرہ",
+    "warningLiqBody": "اگر قیمت حد سے نیچے گرے، سمارٹ کانٹریکٹ خودبخود فروخت کر دیتا ہے۔ ناقابل واپسی۔",
+    "warningLiqBorrowBody": "اگر ضمانت LTV سے نیچے گرے، کانٹریکٹ فروخت کر دیتا ہے۔ ناقابل واپسی۔",
+    "warningScTitle": "سمارٹ کانٹریکٹ خطرہ",
+    "warningScBody": "کسی بھی پروٹوکول میں خرابی ہو سکتی ہے۔",
+    "maxBorrowHint": "زیادہ سے زیادہ: {{max}}",
+    "chooseAssetFirst": "پہلے ایک اثاثہ منتخب کریں"
   }
 }

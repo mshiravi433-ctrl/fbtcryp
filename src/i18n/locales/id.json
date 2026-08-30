@@ -973,6 +973,13 @@
     "enterCollateral": "Masukkan agunan",
     "overMaxBorrow": "Melebihi maksimum",
     "openIntentForSupply": "Intent OS akan terbuka",
-    "openIntentForBorrow": "Intent OS akan terbuka"
+    "openIntentForBorrow": "Intent OS akan terbuka",
+    "warningLiqTitle": "Risiko likuidasi",
+    "warningLiqBody": "Jika nilai jatuh di bawah ambang batas, kontrak pintar menjualnya secara otomatis. Tidak dapat dibalik.",
+    "warningLiqBorrowBody": "Jika agunan jatuh di bawah LTV, kontrak menjualnya. Tidak dapat dibalik.",
+    "warningScTitle": "Risiko kontrak pintar",
+    "warningScBody": "Protokol apa pun bisa memiliki bug. Hanya simpan yang bisa Anda tanggung.",
+    "maxBorrowHint": "Maks: {{max}}",
+    "chooseAssetFirst": "Pilih aset terlebih dahulu"
   }
 }

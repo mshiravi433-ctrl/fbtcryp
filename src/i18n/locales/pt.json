@@ -973,6 +973,13 @@
     "enterCollateral": "Insira a garantia",
     "overMaxBorrow": "Acima do máximo",
     "openIntentForSupply": "Intent OS abrirá para assinar",
-    "openIntentForBorrow": "Intent OS abrirá"
+    "openIntentForBorrow": "Intent OS abrirá",
+    "warningLiqTitle": "Risco de liquidação",
+    "warningLiqBody": "Se o valor cair abaixo do limiar, o contrato vende automaticamente. Irreversível.",
+    "warningLiqBorrowBody": "Se a garantia cair abaixo do LTV, o contrato a vende. Irreversível.",
+    "warningScTitle": "Risco de contrato",
+    "warningScBody": "Qualquer protocolo pode ter bugs. Deposite apenas o que pode perder.",
+    "maxBorrowHint": "Máximo: {{max}}",
+    "chooseAssetFirst": "Escolha um ativo primeiro"
   }
 }

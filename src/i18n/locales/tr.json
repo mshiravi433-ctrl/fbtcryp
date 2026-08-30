@@ -973,6 +973,13 @@
     "enterCollateral": "Teminat girin",
     "overMaxBorrow": "Maksimumu aşıyor",
     "openIntentForSupply": "Intent OS açılacak",
-    "openIntentForBorrow": "Intent OS açılacak"
+    "openIntentForBorrow": "Intent OS açılacak",
+    "warningLiqTitle": "Tasfiye riski",
+    "warningLiqBody": "Değer eşiğin altına düşerse, akıllı sözleşme otomatik satar. Geri alınamaz.",
+    "warningLiqBorrowBody": "Teminat LTV'nin altına düşerse, sözleşme satar. Geri alınamaz.",
+    "warningScTitle": "Akıllı sözleşme riski",
+    "warningScBody": "Her protokolde hata olabilir.",
+    "maxBorrowHint": "Maks: {{max}}",
+    "chooseAssetFirst": "Önce bir varlık seçin"
   }
 }

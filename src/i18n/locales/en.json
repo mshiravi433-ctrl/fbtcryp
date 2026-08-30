@@ -6300,6 +6300,13 @@
     "enterCollateral": "Enter collateral amount",
     "overMaxBorrow": "Borrow amount exceeds maximum allowed",
     "openIntentForSupply": "Intent OS will open to sign the supply transaction",
-    "openIntentForBorrow": "Intent OS will open to sign the borrow transaction"
+    "openIntentForBorrow": "Intent OS will open to sign the borrow transaction",
+    "warningLiqTitle": "Liquidation risk — read before continuing",
+    "warningLiqBody": "If the value of your supplied asset drops below the threshold, the smart contract auto-sells it. This is irreversible and FBT has no control over it.",
+    "warningLiqBorrowBody": "If your collateral falls below the LTV threshold, the smart contract sells it — not FBT. Irreversible. Keep enough collateral.",
+    "warningScTitle": "Smart contract risk",
+    "warningScBody": "Any lending protocol can have bugs. Only supply amounts you can afford to lose.",
+    "maxBorrowHint": "Max allowed: {{max}}",
+    "chooseAssetFirst": "Choose an asset first"
   }
 }

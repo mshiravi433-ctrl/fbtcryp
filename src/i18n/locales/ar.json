@@ -4464,6 +4464,13 @@
     "enterCollateral": "أدخل مبلغ الضمان",
     "overMaxBorrow": "مبلغ القرض يتجاوز الحد الأقصى",
     "openIntentForSupply": "سيفتح Intent OS لتوقيع معاملة الإيداع",
-    "openIntentForBorrow": "سيفتح Intent OS لتوقيع معاملة الاقتراض"
+    "openIntentForBorrow": "سيفتح Intent OS لتوقيع معاملة الاقتراض",
+    "warningLiqTitle": "خطر التصفية",
+    "warningLiqBody": "إذا انخفض الضمان تحت العتبة، يبيعه العقد الذكي تلقائياً. لا رجعة فيه.",
+    "warningLiqBorrowBody": "إذا انخفض الضمان تحت حد LTV، يبيعه العقد الذكي. لا رجعة. حافظ على ضمان كافٍ.",
+    "warningScTitle": "مخاطر العقود الذكية",
+    "warningScBody": "أي بروتوكول إقراض قد يحتوي على أخطاء. لا تودع إلا ما تتحمل خسارته.",
+    "maxBorrowHint": "الحد الأقصى: {{max}}",
+    "chooseAssetFirst": "اختر أصلاً أولاً"
   }
 }

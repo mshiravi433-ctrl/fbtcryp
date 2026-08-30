@@ -973,6 +973,13 @@
     "enterCollateral": "Введите залог",
     "overMaxBorrow": "Превышает максимум",
     "openIntentForSupply": "Откроется Intent OS",
-    "openIntentForBorrow": "Откроется Intent OS"
+    "openIntentForBorrow": "Откроется Intent OS",
+    "warningLiqTitle": "Риск ликвидации",
+    "warningLiqBody": "Если значение упадёт ниже порога, смарт-контракт автоматически продаёт. Необратимо.",
+    "warningLiqBorrowBody": "Если залог упадёт ниже LTV, контракт продаёт. Необратимо.",
+    "warningScTitle": "Риск смарт-контракта",
+    "warningScBody": "Любой протокол может иметь ошибки.",
+    "maxBorrowHint": "Макс: {{max}}",
+    "chooseAssetFirst": "Сначала выберите актив"
   }
 }

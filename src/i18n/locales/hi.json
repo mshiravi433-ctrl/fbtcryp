@@ -973,6 +973,13 @@
     "enterCollateral": "संपार्श्विक दर्ज करें",
     "overMaxBorrow": "अधिकतम से अधिक",
     "openIntentForSupply": "जमा के लिए Intent OS खुलेगा",
-    "openIntentForBorrow": "उधार के लिए Intent OS खुलेगा"
+    "openIntentForBorrow": "उधार के लिए Intent OS खुलेगा",
+    "warningLiqTitle": "लिक्विडेशन जोखिम",
+    "warningLiqBody": "यदि मूल्य सीमा से नीचे गिरा, तो स्मार्ट कॉन्ट्रैक्ट स्वतः बेच देता है। अपरिवर्तनीय।",
+    "warningLiqBorrowBody": "यदि संपार्श्विक LTV से नीचे गिरा, कॉन्ट्रैक्ट बेच देता है। अपरिवर्तनीय।",
+    "warningScTitle": "स्मार्ट कॉन्ट्रैक्ट जोखिम",
+    "warningScBody": "किसी भी प्रोटोकॉल में बग हो सकते हैं।",
+    "maxBorrowHint": "अधिकतम: {{max}}",
+    "chooseAssetFirst": "पहले एक संपत्ति चुनें"
   }
 }
