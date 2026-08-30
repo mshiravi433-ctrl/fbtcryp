@@ -67,6 +67,19 @@ export default async function run() {
   t('two configured chains activate the capability',
     atomicSwapConfigured(parseAtomicSwapAddresses(`{"56":"${ADDR_BNB}","42161":"${ADDR_ARB}"}`)) === true);
 
+  /* ------------------ 2b. dedicated RPC network parsing ------------------- */
+  const { parseAtomicSwapRpcNetworks } = mod;
+  const rpcMap = parseAtomicSwapRpcNetworks(`[{"chainId":56,"rpcUrls":["https://a.example","https://a.example","http://127.0.0.1:8545"]},{"chainId":137,"rpcUrls":["http://public.example"]},{"chainId":9999,"rpcUrls":["https://b.example"]}]`);
+  t('dedicated RPC networks parse https and loopback http, deduped',
+    rpcMap.size === 1 && rpcMap.get(56).rpcUrls.length === 2
+    && rpcMap.get(56).rpcUrls.includes('http://127.0.0.1:8545'));
+  t('http on a PUBLIC hostname is refused — loopback only',
+    !rpcMap.has(137));
+  t('unknown chain ids are dropped from RPC networks', !rpcMap.has(9999));
+  t('public testnets are first-class activation chains',
+    mod.ATOMIC_SWAP_CHAINS.includes(97) && mod.ATOMIC_SWAP_CHAINS.includes(421614)
+    && mod.ATOMIC_SWAP_CHAINS.includes(11155111) && mod.ATOMIC_SWAP_CHAINS.includes(84532));
+
   /* --------------------------- 3. plan compile ---------------------------- */
   const now = Math.floor(Date.now() / 1000);
   process.env.INTENT_ATOMIC_SWAP_ADDRESSES = `{"56":"${ADDR_BNB}","42161":"${ADDR_ARB}"}`;

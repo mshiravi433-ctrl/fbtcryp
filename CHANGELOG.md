@@ -26,9 +26,28 @@
 - Scripts: `scripts/compile-atomic-swap.mjs` (solc artifact
   `src/lib/atomicSwapArtifact.json`), `scripts/deploy-atomic-swap.mjs`, and the
   contract is registered in `scripts/deploy-all.mjs`.
-- Tests: `test/intent-atomic-swap-probe.mjs` — 43 assertions proving the claim in both
+- Tests: `test/intent-atomic-swap-probe.mjs` — 47 assertions proving the claim in both
   directions: real when configured, never claimed when the mechanism is absent.
 - Docs: `docs/INTENT-ATOMIC-SWAP-FA.md` (+ README and INTENT-OS-FA sections).
+
+Activation tooling (this commit):
+
+- `scripts/activate-atomic-swap.mjs` — the one-command finisher: compiles if needed,
+  deploys on every target (env `ATOMIC_SWAP_DEPLOY_TARGETS` or repeatable
+  `--chain/--rpc` pairs), emits/writes the exact `INTENT_ATOMIC_SWAP_ADDRESSES` +
+  `INTENT_ATOMIC_SWAP_RPC_NETWORKS`. Public testnets (97, 80002, 84532, 421614,
+  11155111) are first-class activation chains.
+- `INTENT_ATOMIC_SWAP_RPC_NETWORKS`: dedicated server-only RPC config for leg
+  verification — https required; plain http accepted only for loopback dev
+  chains. The Phase 4c parser and its distinct-hostname quorum stay untouched.
+- Deploy scripts use a bare ethers Network (no chain plugins), so known chainIds
+  like 137 never phone home to a public gas station; loopback http RPCs are
+  accepted for local dev chains.
+- Proven end to end on two local chains through the live server: lock → verify
+  (locked, RPC consensus) → claim with one preimage (counterparty reads it from
+  the on-chain SwapClaimed event) → both legs claimed; and a second swap with no
+  claim → time past both timelocks → both legs refunded. See the doc's
+  "اجرای واقعی" section.
 
 ## Unreleased — Free Upstash durable-store fallback
 

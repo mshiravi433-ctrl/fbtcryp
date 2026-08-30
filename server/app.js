@@ -235,6 +235,7 @@ import { workflowProtocolStatus } from './intentWorkflow.js';
 import {
   atomicSwapProtocolStatus,
   buildAtomicSwapPlan,
+  parseAtomicSwapRpcNetworks,
   verifyAtomicSwapLeg
 } from './intentAtomicSwap.js';
 import {
@@ -1898,9 +1899,12 @@ app.post('/api/intents/v1/atomic-swap/plan', (req, res) => {
 
 app.post('/api/intents/v1/atomic-swap/verify', async (req, res) => {
   const body = req.body || {};
-  const networks = parseCrossChainRpcNetworks();
-  const network = networks.get(Number(body.chainId));
-  const rpcUrls = (network?.providers || []).map((row) => row.rpcUrl);
+  /* The server reads through its OWN configured endpoints only — dedicated
+     INTENT_ATOMIC_SWAP_RPC_NETWORKS first, then the Phase 4c networks. A
+     caller-supplied URL proves nothing and is never used. */
+  const dedicated = parseAtomicSwapRpcNetworks().get(Number(body.chainId));
+  const shared = parseCrossChainRpcNetworks().get(Number(body.chainId));
+  const rpcUrls = dedicated?.rpcUrls || (shared?.providers || []).map((row) => row.rpcUrl) || [];
   const verified = await verifyAtomicSwapLeg({
     chainId: body.chainId,
     swapId: body.swapId,

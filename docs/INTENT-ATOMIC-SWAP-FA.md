@@ -66,6 +66,34 @@ destination.timeout + 3600s  ≤  source.timeout     (ATOMIC_SWAP_TIMELOCK_ORDER
 
 ## فعال‌سازی عملیاتی
 
+### راه یک‌فرمانی (توصیه‌شده)
+
+```bash
+# کامپایل در صورت نیاز + استقرار روی هر هدف + چاپ/نوشتن env نهایی:
+ATOMIC_SWAP_DEPLOY_TARGETS='[
+  {"chainId":97,"rpcUrl":"https://data-seed-prebsc-1-s1.binance.org:8545/"},
+  {"chainId":421614,"rpcUrl":"https://sepolia-rollup.arbitrum.io/rpc"}
+]' DEPLOYER_PRIVATE_KEY=0x… node scripts/activate-atomic-swap.mjs --write-env .env.atomic.local
+
+# یا با پرچم‌های تکرارشونده:
+node scripts/activate-atomic-swap.mjs --chain 56 --rpc https://… --chain 137 --rpc https://… --key 0x…
+```
+
+اسکریپت هر دو زنجیره را مستقر می‌کند، مقدار دقیق `INTENT_ATOMIC_SWAP_ADDRESSES`
+و `INTENT_ATOMIC_SWAP_RPC_NETWORKS` را می‌سازد (و با `--write-env` در یک فایل
+env محلی می‌نویسد). سپس با بالا آوردن سرور:
+
+```bash
+node --env-file=.env.atomic.local server/index.js   # یا env را در Vercel بگذارید
+```
+
+`GET /api/intents/v1/atomic-swap/status` باید `available:true` بدهد و ردیف HTLC
+در `/#/intent` «فعال» می‌شود. تست‌نت‌های عمومی (۹۷، ۸۰۰۰۲، ۸۴۵۳۲، ۴۲۱۶۱۴،
+۱۱۱۵۵۱۱) هدف درجه‌یک فعال‌سازی‌اند؛ برای مین‌نت طبق سیاست مخزن از KMS
+استفاده کنید، نه کلید خام.
+
+### گام‌به‌گام (معادل دستی)
+
 ```bash
 # ۱) کامپایل
 node scripts/compile-atomic-swap.mjs
@@ -91,6 +119,32 @@ GET  /api/intents/v1/capabilities           ← بلوک atomicSwap + آداپت
 
 ## تست‌ها
 
-- `test/intent-atomic-swap-probe.mjs` — ۴۳ ادعا در دو جهت: ادعا وقتی واقعی
+- `test/intent-atomic-swap-probe.mjs` — ۴۷ ادعا در دو جهت: ادعا وقتی واقعی
   است، و امتناع از ادعا وقتی سازوکار غایب است.
 - `node scripts/compile-atomic-swap.mjs` — کامپایل solc و artifact.
+
+## اثبات سرتاسری روی دو زنجیرهٔ محلی (اجرای واقعی)
+
+کل چرخه با سرور زنده و قراردادهای واقعیِ مستقرشده روی دو زنجیرهٔ توسعه
+(ganache با chainIdهای ۵۶ و ۱۳۷) اجرا و اثبات شده است:
+
+1. `activate-atomic-swap.mjs` هر دو زنجیره را مستقر کرد و env را ساخت؛
+2. `POST /atomic-swap/plan` → قفل هر دو پا با `newSwap` → `POST
+   /atomic-swap/verify` هر دو پا `locked` با اجماع RPC؛
+3. کاربر پای مقصد را با preimage گرفت؛ طرف مقابل **preimage را از رویداد
+   آن‌چین `SwapClaimed`** خواند و پای منبع را با همان preimage گرفت → هر دو
+   پا `claimed`: تسویهٔ اتمیک؛
+4. سواپ دوم بدون claim → سفر زمانی از هر دو مهلت → `refund` هر دو پا →
+   هر دو `refunded`: سقط اتمیک، بدون ضرر برای هیچ طرف.
+
+خروجی نمونه:
+
+```text
+verify source leg → state=claimed   · consensus=true
+verify destination leg → state=claimed
+→ both legs claimed: value moved on BOTH chains. Atomic completion proven.
+…
+verify source leg → state=refunded  · consensus=true
+verify destination leg → state=refunded
+→ both legs refunded: nobody lost funds. Atomic abort proven.
+```

@@ -17,8 +17,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ContractFactory, JsonRpcProvider, Wallet } from 'ethers';
+import { ContractFactory, JsonRpcProvider, Network, Wallet } from 'ethers';
 
+/* A bare Network (no chain-specific plugins) so a known chainId such as 137
+   never makes ethers phone home to a public gas station — the RPC endpoint
+   alone decides fees. Offline/local-chain safe. */
+const bareNetwork = (chainId) => new Network(`fbt-dev-${chainId}`, chainId);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 
@@ -32,7 +36,15 @@ if (!pk) fail('Set DEPLOYER_PRIVATE_KEY (a wallet with a little gas). Never comm
 
 const rpc = process.env.RPC_URL || process.env.INTENT_WORKFLOW_RPC_URL;
 if (!rpc) fail('Set RPC_URL to an HTTPS RPC endpoint.');
-if (!/^https:\/\//.test(rpc)) fail('RPC_URL must be https.');
+const isLoopback = (() => {
+  try {
+    const host = new URL(rpc).hostname;
+    return ['localhost', '127.0.0.1', '::1'].includes(host);
+  } catch { return false; }
+})();
+if (!/^https:\/\//.test(rpc) && !(/^http:\/\//.test(rpc) && isLoopback)) {
+  fail('RPC_URL must be https (http is allowed only for a local dev chain on localhost/127.0.0.1).');
+}
 
 const chainId = Number(process.env.CHAIN_ID || 42161);
 if (!Number.isInteger(chainId) || chainId <= 0) fail('CHAIN_ID must be a positive integer.');
@@ -41,7 +53,7 @@ const artifactPath = path.join(root, 'src/lib/atomicSwapArtifact.json');
 if (!fs.existsSync(artifactPath)) fail('Artifact missing. Run: node scripts/compile-atomic-swap.mjs');
 const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
 
-const provider = new JsonRpcProvider(rpc, chainId, { staticNetwork: true });
+const provider = new JsonRpcProvider(rpc, bareNetwork(chainId), { staticNetwork: true });
 const wallet = new Wallet(pk, provider);
 
 console.log('\n──────────────────────────────────────────────');

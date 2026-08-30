@@ -40,8 +40,14 @@ export const ATOMIC_SWAP_MODE = 'htlc-evm-evm';
 export const ATOMIC_SWAP_MECHANISM = 'hash-timelock-contract-escrow';
 
 /* EVM<->EVM only. Solana (and any chain without a deployed IntentAtomicSwap)
-   is refused, never silently downgraded to sequential. */
-export const ATOMIC_SWAP_CHAINS = Object.freeze([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144]);
+   is refused, never silently downgraded to sequential. Public testnets are
+   first-class activation targets (same set as scripts/deploy-all.mjs), so an
+   operator can prove the mechanism on testnet before mainnet. */
+export const ATOMIC_SWAP_CHAINS = Object.freeze([
+  1, 10, 56, 137, 146, 8453, 42161, 43114, 59144,
+  /* public testnets */
+  97, 80002, 84532, 421614, 11155111
+]);
 
 /* The counterparty locking the destination leg must still have time to claim
    the source leg after the user reveals the preimage. A pair without this
@@ -144,6 +150,53 @@ export function parseAtomicSwapAddresses(raw = process.env.INTENT_ATOMIC_SWAP_AD
 export function atomicSwapConfigured(addresses = parseAtomicSwapAddresses()) {
   /* A cross-chain swap needs at least two DIFFERENT configured chains. */
   return addresses.size >= 2;
+}
+
+const isLoopbackHost = (host) => ['localhost', '127.0.0.1', '[::1]', '::1'].includes(String(host || '').toLowerCase());
+
+/**
+ * Dedicated RPC configuration for atomic-swap leg verification
+ * (INTENT_ATOMIC_SWAP_RPC_NETWORKS): [{"chainId":56,"rpcUrls":["https://…"]}].
+ *
+ * https is required for public hosts. Plain http is allowed ONLY for loopback
+ * (a local dev chain such as a ganache used to prove the mechanism end to
+ * end) — never for a public hostname. This parser is deliberately separate
+ * from the Phase 4c verification networks, whose stricter distinct-hostname
+ * quorum is a security property of THAT protocol and stays untouched.
+ */
+export function parseAtomicSwapRpcNetworks(raw = process.env.INTENT_ATOMIC_SWAP_RPC_NETWORKS || '') {
+  const text = String(raw || '').trim();
+  if (!text) return new Map();
+  let rows;
+  try {
+    rows = JSON.parse(text);
+  } catch {
+    return new Map();
+  }
+  if (!Array.isArray(rows)) return new Map();
+  const networks = new Map();
+  for (const row of rows.slice(0, 12)) {
+    const chainId = Number(row?.chainId);
+    if (!Number.isInteger(chainId) || !ATOMIC_SWAP_CHAINS.includes(chainId) || networks.has(chainId)) continue;
+    const urls = (Array.isArray(row?.rpcUrls) ? row.rpcUrls : Array.isArray(row?.providers) ? row.providers.map((p) => p?.rpcUrl) : [])
+      .map((url) => String(url || '').trim())
+      .filter((url) => {
+        try {
+          const parsed = new URL(url);
+          if (parsed.username || parsed.password) return false;
+          if (parsed.protocol === 'https:') return true;
+          /* loopback-only http: a local dev chain, never a public host. */
+          return parsed.protocol === 'http:' && isLoopbackHost(parsed.hostname);
+        } catch {
+          return false;
+        }
+      })
+      .filter((url, index, all) => all.indexOf(url) === index)
+      .slice(0, 4);
+    if (!urls.length) continue;
+    networks.set(chainId, { chainId, rpcUrls: urls });
+  }
+  return networks;
 }
 
 function validateLeg(leg, role, now) {
