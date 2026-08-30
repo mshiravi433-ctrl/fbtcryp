@@ -148,3 +148,38 @@ verify source leg → state=refunded  · consensus=true
 verify destination leg → state=refunded
 → both legs refunded: nobody lost funds. Atomic abort proven.
 ```
+
+## فعال‌سازی فقط با موبایل (بدون کامپیوتر)
+
+توکن‌های ایجنت (و هر اتوماسیون شخص ثالث) اجازهٔ نوشتن در `.github/workflows/`
+یا تنظیم Secret ندارند — محدودیت GitHub است، نه انتخاب ما. پس مسیر موبایلی
+۵ مرحله‌ای زیر طراحی شده (فایل آماده: `ci/atomic-swap-activation.yml`):
+
+1. **کپی workflow** — در مرورگر گوشی: این فایل را باز کنید → Raw → کپی →
+   سپس در ریپو «Add file → Create new file» با مسیر
+   `.github/workflows/atomic-swap-activation.yml` بچسبانید و کامیت کنید.
+2. **ساخت کیف پول burner** — در هر اپ کیف پولی یک حساب تازه بسازید و کلید
+   خصوصی‌اش را export کنید. **هرگز** از کیف اصلی استفاده نکنید و کلید را
+   **هرگز در چت یا_issue نگذارید**.
+3. **ثبت Secret** — Settings → Secrets and variables → Actions →
+   «New repository secret» با نام `ATOMIC_SWAP_DEPLOYER_KEY` و مقدار همان
+   کلید burner.
+4. **شارژ گس تست‌نت** برای «آدرس عمومی» burner:
+   - tBNB (زنجیرهٔ ۹۷): https://testnet.bnbchain.org/faucet-smart
+   - ETH سپولیای آربیتروم (زنجیرهٔ ۴۲۱۶۱۴): https://faucets.chain.link/arbitrum-sepolia
+5. **اجرای workflow** — تب Actions → «Atomic Swap Testnet Activation» →
+   «Run workflow». خروجی (آدرس قراردادهای دو زنجیره) در خلاصهٔ اجرا
+   (`$GITHUB_STEP_SUMMARY`) چاپ می‌شود.
+
+سپس برای «لایو» روی سایت: دو متغیر زیر را در محیط هاست (مثلاً Vercel →
+Settings → Environment Variables) بگذارید و یک redeploy بگیرید:
+
+```text
+INTENT_ATOMIC_SWAP_ADDRESSES={"97":"0x…","421614":"0x…"}
+INTENT_ATOMIC_SWAP_RPC_NETWORKS=[{"chainId":97,"rpcUrls":["https://…"]},{"chainId":421614,"rpcUrls":["https://…"]}]
+```
+
+از آن لحظه `/#/intent` ردیف HTLC را «فعال/ATOMIC» نشان می‌دهد و
+`GET /api/intents/v1/atomic-swap/status` مقدار `available:true` می‌دهد. برای
+مین‌نت همان مسیر با کلید تحت KMS (طبق سیاست مخزن) و زنجیره‌های اصلی
+اجرا کنید.
