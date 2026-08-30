@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fmtPct, timeAgo } from '../lib/format';
+import { fmtPct, fmtCompact, timeAgo } from '../lib/format';
 import { getSolanaAssets } from '../lib/solanaAssetsClient';
 import { deriveMarketInsights } from '../lib/marketInsights';
 import { publishInsightEquities } from '../lib/insightSession';
@@ -61,26 +61,10 @@ function MetricCard({ title, item, source, tone = 'up', note, fallback, emptyTex
   );
 }
 
-function UnavailableCard({ title, body, Icon }) {
-  const { t } = useTranslation();
-  return (
-    <article className="insight-unavailable">
-      <span className="insight-unavailable-icon" aria-hidden="true"><Icon width={20} height={20} /></span>
-      <div>
-        <div className="insight-unavailable-head">
-          <strong>{title}</strong>
-          <span>{t('insights.unavailable')}</span>
-        </div>
-        <p>{body}</p>
-      </div>
-    </article>
-  );
-}
-
 /**
  * Market intelligence assembled only from feeds already verified by the app.
- * Unsupported country/capital-flow/accounting claims stay visible as explicit
- * source gaps instead of disappearing or being filled with invented figures.
+ * Key indicators (Volume, Market Cap, Volatility) are computed from live market
+ * data and kept strictly factual.
  */
 export default function MarketInsightsPanel({
   markets = [],
@@ -130,7 +114,7 @@ export default function MarketInsightsPanel({
   // also timestamps deterministic offline fallbacks; treating that as a live
   // refresh would undermine the explicit unavailable state on the cards.
   const freshestAt = Math.max(
-    insights.cryptoLeader || insights.cryptoLaggard ? Number(marketsUpdatedAt) || 0 : 0,
+    insights.cryptoLeader || insights.cryptoLaggard || insights.volumeLeader ? Number(marketsUpdatedAt) || 0 : 0,
     insights.tokenizedLeader || insights.companyLeader ? equityAt : 0,
     insights.eventStories.length ? Number(newsUpdatedAt) || 0 : 0
   );
@@ -206,24 +190,33 @@ export default function MarketInsightsPanel({
       )}
 
       <div className="insights-section-heading">
-        <IconInfo width={17} height={17} />
-        <div><strong>{t('insights.coverageTitle')}</strong><span>{t('insights.coverageSub')}</span></div>
+        <IconTrend width={17} height={17} />
+        <div><strong>{t('insights.indicatorsTitle', { defaultValue: 'شاخص‌های کلیدی بازار و نقدینگی' })}</strong><span>{t('insights.indicatorsSub', { defaultValue: 'تحلیل داده‌های زنده و جریان نقدینگی' })}</span></div>
       </div>
-      <div className="insights-unavailable-grid">
-        <UnavailableCard
-          title={t('insights.countryFlow')}
-          body={t('insights.countryUnavailable')}
-          Icon={IconGlobe}
+      <div className="insights-grid">
+        <MetricCard
+          title={t('insights.volumeLeader', { defaultValue: 'بیشترین حجم معاملات ۲۴ ساعته' })}
+          item={insights.volumeLeader}
+          source={t('insights.volumeSource', { vol: insights.volumeLeader?.volume ? fmtCompact(insights.volumeLeader.volume) : '—', defaultValue: insights.volumeLeader?.volume ? `حجم ۲۴ساعته: ${fmtCompact(insights.volumeLeader.volume)}` : 'حجم زنده معاملات' })}
+          tone="up"
+          fallback={IconTrend}
+          emptyText={t('insights.marketUnavailable')}
         />
-        <UnavailableCard
-          title={t('insights.companyProfit')}
-          body={t('insights.profitUnavailable')}
-          Icon={IconBuilding}
+        <MetricCard
+          title={t('insights.marketCapLeader', { defaultValue: 'برترین ارزش بازار' })}
+          item={insights.marketCapLeader}
+          source={t('insights.mcapSource', { mcap: insights.marketCapLeader?.mcap ? fmtCompact(insights.marketCapLeader.mcap) : '—', defaultValue: insights.marketCapLeader?.mcap ? `ارزش بازار: ${fmtCompact(insights.marketCapLeader.mcap)}` : 'ارزش کل بازار' })}
+          tone="blue"
+          fallback={IconBuilding}
+          emptyText={t('insights.marketUnavailable')}
         />
-        <UnavailableCard
-          title={t('insights.capitalOutflow')}
-          body={t('insights.outflowUnavailable')}
-          Icon={IconTrend}
+        <MetricCard
+          title={t('insights.volatilityLeader', { defaultValue: 'بیشترین دامنه نوسان روزانه' })}
+          item={insights.volatilityLeader}
+          source={insights.volatilityLeader?.spreadPct != null ? t('insights.spreadSource', { spread: fmtPct(insights.volatilityLeader.spreadPct, 1), defaultValue: `دامنه نوسان: ${fmtPct(insights.volatilityLeader.spreadPct, 1)}` }) : t('insights.cryptoSource')}
+          tone="violet"
+          fallback={IconTrend}
+          emptyText={t('insights.marketUnavailable')}
         />
       </div>
 

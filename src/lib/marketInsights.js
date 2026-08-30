@@ -56,6 +56,31 @@ export function isEventStory(item) {
 }
 
 /**
+ * Compact rotation candidates. Brand slots are inserted by Header itself so
+ * the data model stays independent of timing and animation.
+ */
+function rankByVolume(rows = []) {
+  const clean = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.volume)) && Number(row?.volume) > 0);
+  return [...clean].sort((a, b) => Number(b.volume) - Number(a.volume))[0] ?? null;
+}
+
+function rankByMarketCap(rows = []) {
+  const clean = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.mcap)) && Number(row?.mcap) > 0);
+  return [...clean].sort((a, b) => Number(b.mcap) - Number(a.mcap))[0] ?? null;
+}
+
+function rankByVolatility(rows = []) {
+  const clean = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.high24h)) && Number.isFinite(Number(row?.low24h)) && Number(row?.low24h) > 0 && Number(row?.high24h) >= Number(row?.low24h));
+  return [...clean].map((row) => ({
+    ...row,
+    spreadPct: ((Number(row.high24h) - Number(row.low24h)) / Number(row.low24h)) * 100
+  })).sort((a, b) => b.spreadPct - a.spreadPct)[0] ?? null;
+}
+
+/**
  * Derive everything displayed by the Intelligence tab and header spotlight.
  * No values are generated here: returned rows retain their source fields.
  */
@@ -68,6 +93,10 @@ export function deriveMarketInsights(input = {}) {
   const tokenizedLeader = rankByMove(equityRows, 'desc');
   const companyLeader = rankByMove(equityRows.filter(isCompanyToken), 'desc');
 
+  const volumeLeader = rankByVolume(markets);
+  const marketCapLeader = rankByMarketCap(markets);
+  const volatilityLeader = rankByVolatility(markets);
+
   const eventStories = newsRows
     .filter(isEventStory)
     .sort((a, b) => Number(b?.at ?? 0) - Number(a?.at ?? 0))
@@ -78,6 +107,9 @@ export function deriveMarketInsights(input = {}) {
     cryptoLaggard,
     tokenizedLeader,
     companyLeader,
+    volumeLeader,
+    marketCapLeader,
+    volatilityLeader,
     eventStories,
 
     // Explicitly unavailable rather than inferred from price, market cap,
@@ -91,10 +123,6 @@ export function deriveMarketInsights(input = {}) {
   };
 }
 
-/**
- * Compact rotation candidates. Brand slots are inserted by Header itself so
- * the data model stays independent of timing and animation.
- */
 export function headerInsightItems(insights) {
   const out = [];
   if (insights?.cryptoLeader) {
@@ -110,6 +138,9 @@ export function headerInsightItems(insights) {
   );
   if (laggard && !sameCrypto) {
     out.push({ kind: 'laggard', item: laggard, change24h: Number(laggard.change24h) });
+  }
+  if (insights?.volumeLeader) {
+    out.push({ kind: 'volume', item: insights.volumeLeader, change24h: Number(insights.volumeLeader.change24h) });
   }
   if (insights?.companyLeader) {
     out.push({ kind: 'company', item: insights.companyLeader, change24h: Number(insights.companyLeader.change24h) });
