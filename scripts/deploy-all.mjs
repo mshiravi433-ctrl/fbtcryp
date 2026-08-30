@@ -71,6 +71,7 @@ const feeBps = Number(process.env.FEE_BPS || 50);
 
 const contracts = [
   { name: 'IntentWorkflowBatch', artifact: 'src/lib/workflowBatchArtifact.json', compile: 'scripts/compile-workflow.mjs', envKey: 'INTENT_WORKFLOW_BATCH_ADDRESS', args: [] },
+  { name: 'IntentAtomicSwap', artifact: 'src/lib/atomicSwapArtifact.json', compile: 'scripts/compile-atomic-swap.mjs', envKey: 'INTENT_ATOMIC_SWAP_ADDRESS', args: [] },
   { name: 'IntentMerkleRootAnchor', artifact: 'src/lib/merkleRootAnchorArtifact.json', compile: 'scripts/compile-merkle-anchor.mjs', envKey: 'INTENT_MERKLE_ANCHOR_ADDRESS', args: [] },
   { name: 'IntentAuctionAnchor', artifact: 'src/lib/auctionAnchorArtifact.json', compile: 'scripts/compile-auction-anchor.mjs', envKey: 'INTENT_ANCHOR_ADDRESS', args: [] },
   { name: 'FeeRouter', artifact: 'src/lib/feeRouterArtifact.json', compile: 'scripts/compile.mjs', envKey: 'INTENT_FEE_ROUTER_ADDRESS', args: [defaultDexRouter, feeRecipient, feeBps] }

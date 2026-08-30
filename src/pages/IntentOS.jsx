@@ -1428,6 +1428,29 @@ export default function IntentOS() {
           <section className="ios-auction-status">
             <div className="row-between">
               <div>
+                <span className="ios-eyebrow">{t('intentOS.network.atomicSwapProtocol')}</span>
+                <strong>{networkStatus?.atomicSwap?.crossChainAtomic
+                  ? t('intentOS.network.atomicSwapReady')
+                  : t('intentOS.network.atomicSwapUnavailable')}</strong>
+              </div>
+              <span className={`ios-status ${networkStatus?.atomicSwap?.crossChainAtomic ? 'eligible' : 'unavailable'}`}>
+                {networkStatus?.atomicSwap?.crossChainAtomic
+                  ? t('intentOS.network.atomic')
+                  : t('intentOS.network.nonAtomic')}
+              </span>
+            </div>
+            <div className="ios-network-metrics">
+              <span><b>{networkStatus?.atomicSwap?.mechanism ?? '—'}</b>{t('intentOS.network.atomicSwapMechanism')}</span>
+              <span><b>{networkStatus?.atomicSwap?.configuredChainCount ?? 0}</b>{t('intentOS.network.atomicSwapChains')}</span>
+              <span><b>{networkStatus?.atomicSwap?.minTimelockMarginSeconds ?? '—'}</b>{t('intentOS.network.atomicSwapMargin')}</span>
+              <span><b>{networkStatus?.atomicSwap?.escrowDuringSwap ? t('intentOS.network.onChainEscrow') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
+            </div>
+            <p>{t('intentOS.network.atomicSwapNote')}</p>
+          </section>
+
+          <section className="ios-auction-status">
+            <div className="row-between">
+              <div>
                 <span className="ios-eyebrow">{t('intentOS.network.txVerification')}</span>
                 <strong>{crossChainVerification?.configured
                   ? t('intentOS.network.txVerificationConfigured')

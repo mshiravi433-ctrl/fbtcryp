@@ -21,6 +21,7 @@
 import { createHash } from 'node:crypto';
 import { Interface, ZeroAddress, isAddress } from 'ethers';
 import { canonicalValue } from './intentSignatures.js';
+import { atomicSwapProtocolStatus } from './intentAtomicSwap.js';
 
 export const WORKFLOW_SCHEMA = 'fbt.workflow.v1';
 export const WORKFLOW_PROOF_SCHEMA = 'fbt.workflow-execution-proof.v1';
@@ -399,6 +400,11 @@ export function workflowProtocolStatus({ address = configuredWorkflowBatchAddres
     proofSchema: WORKFLOW_PROOF_SCHEMA,
     singleChainAtomic: true,
     crossChainAtomic: false,
+    /* Phase 4d: a separate REAL mechanism (IntentAtomicSwap HTLC escrow) makes
+       cross-chain atomicity available for EVM<->EVM pairs when its contracts
+       are deployed. The workflow-batch compiler itself stays single-chain —
+       this field points at the mechanism that owns the claim. */
+    crossChainAtomicSwap: atomicSwapProtocolStatus(),
     crossChainStateSchema: 'fbt.cross-chain-state.v1',
     crossChainReceiptSchema: 'fbt.cross-chain-leg-receipt.v1',
     crossChainSequentialSignatures: true,

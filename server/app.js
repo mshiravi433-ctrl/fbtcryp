@@ -233,6 +233,12 @@ import {
 } from './intentSettlement.js';
 import { workflowProtocolStatus } from './intentWorkflow.js';
 import {
+  atomicSwapProtocolStatus,
+  buildAtomicSwapPlan,
+  parseAtomicSwapRpcNetworks,
+  verifyAtomicSwapLeg
+} from './intentAtomicSwap.js';
+import {
   createCrossChainState,
   crossChainProtocolStatus,
   readCrossChainState,
@@ -1347,6 +1353,9 @@ app.get('/api/intents/v1/capabilities', (_req, res) => {
       graceSeconds: executionGraceSeconds()
     }),
     workflows: workflowProtocolStatus(),
+    /* Phase 4d: REAL cross-chain atomicity (HTLC escrow), honestly gated on
+       deployed contract addresses. */
+    atomicSwap: atomicSwapProtocolStatus(),
     crossChain: {
       ...crossChainProtocolStatus(),
       txVerification: crossChainVerificationStatus(parseCrossChainRpcNetworks())
@@ -1864,6 +1873,50 @@ app.post('/api/intents/v1/cross-chain/states/:stateId/receipts', async (req, res
     return res.status(status).json({ error: stored.code });
   }
   return res.status(stored.alreadyStored ? 200 : 201).json(stored.state);
+});
+
+/*
+ * Phase 4d: cross-chain ATOMIC swap (HTLC). The plan endpoint compiles two
+ * user-signed `newSwap` legs with the safety ordering enforced off-chain; it
+ * never sends a transaction. The verify endpoint re-reads a leg through the
+ * server's OWN configured RPCs (INTENT_CROSS_CHAIN_RPC_NETWORKS) — caller
+ * claims prove nothing. Unconfigured contracts are reported exactly as that
+ * (ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED), never silently downgraded.
+ */
+app.get('/api/intents/v1/atomic-swap/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=240');
+  return res.json(atomicSwapProtocolStatus());
+});
+
+app.post('/api/intents/v1/atomic-swap/plan', (req, res) => {
+  const plan = buildAtomicSwapPlan(req.body);
+  if (!plan.ok) {
+    const status = ['ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED'].includes(plan.code) ? 503 : 400;
+    return res.status(status).json({ error: plan.code });
+  }
+  return res.status(201).json(plan);
+});
+
+app.post('/api/intents/v1/atomic-swap/verify', async (req, res) => {
+  const body = req.body || {};
+  /* The server reads through its OWN configured endpoints only — dedicated
+     INTENT_ATOMIC_SWAP_RPC_NETWORKS first, then the Phase 4c networks. A
+     caller-supplied URL proves nothing and is never used. */
+  const dedicated = parseAtomicSwapRpcNetworks().get(Number(body.chainId));
+  const shared = parseCrossChainRpcNetworks().get(Number(body.chainId));
+  const rpcUrls = dedicated?.rpcUrls || (shared?.providers || []).map((row) => row.rpcUrl) || [];
+  const verified = await verifyAtomicSwapLeg({
+    chainId: body.chainId,
+    swapId: body.swapId,
+    rpcUrls
+  });
+  if (!verified.ok) {
+    const status = ['ATOMIC_SWAP_RPC_UNREACHABLE', 'ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED'].includes(verified.code)
+      ? 503 : 400;
+    return res.status(status).json({ error: verified.code, detail: verified.attempts || null });
+  }
+  res.set('cache-control', 'public, max-age=0, s-maxage=2, must-revalidate');
+  return res.json(verified);
 });
 
 /* Phase 4c: signed account bindings + independently recomputed multi-RPC

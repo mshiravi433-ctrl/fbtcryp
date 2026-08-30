@@ -13,6 +13,11 @@ import {
   validateWorkflow,
   workflowFromLegacySteps
 } from './intentWorkflow.js';
+import {
+  atomicSwapConfigured,
+  atomicSwapProtocolStatus,
+  parseAtomicSwapAddresses
+} from './intentAtomicSwap.js';
 
 const CHAINS = [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144];
 const KINDS = new Set(['swap', 'outcome', 'automation', 'workflow']);
@@ -188,6 +193,26 @@ export const INTENT_CAPABILITIES = Object.freeze({
       automaticSettlement: false,
       note: 'Phase 4b stores verifiable source/destination/refund signatures. The intent envelope remains draft-only with ATOMIC_CROSS_CHAIN_UNAVAILABLE.'
     },
+    /* Phase 4d: REAL cross-chain atomicity via hash-timelock escrow — but only
+       when >= 2 chains have a deployed IntentAtomicSwap address. Unconfigured,
+       the adapter reports unavailable and claims nothing. */
+    {
+      id: 'fbt-htlc-atomic-swap',
+      status: atomicSwapConfigured(parseAtomicSwapAddresses()) ? 'live' : 'unavailable',
+      kinds: ['cross-chain-swap'],
+      settlement: 'user-signed-htlc-legs',
+      quoteCommitments: false,
+      atomic: atomicSwapConfigured(parseAtomicSwapAddresses()) ? 'htlc-evm-evm' : false,
+      atomicityEnforcedBy: 'on-chain-hash-timelock-contracts',
+      custody: 'on-chain-contract-escrow-while-open',
+      fbtHoldsKeys: false,
+      automaticSettlement: false,
+      serverExecutes: false,
+      blockCode: atomicSwapConfigured(parseAtomicSwapAddresses()) ? null : 'ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED',
+      note: atomicSwapConfigured(parseAtomicSwapAddresses())
+        ? 'Both legs lock under one keccak256 hashlock with enforced timeout ordering: either both legs are claimed with one preimage or both refund. Escrow is contract-held; FBT holds no key.'
+        : 'Atomic cross-chain (HTLC) activates only after IntentAtomicSwap is deployed on >= 2 chains and INTENT_ATOMIC_SWAP_ADDRESSES is set. Until then it stays unavailable, never silently sequential.'
+    },
     {
       id: 'fbt-outcome-market',
       status: 'live',
@@ -251,7 +276,14 @@ export const INTENT_CAPABILITIES = Object.freeze({
     crossChainState: 'fbt.cross-chain-state.v1',
     crossChainLegReceipts: 'fbt.cross-chain-leg-receipt.v1',
     crossChainSequentialUserSignatures: true,
-    crossChainAtomicity: false,
+    /* With IntentAtomicSwap deployed on >= 2 chains, cross-chain atomicity is
+       REAL for EVM<->EVM pairs — enforced by on-chain HTLC escrow, not by a
+       label. Unconfigured it stays false, and the sequential path it covers
+       is never re-labelled. */
+    crossChainAtomicity: atomicSwapConfigured(parseAtomicSwapAddresses())
+      ? 'htlc-evm-evm-on-chain-escrow'
+      : false,
+    crossChainAtomicSwapProtocol: atomicSwapProtocolStatus(),
     crossChainCustody: false,
     /* Phase 4c: per-leg multi-RPC verification is a derived layer. It can
        prove one transaction was mined with exact facts; it cannot make two
@@ -332,7 +364,8 @@ export const INTENT_CAPABILITIES = Object.freeze({
     merkleRootAnchorClaimSchema: 'fbt.merkle-root-anchor-claim.v1'
   },
   unavailable: {
-    atomicCrossChainWorkflows: true,
+    /* Flips off only when the HTLC contracts are actually configured. */
+    atomicCrossChainWorkflows: !atomicSwapConfigured(parseAtomicSwapAddresses()),
     cexOtcInventoryBids: true,
     autonomousAiSpending: true,
     onChainBondEscrow: true,

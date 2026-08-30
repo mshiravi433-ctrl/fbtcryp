@@ -37,6 +37,7 @@ executable calldata, bonded settlement, or proof that no pre-seal bid was
 censored.
 
 - [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
+- [سواپ اتمیک میان‌زنجیره‌ای (HTLC) — فاز ۴د](docs/INTENT-ATOMIC-SWAP-FA.md)
 - [فازهای ۱۵۱ تا ۲۰۰ — Recovery، 0x، Atomic Intent، ریسک ۲۰٪ و کارمزد ۵٪ از سود محقق‌شده](docs/INTENT-AI-PHASES-151-200-FA.md)
 - [Intent AI — فازهای ۸ تا ۲۰ و وضعیت فعال‌سازی](docs/INTENT-AI-ROADMAP-8-20-FA.md)
 - [فاز ۸ — مرز Secret Manager و گزارش readiness](docs/INTENT-AI-PHASE8-FA.md)
