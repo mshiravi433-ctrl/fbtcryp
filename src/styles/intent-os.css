@@ -2074,3 +2074,56 @@
 :root[data-theme='light'] .ios-loan-handoff p { color: rgba(20, 35, 60, 0.78); }
 :root[data-theme='light'] .ios-loan-handoff small { color: rgba(20, 35, 60, 0.55); }
 :root[data-theme='light'] .ios-loan-handoff-close { border-color: rgba(20, 35, 60, 0.16); color: rgba(20, 35, 60, 0.6); }
+
+/* ── Wallet-missing strip on the confirmation screen ─────────────────────—
+   When no wallet runtime is handed to the panel, the final confirm could
+   never be signed; the strip says so up front and links to the wallet page. */
+.ia-wallet-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(66, 232, 255, 0.32);
+  background: rgba(66, 232, 255, 0.06);
+}
+
+.ia-wallet-missing-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex: none;
+  background: var(--ios-cyan);
+  box-shadow: 0 0 8px rgba(66, 232, 255, 0.55);
+}
+
+.ia-wallet-missing-body { flex: 1; min-width: 0; }
+.ia-wallet-missing-body strong { display: block; font-size: 11.5px; color: var(--ios-cyan); }
+.ia-wallet-missing-body small { font-size: 10.5px; line-height: 1.7; color: var(--text-2, rgba(235,240,250,.75)); }
+
+.ia-wallet-connect-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px;
+  margin-top: 2px;
+  border-radius: 9px;
+  border: 1px solid rgba(66, 232, 255, 0.4);
+  background: rgba(66, 232, 255, 0.1);
+  color: var(--ios-cyan);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .ia-wallet-missing {
+  border-color: rgba(0, 145, 170, 0.35);
+  background: rgba(0, 145, 170, 0.06);
+}
+:root[data-theme='light'] .ia-wallet-missing-dot { background: #0091aa; box-shadow: none; }
+:root[data-theme='light'] .ia-wallet-missing-body strong { color: #007a92; }
+:root[data-theme='light'] .ia-wallet-missing-body small { color: rgba(20,35,60,.75); }
+:root[data-theme='light'] .ia-wallet-connect-link { color: #00788f; border-color: rgba(0,145,170,.4); background: rgba(0,145,170,.08); }

@@ -5828,7 +5828,10 @@
     },
     "wallet": {
       "signRequired": "Your wallet will ask you to sign the terms shown above.",
-      "notConnected": "No wallet is connected, so nothing can be signed or sent."
+      "notConnected": "No wallet is connected, so nothing can be signed or sent.",
+      "missingTitle": "No wallet is connected",
+      "missingBody": "Signing and final authorization need your wallet. Analysis and preparation keep working without it.",
+      "connectNow": "Connect wallet"
     },
     "regime": {
       "unavailable": "Market conditions are unavailable right now — the price feed did not return usable data, so no read is offered.",
