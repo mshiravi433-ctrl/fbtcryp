@@ -435,6 +435,26 @@ export default function IntentOS() {
     return TABS.includes(requested) ? requested : 'compose';
   });
   /*
+   * ─── THE TAB MUST FOLLOW THE URL, NOT JUST THE FIRST PAINT ────────────────
+   * Reported as "many tabs are broken / the wiring is wrong" — and the wiring
+   * failure was real. The tab was read ONCE, inside the useState initializer,
+   * and AnimatedRoutes keys the route tree by PATHNAME only. So a change from
+   * /intent?tab=agents to /intent?tab=strategies never remounted this page,
+   * never re-ran the initializer, and the visible tab simply ignored the URL.
+   *
+   * That is exactly what the AI panel's plain-anchor chips (#/intent?tab=…),
+   * the Swap screen's proof link, browser back/forward and any shared link
+   * produce when /intent is already open: the address bar changes, the chip
+   * was pressed, and NOTHING happens on screen. Syncing here makes every one
+   * of those paths land, while chooseTab (which sets both together) stays a
+   * no-op through this effect.
+   */
+  const requestedTab = searchParams.get('tab');
+  useEffect(() => {
+    const fromUrl = TABS.includes(requestedTab) ? requestedTab : 'compose';
+    setTab((current) => (current === fromUrl ? current : fromUrl));
+  }, [requestedTab]);
+  /*
    * `loadIntentMemory()` is a localStorage JSON parse. It used to run THREE
    * times during initial state setup — once for `memory`, then twice inside
    * the `draft` initializer. Read it once via useRef(loadIntentMemory()) so
@@ -513,8 +533,24 @@ export default function IntentOS() {
     };
     const chainParam = Number(searchParams.get('chain'));
     const chainId = Number.isInteger(chainParam) && EVM_CHAINS[chainParam] ? chainParam : mem.preferredChainId;
-    const fromSymbol = known(searchParams.get('from')) ?? 'USDC';
-    const toSymbol = known(searchParams.get('to')) ?? 'ETH';
+    /*
+     * A prefill that arrives as ?from=USDC (Signals) or ?to=USDC must never
+     * resolve to from === to: that draft would die at compile with SAME_TOKEN
+     * before the user touched anything. If both sides name the same symbol,
+     * the side that was NOT supplied by the URL falls back to a different,
+     * known token — the user's explicit input is never silently overwritten,
+     * only the default partner is chosen sensibly.
+     */
+    const fromParam = known(searchParams.get('from'));
+    const toParam = known(searchParams.get('to'));
+    const fallbackPartner = (symbol) => (symbol === 'ETH' ? 'USDC' : 'ETH');
+    let fromSymbol = fromParam ?? 'USDC';
+    let toSymbol = toParam ?? 'ETH';
+    if (fromSymbol === toSymbol) {
+      if (toParam == null) toSymbol = fallbackPartner(fromSymbol);
+      else if (fromParam == null) fromSymbol = fallbackPartner(toSymbol);
+      else toSymbol = fallbackPartner(fromSymbol);
+    }
     if (loanHandoff) {
       const amount = loanHandoff.amount || '';
       const collateral = loanHandoff.collateral || '';
@@ -1165,6 +1201,25 @@ export default function IntentOS() {
                 <p className="notice notice-danger">{t(`intentOS.error.${compiled.error}`)}</p>
               ) : (
                 <>
+                  {compiled.intent.kind === 'workflow' && (
+                    <div className="ios-result-steps" data-testid="compiled-steps">
+                      {compiled.intent.steps.map((step, index) => (
+                        <div className="ios-result-step" key={`${step.id}-${index}`}>
+                          <span aria-hidden="true">{index + 1}</span>
+                          <strong>{t(`intentOS.action.${step.action}`)}</strong>
+                          <span className="mono ios-result-step-asset">{step.asset || '—'}</span>
+                          <small>{EVM_CHAINS[step.chainId]?.short || EVM_CHAINS[step.chainId]?.name || `#${step.chainId}`}</small>
+                          {(step.maxInput || step.minOutput) && (
+                            <small className="ios-catalog-muted">
+                              {step.maxInput ? `${t('intentOS.field.workflowMaxIn')} ${step.maxInput}` : ''}
+                              {step.maxInput && step.minOutput ? ' · ' : ''}
+                              {step.minOutput ? `${t('intentOS.field.workflowMinOut')} ${step.minOutput}` : ''}
+                            </small>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="ios-check-list">
                     {compiled.checks.map((row, index) => <CheckRow key={`${row.id}-${index}`} row={row} t={t} />)}
                   </div>
@@ -1203,7 +1258,13 @@ export default function IntentOS() {
                   )}
                     </div>
                   ) : (
-                    <p className="ios-honesty-note">{t('intentOS.result.draftOnly')}</p>
+                    <p className="ios-honesty-note">
+                      {!compiled.blocked
+                        && compiled.intent.kind === 'workflow'
+                        && compiled.intent.fromSymbol === compiled.intent.toSymbol
+                        ? t('intentOS.result.lendingDraftNote')
+                        : t('intentOS.result.draftOnly')}
+                    </p>
                   )}
                 </>
               )}

@@ -191,7 +191,17 @@ export function normalizeIntent(input = {}, memory = loadIntentMemory(), now = D
   const fromSymbol = cleanSymbol(input.fromSymbol);
   const toSymbol = cleanSymbol(input.toSymbol);
   if (!fromSymbol || !toSymbol) return { error: 'BAD_TOKENS' };
-  if (fromSymbol === toSymbol) return { error: 'SAME_TOKEN' };
+  /*
+   * SAME_TOKEN is a swap-shaped rule: USDT → USDT is a meaningless TRADE.
+   * A workflow is not its envelope — the steps are the trade, and a lending
+   * workflow legitimately moves one asset through approve → deposit (supply)
+   * or deposit → borrow (borrow). Rejecting USDT → USDT there is what made
+   * the Loan page hand-off die with the "input and output tokens must differ"
+   * error before the user could review a single check. The envelope pair still
+   * gates the /swap hand-off in compileIntent: a same-token workflow never
+   * lands on the swap screen, because the swap screen can only review a pair.
+   */
+  if (fromSymbol === toSymbol && kind !== 'workflow') return { error: 'SAME_TOKEN' };
 
   const amountIn = Number(input.amountIn);
   if (!Number.isFinite(amountIn) || amountIn <= 0) return { error: 'BAD_AMOUNT' };
@@ -455,15 +465,25 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
     });
     handoff = `/swap?${params.toString()}`;
   } else if (!blocked && intent.kind === 'workflow') {
-    const params = new URLSearchParams({
-      from: intent.fromSymbol,
-      to: intent.toSymbol,
-      amount: intent.amountIn,
-      chain: String(intent.chainId),
-      intent: intent.id,
-      workflow: '1'
-    });
-    handoff = `/swap?${params.toString()}`;
+    /*
+     * The swap screen can only review a swap PAIR. A lending workflow's
+     * envelope is same-token by construction (approve USDT → deposit USDT,
+     * deposit collateral → borrow USDT): handing that to /swap would prefill
+     * USDT → USDT, a pair no router can quote — the user would land on a dead
+     * quote screen after a successful compile. Same-token workflows stay
+     * reviewable local drafts instead, which is what the result screen says.
+     */
+    if (intent.fromSymbol !== intent.toSymbol) {
+      const params = new URLSearchParams({
+        from: intent.fromSymbol,
+        to: intent.toSymbol,
+        amount: intent.amountIn,
+        chain: String(intent.chainId),
+        intent: intent.id,
+        workflow: '1'
+      });
+      handoff = `/swap?${params.toString()}`;
+    }
   } else if (!blocked && intent.kind === 'automation') {
     handoff = '/orders';
   }
