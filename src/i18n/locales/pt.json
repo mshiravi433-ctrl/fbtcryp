@@ -532,7 +532,11 @@
       "company": "Token de empresa 24h",
       "event": "Evento de mercado"
     },
-    "marketUnavailable": "Dados de mercado ao vivo indisponíveis"
+    "marketUnavailable": "Dados de mercado ao vivo indisponíveis",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "Ordens automáticas",

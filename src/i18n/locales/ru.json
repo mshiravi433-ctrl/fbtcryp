@@ -532,7 +532,11 @@
       "company": "Токен компании 24 ч",
       "event": "Событие рынка"
     },
-    "marketUnavailable": "Рыночные данные в реальном времени недоступны"
+    "marketUnavailable": "Рыночные данные в реальном времени недоступны",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "Автоордера",

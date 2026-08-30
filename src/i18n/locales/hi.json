@@ -532,7 +532,11 @@
       "company": "24घं कंपनी टोकन",
       "event": "मार्केट इवेंट"
     },
-    "marketUnavailable": "लाइव बाज़ार डेटा उपलब्ध नहीं है"
+    "marketUnavailable": "लाइव बाज़ार डेटा उपलब्ध नहीं है",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "ऑटो ऑर्डर",

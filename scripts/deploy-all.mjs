@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { maskBytecodeImmutables } from '../server/intentOperationalDrills.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -57,11 +58,22 @@ catch { fail('Cannot reach RPC.'); }
 console.log(` balance: ${balance.toString()} wei`);
 if (balance === 0n) fail('Deployer has no gas.');
 
+const ROUTERS = {
+  56: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+  97: '0xD99D1c33F9fC3444f8101754aBC46c52416550D1',
+  42161: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+  421614: '0x10ED43C718714eb63d5aA57B78B54704E256024E'
+};
+
+const defaultDexRouter = ROUTERS[chainId] || '0x10ED43C718714eb63d5aA57B78B54704E256024E';
+const feeRecipient = process.env.FEE_RECIPIENT || '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
+const feeBps = Number(process.env.FEE_BPS || 50);
+
 const contracts = [
-  { name: 'IntentWorkflowBatch', artifact: 'src/lib/workflowBatchArtifact.json', compile: 'scripts/compile-workflow.mjs', envKey: 'INTENT_WORKFLOW_BATCH_ADDRESS' },
-  { name: 'IntentMerkleRootAnchor', artifact: 'src/lib/merkleRootAnchorArtifact.json', compile: 'scripts/compile-merkle-anchor.mjs', envKey: 'INTENT_MERKLE_ANCHOR_ADDRESS' },
-  { name: 'IntentAuctionAnchor', artifact: 'src/lib/auctionAnchorArtifact.json', compile: 'scripts/compile-auction-anchor.mjs', envKey: 'INTENT_ANCHOR_ADDRESS' },
-  { name: 'FeeRouter', artifact: 'src/lib/feeRouterArtifact.json', compile: 'scripts/compile.mjs', envKey: 'INTENT_FEE_ROUTER_ADDRESS' }
+  { name: 'IntentWorkflowBatch', artifact: 'src/lib/workflowBatchArtifact.json', compile: 'scripts/compile-workflow.mjs', envKey: 'INTENT_WORKFLOW_BATCH_ADDRESS', args: [] },
+  { name: 'IntentMerkleRootAnchor', artifact: 'src/lib/merkleRootAnchorArtifact.json', compile: 'scripts/compile-merkle-anchor.mjs', envKey: 'INTENT_MERKLE_ANCHOR_ADDRESS', args: [] },
+  { name: 'IntentAuctionAnchor', artifact: 'src/lib/auctionAnchorArtifact.json', compile: 'scripts/compile-auction-anchor.mjs', envKey: 'INTENT_ANCHOR_ADDRESS', args: [] },
+  { name: 'FeeRouter', artifact: 'src/lib/feeRouterArtifact.json', compile: 'scripts/compile.mjs', envKey: 'INTENT_FEE_ROUTER_ADDRESS', args: [defaultDexRouter, feeRecipient, feeBps] }
 ];
 
 for (const c of contracts) {
@@ -81,7 +93,7 @@ for (const c of contracts) {
   console.log(`\n── ${c.name} ──`);
   try {
     const factory = new ContractFactory(art.abi, art.bytecode, wallet);
-    const tx = await factory.deploy();
+    const tx = await factory.deploy(...(c.args || []));
     console.log(`  tx: ${tx.deploymentTransaction().hash}`);
     await tx.waitForDeployment();
     const addr = await tx.getAddress();
@@ -90,7 +102,9 @@ for (const c of contracts) {
 
     if (art.deployedBytecode) {
       const onChain = await provider.getCode(addr);
-      if (onChain.toLowerCase() !== art.deployedBytecode.toLowerCase()) {
+      const maskedOnChain = maskBytecodeImmutables(onChain, art.immutableReferences || {});
+      const maskedLocal = maskBytecodeImmutables(art.deployedBytecode, art.immutableReferences || {});
+      if (maskedOnChain.toLowerCase() !== maskedLocal.toLowerCase()) {
         console.log('  ⚠ bytecode mismatch');
         errors.push(`${c.name}: bytecode mismatch`);
       } else console.log('  ✓ bytecode verified');

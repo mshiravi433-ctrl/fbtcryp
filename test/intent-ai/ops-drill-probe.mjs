@@ -16,6 +16,7 @@ process.env.TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '0000000000:t
 process.env.ECOSYSTEM_WRITE_RATE_LIMIT = process.env.ECOSYSTEM_WRITE_RATE_LIMIT || '25';
 
 import http from 'node:http';
+import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
   verifyBackupRestore,
@@ -106,6 +107,22 @@ const policy = await runPolicyContractDrill();
 check('policy-contract drill passes', policy.ok === true);
 check('policy-contract digest is the bytecode hash', /^[0-9a-f]{64}$/.test(policy.expectedCodeHash || '') && policy.evidence.digest === policy.expectedCodeHash);
 check('policy-contract evidence normalizes to verified', normalizeEvidence(policy.evidence).ok === true);
+
+const { maskBytecodeImmutables } = await import('../../server/intentOperationalDrills.js');
+const rawArtifact = JSON.parse(fs.readFileSync('src/lib/feeRouterArtifact.json', 'utf8'));
+const maskedArtifact = maskBytecodeImmutables(rawArtifact.deployedBytecode, rawArtifact.immutableReferences);
+check('maskBytecodeImmutables leaves zero placeholders intact', maskedArtifact.toLowerCase() === rawArtifact.deployedBytecode.toLowerCase());
+
+let simulatedDeployed = rawArtifact.deployedBytecode.toLowerCase().slice(2).split('');
+const fakeDexRouter = '00000000000000000000000010ed43c718714eb63d5aa57b78b54704e256024e';
+for (const ref of (rawArtifact.immutableReferences?.['115'] || [])) {
+  for (let i = 0; i < 64; i++) {
+    simulatedDeployed[ref.start * 2 + i] = fakeDexRouter[i];
+  }
+}
+const deployedWithImmutables = '0x' + simulatedDeployed.join('');
+const maskedDeployed = maskBytecodeImmutables(deployedWithImmutables, rawArtifact.immutableReferences);
+check('maskBytecodeImmutables masks runtime constructor immutable values to zeros', maskedDeployed.toLowerCase() === maskedArtifact.toLowerCase());
 
 /* ── ops-probe earns exactly the four drill kinds ──────────────────────── */
 resetOpsProbeCache();

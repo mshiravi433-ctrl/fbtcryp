@@ -16,8 +16,8 @@ import { deriveMarketInsights, headerInsightItems } from '../lib/marketInsights'
 import { useInsightEquities } from '../lib/insightSession';
 import { useSettingsStore } from '../store/useSettingsStore';
 
-const BRAND_MS = 2 * 60 * 1000;
-const SPOTLIGHT_MS = 60 * 1000;
+const BRAND_MS = 60 * 1000;
+const SPOTLIGHT_MS = 30 * 1000;
 
 /**
  * The brand coin is drawn STATIC inside the slowly-spinning gradient tile.
@@ -188,7 +188,7 @@ export default function Header() {
           aria-hidden={!visibleSpotlight}
           aria-label={`${spotlightLabel}: ${spotlightTitle}`}
           title={spotlightTitle}
-          onClick={() => navigate('/news')}
+          onClick={() => navigate('/news?tab=insights')}
         >
           {spotlight && <SpotlightMark spotlight={spotlight} />}
           <span className="header-spotlight-copy">

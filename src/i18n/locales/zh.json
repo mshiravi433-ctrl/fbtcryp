@@ -532,7 +532,11 @@
       "company": "24小时公司代币",
       "event": "市场事件"
     },
-    "marketUnavailable": "实时市场数据不可用"
+    "marketUnavailable": "实时市场数据不可用",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "自动订单",

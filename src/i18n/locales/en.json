@@ -4019,6 +4019,14 @@
     "companyLeader": "Top company token",
     "performanceNotProfit": "Market-price performance, not accounting profit.",
     "retryEquities": "Retry verified share data",
+    "indicatorsTitle": "Key Market & Liquidity Indicators",
+    "indicatorsSub": "Live market and liquidity flow analysis",
+    "volumeLeader": "Top 24h Trading Volume",
+    "volumeSource": "24h Volume: {{vol}}",
+    "marketCapLeader": "Market Cap Leader",
+    "mcapSource": "Total Market Cap: {{mcap}}",
+    "volatilityLeader": "Highest Daily Volatility",
+    "spreadSource": "24h High/Low Spread: {{spread}}",
     "coverageTitle": "Coverage, without invented figures",
     "coverageSub": "Unsupported live claims stay clearly unavailable.",
     "unavailable": "Unavailable",
@@ -4039,7 +4047,11 @@
       "company": "24h company token",
       "event": "Market event"
     },
-    "marketUnavailable": "Live market data unavailable"
+    "marketUnavailable": "Live market data unavailable",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "intentOS": {
     "eyebrow": "Financial intent control plane",

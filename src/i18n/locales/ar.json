@@ -2864,6 +2864,14 @@
     "companyLeader": "أفضل رمز لشركة",
     "performanceNotProfit": "أداء سعر السوق، وليس ربحاً محاسبياً.",
     "retryEquities": "إعادة محاولة بيانات الأسهم الموثقة",
+    "indicatorsTitle": "مؤشرات السوق والسيولة الرئيسية",
+    "indicatorsSub": "تحليل مباشر للبيانات وتدفقات السيولة",
+    "volumeLeader": "أعلى حجم تداول خلال 24 ساعة",
+    "volumeSource": "حجم التداول المباشر: {{vol}}",
+    "marketCapLeader": "أعلى قيمة سوقية",
+    "mcapSource": "إجمالي القيمة السوقية: {{mcap}}",
+    "volatilityLeader": "أعلى تقلب يومي في السعر",
+    "spreadSource": "نطاق التذبذب لـ24 ساعة: {{spread}}",
     "coverageTitle": "تغطية بلا أرقام مختلقة",
     "coverageSub": "الادعاءات غير المدعومة تبقى معلّمة بوضوح كغير متاحة.",
     "unavailable": "غير متاح",
@@ -2884,7 +2892,11 @@
       "company": "رمز شركة متصدر 24س",
       "event": "حدث سوقي"
     },
-    "marketUnavailable": "بيانات السوق المباشرة غير متاحة"
+    "marketUnavailable": "بيانات السوق المباشرة غير متاحة",
+    "volumeLeader": "الأعلى حجماً للتداول خلال ۲۴ ساعة",
+    "volumeSource": "تغطية السوق الحية · حجم التداول خلال ۲۴ ساعة",
+    "marketCapLeader": "الأعلى قيمة سوقية",
+    "marketCapSource": "القيمة السوقية الحية للأصول الرائدة"
   },
   "dydx": {
     "steps": {

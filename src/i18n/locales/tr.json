@@ -532,7 +532,11 @@
       "company": "24s şirket tokeni",
       "event": "Piyasa olayı"
     },
-    "marketUnavailable": "Canlı piyasa verisi kullanılamıyor"
+    "marketUnavailable": "Canlı piyasa verisi kullanılamıyor",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "Otomatik Emirler",
