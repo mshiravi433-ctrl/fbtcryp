@@ -1,3 +1,43 @@
+# Unreleased — Phase 153b: the Loan → Intent OS → compile chain actually completes
+
+- Reported (fa): «وقتی از صفحه وام میایی و میخایی کامپیل کنی میزنه "توکن ورودی
+  و خروجی باید متفاوت باشند"» — and the report was exact. The Loan page's
+  hand-off prefills a LENDING workflow (approve → deposit, or deposit →
+  borrow), whose envelope is same-token by construction, and the compiler
+  rejected `fromSymbol === toSymbol` for EVERY kind. `normalizeIntent` now
+  applies SAME_TOKEN only where the pair IS the trade (swap / outcome /
+  automation); a workflow's steps are its trade. A same-token workflow still
+  never reaches the swap screen — `compileIntent` only builds the /swap
+  hand-off for a real pair, so a compiled loan plan stays an honestly-labelled
+  local draft with its steps spelled out on screen
+  (`intentOS.result.lendingDraftNote`, fa + en) instead of dead-ending the user
+  on a USDT → USDT quote that no router can fill.
+- Reported (fa): «خیلی تب هاش درست نیست، سیم کشی درستی ندارد» — also real.
+  The /intent tab was read ONCE inside the useState initializer, while
+  AnimatedRoutes keys the route tree by pathname only. Any query-only change
+  (the AI panel's `#/intent?tab=…` stage chips, the Swap screen's proof link,
+  browser back/forward, shared links landing on an already-open /intent) was
+  silently ignored: the URL moved, the screen did not. The tab now follows the
+  URL through an effect, and `chooseTab` (which sets both together) remains a
+  no-op through it. This is the fix behind the Telegram report that tapping
+  toward the Agent/Strategy surfaces "didn't go anywhere".
+- The Intent AI chat's draft hand-off button ("Open in swap screen") was never
+  rendered in the real app: the panel only draws it when an `onDraftReady`
+  callback is passed, and `IntentAIRoute` passed nothing. The route wrapper now
+  wires it (swap drafts → /swap with the pair; bridge drafts → /bridge with
+  both chains recovered from the plan step; lending/custom legs → the Intent OS
+  composer), so a confirmed plan finally has somewhere to go.
+- A `?from=X&to=X` (or Signals' `?to=USDC`) prefill can no longer produce a
+  default draft that dies at compile: when both sides resolve to the same
+  symbol, only the side the URL did NOT supply falls back to a different known
+  token.
+- New probe `test/intentos-wiring-probe.jsx` (in `npm test`): mounts the real
+  /intent page in the real router shape and drives both Loan hand-offs, the
+  real Loan page (asset → amount → confirm sheet), all nine tabs, URL-driven
+  tab switches, the dead-network catalog error state with Retry, the review
+  gate → swap navigation, and the AI draft hand-off. `test/intent-probe.mjs`
+  additionally pins the same-token compiler rules at the pure-logic level.
+
 # Unreleased — Phase 153: the cross-chain stack is now REACHABLE from the UI
 
 - The Phase 4b/4d cross-chain machine was server-complete but had NO client:

@@ -4402,7 +4402,8 @@
       "draft-only": "Draft only",
       "solverCandidates": "Solver and adapter coverage",
       "reviewHandoff": "Open the user-signed review",
-      "draftOnly": "This outcome is saved as a local draft. FBT will not pretend an unavailable privacy, outcome or cross-chain atomic workflow is live."
+      "draftOnly": "This outcome is saved as a local draft. FBT will not pretend an unavailable privacy, outcome or cross-chain atomic workflow is live.",
+      "lendingDraftNote": "The lending steps are compiled and saved above as a local draft. This build has no live lending venue to sign against, so the plan stays here for review — nothing executes, nothing is sent, and no wallet is asked to sign."
     },
     "solverStatus": {
       "eligible": "Eligible",

@@ -174,6 +174,41 @@ export default async function run() {
   });
   t('cross-chain workflow is blocked (no atomic cross-chain)', crossChainWf.blocked === true);
 
+  /*
+   * ─── THE LOAN HAND-OFF SHAPE (same-token workflow) ────────────────────────
+   * Reported: confirming a Loan supply/borrow and compiling the pre-filled
+   * lending workflow died with SAME_TOKEN («توکن ورودی و خروجی باید متفاوت
+   * باشند»). A workflow's steps are its trade — approve → deposit USDT is a
+   * real plan — so the envelope pair may be same-token. What must NEVER happen
+   * is handing that envelope to the swap screen, which can only review a pair
+   * and would land the user on a dead USDT → USDT quote.
+   */
+  const loanWf = mod.compileIntent({
+    kind: 'workflow',
+    chainId: 42161,
+    fromSymbol: 'USDT',
+    toSymbol: 'USDT',
+    amountIn: '1000',
+    amountUsd: '1000',
+    maxSlippagePct: 0.5,
+    privacy: 'standard',
+    steps: [
+      { action: 'approve', chainId: 42161, asset: 'USDT', maxInput: '1000' },
+      { action: 'deposit', chainId: 42161, asset: 'USDT', maxInput: '1000' }
+    ]
+  });
+  t('a same-token lending workflow compiles (Loan hand-off, no SAME_TOKEN)', !loanWf.error);
+  t('the lending workflow passes the single-chain atomic check',
+    !loanWf.blocked && loanWf.checks.some((c) => c.id === 'WORKFLOW_SINGLE_CHAIN_ATOMIC' && c.level === 'pass'));
+  t('a same-token workflow stays a local draft (no /swap hand-off)',
+    loanWf.handoff == null && loanWf.status === 'draft-only');
+  t('a same-token SWAP is still rejected as SAME_TOKEN',
+    mod.normalizeIntent({ kind: 'swap', chainId: 42161, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: '1' }).error === 'SAME_TOKEN');
+  t('a same-token OUTCOME is still rejected as SAME_TOKEN',
+    mod.normalizeIntent({ kind: 'outcome', chainId: 42161, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: '1', minReceive: '0.5' }).error === 'SAME_TOKEN');
+  t('a same-token AUTOMATION is still rejected as SAME_TOKEN',
+    mod.normalizeIntent({ kind: 'automation', chainId: 42161, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: '1', conditionType: 'daily' }).error === 'SAME_TOKEN');
+
   /* ------------------------------------------------------------------ */
   /*  4. saveCompiledIntent / loadIntents / removeIntent                */
   /* ------------------------------------------------------------------ */

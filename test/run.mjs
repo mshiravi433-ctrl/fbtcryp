@@ -754,6 +754,30 @@ const { run: runIntentAIPanel } = await import('./.out/intentai/intent-ai-panel-
 report('intent AI panel (guided flow · interactive confirm · real execution)', await runIntentAIPanel(document.getElementById('r')));
 
 
+/* ------------------- 4c. Intent OS page wiring (mounted) ------------------- */
+/*
+ * The Loan → compile SAME_TOKEN report, the tab-wiring report and the dead
+ * AI-panel hand-off button are all INTERACTION bugs: an onClick nobody wired,
+ * state read once when it must follow the URL, a hand-off built for a screen
+ * that cannot review it. No pure-logic probe can see any of them, so this
+ * mounts the REAL /intent page (in the REAL router shape — Routes keyed by
+ * pathname, exactly like AnimatedRoutes) and drives it:
+ *
+ *   · the Loan supply & borrow hand-offs compile into reviewable plans
+ *   · the real Loan page (asset → amount → confirm sheet) drives the hand-off
+ *   · every one of the nine tabs switches and renders its real surface
+ *   · URL-driven tab changes land even when the page does not remount
+ *   · a dead network yields the honest catalog error state + a working Retry
+ *   · a compiled swap walks the review gate into the swap screen
+ *   · the AI chat's "open in swap screen" button exists and routes the draft
+ */
+console.log('\n▸ building Intent OS wiring suite…');
+npx(['vite', 'build', '-c', 'test/vite.intentos.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runIntentOSWiring } = await import('./.out/intentos/intentos-wiring-probe.js');
+report('Intent OS wiring (loan hand-off · tabs · URL sync · AI draft hand-off)', await runIntentOSWiring(document.getElementById('r')));
+
+
 /* --------------------------- 5. store-safe build -------------------------- */
 /*
  * Two separate guarantees are checked here, and they are not the same thing:
