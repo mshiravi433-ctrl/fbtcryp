@@ -722,6 +722,15 @@ export function planFlashArbitrage({ intent, market, config = {}, policy = null,
   const providerEntry = provider.chains[Number(market.chainId)];
   const sourceAddress = providerEntry.pool || providerEntry.vault;
 
+  /* Operator-attested source override (fork/rehearsal or a newly deployed
+     provider the operator has verified from official docs). It replaces the
+     address the caller will actually target and is HONESTLY labeled as
+     attested, not registry-verified. */
+  const override = config.flashSourceOverride;
+  const overrideValid = override
+    && /^0x[a-fA-F0-9]{40}$/.test(String(override.address || ''))
+    && typeof override.attestedBy === 'string' && override.attestedBy.length > 0;
+
   /* 4 — gas estimate */
   const gasUnits = Number(config.gasUnits) > 0 ? Number(config.gasUnits) : DEFAULT_GAS_UNITS;
   const gasPriceGwei = Number(config.gasPriceGwei);
@@ -818,8 +827,9 @@ export function planFlashArbitrage({ intent, market, config = {}, policy = null,
       label: provider.label,
       entryFunction: provider.entryFunction,
       callback: provider.callback,
-      sourceAddress,
+      sourceAddress: overrideValid ? override.address : sourceAddress,
       sourceVerified: providerEntry.verified,
+      sourceAttestedBy: overrideValid ? override.attestedBy : undefined,
       premiumBps
     },
     market: {

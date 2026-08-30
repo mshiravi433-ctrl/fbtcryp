@@ -29,6 +29,7 @@ import {
   chainName
 } from '../src/lib/intent-ai/flashLiquidity.js';
 import { flashLiquidityRouterConfigured } from './flashLiquidityConfig.js';
+import { createFlashSimulator, simulationRpcFromEnv } from './flashLiquiditySimulation.js';
 
 const SUPPORTED_CHAINS = Object.keys(FLASH_PROVIDER_REGISTRY['balancer-v2'].chains).map(Number);
 
@@ -166,10 +167,11 @@ function normalizeMarket(body) {
 
 export function flashLiquidityCapabilities() {
   const router = flashLiquidityRouterConfigured();
+  const simulationRpc = simulationRpcFromEnv();
   const report = flashLiquidityCapabilityReport({
     routerConfigured: router.configured,
     routerAudited: router.audited,
-    simulationAvailable: false // server-side simulation is a roadmap item; the wallet/ops stack owns it
+    simulationAvailable: Boolean(simulationRpc)
   });
   return {
     ok: true,
@@ -183,6 +185,11 @@ export function flashLiquidityCapabilities() {
     endpoints: {
       scan: 'POST /api/flash-liquidity/v1/scan (dry-run)',
       plan: 'POST /api/flash-liquidity/v1/plan (dry-run)'
+    },
+    simulation: {
+      endpoint: 'POST /api/flash-liquidity/v1/simulate (eth_call dry-run)',
+      configured: Boolean(simulationRpc),
+      note: 'FLASH_LIQUIDITY_SIMULATION_RPC — https required, http only on loopback for local chains/forks.'
     },
     quoteMaxAgeMs: MAX_QUOTE_AGE_MS,
     maxHops: MAX_HOPS,
@@ -208,6 +215,19 @@ export function flashScan(req, res) {
     now: Date.now()
   });
   return res.json({ ok: true, mode: 'dry-run', broadcasts: false, ...result });
+}
+
+/* ── POST /simulate — the REAL step-7 gate (eth_call, never a broadcast) ───── */
+
+export function flashSimulate(req, res) {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const rpcUrl = simulationRpcFromEnv();
+  const simulator = createFlashSimulator({ rpcUrl, chainId: Number(body.chainId) || 0 });
+  return simulator.simulate({
+    to: body.to,
+    data: body.data,
+    from: body.from == null ? null : body.from
+  }).then((result) => res.json(result)).catch(() => res.status(500).json({ ok: false, code: 'SIMULATION_FAILED' }));
 }
 
 /* ── POST /plan ────────────────────────────────────────────────────────────── */

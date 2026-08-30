@@ -1,3 +1,34 @@
+# Unreleased — Phase 152 Level 2: real atomic rehearsal, live simulation gate, security review
+
+- The full flash-arbitrage cycle now runs for real on a local EVM:
+  `npm run rehearse:flash-liquidity` deploys the actual bundled
+  FlashLiquidityRouter artifact, creates a real price divergence between two
+  constant-product pools, runs the production planner against REAL chain
+  reserves (optimal loan 14,872.47 USDC, route chosen from live state), passes
+  a real eth_call simulation gate, then executes a wallet-signed transaction:
+  flash loan → two hops → full repayment (vault balance untouched) → 176.16
+  USDC profit swept → router left at exactly zero. The greedy variant is
+  refused by the simulation gate before any signature, and a forced send of it
+  reverts atomically with zero loss. Report: test/flash-liquidity/rehearsal-report.json.
+- The rehearsal caught and fixed a REAL bug: the Balancer path only APPROVED
+  repayment, but Balancer's Vault never pulls — the receiver must transfer
+  principal+fee back and the Vault verifies balances. Lending-model bug fixed
+  in receiveFlashLoan; rehearsal then passed 16/16.
+- The simulation gate (pipeline step 7) is now REAL infrastructure:
+  `POST /api/flash-liquidity/v1/simulate` eth_calls the exact wallet calldata
+  against `FLASH_LIQUIDITY_SIMULATION_RPC` (https required; http only on
+  loopback for local chains/forks). Until configured, capabilities honestly
+  report SIMULATION_UNAVAILABLE and stay fail-closed.
+- Planner supports an operator-attested `flashSourceOverride` (fork/harness or
+  newly verified provider) — the address is used, but the plan labels it
+  `sourceAttestedBy`, never silently as registry-verified.
+- Persian security review: self-review checklist, the found-and-fixed
+  Balancer repayment bug, honest scope limits (harness counterparties, local
+  EVM, no mainnet fork), and the exact focus list for the independent audit.
+  The AUDITED gate stays closed — docs/INTENT-AI-PHASE152-SECURITY-REVIEW-FA.md.
+- Tests: `npm run test:phase152` now 17/17 (flashSourceOverride + simulator
+  pass/revert/refusal/env parsing added).
+
 ## Unreleased — Phase 152: Flash Liquidity (collateral-free flash-loan arbitrage planner)
 
 - The flash-loan architecture from the Intent OS spec is now real code: deterministic

@@ -42,6 +42,7 @@ import {
   flashLiquidityCapabilityReport
 } from '../../src/lib/intent-ai/flashLiquidity.js';
 import { flashLiquidityCapabilities, flashScan, flashPlan } from '../../server/flashLiquidity.js';
+import { createFlashSimulator, simulationRpcFromEnv } from '../../server/flashLiquiditySimulation.js';
 
 const tests = [];
 async function test(name, fn) {
@@ -346,6 +347,63 @@ await test('receipts are content-addressed and outcome-bounded', () => {
   const exported = JSON.stringify(receipt.receipt);
   assert.equal(exported.includes('private'), false);
   assert.equal(exported.includes('calldata'), false);
+});
+
+await test('flashSourceOverride is attested, not silently trusted', () => {
+  const plan = planFlashArbitrage({
+    intent: parseFlashIntent('flash loan arbitrage with at least 0.5% profit'),
+    market: MARKET,
+    config: {
+      ...FULL_CONFIG,
+      providerId: 'balancer-v2',
+      flashSourceOverride: { address: '0x2222222222222222222222222222222222222222', attestedBy: 'rehearsal-vault-harness' }
+    },
+    policy: createFlashPolicy({}),
+    context: { now: NOW }
+  });
+  assert.equal(plan.decision, 'EXECUTE_READY');
+  assert.equal(plan.provider.sourceAddress, '0x2222222222222222222222222222222222222222');
+  assert.equal(plan.provider.sourceAttestedBy, 'rehearsal-vault-harness');
+  assert.equal(plan.provider.sourceVerified, true); // registry chain entry stays as-is
+  // an override without an attestation label is refused (ignored, canonical address kept)
+  const sneaky = planFlashArbitrage({
+    intent: parseFlashIntent('flash loan arbitrage with at least 0.5% profit'),
+    market: MARKET,
+    config: { ...FULL_CONFIG, providerId: 'balancer-v2', flashSourceOverride: { address: '0x3333333333333333333333333333333333333333' } },
+    policy: createFlashPolicy({}),
+    context: { now: NOW }
+  });
+  assert.equal(sneaky.provider.sourceAddress, '0xBA12222222228d8Ba445958a75a0704d566BF2C8');
+  assert.equal(sneaky.provider.sourceAttestedBy, undefined);
+});
+
+await test('simulation gate: eth_call dry-run with honest pass/revert/refusal', async () => {
+  // not configured → explicit refusal, never a fake pass
+  const off = createFlashSimulator({});
+  assert.equal(off.configured, false);
+  assert.equal((await off.simulate({ to: '0x1111111111111111111111111111111111111111', data: '0x' })).code, 'SIMULATION_RPC_NOT_CONFIGURED');
+  // injected provider: pass path
+  const pass = createFlashSimulator({ provider: { call: async () => '0x', getBlockNumber: async () => 4_200_000 } });
+  assert.equal(pass.configured, true);
+  const ok = await pass.simulate({ to: '0x1111111111111111111111111111111111111111', data: '0xdeadbeef' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.simulated, true);
+  assert.equal(ok.broadcasts, false);
+  assert.equal(ok.blockNumber, 4_200_000);
+  // injected provider: revert path surfaces the reason
+  const fail = createFlashSimulator({ provider: { call: async () => { throw Object.assign(new Error('execution reverted'), { shortMessage: 'execution reverted: INSUFFICIENT_PROFIT' }); }, getBlockNumber: async () => 1 } });
+  const bad = await fail.simulate({ to: '0x1111111111111111111111111111111111111111', data: '0xdeadbeef' });
+  assert.equal(bad.ok, false);
+  assert.ok(/INSUFFICIENT_PROFIT/.test(bad.revertReason));
+  // bounded inputs
+  assert.equal((await pass.simulate({ to: 'not-an-address', data: '0x' })).code, 'BAD_TARGET');
+  assert.equal((await pass.simulate({ to: '0x1111111111111111111111111111111111111111', data: 'zz' })).code, 'BAD_DATA');
+  assert.equal((await pass.simulate({ to: '0x1111111111111111111111111111111111111111', data: '0x', from: '0xnope' })).code, 'BAD_FROM');
+  // env parsing: https anywhere, http only on loopback
+  assert.equal(simulationRpcFromEnv({ FLASH_LIQUIDITY_SIMULATION_RPC: 'https://rpc.example.com' }), 'https://rpc.example.com');
+  assert.equal(simulationRpcFromEnv({ FLASH_LIQUIDITY_SIMULATION_RPC: 'http://127.0.0.1:8545' }), 'http://127.0.0.1:8545');
+  assert.equal(simulationRpcFromEnv({ FLASH_LIQUIDITY_SIMULATION_RPC: 'http://rpc.example.com' }), null);
+  assert.equal(simulationRpcFromEnv({}), null);
 });
 
 await test('capability report keeps execution disabled without audit + config', () => {

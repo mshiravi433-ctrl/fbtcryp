@@ -153,7 +153,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
-import { flashLiquidityCapabilities, flashScan, flashPlan } from './flashLiquidity.js';
+import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
 import {
   OBSERVATION_CONSENT_RE,
   observationProtocolStatus,
@@ -1496,6 +1496,7 @@ app.get('/api/flash-liquidity/v1/capabilities', (_req, res) => {
   return res.json(flashLiquidityCapabilities());
 });
 app.post('/api/flash-liquidity/v1/scan', flashScan);
+app.post('/api/flash-liquidity/v1/simulate', flashSimulate);
 app.post('/api/flash-liquidity/v1/plan', flashPlan);
 
 

@@ -334,6 +334,9 @@ contract FlashLiquidityRouter {
 
         // Every borrowed token must be back (Balancer loans are fee-free
         // today, but feeAmounts is honored for forward compatibility).
+        // Balancer does NOT pull repayment: the receiver transfers it back
+        // and the Vault only verifies its balance. Compute first, then
+        // transfer principal+fee for every token, then sweep the profit.
         address settlement = tokens[0];
         uint256 profit = 0;
         for (uint256 i; i < tokens.length; ++i) {
@@ -343,10 +346,11 @@ contract FlashLiquidityRouter {
             if (tokens[i] == settlement) {
                 profit = balance - owed;
                 require(profit >= minProfitAsset, "INSUFFICIENT_PROFIT");
-                _safeTransfer(tokens[i], profitTo, profit);
-            } else {
-                require(balance == owed, "DUST_LEFT_ON_INTERMEDIATE");
             }
+            _safeTransfer(tokens[i], msg.sender, owed);
+        }
+        if (profit > 0) {
+            _safeTransfer(settlement, profitTo, profit);
         }
 
         emit FlashArbitrageExecuted(msg.sender, settlement, amounts[0], feeAmounts[0], profit, profitTo);

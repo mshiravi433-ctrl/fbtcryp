@@ -1,0 +1,113 @@
+{
+  "kind": "flash-liquidity-rehearsal",
+  "chainKind": "local-evm (ganache) — NOT a mainnet fork; sandbox has no chain egress",
+  "chainIdLabel": 42161,
+  "version": "level-2.v1",
+  "router": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+  "plannerVersionReady": "EXECUTE_READY",
+  "loanUsdcBase": "14872469746",
+  "route": "rehearsal-pair-2 → rehearsal-pair-1",
+  "onChainProfitUsdcBase": "176156813",
+  "vaultHarness": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+  "honestScope": {
+    "realProductionCode": [
+      "FlashLiquidityRouter.sol",
+      "flashLiquidity.js planner",
+      "simulation gate",
+      "wallet signing flow"
+    ],
+    "localHarnesses": [
+      "MockERC20 tokens",
+      "FlashVaultHarness (Balancer V2 flash semantics)",
+      "MiniPair pools (planner-identical formula)"
+    ],
+    "stillRequiredForMainnet": [
+      "independent audit",
+      "verified Aave/Balancer addresses per chain",
+      "private relay submission",
+      "small first real trade"
+    ]
+  },
+  "steps": [
+    {
+      "name": "local EVM up",
+      "ok": true,
+      "detail": "ganache on :18545 (chainId label 42161 — LOCAL chain, not Arbitrum)"
+    },
+    {
+      "name": "rehearsal world deployed",
+      "ok": true,
+      "detail": "USDC 0x5FbDB2315678afecb367f032d93F642f64180aa3 · WETH 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 · vault 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    },
+    {
+      "name": "FlashLiquidityRouter deployed + allowlisted",
+      "ok": true,
+      "detail": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
+    },
+    {
+      "name": "price divergence created",
+      "ok": true,
+      "detail": "+75,000 USDC into pair-1 (~2.9% gap)"
+    },
+    {
+      "name": "planner: real reserves → GATED plan (simulation pending)",
+      "ok": true,
+      "detail": "loan 14,872.47 USDC · route rehearsal-pair-2 → rehearsal-pair-1 · net est $171.0237"
+    },
+    {
+      "name": "router calldata built from plan",
+      "ok": true,
+      "detail": "2 hops · minProfit 174.92 USDC"
+    },
+    {
+      "name": "simulation gate (eth_call) passed",
+      "ok": true,
+      "detail": "block 18"
+    },
+    {
+      "name": "planner: simulation included → EXECUTE_READY",
+      "ok": true,
+      "detail": "wallet signature is the only thing left"
+    },
+    {
+      "name": "flash loan fully repaid (vault balance unchanged)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "router holds nothing after settlement (exact, no dust)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "profit swept to profitTo",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "on-chain profit ≥ on-chain min-profit check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "profit positive",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ATOMIC SETTLEMENT SUCCEEDED",
+      "ok": true,
+      "detail": "profit 176.16 USDC on 14,872.47 loan · gas 0.24M units"
+    },
+    {
+      "name": "simulation gate refuses the unprofitable variant",
+      "ok": true,
+      "detail": "INSUFFICIENT_PROFIT — nothing signed, nothing sent"
+    },
+    {
+      "name": "forced unprofitable send reverts atomically — zero loss",
+      "ok": true,
+      "detail": "gas is spent, balances untouched: the contract is the guarantee"
+    }
+  ]
+}

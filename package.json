@@ -173,7 +173,8 @@
     "test:upstash-store": "node test/upstash-store-probe.mjs",
     "test:phase152": "node test/intent-ai/phase152-flash-liquidity-probe.mjs",
     "compile:flash-liquidity": "node scripts/compile-flash-liquidity.mjs",
-    "deploy:flash-liquidity": "node scripts/deploy-flash-liquidity.mjs"
+    "deploy:flash-liquidity": "node scripts/deploy-flash-liquidity.mjs",
+    "rehearse:flash-liquidity": "node scripts/rehearse-flash-liquidity.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
@@ -214,6 +215,7 @@
     "@capacitor/core": "^6.2.1",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^10.0.4",
+    "ganache": "^7.9.2",
     "jsdom": "^30.0.1",
     "solc": "0.8.24",
     "vite": "^5.4.1"
