@@ -1347,12 +1347,17 @@ export default function IntentOS() {
             </div>
             <div className="ios-network-metrics">
               <span><b>{networkStatus?.auctions?.coordinator?.id || '—'}</b>{t('intentOS.network.coordinator')}</span>
-              <span><b>{networkStatus?.auctions?.configuredAnchorNetworks ?? '—'}</b>{t('intentOS.network.anchorNetworks')}</span>
+              <span><b>{networkStatus?.auctions?.configuredAnchorNetworks ?? 0}</b>{t('intentOS.network.anchorNetworks')}</span>
               <span><b>{networkStatus?.auctions?.signedCloseReceipts ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.closeReceipt')}</span>
               <span><b>{networkStatus?.auctions?.signedAdmissionReceipts ? t('intentOS.network.signed') : networkStatus?.ok ? t('intentOS.network.unconfigured') : '—'}</b>{t('intentOS.network.admissionReceipts')}</span>
               <span><b>{networkStatus?.watchers ? networkStatus.watchers.registeredWatchers : '—'}</b>{t('intentOS.network.watchers')}</span>
               <span><b>{networkStatus?.auctions?.auctionCompletenessProof ? t('intentOS.network.proven') : t('intentOS.network.evidenceBased')}</b>{t('intentOS.network.completeness')}</span>
             </div>
+            {networkStatus?.auctions?.externalAnchorVerificationConfigured === false && (
+              <p className="ios-rail-statusline">
+                {t('intentOS.network.anchorHint', { defaultValue: 'Signed closing already works with the coordinator key — the on-chain anchor is an optional external timestamp. To enable it set INTENT_ANCHOR_NETWORKS (chain RPC + contract).' })}
+              </p>
+            )}
             <p>{t('intentOS.network.auctionNote')}</p>
           </section>
 
@@ -1417,6 +1422,7 @@ export default function IntentOS() {
             <div className="ios-network-metrics">
               <span><b>{networkStatus?.workflows?.schema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
               <span><b>{networkStatus?.workflows?.maxNodes ?? '—'}</b>{t('intentOS.network.maxNodes')}</span>
+              <span><b>{networkStatus?.workflows?.crossChainEnvelopeStatus ?? 'draft-only'}</b>{t('intentOS.network.crossChainEnvelope')}</span>
               <span><b>{networkStatus?.workflows?.contract?.configured
                 ? (networkStatus.workflows.contract.address || t('intentOS.network.signed'))
                 : t('intentOS.network.unconfigured')}</b>{t('intentOS.network.workflowContract')}</span>
@@ -1440,7 +1446,8 @@ export default function IntentOS() {
             <div className="ios-network-metrics">
               <span><b>{networkStatus?.crossChain?.schema ?? '—'}</b>{t('intentOS.network.settlementSchema')}</span>
               <span><b>{networkStatus?.crossChain?.receiptSchema ?? '—'}</b>{t('intentOS.network.receiptSchema')}</span>
-              <span><b>{networkStatus?.crossChain?.sequentialUserSignatures ? t('intentOS.network.signed') : '—'}</b>{t('intentOS.network.sequentialSignatures')}</span>
+              <span><b>{networkStatus?.crossChain?.sequentialUserSignatures ? t('intentOS.network.sequentialNonAtomic') : '—'}</b>{t('intentOS.network.sequentialSignatures')}</span>
+              <span><b>{networkStatus?.crossChain?.envelopeStatus ?? networkStatus?.workflows?.crossChainEnvelopeStatus ?? '—'}</b>{t('intentOS.network.crossChainEnvelope')}</span>
               <span><b>{networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
             </div>
             <p>{t('intentOS.network.crossChainNote')}</p>
@@ -1493,8 +1500,10 @@ export default function IntentOS() {
               <span><b>{crossChainVerification?.verificationSchema ?? crossChainVerification?.schema ?? '—'}</b>{t('intentOS.network.txVerificationSchema')}</span>
               <span><b>{crossChainVerification?.bindingSchema ?? crossChainVerification?.accountBindingSchema ?? '—'}</b>{t('intentOS.network.txVerificationBindings')}</span>
               <span><b>{crossChainVerification?.walletProof ?? '—'}</b>{t('intentOS.network.txVerificationWalletProof')}</span>
+              <span><b>{crossChainVerification?.configuredChains ?? crossChainVerification?.chains?.length ?? '—'}</b>{t('intentOS.network.txVerificationChains')}</span>
+              <span><b>{crossChainVerification?.chains?.reduce((s, c) => s + (c.providers || 0), 0) ?? '—'}</b>{t('intentOS.network.txVerificationProviders')}</span>
               <span><b>{crossChainVerification?.minimumQuorum ?? crossChainVerification?.quorumRequired ?? '—'}</b>{t('intentOS.network.txVerificationQuorum')}</span>
-              <span><b>{t('intentOS.network.independenceNotProven')}</b>{t('intentOS.network.txVerificationProviderIndependence')}</span>
+              <span><b>{crossChainVerification?.providerIndependenceProven === true ? t('intentOS.network.proven') : t('intentOS.network.independenceNotProven')}</b>{t('intentOS.network.txVerificationProviderIndependence')}</span>
               <span><b>{networkStatus?.crossChain?.custody === false ? t('intentOS.network.noCustody') : '—'}</b>{t('intentOS.network.bondCustody')}</span>
             </div>
             <p>{t('intentOS.network.txVerificationNote')}</p>
@@ -1513,7 +1522,9 @@ export default function IntentOS() {
               </span>
             </div>
             <div className="ios-network-metrics">
+              <span><b>{networkStatus?.independentVerification?.registeredObserverKeys ?? '—'}</b>{t('intentOS.network.registeredObserverKeys')}</span>
               <span><b>{networkStatus?.independentVerification?.signedOperatorBindings ?? '—'}</b>{t('intentOS.network.attestedKeys')}</span>
+              <span><b>{networkStatus?.independentVerification?.distinctAttestedOperators ?? '—'}</b>{t('intentOS.network.distinctOperators')}</span>
               <span><b>{networkStatus?.auctions?.coordinatorRotationConfigured ? t('intentOS.network.signed') : t('intentOS.network.unconfigured')}</b>{t('intentOS.network.coordinatorRotation')}</span>
               <span><b>{networkStatus?.merkleRootAnchors?.configured ? t('intentOS.network.anchorReady') : t('intentOS.network.unconfigured')}</b>{t('intentOS.network.rootAnchor')}</span>
               <span><b>{networkStatus?.independentVerification?.organizationalIndependenceProven ? t('intentOS.network.proven') : t('intentOS.network.unproven')}</b>{t('intentOS.network.operatorIndependence')}</span>

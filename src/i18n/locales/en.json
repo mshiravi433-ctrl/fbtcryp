@@ -907,7 +907,10 @@
       "partial": "partially configured",
       "built": "built, not configured",
       "missing": "pending"
-    }
+    },
+    "sandboxBadge": "Sandbox operator — 21 kinds self-attested by the built-in demo operator. Production activation needs externally reviewed evidence.",
+    "executionReadySandbox": "Active in sandbox mode — self-attested demo evidence, wallet confirmation still required. Production launch stays off until externally reviewed evidence replaces the sandbox attestations.",
+    "notesSandboxHint": "22–50 per-plane drills — the 21-kind launch gate is already met"
   },
   "about": {
     "title": "About us",
@@ -3172,7 +3175,14 @@
       "withdrawReview": "Review withdrawal",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "Confirm withdrawal",
-      "withdrawDone": "Withdrawal submitted"
+      "withdrawDone": "Withdrawal submitted",
+      "offlineNotice": "Live Wallex connection failed — the list is offline (demo) and orders are recorded as DEMO.",
+      "reviewDemo": "Review order (demo)",
+      "demoNotice": "Without an API key this is recorded in DEMO mode only — nothing is sent to Wallex.",
+      "demoConfirmYes": "Record DEMO",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "Review withdrawal (demo)",
+      "withdrawDemoNotice": "Without an API key the withdrawal is recorded in DEMO mode and nothing actually leaves your Wallex account. For a real withdrawal, enter your API key at the top of this page."
     }
   },
   "install": {
@@ -3384,7 +3394,9 @@
       "controlLabel": "What we control",
       "learnLabel": "What we learn",
       "measuredOn": "measured on {{pair}}",
-      "boundary": "This sheet only explains. It never places an order, and the last action is always yours."
+      "boundary": "This sheet only explains. It never places an order, and the last action is always yours.",
+      "optionsTitle": "All order options",
+      "optionsIntro": "Every order type on the Orders screen — what it does and how the autopilot builds it, in plain language."
     },
     "goal": {
       "protect": {
@@ -3421,7 +3433,46 @@
       "BAD_AMOUNT": "Enter an amount first."
     },
     "evidenceNote": "Measured from {{samples}} days of real prices. These are counts of what already happened, not a forecast — a level that held four times can break on the fifth.",
-    "review": "Review this order"
+    "review": "Review this order",
+    "option": {
+      "limit": {
+        "sub": "One price, one size — fills only if the market reaches it",
+        "how": "You set a price and an amount. The autopilot watches the market and submits the order only when the price actually reaches your level — never before, so a market order at the wrong price cannot happen.",
+        "control": "The target price, the amount, and which side (buy or sell). Nothing else is touched."
+      },
+      "trailing": {
+        "sub": "Follow the price up, sell only on a fall-back",
+        "how": "It rides the price upward and keeps the sell trigger glued a set distance below the highest point reached since you started. If the price falls back that distance, the order fires.",
+        "control": "One number: the trailing distance — {{trail}} on this chart right now (3× the typical daily move, scaled by your {{trailMult}}× tuning).",
+        "learn": "Measured on this pair: an ordinary day moves {{typical}}% and the worst fall in the window was {{maxDd}}% over {{samples}} days."
+      },
+      "bracket": {
+        "sub": "Take-profit and stop-loss as ONE order (OCO)",
+        "how": "It places the take-profit and the stop-loss together. Whichever level the market hits first executes, and the other is cancelled automatically — you cannot be left holding the wrong half of the bracket.",
+        "control": "The take-profit distance and the stop-loss distance. Both are suggested from this chart's volatility, and both stay yours to change."
+      },
+      "ladder": {
+        "sub": "Fill in steps instead of one price",
+        "how": "It splits the order into several rungs across a price range, so part of it fills as the market walks through the range instead of needing one exact price.",
+        "control": "The range and the number of rungs — {{steps}} rungs from {{start}} to {{end}} on this chart, from the range divided by {{ladderStepDiv}}.",
+        "learn": "Measured on this pair: the level at the end of the range held {{held}} of {{tested}} tests over {{samples}} days."
+      },
+      "dca": {
+        "sub": "Fixed amount on a schedule — average your entry",
+        "how": "It buys (or sells) a fixed amount at regular intervals, so the average entry price smooths out over time instead of depending on one moment's price.",
+        "control": "How much per round, how often, and how many rounds. The schedule is stored on-device and each round needs the same review as any order."
+      },
+      "twap": {
+        "sub": "Split a big order into small slices",
+        "how": "It cuts one large order into many smaller pieces spread over time, so the market does not see — and cannot move against — the whole size at once.",
+        "control": "Total size, number of slices, and the time window. Fewer slices = faster but more market impact; more slices = gentler but slower."
+      },
+      "rebalance": {
+        "sub": "Bring the portfolio back to its target mix",
+        "how": "It compares the current holdings to the target weights you set, then sells what is overweight and buys what is underweight until the mix matches.",
+        "control": "The target weights and how far the drift must be before it acts. Nothing rebalances on its own without your review first."
+      }
+    }
   },
   "fiat": {
     "title": "Buy crypto with money",
@@ -3949,7 +4000,16 @@
       "collateral": "USDC change"
     },
     "collateralHint": "Positive adds; negative removes",
-    "manageRisk": "This is a real position-management transaction. Closing can realize a loss; removing collateral moves liquidation closer. A positive top-up requires an exact USDC approval first."
+    "manageRisk": "This is a real position-management transaction. Closing can realize a loss; removing collateral moves liquidation closer. A positive top-up requires an exact USDC approval first.",
+    "offlineNotice": "Live feed unavailable — offline (demo) markets and sample prices.",
+    "longSub": "Buy — expecting the price to rise",
+    "shortSub": "Sell — expecting the price to fall",
+    "chartDemo": "Sample chart — live feed unavailable",
+    "chartSession": "Prices observed this session",
+    "chartCollecting": "Collecting live prices…",
+    "pairInfoTitle": "What is this pair?",
+    "pairInfoOpen": "What is this pair?",
+    "pairInfoNote": "This pair trades with USDC and leverage on this screen; its price comes from the global Ostium feed."
   },
   "dydx": {
     "title": "dYdX Orbit",
@@ -4020,10 +4080,17 @@
     "chartTitle": "Price · last 4 days",
     "res": {
       "4h": "4h",
-      "1d": "1d"
+      "1d": "1d",
+      "15m": "15m",
+      "1h": "1h"
     },
     "chartUnavailable": "The dYdX indexer did not return candles for this market.",
-    "chartSource": "dYdX indexer candles"
+    "chartSource": "dYdX indexer candles",
+    "offlineNotice": "dYdX indexer unavailable — demo markets and chart (offline). Real orders are disabled.",
+    "longSub": "Long — expecting the price to rise",
+    "shortSub": "Short — expecting the price to fall",
+    "chartDemo": "Sample chart — indexer unavailable",
+    "chartDemoSource": "Sample series (offline)"
   },
   "derivatives": {
     "title": "Derivatives Hall",
@@ -4632,7 +4699,14 @@
         "balance-fetched": "balance unavailable",
         "no-raw-credentials": "raw credential material present"
       },
-      "openDesk": "Open the cross-chain desk — plan, sign, settle"
+      "openDesk": "Open the cross-chain desk — plan, sign, settle",
+      "anchorHint": "Signed closing already works with the coordinator key — the on-chain anchor is an optional external timestamp. To enable it set INTENT_ANCHOR_NETWORKS (chain RPC + contract).",
+      "crossChainEnvelope": "cross-chain envelope",
+      "sequentialNonAtomic": "sequential (non-atomic)",
+      "txVerificationChains": "chains configured",
+      "txVerificationProviders": "RPC providers",
+      "registeredObserverKeys": "observer keys",
+      "distinctOperators": "distinct operators"
     },
     "revert": {
       "abort-all": "Abort all",
@@ -6409,6 +6483,7 @@
     "warningScTitle": "Smart contract risk",
     "warningScBody": "Any lending protocol can have bugs. Only supply amounts you can afford to lose.",
     "maxBorrowHint": "Max allowed: {{max}}",
-    "chooseAssetFirst": "Choose an asset first"
+    "chooseAssetFirst": "Choose an asset first",
+    "ratesUpdated": "Rates are read from the lending contracts (Morpho/Aave) — refreshed automatically."
   }
 }

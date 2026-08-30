@@ -33,3 +33,4 @@ scripts/locales/ar-todo.txt
 # collected operational evidence (real digests + measurements, re-earned per run)
 evidence.json
 *-probe-detail.json
+.sandbox/

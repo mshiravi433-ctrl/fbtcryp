@@ -911,7 +911,14 @@
       "withdrawReview": "检查提现",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "确认提现",
-      "withdrawDone": "提现已提交"
+      "withdrawDone": "提现已提交",
+      "offlineNotice": "无法直接连接 Wallex — 列表为离线（演示）模式，订单以 DEMO 方式记录。",
+      "reviewDemo": "查看订单（演示）",
+      "demoNotice": "没有 API 密钥时，此订单仅以 DEMO 模式记录 — 不会发送到 Wallex。",
+      "demoConfirmYes": "记录 DEMO",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "查看提现（演示）",
+      "withdrawDemoNotice": "没有 API 密钥时，提现以 DEMO 模式记录，实际不会从您的 Wallex 账户转出。"
     }
   },
   "loan": {

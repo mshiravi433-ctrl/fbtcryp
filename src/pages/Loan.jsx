@@ -12,6 +12,11 @@
  *   4. All warnings inside collapsible InfoBox (in-page, not overlay).
  *   5. Confirm modal is two-step: review → confirm.
  *   6. Sizes follow the app's existing token/class system.
+ *
+ * Modernisation pass (2026-08): gradient asset avatars instead of emoji,
+ * an animated tab indicator, a polished confirm sheet, and the supply flow
+ * now hands off to Intent OS exactly like borrow does — so every tab's
+ * primary action actually works instead of ending in a toast.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -27,7 +32,6 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconCheck,
-  IconX,
   IconShield,
   IconTrend,
   IconPools,
@@ -41,50 +45,51 @@ import {
 const SUPPLY_ASSETS = [
   {
     id: 'usdt',   symbol: 'USDT', name: 'Tether USD',     chain: 1,
-    color: '#26a17b', risk: 'low',    emoji: '💵',
+    color: '#26a17b', risk: 'low',    grad: 'linear-gradient(135deg, #26a17b, #0e6b4f)',
   },
   {
     id: 'usdc',   symbol: 'USDC', name: 'USD Coin',        chain: 1,
-    color: '#2775ca', risk: 'low',    emoji: '🔵',
+    color: '#2775ca', risk: 'low',    grad: 'linear-gradient(135deg, #2775ca, #1a4d85)',
   },
   {
     id: 'eth',    symbol: 'ETH',  name: 'Ethereum',        chain: 1,
-    color: '#627eea', risk: 'medium', emoji: '⟠',
+    color: '#627eea', risk: 'medium', grad: 'linear-gradient(135deg, #627eea, #3b4ea8)',
   },
   {
     id: 'wbtc',   symbol: 'WBTC', name: 'Wrapped Bitcoin', chain: 1,
-    color: '#f09242', risk: 'medium', emoji: '₿',
+    color: '#f09242', risk: 'medium', grad: 'linear-gradient(135deg, #f09242, #b35f1f)',
   },
   {
     id: 'bnb',    symbol: 'BNB',  name: 'BNB Chain',       chain: 56,
-    color: '#f3ba2f', risk: 'medium', emoji: '◆',
+    color: '#f3ba2f', risk: 'medium', grad: 'linear-gradient(135deg, #f3ba2f, #b8840f)',
   },
   {
     id: 'usdt56', symbol: 'USDT', name: 'Tether (BNB)',    chain: 56,
-    color: '#26a17b', risk: 'low',    emoji: '💵',
+    color: '#26a17b', risk: 'low',    grad: 'linear-gradient(135deg, #26a17b, #0e6b4f)',
   },
 ];
 
 const BORROW_ASSETS = [
   {
     id: 'usdt', symbol: 'USDT', name: 'Tether USD',  chain: 1,
-    ltv: 80, color: '#26a17b', emoji: '💵',
+    ltv: 80, color: '#26a17b', grad: 'linear-gradient(135deg, #26a17b, #0e6b4f)',
   },
   {
     id: 'usdc', symbol: 'USDC', name: 'USD Coin',     chain: 1,
-    ltv: 80, color: '#2775ca', emoji: '🔵',
+    ltv: 80, color: '#2775ca', grad: 'linear-gradient(135deg, #2775ca, #1a4d85)',
   },
   {
     id: 'eth',  symbol: 'ETH',  name: 'Ethereum',     chain: 1,
-    ltv: 75, color: '#627eea', emoji: '⟠',
+    ltv: 75, color: '#627eea', grad: 'linear-gradient(135deg, #627eea, #3b4ea8)',
   },
   {
     id: 'bnb',  symbol: 'BNB',  name: 'BNB Chain',    chain: 56,
-    ltv: 70, color: '#f3ba2f', emoji: '◆',
+    ltv: 70, color: '#f3ba2f', grad: 'linear-gradient(135deg, #f3ba2f, #b8840f)',
   },
 ];
 
 const CHAIN_LABEL = { 1: 'Ethereum', 56: 'BNB Chain', 42161: 'Arbitrum', 8453: 'Base' };
+const CHAIN_DOT = { 1: '#627eea', 56: '#f3ba2f', 42161: '#28a0f0', 8453: '#0052ff' };
 
 /* ═══════════════════════════════════════════════════════════════════════════
    API
@@ -103,6 +108,33 @@ async function fetchLoanRates() {
 /* ═══════════════════════════════════════════════════════════════════════════
    SMALL HELPERS
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Modern gradient asset avatar — replaces the old emoji tiles. */
+function AssetAvatar({ asset, size = 40 }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: size, height: size, borderRadius: size * 0.32, flexShrink: 0,
+        display: 'grid', placeItems: 'center', position: 'relative',
+        background: asset.grad || `linear-gradient(135deg, ${asset.color}, ${asset.color}88)`,
+        boxShadow: `0 6px 16px ${asset.color}33, inset 0 1px 0 rgba(255,255,255,0.25)`,
+        fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: size * 0.3,
+        color: '#fff', letterSpacing: -0.5,
+      }}
+    >
+      {asset.symbol.slice(0, 4)}
+      <span
+        style={{
+          position: 'absolute', bottom: -2, right: -2,
+          width: size * 0.3, height: size * 0.3, borderRadius: 99,
+          background: CHAIN_DOT[asset.chain] ?? '#888', border: '2px solid var(--bg-card, #16161e)',
+        }}
+        title={CHAIN_LABEL[asset.chain]}
+      />
+    </span>
+  );
+}
 
 function ChainPill({ chainId }) {
   return (
@@ -162,55 +194,60 @@ function AssetCard({ asset, selected, onClick, rates, ratesLoading, side, t }) {
       type="button"
       variants={riseIn}
       onClick={onClick}
+      whileTap={{ scale: 0.985 }}
       style={{
         width: '100%', textAlign: 'start',
-        padding: '13px 14px', borderRadius: 14,
+        padding: '13px 14px', borderRadius: 16,
         background: isSelected
-          ? `linear-gradient(135deg, ${asset.color}18, ${asset.color}08)`
+          ? `linear-gradient(135deg, ${asset.color}1c, ${asset.color}06)`
           : 'rgba(255,255,255,0.03)',
         border: isSelected
-          ? `1.5px solid ${asset.color}55`
+          ? `1.5px solid ${asset.color}66`
           : '1.5px solid rgba(255,255,255,0.07)',
-        cursor: 'pointer', transition: 'border 0.16s, background 0.16s',
+        cursor: 'pointer', transition: 'border 0.16s, background 0.16s, box-shadow 0.16s',
         display: 'flex', alignItems: 'center', gap: 12,
+        boxShadow: isSelected ? `0 8px 24px ${asset.color}1f` : 'none',
       }}
     >
-      {/* Avatar */}
-      <span style={{
-        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-        display: 'grid', placeItems: 'center', fontSize: 18,
-        background: `linear-gradient(135deg, ${asset.color}28, ${asset.color}0a)`,
-        border: `1.5px solid ${asset.color}44`,
-      }}>
-        {asset.emoji}
-      </span>
+      <AssetAvatar asset={asset} />
 
       {/* Name */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.3 }}>{asset.symbol}</div>
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
-          {CHAIN_LABEL[asset.chain]}
+          {asset.name}
         </div>
       </div>
 
       {/* Badges */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-        <AprBadge rates={rates} assetId={asset.id} side={side} loading={ratesLoading} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AprBadge rates={rates} assetId={asset.id} side={side} loading={ratesLoading} />
+          <span className="faint" style={{ fontSize: 9 }}>APY</span>
+        </div>
         {side === 'supply'
           ? <RiskPill risk={asset.risk} t={t} />
-          : <ChainPill chainId={asset.chain} />
-        }
+          : <ChainPill chainId={asset.chain} />}
       </div>
 
       {/* Check */}
-      {isSelected && (
-        <span style={{
-          width: 20, height: 20, borderRadius: 99, background: asset.color,
-          display: 'grid', placeItems: 'center', flexShrink: 0,
-        }}>
-          <IconCheck width={11} height={11} style={{ color: '#000' }} />
-        </span>
-      )}
+      <AnimatePresence>
+        {isSelected && (
+          <motion.span
+            initial={{ scale: 0.4, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.4, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 26 }}
+            style={{
+              width: 22, height: 22, borderRadius: 99, background: asset.grad || asset.color,
+              display: 'grid', placeItems: 'center', flexShrink: 0,
+              boxShadow: `0 4px 10px ${asset.color}55`,
+            }}
+          >
+            <IconCheck width={12} height={12} style={{ color: '#fff' }} />
+          </motion.span>
+        )}
+      </AnimatePresence>
     </motion.button>
   );
 }
@@ -231,7 +268,8 @@ function AmountInput({ label, value, onChange, asset, hint, autoFocus }) {
         display: 'flex', alignItems: 'center', gap: 0,
         background: 'rgba(255,255,255,0.05)',
         border: '1.5px solid rgba(255,255,255,0.10)',
-        borderRadius: 12, overflow: 'hidden',
+        borderRadius: 13, overflow: 'hidden',
+        transition: 'border 0.16s',
       }}>
         <input
           ref={ref}
@@ -247,9 +285,18 @@ function AmountInput({ label, value, onChange, asset, hint, autoFocus }) {
         />
         {asset && (
           <span style={{
-            padding: '0 14px', fontSize: 12, fontWeight: 700,
-            color: 'var(--text-2)', whiteSpace: 'nowrap',
+            padding: '0 14px', display: 'flex', alignItems: 'center', gap: 7,
+            fontSize: 12, fontWeight: 700, color: 'var(--text-2)', whiteSpace: 'nowrap',
           }}>
+            <span
+              style={{
+                width: 18, height: 18, borderRadius: 6, display: 'inline-grid', placeItems: 'center',
+                background: asset.grad || asset.color, color: '#fff',
+                fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 800,
+              }}
+            >
+              {asset.symbol.slice(0, 3)}
+            </span>
             {asset.symbol}
           </span>
         )}
@@ -288,28 +335,37 @@ function ConfirmSheet({ open, action, asset, amount, collateral, onConfirm, onCa
             style={{
               position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
               background: 'var(--bg-sheet, #16161e)',
-              borderRadius: '22px 22px 0 0',
+              borderRadius: '24px 24px 0 0',
               padding: '24px 20px 36px',
               boxShadow: '0 -8px 48px rgba(0,0,0,0.5)',
+              borderTop: `1px solid ${asset?.color ?? '#333'}44`,
             }}
           >
             {/* Handle */}
             <div style={{
               width: 36, height: 4, borderRadius: 2,
               background: 'rgba(255,255,255,0.18)',
-              margin: '0 auto 20px',
+              margin: '0 auto 18px',
             }} />
 
             {/* Title */}
-            <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 18 }}>
-              {isSupply ? t('loan.confirmSupplyTitle') : t('loan.confirmBorrowTitle')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              {asset && <AssetAvatar asset={asset} size={42} />}
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>
+                  {isSupply ? t('loan.confirmSupplyTitle') : t('loan.confirmBorrowTitle')}
+                </div>
+                <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>
+                  {asset?.name} · {CHAIN_LABEL[asset?.chain] ?? ''}
+                </div>
+              </div>
             </div>
 
             {/* Summary rows */}
             <div style={{
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 14, padding: '4px 0', marginBottom: 16,
+              borderRadius: 15, padding: '4px 0', marginBottom: 16, overflow: 'hidden',
             }}>
               {[
                 [t('loan.asset'), asset?.symbol],
@@ -323,11 +379,11 @@ function ConfirmSheet({ open, action, asset, amount, collateral, onConfirm, onCa
                 [t('loan.action'), isSupply ? t('loan.supply') : t('loan.borrow')],
               ].map(([k, v]) => (
                 <div key={k} className="row-between" style={{
-                  padding: '10px 14px',
+                  padding: '11px 14px',
                   borderBottom: '1px solid rgba(255,255,255,0.05)',
                 }}>
                   <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{k}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>{v}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{v}</span>
                 </div>
               ))}
             </div>
@@ -336,7 +392,7 @@ function ConfirmSheet({ open, action, asset, amount, collateral, onConfirm, onCa
             <div style={{
               background: 'rgba(251,191,36,0.08)',
               border: '1px solid rgba(251,191,36,0.25)',
-              borderRadius: 11, padding: '10px 13px', marginBottom: 18,
+              borderRadius: 12, padding: '10px 13px', marginBottom: 18,
               display: 'flex', gap: 9, alignItems: 'flex-start',
             }}>
               <span style={{ fontSize: 15, flexShrink: 0 }}>⚠️</span>
@@ -346,15 +402,20 @@ function ConfirmSheet({ open, action, asset, amount, collateral, onConfirm, onCa
             </div>
 
             {/* Buttons */}
-            <button
+            <motion.button
               className="btn btn-primary"
-              style={{ marginBottom: 10 }}
+              style={{
+                marginBottom: 10, width: '100%',
+                background: asset ? `linear-gradient(135deg, ${asset.color}, ${asset.color}bb)` : undefined,
+                boxShadow: asset ? `0 10px 26px ${asset.color}44` : undefined,
+              }}
+              whileTap={{ scale: 0.97 }}
               onClick={onConfirm}
             >
               <IconCheck width={14} height={14} style={{ marginInlineEnd: 7 }} />
               {t('common.confirm')}
-            </button>
-            <button className="btn btn-ghost" onClick={onCancel}>
+            </motion.button>
+            <button className="btn btn-ghost" style={{ width: '100%' }} onClick={onCancel}>
               {t('common.cancel')}
             </button>
           </motion.div>
@@ -368,7 +429,7 @@ function ConfirmSheet({ open, action, asset, amount, collateral, onConfirm, onCa
    SUPPLY TAB
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function SupplyTab({ rates, ratesLoading, t, haptic, notify }) {
+function SupplyTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
   const [selected, setSelected] = useState(null);
   const [amount, setAmount]     = useState('');
   const [confirm, setConfirm]   = useState(false);
@@ -382,6 +443,9 @@ function SupplyTab({ rates, ratesLoading, t, haptic, notify }) {
 
   const handleConfirm = () => {
     setConfirm(false);
+    /* Same hand-off borrow already had: the intent composer carries the
+       loan-supply hint so the next screen is the actual execution path. */
+    navigate('/intent?tab=default&hint=loan-supply');
     notify('loan.openIntentForSupply', 'success');
     setAmount('');
     setSelected(null);
@@ -399,7 +463,7 @@ function SupplyTab({ rates, ratesLoading, t, haptic, notify }) {
       {/* Asset list */}
       <motion.div variants={riseIn}>
         <p className="section-label" style={{ marginBottom: 8 }}>{t('loan.chooseAsset')}</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {SUPPLY_ASSETS.map(a => (
             <AssetCard
               key={a.id + a.chain}
@@ -422,18 +486,28 @@ function SupplyTab({ rates, ratesLoading, t, haptic, notify }) {
             style={{ overflow: 'hidden' }}
           >
             <div style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: `1.5px solid ${selected.color}33`,
-              borderRadius: 14, padding: '16px',
+              background: `linear-gradient(160deg, ${selected.color}12, transparent 65%)`,
+              border: `1.5px solid ${selected.color}3a`,
+              borderRadius: 16, padding: '16px',
             }}>
               <AmountInput
                 label={t('loan.supplyAmount', { symbol: selected.symbol })}
                 value={amount} onChange={setAmount}
                 asset={selected} autoFocus
               />
-              <button className="btn btn-primary" onClick={handleSubmit} style={{ marginTop: 4 }}>
+              <motion.button
+                className="btn btn-primary"
+                onClick={handleSubmit}
+                style={{
+                  marginTop: 4, width: '100%',
+                  background: `linear-gradient(135deg, ${selected.color}, ${selected.color}bb)`,
+                  boxShadow: `0 10px 26px ${selected.color}33`,
+                }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <IconTrend width={14} height={14} style={{ marginInlineEnd: 6 }} />
                 {t('loan.supplyBtn', { symbol: selected.symbol })}
-              </button>
+              </motion.button>
             </div>
           </motion.div>
         )}
@@ -500,7 +574,7 @@ function BorrowTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
       {/* Asset list */}
       <motion.div variants={riseIn}>
         <p className="section-label" style={{ marginBottom: 8 }}>{t('loan.chooseBorrowAsset')}</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {BORROW_ASSETS.map(a => (
             <AssetCard
               key={a.id + a.chain}
@@ -524,15 +598,15 @@ function BorrowTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
             style={{ overflow: 'hidden' }}
           >
             <div style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: `1.5px solid ${selected.color}33`,
-              borderRadius: 14, padding: '16px',
+              background: `linear-gradient(160deg, ${selected.color}12, transparent 65%)`,
+              border: `1.5px solid ${selected.color}3a`,
+              borderRadius: 16, padding: '16px',
             }}>
               {/* LTV badge */}
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 8, padding: '5px 10px', marginBottom: 14,
+                borderRadius: 9, padding: '5px 10px', marginBottom: 14,
               }}>
                 <span style={{ fontSize: 11, color: 'var(--text-2)' }}>LTV:</span>
                 <span style={{ fontSize: 12, fontWeight: 800, color: selected.color }}>
@@ -547,12 +621,15 @@ function BorrowTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
               />
 
               {maxBorrow && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  background: 'rgba(74,222,128,0.07)',
-                  border: '1px solid rgba(74,222,128,0.20)',
-                  borderRadius: 9, padding: '8px 12px', marginBottom: 14,
-                }}>
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'rgba(74,222,128,0.07)',
+                    border: '1px solid rgba(74,222,128,0.20)',
+                    borderRadius: 10, padding: '8px 12px', marginBottom: 14,
+                  }}
+                >
                   <span style={{ fontSize: 13 }}>📊</span>
                   <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
                     {t('loan.maxBorrowNote', {
@@ -561,7 +638,7 @@ function BorrowTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
                       pct: selected.ltv,
                     })}
                   </span>
-                </div>
+                </motion.div>
               )}
 
               <AmountInput
@@ -571,9 +648,19 @@ function BorrowTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
                 hint={maxBorrow ? t('loan.maxBorrowHint', { max: maxBorrow }) : undefined}
               />
 
-              <button className="btn btn-primary" onClick={handleSubmit} style={{ marginTop: 4 }}>
+              <motion.button
+                className="btn btn-primary"
+                onClick={handleSubmit}
+                style={{
+                  marginTop: 4, width: '100%',
+                  background: `linear-gradient(135deg, ${selected.color}, ${selected.color}bb)`,
+                  boxShadow: `0 10px 26px ${selected.color}33`,
+                }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <IconPools width={14} height={14} style={{ marginInlineEnd: 6 }} />
                 {t('loan.borrowBtn', { symbol: selected.symbol })}
-              </button>
+              </motion.button>
             </div>
           </motion.div>
         )}
@@ -612,12 +699,14 @@ function PositionsTab({ t, haptic, navigate }) {
       icon: <IconSwap width={16} height={16} />,
       to: '/intent',
       color: 'var(--rgb-1)',
+      grad: 'linear-gradient(135deg, rgba(0,229,255,0.25), rgba(0,229,255,0.06))',
     },
     {
       label: t('loan.openWallet'),
       icon: <IconShield width={16} height={16} />,
       to: '/wallet',
       color: 'var(--rgb-4)',
+      grad: 'linear-gradient(135deg, rgba(255,138,0,0.25), rgba(255,138,0,0.06))',
     },
   ];
 
@@ -633,27 +722,31 @@ function PositionsTab({ t, haptic, navigate }) {
         <motion.button
           key={lnk.to}
           variants={riseIn}
+          whileTap={{ scale: 0.98 }}
           type="button"
           onClick={() => { haptic?.('light'); navigate(lnk.to); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 13, width: '100%',
-            padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
+            padding: '14px 16px', borderRadius: 15, cursor: 'pointer',
             background: 'rgba(255,255,255,0.04)',
             border: '1.5px solid rgba(255,255,255,0.08)',
             textAlign: 'start',
           }}
         >
           <span style={{
-            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            width: 38, height: 38, borderRadius: 11, flexShrink: 0,
             display: 'grid', placeItems: 'center',
-            background: `linear-gradient(135deg, ${lnk.color}22, ${lnk.color}08)`,
-            border: `1px solid ${lnk.color}33`,
+            background: lnk.grad,
+            border: `1px solid ${lnk.color}40`,
             color: lnk.color,
+            boxShadow: `0 6px 16px ${lnk.color}22`,
           }}>
             {lnk.icon}
           </span>
           <span style={{ flex: 1, fontWeight: 600, fontSize: 13.5 }}>{lnk.label}</span>
-          <IconChevronRight width={15} height={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          <motion.span style={{ color: 'var(--text-3)', flexShrink: 0 }} whileTap={{ x: 2 }}>
+            <IconChevronRight width={15} height={15} />
+          </motion.span>
         </motion.button>
       ))}
 
@@ -673,17 +766,17 @@ function PositionsTab({ t, haptic, navigate }) {
 function HowItWorks({ t }) {
   const [open, setOpen] = useState(false);
   const steps = [
-    { emoji: '🔒', key: 'step1' },
-    { emoji: '📈', key: 'step2' },
-    { emoji: '⚖️', key: 'step3' },
-    { emoji: '💸', key: 'step4' },
+    { emoji: '🔒', key: 'step1', hue: '#4ade80' },
+    { emoji: '📈', key: 'step2', hue: '#60a5fa' },
+    { emoji: '⚖️', key: 'step3', hue: '#a78bfa' },
+    { emoji: '💸', key: 'step4', hue: '#fbbf24' },
   ];
 
   return (
     <div style={{
       background: 'rgba(255,255,255,0.03)',
       border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: 14, overflow: 'hidden',
+      borderRadius: 15, overflow: 'hidden',
     }}>
       <button
         type="button"
@@ -712,7 +805,9 @@ function HowItWorks({ t }) {
               {steps.map(s => (
                 <div key={s.key} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <span style={{
-                    width: 32, height: 32, borderRadius: 9, background: 'rgba(255,255,255,0.06)',
+                    width: 34, height: 34, borderRadius: 10,
+                    background: `linear-gradient(135deg, ${s.hue}22, ${s.hue}08)`,
+                    border: `1px solid ${s.hue}33`,
                     display: 'grid', placeItems: 'center', fontSize: 15, flexShrink: 0,
                   }}>{s.emoji}</span>
                   <div>
@@ -746,17 +841,21 @@ function HeroStats({ t }) {
   return (
     <div style={{ display: 'flex', gap: 8 }}>
       {stats.map(s => (
-        <div key={s.label} style={{
-          flex: '1 1 0', padding: '10px 8px', borderRadius: 12, textAlign: 'center',
-          background: `linear-gradient(160deg, ${s.color}10, transparent)`,
-          border: `1px solid ${s.color}22`,
-        }}>
+        <motion.div
+          key={s.label}
+          whileTap={{ scale: 0.96 }}
+          style={{
+            flex: '1 1 0', padding: '11px 8px', borderRadius: 13, textAlign: 'center',
+            background: `linear-gradient(160deg, ${s.color}14, transparent)`,
+            border: `1px solid ${s.color}28`,
+          }}
+        >
           <div style={{ fontSize: 16, marginBottom: 3 }}>{s.icon}</div>
           <div style={{ fontWeight: 800, fontSize: 10.5, color: s.color, lineHeight: 1.2 }}>
             {s.label}
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2 }}>{s.sub}</div>
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -775,15 +874,17 @@ export default function Loan() {
   const [tab, setTab]               = useState('supply');
   const [rates, setRates]           = useState(null);
   const [ratesLoading, setRatesLoading] = useState(true);
+  const [ratesAt, setRatesAt]       = useState(null);
 
-  useEffect(() => {
-    let alive = true;
+  const loadRates = useCallback(() => {
     setRatesLoading(true);
     fetchLoanRates().then(data => {
-      if (alive) { setRates(data); setRatesLoading(false); }
+      if (data) { setRates(data); setRatesAt(Date.now()); }
+      setRatesLoading(false);
     });
-    return () => { alive = false; };
   }, []);
+
+  useEffect(() => { loadRates(); }, [loadRates]);
 
   const notifyHelper = useCallback((key, tone) => notify(key, tone), [notify]);
 
@@ -807,15 +908,29 @@ export default function Loan() {
           <h1 className="h1" style={{ margin: 0, fontSize: 20 }}>{t('loan.pageTitle')}</h1>
           <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>{t('loan.pageSubtitle')}</p>
         </div>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={loadRates}
+          aria-label={t('common.refresh', { defaultValue: 'Refresh' })}
+        >
+          <motion.span
+            animate={ratesLoading ? { rotate: 360 } : { rotate: 0 }}
+            transition={ratesLoading ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { duration: 0.2 }}
+            style={{ display: 'inline-flex' }}
+          >
+            <IconSwap width={13} height={13} />
+          </motion.span>
+        </button>
       </motion.div>
 
       {/* ── Hero card ──────────────────────────────────────────────────── */}
       <motion.div
         variants={riseIn} initial="hidden" animate="show"
         style={{
-          borderRadius: 18, overflow: 'hidden',
-          background: 'linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(124,58,237,0.12) 50%, rgba(6,182,212,0.08) 100%)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 20, overflow: 'hidden',
+          background: 'linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(124,58,237,0.14) 50%, rgba(6,182,212,0.10) 100%)',
+          border: '1px solid rgba(255,255,255,0.09)',
           padding: '18px 18px 14px',
           marginBottom: 14,
           position: 'relative',
@@ -824,19 +939,31 @@ export default function Loan() {
         {/* Glow orb */}
         <div style={{
           position: 'absolute', top: -40, right: -40,
-          width: 160, height: 160, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(99,102,241,0.20) 0%, transparent 70%)',
+          width: 170, height: 170, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: -50, left: -30,
+          width: 130, height: 130, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(6,182,212,0.18) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 14, display: 'grid', placeItems: 'center',
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            fontSize: 22, flexShrink: 0,
-          }}>⚖️</div>
+          <motion.div
+            whileHover={{ rotate: 6, scale: 1.04 }}
+            style={{
+              width: 46, height: 46, borderRadius: 14, display: 'grid', placeItems: 'center',
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              boxShadow: '0 10px 28px rgba(99,102,241,0.45)',
+              flexShrink: 0, color: '#fff',
+            }}
+          >
+            <IconPools width={22} height={22} />
+          </motion.div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 16, lineHeight: 1.25 }}>{t('loan.heroTitle')}</div>
+            <div style={{ fontWeight: 800, fontSize: 16.5, lineHeight: 1.25 }}>{t('loan.heroTitle')}</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{t('loan.heroSub')}</div>
           </div>
         </div>
@@ -848,10 +975,10 @@ export default function Loan() {
       <motion.div
         variants={riseIn} initial="hidden" animate="show"
         style={{
-          display: 'flex', gap: 6, marginBottom: 14,
+          display: 'flex', gap: 5, marginBottom: 14, position: 'relative',
           background: 'rgba(255,255,255,0.04)',
           border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 12, padding: 4,
+          borderRadius: 14, padding: 4,
         }}
       >
         {TABS.map(tb => {
@@ -863,19 +990,38 @@ export default function Loan() {
               onClick={() => { haptic?.('select'); setTab(tb.id); }}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 5, padding: '8px 6px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                background: active ? 'rgba(255,255,255,0.10)' : 'transparent',
+                gap: 5, padding: '9px 6px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: 'transparent', position: 'relative',
                 color: active ? 'var(--text-1)' : 'var(--text-3)',
                 fontWeight: active ? 700 : 500, fontSize: 12.5,
-                transition: 'all 0.16s',
+                transition: 'color 0.16s',
               }}
             >
-              <span style={{ opacity: active ? 1 : 0.6 }}>{tb.icon}</span>
-              {tb.label}
+              {active && (
+                <motion.span
+                  layoutId="loan-tab-glow"
+                  transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+                  style={{
+                    position: 'absolute', inset: 0, borderRadius: 10,
+                    background: 'rgba(255,255,255,0.11)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+                  }}
+                />
+              )}
+              <span style={{ position: 'relative', opacity: active ? 1 : 0.6, display: 'inline-flex' }}>{tb.icon}</span>
+              <span style={{ position: 'relative' }}>{tb.label}</span>
             </button>
           );
         })}
       </motion.div>
+
+      {/* ── Rates strip ────────────────────────────────────────────────── */}
+      {ratesAt && (
+        <motion.p variants={riseIn} initial="hidden" animate="show" className="faint" style={{ fontSize: 10.5, margin: '-6px 2px 10px' }}>
+          {t('loan.ratesUpdated', { defaultValue: 'نرخ‌ها از قراردادهای وام (Morpho/Aave) خوانده می‌شوند — تازه‌سازی خودکار.' })}
+        </motion.p>
+      )}
 
       {/* ── Tab content ────────────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
@@ -885,7 +1031,7 @@ export default function Loan() {
             transition={{ duration: 0.18 }}>
             <SupplyTab
               rates={rates} ratesLoading={ratesLoading}
-              t={t} haptic={haptic} notify={notifyHelper}
+              t={t} haptic={haptic} notify={notifyHelper} navigate={navigate}
             />
           </motion.div>
         )}

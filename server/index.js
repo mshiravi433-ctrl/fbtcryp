@@ -8,6 +8,7 @@
  * On Vercel, api/index.js imports the same app without these.
  */
 import 'dotenv/config';
+import './intentSandboxOps.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';

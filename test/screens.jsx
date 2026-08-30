@@ -380,12 +380,13 @@ export async function run(container) {
     out.push(['RTL: the guide sheet renders under dir=rtl',
       errors.length === before
       && document.documentElement.getAttribute('dir') === 'rtl']);
-    /* All three options, and all three closed — the owner's ask was a sheet
-       that opens on a tap, not one that arrives already unpacked. */
+    /* The three goals PLUS all seven order options — ten cards, and every
+       one closed: the owner's ask was a sheet that opens on a tap, not one
+       that arrives already unpacked. */
     const heads = sheetScope.querySelectorAll('.ap-opt-head');
-    out.push(['RTL: the sheet shows its three options', heads.length === 3]);
+    out.push(['RTL: the sheet lists every goal and order option', heads.length === 10]);
     out.push(['RTL: every option starts closed',
-      heads.length === 3
+      heads.length === 10
       && sheetScope.querySelectorAll('.ap-opt-open').length === 0
       && [...heads].every((b) => b.getAttribute('aria-expanded') === 'false')]);
     out.push(['RTL: a closed option shows no rows',

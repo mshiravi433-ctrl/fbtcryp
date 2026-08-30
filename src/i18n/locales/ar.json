@@ -3290,7 +3290,14 @@
       "withdrawReview": "مراجعة السحب",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "تأكيد السحب",
-      "withdrawDone": "تم إرسال السحب"
+      "withdrawDone": "تم إرسال السحب",
+      "offlineNotice": "تعذّر الاتصال المباشر بوالكس — القائمة غير متصلة (تجريبية) وتُسجَّل الطلبات كـ DEMO.",
+      "reviewDemo": "مراجعة الطلب (تجريبي)",
+      "demoNotice": "بدون مفتاح API يُسجَّل هذا الطلب في وضع DEMO فقط — لا يُرسَل إلى والكس.",
+      "demoConfirmYes": "تسجيل DEMO",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "مراجعة السحب (تجريبي)",
+      "withdrawDemoNotice": "بدون مفتاح API يُسجَّل السحب في وضع DEMO ولا يخرج شيء فعليًا من حسابك في والكس."
     }
   },
   "p2pMarket": {

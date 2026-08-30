@@ -911,7 +911,14 @@
       "withdrawReview": "Tinjau penarikan",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "Konfirmasi penarikan",
-      "withdrawDone": "Penarikan dikirim"
+      "withdrawDone": "Penarikan dikirim",
+      "offlineNotice": "Koneksi langsung ke Wallex gagal — daftar offline (demo) dan pesanan dicatat sebagai DEMO.",
+      "reviewDemo": "Tinjau pesanan (demo)",
+      "demoNotice": "Tanpa kunci API pesanan ini hanya dicatat dalam mode DEMO — tidak dikirim ke Wallex.",
+      "demoConfirmYes": "Catat DEMO",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "Tinjau penarikan (demo)",
+      "withdrawDemoNotice": "Tanpa kunci API penarikan dicatat dalam mode DEMO dan tidak ada yang benar-benar keluar dari akun Wallex Anda."
     }
   },
   "loan": {

@@ -79,12 +79,17 @@ function PhaseGrid({ rows = [], checking = false }) {
 }
 
 /** Every operational note, reachable, with a count. */
-function BlockerList({ items = [], t, expanded, onToggle }) {
+function BlockerList({ items = [], t, expanded, onToggle, sandboxMode = false }) {
   if (items.length === 0) return null;
   return (
     <div className="activation-block">
       <h4 style={{ fontSize: 'var(--fs-sm)', margin: '0 0 var(--sp-2)' }}>
         {t('activation.notes', 'Operational notes')} ({items.length})
+        {sandboxMode && (
+          <span style={{ fontWeight: 600, color: 'var(--text-3)' }}>
+            {' '}· {t('activation.notesSandboxHint', '22–50 per-plane drills — the 21-kind launch gate is already met')}
+          </span>
+        )}
       </h4>
       <ul className="activation-notes" data-testid="activation-notes">
         {items.map((b) => (
@@ -204,6 +209,12 @@ export function ActivationDashboard() {
     .filter(([, v]) => v?.configured !== true)
     .map(([name, v]) => ({ name, ...v }));
 
+  /* Sandbox operator mode: the 21 kinds are self-attested by the built-in
+     sandbox operator (dev/preview). Shown as a badge, never hidden. */
+  const sandboxMode = evidence?.mode === 'sandbox-operator-self-attested'
+    || data?.phase21?.mode === 'sandbox-operator-self-attested'
+    || config?.variables?.INTENT_AI_SANDBOX_EVIDENCE?.configured === true;
+
   return (
     <div className="activation-dashboard glass" style={{ padding: 'var(--sp-4)' }}>
       {/* Header */}
@@ -230,6 +241,12 @@ export function ActivationDashboard() {
       </div>
 
       {checking && <div className="activation-progress" aria-hidden="true" />}
+
+      {sandboxMode && (
+        <p className="activation-sandbox-badge" data-testid="activation-sandbox-mode">
+          {t('activation.sandboxBadge', 'Sandbox operator — 21 kinds self-attested by the built-in demo operator. Production activation needs externally reviewed evidence.')}
+        </p>
+      )}
 
       {run && !checking && (
         <p className={`activation-run-result${run.failed ? ' is-warn' : ''}`} role="status" data-testid="activation-run-result">
@@ -298,7 +315,9 @@ export function ActivationDashboard() {
         </strong>
         <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', margin: 'var(--sp-1) 0 0' }}>
           {launchAllowed
-            ? t('activation.executionReady', 'Execution Ready — wallet confirmation remains required.')
+            ? (sandboxMode
+              ? t('activation.executionReadySandbox', 'Active in sandbox mode — self-attested demo evidence, wallet confirmation still required. Production launch stays off until externally reviewed evidence replaces the sandbox attestations.')
+              : t('activation.executionReady', 'Execution Ready — wallet confirmation remains required.'))
             : t('activation.pendingBody', 'This deployment runs fail-closed: activation is granted by operational evidence, not by a switch. The retired launch-freeze control no longer gates anything — the evidence count above is what gates it.')}
         </p>
         {!launchAllowed && (
@@ -322,7 +341,7 @@ export function ActivationDashboard() {
       </div>
 
       {/* Every operational note — no slice, no unreachable "+70 more" */}
-      <BlockerList items={allBlockers} t={t} />
+      <BlockerList items={allBlockers} t={t} sandboxMode={sandboxMode} />
 
       {/* What this deployment still needs, and where to get it */}
       {missingConfig.length > 0 && (

@@ -47,6 +47,7 @@ export default function Dydx() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [live, setLive] = useState(false);
+  const [marketsOffline, setMarketsOffline] = useState(false);
   const [ticker, setTicker] = useState('BTC-USD');
   const [side, setSide] = useState('buy');
   const [size, setSize] = useState('');
@@ -65,19 +66,23 @@ export default function Dydx() {
   const [resolution, setResolution] = useState('4HOURS');
   const [candles, setCandles] = useState([]);
   const [candlesLoading, setCandlesLoading] = useState(false);
+  const [candlesOffline, setCandlesOffline] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setCandlesLoading(true);
-    getDydxCandles(ticker, resolution, resolution === '1DAY' ? 30 : 24)
+    const limit = resolution === '1DAY' ? 30 : resolution === '15MINS' ? 60 : 24;
+    getDydxCandles(ticker, resolution, limit)
       .then((r) => {
         if (!alive) return;
         setCandles(r?.candles || []);
+        setCandlesOffline(r?.offline === true);
         setCandlesLoading(false);
       })
       .catch(() => {
         if (!alive) return;
         setCandles([]);
+        setCandlesOffline(false);
         setCandlesLoading(false);
       });
     return () => { alive = false; };
@@ -100,6 +105,7 @@ export default function Dydx() {
       if (!alive) return;
       setMarkets(r.markets);
       setLive(r.live);
+      setMarketsOffline(r.offline === true);
     });
     load();
     const id = setInterval(load, 20_000);
@@ -226,8 +232,15 @@ export default function Dydx() {
         <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
       </motion.section>
 
-      {!live ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
+      {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
+          {!live && marketsOffline && (
+            <div className="feed-offline-note" style={{ marginBottom: 12 }}>
+              <span className="pulse-dot" aria-hidden="true" />
+              {t('dydx.offlineNotice')}
+            </div>
+          )}
+          {!live && !marketsOffline && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
           <label className="field-label">{t('dydx.market')}</label>
           <select value={market?.ticker || ''} onChange={(e) => setTicker(e.target.value)}>
             {markets.filter((m) => m.status === 'ACTIVE').map((m) => <option value={m.ticker} key={m.ticker}>{m.ticker}</option>)}
@@ -253,10 +266,17 @@ export default function Dydx() {
           <div className="dydx-chart" data-testid="dydx-chart">
             <div className="dydx-chart-head">
               <span className="faint">
-                {t('dydx.chartTitle', { defaultValue: 'Price · last 4 days' })}
+                {candlesOffline
+                  ? t('dydx.chartDemo')
+                  : t('dydx.chartTitle', { defaultValue: 'Price · last 4 days' })}
               </span>
               <div className="dydx-chart-res">
-                {[['4HOURS', t('dydx.res.4h', { defaultValue: '4h' })], ['1DAY', t('dydx.res.1d', { defaultValue: '1d' })]].map(([res, label]) => (
+                {[
+                  ['15MINS', t('dydx.res.15m', { defaultValue: '15m' })],
+                  ['1HOUR', t('dydx.res.1h', { defaultValue: '1h' })],
+                  ['4HOURS', t('dydx.res.4h', { defaultValue: '4h' })],
+                  ['1DAY', t('dydx.res.1d', { defaultValue: '1d' })]
+                ].map(([res, label]) => (
                   <button
                     key={res}
                     type="button"
@@ -270,7 +290,7 @@ export default function Dydx() {
             </div>
             <TrendChart
               points={candlePoints}
-              height={92}
+              height={104}
               up={candleChange >= 0}
               loading={candlesLoading}
               emptyLabel={candlesLoading ? '' : t('dydx.chartUnavailable', { defaultValue: 'The dYdX indexer did not return candles for this market.' })}
@@ -282,15 +302,42 @@ export default function Dydx() {
                 <span className={`mono ${candleChange >= 0 ? 'up' : 'down'}`}>
                   {candleChange >= 0 ? '+' : ''}{candleChange.toFixed(2)}%
                 </span>
-                <span className="faint">{t('dydx.chartSource', { defaultValue: 'dYdX indexer candles' })}</span>
+                <span className="faint">
+                  {candlesOffline
+                    ? t('dydx.chartDemoSource')
+                    : t('dydx.chartSource', { defaultValue: 'dYdX indexer candles' })}
+                </span>
               </div>
             )}
           </div>
 
-          <div className="segmented" style={{ marginBottom: 12 }}>
-            {['buy', 'sell'].map((s) => <button key={s} className={side === s ? 'active' : ''} onClick={() => setSide(s)} style={{ isolation: 'isolate' }}>
-              {side === s && <SegIndicator id="dydx-side" />}{t(`dydx.${s}`)}
-            </button>)}
+          <div className="dir-switch">
+            <button
+              type="button"
+              className={`dir-btn long ${side === 'buy' ? 'active' : ''}`}
+              onClick={() => setSide('buy')}
+            >
+              <span className="dir-ico">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
+                </svg>
+              </span>
+              {t('dydx.buy')}
+              <span className="dir-sub">{t('dydx.longSub')}</span>
+            </button>
+            <button
+              type="button"
+              className={`dir-btn short ${side === 'sell' ? 'active' : ''}`}
+              onClick={() => setSide('sell')}
+            >
+              <span className="dir-ico">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14" /><path d="m19 12-7 7-7-7" />
+                </svg>
+              </span>
+              {t('dydx.sell')}
+              <span className="dir-sub">{t('dydx.shortSub')}</span>
+            </button>
           </div>
 
           <div className="segmented" style={{ marginBottom: 12 }}>

@@ -911,7 +911,14 @@
       "withdrawReview": "Vérifier le retrait",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "Confirmer le retrait",
-      "withdrawDone": "Retrait soumis"
+      "withdrawDone": "Retrait soumis",
+      "offlineNotice": "Connexion directe à Wallex impossible — liste hors ligne (démo) et commandes enregistrées en DEMO.",
+      "reviewDemo": "Vérifier la commande (démo)",
+      "demoNotice": "Sans clé API, cette commande est enregistrée en mode DEMO uniquement — rien n’est envoyé à Wallex.",
+      "demoConfirmYes": "Enregistrer DEMO",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "Vérifier le retrait (démo)",
+      "withdrawDemoNotice": "Sans clé API, le retrait est enregistré en mode DEMO et rien ne sort réellement de votre compte Wallex."
     }
   },
   "loan": {

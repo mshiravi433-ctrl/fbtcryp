@@ -8,6 +8,7 @@
  * The AI keys (OPENROUTER_API_KEY, JINA_API_KEY) are read from Vercel's
  * environment at runtime — they are never bundled into the client.
  */
+import '../server/intentSandboxOps.js';
 import app from '../server/app.js';
 
 export default app;

@@ -17,6 +17,8 @@
 
 const HOURS = 3600_000;
 
+import { sandboxEvidenceEnabled } from './intentSandboxEvidence.js';
+
 /** Presence + format checks. Never returns a value. */
 function flag(raw, { pattern = null, minLength = 0 } = {}) {
   const value = String(raw || '').trim();
@@ -143,7 +145,13 @@ export function activationConfigPresence({ now = Date.now() } = {}) {
       requiredFor: ['later-phase-drill']
     },
     VERCEL_PROJECT_PRODUCTION_URL: { ...vercelOrigin, source: 'Injected by Vercel automatically', requiredFor: ['certificate-authority'] },
-    VITE_INTENT_BROADCAST_ENABLED: { ...broadcastEnabled, source: 'Keep off until you test on a testnet', requiredFor: [] }
+    VITE_INTENT_BROADCAST_ENABLED: { ...broadcastEnabled, source: 'Keep off until you test on a testnet', requiredFor: [] },
+    INTENT_AI_SANDBOX_EVIDENCE: {
+      configured: sandboxEvidenceEnabled(),
+      validFormat: true,
+      source: 'Built-in sandbox operator: self-attested 21-kind evidence (dev/preview default; "0" disables, "1" forces on)',
+      requiredFor: []
+    }
   };
 
   /* What the 21-kind gate still needs, with the satisfaction path. */

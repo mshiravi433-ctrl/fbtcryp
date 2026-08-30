@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -7,12 +7,14 @@ import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import Sheet from '../components/Sheet';
 import WalletConnectSheet from '../components/WalletConnectSheet';
-import { IconExternal, IconShield, IconTrend } from '../components/Icons';
+import { IconExternal, IconShield, IconTrend, IconInfo } from '../components/Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
+import TrendChart from '../components/TrendChart';
+import { assetKnowledgeFor, ostiumDemoSeries } from '../lib/ostiumOffline';
 import {
   MIN_COLLATERAL_USD,
   OSTIUM_CHAIN_ID,
@@ -58,8 +60,85 @@ const displayError = (e) => {
   return msg.length > 160 ? `${msg.slice(0, 157)}…` : msg;
 };
 
+/** Token chip inside the "what is this pair" strip. */
+function TokenChip({ symbol, lang, onClick }) {
+  const info = assetKnowledgeFor(symbol);
+  const row = info[lang] ?? info.en;
+  return (
+    <button type="button" className="pair-info-token" onClick={onClick}>
+      <span className="pit-sym">
+        <span style={{
+          width: 20, height: 20, borderRadius: 7, display: 'inline-grid', placeItems: 'center',
+          background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))',
+          color: '#fff', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
+          flexShrink: 0,
+        }}>
+          {symbol.slice(0, 3)}
+        </span>
+        {symbol}
+      </span>
+      <span className="pit-name">{row.name}</span>
+      <span className="pit-desc">{row.desc}</span>
+    </button>
+  );
+}
+
+/** Chart: session-observed prices when live, honest labelled demo series offline. */
+function OstiumChart({ market, feedOffline, sessionPoints, t }) {
+  const points = useMemo(() => {
+    if (sessionPoints && sessionPoints.length >= 2) return sessionPoints;
+    return ostiumDemoSeries(market, 72);
+  }, [sessionPoints, market]);
+  const change = useMemo(() => {
+    if (points.length < 2) return 0;
+    const first = Number(points[0].y);
+    const last = Number(points[points.length - 1].y);
+    return first > 0 ? ((last - first) / first) * 100 : 0;
+  }, [points]);
+  const usingSession = sessionPoints && sessionPoints.length >= 2;
+
+  return (
+    <div className="dydx-chart" data-testid="ostium-chart">
+      <div className="dydx-chart-head">
+        <span className="faint">
+          {feedOffline
+            ? t('ostium.chartDemo', { defaultValue: 'نمودار نمونه — فید زنده در دسترس نیست' })
+            : usingSession
+              ? t('ostium.chartSession', { defaultValue: 'قیمت‌های مشاهده‌شده در این نشست' })
+              : t('ostium.chartCollecting', { defaultValue: 'در حال جمع‌آوری قیمت زنده…' })}
+        </span>
+        <span className={`mono ${change >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
+          {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+        </span>
+      </div>
+      <TrendChart
+        points={points}
+        height={92}
+        up={change >= 0}
+        formatValue={(v) => `$${fmtPrice(v)}`}
+        testId="ostium-trend"
+      />
+    </div>
+  );
+}
+
+/** Strip under the market selector: what IS this pair, one chip per leg. */
+function PairInfoStrip({ market, t, i18n, onOpen }) {
+  const isFa = /^fa\b/i.test(String(i18n.language || 'fa'));
+  const lang = isFa ? 'fa' : 'en';
+  return (
+    <div className="pair-info-strip">
+      <TokenChip symbol={market.from} lang={lang} onClick={onOpen} />
+      <TokenChip symbol={market.to} lang={lang} onClick={onOpen} />
+      <button type="button" className="pair-info-badge" onClick={onOpen} title={t('ostium.pairInfoOpen', { defaultValue: 'این جفت چیست؟' })}>
+        <IconInfo width={15} height={15} />
+      </button>
+    </div>
+  );
+}
+
 export default function Ostium() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();
   const { haptic } = useTelegram();
@@ -87,6 +166,13 @@ export default function Ostium() {
   const [manageAction, setManageAction] = useState('close');
   const [manageValue, setManageValue] = useState('100');
   const [catHelpOpen, setCatHelpOpen] = useState(false);
+  const [pairHelpOpen, setPairHelpOpen] = useState(false);
+  const [feedOffline, setFeedOffline] = useState(false);
+
+  /* Session price history — REAL observed mids from the 20s poll, so the
+     chart shows what this session actually saw when the feed is live. */
+  const sessionRef = useRef({ pairId: null, points: [] });
+  const [sessionPoints, setSessionPoints] = useState([]);
 
   const loadMarkets = useCallback(async () => {
     setLoading(true);
@@ -94,8 +180,23 @@ export default function Ostium() {
     const rows = data.pairs.map((p) => ({ ...p, uiCategory: friendlyCategory(p.category) }));
     setMarkets(rows);
     setFeedLive(data.live);
+    setFeedOffline(data.offline === true);
     setLoading(false);
+    return data;
   }, []);
+
+  /* Append the freshly observed mid to the session series. */
+  useEffect(() => {
+    if (!market || !market.mid) return;
+    const s = sessionRef.current;
+    if (s.pairId !== market.pairId) {
+      s.pairId = market.pairId;
+      s.points = [];
+    }
+    s.points.push({ x: Date.now(), y: market.mid });
+    if (s.points.length > 240) s.points = s.points.slice(-240);
+    setSessionPoints(s.points);
+  }, [market]);
 
   useEffect(() => {
     loadMarkets();
@@ -395,7 +496,7 @@ export default function Ostium() {
       )}
 
       <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
-        {loading ? <div className="skel" style={{ height: 240 }} /> : !feedLive ? (
+        {loading ? <div className="skel" style={{ height: 240 }} /> : !markets.length ? (
           <div className="empty">
             <span className="empty-icon">⌁</span>
             <p>{t('ostium.feedUnavailable')}</p>
@@ -403,6 +504,13 @@ export default function Ostium() {
           </div>
         ) : (
           <>
+            {feedOffline && (
+              <div className="feed-offline-note">
+                <span className="pulse-dot" aria-hidden="true" />
+                {t('ostium.offlineNotice', { defaultValue: 'فید زنده در دسترس نیست — بازارهای آفلاین (نمایشی) و قیمت‌ها نمونه هستند.' })}
+              </div>
+            )}
+
             <label className="field-label">{t('ostium.market')}</label>
             <select value={market?.pairId || ''} onChange={(e) => setPairId(e.target.value)}>
               {visible.map((m) => <option key={m.pairId} value={m.pairId}>{m.name}</option>)}
@@ -425,13 +533,42 @@ export default function Ostium() {
               </div>
             )}
 
-            <div className="segmented" style={{ marginBottom: 14 }}>
-              {['long', 'short'].map((s) => (
-                <button key={s} className={side === s ? 'active' : ''} onClick={() => setSide(s)} style={{ isolation: 'isolate' }}>
-                  {side === s && <SegIndicator id="ostium-side" />}
-                  {t(`ostium.${s}`)}
-                </button>
-              ))}
+            {/* ── CHART ─────────────────────────────────────────────────── */}
+            {market && <OstiumChart market={market} feedOffline={feedOffline} sessionPoints={sessionPoints} t={t} />}
+
+            {/* ── PAIR KNOWLEDGE — «این جفت چیست؟» ─────────────────────── */}
+            {market && (
+              <PairInfoStrip market={market} t={t} i18n={i18n} onOpen={() => setPairHelpOpen(true)} />
+            )}
+
+            {/* ── LONG / SHORT ─────────────────────────────────────────── */}
+            <div className="dir-switch">
+              <button
+                type="button"
+                className={`dir-btn long ${side === 'long' ? 'active' : ''}`}
+                onClick={() => setSide('long')}
+              >
+                <span className="dir-ico">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
+                  </svg>
+                </span>
+                {t('ostium.long')}
+                <span className="dir-sub">{t('ostium.longSub', { defaultValue: 'خرید — انتظار رشد قیمت' })}</span>
+              </button>
+              <button
+                type="button"
+                className={`dir-btn short ${side === 'short' ? 'active' : ''}`}
+                onClick={() => setSide('short')}
+              >
+                <span className="dir-ico">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14" /><path d="m19 12-7 7-7-7" />
+                  </svg>
+                </span>
+                {t('ostium.short')}
+                <span className="dir-sub">{t('ostium.shortSub', { defaultValue: 'فروش — انتظار افت قیمت' })}</span>
+              </button>
             </div>
 
             <div className="row" style={{ gap: 10 }}>
@@ -443,6 +580,22 @@ export default function Ostium() {
                 <span className="field-label">{t('ostium.leverage')}</span>
                 <input type="number" min="1" max={effectiveMax || 200} step="0.25" inputMode="decimal" value={leverage} onChange={(e) => setLeverage(e.target.value)} />
               </label>
+            </div>
+
+            {/* Leverage presets */}
+            <div className="lev-row" style={{ marginTop: 8 }}>
+              {[2, 5, 10, 20, 50, 100]
+                .filter((n) => n <= (effectiveMax || 200))
+                .map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`lev-chip ${Number(leverage) === n ? 'active' : ''}`}
+                    onClick={() => setLeverage(String(n))}
+                  >
+                    {n}×
+                  </button>
+                ))}
             </div>
             <input
               type="range" min="1" max={effectiveMax || 200} step="0.25" value={Math.min(Number(leverage) || 1, effectiveMax || 200)}
@@ -554,7 +707,7 @@ export default function Ostium() {
         {managing && <>
           <div className="card card-tight"><div className="row-between"><strong>{managing.name}</strong><span className="mono">{managing.leverage}×</span></div></div>
           <div className="segmented" style={{ marginTop: 10 }}>
-            {['close', 'tp', 'sl', 'collateral'].map((a) => <button key={a} className={manageAction === a ? 'active' : ''} onClick={() => { setManageAction(a); setManageValue(a === 'close' ? '100' : ''); }}>{t(`ostium.manageAction.${a}`)}</button>)}
+            {['close', 'tp', 'sl', 'collateral'].map((a) => <button key={a} className={manageAction === a ? 'active' : ''} onClick={() => { setManageAction(a); setManageValue(a === 'close' ? '100' : ''); }} style={{ isolation: 'isolate' }}>{manageAction === a && <SegIndicator id="ostium-manage" />}{t(`ostium.manageAction.${a}`)}</button>)}
           </div>
           <label className="field-label" style={{ marginTop: 12 }}>{t(`ostium.manageField.${manageAction}`)}</label>
           <input type="number" inputMode="decimal" value={manageValue} onChange={(e) => setManageValue(e.target.value)} placeholder={manageAction === 'collateral' ? t('ostium.collateralHint') : '0'} />
@@ -565,6 +718,38 @@ export default function Ostium() {
       </Sheet>
 
       <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
+
+      {/* پاپ‌آپ «این جفت چیست؟» — هر دو طرف جفت با توضیح کامل */}
+      <Sheet open={pairHelpOpen} onClose={() => setPairHelpOpen(false)} title={t('ostium.pairInfoTitle', { defaultValue: 'این جفت چیست؟' })}>
+        {market && (
+          <div className="stack" style={{ gap: 10 }}>
+            {[market.from, market.to].map((sym) => {
+              const info = assetKnowledgeFor(sym);
+              const isFa = /^fa\b/i.test(String(i18n.language || 'fa'));
+              const row = isFa ? info.fa : info.en;
+              return (
+                <div key={sym} className="card card-tight" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', width: '100%', boxSizing: 'border-box' }}>
+                  <span style={{
+                    width: 40, height: 40, borderRadius: 11, display: 'grid', placeItems: 'center', flexShrink: 0,
+                    background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))',
+                    color: '#fff', fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: 13,
+                    boxShadow: '0 8px 20px rgba(0,229,255,0.25)',
+                  }}>
+                    {sym.slice(0, 4)}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14 }}>{row.name} <span className="faint" style={{ fontWeight: 600, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{sym}</span></div>
+                    <p className="muted" style={{ margin: '5px 0 0', fontSize: 12.3, lineHeight: 1.85 }}>{row.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.8, margin: '4px 0 0' }}>
+              {t('ostium.pairInfoNote', { defaultValue: 'این جفت با USDC و اهرم روی همین صفحه قابل معامله است؛ قیمت آن از فید جهانی Ostium می‌آید.' })}
+            </p>
+          </div>
+        )}
+      </Sheet>
 
       {/* پاپ‌آپ توضیح دسته‌ها — کالا، فارکس، سهام، صندوق، کریپتو */}
       <Sheet open={catHelpOpen} onClose={() => setCatHelpOpen(false)} title="هر دسته چیست؟">

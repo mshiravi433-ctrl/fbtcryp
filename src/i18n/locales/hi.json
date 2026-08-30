@@ -911,7 +911,14 @@
       "withdrawReview": "निकासी की समीक्षा",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "निकासी की पुष्टि करें",
-      "withdrawDone": "निकासी सबमिट हुई"
+      "withdrawDone": "निकासी सबमिट हुई",
+      "offlineNotice": "Wallex से सीधा कनेक्शन विफल — सूची ऑफ़लाइन (डेमो) है और ऑर्डर DEMO के रूप में दर्ज होते हैं।",
+      "reviewDemo": "ऑर्डर समीक्षा (डेमो)",
+      "demoNotice": "API कुंजी के बिना यह ऑर्डर केवल DEMO मोड में दर्ज होता है — Wallex को नहीं भेजा जाता।",
+      "demoConfirmYes": "DEMO दर्ज करें",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "निकासी समीक्षा (डेमो)",
+      "withdrawDemoNotice": "API कुंजी के बिना निकासी DEMO मोड में दर्ज होती है और आपके Wallex खाते से कुछ नहीं निकलता।"
     }
   },
   "loan": {
