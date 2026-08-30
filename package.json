@@ -169,8 +169,10 @@
     "test:activation-config": "node test/intent-ai/activation-config-probe.mjs",
     "test:phase142": "node test/intent-ai/phase142-reachability-probe.mjs",
     "test:phase151": "node test/intent-ai/phase151-autonomous-recovery-probe.mjs",
-    "test:phases151-200": "npm run test:phase151",
-    "test:upstash-store": "node test/upstash-store-probe.mjs"
+    "test:phases151-200": "npm run test:phase151 && npm run test:phase152",
+    "test:upstash-store": "node test/upstash-store-probe.mjs",
+    "test:phase152": "node test/intent-ai/phase152-flash-liquidity-probe.mjs",
+    "compile:flash-liquidity": "node scripts/compile-flash-liquidity.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

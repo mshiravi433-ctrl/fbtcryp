@@ -753,6 +753,11 @@ export default function IntentOS() {
           <button type="button" className="btn btn-primary" onClick={() => navigate('/intent-ai')}>
             {t('intentOS.aiAssistant')}
           </button>
+          {/* Phase 152: Flash Liquidity lab — planner-only screen for
+              collateral-free flash-loan arbitrage. Nothing here signs. */}
+          <button type="button" className="btn btn-ghost" onClick={() => navigate('/flash-liquidity')}>
+            {t('intentOS.flashLiquidity', { defaultValue: 'Flash Liquidity' })}
+          </button>
         </div>
       </motion.section>
 

@@ -1,0 +1,360 @@
+/* FBT Flash Liquidity (Phase 152) — scoped .fl-page, borrows the Intent OS
+   visual language. Persian-first copy; layout stays LTR-safe with dir=auto
+   on user text. */
+
+.fl-page {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.fl-hero h1 {
+  margin: 10px 0 8px;
+  font-size: 26px;
+  line-height: 1.35;
+}
+
+.fl-sub {
+  color: rgba(235, 240, 250, 0.78);
+  font-size: 13.5px;
+  line-height: 1.9;
+  max-width: 62ch;
+}
+
+.fl-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.fl-badge {
+  font: 600 11px/1 var(--font-mono, monospace);
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(101, 245, 188, 0.35);
+  color: var(--ios-mint, #65f5bc);
+  background: rgba(101, 245, 188, 0.07);
+}
+
+.fl-badge.warn {
+  border-color: rgba(255, 214, 102, 0.4);
+  color: #ffd666;
+  background: rgba(255, 214, 102, 0.07);
+}
+
+.fl-badge.audit {
+  border-color: rgba(255, 93, 125, 0.4);
+  color: var(--ios-red, #ff5d7d);
+  background: rgba(255, 93, 125, 0.07);
+}
+
+/* ── Panels ── */
+.fl-server,
+.fl-intent,
+.fl-market,
+.fl-result,
+.fl-guarantees {
+  padding: 18px;
+  border: 1px solid rgba(107, 226, 255, 0.14);
+  border-radius: 18px;
+  background: var(--ios-panel, rgba(10, 14, 25, 0.82));
+}
+
+.fl-server { padding: 12px 18px; }
+
+.fl-server-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.fl-server code { color: var(--ios-cyan, #42e8ff); }
+
+.fl-server-missing {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255, 214, 102, 0.85);
+  font: 500 11px/1.7 var(--font-mono, monospace);
+  direction: ltr;
+  text-align: left;
+}
+
+.fl-intent h2,
+.fl-market h2,
+.fl-guarantees h2,
+.fl-result h3,
+.fl-provider h3,
+.fl-econ h3,
+.fl-route h3,
+.fl-receipt h3 {
+  font-size: 14px;
+  margin: 0 0 12px;
+  color: rgba(235, 240, 250, 0.92);
+}
+
+.fl-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(107, 226, 255, 0.2);
+  background: rgba(4, 7, 14, 0.7);
+  color: #eef2fb;
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.fl-textarea.mono { font-family: var(--font-mono, monospace); font-size: 12px; }
+
+.fl-textarea:focus { outline: 1px solid rgba(66, 232, 255, 0.5); }
+
+.fl-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.fl-chip {
+  font: 600 11px/1 var(--font-mono, monospace);
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(235, 240, 250, 0.8);
+}
+
+.fl-chip.ok {
+  border-color: rgba(101, 245, 188, 0.35);
+  color: var(--ios-mint, #65f5bc);
+}
+
+.fl-chip.bad {
+  border-color: rgba(255, 93, 125, 0.4);
+  color: var(--ios-red, #ff5d7d);
+}
+
+.fl-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: rgba(235, 240, 250, 0.55);
+  line-height: 1.8;
+}
+
+.fl-number {
+  width: 110px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(107, 226, 255, 0.25);
+  background: rgba(4, 7, 14, 0.7);
+  color: #eef2fb;
+  font: 600 12px var(--font-mono, monospace);
+}
+
+.fl-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: rgba(235, 240, 250, 0.75);
+}
+
+.fl-demo-note {
+  font-size: 12px;
+  color: rgba(255, 214, 102, 0.8);
+  line-height: 1.8;
+  margin: 0 0 12px;
+}
+
+.fl-seg { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.fl-seg-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(235, 240, 250, 0.75);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fl-seg-btn.active {
+  border-color: rgba(66, 232, 255, 0.6);
+  color: var(--ios-cyan, #42e8ff);
+  background: rgba(66, 232, 255, 0.08);
+}
+
+.fl-run {
+  margin-top: 16px;
+  width: 100%;
+  padding: 13px;
+  border-radius: 13px;
+  border: 1px solid rgba(66, 232, 255, 0.55);
+  background: linear-gradient(135deg, rgba(66, 232, 255, 0.16), rgba(157, 123, 255, 0.16));
+  color: #eafcff;
+  font: 700 14px/1 var(--font-ui, sans-serif);
+  cursor: pointer;
+}
+
+.fl-run:active { transform: translateY(1px); }
+
+/* ── Decision banner ── */
+.fl-banner {
+  padding: 13px 16px;
+  border-radius: 13px;
+  font: 700 13.5px/1.7 var(--font-ui, sans-serif);
+  margin-bottom: 14px;
+}
+
+.fl-banner.ready {
+  border: 1px solid rgba(101, 245, 188, 0.45);
+  background: rgba(101, 245, 188, 0.08);
+  color: var(--ios-mint, #65f5bc);
+}
+
+.fl-banner.gated {
+  border: 1px solid rgba(255, 214, 102, 0.45);
+  background: rgba(255, 214, 102, 0.08);
+  color: #ffd666;
+}
+
+.fl-banner.no-trade {
+  border: 1px solid rgba(255, 93, 125, 0.45);
+  background: rgba(255, 93, 125, 0.08);
+  color: var(--ios-red, #ff5d7d);
+}
+
+.fl-reasons {
+  margin: 0 0 14px;
+  padding-inline-start: 18px;
+  font: 500 11.5px/2 var(--font-mono, monospace);
+  color: rgba(235, 240, 250, 0.6);
+  direction: ltr;
+  text-align: left;
+}
+
+/* ── Steps ── */
+.fl-steps { display: grid; gap: 8px; }
+
+.fl-step {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.fl-step-mark {
+  font: 800 13px/1.4 var(--font-mono, monospace);
+  width: 20px;
+  text-align: center;
+  flex: none;
+}
+
+.fl-step.ok .fl-step-mark { color: var(--ios-mint, #65f5bc); }
+.fl-step.bad .fl-step-mark { color: var(--ios-red, #ff5d7d); }
+
+.fl-step strong {
+  display: block;
+  font-size: 12.5px;
+  color: rgba(235, 240, 250, 0.92);
+}
+
+.fl-step small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: rgba(235, 240, 250, 0.55);
+  direction: ltr;
+  text-align: left;
+}
+
+/* ── Provider ── */
+.fl-provider,
+.fl-econ,
+.fl-route,
+.fl-receipt { margin-top: 18px; padding-top: 14px; border-top: 1px dashed rgba(255, 255, 255, 0.09); }
+
+.fl-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.fl-provider-grid > div {
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.fl-provider-grid strong { display: block; font-size: 13px; margin-bottom: 3px; }
+.fl-provider-grid small { display: block; font-size: 11px; color: rgba(235, 240, 250, 0.5); margin-bottom: 3px; }
+.fl-provider-grid code { font-size: 11px; color: var(--ios-cyan, #42e8ff); word-break: break-all; }
+
+/* ── Economics ── */
+.fl-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+.fl-table td {
+  padding: 7px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(235, 240, 250, 0.78);
+}
+
+.fl-table td.mono { text-align: end; font-family: var(--font-mono, monospace); }
+.fl-table td.pos { color: var(--ios-mint, #65f5bc); }
+.fl-table td.neg { color: rgba(255, 138, 158, 0.9); }
+.fl-table tr.fl-total td { font-weight: 700; border-bottom: none; color: #fff; }
+
+/* ── Route ── */
+.fl-hops { margin: 0; padding-inline-start: 20px; }
+
+.fl-hops li { padding: 5px 0; font-size: 12.5px; }
+
+.fl-hops code { color: var(--ios-cyan, #42e8ff); }
+
+.fl-hops small {
+  display: block;
+  font: 500 11px/1.7 var(--font-mono, monospace);
+  color: rgba(235, 240, 250, 0.5);
+}
+
+/* ── Receipt ── */
+.fl-receipt pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 11px;
+  background: rgba(4, 7, 14, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-x: auto;
+  color: rgba(235, 240, 250, 0.8);
+}
+
+.fl-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+.fl-ghost {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: rgba(235, 240, 250, 0.75);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ── Guarantees ── */
+.fl-guarantees ul { margin: 0; padding: 0; list-style: none; }
+
+.fl-guarantees li {
+  padding: 7px 0;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: rgba(235, 240, 250, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.fl-guarantees li:last-child { border-bottom: none; }
+
+.mono { font-family: var(--font-mono, monospace); }

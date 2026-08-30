@@ -153,6 +153,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
+import { flashLiquidityCapabilities, flashScan, flashPlan } from './flashLiquidity.js';
 import {
   OBSERVATION_CONSENT_RE,
   observationProtocolStatus,
@@ -1486,6 +1487,17 @@ app.get('/api/intents/v1/multi-venue/status', async (_req, res) => {
   res.set('cache-control', 'public, max-age=60, s-maxage=60');
   return res.json(status);
 });
+
+/* ── Phase 152: Flash Liquidity — dry-run scan & plan (read-only, no keys,
+   no funds, no broadcast). Execution stays wallet-gated behind an audited
+   router contract; see server/flashLiquidity.js. ── */
+app.get('/api/flash-liquidity/v1/capabilities', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60');
+  return res.json(flashLiquidityCapabilities());
+});
+app.post('/api/flash-liquidity/v1/scan', flashScan);
+app.post('/api/flash-liquidity/v1/plan', flashPlan);
+
 
 /* ── Phases 106–108: customer profit-target plan (read-only proposal) ───── */
 app.post('/api/intents/v1/profit-plan', async (req, res) => {

@@ -1289,4 +1289,38 @@ export {
   autonomousScenarios
 } from './autonomousIntentNetwork.js';
 
+/* ── Phase 152: Flash Liquidity — collateral-free flash-loan arbitrage.
+   Deterministic planner over indicative reserves; fail-closed provider
+   registry; execution stays wallet-gated behind an audited router. ── */
+export {
+  FLASH_LIQUIDITY_VERSION,
+  FLASH_LIQUIDITY_LIMITS,
+  FLASH_PROVIDER_REGISTRY,
+  FLASH_POLICY_SCHEMA,
+  DEMO_SNAPSHOTS,
+  DEFAULT_MIN_NET_PROFIT_BPS,
+  POLICY_FLOOR_NET_PROFIT_BPS,
+  AAVE_V3_DEFAULT_PREMIUM_BPS,
+  BALANCER_V2_PREMIUM_BPS,
+  MAX_HOPS,
+  MAX_QUOTE_AGE_MS,
+  chainName,
+  parseFlashIntent,
+  constantProductOut,
+  evaluateHops,
+  netProfitAsset,
+  closedFormOptimalTwoPool,
+  optimalFlashLoanAmount,
+  validateHopChain,
+  scanOpportunities,
+  selectFlashProvider,
+  computeEconomics,
+  planFlashArbitrage,
+  createFlashPolicy,
+  flashPolicyAllows,
+  buildFlashReceipt,
+  receiptFingerprint,
+  flashLiquidityCapabilityReport
+} from './flashLiquidity.js';
+
 export const INTENT_AI_VERSION = 'intent-os.phase200.bounded-autonomy.v1';

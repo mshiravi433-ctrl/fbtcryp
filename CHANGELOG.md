@@ -1,4 +1,35 @@
-## Unreleased — Phase 4d: real cross-chain ATOMIC swap (HTLC)
+## Unreleased — Phase 152: Flash Liquidity (collateral-free flash-loan arbitrage planner)
+
+- The flash-loan architecture from the Intent OS spec is now real code: deterministic
+  opportunity scanner + planner in `src/lib/intent-ai/flashLiquidity.js`, dry-run
+  server API (`GET /api/flash-liquidity/v1/capabilities`, `POST …/scan`, `POST …/plan`),
+  an educational pipeline screen at `/#/flash-liquidity`, and a compiled reference
+  executor `contracts/FlashLiquidityRouter.sol` (~11.4KB, Aave `flashLoanSimple` +
+  Balancer Vault `flashLoan` callbacks, per-hop minOut, on-chain min-profit check,
+  allowlisted targets, executor/owner split).
+- Honest core, stated everywhere: a flash loan is NOT free money — principal +
+  premium must return inside the same transaction or everything reverts (gas still
+  spent). Nothing broadcasts: every "ready" plan still requires a passing simulation
+  and an explicit wallet signature; public-mempool submission is refused for
+  arbitrage (sandwich risk); profits are estimates over indicative reserves.
+- The math is exact where it matters: BigInt constant-product hops, a closed-form
+  optimum for 2-pool cycles (`x* = [γ√(A₁A₂B₁B₂/(1+p)) − A₁B₂]/(γB₂ + γ²B₁)`),
+  bounded ternary search + BigInt refinement for N hops, and token-continuity
+  validation so inconsistent routes fail loudly.
+- Provider registry is fail-closed: only verified contract addresses plan
+  executions (Balancer Vault canonical address, Aave V3 mainnet Pool); every other
+  chain reports `PROVIDER_ADDRESS_UNVERIFIED` instead of guessing. Router execution
+  stays `planning-only` until `FLASH_LIQUIDITY_ROUTER_ADDRESSES` is configured AND
+  `FLASH_LIQUIDITY_ROUTER_AUDITED=true` after a real independent audit.
+- The canonical intent «با ۰ سرمایه اولیه، هر آربیتراژی که بعد از Gas + Flash Fee
+  حداقل ۰.۵٪ سود دارد اجرا کن» parses (fa/en, Persian digits) into
+  `{ initialCapital: 0, minNetProfitBps: 50, atomic: true }`, and the pipeline's
+  step 9 is the promise it sounds like: net profit below the threshold → `NO_TRADE`,
+  no transaction is built, no gas is spent.
+- Persian walkthrough: [docs/INTENT-AI-PHASE152-FLASH-LIQUIDITY-FA.md](docs/INTENT-AI-PHASE152-FLASH-LIQUIDITY-FA.md).
+  Tests: `npm run test:phase152` (15 probes), contract compile: `npm run compile:flash-liquidity`.
+
+# Unreleased — Phase 4d: real cross-chain ATOMIC swap (HTLC)
 
 - Cross-chain atomicity is now REAL for EVM↔EVM pairs: `contracts/IntentAtomicSwap.sol`
   is a hash-timelock escrow (no owner, no pause, no rescue) where both legs lock under

@@ -1743,6 +1743,96 @@
     "disclosure": "Responsible disclosure",
     "bounty": "Found a security issue? Email fbtswap@gmail.com before disclosing it publicly, and you will get a reply within 48 hours. We have no cash bounty programme and will not pretend otherwise — what we can offer is a fast fix, public credit if you want it, and a straight answer if we disagree with your assessment."
   },
+  "flashLiquidity": {
+    "title": "Flash Liquidity — Collateral-Free Arbitrage",
+    "subtitle": "A flash loan is not free money: principal + premium must be back within the same transaction, or everything reverts and gas is still spent. This screen is a planner and judge only — it never sends a transaction.",
+    "badges": {
+      "atomic": "Atomic — one transaction",
+      "noFreeMoney": "Not free money, not guaranteed profit",
+      "mev": "Private submission only",
+      "audit": "Requires an audited contract"
+    },
+    "server": {
+      "status": "Deployment status (server)",
+      "offline": "Server unavailable — the planner runs locally on this device."
+    },
+    "intent": {
+      "title": "1) Write your intent",
+      "parsed": "Valid intent",
+      "invalid": "Not recognized as a flash-loan intent",
+      "zeroCapital": "Initial capital: 0",
+      "minProfit": "Minimum net profit",
+      "atomic": "Settlement: same transaction",
+      "fallback": "Invalid intent — the minimum profit below is used instead."
+    },
+    "market": {
+      "title": "2) Market data (educational demo)",
+      "demoNote": "These scenarios are not live data — synthetic reserves exist to teach the pipeline math. Until a real snapshot feed is connected, any \"profit\" here is practice only.",
+      "profitable": "Profitable spread",
+      "flat": "Equal prices",
+      "inverted": "Negative spread",
+      "custom": "My JSON",
+      "gasPrice": "Gas price (gwei)"
+    },
+    "run": "Run — simulate the 9-step pipeline",
+    "decision": {
+      "ready": "Signature-ready — a live simulation + wallet signature are still required",
+      "gated": "Held — safety gates are not all green yet",
+      "noTrade": "Nothing was sent — net profit was below the intent threshold",
+      "blocked": "Blocked"
+    },
+    "pipeline": {
+      "title": "The 9-step pipeline"
+    },
+    "steps": {
+      "collect-prices": "Collect prices",
+      "find-arbitrage": "Find arbitrage",
+      "optimal-size": "Optimal flash-loan size",
+      "gas-estimate": "Gas estimate",
+      "flash-fee": "Flash-loan fee",
+      "slippage": "Slippage & deadline",
+      "simulation": "Mandatory simulation",
+      "send-gate": "Send gate",
+      "abort-or-emit": "Abort or emit preparation"
+    },
+    "provider": {
+      "title": "Flash-loan source",
+      "premium": "Flash premium",
+      "source": "Source contract",
+      "verified": "Address verified"
+    },
+    "economics": {
+      "title": "Profit accounting (estimated)",
+      "loan": "Loan size",
+      "gross": "Gross profit (after flash fee)",
+      "gas": "Gas",
+      "platform": "Platform fee ({{bps}} bps)",
+      "mev": "MEV protection",
+      "net": "Net profit",
+      "netBps": "Net profit vs loan",
+      "estimateNote": "These numbers come from the labeled reserves — they are estimates, not promises. In real execution, the on-chain min-profit check reverts the whole transaction instead of settling at a loss."
+    },
+    "route": {
+      "title": "Route & slippage",
+      "revertPolicy": "Revert policy: abort-all — any failed hop reverts the whole transaction."
+    },
+    "receipt": {
+      "notSent": "Build a “not sent” receipt",
+      "simulatedRevert": "Build a “reverted in simulation” receipt",
+      "title": "Execution-proof receipt (simulated)",
+      "note": "The fingerprint is content addressing, not a cryptographic signature; the enforceable proof path is Proof-of-Execution."
+    },
+    "guarantees": {
+      "title": "What is certain and what is not",
+      "atomic": "Everything happens in one transaction: a repayment shortfall = full revert.",
+      "noTrade": "If net profit after gas + flash fee + platform fee is under the intent threshold, no transaction is built at all.",
+      "wallet": "Real execution happens only with your explicit wallet signature after a passing simulation.",
+      "notGuaranteed": "No profit is guaranteed; every number comes from indicative data.",
+      "noFreeMoney": "A flash loan is not spendable credit — it is temporary capital inside one transaction.",
+      "noPublicMempool": "Public-mempool submission is refused for arbitrage (sandwich risk); private route only.",
+      "auditNote": "The reference contract FlashLiquidityRouter.sol is compiled and bundled, but not independently audited. Until an audit exists and an address is configured, this capability stays planning-only."
+    }
+  },
   "dev": {
     "title": "Developers",
     "intro": "A read-only market API, no key and no signup. Everything below is a real registered route on this server, checked rather than remembered — the previous version of this page advertised an endpoint that had been deleted, which is the one mistake documentation must not make.",
@@ -4021,9 +4111,9 @@
     "retryEquities": "Retry verified share data",
     "indicatorsTitle": "Key Market & Liquidity Indicators",
     "indicatorsSub": "Live market and liquidity flow analysis",
-    "volumeLeader": "Top 24h Trading Volume",
-    "volumeSource": "24h Volume: {{vol}}",
-    "marketCapLeader": "Market Cap Leader",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
     "mcapSource": "Total Market Cap: {{mcap}}",
     "volatilityLeader": "Highest Daily Volatility",
     "spreadSource": "24h High/Low Spread: {{spread}}",
@@ -4048,9 +4138,6 @@
       "event": "Market event"
     },
     "marketUnavailable": "Live market data unavailable",
-    "volumeLeader": "24h volume leader",
-    "volumeSource": "Live crypto market coverage · 24h volume",
-    "marketCapLeader": "Market cap leader",
     "marketCapSource": "Live market cap of top assets"
   },
   "intentOS": {
@@ -4679,7 +4766,8 @@
       "m5": "5 min",
       "h1": "1 hour",
       "d1": "1 day"
-    }
+    },
+    "flashLiquidity": "Flash Liquidity (flash-loan arbitrage)"
   },
   "whales": {
     "title": "Whale Tracking",
