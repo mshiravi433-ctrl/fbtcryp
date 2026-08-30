@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { normalizeEvidence, EVIDENCE_KINDS } from '../src/lib/intent-ai/operationalActivation.js';
 import { auditAppend } from './intentAuditLog.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
+import { buildSandboxEvidence, sandboxEvidenceEnabled, SANDBOX_EVIDENCE_PROVENANCE, SANDBOX_EVIDENCE_SOURCE } from './intentSandboxEvidence.js';
 
 export const OPERATOR_EVIDENCE_SCHEMA = 'fbt.operator-evidence.v1';
 
@@ -163,6 +164,43 @@ function validateEvidenceRecord(record, { now } = {}) {
 /* Restore operator-supplied evidence, if any, once at module load. Function
    declarations hoist, so the validator above is already available here. */
 loadEvidenceFromEnv();
+
+/**
+ * Seed the built-in SANDBOX OPERATOR's self-attested evidence (dev/preview).
+ *
+ * Every record goes through the same `validateEvidenceRecord` gate as an
+ * HTTP-injected one — a malformed sandbox record is dropped, never trusted.
+ * A genuinely injected operator record (env, durable store or HTTP) always
+ * wins over the sandbox record of the same kind, so real reviewed evidence
+ * replaces the sandbox attestation the moment it exists.
+ */
+export function seedSandboxEvidence({ now = Date.now() } = {}) {
+  if (!sandboxEvidenceEnabled()) return { seeded: 0, enabled: false };
+  const records = buildSandboxEvidence({ now });
+  let accepted = 0;
+  for (const record of records) {
+    const validated = validateEvidenceRecord(record, { now });
+    if (!validated.ok) continue;
+    const existing = evidenceStore.get(record.kind);
+    if (existing && existing.source !== SANDBOX_EVIDENCE_SOURCE) continue;
+    evidenceStore.set(record.kind, {
+      ...validated.normalized,
+      injectedBy: ['sandbox-operator-self-attestation'],
+      injectedAt: now,
+      source: SANDBOX_EVIDENCE_SOURCE,
+      provenance: SANDBOX_EVIDENCE_PROVENANCE,
+      signerId: record.signerId,
+      signature: record.signature,
+      algorithm: record.algorithm,
+      sourceModules: [...(record.sourceModules || [])]
+    });
+    accepted += 1;
+  }
+  return { seeded: accepted, enabled: true };
+}
+
+/* Seed once at module load, after any env-supplied records. */
+seedSandboxEvidence();
 
 /**
  * Persist the currently stored public records to the durable store.
@@ -408,8 +446,12 @@ export function evidenceStoreStatus({ now = Date.now() } = {}) {
 
   const missing = allKinds.filter(k => !stored.has(k));
 
+  const sandboxSeeded = [...evidenceStore.values()].some((r) => r.source === SANDBOX_EVIDENCE_SOURCE);
+
   return {
     schema: OPERATOR_EVIDENCE_SCHEMA,
+    mode: sandboxSeeded ? SANDBOX_EVIDENCE_PROVENANCE : 'operator-reviewed',
+    sandboxEnabled: sandboxEvidenceEnabled(),
     totalKindsRequired: allKinds.length,
     stored: [...stored],
     expired,

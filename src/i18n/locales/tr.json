@@ -911,7 +911,14 @@
       "withdrawReview": "Çekimi gözden geçir",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "Çekimi onayla",
-      "withdrawDone": "Çekim gönderildi"
+      "withdrawDone": "Çekim gönderildi",
+      "offlineNotice": "Wallex ile doğrudan bağlantı başarısız — liste çevrimdışı (demo) ve emirler DEMO olarak kaydedilir.",
+      "reviewDemo": "Emri incele (demo)",
+      "demoNotice": "API anahtarı olmadan bu emir yalnızca DEMO modunda kaydedilir — Wallex’e gönderilmez.",
+      "demoConfirmYes": "DEMO kaydet",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "Çekimi incele (demo)",
+      "withdrawDemoNotice": "API anahtarı olmadan çekim DEMO modunda kaydedilir ve Wallex hesabınızdan gerçekten hiçbir şey çıkmaz."
     }
   },
   "loan": {

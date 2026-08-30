@@ -914,7 +914,14 @@
       "withdrawReview": "واپسی کا جائزہ",
       "withdrawConfirmLine": "Withdraw {value} {coin} on {network} to {address}. Real funds — Wallex applies its own network fee.",
       "withdrawConfirmYes": "واپسی کی تصدیق",
-      "withdrawDone": "واپسی جمع کروا دی گئی"
+      "withdrawDone": "واپسی جمع کروا دی گئی",
+      "offlineNotice": "والیکس سے براہ راست کنکشن ناکام — فہرست آف لائن (ڈیمو) ہے اور آرڈرز DEMO کے طور پر درج ہوتے ہیں۔",
+      "reviewDemo": "آرڈر کا جائزہ (ڈیمو)",
+      "demoNotice": "API کلید کے بغیر یہ آرڈر صرف DEMO موڈ میں درج ہوتا ہے — والیکس کو نہیں بھیجا جاتا۔",
+      "demoConfirmYes": "DEMO درج کریں",
+      "demoChip": "DEMO",
+      "withdrawReviewDemo": "نکاسی کا جائزہ (ڈیمو)",
+      "withdrawDemoNotice": "API کلید کے بغیر نکاسی DEMO موڈ میں درج ہوتی ہے اور آپ کے والیکس اکاؤنٹ سے کچھ نہیں نکلتا۔"
     }
   },
   "loan": {

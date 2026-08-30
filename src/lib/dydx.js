@@ -72,7 +72,10 @@ export async function getDydxMarkets() {
       .filter((m) => m.ticker && Number.isFinite(m.oraclePrice) && m.oraclePrice > 0);
     return { markets, live: markets.length > 0 };
   } catch {
-    return { markets: [], live: false };
+    /* Offline catalogue — the engine stays alive (and honestly labelled)
+       when the indexer proxy is unreachable. */
+    const fallback = (await import('./dydxOffline.js')).offlineDydxMarkets();
+    return { markets: fallback.markets, live: false, offline: true };
   }
 }
 
@@ -103,7 +106,16 @@ export async function getDydxCandles(ticker, resolution = '1HOUR', limit = 96) {
       resolution: body?.resolution || resolution
     };
   } catch {
-    return { candles: [], live: false, ticker: safe, resolution };
+    /* Offline candles, labelled offline, so the chart teaches the product
+       instead of rendering a dead flat line while the indexer is down. */
+    const fallback = (await import('./dydxOffline.js')).offlineDydxCandles(safe, resolution, Number(limit) || 96);
+    return {
+      candles: fallback,
+      live: false,
+      offline: true,
+      ticker: safe,
+      resolution
+    };
   }
 }
 

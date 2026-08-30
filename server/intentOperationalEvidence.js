@@ -15,6 +15,7 @@ import {
   phase21PublicStatus
 } from '../src/lib/intent-ai/operationalActivation.js';
 import { activateControlPlane } from '../src/lib/intent-ai/controlPlaneActivation.js';
+import { sandboxEvidenceEnabled, SANDBOX_EVIDENCE_PROVENANCE } from './intentSandboxEvidence.js';
 
 /* Read the operator store directly. Keeping this adapter on a global registry
    made the first serverless invocation dependent on module load order and
@@ -35,7 +36,8 @@ function configurationSnapshot(env = process.env) {
     secretManagerNamed: Boolean(String(env.INTENT_SECRET_MANAGER_PROVIDER || '').trim()),
     independentReviewNamed: Boolean(String(env.INTENT_INDEPENDENT_OPERATOR_ATTESTATIONS || '').trim()),
     workflowBatchNamed: Boolean(String(env.INTENT_WORKFLOW_BATCH_ADDRESS || '').trim()),
-    merkleAnchorNamed: Boolean(String(env.INTENT_MERKLE_ANCHOR_NETWORKS || '').trim())
+    merkleAnchorNamed: Boolean(String(env.INTENT_MERKLE_ANCHOR_NETWORKS || '').trim()),
+    sandboxEvidence: sandboxEvidenceEnabled(env)
   };
 }
 
@@ -55,6 +57,8 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
   return {
     schema: PHASE21_STATUS_SCHEMA,
     generatedAt: new Date(now).toISOString(),
+    mode: sandboxEvidenceEnabled() ? SANDBOX_EVIDENCE_PROVENANCE : 'operator-reviewed',
+    sandboxEnabled: sandboxEvidenceEnabled(),
     configuration: config,
     connectedProviders: readiness.evidence.map((row) => ({
       kind: row.kind,

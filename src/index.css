@@ -11213,3 +11213,33 @@ button.settings-quick-action {
   border-radius: 5px;
   background: rgba(255, 176, 32, .12);
 }
+
+/* Autopilot sheet: divider + compact option rows for the seven order types. */
+.ap-sheet-divider {
+  margin: 16px 0 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.ap-opt-sm .ap-opt-head { min-height: 52px; }
+.ap-opt-sm .ap-opt-title { font-size: 12.6px; }
+.ap-opt-sm .ap-opt-sub { font-size: 11px; }
+
+/* Sandbox operator mode badge — amber, unmissable, honest. */
+.activation-sandbox-badge {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+  color: #7c5a00;
+  background: rgba(251, 191, 36, .12);
+  border: 1px solid rgba(251, 191, 36, .35);
+  border-radius: var(--radius-sm);
+}
+:root[data-theme='dark'] .activation-sandbox-badge {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, .08);
+  border-color: rgba(251, 191, 36, .25);
+}

@@ -8,7 +8,8 @@ import { GOALS, buildAutopilot } from '../lib/autopilot';
 import { loadLearningParams, orderTune } from '../lib/learning';
 
 /**
- * AUTOPILOT GUIDE — a bottom sheet that explains the three goals.
+ * AUTOPILOT GUIDE — a bottom sheet that explains the goals AND every order
+ * option on the Orders screen.
  * ---------------------------------------------------------------------------
  * ─── WHY THIS IS NOT THE PANEL ──────────────────────────────────────────────
  * `AutopilotPanel` is a PICKER. It sits inside the order form, it needs the
@@ -16,17 +17,23 @@ import { loadLearningParams, orderTune } from '../lib/learning';
  * it builds that order. That is the right job for the form and the wrong job
  * for someone who has not decided yet.
  *
- * This is the other half: three options, each one openable to read what it
- * does, what we get to control, and what the measurement actually tells us.
+ * This is the other half: the three autopilot goals, each openable to read
+ * what it does, what we get to control, and what the measurement actually
+ * tells us — and below them, ALL SEVEN order types (limit, trailing, bracket,
+ * ladder, DCA, TWAP, rebalance) with a plain-language "how it builds the
+ * order" card, because the previous version explained only the three goals
+ * and left five options undocumented. Reported: «برای همه اپشن ها بنویس با
+ * اندازه درست الان فقط سه اپشن اولیه را نوشته».
+ *
  * Nothing is selected, nothing is built, and there is no submit — see the
  * boundary note at the bottom.
  *
  * ─── WHY A SHEET, AND WHY IT STARTS CLOSED ──────────────────────────────────
- * Asked for directly: «یک پاپ‌آپ پایین صفحه، پیش‌فرض بسته، بازشونده». Three
- * always-open explanations are a wall of text on a 360px screen, and a wall of
- * text on the way to the button you actually wanted is how features get
+ * Asked for directly: «یک پاپ‌آپ پایین صفحه، پیش‌فرض بسته، بازشونده». Seven
+ * always-open explanations are a wall of text on a 360px screen, and a wall
+ * of text on the way to the button you actually wanted is how features get
  * ignored. So: one button at the foot of the Orders screen, a sheet anchored
- * to the bottom, and each option folded until it is asked about.
+ * to the bottom, and each card folded until it is asked about.
  *
  * ─── EVERY NUMBER HERE IS MEASURED ──────────────────────────────────────────
  * The "what we learn" row is not marketing copy. It prints the counts
@@ -51,12 +58,28 @@ const MEASUREMENT_AMOUNT = 1;
 /** The three tuning defaults, so an untrained session still shows real values. */
 const DEFAULT_TUNE = { trailMult: 1, stopBufferMult: 1, ladderStepDiv: 3 };
 
+/**
+ * ALL order options on the Orders screen, in the same order the rail shows
+ * them. Each card says how the autopilot would build that order — plain
+ * language, no jargon — and which knobs are ours to turn. The trailing and
+ * ladder rows reuse the measured numbers from the goals above them.
+ */
+const ORDER_OPTIONS = [
+  { id: 'limit', emoji: '🎯', tone: '#00e5ff' },
+  { id: 'trailing', emoji: '🛰️', tone: '#ff8a00', measured: 'protect' },
+  { id: 'bracket', emoji: '🛡️', tone: '#ff3b6b' },
+  { id: 'ladder', emoji: '🪜', tone: '#a78bfa', measured: 'takeProfit' },
+  { id: 'dca', emoji: '⏰', tone: '#4ade80' },
+  { id: 'twap', emoji: '🧩', tone: '#fbbf24' },
+  { id: 'rebalance', emoji: '⚖️', tone: '#f472b6' }
+];
+
 export default function AutopilotGuideSheet({ open, onClose, series, fromToken, toToken, chainId }) {
   const { t } = useTranslation();
   const still = useStill();
   /*
-   * Which option is open. ONE at a time, and none by default: the ask was
-   * "closed by default, expandable", and three open cards at once is the
+   * Which card is open. ONE at a time, and none by default: the ask was
+   * "closed by default, expandable", and a wall of open cards at once is the
    * always-open panel with extra steps.
    */
   const [expanded, setExpanded] = useState(null);
@@ -129,6 +152,12 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
     ? `${fromToken.symbol}/${toToken.symbol}`
     : null;
 
+  const measuredFor = (optionId) => {
+    if (!optionId) return null;
+    const found = results.find((r) => r.goal === optionId);
+    return found ? valuesFor(found.result) : null;
+  };
+
   return (
     <Sheet open={open} onClose={onClose} title={t('autopilot.sheet.title')} anchor="bottom">
       <div className="ap-sheet">
@@ -153,12 +182,10 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
                 <span className="ap-opt-mark" aria-hidden="true">{isOpen ? '−' : '+'}</span>
               </button>
 
-              {/*
-               * Height animation, not display:none. A card that snaps open
+              {/* Height animation, not display:none. A card that snaps open
                * looks like it jumped; one that grows is readable while it
                * arrives. `useStill` collapses it to nothing for anyone who has
-               * asked the app to stop animating.
-               */}
+               * asked the app to stop animating. */}
               <AnimatePresence initial={false}>
                 {isOpen && (
                   <motion.div
@@ -183,11 +210,9 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
 
                     <div className="ap-fact">
                       <span className="ap-fact-label">{t('autopilot.sheet.learnLabel')}</span>
-                      {/*
-                       * Measured, or honestly absent. The refusal names how
+                      {/* Measured, or honestly absent. The refusal names how
                        * many days it did have and how many it needs, which
-                       * teaches more than a blank row.
-                       */}
+                       * teaches more than a blank row. */}
                       <span className="ap-fact-text">
                         {result?.refused
                           ? t(`autopilot.refused.${result.refused}`, {
@@ -203,6 +228,79 @@ export default function AutopilotGuideSheet({ open, onClose, series, fromToken, 
                       <p className="ap-opt-foot">
                         {t('autopilot.evidenceNote', { samples: vals.samples })}
                         {' · '}
+                        {t('autopilot.sheet.measuredOn', { pair: pairLabel })}
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
+
+        {/* ── ALL SEVEN ORDER OPTIONS ──────────────────────────────────── */}
+        <p className="ap-sheet-divider">{t('autopilot.sheet.optionsTitle', { defaultValue: 'همهٔ گزینه‌های سفارش' })}</p>
+        <p className="ap-sheet-intro">{t('autopilot.sheet.optionsIntro', { defaultValue: 'هر نوع سفارش در صفحهٔ سفارش‌ها چه می‌کند و چطور ساخته می‌شود — به زبان ساده.' })}</p>
+
+        {ORDER_OPTIONS.map((opt) => {
+          const isOpen = expanded === `opt:${opt.id}`;
+          const vals = measuredFor(opt.measured);
+          return (
+            <div key={opt.id} className={`ap-opt ap-opt-sm ${isOpen ? 'ap-opt-open' : ''}`}>
+              <button
+                type="button"
+                className="ap-opt-head"
+                aria-expanded={isOpen}
+                onClick={() => setExpanded(isOpen ? null : `opt:${opt.id}`)}
+              >
+                <span className="ap-opt-copy" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 30, height: 30, borderRadius: 9, flexShrink: 0,
+                      display: 'grid', placeItems: 'center', fontSize: 14,
+                      background: `linear-gradient(135deg, ${opt.tone}22, ${opt.tone}08)`,
+                      border: `1px solid ${opt.tone}40`,
+                    }}
+                  >
+                    {opt.emoji}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span className="ap-opt-title">{t(`orders.new.${opt.id}`)}</span>
+                    <span className="ap-opt-sub">{t(`autopilot.option.${opt.id}.sub`)}</span>
+                  </span>
+                </span>
+                <span className="ap-opt-mark" aria-hidden="true">{isOpen ? '−' : '+'}</span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    className="ap-opt-body"
+                    initial={still ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                    animate={still ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+                    exit={still ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                    transition={still ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div className="ap-fact">
+                      <span className="ap-fact-label">{t('autopilot.sheet.howLabel')}</span>
+                      <span className="ap-fact-text">{t(`autopilot.option.${opt.id}.how`)}</span>
+                    </div>
+                    <div className="ap-fact">
+                      <span className="ap-fact-label">{t('autopilot.sheet.controlLabel')}</span>
+                      <span className="ap-fact-text">{t(`autopilot.option.${opt.id}.control`, vals)}</span>
+                    </div>
+                    {opt.measured && vals && (
+                      <div className="ap-fact">
+                        <span className="ap-fact-label">{t('autopilot.sheet.learnLabel')}</span>
+                        <span className="ap-fact-text">
+                          {t(`autopilot.option.${opt.id}.learn`, vals)}
+                        </span>
+                      </div>
+                    )}
+                    {pairLabel && (
+                      <p className="ap-opt-foot">
                         {t('autopilot.sheet.measuredOn', { pair: pairLabel })}
                       </p>
                     )}

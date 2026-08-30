@@ -22,6 +22,11 @@ import {
   wallexWithdraw,
   writeWallexKey
 } from '../lib/wallex';
+import {
+  demoWallexFill,
+  demoWallexWithdraw,
+  offlineWallexMarkets
+} from '../lib/wallexOffline';
 
 /**
  * WALLEX — the buy/sell tab only Persian-language users see.
@@ -83,6 +88,7 @@ export default function WallexPanel() {
   const [markets, setMarkets] = useState([]);
   const [marketsError, setMarketsError] = useState(null);
   const [marketsLoading, setMarketsLoading] = useState(true);
+  const [marketsOffline, setMarketsOffline] = useState(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
 
@@ -124,10 +130,27 @@ export default function WallexPanel() {
     wallexMarkets()
       .then((payload) => {
         const rows = normalizeWallexMarkets(payload?.result?.symbols);
+        if (rows.length === 0) throw new Error('WALLEX_EMPTY');
         setMarkets(rows);
+        setMarketsOffline(false);
         setSelected((cur) => (cur && rows.some((r) => r.symbol === cur.symbol) ? cur : rows[0] || null));
       })
-      .catch((e) => setMarketsError(e.code || e.message))
+      .catch((e) => {
+        /*
+         * ─── THE "NOT FOUND" FIX ───────────────────────────────────────────
+         * When the live feed is unreachable the tab used to die with a raw
+         * error code and an empty screen. Now it drops to the offline
+         * snapshot — every row is a real Wallex symbol, the header says the
+         * feed is offline, and orders/withdrawals on it run in DEMO mode
+         * (never touching Wallex). The retry button brings the live feed
+         * back the moment it is reachable.
+         */
+        const rows = offlineWallexMarkets();
+        setMarkets(rows);
+        setMarketsOffline(true);
+        setMarketsError(e?.code || e?.message || 'WALLEX_UNREACHABLE');
+        setSelected((cur) => (cur && rows.some((r) => r.symbol === cur.symbol) ? cur : rows[0] || null));
+      })
       .finally(() => setMarketsLoading(false));
   }, []);
 
@@ -201,20 +224,44 @@ export default function WallexPanel() {
     || (selected.minNotional > 0 && total > 0 && total < selected.minNotional)
   ));
 
+  /*
+   * ─── DEMO MODE WITHOUT AN API KEY ────────────────────────────────────────
+   * Reported: «برای برداشت باید حتماً ای‌پی‌آی وارد کنی — این مشکل را حل کن».
+   * A personal Wallex API key is genuinely required for REAL withdrawals and
+   * REAL orders — that is Wallex's own rule and no client can bypass it. What
+   * we CAN fix is the dead end: without a key the flow now runs in DEMO mode
+   * (recorded locally, clearly labelled on every surface, never touching
+   * Wallex), so the user can drive every part of the screen and understand
+   * the flow before deciding to add a key for real money.
+   */
+  const demo = !hasKey;
+
   const submit = async () => {
     if (!confirming || !selected) return;
     setPlacing(true);
     setOrderError(null);
     setOrderResult(null);
     try {
-      const result = kind === DECISIONS.limit
-        ? await wallexPlaceOrder({ symbol: selected.symbol, type: 'LIMIT', side, price, quantity: amount })
-        : await wallexPlaceOtcOrder({ symbol: selected.symbol, side, amount });
-      if (result?.success === false) throw Object.assign(new Error(result.message || 'WALLEX_REJECTED'), { code: 'WALLEX_REJECTED' });
-      setOrderResult(result?.result || null);
+      if (demo) {
+        const fill = demoWallexFill({
+          symbol: selected.symbol,
+          side,
+          kind: kind === DECISIONS.limit ? 'LIMIT' : 'OTC',
+          quantity: amount,
+          price: effPrice
+        });
+        await new Promise((r) => setTimeout(r, 650));
+        setOrderResult(fill);
+      } else {
+        const result = kind === DECISIONS.limit
+          ? await wallexPlaceOrder({ symbol: selected.symbol, type: 'LIMIT', side, price, quantity: amount })
+          : await wallexPlaceOtcOrder({ symbol: selected.symbol, side, amount });
+        if (result?.success === false) throw Object.assign(new Error(result.message || 'WALLEX_REJECTED'), { code: 'WALLEX_REJECTED' });
+        setOrderResult(result?.result || null);
+        refreshAccount();
+      }
       setConfirming(false);
       setAmount(''); setPrice('');
-      refreshAccount();
     } catch (e) {
       setOrderError(e.message || e.code);
     } finally {
@@ -228,13 +275,21 @@ export default function WallexPanel() {
     setWdError(null);
     setWdResult(null);
     try {
-      const result = await wallexWithdraw({
-        coin: wd.coin, network: wd.network, value: wd.value, wallet_address: wd.address.trim()
-      });
-      if (result?.success === false) throw Object.assign(new Error(result.message || 'WALLEX_REJECTED'), { code: 'WALLEX_REJECTED' });
-      setWdResult(result?.result || null);
+      if (demo) {
+        const receipt = demoWallexWithdraw({
+          coin: wd.coin, network: wd.network, value: wd.value, address: wd.address.trim()
+        });
+        await new Promise((r) => setTimeout(r, 650));
+        setWdResult(receipt);
+      } else {
+        const result = await wallexWithdraw({
+          coin: wd.coin, network: wd.network, value: wd.value, wallet_address: wd.address.trim()
+        });
+        if (result?.success === false) throw Object.assign(new Error(result.message || 'WALLEX_REJECTED'), { code: 'WALLEX_REJECTED' });
+        setWdResult(result?.result || null);
+        refreshAccount();
+      }
       setWdConfirm(false);
-      refreshAccount();
     } catch (e) {
       setWdError(e.message || e.code);
     } finally {
@@ -303,7 +358,14 @@ export default function WallexPanel() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        {marketsError && <p className="notice" style={{ marginTop: 8 }}><code>{marketsError}</code></p>}
+        {marketsOffline && (
+          <p className="notice" style={{ marginTop: 8 }}>
+            {t('buy.wallex.offlineNotice', { defaultValue: 'اتصال زنده به والکس برقرار نشد — فهرست آفلاین (نمایشی) است و سفارش‌ها DEMO ثبت می‌شوند.' })}
+            <button type="button" className="btn btn-ghost btn-sm" style={{ marginInlineStart: 8 }} onClick={loadMarkets}>
+              {t('common.retry', { defaultValue: 'تلاش دوباره' })}
+            </button>
+          </p>
+        )}
         {marketsLoading && <p className="faint" style={{ fontSize: 11, marginTop: 8 }}>{t('buy.wallex.loading')}</p>}
         <div className="wallex-markets">
           {filtered.map((m) => (
@@ -400,15 +462,16 @@ export default function WallexPanel() {
               type="button"
               className="btn btn-primary"
               style={{ width: '100%', marginTop: 10 }}
-              disabled={!hasKey || !(Number(amount) > 0) || (kind === DECISIONS.limit ? !(Number(price) > 0) : false) || belowMinimums}
+              disabled={!(Number(amount) > 0) || (kind === DECISIONS.limit ? !(Number(price) > 0) : false) || belowMinimums}
               onClick={() => setConfirming(true)}
             >
-              {hasKey
-                ? t('buy.wallex.review')
-                : t('buy.wallex.needKey')}
+              {demo
+                ? t('buy.wallex.reviewDemo', { defaultValue: 'بازبینی سفارش (نسخهٔ نمایشی)' })
+                : t('buy.wallex.review')}
             </button>
           ) : (
             <div className="wallex-confirm">
+              {demo && <p className="notice" style={{ margin: '0 0 8px' }}>{t('buy.wallex.demoNotice', { defaultValue: 'بدون کلید API این سفارش فقط به‌صورت DEMO ثبت می‌شود و به والکس ارسال نمی‌شود.' })}</p>}
               <p className="prose-sm" style={{ margin: '0 0 8px' }}>
                 {t('buy.wallex.confirmLine', {
                   side: side === 'BUY' ? t('buy.wallex.buy') : t('buy.wallex.sell'),
@@ -424,7 +487,7 @@ export default function WallexPanel() {
                   {t('buy.wallex.confirmNo')}
                 </button>
                 <button type="button" className="btn btn-primary btn-sm" disabled={placing} onClick={submit}>
-                  {placing ? t('buy.wallex.placing') : t('buy.wallex.confirmYes')}
+                  {placing ? t('buy.wallex.placing') : demo ? t('buy.wallex.demoConfirmYes', { defaultValue: 'ثبت DEMO' }) : t('buy.wallex.confirmYes')}
                 </button>
               </div>
             </div>
@@ -436,6 +499,7 @@ export default function WallexPanel() {
           {orderResult && (
             <div className="wallex-result">
               <b>{t('buy.wallex.orderPlaced')}</b>
+              {orderResult.demo && <span className="wallex-chip" style={{ marginInlineStart: 6 }}>{t('buy.wallex.demoChip', { defaultValue: 'DEMO' })}</span>}
               <code dir="ltr">{String(orderResult.clientOrderId || '')}</code>
               <small>
                 {t('buy.wallex.status')}: {String(orderResult.status || '—')}
@@ -475,10 +539,14 @@ export default function WallexPanel() {
           </div>
         )}
 
-        {hasKey && (
-          <details className="wallex-withdraw" style={{ marginTop: 10 }}>
-            <summary style={{ fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>{t('buy.wallex.withdrawTitle')}</summary>
-            <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7 }}>{t('buy.wallex.withdrawHelp')}</p>
+        <details className="wallex-withdraw" style={{ marginTop: 10 }} open={!hasKey}>
+          <summary style={{ fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>{t('buy.wallex.withdrawTitle')}</summary>
+          {demo && (
+            <p className="notice" style={{ fontSize: 11, margin: '8px 0' }}>
+              {t('buy.wallex.withdrawDemoNotice', { defaultValue: 'بدون کلید API، برداشت به‌صورت DEMO ثبت می‌شود و واقعاً از حساب والکس خارج نمی‌شود. برای برداشت واقعی، کلید API را در بالای همین صفحه وارد کنید.' })}
+            </p>
+          )}
+          <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7 }}>{t('buy.wallex.withdrawHelp')}</p>
             <div className="wallex-row">
               <label className="wallex-field">
                 <span>{t('buy.wallex.withdrawCoin')}</span>
@@ -516,17 +584,20 @@ export default function WallexPanel() {
                 disabled={!(wd.coin && wd.network && Number(wd.value) > 0 && wd.address.trim().length >= 15)}
                 onClick={() => setWdConfirm(true)}
               >
-                {t('buy.wallex.withdrawReview')}
+                {demo
+                  ? t('buy.wallex.withdrawReviewDemo', { defaultValue: 'بازبینی برداشت (نسخهٔ نمایشی)' })
+                  : t('buy.wallex.withdrawReview')}
               </button>
             ) : (
               <div className="wallex-confirm" style={{ marginTop: 9 }}>
+                {demo && <p className="notice" style={{ margin: '0 0 8px' }}>{t('buy.wallex.demoNotice', { defaultValue: 'بدون کلید API این برداشت فقط به‌صورت DEMO ثبت می‌شود.' })}</p>}
                 <p className="prose-sm" style={{ margin: '0 0 8px' }}>
                   {t('buy.wallex.withdrawConfirmLine', { value: wd.value, coin: wd.coin, network: wd.network, address: wd.address.trim() })}
                 </p>
                 <div className="wallex-row">
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setWdConfirm(false)}>{t('buy.wallex.confirmNo')}</button>
                   <button type="button" className="btn btn-primary btn-sm" disabled={wdBusy} onClick={submitWithdraw}>
-                    {wdBusy ? t('buy.wallex.placing') : t('buy.wallex.withdrawConfirmYes')}
+                    {wdBusy ? t('buy.wallex.placing') : demo ? t('buy.wallex.demoConfirmYes', { defaultValue: 'ثبت DEMO' }) : t('buy.wallex.withdrawConfirmYes')}
                   </button>
                 </div>
               </div>
@@ -535,12 +606,12 @@ export default function WallexPanel() {
             {wdResult && (
               <div className="wallex-result">
                 <b>{t('buy.wallex.withdrawDone')}</b>
+                {wdResult.demo && <span className="wallex-chip" style={{ marginInlineStart: 6 }}>{t('buy.wallex.demoChip', { defaultValue: 'DEMO' })}</span>}
                 <code dir="ltr">{String(wdResult.txHash || wdResult.id || '')}</code>
                 <small>{t('buy.wallex.status')}: {String(wdResult.status || '—')}</small>
               </div>
             )}
           </details>
-        )}
       </div>
 
       {/* ── balances ── */}

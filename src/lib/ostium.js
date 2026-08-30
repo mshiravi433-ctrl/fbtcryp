@@ -535,7 +535,15 @@ export async function getOstiumMarkets({ timeout = 12000 } = {}) {
     }).filter((p) => Number.isFinite(p.mid) && p.mid > 0);
     return { pairs, live: pairs.length > 0, generatedAt: feed.generatedAt };
   } catch {
-    return { pairs: [], live: false, generatedAt: null };
+    /* Offline catalogue: the tab never dies. Every row is labelled offline and
+       the UI shows the OFFLINE badge + demo chart instead of a dead screen. */
+    const fallback = (await import('./ostiumOffline.js')).offlineOstiumMarkets();
+    return {
+      pairs: fallback.pairs,
+      live: false,
+      generatedAt: null,
+      offline: true
+    };
   }
 }
 

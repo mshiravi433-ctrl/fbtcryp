@@ -28,6 +28,15 @@ import './dca-execution-probe.mjs';
 process.env.RATE_LIMIT = process.env.RATE_LIMIT || '100000';
 process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT || '3';
 /*
+ * The sandbox operator (server/intentSandboxOps.js + intentSandboxEvidence.js)
+ * self-attests the 21 evidence kinds in dev/preview, which would defeat the
+ * fail-closed probes below ("no evidence → no launch"). The suite measures
+ * the deployment-independent property, so the sandbox is pinned OFF for the
+ * whole run; the real gate lives on the gate function itself (NODE_ENV=test
+ * also disables it), and the settings dashboard marks sandbox mode clearly.
+ */
+process.env.INTENT_AI_SANDBOX_EVIDENCE = process.env.INTENT_AI_SANDBOX_EVIDENCE || '0';
+/*
  * The same trap, one budget over: the intent probe walks the full
  * claim/dispute/adjudication/cross-chain lifecycle and exceeds the
  * production settlement budget of 20/min — which it raises to 100 BEFORE

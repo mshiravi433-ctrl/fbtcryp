@@ -197,6 +197,34 @@ export default function MarketInsightsPanel({
               note={insights.companyLeader ? t('insights.performanceNotProfit') : null}
               emptyText={t('insights.equityUnavailable')}
             />
+            {/* Flow and accounting metrics stay EXPLICIT source gaps: price,
+                market cap and open interest prove neither country-level capital
+                flow nor company profit, so the cards say so instead of
+                pretending a proxy metric exists. */}
+            <MetricCard
+              title={t('insights.countryFlow')}
+              item={null}
+              source={insights.countryFlow?.reason ?? 'NO_VERIFIED_COUNTRY_FLOW_SOURCE'}
+              tone="violet"
+              fallback={IconGlobe}
+              emptyText={t('insights.countryUnavailable')}
+            />
+            <MetricCard
+              title={t('insights.companyProfit')}
+              item={null}
+              source={insights.companyProfit?.reason ?? 'NO_ACCOUNTING_PROFIT_SOURCE'}
+              tone="blue"
+              fallback={IconBuilding}
+              emptyText={t('insights.profitUnavailable')}
+            />
+            <MetricCard
+              title={t('insights.capitalOutflow')}
+              item={null}
+              source={insights.capitalOutflow?.reason ?? 'NO_VERIFIED_FLOW_SOURCE'}
+              tone="up"
+              fallback={IconTrend}
+              emptyText={t('insights.outflowUnavailable')}
+            />
           </>
         )}
       </div>

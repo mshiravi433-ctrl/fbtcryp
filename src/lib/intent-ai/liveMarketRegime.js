@@ -110,6 +110,10 @@ function unavailable(detail, extra = {}) {
 /**
  * Detect the regime from REAL prices.
  * @param {function} priceSource async ({assetId, days, vs}) → series
+ * @param {number|null} now  fixed instant for deterministic callers; when
+ *   omitted the FRESHNESS WINDOW is anchored at entry while DETECTION is
+ *   anchored just after the feed loop — a live feed's newest point (stamped
+ *   during the await) must never read as "from the future".
  */
 export async function detectLiveMarketRegime({
   assets = [],
@@ -117,12 +121,17 @@ export async function detectLiveMarketRegime({
   days = 7,
   vs = 'usd',
   liquidityBy = null,
-  now = Date.now(),
+  now = null,
   maxAgeHrs = DEFAULT_REGIME_MAX_AGE_HRS
 } = {}) {
   if (typeof priceSource !== 'function') return unavailable('NO_PRICE_SOURCE');
   const ids = (Array.isArray(assets) ? assets : [assets]).filter(Boolean).slice(0, 6);
   if (!ids.length) return unavailable('NO_ASSETS');
+
+  // Window anchor: the instant the collection started. A point stamped while
+  // the feed was being fetched is obviously not stale, so the window uses
+  // THIS instant, never a later one.
+  const windowNow = now ?? Date.now();
 
   const evidence = [];
   const sources = [];
@@ -139,7 +148,7 @@ export async function detectLiveMarketRegime({
       series,
       source: `price:${assetId}`,
       liquidityUsd: liquidityBy && typeof liquidityBy === 'object' ? liquidityBy[assetId] : null,
-      now,
+      now: windowNow,
       maxAgeHrs
     });
     if (!built.ok) {
@@ -151,7 +160,10 @@ export async function detectLiveMarketRegime({
       assetId,
       source: built.evidence.source,
       observedAt: built.evidence.observedAt,
-      ageMs: now - built.evidence.observedAt,
+      // ageMs is finalised below, against the detection instant, so a live
+      // feed's newest point (stamped during the await) can never read as
+      // "from the future" merely because the loop took a millisecond.
+      ageMs: null,
       points: built.metricsSummary.points,
       trendPct: built.metricsSummary.trendPct,
       volatilityPct: built.metricsSummary.volatilityPct
@@ -160,7 +172,17 @@ export async function detectLiveMarketRegime({
 
   if (!evidence.length) return unavailable('NO_FRESH_PRICE_EVIDENCE', { skipped });
 
-  const detected = detectMarketRegime({ evidence, maxAgeHrs, now });
+  /*
+   * Detection instant: the caller's fixed `now` when determinism was asked
+   * for; otherwise captured AFTER the feed loop, not at entry. The detector's
+   * freshness gate must compare each row against the instant the rows were
+   * actually collected — otherwise a feed that resolves 1ms after entry would
+   * make its own newest point look future-dated and the whole regime would
+   * collapse to unavailable under any real-world latency.
+   */
+  const detectNow = now ?? Date.now();
+  const detected = detectMarketRegime({ evidence, maxAgeHrs, now: detectNow });
+  for (const s of sources) s.ageMs = detectNow - s.observedAt;
   return {
     ok: true,
     schema: LIVE_REGIME_SCHEMA,
@@ -179,7 +201,7 @@ export async function detectLiveMarketRegime({
     requiresStrategyReview: detected.requiresStrategyReview === true,
     strategyChangesAutomatically: false,
     executionAuthorized: false,
-    detectedAt: now
+    detectedAt: detectNow
   };
 }
 
