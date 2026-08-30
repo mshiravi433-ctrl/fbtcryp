@@ -739,6 +739,37 @@ node scripts/intent-cross-chain.mjs verify-report state.json \
 
 هیچ private key و هیچ RPC URL هرگز چاپ نمی‌شود.
 
+### وضعیت دقیق Phase 4d — سواپ اتمیک میان‌زنجیره‌ای واقعی (HTLC)
+
+فاز ۴د اولین جایی است که «اتمیک» برای میان‌زنجیره‌ای **واقعی** است، چون
+سازوکارش روی خود زنجیره‌ها اجرا می‌شود: هر دو پا در قرارداد
+`IntentAtomicSwap` (HTLC) با یک `hashlock` مشترک قفل می‌شوند و مهلت‌ها طوری
+مرتب می‌شوند که **یا هر دو پا با یک preimage تسویه می‌شوند یا هر دو پا
+بازپرداخت می‌شوند.** جزئیات کامل: [INTENT-ATOMIC-SWAP-FA](INTENT-ATOMIC-SWAP-FA.md).
+
+نکته‌های کلیدی:
+
+- کامپایلر پیش از تولید هر کال‌دیتایی قانون
+  `destination.timeout + 3600s ≤ source.timeout` را اعمال می‌کند؛ نقض آن
+  `ATOMIC_SWAP_TIMELOCK_ORDER_UNSAFE` است — جفتِ «اینجا بگیر، آنجا بازپرداخت»
+  هرگز کامپایل نمی‌شود؛
+- اسکرو در طول سواپِ باز نزد قرارداد است و همین صادقانه اعلام می‌شود؛ FBT
+  کلید ندارد، سرور هیچ تراکنشی را امضا یا ارسال نمی‌کند و preimage فقط روی
+  دستگاه کاربر می‌ماند؛
+- فقط EVM↔EVM؛ سولانا و زنجیره‌های بدون قراردادِ مستقر رد می‌شوند؛
+- تا استقرار روی حداقل دو زنجیره و تنظیم `INTENT_ATOMIC_SWAP_ADDRESSES`،
+  قابلیت `unavailable` با `ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED` گزارش
+  می‌شود و `unavailable.atomicCrossChainWorkflows` در همان حالت `true`
+  می‌ماند؛
+- مسیر مرحله‌ای ۴ب/۴c و کد `ATOMIC_CROSS_CHAIN_UNAVAILABLE` آن دست‌نخورده و
+  بدون برچسب‌گذاری مجدد باقی می‌ماند.
+
+```text
+GET  /api/intents/v1/atomic-swap/status
+POST /api/intents/v1/atomic-swap/plan
+POST /api/intents/v1/atomic-swap/verify
+```
+
 ### وضعیت دقیق Phase 6 — اپراتور مستقل، چرخش کلید و anchor ریشه
 
 #### ۱. اتصال رمزنگاری‌شدهٔ اپراتور به کلید ناظر/راستی‌آزما

@@ -1,3 +1,35 @@
+## Unreleased — Phase 4d: real cross-chain ATOMIC swap (HTLC)
+
+- Cross-chain atomicity is now REAL for EVM↔EVM pairs: `contracts/IntentAtomicSwap.sol`
+  is a hash-timelock escrow (no owner, no pause, no rescue) where both legs lock under
+  one shared keccak256 hashlock and timelocks ordered so either both legs are claimed
+  with one preimage or both legs refund. Atomicity is enforced by the contracts, not
+  by a label.
+- `server/intentAtomicSwap.js` compiles the two user-signed `newSwap` legs with the
+  safety ordering enforced before any calldata exists
+  (`destination.timeout + 3600s ≤ source.timeout`, else `ATOMIC_SWAP_TIMELOCK_ORDER_UNSAFE`),
+  refuses Solana/same-chain/decimal-amount inputs, and verifies a leg on-chain by
+  re-reading `swaps(swapId)` through the server's own configured RPCs with
+  rpc-disagreement reported, never averaged.
+- The server never signs or sends anything (`executableByServer: false`); the preimage
+  stays on the user's device. Open swaps are honestly disclosed as contract escrow
+  (`custody: 'on-chain-contract-escrow-while-open'`); FBT holds no key.
+- Until `IntentAtomicSwap` is deployed on ≥ 2 chains and
+  `INTENT_ATOMIC_SWAP_ADDRESSES` is set, the capability reports `unavailable` with
+  `ATOMIC_SWAP_CONTRACT_NOT_CONFIGURED` — it never silently downgrades to sequential,
+  and the Phase 4b/4c sequential path keeps `ATOMIC_CROSS_CHAIN_UNAVAILABLE`, unchanged
+  and never re-labelled.
+- New endpoints: `GET /api/intents/v1/atomic-swap/status`, `POST …/atomic-swap/plan`,
+  `POST …/atomic-swap/verify`; capabilities publish the `atomicSwap` block, the
+  `fbt-htlc-atomic-swap` adapter and a scoped `protocolSecurity.crossChainAtomicity`.
+  The Intent OS page shows a live HTLC status row (fa/en).
+- Scripts: `scripts/compile-atomic-swap.mjs` (solc artifact
+  `src/lib/atomicSwapArtifact.json`), `scripts/deploy-atomic-swap.mjs`, and the
+  contract is registered in `scripts/deploy-all.mjs`.
+- Tests: `test/intent-atomic-swap-probe.mjs` — 43 assertions proving the claim in both
+  directions: real when configured, never claimed when the mechanism is absent.
+- Docs: `docs/INTENT-ATOMIC-SWAP-FA.md` (+ README and INTENT-OS-FA sections).
+
 ## Unreleased — Free Upstash durable-store fallback
 
 - `server/blobCache.js` now supports Upstash Redis REST through server-only

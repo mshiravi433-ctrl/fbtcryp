@@ -169,6 +169,12 @@ console.log('▸ probing the recovery engine…');
   report('intent recovery', await runRecovery());
 }
 
+console.log('▸ probing the cross-chain ATOMIC swap (HTLC) boundary…');
+{
+  const { default: runAtomicSwap } = await import('./intent-atomic-swap-probe.mjs');
+  report('intent atomic swap', await runAtomicSwap());
+}
+
 console.log('▸ probing actual output extraction from receipt logs…');
 {
   const { default: runReceipt } = await import('./intent-receipt-probe.mjs');
