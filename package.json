@@ -172,7 +172,8 @@
     "test:phases151-200": "npm run test:phase151 && npm run test:phase152",
     "test:upstash-store": "node test/upstash-store-probe.mjs",
     "test:phase152": "node test/intent-ai/phase152-flash-liquidity-probe.mjs",
-    "compile:flash-liquidity": "node scripts/compile-flash-liquidity.mjs"
+    "compile:flash-liquidity": "node scripts/compile-flash-liquidity.mjs",
+    "deploy:flash-liquidity": "node scripts/deploy-flash-liquidity.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
