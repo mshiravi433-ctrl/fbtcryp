@@ -1930,3 +1930,76 @@
 :root[data-theme='light'] .ia-stage-chip:hover { border-color: rgba(20,35,60,.3); }
 .ia-stage-chip.is-here { cursor: default; }
 .ia-stage-chip:hover { text-decoration: none; }
+
+/* ── Session setup accordion + quick actions + market analysis card ───────── */
+.ia-setup { margin-bottom: 10px; }
+.ia-setup > summary { cursor: pointer; font-size: 12px; padding: 4px 0 8px; user-select: none; }
+.ia-setup:not([open]) > summary { padding-bottom: 2px; }
+
+.ia-quick-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.ia-quick-chip { text-decoration: none; }
+.ia-quick-chip:disabled { opacity: .5; cursor: not-allowed; }
+.ia-history-link { display: inline-flex; align-items: center; }
+
+/* Deep market analysis — one card per analysis reply. */
+.ia-ana-card {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.07);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+:root[data-theme='light'] .ia-ana-card { background: rgba(20,35,60,.05); border-color: rgba(20,35,60,.1); }
+.ia-ana-card.is-offline { border-style: dashed; }
+.ia-ana-note { font-size: 10px; color: var(--text-3); margin: 7px 0 0; line-height: 1.55; }
+.ia-ana-label {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-3); flex: none;
+}
+.ia-ana-regime {
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 6px 9px; border-radius: 9px;
+  background: rgba(0,229,255,0.07);
+  margin-bottom: 8px;
+}
+.ia-ana-regime-text { font-size: 11px; color: var(--text-1); }
+.ia-ana-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+}
+.ia-ana-asset {
+  padding: 8px 9px; border-radius: 10px;
+  background: var(--ios-panel-2);
+  border: 1px solid rgba(255,255,255,.06);
+}
+:root[data-theme='light'] .ia-ana-asset { border-color: rgba(20,35,60,.1); }
+.ia-ana-asset-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ia-ana-asset-head b { font-size: 12px; }
+.ia-ana-signal {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9px; font-weight: 700; letter-spacing: .03em;
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(255,255,255,.06); color: var(--text-2);
+}
+.ia-ana-signal i { font-style: normal; font-size: 8px; }
+.ia-ana-signal.is-up { color: var(--good, #62e6a7); background: rgba(98,230,167,.12); }
+.ia-ana-signal.is-down { color: var(--bad, #ff6b6b); background: rgba(255,107,107,.1); }
+.ia-ana-price { font: 700 15px/1.25 var(--font-ui); margin: 4px 0 6px; }
+.ia-ana-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+.ia-ana-metrics span { display: block; font-size: 8.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.ia-ana-metrics b { font-size: 10.5px; font-weight: 600; }
+.ia-ana-metrics b.is-up { color: var(--good, #62e6a7); }
+.ia-ana-metrics b.is-down { color: var(--bad, #ff6b6b); }
+.ia-ana-risk { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 9px !important; background: rgba(255,255,255,.06); }
+.ia-ana-risk.is-low { color: var(--good, #62e6a7); }
+.ia-ana-risk.is-medium { color: var(--warn, #ffb454); }
+.ia-ana-risk.is-high { color: var(--bad, #ff6b6b); }
+.ia-ana-unpriced { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.ia-ana-unpriced-chip {
+  font-size: 9.5px; padding: 2px 8px; border-radius: 999px;
+  border: 1px dashed rgba(255,255,255,.16); color: var(--text-3);
+}
+/* The analysis card sits inside a chat bubble, so it owns its width. */
+.ia-panel.ia-chat .intent-ai-thread > div:has(.ia-ana-card) { max-width: 100%; width: 100%; }

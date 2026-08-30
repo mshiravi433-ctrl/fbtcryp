@@ -981,5 +981,115 @@
     "warningScBody": "Любой протокол может иметь ошибки.",
     "maxBorrowHint": "Макс: {{max}}",
     "chooseAssetFirst": "Сначала выберите актив"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "Настройка сессии — режим, уровень, авторизация"
+    },
+    "quick": {
+      "title": "Быстрые действия",
+      "marketBrief": "Обзор рынка",
+      "swap": "Обмен",
+      "bridge": "Мост",
+      "futures": "Фьючерсы",
+      "lend": "Выдать кредит",
+      "goal": "Цель",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "История",
+      "title": "История транзакций",
+      "subtitle": "Что Intent AI сделал на этом устройстве — каждая записанная квитанция, сначала новые.",
+      "emptyTitle": "Пока пусто",
+      "emptyBody": "Квитанции, которые создаёт Intent AI — одобренные, отправленные, неудачные или в очереди — показываются здесь.",
+      "clear": "Очистить историю",
+      "localNote": "Хранится только в этом браузере. Очистка данных браузера удаляет его; он никогда не загружается и не используется для подписи.",
+      "txHash": "tx",
+      "feeLine": "комиссия {{amount}} {{symbol}}",
+      "status": {
+        "completed": "завершено",
+        "submitted": "отправлено",
+        "authorized": "одобрено",
+        "pending": "в ожидании",
+        "partial": "частично",
+        "failed": "неудачно",
+        "rejected": "отклонено",
+        "cancelled": "отменено",
+        "blocked": "заблокировано",
+        "reauthorize": "повторная авторизация",
+        "queued": "в очереди",
+        "unavailable": "недоступно"
+      },
+      "action": {
+        "swap": "обмен",
+        "bridge": "мост",
+        "send": "отправить",
+        "goal": "цель",
+        "futures": "фьючерсы",
+        "futures_open": "фьючерсы",
+        "dydx": "фьючерсы",
+        "defi": "DeFi",
+        "lending": "кредитование",
+        "staking": "стейкинг",
+        "liquidity": "ликвидность",
+        "unknown": "действие"
+      }
+    },
+    "analysis": {
+      "loading": "Чтение живых рыночных данных…",
+      "unavailable": "Живые рыночные данные сейчас недоступны, поэтому цены не показываются.",
+      "offlineNote": "Офлайн-снимок — цены из последних сохранённых данных, не в реальном времени.",
+      "regime": "Режим рынка",
+      "change24h": "24 ч",
+      "trend7d": "Тренд 7 дн.",
+      "volume": "Объём 24 ч",
+      "risk": "Риск",
+      "riskLevel": {
+        "low": "низкий",
+        "medium": "средний",
+        "high": "высокий",
+        "unknown": "н/д"
+      },
+      "signal": {
+        "up": "рост",
+        "down": "падение",
+        "flat": "флэт",
+        "unknown": "н/д"
+      },
+      "assetUnavailable": "нет живой цены",
+      "notAdvice": "Это обзор рынка, а не финансовый совет. Сигналы — простые эвристики по показанным числам — здесь ничего не исполняется и не рекомендуется."
+    },
+    "examples": {
+      "futures": {
+        "title": "Фьючерсы",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "Кредитование и DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "Стейкинг",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "История"
+    }
   }
 }

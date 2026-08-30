@@ -981,5 +981,115 @@
     "warningScBody": "任何协议都可能存在漏洞。",
     "maxBorrowHint": "最大: {{max}}",
     "chooseAssetFirst": "请先选择资产"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "会话设置 — 模式、级别、授权"
+    },
+    "quick": {
+      "title": "快捷操作",
+      "marketBrief": "市场简报",
+      "swap": "兑换",
+      "bridge": "跨链桥",
+      "futures": "合约",
+      "lend": "借贷",
+      "goal": "目标",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "历史",
+      "title": "交易历史",
+      "subtitle": "Intent AI 在本设备上的操作记录——每条收据，最新的在前。",
+      "emptyTitle": "暂无记录",
+      "emptyBody": "Intent AI 生成的收据——已授权、已提交、失败或排队——都会列在这里。",
+      "clear": "清空历史",
+      "localNote": "仅存储在此浏览器中。清除浏览器数据即删除；不会上传，也不会用于任何签名。",
+      "txHash": "tx",
+      "feeLine": "手续费 {{amount}} {{symbol}}",
+      "status": {
+        "completed": "已完成",
+        "submitted": "已提交",
+        "authorized": "已授权",
+        "pending": "待处理",
+        "partial": "部分",
+        "failed": "失败",
+        "rejected": "已拒绝",
+        "cancelled": "已取消",
+        "blocked": "已阻止",
+        "reauthorize": "重新授权",
+        "queued": "已排队",
+        "unavailable": "不可用"
+      },
+      "action": {
+        "swap": "兑换",
+        "bridge": "跨链桥",
+        "send": "发送",
+        "goal": "目标",
+        "futures": "合约",
+        "futures_open": "合约",
+        "dydx": "合约",
+        "defi": "DeFi",
+        "lending": "借贷",
+        "staking": "质押",
+        "liquidity": "流动性",
+        "unknown": "操作"
+      }
+    },
+    "analysis": {
+      "loading": "正在读取实时市场数据…",
+      "unavailable": "当前无法获取实时市场数据，因此不显示价格。",
+      "offlineNote": "离线快照——价格来自上次保存的数据，并非实时。",
+      "regime": "市场状态",
+      "change24h": "24小时",
+      "trend7d": "7日趋势",
+      "volume": "24小时成交量",
+      "risk": "风险",
+      "riskLevel": {
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "unknown": "未知"
+      },
+      "signal": {
+        "up": "上涨",
+        "down": "下跌",
+        "flat": "横盘",
+        "unknown": "未知"
+      },
+      "assetUnavailable": "无实时价格",
+      "notAdvice": "这是市场解读，不构成财务建议。信号只是基于所示数字的简单启发式规则——这里不执行也不推荐任何交易。"
+    },
+    "examples": {
+      "futures": {
+        "title": "合约",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "借贷与 DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "质押",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "历史"
+    }
   }
 }

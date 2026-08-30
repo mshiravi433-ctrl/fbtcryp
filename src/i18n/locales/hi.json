@@ -981,5 +981,115 @@
     "warningScBody": "किसी भी प्रोटोकॉल में बग हो सकते हैं।",
     "maxBorrowHint": "अधिकतम: {{max}}",
     "chooseAssetFirst": "पहले एक संपत्ति चुनें"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "सत्र सेटअप — मोड, स्तर, प्राधिकार"
+    },
+    "quick": {
+      "title": "त्वरित क्रियाएँ",
+      "marketBrief": "बाज़ार सार",
+      "swap": "स्वैप",
+      "bridge": "ब्रिज",
+      "futures": "फ़्यूचर्स",
+      "lend": "उधार दें",
+      "goal": "लक्ष्य",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "इतिहास",
+      "title": "लेन-देन इतिहास",
+      "subtitle": "इस डिवाइस पर Intent AI ने क्या किया — दर्ज की गई हर रसीद, पहले नई।",
+      "emptyTitle": "अभी कुछ नहीं",
+      "emptyBody": "Intent AI जो रसीदें बनाता है — स्वीकृत, सबमिट, असफल या कतार में — वे यहाँ दिखती हैं।",
+      "clear": "इतिहास साफ़ करें",
+      "localNote": "केवल इसी ब्राउज़र में सहेजा जाता है। ब्राउज़र डेटा साफ़ करने से हट जाता है; यह कभी अपलोड नहीं होता और कभी हस्ताक्षर के लिए उपयोग नहीं होता।",
+      "txHash": "tx",
+      "feeLine": "शुल्क {{amount}} {{symbol}}",
+      "status": {
+        "completed": "पूर्ण",
+        "submitted": "सबमिट की गई",
+        "authorized": "स्वीकृत",
+        "pending": "लंबित",
+        "partial": "आंशिक",
+        "failed": "असफल",
+        "rejected": "अस्वीकृत",
+        "cancelled": "रद्द",
+        "blocked": "अवरुद्ध",
+        "reauthorize": "पुनः प्राधिकरण",
+        "queued": "कतार में",
+        "unavailable": "अनुपलब्ध"
+      },
+      "action": {
+        "swap": "स्वैप",
+        "bridge": "ब्रिज",
+        "send": "भेजें",
+        "goal": "लक्ष्य",
+        "futures": "फ़्यूचर्स",
+        "futures_open": "फ़्यूचर्स",
+        "dydx": "फ़्यूचर्स",
+        "defi": "DeFi",
+        "lending": "उधार",
+        "staking": "स्टेकिंग",
+        "liquidity": "तरलता",
+        "unknown": "क्रिया"
+      }
+    },
+    "analysis": {
+      "loading": "लाइव बाज़ार डेटा पढ़ा जा रहा है…",
+      "unavailable": "लाइव बाज़ार डेटा अभी उपलब्ध नहीं है, इसलिए कोई कीमत नहीं दिखाई जा रही।",
+      "offlineNote": "ऑफ़लाइन स्नैपशॉट — कीमतें अंतिम सहेजे गए डेटा से हैं, लाइव नहीं।",
+      "regime": "बाज़ार स्थिति",
+      "change24h": "24 घंटे",
+      "trend7d": "7 दिन का रुझान",
+      "volume": "24 घंटे का आयतन",
+      "risk": "जोखिम",
+      "riskLevel": {
+        "low": "कम",
+        "medium": "मध्यम",
+        "high": "उच्च",
+        "unknown": "अज्ञात"
+      },
+      "signal": {
+        "up": "बढ़त",
+        "down": "गिरावट",
+        "flat": "स्थिर",
+        "unknown": "अज्ञात"
+      },
+      "assetUnavailable": "कोई लाइव कीमत नहीं",
+      "notAdvice": "यह बाज़ार की जानकारी है, वित्तीय सलाह नहीं। संकेत दिखाए गए आंकड़ों पर साधारण नियम हैं — यहाँ कोई ट्रेड न तो चलती है, न सुझाई जाती है।"
+    },
+    "examples": {
+      "futures": {
+        "title": "फ़्यूचर्स",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "उधार और DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "स्टेकिंग",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "इतिहास"
+    }
   }
 }

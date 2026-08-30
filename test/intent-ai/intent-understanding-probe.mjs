@@ -536,10 +536,10 @@ export default async function run() {
   t('an unstated network is reported unclear, never guessed',
     noChain.intent.chainId == null && noChain.clarifications.includes('CHAIN_UNCLEAR'));
 
-  const overLimit = parser.parseUserIntent('swap 50000 USDT to ETH', { locale: 'fa' });
+  const overLimit = parser.parseUserIntent('swap 450000 USDT to ETH', { locale: 'fa' });
   t('an over-limit amount is flagged, not silently clamped',
     Array.isArray(overLimit.limitViolations) && overLimit.limitViolations.length > 0
-    && overLimit.intent.amount === 50000);
+    && overLimit.intent.amount === 450000);
 
   /* ---- margin vocabulary: understood where it exists, absent where not -- */
 

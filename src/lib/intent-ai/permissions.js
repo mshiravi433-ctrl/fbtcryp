@@ -33,19 +33,26 @@ export const PERMISSION_LEVEL_NAMES = Object.freeze({
  * intentLimits.js (single source of truth for what a user may ask for).
  */
 export const DEFAULT_POLICY_CAPS = Object.freeze({
-  maxCapitalUsd: 400_000,
-  maxTransactionUsd: 5_000,
-  maxLossUsd: 1_000,
+  maxCapitalUsd: 10_000_000,
+  maxTransactionUsd: 400_000,
+  maxLossUsd: 1_000_000,
   maxLeverage: 5,
   maxSlippagePct: 3,
   maxFeeBps: 500,        // 5%
   maxDurationMs: 24 * 60 * 60 * 1000, // 24h session bound; goals may run 30 days
-  maxChains: 8,
+  maxChains: 18,
   maxProtocols: 16,
-  maxAssets: 32
+  maxAssets: 64
 });
 
-const ALLOWED_CHAINS = new Set([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144, 8757, 501, 195, 196]);
+/*
+ * Chain allowlist — the majors plus the L2s the product trades on. Extended
+ * 2026-08 with Unichain (130), zkSync Era (324), Mantle (5000), Blast (81457)
+ * and Scroll (534352). A chain outside this set is never silently routed: at
+ * execution time it is a hard Guardian rejection, and at quote/analysis time
+ * it is a named warning (guardian.js).
+ */
+const ALLOWED_CHAINS = new Set([1, 10, 56, 130, 137, 146, 195, 196, 324, 501, 5000, 8453, 42161, 43114, 59144, 8757, 81457, 534352]);
 const ALLOWED_PROTOCOLS = new Set([
   'swap', 'bridge', 'defi', 'farm', 'futures', 'dydx', 'cex',
   'stablecoin', 'lending', 'liquidity', 'staking', 'rwa', 'investment',

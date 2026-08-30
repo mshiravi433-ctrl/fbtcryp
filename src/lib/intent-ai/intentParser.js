@@ -76,7 +76,10 @@ const FILLER_WORDS = new Set([
   'DO', 'DOES', 'DID', 'CAN', 'COULD', 'WOULD', 'SHOULD', 'WILL', 'AM', 'ARE', 'WAS',
   'WERE', 'BEEN', 'BEING', 'MUCH', 'MANY', 'LOT', 'LOTS', 'BIT', 'LITTLE', 'HALF',
   'QUARTER', 'THIRD', 'TOTAL', 'WHOLE', 'ENTIRE', 'REST', 'OTHER', 'ANOTHER', 'SAME',
-  'IF', 'SO', 'BUT', 'BECAUSE', 'THAN', 'THAT', 'WHILE', 'ONCE', 'TWICE'
+  'IF', 'SO', 'BUT', 'BECAUSE', 'THAN', 'THAT', 'WHILE', 'ONCE', 'TWICE',
+  /* "market" and "brief" are analysis-request words, never tickers — without
+     this, "market brief" parses as the fake pair MARKET → BRIEF. */
+  'MARKET', 'MARKETS', 'BRIEF'
 ]);
 
 /* Chain words that should NOT be treated as tokens when used with "on <chain>" context.
@@ -104,7 +107,7 @@ const ACTION_KEYWORDS = [
   { action: 'futures',     keywords: ['futures', 'perps', 'perpetual', 'leverage', 'فیوچرز'],               kind: 'futures' },
   { action: 'dydx',        keywords: ['dydx'],                                                   kind: 'futures' },
   { action: 'defi',        keywords: ['defi', 'lend', 'borrow', 'supply', 'deposit', 'دیفای', 'وام'],            kind: 'defi' },
-  { action: 'analyze',     keywords: ['analyze', 'analyse', 'analysis', 'research', 'look at', 'تحلیل'],  kind: 'analysis' },
+  { action: 'analyze',     keywords: ['analyze', 'analyse', 'analysis', 'research', 'look at', 'market brief', 'brief', 'market update', 'تحلیل'],  kind: 'analysis' },
   // action -> [keywords], kind
   { action: 'swap',        keywords: ['swap', 'exchange', 'convert', 'trade'],                   kind: 'swap' },
   { action: 'bridge',      keywords: ['bridge', 'cross-chain', 'cross chain', 'move to'],        kind: 'bridge' },
@@ -115,7 +118,7 @@ const ACTION_KEYWORDS = [
   { action: 'futures',     keywords: ['futures', 'perps', 'perpetual', 'leverage'],               kind: 'futures' },
   { action: 'dydx',        keywords: ['dydx'],                                                   kind: 'futures' },
   { action: 'defi',        keywords: ['defi', 'lend', 'borrow', 'supply', 'deposit'],            kind: 'defi' },
-  { action: 'analyze',     keywords: ['analyze', 'analyse', 'analysis', 'research', 'look at'],  kind: 'analysis' },
+  { action: 'analyze',     keywords: ['analyze', 'analyse', 'analysis', 'research', 'look at', 'market brief', 'brief', 'market update'],  kind: 'analysis' },
   { action: 'portfolio',   keywords: ['portfolio', 'wallet', 'holdings', 'balance'],              kind: 'analysis' },
   { action: 'news',        keywords: ['news', 'signal', 'headline'],                              kind: 'analysis' },
   { action: 'goal',        keywords: ['goal', 'target', 'percent', '% return', 'profit'],         kind: 'goal' }
@@ -652,6 +655,24 @@ export function parseUserIntent(rawText, context = {}) {
   });
   intent = enriched.intent;
   for (const sig of enriched.signals) if (!signals.includes(sig)) signals.push(sig);
+
+  /*
+   * Every asset the customer named, in the order they named them. An
+   * "analyze BTC ETH SOL" request is about three markets, not two — the
+   * keyword engine only models a from/to pair, so the semantic asset list
+   * fills in the rest. The chat layer renders one market block per symbol;
+   * symbols the feed cannot price are reported as unavailable, never
+   * dropped silently.
+   */
+  const namedAssets = [];
+  for (const sym of [intent.fromSymbol, intent.toSymbol]) {
+    if (sym && !namedAssets.includes(sym)) namedAssets.push(sym);
+  }
+  for (const row of semantic.assets || []) {
+    const sym = String(row?.symbol || '').toUpperCase();
+    if (sym && !namedAssets.includes(sym)) namedAssets.push(sym);
+  }
+  intent.assets = namedAssets;
 
   /* A chain the keyword pass missed, allowing one keystroke of sloppiness. */
   if (!intent.chainId) {

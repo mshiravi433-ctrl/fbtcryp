@@ -211,15 +211,24 @@ export function guardianReview(action, policy, ctx = {}) {
       reasons.push('ACTION_DEADLINE_PASSED');
     }
   } else if (level < 3) {
-    // At L1/L2 we still enforce global chain/protocol sanity but NOT per-session allowlists.
+    /*
+     * L1/L2 = analysis / preparation (quote & draft building). Nothing here
+     * can move funds, so an unknown chain or protocol is a WARNING, not a
+     * block: the user is allowed to explore "what would a swap on X look
+     * like" before the chain is supported. The hard line is unchanged —
+     * `action.execution === true` under section 3 already requires L3, and
+     * the L3 execution branch above still rejects an unsupported chain with
+     * a reason. Blocking a preparation turn would only hide the warning the
+     * user needs to see.
+     */
     if (action.chainId != null && !ALLOWED_CHAINS.has(Number(action.chainId))) {
-      reasons.push('CHAIN_NOT_SUPPORTED');
+      warnings.push(`CHAIN_NOT_SUPPORTED:${Number(action.chainId)}`);
     }
     if (action.protocol) {
       const rawProto = String(action.protocol).toLowerCase();
       const protoMap = { dex_aggregator: 'swap', bridge_router: 'bridge', lending_market: 'defi' };
       const proto = protoMap[rawProto] || rawProto;
-      if (!ALLOWED_PROTOCOLS.has(proto)) reasons.push(`PROTOCOL_NOT_SUPPORTED:${proto}`);
+      if (!ALLOWED_PROTOCOLS.has(proto)) warnings.push(`PROTOCOL_NOT_SUPPORTED:${proto}`);
     }
   }
 

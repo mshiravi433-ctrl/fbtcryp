@@ -981,5 +981,115 @@
     "warningScBody": "Tout protocole peut avoir des bugs. Ne déposez que ce que vous pouvez perdre.",
     "maxBorrowHint": "Maximum: {{max}}",
     "chooseAssetFirst": "Choisissez d'abord un actif"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "Configuration de session — mode, niveau, autorisation"
+    },
+    "quick": {
+      "title": "Actions rapides",
+      "marketBrief": "Aperçu du marché",
+      "swap": "Échanger",
+      "bridge": "Bridge",
+      "futures": "Futures",
+      "lend": "Prêter",
+      "goal": "Objectif",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "Historique",
+      "title": "Historique des transactions",
+      "subtitle": "Ce qu’Intent AI a fait sur cet appareil — chaque reçu enregistré, du plus récent au plus ancien.",
+      "emptyTitle": "Rien pour l’instant",
+      "emptyBody": "Les reçus produits par Intent AI — autorisés, envoyés, échoués ou en attente — sont listés ici.",
+      "clear": "Effacer l’historique",
+      "localNote": "Stocké uniquement dans ce navigateur. L’effacement des données le supprime ; il n’est jamais téléversé ni utilisé pour signer quoi que ce soit.",
+      "txHash": "tx",
+      "feeLine": "frais {{amount}} {{symbol}}",
+      "status": {
+        "completed": "terminée",
+        "submitted": "envoyée",
+        "authorized": "autorisée",
+        "pending": "en attente",
+        "partial": "partielle",
+        "failed": "échouée",
+        "rejected": "rejetée",
+        "cancelled": "annulée",
+        "blocked": "bloquée",
+        "reauthorize": "nouvelle autorisation",
+        "queued": "en file",
+        "unavailable": "indisponible"
+      },
+      "action": {
+        "swap": "échange",
+        "bridge": "bridge",
+        "send": "envoi",
+        "goal": "objectif",
+        "futures": "futures",
+        "futures_open": "futures",
+        "dydx": "futures",
+        "defi": "DeFi",
+        "lending": "prêt",
+        "staking": "staking",
+        "liquidity": "liquidité",
+        "unknown": "action"
+      }
+    },
+    "analysis": {
+      "loading": "Lecture des données de marché en direct…",
+      "unavailable": "Les données de marché en direct sont inaccessibles pour le moment ; aucun prix n’est affiché.",
+      "offlineNote": "Instantané hors ligne — les prix proviennent des dernières données enregistrées, pas du direct.",
+      "regime": "Régime de marché",
+      "change24h": "24 h",
+      "trend7d": "Tendance 7 j",
+      "volume": "Volume 24 h",
+      "risk": "Risque",
+      "riskLevel": {
+        "low": "faible",
+        "medium": "moyen",
+        "high": "élevé",
+        "unknown": "n.d."
+      },
+      "signal": {
+        "up": "hausse",
+        "down": "baisse",
+        "flat": "stable",
+        "unknown": "n.d."
+      },
+      "assetUnavailable": "pas de prix en direct",
+      "notAdvice": "Une lecture du marché, pas un conseil financier. Les signaux sont des heuristiques simples sur ces chiffres — rien ici n’exécute ni ne recommande de trade."
+    },
+    "examples": {
+      "futures": {
+        "title": "Futures",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "Prêts & DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "Staking",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "Historique"
+    }
   }
 }

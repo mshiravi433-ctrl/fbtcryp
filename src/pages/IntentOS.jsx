@@ -28,6 +28,7 @@ import { INTENT_AI_VERSION, mayExecute, verifyWalletChain, multichainCoverage, w
 import IntentRail from '../components/IntentRail';
 import ProfitPlanner from '../components/ProfitPlanner';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
+import IntentTxHistory from '../components/IntentTxHistory';
 import { useWallet } from '../context/WalletContext';
 import {
   ensureLifecycle,
@@ -41,7 +42,7 @@ import { confidentialSwapReadiness } from '../lib/confidentialIntent';
 import { fetchCatalog, fetchCertifications, localizedValue } from '../lib/ecosystemCatalog';
 import '../styles/intent-os.css';
 
-const TABS = ['compose', 'plan', 'crosschain', 'memory', 'proofs', 'agents', 'strategies', 'network'];
+const TABS = ['compose', 'plan', 'crosschain', 'memory', 'proofs', 'history', 'agents', 'strategies', 'network'];
 /* Which registry each tab reads. Only these two tabs fetch a catalog. */
 const TAB_CATALOG = { agents: 'agent', strategies: 'strategy' };
 const TEMPLATES = [
@@ -1229,6 +1230,14 @@ export default function IntentOS() {
             </section>
           )}
           <p className="ios-honesty-note">{t('intentOS.proof.limit')}</p>
+        </motion.div>
+      )}
+
+      {tab === 'history' && (
+        <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          {/* The same local record the Intent AI panel appends to; read-only
+              view plus a user-controlled wipe. */}
+          <IntentTxHistory />
         </motion.div>
       )}
 

@@ -156,7 +156,7 @@ export async function run(container) {
 
     // Over-limit edit → friendly warning + disabled final confirm.
     const amountInput = screen && [...screen.querySelectorAll('input[type="number"]')][0];
-    await act(async () => { setInputValue(amountInput, '6000'); });
+    await act(async () => { setInputValue(amountInput, '450001'); });
     await act(async () => { await sleep(10); });
     t('an over-limit edit shows the friendly limit warning and blocks confirm',
       /above the per-transaction ceiling/i.test(screen?.textContent || '')

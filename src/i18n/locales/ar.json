@@ -3064,7 +3064,8 @@
       "body": "راجع الشروط. لا يُوقَّع أي شيء حتى تؤكّده في محفظتك."
     },
     "tab": {
-      "plan": "خطة الربح"
+      "plan": "خطة الربح",
+      "history": "السجل"
     },
     "rail": {
       "label": "شريط تحكم Intent OS",
@@ -3875,6 +3876,24 @@
         "e1": "analyze BTC",
         "e2": "research the ETH portfolio",
         "e3": "look at SOL market news"
+      },
+      "futures": {
+        "title": "عقود آجلة",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "الإقراض و DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "ستيكينغ",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
       }
     },
     "externalInfo": {
@@ -4403,6 +4422,89 @@
     },
     "activation": {
       "title": "تفعيل Intent AI"
+    },
+    "setup": {
+      "title": "إعداد الجلسة — الوضع، المستوى، التفويض"
+    },
+    "quick": {
+      "title": "إجراءات سريعة",
+      "marketBrief": "موجز السوق",
+      "swap": "مبادلة",
+      "bridge": "جسر",
+      "futures": "عقود آجلة",
+      "lend": "إقراض",
+      "goal": "هدف",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "السجل",
+      "title": "سجل المعاملات",
+      "subtitle": "ما فعله Intent AI على هذا الجهاز — كل إيصال سجّله، الأحدث أولاً.",
+      "emptyTitle": "لا شيء هنا بعد",
+      "emptyBody": "الإيصالات التي ينتجها Intent AI — المصرَّح بها أو المُرسلة أو الفاشلة أو في الانتظار — تُعرض هنا.",
+      "clear": "مسح السجل",
+      "localNote": "يُخزَّن فقط في هذا المتصفح. مسح بيانات المتصفح يزيله؛ لا يُرفَع أبداً ولا يُستخدَم للتوقيع على أي شيء.",
+      "txHash": "tx",
+      "feeLine": "رسوم {{amount}} {{symbol}}",
+      "status": {
+        "completed": "مكتمل",
+        "submitted": "مُرسَل",
+        "authorized": "مصرَّح",
+        "pending": "قيد الانتظار",
+        "partial": "جزئي",
+        "failed": "فاشل",
+        "rejected": "مرفوض",
+        "cancelled": "ملغى",
+        "blocked": "محظور",
+        "reauthorize": "إعادة تخويل",
+        "queued": "في الانتظار",
+        "unavailable": "غير متاح"
+      },
+      "action": {
+        "swap": "مبادلة",
+        "bridge": "جسر",
+        "send": "إرسال",
+        "goal": "هدف",
+        "futures": "عقود آجلة",
+        "futures_open": "عقود آجلة",
+        "dydx": "عقود آجلة",
+        "defi": "DeFi",
+        "lending": "إقراض",
+        "staking": "ستيكينغ",
+        "liquidity": "سيولة",
+        "unknown": "إجراء"
+      }
+    },
+    "analysis": {
+      "loading": "جارٍ قراءة بيانات السوق الحيّة…",
+      "unavailable": "بيانات السوق الحيّة غير متاحة حالياً، لذا لا تُعرض أسعار.",
+      "offlineNote": "لقطة دون اتصال — الأسعار من آخر بيانات محفوظة، وليست حيّة.",
+      "regime": "نظام السوق",
+      "change24h": "٢٤ ساعة",
+      "trend7d": "اتجاه ٧ أيام",
+      "volume": "حجم ٢٤ ساعة",
+      "risk": "المخاطر",
+      "riskLevel": {
+        "low": "منخفض",
+        "medium": "متوسط",
+        "high": "مرتفع",
+        "unknown": "غير معروف"
+      },
+      "signal": {
+        "up": "صاعد",
+        "down": "هابط",
+        "flat": "ثابت",
+        "unknown": "غير معروف"
+      },
+      "assetUnavailable": "لا سعر مباشر",
+      "notAdvice": "هذه قراءة للسوق وليست نصيحة مالية. الإشارات قواعد بسيطة فوق الأرقام المعروضة — لا شيء هنا ينفّذ صفقة أو يوصي بها."
     }
   },
   "loan": {

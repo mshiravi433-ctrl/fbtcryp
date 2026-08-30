@@ -984,5 +984,115 @@
     "warningScBody": "کسی بھی پروٹوکول میں خرابی ہو سکتی ہے۔",
     "maxBorrowHint": "زیادہ سے زیادہ: {{max}}",
     "chooseAssetFirst": "پہلے ایک اثاثہ منتخب کریں"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "سیشن سیٹ اپ — موڈ، سطح، اجازت"
+    },
+    "quick": {
+      "title": "فوری کارروائیاں",
+      "marketBrief": "مارکیٹ خلاصہ",
+      "swap": "سواپ",
+      "bridge": "برج",
+      "futures": "فیوچرز",
+      "lend": "قرض دیں",
+      "goal": "ہدف",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "تاریخچہ",
+      "title": "ٹرانزیکشن تاریخچہ",
+      "subtitle": "اس ڈیوائس پر Intent AI نے کیا کیا — ہر محفوظ شدہ رسید، نئی سے پرانی۔",
+      "emptyTitle": "ابھی کچھ نہیں",
+      "emptyBody": "رسیدیں جو Intent AI بناتا ہے — منظور شدہ، بھیجی گئی، ناکام یا قطار میں — یہاں دکھائی جاتی ہیں۔",
+      "clear": "تاریخچہ صاف کریں",
+      "localNote": "صرف اسی براؤزر میں محفوظ ہے۔ براؤزر ڈیٹا صاف کرنے سے حذف ہو جاتا ہے؛ نہ کبھی اپلوڈ ہوتا ہے نہ کسی دستخط کے لیے استعمال ہوتا ہے۔",
+      "txHash": "tx",
+      "feeLine": "فیس {{amount}} {{symbol}}",
+      "status": {
+        "completed": "مکمل",
+        "submitted": "بھیجی گئی",
+        "authorized": "منظور شدہ",
+        "pending": "زیر التواء",
+        "partial": "جزوی",
+        "failed": "ناکام",
+        "rejected": "مسترد",
+        "cancelled": "منسوخ",
+        "blocked": "بلاک شدہ",
+        "reauthorize": "دوبارہ اجازت",
+        "queued": "قطار میں",
+        "unavailable": "دستیاب نہیں"
+      },
+      "action": {
+        "swap": "سواپ",
+        "bridge": "برج",
+        "send": "بھیجیں",
+        "goal": "ہدف",
+        "futures": "فیوچرز",
+        "futures_open": "فیوچرز",
+        "dydx": "فیوچرز",
+        "defi": "DeFi",
+        "lending": "قرض",
+        "staking": "اسٹیکنگ",
+        "liquidity": "لیکویڈیٹی",
+        "unknown": "کارروائی"
+      }
+    },
+    "analysis": {
+      "loading": "لائیو مارکیٹ ڈیٹا پڑھا جا رہا ہے…",
+      "unavailable": "لائیو مارکیٹ ڈیٹا ابھی دستیاب نہیں، اس لیے کوئی قیمت نہیں دکھائی جا رہی۔",
+      "offlineNote": "آف لائن اسنیپ شاٹ — قیمتیں آخری محفوظ ڈیٹا سے ہیں، لائیو نہیں۔",
+      "regime": "مارکیٹ رجیم",
+      "change24h": "24 گھنٹے",
+      "trend7d": "7 دن کا رجحان",
+      "volume": "حجم 24 گھنٹے",
+      "risk": "رسک",
+      "riskLevel": {
+        "low": "کم",
+        "medium": "درمیانی",
+        "high": "زیاد",
+        "unknown": "نامعلوم"
+      },
+      "signal": {
+        "up": "اوپر",
+        "down": "نیچے",
+        "flat": "مستقل",
+        "unknown": "نامعلوم"
+      },
+      "assetUnavailable": "کوئی لائیو قیمت نہیں",
+      "notAdvice": "یہ مارکیٹ کا جائزہ ہے، مالی مشورہ نہیں۔ سگنلز دکھائے گئے اعداد پر سادہ اصول ہیں — یہاں کوئی ٹریڈ نہ چلتی ہے نہ تجویز ہوتی ہے۔"
+    },
+    "examples": {
+      "futures": {
+        "title": "فیوچرز",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "قرض اور DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "اسٹیکنگ",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "تاریخچہ"
+    }
   }
 }

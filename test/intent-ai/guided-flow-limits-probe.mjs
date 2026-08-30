@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * Locks in the new product behaviour:
  *
- *   · hard user-facing limits: 400k total input, 5k per transaction, 60%
+ *   · hard user-facing limits: 10M total input, 400k per transaction, 500%
  *     goal, 30-day goals — enforced by the parser, the guided flow and the
  *     policy caps, always with a FRIENDLY warning (never a silent clamp)
  *   · the step-by-step guided chat flow (task → amount → confirm → goal →
@@ -43,26 +43,26 @@ export default async function run() {
 
   /* ====================== 1. PRODUCT LIMITS ====================== */
 
-  t('INTENT_LIMITS: 400k total / 5k per tx / 60% goal / 30 days',
-    limits.INTENT_LIMITS.maxTotalInputUsd === 400_000
-    && limits.INTENT_LIMITS.maxPerTransactionUsd === 5_000
-    && limits.INTENT_LIMITS.maxGoalPct === 60
+  t('INTENT_LIMITS: 10M total / 400k per tx / 500% goal / 30 days',
+    limits.INTENT_LIMITS.maxTotalInputUsd === 10_000_000
+    && limits.INTENT_LIMITS.maxPerTransactionUsd === 400_000
+    && limits.INTENT_LIMITS.maxGoalPct === 500
     && limits.INTENT_LIMITS.maxGoalDurationDays === 30
     && limits.MAX_GOAL_DURATION_HRS === 720);
 
   t('compliant intent produces no violations',
     limits.checkIntentLimits({ kind: 'swap', amount: 1000, amountUnit: 'USDC' }).length === 0);
 
-  t('total input over 400k is flagged',
-    limits.checkIntentLimits({ kind: 'goal', amount: 500_000, amountUnit: 'USDT' })
+  t('total input over 10M is flagged',
+    limits.checkIntentLimits({ kind: 'goal', amount: 11_000_000, amountUnit: 'USDT' })
       .some((v) => v.code === 'TOTAL_INPUT_OVER_LIMIT'));
 
-  t('per-transaction over 5k is flagged for transaction kinds',
-    limits.checkIntentLimits({ kind: 'swap', amount: 6_000, amountUnit: 'USDC' })
+  t('per-transaction over 400k is flagged for transaction kinds',
+    limits.checkIntentLimits({ kind: 'swap', amount: 450_000, amountUnit: 'USDC' })
       .some((v) => v.code === 'PER_TX_OVER_LIMIT'));
 
-  t('goal over 60% is flagged',
-    limits.checkIntentLimits({ kind: 'goal', amount: 100, amountUnit: 'USDT', goalPct: 90 })
+  t('goal over 500% is flagged',
+    limits.checkIntentLimits({ kind: 'goal', amount: 100, amountUnit: 'USDT', goalPct: 600 })
       .some((v) => v.code === 'GOAL_PCT_OVER_LIMIT'));
 
   t('goal duration over 30 days is flagged',
@@ -70,16 +70,16 @@ export default async function run() {
       .some((v) => v.code === 'GOAL_DURATION_OVER_LIMIT'));
 
   t('policy caps mirror the product limits',
-    perm.DEFAULT_POLICY_CAPS.maxCapitalUsd === 400_000
-    && perm.DEFAULT_POLICY_CAPS.maxTransactionUsd === 5_000);
+    perm.DEFAULT_POLICY_CAPS.maxCapitalUsd === 10_000_000
+    && perm.DEFAULT_POLICY_CAPS.maxTransactionUsd === 400_000);
 
   /* ====================== 2. PARSER LIMIT SURFACES ====================== */
 
-  const overAmount = parser.parseUserIntent('swap 900000 USDC to ETH on Arbitrum');
+  const overAmount = parser.parseUserIntent('swap 11000000 USDC to ETH on Arbitrum');
   t('parser attaches limit violations to over-limit input',
     overAmount.limitViolations?.some((v) => v.code === 'TOTAL_INPUT_OVER_LIMIT'));
 
-  const overGoal = parser.parseUserIntent('goal 90% profit on 100 USDT in 60 days');
+  const overGoal = parser.parseUserIntent('goal 600% profit on 100 USDT in 60 days');
   t('parser flags over-limit goal and duration',
     overGoal.limitViolations?.some((v) => v.code === 'GOAL_PCT_OVER_LIMIT')
     && overGoal.limitViolations?.some((v) => v.code === 'GOAL_DURATION_OVER_LIMIT'));
@@ -159,7 +159,7 @@ export default async function run() {
   // Over-limit answer inside the flow keeps the flow and warns friendly.
   let s2 = human.startSession({ mode: 'human-ai', level: 1, defaultChainId: 42161 });
   let r2 = human.chatTurn(s2, 'swap USDC to ETH on Arbitrum');
-  r2 = human.chatTurn(r2.session, '6000');
+  r2 = human.chatTurn(r2.session, '450000');
   t('over-limit amount ANSWER warns without advancing the flow',
     r2.reply.type === 'limits-warning'
     && r2.reply.payload.violations?.some((v) => v.code === 'PER_TX_OVER_LIMIT')
