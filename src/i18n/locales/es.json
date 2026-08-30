@@ -28,7 +28,8 @@
       "earn": "Ganar",
       "more": "Más"
     },
-    "intentOS": "Sistema de intents"
+    "intentOS": "Sistema de intents",
+    "loan": "Préstamos"
   },
   "common": {
     "balance": "Saldo",
@@ -448,7 +449,15 @@
     "referral": "Referidos",
     "shareInvite": "Compartir invitación",
     "quests": "Misiones",
-    "virtualNotice": "Los puntos aquí son una puntuación, no una moneda. No se pueden retirar ni transferir y no tienen valor en efectivo."
+    "virtualNotice": "Los puntos aquí son una puntuación, no una moneda. No se pueden retirar ni transferir y no tienen valor en efectivo.",
+    "yield": {
+      "loan": {
+        "title": "Préstamos",
+        "body": "Deposita activos en el pool y gana de los intereses de los prestatarios.",
+        "tag": "Rendimiento de préstamo",
+        "note": "La liquidación es irreversible. Solo deposita lo que puedas perder."
+      }
+    }
   },
   "help": {
     "faqTitle": "Preguntas frecuentes",
@@ -904,5 +913,66 @@
       "withdrawConfirmYes": "Confirmar retiro",
       "withdrawDone": "Retiro enviado"
     }
+  },
+  "loan": {
+    "pageTitle": "Préstamos",
+    "pageSubtitle": "Préstamos en la app — sin intermediarios",
+    "heroTitle": "Préstamos Descentralizados",
+    "heroSub": "Deposita activos para ganar rendimiento o pide prestado con garantía",
+    "nonCustodial": "Sin custodia",
+    "nonCustodialSub": "Claves en tu poder",
+    "fbtFee": "Comisión FBT",
+    "fbtFeeSub": "% de tu rendimiento",
+    "noKyc": "Sin KYC",
+    "noKycSub": "Sin verificación",
+    "tabSupply": "Depositar",
+    "tabBorrow": "Pedir prestado",
+    "tabPositions": "Mis posiciones",
+    "supplySubtitle": "Depósito — Gana de los prestatarios",
+    "supplyDesc": "Deposita tus activos en el pool de préstamos. Los prestatarios pagan intereses; FBT toma una parte de ese rendimiento. Tus claves nunca salen de tu cartera.",
+    "chooseAsset": "Activo a depositar",
+    "supplyAmount": "Cantidad de {{symbol}} a depositar",
+    "supplyBtn": "Depositar {{symbol}}",
+    "borrowSubtitle": "Préstamo — Con garantía",
+    "borrowDesc": "Bloquea garantía y pide prestado. Si el valor de la garantía cae, se liquida. Tú gestionas tu propio riesgo.",
+    "chooseBorrowAsset": "Activo a pedir prestado",
+    "collateralRatio": "Hasta {{pct}}% LTV",
+    "collateralLabel": "Garantía ({{symbol}})",
+    "maxBorrowNote": "Con esta garantía, máximo: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "Monto del préstamo {{symbol}}",
+    "borrowBtn": "Pedir {{symbol}}",
+    "positionsTitle": "Posiciones de préstamo activas",
+    "positionsBody": "Gestiona tus posiciones en Intent OS y tu cartera.",
+    "openIntentOS": "Abrir Intent OS",
+    "openWallet": "Cartera",
+    "howTitle": "Cómo funciona",
+    "step1Title": "Bloquear garantía",
+    "step1Body": "Tus activos se bloquean en el contrato inteligente. FBT no tiene acceso.",
+    "step2Title": "Ganar rendimiento",
+    "step2Body": "Los prestamistas reciben intereses de los prestatarios.",
+    "step3Title": "Pedir con garantía",
+    "step3Body": "Los prestatarios deben mantener garantía sobre el umbral de liquidación.",
+    "step4Title": "Comisión FBT",
+    "step4Body": "FBT toma un % de tu rendimiento — nunca del capital.",
+    "riskTitle": "Riesgos de préstamos",
+    "riskBody": "Liquidación: si la garantía cae bajo el umbral, el contrato la vende. Irreversible.",
+    "riskBody2": "Riesgo de contratos inteligentes: cualquier protocolo puede tener bugs.",
+    "archTitle": "Arquitectura",
+    "archBody": "FBT es solo una capa de enrutamiento y comisiones. Los activos van directamente al protocolo.",
+    "asset": "Activo",
+    "amount": "Cantidad",
+    "action": "Acción",
+    "supply": "Depositar",
+    "borrow": "Pedir prestado",
+    "walletSignRequired": "Se requiere firma de cartera",
+    "walletSignBody": "Tu cartera firma la transacción. FBT nunca firma nada por ti.",
+    "confirmSupplyTitle": "Confirmar depósito",
+    "confirmBorrowTitle": "Confirmar préstamo",
+    "connectWalletFirst": "Conecta tu cartera primero",
+    "enterAmount": "Introduce una cantidad",
+    "enterCollateral": "Introduce la garantía",
+    "overMaxBorrow": "Supera el máximo",
+    "openIntentForSupply": "Intent OS se abrirá para firmar el depósito",
+    "openIntentForBorrow": "Intent OS se abrirá para firmar el préstamo"
   }
 }

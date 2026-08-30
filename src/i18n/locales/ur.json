@@ -28,7 +28,8 @@
       "earn": "کمائیں",
       "more": "مزید"
     },
-    "intentOS": "ارادہ نظام"
+    "intentOS": "ارادہ نظام",
+    "loan": "قرض"
   },
   "common": {
     "balance": "بیلنس",
@@ -451,7 +452,15 @@
     "referral": "ریفرل",
     "shareInvite": "دعوت شیئر کریں",
     "quests": "کویسٹس",
-    "virtualNotice": "یہاں پوائنٹس ایک اسکور ہیں، کرنسی نہیں۔ انہیں نکالا یا منتقل نہیں کیا جا سکتا اور ان کی کوئی نقد قیمت نہیں۔"
+    "virtualNotice": "یہاں پوائنٹس ایک اسکور ہیں، کرنسی نہیں۔ انہیں نکالا یا منتقل نہیں کیا جا سکتا اور ان کی کوئی نقد قیمت نہیں۔",
+    "yield": {
+      "loan": {
+        "title": "قرض",
+        "body": "پول میں جمع کریں اور قرض لینے والوں سے سود کمائیں۔",
+        "tag": "قرض آمدنی",
+        "note": "لیکویڈیشن ناقابل واپسی ہے۔ صرف وہی جمع کریں جو آپ کھو سکتے ہیں۔"
+      }
+    }
   },
   "help": {
     "faqTitle": "اکثر پوچھے گئے سوالات",
@@ -907,5 +916,66 @@
       "withdrawConfirmYes": "واپسی کی تصدیق",
       "withdrawDone": "واپسی جمع کروا دی گئی"
     }
+  },
+  "loan": {
+    "pageTitle": "قرض",
+    "pageSubtitle": "قرض دینا اور لینا — ایپ میں",
+    "heroTitle": "غیر مرکزی قرض",
+    "heroSub": "آمدنی کے لیے جمع کریں یا ضمانت کے ساتھ قرض لیں",
+    "nonCustodial": "غیر تحویلی",
+    "nonCustodialSub": "چابیاں آپ کے پاس",
+    "fbtFee": "FBT فیس",
+    "fbtFeeSub": "آپ کی آمدنی کا %",
+    "noKyc": "KYC نہیں",
+    "noKycSub": "شناخت جانچ نہیں",
+    "tabSupply": "جمع کریں",
+    "tabBorrow": "قرض لیں",
+    "tabPositions": "میری پوزیشن",
+    "supplySubtitle": "جمع — قرض لینے والوں سے کمائیں",
+    "supplyDesc": "اپنے اثاثے پول میں جمع کریں۔ FBT منافع کا حصہ لیتا ہے۔",
+    "chooseAsset": "جمع کرنے کا اثاثہ",
+    "supplyAmount": "{{symbol}} کی رقم",
+    "supplyBtn": "{{symbol}} جمع کریں",
+    "borrowSubtitle": "قرض — ضمانت کے ساتھ",
+    "borrowDesc": "ضمانت لگائیں اور قرض لیں۔",
+    "chooseBorrowAsset": "قرض کا اثاثہ",
+    "collateralRatio": "{{pct}}% LTV تک",
+    "collateralLabel": "ضمانت ({{symbol}})",
+    "maxBorrowNote": "زیادہ سے زیادہ قرض: {{max}} {{symbol}}",
+    "borrowAmountLabel": "{{symbol}} قرض",
+    "borrowBtn": "{{symbol}} قرض لیں",
+    "positionsTitle": "فعال قرض پوزیشن",
+    "positionsBody": "Intent OS اور والیٹ سے منظم کریں۔",
+    "openIntentOS": "Intent OS کھولیں",
+    "openWallet": "والیٹ",
+    "howTitle": "یہ کیسے کام کرتا ہے",
+    "step1Title": "ضمانت مقفل کریں",
+    "step1Body": "اثاثے سمارٹ کانٹریکٹ میں مقفل ہوتے ہیں۔",
+    "step2Title": "آمدنی کمائیں",
+    "step2Body": "قرض دینے والے سود وصول کرتے ہیں۔",
+    "step3Title": "ضمانت کے ساتھ قرض",
+    "step3Body": "لیکویڈیشن حد سے اوپر رکھیں۔",
+    "step4Title": "FBT فیس",
+    "step4Body": "FBT آمدنی کا % لیتا ہے۔",
+    "riskTitle": "خطرات",
+    "riskBody": "لیکویڈیشن: ضمانت گرے تو کانٹریکٹ بیچ دیتا ہے۔",
+    "riskBody2": "سمارٹ کانٹریکٹ خطرہ۔",
+    "archTitle": "آرکیٹیکچر",
+    "archBody": "FBT صرف روٹنگ ہے۔ اثاثے پروٹوکول میں جاتے ہیں۔",
+    "asset": "اثاثہ",
+    "amount": "رقم",
+    "action": "عمل",
+    "supply": "جمع",
+    "borrow": "قرض",
+    "walletSignRequired": "والیٹ دستخط ضروری",
+    "walletSignBody": "والیٹ لین دین پر دستخط کرتا ہے۔",
+    "confirmSupplyTitle": "جمع کی تصدیق",
+    "confirmBorrowTitle": "قرض کی تصدیق",
+    "connectWalletFirst": "پہلے والیٹ جوڑیں",
+    "enterAmount": "رقم درج کریں",
+    "enterCollateral": "ضمانت درج کریں",
+    "overMaxBorrow": "زیادہ سے زیادہ سے زیادہ",
+    "openIntentForSupply": "Intent OS کھلے گا",
+    "openIntentForBorrow": "Intent OS کھلے گا"
   }
 }

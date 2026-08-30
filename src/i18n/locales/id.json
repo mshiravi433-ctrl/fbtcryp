@@ -28,7 +28,8 @@
       "earn": "Dapatkan",
       "more": "Lainnya"
     },
-    "intentOS": "Sistem intent"
+    "intentOS": "Sistem intent",
+    "loan": "Pinjaman"
   },
   "common": {
     "balance": "Saldo",
@@ -448,7 +449,15 @@
     "referral": "Referal",
     "shareInvite": "Bagikan undangan",
     "quests": "Misi",
-    "virtualNotice": "Poin di sini adalah skor, bukan mata uang. Tidak bisa ditarik atau dipindahkan dan tidak punya nilai tunai."
+    "virtualNotice": "Poin di sini adalah skor, bukan mata uang. Tidak bisa ditarik atau dipindahkan dan tidak punya nilai tunai.",
+    "yield": {
+      "loan": {
+        "title": "Pinjaman",
+        "body": "Simpan aset di pool dan dapatkan bunga dari peminjam.",
+        "tag": "Hasil pinjaman",
+        "note": "Likuidasi tidak dapat dibalik. Hanya simpan yang bisa Anda tanggung."
+      }
+    }
   },
   "help": {
     "faqTitle": "Pertanyaan umum",
@@ -904,5 +913,66 @@
       "withdrawConfirmYes": "Konfirmasi penarikan",
       "withdrawDone": "Penarikan dikirim"
     }
+  },
+  "loan": {
+    "pageTitle": "Pinjaman",
+    "pageSubtitle": "Pinjaman & peminjaman — dalam aplikasi",
+    "heroTitle": "Pinjaman Terdesentralisasi",
+    "heroSub": "Simpan aset untuk mendapatkan hasil, atau pinjam dengan agunan",
+    "nonCustodial": "Non-Kustodial",
+    "nonCustodialSub": "Kunci di tangan Anda",
+    "fbtFee": "Biaya FBT",
+    "fbtFeeSub": "% dari hasil Anda",
+    "noKyc": "Tanpa KYC",
+    "noKycSub": "Tanpa verifikasi",
+    "tabSupply": "Simpan",
+    "tabBorrow": "Pinjam",
+    "tabPositions": "Posisi Saya",
+    "supplySubtitle": "Simpan — Dapatkan dari peminjam",
+    "supplyDesc": "Simpan aset Anda di pool pinjaman. Peminjam membayar bunga; FBT mengambil bagian.",
+    "chooseAsset": "Aset untuk disimpan",
+    "supplyAmount": "Jumlah {{symbol}} untuk disimpan",
+    "supplyBtn": "Simpan {{symbol}}",
+    "borrowSubtitle": "Pinjam — Dengan agunan",
+    "borrowDesc": "Kunci agunan dan pinjam. Jika nilainya turun, akan dilikuidasi.",
+    "chooseBorrowAsset": "Aset untuk dipinjam",
+    "collateralRatio": "Hingga {{pct}}% LTV",
+    "collateralLabel": "Agunan ({{symbol}})",
+    "maxBorrowNote": "Maks pinjam: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "Jumlah pinjaman {{symbol}}",
+    "borrowBtn": "Pinjam {{symbol}}",
+    "positionsTitle": "Posisi pinjaman aktif",
+    "positionsBody": "Kelola posisi Anda via Intent OS dan dompet.",
+    "openIntentOS": "Buka Intent OS",
+    "openWallet": "Dompet",
+    "howTitle": "Cara kerja",
+    "step1Title": "Kunci agunan",
+    "step1Body": "Aset Anda dikunci di kontrak pintar. FBT tidak punya akses.",
+    "step2Title": "Dapatkan hasil",
+    "step2Body": "Pemberi pinjaman menerima bunga dari peminjam.",
+    "step3Title": "Pinjam dengan agunan",
+    "step3Body": "Jaga agunan di atas ambang likuidasi.",
+    "step4Title": "Biaya FBT",
+    "step4Body": "FBT mengambil % dari hasil Anda — bukan modal.",
+    "riskTitle": "Risiko",
+    "riskBody": "Likuidasi: jika agunan turun, kontrak menjualnya. Tidak dapat dibalik.",
+    "riskBody2": "Risiko kontrak pintar: protokol bisa memiliki bug.",
+    "archTitle": "Arsitektur",
+    "archBody": "FBT hanya lapisan routing. Aset langsung ke protokol.",
+    "asset": "Aset",
+    "amount": "Jumlah",
+    "action": "Tindakan",
+    "supply": "Simpan",
+    "borrow": "Pinjam",
+    "walletSignRequired": "Tanda tangan dompet diperlukan",
+    "walletSignBody": "Dompet Anda menandatangani. FBT tidak mengirim apa pun.",
+    "confirmSupplyTitle": "Konfirmasi simpan",
+    "confirmBorrowTitle": "Konfirmasi pinjam",
+    "connectWalletFirst": "Hubungkan dompet dulu",
+    "enterAmount": "Masukkan jumlah",
+    "enterCollateral": "Masukkan agunan",
+    "overMaxBorrow": "Melebihi maksimum",
+    "openIntentForSupply": "Intent OS akan terbuka",
+    "openIntentForBorrow": "Intent OS akan terbuka"
   }
 }

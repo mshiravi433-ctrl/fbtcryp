@@ -28,7 +28,8 @@
       "earn": "Ganhar",
       "more": "Mais"
     },
-    "intentOS": "Sistema de intents"
+    "intentOS": "Sistema de intents",
+    "loan": "Empréstimos"
   },
   "common": {
     "balance": "Saldo",
@@ -448,7 +449,15 @@
     "referral": "Indicações",
     "shareInvite": "Partilhar convite",
     "quests": "Missões",
-    "virtualNotice": "Os pontos aqui são uma pontuação, não uma moeda. Não podem ser levantados nem transferidos e não têm valor monetário."
+    "virtualNotice": "Os pontos aqui são uma pontuação, não uma moeda. Não podem ser levantados nem transferidos e não têm valor monetário.",
+    "yield": {
+      "loan": {
+        "title": "Empréstimos",
+        "body": "Deposite no pool e ganhe juros dos tomadores.",
+        "tag": "Rendimento de empréstimo",
+        "note": "A liquidação é irreversível. Deposite apenas o que pode perder."
+      }
+    }
   },
   "help": {
     "faqTitle": "Perguntas frequentes",
@@ -904,5 +913,66 @@
       "withdrawConfirmYes": "Confirmar saque",
       "withdrawDone": "Saque enviado"
     }
+  },
+  "loan": {
+    "pageTitle": "Empréstimos",
+    "pageSubtitle": "Empréstimos — dentro do app",
+    "heroTitle": "Empréstimos Descentralizados",
+    "heroSub": "Deposite para ganhar ou peça emprestado com garantia",
+    "nonCustodial": "Sem custódia",
+    "nonCustodialSub": "Chaves com você",
+    "fbtFee": "Taxa FBT",
+    "fbtFeeSub": "% do seu rendimento",
+    "noKyc": "Sem KYC",
+    "noKycSub": "Sem verificação",
+    "tabSupply": "Depositar",
+    "tabBorrow": "Pedir emprestado",
+    "tabPositions": "Minhas posições",
+    "supplySubtitle": "Depósito — Ganhe dos tomadores",
+    "supplyDesc": "Deposite no pool. Tomadores pagam juros; FBT retém uma parte.",
+    "chooseAsset": "Ativo para depositar",
+    "supplyAmount": "Quantidade de {{symbol}}",
+    "supplyBtn": "Depositar {{symbol}}",
+    "borrowSubtitle": "Empréstimo — Com garantia",
+    "borrowDesc": "Bloqueie garantia e peça emprestado. Se cair, é liquidada.",
+    "chooseBorrowAsset": "Ativo para pedir emprestado",
+    "collateralRatio": "Até {{pct}}% LTV",
+    "collateralLabel": "Garantia ({{symbol}})",
+    "maxBorrowNote": "Máx empréstimo: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "Valor {{symbol}}",
+    "borrowBtn": "Pedir {{symbol}}",
+    "positionsTitle": "Posições ativas",
+    "positionsBody": "Gerencie via Intent OS e carteira.",
+    "openIntentOS": "Abrir Intent OS",
+    "openWallet": "Carteira",
+    "howTitle": "Como funciona",
+    "step1Title": "Bloquear garantia",
+    "step1Body": "Seus ativos ficam no contrato. FBT sem acesso.",
+    "step2Title": "Ganhar rendimento",
+    "step2Body": "Credores recebem juros dos tomadores.",
+    "step3Title": "Pedir com garantia",
+    "step3Body": "Mantenha garantia acima do limiar de liquidação.",
+    "step4Title": "Taxa FBT",
+    "step4Body": "FBT recebe % do rendimento — nunca do capital.",
+    "riskTitle": "Riscos",
+    "riskBody": "Liquidação: se a garantia cair, o contrato a vende. Irreversível.",
+    "riskBody2": "Risco de contratos: qualquer protocolo pode ter bugs.",
+    "archTitle": "Arquitetura",
+    "archBody": "FBT é apenas roteamento. Ativos vão direto ao protocolo.",
+    "asset": "Ativo",
+    "amount": "Valor",
+    "action": "Ação",
+    "supply": "Depositar",
+    "borrow": "Pedir",
+    "walletSignRequired": "Assinatura necessária",
+    "walletSignBody": "Sua carteira assina. FBT não envia nada.",
+    "confirmSupplyTitle": "Confirmar depósito",
+    "confirmBorrowTitle": "Confirmar empréstimo",
+    "connectWalletFirst": "Conecte sua carteira",
+    "enterAmount": "Insira um valor",
+    "enterCollateral": "Insira a garantia",
+    "overMaxBorrow": "Acima do máximo",
+    "openIntentForSupply": "Intent OS abrirá para assinar",
+    "openIntentForBorrow": "Intent OS abrirá"
   }
 }

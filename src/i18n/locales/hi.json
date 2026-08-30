@@ -28,7 +28,8 @@
       "earn": "कमाएँ",
       "more": "और"
     },
-    "intentOS": "इंटेंट OS"
+    "intentOS": "इंटेंट OS",
+    "loan": "ऋण"
   },
   "common": {
     "balance": "बैलेंस",
@@ -448,7 +449,15 @@
     "referral": "रेफ़रल",
     "shareInvite": "इनवाइट शेयर करें",
     "quests": "क्वेस्ट",
-    "virtualNotice": "यहाँ के अंक स्कोर हैं, मुद्रा नहीं। इन्हें निकाला या ट्रांसफ़र नहीं किया जा सकता और इनका कोई नक़द मूल्य नहीं है।"
+    "virtualNotice": "यहाँ के अंक स्कोर हैं, मुद्रा नहीं। इन्हें निकाला या ट्रांसफ़र नहीं किया जा सकता और इनका कोई नक़द मूल्य नहीं है।",
+    "yield": {
+      "loan": {
+        "title": "ऋण",
+        "body": "पूल में जमा करें और उधारकर्ताओं से कमाएँ।",
+        "tag": "ऋण उपज",
+        "note": "लिक्विडेशन अपरिवर्तनीय है। केवल वही जमा करें जो आप खो सकते हैं।"
+      }
+    }
   },
   "help": {
     "faqTitle": "अक्सर पूछे जाने वाले सवाल",
@@ -904,5 +913,66 @@
       "withdrawConfirmYes": "निकासी की पुष्टि करें",
       "withdrawDone": "निकासी सबमिट हुई"
     }
+  },
+  "loan": {
+    "pageTitle": "ऋण",
+    "pageSubtitle": "ऐप में उधार देना और लेना",
+    "heroTitle": "विकेंद्रीकृत ऋण",
+    "heroSub": "उधार दें या संपार्श्विक के साथ लें",
+    "nonCustodial": "गैर-कस्टोडियल",
+    "nonCustodialSub": "चाबियाँ आपके पास",
+    "fbtFee": "FBT शुल्क",
+    "fbtFeeSub": "% आपके yield का",
+    "noKyc": "KYC नहीं",
+    "noKycSub": "पहचान जाँच नहीं",
+    "tabSupply": "जमा करें",
+    "tabBorrow": "उधार लें",
+    "tabPositions": "मेरी स्थिति",
+    "supplySubtitle": "जमा — उधारकर्ताओं से कमाएँ",
+    "supplyDesc": "अपनी संपत्ति pool में जमा करें। FBT उस yield का हिस्सा लेता है।",
+    "chooseAsset": "जमा करने के लिए संपत्ति",
+    "supplyAmount": "{{symbol}} की राशि",
+    "supplyBtn": "{{symbol}} जमा करें",
+    "borrowSubtitle": "उधार — संपार्श्विक के साथ",
+    "borrowDesc": "संपार्श्विक लगाएँ और उधार लें।",
+    "chooseBorrowAsset": "उधार लेने के लिए संपत्ति",
+    "collateralRatio": "{{pct}}% LTV तक",
+    "collateralLabel": "संपार्श्विक ({{symbol}})",
+    "maxBorrowNote": "अधिकतम उधार: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "{{symbol}} ऋण राशि",
+    "borrowBtn": "{{symbol}} उधार लें",
+    "positionsTitle": "सक्रिय ऋण स्थितियाँ",
+    "positionsBody": "Intent OS और wallet से अपनी स्थितियाँ प्रबंधित करें।",
+    "openIntentOS": "Intent OS खोलें",
+    "openWallet": "Wallet",
+    "howTitle": "यह कैसे काम करता है",
+    "step1Title": "संपार्श्विक लॉक करें",
+    "step1Body": "आपकी संपत्ति smart contract में लॉक होती है। FBT की पहुँच नहीं।",
+    "step2Title": "yield कमाएँ",
+    "step2Body": "ऋणदाता उधारकर्ताओं का ब्याज प्राप्त करते हैं।",
+    "step3Title": "संपार्श्विक से उधार",
+    "step3Body": "liquidation threshold से ऊपर रखें।",
+    "step4Title": "FBT शुल्क",
+    "step4Body": "FBT आपकी yield का % लेता है।",
+    "riskTitle": "जोखिम",
+    "riskBody": "Liquidation: यदि संपार्श्विक गिरा, contract बेचता है।",
+    "riskBody2": "Smart contract में bug हो सकते हैं।",
+    "archTitle": "आर्किटेक्चर",
+    "archBody": "FBT केवल routing layer है। संपत्ति सीधे protocol में जाती है।",
+    "asset": "संपत्ति",
+    "amount": "राशि",
+    "action": "क्रिया",
+    "supply": "जमा",
+    "borrow": "उधार",
+    "walletSignRequired": "Wallet हस्ताक्षर आवश्यक",
+    "walletSignBody": "आपका wallet हस्ताक्षर करता है। FBT कुछ नहीं भेजता।",
+    "confirmSupplyTitle": "जमा की पुष्टि",
+    "confirmBorrowTitle": "उधार की पुष्टि",
+    "connectWalletFirst": "पहले wallet जोड़ें",
+    "enterAmount": "राशि दर्ज करें",
+    "enterCollateral": "संपार्श्विक दर्ज करें",
+    "overMaxBorrow": "अधिकतम से अधिक",
+    "openIntentForSupply": "जमा के लिए Intent OS खुलेगा",
+    "openIntentForBorrow": "उधार के लिए Intent OS खुलेगा"
   }
 }

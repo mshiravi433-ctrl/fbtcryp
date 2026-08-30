@@ -28,7 +28,8 @@
       "earn": "Gagner",
       "more": "Plus"
     },
-    "intentOS": "Système d’intentions"
+    "intentOS": "Système d’intentions",
+    "loan": "Prêts"
   },
   "common": {
     "balance": "Solde",
@@ -448,7 +449,15 @@
     "referral": "Parrainage",
     "shareInvite": "Partager l'invitation",
     "quests": "Quêtes",
-    "virtualNotice": "Les points ici sont un score, pas une monnaie. Ils ne peuvent être ni retirés ni transférés et n'ont aucune valeur monétaire."
+    "virtualNotice": "Les points ici sont un score, pas une monnaie. Ils ne peuvent être ni retirés ni transférés et n'ont aucune valeur monétaire.",
+    "yield": {
+      "loan": {
+        "title": "Prêts",
+        "body": "Déposez des actifs dans le pool et gagnez des intérêts des emprunteurs.",
+        "tag": "Rendement de prêt",
+        "note": "La liquidation est irréversible. Ne déposez que ce que vous pouvez vous permettre de perdre."
+      }
+    }
   },
   "help": {
     "faqTitle": "Questions fréquentes",
@@ -904,5 +913,66 @@
       "withdrawConfirmYes": "Confirmer le retrait",
       "withdrawDone": "Retrait soumis"
     }
+  },
+  "loan": {
+    "pageTitle": "Prêts",
+    "pageSubtitle": "Prêt et emprunt — dans l'appli",
+    "heroTitle": "Prêts Décentralisés",
+    "heroSub": "Déposez pour gagner, ou empruntez avec garantie",
+    "nonCustodial": "Non-dépositaire",
+    "nonCustodialSub": "Clés chez vous",
+    "fbtFee": "Frais FBT",
+    "fbtFeeSub": "% de votre rendement",
+    "noKyc": "Sans KYC",
+    "noKycSub": "Sans vérification",
+    "tabSupply": "Déposer",
+    "tabBorrow": "Emprunter",
+    "tabPositions": "Mes positions",
+    "supplySubtitle": "Dépôt — Gagnez des emprunteurs",
+    "supplyDesc": "Déposez vos actifs dans la réserve. Les emprunteurs paient des intérêts; FBT prend une part. Vos clés ne quittent jamais votre portefeuille.",
+    "chooseAsset": "Actif à déposer",
+    "supplyAmount": "Montant de {{symbol}} à déposer",
+    "supplyBtn": "Déposer {{symbol}}",
+    "borrowSubtitle": "Emprunt — Avec garantie",
+    "borrowDesc": "Bloquez une garantie et empruntez. Si la valeur baisse, elle est liquidée.",
+    "chooseBorrowAsset": "Actif à emprunter",
+    "collateralRatio": "Jusqu'à {{pct}}% LTV",
+    "collateralLabel": "Garantie ({{symbol}})",
+    "maxBorrowNote": "Emprunt max: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "Montant {{symbol}}",
+    "borrowBtn": "Emprunter {{symbol}}",
+    "positionsTitle": "Positions actives",
+    "positionsBody": "Gérez vos positions via Intent OS et votre portefeuille.",
+    "openIntentOS": "Ouvrir Intent OS",
+    "openWallet": "Portefeuille",
+    "howTitle": "Comment ça marche",
+    "step1Title": "Bloquer la garantie",
+    "step1Body": "Vos actifs sont verrouillés dans le contrat. FBT n'y a pas accès.",
+    "step2Title": "Gagner un rendement",
+    "step2Body": "Les prêteurs reçoivent les intérêts des emprunteurs.",
+    "step3Title": "Emprunter avec garantie",
+    "step3Body": "Les emprunteurs maintiennent une garantie au-dessus du seuil de liquidation.",
+    "step4Title": "Frais FBT",
+    "step4Body": "FBT prend un % de votre rendement — jamais du capital.",
+    "riskTitle": "Risques",
+    "riskBody": "Liquidation: si la garantie chute, le contrat la vend. Irréversible.",
+    "riskBody2": "Risque de contrat intelligent: tout protocole peut avoir des bugs.",
+    "archTitle": "Architecture",
+    "archBody": "FBT est uniquement une couche de routage. Les actifs vont directement au protocole.",
+    "asset": "Actif",
+    "amount": "Montant",
+    "action": "Action",
+    "supply": "Déposer",
+    "borrow": "Emprunter",
+    "walletSignRequired": "Signature requise",
+    "walletSignBody": "Votre portefeuille signe la transaction. FBT ne signe rien.",
+    "confirmSupplyTitle": "Confirmer le dépôt",
+    "confirmBorrowTitle": "Confirmer l'emprunt",
+    "connectWalletFirst": "Connectez votre portefeuille",
+    "enterAmount": "Entrez un montant",
+    "enterCollateral": "Entrez la garantie",
+    "overMaxBorrow": "Dépasse le maximum",
+    "openIntentForSupply": "Intent OS s'ouvrira pour signer",
+    "openIntentForBorrow": "Intent OS s'ouvrira"
   }
 }

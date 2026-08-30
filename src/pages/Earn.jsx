@@ -152,6 +152,18 @@ const YIELD = [
     }]
     : []),
   /*
+   * OUR OWN LOAN PRODUCT — lending & borrowing via protocol smart contracts.
+   * FBT earns a % of the yield generated; the depositor's principal stays
+   * in the protocol contract, never in FBT's accounts.
+   */
+  {
+    id: 'loan',
+    Icon: IconShield,
+    risk: 'medium',
+    color: 'var(--rgb-2)',
+    internal: '/loan'
+  },
+  /*
    * OUR OWN VAULT — the only row that recurs instead of paying once.
    *
    * Rendered from the live config, not a static entry: `vaultIsLive()` is

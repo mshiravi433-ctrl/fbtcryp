@@ -101,6 +101,13 @@ const IntentAIPanel = lazyRetry(() => import('./components/IntentAIRoute'));
  */
 const Vault = lazyRetry(() => import('./pages/Vault'));
 
+/*
+ * Loan — lending & borrowing page.
+ * FBT acts as Router + Fee layer only; assets go directly into lending
+ * protocol smart contracts (Morpho / Aave style). No funds held by FBT.
+ */
+const Loan = lazyRetry(() => import('./pages/Loan'));
+
 
 /*
  * ─── MERGED HUBS ────────────────────────────────────────────────────────────
@@ -294,6 +301,7 @@ function AnimatedRoutes() {
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/intent-ai" element={<IntentAIPanel />} />
             <Route path="/vault" element={<Vault />} />
+            <Route path="/loan" element={<Loan />} />
 
             <Route path="*" element={<Market />} />
           </Routes>

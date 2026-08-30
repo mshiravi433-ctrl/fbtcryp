@@ -28,7 +28,8 @@
       "earn": "Kazan",
       "more": "Daha"
     },
-    "intentOS": "Niyet sistemi"
+    "intentOS": "Niyet sistemi",
+    "loan": "Krediler"
   },
   "common": {
     "balance": "Bakiye",
@@ -448,7 +449,15 @@
     "referral": "Davet",
     "shareInvite": "Daveti paylaş",
     "quests": "Görevler",
-    "virtualNotice": "Buradaki puanlar bir skordur, para birimi değil. Çekilemez, devredilemez ve nakit değeri yoktur."
+    "virtualNotice": "Buradaki puanlar bir skordur, para birimi değil. Çekilemez, devredilemez ve nakit değeri yoktur.",
+    "yield": {
+      "loan": {
+        "title": "Krediler",
+        "body": "Havuza yatırın ve borçlulardan faiz kazanın.",
+        "tag": "Kredi getirisi",
+        "note": "Tasfiye geri dönülemez. Sadece kaybedebileceğinizi yatırın."
+      }
+    }
   },
   "help": {
     "faqTitle": "Sık sorulan sorular",
@@ -904,5 +913,66 @@
       "withdrawConfirmYes": "Çekimi onayla",
       "withdrawDone": "Çekim gönderildi"
     }
+  },
+  "loan": {
+    "pageTitle": "Krediler",
+    "pageSubtitle": "Borç verme ve alma — uygulamada",
+    "heroTitle": "Merkeziyetsiz Borç Verme",
+    "heroSub": "Getiri için yatırın veya teminatla borç alın",
+    "nonCustodial": "Vedasız",
+    "nonCustodialSub": "Anahtarlar sizde",
+    "fbtFee": "FBT Ücreti",
+    "fbtFeeSub": "Getirinizin %'si",
+    "noKyc": "KYC Yok",
+    "noKycSub": "Kimlik doğrulama yok",
+    "tabSupply": "Yatır",
+    "tabBorrow": "Borç al",
+    "tabPositions": "Pozisyonlarım",
+    "supplySubtitle": "Yatırma — Borçlulardan kazan",
+    "supplyDesc": "Varlıklarınızı havuza yatırın. Borçlular faiz öder; FBT bir pay alır.",
+    "chooseAsset": "Yatırılacak varlık",
+    "supplyAmount": "{{symbol}} miktarı",
+    "supplyBtn": "{{symbol}} Yatır",
+    "borrowSubtitle": "Borç — Teminatlı",
+    "borrowDesc": "Teminat kilitleyin ve borç alın. Değer düşerse tasfiye edilir.",
+    "chooseBorrowAsset": "Borç alınacak varlık",
+    "collateralRatio": "{{pct}}% LTV'ye kadar",
+    "collateralLabel": "Teminat ({{symbol}})",
+    "maxBorrowNote": "Maks borç: {{max}} {{symbol}} ({{pct}}% LTV)",
+    "borrowAmountLabel": "Borç miktarı {{symbol}}",
+    "borrowBtn": "{{symbol}} Borç Al",
+    "positionsTitle": "Aktif pozisyonlar",
+    "positionsBody": "Intent OS ve cüzdanınızla yönetin.",
+    "openIntentOS": "Intent OS Aç",
+    "openWallet": "Cüzdan",
+    "howTitle": "Nasıl çalışır",
+    "step1Title": "Teminat kilitle",
+    "step1Body": "Varlıklarınız akıllı sözleşmede kilitlenir. FBT erişemez.",
+    "step2Title": "Getiri kazan",
+    "step2Body": "Borç verenler borçlulardan faiz alır.",
+    "step3Title": "Teminatlı borç",
+    "step3Body": "Tasfiye eşiğinin üzerinde teminat tutun.",
+    "step4Title": "FBT ücreti",
+    "step4Body": "FBT getirinizin %'sini alır — anaparadan değil.",
+    "riskTitle": "Riskler",
+    "riskBody": "Tasfiye: teminat düşerse, sözleşme satar. Geri döndürülemez.",
+    "riskBody2": "Akıllı sözleşme riski: her protokolde hata olabilir.",
+    "archTitle": "Mimari",
+    "archBody": "FBT yalnızca yönlendirme katmanıdır. Varlıklar doğrudan protokole gider.",
+    "asset": "Varlık",
+    "amount": "Miktar",
+    "action": "İşlem",
+    "supply": "Yatır",
+    "borrow": "Borç al",
+    "walletSignRequired": "Cüzdan imzası gerekli",
+    "walletSignBody": "Cüzdanınız işlemi imzalar. FBT hiçbir şey göndermez.",
+    "confirmSupplyTitle": "Yatırmayı onayla",
+    "confirmBorrowTitle": "Borcu onayla",
+    "connectWalletFirst": "Önce cüzdanı bağlayın",
+    "enterAmount": "Miktar girin",
+    "enterCollateral": "Teminat girin",
+    "overMaxBorrow": "Maksimumu aşıyor",
+    "openIntentForSupply": "Intent OS açılacak",
+    "openIntentForBorrow": "Intent OS açılacak"
   }
 }
