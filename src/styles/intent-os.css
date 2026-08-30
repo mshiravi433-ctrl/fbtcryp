@@ -2003,3 +2003,127 @@
 }
 /* The analysis card sits inside a chat bubble, so it owns its width. */
 .ia-panel.ia-chat .intent-ai-thread > div:has(.ia-ana-card) { max-width: 100%; width: 100%; }
+
+/* ── Loan page hand-off banner (compose tab) ─────────────────────────────
+   Shown when the Loan page's supply/borrow confirm sheet sends the user to
+   /intent?hint=loan-*. It proves the hand-off wired up: the draft below is
+   prefilled with the position the user just reviewed. */
+.ios-loan-handoff {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(101, 245, 188, 0.28);
+  background: linear-gradient(135deg, rgba(101, 245, 188, 0.08), rgba(66, 232, 255, 0.05));
+}
+
+.ios-loan-handoff-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 14px;
+  color: var(--ios-mint);
+  border: 1px solid rgba(101, 245, 188, 0.3);
+  background: rgba(101, 245, 188, 0.09);
+}
+
+.ios-loan-handoff strong {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ios-mint);
+  margin-bottom: 3px;
+}
+
+.ios-loan-handoff p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--text-2, rgba(235, 240, 250, 0.75));
+}
+
+.ios-loan-handoff small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--text-3, rgba(235, 240, 250, 0.5));
+}
+
+.ios-loan-handoff-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text-3, rgba(235, 240, 250, 0.6));
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+:root[data-theme='light'] .ios-loan-handoff {
+  border-color: rgba(18, 140, 100, 0.3);
+  background: linear-gradient(135deg, rgba(18, 140, 100, 0.07), rgba(0, 145, 170, 0.05));
+}
+
+:root[data-theme='light'] .ios-loan-handoff strong { color: #0d7a55; }
+:root[data-theme='light'] .ios-loan-handoff p { color: rgba(20, 35, 60, 0.78); }
+:root[data-theme='light'] .ios-loan-handoff small { color: rgba(20, 35, 60, 0.55); }
+:root[data-theme='light'] .ios-loan-handoff-close { border-color: rgba(20, 35, 60, 0.16); color: rgba(20, 35, 60, 0.6); }
+
+/* ── Wallet-missing strip on the confirmation screen ─────────────────────—
+   When no wallet runtime is handed to the panel, the final confirm could
+   never be signed; the strip says so up front and links to the wallet page. */
+.ia-wallet-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(66, 232, 255, 0.32);
+  background: rgba(66, 232, 255, 0.06);
+}
+
+.ia-wallet-missing-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex: none;
+  background: var(--ios-cyan);
+  box-shadow: 0 0 8px rgba(66, 232, 255, 0.55);
+}
+
+.ia-wallet-missing-body { flex: 1; min-width: 0; }
+.ia-wallet-missing-body strong { display: block; font-size: 11.5px; color: var(--ios-cyan); }
+.ia-wallet-missing-body small { font-size: 10.5px; line-height: 1.7; color: var(--text-2, rgba(235,240,250,.75)); }
+
+.ia-wallet-connect-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px;
+  margin-top: 2px;
+  border-radius: 9px;
+  border: 1px solid rgba(66, 232, 255, 0.4);
+  background: rgba(66, 232, 255, 0.1);
+  color: var(--ios-cyan);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .ia-wallet-missing {
+  border-color: rgba(0, 145, 170, 0.35);
+  background: rgba(0, 145, 170, 0.06);
+}
+:root[data-theme='light'] .ia-wallet-missing-dot { background: #0091aa; box-shadow: none; }
+:root[data-theme='light'] .ia-wallet-missing-body strong { color: #007a92; }
+:root[data-theme='light'] .ia-wallet-missing-body small { color: rgba(20,35,60,.75); }
+:root[data-theme='light'] .ia-wallet-connect-link { color: #00788f; border-color: rgba(0,145,170,.4); background: rgba(0,145,170,.08); }

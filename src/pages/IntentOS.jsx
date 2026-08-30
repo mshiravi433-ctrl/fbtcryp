@@ -478,6 +478,30 @@ export default function IntentOS() {
     approvalMode: 'sensitive'
   });
 
+  /*
+   * Loan page hand-off (hint=loan-supply|loan-borrow). The Loan page used to
+   * send users here with `?tab=default&hint=loan-borrow` and NOTHING consumed
+   * those params — the user confirmed a borrow sheet and landed on a bare
+   * swap composer under a launch banner, which looked exactly like an error.
+   * Now the params pre-fill a lending workflow (approve → deposit for
+   * supply, deposit collateral → borrow for borrow) so the confirm →
+   * compose → compile chain stays continuous.
+   */
+  const [loanHandoff] = useState(() => {
+    const hint = searchParams.get('hint');
+    if (hint !== 'loan-supply' && hint !== 'loan-borrow') return null;
+    const cleanAmount = (v) => {
+      if (typeof v !== 'string' || !/^\d*\.?\d+$/.test(v.trim())) return null;
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 && n < 1e12 ? String(n) : null;
+    };
+    return {
+      hint,
+      amount: cleanAmount(searchParams.get('amount')),
+      collateral: cleanAmount(searchParams.get('collateral'))
+    };
+  });
+
   const [draft, setDraft] = useState(() => {
     const mem = intentMemoryAtBoot.current;
     const known = (v) => {
@@ -491,6 +515,35 @@ export default function IntentOS() {
     const chainId = Number.isInteger(chainParam) && EVM_CHAINS[chainParam] ? chainParam : mem.preferredChainId;
     const fromSymbol = known(searchParams.get('from')) ?? 'USDC';
     const toSymbol = known(searchParams.get('to')) ?? 'ETH';
+    if (loanHandoff) {
+      const amount = loanHandoff.amount || '';
+      const collateral = loanHandoff.collateral || '';
+      const steps = loanHandoff.hint === 'loan-supply'
+        ? [
+          { ...defaultWorkflowStep('approve', 'approve', fromSymbol, 'Approve lending pool access', chainId), maxInput: amount },
+          { ...defaultWorkflowStep('deposit', 'deposit', fromSymbol, 'Deposit into lending pool', chainId), maxInput: amount }
+        ]
+        : [
+          { ...defaultWorkflowStep('deposit', 'deposit', fromSymbol, 'Deposit collateral', chainId), maxInput: collateral },
+          { ...defaultWorkflowStep('borrow', 'borrow', fromSymbol, 'Borrow against collateral', chainId), minOutput: amount }
+        ];
+      return {
+        kind: 'workflow',
+        chainId,
+        fromSymbol,
+        toSymbol: fromSymbol,
+        amountIn: loanHandoff.hint === 'loan-supply' ? (amount || '1000') : (collateral || '1000'),
+        amountUsd: loanHandoff.hint === 'loan-supply' ? (amount || '1000') : (collateral || '1000'),
+        minReceive: '',
+        deadlineHours: 2,
+        maxSlippagePct: mem.maxSlippagePct,
+        privacy: 'standard',
+        conditionType: 'priceBelow',
+        conditionValue: '2500',
+        note: '',
+        steps
+      };
+    }
     return {
       kind: 'swap',
       chainId,
@@ -689,6 +742,8 @@ export default function IntentOS() {
     [networkStatus]
   );
 
+  const [loanHandoffDismissed, setLoanHandoffDismissed] = useState(false);
+
   /* ── Phases 141–150: the horizontal rail gates the compose surface. ─── */
   const [railState, setRailState] = useState(null);
   const railGate = useMemo(() => mayExecute(railState || undefined), [railState]);
@@ -787,6 +842,45 @@ export default function IntentOS() {
 
       {tab === 'compose' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          {loanHandoff && !loanHandoffDismissed && (
+            <section className="ios-loan-handoff" role="status" data-testid="loan-handoff">
+              <div>
+                <span className="ios-loan-handoff-icon" aria-hidden="true">⇄</span>
+              </div>
+              <div style={{ flex: 1 }}>
+                <strong>
+                  {loanHandoff.hint === 'loan-supply'
+                    ? t('intentOS.loanHandoff.supplyTitle', { defaultValue: 'Lending draft arrived from the Loan page' })
+                    : t('intentOS.loanHandoff.borrowTitle', { defaultValue: 'Borrowing draft arrived from the Loan page' })}
+                </strong>
+                <p>
+                  {loanHandoff.hint === 'loan-supply'
+                    ? t('intentOS.loanHandoff.supplyBody', {
+                      amount: loanHandoff.amount || '—',
+                      symbol: draft.fromSymbol,
+                      chain: EVM_CHAINS[draft.chainId]?.name || draft.chainId,
+                      defaultValue: '{{amount}} {{symbol}} on {{chain}} — steps ready: approve pool access, then deposit. Hit compile to review the signing path.'
+                    })
+                    : t('intentOS.loanHandoff.borrowBody', {
+                      collateral: loanHandoff.collateral || '—',
+                      amount: loanHandoff.amount || '—',
+                      symbol: draft.fromSymbol,
+                      chain: EVM_CHAINS[draft.chainId]?.name || draft.chainId,
+                      defaultValue: 'Collateral {{collateral}} {{symbol}} + borrow {{amount}} {{symbol}} on {{chain}} — steps: deposit collateral, then borrow. Hit compile to review the signing path.'
+                    })}
+                </p>
+                <small>{t('intentOS.loanHandoff.note', { defaultValue: 'Nothing executes on its own — the final signature is always your wallet’s.' })}</small>
+              </div>
+              <button
+                type="button"
+                className="ios-loan-handoff-close"
+                aria-label={t('common.close', { defaultValue: 'Close' })}
+                onClick={() => setLoanHandoffDismissed(true)}
+              >
+                ×
+              </button>
+            </section>
+          )}
           {railBlocked && (
             <section className="ios-rail-blocked" role="alert">
               <strong>

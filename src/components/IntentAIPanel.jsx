@@ -338,6 +338,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     return () => { active = false; };
   }, []);
 
+  const sessionIdentityRef = useRef({ mode, level });
   useEffect(() => {
     const catalogAvailable = mode === 'fbt-external-ai' && externalAgentCatalog?.dataStatus === 'live';
     const s = startSession({
@@ -348,8 +349,28 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       externalAgents: catalogAvailable && Array.isArray(externalAgentCatalog?.candidates) ? externalAgentCatalog.candidates : [],
       externalAgentsSource: catalogAvailable ? 'server-catalog' : 'unavailable'
     });
-    setSession(s);
-    setGate(null); setRisk(null); setReceipt(null); setGateAction(null); setScreen(null);
+    /*
+     * The disappearing-conversation bug: this effect also depends on
+     * externalAgentCatalog, which resolves asynchronously — SECONDS after the
+     * user may already be several turns into the chat. Rebuilding the session
+     * at that moment erased the whole thread (and any in-flight guided flow)
+     * and looked exactly like "nothing works / the steps just vanished".
+     *
+     * A session rebuild is only honest when the AUTHORIZATION IDENTITY
+     * changes (mode or level). A catalog refresh is not an identity change,
+     * so in that case we patch the discovery payload into the live session
+     * and keep every message, draft, gate and confirmation screen.
+     */
+    const identityChanged = sessionIdentityRef.current.mode !== mode || sessionIdentityRef.current.level !== level;
+    sessionIdentityRef.current = { mode, level };
+    if (identityChanged) {
+      setSession(s);
+      setGate(null); setRisk(null); setReceipt(null); setGateAction(null); setScreen(null);
+      return;
+    }
+    setSession((prev) => (prev && prev.status !== 'BLOCKED' && s.status !== 'BLOCKED'
+      ? { ...prev, externalAgentDiscovery: s.externalAgentDiscovery ?? prev.externalAgentDiscovery ?? null }
+      : s));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level, mode, externalAgentCatalog]);
 
@@ -1501,6 +1522,27 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
                   {t(violation.i18nKey, violation.params)}
                 </small>
               ))}
+            </div>
+          )}
+
+          {/*
+            Wallet connection state — WITHOUT a connected wallet the final
+            confirm can never be signed, so the only receipt it can produce is
+            "wallet signature required". Say that BEFORE the click, with the
+            way to fix it, instead of letting the user discover a dead end.
+            Plain anchor: this panel also mounts headless in the test suite,
+            where a Router-dependent wallet sheet would crash.
+          */}
+          {!wallet.connected && (
+            <div className="ia-wallet-missing" data-testid="wallet-missing">
+              <span className="ia-wallet-missing-dot" aria-hidden="true" />
+              <div className="ia-wallet-missing-body">
+                <strong>{t('intentAI.wallet.missingTitle', { defaultValue: 'No wallet is connected' })}</strong>
+                <small>{t('intentAI.wallet.missingBody', { defaultValue: 'Signing and final authorization need your wallet. Analysis and preparation keep working without it.' })}</small>
+              </div>
+              <a className="ia-wallet-connect-link" href="#/wallet">
+                {t('intentAI.wallet.connectNow', { defaultValue: 'Connect wallet' })}
+              </a>
             </div>
           )}
 

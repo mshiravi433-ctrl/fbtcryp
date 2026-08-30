@@ -1764,7 +1764,9 @@
     },
     "server": {
       "status": "Deployment status (server)",
-      "offline": "Server unavailable — the planner runs locally on this device."
+      "offline": "Server unavailable — the planner runs locally on this device.",
+      "offlineShort": "unreachable",
+      "localNote": "Planning still runs locally on this device; the server only reports deployment status."
     },
     "intent": {
       "title": "1) Write your intent",
@@ -3167,6 +3169,7 @@
       "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
       "withdrawTitle": "Withdraw from Wallex to this app's wallet",
       "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawIpAllowlist": "To withdraw, you must add this IP in your Wallex API settings (the allowed-IPs section) so withdrawals work from any network:",
       "withdrawCoin": "Coin",
       "withdrawNetwork": "Network",
       "withdrawValue": "Amount",
@@ -4826,6 +4829,13 @@
       "buildId": "Intent AI build identifier",
       "evidence": "evidence"
     },
+    "loanHandoff": {
+      "supplyTitle": "Lending draft arrived from the Loan page",
+      "borrowTitle": "Borrowing draft arrived from the Loan page",
+      "supplyBody": "{{amount}} {{symbol}} on {{chain}} — steps ready: approve pool access, then deposit. Hit compile to review the signing path.",
+      "borrowBody": "Collateral {{collateral}} {{symbol}} + borrow {{amount}} {{symbol}} on {{chain}} — steps: deposit collateral, then borrow. Hit compile to review the signing path.",
+      "note": "Nothing executes on its own — the final signature is always your wallet’s."
+    },
     "rail": {
       "label": "Intent OS control rail",
       "autonomy": "Autonomy level",
@@ -5818,7 +5828,10 @@
     },
     "wallet": {
       "signRequired": "Your wallet will ask you to sign the terms shown above.",
-      "notConnected": "No wallet is connected, so nothing can be signed or sent."
+      "notConnected": "No wallet is connected, so nothing can be signed or sent.",
+      "missingTitle": "No wallet is connected",
+      "missingBody": "Signing and final authorization need your wallet. Analysis and preparation keep working without it.",
+      "connectNow": "Connect wallet"
     },
     "regime": {
       "unavailable": "Market conditions are unavailable right now — the price feed did not return usable data, so no read is offered.",

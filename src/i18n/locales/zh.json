@@ -903,6 +903,7 @@
       "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
       "withdrawTitle": "从 Wallex 提现到本应用钱包",
       "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawIpAllowlist": "要提现，您必须在 Wallex API 设置（允许的 IP 部分）中添加此 IP，才能从任何网络提现：",
       "withdrawCoin": "币种",
       "withdrawNetwork": "网络",
       "withdrawValue": "数量",
