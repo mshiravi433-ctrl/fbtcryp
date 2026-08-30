@@ -188,7 +188,7 @@ export default function Header() {
           aria-hidden={!visibleSpotlight}
           aria-label={`${spotlightLabel}: ${spotlightTitle}`}
           title={spotlightTitle}
-          onClick={() => navigate('/news')}
+          onClick={() => navigate('/news?tab=insights')}
         >
           {spotlight && <SpotlightMark spotlight={spotlight} />}
           <span className="header-spotlight-copy">

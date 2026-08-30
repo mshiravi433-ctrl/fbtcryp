@@ -532,7 +532,11 @@
       "company": "Token perusahaan 24j",
       "event": "Peristiwa pasar"
     },
-    "marketUnavailable": "Data pasar live tidak tersedia"
+    "marketUnavailable": "Data pasar live tidak tersedia",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "Order Otomatis",

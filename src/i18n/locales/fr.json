@@ -532,7 +532,11 @@
       "company": "Jeton entreprise 24 h",
       "event": "Événement de marché"
     },
-    "marketUnavailable": "Données de marché en direct indisponibles"
+    "marketUnavailable": "Données de marché en direct indisponibles",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "Ordres automatiques",

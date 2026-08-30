@@ -535,7 +535,11 @@
       "company": "24گ کمپنی ٹوکن",
       "event": "مارکیٹ ایونٹ"
     },
-    "marketUnavailable": "لائیو مارکیٹ ڈیٹا دستیاب نہیں ہے"
+    "marketUnavailable": "لائیو مارکیٹ ڈیٹا دستیاب نہیں ہے",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "orders": {
     "title": "خودکار آرڈرز",

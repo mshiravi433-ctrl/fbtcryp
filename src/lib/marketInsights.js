@@ -55,20 +55,16 @@ export function isEventStory(item) {
   return EVENT_TERMS.some((term) => text.includes(term));
 }
 
-/**
- * Compact rotation candidates. Brand slots are inserted by Header itself so
- * the data model stays independent of timing and animation.
- */
 function rankByVolume(rows = []) {
   const clean = (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.volume)) && Number(row?.volume) > 0);
-  return [...clean].sort((a, b) => Number(b.volume) - Number(a.volume))[0] ?? null;
+    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.volume || row?.total_volume)) && Number(row?.volume || row?.total_volume) > 0);
+  return [...clean].sort((a, b) => Number(b?.volume || b?.total_volume) - Number(a?.volume || a?.total_volume))[0] ?? null;
 }
 
 function rankByMarketCap(rows = []) {
   const clean = (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.mcap)) && Number(row?.mcap) > 0);
-  return [...clean].sort((a, b) => Number(b.mcap) - Number(a.mcap))[0] ?? null;
+    .filter((row) => row?.name && row?.symbol && hasFiniteMove(row) && Number.isFinite(Number(row?.mcap || row?.marketCap || row?.market_cap)) && Number(row?.mcap || row?.marketCap || row?.market_cap) > 0);
+  return [...clean].sort((a, b) => Number(b?.mcap || b?.marketCap || b?.market_cap) - Number(a?.mcap || a?.marketCap || a?.market_cap))[0] ?? null;
 }
 
 function rankByVolatility(rows = []) {

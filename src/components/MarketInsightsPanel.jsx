@@ -155,6 +155,24 @@ export default function MarketInsightsPanel({
               tone="down"
               emptyText={t('insights.marketUnavailable')}
             />
+            {insights.volumeLeader && (
+              <MetricCard
+                title={t('insights.volumeLeader', 'بیشترین حجم معاملات ۲۴ ساعته')}
+                item={insights.volumeLeader}
+                source={t('insights.volumeSource', 'پوشش زنده بازار کریپتو · حجم معاملات ۲۴ ساعته')}
+                tone="blue"
+                emptyText={t('insights.marketUnavailable')}
+              />
+            )}
+            {insights.marketCapLeader && (
+              <MetricCard
+                title={t('insights.marketCapLeader', 'برترین دارایی از نظر ارزش بازار')}
+                item={insights.marketCapLeader}
+                source={t('insights.marketCapSource', 'ارزش بازار زنده دارایی‌های برتر')}
+                tone="violet"
+                emptyText={t('insights.marketUnavailable')}
+              />
+            )}
           </>
         )}
 

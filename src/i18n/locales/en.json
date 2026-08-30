@@ -4047,7 +4047,11 @@
       "company": "24h company token",
       "event": "Market event"
     },
-    "marketUnavailable": "Live market data unavailable"
+    "marketUnavailable": "Live market data unavailable",
+    "volumeLeader": "24h volume leader",
+    "volumeSource": "Live crypto market coverage · 24h volume",
+    "marketCapLeader": "Market cap leader",
+    "marketCapSource": "Live market cap of top assets"
   },
   "intentOS": {
     "eyebrow": "Financial intent control plane",
