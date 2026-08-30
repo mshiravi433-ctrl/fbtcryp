@@ -64,6 +64,47 @@ const LEVELS = [
   { value: 3, key: 'level3' }
 ];
 
+/**
+ * One row of pipeline stages, each opening the screen where that stage is
+ * REALLY performed (phase 153). Stages 1–3 run inside this panel; the rest
+ * route to their live Intent OS tabs. Every chip is enabled — the stages are
+ * genuinely usable — and the honest limits still live where they belong: the
+ * activation strip keeps reporting whatever the server truthfully reports.
+ */
+function AiStageRail() {
+  const { t } = useTranslation();
+  const stages = [
+    { id: 'intent', here: true },
+    { id: 'risk', here: true },
+    { id: 'execution', here: true },
+    { id: 'verification', tab: 'proofs' },
+    { id: 'crosschain', tab: 'crosschain' },
+    { id: 'memory', tab: 'memory' }
+  ];
+  return (
+    <div className="ia-stage-row" role="group" aria-label={t('intentAI.stages.title', { defaultValue: 'Pipeline stages' })}>
+      {stages.map((stage) => {
+        /* Plain anchors, not useNavigate(): this panel is also mounted
+           headless by the test suite without a Router, and a crash there is
+           a broken suite, not a broken promise. A full load of the target
+           tab is an acceptable price for that robustness. */
+        const label = t(`intentAI.stages.${stage.id}`);
+        return stage.tab ? (
+          <a key={stage.id} className="ia-stage-chip" href={`/intent?tab=${stage.tab}`}>
+            <span>{label}</span>
+            <em>→</em>
+          </a>
+        ) : (
+          <span key={stage.id} className="ia-stage-chip is-here" title={t('intentAI.stages.here', { defaultValue: 'Runs in this panel' })}>
+            <span>{label}</span>
+            <em>•</em>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /*
  * Session controls, in rail order.
  *
@@ -1122,6 +1163,15 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           ))}
         </div>
       </details>
+
+      {/*
+        Pipeline stages as REACHABLE surfaces, not decoration. Every chip leads
+        to the screen where that stage is genuinely performed today: analysis,
+        policy and execution happen in this panel; verification, cross-chain
+        settlement (sequential + HTLC) and memory live in their Intent OS tabs.
+        Nothing here claims a capability the destination does not have.
+      */}
+      <AiStageRail />
 
       <div className="intent-ai-thread" ref={threadRef}>
         {visibleMessages.length === 0 && (

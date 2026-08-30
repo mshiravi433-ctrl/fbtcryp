@@ -4165,7 +4165,8 @@
       "network": "Network",
       "agents": "Agent",
       "strategies": "Strategy",
-      "plan": "Profit plan"
+      "plan": "Profit plan",
+      "crosschain": "Cross-chain"
     },
     "compose": {
       "choose": "Choose an outcome",
@@ -4556,7 +4557,8 @@
         "rpc-reachable": "RPC did not answer",
         "balance-fetched": "balance unavailable",
         "no-raw-credentials": "raw credential material present"
-      }
+      },
+      "openDesk": "Open the cross-chain desk — plan, sign, settle"
     },
     "revert": {
       "abort-all": "Abort all",
@@ -4767,7 +4769,55 @@
       "h1": "1 hour",
       "d1": "1 day"
     },
-    "flashLiquidity": "Flash Liquidity (flash-loan arbitrage)"
+    "flashLiquidity": "Flash Liquidity (flash-loan arbitrage)",
+    "crossChain": {
+      "deskTitle": "Cross-chain desk",
+      "sequentialReady": "Sequential settlement: protocol ready",
+      "sequentialOff": "Sequential settlement: server unavailable",
+      "htlcReady": "HTLC atomic: contracts configured",
+      "htlcOff": "HTLC atomic: contracts not configured",
+      "walletOn": "Wallet connected",
+      "walletOff": "Wallet not connected",
+      "modeNote": "Sequential mode = two user-signed transfers tracked by signed statements (NOT atomic). Atomic mode = HTLC contract escrow, only when configured. Keys never leave this device.",
+      "planTitle": "1) Plan a cross-chain exchange",
+      "from": "From chain",
+      "to": "To chain",
+      "token": "Token",
+      "amount": "Amount",
+      "counterparty": "Counterparty id",
+      "window": "Source window (hours)",
+      "bothSides": "Both sides on this device (rehearsal mode — counterparty key stored locally, clearly labeled)",
+      "quoting": "Quoting…",
+      "getQuote": "Get real bridge quote",
+      "createPlan": "Create settlement plan",
+      "creating": "Creating…",
+      "quoteTitle": "Live quote (LI.FI via FBT server)",
+      "stateTitle": "2) Settlement state",
+      "legRecorded": "recorded",
+      "legOpen": "open",
+      "legWaiting": "awaiting counterparty",
+      "legSource": "Leg 1 — source transfer",
+      "legDest": "Leg 2 — destination transfer",
+      "openBridge": "Open bridge handoff",
+      "signRecord": "Sign & record",
+      "counterpartyNote": "The counterparty signs this leg from their own session with their device key. (Rehearsal mode keeps both keys here, labeled.)",
+      "receipts": "Signed receipts (claims — on-chain verification below)",
+      "verified": "on-chain verified",
+      "unverified": "claim only",
+      "stateNote": "History is immutable: every transition is a signed statement pinned to the plan and the prior receipt. If the destination misses its window, the refund leg returns the source transfer.",
+      "localTitle": "This device’s plans",
+      "forget": "Forget keys locally",
+      "htlcTitle": "Atomic option — HTLC contract escrow",
+      "chainsConfigured": "chains configured",
+      "building": "Building…",
+      "buildHtlc": "Build atomic swap plan (preimage stays on device)",
+      "htlcMissing": "deploy IntentAtomicSwap on ≥2 chains and set the addresses; until then atomic cross-chain stays honestly unavailable.",
+      "htlcPlanTitle": "Two user-signed legs (server never sends)",
+      "htlcPreimage": "The preimage is stored only in this browser session. Losing it before claiming = refund path only.",
+      "htlcStatusUnavailable": "Atomic swap status unavailable from the server.",
+      "derivedStatus": "server status",
+      "htlcCounterparty": "Counterparty address (EVM)"
+    }
   },
   "whales": {
     "title": "Whale Tracking",
@@ -6105,6 +6155,17 @@
     },
     "activation": {
       "title": "Intent AI Activation"
+    },
+    "stages": {
+      "title": "Pipeline stages",
+      "intent": "Intent",
+      "risk": "Risk & policy",
+      "execution": "Execution",
+      "verification": "Verification",
+      "crosschain": "Cross-chain",
+      "memory": "Memory",
+      "here": "Runs in this panel",
+      "open": "Open in Intent OS"
     }
   }
 }

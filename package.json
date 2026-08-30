@@ -169,12 +169,13 @@
     "test:activation-config": "node test/intent-ai/activation-config-probe.mjs",
     "test:phase142": "node test/intent-ai/phase142-reachability-probe.mjs",
     "test:phase151": "node test/intent-ai/phase151-autonomous-recovery-probe.mjs",
-    "test:phases151-200": "npm run test:phase151 && npm run test:phase152",
+    "test:phases151-200": "npm run test:phase151 && npm run test:phase152 && npm run test:phase153",
     "test:upstash-store": "node test/upstash-store-probe.mjs",
     "test:phase152": "node test/intent-ai/phase152-flash-liquidity-probe.mjs",
     "compile:flash-liquidity": "node scripts/compile-flash-liquidity.mjs",
     "deploy:flash-liquidity": "node scripts/deploy-flash-liquidity.mjs",
-    "rehearse:flash-liquidity": "node scripts/rehearse-flash-liquidity.mjs"
+    "rehearse:flash-liquidity": "node scripts/rehearse-flash-liquidity.mjs",
+    "test:phase153": "node test/intent-ai/phase153-cross-chain-live-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",
@@ -182,6 +183,8 @@
     "@capacitor/push-notifications": "^6.0.5",
     "@capacitor/share": "^6.0.4",
     "@dydxprotocol/v4-client-js": "3.4.0",
+    "@noble/ed25519": "^3.2.0",
+    "@noble/hashes": "^2.4.0",
     "@solana-mobile/wallet-standard-mobile": "^0.5.3",
     "@solana/web3.js": "^1.98.4",
     "@tonconnect/ui-react": "^2.4.4",

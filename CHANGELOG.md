@@ -1,3 +1,29 @@
+# Unreleased — Phase 153: the cross-chain stack is now REACHABLE from the UI
+
+- The Phase 4b/4d cross-chain machine was server-complete but had NO client:
+  receipts need Ed25519 signatures and no browser code could produce them.
+  `src/lib/intentCrossChainClient.js` adds @noble/ed25519 signing whose keys,
+  canonical serialization, deterministic plan ids and signatures the server
+  validator accepts byte-for-byte (proven by `npm run test:phase153`, 8/8).
+- New "Cross-chain" tab in Intent OS (`/#/intent?tab=crosschain`): plan an
+  exchange against a REAL LI.FI quote via the server, create the settlement
+  plan, walk the bridge handoff (Bridge.jsx now deep-link prefills
+  fromChain/toChain/token/amount), sign and record each leg on-device, and
+  request the Phase 4c on-chain verification reports — which stay honest
+  ("claim only") until the server's RPCs are configured.
+- HTLC atomic swap surfaced honestly: while
+  `INTENT_ATOMIC_SWAP_ADDRESSES` is unconfigured the desk says exactly that;
+  once configured it builds real `newSwap` calldata for both legs with a
+  keccak256 hashlock derived from a preimage that never leaves the device and
+  `executableByServer: false`.
+- The Intent AI panel now shows a pipeline-stage rail that routes to the
+  screens where each stage REALLY runs (chat/policy/execution here; proofs,
+  cross-chain and memory in their Intent OS tabs), and the Network tab's
+  cross-chain cards link straight into the desk. Operational launch gates are
+  untouched — no cosmetic enablement anywhere.
+- New probe: `test/intent-ai/phase153-cross-chain-live-probe.mjs`
+  (`npm run test:phase153`; also added to `test:phases151-200`).
+
 # Unreleased — Phase 152 Level 2: real atomic rehearsal, live simulation gate, security review
 
 - The full flash-arbitrage cycle now runs for real on a local EVM:

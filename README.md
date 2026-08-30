@@ -42,6 +42,7 @@ censored.
 - [فاز ۱۵۲ — Flash Liquidity: آربیتراژ با فلش لان بدون وثیقه (Aave/Balancer، خط لولهٔ ۹ مرحله‌ای، `/#/flash-liquidity`)](docs/INTENT-AI-PHASE152-FLASH-LIQUIDITY-FA.md)
 - [فعال‌سازی فاز ۱۵۲ — گام به گام: سطح ۰ پلنر، سطح ۱ دیپلوی قرارداد، سطح ۲ اجرای واقعی پس از ممیزی](docs/INTENT-AI-PHASE152-ACTIVATE-FA.md)
 - [بازبینی امنیتی فاز ۱۵۲ — خودبازبینی + شواهد تمرین اتمیک + باگ پیدا و اصلاح‌شده + نقشهٔ ممیزی](docs/INTENT-AI-PHASE152-SECURITY-REVIEW-FA.md)
+- [فاز ۱۵۳ — وصل کردن میان‌زنجیره‌ای و بخش اتمیک Intent OS: امضای Ed25519 مرورگر، میز میان‌زنجیره‌ای، سواپ اتمیک HTLC و مراحل قابل استفادهٔ بخش هوش مصنوعی](docs/INTENT-AI-PHASE153-CROSS-CHAIN-FA.md)
 - [Intent AI — فازهای ۸ تا ۲۰ و وضعیت فعال‌سازی](docs/INTENT-AI-ROADMAP-8-20-FA.md)
 - [فاز ۸ — مرز Secret Manager و گزارش readiness](docs/INTENT-AI-PHASE8-FA.md)
 - [فاز ۱۰ — Marketplace و Trust](docs/INTENT-AI-PHASE10-FA.md)
