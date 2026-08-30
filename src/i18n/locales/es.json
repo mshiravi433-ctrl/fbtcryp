@@ -981,5 +981,115 @@
     "warningScBody": "Cualquier protocolo puede tener bugs. Solo deposita lo que puedas perder.",
     "maxBorrowHint": "Máximo: {{max}}",
     "chooseAssetFirst": "Elige un activo primero"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "Configuración de sesión — modo, nivel, autorización"
+    },
+    "quick": {
+      "title": "Acciones rápidas",
+      "marketBrief": "Resumen de mercado",
+      "swap": "Intercambiar",
+      "bridge": "Puente",
+      "futures": "Futuros",
+      "lend": "Prestar",
+      "goal": "Meta",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "Historial",
+      "title": "Historial de transacciones",
+      "subtitle": "Lo que hizo Intent AI en este dispositivo — cada recibo registrado, el más reciente primero.",
+      "emptyTitle": "Aún no hay nada",
+      "emptyBody": "Los recibos que produce Intent AI — autorizados, enviados, fallidos o en cola — aparecen aquí.",
+      "clear": "Borrar historial",
+      "localNote": "Se guarda solo en este navegador. Borrar los datos del navegador lo elimina; nunca se sube ni se usa para firmar nada.",
+      "txHash": "tx",
+      "feeLine": "comisión {{amount}} {{symbol}}",
+      "status": {
+        "completed": "completada",
+        "submitted": "enviada",
+        "authorized": "autorizada",
+        "pending": "pendiente",
+        "partial": "parcial",
+        "failed": "fallida",
+        "rejected": "rechazada",
+        "cancelled": "cancelada",
+        "blocked": "bloqueada",
+        "reauthorize": "reautorización",
+        "queued": "en cola",
+        "unavailable": "no disponible"
+      },
+      "action": {
+        "swap": "intercambio",
+        "bridge": "puente",
+        "send": "enviar",
+        "goal": "meta",
+        "futures": "futuros",
+        "futures_open": "futuros",
+        "dydx": "futuros",
+        "defi": "DeFi",
+        "lending": "préstamo",
+        "staking": "staking",
+        "liquidity": "liquidez",
+        "unknown": "acción"
+      }
+    },
+    "analysis": {
+      "loading": "Leyendo datos de mercado en vivo…",
+      "unavailable": "Los datos de mercado en vivo no están disponibles ahora, así que no se muestran precios.",
+      "offlineNote": "Instantánea sin conexión — los precios son de los últimos datos guardados, no en vivo.",
+      "regime": "Régimen de mercado",
+      "change24h": "24 h",
+      "trend7d": "Tendencia 7 d",
+      "volume": "Volumen 24 h",
+      "risk": "Riesgo",
+      "riskLevel": {
+        "low": "bajo",
+        "medium": "medio",
+        "high": "alto",
+        "unknown": "n.d."
+      },
+      "signal": {
+        "up": "al alza",
+        "down": "a la baja",
+        "flat": "plano",
+        "unknown": "n.d."
+      },
+      "assetUnavailable": "sin precio en vivo",
+      "notAdvice": "Una lectura de mercado, no un consejo financiero. Las señales son reglas simples sobre estos números — nada aquí ejecuta ni recomienda una operación."
+    },
+    "examples": {
+      "futures": {
+        "title": "Futuros",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "Préstamos y DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "Staking",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "Historial"
+    }
   }
 }

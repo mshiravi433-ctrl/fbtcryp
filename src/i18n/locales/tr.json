@@ -981,5 +981,115 @@
     "warningScBody": "Her protokolde hata olabilir.",
     "maxBorrowHint": "Maks: {{max}}",
     "chooseAssetFirst": "Önce bir varlık seçin"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "Oturum kurulumu — mod, seviye, yetki"
+    },
+    "quick": {
+      "title": "Hızlı işlemler",
+      "marketBrief": "Piyasa özeti",
+      "swap": "Takas",
+      "bridge": "Köprü",
+      "futures": "Vadeli",
+      "lend": "Borç ver",
+      "goal": "Hedef",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "Geçmiş",
+      "title": "İşlem geçmişi",
+      "subtitle": "Intent AI’ın bu cihazda yaptıkları — kaydettiği her makbuz, en yeniden eskiye.",
+      "emptyTitle": "Henüz bir şey yok",
+      "emptyBody": "Intent AI’ın ürettiği makbuzlar — yetkilendirilmiş, gönderilmiş, başarısız veya kuyrukta — burada listelenir.",
+      "clear": "Geçmişi temizle",
+      "localNote": "Yalnızca bu tarayıcıda saklanır. Tarayıcı verileri temizlendiğinde silinir; asla yüklenmez ve imzalamak için kullanılmaz.",
+      "txHash": "tx",
+      "feeLine": "ücret {{amount}} {{symbol}}",
+      "status": {
+        "completed": "tamamlandı",
+        "submitted": "gönderildi",
+        "authorized": "yetkilendirildi",
+        "pending": "beklemede",
+        "partial": "kısmi",
+        "failed": "başarısız",
+        "rejected": "reddedildi",
+        "cancelled": "iptal edildi",
+        "blocked": "engellendi",
+        "reauthorize": "yeniden yetki",
+        "queued": "kuyrukta",
+        "unavailable": "kullanılamıyor"
+      },
+      "action": {
+        "swap": "takas",
+        "bridge": "köprü",
+        "send": "gönder",
+        "goal": "hedef",
+        "futures": "vadeli",
+        "futures_open": "vadeli",
+        "dydx": "vadeli",
+        "defi": "DeFi",
+        "lending": "borç verme",
+        "staking": "stake",
+        "liquidity": "likidite",
+        "unknown": "işlem"
+      }
+    },
+    "analysis": {
+      "loading": "Canlı piyasa verileri okunuyor…",
+      "unavailable": "Canlı piyasa verilerine şu an ulaşılamıyor, bu yüzden fiyat gösterilmiyor.",
+      "offlineNote": "Çevrimdışı anlık görüntü — fiyatlar son kaydedilen verilerden, canlı değil.",
+      "regime": "Piyasa rejimi",
+      "change24h": "24 sa",
+      "trend7d": "7 günlük trend",
+      "volume": "Hacim 24 sa",
+      "risk": "Risk",
+      "riskLevel": {
+        "low": "düşük",
+        "medium": "orta",
+        "high": "yüksek",
+        "unknown": "bilinmiyor"
+      },
+      "signal": {
+        "up": "yükseliş",
+        "down": "düşüş",
+        "flat": "yatay",
+        "unknown": "bilinmiyor"
+      },
+      "assetUnavailable": "canlı fiyat yok",
+      "notAdvice": "Piyasa okumasıdır, yatırım tavsiyesi değildir. Sinyaller gösterilen sayılar üzerinde basit kurallardır — burada hiçbir işlem yürütülmez veya önerilmez."
+    },
+    "examples": {
+      "futures": {
+        "title": "Vadeli",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "Borç verme ve DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "Stake",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "Geçmiş"
+    }
   }
 }

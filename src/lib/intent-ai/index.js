@@ -1323,4 +1323,24 @@ export {
   flashLiquidityCapabilityReport
 } from './flashLiquidity.js';
 
+/* ── Local transaction history (localStorage only — never a server, never
+   a secret) and the deep market block used to enrich analysis replies with
+   real, sourced market data. ── */
+export {
+  TX_HISTORY_KEY,
+  TX_HISTORY_SCHEMA,
+  TX_HISTORY_MAX,
+  TX_HISTORY_STATUSES,
+  loadIntentTxHistory,
+  recordIntentTx,
+  clearIntentTxHistory
+} from './txHistory.js';
+export {
+  MARKET_CHAT_SCHEMA,
+  MARKET_CHAT_MAX_ASSETS,
+  BRIEF_DEFAULT_SYMBOLS,
+  SYMBOL_TO_COINGECKO,
+  buildChatMarketAnalysis
+} from './liveMarketChat.js';
+
 export const INTENT_AI_VERSION = 'intent-os.phase200.bounded-autonomy.v1';

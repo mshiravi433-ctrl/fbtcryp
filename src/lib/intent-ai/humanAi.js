@@ -394,6 +394,14 @@ function respondToParsed(session, parsed, ctx = {}) {
   // The external mode cannot silently admit an unverified participant. For
   // analysis/preparation we pass an explicit stage so a swap request is not
   // mistaken for permission to execute a swap.
+  //
+  // The level→class mapping, stated precisely:
+  //   · every ANALYSIS request (any level) and every L1 turn is class ANALYSIS
+  //   · L2/L3 non-analysis turns are class PREPARATION (quotes, drafts) —
+  //     preparation is NOT gated to L3; the Guardian only refuses
+  //     `execution: true` below L3 (guardian.js section 3), and the actual
+  //     submit path re-checks the per-action authorization screen. Gate the
+  //     money, not the math.
   const stage = session.level === 1 || parsed.intent?.kind === 'analysis'
     ? REQUEST_CLASSES.ANALYSIS
     : REQUEST_CLASSES.PREPARATION;
@@ -532,6 +540,16 @@ function runIntentPipeline(session, parsed, ctx, env = {}) {
   // 3. Level 1 and all analysis requests stay analysis-only.
   if (session.level === 1 || parsed.intent.kind === 'analysis') {
     const analysis = formulateStrategies(parsed.intent, ctx);
+    /*
+     * The market block ships PENDING. chatTurn is synchronous and does no
+     * I/O; the driving UI hands this reply to buildChatMarketAnalysis()
+     * (liveMarketChat.js) and replaces the pending block with real, sourced
+     * numbers — or with an honest `unavailable` when the feed is unreachable.
+     * `requestedAssets` is the full asset list the parser found, so a
+     * five-symbol "analyze BTC ETH BNB SOL XRP" gets five market rows.
+     */
+    const requestedAssets = (Array.isArray(parsed.intent.assets) ? parsed.intent.assets : [parsed.intent.fromSymbol, parsed.intent.toSymbol])
+      .filter(Boolean);
     session = push(session, assistantMessage('analysis', {
       mode: session.mode,
       modeLabel: session.modeLabel,
@@ -539,6 +557,10 @@ function runIntentPipeline(session, parsed, ctx, env = {}) {
       signals: parsed.signals,
       confidence: parsed.confidence,
       research: analysis.evidence,
+      marketAnalysis: {
+        dataStatus: 'pending',
+        requestedAssets
+      },
       suggestions: analysis.proposals.slice(0, 3).map((p) => ({ id: p.id, strategy: p.strategy, description: p.description, risk: p.risk })),
       targetReality,
       capabilityScan,

@@ -17,11 +17,20 @@
  * `intentAI.limits.*`).
  */
 
-/** Hard product limits — a single source of truth for parser, flow and UI. */
+/**
+ * Hard product limits — a single source of truth for parser, flow and UI.
+ *
+ * Raised 2026-08: $10M total input / $400k per transaction / 500% goal, at
+ * the product owner's explicit request. The enforcement semantics are UNCHANGED:
+ * an over-ceiling number is still answered with a friendly named-limit warning,
+ * never silently clamped and never authorized. These are UI/parser ceilings —
+ * the session policy (sanitizePolicy) and the Guardian re-check every number
+ * before anything is drafted or signed.
+ */
 export const INTENT_LIMITS = Object.freeze({
-  maxTotalInputUsd: 400_000,
-  maxPerTransactionUsd: 5_000,
-  maxGoalPct: 60,
+  maxTotalInputUsd: 10_000_000,
+  maxPerTransactionUsd: 400_000,
+  maxGoalPct: 500,
   maxGoalDurationDays: 30
 });
 

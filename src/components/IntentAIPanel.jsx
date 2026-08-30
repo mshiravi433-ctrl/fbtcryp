@@ -6,8 +6,15 @@
  *
  *   · a guided step-by-step chat flow (one question at a time, with
  *     quick-reply chips: task, amount confirmations, network, tool perms)
- *   · the friendly financial/time limits (400k total, 5k per tx, 60% goal,
+ *   · the friendly financial/time limits (10M total, 400k per tx, 500% goal,
  *     30-day goals) enforced in the parser, the flow and this UI
+ *   · deep market analysis: an "analyze ..." turn enriches its reply with
+ *     real, sourced market data (price / 24h change / 7d trend / volume /
+ *     regime) via buildChatMarketAnalysis; when the feed is unreachable the
+ *     card says so instead of showing numbers it does not have
+ *   · a local transaction history (localStorage only, fbt.intent.txHistory):
+ *     every decided receipt is recorded locally and browsable on the Intent
+ *     OS history tab
  *   · an INTERACTIVE confirmation screen: editable amount / duration / goal
  *     (each with its max-allowed caption) + tool permission checkboxes
  *     ("which of these am I allowed to use?") before the final confirm
@@ -40,6 +47,8 @@ import {
   PRIMARY_MODES, MODE_LABELS, MODE_DEFINITIONS,
   INTENT_LIMITS, MAX_GOAL_DURATION_HRS,
   FLOW_CHAIN_SUGGESTIONS, FLOW_TASK_SUGGESTIONS, FLOW_TOOL_SUGGESTIONS,
+  /* Deep market analysis + local history. */
+  buildChatMarketAnalysis, recordIntentTx,
   /* Phase 90 — the fee is on the preview and on the receipt, or nothing runs. */
   computeFee, attachFeeToReceipt,
   /* Phase 94 — offline is a waiting room, never an outbox. */
@@ -50,6 +59,7 @@ import {
   broadcastEnabled, assertBroadcastAllowed, prepareDraftTransaction,
   createEip1193Broadcaster, broadcastSigned
 } from '../lib/intent-ai';
+import { getMarkets, getOhlc } from '../lib/api';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
 import TokenApprovals from './TokenApprovals';
@@ -90,7 +100,7 @@ function AiStageRail() {
            tab is an acceptable price for that robustness. */
         const label = t(`intentAI.stages.${stage.id}`);
         return stage.tab ? (
-          <a key={stage.id} className="ia-stage-chip" href={`/intent?tab=${stage.tab}`}>
+          <a key={stage.id} className="ia-stage-chip" href={`#/intent?tab=${stage.tab}`}>
             <span>{label}</span>
             <em>→</em>
           </a>
@@ -184,6 +194,9 @@ const CONTROL_VARIANTS = {
 /** The four Confirmation Gate actions the panel submits. */
 const GATE_ACTIONS = ['CONFIRM', 'REJECT', 'CANCEL', 'REAUTHORIZE'];
 
+/** Quick-action chips under the stage rail (labels + send phrases are i18n). */
+const QUICK_CHIPS = ['marketBrief', 'swap', 'bridge', 'futures', 'lend', 'goal'];
+
 function fmtTime(ts) {
   try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
   catch { return ''; }
@@ -256,7 +269,7 @@ function applyScreenEdits(session, screen) {
 }
 
 export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, walletRuntime = null, tokenApprovals = null }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [mode, setMode] = useState(PRIMARY_MODES[0]);
   const [level, setLevel] = useState(1);
   const [session, setSession] = useState(() => startSession({ mode: PRIMARY_MODES[0], level: 1, defaultChainId }));
@@ -285,13 +298,31 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
   const [offlineQueue, setOfflineQueue] = useState([]);
   /* Phase 88 — the honest answer when a request is really about money. */
   const [rampNotice, setRampNotice] = useState(null);
+  /*
+   * L3 policy editor defaults. Chains and protocols default to EVERY allowed
+   * value and assets defaults to blank (= all assets): a fresh session that
+   * only quotes USDC→ETH on Arbitrum must not be refused because the default
+   * policy forgot a network. The money caps stay tight ($1k / $200 / $100) —
+   * broad scope, bounded size; the user raises them deliberately.
+   */
   const [policyInput, setPolicyInput] = useState({
     maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
-    allowedChains: '42161,8453', allowedProtocols: 'swap', allowedAssets: 'USDC,ETH,BTC', durationMin: 60
+    allowedChains: '42161,8453,56,1,137,10,43114,59144,146',
+    allowedProtocols: 'swap,bridge,defi,staking,lending,liquidity,futures,dydx',
+    allowedAssets: '', durationMin: 60
   });
   const threadRef = useRef(null);
   const inputRef = useRef(null);
-  const intentIsLive = publicStatus?.status !== 'unavailable' && publicStatus?.launchAllowed !== false;
+  /*
+   * The panel is always "live". The earlier activation strip gated the whole
+   * chat on `getIntentPublicStatus()` — a status endpoint that reports the
+   * NETWORK's launch posture, not the chat's. The result was a panel telling
+   * users "activation pending" while every analysis/preparation path worked.
+   * Honesty about what can actually run lives where it belongs: in the
+   * per-stage surfaces (venue health, the confirmation screen, the honest
+   * receipt) — not in a banner that blocks the assistant itself.
+   */
+  const intentIsLive = true;
 
   useEffect(() => {
     let active = true;
@@ -327,6 +358,21 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [session?.messages?.length]);
+
+  /*
+   * First-open market brief: the panel greets the user WITH a market read
+   * instead of an empty thread. Fires exactly once per mount. The phrase is
+   * localized — the parser understands the market-analysis keywords in the
+   * user's own language — and the pending reply is enriched with real
+   * market data a beat later by sendText.
+   */
+  const autoBriefRef = useRef(false);
+  useEffect(() => {
+    if (autoBriefRef.current) return;
+    autoBriefRef.current = true;
+    sendText(t('intentAI.quick.phrase.marketBrief'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /*
    * Phase 94 — the panel follows the real connection state. Going offline
@@ -383,6 +429,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     if (!value || session?.status === 'STOPPED') return;
     const { session: after } = chatTurn({ ...session }, value, {
       defaultChainId,
+      locale: i18n.language,
       externalAgents: Array.isArray(externalAgentCatalog?.candidates) ? externalAgentCatalog.candidates : [],
       externalAgentsSource: externalAgentCatalog?.dataStatus === 'live' ? 'server-catalog' : 'unavailable'
     });
@@ -411,6 +458,74 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     } else if (last && last.type === 'next-step-ready') {
       openInteractiveScreen(last.payload, after);
     }
+
+    /*
+     * Deep market analysis: the reply went up synchronously with a pending
+     * market block; the async enrichment now replaces it with real, sourced
+     * numbers (or an honest unavailable). The user sees the answer instantly
+     * and the market card fills in a beat later.
+     */
+    if (last?.type === 'analysis' && last?.payload?.marketAnalysis?.dataStatus === 'pending') {
+      void enrichAnalysisReply(last);
+    }
+  }
+
+  /**
+   * Fill a pending market block with REAL, sourced market data. The message
+   * is patched in place — and only if it is still part of the CURRENT
+   * session: a mode/level switch rebuilds the session while the market
+   * request is in flight, and a stale enrichment must never resurrect
+   * messages that are no longer on screen.
+   */
+  async function enrichAnalysisReply(message) {
+    let built = null;
+    try {
+      built = await buildChatMarketAnalysis({
+        symbols: message.payload?.marketAnalysis?.requestedAssets || [],
+        marketsSource: () => getMarkets({ page: 1, perPage: 250, vs: 'usd' }),
+        /*
+         * OHLC for the regime, NOT getChart. getChart falls back to the
+         * offline snapshot, whose synthetic series is stamped with fresh
+         * timestamps — passing that to the regime detector would fabricate
+         * "fresh evidence". A dead OHLC feed returns [], which the detector
+         * honestly reports as unavailable.
+         */
+        priceSource: ({ assetId, days }) => getOhlc(assetId, days)
+      });
+    } catch {
+      built = null;
+    }
+    if (!built) return;
+    setSession((prev) => {
+      if (!prev?.messages?.some((m) => m.id === message.id)) return prev;
+      return {
+        ...prev,
+        messages: prev.messages.map((m) => (
+          m.id === message.id && m.payload?.marketAnalysis?.dataStatus === 'pending'
+            ? { ...m, payload: { ...m.payload, marketAnalysis: built } }
+            : m
+        ))
+      };
+    });
+  }
+
+  /**
+   * Append a decided receipt to the LOCAL history (localStorage only, never
+   * a server). Best-effort: a full or unavailable storage must never break
+   * the execution flow, so every failure is swallowed by recordIntentTx's
+   * own guards and this wrapper.
+   */
+  function recordHistory(entry) {
+    try {
+      recordIntentTx({
+        action: screen?.protocol || 'swap',
+        fromSymbol: screen?.fromSymbol || null,
+        toSymbol: screen?.toSymbol || null,
+        amountUsd: Number(screen?.amountUsd) > 0 ? Number(screen.amountUsd) : null,
+        chainId: screen?.chainId || null,
+        ...entry
+      });
+    } catch { /* history is a convenience, never a gate */ }
   }
 
   function handleSend(e) {
@@ -484,12 +599,14 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     }
     if (action === 'REJECT') {
       setReceipt({ status: 'rejected', confirmed: false });
+      recordHistory({ status: 'rejected' });
       const res = executeConfirmed(session, { action: 'REJECT', draftId: screen?.draftId });
       setSession(res.session);
       return;
     }
     if (action === 'CANCEL') {
       setReceipt({ status: 'cancelled', confirmed: false });
+      recordHistory({ status: 'cancelled' });
       const res = executeConfirmed(session, { action: 'CANCEL', draftId: screen?.draftId });
       setSession(res.session);
       return;
@@ -605,6 +722,10 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         queued: enqueued.ok,
         reasonKey: enqueued.ok ? 'intentAI.receipt.queued' : 'intentAI.offline.notQueued'
       });
+      recordHistory({
+        status: 'queued',
+        reasonKey: enqueued.ok ? 'intentAI.receipt.queued' : 'intentAI.offline.notQueued'
+      });
       return;
     }
     const health = activeGate
@@ -631,6 +752,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           reasonKey: explained.i18nKey,
           reasonParams: explained.params
         });
+        recordHistory({ status: explained.status || 'failed', reasonKey: explained.i18nKey });
         return;
       }
       walletSignature = asked.signature;
@@ -727,10 +849,11 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           }
         }
       }
+      const finalStatus = rec.receipt?.status === 'COMPLETED' && realTxHash
+        ? 'completed'
+        : realTxHash ? 'submitted' : 'authorized';
       setReceipt({
-        status: rec.receipt?.status === 'COMPLETED' && realTxHash
-          ? 'completed'
-          : realTxHash ? 'submitted' : 'authorized',
+        status: finalStatus,
         confirmed: rec.receipt?.confirmed === true && Boolean(realTxHash),
         venue: health.venue || null,
         receipt: settled.ok ? settled.receipt : rec.receipt,
@@ -742,6 +865,19 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           ? null
           : broadcastReady ? 'intentAI.receipt.awaitingBroadcast' : 'intentAI.receipt.broadcastDisabled',
         ok: true
+      });
+      /* The local history remembers the DECISION (with its real hash when
+         one exists), so a phone can answer "what did I just approve?" */
+      recordHistory({
+        status: finalStatus,
+        confirmed: rec.receipt?.confirmed === true && Boolean(realTxHash),
+        txHash: realTxHash,
+        signerKind: result.signerKind || null,
+        feeAmount: feeQuote?.ok ? feeQuote.feeAmount : null,
+        feeSymbol: feeQuote?.ok ? feeQuote.symbol : null,
+        reasonKey: realTxHash
+          ? null
+          : broadcastReady ? 'intentAI.receipt.awaitingBroadcast' : 'intentAI.receipt.broadcastDisabled'
       });
       return;
     }
@@ -763,6 +899,10 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       reasonParams: explained.params,
       guardianReasons: explained.reasons,
       ok: false
+    });
+    recordHistory({
+      status: result.reauthoriseRequired ? 'reauthorize' : (explained.status || 'failed'),
+      reasonKey: explained.i18nKey
     });
   }
 
@@ -861,6 +1001,16 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       <p className="muted" style={{ fontSize: 12.2, margin: '0 0 10px', lineHeight: 1.7 }}>
         {t('intentAI.subtitle', { summary: describeLevel(level).summary, version: INTENT_AI_VERSION })}
       </p>
+
+      {/*
+        Session setup — mode, level and the authorization boundary — folds
+        into ONE accordion. On a phone these three blocks pushed the actual
+        chat below the fold; the user opens them when configuring and keeps
+        them closed while talking. Safety surfaces (session controls,
+        emergency stop, the receipt) always stay visible.
+      */}
+      <details className="ia-setup">
+        <summary className="muted">{t('intentAI.setup.title', { defaultValue: 'Session setup — mode, level, authorization' })}</summary>
 
       <div className="card-inner" style={{ background: 'rgba(0,229,255,0.06)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
         <div className="row-between" style={{ gap: 8 }}>
@@ -1043,6 +1193,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           ))}
         </ScrollRail>
       </div>
+      </details>
 
       {/*
         EXECUTION CONTROLS — pause, emergency stop, human agent.
@@ -1147,7 +1298,7 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       <details className="ia-examples" style={{ marginBottom: 10, fontSize: 12 }}>
         <summary className="muted">{t('intentAI.examples.title')}</summary>
         <div className="ia-examples-grid">
-          {['swap', 'bridge', 'send', 'goal', 'analyze'].map((group) => (
+          {['swap', 'bridge', 'send', 'goal', 'analyze', 'futures', 'lending', 'staking'].map((group) => (
             <div key={group} className="ia-example-group">
               <p className="faint" style={{ fontSize: 10.5, margin: '0 0 4px' }}>{t(`intentAI.examples.${group}.title`)}</p>
               {[1, 2, 3].map((n) => {
@@ -1172,6 +1323,31 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         Nothing here claims a capability the destination does not have.
       */}
       <AiStageRail />
+
+      {/*
+        Quick actions — the six things people open this panel for. Each chip
+        SENDS a localized phrase (not just filling the composer): the parser
+        understands every one of them, and the market brief is the same
+        phrase the auto-fire on mount uses.
+      */}
+      <div className="ia-quick-row" role="group" aria-label={t('intentAI.quick.title', { defaultValue: 'Quick actions' })}>
+        {QUICK_CHIPS.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            className="ia-chip ia-quick-chip"
+            onClick={() => sendText(t(`intentAI.quick.phrase.${chip}`))}
+            disabled={session?.status === 'STOPPED'}
+          >
+            {t(`intentAI.quick.${chip}`)}
+          </button>
+        ))}
+        {/* Plain anchors, not useNavigate: this panel also mounts headless in
+            the test suite without a Router (see AiStageRail). */}
+        <a className="ia-chip ia-quick-chip ia-history-link" href="#/intent?tab=history">
+          {t('intentAI.history.viewAll', { defaultValue: 'History' })}
+        </a>
+      </div>
 
       <div className="intent-ai-thread" ref={threadRef}>
         {visibleMessages.length === 0 && (
@@ -1660,11 +1836,14 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
   }
 
   if (type === 'analysis') {
-    const { intent, suggestions = [], confidence, targetReality } = payload;
+    const { intent, suggestions = [], confidence, targetReality, marketAnalysis } = payload;
     return (
       <div>
         <div><b>{t('intentAI.msg.intent')}:</b> {intent?.action} · {t('intentAI.msg.confidence', { n: confidence })}</div>
         <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.analysisOnly', { defaultValue: 'Analysis only — no financial execution permission.' })}</div>
+        {marketAnalysis && (
+          <MarketAnalysisCard data={marketAnalysis} t={t} />
+        )}
         {targetReality?.ok && <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.reality', { defaultValue: 'Target reality' })}: {targetReality.realism?.level} · {t('intentAI.msg.notGuaranteed', { defaultValue: 'not guaranteed' })}</div>}
         {suggestions.length > 0 && (
           <div style={{ marginTop: 4 }}>
@@ -1756,6 +1935,143 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
     return <div>{t('intentAI.msg.policyConfirm')}</div>;
   }
   return <span>{type}</span>;
+}
+
+/* ------------------------------------------------------------------ */
+/* Deep market analysis card                                            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * USD formatting for the asset grid. Prices need more precision than money
+ * amounts: a $0.0004 token says "$0.00" at 2 decimals, which is not a price
+ * at all.
+ */
+function fmtUsd(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  const digits = n >= 1000 ? 0 : n >= 1 ? 2 : 6;
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: digits })}`;
+}
+
+function fmtCompactUsd(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  try {
+    return `$${Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n)}`;
+  } catch {
+    return fmtUsd(n);
+  }
+}
+
+function fmtSignedPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `${n > 0 ? '+' : ''}${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+}
+
+const SIGNAL_GLYPH = { up: '▲', down: '▼', flat: '◆', unknown: '·' };
+
+/**
+ * One analysis reply = one market card: a regime strip on top, then a grid
+ * with a block per requested asset (price, 24h change, 7d trend, volume,
+ * signal, risk). Pending renders a loading note; unavailable says WHY it
+ * has no numbers. Every label is i18n — nothing is assembled from a
+ * hardcoded language.
+ */
+function MarketAnalysisCard({ data, t }) {
+  const status = data?.dataStatus || 'unavailable';
+
+  if (status === 'pending') {
+    return (
+      <div className="ia-ana-card is-pending" data-testid="market-analysis" data-status="pending">
+        <p className="faint" style={{ fontSize: 11.5, margin: 0 }}>{t('intentAI.analysis.loading', { defaultValue: 'Reading the live market data…' })}</p>
+      </div>
+    );
+  }
+
+  const assets = Array.isArray(data?.assets) ? data.assets : [];
+  const priced = assets.filter((a) => a.dataStatus === 'live' || a.dataStatus === 'offline');
+  const regime = data?.regime || null;
+  const offline = status === 'offline';
+
+  return (
+    <div className={`ia-ana-card${offline ? ' is-offline' : ''}`} data-testid="market-analysis" data-status={status}>
+      {offline && (
+        <p className="ia-ana-note" style={{ marginTop: 0 }}>
+          {t('intentAI.analysis.offlineNote', { defaultValue: 'Offline snapshot — prices are from the last saved data, not live.' })}
+        </p>
+      )}
+      {status === 'unavailable' && (
+        <p className="ia-ana-note" style={{ marginTop: 0 }}>
+          {t('intentAI.analysis.unavailable', { defaultValue: 'Live market data is unreachable right now, so no prices are shown.' })}
+        </p>
+      )}
+
+      {regime && (
+        <div className={`ia-ana-regime${regime.available ? ' has-regime' : ''}`} data-testid="market-regime-strip">
+          <span className="ia-ana-label">{t('intentAI.analysis.regime', { defaultValue: 'Market regime' })}</span>
+          <span className="ia-ana-regime-text">
+            {regime.available
+              ? t(regime.i18nKey, regime.params || {})
+              : t('intentAI.regime.unavailable')}
+          </span>
+        </div>
+      )}
+
+      {priced.length > 0 && (
+        <div className="ia-ana-grid">
+          {priced.map((asset) => (
+            <div key={asset.symbol} className="ia-ana-asset" data-testid={`market-asset-${asset.symbol}`}>
+              <div className="ia-ana-asset-head">
+                <b>{asset.symbol}</b>
+                <span className={`ia-ana-signal is-${asset.signal || 'unknown'}`}>
+                  <i aria-hidden="true">{SIGNAL_GLYPH[asset.signal] || SIGNAL_GLYPH.unknown}</i>
+                  {t(`intentAI.analysis.signal.${asset.signal || 'unknown'}`)}
+                </span>
+              </div>
+              <div className="ia-ana-price">{fmtUsd(asset.priceUsd)}</div>
+              <div className="ia-ana-metrics">
+                <div>
+                  <span>{t('intentAI.analysis.change24h', { defaultValue: '24h' })}</span>
+                  <b className={Number(asset.change24hPct) > 0 ? 'is-up' : Number(asset.change24hPct) < 0 ? 'is-down' : ''}>
+                    {fmtSignedPct(asset.change24hPct)}
+                  </b>
+                </div>
+                <div>
+                  <span>{t('intentAI.analysis.trend7d', { defaultValue: '7d trend' })}</span>
+                  <b>{fmtSignedPct(asset.trend7dPct)}</b>
+                </div>
+                <div>
+                  <span>{t('intentAI.analysis.volume', { defaultValue: 'Volume 24h' })}</span>
+                  <b>{fmtCompactUsd(asset.volume24hUsd)}</b>
+                </div>
+                <div>
+                  <span>{t('intentAI.analysis.risk', { defaultValue: 'Risk' })}</span>
+                  <b className={`ia-ana-risk is-${asset.risk || 'unknown'}`}>
+                    {t(`intentAI.analysis.riskLevel.${asset.risk || 'unknown'}`)}
+                  </b>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {assets.some((a) => a.dataStatus === 'unavailable') && (
+        <div className="ia-ana-unpriced">
+          {assets.filter((a) => a.dataStatus === 'unavailable').map((asset) => (
+            <span key={asset.symbol} className="ia-ana-unpriced-chip">
+              {asset.symbol}: {t('intentAI.analysis.assetUnavailable', { defaultValue: 'no live price' })}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <p className="ia-ana-note">
+        {t('intentAI.analysis.notAdvice', { defaultValue: 'A market read, not financial advice. Signals are simple heuristics over the numbers shown — nothing here executes or recommends a trade.' })}
+      </p>
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */

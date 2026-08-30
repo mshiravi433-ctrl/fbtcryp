@@ -981,5 +981,115 @@
     "warningScBody": "Protokol apa pun bisa memiliki bug. Hanya simpan yang bisa Anda tanggung.",
     "maxBorrowHint": "Maks: {{max}}",
     "chooseAssetFirst": "Pilih aset terlebih dahulu"
+  },
+  "intentAI": {
+    "setup": {
+      "title": "Pengaturan sesi — mode, level, otorisasi"
+    },
+    "quick": {
+      "title": "Aksi cepat",
+      "marketBrief": "Ringkasan pasar",
+      "swap": "Tukar",
+      "bridge": "Bridge",
+      "futures": "Futures",
+      "lend": "Pinjamkan",
+      "goal": "Target",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "Riwayat",
+      "title": "Riwayat transaksi",
+      "subtitle": "Apa yang dilakukan Intent AI di perangkat ini — setiap bukti yang tercatat, terbaru dulu.",
+      "emptyTitle": "Belum ada apa-apa",
+      "emptyBody": "Bukti yang dihasilkan Intent AI — disahkan, terkirim, gagal, atau antre — tercantum di sini.",
+      "clear": "Hapus riwayat",
+      "localNote": "Hanya disimpan di browser ini. Menghapus data browser akan menghilangkannya; tidak pernah diunggah dan tidak pernah dipakai untuk menandatangani.",
+      "txHash": "tx",
+      "feeLine": "biaya {{amount}} {{symbol}}",
+      "status": {
+        "completed": "selesai",
+        "submitted": "terkirim",
+        "authorized": "disahkan",
+        "pending": "menunggu",
+        "partial": "parsial",
+        "failed": "gagal",
+        "rejected": "ditolak",
+        "cancelled": "dibatalkan",
+        "blocked": "diblokir",
+        "reauthorize": "otorisasi ulang",
+        "queued": "antre",
+        "unavailable": "tidak tersedia"
+      },
+      "action": {
+        "swap": "tukar",
+        "bridge": "bridge",
+        "send": "kirim",
+        "goal": "target",
+        "futures": "futures",
+        "futures_open": "futures",
+        "dydx": "futures",
+        "defi": "DeFi",
+        "lending": "pinjaman",
+        "staking": "staking",
+        "liquidity": "likuiditas",
+        "unknown": "aksi"
+      }
+    },
+    "analysis": {
+      "loading": "Membaca data pasar langsung…",
+      "unavailable": "Data pasar langsung tidak dapat dijangkau saat ini, jadi tidak ada harga yang ditampilkan.",
+      "offlineNote": "Snapshot luring — harga dari data tersimpan terakhir, bukan langsung.",
+      "regime": "Rezim pasar",
+      "change24h": "24 jam",
+      "trend7d": "Tren 7 hari",
+      "volume": "Volume 24 jam",
+      "risk": "Risiko",
+      "riskLevel": {
+        "low": "rendah",
+        "medium": "sedang",
+        "high": "tinggi",
+        "unknown": "tak diketahui"
+      },
+      "signal": {
+        "up": "naik",
+        "down": "turun",
+        "flat": "datar",
+        "unknown": "tak diketahui"
+      },
+      "assetUnavailable": "tanpa harga langsung",
+      "notAdvice": "Pembacaan pasar, bukan nasihat keuangan. Sinyal adalah heuristik sederhana atas angka-angka ini — tidak ada yang mengeksekusi atau merekomendasikan perdagangan."
+    },
+    "examples": {
+      "futures": {
+        "title": "Futures",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "Pinjaman & DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "Staking",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
+      }
+    }
+  },
+  "intentOS": {
+    "tab": {
+      "history": "Riwayat"
+    }
   }
 }

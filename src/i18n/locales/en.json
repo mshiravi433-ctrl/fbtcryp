@@ -4239,7 +4239,8 @@
       "agents": "Agent",
       "strategies": "Strategy",
       "plan": "Profit plan",
-      "crosschain": "Cross-chain"
+      "crosschain": "Cross-chain",
+      "history": "History"
     },
     "compose": {
       "choose": "Choose an outcome",
@@ -5688,6 +5689,24 @@
         "e1": "analyze BTC",
         "e2": "research the ETH portfolio",
         "e3": "look at SOL market news"
+      },
+      "futures": {
+        "title": "Futures",
+        "e1": "open a 2x long on BTC perpetual with 100 USDT",
+        "e2": "short ETH with 2x leverage on 50 USDT",
+        "e3": "analyze BTC perpetual futures"
+      },
+      "lending": {
+        "title": "Lending & DeFi",
+        "e1": "lend 100 USDC on Arbitrum",
+        "e2": "borrow 50 USDC against my ETH",
+        "e3": "deposit 200 USDC into a yield pool"
+      },
+      "staking": {
+        "title": "Staking",
+        "e1": "stake 100 USDC",
+        "e2": "stake 1 ETH for yield",
+        "e3": "unstake my ETH"
       }
     },
     "externalInfo": {
@@ -6239,6 +6258,89 @@
       "memory": "Memory",
       "here": "Runs in this panel",
       "open": "Open in Intent OS"
+    },
+    "setup": {
+      "title": "Session setup — mode, level, authorization"
+    },
+    "quick": {
+      "title": "Quick actions",
+      "marketBrief": "Market brief",
+      "swap": "Swap",
+      "bridge": "Bridge",
+      "futures": "Futures",
+      "lend": "Lend",
+      "goal": "Goal",
+      "phrase": {
+        "marketBrief": "analyze BTC ETH BNB SOL XRP",
+        "swap": "swap 100 USDC to ETH on Arbitrum",
+        "bridge": "bridge 50 USDC from Arbitrum to Base",
+        "futures": "open a 2x long on BTC perpetual with 100 USDT",
+        "lend": "lend 100 USDC on Arbitrum",
+        "goal": "target 10% on 500 USDC in 4 hours"
+      }
+    },
+    "history": {
+      "viewAll": "History",
+      "title": "Transaction history",
+      "subtitle": "What the Intent AI did on this device — every receipt it recorded, newest first.",
+      "emptyTitle": "Nothing here yet",
+      "emptyBody": "Receipts the Intent AI produces — authorized, submitted, failed or queued — are listed here.",
+      "clear": "Clear history",
+      "localNote": "Stored only in this browser. Clearing browser data removes it; it is never uploaded and never used to sign anything.",
+      "txHash": "tx",
+      "feeLine": "fee {{amount}} {{symbol}}",
+      "status": {
+        "completed": "completed",
+        "submitted": "submitted",
+        "authorized": "authorized",
+        "pending": "pending",
+        "partial": "partial",
+        "failed": "failed",
+        "rejected": "rejected",
+        "cancelled": "cancelled",
+        "blocked": "blocked",
+        "reauthorize": "reauthorization",
+        "queued": "queued",
+        "unavailable": "unavailable"
+      },
+      "action": {
+        "swap": "swap",
+        "bridge": "bridge",
+        "send": "send",
+        "goal": "goal",
+        "futures": "futures",
+        "futures_open": "futures",
+        "dydx": "futures",
+        "defi": "DeFi",
+        "lending": "lending",
+        "staking": "staking",
+        "liquidity": "liquidity",
+        "unknown": "action"
+      }
+    },
+    "analysis": {
+      "loading": "Reading the live market data…",
+      "unavailable": "Live market data is unreachable right now, so no prices are shown.",
+      "offlineNote": "Offline snapshot — prices are from the last saved data, not live.",
+      "regime": "Market regime",
+      "change24h": "24h",
+      "trend7d": "7d trend",
+      "volume": "Volume 24h",
+      "risk": "Risk",
+      "riskLevel": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "unknown": "n/a"
+      },
+      "signal": {
+        "up": "up",
+        "down": "down",
+        "flat": "flat",
+        "unknown": "n/a"
+      },
+      "assetUnavailable": "no live price",
+      "notAdvice": "A market read, not financial advice. Signals are simple heuristics over the numbers shown — nothing here executes or recommends a trade."
     }
   },
   "loan": {

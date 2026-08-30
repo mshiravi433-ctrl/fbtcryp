@@ -247,6 +247,16 @@ console.log('▸ probing FBT Intent AI — guided flow, product limits & interac
   report('intent-ai guided flow & limits', await runGuidedFlow());
 }
 
+/* Deep market analysis chat, local tx history and the preparation gate:
+   the parser's full asset list, the pending→live analysis enrichment, the
+   localStorage receipt record, and the proof that preparation (quote/draft)
+   is never gated to L3 while execution always is. */
+console.log('▸ probing FBT Intent AI — market analysis chat, local tx history & preparation gate…');
+{
+  const { default: runMarketChat } = await import('./intent-ai/market-chat-history-probe.mjs');
+  report('intent-ai market chat & history', await runMarketChat());
+}
+
 console.log('▸ probing FBT Intent AI — Phase 2 Controlled Execution…');
 {
   const { default: runGate } = await import('./intent-ai/phase2-confirmation-gate-probe.mjs');
