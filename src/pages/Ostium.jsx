@@ -185,19 +185,6 @@ export default function Ostium() {
     return data;
   }, []);
 
-  /* Append the freshly observed mid to the session series. */
-  useEffect(() => {
-    if (!market || !market.mid) return;
-    const s = sessionRef.current;
-    if (s.pairId !== market.pairId) {
-      s.pairId = market.pairId;
-      s.points = [];
-    }
-    s.points.push({ x: Date.now(), y: market.mid });
-    if (s.points.length > 240) s.points = s.points.slice(-240);
-    setSessionPoints(s.points);
-  }, [market]);
-
   useEffect(() => {
     loadMarkets();
     const id = setInterval(loadMarkets, 20_000);
@@ -228,6 +215,19 @@ export default function Ostium() {
   const effectiveMax = market?.isDayTradingClosed && market.overnightMaxLeverage > 0
     ? market.overnightMaxLeverage
     : market?.maxLeverage;
+
+  /* Append the freshly observed mid to the session series. */
+  useEffect(() => {
+    if (!market || !market.mid) return;
+    const s = sessionRef.current;
+    if (s.pairId !== market.pairId) {
+      s.pairId = market.pairId;
+      s.points = [];
+    }
+    s.points.push({ x: Date.now(), y: market.mid });
+    if (s.points.length > 240) s.points = s.points.slice(-240);
+    setSessionPoints(s.points);
+  }, [market]);
 
   useEffect(() => {
     if (effectiveMax && Number(leverage) > effectiveMax) setLeverage(String(effectiveMax));

@@ -20,7 +20,8 @@ import {
   wallexPlaceOrder,
   wallexTrades,
   wallexWithdraw,
-  writeWallexKey
+  writeWallexKey,
+  wallexServerIp
 } from '../lib/wallex';
 import {
   demoWallexFill,
@@ -118,11 +119,16 @@ export default function WallexPanel() {
   const [wdBusy, setWdBusy] = useState(false);
   const [wdResult, setWdResult] = useState(null);
   const [wdError, setWdError] = useState(null);
+  const [serverIp, setServerIp] = useState('');
 
   /* Guard: if the language switches away from Persian while this tab is
      mounted, it must render nothing — the gate lives in Buy.jsx too, this is
      the second lock on the same door. */
   if (!isFa) return null;
+
+  useEffect(() => {
+    wallexServerIp().then(d => setServerIp(d?.ip || 'نامشخص')).catch(() => setServerIp('نامشخص'));
+  }, []);
 
   const loadMarkets = useCallback(() => {
     setMarketsLoading(true);
@@ -184,8 +190,11 @@ export default function WallexPanel() {
     if (kind !== DECISIONS.otc || !selected) return undefined;
     const id = setTimeout(() => {
       wallexOtcPrice(selected.symbol, side)
-        .then((p) => setOtcQuote(p?.result || null))
-        .catch(() => setOtcQuote(null));
+        .then((p) => {
+          if (p?.result) setOtcQuote(p.result);
+          else setOtcQuote({ price: side === 'BUY' ? selected.askPrice : selected.bidPrice });
+        })
+        .catch(() => setOtcQuote({ price: side === 'BUY' ? selected.askPrice : selected.bidPrice }));
     }, 250);
     return () => clearTimeout(id);
   }, [kind, side, selected]);
@@ -347,70 +356,26 @@ export default function WallexPanel() {
         </div>
       </div>
 
-      {/* ── markets ── */}
-      <div className="wallex-block">
-        <div className="wallex-row" style={{ justifyContent: 'space-between' }}>
-          <p className="section-label" style={{ margin: 0 }}>{t('buy.wallex.markets')}</p>
-          <input
-            className="wallex-input wallex-search"
-            placeholder={t('buy.wallex.search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {marketsOffline && (
-          <p className="notice" style={{ marginTop: 8 }}>
-            {t('buy.wallex.offlineNotice', { defaultValue: 'اتصال زنده به والکس برقرار نشد — فهرست آفلاین (نمایشی) است و سفارش‌ها DEMO ثبت می‌شوند.' })}
-            <button type="button" className="btn btn-ghost btn-sm" style={{ marginInlineStart: 8 }} onClick={loadMarkets}>
-              {t('common.retry', { defaultValue: 'تلاش دوباره' })}
-            </button>
-          </p>
-        )}
-        {marketsLoading && <p className="faint" style={{ fontSize: 11, marginTop: 8 }}>{t('buy.wallex.loading')}</p>}
-        <div className="wallex-markets">
-          {filtered.map((m) => (
-            <button
-              key={m.symbol}
-              type="button"
-              className={`wallex-market ${selected?.symbol === m.symbol ? 'active' : ''}`}
-              onClick={() => { setSelected(m); setConfirming(false); setOrderResult(null); }}
-            >
-              <span className="wallex-market-name">
-                <b dir="ltr">{m.baseAsset}/{m.quoteAsset}</b>
-                {m.faName && <small>{m.faName}</small>}
-              </span>
-              <span className="wallex-market-price">
-                <b>{formatWallexPrice(m.lastPrice, m.tickSize)}</b>
-                <Chg value={m.change24h} />
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ── trade ── */}
       {selected && (
         <div className="wallex-block">
-          <p className="section-label" style={{ margin: 0 }}>
-            {t('buy.wallex.trade')} — <span dir="ltr">{selected.baseAsset}/{selected.quoteAsset}</span>
-          </p>
-
-          <div className="wallex-toggle" role="group" aria-label={t('buy.wallex.side')}>
-            <button type="button" className={side === 'BUY' ? 'buy active' : 'buy'} onClick={() => { setSide('BUY'); setConfirming(false); }}>
-              {t('buy.wallex.buy')}
-            </button>
-            <button type="button" className={side === 'SELL' ? 'sell active' : 'sell'} onClick={() => { setSide('SELL'); setConfirming(false); }}>
-              {t('buy.wallex.sell')}
-            </button>
-          </div>
-
-          <div className="wallex-toggle" role="group" aria-label={t('buy.wallex.kind')}>
-            <button type="button" className={kind === DECISIONS.otc ? 'active' : ''} onClick={() => { setKind(DECISIONS.otc); setConfirming(false); }}>
-              {t('buy.wallex.instant')}
-            </button>
-            <button type="button" className={kind === DECISIONS.limit ? 'active' : ''} onClick={() => { setKind(DECISIONS.limit); setConfirming(false); }}>
-              {t('buy.wallex.limitOrder')}
-            </button>
+          <div className="wallex-row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+            <p className="section-label" style={{ margin: 0 }}>
+              {t('buy.wallex.trade')}
+            </p>
+            <select
+              className="wallex-input"
+              style={{ width: 'auto', padding: '4px 8px' }}
+              value={selected.symbol}
+              onChange={(e) => {
+                const m = markets.find(x => x.symbol === e.target.value);
+                if (m) { setSelected(m); setConfirming(false); setOrderResult(null); }
+              }}
+            >
+              {markets.map(m => (
+                <option key={m.symbol} value={m.symbol}>{m.baseAsset}/{m.quoteAsset} {m.faName ? `(${m.faName})` : ''}</option>
+              ))}
+            </select>
           </div>
 
           <div className="wallex-row">
@@ -541,9 +506,13 @@ export default function WallexPanel() {
 
         <details className="wallex-withdraw" style={{ marginTop: 10 }} open={!hasKey}>
           <summary style={{ fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>{t('buy.wallex.withdrawTitle')}</summary>
-          {demo && (
+          {demo ? (
             <p className="notice" style={{ fontSize: 11, margin: '8px 0' }}>
               {t('buy.wallex.withdrawDemoNotice', { defaultValue: 'بدون کلید API، برداشت به‌صورت DEMO ثبت می‌شود و واقعاً از حساب والکس خارج نمی‌شود. برای برداشت واقعی، کلید API را در بالای همین صفحه وارد کنید.' })}
+            </p>
+          ) : (
+            <p className="notice" style={{ fontSize: 11, margin: '8px 0', border: '1px solid var(--accent)', background: 'var(--accent-10)' }}>
+              {t('buy.wallex.withdrawIpAllowlist', { defaultValue: 'برای برداشت، حتماً باید این آی‌پی را در تنظیمات API والکس خود (بخش آی‌پی‌های مجاز) اضافه کنید تا از هر اینترنتی بتوانید برداشت کنید:' })} <b dir="ltr">{serverIp}</b>
             </p>
           )}
           <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7 }}>{t('buy.wallex.withdrawHelp')}</p>

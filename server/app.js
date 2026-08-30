@@ -3508,6 +3508,16 @@ app.post('/api/wallex/v1/account/otc/orders', wallexOrderCall('placeOtc'));
 app.post('/api/wallex/v1/account/crypto-withdrawal', wallexOrderCall('withdrawCrypto'));
 app.delete('/api/wallex/v1/account/orders', wallexOrderCall('cancelOrder'));
 
+app.get('/api/wallex/v1/server-ip', async (req, res) => {
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const d = await r.json();
+    res.json({ ip: d.ip });
+  } catch (e) {
+    res.json({ ip: 'نامشخص' });
+  }
+});
+
 /*
  * ─── THE SECOND BRIDGE, AT MORE THAN TWICE THE FEE ──────────────────────────
  * deBridge DLN pays us 70 bps where LI.FI pays 30, needs no key and no
