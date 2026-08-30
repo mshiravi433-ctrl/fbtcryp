@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import { getFlashLiquidityCapabilities } from '../lib/intentNetwork';
 import {
-  FLASH_LIQUIDITY_LIMITS,
   DEMO_SNAPSHOTS,
   parseFlashIntent,
-  scanOpportunities,
-  selectFlashProvider,
   planFlashArbitrage,
   createFlashPolicy,
   buildFlashReceipt,
@@ -18,9 +15,12 @@ import '../styles/flash-liquidity.css';
 const INTENT_EXAMPLE_FA = 'با ۰ سرمایه اولیه، هر آربیتراژی که بعد از Gas + Flash Fee حداقل ۰.۵٪ سود دارد اجرا کن';
 const INTENT_EXAMPLE_EN = 'Zero initial capital — run any arbitrage netting at least 0.5% profit after gas + flash fee';
 
+/* Demo market lives on Arbitrum (see DEMO_SNAPSHOTS.marketDefaults) whose gas
+   token is ETH — the config used to price gas at $0.8/native, which made the
+   gas line render as $0.0000 and every economics table look fake. */
 const DEMO_CONFIG = {
   gasPriceGwei: 0.01,
-  nativePriceUsd: 0.8,
+  nativePriceUsd: 2500,
   gasUnits: 650000,
   platformFeeBps: 70,
   mevBufferBps: 10,
@@ -78,8 +78,11 @@ export default function FlashLiquidity() {
   const [minProfitBps, setMinProfitBps] = useState(50);
   const [plan, setPlan] = useState(null);
   const [receipt, setReceipt] = useState(null);
-  const [serverStatus, setServerStatus] = useState(null);
+  const [serverStatus, setServerStatus] = useState(undefined);
+  const resultRef = useRef(null);
 
+  /* `undefined` = still asking, `null` = unreachable, object = answered.
+     Only the answered state claims anything about the server. */
   useEffect(() => {
     let alive = true;
     getFlashLiquidityCapabilities()
@@ -129,6 +132,11 @@ export default function FlashLiquidity() {
       context: { now: Date.now(), attemptsToday: 0 }
     });
     setPlan(result);
+    /* The result lands below the fold on a phone — scroll it into view so a
+       tap on «run» never looks like a dead button. */
+    requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }, [parsedIntent, minProfitBps, market, gasPriceGwei]);
 
   const makeReceipt = useCallback((outcome) => {
@@ -151,10 +159,10 @@ export default function FlashLiquidity() {
 
   return (
     <PageTransition>
-      <div className="page ios-page fl-page">
+      <div className="page fl-page">
         {/* ── Hero ─────────────────────────────────────────────────────── */}
-        <section className="ios-hero fl-hero" style={riseIn}>
-          <div className="ios-kicker"><span>FBT · Flash Liquidity · Phase 152</span></div>
+        <section className="fl-hero" style={riseIn}>
+          <div className="fl-kicker">FBT · Flash Liquidity · Phase 152</div>
           <h1>{t('flashLiquidity.title', { defaultValue: 'فلش لیکوییدیتی — آربیتراژ بدون وثیقه' })}</h1>
           <p className="fl-sub">
             {t('flashLiquidity.subtitle', {
@@ -169,25 +177,8 @@ export default function FlashLiquidity() {
           </div>
         </section>
 
-        {/* ── Server deployment status (optional, never blocks the lab) ── */}
-        <section className="ios-panel fl-server" style={riseIn}>
-          {serverStatus ? (
-            <>
-              <div className="fl-server-row">
-                <strong>{t('flashLiquidity.server.status', { defaultValue: 'وضعیت استقرار (سرور)' })}:</strong>
-                <code>{serverStatus.status}</code>
-              </div>
-              {serverStatus.missing?.length > 0 && (
-                <small className="fl-server-missing">{serverStatus.missing.join(' · ')}</small>
-              )}
-            </>
-          ) : (
-            <small>{t('flashLiquidity.server.offline', { defaultValue: 'سرور در دسترس نیست — برنامه‌ریز به‌صورت محلی روی همین دستگاه اجرا می‌شود.' })}</small>
-          )}
-        </section>
-
         {/* ── Intent composer ──────────────────────────────────────────── */}
-        <section className="ios-panel fl-intent" style={riseIn}>
+        <section className="fl-panel fl-intent" style={riseIn}>
           <h2>{t('flashLiquidity.intent.title', { defaultValue: '۱) اینتنت را بنویس' })}</h2>
           <textarea
             className="fl-textarea"
@@ -233,7 +224,7 @@ export default function FlashLiquidity() {
         </section>
 
         {/* ── Market data (educational demo) ───────────────────────────── */}
-        <section className="ios-panel fl-market" style={riseIn}>
+        <section className="fl-panel fl-market" style={riseIn}>
           <h2>{t('flashLiquidity.market.title', { defaultValue: '۲) داده بازار (نمونه آموزشی)' })}</h2>
           <p className="fl-demo-note">
             {t('flashLiquidity.market.demoNote', {
@@ -289,9 +280,29 @@ export default function FlashLiquidity() {
           </button>
         </section>
 
+        {/* ── Server deployment status: a quiet note, not an error box.
+               The planner runs fully client-side; this strip only says what
+               the optional deployment reports, and never blocks the lab. ── */}
+        {serverStatus !== undefined && (
+          <div className="fl-server" role="status" style={riseIn}>
+            <span className={`fl-server-dot ${serverStatus ? '' : 'off'}`} aria-hidden="true" />
+            <span>
+              {t('flashLiquidity.server.status', { defaultValue: 'وضعیت استقرار (سرور)' })}:
+              {' '}
+              {serverStatus ? <code>{serverStatus.status}</code> : t('flashLiquidity.server.offlineShort', { defaultValue: 'در دسترس نیست' })}
+            </span>
+            {serverStatus?.missing?.length > 0 && (
+              <span className="fl-server-missing">{serverStatus.missing.join(' · ')}</span>
+            )}
+            <span>
+              {t('flashLiquidity.server.localNote', { defaultValue: 'برنامه‌ریز همین‌جا روی دستگاه اجرا می‌شود؛ سرور فقط گزارش وضعیت است.' })}
+            </span>
+          </div>
+        )}
+
         {/* ── Pipeline result ─────────────────────────────────────────── */}
         {plan && (
-          <section className="ios-panel fl-result" style={riseIn}>
+          <section className="fl-panel fl-result" ref={resultRef} style={riseIn}>
             <div className={bannerClass}>
               {decision === 'EXECUTE_READY' && t('flashLiquidity.decision.ready', { defaultValue: 'آمادهٔ امضا — هنوز شبیه‌سازی زنده + امضای کیف پول لازم است' })}
               {decision === 'GATED' && t('flashLiquidity.decision.gated', { defaultValue: 'متوقف شد — گیت‌های ایمنی هنوز کامل نیستند' })}
@@ -380,7 +391,7 @@ export default function FlashLiquidity() {
         )}
 
         {/* ── Guarantees panel ─────────────────────────────────────────── */}
-        <section className="ios-panel fl-guarantees" style={riseIn}>
+        <section className="fl-panel fl-guarantees" style={riseIn}>
           <h2>{t('flashLiquidity.guarantees.title', { defaultValue: 'چه چیزی قطعی است و چه چیزی نیست' })}</h2>
           <ul>
             <li>✓ {t('flashLiquidity.guarantees.atomic', { defaultValue: 'کل عملیات در یک تراکنش است: کمبود بازپرداخت = revert کامل.' })}</li>

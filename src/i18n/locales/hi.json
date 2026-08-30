@@ -903,6 +903,7 @@
       "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
       "withdrawTitle": "वॉलेक्स से इस ऐप के वॉलेट में निकालें",
       "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawIpAllowlist": "निकासी के लिए, आपको अपनी Wallex API सेटिंग्स (अनुमत IP अनुभाग) में यह IP जोड़ना होगा ताकि आप किसी भी नेटवर्क से निकासी कर सकें:",
       "withdrawCoin": "कॉइन",
       "withdrawNetwork": "नेटवर्क",
       "withdrawValue": "राशि",

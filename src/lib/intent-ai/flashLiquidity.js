@@ -484,8 +484,11 @@ export function scanOpportunities({ chainId, asset, snapshots, loanPremiumBps = 
       const amount = optimalFlashLoanAmount(hops, premiumBps);
       const { amountOut } = evaluateHops(hops, amount || 1n);
       const net = amount > 0n ? netProfitAsset(amount, hops, premiumBps) : 0n;
+      /* Same-direction spot prices on both venues; the old code compared one
+         venue's price against the other venue's INVERSE price and reported a
+         200 % "spread" on a 1 % gap. */
       const spotBuy = Number(buy.reserveB) / Number(buy.reserveA);
-      const spotSell = Number(sell.reserveA) / Number(sell.reserveB);
+      const spotSell = Number(sell.reserveB) / Number(sell.reserveA);
       const spreadBps = Math.abs((spotSell - spotBuy) / ((spotBuy + spotSell) / 2) * 10000);
       opportunities.push({
         id: `cycle:${buy.venueId}->${sell.venueId}`,
@@ -953,10 +956,15 @@ export const DEMO_SNAPSHOTS = Object.freeze({
   label: 'demo-educational',
   live: false,
   sets: Object.freeze({
+    /* Spreads must beat 2×30 bps swap fees + the 0.70 % platform fee on gross
+       + MEV buffer before the pipeline's own 0.50 % min-profit gate lets a
+       plan through — a "profitable" demo that nets less than the gate teaches
+       the wrong lesson (nothing ever EXECUTE_READY/GATED). ~1.3 % / ~1.2 %
+       gaps net ≈ 95 bps after every cost line. */
     profitable: Object.freeze([
       Object.freeze({ venueId: 'demo-dex-alpha', reserveA: '2500000000000', reserveB: '2500000000', feeBps: 30, observedAtMs: 0 }),
-      Object.freeze({ venueId: 'demo-dex-beta', reserveA: '2515000000000', reserveB: '2500000000', feeBps: 30, observedAtMs: 0 }),
-      Object.freeze({ venueId: 'demo-dex-gamma', reserveA: '2490000000000', reserveB: '2500000000', feeBps: 30, observedAtMs: 0 })
+      Object.freeze({ venueId: 'demo-dex-beta', reserveA: '2532500000000', reserveB: '2500000000', feeBps: 30, observedAtMs: 0 }),
+      Object.freeze({ venueId: 'demo-dex-gamma', reserveA: '2470000000000', reserveB: '2500000000', feeBps: 30, observedAtMs: 0 })
     ]),
     flat: Object.freeze([
       Object.freeze({ venueId: 'demo-dex-alpha', reserveA: '2500000000000', reserveB: '2500000000', feeBps: 30, observedAtMs: 0 }),

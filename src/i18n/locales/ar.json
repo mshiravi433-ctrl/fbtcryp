@@ -3282,6 +3282,7 @@
       "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
       "withdrawTitle": "السحب من والكس إلى محفظة التطبيق",
       "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawIpAllowlist": "للسحب، يجب إضافة عنوان IP هذا في إعدادات واجهة برمجة تطبيقات والكس (قسم عناوين IP المسموح بها) حتى تتمكن من السحب من أي شبكة:",
       "withdrawCoin": "العملة",
       "withdrawNetwork": "الشبكة",
       "withdrawValue": "المقدار",

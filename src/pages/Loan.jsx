@@ -447,9 +447,17 @@ function SupplyTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
 
   const handleConfirm = () => {
     setConfirm(false);
-    /* Same hand-off borrow already had: the intent composer carries the
-       loan-supply hint so the next screen is the actual execution path. */
-    navigate('/intent?tab=default&hint=loan-supply');
+    /* The hand-off carries the actual position the user just reviewed:
+       Intent OS reads hint+chain+from+amount and pre-fills a lending
+       workflow draft, so this never lands on a bare composer. */
+    const params = new URLSearchParams({
+      tab: 'compose',
+      hint: 'loan-supply',
+      chain: String(selected.chain),
+      from: selected.symbol,
+      amount: String(amount)
+    });
+    navigate(`/intent?${params.toString()}`);
     notify('loan.openIntentForSupply', 'success');
     setAmount('');
     setSelected(null);
@@ -564,7 +572,17 @@ function BorrowTab({ rates, ratesLoading, t, haptic, notify, navigate }) {
 
   const handleConfirm = () => {
     setConfirm(false);
-    navigate('/intent?tab=default&hint=loan-borrow');
+    /* Borrow = deposit collateral, then borrow against it. Both legs ride
+       the hand-off so Intent OS can pre-fill the real workflow. */
+    const params = new URLSearchParams({
+      tab: 'compose',
+      hint: 'loan-borrow',
+      chain: String(selected.chain),
+      from: selected.symbol,
+      amount: String(amount),
+      collateral: String(collateral)
+    });
+    navigate(`/intent?${params.toString()}`);
     notify('loan.openIntentForBorrow', 'success');
   };
 

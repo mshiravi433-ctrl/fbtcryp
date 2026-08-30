@@ -903,6 +903,7 @@
       "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
       "withdrawTitle": "Sacar da Wallex para a carteira do app",
       "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawIpAllowlist": "Para sacar, você precisa adicionar este IP nas configurações da sua API da Wallex (seção de IPs permitidos) para poder sacar de qualquer rede:",
       "withdrawCoin": "Moeda",
       "withdrawNetwork": "Rede",
       "withdrawValue": "Quantia",

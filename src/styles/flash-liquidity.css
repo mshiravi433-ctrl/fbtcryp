@@ -1,21 +1,90 @@
-/* FBT Flash Liquidity (Phase 152) — scoped .fl-page, borrows the Intent OS
-   visual language. Persian-first copy; layout stays LTR-safe with dir=auto
-   on user text. */
+/* FBT Flash Liquidity (Phase 152) — scoped .fl-page, Intent OS visual
+   language, SELF-CONTAINED: this page is lazy-loaded on its own chunk, so
+   every style it needs lives here. (It used to lean on intent-os.css via
+   .ios-page/.ios-hero/.ios-kicker/.ios-panel — a direct visit to
+   /flash-liquidity never loaded that file and the whole page rendered
+   unstyled: broken boxes, jumbled text, wrong sizes.) Persian-first copy;
+   layout stays LTR-safe with dir=auto on user text. */
 
 .fl-page {
+  gap: 16px;
   max-width: 860px;
   margin: 0 auto;
+  width: 100%;
+  --ios-cyan: #42e8ff;
+  --ios-violet: #9d7bff;
+  --ios-mint: #65f5bc;
+  --ios-red: #ff5d7d;
+  --ios-panel: rgba(10, 14, 25, 0.82);
+  --ios-panel-2: rgba(255, 255, 255, 0.035);
+}
+
+/* ── Hero ── */
+.fl-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 25px 21px 21px;
+  border: 1px solid rgba(107, 226, 255, 0.17);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(66, 232, 255, 0.18), transparent 30%),
+    radial-gradient(circle at 12% 100%, rgba(157, 123, 255, 0.14), transparent 38%),
+    linear-gradient(145deg, rgba(11, 18, 31, 0.96), rgba(5, 7, 13, 0.93));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 20px 50px rgba(0, 0, 0, 0.26);
+}
+
+.fl-hero::after {
+  content: '';
+  position: absolute;
+  width: 190px;
+  height: 190px;
+  inset-inline-end: -58px;
+  top: -78px;
+  border-radius: 50%;
+  border: 1px solid rgba(66, 232, 255, 0.14);
+  box-shadow: 0 0 0 22px rgba(66, 232, 255, 0.025), 0 0 0 45px rgba(157, 123, 255, 0.02);
+  pointer-events: none;
+}
+
+.fl-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ios-cyan);
+  font: 700 10px/1 var(--font-mono, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.fl-kicker::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ios-mint);
+  box-shadow: 0 0 10px var(--ios-mint);
+  flex: none;
 }
 
 .fl-hero h1 {
-  margin: 10px 0 8px;
-  font-size: 26px;
-  line-height: 1.35;
+  position: relative;
+  z-index: 1;
+  margin: 13px 0 7px;
+  font-size: clamp(22px, 5.6vw, 30px);
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  background: linear-gradient(100deg, #fff 15%, #b9f6ff 62%, #c8baff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .fl-sub {
+  position: relative;
+  z-index: 1;
+  margin: 0;
   color: rgba(235, 240, 250, 0.78);
-  font-size: 13.5px;
+  font-size: 12.5px;
   line-height: 1.9;
   max-width: 62ch;
 }
@@ -49,35 +118,51 @@
 }
 
 /* ── Panels ── */
-.fl-server,
-.fl-intent,
-.fl-market,
-.fl-result,
-.fl-guarantees {
+.fl-panel {
   padding: 18px;
   border: 1px solid rgba(107, 226, 255, 0.14);
   border-radius: 18px;
   background: var(--ios-panel, rgba(10, 14, 25, 0.82));
 }
 
-.fl-server { padding: 12px 18px; }
-
-.fl-server-row {
+/* Deployment status: a quiet inline strip, not an error-looking box. */
+.fl-server {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
   align-items: center;
-  font-size: 13px;
+  gap: 7px 10px;
+  padding: 10px 14px;
+  border-radius: 13px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11.5px;
+  color: rgba(235, 240, 250, 0.66);
+  line-height: 1.8;
 }
 
-.fl-server code { color: var(--ios-cyan, #42e8ff); }
+.fl-server-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ios-mint, #65f5bc);
+  box-shadow: 0 0 8px var(--ios-mint, #65f5bc);
+}
+
+.fl-server-dot.off {
+  background: rgba(235, 240, 250, 0.35);
+  box-shadow: none;
+}
+
+.fl-server code {
+  color: var(--ios-cyan, #42e8ff);
+  font-size: 10.5px;
+}
 
 .fl-server-missing {
-  display: block;
-  margin-top: 6px;
-  color: rgba(255, 214, 102, 0.85);
-  font: 500 11px/1.7 var(--font-mono, monospace);
+  font: 500 10px/1.7 var(--font-mono, monospace);
+  color: rgba(255, 214, 102, 0.8);
   direction: ltr;
-  text-align: left;
 }
 
 .fl-intent h2,
@@ -358,3 +443,83 @@
 .fl-guarantees li:last-child { border-bottom: none; }
 
 .mono { font-family: var(--font-mono, monospace); }
+
+/* ── Light theme ── */
+:root[data-theme='light'] .fl-page {
+  --ios-panel: rgba(255, 255, 255, 0.82);
+  --ios-panel-2: rgba(40, 52, 80, 0.035);
+}
+
+:root[data-theme='light'] .fl-hero {
+  border-color: rgba(0, 145, 170, 0.22);
+  background:
+    radial-gradient(circle at 88% 18%, rgba(0, 145, 170, 0.13), transparent 30%),
+    linear-gradient(145deg, #eff8fb, #f5f2ff);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.6), 0 14px 34px rgba(30, 50, 90, 0.12);
+}
+
+:root[data-theme='light'] .fl-hero h1 {
+  background: linear-gradient(100deg, #0d1b2a 15%, #075e7d 62%, #4c2ea8);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+:root[data-theme='light'] .fl-sub,
+:root[data-theme='light'] .fl-guarantees li {
+  color: rgba(20, 30, 50, 0.84);
+}
+
+:root[data-theme='light'] .fl-panel {
+  border-color: rgba(20, 80, 120, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 24px rgba(30, 50, 90, 0.08);
+}
+
+:root[data-theme='light'] .fl-intent h2,
+:root[data-theme='light'] .fl-market h2,
+:root[data-theme='light'] .fl-guarantees h2,
+:root[data-theme='light'] .fl-result h3,
+:root[data-theme='light'] .fl-provider h3,
+:root[data-theme='light'] .fl-econ h3,
+:root[data-theme='light'] .fl-route h3,
+:root[data-theme='light'] .fl-receipt h3,
+:root[data-theme='light'] .fl-step strong {
+  color: rgba(15, 25, 45, 0.92);
+}
+
+:root[data-theme='light'] .fl-textarea,
+:root[data-theme='light'] .fl-number,
+:root[data-theme='light'] .fl-receipt pre {
+  background: rgba(240, 244, 250, 0.9);
+  border-color: rgba(20, 80, 120, 0.2);
+  color: #142032;
+}
+
+:root[data-theme='light'] .fl-step,
+:root[data-theme='light'] .fl-provider-grid > div {
+  background: rgba(40, 52, 80, 0.04);
+  border-color: rgba(40, 52, 80, 0.09);
+}
+
+:root[data-theme='light'] .fl-chip,
+:root[data-theme='light'] .fl-seg-btn,
+:root[data-theme='light'] .fl-ghost {
+  border-color: rgba(40, 52, 80, 0.18);
+  color: rgba(20, 35, 60, 0.8);
+}
+
+:root[data-theme='light'] .fl-hint,
+:root[data-theme='light'] .fl-step small,
+:root[data-theme='light'] .fl-provider-grid small,
+:root[data-theme='light'] .fl-hops small,
+:root[data-theme='light'] .fl-server {
+  color: rgba(20, 35, 60, 0.6);
+}
+
+:root[data-theme='light'] .fl-table td { color: rgba(20, 35, 60, 0.8); border-color: rgba(40, 52, 80, 0.08); }
+:root[data-theme='light'] .fl-table tr.fl-total td { color: #0d1b2a; }
+:root[data-theme='light'] .fl-badge { background: rgba(20, 160, 120, 0.08); }
+:root[data-theme='light'] .fl-badge.warn { background: rgba(180, 120, 10, 0.08); }
+:root[data-theme='light'] .fl-badge.audit { background: rgba(200, 40, 70, 0.07); }
+:root[data-theme='light'] .fl-run { color: #06303e; }
+:root[data-theme='light'] .fl-server { background: rgba(40, 52, 80, 0.03); border-color: rgba(40, 52, 80, 0.16); }

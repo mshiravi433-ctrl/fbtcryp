@@ -903,6 +903,7 @@
       "depositHelp": "Your Wallex deposit addresses (from your real account) — funding Wallex stays exactly where it always was.",
       "withdrawTitle": "Wallex'ten bu uygulamanın cüzdanına çekim",
       "withdrawHelp": "Moves real funds from your Wallex balance to the address you set. Network and address must match exactly — a wrong network loses the funds. This is Wallex's own withdrawal; it is here so everything happens inside FBT.",
+      "withdrawIpAllowlist": "Para çekmek için bu IP’yi Wallex API ayarlarınıza (izin verilen IP’ler bölümü) eklemelisiniz ki her ağdan çekim yapabilesiniz:",
       "withdrawCoin": "Coin",
       "withdrawNetwork": "Ağ",
       "withdrawValue": "Miktar",
