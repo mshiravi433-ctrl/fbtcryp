@@ -491,6 +491,12 @@ console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
   if (Array.isArray(upgradeResults)) report('intent-ai phase 201-207 upgrades', upgradeResults);
 }
 
+console.log('▸ probing the Financial OS — Financial Goals (engine · storage · API · wiring)…');
+{
+  const { default: goalRows } = await import('./financial-goals-probe.mjs');
+  if (Array.isArray(goalRows)) report('financial goals', goalRows);
+}
+
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
 console.log('▸ probing the free Upstash durable-store fallback…');
 {

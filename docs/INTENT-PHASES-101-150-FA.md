@@ -109,3 +109,36 @@ npm test                     # کل سوئیت — All suites passed (0 failed)
 - بازده‌ها برآوردِ دادهٔ زنده‌اند، نه وعده — یادداشت در هر ۱۲ زبان.
 - `executionActivated: false` و `rawCredentialsAllowed: false` در کل گزارش وضعیت.
 - اگر فید بازاری در دسترس نباشد، کلاس مربوطه «بدون داده» گزارش می‌شود، نه عدد ساختگی.
+
+---
+
+## Financial OS — اهداف مالی (گسترش همان تب «برنامه سود»)
+
+تبِ این مراحل دیگر فقط یک برنامهٔ سودِ تک‌صفحه‌ای نیست؛ حالا **Financial OS**
+روی همان تب نشسته است: کاربر هدف می‌نویسد → سرور محاسبه می‌کند → تخصیص ساخته
+می‌شود → بعد از تأیید، payload به **همان Intent OS موجود** تحویل داده می‌شود.
+برنامهٔ سودِ چندبازاری (۱۰۱–۱۱۶) حذف نشده؛ داخل یک `<details>` در پایین تب
+همان‌طور قابل دسترسی است.
+
+```bash
+POST /api/v1/financial-goals               # ایجاد هدف
+GET  /api/v1/financial-goals               # فهرست
+GET  /api/v1/financial-goals/:id           # هدف + برنامه
+POST /api/v1/financial-goals/:id/build-plan
+POST /api/v1/financial-goals/:id/approve   # فقط بازبینی؛ اجرا نمی‌کند
+POST /api/v1/financial-goals/:id/pause
+GET  /api/v1/financial-goals/:id/progress
+```
+
+* سه جدولِ `financial_goals` / `financial_goal_plans` / `financial_goal_events`
+  در همان KV storeِ پروژه (`server/store.js`) پیاده شده‌اند، چون پروژه بانک SQL
+  ندارد. `durable` در پاسخ هر مسیر، ماندگاری واقعی را می‌گوید.
+* همهٔ محاسبات (Required Return، Risk Score، Allocation، سناریوها، Monitoring)
+  در `src/lib/financialGoalEngine.js` و روی سرور انجام می‌شوند؛ هیچ عددی در
+  فرانت‌اند ساخته نمی‌شود.
+* اعتبارسنجیِ تخصیص همان تابع مشخص‌شده است و در سه نقطه صدا زده می‌شود.
+* تأیید، یک intent می‌سازد و بس؛ اجرا فقط از مسیرِ موجودِ Intent OS و امضای
+  کیف پول است (`autonomousExecution: false`).
+
+جزئیات کامل: [`FINANCIAL-GOALS-FA.md`](./FINANCIAL-GOALS-FA.md) و
+[`FINANCIAL-GOALS.md`](./FINANCIAL-GOALS.md)
