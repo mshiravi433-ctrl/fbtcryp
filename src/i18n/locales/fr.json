@@ -1093,6 +1093,72 @@
         "e2": "stake 1 ETH for yield",
         "e3": "unstake my ETH"
       }
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm",
+      "hint": "Après « confirme », ton wallet demande encore une fois et la transaction part réellement vers le réseau."
+    },
+    "fee": {
+      "quotedOnly": "Frais annoncés sur l'aperçu : {{amount}} {{symbol}} ({{percent}} %) — prélevés uniquement si une transaction réelle s'exécute."
+    },
+    "receipt": {
+      "viewOnExplorer": "voir sur l'explorateur",
+      "broadcastDisabled": "Signé et vérifié selon ta politique — mais la case « envoyer au réseau » n'était pas cochée, donc rien n'a été envoyé. Coche-la et confirme à nouveau.",
+      "awaitingBroadcast": "Signé et vérifié selon ta politique. Pas encore remis au réseau — l'envoi n'est qu'à une case."
+    },
+    "broadcastFail": {
+      "error": "L'envoi vers le réseau n'a pas eu lieu : {{code}}{{message,}}.",
+      "venue": "Aujourd'hui, seuls les swaps mono-chaîne sont envoyés au réseau d'ici. « {{kind}} » est prêt et peut être examiné sur son propre écran."
+    },
+    "participants": {
+      "fbt-guardian": "Gardien FBT",
+      "fbt-council": "Conseil d'agents"
+    },
+    "dialogue": {
+      "proposal": "Je propose : {{strategy}} — {{from}} → {{to}}, environ {{amount}} $ sur le réseau {{chain}}.",
+      "independent-review": "Revue indépendante : {{decision}}{{reason,}}. La route tient.",
+      "council": "Le conseil de {{votes}} agents a décidé : {{decision}}.",
+      "gate-result": "La porte de confirmation est ouverte — en attente de ton accord."
+    },
+    "points": {
+      "title": "Tes points Intent AI",
+      "unit": "pts",
+      "gained": "+{{n}} points gagnés avec Intent AI"
+    },
+    "external": {
+      "join": "rejoindre",
+      "joined": "participe",
+      "viewTitle": "agent externe — lecture indépendante",
+      "readAnalyst": "Ma lecture indépendante de {{symbol}} : tendance {{signal}} ({{change}} % sur 24 h). Mêmes données, conclusion perso — analyse uniquement.",
+      "readAuditor": "Mon passage risque sur {{symbol}} : risque réalisé {{risk}} (volatilité {{volatility}} %). Je cherche ce qui peut mal tourner — analyse uniquement.",
+      "readNoData": "Je n'ai pas de données de marché en direct pour l'instant, alors je me tais plutôt que de deviner."
+    },
+    "memory": {
+      "learnedTitle": "Appris. Je m'en souviendrai :",
+      "learnedNote": "{{total}} choses apprises à ce jour — stockées uniquement sur cet appareil, jamais envoyées.",
+      "learnFailed": "Impossible de l'enregistrer (stockage plein ou indisponible).",
+      "secretRefused": "Je ne mémorise jamais de secrets — ni phrase de récupération, ni clé, ni mot de passe.",
+      "recallTitle": "Tu m’as appris {{n}} chose(s) :",
+      "localOnly": "local uniquement",
+      "empty": "Tu ne m’as encore rien appris. Dis « retiens : … » et j’apprendrai.",
+      "more": "+ {{n}} autres…",
+      "cleared": "J'ai oublié tout ce qu'on m'avait appris.",
+      "tag": {
+        "assets": "actifs",
+        "preferences": "préférence",
+        "preferred-chain": "chaîne",
+        "risk-appetite": "appétit de risque"
+      }
+    },
+    "mission": "Mon but : transformer ce que tu dis en un plan vérifié et mesuré au regard du risque — et ne l'exécuter qu'après ta confirmation explicite. Je ne garde jamais tes clés et ne bouge jamais d'argent seul.",
+    "sections": {
+      "title": "Autres sections",
+      "wallet": "Portefeuille",
+      "stocks": "Actions",
+      "futures": "Futures",
+      "loan": "Prêt",
+      "farm": "Farm",
+      "points": "Points"
     }
   },
   "intentOS": {

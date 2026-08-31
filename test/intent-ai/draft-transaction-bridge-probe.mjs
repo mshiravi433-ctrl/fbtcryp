@@ -177,18 +177,23 @@ try {
   check('a USD draft with an explicit price prepares', withPrice.ok && withPrice.amountBaseUnits === '100000000');
 
   /* ------------------------------------------------------- broadcast gate */
-  check('broadcasting is OFF by default', broadcastEnabled({}) === false);
-  check('an unrelated value does not enable broadcasting', broadcastEnabled({ VITE_INTENT_BROADCAST_ENABLED: '1' }) === false);
-  check('only the exact string "true" enables broadcasting', broadcastEnabled({ VITE_INTENT_BROADCAST_ENABLED: 'true' }) === true);
+  /* Phase 201 (owner directive): broadcasting is ON by default — the consent
+     chain is the gate, not a build flag that was never set in production and
+     produced the reported «امضا شد و … به شبکه نمی‌فرستد» dead end. 'false'
+     stays a deliberate kill-switch. */
+  check('broadcasting is ON by default', broadcastEnabled({}) === true);
+  check('only the exact string "false" disables broadcasting', broadcastEnabled({ VITE_INTENT_BROADCAST_ENABLED: 'false' }) === false);
+  check('an unrelated value does not disable broadcasting', broadcastEnabled({ VITE_INTENT_BROADCAST_ENABLED: '1' }) === true);
+  check('the kill-switch is case-insensitive', broadcastEnabled({ VITE_INTENT_BROADCAST_ENABLED: 'FALSE' }) === false);
 
-  check('a disabled build refuses to broadcast even with opt-in',
-    assertBroadcastAllowed({ env: {}, userOptIn: true }).ok === false);
-  check('an enabled build still refuses without an explicit opt-in',
-    assertBroadcastAllowed({ env: { VITE_INTENT_BROADCAST_ENABLED: 'true' }, userOptIn: false }).ok === false);
+  check('a killed build refuses to broadcast even with opt-in',
+    assertBroadcastAllowed({ env: { VITE_INTENT_BROADCAST_ENABLED: 'false' }, userOptIn: true }).ok === false);
+  check('a default build still refuses without an explicit opt-in',
+    assertBroadcastAllowed({ env: {}, userOptIn: false }).ok === false);
   check('a truthy non-true opt-in is not an opt-in',
-    assertBroadcastAllowed({ env: { VITE_INTENT_BROADCAST_ENABLED: 'true' }, userOptIn: 'yes' }).ok === false);
-  check('both flag and opt-in together are allowed',
-    assertBroadcastAllowed({ env: { VITE_INTENT_BROADCAST_ENABLED: 'true' }, userOptIn: true }).ok === true);
+    assertBroadcastAllowed({ env: {}, userOptIn: 'yes' }).ok === false);
+  check('default build plus a real opt-in is allowed',
+    assertBroadcastAllowed({ env: {}, userOptIn: true }).ok === true);
 
   /* --------------------------------------------- closed cause-code set */
   const emitted = [
@@ -203,12 +208,16 @@ try {
   /* ------------------------------------------------- panel wiring (static) */
   const panel = readFileSync(new URL('../../src/components/IntentAIPanel.jsx', import.meta.url), 'utf8');
 
-  check('the panel actually calls the broadcaster factory', /createEip1193Broadcaster\(/.test(panel));
-  check('the panel hands the shielded tx to broadcastSigned', /broadcastSigned\(\{/.test(panel));
+  /* Phase 201: the panel no longer "broadcasts" the MEV envelope (which had
+     no to/data/value and could never execute). It calls the injected REAL
+     bridge — the same quote → approval → swap path the /swap screen runs. */
+  check('the panel calls the injected real-broadcast bridge', /executeIntentBroadcast\(\{/.test(panel));
   check('the broadcast path is gated by assertBroadcastAllowed', /assertBroadcastAllowed\(\{/.test(panel));
   check('the panel checks the build flag before broadcasting', /broadcastEnabled\(import\.meta\.env/.test(panel));
   check('all three gates guard the send', /broadcastReady\s*&&\s*broadcastOptIn\s*&&\s*wallet\.canSign/.test(panel));
-  check('a hash is only adopted when the broadcast really succeeded', /sent\.ok\s*&&\s*sent\.txHash/.test(panel));
+  check('a hash is only adopted when the broadcast really succeeded', /sent\?\.ok\s*&&\s*sent\.txHash/.test(panel));
+  check('a failed broadcast is named, never silent', /broadcastFailure/.test(panel));
+  check('a real hash is tracked to a terminal state', /trackIntentTx/.test(panel));
 
   check('consent is per-execution state, not persisted', /useState\(false\)/.test(panel) && /setBroadcastOptIn/.test(panel));
   check('consent is reset after every run', /setBroadcastOptIn\(false\)/.test(panel));

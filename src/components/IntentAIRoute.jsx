@@ -17,6 +17,7 @@
 import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
+import useIntentBroadcast from '../hooks/useIntentBroadcast';
 import IntentAIPanel from './IntentAIPanel';
 
 /** Deterministic, URL-safe positive number formatting. */
@@ -27,11 +28,31 @@ const cleanAmount = (value) => {
 
 /**
  * Where a prepared draft should be reviewed. The swap screen can only review
- * a swap PAIR, the bridge screen a token + two chains, and everything else
- * (deposit/borrow/lend/custom) becomes an Intent OS compose prefill. An
- * unknown or same-symbol pair never goes to /swap — it would arrive as a
+ * a swap PAIR, the bridge screen a token + two chains. Every other kind ALSO
+ * has a real destination inside the app — the farm, lending, futures, send
+ * and wallet screens — so a confirmed plan never dead-ends in the chat:
+ *
+ *   swap   → /swap?from=…&to=…&amount=…&chain=…
+ *   bridge → /bridge?fromChain=…&toChain=…&token=…&amount=…
+ *   futures_*           → /perp
+ *   farm_*              → /farm
+ *   lend, borrow, repay → /loan
+ *   send                → /wallet?tab=send
+ *   anything else       → /intent compose prefill
+ *
+ * An unknown or same-symbol pair never goes to /swap — it would arrive as a
  * dead USDT → USDT quote.
  */
+const VENUE_ROUTES = Object.freeze({
+  futures_open: '/perp',
+  futures_close: '/perp',
+  farm_deposit: '/farm',
+  farm_withdraw: '/farm',
+  lend_supply: '/loan',
+  lend_withdraw: '/loan',
+  borrow: '/loan',
+  repay: '/loan'
+});
 export function draftHandoffRoute({ plan, drafts } = {}) {
   const first = Array.isArray(drafts) && drafts.length
     ? (drafts.find((d) => d?.order?.kind === 'swap') || drafts.find((d) => d?.order) || null)
@@ -63,7 +84,15 @@ export function draftHandoffRoute({ plan, drafts } = {}) {
     if (amount) params.set('amount', amount);
     return `/bridge?${params.toString()}`;
   }
-  /* Lending / send / custom legs have no venue screen yet: prefill compose. */
+  /* The other executable venues have a real screen, reached by its name. */
+  if (VENUE_ROUTES[order.kind]) return VENUE_ROUTES[order.kind];
+  if (order.kind === 'send') {
+    const sendParams = new URLSearchParams({ tab: 'send' });
+    if (order.fromSymbol) sendParams.set('token', order.fromSymbol);
+    if (amount) sendParams.set('amount', amount);
+    return `/wallet?${sendParams.toString()}`;
+  }
+  /* Custom legs have no venue screen yet: prefill compose. */
   const params = new URLSearchParams({ tab: 'compose' });
   if (order.fromSymbol) params.set('from', order.fromSymbol);
   if (order.toSymbol && order.toSymbol !== order.fromSymbol) params.set('to', order.toSymbol);
@@ -74,6 +103,12 @@ export function draftHandoffRoute({ plan, drafts } = {}) {
 export default function IntentAIRoute(props) {
   const wallet = useWallet();
   const navigate = useNavigate();
+  const {
+    executeIntentBroadcast,
+    trackIntentTx,
+    explorerUrl,
+    broadcastSupportedKind
+  } = useIntentBroadcast(wallet);
 
   const onDraftReady = useCallback((payload) => {
     const route = draftHandoffRoute(payload || {});
@@ -87,5 +122,15 @@ export default function IntentAIRoute(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet?.address, wallet?.chainId, wallet?.locked, wallet?.isConnected, wallet?.getWalletRuntime]);
 
-  return <IntentAIPanel {...props} onDraftReady={onDraftReady} walletRuntime={walletRuntime} />;
+  return (
+    <IntentAIPanel
+      {...props}
+      onDraftReady={onDraftReady}
+      walletRuntime={walletRuntime}
+      executeIntentBroadcast={executeIntentBroadcast}
+      trackIntentTx={trackIntentTx}
+      explorerUrl={explorerUrl}
+      broadcastSupportedKind={broadcastSupportedKind}
+    />
+  );
 }

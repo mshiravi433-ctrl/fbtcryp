@@ -53,6 +53,7 @@ import { createIntentGenome } from './intentGenome.js';
 import { createMemoryStore } from './agentMemory.js';
 import { createControlState, applyControl } from './policyGuard.js';
 import { discoverExternalAgents } from './externalAgentTrust.js';
+import { selectExternalAgent } from './externalAgentVoice.js';
 
 const SESSION_SCHEMA = 'fbt.intent-session.v2';
 
@@ -550,6 +551,17 @@ function runIntentPipeline(session, parsed, ctx, env = {}) {
      */
     const requestedAssets = (Array.isArray(parsed.intent.assets) ? parsed.intent.assets : [parsed.intent.fromSymbol, parsed.intent.toSymbol])
       .filter(Boolean);
+    /*
+     * Phase 204 — the external agent's voice. In external-agent mode, the
+     * verified analysis-eligible agent that participates in this session is
+     * attached to the reply as a `externalView` summary; the panel renders
+     * its deterministic second opinion next to the market data (see
+     * externalAgentVoice.js). No authority travels with the view.
+     */
+    const externalVoice = selectExternalAgent({
+      candidates: externalAgentDiscovery?.candidates || [],
+      selectedId: ctx.externalAgentId || null
+    });
     session = push(session, assistantMessage('analysis', {
       mode: session.mode,
       modeLabel: session.modeLabel,
@@ -565,6 +577,13 @@ function runIntentPipeline(session, parsed, ctx, env = {}) {
       targetReality,
       capabilityScan,
       externalAgentDiscovery,
+      externalView: externalVoice ? {
+        agentId: externalVoice.passport.id,
+        agentName: externalVoice.passport.name,
+        capabilities: externalVoice.passport.capabilities,
+        eligibleForAnalysis: externalVoice.eligibleForAnalysis === true,
+        canExecute: false
+      } : null,
       permission: buildPermissionBoundary({ mode: session.mode, request: { ...parsed.intent, stage }, userAuthorized: false }),
       canExecute: false,
       financialExecutionAuthorized: false,
@@ -698,13 +717,66 @@ function runIntentPipeline(session, parsed, ctx, env = {}) {
     executionAuthorized: false,
     explanation: 'A proposal, plan or Guardian approval never substitutes for the explicit authorization screen.'
   };
+  /*
+   * Phase 202 — the conversation between the two AIs, made READABLE.
+   *
+   * The dialogue object existed but carried no content a human could read,
+   * so the panel could only say «دو ایجنت در حال تحلیل هستند» and print the
+   * final route — the exchange itself was invisible, which is precisely what
+   * was reported («نداشتن مکالمه بین دو هوش مصنوعی»). Each line now carries
+   * structured params the panel renders in the user's own language; the
+   * numbers come from the real proposal, never invented.
+   */
+  const dialogueRoute = {
+    action: orch.selected?.strategy === 'goal_based_spot' ? 'goal'
+      : parsed.intent?.kind === 'bridge' ? 'bridge'
+        : parsed.intent?.kind === 'send' ? 'send' : 'swap',
+    from: parsed.intent?.fromSymbol || orch.selected?.from || null,
+    to: parsed.intent?.toSymbol || orch.selected?.to || null,
+    amountUsd: amountUsd ?? null,
+    chainId: parsed.intent?.chainId ?? null,
+    strategy: orch.selected?.strategy || null
+  };
   const agentDialogue = {
     mode: session.mode,
     participants: session.modeDefinition?.participants || ['fbt-strategy', 'fbt-execution'],
     messages: [
-      { from: 'fbt.strategy', type: 'proposal', executable: false },
-      { from: 'fbt.execution', type: 'independent-review', executable: false },
-      { from: 'fbt.guardian', type: 'gate-result', approved: orch.guardian.approved, executable: false }
+      {
+        from: 'fbt.strategy',
+        type: 'proposal',
+        params: {
+          strategy: orch.selected?.strategy || '—',
+          from: dialogueRoute.from || '—',
+          to: dialogueRoute.to || '—',
+          amount: Number.isFinite(Number(dialogueRoute.amountUsd)) ? Math.round(Number(dialogueRoute.amountUsd)) : 0,
+          chain: dialogueRoute.chainId ?? '—'
+        },
+        executable: false
+      },
+      {
+        from: 'fbt.execution',
+        type: 'independent-review',
+        params: {
+          decision: challenge?.decision || 'APPROVE',
+          reason: challenge?.disagreements?.[0]?.code || null
+        },
+        executable: false
+      },
+      ...(council?.ok
+        ? [{
+            from: 'fbt.council',
+            type: 'council',
+            params: { decision: council.decision, votes: (council.votes || []).length },
+            executable: false
+          }]
+        : []),
+      {
+        from: 'fbt.guardian',
+        type: 'gate-result',
+        approved: orch.guardian.approved,
+        params: { approved: orch.guardian.approved ? 'yes' : 'no' },
+        executable: false
+      }
     ],
     challenge,
     council,

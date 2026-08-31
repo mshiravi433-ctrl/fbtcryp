@@ -2154,3 +2154,143 @@
 .ios-step-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .ios-saved-actions { display: inline-flex !important; align-items: center; gap: 6px; }
 .ios-saved-actions button:first-child { width: auto; min-width: 78px; padding: 0 10px; color: var(--text-1); }
+
+/* ─── Phase 202 — the visible AI↔AI conversation transcript ──────────────── */
+.ia-dialogue {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  background: rgba(0, 229, 255, 0.04);
+}
+.ia-dialogue-line {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.ia-dialogue-line b {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ia-dialogue-line.alt { padding-inline-start: 10px; border-inline-start: 2px solid rgba(0, 229, 255, 0.35); }
+
+/* ─── Phase 201 — the broadcast opt-in box on the confirmation screen ────── */
+.ia-broadcast-box {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 255, 157, 0.22);
+  background: rgba(0, 255, 157, 0.05);
+}
+.ia-broadcast-box .ia-hint { font-size: 10.5px; line-height: 1.6; }
+.ia-explorer-link { color: var(--accent, #00e5ff); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ─── Phase 203 — the AI's points chip and the transient award ───────────── */
+.ia-points-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 157, 0.28);
+  background: rgba(0, 255, 157, 0.07);
+  color: var(--text-2);
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ia-points-chip span { color: #ffb454; }
+.ia-points-chip b { font-size: 11.5px; }
+.ia-points-chip small { color: var(--text-3); font-size: 9.5px; }
+.ia-points-gain {
+  animation: iaPointsPop 3.2s ease forwards;
+  font-size: 11px;
+  color: #0fda8f;
+  margin: -4px 0 8px;
+}
+@keyframes iaPointsPop {
+  0% { opacity: 0; transform: translateY(4px); }
+  12% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ─── Phase 204 — the external agent's voice in the analysis bubble ───────── */
+.ia-ext-read {
+  margin-top: 6px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px dashed rgba(0, 229, 255, 0.3);
+  background: rgba(0, 229, 255, 0.04);
+  font-size: 11.5px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ia-ext-read-head { display: flex; align-items: center; gap: 6px; }
+.ia-ext-read-head small { color: var(--text-3); font-size: 9.5px; }
+.ia-ext-row.selected { border-color: rgba(0, 255, 157, 0.4); }
+.ia-ext-join { padding: 2px 8px; font-size: 10px; border-radius: 999px; }
+.ia-ext-join.on { border-color: rgba(0, 255, 157, 0.5); color: #0fda8f; }
+
+/* ─── Phase 205 — taught memory bubbles ───────────────────────────────────── */
+.ia-taught {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 180, 84, 0.28);
+  background: rgba(255, 180, 84, 0.06);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.ia-taught-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ia-taught-head span { color: #ffb454; }
+.ia-taught-head small { color: var(--text-3); font-size: 9.5px; border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 0 6px; }
+.ia-taught-text { font-size: 11.5px; }
+
+/* ─── Phase 206 — mission strip + section links ───────────────────────────── */
+.ia-mission {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 255, 157, 0.18);
+  background: rgba(0, 255, 157, 0.04);
+}
+.ia-mission span { color: #0fda8f; font-size: 11px; }
+.ia-mission small { font-size: 11px; line-height: 1.6; color: var(--text-2); }
+.ia-section-links .ia-section-chip {
+  border-style: dashed;
+  opacity: 0.85;
+  text-decoration: none;
+}
+
+/* ─── Phase 207 — the merged connection+activation strip ──────────────────── */
+.ia-connection { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.ia-connection .ia-connection-sep { color: var(--text-3); font-size: 10px; }
+.ia-connection .ia-activation-state-dot {
+  grid-row: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ios-mint, #00ff9d);
+  box-shadow: 0 0 7px rgba(0, 255, 157, .55);
+  flex: 0 0 auto;
+}
+.ia-connection .ia-hint { grid-column: auto; flex-basis: 100%; }

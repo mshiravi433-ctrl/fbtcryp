@@ -32,7 +32,12 @@ export const POINT_VALUES = {
   shareApp: 30,
   connectWallet: 100,
   backupWallet: 75,
-  enable2fa: 60
+  enable2fa: 60,
+  /* Intent AI — using the assistant is part of the product now, and the
+     points screen says where points come from, so the AI names its own.
+     A real broadcast is the rare, valuable event and pays the most. */
+  intentAiPlan: 10, // a structured plan made it to the confirmation screen
+  intentAiExecuted: 25 // an intent actually reached a network (real txHash)
 };
 
 export function tierFor(points) {

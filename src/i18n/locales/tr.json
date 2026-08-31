@@ -1093,6 +1093,72 @@
         "e2": "stake 1 ETH for yield",
         "e3": "unstake my ETH"
       }
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm",
+      "hint": "«Onayla»dan sonra cüzdan bir kez daha sorar ve işlem gerçekten ağa gönderilir."
+    },
+    "fee": {
+      "quotedOnly": "Önizlemede duyurulan ücret: {{amount}} {{symbol}} ({{percent}}%) — yalnızca gerçek bir işlem gerçekleşirse alınır."
+    },
+    "receipt": {
+      "viewOnExplorer": "gezginde görüntüle",
+      "broadcastDisabled": "Politikanıza göre imzalandı ve kontrol edildi — ancak «ağa gönder» kutusu işaretli değildi, bu yüzden hiçbir şey gönderilmedi. İşaretleyin ve tekrar onaylayın.",
+      "awaitingBroadcast": "Politikanıza göre imzalandı ve kontrol edildi. Henüz ağa teslim edilmedi — gönderim bir işaret uzağınızda."
+    },
+    "broadcastFail": {
+      "error": "Ağa gönderim gerçekleşmedi: {{code}}{{message,}}.",
+      "venue": "Bugün buradan yalnızca tek zincirli takaslar ağa gönderilir. «{{kind}}» hazır ve kendi ekranında incelenebilir."
+    },
+    "participants": {
+      "fbt-guardian": "FBT Muhafızı",
+      "fbt-council": "Ajanlar konseyi"
+    },
+    "dialogue": {
+      "proposal": "Öneriyorum: {{strategy}} — {{from}} → {{to}}, {{chain}} ağında yaklaşık ${{amount}}.",
+      "independent-review": "Bağımsız inceleme: {{decision}}{{reason,}}. Rota geçerli.",
+      "council": "{{votes}} ajanlı konsey karar verdi: {{decision}}.",
+      "gate-result": "Onay kapısı açık — onayınızı bekliyoruz."
+    },
+    "points": {
+      "title": "Intent AI puanlarınız",
+      "unit": "puan",
+      "gained": "Intent AI ile +{{n}} puan kazandınız"
+    },
+    "external": {
+      "join": "katıl",
+      "joined": "katılıyor",
+      "viewTitle": "dış ajan — bağımsız okuma",
+      "readAnalyst": "{{symbol}} için bağımsız okumam: eğilim {{signal}} (24 saatte %{{change}}). Aynı veriler, kendi sonuçlarım — yalnızca analiz.",
+      "readAuditor": "{{symbol}} için risk incelemem: gerçekleşen risk {{risk}} (oynaklık %{{volatility}}). Neyin ters gidebileceğini arıyorum — yalnızca analiz.",
+      "readNoData": "Şu anda canlı piyasa verim yok; tahmin etmek yerine sessiz kalıyorum."
+    },
+    "memory": {
+      "learnedTitle": "Öğrendim. Hatırlayacağım:",
+      "learnedNote": "Şu ana kadar {{total}} şey öğrendim — yalnızca bu cihazda saklanır, hiçbir yere gönderilmez.",
+      "learnFailed": "Bunu saklayamadım (depolama dolu veya erişilemez).",
+      "secretRefused": "Asla sırları ezberlemem — ne seed cümlesi, ne anahtar, ne şifre.",
+      "recallTitle": "Bana {{n}} şey öğrettin:",
+      "localOnly": "yalnızca yerel",
+      "empty": "Henüz bana bir şey öğretmedin. «hatırla: …» de, öğreneyim.",
+      "more": "+ {{n}} tane daha…",
+      "cleared": "Bana öğretilen her şeyi unuttum.",
+      "tag": {
+        "assets": "varlıklar",
+        "preferences": "tercih",
+        "preferred-chain": "zincir",
+        "risk-appetite": "risk iştahı"
+      }
+    },
+    "mission": "Amacım: söylediğini denetlenmiş ve riski ölçülmüş bir plana dönüştürmek — ve yalnızca açık onayından sonra uygulamak. Anahtarlarını asla tutmam, parayı kendi başıma hareket ettirmem.",
+    "sections": {
+      "title": "Diğer bölümler",
+      "wallet": "Cüzdan",
+      "stocks": "Hisseler",
+      "futures": "Vadeli",
+      "loan": "Kredi",
+      "farm": "Farm",
+      "points": "Puanlar"
     }
   },
   "intentOS": {

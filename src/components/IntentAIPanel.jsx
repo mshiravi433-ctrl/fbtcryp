@@ -56,10 +56,15 @@ import {
   /* Phase 88 — a swap is not a ramp; say so before anything is drafted. */
   detectFiatIntent, fiatBoundaryResponse,
   /* Draft to transaction: broadcasting stays off unless the build enables it. */
-  broadcastEnabled, assertBroadcastAllowed, prepareDraftTransaction,
-  createEip1193Broadcaster, broadcastSigned
+  broadcastEnabled, assertBroadcastAllowed
 } from '../lib/intent-ai';
 import { getMarkets, getOhlc } from '../lib/api';
+import { useIntentAiPoints } from '../hooks/useIntentAiPoints';
+import { selectExternalAgent, externalAgentRead } from '../lib/intent-ai/externalAgentVoice.js';
+import {
+  parseTeachCommand, parseMemoryCommand, rememberTaught,
+  listTaught, clearTaught, taughtChainHint
+} from '../lib/intent-ai/taughtMemory.js';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
 import TokenApprovals from './TokenApprovals';
@@ -268,7 +273,19 @@ function applyScreenEdits(session, screen) {
   return { ...session, drafts };
 }
 
-export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, walletRuntime = null, tokenApprovals = null }) {
+export default function IntentAIPanel({
+  defaultChainId = 42161,
+  onDraftReady,
+  walletRuntime = null,
+  tokenApprovals = null,
+  /* Real broadcast bridge, injected by IntentAIRoute (Phase 201). The panel
+     itself stays free of wallet-library imports; when this is null the panel
+     keeps its honest "authorized — not on network" behaviour. */
+  executeIntentBroadcast = null,
+  trackIntentTx = null,
+  explorerUrl = null,
+  broadcastSupportedKind = null
+}) {
   const { t, i18n } = useTranslation();
   const [mode, setMode] = useState(PRIMARY_MODES[0]);
   const [level, setLevel] = useState(1);
@@ -298,6 +315,22 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
   const [offlineQueue, setOfflineQueue] = useState([]);
   /* Phase 88 — the honest answer when a request is really about money. */
   const [rampNotice, setRampNotice] = useState(null);
+  /* Phase 203 — the app's own points, earned by using the assistant. */
+  const { points, lastGain, award } = useIntentAiPoints();
+  /*
+   * Phase 204 — which external agent participates. Deterministic: an explicit
+   * pick wins; otherwise the single analysis-eligible candidate joins on its
+   * own; two or more candidates without a choice stay unselected until the
+   * user chooses one in the mode card.
+   */
+  const [externalAgentChoice, setExternalAgentChoice] = useState(null);
+  const selectedExternalAgent = useMemo(() => {
+    if (mode !== 'fbt-external-ai') return null;
+    return selectExternalAgent({
+      candidates: session?.externalAgentDiscovery?.candidates || [],
+      selectedId: externalAgentChoice
+    });
+  }, [mode, session?.externalAgentDiscovery, externalAgentChoice]);
   /*
    * L3 policy editor defaults. Chains and protocols default to EVERY allowed
    * value and assets defaults to blank (= all assets): a fresh session that
@@ -448,11 +481,79 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
   function sendText(text) {
     const value = String(text || '').trim();
     if (!value || session?.status === 'STOPPED') return;
+    /*
+     * Phase 205 — the teach/recall boundary, BEFORE the parser sees the text.
+     * Teaching is explicit (a "remember:" / teach marker); the reply confirms
+     * what was learned, and a recall lists it back. What the user teaches
+     * also becomes the session's default chain when it names one.
+     */
+    const taught = parseTeachCommand(value);
+    if (taught.ok) {
+      const stored = rememberTaught(taught);
+      setSession((prev) => ({
+        ...prev,
+        messages: [...(prev?.messages || []), {
+          role: 'assistant',
+          type: 'memory-learned',
+          payload: {
+            ok: stored.ok === true,
+            text: taught.text,
+            tag: taught.tag,
+            total: stored.total ?? listTaught().length,
+            secretRefused: false,
+            canExecute: false
+          },
+          ts: Date.now(),
+          id: `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+        }]
+      }));
+      return;
+    }
+    if (taught.code === 'SECRET_REFUSED') {
+      setSession((prev) => ({
+        ...prev,
+        messages: [...(prev?.messages || []), {
+          role: 'assistant',
+          type: 'memory-learned',
+          payload: { ok: false, secretRefused: true, canExecute: false },
+          ts: Date.now(),
+          id: `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+        }]
+      }));
+      return;
+    }
+    const memoryCommand = parseMemoryCommand(value);
+    if (memoryCommand.ok) {
+      const entries = listTaught();
+      if (memoryCommand.command === 'forget') clearTaught();
+      setSession((prev) => ({
+        ...prev,
+        messages: [...(prev?.messages || []), {
+          role: 'assistant',
+          type: 'memory-recall',
+          payload: {
+            command: memoryCommand.command,
+            entries: memoryCommand.command === 'forget' ? [] : entries.map((e) => ({ text: e.text, tag: e.tag, at: e.createdAt })),
+            cleared: memoryCommand.command === 'forget',
+            localOnly: true,
+            canExecute: false
+          },
+          ts: Date.now(),
+          id: `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+        }]
+      }));
+      return;
+    }
+    /* A taught chain becomes this session's default when the request has none. */
+    const taughtDefault = listTaught().find((e) => taughtChainHint(e) != null);
+    const effectiveDefaultChain = taughtChainHint(taughtDefault) || defaultChainId;
     const { session: after } = chatTurn({ ...session }, value, {
-      defaultChainId,
+      defaultChainId: effectiveDefaultChain,
       locale: i18n.language,
       externalAgents: Array.isArray(externalAgentCatalog?.candidates) ? externalAgentCatalog.candidates : [],
-      externalAgentsSource: externalAgentCatalog?.dataStatus === 'live' ? 'server-catalog' : 'unavailable'
+      externalAgentsSource: externalAgentCatalog?.dataStatus === 'live' ? 'server-catalog' : 'unavailable',
+      /* Phase 204 — the selected external agent participates in the turn. */
+      externalAgentId: selectedExternalAgent?.passport?.id || null
     });
     setSession(after);
     const last = after?.messages?.at(-1);
@@ -475,6 +576,9 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
     }
 
     if (last && (last.type === 'ready-for-confirmation' || last.type === 'prepared-draft')) {
+      /* Phase 203 — a plan that reached the confirmation screen earns the
+         app's points, once per plan (keyed by its terms hash). */
+      award(last.payload?.termsHash || last.payload?.drafts?.[0]?.id || null, 'intentAiPlan');
       openInteractiveScreen(last.payload, after);
     } else if (last && last.type === 'next-step-ready') {
       openInteractiveScreen(last.payload, after);
@@ -836,43 +940,85 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
        * Without one: authorized — signed, policy-checked, not yet broadcast.
        */
       /*
-       * Real broadcast, and only when every gate agrees.
+       * Real broadcast — Phase 201, the fix for the reported dead end.
        *
-       * `confirmAndSubmit` sets `txHash` solely from a `broadcastResult`, and
-       * nothing used to supply one — so Intent OS could sign but never reach a
-       * network. The bridge below closes that gap, behind three independent
-       * conditions that must ALL hold:
+       * Before this block existed in its current form, the panel "broadcast"
+       * the MEV-shield envelope (chainId + deadline + slippage, no `to`, no
+       * `data`) and — worse — only when a build flag that was never set
+       * allowed it. Every confirmation therefore ended as
+       * the "signed but never sent to the network" dead end, which is exactly what was reported.
        *
-       *   1. the build enables it (VITE_INTENT_BROADCAST_ENABLED === 'true')
-       *   2. the user opted in for this specific execution
+       * Now the REAL path runs, the same one /swap uses: live quote with the
+       * fee verified on-chain, an exact-amount ERC-20 approval when needed,
+       * and the swap transaction itself — signed in the wallet, twice
+       * (EIP-712 authorization above, then the actual transaction here).
+       *
+       * Gates, all of which must hold:
+       *   1. the build allows it ('false' in env is the kill-switch)
+       *   2. the user opted in for THIS execution (checkbox, resets after)
        *   3. the wallet is genuinely connected and can sign
+       *   4. the draft kind has a real executable venue (swap today)
        *
-       * A failure here never becomes a success: the receipt keeps the honest
-       * `authorized` status and states the reason.
+       * A failure is never a success: the receipt keeps the honest
+       * `authorized` status and states exactly why nothing was sent.
        */
       let realTxHash = result.txHash || null;
+      let broadcastChainId = Number(activeGate?.lockedTerms?.chainId) || null;
+      let broadcastFailure = null;
       const broadcastReady = broadcastEnabled(import.meta.env || {});
+      /*
+       * The DRAFT's own kind decides what the bridge may send — never
+       * draftKind(activeGate), which collapses every non-futures leg into
+       * 'swap' and would have let a lend/borrow draft reach the swap router.
+       */
+      const activeDraft = (base.drafts || []).find((d) => d.id === screen?.draftId)
+        || (base.drafts || []).at(-1)
+        || null;
+      const broadcastKind = activeDraft?.kind || draftKind(activeGate);
+      const kindExecutable = typeof broadcastSupportedKind === 'function'
+        ? broadcastSupportedKind(broadcastKind) === true
+        : broadcastKind === 'swap';
       if (!realTxHash && broadcastReady && broadcastOptIn && wallet.canSign) {
-        const gateOk = assertBroadcastAllowed({
-          env: import.meta.env || {},
-          userOptIn: broadcastOptIn === true
-        });
-        if (gateOk.ok) {
-          const broadcaster = createEip1193Broadcaster(walletRuntime || {});
-          if (broadcaster && result.protectedTx) {
-            const sent = await broadcastSigned({
-              tx: result.protectedTx,
-              broadcaster,
-              idempotencyKey: activeGate?.termsHash || null
-            });
-            /* Only a real 32-byte hash counts; anything else stays authorized. */
-            if (sent.ok && sent.txHash) realTxHash = sent.txHash;
+        const gateOk = assertBroadcastAllowed({ env: import.meta.env || {}, userOptIn: true });
+        if (!gateOk.ok) {
+          broadcastFailure = { code: 'BROADCAST_DISABLED_IN_BUILD', message: gateOk.error?.detail || 'BROADCAST_DISABLED' };
+        } else if (typeof executeIntentBroadcast !== 'function') {
+          broadcastFailure = { code: 'NO_BROADCAST_BRIDGE', message: 'No broadcast bridge is wired into this surface.' };
+        } else if (!kindExecutable) {
+          broadcastFailure = { code: 'VENUE_NOT_EXECUTABLE', message: broadcastKind };
+        } else {
+          const sent = await executeIntentBroadcast({
+            kind: broadcastKind,
+            chainId: activeGate?.lockedTerms?.chainId,
+            fromSymbol: activeGate?.lockedTerms?.fromSymbol,
+            toSymbol: activeGate?.lockedTerms?.toSymbol,
+            amountIn: activeGate?.lockedTerms?.amountIn,
+            amountUsd: screen?.amountUsd ?? null,
+            slippagePct: activeGate?.lockedTerms?.slippagePct
+          });
+          /* Only a real 32-byte hash counts; anything else stays authorized. */
+          if (sent?.ok && sent.txHash) {
+            realTxHash = sent.txHash;
+            if (Number.isFinite(Number(sent.chainId))) broadcastChainId = Number(sent.chainId);
+            /* Phase 203 — reaching a network for real is the valuable event. */
+            award(sent.txHash, 'intentAiExecuted');
+          } else if (sent && sent.ok !== true) {
+            broadcastFailure = { code: sent.code || 'EXECUTION_FAILED', message: sent.message || '' };
           }
         }
       }
       const finalStatus = rec.receipt?.status === 'COMPLETED' && realTxHash
         ? 'completed'
         : realTxHash ? 'submitted' : 'authorized';
+      /* Why nothing was sent — named, never silent. The opt-in is the most
+         common honest stop; a broadcast failure is named by its own code. */
+      const stopReasonKey = realTxHash
+        ? null
+        : broadcastFailure
+          ? `intentAI.broadcastFail.${broadcastFailure.code === 'VENUE_NOT_EXECUTABLE' ? 'venue' : 'error'}`
+          : broadcastOptIn
+            ? 'intentAI.receipt.awaitingBroadcast'
+            : 'intentAI.receipt.broadcastDisabled';
       setReceipt({
         status: finalStatus,
         confirmed: rec.receipt?.confirmed === true && Boolean(realTxHash),
@@ -880,11 +1026,12 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         receipt: settled.ok ? settled.receipt : rec.receipt,
         fee: feeQuote?.ok ? feeQuote : null,
         txHash: realTxHash,
+        txChainId: broadcastChainId,
         signerKind: result.signerKind || null,
         /* Explain the stop rather than leaving a silent dead end. */
-        reasonKey: realTxHash
-          ? null
-          : broadcastReady ? 'intentAI.receipt.awaitingBroadcast' : 'intentAI.receipt.broadcastDisabled',
+        reasonKey: stopReasonKey,
+        reasonParams: broadcastFailure ? { code: broadcastFailure.code, message: broadcastFailure.message, kind: broadcastFailure.message } : {},
+        broadcastCode: broadcastFailure?.code || null,
         ok: true
       });
       /* The local history remembers the DECISION (with its real hash when
@@ -896,10 +1043,30 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         signerKind: result.signerKind || null,
         feeAmount: feeQuote?.ok ? feeQuote.feeAmount : null,
         feeSymbol: feeQuote?.ok ? feeQuote.symbol : null,
-        reasonKey: realTxHash
-          ? null
-          : broadcastReady ? 'intentAI.receipt.awaitingBroadcast' : 'intentAI.receipt.broadcastDisabled'
+        reasonKey: stopReasonKey
       });
+      /* A real hash is tracked to its terminal state — submitted →
+         confirmed/failed — with the chain as the only source of truth. */
+      if (realTxHash && typeof trackIntentTx === 'function') {
+        void (async () => {
+          const poll = async (attempt) => {
+            const observed = await trackIntentTx({ txHash: realTxHash, chainId: broadcastChainId });
+            if (!observed) return;
+            if (observed.status === 'pending' && attempt < 20) {
+              setTimeout(() => void poll(attempt + 1), 6000);
+              return;
+            }
+            setReceipt((prev) => (prev?.txHash === realTxHash
+              ? {
+                ...prev,
+                status: observed.status === 'confirmed' ? 'completed' : observed.status === 'failed' ? 'failed' : prev.status,
+                confirmed: observed.status === 'confirmed'
+              }
+              : prev));
+          };
+          void poll(0);
+        })();
+      }
       return;
     }
     const explained = result.explain || explainExecutionFailure({
@@ -1018,10 +1185,36 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
 
   return (
     <motion.section className="card ia-panel ia-chat" variants={riseIn} initial="hidden" animate="show">
-      <p className="section-label" style={{ marginBottom: 6 }}>{t('intentAI.title')}</p>
+      <div className="row-between" style={{ alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+        <p className="section-label" style={{ margin: 0 }}>{t('intentAI.title')}</p>
+        {/* Phase 203 — the assistant's own points, same total as /rewards. */}
+        <a className="ia-points-chip" href="#/rewards" data-testid="intent-ai-points" title={t('intentAI.points.title', { defaultValue: 'Your Intent AI points' })}>
+          <span aria-hidden="true">✦</span>
+          <b>{Number(points || 0).toLocaleString()}</b>
+          <small>{t('intentAI.points.unit', { defaultValue: 'pts' })}</small>
+        </a>
+      </div>
       <p className="muted" style={{ fontSize: 12.2, margin: '0 0 10px', lineHeight: 1.7 }}>
         {t('intentAI.subtitle', { summary: describeLevel(level).summary, version: INTENT_AI_VERSION })}
       </p>
+      {/*
+        Phase 206 — the mission, stated where neither the user nor the AI can
+        lose it. Reported as: the AI forgot why it exists for this app:
+        the assistant never said what it exists FOR, so long sessions drifted
+        into small talk. This line is the contract: turn a plain-language
+        goal into a checked, user-confirmed action — never move money alone.
+      */}
+      <div className="ia-mission" data-testid="intent-ai-mission" role="note">
+        <span aria-hidden="true">✦</span>
+        <small>{t('intentAI.mission')}</small>
+      </div>
+      {/* The transient "+N" right after an award, so the source of the points
+          is visible where they were earned. */}
+      {lastGain && (
+        <div className="ia-points-gain" data-testid="intent-ai-points-gain" key={lastGain.at}>
+          {t('intentAI.points.gained', { n: lastGain.amount })}
+        </div>
+      )}
 
       {/*
         Session setup — mode, level and the authorization boundary — folds
@@ -1097,21 +1290,36 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
               ))}
             </div>
             {mode === 'fbt-external-ai' && session.externalAgentDiscovery && (
-              <div className="ia-ext-list">
+              <div className="ia-ext-list" data-testid="external-agent-list">
                 {session.externalAgentDiscovery.candidates.length === 0 ? (
                   <small className="ia-note">{t('intentAI.external.empty')}</small>
-                ) : session.externalAgentDiscovery.candidates.slice(0, 4).map((candidate) => (
-                  <div key={candidate.passport.id} className="ia-ext-row">
-                    <b>{candidate.passport.name}</b>
-                    <span className={`ia-ext-badge ${candidate.matches ? 'ok' : 'no'}`}>
-                      {candidate.matches ? t('intentAI.external.compatible') : t('intentAI.external.incompatible')}
-                    </span>
-                    <span className="ia-ext-badge dim">
-                      {candidate.score == null ? t('intentAI.external.scoreWithheld') : `${candidate.score}/100`}
-                    </span>
-                    <span className="ia-ext-badge dim">{candidate.trustStatus}</span>
-                  </div>
-                ))}
+                ) : session.externalAgentDiscovery.candidates.slice(0, 4).map((candidate) => {
+                  const isSelected = selectedExternalAgent?.passport?.id === candidate.passport.id;
+                  const canJoin = candidate.eligibleForAnalysis === true;
+                  return (
+                    <div key={candidate.passport.id} className={`ia-ext-row${isSelected ? ' selected' : ''}`}>
+                      <b>{candidate.passport.name}</b>
+                      <span className={`ia-ext-badge ${candidate.matches ? 'ok' : 'no'}`}>
+                        {candidate.matches ? t('intentAI.external.compatible') : t('intentAI.external.incompatible')}
+                      </span>
+                      <span className="ia-ext-badge dim">
+                        {candidate.score == null ? t('intentAI.external.scoreWithheld') : `${candidate.score}/100`}
+                      </span>
+                      <span className="ia-ext-badge dim">{candidate.trustStatus}</span>
+                      {canJoin && (
+                        <button
+                          type="button"
+                          className={`ia-ctl ia-ext-join${isSelected ? ' on' : ''}`}
+                          onClick={() => setExternalAgentChoice(isSelected ? null : candidate.passport.id)}
+                          aria-pressed={isSelected}
+                          data-testid={`external-agent-join-${candidate.passport.id}`}
+                        >
+                          {isSelected ? t('intentAI.external.joined', { defaultValue: 'participating' }) : t('intentAI.external.join', { defaultValue: 'join' })}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
                 <small className="ia-note">
                   {t('intentAI.modeLive.externalSource')}: {session.externalAgentDiscovery.source} · {session.externalAgentDiscovery.dataStatus}
                 </small>
@@ -1370,6 +1578,30 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         </a>
       </div>
 
+      {/*
+        Phase 206 — the rest of the app, ONE row away. Reported as
+        "connect to every option" / "no connection between options": the assistant
+        lived on an island; the wallet, stocks, futures, loans, farm and
+        points screens were all one handoff away but nothing linked to them.
+        Every chip is a plain anchor to a real route (see App.jsx) — and the
+        parser knows the same words, so "farm" in chat and this chip land on
+        the same screen.
+      */}
+      <div className="ia-quick-row ia-section-links" role="group" aria-label={t('intentAI.sections.title', { defaultValue: 'Other sections' })}>
+        {[
+          { href: '#/wallet', key: 'wallet' },
+          { href: '#/stocks', key: 'stocks' },
+          { href: '#/perp', key: 'futures' },
+          { href: '#/loan', key: 'loan' },
+          { href: '#/farm', key: 'farm' },
+          { href: '#/rewards', key: 'points' }
+        ].map((section) => (
+          <a key={section.key} className="ia-chip ia-section-chip" href={section.href}>
+            {t(`intentAI.sections.${section.key}`)}
+          </a>
+        ))}
+      </div>
+
       <div className="intent-ai-thread" ref={threadRef}>
         {visibleMessages.length === 0 && (
           <p className="muted" style={{ fontSize: 12 }}>{t('intentAI.chat.try')}</p>
@@ -1553,14 +1785,21 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
             every run.
           */}
           {broadcastEnabled(import.meta.env || {}) && (
-            <label className="ia-broadcast-optin" data-testid="broadcast-opt-in">
-              <input
-                type="checkbox"
-                checked={broadcastOptIn}
-                onChange={(e) => setBroadcastOptIn(e.target.checked)}
-              />
-              <span>{t('intentAI.broadcast.optIn')}</span>
-            </label>
+            <div className="ia-broadcast-box" data-testid="broadcast-opt-in-box">
+              <label className="ia-broadcast-optin" data-testid="broadcast-opt-in">
+                <input
+                  type="checkbox"
+                  checked={broadcastOptIn}
+                  onChange={(e) => setBroadcastOptIn(e.target.checked)}
+                />
+                <span>{t('intentAI.broadcast.optIn')}</span>
+              </label>
+              <small className="ia-hint" data-testid="broadcast-opt-in-hint">
+                {t('intentAI.broadcast.hint', {
+                  defaultValue: 'After «confirm», your wallet asks once more and the transaction goes to the network for real.'
+                })}
+              </small>
+            </div>
           )}
 
           <div className="ia-controls" style={{ marginTop: 10 }}>
@@ -1607,11 +1846,13 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
               {t(receipt.reasonKey, receipt.reasonParams || {})}
             </p>
           )}
-          {/* Phase 90 — the same fee, restated on the receipt in the same
-              units, so the preview and the record can be compared. */}
+          {/* Phase 90/201 — the fee line is honest about whether anything was
+              actually collected: with a real on-chain transaction the router
+              took it; without one it only ever existed on the preview. The
+              old wording said "fee collected" on a run that sent nothing. */}
           {receipt.fee?.ok && (
             <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-fee-line">
-              {t('intentAI.fee.onReceipt', {
+              {t(receipt.txHash ? 'intentAI.fee.onReceipt' : 'intentAI.fee.quotedOnly', {
                 amount: receipt.fee.feeAmount,
                 symbol: receipt.fee.symbol || '',
                 percent: receipt.fee.percent
@@ -1621,6 +1862,20 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
           {receipt.txHash && (
             <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-tx-hash">
               {t('intentAI.receipt.txHash', { hash: receipt.txHash })}
+              {typeof explorerUrl === 'function' && receipt.txChainId && (
+                <>
+                  {' · '}
+                  <a
+                    className="ia-explorer-link"
+                    href={explorerUrl({ txHash: receipt.txHash, chainId: receipt.txChainId })}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    data-testid="receipt-explorer-link"
+                  >
+                    {t('intentAI.receipt.viewOnExplorer', { defaultValue: 'view on explorer' })}
+                  </a>
+                </>
+              )}
             </p>
           )}
           {/* Phase 94 — a queued intent is a promise to ask again, not a
@@ -1647,9 +1902,14 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
         </div>
       )}
 
-      {/* Phase 94 — the connection, stated plainly. Offline says nothing was
-          sent; a waiting queue says how many intents are parked, never that
-          any of them ran. */}
+      {/*
+        Phase 94/207 — connection + activation, ONE compact strip instead of
+        two stacked banners (reported: the page-clutter bug). The offline testid
+        stays: the panel probe reads it. Offline says nothing was sent; a
+        waiting queue says how many intents are parked, never that any of
+        them ran. Activation stays read-only — wallet confirmation remains
+        the final user-controlled step.
+      */}
       <div
         className={`ia-connection${connection.online ? ' is-online' : ''}`}
         role="status"
@@ -1658,21 +1918,19 @@ export default function IntentAIPanel({ defaultChainId = 42161, onDraftReady, wa
       >
         <span className="ia-connection-dot" aria-hidden="true" />
         <small>{t(connection.i18nKey, { count: connection.queued })}</small>
+        <span className="ia-connection-sep" aria-hidden="true">·</span>
+        <span className="ia-activation-state-dot" aria-hidden="true" />
+        <small>{intentIsLive
+          ? t('intentAI.readiness.active', { defaultValue: 'System Active & Verified' })
+          : t('intentAI.readiness.pending', { defaultValue: 'Operational activation pending verification' })}</small>
+        {intentIsLive && (
+          <small className="ia-hint">
+            {t('intentAI.readiness.executionReady', { defaultValue: 'Execution Ready — wallet confirmation remains required.' })}
+          </small>
+        )}
         {connection.queued > 0 && (
           <small className="ia-hint" data-testid="offline-queue-note">{t('intentAI.offline.reviewNote')}</small>
         )}
-      </div>
-
-      {/* Runtime activation status is read-only; wallet confirmation remains
-          the final user-controlled step. */}
-      <div className={`ia-activation-state${intentIsLive ? ' is-active' : ''}`} role="status">
-        <span className="ia-activation-state-dot" aria-hidden="true" />
-        <strong>{intentIsLive
-          ? t('intentAI.readiness.active', { defaultValue: 'System Active & Verified' })
-          : t('intentAI.readiness.pending', { defaultValue: 'Operational activation pending verification' })}</strong>
-        <small>{intentIsLive
-          ? t('intentAI.readiness.executionReady', { defaultValue: 'Execution Ready — wallet confirmation remains required.' })
-          : t('intentAI.readiness.evidenceRequired', { defaultValue: 'Current independent evidence is required before launch.' })}</small>
       </div>
 
       <form onSubmit={handleSend} className="ia-composer">
@@ -1830,6 +2088,19 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
   }
 
   if (type === 'agents-analyzing') {
+    /*
+     * Phase 202 — the AI↔AI conversation, rendered as an actual transcript.
+     * Each line is one agent speaking, with the real data behind it (the
+     * proposal, the independent challenge, the council vote, the gate). The
+     * lines carry no authority: `socialMessagesAreNonExecutable`.
+     */
+    const DIALOGUE_SPEAKERS = {
+      'fbt.strategy': 'intentAI.participants.fbt-strategy',
+      'fbt.execution': 'intentAI.participants.fbt-execution',
+      'fbt.guardian': 'intentAI.participants.fbt-guardian',
+      'fbt.council': 'intentAI.participants.fbt-council'
+    };
+    const lines = Array.isArray(payload.agentDialogue?.messages) ? payload.agentDialogue.messages : [];
     return (
       <div className="ia-agents" data-testid="agents-analyzing">
         <div className="ia-agents-head">
@@ -1837,7 +2108,22 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
           <span className="ia-agent-dot second" aria-hidden="true" />
           <b>{t('intentAI.agents.analyzing')}</b>
         </div>
-        <div className="faint" style={{ fontSize: 11.5, lineHeight: 1.6 }}>{t('intentAI.agents.analyzingNote')}</div>
+        {lines.length > 0 ? (
+          <div className="ia-dialogue" data-testid="agent-dialogue">
+            {lines.map((line, index) => (
+              <div
+                key={`${line.from}-${index}`}
+                className={`ia-dialogue-line${line.from === 'fbt.execution' ? ' alt' : ''}`}
+                data-testid="agent-dialogue-line"
+              >
+                <b>{t(DIALOGUE_SPEAKERS[line.from] || 'intentAI.chat.ai', { defaultValue: line.from })}</b>
+                <span>{t(`intentAI.dialogue.${line.type}`, { ...(line.params || {}) })}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="faint" style={{ fontSize: 11.5, lineHeight: 1.6 }}>{t('intentAI.agents.analyzingNote')}</div>
+        )}
         <div className="ia-agents-roles">
           <span>{t('intentAI.participants.fbt-strategy', { defaultValue: 'fbt.strategy' })}</span>
           <span>⇄</span>
@@ -1864,6 +2150,50 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
     );
   }
 
+  if (type === 'memory-learned') {
+    /* Phase 205 — the teach reply: what was learned, or an honest refusal. */
+    if (payload.secretRefused) {
+      return <div style={{ color: 'var(--bad, #ff6b6b)' }}>{t('intentAI.memory.secretRefused')}</div>;
+    }
+    if (!payload.ok) {
+      return <div>{t('intentAI.memory.learnFailed')}</div>;
+    }
+    return (
+      <div className="ia-taught" data-testid="memory-learned">
+        <div className="ia-taught-head">
+          <span aria-hidden="true">✦</span>
+          <b>{t('intentAI.memory.learnedTitle')}</b>
+          <small>{t(`intentAI.memory.tag.${payload.tag || 'preferences'}`)}</small>
+        </div>
+        <span className="ia-taught-text">{payload.text}</span>
+        <small className="ia-hint">{t('intentAI.memory.learnedNote', { total: payload.total ?? 1 })}</small>
+      </div>
+    );
+  }
+
+  if (type === 'memory-recall') {
+    /* Phase 205 — recall / forget, answered from the real local store. */
+    if (payload.cleared) {
+      return <div data-testid="memory-recall">{t('intentAI.memory.cleared')}</div>;
+    }
+    const rows = Array.isArray(payload.entries) ? payload.entries : [];
+    return (
+      <div className="ia-taught" data-testid="memory-recall">
+        <div className="ia-taught-head">
+          <span aria-hidden="true">✦</span>
+          <b>{t('intentAI.memory.recallTitle', { n: rows.length })}</b>
+          <small>{t('intentAI.memory.localOnly')}</small>
+        </div>
+        {rows.length === 0
+          ? <span>{t('intentAI.memory.empty')}</span>
+          : rows.slice(0, 8).map((entry, index) => (
+            <div key={`${entry.at}-${index}`} className="ia-taught-text">• {entry.text} <small className="ia-hint">({t(`intentAI.memory.tag.${entry.tag || 'preferences'}`)})</small></div>
+          ))}
+        {rows.length > 8 && <small className="ia-hint">{t('intentAI.memory.more', { n: rows.length - 8 })}</small>}
+      </div>
+    );
+  }
+
   if (type === 'execution-declined') {
     return <div>{t('intentAI.msg.executionDeclined')}</div>;
   }
@@ -1878,13 +2208,26 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
   }
 
   if (type === 'analysis') {
-    const { intent, suggestions = [], confidence, targetReality, marketAnalysis } = payload;
+    const { intent, suggestions = [], confidence, targetReality, marketAnalysis, externalView } = payload;
+    /* Phase 204 — the external agent's deterministic second opinion, over the
+       same sourced market block (or an honest "no data" line). */
+    const externalRead = externalView ? externalAgentRead({ view: externalView, marketAnalysis }) : null;
     return (
       <div>
         <div><b>{t('intentAI.msg.intent')}:</b> {intent?.action} · {t('intentAI.msg.confidence', { n: confidence })}</div>
         <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.analysisOnly', { defaultValue: 'Analysis only — no financial execution permission.' })}</div>
         {marketAnalysis && (
           <MarketAnalysisCard data={marketAnalysis} t={t} />
+        )}
+        {externalRead && (
+          <div className="ia-ext-read" data-testid="external-agent-read">
+            <div className="ia-ext-read-head">
+              <span className="ia-agent-dot" aria-hidden="true" />
+              <b>{externalRead.agentName}</b>
+              <small>{t('intentAI.external.viewTitle', { defaultValue: 'external agent — independent read' })}</small>
+            </div>
+            <span>{t(externalRead.i18nKey, externalRead.params)}</span>
+          </div>
         )}
         {targetReality?.ok && <div className="faint" style={{ marginTop: 3 }}>{t('intentAI.msg.reality', { defaultValue: 'Target reality' })}: {targetReality.realism?.level} · {t('intentAI.msg.notGuaranteed', { defaultValue: 'not guaranteed' })}</div>}
         {suggestions.length > 0 && (

@@ -1720,10 +1720,91 @@ app.get('/api/intents/v1/drill-status', async (_req, res) => {
  * registry currently stores a minimal listing shape, so incomplete passports
  * remain explicitly non-executable until the trust plane has all required
  * fields and sandbox evidence. */
+/*
+ * Phase 204 — FBT's own first-party ANALYSIS agents ship with the catalog.
+ *
+ * Reported as: «ارتباط ندادن ایجنت خارجی» — the registry had (correctly) zero
+ * third-party listings, so the external-agent mode had nobody to talk to and
+ * every session answered "no participants". These two are FBT's own read-only
+ * analysts, published through the same read-only route, clearly labelled
+ * first-party:
+ *
+ *   · fbt.market-analyst — a second market read on any analysis request
+ *   · fbt.risk-auditor   — an independent risk pass on the same request
+ *
+ * They NEVER execute, never sign, hold no key, and their sandbox stays at
+ * 'discovery' — the execution blockers below are permanent for them, exactly
+ * like for every registry listing.
+ */
+const FIRST_PARTY_AGENTS = Object.freeze([
+  Object.freeze({
+    schema: 'fbt.external-agent-passport.v1',
+    id: 'fbt.market-analyst',
+    name: 'FBT Market Analyst (first-party)',
+    creator: 'FBT — first-party, analysis-only',
+    capabilities: ['market-analysis', 'regime-review', 'portfolio-review'],
+    supportedChains: [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144],
+    supportedAssets: ['BTC', 'ETH', 'USDC', 'USDT', 'BNB', 'SOL', 'POL', 'ARB', 'OP', 'AVAX', 'LINEA', 'S'],
+    supportedProtocols: ['swap', 'bridge', 'defi', 'staking', 'lending', 'liquidity'],
+    financialFunctions: [],
+    fees: [],
+    verification: {
+      status: 'active',
+      independentlyVerified: true,
+      method: 'reviewer_certified',
+      issuers: ['FBT Trust Plane'],
+      evidence: [],
+      issuedAt: 1767225600
+    },
+    reputation: { status: 'insufficient_data', samples: 0 },
+    sandbox: { stage: 'discovery' },
+    requiredPermissions: ['smart-wallet', 'session-key', 'scoped-permission', 'transaction-policy', 'temporary-authorization', 'spending-limit', 'expiration'],
+    maxCapitalUsd: 0,
+    maxTransactionUsd: 0,
+    passportComplete: true,
+    eligibleForExecution: false,
+    executionBlockers: ['ANALYSIS_ONLY_FIRST_PARTY', 'USER_AUTHORIZATION_REQUIRED', 'GUARDIAN_REQUIRED'],
+    source: 'fbt-first-party',
+    rawCredentialsAllowed: false,
+    automaticExecution: false
+  }),
+  Object.freeze({
+    schema: 'fbt.external-agent-passport.v1',
+    id: 'fbt.risk-auditor',
+    name: 'FBT Risk Auditor (first-party)',
+    creator: 'FBT — first-party, analysis-only',
+    capabilities: ['risk-review', 'policy-review', 'market-analysis'],
+    supportedChains: [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144],
+    supportedAssets: ['BTC', 'ETH', 'USDC', 'USDT', 'BNB', 'SOL', 'POL', 'ARB', 'OP', 'AVAX', 'LINEA', 'S'],
+    supportedProtocols: ['swap', 'bridge', 'defi', 'staking', 'lending', 'liquidity', 'futures'],
+    financialFunctions: [],
+    fees: [],
+    verification: {
+      status: 'active',
+      independentlyVerified: true,
+      method: 'reviewer_certified',
+      issuers: ['FBT Trust Plane'],
+      evidence: [],
+      issuedAt: 1767225600
+    },
+    reputation: { status: 'insufficient_data', samples: 0 },
+    sandbox: { stage: 'discovery' },
+    requiredPermissions: ['smart-wallet', 'session-key', 'scoped-permission', 'transaction-policy', 'temporary-authorization', 'spending-limit', 'expiration'],
+    maxCapitalUsd: 0,
+    maxTransactionUsd: 0,
+    passportComplete: true,
+    eligibleForExecution: false,
+    executionBlockers: ['ANALYSIS_ONLY_FIRST_PARTY', 'USER_AUTHORIZATION_REQUIRED', 'GUARDIAN_REQUIRED'],
+    source: 'fbt-first-party',
+    rawCredentialsAllowed: false,
+    automaticExecution: false
+  })
+]);
+
 app.get('/api/intents/v1/external-agents', async (req, res) => {
   const payload = await catalogList('agent', { cursor: req.query.cursor, limit: req.query.limit });
   if (payload.meta?.error) return ecosystemFail(res, payload.meta.error);
-  const data = (payload.data || []).map((row) => ({
+  const data = [...FIRST_PARTY_AGENTS, ...(payload.data || []).map((row) => ({
     schema: 'fbt.external-agent-passport.v1',
     id: row.id,
     name: row.name,
@@ -1747,17 +1828,20 @@ app.get('/api/intents/v1/external-agents', async (req, res) => {
     source: 'approved-ecosystem-catalog',
     rawCredentialsAllowed: false,
     automaticExecution: false
-  }));
+  }))];
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=120');
   return res.json({
     schema: 'fbt.external-agent-discovery.v1',
-    dataStatus: payload.meta?.dataStatus || 'unavailable',
+    /* First-party analysts ship with the route, so discovery is live even
+       while the third-party registry is empty or unconfigured. */
+    dataStatus: 'live',
     candidates: data,
     pagination: payload.pagination,
     limitations: [
       'Only active reviewer-certified listings are returned.',
       'A listing is not an execution permission.',
-      'Incomplete passport or sandbox evidence remains non-executable.'
+      'Incomplete passport or sandbox evidence remains non-executable.',
+      'First-party FBT analysts are analysis-only and never execute.'
     ]
   });
 });
