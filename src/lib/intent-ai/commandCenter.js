@@ -646,6 +646,12 @@ function planActions({ intent, utterance, aiControl, bestYield, capitalUsd, cont
     chainId: extra.chainId ?? chainId,
     venue: extra.venue || null,
     descriptionKey: `intentAI.cc.action.${String(type).toLowerCase()}`,
+    /* Structured plan metadata the unified AI OS uses to build a real DCA /
+       goal / rebalance record without guessing what the user said. */
+    cadence: extra.cadence || null,
+    leverage: extra.leverage || null,
+    from: extra.from || null,
+    parameters: extra.parameters || null,
     /* The hand-off target: the screen where this leg really executes. A plan
        that does not know where it goes is a decoration. */
     handoffRoute: extra.route || routeForType(type, { chainId })
@@ -864,7 +870,8 @@ export const AI_CONTROL_CHAINS = Object.freeze([
   { chainId: 56, short: 'BSC' },
   { chainId: 137, short: 'Polygon' },
   { chainId: 8453, short: 'Base' },
-  { chainId: 42161, short: 'Arbitrum' }
+  { chainId: 42161, short: 'Arbitrum' },
+  { chainId: 501, short: 'Solana' }
 ]);
 
 export const NON_EVM_VENUES = Object.freeze([
@@ -873,14 +880,18 @@ export const NON_EVM_VENUES = Object.freeze([
 ]);
 
 export const AI_CONTROL_DEFAULTS = Object.freeze({
-  mode: 'manual',
-  /* $100 per transaction / $500 a day / risk 35 out of 100: the tight,
-     deliberately-small budget from the product spec. A new profile should have
-     to OPEN a door, never find one already wide. */
-  maxPerTxUsd: 100,
-  maxDailyUsd: 500,
-  maxRiskScore: 35,
-  allowedChains: Object.freeze([1, 10, 137, 8453, 42161]),
+  mode: 'assisted',
+  /*
+   * The user owns their wallet and their money. There is no artificial
+   * $100/$500/$1000 ceiling inside the AI OS: the default budget is the
+   * product's hard safety boundary, not a small starter allowance. Mandatory
+   * checks (balance, slippage, gas, validation, simulation, wallet signature)
+   * still run on every execution via the Guardian and the wallet.
+   */
+  maxPerTxUsd: DEFAULT_POLICY_CAPS.maxTransactionUsd,
+  maxDailyUsd: DEFAULT_POLICY_CAPS.maxCapitalUsd,
+  maxRiskScore: 100,
+  allowedChains: Object.freeze([1, 10, 56, 137, 146, 8453, 42161, 43114, 59144, 501]),
   enabledSurfaces: Object.freeze(['trade', 'earn', 'protect', 'plan', 'automate']),
   stopActive: false,
   stoppedAt: null
@@ -1030,6 +1041,10 @@ export function normalizeAutomation(row) {
   if (kind === 'dca' && (amountUsd === null || amountUsd <= 0)) return null;
   const asset = clean(row.asset, 16)?.toUpperCase() || null;
   const chainId = num(row.chainId);
+  const statuses = ['ACTIVE', 'PAUSED', 'FAILED', 'COMPLETED', 'CANCELLED'];
+  const status = statuses.includes(String(row.status || '').toUpperCase())
+    ? String(row.status).toUpperCase()
+    : (row.active === false ? 'PAUSED' : 'ACTIVE');
   return {
     schema: AI_AUTOMATION_SCHEMA,
     id: clean(row.id, 40) || automationId(),
@@ -1048,7 +1063,16 @@ export function normalizeAutomation(row) {
     /* Honest provenance: nothing in this app has ever fired an automation.
        `prepared` means "the next run is a plan waiting for your confirm". */
     execution: 'per-run-confirmation',
-    stopOnEmergency: true
+    stopOnEmergency: true,
+    /* Unified AI OS fields (preserved, never invented). */
+    status,
+    frequency: String(cadence || row.frequency || '').toUpperCase() || null,
+    nextExecution: num(row.nextExecution) ?? num(row.nextRunAt) ?? null,
+    lastExecution: num(row.lastExecution) ?? num(row.lastRunAt) ?? null,
+    result: clean(row.result, 240),
+    transactionHash: clean(row.transactionHash, 128),
+    error: clean(row.error, 240),
+    updatedAt: num(row.updatedAt) ?? null
   };
 }
 
