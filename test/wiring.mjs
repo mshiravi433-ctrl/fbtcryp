@@ -711,26 +711,37 @@ export default function run() {
 
   /* ------------- 12. vercel.json must stay deployable on Hobby ----------- */
   /*
-   * THE BUG THAT SILENTLY STOPPED EVERY DEPLOY FOR ~22 HOURS.
+   * TWO OCCURRENCES, ONE LINE OF JSON, THE SAME SYMPTOM: production stops
+   * moving and nothing in the code is wrong.
    *
-   * A second cron was added for /api/cron/watch on a 15-minute schedule. The
-   * Vercel Hobby plan allows at most 2 cron jobs AND at most one invocation
-   * per day each, so 96/day is refused.
+   *   2026-08-04   a second cron, /api/cron/watch, on a 15-minute schedule.
+   *   2026-08-31   a third cron, /api/cron/smart-money, every 10 minutes.
    *
-   * What made it so expensive to find: the project still BUILDS. It just
-   * never runs, and no failed deployment is recorded - the deploy list simply
-   * stops growing. That is indistinguishable from a broken Git connection, so
-   * the search went to the branch, the webhook and the daily quota in turn,
-   * when the only thing that had changed was one line in one JSON file.
+   * WHAT THE PLAN ACTUALLY LIMITS — vercel.com/docs/cron-jobs/usage-and-pricing
+   * (read 2026-08-31): Hobby allows 100 cron jobs per project, and the minimum
+   * interval for each is ONE DAY. So the count was never the constraint; the
+   * cadence is. Vercel validates the schedule while creating the deployment
+   * and refuses the whole thing with: "Hobby accounts are limited to daily
+   * cron jobs. This cron expression would run more than once per day."
    *
-   * A cron expression is a line of JSON that no test covered and no build
-   * step validates. It is covered now.
+   * The note in this file until today said "at most 2 jobs" and "no failed
+   * deployment is recorded". Both halves were wrong, and the wrongness cost
+   * hours: on the 31st a "Deployment failed." status WAS posted on every push
+   * to main, which is the only reason the cause was findable at all — while
+   * the stale "2" made the third cron look illegal by itself and sent the
+   * search off toward the quota again.
+   *
+   * The ceiling kept below is a PROJECT budget of three, chosen deliberately;
+   * the rule that keeps deploys alive is the cadence check under it.
    */
   {
     const vercel = JSON.parse(read('vercel.json'));
     const crons = vercel.crons ?? [];
 
-    t(`at most 2 cron jobs on Hobby (found ${crons.length})`, crons.length <= 2);
+    /* Not a platform limit — ours. A fourth cron means deleting one on purpose,
+       because each slot is another cold function to keep within the free
+       execution budget, and another schedule that can black out production. */
+    t(`at most 3 cron jobs (found ${crons.length})`, crons.length <= 3);
 
     /*
      * Reject any schedule that fires more than once a day. The only shape
@@ -764,6 +775,16 @@ export default function run() {
       'the daily cron passes the push-routing callback to the watch cycle',
       /runWatchCycle\(\s*sendWatchAlert\s*\)/.test(serverSrc)
     );
+    /*
+     * Same trap, one feature later: the smart-money alert cron is now a daily
+     * slot, and the honest reading of "Hobby only allows one firing a day" is
+     * to delete that cron. Deleting it would quietly delete whale alerts for
+     * anyone who had not opened the app that day. The 09:00 daily slot already
+     * runs the same cycle, so deleting the cron line is safe ONLY as long as
+     * this stays true — hence checked.
+     */
+    t('the daily cron also runs the smart-money alert cycle, with a delivery callback',
+      /smartMoney\.runAlertCycle\(async/.test(serverSrc));
     /*
      * And the callback itself must actually route to both transports — a
      * helper that exists but is never used to send is the same silent dead
@@ -6727,6 +6748,59 @@ export default function run() {
        another hour blaming the CDN. */
     t('the deployment-budget diagnosis is documented',
       existsSync('docs/VERCEL-DEPLOY-LIMIT-FA.md'));
+
+    /*
+     * ─── EVERY Vercel CRON HERE MUST FIRE AT MOST ONCE A DAY ────────────────
+     * fbtswap.ir runs on the Hobby plan, and the Hobby rule for crons is not
+     * a runtime throttle — it is a DEPLOYMENT VALIDATOR. Vercel's own wording:
+     * "Hobby accounts are limited to daily cron jobs. This cron expression
+     * would run more than once per day." Anything whose minute or hour field
+     * can match more than one value per day fails the deployment outright.
+     *
+     *   2026-08-31, 21:45 UTC  last successful production deploy
+     *   2026-08-31, 21:50 UTC  one cron added, every ten minutes
+     *   → three pushes to main, three "Deployment failed." statuses, ZERO build
+     *     logs, and the live site still serving the 21:45 bundle.
+     *
+     * The reason this needs a test and not a comment: the schedule is legal
+     * JSON, `vite build` never reads vercel.json, and the failure looks like a
+     * CDN problem, a quota problem, or a git problem. Three separate
+     * diagnoses were spent on it before someone diffed vercel.json against the
+     * last commit that actually deployed. So the cadence is pinned here, in
+     * the strictest form the plan allows: one fixed minute, one fixed hour.
+     */
+    const cronFieldMatches = (field, size) => {
+      if (field === '*') return size;
+      let n = 0;
+      for (const part of String(field).split(',')) {
+        const [span, stepRaw] = part.split('/');
+        const step = Math.max(1, Number(stepRaw) || 1);
+        if (span === '*') n += Math.ceil(size / step);
+        else if (span.includes('-')) {
+          const [lo, hi] = span.split('-').map(Number);
+          n += Math.floor(((hi - lo) || 0) / step) + 1;
+        } else n += 1;
+      }
+      return n;
+    };
+    const cronFiresPerDay = (expr) => {
+      const f = String(expr).trim().split(/\s+/);
+      if (f.length !== 5) return Number.POSITIVE_INFINITY;
+      return cronFieldMatches(f[0], 60) * cronFieldMatches(f[1], 24);
+    };
+
+    const crons = Array.isArray(vj.crons) ? vj.crons : [];
+    const tooOften = crons
+      .filter((c) => cronFiresPerDay(c.schedule) > 1)
+      .map((c) => `${c.path} = ${c.schedule} (${cronFiresPerDay(c.schedule)}×/day)`);
+    t(`every Vercel cron is daily-safe for the Hobby plan${tooOften.length ? ` — too frequent: ${tooOften.join(', ')}` : ''}`,
+      crons.length > 0 && tooOften.length === 0);
+    t('...and no two crons share a slot, so a slow job cannot starve a fast one',
+      new Set(crons.map((c) => String(c.schedule).trim())).size === crons.length);
+    t('the Hobby-cron diagnosis is documented',
+      existsSync('docs/VERCEL-CRON-HOBBY-FA.md'));
+    t('...and the server comment on the daily slot no longer repeats the wrong Hobby rule',
+      /Hobby allows 100 cron jobs/.test(read('server/app.js')));
   }
 
   /* ---- 72. the poisoned-module crash, nav glyph, calm music ------------- */
