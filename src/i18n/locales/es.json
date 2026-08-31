@@ -1093,6 +1093,72 @@
         "e2": "stake 1 ETH for yield",
         "e3": "unstake my ETH"
       }
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm",
+      "hint": "Tras «confirmar», tu cartera pregunta una vez más y la transacción se envía realmente a la red."
+    },
+    "fee": {
+      "quotedOnly": "Comisión anunciada en la vista previa: {{amount}} {{symbol}} ({{percent}}%) — se cobra solo si se ejecuta una transacción real."
+    },
+    "receipt": {
+      "viewOnExplorer": "ver en el explorador",
+      "broadcastDisabled": "Firmado y verificado según tu política — pero no marcaste «enviar a la red», así que no se envió nada. Márcalo y confirma de nuevo.",
+      "awaitingBroadcast": "Firmado y verificado según tu política. Aún no se entregó a la red — el envío está a un tick de distancia."
+    },
+    "broadcastFail": {
+      "error": "El envío a la red no ocurrió: {{code}}{{message,}}.",
+      "venue": "Hoy solo los swaps de una sola cadena se envían a la red desde aquí. «{{kind}}» está preparado y puede revisarse en su propia pantalla."
+    },
+    "participants": {
+      "fbt-guardian": "Guardián de FBT",
+      "fbt-council": "Consejo de agentes"
+    },
+    "dialogue": {
+      "proposal": "Propongo: {{strategy}} — {{from}} → {{to}}, unos ${{amount}} en la red {{chain}}.",
+      "independent-review": "Revisión independiente: {{decision}}{{reason,}}. La ruta es válida.",
+      "council": "El consejo de {{votes}} agentes decidió: {{decision}}.",
+      "gate-result": "La puerta de confirmación está abierta — esperando tu aprobación."
+    },
+    "points": {
+      "title": "Tus puntos de Intent AI",
+      "unit": "pts",
+      "gained": "+{{n}} puntos ganados con Intent AI"
+    },
+    "external": {
+      "join": "unirse",
+      "joined": "participando",
+      "viewTitle": "agente externo — lectura independiente",
+      "readAnalyst": "Mi lectura independiente de {{symbol}}: tendencia {{signal}} ({{change}}% en 24h). Mismos datos, conclusión propia — solo análisis.",
+      "readAuditor": "Mi revisión de riesgo de {{symbol}}: riesgo realizado {{risk}} (volatilidad {{volatility}}%). Busco lo que puede salir mal — solo análisis.",
+      "readNoData": "Ahora mismo no tengo datos de mercado en vivo, así que callo en lugar de adivinar."
+    },
+    "memory": {
+      "learnedTitle": "Aprendido. Lo recordaré:",
+      "learnedNote": "{{total}} cosas aprendidas hasta ahora — solo en este dispositivo, nunca se envía.",
+      "learnFailed": "No pude guardarlo (almacenamiento lleno o no disponible).",
+      "secretRefused": "Nunca memorizo secretos — ni frases semilla, ni claves, ni contraseñas.",
+      "recallTitle": "Me has enseñado {{n}} cosa(s):",
+      "localOnly": "solo local",
+      "empty": "Aún no me has enseñado nada. Di «recuerda: …» y aprenderé.",
+      "more": "+ {{n}} más…",
+      "cleared": "He olvidado todo lo que me enseñaste.",
+      "tag": {
+        "assets": "activos",
+        "preferences": "preferencia",
+        "preferred-chain": "cadena",
+        "risk-appetite": "apetito de riesgo"
+      }
+    },
+    "mission": "Mi propósito: convertir lo que dices en un plan revisado y medido en riesgo — y ejecutarlo solo tras tu confirmación explícita. Nunca guardo tus claves ni muevo dinero por mi cuenta.",
+    "sections": {
+      "title": "Otras secciones",
+      "wallet": "Cartera",
+      "stocks": "Acciones",
+      "futures": "Futuros",
+      "loan": "Préstamo",
+      "farm": "Farming",
+      "points": "Puntos"
     }
   },
   "intentOS": {

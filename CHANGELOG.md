@@ -1,3 +1,63 @@
+# Unreleased — Phases 201-207: the #/intent-ai user-report sweep (owner review)
+
+- Reported (fa): «مجاز شد — هنوز روی شبکه نیست · مقصد swap», «امضا شد و با
+  سیاست شما بررسی شد. این نسخه تراکنش را به شبکه نمی‌فرستد.» — both real, and
+  both the SAME bug: the Intent AI "broadcast" sent the MEV-shield envelope
+  (chainId + deadline + slippage — no `to`, no `data`, no `value`) to
+  eth_sendTransaction, and only when `VITE_INTENT_BROADCAST_ENABLED === 'true'`,
+  a flag no deployment ever set. The panel now runs the REAL path via
+  `src/hooks/useIntentBroadcast.js`: the same audited quote → (exact-amount
+  approval when needed) → executeSwap chain the /swap screen uses, wallet-signed
+  twice (EIP-712 authorization + the transaction itself). Broadcasting defaults
+  ON; `VITE_INTENT_BROADCAST_ENABLED=false` is the deliberate kill-switch. The
+  receipt carries the real hash, an explorer link and tracks to
+  confirmed/failed (`trackIntentTx`). Non-swap legs answer honestly
+  (`intentAI.broadcastFail.venue`) with a hand-off to their own screen instead
+  of a dead end.
+- Reported (fa): «کارمزد دریافت‌شده: 0.7 USDT (0.7٪)» while nothing ran — the
+  receipt now distinguishes an ANNOUNCED fee (`intentAI.fee.quotedOnly`: charged
+  only if a real transaction executes) from a fee actually taken on-chain
+  (`fee.onReceipt`, rendered only with a real txHash).
+- Reported (fa): «نداشتن مکالمه بین دو هوش مصنوعی» — the agent council existed
+  but said nothing readable. `agentDialogue` now carries structured params and
+  the panel renders the live transcript (strategy proposal ⇄ independent
+  challenge ⇄ council vote ⇄ gate status), twelve locales
+  (`intentAI.dialogue.*`, new participants fbt-guardian / fbt-council).
+- Reported (fa): «ارتباط ندادن ایجنت خارجی» — the third-party registry is
+  (correctly) empty, so the external-agent mode had nobody to talk to. Two
+  FBT first-party ANALYSIS agents (`fbt.market-analyst`, `fbt.risk-auditor`)
+  now ship in `/api/intents/v1/external-agents` — clearly labelled first-party,
+  analysis-only, permanently non-executable (`ANALYSIS_ONLY_FIRST_PARTY`).
+  `externalAgentVoice.js` gives the selected agent one deterministic,
+  data-grounded line in the analysis reply (trend read vs risk read vs honest
+  no-data), and a "join" control in the mode card makes participation explicit.
+- Reported (fa): «ندادن امتیاز بهم هوش مصنوعی» — using the assistant now earns
+  the app's real points through the shared store: `intentAiPlan` (+10, a plan
+  reaching the confirmation screen) and `intentAiExecuted` (+25, an intent that
+  actually reached a network), with a points chip in the panel header and the
+  transient "+N" award where it was earned.
+- Reported (fa): «نبود ارتباط با سیستم آموزش» — the user can now TEACH the
+  assistant: «یادت باشد: …» / "remember:" stores a bounded (50-entry),
+  local-only, secret-free note (`taughtMemory.js`); «چه چیزی یادت هست؟»
+  recalls it; a taught chain becomes the session's default chain. Secrets are
+  refused with the same credential screen the chat uses.
+- Reported (fa): «از یاد بردن هدف بوجود امدن هوش مصنوعی برای اپ» — a permanent
+  mission strip now states the assistant's purpose on the panel
+  (`intentAI.mission`, 12 locales).
+- Reported (fa): «وصل شدن به همه اپشن‌ها… نداشتن ارتباط بین اپشن‌ها» — a
+  section-links row (wallet / stocks / futures / loan / farm / points) connects
+  the panel to the app's other screens, and `draftHandoffRoute` now routes
+  farm/lend/borrow/futures/send drafts to their real screens instead of the
+  generic compose prefill.
+- Reported (fa): «باگ شلوغی صفحه» — the connection and activation banners merge
+  into one compact status line; session setup stays collapsed; the chat is the
+  centre of the screen again.
+- Tests: `test/intent-ai/phase201-207-upgrade-probe.mjs` (40 logic checks) and
+  `test/intent-ai/phase201-ai-panel-upgrade-probe.jsx` (20 mounted checks with
+  a stub EIP-1193 wallet and broadcast bridge — real hash, explorer link,
+  completed promotion, points) added to `npm test`; the bridge probe was
+  updated to the new on-by-default broadcast contract.
+
 # Unreleased — Phase 153b: the Loan → Intent OS → compile chain actually completes
 
 - Reported (fa): «وقتی از صفحه وام میایی و میخایی کامپیل کنی میزنه "توکن ورودی

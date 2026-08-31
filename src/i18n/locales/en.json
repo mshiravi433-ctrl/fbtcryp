@@ -5460,7 +5460,13 @@
       "empty": "No external Agent is verified for this request. Discovery does not grant access.",
       "compatible": "compatible",
       "incompatible": "not compatible",
-      "scoreWithheld": "score withheld"
+      "scoreWithheld": "score withheld",
+      "join": "join",
+      "joined": "participating",
+      "viewTitle": "external agent — independent read",
+      "readAnalyst": "My independent read of {{symbol}}: trend {{signal}} ({{change}}% in 24h). Same data, own conclusion — analysis only.",
+      "readAuditor": "My risk pass on {{symbol}}: realised risk {{risk}} (volatility {{volatility}}%). I look for what can go wrong — analysis only.",
+      "readNoData": "I have no live market data to read right now, so I say nothing rather than guess."
     },
     "levels": {
       "level1": "Analysis",
@@ -5584,9 +5590,10 @@
         "unknown": "Execution did not complete, and the exact cause is not known."
       },
       "queued": "Saved to send when you are back online. Nothing has been executed.",
-      "awaitingBroadcast": "Signed and checked against your policy. Not sent to the network yet.",
-      "broadcastDisabled": "Signed and checked against your policy. This build does not send transactions to the network.",
-      "authorized": "Authorized — not yet on the network"
+      "awaitingBroadcast": "Signed and checked against your policy. Not yet handed to the network — the send is one tick away.",
+      "broadcastDisabled": "Signed and checked against your policy — but the «send to the network» box was not ticked, so nothing was sent. Tick it and confirm again.",
+      "authorized": "Authorized — not yet on the network",
+      "viewOnExplorer": "view on explorer"
     },
     "readiness": {
       "title": "Capabilities & readiness",
@@ -5647,7 +5654,9 @@
       "fbt-ai": "FBT AI",
       "fbt-strategy": "FBT strategy engine",
       "fbt-execution": "FBT execution engine",
-      "external-agent": "external agent"
+      "external-agent": "external agent",
+      "fbt-guardian": "FBT Guardian",
+      "fbt-council": "Agent council"
     },
     "modeLive": {
       "title": "Active mode",
@@ -5975,7 +5984,22 @@
       "notStored": "Memory is off, so nothing from this was kept.",
       "stored": "Saved to your memory.",
       "revoked": "Memory was turned off and everything kept was deleted.",
-      "revokeFailed": "Memory was turned off, but the stored data could not be deleted. Please try again."
+      "revokeFailed": "Memory was turned off, but the stored data could not be deleted. Please try again.",
+      "learnedTitle": "Learned. I will remember:",
+      "learnedNote": "{{total}} things learned so far — stored only on this device, never sent anywhere.",
+      "learnFailed": "I could not store that (storage is full or unavailable).",
+      "secretRefused": "I never memorize secrets — no seed phrases, keys or passwords, ever.",
+      "recallTitle": "You taught me {{n}} thing(s):",
+      "localOnly": "local only",
+      "empty": "You have not taught me anything yet. Say «remember: …» and I will.",
+      "more": "+ {{n}} more…",
+      "cleared": "Everything I was taught is now forgotten.",
+      "tag": {
+        "assets": "assets",
+        "preferences": "preference",
+        "preferred-chain": "chain",
+        "risk-appetite": "risk appetite"
+      }
     },
     "notify": {
       "completed": "Your request finished.",
@@ -6205,7 +6229,8 @@
       "accountingPartial": "{{counted}} settled fees counted; {{excluded}} could not be verified.",
       "title": "Fee",
       "net": "You keep about {{amount}} {{symbol}} after the fee.",
-      "onReceipt": "Fee charged: {{amount}} {{symbol}} ({{percent}}%)."
+      "onReceipt": "Fee charged: {{amount}} {{symbol}} ({{percent}}%).",
+      "quotedOnly": "Announced fee: {{amount}} {{symbol}} ({{percent}}%) — charged only if a real transaction executes."
     },
     "plan": {
       "entitlements": "Your {{tier}} plan includes {{count}} analysis features.",
@@ -6358,7 +6383,8 @@
       "residueUnknown": "We could not check what remains."
     },
     "broadcast": {
-      "optIn": "Send this transaction to the network after I confirm"
+      "optIn": "Send this transaction to the network after I confirm",
+      "hint": "After «confirm», your wallet asks once more and the transaction goes to the network for real."
     },
     "activation": {
       "title": "Intent AI Activation"
@@ -6456,6 +6482,31 @@
       },
       "assetUnavailable": "no live price",
       "notAdvice": "A market read, not financial advice. Signals are simple heuristics over the numbers shown — nothing here executes or recommends a trade."
+    },
+    "broadcastFail": {
+      "error": "The network send did not happen: {{code}}{{message,}}.",
+      "venue": "Only single-chain swaps are sent to the network from here today. «{{kind}}» is prepared and can be reviewed in its own screen."
+    },
+    "dialogue": {
+      "proposal": "Proposing: {{strategy}} — {{from}} → {{to}}, about ${{amount}} on chain {{chain}}.",
+      "independent-review": "Independent review: {{decision}}{{reason,}}. The route stands.",
+      "council": "Council of {{votes}} agents decided: {{decision}}.",
+      "gate-result": "The confirmation gate is open — waiting for your approval."
+    },
+    "points": {
+      "title": "Your Intent AI points",
+      "unit": "pts",
+      "gained": "+{{n}} points earned with Intent AI"
+    },
+    "mission": "My purpose: turn what you say in plain language into a checked, risk-reviewed plan — and execute it only after your explicit confirmation. I never hold your keys and never move money on my own.",
+    "sections": {
+      "title": "Other sections",
+      "wallet": "Wallet",
+      "stocks": "Stocks",
+      "futures": "Futures",
+      "loan": "Loan",
+      "farm": "Farm",
+      "points": "Points"
     }
   },
   "loan": {

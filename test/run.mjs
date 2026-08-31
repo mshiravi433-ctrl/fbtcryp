@@ -487,6 +487,8 @@ console.log('▸ probing FBT Intent AI — draft → transaction bridge…');
 {
   const { default: bridgeResults } = await import('./intent-ai/draft-transaction-bridge-probe.mjs');
   if (Array.isArray(bridgeResults)) report('intent-ai draft-transaction-bridge', bridgeResults);
+  const { default: upgradeResults } = await import('./intent-ai/phase201-207-upgrade-probe.mjs');
+  if (Array.isArray(upgradeResults)) report('intent-ai phase 201-207 upgrades', upgradeResults);
 }
 
 console.log('▸ probing FBT Intent AI — authoritative status routes…');
@@ -752,6 +754,21 @@ npx(['vite', 'build', '-c', 'test/vite.intentai.mjs', '--logLevel', 'error']);
 installDom();
 const { run: runIntentAIPanel } = await import('./.out/intentai/intent-ai-panel-probe.js');
 report('intent AI panel (guided flow · interactive confirm · real execution)', await runIntentAIPanel(document.getElementById('r')));
+
+/* ------------------- 4b2. Phase 201-207 upgrades (mounted) ------------------- */
+/*
+ * Everything the owner reported on #/intent-ai, driven as a user: the visible
+ * AI-to-AI conversation, the mission strip, the section links, the teach /
+ * recall memory, the points integration, and the REAL broadcast path with a
+ * stub EIP-1193 wallet plus a stub broadcast bridge (the real one runs the
+ * same quote -> approval -> swap path the swap screen uses, and is covered by
+ * its own logic probe).
+ */
+console.log('\n▸ building the intent AI upgrade suite…');
+npx(['vite', 'build', '-c', 'test/vite.intentai2.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runIntentAIUpgrade } = await import('./.out/intentai2/phase201-ai-panel-upgrade-probe.js');
+report('intent AI upgrade (AI dialogue · teach memory · points · real broadcast)', await runIntentAIUpgrade(document.getElementById('r')));
 
 
 /* ------------------- 4c. Intent OS page wiring (mounted) ------------------- */

@@ -321,18 +321,26 @@ export async function prepareDraftTransaction({
 /**
  * Is real broadcasting switched on for this build?
  *
- * Default OFF. Turning Intent OS into something that moves funds must be a
- * deliberate deployment decision, never an accident of a module import. The
- * flag is read from an injected env object so tests never depend on ambient
- * process state.
+ * ON BY DEFAULT (owner directive, 2026-08): a confirmed Intent AI swap must
+ * actually reach a network. The consent chain is stronger than the plain swap
+ * screen's — Confirmation Gate terms + a per-execution opt-in checkbox + the
+ * EIP-712 intent signature + the wallet's own confirmation of the final
+ * transaction — so an extra build-time flag only produced the reported
+ * dead end («امضا شد و … به شبکه نمی‌فرستد») while every one of those four
+ * gates still guarded the money.
+ *
+ * `VITE_INTENT_BROADCAST_ENABLED=false` remains a deliberate kill-switch for
+ * a deployment that must never broadcast (an audit build, a store review
+ * build). Anything else — unset, 'true', garbage — means ON.
  */
 export function broadcastEnabled(env = {}) {
-  return String(env.VITE_INTENT_BROADCAST_ENABLED ?? '').trim() === 'true';
+  return String(env.VITE_INTENT_BROADCAST_ENABLED ?? '').trim().toLowerCase() !== 'false';
 }
 
 /**
  * Gate a prepared request behind the broadcast flag AND an explicit
  * per-call opt-in. Both must be true; either alone is not enough.
+ * ('false' in the env is the kill-switch; see broadcastEnabled.)
  */
 export function assertBroadcastAllowed({ env = {}, userOptIn = false } = {}) {
   if (!broadcastEnabled(env)) {

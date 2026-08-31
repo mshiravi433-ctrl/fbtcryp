@@ -1093,6 +1093,72 @@
         "e2": "stake 1 ETH for yield",
         "e3": "unstake my ETH"
       }
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm",
+      "hint": "点击「确认」后，钱包会再次询问，交易将真实发送到网络。"
+    },
+    "fee": {
+      "quotedOnly": "预览中声明的手续费：{{amount}} {{symbol}}（{{percent}}%）——仅在真实交易执行时收取。"
+    },
+    "receipt": {
+      "viewOnExplorer": "在区块浏览器中查看",
+      "broadcastDisabled": "已签名并按您的政策检查——但未勾选「发送到网络」，因此未发送任何内容。请勾选后再次确认。",
+      "awaitingBroadcast": "已签名并按您的政策检查。尚未提交到网络——只需勾选即可发送。"
+    },
+    "broadcastFail": {
+      "error": "未发送到网络：{{code}}{{message,}}。",
+      "venue": "目前此处仅支持将单链兑换发送到网络。「{{kind}}」已准备就绪，可在其专属页面中查看。"
+    },
+    "participants": {
+      "fbt-guardian": "FBT 守护者",
+      "fbt-council": "代理议会"
+    },
+    "dialogue": {
+      "proposal": "提议：{{strategy}} —— {{from}} → {{to}}，在 {{chain}} 网络上约 ${{amount}}。",
+      "independent-review": "独立审查：{{decision}}{{reason,}}。路线成立。",
+      "council": "{{votes}} 个代理的议会决定：{{decision}}。",
+      "gate-result": "确认之门已打开——等待您的批准。"
+    },
+    "points": {
+      "title": "你的 Intent AI 积分",
+      "unit": "分",
+      "gained": "通过 Intent AI 获得 +{{n}} 积分"
+    },
+    "external": {
+      "join": "加入",
+      "joined": "参与中",
+      "viewTitle": "外部代理 — 独立解读",
+      "readAnalyst": "我对 {{symbol}} 的独立解读：趋势 {{signal}}（24小时 {{change}}%）。相同数据，自有结论——仅供参考。",
+      "readAuditor": "我对 {{symbol}} 的风险审查：已实现风险 {{risk}}（波动率 {{volatility}}%）。我关注可能出错的地方——仅供参考。",
+      "readNoData": "我目前没有实时市场数据，因此选择沉默而不是猜测。"
+    },
+    "memory": {
+      "learnedTitle": "学会了。我会记住：",
+      "learnedNote": "目前已学会 {{total}} 件事 — 只存储在此设备上，绝不发送到任何地方。",
+      "learnFailed": "无法保存（存储已满或不可用）。",
+      "secretRefused": "我从不记住机密 — 助记词、私钥、密码都不会。",
+      "recallTitle": "你教会了我 {{n}} 件事：",
+      "localOnly": "仅本地",
+      "empty": "你还没教过我任何东西。说「记住：…」我就会学习。",
+      "more": "+ 另外 {{n}} 条…",
+      "cleared": "我已经忘掉了学到的一切。",
+      "tag": {
+        "assets": "资产",
+        "preferences": "偏好",
+        "preferred-chain": "链",
+        "risk-appetite": "风险偏好"
+      }
+    },
+    "mission": "我的使命：把你用日常语言说的话变成经过检查和风险评估的计划——并且只在得到你的明确确认后才执行。我绝不保管你的私钥，也绝不会擅自转移资金。",
+    "sections": {
+      "title": "其他板块",
+      "wallet": "钱包",
+      "stocks": "股票",
+      "futures": "期货",
+      "loan": "借贷",
+      "farm": "农场的收益",
+      "points": "积分"
     }
   },
   "intentOS": {

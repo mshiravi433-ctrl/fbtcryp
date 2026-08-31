@@ -1093,6 +1093,72 @@
         "e2": "stake 1 ETH for yield",
         "e3": "unstake my ETH"
       }
+    },
+    "broadcast": {
+      "optIn": "Send this transaction to the network after I confirm",
+      "hint": "Setelah «konfirmasi», dompet Anda bertanya sekali lagi dan transaksi benar-benar dikirim ke jaringan."
+    },
+    "fee": {
+      "quotedOnly": "Biaya yang diumumkan di pratinjau: {{amount}} {{symbol}} ({{percent}}%) — hanya dibebankan jika transaksi nyata dieksekusi."
+    },
+    "receipt": {
+      "viewOnExplorer": "lihat di explorer",
+      "broadcastDisabled": "Ditandatangani dan diperiksa sesuai kebijakan Anda — tetapi kotak «kirim ke jaringan» tidak dicentang, jadi tidak ada yang dikirim. Centang dan konfirmasi lagi.",
+      "awaitingBroadcast": "Ditandatangani dan diperiksa sesuai kebijakan Anda. Belum diserahkan ke jaringan — pengiriman hanya satu centang lagi."
+    },
+    "broadcastFail": {
+      "error": "Pengiriman ke jaringan tidak terjadi: {{code}}{{message,}}.",
+      "venue": "Hanya swap satu rantai yang dikirim ke jaringan dari sini hari ini. «{{kind}}» telah disiapkan dan dapat ditinjau di layarnya sendiri."
+    },
+    "participants": {
+      "fbt-guardian": "Penjaga FBT",
+      "fbt-council": "Dewan agen"
+    },
+    "dialogue": {
+      "proposal": "Mengusulkan: {{strategy}} — {{from}} → {{to}}, sekitar ${{amount}} di jaringan {{chain}}.",
+      "independent-review": "Tinjauan independen: {{decision}}{{reason,}}. Rutenya valid.",
+      "council": "Dewan {{votes}} agen memutuskan: {{decision}}.",
+      "gate-result": "Gerbang konfirmasi terbuka — menunggu persetujuan Anda."
+    },
+    "points": {
+      "title": "Poin Intent AI Anda",
+      "unit": "poin",
+      "gained": "+{{n}} poin dari Intent AI"
+    },
+    "external": {
+      "join": "bergabung",
+      "joined": "berpartisipasi",
+      "viewTitle": "agen eksternal — pembacaan independen",
+      "readAnalyst": "Pembacaan independen saya untuk {{symbol}}: tren {{signal}} ({{change}}% dalam 24 jam). Data yang sama, kesimpulan sendiri — hanya analisis.",
+      "readAuditor": "Tinjauan risiko saya untuk {{symbol}}: risiko terrealisasi {{risk}} (volatilitas {{volatility}}%). Saya mencari apa yang bisa salah — hanya analisis.",
+      "readNoData": "Saya tidak punya data pasar langsung saat ini, jadi saya diam daripada menebak."
+    },
+    "memory": {
+      "learnedTitle": "Pelajari. Akan saya ingat:",
+      "learnedNote": "{{total}} hal dipelajari sejauh ini — hanya disimpan di perangkat ini, tidak pernah dikirim.",
+      "learnFailed": "Tidak bisa menyimpannya (penyimpanan penuh atau tidak tersedia).",
+      "secretRefused": "Saya tidak pernah menghafal rahasia — bukan seed phrase, kunci, atau kata sandi.",
+      "recallTitle": "Anda mengajari saya {{n}} hal:",
+      "localOnly": "hanya lokal",
+      "empty": "Anda belum mengajari saya apa pun. Katakan «ingat: …» dan saya akan belajar.",
+      "more": "+ {{n}} lagi…",
+      "cleared": "Saya lupa semua yang diajarkan kepada saya.",
+      "tag": {
+        "assets": "aset",
+        "preferences": "preferensi",
+        "preferred-chain": "rantai",
+        "risk-appetite": "selera risiko"
+      }
+    },
+    "mission": "Tujuan saya: mengubah kata-kata Anda menjadi rencana yang diperiksa dan terukur risikonya — dan mengeksekusinya hanya setelah konfirmasi eksplisit Anda. Saya tidak pernah menyimpan kunci Anda atau memindahkan uang sendiri.",
+    "sections": {
+      "title": "Bagian lain",
+      "wallet": "Dompet",
+      "stocks": "Saham",
+      "futures": "Futures",
+      "loan": "Pinjaman",
+      "farm": "Farm",
+      "points": "Poin"
     }
   },
   "intentOS": {
