@@ -6537,6 +6537,329 @@
       "loan": "Loan",
       "farm": "Farm",
       "points": "Points"
+    },
+    "cc": {
+      "title": "FBT AI",
+      "ask": "What do you want to do?",
+      "askPlaceholder": "Ask FBT anything — “5000 USDC, medium risk, 3 months”",
+      "askSend": "Ask AI",
+      "live": {
+        "on": "Live",
+        "off": "Offline",
+        "stopped": "Stopped"
+      },
+      "mic": {
+        "title": "Dictate your request",
+        "idle": "voice",
+        "listening": "listening…",
+        "unsupported": "This browser has no speech input — type instead"
+      },
+      "tabs": {
+        "title": "AI command center",
+        "command": "Command",
+        "automate": "Automations",
+        "control": "AI control"
+      },
+      "deck": {
+        "stoppedNote": "Stopped from AI control: plans are still built so you can read them, nothing can be approved."
+      },
+      "stop": {
+        "refusedConfirm": "Nothing can be confirmed while the AI stop is on. Release it in AI control first."
+      },
+      "budget": {
+        "refusedConfirm": "{{spent}} of your {{cap}} daily AI budget is already signed today, and this adds {{amount}}. Shrink the plan, or raise the cap in AI control."
+      },
+      "quick": {
+        "title": "Quick actions",
+        "trade": {
+          "title": "Trade",
+          "sub": "Read the market, prepare the swap",
+          "phrase": "help me trade: analyse the market and prepare a swap"
+        },
+        "earn": {
+          "title": "Earn",
+          "sub": "Yield on what is doing nothing",
+          "phrase": "find the best yield for idle stablecoins with low risk"
+        },
+        "protect": {
+          "title": "Protect",
+          "sub": "Risk, approvals, exits",
+          "phrase": "check my risk and tell me how to protect the portfolio"
+        },
+        "plan": {
+          "title": "Plan",
+          "sub": "A route for your money",
+          "phrase": "build me a plan for my money over the next 90 days"
+        },
+        "automate": {
+          "title": "Automate",
+          "sub": "Repeat a plan, confirm each run",
+          "phrase": "set up a weekly plan to buy 100 USDC of BTC"
+        }
+      },
+      "tools": {
+        "title": "AI actions"
+      },
+      "tool": {
+        "buy-sell": {
+          "name": "Buy / Sell",
+          "sub": "One pair, prepared quotes",
+          "phrase": "help me trade: analyse the market and prepare a swap"
+        },
+        "earn-yield": {
+          "name": "Earn Yield",
+          "sub": "Deposit into a ranked venue",
+          "phrase": "find the best yield for idle stablecoins with low risk"
+        },
+        "rebalance": {
+          "name": "Rebalance",
+          "sub": "Back to the split you chose",
+          "phrase": "rebalance my portfolio to a medium risk split"
+        },
+        "protect": {
+          "name": "Protect",
+          "sub": "Hedges, stops, approvals",
+          "phrase": "set protection for my portfolio against a sharp drop"
+        }
+      },
+      "portfolio": {
+        "title": "AI portfolio read",
+        "risk": "Risk",
+        "concentration": "Largest position",
+        "stable": "Stable buffer",
+        "review": "Review portfolio",
+        "buildPlan": "Build a plan",
+        "noPnl": "no 24h read",
+        "riskUnknown": "unknown",
+        "found": "Opportunities found: {{n}} · Risk flags: {{r}}",
+        "noYieldFeed": "The yield feed did not answer, so no opportunity count is shown.",
+        "bestYield": "Best ranked venue right now: {{protocol}} at {{apy}}% APY"
+      },
+      "data": {
+        "fromWallet": "from your wallet",
+        "notConnected": "no wallet read yet"
+      },
+      "think": {
+        "understanding": "Understanding goal",
+        "portfolio": "Analyzing portfolio",
+        "market": "Checking market",
+        "quote": "Pulling quotes",
+        "yield": "Finding yield",
+        "protocolRisk": "Checking protocol risk",
+        "risk": "Scoring risk",
+        "approvals": "Reading standing approvals",
+        "schedule": "Reading the schedule",
+        "sources": "Collecting sources",
+        "strategy": "Building strategy",
+        "done": "done",
+        "working": "working…",
+        "waiting": "waiting",
+        "unavailable": "no data"
+      },
+      "plan": {
+        "title": "Your AI plan",
+        "ready": "ready for your approval",
+        "capital": "Capital",
+        "duration": "Duration",
+        "risk": "Risk",
+        "expectedYield": "Expected yield",
+        "riskScore": "Risk score",
+        "confidence": "Read confidence",
+        "strategy": "Strategy",
+        "noCapital": "not stated",
+        "noYield": "—",
+        "noYieldNote": "no yield feed at plan time",
+        "yieldNote": "venue APY × the stable share of this plan — not a promise",
+        "approve": "Approve plan",
+        "working": "Checking…",
+        "viewDetails": "View details",
+        "hideDetails": "Hide details",
+        "actions": "What this plan would do",
+        "assumptions": "What the AI assumed",
+        "cannot": "What this assistant cannot do",
+        "blockedTitle": "Your own limits stopped this",
+        "blockedNote": "Raise a limit in AI control, or shrink the plan. The AI never raises them for you.",
+        "approvedNote": "Approved. The confirmation screen is the next step; the signature is yours.",
+        "openedVenue": "Opened {{route}} — the plan runs there, and your wallet confirms it.",
+        "block": {
+          "EMERGENCY_STOP": "stopped by you",
+          "NO_ACTIONS": "nothing to approve",
+          "MODE_NOT_ALLOWED": "mode is manual",
+          "SURFACE_DISABLED": "route is off",
+          "CHAIN_NOT_ALLOWED": "network not allowed",
+          "PER_TX_LIMIT": "over the per-transaction cap",
+          "DAILY_LIMIT": "over the daily cap",
+          "RISK_LIMIT": "over your risk limit",
+          "SIMULATION_BLOCKED": "simulation refused",
+          "WALLET_REQUIRED": "no wallet to sign",
+          "APPROVAL_REQUIRED": "needs your approval"
+        },
+        "source": {
+          "semantic-votes": "read from your words",
+          "surface-tap": "you chose this route",
+          "context-carry-over": "continued from the chat",
+          "model-label-only": "label from the model, numbers from this device",
+          "fallback": "guessed — please correct it"
+        }
+      },
+      "stage": {
+        "plan": "Plan",
+        "risk": "Risk model",
+        "simulation": "Simulation",
+        "quotes": "Fresh quotes",
+        "firewall": "Execution firewall",
+        "wallet": "Wallet",
+        "signature": "Signature",
+        "blockchain": "Blockchain"
+      },
+      "stageState": {
+        "done": "done",
+        "unavailable": "unavailable",
+        "blocked": "blocked",
+        "handoff": "yours to do"
+      },
+      "check": {
+        "EMERGENCY_STOP": "Emergency stop",
+        "NO_ACTIONS": "Plan has no actions",
+        "MODE_NOT_ALLOWED": "AI mode",
+        "SURFACE_DISABLED": "Route switched off",
+        "CHAIN_NOT_ALLOWED": "Network permission",
+        "PER_TX_LIMIT": "Maximum per transaction",
+        "DAILY_LIMIT": "Maximum per day",
+        "RISK_LIMIT": "Maximum risk",
+        "SIMULATION_BLOCKED": "Simulation",
+        "WALLET_REQUIRED": "Wallet to sign",
+        "APPROVAL_REQUIRED": "Your approval"
+      },
+      "action": {
+        "ANALYZE": "Analyse only",
+        "AUTOMATION_CREATE": "Save an automation",
+        "BRIDGE": "Bridge",
+        "DEPOSIT": "Deposit",
+        "WITHDRAW": "Withdraw",
+        "HEDGE": "Hedge",
+        "FUTURES_OPEN": "Open a futures position",
+        "REBALANCE": "Rebalance",
+        "REVOKE_APPROVAL": "Revoke an approval",
+        "STABLE_SHIELD": "Move into stables",
+        "STOP_LOSS": "Stop-loss guard",
+        "SWAP": "Swap",
+        "YIELD_SWEEP": "Sweep yield"
+      },
+      "assumption": {
+        "CAPITAL_ASSUMED": "A capital figure was assumed — correct it and the plan is rebuilt",
+        "HORIZON_ASSUMED": "A holding period was assumed",
+        "RISK_UNATTESTED": "No attested balances, so the risk score is not a measurement",
+        "NO_YIELD_FEED": "No yield feed answered, so no return is projected",
+        "NO_ATTESTED_BALANCES": "Wallet balances were unreadable",
+        "UNPRICED_HOLDINGS": "Some holdings could not be priced"
+      },
+      "cannot": {
+        "hold-keys": "hold a key",
+        "sign-without-wallet": "sign without your wallet",
+        "move-funds-without-confirmation": "move funds without your confirmation",
+        "bypass-guardian": "bypass the guardian gate"
+      },
+      "alloc": {
+        "core": "core position",
+        "buffer": "buffer",
+        "growth": "growth",
+        "stable": "stable",
+        "yield": "yield"
+      },
+      "risk": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "unknown": "unknown"
+      },
+      "cadence": {
+        "daily": "daily",
+        "weekly": "weekly",
+        "biweekly": "every two weeks",
+        "monthly": "monthly"
+      },
+      "mode": {
+        "manual": "Manual",
+        "assisted": "Assisted",
+        "autonomous": "Autonomous"
+      },
+      "control": {
+        "title": "AI control",
+        "mode": "AI mode",
+        "modeNote": {
+          "manual": "analysis and plans only",
+          "assisted": "drafts prepared, you approve each",
+          "autonomous": "the “approve” tap is waived — your signature is not"
+        },
+        "manualNote": "Manual: analysis and plans only. No draft is prepared, nothing is queued.",
+        "assistedNote": "Assisted: the assistant prepares drafts, you approve each one.",
+        "autonomousNote": "Autonomous: the assistant skips the “approve this plan” tap and prepares the leg straight away. Your wallet still signs every transaction — nothing here can skip that.",
+        "maxPerTx": "Maximum per transaction",
+        "maxDaily": "Maximum daily",
+        "maxRisk": "Maximum risk",
+        "chains": "Allowed networks",
+        "chainsNone": "Untick everything and the AI has nowhere to prepare a leg — that is allowed, and it is enforced.",
+        "surfaces": "What the AI may act on",
+        "surfacesNote": "Asking anything is always allowed — this list governs what a plan may prepare.",
+        "session": "Session",
+        "automations": "automation(s) armed",
+        "spentToday": "signed today",
+        "left": "left of",
+        "spentSource": "Counted from your own local receipt history — never from a server guess.",
+        "stop": "Emergency stop",
+        "stopActive": "Stopped. No plan can be approved, prepared or executed, and every automation is on pause. Releasing the stop does not restart anything by itself.",
+        "stopHint": "Stops every AI-prepared plan and pauses every automation for you, on this device and on the API.",
+        "stopScope": "A transaction already sitting open in your wallet is yours to cancel, not ours — we never hold it.",
+        "release": "I checked — release the stop",
+        "running": "armed",
+        "stopped": "stopped"
+      },
+      "automation": {
+        "title": "Active automations",
+        "count": "{{active}} of {{total}} armed",
+        "none": "No automations yet. Ask “buy 100 USDC of BTC every week”, or add one here — it stays a plan you confirm each run.",
+        "add": "Add an automation",
+        "close": "Close",
+        "save": "Save automation",
+        "pause": "Pause",
+        "arm": "Arm",
+        "remove": "Remove",
+        "next": "next {{date}}",
+        "asksEachRun": "ready · asks you to confirm each run",
+        "paused": "paused · nothing will be prepared",
+        "commitment": "Planned weekly spend {{weekly}} · {{today}} of today’s budget reserved",
+        "proposed": "A {{cadence}} accumulation of {{amount}} in {{asset}} is ready to save.",
+        "eachRun": "Every run still asks you to confirm. Nothing self-sends.",
+        "formNote": "Saved on this device (and on the API when reachable). It schedules a plan, not a payment.",
+        "field": {
+          "kind": "Type",
+          "asset": "Asset",
+          "amount": "Amount (USD)",
+          "cadence": "Every"
+        },
+        "kind": {
+          "dca": "Buy on a schedule",
+          "rebalance": "Rebalance on a schedule",
+          "protect": "Protection watch",
+          "yield": "Yield sweep"
+        },
+        "refuse": {
+          "AUTOMATION_INVALID": "Refused: that schedule is not valid (an amount above zero is required)",
+          "SCHEDULE_INVALID": "Refused: the schedule could not be created"
+        }
+      },
+      "agent": {
+        "live": "runtime attached",
+        "specOnly": "specification, no runtime",
+        "advisory": "advisory only · cannot execute"
+      },
+      "agents": {
+        "title": "Behind this plan",
+        "count": "{{n}} of {{total}} agents · hidden by default",
+        "roster": "Woken by this surface: {{names}}",
+        "note": "None of these agents can hold a key, sign, or move funds. Market-maker, agent-to-agent, multi-agent and research run here only when a route needs them — they are not menu items."
+      }
     }
   },
   "loan": {

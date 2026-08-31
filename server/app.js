@@ -152,6 +152,7 @@ import {
   storeDurable
 } from './store.js';
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
+import aiCommandRoutes from './aiCommand.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
@@ -4344,6 +4345,25 @@ app.post('/api/ai/ask', async (req, res) => {
     return res.status(status).json({ error: 'AI_FAILED', detail: msg.slice(0, 200) });
   }
 });
+
+/* --------------------- AI COMMAND CENTER (AI page backend) --------------- */
+/*
+ * The eight routes the AI page runs on, in one module: chat, dashboard, plan,
+ * approve, execute, automations, emergency stop, and the hidden agent roster.
+ *
+ * It is mounted here rather than written inline for one reason: the exact same
+ * orchestrator, firewall and budget code the browser runs
+ * (`src/lib/intent-ai/commandCenter.js`) is the code the server runs. Two
+ * surfaces, one authority — a plan that passes in the panel cannot fail
+ * differently on the API, which is the class of bug where a "blocked" verdict
+ * on one device is an "allowed" verdict on another.
+ *
+ * Nothing in this router can move money. There is no signer in this process:
+ * `/plan/:id/execute` returns a verdict and a hand-off route, and the statuses
+ * stop there. The existing /api/ai budget (AI_RATE_LIMIT, 10/min by default)
+ * already covers these paths, since this mount sits under that middleware.
+ */
+app.use('/api/ai', aiCommandRoutes);
 
 /* ------------------------------ order watch -------------------------------- */
 /*
