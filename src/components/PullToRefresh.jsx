@@ -200,6 +200,7 @@ export default function PullToRefresh({ children }) {
         <span className="ptr-label">{label}</span>
       </div>
       <motion.div
+        className="ptr-content"
         animate={{ y: phase === 'refreshing' ? PILL_TOP_PX + 30 : pull }}
         transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 38 }}
       >

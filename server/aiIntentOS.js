@@ -212,16 +212,27 @@ function sanitizePortfolio(value) {
 
 function sanitizeWallet(value) {
   if (!value || typeof value !== 'object') return { connected: false, canSign: false, evmAddresses: [], solanaAddresses: [] };
-  const connected = value.connected === true;
-  const canSign = value.canSign === true;
-  const evm = sanitizeClientArray(value.evmAddresses || value.addresses || [], (a) => (typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a) ? a.toLowerCase() : null), 16);
-  const sol = sanitizeClientArray(value.solanaAddresses || value.solanaAddress, (a) => (typeof a === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a) ? a : null), 16);
+  const evmInput = value.evmAddresses || value.addresses || value.address || [];
+  const solInput = value.solanaAddresses || value.solanaAddress || [];
+  const evm = sanitizeClientArray(Array.isArray(evmInput) ? evmInput : [evmInput], (a) => (typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a) ? a.toLowerCase() : null), 16);
+  const sol = sanitizeClientArray(Array.isArray(solInput) ? solInput : [solInput], (a) => (typeof a === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a) ? a : null), 16);
+  const connected = value.connected === true || evm.length > 0 || sol.length > 0;
+  const canSign = value.canSign === false ? false : (value.canSign === true || connected);
   return { connected, canSign, evmAddresses: evm, solanaAddresses: sol, dataStatus: connected ? 'client' : 'unavailable' };
 }
 
 async function buildAIContext(req, body = {}) {
   const userId = ownerFor(req);
   const b = body && typeof body === 'object' ? body : {};
+  /*
+   * The unified client ships its live wallet/portfolio snapshot under
+   * `body.context`, while the older direct context route posts those same
+   * fields at the top level. Support BOTH: when /chat and /execute ignored the
+   * nested payload, the server always saw `connected: false`, so Action buttons
+   * on the AI screen answered WALLET_REQUIRED even with the wallet already
+   * open and connected.
+   */
+  const client = b.context && typeof b.context === 'object' ? b.context : b;
   const [market, yields, solanaAssets, goals] = await Promise.all([
     marketContext(),
     yieldContext(),
@@ -229,22 +240,22 @@ async function buildAIContext(req, body = {}) {
     readGoals(userId)
   ]);
 
-  const wallet = sanitizeWallet(b.wallet);
-  const balances = sanitizeBalances(b.balances);
-  const portfolio = sanitizePortfolio(b.portfolio);
-  const orders = sanitizeClientArray(b.openOrders || b.orders || [], (o) => ({
+  const wallet = sanitizeWallet(client.wallet || b.wallet);
+  const balances = sanitizeBalances(client.balances || b.balances);
+  const portfolio = sanitizePortfolio(client.portfolio || b.portfolio);
+  const orders = sanitizeClientArray(client.openOrders || client.orders || b.openOrders || b.orders || [], (o) => ({
     id: safe(o?.id, 40), side: safe(o?.side, 8), symbol: token(o?.symbol), amount: Number(o?.amount), status: safe(o?.status, 16)
   }));
-  const positions = sanitizeClientArray(b.positions, (p) => ({
+  const positions = sanitizeClientArray(client.positions || b.positions, (p) => ({
     symbol: token(p?.symbol), side: safe(p?.side, 8), amount: Number(p?.amount), entry: Number(p?.entry), chainId: Number(p?.chainId)
   }));
-  const intents = sanitizeClientArray(b.activeIntents || b.intents || [], (i) => ({
+  const intents = sanitizeClientArray(client.activeIntents || client.intents || b.activeIntents || b.intents || [], (i) => ({
     id: safe(i?.id, 40), kind: safe(i?.kind || i?.type, 16), asset: token(i?.asset), amount: Number(i?.amount), status: safe(i?.status, 16)
   }));
-  const automations = sanitizeClientArray(b.activeAutomations || b.automations || [], (a) => ({
+  const automations = sanitizeClientArray(client.activeAutomations || client.automations || b.activeAutomations || b.automations || [], (a) => ({
     id: safe(a?.id, 40), type: token(a?.type), asset: token(a?.asset), amount: Number(a?.amount), frequency: safe(a?.frequency, 12), status: safe(a?.status, 12)
   }));
-  const recentActivity = sanitizeClientArray(b.recentActivity || b.activity || [], (a) => ({
+  const recentActivity = sanitizeClientArray(client.recentActivity || client.activity || b.recentActivity || b.activity || [], (a) => ({
     type: safe(a?.type || a?.kind, 16), symbol: token(a?.symbol), amount: Number(a?.amount), status: safe(a?.status, 16), at: Number(a?.at) || null
   }));
   const memoryKey = `ai:memory:v1:${userId}`;
