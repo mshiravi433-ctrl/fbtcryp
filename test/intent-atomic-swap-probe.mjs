@@ -39,14 +39,24 @@ export default async function run() {
   const ADDR_BNB = '0x3333333333333333333333333333333333333333';
   const ADDR_ARB = '0x4444444444444444444444444444444444444444';
 
-  const envWas = process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
+  const envWas = {
+    addresses: process.env.INTENT_ATOMIC_SWAP_ADDRESSES,
+    single: process.env.INTENT_ATOMIC_SWAP_ADDRESS,
+    chains: process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS
+  };
   const restoreEnv = () => {
-    if (envWas === undefined) delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
-    else process.env.INTENT_ATOMIC_SWAP_ADDRESSES = envWas;
+    if (envWas.addresses === undefined) delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
+    else process.env.INTENT_ATOMIC_SWAP_ADDRESSES = envWas.addresses;
+    if (envWas.single === undefined) delete process.env.INTENT_ATOMIC_SWAP_ADDRESS;
+    else process.env.INTENT_ATOMIC_SWAP_ADDRESS = envWas.single;
+    if (envWas.chains === undefined) delete process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS;
+    else process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS = envWas.chains;
   };
 
   /* ---------------------- 1. unconfigured honesty ------------------------- */
   delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
+  delete process.env.INTENT_ATOMIC_SWAP_ADDRESS;
+  delete process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS;
   const unconfigured = atomicSwapProtocolStatus();
   t('schema is fbt.atomic-swap.v1', ATOMIC_SWAP_SCHEMA === 'fbt.atomic-swap.v1');
   t('unconfigured reports available:false', unconfigured.available === false);
@@ -62,6 +72,14 @@ export default async function run() {
   t('JSON address map parses to 2 chains', jsonParsed.size === 2);
   const pairParsed = parseAtomicSwapAddresses(`56:${ADDR_BNB},42161:${ADDR_ARB}`);
   t('comma-pair address format parses identically', pairParsed.size === 2 && pairParsed.get(42161) === ADDR_ARB);
+  t('single-address multi-chain env activates a simple HTLC deployment', (() => {
+    delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
+    process.env.INTENT_ATOMIC_SWAP_ADDRESS = ADDR_ARB;
+    process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS = '56,42161';
+    const parsed = parseAtomicSwapAddresses();
+    restoreEnv();
+    return parsed.size === 2 && parsed.get(56) === ADDR_ARB && parsed.get(42161) === ADDR_ARB;
+  })());
   t('invalid entries are dropped, not guessed at',
     parseAtomicSwapAddresses(`{"56":"not-an-address","999":"${ADDR_ARB}","137":42}`).size === 0);
   t('two configured chains activate the capability',
@@ -156,7 +174,9 @@ export default async function run() {
 
   /* ----------------- 5. plan without configured contracts ------------------ */
   delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
-  const unconfiguredPlan = buildAtomicSwapPlan({
+  delete process.env.INTENT_ATOMIC_SWAP_ADDRESS;
+  delete process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS;
+  const unconfiguredPlan = buildAtomicSwapPlan({ 
     hashlock: HASHLOCK,
     source: { chainId: 56, sender: USER, recipient: SOLVER, token: { native: true }, amount: '1', timeout: now + 7200 },
     destination: { chainId: 42161, sender: SOLVER, recipient: USER, token: { native: true }, amount: '1', timeout: now + 3600 }
@@ -216,6 +236,8 @@ export default async function run() {
   /* intents.js snapshots its env at first import; drop the var first so the
      unconfigured assertion below is deterministic in every run order. */
   delete process.env.INTENT_ATOMIC_SWAP_ADDRESSES;
+  delete process.env.INTENT_ATOMIC_SWAP_ADDRESS;
+  delete process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS;
   const workflow = await import('../server/intentWorkflow.js');
   t('the workflow-batch compiler itself still refuses cross-chain (unchanged)',
     workflow.buildWorkflowBatchCalldata({

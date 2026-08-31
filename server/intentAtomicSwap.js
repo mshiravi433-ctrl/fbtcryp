@@ -115,19 +115,31 @@ function normalizedTokenRef(token) {
 
 /**
  * Parse INTENT_ATOMIC_SWAP_ADDRESSES. Accepts either a JSON object
- * {"56":"0x..","1":"0x.."} or comma pairs "56:0x..,1:0x..". Invalid entries
- * are dropped (never guessed at), and every surviving address is checksummed.
+ * {"56":"0x..","1":"0x.."} or comma pairs "56:0x..,1:0x..". When the map is
+ * empty, also accepts INTENT_ATOMIC_SWAP_ADDRESS + INTENT_ATOMIC_SWAP_CHAIN_IDS
+ * for same-address multi-chain deployments. Invalid entries are dropped
+ * (never guessed at), and every surviving address is checksummed.
  */
 export function parseAtomicSwapAddresses(raw = process.env.INTENT_ATOMIC_SWAP_ADDRESSES || '') {
   const text = String(raw || '').trim();
   const map = new Map();
-  if (!text) return map;
   const put = (chainId, address) => {
     const chain = Number(chainId);
     if (!Number.isInteger(chain) || !ATOMIC_SWAP_CHAINS.includes(chain)) return;
     if (!isAddress(address)) return;
     map.set(chain, getAddress(address));
   };
+  if (!text) {
+    const singleAddress = String(process.env.INTENT_ATOMIC_SWAP_ADDRESS || '').trim();
+    const chainIds = String(process.env.INTENT_ATOMIC_SWAP_CHAIN_IDS || '')
+      .split(',')
+      .map((part) => Number(part.trim()))
+      .filter((chainId) => Number.isInteger(chainId));
+    if (isAddress(singleAddress)) {
+      for (const chainId of chainIds) put(chainId, singleAddress);
+    }
+    return map;
+  }
   if (text.startsWith('{')) {
     let parsed;
     try {

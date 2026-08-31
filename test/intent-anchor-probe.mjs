@@ -101,6 +101,22 @@ export default async function run() {
       const network = parsed.get(8453);
       return parsed.size === 1 && network.minConfirmations === 12 && network.contract.toLowerCase() === CONTRACT;
     })());
+    t('simple deployed anchor env infers one configured network', (() => {
+      const old = {
+        address: process.env.INTENT_ANCHOR_ADDRESS,
+        chain: process.env.INTENT_ANCHOR_CHAIN_ID,
+        rpc: process.env.INTENT_ANCHOR_RPC_URL
+      };
+      process.env.INTENT_ANCHOR_ADDRESS = CONTRACT;
+      process.env.INTENT_ANCHOR_CHAIN_ID = '8453';
+      process.env.INTENT_ANCHOR_RPC_URL = 'https://rpc.example';
+      const parsed = parseAnchorNetworks('');
+      if (old.address === undefined) delete process.env.INTENT_ANCHOR_ADDRESS; else process.env.INTENT_ANCHOR_ADDRESS = old.address;
+      if (old.chain === undefined) delete process.env.INTENT_ANCHOR_CHAIN_ID; else process.env.INTENT_ANCHOR_CHAIN_ID = old.chain;
+      if (old.rpc === undefined) delete process.env.INTENT_ANCHOR_RPC_URL; else process.env.INTENT_ANCHOR_RPC_URL = old.rpc;
+      const network = parsed.get(8453);
+      return parsed.size === 1 && network?.contract.toLowerCase() === CONTRACT && /basescan/.test(network?.explorerBaseUrl || '') && network?.minConfirmations === 12;
+    })());
     t('an unsupported chainId is dropped, not half-configured',
       parseAnchorNetworks(JSON.stringify([{ ...row, chainId: 424242 }])).size === 0
         && parseMerkleAnchorNetworks(JSON.stringify([{ ...row, chainId: 424242 }])).size === 0);

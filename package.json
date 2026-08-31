@@ -20,7 +20,7 @@
     "deploy:feerouter": "node scripts/deploy-feerouter.mjs",
     "deploy:workflow": "node scripts/deploy-workflow.mjs",
     "test:feerouter": "node scripts/test-feerouter.mjs",
-    "android:sync": "npm run build && npx cap sync android",
+    "android:sync": "VITE_ENABLE_SPECULATION=false npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
     "test": "node test/run.mjs",

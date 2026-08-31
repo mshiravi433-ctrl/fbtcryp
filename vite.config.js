@@ -29,7 +29,7 @@ import react from '@vitejs/plugin-react';
  * With the flag on, nothing is stripped at all.
  */
 function stripDisabledLocaleCopy() {
-  const speculation = process.env.VITE_ENABLE_SPECULATION === 'true';
+  const speculation = process.env.VITE_ENABLE_SPECULATION !== 'false';
 
   /*
    * The arcade is no longer a flag — the code and its locale namespace were
@@ -93,7 +93,7 @@ function stripDisabledLocaleCopy() {
  * into a screen that is not in the binary.
  */
 function stripSpeculativeVocabulary() {
-  const speculation = process.env.VITE_ENABLE_SPECULATION === 'true';
+  const speculation = process.env.VITE_ENABLE_SPECULATION !== 'false';
   const STUB = `
 export const SPECULATIVE_SCHEMA = 'fbt.speculative-lexicon.v1';
 export const FUTURES_ACTION_STEMS = Object.freeze([]);
@@ -150,7 +150,7 @@ export default defineConfig({
      * because they run on virtual credits, and a literal here is what lets
      * Rollup prove the lazy imports are unreachable and drop the chunks.
      */
-    __SPECULATION_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_SPECULATION === 'true'),
+    __SPECULATION_ENABLED__: JSON.stringify(process.env.VITE_ENABLE_SPECULATION !== 'false'),
     /*
      * Version string, read from package.json at build time.
      *

@@ -73,4 +73,4 @@
 export const SPECULATION_ENABLED =
   typeof __SPECULATION_ENABLED__ !== 'undefined'
     ? __SPECULATION_ENABLED__
-    : import.meta.env?.VITE_ENABLE_SPECULATION === 'true';
+    : import.meta.env?.VITE_ENABLE_SPECULATION !== 'false';

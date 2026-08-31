@@ -63,6 +63,48 @@ const WalletContext = createContext(null);
 
 const loadEthers = () => import('ethers');
 
+const toHexChainId = (value) => `0x${Number(value || DEFAULT_CHAIN).toString(16)}`;
+
+function createLocalEip1193Adapter({ signer, account, chainId, getReadProvider }) {
+  if (!signer || !account) return null;
+  const activeChainId = Number(chainId || DEFAULT_CHAIN);
+  return {
+    async request({ method, params = [] } = {}) {
+      if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [account];
+      if (method === 'eth_chainId') return toHexChainId(activeChainId);
+      if (method === 'net_version') return String(activeChainId);
+      if (method === 'personal_sign') {
+        const [message] = params;
+        const text = typeof message === 'string' && /^0x[0-9a-fA-F]*$/.test(message)
+          ? new TextDecoder().decode(Uint8Array.from(message.slice(2).match(/.{1,2}/g) || [], (b) => parseInt(b, 16)))
+          : String(message || '');
+        return signer.signMessage(text);
+      }
+      if (method === 'eth_signTypedData_v4') {
+        const [, typedRaw] = params;
+        const typed = typeof typedRaw === 'string' ? JSON.parse(typedRaw) : typedRaw;
+        const { domain = {}, types = {}, primaryType, message = {} } = typed || {};
+        const cleanTypes = { ...types };
+        delete cleanTypes.EIP712Domain;
+        const selectedTypes = primaryType && cleanTypes[primaryType]
+          ? { [primaryType]: cleanTypes[primaryType] }
+          : cleanTypes;
+        return signer.signTypedData(domain, selectedTypes, message);
+      }
+      if (method === 'eth_sendTransaction') {
+        const tx = { ...(params[0] || {}) };
+        delete tx.from;
+        if (!signer.provider && typeof getReadProvider === 'function') {
+          const provider = await getReadProvider(activeChainId);
+          return (await signer.connect(provider).sendTransaction(tx)).hash;
+        }
+        return (await signer.sendTransaction(tx)).hash;
+      }
+      throw Object.assign(new Error(`Unsupported local wallet method: ${method}`), { code: 4200 });
+    }
+  };
+}
+
 /*
  * ─── THE "SPINS FOREVER" BUG ────────────────────────────────────────────────
  * `wc.connect()` never had an outer timeout. Inside the SDK, `Relayer.connect()`
@@ -1054,6 +1096,7 @@ export function WalletProvider({ children }) {
     setChainId(DEFAULT_CHAIN);
     setLocked(true);
     signerRef.current = null;
+    eip1193Ref.current = null;
     refreshBalance(vault.address, DEFAULT_CHAIN);
     return true;
   }, [refreshBalance]);
@@ -1084,6 +1127,7 @@ export function WalletProvider({ children }) {
          */
         void releaseWc();
         signerRef.current = signer;
+        eip1193Ref.current = createLocalEip1193Adapter({ signer, account: signerAddress, chainId: DEFAULT_CHAIN, getReadProvider });
         setMode('local');
         setAddress(signerAddress);
         setChainId(DEFAULT_CHAIN);
@@ -1111,6 +1155,7 @@ export function WalletProvider({ children }) {
            existing WalletConnect connection exactly as it was. */
         void releaseWc();
         signerRef.current = signer;
+        eip1193Ref.current = createLocalEip1193Adapter({ signer, account: signer.address, chainId: DEFAULT_CHAIN, getReadProvider });
         setMode('local');
         setAddress(signer.address);
         setChainId(DEFAULT_CHAIN);
@@ -1190,15 +1235,18 @@ export function WalletProvider({ children }) {
     const cfg = EVM_CHAINS[targetId];
     if (!cfg) return false;
     const eip = eip1193Ref.current;
-    if (!eip) {
+    if (!eip || mode === 'local') {
       /*
        * A local ethers Wallet is connected to a concrete Provider. Merely
        * changing the React chain label leaves the signer broadcasting to the
        * old network — catastrophic for a same-address contract call. Reconnect
-       * the in-memory signer to the target RPC before reporting success.
+       * the in-memory signer to the target RPC before reporting success, then
+       * refresh the local EIP-1193 adapter so Intent AI keeps seeing a real
+       * connected signer.
        */
       if (signerRef.current?.connect) {
         signerRef.current = signerRef.current.connect(await getReadProvider(targetId));
+        eip1193Ref.current = createLocalEip1193Adapter({ signer: signerRef.current, account: addressRef.current, chainId: targetId, getReadProvider });
       }
       setChainId(targetId);
       return true;
@@ -1237,7 +1285,7 @@ export function WalletProvider({ children }) {
       // 4001 = user rejected; -32002 = request already pending; both non-fatal
       return false;
     }
-  }, [getReadProvider]);
+  }, [getReadProvider, mode]);
 
   /* ------------------------------ auto-attach ---------------------------- */
 

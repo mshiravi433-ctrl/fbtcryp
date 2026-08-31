@@ -28,8 +28,46 @@ function safeHttps(value) {
   }
 }
 
+const DEFAULT_EXPLORERS = {
+  1: 'https://etherscan.io',
+  10: 'https://optimistic.etherscan.io',
+  56: 'https://bscscan.com',
+  137: 'https://polygonscan.com',
+  146: 'https://sonicscan.org',
+  8453: 'https://basescan.org',
+  42161: 'https://arbiscan.io',
+  43114: 'https://snowtrace.io',
+  59144: 'https://lineascan.build'
+};
+
+function anchorNetworkFromSimpleEnv(env = process.env) {
+  const contractRaw = env.INTENT_AUCTION_ANCHOR_ADDRESS || env.INTENT_ANCHOR_ADDRESS;
+  let contract;
+  try { contract = getAddress(contractRaw); } catch { return null; }
+  if (/^0x0{40}$/i.test(contract)) return null;
+  const chainId = Number(env.INTENT_AUCTION_ANCHOR_CHAIN_ID || env.INTENT_ANCHOR_CHAIN_ID || env.INTENT_ANCHOR_CHAIN || env.CHAIN_ID || 0);
+  if (!Number.isInteger(chainId) || !ALLOWED_CHAINS.has(chainId)) return null;
+  const rpcUrl = safeHttps(env.INTENT_AUCTION_ANCHOR_RPC_URL || env.INTENT_ANCHOR_RPC_URL || env.RPC_URL);
+  const explorerBaseUrl = safeHttps(env.INTENT_AUCTION_ANCHOR_EXPLORER_BASE_URL || env.INTENT_ANCHOR_EXPLORER_BASE_URL)
+    || DEFAULT_EXPLORERS[chainId] || null;
+  const minConfirmationsRaw = Number(env.INTENT_AUCTION_ANCHOR_MIN_CONFIRMATIONS || env.INTENT_ANCHOR_MIN_CONFIRMATIONS);
+  const minConfirmations = Number.isInteger(minConfirmationsRaw) ? Math.max(1, Math.min(128, minConfirmationsRaw)) : 12;
+  return {
+    chainId,
+    name: String(env.INTENT_AUCTION_ANCHOR_NETWORK_NAME || env.INTENT_ANCHOR_NETWORK_NAME || `Chain ${chainId}`).replace(/[<>"'`\\]/g, '').slice(0, 60),
+    contract,
+    rpcUrl,
+    explorerBaseUrl,
+    minConfirmations
+  };
+}
+
 export function parseAnchorNetworks(raw = process.env.INTENT_ANCHOR_NETWORKS || '') {
-  if (!raw) return new Map();
+  if (!raw) {
+    const simple = anchorNetworkFromSimpleEnv(process.env);
+    if (!simple) return new Map();
+    return new Map([[simple.chainId, simple]]);
+  }
   try {
     const rows = JSON.parse(raw);
     if (!Array.isArray(rows)) return new Map();
