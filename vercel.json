@@ -86,7 +86,7 @@
     },
     {
       "path": "/api/cron/smart-money",
-      "schedule": "*/10 * * * *"
+      "schedule": "41 21 * * *"
     }
   ]
 }

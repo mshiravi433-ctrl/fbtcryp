@@ -3615,7 +3615,19 @@ app.delete('/api/v1/smart-money/watchlist/:id', async (req, res) => {
 });
 
 /* Cron: run one smart-money alert evaluation cycle. Same secret guard as the
-   order watcher; delivers via the shared push/FCM transport. */
+   order watcher; delivers via the shared push/FCM transport.
+
+   SCHEDULE: vercel.json fires this at 21:41 UTC — twelve hours after the
+   daily slot at 09:00, which runs the same cycle. Vercel's Hobby plan accepts
+   nothing more frequent than once a day, so "every ten minutes" is not a
+   slower refresh, it is a deployment that never builds at all
+   (docs/VERCEL-CRON-HOBBY-FA.md). runAlertCycle dedupes on
+   watch + event + type and honours a per-watch cooldown, so the two passes
+   per day widen the catch window instead of double-notifying.
+
+   Still triggerable by hand when a whale sweep is worth waiting for:
+       curl -H "Authorization: Bearer $CRON_SECRET" \
+            https://fbtswap.ir/api/cron/smart-money */
 app.get('/api/cron/smart-money', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   const out = await smartMoney.runAlertCycle(async (endpoint, lang, payload) => {
@@ -5336,8 +5348,15 @@ async function readFcmTokensSafe() {
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   /*
-   * Registry maintenance rides on the existing daily slot rather than asking
-   * for a third Vercel cron (Hobby allows two).
+   * Registry maintenance rides on the existing daily slot rather than taking
+   * another cron slot. The old reason written here — "Hobby allows two" — was
+   * wrong and it nearly cost us production: Hobby allows 100 cron jobs per
+   * project, but EVERY one of them must fire at most once a day. A
+   * ten-minute step expression is rejected with "Hobby accounts are limited
+   * to daily cron jobs", and because the cron table is validated when the
+   * deployment is created, the whole deployment dies — no build, no error on
+   * the code, the site simply stops moving. docs/VERCEL-CRON-HOBBY-FA.md has
+   * the two-hour story.
    *
    *   · sweepCertifications — reads already treat an expired certificate as
    *     expired; this makes the stored row say so, instead of leaving
