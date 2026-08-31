@@ -224,8 +224,17 @@ export default async function run() {
     panel.includes('const intentIsLive = true'));
   t('the panel auto-fires a market brief on open',
     panel.includes('autoBriefRef') && panel.includes('intentAI.quick.phrase.marketBrief'));
-  t('quick chips send localized phrases for the six main actions',
-    panel.includes('QUICK_CHIPS') && panel.includes('intentAI.quick.phrase.'));
+  /*
+   * Owner decision: the quick-action chip row above the chat (swap / market
+   * brief / futures / lend / goal / Intent OS) and the pipeline stage rail
+   * were removed — everything they offered is one sentence in the composer,
+   * and they pushed the conversation below the fold. What must NOT regress is
+   * the localized market brief that still fires once on open, which is why the
+   * phrase key above is still asserted.
+   */
+  t('the quick-chip row and the pipeline stage rail are gone from the panel',
+    !panel.includes('QUICK_CHIPS') && !panel.includes('ia-quick-row')
+    && !panel.includes('AiStageRail') && !panel.includes('ia-stage-chip'));
   t('the history tab exists on the Intent OS page and renders the read view',
     os.includes("'history'") && os.includes('IntentTxHistory'));
   t('the history view is local-only with a user-controlled wipe',

@@ -38,7 +38,7 @@ import { useTranslation } from 'react-i18next';
 import { riseIn } from './PageTransition';
 import {
   startSession, chatTurn, confirmSessionPolicy, userStop, userControl,
-  describeLevel, policyPreview, INTENT_AI_VERSION,
+  policyPreview,
   openConfirmationGate, decideGate, assertGateAllowsSubmit, termsFromDraft,
   evaluateRisk, venueHealth, reconcile, executeConfirmed,
   describeWalletRuntime, signIntentWithWallet,
@@ -78,46 +78,6 @@ const LEVELS = [
   { value: 2, key: 'level2' },
   { value: 3, key: 'level3' }
 ];
-
-/**
- * One row of pipeline stages, each opening the screen where that stage is
- * REALLY performed (phase 153). Stages 1–3 run inside this panel; the rest
- * route to their live Intent OS tabs. Every chip is enabled — the stages are
- * genuinely usable — and the honest limits still live where they belong: the
- * activation strip keeps reporting whatever the server truthfully reports.
- */
-function AiStageRail() {
-  const { t } = useTranslation();
-  // Stages removed per user request: Risk, Execution, Memory, Middle chain (crosschain)
-  // Keeping: intent (runs in this panel), verification, and cross-chain review.
-  const stages = [
-    { id: 'intent', here: true },
-    { id: 'verification', tab: 'proofs' },
-    { id: 'crosschain', tab: 'crosschain' }
-  ];
-  return (
-    <div className="ia-stage-row" role="group" aria-label={t('intentAI.stages.title', { defaultValue: 'Pipeline stages' })}>
-      {stages.map((stage) => {
-        /* Plain anchors, not useNavigate(): this panel is also mounted
-           headless by the test suite without a Router, and a crash there is
-           a broken suite, not a broken promise. A full load of the target
-           tab is an acceptable price for that robustness. */
-        const label = t(`intentAI.stages.${stage.id}`);
-        return stage.tab ? (
-          <a key={stage.id} className="ia-stage-chip" href={`#/intent?tab=${stage.tab}`}>
-            <span>{label}</span>
-            <em>→</em>
-          </a>
-        ) : (
-          <span key={stage.id} className="ia-stage-chip is-here" title={t('intentAI.stages.here', { defaultValue: 'Runs in this panel' })}>
-            <span>{label}</span>
-            <em>•</em>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
 
 /*
  * Session controls, in rail order.
@@ -198,33 +158,22 @@ const CONTROL_VARIANTS = {
 /** The four Confirmation Gate actions the panel submits. */
 const GATE_ACTIONS = ['CONFIRM', 'REJECT', 'CANCEL', 'REAUTHORIZE'];
 
-/** Quick-action chips under the stage rail (labels + send phrases are i18n). */
-const QUICK_CHIPS = (() => {
-  const base = ['swap', 'marketBrief', 'futures', 'lend', 'goal', 'intentOS'];
-  /*
-   * The last action is read fail-safe. The previous fallback passed the raw
-   * word 'swap' to JSON.parse when the key was absent or corrupt — a string
-   * that is not valid JSON — so on a fresh profile (or cleared storage) the
-   * whole panel chunk crashed at module load and the AI screen never opened.
-   * Absent, corrupt or wrong-shaped storage now simply yields the default
-   * order instead of a dead screen.
-   */
-  let lastAction = null;
-  try {
-    const stored = JSON.parse(localStorage.getItem('fbt_intent_last_action') || 'null');
-    if (typeof stored === 'string') lastAction = stored;
-  } catch { lastAction = null; }
-  if (base.includes(lastAction)) {
-    const idx = base.indexOf(lastAction);
-    const moved = base.splice(idx, 1);
-    return [moved[0], ...base];
-  }
-  return base;
-})();
-
-const setLastAction = (action) => {
-  try { localStorage.setItem('fbt_intent_last_action', JSON.stringify(action)); } catch {}
-};
+/*
+ * Guided examples, one panel per venue. The glyph is drawn from the same
+ * typographic family the rest of the panel uses (no emoji: their size and
+ * baseline move with the platform font) and it is decorative only — the text
+ * of every example is the thing that carries meaning, and it is i18n.
+ */
+const EXAMPLE_GROUPS = [
+  { id: 'swap', glyph: '⇄' },
+  { id: 'bridge', glyph: '⇌' },
+  { id: 'send', glyph: '↗' },
+  { id: 'goal', glyph: '◎' },
+  { id: 'analyze', glyph: '⌁' },
+  { id: 'futures', glyph: '⇡' },
+  { id: 'lending', glyph: '◈' },
+  { id: 'staking', glyph: '⬡' }
+];
 
 function fmtTime(ts) {
   try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
@@ -1283,9 +1232,11 @@ export default function IntentAIPanel({
           <small>{t('intentAI.points.unit', { defaultValue: 'pts' })}</small>
         </a>
       </div>
-      <p className="muted" style={{ fontSize: 12.2, margin: '0 0 10px', lineHeight: 1.7 }}>
-        {t('intentAI.subtitle', { summary: describeLevel(level).summary, version: INTENT_AI_VERSION })}
-      </p>
+      {/*
+        The parser/version/analysis-only strapline that used to sit here was
+        removed on the owner's request: it repeated in build-log language what
+        the mission strip below already says in plain words.
+      */}
       {/*
         Phase 206 — the mission, stated where neither the user nor the AI can
         lose it. Reported as: the AI forgot why it exists for this app:
@@ -1313,11 +1264,16 @@ export default function IntentAIPanel({
         emergency stop, the receipt) always stay visible.
       */}
       <details className="ia-setup">
-        <summary className="muted">{t('intentAI.setup.title', { defaultValue: 'Session setup — mode, level, authorization' })}</summary>
+        <summary className="ia-setup-summary">
+          <span className="ia-setup-summary-text">{t('intentAI.setup.title', { defaultValue: 'Session setup — mode, level, authorization' })}</span>
+          <span className="ia-setup-caret" aria-hidden="true">⌄</span>
+        </summary>
 
-      <div className="card-inner" style={{ background: 'rgba(0,229,255,0.06)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
-        <div className="row-between" style={{ gap: 8 }}>
-          <p className="faint" style={{ fontSize: 10.5, margin: 0 }}>{t('intentAI.mode.title', { defaultValue: 'Primary mode' })}</p>
+        <div className="ia-setup-body">
+
+      <section className="ia-setup-card is-mode">
+        <header className="ia-setup-card-head">
+          <p className="ia-setup-card-title">{t('intentAI.mode.title', { defaultValue: 'Primary mode' })}</p>
           <button
             type="button"
             className="ia-info-btn"
@@ -1328,7 +1284,7 @@ export default function IntentAIPanel({
           >
             ⓘ
           </button>
-        </div>
+        </header>
         {/* Real mode selector: each chip carries the mode's actual participants
             from MODE_DEFINITIONS, and switching rebuilds the session boundary. */}
         {/*
@@ -1420,10 +1376,10 @@ export default function IntentAIPanel({
           </div>
         )}
 
-        <p className="muted" style={{ fontSize: 11.5, margin: '7px 0 0', lineHeight: 1.6 }}>
+        <p className="ia-setup-note">
           {t('intentAI.mode.boundary', { defaultValue: 'Analysis and preparation never authorize financial execution. Every execution requires a separate authorization screen.' })}
         </p>
-      </div>
+      </section>
 
       {/*
         Autonomy level. Three bare "L1" chips said nothing about what
@@ -1432,34 +1388,39 @@ export default function IntentAIPanel({
         carries the same glyph the Intent OS rail uses, so the two screens read
         as one product.
       */}
-      <div className="ia-level-row">
-        <span className="ia-level-label">{t('intentAI.policy.level', { defaultValue: 'Level' })}</span>
-        <div className="ia-levels" role="group" aria-label={t('intentAI.policy.level', { defaultValue: 'Level' })}>
-          {LEVELS.map((L) => {
-            const isCurrent = level === L.value;
-            return (
-              <button
-                key={L.key}
-                type="button"
-                className={`ia-level${isCurrent ? ' is-current' : level > L.value ? ' is-below' : ''}`}
-                onClick={() => setLevel(L.value)}
-                aria-pressed={isCurrent}
-                data-testid={`intent-ai-level-${L.value}`}
-              >
-                <span className="ia-level-icon" aria-hidden="true"><AutonomyLevelIcon level={L.value} size={14} /></span>
-                <b>{`L${L.value}`}</b>
-                <small>{t(`intentAI.levels.${L.key}`)}</small>
-              </button>
-            );
-          })}
+      <section className="ia-setup-card is-level">
+        <header className="ia-setup-card-head">
+          <p className="ia-setup-card-title">{t('intentAI.policy.level', { defaultValue: 'Level' })}</p>
+          <span className="ia-setup-card-value">{t(`intentAI.levels.${(LEVELS.find((L) => L.value === level) || LEVELS[0]).key}`)}</span>
+        </header>
+        <div className="ia-level-row">
+          <div className="ia-levels" role="group" aria-label={t('intentAI.policy.level', { defaultValue: 'Level' })}>
+            {LEVELS.map((L) => {
+              const isCurrent = level === L.value;
+              return (
+                <button
+                  key={L.key}
+                  type="button"
+                  className={`ia-level${isCurrent ? ' is-current' : level > L.value ? ' is-below' : ''}`}
+                  onClick={() => setLevel(L.value)}
+                  aria-pressed={isCurrent}
+                  data-testid={`intent-ai-level-${L.value}`}
+                >
+                  <span className="ia-level-icon" aria-hidden="true"><AutonomyLevelIcon level={L.value} size={14} /></span>
+                  <b>{`L${L.value}`}</b>
+                  <small>{t(`intentAI.levels.${L.key}`)}</small>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="card-inner" style={{ background: 'rgba(255,255,255,0.035)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
-        <div className="row-between" style={{ gap: 8 }}>
-          <span className="faint" style={{ fontSize: 10.5 }}>{t('intentAI.authorization.title', { defaultValue: 'Authorization boundary' })}</span>
-          <span className="faint" style={{ fontSize: 10.5 }}>{session?.modeLabel || MODE_LABELS[mode]}</span>
-        </div>
+      <section className="ia-setup-card is-auth">
+        <header className="ia-setup-card-head">
+          <p className="ia-setup-card-title">{t('intentAI.authorization.title', { defaultValue: 'Authorization boundary' })}</p>
+          <span className="ia-setup-card-value">{session?.modeLabel || MODE_LABELS[mode]}</span>
+        </header>
         {/*
           The boundary was three loose spans with inline colours and a bare
           "✓"/"!" as its only iconography, wrapping onto as many lines as the
@@ -1492,9 +1453,11 @@ export default function IntentAIPanel({
           would expect it. As a rail the order is stable at every width and the
           row scrolls instead of growing.
         */}
+        <div className="ia-setup-subhead">
+          <span>{t('intentAI.controls.title', { defaultValue: 'Session controls' })}</span>
+        </div>
         <ScrollRail
           className="ia-controls"
-          style={{ marginTop: 9 }}
           ariaLabel={t('intentAI.controls.title', { defaultValue: 'Session controls' })}
         >
           {CONTROL_ORDER.map((action) => (
@@ -1510,12 +1473,12 @@ export default function IntentAIPanel({
             </button>
           ))}
         </ScrollRail>
-      </div>
+      </section>
+        </div>
       </details>
 
-
       {session?.status === 'STOPPED' && (
-        <p className="notice" style={{ color: 'var(--bad, #ff6b6b)' }}>
+        <p className="notice ia-notice" data-testid="intent-ai-stopped-notice">
           {t('intentAI.stop.active')}
         </p>
       )}
@@ -1598,58 +1561,59 @@ export default function IntentAIPanel({
         </details>
       )}
 
-      {/* Practical prompt examples — one collapsible section per route. */}
-      <details className="ia-examples" style={{ marginBottom: 10, fontSize: 12 }}>
-        <summary className="muted">{t('intentAI.examples.title')}</summary>
+      {/*
+        Practical prompt examples. Presented as a real card — a header that
+        says what the box is FOR, one panel per venue with its own glyph, and
+        each example as a full-width row that reads like a sentence you could
+        say out loud. Tapping still only FILLS the composer: the user edits and
+        sends, so an example can never become an unreviewed instruction.
+      */}
+      <details className="ia-examples">
+        <summary className="ia-examples-summary">
+          <span className="ia-examples-glyph" aria-hidden="true">✦</span>
+          <span className="ia-examples-heading">
+            <b>{t('intentAI.examples.title')}</b>
+            <small>{t('intentAI.examples.subtitle', { defaultValue: 'Ready-made sentences the assistant understands — tap one, edit it, send it.' })}</small>
+          </span>
+          <span className="ia-examples-caret" aria-hidden="true">⌄</span>
+        </summary>
         <div className="ia-examples-grid">
-          {['swap', 'bridge', 'send', 'goal', 'analyze', 'futures', 'lending', 'staking'].map((group) => (
-            <div key={group} className="ia-example-group">
-              <p className="faint" style={{ fontSize: 10.5, margin: '0 0 4px' }}>{t(`intentAI.examples.${group}.title`)}</p>
-              {[1, 2, 3].map((n) => {
-                const text = t(`intentAI.examples.${group}.e${n}`);
-                if (!text || text.startsWith('intentAI.')) return null;
-                return (
-                  <button key={n} type="button" className="ia-example-chip" onClick={() => useExample(text)}>
-                    {text}
-                  </button>
-                );
-              })}
+          {EXAMPLE_GROUPS.map((group) => (
+            <div key={group.id} className="ia-example-group">
+              <p className="ia-example-group-head">
+                <span className="ia-example-group-glyph" aria-hidden="true">{group.glyph}</span>
+                <span className="ia-example-group-title">{t(`intentAI.examples.${group.id}.title`)}</span>
+              </p>
+              <div className="ia-example-list">
+                {[1, 2, 3].map((n) => {
+                  const text = t(`intentAI.examples.${group.id}.e${n}`);
+                  if (!text || text.startsWith('intentAI.')) return null;
+                  return (
+                    <button key={n} type="button" className="ia-example-chip" onClick={() => useExample(text)}>
+                      <span className="ia-example-text">{text}</span>
+                      <span className="ia-example-go" aria-hidden="true">↵</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
+        <p className="ia-examples-foot">
+          {t('intentAI.examples.hint', { defaultValue: 'A tap only fills the composer — nothing is sent and nothing moves until you send it and confirm.' })}
+        </p>
       </details>
 
       {/*
-        Pipeline stages as REACHABLE surfaces, not decoration. Every chip leads
-        to the screen where that stage is genuinely performed today: analysis,
-        policy and execution happen in this panel; verification, cross-chain
-        settlement (sequential + HTLC) and memory live in their Intent OS tabs.
-        Nothing here claims a capability the destination does not have.
+        Owner decision — the pipeline stage rail (intent · verification ·
+        cross-chain) and the quick-action chip row (swap / market brief /
+        futures / lend / goal / Intent OS) that used to sit above the chat are
+        removed. Both were shortcuts into things the user can simply ask for in
+        the composer, and they pushed the actual conversation below the fold.
+        The guided examples accordion above and the section links below remain
+        the reachable paths; the localized market-brief phrase still fires once
+        on open (see autoBriefRef).
       */}
-      <AiStageRail />
-
-      {/*
-        Quick actions — the six things people open this panel for. Each chip
-        SENDS a localized phrase (not just filling the composer): the parser
-        understands every one of them, and the market brief is the same
-        phrase the auto-fire on mount uses.
-      */}
-      <div className="ia-quick-row" role="group" aria-label={t('intentAI.quick.title', { defaultValue: 'Quick actions' })}>
-        {QUICK_CHIPS.map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            className="ia-chip ia-quick-chip"
-            onClick={() => { setLastAction(chip); sendText(t(`intentAI.quick.phrase.${chip}`)); }}
-            disabled={session?.status === 'STOPPED'}
-          >
-            {t(`intentAI.quick.${chip}`)}
-          </button>
-        ))}
-        {/* Plain anchors, not useNavigate: this panel also mounts headless in
-            the test suite without a Router (see AiStageRail). */}
-        {/* <a className="ia-chip ia-quick-chip ia-history-link" href="#/intent?tab=history">\n          {t('intentAI.history.viewAll', { defaultValue: 'History' })}</a> */}
-      </div>
 
       {/*
         Phase 206 — the rest of the app, ONE row away. Reported as

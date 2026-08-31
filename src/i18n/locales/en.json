@@ -5782,6 +5782,8 @@
     },
     "examples": {
       "title": "Prompt examples — tap to use",
+      "subtitle": "Ready-made sentences the assistant understands — tap one, edit it, then send.",
+      "hint": "A tap only fills the composer. Nothing is sent, and nothing moves, until you send it and confirm.",
       "swap": {
         "title": "Swap",
         "e1": "swap 100 USDC to ETH on Arbitrum",

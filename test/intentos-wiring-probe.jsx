@@ -367,39 +367,55 @@ export async function run(container) {
         && /from=USDC/.test(window.location.hash) && /to=ETH/.test(window.location.hash));
     }
 
-    /* ═══════════ 8b. AI PANEL STAGE CHIPS → INTENT TABS (the Telegram report) ═══════════ */
+    /* ═══════════ 8b. /intent FOLLOWS A QUERY-ONLY TAB CHANGE (the Telegram report) ═══════════ */
     /*
-     * The panel's pipeline chips are plain anchors to #/intent?tab=…. From
-     * /intent-ai they mount the page fresh; the previously broken case was the
-     * one a Telegram user hits — following one chip, coming back, following
-     * another: /intent is already mounted, only the query changes, and the tab
-     * used to ignore it completely.
+     * The AI panel's pipeline stage chips (intent · verification · cross-chain)
+     * were removed on the owner's request — everything they pointed at is one
+     * sentence in the composer, and the rail pushed the conversation below the
+     * fold. The bug they once exposed must still never come back: /intent is
+     * already mounted, only the ?tab= query changes, and the page used to
+     * ignore it completely. That is now driven straight through the hash,
+     * which is what EVERY caller does — a shared link, chat navigation, the
+     * browser back button — rather than through one particular row of chips.
      */
     await mountAt('#/intent-ai');
-    const chip = qa('a.ia-stage-chip').find((a) => /intent\?tab=/.test(a.getAttribute('href') || ''));
-    t('the AI panel exposes stage chips into Intent OS tabs', !!chip);
-    if (chip) {
-      await act(async () => { followAnchor(chip); });
-      await act(async () => { await sleep(40); });
-      const chipTab = (chip.getAttribute('href').match(/tab=([a-z]+)/) || [])[1];
-      t('following a stage chip opens /intent on that tab', window.location.hash.includes(`tab=${chipTab}`));
-      /* Back to the panel, follow a DIFFERENT chip — the query-only change. */
-      await act(async () => { window.location.hash = '#/intent-ai'; window.dispatchEvent(new window.HashChangeEvent('hashchange')); });
-      await act(async () => { await sleep(120); });
-      const other = qa('a.ia-stage-chip').find((a) => {
-        const m = (a.getAttribute('href') || '').match(/tab=([a-z]+)/);
-        return m && m[1] !== chipTab;
-      });
-      if (other) {
-        await act(async () => { followAnchor(other); });
-        await act(async () => { await sleep(40); });
-        const otherTab = (other.getAttribute('href').match(/tab=([a-z]+)/) || [])[1];
-        t('following a second chip switches the already-open /intent tab',
-          window.location.hash.includes(`tab=${otherTab}`) && q('.ios-content') !== null);
-      } else {
-        t('a second chip with a different tab exists to follow', false);
-      }
+    t('the AI panel no longer renders the pipeline stage rail',
+      qa('a.ia-stage-chip').length === 0 && !q('.ia-stage-row'));
+    t('the AI panel no longer renders the quick-action chip row',
+      qa('.ia-quick-chip').length === 0 && !q('.ia-quick-row'));
+
+    /*
+     * What replaced them must actually work: the section links are the row the
+     * owner kept, so one of them is followed here the way a browser would.
+     */
+    const loanLink = qa('a.ia-section-chip').find((a) => (a.getAttribute('href') || '') === '#/loan');
+    t('the AI panel still links out to the real product screens', !!loanLink);
+    if (loanLink) {
+      await act(async () => { followAnchor(loanLink); });
+      await act(async () => { await sleep(60); });
+      t('following a section link leaves the panel for that screen',
+        window.location.hash.startsWith('#/loan'));
     }
+
+    const activeTabLabel = () => (q('.ios-tabs button.active')?.textContent || '').trim();
+    await mountAt('#/intent?tab=proofs');
+    const proofsLabel = activeTabLabel();
+    t('/intent opens on the tab named in the query',
+      window.location.hash.includes('tab=proofs')
+      && q('.ios-content') !== null
+      && proofsLabel.length > 0
+      && q('.ios-tabs button.active')?.getAttribute('aria-selected') === 'true');
+
+    /* Query-only change on the ALREADY-MOUNTED page — the reported failure. */
+    await act(async () => {
+      window.location.hash = '#/intent?tab=crosschain';
+      window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+    });
+    await act(async () => { await sleep(120); });
+    t('a query-only change switches the already-open /intent tab',
+      window.location.hash.includes('tab=crosschain')
+      && q('.ios-content') !== null
+      && activeTabLabel() !== proofsLabel);
 
     /* Pure routing rules for the draft hand-off. */
     t('draftHandoffRoute: swap draft → /swap pair', (() => {
