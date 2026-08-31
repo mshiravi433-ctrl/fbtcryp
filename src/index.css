@@ -2593,6 +2593,17 @@ input, select, textarea { font-size: 16px !important; }
   transition: background 0.18s, border-color 0.18s, transform 0.12s ease-out;
 }
 
+/* Keep the intelligence center easy to spot instead of burying it among
+   secondary destinations in the More drawer. */
+.more-tile-featured {
+  border-color: color-mix(in srgb, var(--rgb-7) 48%, var(--line));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--rgb-7) 14%, transparent);
+}
+
+.more-tile-featured .more-tile-label {
+  font-weight: 700;
+}
+
 /*
  * Tap feedback in CSS rather than a Framer `whileTap`. :active covers touch
  * and mouse, and [data-pressed] holds the state for the ~90ms between the tap

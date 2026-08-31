@@ -161,7 +161,7 @@ const GROUPS = [
   {
     id: 'more',
     items: [
-      { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
+      { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)', featured: true },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
@@ -292,7 +292,8 @@ export default function MoreSheet({ open, onClose }) {
                       <button
                         key={item.to + item.key}
                         type="button"
-                        className="more-tile"
+                        className={`more-tile${item.featured ? ' more-tile-featured' : ''}`}
+                        data-featured={item.featured ? 'true' : 'false'}
                         data-pressed={pressed === item.to ? 'true' : 'false'}
                         onClick={() => go(item.to)}
                         style={{ padding: 12, borderRadius: 16, background: `linear-gradient(145deg, color-mix(in srgb, \${item.hue} 7%, rgba(255,255,255,0.05)), rgba(255,255,255,0.03))`, border: `1px solid color-mix(in srgb, \${item.hue} 12%, rgba(255,255,255,0.06))`, backdropFilter: 'blur(10px)' }}
