@@ -1343,4 +1343,64 @@ export {
   buildChatMarketAnalysis
 } from './liveMarketChat.js';
 
+/* ── AI COMMAND CENTER — the orchestrator, the intent engine, the execution
+   firewall, the AI-control budget and the automations ledger. One module that
+   the panel and `server/aiCommand.js` both import, so the browser and the API
+   can never disagree about what a plan may do. ── */
+export {
+  COMMAND_CENTER_SCHEMA,
+  AI_PLAN_SCHEMA,
+  AI_CONTROL_SCHEMA,
+  AI_AUTOMATION_SCHEMA,
+  AI_DASHBOARD_SCHEMA,
+  AI_CONTROL_STORE_KEY,
+  AI_AUTOMATION_STORE_KEY,
+  AI_STOP_STORE_KEY,
+  AI_INTENTS,
+  AI_SURFACES,
+  AI_TOOLS,
+  AI_AGENTS,
+  AI_MODES,
+  AI_CONTROL_CHAINS,
+  AI_CONTROL_DEFAULTS,
+  NON_EVM_VENUES,
+  AGENT_ROSTER_SIZE,
+  EXECUTION_STAGES,
+  FIREWALL_CHECKS,
+  AUTOMATION_KINDS,
+  AUTOMATION_CADENCES,
+  agentsForSurface,
+  lanesForIntent,
+  classifyIntent,
+  buildPlan,
+  /* `orchestrate` is taken by executionOrchestrator.js (Agent 2 — it builds one
+     plan for a compiled intent). The Command Center's dispatcher is the
+     router in front of that, so in this barrel it is exported under its own
+     name rather than shadowing the audited one. */
+  orchestrate as orchestrateCommandCenter,
+  validateExecution,
+  executionStageLedger,
+  thinkingStages,
+  portfolioRiskScore,
+  sanitizeAiControl,
+  aiControlPreview,
+  loadAiControl,
+  saveAiControl,
+  readStopFlag,
+  writeStopFlag,
+  normalizeAutomation,
+  createAutomation,
+  loadAutomations,
+  saveAutomations,
+  upsertAutomation,
+  removeAutomation,
+  setAutomationActive,
+  automationSpendToday,
+  automationTotals,
+  automationCadenceMs,
+  dashboardSnapshot,
+  intentForSurface,
+  surfaceForIntent
+} from './commandCenter.js';
+
 export const INTENT_AI_VERSION = 'intent-os.phase200.bounded-autonomy.v1';

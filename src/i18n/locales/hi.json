@@ -951,7 +951,6 @@
     "borrowBtn": "{{symbol}} उधार लें",
     "positionsTitle": "सक्रिय ऋण स्थितियाँ",
     "positionsBody": "Intent OS और wallet से अपनी स्थितियाँ प्रबंधित करें।",
-    "openIntentOS": "Intent OS खोलें",
     "openWallet": "Wallet",
     "howTitle": "यह कैसे काम करता है",
     "step1Title": "संपार्श्विक लॉक करें",
@@ -980,8 +979,6 @@
     "enterAmount": "राशि दर्ज करें",
     "enterCollateral": "संपार्श्विक दर्ज करें",
     "overMaxBorrow": "अधिकतम से अधिक",
-    "openIntentForSupply": "जमा के लिए Intent OS खुलेगा",
-    "openIntentForBorrow": "उधार के लिए Intent OS खुलेगा",
     "warningLiqTitle": "लिक्विडेशन जोखिम",
     "warningLiqBody": "यदि मूल्य सीमा से नीचे गिरा, तो स्मार्ट कॉन्ट्रैक्ट स्वतः बेच देता है। अपरिवर्तनीय।",
     "warningLiqBorrowBody": "यदि संपार्श्विक LTV से नीचे गिरा, कॉन्ट्रैक्ट बेच देता है। अपरिवर्तनीय।",
@@ -1018,7 +1015,7 @@
       "open": "{{page}} खोलें",
       "intentOS": "Intent OS"
     },
-"history": {
+    "history": {
       "viewAll": "इतिहास",
       "title": "लेन-देन इतिहास",
       "subtitle": "इस डिवाइस पर Intent AI ने क्या किया — दर्ज की गई हर रसीद, पहले नई।",

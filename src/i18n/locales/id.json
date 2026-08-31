@@ -951,7 +951,6 @@
     "borrowBtn": "Pinjam {{symbol}}",
     "positionsTitle": "Posisi pinjaman aktif",
     "positionsBody": "Kelola posisi Anda via Intent OS dan dompet.",
-    "openIntentOS": "Buka Intent OS",
     "openWallet": "Dompet",
     "howTitle": "Cara kerja",
     "step1Title": "Kunci agunan",
@@ -980,8 +979,6 @@
     "enterAmount": "Masukkan jumlah",
     "enterCollateral": "Masukkan agunan",
     "overMaxBorrow": "Melebihi maksimum",
-    "openIntentForSupply": "Intent OS akan terbuka",
-    "openIntentForBorrow": "Intent OS akan terbuka",
     "warningLiqTitle": "Risiko likuidasi",
     "warningLiqBody": "Jika nilai jatuh di bawah ambang batas, kontrak pintar menjualnya secara otomatis. Tidak dapat dibalik.",
     "warningLiqBorrowBody": "Jika agunan jatuh di bawah LTV, kontrak menjualnya. Tidak dapat dibalik.",
@@ -1018,7 +1015,7 @@
       "open": "Buka {{page}}",
       "intentOS": "Intent OS"
     },
-"history": {
+    "history": {
       "viewAll": "Riwayat",
       "title": "Riwayat transaksi",
       "subtitle": "Apa yang dilakukan Intent AI di perangkat ini — setiap bukti yang tercatat, terbaru dulu.",
