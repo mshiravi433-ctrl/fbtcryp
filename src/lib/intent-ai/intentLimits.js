@@ -28,10 +28,10 @@
  * before anything is drafted or signed.
  */
 export const INTENT_LIMITS = Object.freeze({
-  maxTotalInputUsd: 100_000,
-  maxPerTransactionUsd: 10_000,
-  maxGoalPct: 100,
-  maxGoalDurationDays: 7
+  maxTotalInputUsd: 10_000_000,
+  maxPerTransactionUsd: 400_000,
+  maxGoalPct: 500,
+  maxGoalDurationDays: 30
 });
 
 /** Maximum goal duration expressed in hours (30 days). */

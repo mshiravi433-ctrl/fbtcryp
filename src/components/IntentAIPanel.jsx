@@ -65,6 +65,7 @@ import {
   parseTeachCommand, parseMemoryCommand, rememberTaught,
   listTaught, clearTaught, taughtChainHint
 } from '../lib/intent-ai/taughtMemory.js';
+import { parseNavigationCommand } from '../lib/intent-ai/chatNavigation.js';
 import { getIntentActivation, getIntentCapabilities, getExternalAgents, getIntentPhaseStatus, getIntentPublicStatus } from '../lib/intentNetwork';
 import GoalCountdown from './GoalCountdown';
 import TokenApprovals from './TokenApprovals';
@@ -200,8 +201,20 @@ const GATE_ACTIONS = ['CONFIRM', 'REJECT', 'CANCEL', 'REAUTHORIZE'];
 
 /** Quick-action chips under the stage rail (labels + send phrases are i18n). */
 const QUICK_CHIPS = (() => {
-  const base = ['swap', 'marketBrief', 'futures', 'lend', 'goal'];
-  const lastAction = JSON.parse(localStorage.getItem('fbt_intent_last_action') || 'swap');
+  const base = ['swap', 'marketBrief', 'futures', 'lend', 'goal', 'intentOS'];
+  /*
+   * The last action is read fail-safe. The previous fallback passed the raw
+   * word 'swap' to JSON.parse when the key was absent or corrupt — a string
+   * that is not valid JSON — so on a fresh profile (or cleared storage) the
+   * whole panel chunk crashed at module load and the AI screen never opened.
+   * Absent, corrupt or wrong-shaped storage now simply yields the default
+   * order instead of a dead screen.
+   */
+  let lastAction = null;
+  try {
+    const stored = JSON.parse(localStorage.getItem('fbt_intent_last_action') || 'null');
+    if (typeof stored === 'string') lastAction = stored;
+  } catch { lastAction = null; }
   if (base.includes(lastAction)) {
     const idx = base.indexOf(lastAction);
     const moved = base.splice(idx, 1);
@@ -351,9 +364,20 @@ export default function IntentAIPanel({
    * broad scope, bounded size; the user raises them deliberately.
    */
   const [policyInput, setPolicyInput] = useState({
-    maxCapitalUsd: 500, maxTransactionUsd: 50, maxLossUsd: 50, maxLeverage: 2,
-    // allowedChains: '42161,1,137,10',
-    // allowedProtocols: 'swap,bridge,lending',
+    /* The documented defaults: $1k capital / $200 per transaction / $100 max
+       loss (see the L3 policy editor comment above). The previous values
+       ($500/$50/$50) refused a plain $100 swap with TRANSACTION_LIMIT_EXCEEDED
+       before the user had touched a single setting. */
+    maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
+    /*
+     * A fresh L3 policy MUST carry at least one chain and one protocol:
+     * sanitizePolicy refuses an L3 policy with empty lists (createPolicy then
+     * returns policy: null and every turn answers POLICY_BAD_POLICY — the
+     * exact dead end this restores). These defaults were commented out,
+     * which made the first L3 session in a fresh profile unusable.
+     */
+    allowedChains: '42161,1,137,10',
+    allowedProtocols: 'swap,bridge,lending',
     allowedAssets: '', durationMin: 30
   });
   const threadRef = useRef(null);
@@ -426,6 +450,18 @@ export default function IntentAIPanel({
   }, [session?.messages?.length]);
 
   /*
+   * Phase 208 — the pending hash navigation after a page command. Kept as a
+   * ref so an unmount (route change, test teardown) clears it instead of a
+   * stale timer forcing a navigation nobody asked for any more.
+   */
+  const navTimerRef = useRef(null);
+
+  /* A pending navigation timer never outlives the panel. */
+  useEffect(() => () => {
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
+  }, []);
+
+  /*
    * First-open market brief: the panel greets the user WITH a market read
    * instead of an empty thread. Fires exactly once per mount. The phrase is
    * localized — the parser understands the market-analysis keywords in the
@@ -492,7 +528,49 @@ export default function IntentAIPanel({
   /** One chat turn — shared by the composer and every quick-reply chip. */
   function sendText(text) {
     const value = String(text || '').trim();
-    if (!value || session?.status === 'STOPPED') return;
+    if (!value) return;
+    /*
+     * Phase 208 — a page request is answered AND performed. Checked before
+     * the STOPPED gate on purpose: the session controls fence the
+     * assistant's trading authority, never the user's way out of this
+     * screen. Navigation grants nothing financial — the reply carries
+     * canExecute: false and the Confirmation Gate is untouched.
+     */
+    const nav = parseNavigationCommand(value);
+    if (nav.ok) {
+      setSession((prev) => ({
+        ...prev,
+        messages: [...(prev?.messages || []), {
+          role: 'assistant',
+          type: 'navigation',
+          payload: {
+            target: nav.target,
+            route: nav.route,
+            labelKey: nav.labelKey,
+            canExecute: false,
+            financialExecutionAuthorized: false
+          },
+          ts: Date.now(),
+          id: `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+        }]
+      }));
+      /*
+       * The page opens for real. A short beat lets the reply paint first.
+       * The hash write is the ONLY navigation this panel performs, so a
+       * headless mount (no Router) simply keeps the reply — no crash, no
+       * import of react-router. On hash routers (see App.jsx) the write
+       * triggers the route change to /intent.
+       */
+      if (typeof window !== 'undefined') {
+        if (navTimerRef.current) clearTimeout(navTimerRef.current);
+        navTimerRef.current = setTimeout(() => {
+          navTimerRef.current = null;
+          try { window.location.hash = `#${nav.route}`; } catch { /* stay on the chat */ }
+        }, 300);
+      }
+      return;
+    }
+    if (session?.status === 'STOPPED') return;
     /*
      * Phase 205 — the teach/recall boundary, BEFORE the parser sees the text.
      * Teaching is explicit (a "remember:" / teach marker); the reply confirms
@@ -1595,9 +1673,10 @@ export default function IntentAIPanel({
         points screens were all one handoff away but nothing linked to them.
         Every chip is a plain anchor to a real route (see App.jsx) — and the
         parser knows the same words, so "farm" in chat and this chip land on
-        the same screen.
+        the same screen. The row is live again after an unterminated JSX
+        comment once swallowed it together with the chat thread.
       */}
-{/*
+      <div className="ia-section-links">
         {[
           { href: '#/wallet', key: 'wallet' },
           { href: '#/stocks', key: 'stocks' },
@@ -2328,6 +2407,20 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
   }
   if (type === 'policy-confirmation-required') {
     return <div>{t('intentAI.msg.policyConfirm')}</div>;
+  }
+  if (type === 'navigation') {
+    /* Phase 208 — the assistant opened (or is opening) a real screen. The
+       link is the reachable fallback for every surface where the auto-open
+       hash write cannot run; the label is i18n, never hardcoded. */
+    const label = t(payload.labelKey || 'intentAI.navigation.intentOS', { defaultValue: 'Intent OS' });
+    return (
+      <div className="ia-nav" data-testid="chat-navigation">
+        <span>{t('intentAI.navigation.opening', { page: label, defaultValue: `Opening ${label}…` })}</span>
+        <a className="ia-chip" href={`#${payload.route || '/intent'}`} data-testid="chat-navigation-link">
+          {t('intentAI.navigation.open', { page: label, defaultValue: `Open ${label}` })} →
+        </a>
+      </div>
+    );
   }
   return <span>{type}</span>;
 }

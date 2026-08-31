@@ -6411,14 +6411,21 @@
       "futures": "Futures",
       "lend": "Lend",
       "goal": "Goal",
+      "intentOS": "Intent OS",
       "phrase": {
         "marketBrief": "analyze BTC ETH BNB SOL XRP",
         "swap": "swap 100 USDC to ETH on Arbitrum",
         "bridge": "bridge 50 USDC from Arbitrum to Base",
         "futures": "open a 2x long on BTC perpetual with 100 USDT",
         "lend": "lend 100 USDC on Arbitrum",
-        "goal": "target 10% on 500 USDC in 4 hours"
+        "goal": "target 10% on 500 USDC in 4 hours",
+        "intentOS": "intent os"
       }
+    },
+    "navigation": {
+      "opening": "Opening {{page}}…",
+      "open": "Open {{page}}",
+      "intentOS": "Intent OS"
     },
     "history": {
       "viewAll": "History",

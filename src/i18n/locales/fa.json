@@ -6401,14 +6401,21 @@
       "futures": "فیوچرز",
       "lend": "وام‌دهی",
       "goal": "هدف",
+      "intentOS": "Intent OS",
       "phrase": {
         "marketBrief": "تحلیل BTC ETH BNB SOL XRP",
         "swap": "سواپ 100 USDC به ETH روی آربیتروم",
         "bridge": "bridge 50 USDC از آربیتروم به Base",
         "futures": "فیوچرز لانگ BTC با 100 دلار",
         "lend": "وام‌دهی 100 USDC روی آربیتروم",
-        "goal": "هدف 10 درصد سود روی 500 دلار در 4 ساعت"
+        "goal": "هدف 10 درصد سود روی 500 دلار در 4 ساعت",
+        "intentOS": "intent os"
       }
+    },
+    "navigation": {
+      "opening": "در حال باز کردن صفحهٔ {{page}}…",
+      "open": "باز کردن {{page}}",
+      "intentOS": "Intent OS"
     },
     "history": {
       "viewAll": "تاریخچه",

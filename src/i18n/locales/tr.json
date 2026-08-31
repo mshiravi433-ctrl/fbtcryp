@@ -1002,16 +1002,23 @@
       "futures": "Vadeli",
       "lend": "Borç ver",
       "goal": "Hedef",
+      "intentOS": "Intent OS",
       "phrase": {
         "marketBrief": "analyze BTC ETH BNB SOL XRP",
         "swap": "swap 100 USDC to ETH on Arbitrum",
         "bridge": "bridge 50 USDC from Arbitrum to Base",
         "futures": "open a 2x long on BTC perpetual with 100 USDT",
         "lend": "lend 100 USDC on Arbitrum",
-        "goal": "target 10% on 500 USDC in 4 hours"
+        "goal": "target 10% on 500 USDC in 4 hours",
+        "intentOS": "intent os"
       }
     },
-    "history": {
+    "navigation": {
+      "opening": "{{page}} açılıyor…",
+      "open": "{{page}} sayfasını aç",
+      "intentOS": "Intent OS"
+    },
+"history": {
       "viewAll": "Geçmiş",
       "title": "İşlem geçmişi",
       "subtitle": "Intent AI’ın bu cihazda yaptıkları — kaydettiği her makbuz, en yeniden eskiye.",

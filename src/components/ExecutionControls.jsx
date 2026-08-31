@@ -88,7 +88,11 @@ export default function ExecutionControls({ compact = false }) {
   };
 
   return (
-    <div className="exec-controls" data-testid="execution-controls" style="border: 1px solid #e0e0e0; border-radius: 8; padding: 12; background: rgba(255,255,255,0.03); margin-bottom: 16;">
+    <div
+      className="exec-controls"
+      data-testid="execution-controls"
+      style={{ border: '1px solid #e0e0e0', borderRadius: 8, padding: 12, background: 'rgba(255,255,255,0.03)', marginBottom: 16 }}
+    >
       <div className="exec-controls-head">
         <span className="faint">
           {t('intentOS.execControls.title', { defaultValue: 'Execution controls' })}

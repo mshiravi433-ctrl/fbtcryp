@@ -1002,16 +1002,23 @@
       "futures": "फ़्यूचर्स",
       "lend": "उधार दें",
       "goal": "लक्ष्य",
+      "intentOS": "Intent OS",
       "phrase": {
         "marketBrief": "analyze BTC ETH BNB SOL XRP",
         "swap": "swap 100 USDC to ETH on Arbitrum",
         "bridge": "bridge 50 USDC from Arbitrum to Base",
         "futures": "open a 2x long on BTC perpetual with 100 USDT",
         "lend": "lend 100 USDC on Arbitrum",
-        "goal": "target 10% on 500 USDC in 4 hours"
+        "goal": "target 10% on 500 USDC in 4 hours",
+        "intentOS": "intent os"
       }
     },
-    "history": {
+    "navigation": {
+      "opening": "{{page}} खुल रहा है…",
+      "open": "{{page}} खोलें",
+      "intentOS": "Intent OS"
+    },
+"history": {
       "viewAll": "इतिहास",
       "title": "लेन-देन इतिहास",
       "subtitle": "इस डिवाइस पर Intent AI ने क्या किया — दर्ज की गई हर रसीद, पहले नई।",

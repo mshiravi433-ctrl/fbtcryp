@@ -210,6 +210,22 @@ export async function run(container) {
       !!q('[data-testid="goal-countdown"]')
       && /Goal countdown/i.test(q('[data-testid="goal-countdown"]').textContent || ''));
 
+    /* ---------------- 7. "intent os" opens the page ---------------- */
+    /* The reported bug, driven through the keyboard: typing "intent os" into
+       the assistant did nothing — no page opened. The command must win over
+       the guided flow (which is still active here), emit the navigation
+       reply, and perform the real hash write to the Intent OS route. */
+    await act(async () => { setInputValue(composerInput, 'intent os'); });
+    await act(async () => { q('.ia-composer .ia-send').click(); });
+    await act(async () => { await sleep(30); });
+    t('"intent os" produces the navigation reply with a reachable link',
+      !!q('[data-testid="chat-navigation"]')
+      && /#\/intent$/.test(q('[data-testid="chat-navigation-link"]')?.getAttribute('href') || ''));
+
+    await act(async () => { await sleep(450); });
+    t('"intent os" actually navigates the hash to the Intent OS route',
+      /^#\/intent/.test(window.location.hash || ''));
+
     t('the panel produced no unexpected console errors', errors.length === 0);
 
     await act(async () => { root.unmount(); });

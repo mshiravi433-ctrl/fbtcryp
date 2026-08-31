@@ -1002,16 +1002,23 @@
       "futures": "Futuros",
       "lend": "Prestar",
       "goal": "Meta",
+      "intentOS": "Intent OS",
       "phrase": {
         "marketBrief": "analyze BTC ETH BNB SOL XRP",
         "swap": "swap 100 USDC to ETH on Arbitrum",
         "bridge": "bridge 50 USDC from Arbitrum to Base",
         "futures": "open a 2x long on BTC perpetual with 100 USDT",
         "lend": "lend 100 USDC on Arbitrum",
-        "goal": "target 10% on 500 USDC in 4 hours"
+        "goal": "target 10% on 500 USDC in 4 hours",
+        "intentOS": "intent os"
       }
     },
-    "history": {
+    "navigation": {
+      "opening": "Abriendo {{page}}…",
+      "open": "Abrir {{page}}",
+      "intentOS": "Intent OS"
+    },
+"history": {
       "viewAll": "Historial",
       "title": "Historial de transacciones",
       "subtitle": "Lo que hizo Intent AI en este dispositivo — cada recibo registrado, el más reciente primero.",

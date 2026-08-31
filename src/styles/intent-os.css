@@ -2294,3 +2294,18 @@
   flex: 0 0 auto;
 }
 .ia-connection .ia-hint { grid-column: auto; flex-basis: 100%; }
+
+/* ─── Phase 208 — chat navigation reply ("intent os" opens the page) ──────── */
+.ia-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.ia-nav .ia-chip {
+  border-color: rgba(0, 255, 157, 0.35);
+  background: rgba(0, 255, 157, 0.08);
+  text-decoration: none;
+}
