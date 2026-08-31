@@ -83,6 +83,10 @@
     {
       "path": "/api/cron/train",
       "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/smart-money",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

@@ -32,6 +32,7 @@ import { calmResultIsUsable, fetchCalm } from './calm.js';
 import { fetchThorPools, thorQuote, thorStatus } from './thorchain.js';
 import { fetchNews } from './news.js';
 import { cachedWhales } from './whales.js';
+import * as smartMoney from './smartMoney/index.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
@@ -3386,6 +3387,216 @@ app.get('/api/news/whales', async (req, res) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * SMART MONEY — FBT On-Chain Intelligence Layer
+ * --------------------------------------------------------------------------
+ * Whales, smart wallets, token intelligence, money/liquidity flows and
+ * tracked-wallet alerts — all derived from REAL on-chain / market data
+ * (RPC, explorers, DexScreener, Blockscout, Solscan) via server/smartMoney.
+ * Every metric degrades to an honest `dataStatus` when a source is missing;
+ * nothing is fabricated. Scores describe observed behaviour — they are NOT
+ * buy signals, profit guarantees or insider information.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+const smJson = (res, value, { sMax = 60, maxAge = 20 } = {}) => {
+  res.set('cache-control', `public, max-age=${maxAge}, s-maxage=${sMax}, stale-while-revalidate=300`);
+  return res.json(value);
+};
+
+/* Overview — headline metrics, flows, token accumulation ranking, early feed. */
+app.get('/api/v1/smart-money/overview', async (req, res) => {
+  const window = ['1h', '4h', '24h', '7d', '30d'].includes(String(req.query.window)) ? String(req.query.window) : '24h';
+  try {
+    return smJson(res, await smartMoney.getOverview({ window }), { sMax: 60, maxAge: 30 });
+  } catch (err) {
+    return res.status(502).json({ error: 'SMART_MONEY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Whale board — most active large wallets. */
+app.get('/api/v1/smart-money/whales', async (req, res) => {
+  try {
+    const minUsd = Math.max(10_000, Math.min(100_000_000, Number(req.query.minUsd) || 250_000));
+    return smJson(res, await smartMoney.whaleBoard({ minUsd }), { sMax: 60 });
+  } catch (err) {
+    return res.status(502).json({ error: 'SMART_MONEY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Smart wallets (alias of the whale board filtered toward tagged smart money
+   when wallet intel is requested — same source, no parallel endpoint). */
+app.get('/api/v1/smart-money/wallets', async (req, res) => {
+  try {
+    const minUsd = Math.max(10_000, Math.min(100_000_000, Number(req.query.minUsd) || 250_000));
+    const board = await smartMoney.whaleBoard({ minUsd });
+    return smJson(res, board, { sMax: 60 });
+  } catch (err) {
+    return res.status(502).json({ error: 'SMART_MONEY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Wallet detail — scores, reputation, risk, P&L, holdings, activity.
+   :chain is a chain id (1,56,137,…) or the string "solana". */
+app.get('/api/v1/smart-money/wallet/:chain/:address', async (req, res) => {
+  try {
+    const chain = req.params.chain === 'solana' ? 'solana' : Number(req.params.chain);
+    const out = await smartMoney.analyzeWallet(req.params.address, chain);
+    res.set('cache-control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    if (err?.code === 'BAD_ADDRESS') return res.status(400).json({ error: 'BAD_ADDRESS' });
+    return res.status(502).json({ error: 'WALLET_INTEL_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Back-compat: wallet lookup without a chain in the path (auto-detects). */
+app.get('/api/v1/smart-money/wallet/:address', async (req, res) => {
+  try {
+    const out = await smartMoney.analyzeWallet(req.params.address, req.query.chain || null);
+    res.set('cache-control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    if (err?.code === 'BAD_ADDRESS') return res.status(400).json({ error: 'BAD_ADDRESS' });
+    return res.status(502).json({ error: 'WALLET_INTEL_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Token intelligence — liquidity, holders, accumulation/distribution, flows. */
+app.get('/api/v1/smart-money/token/:chain/:address', async (req, res) => {
+  try {
+    const chainId = Number(req.params.chain) || 1;
+    const [intel, signals] = await Promise.all([
+      smartMoney.analyzeToken(req.params.address, chainId),
+      smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h')).catch(() => null)
+    ]);
+    res.set('cache-control', 'public, max-age=30, s-maxage=90, stale-while-revalidate=600');
+    return res.json({ ...intel, smartMoneyFlow: signals });
+  } catch (err) {
+    if (err?.code === 'BAD_ADDRESS') return res.status(400).json({ error: 'BAD_ADDRESS' });
+    return res.status(502).json({ error: 'TOKEN_INTEL_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Exchange flows — CEX inflow/outflow over 24h/7d/30d. */
+app.get('/api/v1/smart-money/flows', async (_req, res) => {
+  try {
+    return smJson(res, await smartMoney.exchangeFlows(), { sMax: 60 });
+  } catch (err) {
+    return res.status(502).json({ error: 'FLOWS_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Liquidity movement — LP added/removed/pool events. */
+app.get('/api/v1/smart-money/liquidity', async (req, res) => {
+  try {
+    const minUsd = Math.max(10_000, Math.min(100_000_000, Number(req.query.minUsd) || 200_000));
+    const out = await smartMoney.getLiquidityEvents({ minUsd });
+    const value = out?.value ?? out;
+    return smJson(res, value, { sMax: 90 });
+  } catch (err) {
+    return res.status(502).json({ error: 'LIQUIDITY_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Exchange wallet registry — transparent sourcing. */
+app.get('/api/v1/smart-money/exchanges', async (_req, res) => {
+  res.set('cache-control', 'public, max-age=300, s-maxage=3600');
+  return res.json(await smartMoney.getExchanges());
+});
+
+/* Early token detection. */
+app.get('/api/v1/smart-money/early-tokens', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(30, Number(req.query.limit) || 12));
+    const out = await smartMoney.earlyTokens({ limit });
+    return smJson(res, out, { sMax: 120 });
+  } catch (err) {
+    return res.status(502).json({ error: 'EARLY_TOKENS_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Fresh wallets. */
+app.get('/api/v1/smart-money/fresh-wallets', async (_req, res) => {
+  try {
+    return smJson(res, await smartMoney.freshWallets(), { sMax: 120 });
+  } catch (err) {
+    return res.status(502).json({ error: 'FRESH_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
+  }
+});
+
+/* Alerts for the caller's push identity. */
+app.get('/api/v1/smart-money/alerts', async (req, res) => {
+  const identity = String(req.query.identity || req.get('x-push-identity') || '');
+  if (!identity) return res.json({ schema: 'fbt.smart-money-alerts.v1', alerts: [] });
+  try {
+    const alerts = await smartMoney.readAlerts(identity, { limit: 50 });
+    res.set('cache-control', 'private, max-age=10');
+    return res.json({ schema: 'fbt.smart-money-alerts.v1', alerts });
+  } catch (err) {
+    return res.status(502).json({ error: 'ALERTS_UNAVAILABLE', detail: String(err.message).slice(0, 120) });
+  }
+});
+
+/* Mark alerts read. */
+app.post('/api/v1/smart-money/alerts/read', async (req, res) => {
+  const identity = String(req.body?.identity || '').trim();
+  if (!identity) return res.status(400).json({ error: 'BAD_IDENTITY' });
+  try {
+    return res.json(await smartMoney.markAlertsRead(identity));
+  } catch (err) {
+    return res.status(502).json({ error: 'ALERTS_UNAVAILABLE', detail: String(err.message).slice(0, 120) });
+  }
+});
+
+/*
+ * Watchlist — replace (PUT semantics via POST) the rows for one device.
+ * Body: { identity, lang, rows:[{id, chain, address, target, types, label,
+ *                                condition:{signal,confidence}}] }
+ */
+app.post('/api/v1/smart-money/watchlist', async (req, res) => {
+  const identity = String(req.body?.identity || '').trim();
+  if (!identity) return res.status(400).json({ error: 'BAD_IDENTITY' });
+  try {
+    const out = await smartMoney.putWatchlist(identity, req.body?.rows || [], String(req.body?.lang || 'en').slice(0, 5));
+    res.set('cache-control', 'no-store');
+    return res.json(out);
+  } catch (err) {
+    if (String(err.message) === 'BAD_IDENTITY') return res.status(400).json({ error: 'BAD_IDENTITY' });
+    return res.status(502).json({ error: 'WATCHLIST_UNAVAILABLE', detail: String(err.message).slice(0, 120) });
+  }
+});
+
+/* Read a device's watchlist. */
+app.get('/api/v1/smart-money/watchlist', async (req, res) => {
+  const identity = String(req.query.identity || '').trim();
+  if (!identity) return res.json({ schema: 'fbt.smart-money-watchlist.v1', rows: [] });
+  const rows = (await smartMoney.readWatchlist()).filter((r) => r.identity === identity)
+    .map(({ identity: _i, ...rest }) => rest); // never echo one device's id elsewhere
+  res.set('cache-control', 'private, max-age=10');
+  return res.json({ schema: 'fbt.smart-money-watchlist.v1', rows });
+});
+
+/* Delete one tracked row. */
+app.delete('/api/v1/smart-money/watchlist/:id', async (req, res) => {
+  const identity = String(req.body?.identity || req.query.identity || '').trim();
+  if (!identity) return res.status(400).json({ error: 'BAD_IDENTITY' });
+  try {
+    return res.json(await smartMoney.deleteWatch(identity, req.params.id));
+  } catch (err) {
+    return res.status(502).json({ error: 'WATCHLIST_UNAVAILABLE', detail: String(err.message).slice(0, 120) });
+  }
+});
+
+/* Cron: run one smart-money alert evaluation cycle. Same secret guard as the
+   order watcher; delivers via the shared push/FCM transport. */
+app.get('/api/cron/smart-money', async (req, res) => {
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const out = await smartMoney.runAlertCycle(async (endpoint, lang, payload) => {
+    return deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang });
+  });
+  return res.json(out);
+});
+
 /*
  * CRYPTO RADIO — spoken news from real podcast feeds.
  *
@@ -5112,10 +5323,12 @@ app.get('/api/cron/daily', async (req, res) => {
     ensureOpsHydrated().catch(() => {}),
     ensureStage3Hydrated().catch(() => {})
   ]);
-  const [web, fcm, watch, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
+  const [web, fcm, watch, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
     runWatchCycle(sendWatchAlert),
+    smartMoney.runAlertCycle(async (endpoint, _lang, payload) =>
+      deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag })),
     sweepCertifications(),
     getReputationSnapshot({ force: true }),
     runSelfProbe({}),
@@ -5127,6 +5340,7 @@ app.get('/api/cron/daily', async (req, res) => {
     web: web.status === 'fulfilled' ? web.value : { error: String(web.reason).slice(0, 120) },
     fcm: fcm.status === 'fulfilled' ? fcm.value : { error: String(fcm.reason).slice(0, 120) },
     watch: watch.status === 'fulfilled' ? watch.value : { error: String(watch.reason).slice(0, 120) },
+    smartMoneyAlerts: smartMoneyAlerts.status === 'fulfilled' ? smartMoneyAlerts.value : { error: String(smartMoneyAlerts.reason).slice(0, 120) },
     certifications: settled(certs, (value) => value.ok ? { expired: value.expired, active: value.active } : { skipped: value.code }),
     reputation: settled(reputation, (value) => ({ dataStatus: value.dataStatus, subjects: value.snapshot?.subjectCount ?? 0 })),
     intentActivation: {

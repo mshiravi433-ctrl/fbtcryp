@@ -605,7 +605,41 @@ export default function run() {
       }
     }
 
-    const unrouted = [...called].filter((p) => !declared.some((d) => d.re.test(p)));
+    // A base prefix (e.g. `${apiBase()}/v1/smart-money`) that sits at the end
+    // of a template because the concrete route is appended by the next call is
+    // not itself an API call — it is a prefix. The client's smart-money client
+    // builds `BASE + '/overview'` etc., so the concrete paths are asserted
+    // separately below; a bare prefix must not fail the "every call is routed"
+    // check for the same reason a route *prefix* is never a route.
+    const prefixes = new Set(['v1/smart-money']);
+    const unrouted = [...called].filter(
+      (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p))
+    );
+    // Explicit coverage for the On-Chain Intelligence Layer surface: every
+    // route must really be declared in server/app.js (the grep below would
+    // catch a handler written but never wired — the same bug class this whole
+    // section guards against).
+    const smRoutes = [
+      "app.get('/api/v1/smart-money/overview'",
+      "app.get('/api/v1/smart-money/whales'",
+      "app.get('/api/v1/smart-money/wallets'",
+      "app.get('/api/v1/smart-money/wallet/:chain/:address'",
+      "app.get('/api/v1/smart-money/token/:chain/:address'",
+      "app.get('/api/v1/smart-money/flows'",
+      "app.get('/api/v1/smart-money/liquidity'",
+      "app.get('/api/v1/smart-money/exchanges'",
+      "app.get('/api/v1/smart-money/early-tokens'",
+      "app.get('/api/v1/smart-money/fresh-wallets'",
+      "app.get('/api/v1/smart-money/alerts'",
+      "app.post('/api/v1/smart-money/watchlist'",
+      "app.delete('/api/v1/smart-money/watchlist/:id'",
+      "app.get('/api/cron/smart-money'"
+    ];
+    const missingSmRoutes = smRoutes.filter((r) => !serverSrc.includes(r));
+    t(
+      `every smart-money route is wired in the server${missingSmRoutes.length ? ` — missing: ${missingSmRoutes.join(', ')}` : ''}`,
+      missingSmRoutes.length === 0
+    );
     t(
       `every /api path the client calls is routed${unrouted.length ? ` — unrouted: ${unrouted.join(', ')}` : ''}`,
       unrouted.length === 0

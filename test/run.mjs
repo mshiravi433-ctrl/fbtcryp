@@ -1107,6 +1107,17 @@ console.log('\n▸ probing order-watch push delivery…');
 }
 
 /*
+ * SMART MONEY intelligence layer — engines, registry discipline, fail-closed
+ * data sources, the full /api/v1/smart-money/* surface, watchlist persistence
+ * and the detect → alert → push-notification cycle.
+ */
+console.log('\n▸ probing the Smart Money intelligence layer…');
+{
+  const rows = (await import('./smart-money-probe.mjs')).default;
+  report('smart money', rows);
+}
+
+/*
  * QR CAMERA LIFECYCLE.
  *
  * Wiring check #32 proves the dependency array was written correctly. It

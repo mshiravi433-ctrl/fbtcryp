@@ -7,6 +7,13 @@ import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
 import { SPECULATION_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
+const IconSmartMoney = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 import {
   IconActivity,
   IconBriefcase,
@@ -154,6 +161,7 @@ const GROUPS = [
   {
     id: 'more',
     items: [
+      { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
