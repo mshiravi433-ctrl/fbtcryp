@@ -102,6 +102,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
   const solanaAddressLive = solana.address || solanaAddress();
+  const evmConnected = Boolean(wallet?.isConnected && wallet?.address);
+  const solanaConnected = Boolean(solanaAddressLive);
+  const walletConnected = evmConnected || solanaConnected;
+  const walletCanSign = Boolean((evmConnected && !wallet?.locked) || solanaConnected);
   const aiContext = useMemo(() => {
     const rows = Array.isArray(multi?.rows) ? multi.rows : [];
     const evmRows = rows.map((r) => ({
@@ -126,8 +130,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const solTotal = solRows.reduce((s, r) => s + (Number(r.valueUsd) || 0), 0);
     return {
       wallet: {
-        connected: Boolean(wallet?.isConnected),
-        canSign: Boolean(wallet?.isConnected && !wallet?.locked),
+        connected: walletConnected,
+        canSign: walletCanSign,
         evmAddresses: wallet?.address ? [wallet.address] : [],
         solanaAddresses: solanaAddressLive ? [solanaAddressLive] : []
       },
@@ -145,7 +149,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       recentActivity: [],
       conversationSummary: memorySummary || ''
     };
-  }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows]);
+  }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign]);
 
   const sendMessage = useCallback(async (rawText) => {
     const message = String(rawText || '').trim();
@@ -383,7 +387,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             <span className="iaos-mark" aria-hidden="true">✦</span>
             <h1>{t('intentAIOS.header', { defaultValue: 'Intent AI' })}</h1>
           </div>
-          <span className="iaos-live" data-on={wallet?.isConnected ? 'true' : 'false'} title={wallet?.isConnected ? 'Wallet connected' : 'Wallet not connected'}>
+          <span className="iaos-live" data-on={walletConnected ? 'true' : 'false'} title={walletConnected ? 'Wallet connected' : 'Wallet not connected'}>
             <i aria-hidden="true" /> {t('intentAIOS.live', { defaultValue: 'Live' })}
           </span>
         </header>
@@ -486,8 +490,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             onChange={(e) => setInput(e.target.value)}
             placeholder={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
+            enterKeyHint="send"
           />
-          <button type="button" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinking.length > 0}>➤</button>
+          <button type="submit" className="iaos-send" aria-label={t('intentAIOS.send', { defaultValue: 'Send' })} disabled={!input.trim() || thinking.length > 0}>➤</button>
         </form>
       </div>
 
