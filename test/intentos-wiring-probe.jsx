@@ -273,6 +273,74 @@ export async function run(container) {
     t('a same-token lending workflow never offers the /swap review hand-off',
       strayHandoff.length === 0);
 
+    /* ═══════════ 7b. THE COMPILED WORKFLOW STEP ACTIONS ARE NOT DEAD ═══════════ */
+    /* Reported (fa): «دکمهٔ مجوز یا سپرده و بقیهٔ دکمهها کار نمیده». The step
+       buttons used to navigate back to /intent?tab=compose — the page that was
+       already open, with query params nothing consumes — so the pathname never
+       changed and every button looked dead. Each action must now land on the
+       screen where that step really runs, carrying the intent id. */
+
+    await mountAt('#/intent?tab=compose&hint=loan-supply&chain=42161&from=USDT&amount=1000');
+    await compile();
+    const approveBtn = q('[data-testid="workflow-step-action-approve"]');
+    t('the approve step renders its own action button', !!approveBtn);
+    if (approveBtn) {
+      await act(async () => { click(approveBtn); });
+      await act(async () => { await sleep(40); });
+      t('approve hands off to the loan supply tab (a real screen change)',
+        window.location.hash.startsWith('#/loan')
+        && /tab=supply/.test(window.location.hash)
+        && /intent=/.test(window.location.hash));
+    }
+
+    await mountAt('#/intent?tab=compose&hint=loan-supply&chain=42161&from=USDT&amount=1000');
+    await compile();
+    const depositBtn = q('[data-testid="workflow-step-action-deposit"]');
+    t('the deposit step renders its own action button', !!depositBtn);
+    if (depositBtn) {
+      await act(async () => { click(depositBtn); });
+      await act(async () => { await sleep(40); });
+      t('deposit hands off to the loan supply tab', window.location.hash.startsWith('#/loan') && /tab=supply/.test(window.location.hash));
+    }
+
+    await mountAt('#/intent?tab=compose&hint=loan-borrow&chain=42161&from=USDT&amount=100&collateral=150');
+    await compile();
+    const borrowBtn = q('[data-testid="workflow-step-action-borrow"]');
+    t('the borrow step renders its own action button', !!borrowBtn);
+    if (borrowBtn) {
+      await act(async () => { click(borrowBtn); });
+      await act(async () => { await sleep(40); });
+      t('borrow hands off to the loan borrow tab', window.location.hash.startsWith('#/loan') && /tab=borrow/.test(window.location.hash));
+    }
+
+    /* The default same-chain workflow template: swap → deposit. The swap step
+       must land on /swap with the REAL pair, not loop back to compose. */
+    await mountAt('#/intent?tab=compose');
+    const workflowTemplate = q('[data-testid="intent-template-workflow"]');
+    t('the workflow template selector renders', !!workflowTemplate);
+    if (workflowTemplate) {
+      await act(async () => { click(workflowTemplate); });
+      await act(async () => { await sleep(30); });
+      await compile();
+      const swapBtn = q('[data-testid="workflow-step-action-swap"]');
+      t('the workflow swap step renders its own action button', !!swapBtn);
+      if (swapBtn) {
+        await act(async () => { click(swapBtn); });
+        await act(async () => { await sleep(40); });
+        t('the workflow swap step lands on /swap with the draft pair',
+          window.location.hash.startsWith('#/swap')
+          && /from=USDC/.test(window.location.hash) && /to=ETH/.test(window.location.hash));
+      }
+    }
+
+    /* The Loan page must honour the hand-off's ?tab= deep link. */
+    await mountAt('#/loan?tab=borrow');
+    t('the loan page opens its borrow tab from ?tab=borrow',
+      q('[data-testid="loan-tab-borrow"]')?.getAttribute('data-active') === 'true');
+    await mountAt('#/loan');
+    t('the loan page defaults to supply without a tab param',
+      q('[data-testid="loan-tab-supply"]')?.getAttribute('data-active') === 'true');
+
     /* ═══════════ 8. AI CHAT DRAFT → REAL SCREEN (the dead hand-off button) ═══════════ */
     await mountAt('#/intent-ai');
     const composer = q('.ia-composer input');

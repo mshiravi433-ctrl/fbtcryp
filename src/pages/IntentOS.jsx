@@ -69,6 +69,92 @@ const DEFAULT_WORKFLOW = [
   defaultWorkflowStep('deposit', 'deposit', 'ETH', 'Deposit into lending', 42161)
 ];
 
+/**
+ * Where ONE step of a compiled workflow really executes.
+ * ---------------------------------------------------------------------------
+ * Reported: "the approve / deposit buttons (and every other one) do not
+ * work". The step actions navigated to `/intent?tab=compose&…` — the page
+ * the user was ALREADY on, with query params (intent/step) that nothing on
+ * the compose tab consumes. The pathname never changed, so the route never
+ * remounted, the tab never moved, and every button looked dead.
+ *
+ * Each action now lands on the screen where that step genuinely runs,
+ * carrying the workflow's pair, amount and intent id:
+ *
+ *   swap / approve → /swap    (the approval transaction is part of the
+ *                              trade path there)
+ *   deposit / borrow → /loan  (supply / borrow tab)
+ *   bridge → /bridge          (fromChain + token; the step's chain target
+ *                              when it names a known network)
+ *   send → /wallet
+ *
+ * Intent OS still executes nothing itself: the destinations are the real
+ * screens, and each keeps its own confirmation gates.
+ */
+export function stepVenueRoute(step, intent, allSteps = []) {
+  const fromChain = String(step.chainId || intent.chainId || '');
+  /* An "approve" in a lending workflow grants the pool allowance, so its
+     real venue is the Loan supply tab — not a swap screen. */
+  const lendingWorkflow = Array.isArray(allSteps)
+    && allSteps.some((s) => s?.action === 'deposit' || s?.action === 'borrow');
+  const withIntent = (extra = {}) => {
+    const params = new URLSearchParams({
+      intent: String(intent.id || ''),
+      step: String(step.id || '')
+    });
+    for (const [key, value] of Object.entries(extra)) {
+      if (value !== null && value !== undefined && String(value).trim() !== '') params.set(key, String(value));
+    }
+    return params;
+  };
+  switch (String(step.action || '')) {
+    case 'swap': {
+      const extra = {
+        from: intent.fromSymbol,
+        amount: intent.amountIn,
+        chain: fromChain
+      };
+      /* A same-symbol lending workflow must not land as a dead USDT→USDT
+         quote; without a destination the swap screen picks its own. */
+      if (intent.toSymbol && intent.toSymbol !== intent.fromSymbol) extra.to = intent.toSymbol;
+      return `/swap?${withIntent(extra).toString()}`;
+    }
+    case 'approve':
+      if (lendingWorkflow) return `/loan?${withIntent({ tab: 'supply' }).toString()}`;
+      return `/swap?${withIntent({
+        from: intent.fromSymbol,
+        amount: intent.amountIn,
+        chain: fromChain
+      }).toString()}`;
+    case 'bridge': {
+      const extra = {
+        fromChain,
+        token: step.asset || intent.fromSymbol,
+        amount: intent.amountIn
+      };
+      if (step.target) {
+        const named = EVM_CHAIN_ORDER.find((id) => {
+          const chain = EVM_CHAINS[id];
+          return chain && (
+            String(chain.name || '').toLowerCase() === String(step.target).toLowerCase()
+            || String(chain.short || '').toLowerCase() === String(step.target).toLowerCase()
+          );
+        });
+        if (named) extra.toChain = String(named);
+      }
+      return `/bridge?${withIntent(extra).toString()}`;
+    }
+    case 'deposit':
+      return `/loan?${withIntent({ tab: 'supply' }).toString()}`;
+    case 'borrow':
+      return `/loan?${withIntent({ tab: 'borrow' }).toString()}`;
+    case 'send':
+      return `/wallet?${withIntent().toString()}`;
+    default:
+      return `/loan?${withIntent({ tab: 'supply' }).toString()}`;
+  }
+}
+
 function StageRail({ t }) {
   const stages = ['intent', 'risk', 'solvers', 'simulation', 'execution', 'verification'];
   return (
@@ -1012,6 +1098,8 @@ export default function IntentOS() {
               {TEMPLATES.map((template) => (
                 <button
                   key={template.id}
+                  type="button"
+                  data-testid={`intent-template-${template.id}`}
                   className={draft.kind === template.kind ? 'active' : ''}
                   onClick={() => chooseTemplate(template)}
                 >
@@ -1333,21 +1421,13 @@ export default function IntentOS() {
                                   key={step.id}
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => {
-                                    const params = new URLSearchParams({
-                                      from: compiled.intent.fromSymbol,
-                                      to: compiled.intent.toSymbol,
-                                      amount: compiled.intent.amountIn,
-                                      chain: String(step.chainId || compiled.intent.chainId),
-                                      intent: compiled.intent.id,
-                                      step: step.id
-                                    });
-                                    navigate(step.action === 'swap' ? `/swap?${params.toString()}` : `/${step.action === 'bridge' ? 'bridge' : 'intent'}?tab=compose`);
-                                  }}
+                                  data-testid={`workflow-step-action-${step.action}`}
+                                  onClick={() => navigate(stepVenueRoute(step, compiled.intent, compiled.intent.steps))}
                                 >
                                   {t(`intentOS.action.${step.action}`, { defaultValue: step.action })}
                                 </button>
                               ))}
+                              <p className="ios-honesty-note">{t('intentOS.result.stepActionHint', { defaultValue: 'Each action opens the real screen for that step with the values of this intent — Intent OS itself executes nothing.' })}</p>
                             </div>
                           </>
                         )

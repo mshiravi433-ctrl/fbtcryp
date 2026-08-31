@@ -22,7 +22,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import { useWallet } from '../context/WalletContext';
@@ -910,10 +910,20 @@ function HeroStats({ t }) {
 export default function Loan() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { haptic } = useTelegram();
   const notify = useAppStore(s => s.notify);
 
-  const [tab, setTab]               = useState('supply');
+  /*
+   * The Intent OS workflow step actions hand off here with ?tab=supply /
+   * ?tab=borrow (deposit → supply, borrow → borrow). The tab must follow
+   * the URL instead of always resetting to supply, or the hand-off lands
+   * on the wrong half of the page.
+   */
+  const [tab, setTab]               = useState(() => {
+    const requested = searchParams.get('tab');
+    return requested === 'borrow' || requested === 'positions' ? requested : 'supply';
+  });
   const [rates, setRates]           = useState(null);
   const [ratesLoading, setRatesLoading] = useState(true);
   const [ratesAt, setRatesAt]       = useState(null);
@@ -1029,6 +1039,8 @@ export default function Loan() {
             <button
               key={tb.id}
               type="button"
+              data-testid={`loan-tab-${tb.id}`}
+              data-active={active ? 'true' : 'false'}
               onClick={() => { haptic?.('select'); setTab(tb.id); }}
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',

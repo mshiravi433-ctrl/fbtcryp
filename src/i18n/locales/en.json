@@ -4419,7 +4419,8 @@
       "automationHandoffNote": "This creates a local watched order now. It watches the condition and asks for a wallet signature only when execution is due.",
       "handoffResumeNote": "The compiled intent is saved locally. If you leave the target page, use Saved intents here to restore the draft.",
       "workflowReadyNote": "Same-chain workflow compiled as a local review plan. Use the step actions below, or restore it later from Saved intents; Intent OS will not pretend this is an atomic cross-chain execution.",
-      "workflowCrossChainNote": "Cross-chain workflow is kept as a draft because the current signed-state rail is not atomic. Configure HTLC atomic swap contracts for atomic cross-chain execution."
+      "workflowCrossChainNote": "Cross-chain workflow is kept as a draft because the current signed-state rail is not atomic. Configure HTLC atomic swap contracts for atomic cross-chain execution.",
+      "stepActionHint": "Each action opens the real screen for that step with this intent's values — Intent OS itself executes nothing."
     },
     "solverStatus": {
       "eligible": "Eligible",
