@@ -170,14 +170,9 @@ export async function run(container) {
     t('compiled swap offers the review hand-off', !!handoffBtn);
     if (handoffBtn) {
       await act(async () => { click(handoffBtn); });
-      await act(async () => { await sleep(20); });
-      const gate = q('[role="dialog"]');
-      t('the review gate opens with the pair summary', !!gate && /ETH/.test(gate.textContent || '') && /USDT/.test(gate.textContent || ''));
-      const goBtn = gate && [...gate.querySelectorAll('button')].find((b) => /wallet/i.test(b.textContent || ''));
-      await act(async () => { if (goBtn) click(goBtn); });
       await act(async () => { await sleep(30); });
-      t('confirming the gate navigates to the swap screen with the pair',
-        window.location.hash.startsWith('#/swap') && /from=ETH/.test(window.location.hash) && /to=USDT/.test(window.location.hash));
+      t('the review action goes directly to the swap review without a redundant gate',
+        !q('[role="dialog"]') && window.location.hash.startsWith('#/swap') && /from=ETH/.test(window.location.hash) && /to=USDT/.test(window.location.hash));
     }
 
     /* ═══════════ 4. EVERY TAB BUTTON ACTUALLY SWITCHES ═══════════ */

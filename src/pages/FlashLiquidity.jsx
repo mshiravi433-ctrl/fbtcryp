@@ -59,6 +59,14 @@ function Money({ value, currency = '$', digits = 4 }) {
   return <span>{currency}{num.toLocaleString('en-US', { maximumFractionDigits: digits })}</span>;
 }
 
+function displayServerStatus(status) {
+  return status === 'planning-only' ? 'planner-active' : status;
+}
+
+function prerequisiteLabel(code, t) {
+  return t(`flashLiquidity.server.prereq.${code}`, { defaultValue: code });
+}
+
 /**
  * FBT Flash Liquidity — فاز ۱۵۲
  * Client-side deterministic planner over clearly-labeled demo snapshots or
@@ -223,12 +231,12 @@ export default function FlashLiquidity() {
           )}
         </section>
 
-        {/* ── Market data (educational demo) ───────────────────────────── */}
+        {/* ── Market data / user snapshots ────────────────────────────── */}
         <section className="fl-panel fl-market" style={riseIn}>
-          <h2>{t('flashLiquidity.market.title', { defaultValue: '۲) داده بازار (نمونه آموزشی)' })}</h2>
+          <h2>{t('flashLiquidity.market.title', { defaultValue: '۲) داده بازار و snapshotها' })}</h2>
           <p className="fl-demo-note">
             {t('flashLiquidity.market.demoNote', {
-              defaultValue: 'سناریوهای زیر داده زنده نیستند — reserve های ساختگی برای آموزش ریاضی خط لوله‌اند. تا وقتی snapshot واقعی وصل نشود، هر «سود» اینجا فقط تمرین است.'
+              defaultValue: 'برنامه‌ریز فعال است: می‌توانی سناریوی نمونه را اجرا کنی یا snapshot واقعی خودت را با JSON وارد کنی. سناریوهای نمونه فقط برای تست ریاضی‌اند و سود واقعی را تضمین نمی‌کنند.'
             })}
           </p>
           <div className="fl-seg">
@@ -280,22 +288,25 @@ export default function FlashLiquidity() {
           </button>
         </section>
 
-        {/* ── Server deployment status: a quiet note, not an error box.
-               The planner runs fully client-side; this strip only says what
-               the optional deployment reports, and never blocks the lab. ── */}
+        {/* ── Server deployment status: active planner, execution prereqs. ── */}
         {serverStatus !== undefined && (
           <div className="fl-server" role="status" style={riseIn}>
             <span className={`fl-server-dot ${serverStatus ? '' : 'off'}`} aria-hidden="true" />
             <span>
-              {t('flashLiquidity.server.status', { defaultValue: 'وضعیت استقرار (سرور)' })}:
+              {t('flashLiquidity.server.status', { defaultValue: 'وضعیت Flash Liquidity' })}:
               {' '}
-              {serverStatus ? <code>{serverStatus.status}</code> : t('flashLiquidity.server.offlineShort', { defaultValue: 'در دسترس نیست' })}
+              {serverStatus
+                ? <code>{t(`flashLiquidity.server.statusValue.${displayServerStatus(serverStatus.status)}`, { defaultValue: displayServerStatus(serverStatus.status) })}</code>
+                : t('flashLiquidity.server.offlineShort', { defaultValue: 'در دسترس نیست' })}
             </span>
-            {serverStatus?.missing?.length > 0 && (
-              <span className="fl-server-missing">{serverStatus.missing.join(' · ')}</span>
+            {serverStatus?.executionPrerequisites?.length > 0 && (
+              <span className="fl-server-missing">
+                {t('flashLiquidity.server.prereqTitle', { defaultValue: 'پیش‌نیاز اجرای کیف‌پولی' })}: {' '}
+                {serverStatus.executionPrerequisites.map((code) => prerequisiteLabel(code, t)).join(' · ')}
+              </span>
             )}
             <span>
-              {t('flashLiquidity.server.localNote', { defaultValue: 'برنامه‌ریز همین‌جا روی دستگاه اجرا می‌شود؛ سرور فقط گزارش وضعیت است.' })}
+              {t('flashLiquidity.server.localNote', { defaultValue: 'اسکن و برنامه‌ریزی فعال است؛ سرور چیزی امضا یا ارسال نمی‌کند و اجرای واقعی فقط با کیف پول انجام می‌شود.' })}
             </span>
           </div>
         )}
@@ -384,7 +395,7 @@ export default function FlashLiquidity() {
               <div className="fl-receipt">
                 <h3>{t('flashLiquidity.receipt.title', { defaultValue: 'رسید اثبات اجرا (شبیه‌سازی)' })}</h3>
                 <pre className="mono" dir="ltr">{JSON.stringify(receipt, null, 2)}</pre>
-                <small>{t('flashLiquidity.receipt.note', { defaultValue: 'اثم انگشت محتواست، نه امضای رمزنگارانه؛ مسیر اثبات رسمی همان Proof-of-Execution است.' })}</small>
+                <small>{t('flashLiquidity.receipt.note', { defaultValue: 'اثر انگشت محتواست، نه امضای رمزنگارانه؛ مسیر اثبات رسمی همان Proof-of-Execution است.' })}</small>
               </div>
             )}
           </section>
@@ -401,7 +412,7 @@ export default function FlashLiquidity() {
             <li>✗ {t('flashLiquidity.guarantees.noFreeMoney', { defaultValue: 'فلش لان اعتبار قابل خرج کردن نیست؛ فقط سرمایهٔ موقت داخل یک تراکنش است.' })}</li>
             <li>✗ {t('flashLiquidity.guarantees.noPublicMempool', { defaultValue: 'ارسال به ممپول عمومی برای آربیتراژ رد می‌شود (ریسک سندویچ)؛ فقط مسیر خصوصی.' })}</li>
           </ul>
-          <p className="fl-hint">{t('flashLiquidity.guarantees.auditNote', { defaultValue: 'قرارداد مرجع FlashLiquidityRouter.sol کامپایل و باندل شده، اما مستقل ممیزی نشده است. تا پیش از ممیزی و پیکربندی آدرس، این قابلیت در وضعیت planning-only می‌ماند.' })}</p>
+          <p className="fl-hint">{t('flashLiquidity.guarantees.auditNote', { defaultValue: 'اسکنر، برنامه‌ریز و حساب‌وکتاب Flash Liquidity فعال‌اند. اجرای کیف‌پولی فقط وقتی فعال می‌شود که آدرس Router، ممیزی مستقل و شبیه‌سازی RPC پیکربندی شده باشند؛ این‌ها خطای صفحه نیستند، گیت ایمنی اجرای واقعی‌اند.' })}</p>
         </section>
       </div>
     </PageTransition>

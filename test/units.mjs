@@ -6104,8 +6104,8 @@ export default async function run() {
       amountIn: '2500', amountUsd: 2500, maxSlippagePct: 0.3,
       privacy: 'standard', deadlineAt: Date.now() + 3600000
     }, memory);
-    t('memory spend limits block rather than warn',
-      over.blocked && over.checks.some((r) => r.id === 'OVER_SPEND_LIMIT' && r.level === 'block'));
+    t('memory spend limits warn on user-reviewed intents instead of producing a false protocol block',
+      !over.blocked && over.checks.some((r) => r.id === 'OVER_SPEND_LIMIT' && r.level === 'warn'));
 
     const privateInput = {
       kind: 'swap', chainId: 1, fromSymbol: 'USDC', toSymbol: 'ETH',
@@ -6188,9 +6188,9 @@ export default async function run() {
         { action: 'deposit', asset: 'ETH', chainId: 42161 }
       ]
     }, memory);
-    t('a same-chain workflow compiles to review, never server execution',
+    t('a same-chain workflow compiles to a recoverable local review, never a fake swap hand-off',
       sameChain.status === 'ready-for-review' && !sameChain.blocked
-        && String(sameChain.handoff || '').includes('workflow=1')
+        && sameChain.handoff === null
         && sameChain.intent.constraints.requireUserSignature === true
         && sameChain.intent.constraints.custodyAllowed === false);
     t('the single-chain workflow solver is eligible only for same-chain plans',

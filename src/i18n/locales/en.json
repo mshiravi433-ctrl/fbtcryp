@@ -1763,10 +1763,21 @@
       "audit": "Requires an audited contract"
     },
     "server": {
-      "status": "Deployment status (server)",
+      "status": "Flash Liquidity status",
       "offline": "Server unavailable — the planner runs locally on this device.",
       "offlineShort": "unreachable",
-      "localNote": "Planning still runs locally on this device; the server only reports deployment status."
+      "localNote": "Scanning and planning are active; the server never signs or broadcasts, and real execution remains wallet-only.",
+      "prereqTitle": "Wallet-execution prerequisites",
+      "statusValue": {
+        "planner-active": "Planner active",
+        "execution-gated-by-wallet": "Execution gated by wallet",
+        "planning-only": "Planner active"
+      },
+      "prereq": {
+        "ROUTER_CONTRACT_NOT_CONFIGURED": "Router address not configured",
+        "ROUTER_CONTRACT_NOT_AUDITED": "Independent router audit not recorded",
+        "SIMULATION_UNAVAILABLE": "Simulation RPC is not connected"
+      }
     },
     "intent": {
       "title": "1) Write your intent",
@@ -1778,8 +1789,8 @@
       "fallback": "Invalid intent — the minimum profit below is used instead."
     },
     "market": {
-      "title": "2) Market data (educational demo)",
-      "demoNote": "These scenarios are not live data — synthetic reserves exist to teach the pipeline math. Until a real snapshot feed is connected, any \"profit\" here is practice only.",
+      "title": "2) Market data and snapshots",
+      "demoNote": "The planner is active: run the sample scenario or paste your own real reserve snapshots as JSON. Sample scenarios only test the math and never guarantee live profit.",
       "profitable": "Profitable spread",
       "flat": "Equal prices",
       "inverted": "Negative spread",
@@ -1842,7 +1853,7 @@
       "notGuaranteed": "No profit is guaranteed; every number comes from indicative data.",
       "noFreeMoney": "A flash loan is not spendable credit — it is temporary capital inside one transaction.",
       "noPublicMempool": "Public-mempool submission is refused for arbitrage (sandwich risk); private route only.",
-      "auditNote": "The reference contract FlashLiquidityRouter.sol is compiled and bundled, but not independently audited. Until an audit exists and an address is configured, this capability stays planning-only."
+      "auditNote": "The Flash Liquidity scanner, planner, and economics engine are active. Wallet execution is enabled only after a Router address, an independent audit record, and simulation RPC are configured; those are execution safety gates, not page errors."
     }
   },
   "dev": {
@@ -4403,7 +4414,12 @@
       "solverCandidates": "Solver and adapter coverage",
       "reviewHandoff": "Open the user-signed review",
       "draftOnly": "This outcome is saved as a local draft. FBT will not pretend an unavailable privacy, outcome or cross-chain atomic workflow is live.",
-      "lendingDraftNote": "The lending steps are compiled and saved above as a local draft. This build has no live lending venue to sign against, so the plan stays here for review — nothing executes, nothing is sent, and no wallet is asked to sign."
+      "lendingDraftNote": "The lending steps are compiled and saved above as a local draft. This build has no live lending venue to sign against, so the plan stays here for review — nothing executes, nothing is sent, and no wallet is asked to sign.",
+      "createWatchedOrder": "Create watched order",
+      "automationHandoffNote": "This creates a local watched order now. It watches the condition and asks for a wallet signature only when execution is due.",
+      "handoffResumeNote": "The compiled intent is saved locally. If you leave the target page, use Saved intents here to restore the draft.",
+      "workflowReadyNote": "Same-chain workflow compiled as a local review plan. Use the step actions below, or restore it later from Saved intents; Intent OS will not pretend this is an atomic cross-chain execution.",
+      "workflowCrossChainNote": "Cross-chain workflow is kept as a draft because the current signed-state rail is not atomic. Configure HTLC atomic swap contracts for atomic cross-chain execution."
     },
     "solverStatus": {
       "eligible": "Eligible",
@@ -4544,12 +4560,14 @@
       "BAD_AMOUNT": "Enter an amount greater than zero.",
       "BAD_OUTCOME": "An outcome request needs a positive minimum receive amount.",
       "BAD_CONDITION": "Choose a valid trigger and target.",
-      "BAD_WORKFLOW": "A workflow needs two to eight valid actions."
+      "BAD_WORKFLOW": "A workflow needs two to eight valid actions.",
+      "BAD_ORDER_DRAFT": "This watched-order draft needs known tokens, a positive amount, and a price condition. Adjust the rule values and try again."
     },
     "saved": {
       "title": "Recent local drafts",
       "local": "On this device",
-      "remove": "Remove draft"
+      "remove": "Remove draft",
+      "restore": "Restore"
     },
     "memory": {
       "title": "Memory Wallet",
@@ -4675,9 +4693,9 @@
       "operatorIndependence": "Organizational independence",
       "verificationNote": "An expiring operator attestation proves control of a registered watcher/verifier key and key separation from FBT solvers/coordinator. It does not prove legal or organizational independence; that requires external operation and audit. Coordinator rotation is dual-signed by old and new keys, while historical receipts verify against their embedded key. Merkle roots become externally anchored only after an exact configured-contract event is verified.",
       "txVerification": "PER-LEG ON-CHAIN VERIFICATION",
-      "txVerificationConfigured": "Multi-RPC verification is configured",
+      "txVerificationConfigured": "Multi-RPC verification is active",
       "txVerificationUnconfigured": "Multi-RPC verification is not configured",
-      "txVerificationNote": "Phase 4c adds a derived verification layer. A signed receipt remains a party's signed claim (onChainVerified:false forever) — it is NOT on-chain verification. A party binds an on-chain address with its own pinned Ed25519 key, optionally adding an EIP-191 wallet proof (personal_sign over a deterministic challenge, recovered address must match); a binding without that proof stays self-attested only and can never reach onchain-verified. A registered verifier reads each leg through at least two HTTPS RPC endpoints on distinct hostnames and the server re-reads the chain itself before storing any recomputable report. Distinct hostnames are not proof of provider independence, so provider independence stays unproven. Verifying two separate transactions never makes them atomic: custody, escrow, global atomicity and automatic settlement stay false, and the envelope stays draft-only under ATOMIC_CROSS_CHAIN_UNAVAILABLE. Without a real INTENT_CROSS_CHAIN_RPC_NETWORKS configuration this feature is unconfigured.",
+      "txVerificationNote": "Phase 4c verifies each leg through multiple RPCs, and when the HTLC section is also configured this status is combined with the contract-backed atomic path: both legs are locked under one hashlock and safe timelock ordering in IntentAtomicSwap contracts, while multi-RPC verification independently re-reads each leg. If HTLC is not configured, this panel only proves that transactions happened and is not atomic. Atomicity is active only with IntentAtomicSwap contracts on at least two chains.",
       "txVerificationQuorum": "RPC quorum (minimum)",
       "txVerificationBindings": "Signed account bindings",
       "txVerificationSchema": "Verification report schema",
@@ -4710,7 +4728,11 @@
       "txVerificationChains": "chains configured",
       "txVerificationProviders": "RPC providers",
       "registeredObserverKeys": "observer keys",
-      "distinctOperators": "distinct operators"
+      "distinctOperators": "distinct operators",
+      "txVerificationOnly": "Verification active / not atomic",
+      "txVerificationOff": "Verification off",
+      "txVerificationConfiguredAtomic": "Multi-RPC verification and HTLC atomic path are active",
+      "atomicViaHtlc": "Atomic via HTLC"
     },
     "revert": {
       "abort-all": "Abort all",
@@ -4818,17 +4840,22 @@
       "note": "Operational evidence is current. Review the final transaction in your wallet before signing.",
       "active": "System Active & Verified",
       "activeNote": "Operational evidence is current. Review the final transaction in your wallet before signing.",
-      "pending": "Activation pending verification",
-      "p1": "Activation is pending verification.",
-      "p2": "Operational status is not yet available.",
-      "p3": "Execution remains behind wallet confirmation.",
-      "pendingNote": "This deployment has not earned operational activation yet. Nothing here executes on its own — and any execution would still need your wallet.",
+      "pending": "Intent OS safe review mode",
+      "p1": "Intent OS is running in safe review and preparation mode.",
+      "p2": "The Active & Verified label appears after the full operator evidence set is complete.",
+      "p3": "Nothing executes without wallet confirmation.",
+      "pendingNote": "This state is not a user error and does not block composing intents; it only means full operational evidence is not complete yet.",
       "b1": "System Active & Verified.",
       "b2": "Execution Ready — wallet confirmation remains required.",
       "b3": "Current operational evidence is attested and within its validity window.",
       "build": "build",
       "buildId": "Intent AI build identifier",
-      "evidence": "evidence"
+      "evidence": "evidence",
+      "reviewReady": "Intent OS review and wallet-signing mode is ready",
+      "r1": "Usable Intent OS capabilities are online; final execution still happens only after wallet confirmation.",
+      "r2": "Operational evidence has been received, and full operator activation is tracked separately in the evidence counter.",
+      "r3": "This is not a blocking user error; it only means the complete operator evidence set is not finished yet.",
+      "reviewNote": "The usable Intent OS surface is online in wallet-confirmed mode; full operator evidence completion is tracked separately."
     },
     "loanHandoff": {
       "supplyTitle": "Lending draft arrived from the Loan page",

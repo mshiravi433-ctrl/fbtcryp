@@ -2,8 +2,8 @@
  * PHASES 141–150 — RAIL LAYOUT CONTRACT
  * The horizontal rail's layout descriptor is the single source of truth the
  * screen renders; this probe asserts the contract so the UI cannot drift:
- * L1–L3 icons, the conditional release action, the collapse toggle, spacing
- * and the safety invariants.
+ * L1–L3 icons, the conditional release action, spacing and the safety
+ * invariants. The Intent OS rail is not expandable/collapsible.
  *
  * ─── WHY THERE ARE ONLY TWO ACTIONS LEFT ───────────────────────────────────
  * PAUSE, EMERGENCY STOP and HUMAN AGENT were removed from the /#/intent rail
@@ -33,7 +33,7 @@ try {
   check('every icon has a label key and an icon key', AUTONOMY_ICONS.every((i) => /^l[123]-/.test(i.key) && typeof i.labelKey === 'string'));
 
   /* ---------- actions ---------- */
-  check('the rail has exactly two actions', RAIL_ACTIONS.length === 2);
+  check('the rail has exactly one action', RAIL_ACTIONS.length === 1);
   const release = RAIL_ACTIONS.find((a) => a.id === 'release');
   const collapse = RAIL_ACTIONS.find((a) => a.id === 'rail-collapse');
   /* The pause/stop/agent buttons are gone from this screen; their absence is
@@ -43,8 +43,8 @@ try {
   check('no human-agent action remains on the rail', !RAIL_ACTIONS.some((a) => a.id === 'human-agent'));
   check('release exists and is fail-closed', release?.kind === 'fail-closed');
   check('release is conditional (renders only when blocked)', release?.conditional === true);
-  check('rail collapse exists as a layout action', collapse?.kind === 'layout' && collapse?.conditional === false);
-  check('rail order puts autonomy first and collapse last', layout.order.join(',') === 'autonomy,release,rail-collapse');
+  check('rail collapse is not rendered on Intent OS', collapse === undefined);
+  check('rail order puts autonomy first and release last', layout.order.join(',') === 'autonomy,release');
 
   /* ---------- spacing ---------- */
   check('touch targets are at least 44px', RAIL_SPACING.touchTargetPx >= 44);
@@ -53,8 +53,8 @@ try {
 
   /* ---------- safety invariants ---------- */
   const inv = layout.safetyInvariants;
-  check('emergency stop stays one tap away even collapsed', inv.emergencyAlwaysReachable === true);
-  check('collapsing never hides the safety state', inv.collapseNeverHidesSafetyState === true);
+  check('emergency stop state stays visible on the non-expandable rail', inv.emergencyAlwaysReachable === true);
+  check('there is no collapsed state that can hide safety', inv.collapseNeverHidesSafetyState === true);
   check('pause must show its resume time', inv.pauseShowsResumeTime === true);
   check('stop requires confirmation to release', inv.stopRequiresConfirmationToRelease === true);
   check('touch targets stay thumb-friendly', inv.touchTargetsAtLeast44px === true);

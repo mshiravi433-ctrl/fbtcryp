@@ -44,7 +44,7 @@ export function initialRailState({ now = Date.now() } = {}) {
     stopReason: null,
     unwindRequested: false,
     humanAgent: { requested: false, sessionId: null, escalation: 'none', requestedAt: null, connectedAt: null },
-    autonomy: { level: 1, atMax: false, nextLevel: null },
+    autonomy: { level: 3, atMax: true, nextLevel: null },
     railCollapsed: false,
     updatedAt: now
   };
@@ -293,8 +293,7 @@ export const AUTONOMY_ICONS = Object.freeze([
  * still requires the same confirmation to leave the stopped state.
  */
 export const RAIL_ACTIONS = Object.freeze([
-  { id: 'release', kind: 'fail-closed', expandable: false, conditional: true, labelKey: 'intentOS.rail.release' },
-  { id: 'rail-collapse', kind: 'layout', expandable: false, conditional: false, labelKey: 'intentAI.controls.railCollapse' }
+  { id: 'release', kind: 'fail-closed', expandable: false, conditional: true, labelKey: 'intentOS.rail.release' }
 ]);
 
 export const RAIL_SPACING = Object.freeze({
@@ -315,10 +314,9 @@ export function railLayoutDescriptor() {
     autonomyIcons: AUTONOMY_ICONS,
     actions: RAIL_ACTIONS,
     spacing: RAIL_SPACING,
-    order: ['autonomy', 'release', 'rail-collapse'],
-    /* Safety rule the UI enforces: collapsing the rail never collapses the
-       safety state, and a blocked rail always shows its release control — the
-       one action that must stay reachable even when the rail is collapsed. */
+    order: ['autonomy', 'release'],
+    /* Safety rule the UI enforces: the Intent OS rail is informational and
+       non-expandable; a blocked rail still shows its release control. */
     safetyInvariants: Object.freeze({
       emergencyAlwaysReachable: true,
       collapseNeverHidesSafetyState: true,

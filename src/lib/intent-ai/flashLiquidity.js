@@ -924,16 +924,21 @@ export function buildFlashReceipt({ plan, outcome, txHash = null, netProfitUsd =
 /* ── Capability report (what this deployment may honestly claim) ───────────── */
 
 export function flashLiquidityCapabilityReport({ routerConfigured = false, routerAudited = false, simulationAvailable = false } = {}) {
-  let status = 'planning-only';
-  const missing = [];
-  if (!routerConfigured) missing.push('ROUTER_CONTRACT_NOT_CONFIGURED');
-  if (!routerAudited) missing.push('ROUTER_CONTRACT_NOT_AUDITED');
-  if (!simulationAvailable) missing.push('SIMULATION_UNAVAILABLE');
-  if (missing.length === 0) status = 'execution-gated-by-wallet';
+  const executionPrerequisites = [];
+  if (!routerConfigured) executionPrerequisites.push('ROUTER_CONTRACT_NOT_CONFIGURED');
+  if (!routerAudited) executionPrerequisites.push('ROUTER_CONTRACT_NOT_AUDITED');
+  if (!simulationAvailable) executionPrerequisites.push('SIMULATION_UNAVAILABLE');
+  const executionReady = executionPrerequisites.length === 0;
   return {
-    status,
-    missing,
-    executionEnabled: missing.length === 0,
+    status: executionReady ? 'execution-gated-by-wallet' : 'planner-active',
+    /* Backward-compatible diagnostics for API consumers. These are execution
+       prerequisites, not page-level errors: scan/plan/math are active even when
+       wallet execution is still gated. */
+    missing: executionPrerequisites,
+    executionPrerequisites,
+    plannerEnabled: true,
+    scanEnabled: true,
+    executionEnabled: executionReady,
     ...FLASH_LIQUIDITY_LIMITS,
     providers: Object.values(FLASH_PROVIDER_REGISTRY).map((p) => ({
       id: p.id,

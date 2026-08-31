@@ -235,18 +235,24 @@ export function normalizeIntent(input = {}, memory = loadIntentMemory(), now = D
 
   let outcome = null;
   if (kind === 'outcome') {
-    const spec = input.outcome;
-    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return { error: 'BAD_OUTCOME' };
-    const guaranteedMinimum = String(spec.guaranteedMinimum || '').trim().slice(0, 40);
-    const totalMaxCost = String(spec.totalMaxCost || '').trim().slice(0, 40);
+    const spec = input.outcome && typeof input.outcome === 'object' && !Array.isArray(input.outcome)
+      ? input.outcome
+      : {};
+    /* The UI's "request outcome" template exposes a human minReceive field,
+       not raw outcome JSON. Build a bounded single-chain outcome from it so
+       the template works out of the box instead of erroring with BAD_OUTCOME. */
+    const guaranteedMinimum = String(spec.guaranteedMinimum || input.minReceive || '').trim().slice(0, 40);
+    const totalMaxCost = String(spec.totalMaxCost || input.amountIn || '').trim().slice(0, 40);
     const settlementChainId = Number(spec.settlementChainId) || chainId;
     const partialFillPolicy = ['full-only', 'partial-allowed'].includes(spec.partialFillPolicy)
       ? spec.partialFillPolicy : 'full-only';
     const expiry = Number.isSafeInteger(Number(spec.expiry)) ? Number(spec.expiry) : Math.floor(deadlineAt / 1000);
-    if (!/^[0-9]{1,40}$/.test(guaranteedMinimum) || BigInt(guaranteedMinimum) <= 0n) {
+    const guaranteedMinimumNum = Number(guaranteedMinimum);
+    const totalMaxCostNum = Number(totalMaxCost);
+    if (!Number.isFinite(guaranteedMinimumNum) || guaranteedMinimumNum <= 0) {
       return { error: 'BAD_OUTCOME' };
     }
-    if (!/^[0-9]{1,40}$/.test(totalMaxCost) || BigInt(totalMaxCost) <= 0n) {
+    if (!Number.isFinite(totalMaxCostNum) || totalMaxCostNum <= 0) {
       return { error: 'BAD_OUTCOME' };
     }
     if (!SUPPORTED_CHAINS.has(settlementChainId)) return { error: 'BAD_OUTCOME' };
@@ -382,7 +388,10 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
   if (intent.amountUsd == null) {
     checks.push(check('USD_VALUE_UNKNOWN', 'warn'));
   } else if (intent.amountUsd > memory.maxPerIntentUsd) {
-    checks.push(check('OVER_SPEND_LIMIT', 'block', {
+    /* Intent OS prepares user-reviewed actions. A local preference overrun must
+       not look like a protocol failure; warn and let the user adjust the saved
+       limit in Policy if they want a higher default. */
+    checks.push(check('OVER_SPEND_LIMIT', 'warn', {
       amountUsd: intent.amountUsd,
       maximum: memory.maxPerIntentUsd
     }));
@@ -465,25 +474,11 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
     });
     handoff = `/swap?${params.toString()}`;
   } else if (!blocked && intent.kind === 'workflow') {
-    /*
-     * The swap screen can only review a swap PAIR. A lending workflow's
-     * envelope is same-token by construction (approve USDT → deposit USDT,
-     * deposit collateral → borrow USDT): handing that to /swap would prefill
-     * USDT → USDT, a pair no router can quote — the user would land on a dead
-     * quote screen after a successful compile. Same-token workflows stay
-     * reviewable local drafts instead, which is what the result screen says.
-     */
-    if (intent.fromSymbol !== intent.toSymbol) {
-      const params = new URLSearchParams({
-        from: intent.fromSymbol,
-        to: intent.toSymbol,
-        amount: intent.amountIn,
-        chain: String(intent.chainId),
-        intent: intent.id,
-        workflow: '1'
-      });
-      handoff = `/swap?${params.toString()}`;
-    }
+    /* A workflow is not a swap pair. Opening /swap for a multi-step graph made
+       every non-swap step disappear and left the user with no recovery path.
+       Keep workflows in Intent OS as compiled local plans until a real batch
+       execution surface is available. */
+    handoff = null;
   } else if (!blocked && intent.kind === 'automation') {
     handoff = '/orders';
   }
@@ -494,7 +489,7 @@ export function compileIntent(input, memoryInput = loadIntentMemory(), now = Dat
     checks,
     solvers: solverRows(intent),
     blocked,
-    status: blocked ? 'draft-only' : handoff ? 'ready-for-review' : 'draft-only',
+    status: blocked ? 'draft-only' : (handoff || intent.kind === 'workflow') ? 'ready-for-review' : 'draft-only',
     handoff
   };
 }

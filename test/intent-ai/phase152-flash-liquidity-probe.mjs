@@ -42,6 +42,7 @@ import {
   flashLiquidityCapabilityReport
 } from '../../src/lib/intent-ai/flashLiquidity.js';
 import { flashLiquidityCapabilities, flashScan, flashPlan } from '../../server/flashLiquidity.js';
+import { flashLiquidityRouterConfigured } from '../../server/flashLiquidityConfig.js';
 import { createFlashSimulator, simulationRpcFromEnv } from '../../server/flashLiquiditySimulation.js';
 
 const tests = [];
@@ -279,7 +280,8 @@ await test('server surface is dry-run only and bounded', () => {
   const caps = flashLiquidityCapabilities();
   assert.equal(caps.ok, true);
   assert.equal(caps.executionEnabled, false);
-  assert.equal(caps.status, 'planning-only');
+  assert.equal(caps.plannerEnabled, true);
+  assert.equal(caps.status, 'planner-active');
   assert.equal(caps.limits.serverExecutesTransactions, false);
   assert.equal(caps.limits.autoBroadcasts, false);
 
@@ -406,16 +408,29 @@ await test('simulation gate: eth_call dry-run with honest pass/revert/refusal', 
   assert.equal(simulationRpcFromEnv({}), null);
 });
 
-await test('capability report keeps execution disabled without audit + config', () => {
+await test('capability report keeps the planner active while wallet execution waits for audit + config', () => {
   const bare = flashLiquidityCapabilityReport({});
   assert.equal(bare.executionEnabled, false);
-  assert.ok(bare.missing.includes('ROUTER_CONTRACT_NOT_AUDITED'));
+  assert.equal(bare.plannerEnabled, true);
+  assert.equal(bare.status, 'planner-active');
+  assert.ok(bare.executionPrerequisites.includes('ROUTER_CONTRACT_NOT_AUDITED'));
   const full = flashLiquidityCapabilityReport({ routerConfigured: true, routerAudited: true, simulationAvailable: true });
   assert.equal(full.status, 'execution-gated-by-wallet');
   assert.equal(full.guaranteedProfit, false);
   assert.equal(full.notFreeMoney, true);
   // and the constant is not negotiable at runtime
   assert.equal(Object.isFrozen(FLASH_LIQUIDITY_LIMITS), true);
+});
+
+await test('router config accepts a single address env as well as the chain map', () => {
+  const single = flashLiquidityRouterConfigured({
+    FLASH_LIQUIDITY_ROUTER_ADDRESS: '0x1111111111111111111111111111111111111111',
+    FLASH_LIQUIDITY_ROUTER_CHAIN_ID: '42161',
+    FLASH_LIQUIDITY_ROUTER_AUDITED: 'true'
+  });
+  assert.equal(single.configured, true);
+  assert.equal(single.audited, true);
+  assert.equal(single.addresses[42161], '0x1111111111111111111111111111111111111111');
 });
 
 await test('compiled reference contract exposes both provider callbacks and admits it is unaudited', () => {

@@ -182,9 +182,12 @@ export function flashLiquidityCapabilities() {
     chains: SUPPORTED_CHAINS.map((chainId) => ({ chainId, chain: chainName(chainId) })),
     providers: report.providers,
     limits: FLASH_LIQUIDITY_LIMITS,
+    plannerEnabled: true,
+    scanEnabled: true,
+    executionPrerequisites: report.executionPrerequisites,
     endpoints: {
-      scan: 'POST /api/flash-liquidity/v1/scan (dry-run)',
-      plan: 'POST /api/flash-liquidity/v1/plan (dry-run)'
+      scan: 'POST /api/flash-liquidity/v1/scan (active planner, no broadcast)',
+      plan: 'POST /api/flash-liquidity/v1/plan (active planner, no broadcast)'
     },
     simulation: {
       endpoint: 'POST /api/flash-liquidity/v1/simulate (eth_call dry-run)',
@@ -193,7 +196,7 @@ export function flashLiquidityCapabilities() {
     },
     quoteMaxAgeMs: MAX_QUOTE_AGE_MS,
     maxHops: MAX_HOPS,
-    note: 'This API plans and judges; it does not sign, send, or hold. Execution happens in the user\'s wallet against an audited router contract.'
+    note: 'Scan and planning are active. This API does not sign, send, or hold. Wallet execution is enabled only when an audited router contract and simulation RPC are configured.'
   };
 }
 
