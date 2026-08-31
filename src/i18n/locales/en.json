@@ -5004,6 +5004,26 @@
       "htlcStatusUnavailable": "Atomic swap status unavailable from the server.",
       "derivedStatus": "server status",
       "htlcCounterparty": "Counterparty address (EVM)"
+    },
+    "progress": {
+      "title": "Progress of this workflow",
+      "count": "{{done}} of {{total}} done",
+      "state": {
+        "pending": "not started",
+        "opened": "opened",
+        "done": "done"
+      },
+      "open": "Open venue",
+      "reopen": "Open again",
+      "markDone": "I finished this",
+      "undo": "Undo",
+      "reset": "Reset progress",
+      "selfReported": "marked done by you — not verified on-chain",
+      "hint": "Each step opens its real screen with these values filled in. Intent OS records what you opened and what you tell it you finished — it never executes anything itself and never assumes a step succeeded.",
+      "allDone": "You have marked every step of this workflow as finished.",
+      "resumed": "Recorded as finished: {{steps}}. {{remaining}} step(s) left — undo any of them below if that is wrong.",
+      "restoredTitle": "Workflow you came back to",
+      "restoredNote": "The form above is filled with this intent again. Compile it to re-run the checks — the progress below is kept, because it is the same workflow."
     }
   },
   "whales": {
@@ -6548,7 +6568,6 @@
     "borrowBtn": "Borrow {{symbol}}",
     "positionsTitle": "Active Loan Positions",
     "positionsBody": "View and manage your active supply/borrow positions via Intent OS and your wallet. FBT never holds funds or withdrawal permissions.",
-    "openIntentOS": "Open Intent OS",
     "openWallet": "Wallet",
     "howTitle": "How it works",
     "step1Title": "Lock collateral",
@@ -6577,8 +6596,6 @@
     "enterAmount": "Enter an amount",
     "enterCollateral": "Enter collateral amount",
     "overMaxBorrow": "Borrow amount exceeds maximum allowed",
-    "openIntentForSupply": "Intent OS will open to sign the supply transaction",
-    "openIntentForBorrow": "Intent OS will open to sign the borrow transaction",
     "warningLiqTitle": "Liquidation risk — read before continuing",
     "warningLiqBody": "If the value of your supplied asset drops below the threshold, the smart contract auto-sells it. This is irreversible and FBT has no control over it.",
     "warningLiqBorrowBody": "If your collateral falls below the LTV threshold, the smart contract sells it — not FBT. Irreversible. Keep enough collateral.",
@@ -6586,6 +6603,83 @@
     "warningScBody": "Any lending protocol can have bugs. Only supply amounts you can afford to lose.",
     "maxBorrowHint": "Max allowed: {{max}}",
     "chooseAssetFirst": "Choose an asset first",
-    "ratesUpdated": "Rates are read from the lending contracts (Morpho/Aave) — refreshed automatically."
+    "ratesUpdated": "Rates are read from the lending contracts (Morpho/Aave) — refreshed automatically.",
+    "connectWallet": "Connect wallet",
+    "switchChain": "Switch network to {{chain}}",
+    "chainUnsupported": "{{chain}} has no lending market wired into this app yet.",
+    "reserveUnavailable": "Not a reserve on this network",
+    "noAssetsOnChain": "No lending assets are available on {{chain}}.",
+    "market": "Market",
+    "poolLabel": "Aave V3 · {{chain}}",
+    "rateSource": "Rates and balances are read live from the Aave V3 pool on {{chain}} — last read {{at}}.",
+    "maxOf": "Max {{amount}} {{symbol}}",
+    "amountOverWallet": "More than your wallet balance.",
+    "alreadySupplied": "Already supplied: {{amount}} {{symbol}}",
+    "earnHint": "Current supply APY: {{apy}}%",
+    "collateralOptional": "Collateral to add ({{symbol}}) — optional",
+    "collateralHint": "Leave empty to borrow against collateral you already supplied.",
+    "needCollateralFirst": "Supply collateral first — the pool has none for this wallet.",
+    "projectedHealth": "Health factor after this borrow: about {{hf}}",
+    "borrowPower": "Borrowing power",
+    "collateral": "Collateral",
+    "debt": "Debt",
+    "healthFactor": "Health factor",
+    "healthNone": "no debt",
+    "health": {
+      "safe": "safe",
+      "watch": "watch",
+      "risky": "risky",
+      "critical": "critical",
+      "none": "—"
+    },
+    "supplied": "Supplied",
+    "borrowed": "Borrowed",
+    "manageAmount": "Amount of {{symbol}}",
+    "withdraw": "Withdraw",
+    "repay": "Repay",
+    "noPositions": "This wallet has no supply or borrow position in this market yet.",
+    "loadingPositions": "Reading your position from the pool…",
+    "stepsTitle": "{{n}} transaction(s) your wallet will sign",
+    "running": "Waiting for your wallet…",
+    "backToLoan": "Back to loans",
+    "step": {
+      "approve": "Approve {{symbol}} for the pool",
+      "supply": "Supply {{symbol}}",
+      "borrow": "Borrow {{symbol}}",
+      "repay": "Repay {{symbol}}",
+      "withdraw": "Withdraw {{symbol}}"
+    },
+    "stepState": {
+      "pending": "pending",
+      "running": "signing",
+      "done": "confirmed",
+      "failed": "failed"
+    },
+    "sheetTitle": {
+      "supply": "Supply",
+      "borrow": "Borrow",
+      "repay": "Repay",
+      "withdraw": "Withdraw"
+    },
+    "done": {
+      "supply": "Supplied. The pool now holds your deposit and it is earning from this block on.",
+      "borrow": "Borrowed. The asset is in your wallet and the debt is on your position.",
+      "repay": "Repaid. Your debt on this asset has gone down by that amount.",
+      "withdraw": "Withdrawn. The asset is back in your wallet."
+    },
+    "error": {
+      "USER_REJECTED": "You rejected the request in your wallet. Nothing was sent.",
+      "WALLET_NOT_CONNECTED": "No wallet is connected, so nothing could be signed.",
+      "UNSUPPORTED_CHAIN": "This network has no lending market wired into the app.",
+      "APPROVE_FAILED": "The approval transaction failed. Nothing was deposited.",
+      "SUPPLY_FAILED": "The supply transaction failed.",
+      "BORROW_FAILED": "The borrow transaction failed. Check your collateral and borrowing power.",
+      "REPAY_FAILED": "The repay transaction failed.",
+      "WITHDRAW_FAILED": "The withdraw transaction failed. Withdrawing may be blocked while it would push your health factor below 1.",
+      "REVERTED": "The network rejected the transaction.",
+      "UNKNOWN_STEP": "Unknown step — nothing was sent.",
+      "UNKNOWN": "The transaction did not go through."
+    },
+    "rateUnknown": "live rate unavailable right now"
   }
 }

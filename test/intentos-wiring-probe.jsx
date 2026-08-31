@@ -434,31 +434,94 @@ export async function run(container) {
       return typeof r === 'string' && r.startsWith('/bridge?') && r.includes('fromChain=1') && r.includes('toChain=42161');
     })());
 
-    /* ═══════════ 9. THE REAL LOAN PAGE DRIVES THE HAND-OFF ═══════════ */
+    /* ═══════════ 9. THE LOAN PAGE IS THE VENUE, NOT A DETOUR ═══════════ */
     /*
-     * Not a synthetic URL: pick an asset, type an amount, confirm the sheet —
-     * exactly the path a user takes — and expect to land on /intent with a
-     * compilable lending draft.
+     * This used to assert the opposite: pick an asset, type an amount, confirm
+     * — and land on /intent holding a draft. The owner's report was that the
+     * deposit never happened, and it was right: Intent OS executes nothing, so
+     * a supply that ended there ended nowhere.
+     *
+     * The loan screen now runs supply / borrow / repay / withdraw itself, and
+     * the full signed path (approve → supply → receipt) is driven with a stub
+     * wallet in test/loan-execution-probe.jsx. What belongs HERE is the part
+     * this suite owns: the hand-off arrives prefilled, and the screen never
+     * bounces the user back to Intent OS.
      */
-    await mountAt('#/loan');
+    await mountAt('#/loan?tab=supply&asset=USDT&amount=250&chain=42161&intent=abc&step=step-2');
+    await act(async () => { await sleep(120); });
     t('the Loan page renders its tabs', qa('button').filter((b) => /supply|deposit|lend/i.test(b.textContent || '')).length > 0);
-    const assetCard = qa('button').find((b) => /USDT/i.test(b.textContent || ''));
-    await act(async () => { click(assetCard); });
-    await act(async () => { await sleep(30); });
-    const amountField = qa('input[type="number"]').find((i) => i.offsetParent !== null || true);
-    await act(async () => { setInputValue(amountField, '250'); });
-    const supplyBtn = qa('button').find((b) => (b.className || '').includes('btn-primary') && /supply|deposit/i.test(b.textContent || ''));
-    await act(async () => { click(supplyBtn); });
-    await act(async () => { await sleep(30); });
-    const confirmBtn = qa('button').filter((b) => (b.className || '').includes('btn-primary')).pop();
-    await act(async () => { click(confirmBtn); });
-    await act(async () => { await sleep(60); });
-    t('confirming supply navigates to Intent OS with the hand-off params',
-      window.location.hash.startsWith('#/intent') && /hint=loan-supply/.test(window.location.hash) && /amount=250/.test(window.location.hash));
-    t('the compose tab opens with the loan banner', !!q('[data-testid="loan-handoff"]'));
+    t('a workflow hand-off lands on the supply tab',
+      q('[data-testid="loan-tab-supply"]')?.getAttribute('data-active') === 'true');
+    const prefilled = q('input[type="number"]');
+    t('the hand-off arrives prefilled — the amount is already in the field',
+      !!prefilled && prefilled.value === '250');
+
+    /* No wallet is connected in this suite, so the only honest primary action
+       is the connect gate — never a navigation that pretends to deposit. */
+    const gate = q('[data-testid="loan-connect"]');
+    t('with no wallet the loan action is a connect gate', !!gate);
+    await act(async () => { click(gate); });
+    await act(async () => { await sleep(80); });
+    t('pressing it stays on the loan screen (no Intent OS hand-off)',
+      window.location.hash.startsWith('#/loan'));
+    t('the loan screen offers no link back into Intent OS',
+      qa('a').every((a) => !/#\/intent/.test(a.getAttribute('href') || '')));
+
+    /* ═══════════ 10. A WORKFLOW REMEMBERS WHERE YOU LEFT IT ═══════════ */
+    /*
+     * Reported (fa): a step hands off to its venue, and when you come back and
+     * press «ادامه/بازیابی» nothing records that the step is finished. The
+     * progress panel is the answer, and its rules are honest ones: opening a
+     * step is observed, finishing it is self-reported and undoable.
+     */
+    window.localStorage.removeItem('fbt.intent-os.workflow-progress.v1');
+    await mountAt('#/intent?tab=compose&hint=loan-supply&chain=42161&from=USDT&amount=1000');
     await compile();
-    const loanErr = q('.ios-result .notice-danger');
-    t('compiling the real loan hand-off produces a plan, not SAME_TOKEN', !loanErr);
+    t('the compiled workflow renders a progress panel', !!q('[data-testid="workflow-progress"]'));
+    t('every step starts as not-started',
+      qa('[data-testid^="workflow-progress-step-"]').length >= 2
+      && qa('[data-testid^="workflow-progress-step-"]').every((el) => el.getAttribute('data-status') === 'pending'));
+
+    const openDeposit = q('[data-testid="workflow-step-action-deposit"]');
+    await act(async () => { click(openDeposit); });
+    await act(async () => { await sleep(60); });
+    t('opening a step still lands on its real venue', window.location.hash.startsWith('#/loan'));
+    t('the deposit hand-off carries the amount, not just the tab',
+      /amount=1000/.test(window.location.hash) && /asset=USDT/.test(window.location.hash));
+
+    /* Back on Intent OS, the saved intent is restored — the step that was
+       opened is recorded as finished and the rest are listed. */
+    await mountAt('#/intent?tab=compose');
+    const restoreBtn = qa('.ios-saved button').find((b) => !/×/.test(b.textContent || ''));
+    t('the saved intent offers a restore/continue control', !!restoreBtn);
+    if (restoreBtn) {
+      await act(async () => { click(restoreBtn); });
+      await act(async () => { await sleep(120); });
+      t('restoring shows the workflow you came back to', !!q('[data-testid="restored-workflow"]'));
+      t('restoring records the step you had opened as finished',
+        q('[data-testid="workflow-progress-step-deposit"]')?.getAttribute('data-status') === 'done');
+      t('it says so out loud instead of silently ticking a box',
+        !!q('[data-testid="workflow-progress-confirmed"]'));
+      t('the steps you never opened are still waiting',
+        qa('[data-testid^="workflow-progress-step-"]').some((el) => el.getAttribute('data-status') !== 'done'));
+      t('the count reflects what is done', /1/.test(q('[data-testid="workflow-progress-count"]')?.textContent || ''));
+
+      const undo = q('[data-testid="workflow-progress-undo-deposit"]');
+      t('a self-reported completion can be undone', !!undo);
+      if (undo) {
+        await act(async () => { click(undo); });
+        await act(async () => { await sleep(60); });
+        t('undo puts the step back',
+          q('[data-testid="workflow-progress-step-deposit"]')?.getAttribute('data-status') !== 'done');
+      }
+    }
+
+    /* ═══════════ 11. THE REMOVED CONTROL RAIL ═══════════ */
+    await mountAt('#/intent?tab=compose');
+    t('the L1/L2/L3 control rail is gone from Intent OS',
+      !q('.intent-rail') && !q('[data-testid="intent-rail"]'));
+    t('nothing blocks composing behind a rail state nobody can release',
+      !q('.ios-rail-blocked'));
 
     if (root) await act(async () => { root.unmount(); });
   } catch (e) {

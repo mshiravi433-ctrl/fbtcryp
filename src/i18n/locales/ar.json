@@ -3179,6 +3179,26 @@
       "m5": "٥ دقائق",
       "h1": "ساعة",
       "d1": "يوم"
+    },
+    "progress": {
+      "title": "تقدّم هذا السير المتعدد الخطوات",
+      "count": "{{done}} من {{total}} منجزة",
+      "state": {
+        "pending": "لم تبدأ",
+        "opened": "فُتحت",
+        "done": "منجزة"
+      },
+      "open": "افتح الشاشة",
+      "reopen": "افتحها ثانية",
+      "markDone": "أنهيت هذه",
+      "undo": "تراجع",
+      "reset": "تصفير التقدّم",
+      "selfReported": "سجّلتها أنت كمنجزة — غير مؤكدة على السلسلة",
+      "hint": "كل خطوة تفتح شاشتها الحقيقية بالقيم نفسها. يسجّل Intent OS ما فتحته وما أعلنت أنك أنهيته فقط — لا ينفّذ شيئاً بنفسه ولا يفترض نجاح أي خطوة.",
+      "allDone": "سجّلت كل خطوات هذا السير كمنجزة.",
+      "resumed": "سُجّلت كمنجزة: {{steps}}. بقيت {{remaining}} خطوة — تراجع عنها أدناه إن كان ذلك خطأً.",
+      "restoredTitle": "السير الذي عدت إليه",
+      "restoredNote": "أعيد ملء النموذج أعلاه بهذا الـintent. جمّعه لإعادة الفحوصات — يبقى التقدّم أدناه لأنه السير نفسه."
     }
   },
   "verdict": {
@@ -4604,7 +4624,6 @@
     "borrowBtn": "اقتراض {{symbol}}",
     "positionsTitle": "مراكز القروض النشطة",
     "positionsBody": "عرض وإدارة مراكزك عبر Intent OS ومحفظتك.",
-    "openIntentOS": "فتح Intent OS",
     "openWallet": "المحفظة",
     "howTitle": "كيف يعمل",
     "step1Title": "قفل الضمان",
@@ -4633,14 +4652,89 @@
     "enterAmount": "أدخل مبلغاً",
     "enterCollateral": "أدخل مبلغ الضمان",
     "overMaxBorrow": "مبلغ القرض يتجاوز الحد الأقصى",
-    "openIntentForSupply": "سيفتح Intent OS لتوقيع معاملة الإيداع",
-    "openIntentForBorrow": "سيفتح Intent OS لتوقيع معاملة الاقتراض",
     "warningLiqTitle": "خطر التصفية",
     "warningLiqBody": "إذا انخفض الضمان تحت العتبة، يبيعه العقد الذكي تلقائياً. لا رجعة فيه.",
     "warningLiqBorrowBody": "إذا انخفض الضمان تحت حد LTV، يبيعه العقد الذكي. لا رجعة. حافظ على ضمان كافٍ.",
     "warningScTitle": "مخاطر العقود الذكية",
     "warningScBody": "أي بروتوكول إقراض قد يحتوي على أخطاء. لا تودع إلا ما تتحمل خسارته.",
     "maxBorrowHint": "الحد الأقصى: {{max}}",
-    "chooseAssetFirst": "اختر أصلاً أولاً"
+    "chooseAssetFirst": "اختر أصلاً أولاً",
+    "connectWallet": "توصيل المحفظة",
+    "switchChain": "بدّل الشبكة إلى {{chain}}",
+    "chainUnsupported": "لا يوجد سوق إقراض موصول في التطبيق لشبكة {{chain}} بعد.",
+    "reserveUnavailable": "ليس أصلاً مدعوماً في المجمّع على هذه الشبكة",
+    "noAssetsOnChain": "لا توجد أصول إقراض متاحة على {{chain}}.",
+    "market": "السوق",
+    "poolLabel": "Aave V3 · {{chain}}",
+    "rateSource": "تُقرأ الأسعار والأرصدة مباشرة من مجمّع Aave V3 على {{chain}} — آخر قراءة {{at}}.",
+    "maxOf": "الحد الأقصى {{amount}} {{symbol}}",
+    "amountOverWallet": "أكبر من رصيد محفظتك.",
+    "alreadySupplied": "المودع حالياً: {{amount}} {{symbol}}",
+    "earnHint": "عائد الإيداع الحالي: {{apy}}%",
+    "collateralOptional": "ضمان إضافي ({{symbol}}) — اختياري",
+    "collateralHint": "اتركه فارغاً إذا كان لديك ضمان مودع بالفعل.",
+    "needCollateralFirst": "أودع ضماناً أولاً — لا يسجّل المجمّع أي ضمان لهذه المحفظة.",
+    "projectedHealth": "معامل الأمان بعد هذا الاقتراض: نحو {{hf}}",
+    "borrowPower": "قدرة الاقتراض",
+    "collateral": "الضمان",
+    "debt": "الدين",
+    "healthFactor": "معامل الأمان",
+    "healthNone": "لا يوجد دين",
+    "health": {
+      "safe": "آمن",
+      "watch": "انتبه",
+      "risky": "خطر",
+      "critical": "حرج",
+      "none": "—"
+    },
+    "supplied": "مودع",
+    "borrowed": "مقترض",
+    "manageAmount": "كمية {{symbol}}",
+    "withdraw": "سحب",
+    "repay": "سداد",
+    "noPositions": "لا يوجد لهذه المحفظة إيداع أو اقتراض في هذا السوق بعد.",
+    "loadingPositions": "نقرأ مركزك من المجمّع…",
+    "stepsTitle": "{{n}} معاملة ستوقّعها محفظتك",
+    "running": "بانتظار محفظتك…",
+    "backToLoan": "العودة إلى القروض",
+    "step": {
+      "approve": "الموافقة على {{symbol}} للمجمّع",
+      "supply": "إيداع {{symbol}}",
+      "borrow": "اقتراض {{symbol}}",
+      "repay": "سداد {{symbol}}",
+      "withdraw": "سحب {{symbol}}"
+    },
+    "stepState": {
+      "pending": "بالانتظار",
+      "running": "قيد التوقيع",
+      "done": "مؤكدة",
+      "failed": "فشلت"
+    },
+    "sheetTitle": {
+      "supply": "إيداع",
+      "borrow": "اقتراض",
+      "repay": "سداد",
+      "withdraw": "سحب"
+    },
+    "done": {
+      "supply": "تم الإيداع. المبلغ في المجمّع ويحقق عائداً من هذه الكتلة.",
+      "borrow": "تم الاقتراض. الأصل في محفظتك والدين مسجّل على مركزك.",
+      "repay": "تم السداد. انخفض دينك على هذا الأصل بالمقدار نفسه.",
+      "withdraw": "تم السحب. عاد الأصل إلى محفظتك."
+    },
+    "error": {
+      "USER_REJECTED": "رفضت الطلب في محفظتك. لم يُرسل شيء.",
+      "WALLET_NOT_CONNECTED": "لا توجد محفظة موصولة، فلم يُوقَّع شيء.",
+      "UNSUPPORTED_CHAIN": "هذه الشبكة بلا سوق إقراض موصول.",
+      "APPROVE_FAILED": "فشلت معاملة الموافقة. لم يتم أي إيداع.",
+      "SUPPLY_FAILED": "فشلت معاملة الإيداع.",
+      "BORROW_FAILED": "فشلت معاملة الاقتراض. راجع ضمانك وقدرتك على الاقتراض.",
+      "REPAY_FAILED": "فشلت معاملة السداد.",
+      "WITHDRAW_FAILED": "فشلت معاملة السحب. قد يمنع المجمّع السحب إذا خفض معامل الأمان دون 1.",
+      "REVERTED": "رفضت الشبكة المعاملة.",
+      "UNKNOWN_STEP": "خطوة غير معروفة — لم يُرسل شيء.",
+      "UNKNOWN": "لم تتم المعاملة."
+    },
+    "rateUnknown": "السعر المباشر غير متاح الآن"
   }
 }

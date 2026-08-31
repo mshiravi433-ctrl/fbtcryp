@@ -1,27 +1,34 @@
 /**
- * PHASE 142 (REVISED 2026-08-31) — THE EXECUTION-CONTROL BOX IS REMOVED,
- * THE STATE MACHINE AND THE RELEASE PATH STAY.
+ * PHASE 142 (REVISED 2026-08-31, second pass) — NOTHING CAN BLOCK A USER
+ * BEHIND A CONTROL THAT NO LONGER EXISTS.
  * ---------------------------------------------------------------------------
- * History this probe guards, so neither regression returns:
+ * History this probe guards, so none of it comes back:
  *
- *   · First the pause / emergency-stop / human-agent controls lived on the
- *     Intent OS rail, then they were moved to the AI surface, and once they
- *     were removed without being rebuilt anywhere the gate became unreachable
- *     from every screen while the probes stayed green (they tested the module,
- *     not the screen). The original phase-142 probe made sure that could not
- *     happen again.
+ *   · The pause / emergency-stop / human-agent controls lived on the Intent OS
+ *     rail, then moved to the AI surface, and once they were removed without
+ *     being rebuilt anywhere the gate became UNREACHABLE from every screen
+ *     while the probes stayed green — they tested the module, not the screen.
+ *     That is the original bug this phase exists for.
  *
- *   · On 2026-08-31 the OWNER asked for the execution-control box on the
- *     Intent AI page (pause / emergency stop / human agent / pause presets)
- *     to be removed entirely. That is now the requirement this probe encodes:
+ *   · 2026-08-31 (a): the owner removed the execution-control box on the
+ *     Intent AI page (pause / emergency stop / human agent / presets).
  *
- *       - the box is NOT mounted on any screen and the component file is gone;
- *       - the rail state machine itself (railStore + intentRailControls) stays,
- *         because the Intent OS rail renders its state and the chat gates
- *         still read it — a persisted STOPPED state must keep meaning STOPPED;
- *       - a blocked rail ALWAYS keeps its way back: the release control on the
- *         Intent OS rail (two taps for a stop) is the one remaining operator,
- *         so removing the box must never remove the release.
+ *   · 2026-08-31 (b): the owner removed the L1/L2/L3 + state-pill rail box
+ *     from the Intent OS page. That rail carried the LAST release control, and
+ *     it also carried the gate that could refuse to send. Removing the release
+ *     while keeping the gate would have recreated the original bug in its
+ *     worst form: a screen that refuses to send with no way back.
+ *
+ * So the contract is now the mirror image of the old one:
+ *
+ *   1. no screen mounts a pause / emergency-stop / human-agent control;
+ *   2. no screen GATES execution on the rail state either — if there is no
+ *      release control on any screen, there must be no lock to release;
+ *   3. the deterministic state machine in the library stays (it is still the
+ *      audited definition of the states, and its release transitions still
+ *      exist), so a future surface can be rebuilt on it honestly;
+ *   4. the real gates are untouched: a compiled plan's own checks, the venue
+ *      screen and the wallet signature.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 
@@ -31,7 +38,7 @@ const check = (name, ok) => results.push({ name, ok: Boolean(ok) });
 const read = (p) => { try { return readFileSync(p, 'utf8'); } catch { return ''; } };
 const srcFiles = (function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? walk(`${dir}/${e.name}`) : (/\\.jsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])
+    e.isDirectory() ? walk(`${dir}/${e.name}`) : (/\.jsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [])
   );
 })('src');
 const all = srcFiles.map((f) => ({ file: f, src: read(f) }));
@@ -42,43 +49,51 @@ const GATE_ACTIONS = ['pauseExecution', 'engageEmergencyStop', 'requestHumanAgen
 const RELEASE_ACTIONS = ['releaseEmergencyStop', 'resumeExecution'];
 
 try {
-  /* ---------------- 1. the state machine stays ---------------- */
-  const store = read('src/lib/intent-ai/railStore.js');
-  check('a rail store exists', store.length > 0);
+  /* ---------------- 1. the state machine stays in the library ---------- */
+  const controls = read('src/lib/intent-ai/intentRailControls.js');
+  check('the deterministic rail state machine still exists', controls.length > 0);
   for (const action of [...GATE_ACTIONS, ...RELEASE_ACTIONS]) {
-    check(`the store exposes a wrapper for ${action}`,
-      new RegExp(`export const rail\\w+\\s*=\\s*\\(?[^)]*\\)?\\s*=>\\s*commitRail\\(\\s*${action}\\b`).test(store)
-      || new RegExp(`commitRail\\(\\s*${action}\\(`).test(store));
+    check(`the state machine still defines ${action}`,
+      new RegExp(`export function ${action}\\b`).test(controls));
   }
+  check('mayExecute still refuses a stopped or indefinitely paused state',
+    /export function mayExecute/.test(controls)
+    && /EMERGENCY_STOP/.test(controls) && /PAUSED_INDEFINITE/.test(controls));
 
-  /* ---------------- 2. the box is gone (owner, 2026-08-31) ---- */
+  const store = read('src/lib/intent-ai/railStore.js');
+  check('the shared store keeps a way back for both pause and stop',
+    /railResume\b/.test(store) && /railReleaseStop\b/.test(store));
+
+  /* ---------------- 2. no screen mounts the removed controls ----------- */
   check('the ExecutionControls component file is deleted',
     !srcFiles.some((f) => f.endsWith('/components/ExecutionControls.jsx'))
     && read('src/components/ExecutionControls.jsx') === '');
+  check('the Intent OS control rail component is deleted',
+    !srcFiles.some((f) => f.endsWith('/components/IntentRail.jsx'))
+    && read('src/components/IntentRail.jsx') === '');
   check('no screen mounts an execution-controls box',
     !callers.some((f) => /<ExecutionControls/.test(f.src) || /import ExecutionControls/.test(f.src)));
+  check('no screen mounts the L1/L2/L3 control rail',
+    !callers.some((f) => /<IntentRail/.test(f.src) || /import IntentRail/.test(f.src)));
   for (const action of GATE_ACTIONS) {
-    check(`no screen calls ${action} (the box was removed on purpose)`,
+    check(`no screen calls ${action} (the controls were removed on purpose)`,
       !callers.some((f) => f.src.includes(`${action}(`)));
   }
 
-  /* ---------------- 3. the way back is never lost ------------- */
-  const rail = read('src/components/IntentRail.jsx');
-  check('the Intent OS rail still reads the shared store',
-    rail.includes('useSyncExternalStore') && rail.includes('subscribeRail'));
-  check('a blocked rail always offers a release on the Intent OS rail',
-    /blocked &&[\s\S]{0,400}?intent-rail-release/.test(rail));
-  check('releasing a stop still needs two taps',
-    /releaseArm/.test(rail));
-  check('the store keeps a way back for both pause and stop',
-    /railResume\b/.test(store) && /railReleaseStop\b/.test(store));
+  /* ---------------- 3. and no screen locks on that state --------------- */
+  const os = read('src/pages/IntentOS.jsx');
+  check('the Intent OS page no longer gates sending on the rail state',
+    !/railBlocked/.test(os) && !/mayExecute\(/.test(os));
+  check('no screen imports the rail store now that no rail is rendered',
+    !callers.some((f) => /from '[^']*railStore/.test(f.src)));
+  check('no screen renders a rail-blocked banner',
+    !callers.some((f) => /ios-rail-blocked/.test(f.src)));
 
-  /* ---------------- 4. the rail copy is translated ------------- */
-  const locales = ['en', 'fa', 'ar'].map((l) => JSON.parse(read(`src/i18n/locales/${l}.json`)));
-  check('the Intent OS rail copy exists in en, fa and ar',
-    locales.every((l) => typeof l?.intentOS?.rail?.label === 'string'
-      && typeof l?.intentOS?.rail?.release === 'string'
-      && typeof l?.intentOS?.rail?.stoppedShort === 'string'));
+  /* ---------------- 4. the real gates are still there ------------------ */
+  check('a compiled plan still refuses to hand off when its own checks block it',
+    /if \(!compiled \|\| compiled\.blocked\) return;/.test(os));
+  check('the Intent OS page still hands off to a venue screen instead of executing',
+    /navigate\(compiled\.handoff\)/.test(os));
 } catch (error) {
   check(`probe crashed: ${error.message}`, false);
 }

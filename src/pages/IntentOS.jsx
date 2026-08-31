@@ -25,8 +25,18 @@ import {
   verifyExecutionProof
 } from '../lib/executionProof';
 import { getIntentCapabilities, getIntentPublicStatus } from '../lib/intentNetwork';
-import { INTENT_AI_VERSION, mayExecute, verifyWalletChain, multichainCoverage, walletSecurityPosture } from '../lib/intent-ai/index.js';
-import IntentRail from '../components/IntentRail';
+import { INTENT_AI_VERSION, verifyWalletChain, multichainCoverage, walletSecurityPosture } from '../lib/intent-ai/index.js';
+import {
+  summarizeWorkflow,
+  markStepOpened,
+  markStepDone,
+  markStepPending,
+  confirmOpenedSteps,
+  getIntentProgress,
+  clearIntentProgress,
+  STEP_DONE,
+  STEP_OPENED
+} from '../lib/intent-ai/workflowProgress.js';
 import ProfitPlanner from '../components/ProfitPlanner';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
 import IntentTxHistory from '../components/IntentTxHistory';
@@ -120,7 +130,14 @@ export function stepVenueRoute(step, intent, allSteps = []) {
       return `/swap?${withIntent(extra).toString()}`;
     }
     case 'approve':
-      if (lendingWorkflow) return `/loan?${withIntent({ tab: 'supply' }).toString()}`;
+      if (lendingWorkflow) {
+        return `/loan?${withIntent({
+          tab: 'supply',
+          asset: step.asset || intent.fromSymbol,
+          amount: step.maxInput || intent.amountIn,
+          chain: fromChain
+        }).toString()}`;
+      }
       return `/swap?${withIntent({
         from: intent.fromSymbol,
         amount: intent.amountIn,
@@ -145,14 +162,167 @@ export function stepVenueRoute(step, intent, allSteps = []) {
       return `/bridge?${withIntent(extra).toString()}`;
     }
     case 'deposit':
-      return `/loan?${withIntent({ tab: 'supply' }).toString()}`;
+      return `/loan?${withIntent({
+        tab: 'supply',
+        asset: step.asset || intent.fromSymbol,
+        amount: step.maxInput || intent.amountIn,
+        chain: fromChain
+      }).toString()}`;
     case 'borrow':
-      return `/loan?${withIntent({ tab: 'borrow' }).toString()}`;
+      return `/loan?${withIntent({
+        tab: 'borrow',
+        asset: step.asset || intent.toSymbol || intent.fromSymbol,
+        amount: step.minOutput || step.maxInput || '',
+        chain: fromChain
+      }).toString()}`;
     case 'send':
       return `/wallet?${withIntent().toString()}`;
     default:
-      return `/loan?${withIntent({ tab: 'supply' }).toString()}`;
+      return `/loan?${withIntent({
+        tab: 'supply',
+        asset: step.asset || intent.fromSymbol,
+        amount: step.maxInput || intent.amountIn,
+        chain: fromChain
+      }).toString()}`;
   }
+}
+
+/**
+ * ─── PICKING UP A MULTI-STEP INTENT WHERE YOU LEFT IT ──────────────────────
+ * A workflow is executed one venue at a time: the step button opens the real
+ * screen with this intent's amounts already filled in, the user confirms there
+ * and signs in their wallet, then comes back here.
+ *
+ * Before this panel existed, coming back showed the same untouched list, so
+ * "which of these have I already done?" had no answer on screen. Now every
+ * step carries a state:
+ *
+ *   · pending — never opened
+ *   · opened  — we sent the user to the venue (a fact this app observed)
+ *   · done    — the user said so, here or by pressing restore on the saved
+ *               intent. It is labelled as self-reported and it can be undone.
+ *
+ * The one thing this panel refuses to do is guess. It never reads a balance
+ * and declares a step finished; a wrong "done" on a bridge step is how people
+ * send funds twice.
+ */
+function WorkflowProgress({ intent, summary, t, onOpen, onDone, onUndo, onReset, confirmedNote }) {
+  if (!intent || !summary || summary.total === 0) return null;
+  const pct = Math.round((summary.doneCount / summary.total) * 100);
+  const statusLabel = {
+    pending: t('intentOS.progress.state.pending', { defaultValue: 'not started' }),
+    opened: t('intentOS.progress.state.opened', { defaultValue: 'opened' }),
+    done: t('intentOS.progress.state.done', { defaultValue: 'done' })
+  };
+  return (
+    <div className="ios-progress" data-testid="workflow-progress">
+      <div className="row-between ios-progress-head">
+        <strong>{t('intentOS.progress.title', { defaultValue: 'Progress of this workflow' })}</strong>
+        <span className="mono" data-testid="workflow-progress-count">
+          {t('intentOS.progress.count', {
+            done: summary.doneCount,
+            total: summary.total,
+            defaultValue: `${summary.doneCount} of ${summary.total} done`
+          })}
+        </span>
+      </div>
+      <div className="ios-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+        <span style={{ width: `${pct}%` }} />
+      </div>
+
+      {confirmedNote ? (
+        <p className="notice ios-progress-confirmed" data-testid="workflow-progress-confirmed">{confirmedNote}</p>
+      ) : null}
+
+      <ol className="ios-progress-steps">
+        {summary.rows.map((row) => {
+          const isNext = summary.next && summary.next.id === row.id;
+          return (
+            <li
+              key={row.id || row.index}
+              className={`ios-progress-step is-${row.status}${isNext ? ' is-next' : ''}`}
+              data-testid={`workflow-progress-step-${row.action}`}
+              data-status={row.status}
+            >
+              <span className="ios-progress-index" aria-hidden="true">{row.index + 1}</span>
+              <span className="ios-progress-body">
+                <strong>{t(`intentOS.action.${row.action}`, { defaultValue: row.action })}</strong>
+                <small>
+                  {row.step?.asset || intent.fromSymbol || '—'}
+                  {' · '}
+                  {EVM_CHAINS[row.step?.chainId || intent.chainId]?.short
+                    || EVM_CHAINS[row.step?.chainId || intent.chainId]?.name
+                    || `#${row.step?.chainId || intent.chainId}`}
+                  {row.step?.maxInput ? ` · ${t('intentOS.field.workflowMaxIn')} ${row.step.maxInput}` : ''}
+                  {row.step?.minOutput ? ` · ${t('intentOS.field.workflowMinOut')} ${row.step.minOutput}` : ''}
+                </small>
+                {row.status === STEP_DONE && row.selfReported && (
+                  <small className="ios-progress-selfreport">
+                    {t('intentOS.progress.selfReported', { defaultValue: 'marked done by you — not verified on-chain' })}
+                  </small>
+                )}
+              </span>
+              <span className={`ios-status ${row.status === STEP_DONE ? 'eligible' : row.status === STEP_OPENED ? 'pending' : 'unavailable'}`}>
+                {statusLabel[row.status]}
+              </span>
+              <span className="ios-progress-actions">
+                {row.status !== STEP_DONE && (
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${isNext ? 'btn-primary' : 'btn-ghost'}`}
+                    data-testid={`workflow-step-action-${row.action}`}
+                    onClick={() => onOpen(row.step)}
+                  >
+                    {row.status === STEP_OPENED
+                      ? t('intentOS.progress.reopen', { defaultValue: 'Open again' })
+                      : t('intentOS.progress.open', { defaultValue: 'Open venue' })}
+                    <span aria-hidden="true"> →</span>
+                  </button>
+                )}
+                {row.status === STEP_DONE ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-testid={`workflow-progress-undo-${row.action}`}
+                    onClick={() => onUndo(row.step)}
+                  >
+                    {t('intentOS.progress.undo', { defaultValue: 'Undo' })}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-testid={`workflow-progress-done-${row.action}`}
+                    onClick={() => onDone(row.step)}
+                  >
+                    {t('intentOS.progress.markDone', { defaultValue: 'I finished this' })}
+                  </button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="row-between ios-progress-foot">
+        <p className="ios-honesty-note">
+          {summary.complete
+            ? t('intentOS.progress.allDone', { defaultValue: 'You have marked every step of this workflow as finished.' })
+            : t('intentOS.progress.hint', { defaultValue: 'Each step opens its real screen with these values filled in. Intent OS records what you opened and what you tell it you finished — it never executes anything itself and never assumes a step succeeded.' })}
+        </p>
+        {summary.started && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            data-testid="workflow-progress-reset"
+            onClick={onReset}
+          >
+            {t('intentOS.progress.reset', { defaultValue: 'Reset progress' })}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function StageRail({ t }) {
@@ -766,7 +936,12 @@ export default function IntentOS() {
   };
 
   const chooseTemplate = (template) => {
+    /* Picking a template starts a new thread: drop the restored intent id so
+       the next compile does not inherit another workflow's progress. */
+    setRestoredWorkflow(null);
+    setResumeNoteText('');
     patchDraft({
+      id: null,
       kind: template.kind,
       ...(template.kind === 'workflow' ? {
         steps: DEFAULT_WORKFLOW.map((step) => ({ ...step, chainId: draft.chainId }))
@@ -819,6 +994,11 @@ export default function IntentOS() {
     }
     const persisted = saveCompiledIntent(result);
     if (persisted.rows) setSaved(persisted.rows);
+    /* Keep the compiled plan and the restored one from fighting over which
+       workflow the progress panel is showing. */
+    setRestoredWorkflow(null);
+    if (result.intent?.id !== restoredWorkflow?.id) setResumeNoteText('');
+    setProgressTick((n) => n + 1);
 
     /*
      * Start the lifecycle at compile time. A BLOCKED intent stays CREATED —
@@ -866,10 +1046,22 @@ export default function IntentOS() {
     setSearchParams(next, { replace: true });
   };
 
+  /**
+   * "Continue / restore" on a saved intent. Two things happen, and only one of
+   * them is an assumption — the honest one:
+   *
+   *   1. the draft is refilled from the saved intent, keeping its id so a
+   *      recompile stays the SAME workflow instead of forking a new one;
+   *   2. every step we had sent the user to is taken at their word as
+   *      finished. That is what pressing "continue" means here, it is labelled
+   *      on screen as self-reported, each one has an undo, and the remaining
+   *      steps are listed underneath. Nothing is inferred from chain state.
+   */
   const restoreSavedIntent = (intent) => {
     if (!intent) return;
     setDraft((current) => ({
       ...current,
+      id: intent.id || current.id || null,
       kind: intent.kind || current.kind,
       chainId: intent.chainId || current.chainId,
       fromSymbol: intent.fromSymbol || current.fromSymbol,
@@ -884,6 +1076,31 @@ export default function IntentOS() {
     setCompiled(null);
     const record = expireIfDue(getLifecycle(intent.id));
     setLifecycle(record || null);
+
+    const steps = Array.isArray(intent.steps) ? intent.steps : [];
+    if (intent.kind === 'workflow' && steps.length) {
+      const { steps: progress, confirmed } = confirmOpenedSteps(intent.id);
+      const summary = summarizeWorkflow(intent, progress);
+      setRestoredWorkflow(intent);
+      if (confirmed.length) {
+        const names = confirmed
+          .map((stepId) => steps.find((step) => String(step.id) === String(stepId)))
+          .filter(Boolean)
+          .map((step) => t(`intentOS.action.${step.action}`, { defaultValue: step.action }))
+          .join(' · ');
+        setResumeNoteText(t('intentOS.progress.resumed', {
+          steps: names,
+          remaining: summary.remaining.length,
+          defaultValue: `Recorded as finished: ${names}. ${summary.remaining.length} step(s) left — you can undo any of them below.`
+        }));
+      } else {
+        setResumeNoteText('');
+      }
+    } else {
+      setRestoredWorkflow(null);
+      setResumeNoteText('');
+    }
+    setProgressTick((n) => n + 1);
     chooseTab('compose');
   };
 
@@ -914,7 +1131,7 @@ export default function IntentOS() {
   };
 
   const handleCompiledAction = () => {
-    if (!compiled || compiled.blocked || railBlocked) return;
+    if (!compiled || compiled.blocked) return;
     if (compiled.intent.kind === 'automation') {
       const res = storeAutomationOrder(compiled.intent);
       if (res.error) {
@@ -935,10 +1152,76 @@ export default function IntentOS() {
 
   const [loanHandoffDismissed, setLoanHandoffDismissed] = useState(false);
 
-  /* ── Phases 141–150: the horizontal rail gates the compose surface. ─── */
-  const [railState, setRailState] = useState(null);
-  const railGate = useMemo(() => mayExecute(railState || undefined), [railState]);
-  const railBlocked = railGate.allowed !== true;
+  /*
+   * ─── THE L1/L2/L3 CONTROL RAIL IS REMOVED (owner, 2026-08-31) ─────────────
+   * The strip that sat here — the L1 analysis / L2 preparation / L3 controlled
+   * icons plus the "active" state pill — was taken off this page on request.
+   *
+   * Its execution GATE had to go with it, and that is the important half: the
+   * pause / emergency-stop controls had already been removed from the product,
+   * so the only remaining way into a blocked state was a persisted record from
+   * an older build — and with the rail gone there was no control left to
+   * release it. Keeping the gate would have meant a screen that can refuse to
+   * send and offers no way back. Sending is still gated where the money is:
+   * the compiled plan's own checks, the venue screen and the wallet signature.
+   */
+
+  /*
+   * ─── RESUMING A MULTI-STEP INTENT ────────────────────────────────────────
+   * The active workflow is whatever the user is looking at: the plan they just
+   * compiled, or the saved intent they restored. Its per-step progress lives
+   * in local storage keyed by intent id, so leaving for the bridge screen and
+   * coming back does not lose the thread. `progressTick` exists only to pull
+   * that storage back into render after we write to it.
+   */
+  const [restoredWorkflow, setRestoredWorkflow] = useState(null);
+  const [resumeNoteText, setResumeNoteText] = useState('');
+  const [progressTick, setProgressTick] = useState(0);
+
+  const activeWorkflowIntent = useMemo(() => {
+    if (compiled && !compiled.error && compiled.intent?.kind === 'workflow') return compiled.intent;
+    return restoredWorkflow;
+  }, [compiled, restoredWorkflow]);
+
+  const workflowSummary = useMemo(
+    () => (activeWorkflowIntent
+      ? summarizeWorkflow(activeWorkflowIntent, getIntentProgress(activeWorkflowIntent.id))
+      : null),
+    [activeWorkflowIntent, progressTick]
+  );
+
+  const resumeNote = restoredWorkflow && activeWorkflowIntent?.id === restoredWorkflow.id ? resumeNoteText : '';
+
+  const openWorkflowStep = (step) => {
+    if (!activeWorkflowIntent || !step) return;
+    const steps = Array.isArray(activeWorkflowIntent.steps) ? activeWorkflowIntent.steps : [];
+    const route = stepVenueRoute(step, activeWorkflowIntent, steps);
+    /* "Opened" is a fact we observed; it is never upgraded to "done" for you. */
+    markStepOpened(activeWorkflowIntent.id, step.id, route);
+    setProgressTick((n) => n + 1);
+    navigate(route);
+  };
+
+  const completeWorkflowStep = (step) => {
+    if (!activeWorkflowIntent || !step) return;
+    markStepDone(activeWorkflowIntent.id, step.id);
+    setResumeNoteText('');
+    setProgressTick((n) => n + 1);
+  };
+
+  const reopenWorkflowStep = (step) => {
+    if (!activeWorkflowIntent || !step) return;
+    markStepPending(activeWorkflowIntent.id, step.id);
+    setResumeNoteText('');
+    setProgressTick((n) => n + 1);
+  };
+
+  const resetWorkflowProgress = () => {
+    if (!activeWorkflowIntent) return;
+    clearIntentProgress(activeWorkflowIntent.id);
+    setResumeNoteText('');
+    setProgressTick((n) => n + 1);
+  };
 
   /* ── Phases 131–140: wallet & multichain verification. ────────────────── */
   const wallet = useWallet();
@@ -1013,8 +1296,6 @@ export default function IntentOS() {
 
       <StageRail t={t} />
 
-      <IntentRail t={t} onStateChange={setRailState} />
-
       <div className="ios-tabs" role="tablist">
         {TABS.map((name) => (
           <button
@@ -1070,20 +1351,6 @@ export default function IntentOS() {
               >
                 ×
               </button>
-            </section>
-          )}
-          {railBlocked && (
-            <section className="ios-rail-blocked" role="alert">
-              <strong>
-                {railGate.reason === 'EMERGENCY_STOP'
-                  ? t('intentOS.rail.composeBlockedStop', { defaultValue: 'Emergency stop is engaged — execution is blocked.' })
-                  : t('intentOS.rail.composeBlockedPause', { defaultValue: 'The system is paused — execution is blocked.' })}
-              </strong>
-              <span>
-                {railGate.reason === 'PAUSED' && railGate.resumesAt
-                  ? t('intentOS.rail.composeResumes', { defaultValue: 'You can keep composing; sending resumes automatically at' }) + ` ${new Date(railGate.resumesAt).toLocaleTimeString()}`
-                  : t('intentOS.rail.composeNote', { defaultValue: 'You can keep composing, but no intent can be sent until the rail is released.' })}
-              </span>
             </section>
           )}
           <section>
@@ -1393,13 +1660,10 @@ export default function IntentOS() {
                       <button
                         className="btn btn-primary ios-compile"
                         onClick={handleCompiledAction}
-                        disabled={railBlocked}
                       >
-                        {railBlocked
-                          ? t('intentOS.rail.blocked', { defaultValue: 'Rail paused/stopped — release to send' })
-                          : compiled.intent.kind === 'automation'
-                            ? t('intentOS.result.createWatchedOrder')
-                            : t('intentOS.result.reviewHandoff')} <span>→</span>
+                        {compiled.intent.kind === 'automation'
+                          ? t('intentOS.result.createWatchedOrder')
+                          : t('intentOS.result.reviewHandoff')} <span>→</span>
                       </button>
                       <p className="ios-honesty-note">
                         {compiled.intent.kind === 'automation'
@@ -1415,20 +1679,16 @@ export default function IntentOS() {
                             <p>{isSingleChainWorkflowSteps(compiled.intent.steps, compiled.intent.chainId)
                               ? t('intentOS.result.workflowReadyNote')
                               : t('intentOS.result.workflowCrossChainNote')}</p>
-                            <div className="ios-step-actions">
-                              {compiled.intent.steps.map((step) => (
-                                <button
-                                  key={step.id}
-                                  type="button"
-                                  className="btn btn-ghost btn-sm"
-                                  data-testid={`workflow-step-action-${step.action}`}
-                                  onClick={() => navigate(stepVenueRoute(step, compiled.intent, compiled.intent.steps))}
-                                >
-                                  {t(`intentOS.action.${step.action}`, { defaultValue: step.action })}
-                                </button>
-                              ))}
-                              <p className="ios-honesty-note">{t('intentOS.result.stepActionHint', { defaultValue: 'Each action opens the real screen for that step with the values of this intent — Intent OS itself executes nothing.' })}</p>
-                            </div>
+                            <WorkflowProgress
+                              intent={compiled.intent}
+                              summary={workflowSummary}
+                              t={t}
+                              onOpen={openWorkflowStep}
+                              onDone={completeWorkflowStep}
+                              onUndo={reopenWorkflowStep}
+                              onReset={resetWorkflowProgress}
+                              confirmedNote={resumeNote}
+                            />
                           </>
                         )
                         : <p>{t('intentOS.result.draftOnly')}</p>}
@@ -1436,6 +1696,31 @@ export default function IntentOS() {
                   )}
                 </>
               )}
+            </section>
+          )}
+
+          {restoredWorkflow && (!compiled || compiled.intent?.id !== restoredWorkflow.id) && (
+            <section className="ios-result" data-testid="restored-workflow">
+              <div className="row-between ios-section-head">
+                <div>
+                  <span className="ios-step-number">↺</span>
+                  <strong>{t('intentOS.progress.restoredTitle', { defaultValue: 'Workflow you came back to' })}</strong>
+                </div>
+                <small>{restoredWorkflow.fromSymbol} → {restoredWorkflow.toSymbol}</small>
+              </div>
+              <WorkflowProgress
+                intent={restoredWorkflow}
+                summary={workflowSummary}
+                t={t}
+                onOpen={openWorkflowStep}
+                onDone={completeWorkflowStep}
+                onUndo={reopenWorkflowStep}
+                onReset={resetWorkflowProgress}
+                confirmedNote={resumeNote}
+              />
+              <p className="ios-honesty-note">
+                {t('intentOS.progress.restoredNote', { defaultValue: 'The form above is filled with this intent again. Compile it to re-run the checks — the progress below is kept, because it is the same workflow.' })}
+              </p>
             </section>
           )}
 

@@ -2164,6 +2164,73 @@
 .ia-setup-card .ia-modes { padding-block: 1px 6px; }
 .ia-setup-card .ia-mode-card { margin-top: 10px; }
 
+/* ─── SESSION SETUP: THE BOXES INSIDE ARE SIZED, NOT STRETCHED ──────────────
+   Reported (fa): «وقتی تنظیمات جلسه رو باز می‌کنی کادرهای داخلش کشیده و
+   بدسایز است — باید وسط‌چین و درست‌سایز باشد».
+
+   The accordion body is a full-width grid, so every control inside inherited
+   the panel's width no matter how little it had to say: three mode chips laid
+   out for a 132px card were pulled across a 460px tablet column, the L1/L2/L3
+   chips became three wide slabs with a 21px glyph floating at the start of
+   each, and the session-control rail hugged the leading edge with a gap where
+   a fifth button used to be.
+
+   Nothing here changes what the controls DO. Three rules fix the shape:
+
+     · every card gets a readable maximum width and is centred in the body, so
+       the panel stays one column on a phone and does not smear on a tablet;
+     · rows that can fit their items share the width evenly (`flex: 1 1 0`)
+       instead of leaving one wide item and empty space, and they keep their
+       `min-width` so a narrow screen still scrolls the rail rather than
+       squeezing the labels;
+     · the content of each chip is centred with the chip, and the chips in a
+       row are the same height, so the row reads as one control.
+   ------------------------------------------------------------------------ */
+.ia-setup-body { justify-items: center; }
+.ia-setup-card {
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+}
+.ia-setup-card .ia-setup-card-head { justify-content: space-between; }
+
+/* Mode chips: even columns when they fit, a scrolling rail when they do not. */
+.ia-setup-card .ia-modes { justify-content: safe center; }
+.ia-setup-card .ia-modes > .ia-mode {
+  flex: 1 1 0;
+  min-width: 116px;
+  max-width: 200px;
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+  min-height: 62px;
+}
+.ia-setup-card .ia-mode small { white-space: normal; text-align: center; }
+
+/* Level chips: a capped, centred three-up row instead of three wide slabs. */
+.ia-setup-card .ia-level-row { justify-content: center; }
+.ia-setup-card .ia-levels {
+  max-width: 340px;
+  margin-inline: auto;
+}
+.ia-setup-card .ia-level {
+  min-width: 0;
+  min-height: 62px;
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+/* Session controls: centred while they fit, scrollable the moment they do not. */
+.ia-setup-card .ia-controls { justify-content: safe center; }
+.ia-setup-card .ia-ctl { min-height: 38px; }
+
+/* Everything else in the card stays inside it. */
+.ia-setup-card .ia-mode-card,
+.ia-setup-card .ia-auth-item,
+.ia-setup-card .ia-setup-note { max-width: 100%; }
+.ia-setup-card .ia-setup-note { text-align: start; }
+
 /* Deep market analysis — one card per analysis reply. */
 .ia-ana-card {
   margin-top: 8px;
@@ -2542,3 +2609,98 @@
   background: rgba(0, 255, 157, 0.08);
   text-decoration: none;
 }
+
+/* ─── WORKFLOW PROGRESS ──────────────────────────────────────────────────────
+   The multi-step resume panel: what you opened, what you told us you finished,
+   and what is left. Sized for a phone first — every row collapses to a single
+   column under 420px so the two small buttons never squeeze the label. */
+.ios-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--ios-line, rgba(107, 226, 255, .16));
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .025);
+}
+.ios-progress-head strong { font-size: 13.5px; }
+.ios-progress-head .mono { font-size: 11.5px; color: var(--text-2, #9aa4bf); }
+.ios-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+.ios-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ios-cyan, #42e8ff), var(--ios-mint, #65f5bc));
+  transition: width .3s ease;
+}
+.ios-progress-confirmed {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(101, 245, 188, .35);
+  background: rgba(101, 245, 188, .08);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.ios-progress-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ios-progress-step {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .03);
+}
+.ios-progress-step.is-next { border-color: rgba(66, 232, 255, .4); background: rgba(66, 232, 255, .06); }
+.ios-progress-step.is-done { opacity: .78; }
+.ios-progress-index {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  font: 700 12px/1 var(--font-mono, monospace);
+}
+.ios-progress-step.is-done .ios-progress-index {
+  border-color: rgba(101, 245, 188, .5);
+  color: var(--ios-mint, #65f5bc);
+}
+.ios-progress-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ios-progress-body strong { font-size: 13px; }
+.ios-progress-body small { font-size: 11px; color: var(--text-2, #9aa4bf); line-height: 1.7; }
+.ios-progress-selfreport { color: rgba(255, 214, 102, .9) !important; }
+.ios-progress-actions {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.ios-progress-step .ios-status { grid-column: 3; grid-row: 1; justify-self: end; }
+.ios-progress-foot { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.ios-progress-foot .ios-honesty-note { margin: 0; flex: 1 1 220px; }
+@media (max-width: 420px) {
+  .ios-progress-step { grid-template-columns: 26px minmax(0, 1fr); }
+  .ios-progress-step .ios-status { grid-column: 2; grid-row: 2; justify-self: start; }
+  .ios-progress-actions { grid-column: 1 / -1; justify-content: stretch; }
+  .ios-progress-actions > button { flex: 1 1 auto; }
+}
+:root[data-theme='light'] .ios-progress { background: rgba(40, 52, 80, .03); border-color: rgba(20, 80, 120, .16); }
+:root[data-theme='light'] .ios-progress-step { background: rgba(40, 52, 80, .035); border-color: rgba(40, 52, 80, .09); }
+:root[data-theme='light'] .ios-progress-bar { background: rgba(40, 52, 80, .12); }

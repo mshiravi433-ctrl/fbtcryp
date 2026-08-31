@@ -788,6 +788,23 @@ report('intent AI upgrade (AI dialogue · teach memory · points · real broadca
  *   · a compiled swap walks the review gate into the swap screen
  *   · the AI chat's "open in swap screen" button exists and routes the draft
  */
+/* ------------------- 4c0. the loan screen, to the last step --------------- */
+/*
+ * Reported (fa): «صفحه وام باید ۱۰۰٪ در همان صفحه کامل شود» — the screen used
+ * to hand a deposit to Intent OS, which executes nothing, so nothing was ever
+ * supplied. It now talks to the Aave V3 pool itself, and the only way to prove
+ * that is to drive it with a wallet: a stub EIP-1193 provider and a stubbed
+ * JSON-RPC chain, then decode the calldata the app actually signed
+ * (approve → supply → withdraw) and check the amounts, the beneficiary and
+ * the receipt against what the review sheet promised.
+ */
+console.log('\n▸ building the loan execution suite…');
+npx(['vite', 'build', '-c', 'test/vite.loan.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runLoanExecution } = await import('./.out/loan/loan-execution-probe.js');
+report('loan screen (live pool reads · signed supply/withdraw · no hand-off)', await runLoanExecution(document.getElementById('r')));
+
+
 console.log('\n▸ building Intent OS wiring suite…');
 npx(['vite', 'build', '-c', 'test/vite.intentos.mjs', '--logLevel', 'error']);
 installDom();

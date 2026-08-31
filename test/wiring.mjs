@@ -12851,6 +12851,24 @@ export default function run() {
       hasKey(ar, 'intentAI.authorization.title') && hasKey(ar, 'intentAI.mode.boundary') &&
       hasKey(ar, 'intentAI.external.empty') && hasKey(ar, 'intentAI.controls.emergency_exit') &&
       hasKey(ar, 'intentOS.policy.title'));
+
+    /* ── «تنظیمات جلسه»: the cards inside the accordion are sized, not
+       stretched. Reported as «کادرهای داخلش کشیده و بدسایز است». Each card is
+       capped and centred, and the rows inside share the width evenly instead
+       of leaving one wide chip and a hole where the next one should be. */
+    t('the session-setup cards are capped and centred, not full-bleed',
+      /\.ia-setup-body \{[^}]*justify-items: center/.test(css)
+      && /\.ia-setup-card \{[^}]*max-width: \d+px/.test(css)
+      && /\.ia-setup-card \{[^}]*margin-inline: auto/.test(css));
+    t('the mode chips share the row evenly and still scroll when they cannot',
+      /\.ia-setup-card \.ia-modes > \.ia-mode \{[^}]*flex: 1 1 0/.test(css)
+      && /\.ia-setup-card \.ia-modes > \.ia-mode \{[^}]*min-width: \d+px/.test(css));
+    t('the L1/L2/L3 row is a capped, centred three-up instead of three slabs',
+      /\.ia-setup-card \.ia-levels \{[^}]*max-width: \d+px/.test(css)
+      && /\.ia-setup-card \.ia-levels \{[^}]*margin-inline: auto/.test(css));
+    t('chip content is centred inside the chip',
+      /\.ia-setup-card \.ia-level \{[^}]*justify-items: center/.test(css)
+      && /\.ia-setup-card \.ia-modes > \.ia-mode \{[^}]*text-align: center/.test(css));
   }
 
   return rows;
