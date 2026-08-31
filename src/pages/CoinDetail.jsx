@@ -20,6 +20,8 @@ import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
 import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
 import TokenRiskCard from '../components/TokenRiskCard';
+import TokenSmartMoney from '../components/TokenSmartMoney';
+import '../styles/smart-money.css';
 
 /**
  * Chain names for the resolved-venue line.
@@ -517,6 +519,20 @@ export default function CoinDetail() {
           chainId={realSwap.chainId}
           address={realSwap.token.address}
           symbol={realSwap.token.symbol}
+        />
+      )}
+
+      {/*
+        SMART MONEY — on-chain behaviour layer (Section 31 of the Smart Money
+        spec). Real flows, holders, accumulation/distribution and top movers
+        from the server-side intelligence engine. Shown only when there is a
+        real contract address to anchor to; it reports unavailability rather
+        than inventing a signal. Not a buy recommendation.
+      */}
+      {realSwap?.token?.address && realSwap?.chainId !== 'solana' && (
+        <TokenSmartMoney
+          chainId={Number(realSwap.chainId) || 1}
+          address={realSwap.token.address}
         />
       )}
 

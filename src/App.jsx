@@ -90,6 +90,9 @@ const Orders = lazyRetry(() => import('./pages/Orders'));
 const SolanaSwap = lazyRetry(() => import('./pages/SolanaSwap'));
 const Buy = lazyRetry(() => import('./pages/Buy'));
 const SmartWallet = lazyRetry(() => import('./pages/SmartWallet'));
+const SmartMoney = lazyRetry(() => import('./pages/SmartMoney'));
+const SmartMoneyWallet = lazyRetry(() => import('./pages/SmartMoneyWallet'));
+const SmartMoneyToken = lazyRetry(() => import('./pages/SmartMoneyToken'));
 const Portfolio = lazyRetry(() => import('./pages/Portfolio'));
 const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
@@ -296,6 +299,9 @@ function AnimatedRoutes() {
             <Route path="/solana" element={<SolanaSwap />} />
             <Route path="/buy" element={<Buy />} />
             <Route path="/smart-wallet" element={<SmartWallet />} />
+            <Route path="/smart-money" element={<SmartMoney />} />
+            <Route path="/smart-money/wallet/:chain/:address" element={<SmartMoneyWallet />} />
+            <Route path="/smart-money/token/:chain/:address" element={<SmartMoneyToken />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/intent" element={<IntentOS />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
