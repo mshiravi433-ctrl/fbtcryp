@@ -692,3 +692,71 @@ export async function generateMarketBrief({ global, top, lang }) {
 }
 
 /** FAQ answering, grounded in a fixed knowledge base about this app. */
+
+/**
+ * INTENT CLASSIFICATION — the one job a model is allowed to do on this path.
+ * ────────────────────────────────────────────────────────────────────────────
+ * The AI page needs to know which door a sentence walked through (Trade · Earn ·
+ * Protect · Plan · Automate), and a keyword table reads «should I buy?» as an
+ * order to buy. A model is genuinely better at that — and it is also the place
+ * where a finance app can invent a trade.
+ *
+ * So the authority is cut to the size of the job:
+ *
+ *   · the model may return ONE label from a fixed enum;
+ *   · an amount, a chain, a token or a permission is NEVER read out of the
+ *     model — the plan's numbers come from the deterministic local layer that
+ *     parsed the user's own sentence, so there is nothing for a hallucinated
+ *     "5000 SOL on Solana" to become;
+ *   · the reply is schema-validated, and any deviation (unknown label, missing
+ *     field, prose instead of JSON) is `ok:false` and the caller falls back to
+ *     the local classifier. An unavailable model costs a worse label, never a
+ *     worse number;
+ *   · temperature 0 and maxTokens 60: this is a form field, not a conversation.
+ *
+ * @returns {Promise<{ok:boolean, intent?:string, confidence?:number,
+ *                    reason?:string, model?:string}>}
+ */
+export async function classifyIntentWithModel({ message = '', intents = [], locale = null } = {}) {
+  if (!aiConfigured()) return { ok: false, reason: 'AI_NOT_CONFIGURED' };
+  const allowed = Array.isArray(intents) && intents.length
+    ? [...new Set(intents.map((i) => String(i).toUpperCase()).filter((i) => /^[A-Z_]{3,20}$/.test(i)))]
+    : [];
+  if (!allowed.length) return { ok: false, reason: 'NO_INTENT_ENUM' };
+
+  const text = String(message || '').slice(0, 900).trim();
+  if (!text) return { ok: false, reason: 'EMPTY_MESSAGE' };
+
+  const user = [
+    `Route this one customer message into exactly one intent.`,
+    `Allowed intents: ${allowed.join(', ')}.`,
+    `Rules:`,
+    `- A question about whether to act is RESEARCH, never TRADE.`,
+    `- A recurring cadence (daily / weekly / every month / automatically) is AUTOMATION.`,
+    `- "risk", "hedge", "protect", "revoke an approval" about the customer's own money is PROTECT.`,
+    `- An amount plus a horizon plus a risk tolerance, with no verb, is PORTFOLIO (a plan request).`,
+    `- Reply with JSON only: {"intent":"<one of the list>","confidence":<0-1>}`,
+    locale ? `- The message is in locale ${locale}. Do not translate it, route it.` : '',
+    ``,
+    `Message: ${text}`
+  ].filter(Boolean).join('\n');
+
+  try {
+    const { text: raw, model } = await chat({
+      system: 'You classify financial intent for a self-custody wallet. You never produce amounts, assets, chains, permissions or advice — only one label from the given enum. If you cannot decide, return GENERAL.',
+      user,
+      temperature: 0,
+      maxTokens: 60
+    });
+    const parsed = parseJson(raw);
+    const intent = String(parsed?.intent || '').trim().toUpperCase();
+    if (!allowed.includes(intent)) return { ok: false, reason: 'INTENT_NOT_IN_ENUM', model };
+    const confidence = clamp(parsed?.confidence, 0, 0.99);
+    return { ok: true, intent, confidence: Number(confidence.toFixed(2)), model };
+  } catch (err) {
+    /* Every failure shape is a fall-back, not an error the user sees: a stale
+       model id, a quota wall and a markdown-wrapped answer all mean "use the
+       deterministic layer". */
+    return { ok: false, reason: String(err.message || 'AI_FAILED').slice(0, 120) };
+  }
+}

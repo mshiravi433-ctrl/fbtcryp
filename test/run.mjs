@@ -777,6 +777,24 @@ const { run: runIntentAIUpgrade } = await import('./.out/intentai2/phase201-ai-p
 report('intent AI upgrade (AI dialogue · teach memory · points · real broadcast)', await runIntentAIUpgrade(document.getElementById('r')));
 
 
+/* ------------- 4b3. the AI page as a Command Center (mounted) ------------- */
+/*
+ * The redesign brief for #/intent-ai was three claims, two of them negative:
+ * seventeen agents work, FIVE things are shown, and the assistant never trades
+ * by itself. A grep cannot prove a negative about a UI, so this mounts the real
+ * panel and looks: the ask box is the only composer, the quick actions are the
+ * five surfaces, the agent roster sits behind a closed disclosure, ⚙ AI control
+ * writes the caps the firewall reads, an automation is stored as a plan to
+ * confirm, a stop taken after a plan is built kills its Approve button on the
+ * same paint — and the stub signer is never called by any of it.
+ */
+console.log('\n▸ building the AI command-deck suite…');
+npx(['vite', 'build', '-c', 'test/vite.intentai3.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runCommandDeck } = await import('./.out/intentai3/phase209-command-deck-probe.js');
+report('intent AI command deck (five surfaces · AI control · automations · approve signs nothing)', await runCommandDeck(document.getElementById('r')));
+
+
 /* ------------------- 4c. Intent OS page wiring (mounted) ------------------- */
 /*
  * The Loan → compile SAME_TOKEN report, the tab-wiring report and the dead

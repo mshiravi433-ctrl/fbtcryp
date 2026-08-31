@@ -56,9 +56,14 @@ import {
   /* Phase 88 — a swap is not a ramp; say so before anything is drafted. */
   detectFiatIntent, fiatBoundaryResponse,
   /* Draft to transaction: broadcasting stays off unless the build enables it. */
-  broadcastEnabled, assertBroadcastAllowed
+  broadcastEnabled, assertBroadcastAllowed,
+  /* Command Center inputs the deck reads: this device's own receipt history
+     (the daily budget) and the wallet's standing approvals (a risk signal). */
+  loadIntentTxHistory, approvalInventory
 } from '../lib/intent-ai';
 import { getMarkets, getOhlc } from '../lib/api';
+import { getYields } from '../lib/yields.js';
+import { EVM_CHAINS } from '../lib/chains';
 import { useIntentAiPoints } from '../hooks/useIntentAiPoints';
 import { selectExternalAgent, externalAgentRead } from '../lib/intent-ai/externalAgentVoice.js';
 import {
@@ -71,7 +76,47 @@ import GoalCountdown from './GoalCountdown';
 import TokenApprovals from './TokenApprovals';
 import ScrollRail from './ScrollRail';
 import AutonomyLevelIcon from './AutonomyLevelIcon';
+/* Command Center: the orchestrator, the deck it feeds, and the browser half of
+   its API. The deck components are presentational by construction — they cannot
+   invent a number, because every figure is computed here or in the shared lib. */
+import {
+  orchestrate as aiOrchestrate,
+  buildPlan as aiBuildPlanLocal,
+  classifyIntent as aiClassify,
+  dashboardSnapshot,
+  validateExecution as aiValidateExecution,
+  executionStageLedger as aiStageLedger,
+  thinkingStages as aiThinkingStages,
+  loadAiControl,
+  saveAiControl,
+  writeStopFlag,
+  readStopFlag,
+  loadAutomations,
+  saveAutomations,
+  upsertAutomation,
+  removeAutomation as removeAutomationRow,
+  setAutomationActive,
+  automationSpendToday,
+  automationTotals,
+  sanitizeAiControl,
+  createAutomation as createAutomationRow,
+  intentForSurface,
+  AI_SURFACES,
+  AI_MODES
+} from '../lib/intent-ai/commandCenter.js';
+import { aiBuildPlan, aiChat, aiCreateAutomation, aiDeleteAutomation, aiApprovePlan, aiEmergencyStop, aiReleaseEmergencyStop } from '../lib/aiCommandClient.js';
+import {
+  AiQuickActions,
+  AiPortfolioCard,
+  AiToolGrid,
+  AiThinkRail,
+  AiPlanCard,
+  AiAgentLanes
+} from './ai/AiCommandDeck.jsx';
+import AiControlPanel from './ai/AiControlPanel.jsx';
+import AiAutomations from './ai/AiAutomations.jsx';
 import '../styles/intent-os.css';
+import '../styles/ai-command-center.css';
 
 const LEVELS = [
   { value: 1, key: 'level1' },
@@ -250,6 +295,17 @@ export default function IntentAIPanel({
   defaultChainId = 42161,
   onDraftReady,
   walletRuntime = null,
+  /*
+   * What the deck's portfolio card is allowed to say.
+   *
+   * `aiPortfolio` arrives from the route wrapper as `{ holdings, totalValueUsd,
+   * change24hPct, dataStatus }`, built from the wallet reads the app already
+   * makes. The panel deliberately does NOT import a wallet hook: it is mounted
+   * headless by the suite, and a deck that read balances by itself could paint
+   * a number on a screen where nothing was actually read. `null` here is the
+   * honest "no wallet read yet" card, and it is what a headless mount gets.
+   */
+  aiPortfolio = null,
   tokenApprovals = null,
   /* Real broadcast bridge, injected by IntentAIRoute (Phase 201). The panel
      itself stays free of wallet-library imports; when this is null the panel
@@ -330,6 +386,573 @@ export default function IntentAIPanel({
   });
   const threadRef = useRef(null);
   const inputRef = useRef(null);
+  /*
+   * ─── COMMAND CENTER STATE ────────────────────────────────────────────────
+   * Four pieces, and each exists for a reason a reviewer can check:
+   *
+   *   aiControl   the budget the firewall reads (persisted; a cap that resets on
+   *               refresh is not a cap)
+   *   automations the recurring plans on this device (persisted)
+   *   deck        the last orchestration: plan + verdict + stages + what the
+   *               feeds said. Derived state is NOT stored alongside it, so an
+   *               edit of a cap cannot leave a stale "ready" banner on screen.
+   *   ccTab       which deck surface is open. A tab, not a page: the assistant,
+   *               its thread and its confirmation screen are always mounted, so
+   *               there is no route where the safety surfaces disappear.
+   */
+  const [aiControl, setAiControl] = useState(() => {
+    const stored = loadAiControl();
+    const stop = readStopFlag();
+    /* A stop that is on disk must be ON in memory before the first paint: the
+       half-second where it was not was a window where a plan could be approved
+       by someone who had just stopped everything. */
+    return stop ? { ...stored, stopActive: true, stoppedAt: stop.at } : stored;
+  });
+  const [automations, setAutomations] = useState(() => loadAutomations());
+  const [deck, setDeck] = useState(null);
+  const [deckBusy, setDeckBusy] = useState(null);
+  const [ccTab, setCcTab] = useState('command');
+  const [automationCode, setAutomationCode] = useState(null);
+  const [serverMode, setServerMode] = useState('local');
+  /* Voice input. Rendered as a real control only when the browser has the
+     API; everywhere else the button says "not here" rather than doing nothing. */
+  const [listening, setListening] = useState(false);
+  const speechRef = useRef(null);
+  const deckRunRef = useRef(0);
+
+  /*
+   * The AI daily budget is measured against something real: the receipts this
+   * device already recorded locally (`fbt.intent.txHistory`). Not a server
+   * guess, not a balance delta. If history is unreadable the spend is 0 and the
+   * card says where that 0 came from — the cap still applies, it just starts
+   * from the only number this app can attest.
+   */
+  const dailyVolume = useMemo(() => {
+    let rows = [];
+    try { rows = loadIntentTxHistory(); } catch { rows = []; }
+    const dayStart = Math.floor(Date.now() / 86_400_000) * 86_400_000;
+    const spent = rows
+      .filter((r) => r && r.at >= dayStart && Number(r.amountUsd) > 0
+        && ['completed', 'submitted', 'authorized', 'pending', 'partial'].includes(r.status))
+      .reduce((sum, r) => sum + Number(r.amountUsd), 0);
+    return { spentTodayUsd: Math.round(spent * 100) / 100, entries: rows.length, rows };
+  }, [deck?.at, receipt?.status, session?.messages?.length]);
+
+  const approvalRead = useMemo(
+    () => (Array.isArray(tokenApprovals) ? approvalInventory(tokenApprovals) : null),
+    [tokenApprovals]
+  );
+
+  /* One snapshot for every card on the deck. Recomputed when a feed, a cap, an
+     automation or the plan changes — never cached across a change, so a raised
+     limit cannot leave a stale budget bar under it. */
+  const snapshot = useMemo(() => dashboardSnapshot({
+    aiControl,
+    automations,
+    txHistory: dailyVolume.rows || null,
+    holdings: aiPortfolio?.holdings || null,
+    /* Only a LIVE market read may set a number the user sees. An offline
+       snapshot stays out of the card (it still reaches the planner through
+       `orchestrate`'s context, which reports it as an assumption). */
+    market: deck?.market
+      ? (deck.market.dataStatus === 'live'
+        ? deck.market
+        : { ...deck.market, change24hPct: null, regime: null, dataStatus: 'offline' })
+      : (aiPortfolio?.change24hPct != null ? { change24hPct: aiPortfolio.change24hPct, dataStatus: 'local' } : null),
+    yields: deck?.yields || null,
+    approvals: approvalRead ? { unsafeCount: (approvalRead.needsAttention || []).length } : null
+  }), [aiControl, automations, dailyVolume, aiPortfolio, deck, approvalRead]);
+
+  /*
+   * The plan card's verdict is recomputed from the CURRENT control on every
+   * render, not replayed from the moment the plan was built. Two reasons, both
+   * of them safety: raise a cap and a stale "ready for your approval" tag would
+   * be a lie, and press Emergency stop and the Approve button has to go dead on
+   * the same paint. `approveDeckPlan` runs this same check again at the tap, so
+   * what the screen says and what the button does cannot drift apart.
+   */
+  const deckWallet = useMemo(() => describeWalletRuntime(walletRuntime || {}), [walletRuntime]);
+  const deckView = useMemo(() => {
+    const plan = deck?.plan || null;
+    if (!plan) return null;
+    const verdict = aiValidateExecution(plan, {
+      aiControl,
+      automations,
+      dailyVolumeUsd: dailyVolume.spentTodayUsd,
+      wallet: { connected: deckWallet.connected === true, canSign: deckWallet.canSign === true },
+      sessionLevel: level
+    });
+    const ledger = aiStageLedger(plan, verdict, { wallet: { connected: deckWallet.connected === true } });
+    return { verdict, stages: ledger.stages };
+  }, [deck?.plan, aiControl, automations, dailyVolume, level, deckWallet]);
+
+  /* The AI-control box sets the session's autonomy level, so there is exactly
+     one number that decides what may be prepared. The L1/L2/L3 chips and this
+     box are two handles on the same value, never two values. */
+  useEffect(() => {
+    const next = AI_MODES.find((m) => m.id === aiControl.mode)?.level || 1;
+    setLevel((prev) => (prev === next ? prev : next));
+  }, [aiControl.mode]);
+
+  /* Persist the moment it changes. A budget the user set and never saved is a
+     budget the next plan will not see. */
+  useEffect(() => {
+    saveAiControl(aiControl);
+  }, [aiControl]);
+
+  /*
+   * First paint of the deck: the read the user lands on. It runs through the
+   * same orchestrate() a tap runs, with no message — so the card is never a
+   * different kind of thing from the plan, just an earlier one. A dead feed
+   * leaves `dataStatus: 'unavailable'`, which is what the card then prints.
+   */
+  const deckInitRef = useRef(false);
+  useEffect(() => {
+    if (deckInitRef.current) return;
+    deckInitRef.current = true;
+    runDeck({ text: '', surface: null, reason: 'open' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ─────────────── deck: the five routes, one engine ─────────────────── */
+
+  /**
+   * Run the orchestrator for a message or a tapped surface.
+   *
+   * Sequence, and why it is in this order:
+   *   1. the LOCAL layer decides the route and the numbers, synchronously — so a
+   *      user with no network still gets a plan, and the plan's figures are the
+   *      ones the deterministic parser read out of their own sentence;
+   *   2. the stage rail advances on REAL work (a price read, a yield read), so
+   *      "Checking market…" is a fetch and not a timer;
+   *   3. the API is asked, and only its *feed* data (prices, ranked venues) and
+   *      an optional intent label are merged in. A response that is not ok is
+   *      recorded as `serverMode: 'unavailable'` and changes nothing else.
+   */
+  async function runDeck({ text = '', surface = null, reason = 'ask' } = {}) {
+    const run = deckRunRef.current + 1;
+    deckRunRef.current = run;
+    const stale = () => deckRunRef.current !== run;
+    const classification = surface
+      ? { intent: intentForSurface(surface), surface, confidence: 1, source: 'surface-tap', utterance: {} }
+      : aiClassify(text, { locale: i18n?.language });
+    const stages = aiThinkingStages(classification.intent || 'GENERAL');
+    setDeckBusy({ stages: stages.map((st) => ({ ...st })), index: 0, reason });
+
+    let market = null;
+    let yields = null;
+    /* Stage 2–3: the market read. Same source the analysis card uses, so the
+       deck and the thread can never disagree about a price. */
+    setDeckBusy((prev) => ({ ...prev, index: 1 }));
+    try {
+      const list = await getMarkets({ page: 1, perPage: 250, vs: 'usd' });
+      if (Array.isArray(list) && list.length) {
+        const byId = (id) => list.find((c) => c?.id === id) || null;
+        const btc = byId('bitcoin');
+        /* `getMarkets` answers from a deterministic offline snapshot when neither
+           the API nor the public feed can be reached — the same call the market
+           screen makes. The deck must not relabel that as a live read: the
+           provenance rides on every row, and it decides whether the rail says
+           "done" or "unavailable", and whether any 24h number is printed at all.
+           A stale price is worth reading; it is not worth planning on. */
+        const live = list[0]?.dataProvenance !== 'offline';
+        market = {
+          dataStatus: live ? 'live' : 'offline',
+          change24hPct: Number.isFinite(Number(btc?.price_change_percentage_24h)) ? Number(btc.price_change_percentage_24h) : null,
+          priceMap: {
+            BTC: Number(btc?.current_price) || null,
+            ETH: Number(byId('ethereum')?.current_price) || null,
+            SOL: Number(byId('solana')?.current_price) || null
+          },
+          fetchedAt: Date.now()
+        };
+      }
+    } catch { market = null; }
+    if (stale()) return null;
+    setDeckBusy((prev) => ({ ...prev, index: 2 }));
+
+    /* The yield read only runs for routes that spend the answer. */
+    const needsYields = ['EARN', 'GENERAL', 'PORTFOLIO'].includes(classification.intent);
+    if (needsYields) {
+      try {
+        /* The Farm page's own reader, so the deck and /farm never disagree about
+           what a venue pays. It throws when the feed is unreachable, which is
+           exactly the branch that leaves `yields` null and lets the rail say so
+           instead of showing a yield the assistant did not read. */
+        const raw = await getYields({ timeout: 8000 });
+        const pools = Array.isArray(raw?.pools) ? raw.pools : (Array.isArray(raw) ? raw : []);
+        yields = pools
+          .slice(0, 40)
+          .map((pool) => ({
+            protocol: pool?.protocol || pool?.project || null,
+            symbol: pool?.symbol || pool?.token || null,
+            apy: Number.isFinite(Number(pool?.apy)) ? Number(pool.apy) : null,
+            riskBand: pool?.riskBand || pool?.risk || null
+          }))
+          .filter((row) => row.apy != null);
+        if (!yields.length) yields = null;
+      } catch { yields = null; }
+    }
+    if (stale()) return null;
+    setDeckBusy((prev) => ({ ...prev, index: stages.length - 1 }));
+
+    const walletRuntimeInfo = describeWalletRuntime(walletRuntime || {});
+    const local = aiOrchestrate({
+      message: text,
+      surface,
+      context: {
+        locale: i18n?.language,
+        aiControl,
+        automations,
+        holdings: aiPortfolio?.holdings || null,
+        market: market || (aiPortfolio?.change24hPct != null ? { change24hPct: aiPortfolio.change24hPct, dataStatus: 'local' } : null),
+        priceMap: market?.priceMap || undefined,
+        yields: yields && yields.length ? yields : undefined,
+        approvals: approvalRead ? { unsafeCount: (approvalRead.needsAttention || []).length } : undefined,
+        dailyVolumeUsd: dailyVolume.spentTodayUsd,
+        wallet: { connected: walletRuntimeInfo.connected === true, canSign: walletRuntimeInfo.canSign === true },
+        sessionLevel: level,
+        now: Date.now()
+      }
+    });
+
+    /* Ask the API only when there is something a browser cannot compute: a
+       model label for an ambiguous sentence. Everything else stays local. */
+    let merged = local;
+    let serverStatus = 'not-asked';
+    const ambiguous = !surface && local.classification?.confidence < 0.6 && String(text || '').trim().length > 12;
+    if (ambiguous) {
+      const res = await aiChat(text, { aiControl, prior: null });
+      if (res?.ok && res.plan) {
+        serverStatus = 'model-label-only';
+        /* Merged fields are enumerated, not spread: the plan's numbers stay
+           LOCAL by construction, so no response can move an amount. */
+        merged = {
+          ...local,
+          plan: { ...local.plan, intent: res.plan.intent || local.plan.intent, source: res.plan.source || local.plan.source },
+          serverPlanId: res.plan.id || null
+        };
+      } else {
+        serverStatus = 'unavailable';
+      }
+    }
+    if (stale()) return null;
+    setServerMode(serverStatus);
+    setDeck({
+      at: Date.now(),
+      reason,
+      text: text || null,
+      surface: merged.plan.surface || surface || null,
+      plan: merged.plan,
+      verdict: merged.verdict,
+      stages: merged.stages.stages,
+      thinking: merged.thinking.map((st) => ({ ...st, status: deckStageStatus(st, { market, yields }) })),
+      market,
+      yields,
+      approvedAt: null,
+      handoffNote: null,
+      serverStatus
+    });
+    setDeckBusy(null);
+    return merged;
+  }
+
+  /**
+   * What one stage of the thinking rail may claim, given what came back.
+   *
+   * This is the difference between a progress animation and a report: every row
+   * is answered from a real input, and a stage whose input did not arrive says
+   * `unavailable` instead of `done`. No spinner is allowed to become a
+   * conclusion. `strategy` stays `done` on purpose — the plan WAS built, from
+   * the inputs it had, and the plan card is where the missing ones are listed.
+   */
+  function deckStageStatus(stage, { market = null, yields = null } = {}) {
+    const id = stage?.id;
+    if (id === 'understanding') return 'done';
+    if (id === 'portfolio') return aiPortfolio?.holdings?.length ? 'done' : 'unavailable';
+    if (id === 'market' || id === 'quote') return market?.dataStatus === 'live' ? 'done' : 'unavailable';
+    if (id === 'yield') return yields && yields.length ? 'done' : 'unavailable';
+    if (id === 'approvals') return Array.isArray(tokenApprovals) ? 'done' : 'unavailable';
+    return 'done';
+  }
+
+  /** A quick action: pins the route, says it out loud in the thread, plans it. */
+  function pickSurface(surfaceId) {
+    const surface = AI_SURFACES.find((s) => s.id === surfaceId);
+    if (!surface) return;
+    setCcTab('command');
+    const phrase = t(surface.promptKey, { defaultValue: surface.fallbackPrompt });
+    runDeck({ text: phrase, surface: surfaceId, reason: 'quick-action' });
+    sendText(phrase);
+    award?.(null, 'deck');
+  }
+
+  /** A tool does the same, with the tool's own sentence. */
+  function pickTool(tool) {
+    if (!tool) return;
+    setCcTab('command');
+    const phrase = t(`intentAI.cc.tool.${tool.id}.phrase`, { defaultValue: AI_SURFACES.find((s) => s.id === tool.surface)?.fallbackPrompt || '' });
+    runDeck({ text: phrase, surface: tool.surface, reason: `tool:${tool.id}` });
+    sendText(phrase);
+  }
+
+  /**
+   * Approve. The tap does NOT execute: it re-runs the firewall on the plan as
+   * it stands now (the caps may have moved since the card painted) and, if the
+   * verdict still allows it, turns the plan's first leg into an utterance the
+   * existing confirmation path already understands. One execution path, one
+   * gate, one signature — that is the whole design.
+   */
+  async function approveDeckPlan() {
+    if (!deck?.plan) return;
+    const walletInfo = describeWalletRuntime(walletRuntime || {});
+    const verdict = aiValidateExecution(deck.plan, {
+      aiControl,
+      automations,
+      dailyVolumeUsd: dailyVolume.spentTodayUsd,
+      wallet: { connected: walletInfo.connected === true, canSign: walletInfo.canSign === true },
+      sessionLevel: level
+    });
+    const stages = aiStageLedger(deck.plan, verdict, { wallet: { connected: walletInfo.connected === true } });
+    if (!verdict.ok) {
+      setDeck((prev) => ({ ...prev, verdict, stages: stages.stages, approveNote: verdict.reason }));
+      return;
+    }
+    setDeck((prev) => ({ ...prev, verdict, stages: stages.stages, approvedAt: Date.now(), approveNote: 'approved' }));
+
+    /* Tell the API, when it is there, so a plan held server-side records the
+       same tap the user made here. Failure is silent on purpose: the local
+       verdict already bound the plan, and a 500 on a bookkeeping call must not
+       look like a failed approval. */
+    if (deck.serverPlanId) {
+      try { await aiApprovePlan(deck.serverPlanId, { aiControl, dailyVolumeUsd: dailyVolume.spentTodayUsd }); } catch { /* local verdict stands */ }
+    }
+
+    const utterance = deckHandoffUtterance(deck.plan);
+    if (utterance) {
+      setDeck((prev) => ({ ...prev, handoffNote: { kind: 'compose', utterance } }));
+      setInput(utterance);
+      sendText(utterance);
+      return;
+    }
+    /* No sentence the parser can run: the leg belongs on a venue screen, so the
+       hand-off is the route itself. Same hash write the chat navigation uses —
+       the panel stays router-free because it also mounts headless. */
+    const route = deck.plan.actions?.[0]?.handoffRoute || '/intent';
+    setDeck((prev) => ({ ...prev, handoffNote: { kind: 'route', route } }));
+    if (typeof window !== 'undefined') {
+      try { window.location.hash = `#${route}`; } catch { /* stay put */ }
+    }
+  }
+
+  /**
+   * The one executable sentence a plan can produce.
+   *
+   * Built from the plan's own legs, using phrasings the parser is proven to
+   * read (they mirror intentAI.examples.*). Anything the plan did not state —
+   * an amount, the pair — is NOT filled in with a guess: with a leg that cannot
+   * be spoken honestly, the deck hands off to the venue instead and says so.
+   */
+  function deckHandoffUtterance(plan) {
+    const leg = (plan?.actions || [])[0];
+    if (!leg) return null;
+    const amount = Number(leg.amount);
+    const chainShort = chainIdToName(leg.chainId);
+    if (leg.type === 'SWAP') {
+      const from = leg.fromSymbol || 'USDC';
+      const to = leg.asset;
+      if (!Number.isFinite(amount) || amount <= 0 || !to || to === from) return null;
+      return `swap ${amount} ${from} to ${to}${chainShort ? ` on ${chainShort}` : ''}`;
+    }
+    if (leg.type === 'DEPOSIT') {
+      if (!Number.isFinite(amount) || amount <= 0 || !leg.asset) return null;
+      return `farm ${amount} ${leg.asset}${chainShort ? ` on ${chainShort}` : ''}`;
+    }
+    if (leg.type === 'STABLE_SHIELD') {
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      return `lend ${amount} USDC${chainShort ? ` on ${chainShort}` : ''}`;
+    }
+    if (leg.type === 'FUTURES_OPEN') {
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      return `open a ${leg.leverage || 2}x long on ${leg.asset || 'BTC'} perpetual with ${amount} USDT`;
+    }
+    return null;
+  }
+
+  function chainIdToName(chainId) {
+    const id = Number(chainId);
+    if (!Number.isFinite(id)) return null;
+    return EVM_CHAINS[id]?.short || EVM_CHAINS[id]?.name || null;
+  }
+
+  /* ───────────────────── automations (local + API) ────────────────────── */
+
+  function persistAutomations(next) {
+    setAutomations(saveAutomations(next));
+  }
+
+  function acceptAutomation(automation) {
+    if (!automation) return;
+    const made = createAutomationRow(automation, { now: Date.now() });
+    if (!made.ok) {
+      setAutomationCode(made.code || 'AUTOMATION_INVALID');
+      return;
+    }
+    setAutomationCode(null);
+    persistAutomations(upsertAutomation(automations, made.automation).rows);
+    setDeck((prev) => (prev ? { ...prev, automationAccepted: true } : prev));
+    /* Best-effort mirror to the API; the local list is authoritative for this
+       device, and a failure is not a reason to lose what the user just saved. */
+    aiCreateAutomation(automation).catch(() => null);
+  }
+
+  function toggleAutomation(id, active) {
+    persistAutomations(setAutomationActive(automations, id, active));
+  }
+
+  function deleteAutomation(id) {
+    persistAutomations(removeAutomationRow(automations, id));
+    aiDeleteAutomation(id).catch(() => null);
+  }
+
+  /* ─────────────────────────── AI control ─────────────────────────────── */
+
+  function changeAiControl(next) {
+    const clean = sanitizeAiControl(next);
+    setAiControl(clean);
+  }
+
+  /**
+   * The stop. Three things happen and all three are necessary: the session is
+   * stopped (the existing fence on the assistant), the persisted kill flag is
+   * written (so a refresh cannot undo it), and every automation is paused (so a
+   * schedule cannot outlive the decision to stop). The API is told last, because
+   * an unreachable API must not soften any of the first three.
+   */
+  function handleAiStop() {
+    handleEmergencyStop();
+    setAiControl((prev) => ({ ...prev, stopActive: true, stoppedAt: Date.now() }));
+    writeStopFlag(true, { reason: 'ai-control' });
+    persistAutomations(automations.map((r) => ({ ...r, active: false, stoppedAt: Date.now() })));
+    aiEmergencyStop('ai-control').catch(() => null);
+  }
+
+  /**
+   * One entry point for the autonomy level, whichever handle moved it.
+   *
+   * Setting `level` alone used to be possible (the setup accordion did exactly
+   * that) while the AI-control box still read `manual` — so the box displayed a
+   * mode the session was not in, and the firewall's number on screen was not
+   * the number in force. Both values now move together, and the mode is
+   * persisted with the level: reopening the page shows the state it is really
+   * in, which is the difference between a control and a decoration.
+   */
+  function pickLevel(value) {
+    const lvl = [1, 2, 3].includes(Number(value)) ? Number(value) : 1;
+    const modeId = AI_MODES.find((m) => m.level === lvl)?.id || 'manual';
+    setLevel(lvl);
+    const next = sanitizeAiControl({ ...aiControl, mode: modeId });
+    if (next.mode !== aiControl.mode) setAiControl(next);
+  }
+
+  function handleAiRelease() {
+    setAiControl((prev) => ({ ...prev, stopActive: false, stoppedAt: null }));
+    writeStopFlag(false);
+    /* Deliberately does NOT re-arm anything: `active` stays false until the
+       user switches a row back on, which is what makes pausing mean something. */
+    aiReleaseEmergencyStop().catch(() => null);
+  }
+
+  function handleFinalConfirmWithBudget() {
+    /*
+     * The final confirm is the last door, so the budget is checked AT the door
+     * and not only on the card: a user who approved a plan and then raised the
+     * amount must meet the same limit. Two refusals are possible here — a stop
+     * that was set while the screen was open, and a plan that would cross the
+     * day's cap — and both say which one it was, with the way out.
+     */
+    if (aiControl.stopActive) {
+      setReceipt({ status: 'blocked', confirmed: false, reasonKey: 'intentAI.cc.stop.refusedConfirm' });
+      return;
+    }
+    const amount = Number(screen?.amountUsd);
+    if (Number.isFinite(amount) && amount > 0) {
+      const projected = dailyVolume.spentTodayUsd + amount;
+      if (projected > aiControl.maxDailyUsd) {
+        setReceipt({
+          status: 'blocked',
+          confirmed: false,
+          reasonKey: 'intentAI.cc.budget.refusedConfirm',
+          reasonParams: {
+            spent: dailyVolume.spentTodayUsd,
+            amount,
+            cap: aiControl.maxDailyUsd
+          }
+        });
+        recordHistory({ status: 'blocked', confirmed: false, reasonKey: 'AI_BUDGET_DAILY' });
+        return;
+      }
+    }
+    handleFinalConfirm();
+  }
+
+  /**
+   * Voice input, where the browser has it. Transcription lands in the composer
+   * UNsent, like every example chip: a mis-heard amount that auto-submits is
+   * the worst possible failure of a microphone button.
+   */
+  const speechSupported = typeof window !== 'undefined'
+    && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  function toggleDictation() {
+    if (!speechSupported) return;
+    if (listening) {
+      try { speechRef.current?.stop(); } catch { /* already stopped */ }
+      setListening(false);
+      return;
+    }
+    try {
+      const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new Ctor();
+      rec.lang = i18n?.language === 'fa' ? 'fa-IR' : (i18n?.language || 'en-US');
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = (event) => {
+        const said = event?.results?.[0]?.[0]?.transcript || '';
+        if (said.trim()) setInput((prev) => (prev ? `${prev} ${said}`.trim() : said.trim()));
+      };
+      rec.onend = () => setListening(false);
+      rec.onerror = () => setListening(false);
+      speechRef.current = rec;
+      setListening(true);
+      rec.start();
+    } catch {
+      setListening(false);
+    }
+  }
+
+
+  /**
+   * The plan's automation leg, turned into a storable row.
+   *
+   * Only the fields the plan actually carries are copied; `chainId` falls back
+   * to the FIRST network the AI-control box allows rather than to a hard-coded
+   * chain, so an automation saved from a plan can never name a network the user
+   * has not opened.
+   */
+  function automationFromPlan(plan) {
+    const leg = (plan?.actions || []).find((a) => a?.type === 'AUTOMATION_CREATE') || null;
+    if (!leg) return null;
+    return {
+      kind: 'dca',
+      asset: leg.asset || 'BTC',
+      amountUsd: Number(leg.amount) > 0 ? Number(leg.amount) : null,
+      cadence: ['daily', 'weekly', 'biweekly', 'monthly'].includes(leg.cadence) ? leg.cadence : 'weekly',
+      chainId: (leg.chainId && aiControl.allowedChains.includes(Number(leg.chainId)))
+        ? Number(leg.chainId)
+        : (aiControl.allowedChains[0] ?? defaultChainId)
+    };
+  }
+
   /*
    * The panel is always "live". The earlier activation strip gated the whole
    * chat on `getIntentPublicStatus()` — a status endpoint that reports the
@@ -1223,15 +1846,39 @@ export default function IntentAIPanel({
 
   return (
     <motion.section className="card ia-panel ia-chat" variants={riseIn} initial="hidden" animate="show">
-      <div className="row-between" style={{ alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-        <p className="section-label" style={{ margin: 0 }}>{t('intentAI.title')}</p>
-        {/* Phase 203 — the assistant's own points, same total as /rewards. */}
-        <a className="ia-points-chip" href="#/rewards" data-testid="intent-ai-points" title={t('intentAI.points.title', { defaultValue: 'Your Intent AI points' })}>
-          <span aria-hidden="true">✦</span>
-          <b>{Number(points || 0).toLocaleString()}</b>
-          <small>{t('intentAI.points.unit', { defaultValue: 'pts' })}</small>
-        </a>
-      </div>
+      {/*
+        ✦ FBT AI — the header of a Command Center, not of a feature list.
+        Two things a person needs before they read anything else: is this
+        assistant live right now, and what is it asking me. The live pill is
+        derived from the SAME connection + activation read as the status strip at
+        the bottom, so the header can never claim "Live" while the strip says
+        offline.
+      */}
+      <header className="ia-cc-head">
+        <div className="ia-cc-title">
+          <span className="ia-cc-glyph" aria-hidden="true">✦</span>
+          <div>
+            <h2 className="ia-cc-name">{t('intentAI.cc.title', { defaultValue: 'FBT AI' })}</h2>
+            <p className="ia-cc-ask">{t('intentAI.cc.ask', { defaultValue: 'What do you want to do?' })}</p>
+          </div>
+        </div>
+        <div className="ia-cc-head-side">
+          <span className={`ia-cc-live${connection.online && intentIsLive && !aiControl.stopActive ? ' is-on' : ''}`} data-testid="ai-live-pill" data-online={connection.online ? 'true' : 'false'} data-stopped={aiControl.stopActive ? 'true' : 'false'}>
+            <span className="ia-cc-live-dot" aria-hidden="true" />
+            {aiControl.stopActive
+              ? t('intentAI.cc.live.stopped', { defaultValue: 'Stopped' })
+              : connection.online
+                ? t('intentAI.cc.live.on', { defaultValue: 'Live' })
+                : t('intentAI.cc.live.off', { defaultValue: 'Offline' })}
+          </span>
+          {/* Phase 203 — the assistant's own points, same total as /rewards. */}
+          <a className="ia-points-chip" href="#/rewards" data-testid="intent-ai-points" title={t('intentAI.points.title', { defaultValue: 'Your Intent AI points' })}>
+            <span aria-hidden="true">✦</span>
+            <b>{Number(points || 0).toLocaleString()}</b>
+            <small>{t('intentAI.points.unit', { defaultValue: 'pts' })}</small>
+          </a>
+        </div>
+      </header>
       {/*
         The parser/version/analysis-only strapline that used to sit here was
         removed on the owner's request: it repeated in build-log language what
@@ -1255,6 +1902,478 @@ export default function IntentAIPanel({
           {t('intentAI.points.gained', { n: lastGain.amount })}
         </div>
       )}
+      {/*
+        ─── ASK FBT ─────────────────────────────────────────────────────────
+        The composer, moved to the top because this is the door everything else
+        hangs from. It is ONE form, not a copy: the thread, the guided flow, the
+        quick replies and the confirmation screen all read the same `input`
+        state, so there is no second box that could drift out of sync with the
+        conversation.
+
+        The microphone transcribes INTO the composer and stops there, exactly
+        like an example chip does. Nothing a user dictates is sent without their
+        own tap — a mis-heard amount that auto-submits is the one failure mode a
+        voice button on a wallet must not have.
+      */}
+      <form onSubmit={handleSend} className="ia-composer ia-cc-composer" data-testid="ai-ask-box">
+        <span className="ia-cc-composer-glyph" aria-hidden="true">✦</span>
+        <input
+          ref={inputRef}
+          placeholder={t('intentAI.cc.askPlaceholder', { defaultValue: 'Ask FBT anything — “5000 USDC, medium risk, 3 months”' })}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={session?.status === 'STOPPED'}
+          aria-label={t('intentAI.cc.askPlaceholder', { defaultValue: 'Ask FBT anything' })}
+        />
+        <button
+          type="button"
+          className={`ia-cc-mic${listening ? ' is-listening' : ''}`}
+          onClick={toggleDictation}
+          disabled={!speechSupported}
+          aria-pressed={listening}
+          title={speechSupported
+            ? t('intentAI.cc.mic.title', { defaultValue: 'Dictate your request' })
+            : t('intentAI.cc.mic.unsupported', { defaultValue: 'This browser has no speech input — type instead' })}
+          data-testid="ai-mic"
+          data-supported={speechSupported ? 'true' : 'false'}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="11" rx="3" />
+            <path d="M5 11a7 7 0 0 0 14 0" />
+            <path d="M12 18v4" />
+          </svg>
+          <span className="ia-cc-mic-label">{listening ? t('intentAI.cc.mic.listening', { defaultValue: 'listening…' }) : t('intentAI.cc.mic.idle', { defaultValue: 'voice' })}</span>
+        </button>
+        <button type="submit" className="ia-send" disabled={!input.trim() || session?.status === 'STOPPED'}>
+          {t('intentAI.cc.askSend', { defaultValue: 'Ask AI' })}
+        </button>
+        {level >= 2 && (
+          <button type="button" className="ia-ctl ia-danger" onClick={handleEmergencyStop} title={t('intentAI.stop.title')}>
+            {t('intentAI.stop.button')}
+          </button>
+        )}
+      </form>
+
+      {/* The five doors. Agents stay behind them (see AiAgentLanes). */}
+      <AiQuickActions
+        t={t}
+        onPick={pickSurface}
+        activeSurface={deck?.surface || null}
+        busy={Boolean(deckBusy)}
+      />
+      <div className="intent-ai-thread" ref={threadRef}>
+        {visibleMessages.length === 0 && (
+          <p className="muted" style={{ fontSize: 12 }}>{t('intentAI.chat.try')}</p>
+        )}
+        {visibleMessages.map((m) => (
+          <MessageBubble
+            key={m.id}
+            msg={m}
+            onDraftReady={onDraftReady}
+            onQuickReply={sendText}
+            onOpenGate={openInteractiveScreen}
+          />
+        ))}
+      </div>
+
+      {screen && level >= 2 && (
+        <div className="card-inner ia-confirm-screen" data-testid="interactive-confirmation-screen">
+          <div className="row-between" style={{ gap: 8, marginBottom: 6 }}>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t('intentAI.confirm.title')}</p>
+            {screen.modified && <span className="ia-badge-edit">{t('intentAI.confirm.edited')}</span>}
+          </div>
+
+          <div className="ia-confirm-grid">
+            <label className="field">
+              <span className="field-label">{t('intentAI.confirm.amount')}</span>
+              <input
+                type="number"
+                min="0"
+                inputMode="decimal"
+                value={screen.amountUsd}
+                onChange={(e) => updateScreen('amountUsd', e.target.value === '' ? '' : Number(e.target.value))}
+                aria-invalid={Boolean(screen.errors.amountUsd)}
+              />
+              <small className="ia-hint">{t('intentAI.limits.hintAmount', { limit: INTENT_LIMITS.maxTotalInputUsd.toLocaleString() })}</small>
+              <small className="ia-hint">{t('intentAI.limits.hintPerTx', { limit: INTENT_LIMITS.maxPerTransactionUsd.toLocaleString() })}</small>
+              {/* Phase 56 — the ACTIVE session policy, shown next to the product ceilings. */}
+              {policyCaps?.maxTransactionUsd != null && (
+                <small className="ia-hint" data-testid="session-policy-per-tx">
+                  {t('intentAI.policyLimits.hintPerTx', { limit: policyCaps.maxTransactionUsd.toLocaleString() })}
+                </small>
+              )}
+              {policyCaps?.maxCapitalUsd != null && (
+                <small className="ia-hint" data-testid="session-policy-capital">
+                  {t('intentAI.policyLimits.hintCapital', { limit: policyCaps.maxCapitalUsd.toLocaleString() })}
+                </small>
+              )}
+              {screen.errors.amountUsd && (
+                <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.amountUsd}`, { value: Number(screen.amountUsd).toLocaleString(), limit: INTENT_LIMITS.maxPerTransactionUsd.toLocaleString() })}</small>
+              )}
+            </label>
+
+            <label className="field">
+              <span className="field-label">{t('intentAI.confirm.duration')}</span>
+              <input
+                type="number"
+                min="0"
+                inputMode="decimal"
+                placeholder={t('intentAI.confirm.durationPlaceholder')}
+                value={screen.durationHrs ?? ''}
+                onChange={(e) => updateScreen('durationHrs', e.target.value === '' ? null : Number(e.target.value))}
+                aria-invalid={Boolean(screen.errors.durationHrs)}
+              />
+              <small className="ia-hint">{t('intentAI.limits.hintDuration', { days: INTENT_LIMITS.maxGoalDurationDays })}</small>
+              {screen.errors.durationHrs && (
+                <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.durationHrs}`, { days: INTENT_LIMITS.maxGoalDurationDays })}</small>
+              )}
+            </label>
+
+            <label className="field">
+              <span className="field-label">{t('intentAI.confirm.goal')}</span>
+              <input
+                type="number"
+                min="0"
+                max={INTENT_LIMITS.maxGoalPct}
+                inputMode="decimal"
+                placeholder={t('intentAI.confirm.goalPlaceholder')}
+                value={screen.goalPct ?? ''}
+                onChange={(e) => updateScreen('goalPct', e.target.value === '' ? null : Number(e.target.value))}
+                aria-invalid={Boolean(screen.errors.goalPct)}
+              />
+              <small className="ia-hint">{t('intentAI.limits.hintGoal', { pct: INTENT_LIMITS.maxGoalPct })}</small>
+              {screen.errors.goalPct && (
+                <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.goalPct}`, { value: screen.goalPct, limit: INTENT_LIMITS.maxGoalPct })}</small>
+              )}
+            </label>
+
+            <div className="field">
+              <span className="field-label">{t('intentAI.confirm.route')}</span>
+              <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+                {screen.fromSymbol || '—'} → {screen.toSymbol || '—'} · {t('intentAI.confirm.chain')}: {screen.chainId || '—'}
+              </p>
+              {gate?.termsHash && <small className="ia-hint">{t('intentAI.gate.termsHash')}: {gate.termsHash?.slice(0, 12)}</small>}
+              {risk && (
+                <small className="ia-hint">{t('intentAI.risk.summary', { level: risk.level, decision: risk.decision })}</small>
+              )}
+            </div>
+          </div>
+
+          {/* Phase 90 — the fee, on the preview, before anything is approved:
+              the percentage, the amount, and what is left afterwards. */}
+          {feeQuote && (
+            <div className="ia-fee-line" data-testid="preview-fee-line">
+              <span className="field-label">{t('intentAI.fee.title')}</span>
+              {feeQuote.ok ? (
+                <>
+                  <span data-testid="preview-fee-amount">
+                    {t('intentAI.fee.line', {
+                      percent: feeQuote.percent,
+                      amount: feeQuote.feeAmount,
+                      symbol: feeQuote.symbol || ''
+                    })}
+                  </span>
+                  <small className="ia-hint" data-testid="preview-fee-net">
+                    {t('intentAI.fee.net', { amount: feeQuote.netAmount, symbol: feeQuote.symbol || '' })}
+                  </small>
+                </>
+              ) : (
+                <span className="ia-limit-warning">{t(feeQuote.i18nKey)}</span>
+              )}
+            </div>
+          )}
+
+          {/* Tool permissions — the user decides what the agents may use. */}
+          <div className="ia-tools-box">
+            <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>{t('intentAI.confirm.toolsTitle')}</p>
+            <div className="ia-check-row">
+              {FLOW_TOOL_SUGGESTIONS.map((tool) => (
+                <label key={tool.id} className="ia-check">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(screen.tools[tool.id])}
+                    onChange={() => toggleScreenTool(tool.id)}
+                  />
+                  <span>{t(`intentAI.confirm.tool.${tool.key}`)}</span>
+                </label>
+              ))}
+            </div>
+            <small className="ia-hint">{t('intentAI.confirm.toolsNote')}</small>
+          </div>
+
+          {/* Phase 56 — a session-policy breach is named here and locks the
+              final confirm, instead of surfacing later as "no live venue". */}
+          {policyViolations.length > 0 && (
+            <div className="ia-limit-warning" data-testid="session-policy-violation" style={{ marginTop: 8 }}>
+              <strong style={{ display: 'block' }}>{t('intentAI.policyLimits.violationTitle')}</strong>
+              {policyViolations.map((violation) => (
+                <small key={violation.code} style={{ display: 'block' }}>
+                  {t(violation.i18nKey, violation.params)}
+                </small>
+              ))}
+            </div>
+          )}
+
+          {/*
+            Wallet connection state — WITHOUT a connected wallet the final
+            confirm can never be signed, so the only receipt it can produce is
+            "wallet signature required". Say that BEFORE the click, with the
+            way to fix it, instead of letting the user discover a dead end.
+            Plain anchor: this panel also mounts headless in the test suite,
+            where a Router-dependent wallet sheet would crash.
+          */}
+          {!wallet.connected && (
+            <div className="ia-wallet-missing" data-testid="wallet-missing">
+              <span className="ia-wallet-missing-dot" aria-hidden="true" />
+              <div className="ia-wallet-missing-body">
+                <strong>{t('intentAI.wallet.missingTitle', { defaultValue: 'No wallet is connected' })}</strong>
+                <small>{t('intentAI.wallet.missingBody', { defaultValue: 'Signing and final authorization need your wallet. Analysis and preparation keep working without it.' })}</small>
+              </div>
+              <a className="ia-wallet-connect-link" href="#/wallet">
+                {t('intentAI.wallet.connectNow', { defaultValue: 'Connect wallet' })}
+              </a>
+            </div>
+          )}
+
+          {/*
+            Broadcast consent. Only rendered when the build actually permits
+            sending, so a deployment that cannot broadcast never shows a
+            control implying it can. Consent is per-execution and resets after
+            every run.
+          */}
+          {broadcastEnabled(import.meta.env || {}) && (
+            <div className="ia-broadcast-box" data-testid="broadcast-opt-in-box">
+              <label className="ia-broadcast-optin" data-testid="broadcast-opt-in">
+                <input
+                  type="checkbox"
+                  checked={broadcastOptIn}
+                  onChange={(e) => setBroadcastOptIn(e.target.checked)}
+                />
+                <span>{t('intentAI.broadcast.optIn')}</span>
+              </label>
+              <small className="ia-hint" data-testid="broadcast-opt-in-hint">
+                {t('intentAI.broadcast.hint', {
+                  defaultValue: 'After «confirm», your wallet asks once more and the transaction goes to the network for real.'
+                })}
+              </small>
+            </div>
+          )}
+
+          <div className="ia-controls" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="ia-ctl ia-go"
+              disabled={confirmBlocked}
+              /* The AI budget is checked AT the door (see
+                 handleFinalConfirmWithBudget): a plan approved under one amount
+                 and then edited on this screen to another must meet the cap
+                 again, and a stop raised while this screen was open must
+                 actually stop it. */
+              onClick={handleFinalConfirmWithBudget}
+              data-testid="final-confirm-button"
+            >
+              {t('intentAI.confirm.final')}
+            </button>
+            {GATE_ACTIONS.map((action) => (
+              <button
+                key={action}
+                type="button"
+                className={`ia-ctl ${action === 'CONFIRM' ? 'ia-go' : action === 'REJECT' ? 'ia-danger' : action === 'REAUTHORIZE' ? 'ia-cool' : ''}`}
+                disabled={action === 'CONFIRM' && gateAction === 'CONFIRM' && receipt?.ok}
+                onClick={() => handleGateAction(action)}
+              >
+                {t(`intentAI.gate.${action.toLowerCase()}`)}
+              </button>
+            ))}
+          </div>
+          {Object.keys(screen.errors || {}).length > 0 && (
+            <small className="ia-limit-warning" style={{ display: 'block', marginTop: 6 }}>
+              {t('intentAI.confirm.fixLimits')}
+            </small>
+          )}
+        </div>
+      )}
+
+      {receipt && (
+        <div className="card-inner" style={{ background: 'rgba(255,255,255,0.03)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
+          <p className="muted" style={{ fontSize: 12, margin: '0 0 4px' }}>{t('intentAI.receipt.title')}</p>
+          <p style={{ fontSize: 12.5, margin: 0 }}>
+            <span className={['completed', 'success'].includes(receipt.status) ? '' : 'faint'}>{t(`intentAI.receipt.${receipt.status || 'pending'}`)}</span>
+            {receipt.venue ? ` · ${t('intentAI.receipt.venue', { venue: receipt.venue })}` : ''}
+          </p>
+          {/* Phase 56 — the receipt says WHY, with the real reason. */}
+          {receipt.reasonKey && (
+            <p style={{ fontSize: 12, margin: '4px 0 0' }} data-testid="receipt-reason">
+              {t(receipt.reasonKey, receipt.reasonParams || {})}
+            </p>
+          )}
+          {/* Phase 90/201 — the fee line is honest about whether anything was
+              actually collected: with a real on-chain transaction the router
+              took it; without one it only ever existed on the preview. The
+              old wording said "fee collected" on a run that sent nothing. */}
+          {receipt.fee?.ok && (
+            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-fee-line">
+              {t(receipt.txHash ? 'intentAI.fee.onReceipt' : 'intentAI.fee.quotedOnly', {
+                amount: receipt.fee.feeAmount,
+                symbol: receipt.fee.symbol || '',
+                percent: receipt.fee.percent
+              })}
+            </p>
+          )}
+          {receipt.txHash && (
+            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-tx-hash">
+              {t('intentAI.receipt.txHash', { hash: receipt.txHash })}
+              {typeof explorerUrl === 'function' && receipt.txChainId && (
+                <>
+                  {' · '}
+                  <a
+                    className="ia-explorer-link"
+                    href={explorerUrl({ txHash: receipt.txHash, chainId: receipt.txChainId })}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    data-testid="receipt-explorer-link"
+                  >
+                    {t('intentAI.receipt.viewOnExplorer', { defaultValue: 'view on explorer' })}
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+          {/* Phase 94 — a queued intent is a promise to ask again, not a
+              promise to send. It carries no hash and no receipt. */}
+          {receipt.queued && (
+            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-queued-note">
+              {t('intentAI.offline.reviewNote')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {rampNotice?.applies && (
+        <div className="ia-ramp-notice" role="note" data-testid="fiat-ramp-notice">
+          <p className="muted" style={{ fontSize: 12, margin: '0 0 4px' }}>{t('intentAI.ramp.title')}</p>
+          <p style={{ fontSize: 12.5, margin: 0 }} data-testid="fiat-ramp-message">
+            {t(rampNotice.i18nKey)}
+          </p>
+          <small className="ia-hint" data-testid="fiat-ramp-alternative">
+            {t(rampNotice.alternativeI18nKey)}
+          </small>
+        </div>
+      )}
+
+      {/*
+        ─── THE DECK ────────────────────────────────────────────────────────
+        Three tabs on ONE screen — nothing here is a route, and nothing here is
+        hidden from the panel's mount: the assistant, its thread and its
+        confirmation surface stay visible above, so switching tabs can never hide
+        a safety state (that is why the session-setup accordion, the stopped
+        notice and the receipt live outside this switch).
+      */}
+      <nav className="ia-cc-tabs" role="tablist" aria-label={t('intentAI.cc.tabs.title', { defaultValue: 'AI command center' })} data-testid="ai-cc-tabs">
+        {[
+          { id: 'command', key: 'intentAI.cc.tabs.command', fallback: 'Command' },
+          { id: 'automate', key: 'intentAI.cc.tabs.automate', fallback: 'Automations', badge: automationTotals(automations).active },
+          { id: 'control', key: 'intentAI.cc.tabs.control', fallback: 'AI control', badge: null }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={ccTab === tab.id}
+            className={`ia-cc-tab${ccTab === tab.id ? ' is-on' : ''}`}
+            onClick={() => setCcTab(tab.id)}
+            data-testid={`ai-tab-${tab.id}`}
+          >
+            {t(tab.key, { defaultValue: tab.fallback })}
+            {tab.badge ? <span className="ia-cc-tab-badge" data-testid={`ai-tab-badge-${tab.id}`}>{tab.badge}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      {ccTab === 'command' && (
+        <div className="ia-cc-deck" data-testid="ai-deck-command">
+          <AiThinkRail t={t} stages={deck?.thinking || []} busy={deckBusy ? { index: deckBusy.index } : null} />
+          <AiPortfolioCard
+            t={t}
+            snapshot={snapshot}
+            onReview={() => { if (typeof window !== 'undefined') window.location.hash = '#/portfolio'; }}
+            onPlan={() => runDeck({ text: t('intentAI.cc.quick.plan.phrase', { defaultValue: 'build me a plan for my money over the next 90 days' }), surface: 'plan', reason: 'portfolio-card' })}
+          />
+          <AiToolGrid t={t} onPick={pickTool} busy={Boolean(deckBusy)} />
+          {/*
+            The plan card is the answer to a question, so it only exists once a
+            question has been asked. The first paint of the page runs the SAME
+            orchestrator with no message (that is what fills the portfolio read
+            and the market stage honestly) — but printing "YOUR AI PLAN" with a
+            blocked verdict on an empty page would present a refusal to someone
+            who has not requested anything yet.
+          */}
+          {deck?.plan && deck.reason !== 'open' && (
+          <AiPlanCard
+            t={t}
+            plan={deck?.plan || null}
+            verdict={deckView?.verdict || null}
+            stages={deckView?.stages || []}
+            busy={Boolean(deckBusy)}
+            automationProposal={deck?.plan?.intent === 'AUTOMATION' && deck?.plan?.actions?.[0]?.type === 'AUTOMATION_CREATE'
+              ? { ok: !deck.automationAccepted, automation: automationFromPlan(deck.plan) }
+              : null}
+            onAcceptAutomation={acceptAutomation}
+            onApprove={approveDeckPlan}
+            savedLabel={deck?.handoffNote?.kind === 'route'
+              ? t('intentAI.cc.plan.openedVenue', { route: deck.handoffNote.route, defaultValue: `Opened ${deck.handoffNote.route} — the plan runs there, and your wallet confirms it.` })
+              : deck?.approvedAt
+                ? t('intentAI.cc.plan.approvedNote', { defaultValue: 'Approved. The confirmation screen above is the next step; the signature is yours.' })
+                : null}
+          />
+          )}
+          <AiAgentLanes t={t} plan={(deck?.plan && deck.reason !== 'open') ? deck.plan : null} />
+          {snapshot?.execution?.emergencyStop && (
+            <p className="ia-cc-stopped" role="status" data-testid="ai-deck-stopped">
+              {t('intentAI.cc.deck.stoppedNote', { defaultValue: 'Stopped from AI control: plans are still built so you can read them, nothing can be approved.' })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {ccTab === 'automate' && (
+        <div className="ia-cc-deck" data-testid="ai-deck-automate">
+          <AiAutomations
+            t={t}
+            rows={automations}
+            totals={automationTotals(automations)}
+            spendTodayUsd={automationSpendToday(automations).usd}
+            onCreate={(draft) => {
+              const made = createAutomationRow({ ...draft, chainId: draft?.chainId ?? aiControl.allowedChains[0] ?? defaultChainId }, { now: Date.now() });
+              if (!made.ok) { setAutomationCode(made.code || 'AUTOMATION_INVALID'); return; }
+              setAutomationCode(null);
+              persistAutomations(upsertAutomation(automations, made.automation).rows);
+              aiCreateAutomation(draft).catch(() => null);
+            }}
+            busy={Boolean(deckBusy)}
+            lastCode={automationCode}
+            onToggle={toggleAutomation}
+            onDelete={deleteAutomation}
+          />
+        </div>
+      )}
+
+      {ccTab === 'control' && (
+        <div className="ia-cc-deck" data-testid="ai-deck-control">
+          <AiControlPanel
+            t={t}
+            aiControl={aiControl}
+            onChange={changeAiControl}
+            onStop={handleAiStop}
+            onRelease={handleAiRelease}
+            usage={{ spentTodayUsd: dailyVolume.spentTodayUsd }}
+            level={level}
+            automationsActive={automationTotals(automations).active}
+            serverState={serverMode}
+          />
+        </div>
+      )}
+
 
       {/*
         Session setup — mode, level and the authorization boundary — folds
@@ -1402,7 +2521,7 @@ export default function IntentAIPanel({
                   key={L.key}
                   type="button"
                   className={`ia-level${isCurrent ? ' is-current' : level > L.value ? ' is-below' : ''}`}
-                  onClick={() => setLevel(L.value)}
+                  onClick={() => pickLevel(L.value)}
                   aria-pressed={isCurrent}
                   data-testid={`intent-ai-level-${L.value}`}
                 >
@@ -1640,306 +2759,11 @@ export default function IntentAIPanel({
         ))}
       </div>
 
-      <div className="intent-ai-thread" ref={threadRef}>
-        {visibleMessages.length === 0 && (
-          <p className="muted" style={{ fontSize: 12 }}>{t('intentAI.chat.try')}</p>
-        )}
-        {visibleMessages.map((m) => (
-          <MessageBubble
-            key={m.id}
-            msg={m}
-            onDraftReady={onDraftReady}
-            onQuickReply={sendText}
-            onOpenGate={openInteractiveScreen}
-          />
-        ))}
-      </div>
-
       {/* Interactive confirmation screen: edit values, set tool permissions,
           then confirm — or answer in chat. */}
-      {screen && level >= 2 && (
-        <div className="card-inner ia-confirm-screen" data-testid="interactive-confirmation-screen">
-          <div className="row-between" style={{ gap: 8, marginBottom: 6 }}>
-            <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t('intentAI.confirm.title')}</p>
-            {screen.modified && <span className="ia-badge-edit">{t('intentAI.confirm.edited')}</span>}
-          </div>
-
-          <div className="ia-confirm-grid">
-            <label className="field">
-              <span className="field-label">{t('intentAI.confirm.amount')}</span>
-              <input
-                type="number"
-                min="0"
-                inputMode="decimal"
-                value={screen.amountUsd}
-                onChange={(e) => updateScreen('amountUsd', e.target.value === '' ? '' : Number(e.target.value))}
-                aria-invalid={Boolean(screen.errors.amountUsd)}
-              />
-              <small className="ia-hint">{t('intentAI.limits.hintAmount', { limit: INTENT_LIMITS.maxTotalInputUsd.toLocaleString() })}</small>
-              <small className="ia-hint">{t('intentAI.limits.hintPerTx', { limit: INTENT_LIMITS.maxPerTransactionUsd.toLocaleString() })}</small>
-              {/* Phase 56 — the ACTIVE session policy, shown next to the product ceilings. */}
-              {policyCaps?.maxTransactionUsd != null && (
-                <small className="ia-hint" data-testid="session-policy-per-tx">
-                  {t('intentAI.policyLimits.hintPerTx', { limit: policyCaps.maxTransactionUsd.toLocaleString() })}
-                </small>
-              )}
-              {policyCaps?.maxCapitalUsd != null && (
-                <small className="ia-hint" data-testid="session-policy-capital">
-                  {t('intentAI.policyLimits.hintCapital', { limit: policyCaps.maxCapitalUsd.toLocaleString() })}
-                </small>
-              )}
-              {screen.errors.amountUsd && (
-                <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.amountUsd}`, { value: Number(screen.amountUsd).toLocaleString(), limit: INTENT_LIMITS.maxPerTransactionUsd.toLocaleString() })}</small>
-              )}
-            </label>
-
-            <label className="field">
-              <span className="field-label">{t('intentAI.confirm.duration')}</span>
-              <input
-                type="number"
-                min="0"
-                inputMode="decimal"
-                placeholder={t('intentAI.confirm.durationPlaceholder')}
-                value={screen.durationHrs ?? ''}
-                onChange={(e) => updateScreen('durationHrs', e.target.value === '' ? null : Number(e.target.value))}
-                aria-invalid={Boolean(screen.errors.durationHrs)}
-              />
-              <small className="ia-hint">{t('intentAI.limits.hintDuration', { days: INTENT_LIMITS.maxGoalDurationDays })}</small>
-              {screen.errors.durationHrs && (
-                <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.durationHrs}`, { days: INTENT_LIMITS.maxGoalDurationDays })}</small>
-              )}
-            </label>
-
-            <label className="field">
-              <span className="field-label">{t('intentAI.confirm.goal')}</span>
-              <input
-                type="number"
-                min="0"
-                max={INTENT_LIMITS.maxGoalPct}
-                inputMode="decimal"
-                placeholder={t('intentAI.confirm.goalPlaceholder')}
-                value={screen.goalPct ?? ''}
-                onChange={(e) => updateScreen('goalPct', e.target.value === '' ? null : Number(e.target.value))}
-                aria-invalid={Boolean(screen.errors.goalPct)}
-              />
-              <small className="ia-hint">{t('intentAI.limits.hintGoal', { pct: INTENT_LIMITS.maxGoalPct })}</small>
-              {screen.errors.goalPct && (
-                <small className="ia-limit-warning">{t(`intentAI.limits.${screen.errors.goalPct}`, { value: screen.goalPct, limit: INTENT_LIMITS.maxGoalPct })}</small>
-              )}
-            </label>
-
-            <div className="field">
-              <span className="field-label">{t('intentAI.confirm.route')}</span>
-              <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-                {screen.fromSymbol || '—'} → {screen.toSymbol || '—'} · {t('intentAI.confirm.chain')}: {screen.chainId || '—'}
-              </p>
-              {gate?.termsHash && <small className="ia-hint">{t('intentAI.gate.termsHash')}: {gate.termsHash?.slice(0, 12)}</small>}
-              {risk && (
-                <small className="ia-hint">{t('intentAI.risk.summary', { level: risk.level, decision: risk.decision })}</small>
-              )}
-            </div>
-          </div>
-
-          {/* Phase 90 — the fee, on the preview, before anything is approved:
-              the percentage, the amount, and what is left afterwards. */}
-          {feeQuote && (
-            <div className="ia-fee-line" data-testid="preview-fee-line">
-              <span className="field-label">{t('intentAI.fee.title')}</span>
-              {feeQuote.ok ? (
-                <>
-                  <span data-testid="preview-fee-amount">
-                    {t('intentAI.fee.line', {
-                      percent: feeQuote.percent,
-                      amount: feeQuote.feeAmount,
-                      symbol: feeQuote.symbol || ''
-                    })}
-                  </span>
-                  <small className="ia-hint" data-testid="preview-fee-net">
-                    {t('intentAI.fee.net', { amount: feeQuote.netAmount, symbol: feeQuote.symbol || '' })}
-                  </small>
-                </>
-              ) : (
-                <span className="ia-limit-warning">{t(feeQuote.i18nKey)}</span>
-              )}
-            </div>
-          )}
-
-          {/* Tool permissions — the user decides what the agents may use. */}
-          <div className="ia-tools-box">
-            <p className="muted" style={{ fontSize: 11.5, margin: '0 0 6px' }}>{t('intentAI.confirm.toolsTitle')}</p>
-            <div className="ia-check-row">
-              {FLOW_TOOL_SUGGESTIONS.map((tool) => (
-                <label key={tool.id} className="ia-check">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(screen.tools[tool.id])}
-                    onChange={() => toggleScreenTool(tool.id)}
-                  />
-                  <span>{t(`intentAI.confirm.tool.${tool.key}`)}</span>
-                </label>
-              ))}
-            </div>
-            <small className="ia-hint">{t('intentAI.confirm.toolsNote')}</small>
-          </div>
-
-          {/* Phase 56 — a session-policy breach is named here and locks the
-              final confirm, instead of surfacing later as "no live venue". */}
-          {policyViolations.length > 0 && (
-            <div className="ia-limit-warning" data-testid="session-policy-violation" style={{ marginTop: 8 }}>
-              <strong style={{ display: 'block' }}>{t('intentAI.policyLimits.violationTitle')}</strong>
-              {policyViolations.map((violation) => (
-                <small key={violation.code} style={{ display: 'block' }}>
-                  {t(violation.i18nKey, violation.params)}
-                </small>
-              ))}
-            </div>
-          )}
-
-          {/*
-            Wallet connection state — WITHOUT a connected wallet the final
-            confirm can never be signed, so the only receipt it can produce is
-            "wallet signature required". Say that BEFORE the click, with the
-            way to fix it, instead of letting the user discover a dead end.
-            Plain anchor: this panel also mounts headless in the test suite,
-            where a Router-dependent wallet sheet would crash.
-          */}
-          {!wallet.connected && (
-            <div className="ia-wallet-missing" data-testid="wallet-missing">
-              <span className="ia-wallet-missing-dot" aria-hidden="true" />
-              <div className="ia-wallet-missing-body">
-                <strong>{t('intentAI.wallet.missingTitle', { defaultValue: 'No wallet is connected' })}</strong>
-                <small>{t('intentAI.wallet.missingBody', { defaultValue: 'Signing and final authorization need your wallet. Analysis and preparation keep working without it.' })}</small>
-              </div>
-              <a className="ia-wallet-connect-link" href="#/wallet">
-                {t('intentAI.wallet.connectNow', { defaultValue: 'Connect wallet' })}
-              </a>
-            </div>
-          )}
-
-          {/*
-            Broadcast consent. Only rendered when the build actually permits
-            sending, so a deployment that cannot broadcast never shows a
-            control implying it can. Consent is per-execution and resets after
-            every run.
-          */}
-          {broadcastEnabled(import.meta.env || {}) && (
-            <div className="ia-broadcast-box" data-testid="broadcast-opt-in-box">
-              <label className="ia-broadcast-optin" data-testid="broadcast-opt-in">
-                <input
-                  type="checkbox"
-                  checked={broadcastOptIn}
-                  onChange={(e) => setBroadcastOptIn(e.target.checked)}
-                />
-                <span>{t('intentAI.broadcast.optIn')}</span>
-              </label>
-              <small className="ia-hint" data-testid="broadcast-opt-in-hint">
-                {t('intentAI.broadcast.hint', {
-                  defaultValue: 'After «confirm», your wallet asks once more and the transaction goes to the network for real.'
-                })}
-              </small>
-            </div>
-          )}
-
-          <div className="ia-controls" style={{ marginTop: 10 }}>
-            <button
-              type="button"
-              className="ia-ctl ia-go"
-              disabled={confirmBlocked}
-              onClick={handleFinalConfirm}
-              data-testid="final-confirm-button"
-            >
-              {t('intentAI.confirm.final')}
-            </button>
-            {GATE_ACTIONS.map((action) => (
-              <button
-                key={action}
-                type="button"
-                className={`ia-ctl ${action === 'CONFIRM' ? 'ia-go' : action === 'REJECT' ? 'ia-danger' : action === 'REAUTHORIZE' ? 'ia-cool' : ''}`}
-                disabled={action === 'CONFIRM' && gateAction === 'CONFIRM' && receipt?.ok}
-                onClick={() => handleGateAction(action)}
-              >
-                {t(`intentAI.gate.${action.toLowerCase()}`)}
-              </button>
-            ))}
-          </div>
-          {Object.keys(screen.errors || {}).length > 0 && (
-            <small className="ia-limit-warning" style={{ display: 'block', marginTop: 6 }}>
-              {t('intentAI.confirm.fixLimits')}
-            </small>
-          )}
-        </div>
-      )}
-
       {/* Honest receipt */}
-      {receipt && (
-        <div className="card-inner" style={{ background: 'rgba(255,255,255,0.03)', padding: 10, borderRadius: 10, marginBottom: 10 }}>
-          <p className="muted" style={{ fontSize: 12, margin: '0 0 4px' }}>{t('intentAI.receipt.title')}</p>
-          <p style={{ fontSize: 12.5, margin: 0 }}>
-            <span className={['completed', 'success'].includes(receipt.status) ? '' : 'faint'}>{t(`intentAI.receipt.${receipt.status || 'pending'}`)}</span>
-            {receipt.venue ? ` · ${t('intentAI.receipt.venue', { venue: receipt.venue })}` : ''}
-          </p>
-          {/* Phase 56 — the receipt says WHY, with the real reason. */}
-          {receipt.reasonKey && (
-            <p style={{ fontSize: 12, margin: '4px 0 0' }} data-testid="receipt-reason">
-              {t(receipt.reasonKey, receipt.reasonParams || {})}
-            </p>
-          )}
-          {/* Phase 90/201 — the fee line is honest about whether anything was
-              actually collected: with a real on-chain transaction the router
-              took it; without one it only ever existed on the preview. The
-              old wording said "fee collected" on a run that sent nothing. */}
-          {receipt.fee?.ok && (
-            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-fee-line">
-              {t(receipt.txHash ? 'intentAI.fee.onReceipt' : 'intentAI.fee.quotedOnly', {
-                amount: receipt.fee.feeAmount,
-                symbol: receipt.fee.symbol || '',
-                percent: receipt.fee.percent
-              })}
-            </p>
-          )}
-          {receipt.txHash && (
-            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-tx-hash">
-              {t('intentAI.receipt.txHash', { hash: receipt.txHash })}
-              {typeof explorerUrl === 'function' && receipt.txChainId && (
-                <>
-                  {' · '}
-                  <a
-                    className="ia-explorer-link"
-                    href={explorerUrl({ txHash: receipt.txHash, chainId: receipt.txChainId })}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    data-testid="receipt-explorer-link"
-                  >
-                    {t('intentAI.receipt.viewOnExplorer', { defaultValue: 'view on explorer' })}
-                  </a>
-                </>
-              )}
-            </p>
-          )}
-          {/* Phase 94 — a queued intent is a promise to ask again, not a
-              promise to send. It carries no hash and no receipt. */}
-          {receipt.queued && (
-            <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0' }} data-testid="receipt-queued-note">
-              {t('intentAI.offline.reviewNote')}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Phase 88 — the honest fiat boundary. Shown when the user asked us to
           move real money, which we do not do, with what we CAN do next to it. */}
-      {rampNotice?.applies && (
-        <div className="ia-ramp-notice" role="note" data-testid="fiat-ramp-notice">
-          <p className="muted" style={{ fontSize: 12, margin: '0 0 4px' }}>{t('intentAI.ramp.title')}</p>
-          <p style={{ fontSize: 12.5, margin: 0 }} data-testid="fiat-ramp-message">
-            {t(rampNotice.i18nKey)}
-          </p>
-          <small className="ia-hint" data-testid="fiat-ramp-alternative">
-            {t(rampNotice.alternativeI18nKey)}
-          </small>
-        </div>
-      )}
-
       {/*
         Phase 94/207 — connection + activation, ONE compact strip instead of
         two stacked banners (reported: the page-clutter bug). The offline testid
@@ -1970,22 +2794,6 @@ export default function IntentAIPanel({
           <small className="ia-hint" data-testid="offline-queue-note">{t('intentAI.offline.reviewNote')}</small>
         )}
       </div>
-
-      <form onSubmit={handleSend} className="ia-composer">
-        <input
-          ref={inputRef}
-          placeholder={t('intentAI.chat.placeholder')}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={session?.status === 'STOPPED'}
-        />
-        <button type="submit" className="ia-send" disabled={!input.trim()}>{t('intentAI.chat.send')}</button>
-        {level >= 2 && (
-          <button type="button" className="ia-ctl ia-danger" onClick={handleEmergencyStop} title={t('intentAI.stop.title')}>
-            {t('intentAI.stop.button')}
-          </button>
-        )}
-      </form>
 
       {/* External-agent mode explained: how it works, its security boundaries,
           and how the interaction is scoped. */}

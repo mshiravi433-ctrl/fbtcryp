@@ -18,6 +18,7 @@ import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
 import useIntentBroadcast from '../hooks/useIntentBroadcast';
+import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
 import IntentAIPanel from './IntentAIPanel';
 
 /** Deterministic, URL-safe positive number formatting. */
@@ -122,9 +123,44 @@ export default function IntentAIRoute(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet?.address, wallet?.chainId, wallet?.locked, wallet?.isConnected, wallet?.getWalletRuntime]);
 
+  /*
+   * The "✦ AI Portfolio" card on the AI page reads the SAME aggregation the
+   * portfolio screen uses — one source for a number that decides plans.
+   *
+   * It is built here, not in the panel, for the same reason the wallet runtime
+   * is: the panel must stay mountable without a wallet, a router or a provider
+   * (the test suite does exactly that). And it is only asked for when a wallet
+   * is actually readable, because this aggregation walks every EVM network in
+   * order — running it for an anonymous visitor would be a page of RPC calls
+   * whose answer nobody can use.
+   *
+   * `dataStatus` is what lets the card be honest: `live` prints the total,
+   * anything else prints an em-dash and the reason, never a confident $0.
+   */
+  const canReadPortfolio = Boolean(wallet?.isConnected && wallet?.address && !wallet?.locked);
+  const multi = useMultiChainPortfolio(canReadPortfolio ? wallet : null);
+  const aiPortfolio = useMemo(() => {
+    const holdings = (multi?.rows || [])
+      .filter((r) => Number(r?.value) > 0)
+      .map((r) => ({ symbol: r.symbol, valueUsd: Number(r.value), chainId: r.chainId ?? null }));
+    return {
+      holdings,
+      totalValueUsd: Number(multi?.totalValue) || 0,
+      change24hPct: null,
+      dataStatus: !canReadPortfolio
+        ? 'none'
+        : multi?.loading
+          ? 'loading'
+          : holdings.length
+            ? (multi?.partial ? 'partial' : 'live')
+            : 'empty'
+    };
+  }, [multi?.rows, multi?.totalValue, multi?.partial, multi?.loading, canReadPortfolio]);
+
   return (
     <IntentAIPanel
       {...props}
+      aiPortfolio={aiPortfolio}
       onDraftReady={onDraftReady}
       walletRuntime={walletRuntime}
       executeIntentBroadcast={executeIntentBroadcast}

@@ -951,7 +951,6 @@
     "borrowBtn": "Занять {{symbol}}",
     "positionsTitle": "Активные позиции",
     "positionsBody": "Управляйте через Intent OS и кошелёк.",
-    "openIntentOS": "Открыть Intent OS",
     "openWallet": "Кошелёк",
     "howTitle": "Как это работает",
     "step1Title": "Заблокировать залог",
@@ -980,8 +979,6 @@
     "enterAmount": "Введите сумму",
     "enterCollateral": "Введите залог",
     "overMaxBorrow": "Превышает максимум",
-    "openIntentForSupply": "Откроется Intent OS",
-    "openIntentForBorrow": "Откроется Intent OS",
     "warningLiqTitle": "Риск ликвидации",
     "warningLiqBody": "Если значение упадёт ниже порога, смарт-контракт автоматически продаёт. Необратимо.",
     "warningLiqBorrowBody": "Если залог упадёт ниже LTV, контракт продаёт. Необратимо.",
@@ -1018,7 +1015,7 @@
       "open": "Открыть {{page}}",
       "intentOS": "Intent OS"
     },
-"history": {
+    "history": {
       "viewAll": "История",
       "title": "История транзакций",
       "subtitle": "Что Intent AI сделал на этом устройстве — каждая записанная квитанция, сначала новые.",

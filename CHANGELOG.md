@@ -45,6 +45,78 @@
   vocabulary in the UI), wired into `npm test` and `npm run test:financial-goals`.
 - Docs: `docs/FINANCIAL-GOALS.md` and `docs/FINANCIAL-GOALS-FA.md`.
 
+# Unreleased — Phase 209: #/intent-ai becomes an AI Command Center (owner brief)
+
+- Requested (fa): «۱۷ ایجنت را به کاربر نشان نده؛ صفحه یک کادر پرسش بزرگ، چهار
+  اقدام سریع، کارت پورتفوی AI، شبکهٔ ۲×۲ اقدامات و ⚙ کنترل AI باشد» and «فقط
+  صفحهٔ جدید نساز». Nothing was added to the router: `IntentAIPanel.jsx` keeps
+  its chat, thread, confirmation screen and receipt, and gained a header
+  (`✦ FBT AI` + a live pill), one ask box (the mic renders only when
+  `window.SpeechRecognition` exists) and three tabs — `Command` / `Automations`
+  / `AI control` — so a safety state can never be hidden behind a tab switch.
+- Backend layer (not a rewrite): `src/lib/intent-ai/commandCenter.js` owns
+  `classifyIntent` → `buildPlan` → `orchestrate` → `validateExecution` →
+  `executionStageLedger` → `dashboardSnapshot`. Seven intents
+  (`TRADE · EARN · PORTFOLIO · PROTECT · RESEARCH · AUTOMATION · GENERAL`); the
+  LLM is consulted only when the user typed instead of tapping AND local
+  confidence is below 0.6, and every plan prints its own provenance
+  (`semantic-votes | fallback | surface-tap | context-carry-over |
+  model-label-only`). Keyword matching stayed a fallback and never decides alone.
+- The Execution Firewall is 11 ordered checks (`EMERGENCY_STOP … APPROVAL_REQUIRED`)
+  and can only ever make a plan MORE blocked. Defaults are deliberately tight
+  ($100 per transaction, $500 a day, risk 35, 5 of 6 EVM chains — BSC off); the
+  daily figure is measured from `loadIntentTxHistory()` for today, not a
+  counter. `WALLET_REQUIRED` is last because it is the boundary, not a fallback.
+  Solana/Tron are `NON_EVM_VENUES` — offered as a hand-off route, never as a
+  checkbox.
+- Seventeen agents are hidden, not deleted: `AI_AGENTS` still routes every
+  surface, and the only UI is a closed `<details>` («Behind this plan», carrying
+  «None of these agents can hold a key, sign, or move funds»). No first-screen
+  control is labelled with an agent, and Market Maker / agent-to-agent /
+  multi-agent / research are asserted absent from it.
+- Honesty pass on data: an offline market read reports `dataProvenance:
+  'offline'` and the think rail prints `unavailable` instead of spinning; an
+  unread wallet shows `—`, never `$0`; expected yield appears only when the
+  yield feed answered; a plan with no capital prints its own `noCapital` line;
+  risk is omitted when `riskScore == null`. Approve re-runs `validateExecution`
+  at tap time, writes the ledger, then hands off — the page performs no signing
+  and no broadcast (asserted against a stub signer).
+- Emergency stop persists at `fbt.ai.emergencyStop.v1` and is hydrated before
+  the first paint; stopping mid-plan kills that plan's Approve button on the
+  same render, and releasing takes two deliberate taps plus `POST
+  /api/ai/emergency-stop/release` with `confirm: true`.
+- Server mirror: `server/aiCommand.js` (mounted in `server/app.js`) answers
+  `fbt.ai-chat.v1` / `fbt.ai-dashboard.v1`, stores plans per caller (TTL 1h,
+  cap 200) and returns `409 FIREWALL_REFUSED`, `428 AWAITING_APPROVAL`,
+  `412 WALLET_SIGNATURE_REQUIRED` or `200 HANDOFF_READY` with `executed: false`;
+  automations carry `executionModel: 'per-run-user-confirmation'`;
+  `GET /api/ai/agents` says `presentation: { shownOnMainSurface: 0,
+  hiddenByDesign: true }`. Free model prose is never echoed to the client, and
+  the `context` a caller may send is sanitised so no address or execution
+  instruction can ride along.
+- i18n: the whole screen is localised — 237 `intentAI.cc.*` leaves in `en` and
+  `fa`, parallel, including the 11 firewall block messages, the 8 execution
+  stages, the action/assumption/cadence/automation/stage families and the
+  interpolated portfolio/agent/automation counts. The last English strings that
+  render on this page were translated too (`activation.banner.*`,
+  `intentAI.readiness.*`, `intentAI.mode.*`, `intentAI.msg.intent`,
+  `intentAI.confirm.tool.swap|bridge`, `activation.blockers|missing`), so `fa`
+  now defines all 5516 keys; `coverage.json` was regenerated (5426 translated —
+  the remaining 71 are brand/ticker tokens kept in Latin script on purpose,
+  plus `intentAI.quick.phrase.intentOS`, which is classifier input, not copy).
+- Style: `src/styles/ai-command-center.css` — glass on `#07070a` with a radial
+  violet glow, blurred translucent cards, 24px radii, mobile-first two-column
+  quick actions under 600px. Guarded `intent-os.css` rules were overridden,
+  never deleted.
+- Tests: new mounted suite `test/intent-ai/phase209-command-deck-probe.jsx`
+  (29/29, built by `test/vite.intentai3.mjs`, registered in `test/run.mjs`),
+  plus the two earlier mounted suites (25/25, 20/20) and `test/wiring.mjs`
+  (2248/2248) green; `phase141/142` layout-and-reachability guards and the
+  guided-flow limits probe are untouched by design.
+- Docs: `docs/INTENT-AI-COMMAND-CENTER-FA.md` (fa) is the reference for the
+  routing table, the firewall order, what each execution stage attests, and what
+  is deliberately not possible.
+
 # Unreleased — Phases 201-207: the #/intent-ai user-report sweep (owner review)
 
 - Reported (fa): «مجاز شد — هنوز روی شبکه نیست · مقصد swap», «امضا شد و با

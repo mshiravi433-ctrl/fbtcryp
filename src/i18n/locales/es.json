@@ -951,7 +951,6 @@
     "borrowBtn": "Pedir {{symbol}}",
     "positionsTitle": "Posiciones de préstamo activas",
     "positionsBody": "Gestiona tus posiciones en Intent OS y tu cartera.",
-    "openIntentOS": "Abrir Intent OS",
     "openWallet": "Cartera",
     "howTitle": "Cómo funciona",
     "step1Title": "Bloquear garantía",
@@ -980,8 +979,6 @@
     "enterAmount": "Introduce una cantidad",
     "enterCollateral": "Introduce la garantía",
     "overMaxBorrow": "Supera el máximo",
-    "openIntentForSupply": "Intent OS se abrirá para firmar el depósito",
-    "openIntentForBorrow": "Intent OS se abrirá para firmar el préstamo",
     "warningLiqTitle": "Riesgo de liquidación",
     "warningLiqBody": "Si el valor del activo cae, el contrato lo vende automáticamente. Irreversible.",
     "warningLiqBorrowBody": "Si la garantía cae bajo el umbral LTV, el contrato la vende. Irreversible.",
@@ -1018,7 +1015,7 @@
       "open": "Abrir {{page}}",
       "intentOS": "Intent OS"
     },
-"history": {
+    "history": {
       "viewAll": "Historial",
       "title": "Historial de transacciones",
       "subtitle": "Lo que hizo Intent AI en este dispositivo — cada recibo registrado, el más reciente primero.",

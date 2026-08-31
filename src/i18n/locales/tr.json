@@ -951,7 +951,6 @@
     "borrowBtn": "{{symbol}} Borç Al",
     "positionsTitle": "Aktif pozisyonlar",
     "positionsBody": "Intent OS ve cüzdanınızla yönetin.",
-    "openIntentOS": "Intent OS Aç",
     "openWallet": "Cüzdan",
     "howTitle": "Nasıl çalışır",
     "step1Title": "Teminat kilitle",
@@ -980,8 +979,6 @@
     "enterAmount": "Miktar girin",
     "enterCollateral": "Teminat girin",
     "overMaxBorrow": "Maksimumu aşıyor",
-    "openIntentForSupply": "Intent OS açılacak",
-    "openIntentForBorrow": "Intent OS açılacak",
     "warningLiqTitle": "Tasfiye riski",
     "warningLiqBody": "Değer eşiğin altına düşerse, akıllı sözleşme otomatik satar. Geri alınamaz.",
     "warningLiqBorrowBody": "Teminat LTV'nin altına düşerse, sözleşme satar. Geri alınamaz.",
@@ -1018,7 +1015,7 @@
       "open": "{{page}} sayfasını aç",
       "intentOS": "Intent OS"
     },
-"history": {
+    "history": {
       "viewAll": "Geçmiş",
       "title": "İşlem geçmişi",
       "subtitle": "Intent AI’ın bu cihazda yaptıkları — kaydettiği her makbuz, en yeniden eskiye.",
