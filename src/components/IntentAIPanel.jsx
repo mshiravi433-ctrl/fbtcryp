@@ -88,13 +88,12 @@ const LEVELS = [
  */
 function AiStageRail() {
   const { t } = useTranslation();
+  // Stages removed per user request: Risk, Execution, Memory, Middle chain (crosschain)
+  // Keeping: intent (runs in this panel), verification, and cross-chain review.
   const stages = [
     { id: 'intent', here: true },
-    { id: 'risk', here: true },
-    { id: 'execution', here: true },
     { id: 'verification', tab: 'proofs' },
-    { id: 'crosschain', tab: 'crosschain' },
-    { id: 'memory', tab: 'memory' }
+    { id: 'crosschain', tab: 'crosschain' }
   ];
   return (
     <div className="ia-stage-row" role="group" aria-label={t('intentAI.stages.title', { defaultValue: 'Pipeline stages' })}>
@@ -200,7 +199,20 @@ const CONTROL_VARIANTS = {
 const GATE_ACTIONS = ['CONFIRM', 'REJECT', 'CANCEL', 'REAUTHORIZE'];
 
 /** Quick-action chips under the stage rail (labels + send phrases are i18n). */
-const QUICK_CHIPS = ['marketBrief', 'swap', 'bridge', 'futures', 'lend', 'goal'];
+const QUICK_CHIPS = (() => {
+  const base = ['swap', 'marketBrief', 'futures', 'lend', 'goal'];
+  const lastAction = JSON.parse(localStorage.getItem('fbt_intent_last_action') || 'swap');
+  if (base.includes(lastAction)) {
+    const idx = base.indexOf(lastAction);
+    const moved = base.splice(idx, 1);
+    return [moved[0], ...base];
+  }
+  return base;
+})();
+
+const setLastAction = (action) => {
+  try { localStorage.setItem('fbt_intent_last_action', JSON.stringify(action)); } catch {}
+};
 
 function fmtTime(ts) {
   try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
@@ -339,10 +351,10 @@ export default function IntentAIPanel({
    * broad scope, bounded size; the user raises them deliberately.
    */
   const [policyInput, setPolicyInput] = useState({
-    maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
-    allowedChains: '42161,8453,56,1,137,10,43114,59144,146',
-    allowedProtocols: 'swap,bridge,defi,staking,lending,liquidity,futures,dydx',
-    allowedAssets: '', durationMin: 60
+    maxCapitalUsd: 500, maxTransactionUsd: 50, maxLossUsd: 50, maxLeverage: 2,
+    // allowedChains: '42161,1,137,10',
+    // allowedProtocols: 'swap,bridge,lending',
+    allowedAssets: '', durationMin: 30
   });
   const threadRef = useRef(null);
   const inputRef = useRef(null);
@@ -1565,7 +1577,7 @@ export default function IntentAIPanel({
             key={chip}
             type="button"
             className="ia-chip ia-quick-chip"
-            onClick={() => sendText(t(`intentAI.quick.phrase.${chip}`))}
+            onClick={() => { setLastAction(chip); sendText(t(`intentAI.quick.phrase.${chip}`)); }}
             disabled={session?.status === 'STOPPED'}
           >
             {t(`intentAI.quick.${chip}`)}
@@ -1573,9 +1585,7 @@ export default function IntentAIPanel({
         ))}
         {/* Plain anchors, not useNavigate: this panel also mounts headless in
             the test suite without a Router (see AiStageRail). */}
-        <a className="ia-chip ia-quick-chip ia-history-link" href="#/intent?tab=history">
-          {t('intentAI.history.viewAll', { defaultValue: 'History' })}
-        </a>
+        {/* <a className="ia-chip ia-quick-chip ia-history-link" href="#/intent?tab=history">\n          {t('intentAI.history.viewAll', { defaultValue: 'History' })}</a> */}
       </div>
 
       {/*
@@ -1587,7 +1597,7 @@ export default function IntentAIPanel({
         parser knows the same words, so "farm" in chat and this chip land on
         the same screen.
       */}
-      <div className="ia-quick-row ia-section-links" role="group" aria-label={t('intentAI.sections.title', { defaultValue: 'Other sections' })}>
+{/*
         {[
           { href: '#/wallet', key: 'wallet' },
           { href: '#/stocks', key: 'stocks' },
