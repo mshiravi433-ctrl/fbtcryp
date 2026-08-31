@@ -2704,3 +2704,211 @@
 :root[data-theme='light'] .ios-progress { background: rgba(40, 52, 80, .03); border-color: rgba(20, 80, 120, .16); }
 :root[data-theme='light'] .ios-progress-step { background: rgba(40, 52, 80, .035); border-color: rgba(40, 52, 80, .09); }
 :root[data-theme='light'] .ios-progress-bar { background: rgba(40, 52, 80, .12); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FINANCIAL OS — FINANCIAL GOALS
+   The tab keeps the same shell language as the rest of Intent OS (cards,
+   hairline borders, mono numerals). Everything here is presentation only: no
+   control in this block executes anything, and the only primary button that
+   can appear after an approval sends the user to the existing compose tab.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.fg-root { display: flex; flex-direction: column; gap: 12px; }
+.fg-root strong { color: var(--text-1, #eaf0ff); }
+
+.fg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fg-head > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fg-head strong { font-size: 16px; letter-spacing: -.2px; }
+.fg-glyph { color: var(--ios-cyan, #42e8ff); font-size: 15px; }
+
+.fg-create,
+.fg-cta,
+.fg-mini {
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(255, 255, 255, .09));
+  background: rgba(255, 255, 255, .04);
+  color: var(--text-1, #eaf0ff);
+  font: 700 11px/1 var(--font-mono, monospace);
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+.fg-create:hover, .fg-mini:hover, .fg-cta:hover { border-color: rgba(66, 232, 255, .4); transform: translateY(-1px); }
+.fg-create:disabled, .fg-cta:disabled, .fg-mini:disabled { opacity: .5; cursor: default; transform: none; }
+.fg-create { color: var(--ios-cyan, #42e8ff); border-color: rgba(66, 232, 255, .28); }
+.fg-cta {
+  background: linear-gradient(120deg, rgba(66, 232, 255, .16), rgba(101, 245, 188, .12));
+  border-color: rgba(101, 245, 188, .32);
+  color: var(--ios-mint, #65f5bc);
+}
+.fg-cta-wide { width: 100%; margin-top: 12px; padding: 12px; }
+
+.fg-card,
+.fg-list-card,
+.fg-summary {
+  padding: 13px;
+  border: 1px solid var(--line, rgba(255, 255, 255, .08));
+  border-radius: 14px;
+  background: linear-gradient(150deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .015));
+}
+.fg-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.fg-card-head strong { font: 700 10px/1 var(--font-mono, monospace); letter-spacing: .8px; text-transform: uppercase; color: var(--text-2, #9aa4bf); }
+.fg-card-head small { font: 600 9px/1 var(--font-mono, monospace); color: var(--text-3, #6a7590); text-transform: uppercase; }
+
+.fg-empty { margin: 4px 0; font-size: 11.5px; line-height: 1.8; color: var(--text-2, #9aa4bf); }
+
+/* ── the goal list ─────────────────────────────────────────────────────── */
+.fg-goal { padding: 11px 0; border-top: 1px solid rgba(255, 255, 255, .06); }
+.fg-goal:first-of-type { border-top: 0; padding-top: 2px; }
+.fg-goal-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fg-goal-top strong { font-size: 13px; }
+.fg-goal-value { margin-top: 6px; font: 700 15px/1 var(--font-mono, monospace); color: var(--text-1, #eaf0ff); }
+.fg-goal-value span { font-weight: 600; font-size: 12px; color: var(--text-3, #6a7590); }
+.fg-goal-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; font: 600 9.5px/1 var(--font-mono, monospace); color: var(--text-3, #6a7590); }
+.fg-goal-bar { margin-top: 9px; height: 4px; border-radius: 99px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.fg-goal-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--ios-cyan, #42e8ff), var(--ios-mint, #65f5bc)); }
+.fg-goal-actions { display: flex; gap: 8px; margin-top: 10px; }
+.fg-goal-actions .fg-cta { flex: 1 1 auto; }
+
+.fg-dot { width: 7px; height: 7px; border-radius: 99px; background: var(--text-3, #6a7590); flex: 0 0 auto; }
+.fg-dot.is-good { background: var(--ios-mint, #65f5bc); box-shadow: 0 0 8px rgba(101, 245, 188, .55); }
+.fg-dot.is-warn { background: #ffd36b; box-shadow: 0 0 8px rgba(255, 211, 107, .45); }
+.fg-dot.is-bad { background: var(--ios-red, #ff5d7d); box-shadow: 0 0 8px rgba(255, 93, 125, .45); }
+.fg-dot.is-idle { background: var(--text-3, #6a7590); }
+
+.fg-chip {
+  display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 99px;
+  border: 1px solid var(--line, rgba(255, 255, 255, .1));
+  font: 700 8.5px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .4px;
+  color: var(--text-2, #9aa4bf);
+}
+.fg-chip.is-good { color: var(--ios-mint, #65f5bc); border-color: rgba(101, 245, 188, .28); background: rgba(101, 245, 188, .07); }
+.fg-chip.is-warn { color: #ffd36b; border-color: rgba(255, 211, 107, .26); background: rgba(255, 211, 107, .06); }
+.fg-chip.is-bad { color: var(--ios-red, #ff5d7d); border-color: rgba(255, 93, 125, .26); background: rgba(255, 93, 125, .06); }
+
+/* ── the create form ───────────────────────────────────────────────────── */
+.fg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 4px; }
+.fg-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.fg-field > span { font: 700 9px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3, #6a7590); }
+.fg-field input {
+  width: 100%; padding: 10px 11px; border-radius: 10px;
+  border: 1px solid var(--line, rgba(255, 255, 255, .1));
+  background: rgba(255, 255, 255, .035); color: var(--text-1, #eaf0ff);
+  font: 600 12px/1.2 var(--font-mono, monospace);
+}
+.fg-field input:focus { outline: none; border-color: rgba(66, 232, 255, .45); }
+
+.fg-risk { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.fg-risk button {
+  padding: 10px 6px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line, rgba(255, 255, 255, .1));
+  background: rgba(255, 255, 255, .035); color: var(--text-2, #9aa4bf);
+  font: 700 10px/1 var(--font-mono, monospace);
+}
+.fg-risk button.is-on {
+  border-color: rgba(101, 245, 188, .4);
+  background: rgba(101, 245, 188, .1);
+  color: var(--ios-mint, #65f5bc);
+}
+
+/* ── the plan ──────────────────────────────────────────────────────────── */
+.fg-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.fg-summary-grid > div { display: flex; flex-direction: column; gap: 4px; }
+.fg-summary-grid small { font: 700 8.5px/1 var(--font-mono, monospace); text-transform: uppercase; color: var(--text-3, #6a7590); }
+.fg-summary-grid b { font: 700 13px/1 var(--font-mono, monospace); color: var(--text-1, #eaf0ff); }
+
+.fg-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.fg-metric {
+  display: flex; flex-direction: column; gap: 5px; padding: 12px;
+  border-radius: 12px; border: 1px solid rgba(101, 245, 188, .16);
+  background: linear-gradient(150deg, rgba(101, 245, 188, .07), rgba(66, 232, 255, .04));
+}
+.fg-metric small { font: 700 8.5px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3, #6a7590); }
+.fg-metric b { font: 700 22px/1 var(--font-mono, monospace); color: var(--ios-mint, #65f5bc); }
+.fg-metric b span { font-size: 11px; color: var(--text-3, #6a7590); }
+.fg-metric em { font: 600 9px/1.5 var(--font-mono, monospace); font-style: normal; color: var(--text-3, #6a7590); }
+
+.fg-sub { display: block; margin: 14px 0 8px; font: 700 9.5px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .7px; color: var(--text-2, #9aa4bf); }
+.fg-alloc-row { display: grid; grid-template-columns: 1.1fr 3fr auto; gap: 9px; align-items: center; padding: 7px 0; }
+.fg-alloc-row span { font-size: 11.5px; color: var(--text-2, #9aa4bf); }
+.fg-alloc-row b { font: 700 11px/1 var(--font-mono, monospace); color: var(--ios-cyan, #42e8ff); }
+.fg-alloc-bar { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.fg-alloc-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, rgba(66, 232, 255, .9), rgba(101, 245, 188, .9)); }
+
+.fg-scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fg-scenario {
+  display: flex; flex-direction: column; gap: 5px; padding: 11px;
+  border-radius: 12px; border: 1px solid var(--line, rgba(255, 255, 255, .09));
+  background: rgba(255, 255, 255, .03);
+}
+.fg-scenario small { font: 700 8.5px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3, #6a7590); }
+.fg-scenario b { font: 700 13px/1 var(--font-mono, monospace); color: var(--text-1, #eaf0ff); }
+.fg-scenario em { font: 600 9.5px/1 var(--font-mono, monospace); font-style: normal; color: var(--text-3, #6a7590); }
+.fg-scenario.is-bear { border-color: rgba(255, 93, 125, .2); }
+.fg-scenario.is-base { border-color: rgba(255, 255, 255, .12); }
+.fg-scenario.is-bull { border-color: rgba(101, 245, 188, .24); }
+.fg-scenario.is-bull b { color: var(--ios-mint, #65f5bc); }
+
+/* ── expected vs actual path ───────────────────────────────────────────── */
+.fg-path {
+  position: relative; height: 78px; margin: 12px 0 6px;
+  border-radius: 10px; border: 1px solid var(--line, rgba(255, 255, 255, .08));
+  background: rgba(255, 255, 255, .02); overflow: hidden;
+}
+.fg-path-expected span,
+.fg-path-actual span { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 99px; }
+.fg-path-expected span { background: rgba(255, 255, 255, .22); }
+.fg-path-actual span { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: var(--ios-mint, #65f5bc); box-shadow: 0 0 8px rgba(101, 245, 188, .5); }
+
+/* ── review + intent ───────────────────────────────────────────────────── */
+.fg-review-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.fg-review-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.fg-review-list span { font-size: 11.5px; color: var(--text-2, #9aa4bf); }
+.fg-review-list b { font: 700 11px/1 var(--font-mono, monospace); color: var(--text-1, #eaf0ff); text-align: end; }
+
+.fg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.fg-actions .fg-cta { flex: 1 1 140px; }
+
+.fg-intent {
+  display: flex; flex-direction: column; gap: 6px; padding: 11px;
+  border-radius: 12px; border: 1px solid rgba(66, 232, 255, .2); background: rgba(66, 232, 255, .05);
+}
+.fg-intent > small { font: 700 8.5px/1 var(--font-mono, monospace); text-transform: uppercase; color: var(--ios-cyan, #42e8ff); }
+.fg-intent-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; font: 600 10.5px/1 var(--font-mono, monospace); color: var(--text-2, #9aa4bf); }
+.fg-intent-row b { color: var(--text-1, #eaf0ff); }
+.fg-intent-row em { font-style: normal; color: var(--ios-cyan, #42e8ff); }
+.fg-intent-row i { font-style: normal; color: var(--text-3, #6a7590); }
+
+/* ── notes ─────────────────────────────────────────────────────────────── */
+.fg-note { margin: 10px 0 0; font-size: 10px; line-height: 1.75; color: var(--text-3, #6a7590); }
+.fg-warn {
+  margin: 12px 0 0; padding: 10px 11px; border-radius: 10px;
+  border: 1px solid rgba(255, 211, 107, .28); background: rgba(255, 211, 107, .07);
+  font-size: 10.5px; line-height: 1.7; color: #ffd36b;
+}
+.fg-error {
+  margin: 0; padding: 10px 11px; border-radius: 10px;
+  border: 1px solid rgba(255, 93, 125, .3); background: rgba(255, 93, 125, .07);
+  font-size: 10.5px; line-height: 1.7; color: #ff9db1;
+}
+.fg-error code { font: 700 10px/1 var(--font-mono, monospace); }
+
+.fg-honest {
+  padding: 12px; border-radius: 12px;
+  border-inline-start: 2px solid var(--ios-violet, #9d7bff); background: rgba(157, 123, 255, .055);
+}
+.fg-honest strong { display: block; margin-bottom: 6px; font: 700 9.5px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .6px; color: var(--text-2, #9aa4bf); }
+.fg-honest ul { margin: 0; padding-inline-start: 16px; display: flex; flex-direction: column; gap: 5px; }
+.fg-honest li { font-size: 10px; line-height: 1.75; color: var(--text-2, #9aa4bf); }
+
+/* The legacy multi-venue profit plan stays reachable, but it is no longer the
+   headline: the goal flow owns this tab now. */
+.fg-venue-plan { margin-top: 4px; border-radius: 12px; border: 1px solid var(--line, rgba(255, 255, 255, .08)); background: rgba(255, 255, 255, .02); }
+.fg-venue-plan > summary { padding: 11px 12px; cursor: pointer; font: 700 9.5px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3, #6a7590); }
+.fg-venue-plan > div { padding: 0 12px 12px; }
+
+@media (max-width: 480px) {
+  .fg-grid { grid-template-columns: 1fr; }
+  .fg-summary-grid { grid-template-columns: 1fr 1fr; }
+  .fg-metrics { grid-template-columns: 1fr; }
+}

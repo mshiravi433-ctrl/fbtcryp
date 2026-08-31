@@ -304,6 +304,19 @@ import { phaseStatusReport } from './intentPhaseStatus.js';
 import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
 import { activationConfigPresence } from './intentActivationConfig.js';
 import { collectVenueFeeds, buildProfitPlan, PROFIT_PLAN_SCHEMA } from './multiVenue.js';
+import {
+  FINANCIAL_GOAL_SCHEMAS,
+  approveGoalPlan,
+  buildGoalPlan,
+  createGoal,
+  financialGoalMeta,
+  getGoal,
+  goalProgress,
+  listGoals,
+  ownerFromRequest,
+  parseGoalFromText,
+  pauseGoalPlan
+} from './financialGoals.js';
 import { outputLocaleSupport } from '../src/lib/intent-ai/outputLocales.js';
 import { handleUnfreeze, handleFreeze, freezeStateReport } from './intentFreezeControl.js';
 import { auditStatus } from './intentAuditLog.js';
@@ -1521,6 +1534,157 @@ app.post('/api/intents/v1/profit-plan', async (req, res) => {
   } catch (e) {
     return res.status(502).json({ schema: PROFIT_PLAN_SCHEMA, ok: false, code: 'PROFIT_PLAN_FAILED', detail: String(e?.message || '').slice(0, 120) });
   }
+});
+
+/* ── Financial OS — Financial Goals ───────────────────────────────────────── */
+/*
+ * Goal → Analysis → Strategy → Allocation → Intent → Approval → Execution →
+ * Monitoring. Only the first six live here, and "Execution" is a hand-off:
+ * approval produces an INTENT PAYLOAD for the EXISTING Intent OS, whose
+ * compiler, risk checks and confirmation gate are the only path to a
+ * signature. Nothing in this block signs, broadcasts, schedules or holds
+ * funds, and no route here ever receives a key, seed phrase or password.
+ *
+ * The three collections (financial_goals / financial_goal_plans /
+ * financial_goal_events) live in the shared key-value store — see the header
+ * of server/financialGoals.js for why that is not a SQL migration.
+ */
+const GOAL_ERROR_STATUS = Object.freeze({
+  AUTH_REQUIRED: 401,
+  DEVICE_SCOPE_REQUIRED: 401,
+  GOAL_NOT_FOUND: 404,
+  NO_PLAN: 409,
+  TOO_MANY_GOALS: 409,
+  PROJECT_STORE_UNAVAILABLE: 503
+});
+const goalFail = (res, code) => res
+  .status(GOAL_ERROR_STATUS[code] || 400)
+  .json({ ok: false, error: code, meta: { ...financialGoalMeta(), schemas: { ...FINANCIAL_GOAL_SCHEMAS } } });
+
+/* A goal write is a durable read-modify-write, so it gets its own small budget
+   rather than the broad /api allowance sized for cached market data. */
+const goalWriteHits = new Map();
+const GOAL_WRITE_MAX_PER_WINDOW = Number(process.env.FINANCIAL_GOALS_WRITE_RATE_LIMIT || 30);
+app.use('/api/v1/financial-goals', (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const who = ownerFromRequest(req);
+  const key = who.ok ? who.owner : req.ip;
+  const nowMs = Date.now();
+  const rec = goalWriteHits.get(key);
+  if (!rec || nowMs > rec.reset) {
+    goalWriteHits.set(key, { count: 1, reset: nowMs + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > GOAL_WRITE_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - nowMs) / 1000)));
+    return res.status(429).json({ ok: false, error: 'FINANCIAL_GOALS_RATE_LIMITED', meta: financialGoalMeta() });
+  }
+  return next();
+});
+setInterval(() => {
+  const nowMs = Date.now();
+  for (const [key, rec] of goalWriteHits) if (nowMs > rec.reset) goalWriteHits.delete(key);
+}, WINDOW_MS).unref?.();
+
+const goalIdentity = (req, res) => {
+  const who = ownerFromRequest(req);
+  if (!who.ok) {
+    goalFail(res, who.code);
+    return null;
+  }
+  return who;
+};
+
+app.post('/api/v1/financial-goals', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  /* A natural-language line is optional and purely additive: it can pre-fill
+     the fields, it can never override a number the user typed. */
+  const said = parseGoalFromText(req.body?.intent ?? req.body?.text ?? '');
+  const input = { ...(req.body || {}), ...(said.matched ? said.fields : {}) };
+  const result = await createGoal(who.owner, input);
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.status(201).json({
+    data: result.public ?? result.goal,
+    meta: { ...financialGoalMeta(), scope: who.via, parsed: { matched: said.matched, confidence: said.confidence } }
+  });
+});
+
+app.get('/api/v1/financial-goals', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const goals = await listGoals(who.owner);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: goals, meta: { ...financialGoalMeta(), scope: who.via, count: goals.length } });
+});
+
+app.get('/api/v1/financial-goals/:id', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await getGoal(who.owner, req.params.id);
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: { goal: result.goal, plan: result.plan }, meta: { ...financialGoalMeta(), scope: who.via } });
+});
+
+/*
+ * BUILD PLAN — the pipeline:
+ *   Goal → Required Return → Risk Profile → Current Portfolio
+ *       → Market Data → Strategy → Allocation
+ * `currentValueUsd` is the portfolio the app can already read; when it is
+ * absent the plan is built from the declared starting capital and says so.
+ */
+app.post('/api/v1/financial-goals/:id/build-plan', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await buildGoalPlan(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: { goal: result.goal, plan: result.plan },
+    meta: { ...financialGoalMeta(), scope: who.via, market: result.market }
+  });
+});
+
+/*
+ * APPROVE — freezes the plan and returns the intent payload. The word
+ * "approve" is a trap in a financial product: what it means here is exactly
+ * "I have reviewed this proposal", and the response says what still has to
+ * happen (a reviewed, signed Intent OS draft). No transaction is created.
+ */
+app.post('/api/v1/financial-goals/:id/approve', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await approveGoalPlan(who.owner, req.params.id);
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: { goal: result.goal, plan: result.plan, intent: result.intent },
+    meta: { ...financialGoalMeta(), scope: who.via, executed: false, nextStep: 'REVIEW_AND_SIGN_IN_INTENT_OS' }
+  });
+});
+
+app.post('/api/v1/financial-goals/:id/pause', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await pauseGoalPlan(who.owner, req.params.id, { paused: req.body?.paused !== false });
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: { goal: result.goal }, meta: { ...financialGoalMeta(), scope: who.via } });
+});
+
+app.get('/api/v1/financial-goals/:id/progress', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const raw = req.query.currentValueUsd ?? req.query.currentValue ?? null;
+  const result = await goalProgress(who.owner, req.params.id, {
+    currentValueUsd: raw === null || raw === '' ? null : Number(raw)
+  });
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({ data: { goal: result.goal, progress: result.progress }, meta: { ...financialGoalMeta(), scope: who.via } });
 });
 
 /* ── Phases 121–130: Intent OS output locales ───────────────────────────── */

@@ -51,6 +51,7 @@ censored.
 - [فازهای ۱۱ تا ۱۵ — Strategy، Policy، Lifecycle، Genome و Runtime](docs/INTENT-AI-PHASE11-FA.md) · [۱۲](docs/INTENT-AI-PHASE12-FA.md) · [۱۳](docs/INTENT-AI-PHASE13-FA.md) · [۱۴](docs/INTENT-AI-PHASE14-FA.md) · [۱۵](docs/INTENT-AI-PHASE15-FA.md)
 - [فازهای ۱۶ تا ۲۰ — Adapters، On-chain Policy، Proof، Security و Launch](docs/INTENT-AI-PHASE16-FA.md) · [۱۷](docs/INTENT-AI-PHASE17-FA.md) · [۱۸](docs/INTENT-AI-PHASE18-FA.md) · [۱۹](docs/INTENT-AI-PHASE19-FA.md) · [۲۰](docs/INTENT-AI-PHASE20-FA.md)
 - [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)
+- [Financial OS — Financial Goals: goal → required return → allocation → Intent OS → monitoring](docs/FINANCIAL-GOALS.md) · [فارسی](docs/FINANCIAL-GOALS-FA.md)
 
 ### Public guides
 
@@ -75,6 +76,7 @@ censored.
 | [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
 | [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
 | [APIS-FA.md](docs/APIS-FA.md) | کدام API لازم است، کدام نیست، و هر کلید چه چیزی اضافه می‌کند |
+| [FINANCIAL-GOALS-FA.md](docs/FINANCIAL-GOALS-FA.md) | اهداف مالی (Financial OS): از هدف تا اینتنت، بدون Execution Engine جدید |
 | **[DOWNLOAD-FA.md](docs/DOWNLOAD-FA.md)** | **دانلود اپ و انتشار** — لینک مستقیم + ساخت نسخه امضاشده |
 | [BUILD-NOW-FA.md](docs/BUILD-NOW-FA.md) | **شروع از اینجا** — ساخت اپ و انتشار، گام به گام با گوشی |
 | [PLAY-STORE-FA.md](docs/PLAY-STORE-FA.md) | **انتشار در Google Play** — کلید امضا، AAB، Data safety، چک‌لیست |

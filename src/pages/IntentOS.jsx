@@ -38,6 +38,7 @@ import {
   STEP_OPENED
 } from '../lib/intent-ai/workflowProgress.js';
 import ProfitPlanner from '../components/ProfitPlanner';
+import FinancialGoals from '../components/FinancialGoals';
 import IntentCrossChainPanel from '../components/IntentCrossChainPanel';
 import IntentTxHistory from '../components/IntentTxHistory';
 import { useWallet } from '../context/WalletContext';
@@ -1753,7 +1754,20 @@ export default function IntentOS() {
 
       {tab === 'plan' && (
         <motion.div className="ios-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <ProfitPlanner />
+          {/*
+           * The Profit-Plan tab is now the Financial OS surface: goals own the
+           * screen, and the multi-venue plan it started life as stays one
+           * disclosure away rather than being deleted. `onOpenCompose` is the
+           * hand-off — an approved goal becomes an ordinary Intent OS draft on
+           * the compose tab, which already owns review, signing and execution.
+           */}
+          <FinancialGoals onOpenCompose={() => chooseTab('compose')} />
+          <details className="fg-venue-plan">
+            <summary>{t('intentOS.goals.venuePlan', { defaultValue: 'Venue profit plan (read-only)' })}</summary>
+            <div>
+              <ProfitPlanner />
+            </div>
+          </details>
         </motion.div>
       )}
 

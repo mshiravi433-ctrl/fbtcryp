@@ -1,3 +1,50 @@
+# Unreleased — Financial OS: the Profit-plan tab becomes Financial Goals
+
+- The «برنامه سود» tab is now a **Personal Financial OS**. The user states a
+  goal («I want to double my capital in 3 years»), the server computes what
+  that goal REQUIRES, and an approved plan is handed to the **existing** Intent
+  OS. No new execution engine, no new signer, no new scheduler: approval
+  produces an intent payload (`source: FINANCIAL_GOAL`) and the draft is
+  compiled by the already-existing `compileIntent` → `saveCompiledIntent` →
+  `ensureLifecycle` path, so review and signing stay exactly where they were.
+- **The pipeline is server-side and pure:**
+  `Goal → Required Return → Risk Profile → Current Portfolio → Market Data →
+  Strategy → Allocation`, all in `src/lib/financialGoalEngine.js`. The browser
+  renders numbers it did not compute; `requiredCagr` is the specified formula
+  and the UI shows it as REQUIRED, never as a promise.
+- **Allocations cannot drift.** `validateAllocation` (the specified function)
+  runs in three places — when the allocation is built, before a plan is stored,
+  and before an intent is built. Anything but 100% throws and is never
+  persisted; a probe sweeps every profile × pressure × market state.
+- **Nothing is forecast.** The three scenarios are assumption bands: Bear = no
+  growth, Base = the live haircut yield continues, Bull = the goal's own
+  required return. BTC/ETH/OTHER are exposure, not income, so they contribute
+  zero projected yield — the same rule the existing multi-venue planner applies
+  to spot. A dead feed reports `null`, never a plausible number, and the screen
+  says so. Past a 100%/yr requirement a goal is marked `BEYOND_REACH` instead
+  of being projected.
+- **Seven routes only:** `POST/GET /api/v1/financial-goals`,
+  `GET /api/v1/financial-goals/:id`, `POST …/:id/build-plan`,
+  `POST …/:id/approve`, `POST …/:id/pause`, `GET …/:id/progress`.
+- **Storage is honest about what it is.** The project has no SQL database, so
+  `financial_goals` / `financial_goal_plans` / `financial_goal_events` are
+  three key namespaces in the shared KV store; every response carries
+  `durable`, `dataStatus` and `limitations` so the UI can say the data is
+  per-instance rather than implying a cloud account. Ownership is the verified
+  Telegram session, else a hashed per-device scope (scope, NOT authentication).
+- **Monitoring** returns `Current Value · Target Value · Progress % · Expected
+  Path · Actual Path · Status` with the six specified statuses. Until the user
+  reports a value the response says `valueReported: false` and the UI shows
+  "no value reported" instead of ranking them as behind.
+- Natural-language goals are parsed **on the device** by deterministic rules
+  (`parseGoalFromText`), so what the user types is never sent to a model. No
+  private key, seed phrase, password or API secret is read or sent anywhere in
+  this feature (`secretsIncluded: false` in the payload).
+- New probe `test/financial-goals-probe.mjs` (104 checks: engine, storage, real
+  HTTP, the Intent OS hand-off, and the safety properties — no execution path, no secret, no agent
+  vocabulary in the UI), wired into `npm test` and `npm run test:financial-goals`.
+- Docs: `docs/FINANCIAL-GOALS.md` and `docs/FINANCIAL-GOALS-FA.md`.
+
 # Unreleased — Phase 209: #/intent-ai becomes an AI Command Center (owner brief)
 
 - Requested (fa): «۱۷ ایجنت را به کاربر نشان نده؛ صفحه یک کادر پرسش بزرگ، چهار
