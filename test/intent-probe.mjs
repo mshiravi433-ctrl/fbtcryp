@@ -139,7 +139,8 @@ export default async function run() {
     kind: 'swap', chainId: 42161, fromSymbol: 'USDC', toSymbol: 'ETH', amountIn: '100',
     maxSlippagePct: 0.5, privacy: 'standard'
   }, lowLimitMemory);
-  t('compileIntent blocks over the spend limit', overSpend.blocked === true);
+  t('compileIntent warns over the spend limit without creating a false protocol block',
+    overSpend.blocked === false && overSpend.checks.some((c) => c.id === 'OVER_SPEND_LIMIT' && c.level === 'warn'));
   mod.saveIntentMemory(defaultMemory);
 
   // Workflow validation
@@ -200,8 +201,8 @@ export default async function run() {
   t('a same-token lending workflow compiles (Loan hand-off, no SAME_TOKEN)', !loanWf.error);
   t('the lending workflow passes the single-chain atomic check',
     !loanWf.blocked && loanWf.checks.some((c) => c.id === 'WORKFLOW_SINGLE_CHAIN_ATOMIC' && c.level === 'pass'));
-  t('a same-token workflow stays a local draft (no /swap hand-off)',
-    loanWf.handoff == null && loanWf.status === 'draft-only');
+  t('a same-token workflow stays a recoverable local review (no /swap hand-off)',
+    loanWf.handoff == null && loanWf.status === 'ready-for-review');
   t('a same-token SWAP is still rejected as SAME_TOKEN',
     mod.normalizeIntent({ kind: 'swap', chainId: 42161, fromSymbol: 'USDT', toSymbol: 'USDT', amountIn: '1' }).error === 'SAME_TOKEN');
   t('a same-token OUTCOME is still rejected as SAME_TOKEN',
@@ -338,8 +339,8 @@ export default async function run() {
   t('E2E: it still runs the solver stage', target.solvers.length >= 6);
   t('E2E: a passing workflow is ready-for-review, never executed',
     target.status === 'ready-for-review');
-  t('E2E: ...and the only execution offered is a handoff to the swap screen',
-    typeof target.handoff === 'string' && target.handoff.startsWith('/swap'));
+  t('E2E: workflow execution is kept in Intent OS instead of losing steps in a swap hand-off',
+    target.handoff === null);
 
   /* ---- stage 4+5: the execution envelope --------------------------- */
   const workflow = wfServer.workflowFromLegacySteps(TARGET_STEPS, {

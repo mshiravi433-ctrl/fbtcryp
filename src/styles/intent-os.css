@@ -1526,21 +1526,22 @@
 /* ── Phases 141–150: horizontal control rail ─────────────────────────── */
 .ios-rail {
   position: relative;
-  border: 1px solid var(--line);
-  border-radius: 17px;
-  background: rgba(5, 8, 14, .78);
-  padding: 8px 10px;
+  border: 1px solid rgba(66,232,255,.16);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(5,8,14,.86), rgba(10,16,28,.72));
+  padding: 10px;
   overflow: visible;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 14px 34px rgba(0,0,0,.18);
 }
 .ios-rail.is-paused { border-color: rgba(210, 153, 34, .35); }
 .ios-rail.is-stopped { border-color: rgba(255, 93, 125, .45); }
 
 .ios-rail-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-  min-height: 44px;
+  gap: 10px;
+  min-height: 48px;
 }
 
 /*
@@ -1551,32 +1552,37 @@
  * row. Each level now carries its own glyph (observe / prepare / controlled),
  * a 22px icon plate and a label at a size that can actually be read.
  */
-.ios-rail-levels { display: flex; align-items: stretch; gap: 5px; flex: 0 0 auto; }
+.ios-rail-levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 8px; min-width: 0; }
 .ios-rail-level {
   display: grid;
-  justify-items: center;
+  grid-template-columns: 26px auto;
+  grid-template-areas: "icon level" "icon label";
+  justify-content: start;
   align-content: center;
-  gap: 3px;
-  min-width: 54px;
-  padding: 5px 7px 6px;
+  align-items: center;
+  gap: 2px 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 9px;
   border: 1px solid rgba(255,255,255,.08);
-  border-radius: 12px;
-  background: rgba(255,255,255,.03);
+  border-radius: 13px;
+  background: rgba(255,255,255,.035);
   color: var(--text-3);
   transition: border-color .18s ease, background .18s ease, color .18s ease;
 }
 .ios-rail-level-icon {
+  grid-area: icon;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
   background: rgba(255,255,255,.05);
   color: inherit;
 }
 .ios-rail-level-icon svg { display: block; }
-.ios-rail-level b { font: 800 9.5px/1 var(--font-mono); letter-spacing: .09em; }
-.ios-rail-level small { font-size: 8.5px; line-height: 1.15; white-space: nowrap; }
+.ios-rail-level b { grid-area: level; font: 850 10.5px/1 var(--font-mono); letter-spacing: .08em; }
+.ios-rail-level small { grid-area: label; font-size: 10px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ios-rail-level.is-earned { border-color: rgba(66,232,255,.32); color: var(--ios-cyan); }
 .ios-rail-level.is-earned .ios-rail-level-icon { background: rgba(66,232,255,.1); }
 .ios-rail-level.is-current {
@@ -1599,7 +1605,7 @@
   .ios-rail-level.is-current .ios-rail-level-icon { animation: none; }
 }
 
-.ios-rail-spacer { flex: 1 1 auto; min-width: 2px; }
+.ios-rail-spacer { display: none; }
 
 /* RELEASE — conditional, and the only action left on the trimmed rail. */
 .ios-rail-btn.is-release { color: #ffdce4; border-color: rgba(255,93,125,.4); background: rgba(255,93,125,.09); }
@@ -1757,9 +1763,18 @@
   .ios-rail-chipdot { animation: none; }
 }
 
-.ios-rail.is-collapsed .ios-rail-btn small { display: none; }
-.ios-rail.is-collapsed .ios-rail-level small { display: none; }
-.ios-rail.is-collapsed .ios-rail-level { min-width: 40px; }
+@media (max-width: 640px) {
+  .ios-rail-row { grid-template-columns: 1fr; align-items: stretch; }
+  .ios-rail-levels { gap: 6px; }
+  .ios-rail-level {
+    grid-template-columns: 1fr;
+    grid-template-areas: "icon" "level" "label";
+    justify-items: center;
+    padding: 7px 5px;
+  }
+  .ios-rail-level small { font-size: 9px; }
+  .ios-rail-statechip, .ios-rail-btn.is-release { justify-self: stretch; width: 100%; }
+}
 
 /* The status line used to be absolutely positioned inside an action wrapper;
    with the actions gone it is a plain line under the row. */
@@ -2136,3 +2151,6 @@
 :root[data-theme='light'] .ia-wallet-missing-body strong { color: #007a92; }
 :root[data-theme='light'] .ia-wallet-missing-body small { color: rgba(20,35,60,.75); }
 :root[data-theme='light'] .ia-wallet-connect-link { color: #00788f; border-color: rgba(0,145,170,.4); background: rgba(0,145,170,.08); }
+.ios-step-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ios-saved-actions { display: inline-flex !important; align-items: center; gap: 6px; }
+.ios-saved-actions button:first-child { width: auto; min-width: 78px; padding: 0 10px; color: var(--text-1); }

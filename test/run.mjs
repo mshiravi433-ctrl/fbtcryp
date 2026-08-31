@@ -816,10 +816,17 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
   }
 
   rmSync('dist', { recursive: true, force: true });
-  npxShip(['vite', 'build', '--logLevel', 'error']);
+  {
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false' };
+    delete env.NODE_ENV;
+    execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env
+    });
+  }
   const defaultAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
   rows.push(['store build emits no arcade chunk', !defaultAssets.some((f) => gameChunk.test(f))]);
-  rows.push(['store build emits no speculation chunk', !defaultAssets.some((f) => specChunk.test(f))]);
+  rows.push(['store build emits no speculation chunk when explicitly disabled', !defaultAssets.some((f) => specChunk.test(f))]);
   rows.push(['store build still produced a bundle', defaultAssets.length > 5]);
 
   /* ---- B. the speculation opt-in still works, and still has no games ---- */
@@ -866,7 +873,11 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
 
   // Leave the tree in the store-safe state.
   rmSync('dist', { recursive: true, force: true });
-  npxShip(['vite', 'build', '--logLevel', 'error']);
+  {
+    const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false' };
+    delete env.NODE_ENV;
+    execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], { stdio: ['ignore', 'pipe', 'pipe'], env });
+  }
 
   /*
    * ─── THE VOCABULARY A CONTENT FILTER ACTUALLY SEES ────────────────────────

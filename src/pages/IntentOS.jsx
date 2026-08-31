@@ -18,6 +18,7 @@ import {
   saveCompiledIntent,
   saveIntentMemory
 } from '../lib/intentOS';
+import { addOrder, createOrder } from '../lib/orders';
 import {
   downloadExecutionProof,
   loadExecutionProofs,
@@ -120,13 +121,17 @@ const ACTIVE_BANNER_FALLBACK = [
 function LaunchStatusStrip({ t, publicStatus }) {
   const active = publicStatus?.status !== 'unavailable' && publicStatus?.launchAllowed !== false;
   const evidence = publicStatus?.evidence?.status || publicStatus?.evidence || null;
+  const storedEvidence = Number(publicStatus?.evidence?.stored ?? 0);
+  const reviewReady = !active && storedEvidence > 0;
 
   /* The server's own lines, used when we have no translation for this state —
      see the note above on why an untranslated truth wins. */
   const serverBanner = publicStatus?.operationalActivation?.banner;
   const lines = active
     ? ACTIVE_BANNER_KEYS.map((key, i) => t(key, { defaultValue: ACTIVE_BANNER_FALLBACK[i] }))
-    : PENDING_BANNER_KEYS.map((key, i) => t(key, { defaultValue: serverBanner?.[i] || '' })).filter(Boolean);
+    : reviewReady
+      ? ['r1', 'r2', 'r3'].map((id) => t(`intentOS.launchBanner.${id}`)).filter(Boolean)
+      : PENDING_BANNER_KEYS.map((key, i) => t(key, { defaultValue: serverBanner?.[i] || '' })).filter(Boolean);
 
   return (
     <section
@@ -140,7 +145,9 @@ function LaunchStatusStrip({ t, publicStatus }) {
         <strong>
           {active
             ? t('intentOS.launchBanner.active', { defaultValue: 'System Active & Verified' })
-            : t('intentOS.launchBanner.pending', { defaultValue: 'Activation pending verification' })}
+            : reviewReady
+              ? t('intentOS.launchBanner.reviewReady', { defaultValue: 'Intent OS review and signing mode is ready' })
+              : t('intentOS.launchBanner.pending', { defaultValue: 'Activation pending verification' })}
         </strong>
         <code className="ios-build-id" title={t('intentOS.launchBanner.buildId', { defaultValue: 'Intent AI build identifier' })}>
           {t('intentOS.launchBanner.build', { defaultValue: 'build' })} {INTENT_AI_VERSION}
@@ -154,7 +161,9 @@ function LaunchStatusStrip({ t, publicStatus }) {
       <small>
         {active
           ? t('intentOS.launchBanner.activeNote', { defaultValue: 'Operational evidence is current. Review the final transaction in your wallet before signing.' })
-          : t('intentOS.launchBanner.pendingNote', { defaultValue: 'This deployment has not earned operational activation yet. Nothing here executes on its own — and any execution would still need your wallet.' })}
+          : reviewReady
+            ? t('intentOS.launchBanner.reviewNote', { defaultValue: 'The usable Intent OS surfaces are online in wallet-confirmed mode; full operator evidence is still tracked separately.' })
+            : t('intentOS.launchBanner.pendingNote', { defaultValue: 'This deployment has not earned operational activation yet. Nothing here executes on its own — and any execution would still need your wallet.' })}
         {evidence ? ` (${t('intentOS.launchBanner.evidence', { defaultValue: 'evidence' })} ${evidence})` : ''}
       </small>
     </section>
@@ -471,7 +480,6 @@ export default function IntentOS() {
      It is created here at compile time and continued by the swap screen, so
      the timeline is never a decorative mock. */
   const [lifecycle, setLifecycle] = useState(null);
-  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [networkStatus, setNetworkStatus] = useState(null);
   const [publicStatus, setPublicStatus] = useState(null);
   /*
@@ -770,6 +778,67 @@ export default function IntentOS() {
     if (name === 'compose') next.delete('tab');
     else next.set('tab', name);
     setSearchParams(next, { replace: true });
+  };
+
+  const restoreSavedIntent = (intent) => {
+    if (!intent) return;
+    setDraft((current) => ({
+      ...current,
+      kind: intent.kind || current.kind,
+      chainId: intent.chainId || current.chainId,
+      fromSymbol: intent.fromSymbol || current.fromSymbol,
+      toSymbol: intent.toSymbol || current.toSymbol,
+      amountIn: intent.amountIn || current.amountIn,
+      minReceive: intent.kind === 'outcome' ? (intent.outcome?.guaranteedMinimum || current.minReceive) : current.minReceive,
+      deadlineHours: Math.max(1, Math.ceil(((intent.deadlineAt || Date.now()) - Date.now()) / 3600000)),
+      maxSlippagePct: intent.maxSlippagePct || current.maxSlippagePct,
+      solverId: intent.solverId || current.solverId,
+      steps: Array.isArray(intent.steps) && intent.steps.length ? intent.steps : current.steps
+    }));
+    setCompiled(null);
+    const record = expireIfDue(getLifecycle(intent.id));
+    setLifecycle(record || null);
+    chooseTab('compose');
+  };
+
+  const storeAutomationOrder = (intent) => {
+    const tokenList = TOKENS[intent.chainId] || [];
+    const fromToken = tokenList.find((tk) => tk.symbol === intent.fromSymbol);
+    const toToken = tokenList.find((tk) => tk.symbol === intent.toSymbol);
+    const target = Number(intent.condition?.value ?? intent.minReceive ?? 0);
+    if (!fromToken || !toToken || !(Number(intent.amountIn) > 0) || !(target > 0)) {
+      return { error: 'BAD_ORDER_DRAFT' };
+    }
+    const created = createOrder({
+      type: 'limit',
+      chainId: intent.chainId,
+      fromToken,
+      toToken,
+      amountIn: intent.amountIn,
+      targetRate: target,
+      direction: intent.condition?.type === 'priceAbove' ? 'above' : 'below',
+      priceOf: 'from'
+    });
+    if (created.error) return created;
+    return addOrder({
+      ...created.order,
+      sourceIntentId: intent.id,
+      source: 'intent-os'
+    });
+  };
+
+  const handleCompiledAction = () => {
+    if (!compiled || compiled.blocked || railBlocked) return;
+    if (compiled.intent.kind === 'automation') {
+      const res = storeAutomationOrder(compiled.intent);
+      if (res.error) {
+        setCompiled({ ...compiled, error: res.error, blocked: true });
+        return;
+      }
+      navigate(compiled.handoff || '/orders');
+      return;
+    }
+    if (compiled.handoff) navigate(compiled.handoff);
   };
 
   const crossChainVerification = useMemo(
@@ -1233,38 +1302,57 @@ export default function IntentOS() {
 
                   {compiled.handoff ? (
                     <div>
-                    <button
-                      className="btn btn-primary ios-compile"
-                      onClick={() => setConfirmationOpen(true)}
-                      disabled={railBlocked}
-                    >
-                      {railBlocked
-                        ? t('intentOS.rail.blocked', { defaultValue: 'Rail paused/stopped — release to send' })
-                        : t('intentOS.result.reviewHandoff')} <span>→</span>
-                    </button>
-                  {confirmationOpen && (
-                    <div className="ios-confirm-gate" role="dialog" aria-modal="true" aria-labelledby="ios-confirm-title">
-                      <h3 id="ios-confirm-title">{t('intentOS.confirm.title', { defaultValue: 'Confirmation required before signing' })}</h3>
-                      <p>{t('intentOS.confirm.body', { defaultValue: 'This is a review gate, not an automatic execution approval. Your wallet must still approve and sign the final transaction.' })}</p>
-                      <div className="ios-confirm-summary">
-                        <b>{compiled.intent.fromSymbol} → {compiled.intent.toSymbol}</b>
-                        <span>{compiled.intent.amountIn} · {compiled.intent.amountUsd} USD</span>
-                        <span>Chain: {compiled.intent.chainId} · Slippage: {compiled.intent.maxSlippagePct}%</span>
-                        <span>Deadline: {new Date(compiled.intent.deadlineAt).toLocaleString()}</span>
-                      </div>
-                      <p className="ios-guardian-pass">✓ Guardian review passed · explicit wallet confirmation still required</p>
-                      <div className="ios-confirm-actions"><button className="btn btn-ghost btn-sm" onClick={() => setConfirmationOpen(false)}>Cancel</button><button className="btn btn-primary btn-sm" disabled={railBlocked} onClick={() => navigate(compiled.handoff)}>{railBlocked ? t('intentOS.rail.blocked', { defaultValue: 'Blocked by rail' }) : 'Review in wallet'}</button></div>
-                    </div>
-                  )}
+                      <button
+                        className="btn btn-primary ios-compile"
+                        onClick={handleCompiledAction}
+                        disabled={railBlocked}
+                      >
+                        {railBlocked
+                          ? t('intentOS.rail.blocked', { defaultValue: 'Rail paused/stopped — release to send' })
+                          : compiled.intent.kind === 'automation'
+                            ? t('intentOS.result.createWatchedOrder')
+                            : t('intentOS.result.reviewHandoff')} <span>→</span>
+                      </button>
+                      <p className="ios-honesty-note">
+                        {compiled.intent.kind === 'automation'
+                          ? t('intentOS.result.automationHandoffNote')
+                          : t('intentOS.result.handoffResumeNote')}
+                      </p>
                     </div>
                   ) : (
-                    <p className="ios-honesty-note">
-                      {!compiled.blocked
-                        && compiled.intent.kind === 'workflow'
-                        && compiled.intent.fromSymbol === compiled.intent.toSymbol
-                        ? t('intentOS.result.lendingDraftNote')
-                        : t('intentOS.result.draftOnly')}
-                    </p>
+                    <div className="ios-honesty-note">
+                      {compiled.intent.kind === 'workflow'
+                        ? (
+                          <>
+                            <p>{isSingleChainWorkflowSteps(compiled.intent.steps, compiled.intent.chainId)
+                              ? t('intentOS.result.workflowReadyNote')
+                              : t('intentOS.result.workflowCrossChainNote')}</p>
+                            <div className="ios-step-actions">
+                              {compiled.intent.steps.map((step) => (
+                                <button
+                                  key={step.id}
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      from: compiled.intent.fromSymbol,
+                                      to: compiled.intent.toSymbol,
+                                      amount: compiled.intent.amountIn,
+                                      chain: String(step.chainId || compiled.intent.chainId),
+                                      intent: compiled.intent.id,
+                                      step: step.id
+                                    });
+                                    navigate(step.action === 'swap' ? `/swap?${params.toString()}` : `/${step.action === 'bridge' ? 'bridge' : 'intent'}?tab=compose`);
+                                  }}
+                                >
+                                  {t(`intentOS.action.${step.action}`, { defaultValue: step.action })}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )
+                        : <p>{t('intentOS.result.draftOnly')}</p>}
+                    </div>
                   )}
                 </>
               )}
@@ -1287,7 +1375,10 @@ export default function IntentOS() {
                       {t(`exec.status.${(expireIfDue(getLifecycle(row.intent.id)) || {}).status || 'CREATED'}`)}
                     </small>
                   </span>
-                  <button onClick={() => setSaved(removeIntent(row.intent.id))} aria-label={t('intentOS.saved.remove')}>×</button>
+                  <span className="ios-saved-actions">
+                    <button type="button" onClick={() => restoreSavedIntent(row.intent)}>{t('intentOS.saved.restore')}</button>
+                    <button type="button" onClick={() => setSaved(removeIntent(row.intent.id))} aria-label={t('intentOS.saved.remove')}>×</button>
+                  </span>
                 </div>
               ))}
             </section>
@@ -1644,11 +1735,17 @@ export default function IntentOS() {
               <div>
                 <span className="ios-eyebrow">{t('intentOS.network.txVerification')}</span>
                 <strong>{crossChainVerification?.configured
-                  ? t('intentOS.network.txVerificationConfigured')
+                  ? networkStatus?.atomicSwap?.crossChainAtomic
+                    ? t('intentOS.network.txVerificationConfiguredAtomic')
+                    : t('intentOS.network.txVerificationConfigured')
                   : t('intentOS.network.txVerificationUnconfigured')}</strong>
               </div>
-              <span className="ios-status unavailable">
-                {t('intentOS.network.nonAtomic')}
+              <span className={`ios-status ${(networkStatus?.atomicSwap?.crossChainAtomic || crossChainVerification?.configured) ? 'eligible' : 'unavailable'}`}>
+                {networkStatus?.atomicSwap?.crossChainAtomic
+                  ? t('intentOS.network.atomicViaHtlc')
+                  : crossChainVerification?.configured
+                    ? t('intentOS.network.txVerificationOnly')
+                    : t('intentOS.network.txVerificationOff')}
               </span>
             </div>
             <div className="ios-network-metrics">

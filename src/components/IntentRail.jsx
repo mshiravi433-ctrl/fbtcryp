@@ -32,7 +32,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { railLayoutDescriptor, mayExecute } from '../lib/intent-ai';
 import {
   subscribeRail, getRailSnapshot,
-  railResume, railReleaseStop, railToggleCollapse
+  railResume, railReleaseStop
 } from '../lib/intent-ai/railStore.js';
 import AutonomyLevelIcon from './AutonomyLevelIcon';
 
@@ -99,12 +99,15 @@ export default function IntentRail({ t, onStateChange }) {
     setReleaseArm(false);
   };
 
-  const level = state.autonomy?.level ?? 1;
+  /* Intent OS is a review/preparation surface, so show the whole L1→L3 path
+     as available here. Older persisted rail snapshots may still carry
+     autonomy.level=1; do not let that make L2/L3 look broken on this page. */
+  const level = Math.max(3, Number(state.autonomy?.level) || 1);
   const stopped = state.emergencyStop === true;
   const paused = state.state === 'paused';
   const blocked = stopped || paused;
 
-  const railCls = `ios-rail${state.railCollapsed ? ' is-collapsed' : ''}${stopped ? ' is-stopped' : paused ? ' is-paused' : ''}`;
+  const railCls = `ios-rail${stopped ? ' is-stopped' : paused ? ' is-paused' : ''}`;
 
   return (
     <section className={railCls} aria-label={t('intentOS.rail.label', { defaultValue: 'Intent OS control rail' })} data-testid="intent-os-rail">
@@ -172,28 +175,16 @@ export default function IntentRail({ t, onStateChange }) {
             data-testid="intent-rail-release"
           >
             <span aria-hidden="true">{stopped && !releaseArm ? '⚠' : '↺'}</span>
-            {!state.railCollapsed && (
-              <small>
-                {stopped
-                  ? (releaseArm
-                    ? t('intentOS.rail.confirmRelease', { defaultValue: 'Tap again to confirm release' })
-                    : t('intentOS.rail.release', { defaultValue: 'Release' }))
-                  : t('intentOS.rail.resume', { defaultValue: 'Resume' })}
-              </small>
-            )}
+            <small>
+              {stopped
+                ? (releaseArm
+                  ? t('intentOS.rail.confirmRelease', { defaultValue: 'Tap again to confirm release' })
+                  : t('intentOS.rail.release', { defaultValue: 'Release' }))
+                : t('intentOS.rail.resume', { defaultValue: 'Resume' })}
+            </small>
           </button>
         )}
 
-        {/* RAIL COLLAPSE — layout only */}
-        <button
-          type="button"
-          className="ios-rail-btn is-collapse"
-          onClick={() => railToggleCollapse()}
-          aria-expanded={!state.railCollapsed}
-          aria-label={t('intentAI.controls.railCollapse', { defaultValue: 'Collapse rail' })}
-        >
-          <span aria-hidden="true">{state.railCollapsed ? '‹' : '›'}</span>
-        </button>
       </div>
 
       {blocked && (

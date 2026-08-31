@@ -22,6 +22,14 @@ function parseAddressMap(raw) {
 
 export function flashLiquidityRouterConfigured(env = process.env) {
   const addresses = parseAddressMap(env.FLASH_LIQUIDITY_ROUTER_ADDRESSES);
+  /* Deployment convenience: accept a single chain/address pair too. This fixes
+     environments that had a router address but not the comma-map variable, so
+     the server no longer reports ROUTER_CONTRACT_NOT_CONFIGURED incorrectly. */
+  const singleAddress = String(env.FLASH_LIQUIDITY_ROUTER_ADDRESS || '').trim();
+  const singleChainId = Number(env.FLASH_LIQUIDITY_ROUTER_CHAIN_ID || env.CHAIN_ID || 0);
+  if (!Object.keys(addresses).length && /^0x[a-fA-F0-9]{40}$/.test(singleAddress) && Number.isInteger(singleChainId) && singleChainId > 0) {
+    addresses[singleChainId] = singleAddress;
+  }
   const auditedRaw = String(env.FLASH_LIQUIDITY_ROUTER_AUDITED || '').toLowerCase();
   const audited = auditedRaw === 'true' || auditedRaw === '1';
   return {
@@ -30,6 +38,8 @@ export function flashLiquidityRouterConfigured(env = process.env) {
     addresses,
     envKeys: {
       addresses: 'FLASH_LIQUIDITY_ROUTER_ADDRESSES',
+      singleAddress: 'FLASH_LIQUIDITY_ROUTER_ADDRESS',
+      singleChainId: 'FLASH_LIQUIDITY_ROUTER_CHAIN_ID',
       audited: 'FLASH_LIQUIDITY_ROUTER_AUDITED'
     },
     note: audited
