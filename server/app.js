@@ -153,6 +153,7 @@ import {
 } from './store.js';
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import aiCommandRoutes from './aiCommand.js';
+import aiIntentOSRoutes from './aiIntentOS.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
@@ -657,6 +658,32 @@ app.use('/api/ai', (req, res, next) => {
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of aiHits) if (now > v.reset) aiHits.delete(k);
+}, WINDOW_MS).unref?.();
+
+/* The unified `/api/v1/ai` gateway shares the same deliberate budget as the
+   older command-center routes: AI calls spend real provider quota, so a cheap
+   script must not be able to take the assistant down for everyone. */
+const aiV1Hits = new Map();
+const AI_V1_MAX_PER_WINDOW = Number(process.env.AI_RATE_LIMIT || 10);
+app.use('/api/v1/ai', (req, res, next) => {
+  if (req.method === 'GET') return next();
+  const key = req.tgUser?.id ?? req.ip;
+  const now = Date.now();
+  const rec = aiV1Hits.get(key);
+  if (!rec || now > rec.reset) {
+    aiV1Hits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > AI_V1_MAX_PER_WINDOW) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    return res.status(429).json({ error: 'AI_RATE_LIMITED' });
+  }
+  return next();
+});
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of aiV1Hits) if (now > v.reset) aiV1Hits.delete(k);
 }, WINDOW_MS).unref?.();
 
 /* On-chain anchor verification spends uncached RPC quota. It is public because
@@ -4528,6 +4555,16 @@ app.post('/api/ai/ask', async (req, res) => {
  * already covers these paths, since this mount sits under that middleware.
  */
 app.use('/api/ai', aiCommandRoutes);
+
+/* ---------------------- FBT INTENT AI OS (unified V1) ---------------------- */
+/*
+ * The single AI gateway introduced by the AI OS refactor. It is mounted on
+ * /api/v1/ai so it coexists with the older /api/ai command-center routes
+ * while the client migrates. Same honesty rule as /api/ai: no signer, no key,
+ * no fabricated transaction — the chat builds context + plan + suggestion and
+ * the execute endpoint returns a real venue/wallet hand-off.
+ */
+app.use('/api/v1/ai', aiIntentOSRoutes);
 
 /* ------------------------------ order watch -------------------------------- */
 /*

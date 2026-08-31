@@ -398,6 +398,21 @@ export async function getSolanaSwapBalances({ owner, inputMint, outputMint }) {
 }
 
 /**
+ * Read the native SOL balance for a connected Solana wallet.
+ *
+ * This is the live balance source the unified Intent AI OS uses when the user
+ * asks about Solana. It goes through the same RPC URL and commitment level as
+ * the rest of the Solana path; on failure it throws so the UI can say
+ * "unavailable" rather than showing a guessed zero.
+ */
+export async function getSolanaBalance(owner) {
+  const { Connection, PublicKey, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+  const connection = new Connection(await solanaRpcUrl(), 'confirmed');
+  const lamports = await connection.getBalance(new PublicKey(owner), 'confirmed');
+  return Number(((lamports || 0) / LAMPORTS_PER_SOL).toFixed(6));
+}
+
+/**
  * Sign a base64 transaction from Jupiter and return it base64-encoded again.
  *
  * ─── WHY PARTIAL SIGNING, NOT signAndSendTransaction ────────────────────────
