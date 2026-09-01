@@ -91,19 +91,28 @@ const walletKey = (wallet) => {
 };
 
 /** The audited token list for one chain, from chainsLite's registry. */
-function chainTokens(chainId) {
+export function chainTokens(chainId) {
   return (TOKENS[Number(chainId)] || [])
     .filter((token) => token.address && !token.native)
     .filter((token) => (RESERVE_SYMBOLS[Number(chainId)] || []).includes(token.symbol));
 }
 
-function findToken(chainId, assetRef) {
+export function findToken(chainId, assetRef) {
   const tokens = chainTokens(chainId);
   const ref = String(assetRef || '').toLowerCase();
   return tokens.find((token) => token.symbol.toLowerCase() === ref || token.address.toLowerCase() === ref) || null;
 }
 
 /* ── JSON-RPC with failover + circuit breaker (§26) ───────────────────────── */
+/*
+ * `chainTokens`, `findToken`, `rpcWithFailover`, `readReserve`, `readUserAccount`
+ * and `oraclePrices` are exported for the Central Intelligence OS adapters
+ * (server/ci/sources.js). They were previously private to this BFF, which forced
+ * any other reader of the same Aave pools to open its own RPC session and invent
+ * its own failover — two sources of truth about one chain. The Central State
+ * reads lending through THESE functions so the brain and the /lending page can
+ * never disagree about a health factor.
+ */
 
 async function rpcOnce(endpoint, method, params, timeoutMs = 8000) {
   const controller = new AbortController();
@@ -125,7 +134,7 @@ async function rpcOnce(endpoint, method, params, timeoutMs = 8000) {
 }
 
 /** Try every endpoint for the chain, in order; report health to the breaker. */
-async function rpcWithFailover(chainId, method, params) {
+export async function rpcWithFailover(chainId, method, params) {
   const chain = EVM_CHAINS[Number(chainId)];
   const endpoints = (chain?.rpc || []).slice();
   if (!endpoints.length) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
@@ -200,7 +209,7 @@ function decodeReserveConfig(configuration) {
   };
 }
 
-async function readReserve(chainId, token) {
+export async function readReserve(chainId, token) {
   const pool = poolFor(chainId);
   if (!pool || !token) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
   const res = await ethCall(chainId, pool, poolIface.encodeFunctionData('getReserveData', [token.address]));
@@ -223,7 +232,7 @@ async function readReserve(chainId, token) {
   };
 }
 
-async function readUserAccount(chainId, wallet) {
+export async function readUserAccount(chainId, wallet) {
   const pool = poolFor(chainId);
   if (!pool || !isAddress(wallet)) return { ok: false, code: 'BAD_REQUEST' };
   const res = await ethCall(chainId, pool, poolIface.encodeFunctionData('getUserAccountData', [wallet]));
@@ -259,7 +268,7 @@ async function readTokenBalances(chainId, wallet, token, reserve) {
 
 /* ── oracle (§21) — aggregated price with anomaly flagging ────────────────── */
 
-async function oraclePrices(chainId) {
+export async function oraclePrices(chainId) {
   const tokens = chainTokens(chainId);
   if (!tokens.length) return { ok: false, code: 'NO_TOKENS' };
   const ids = tokens.map((token) => token.coingeckoId).filter(Boolean);

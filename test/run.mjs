@@ -19,6 +19,12 @@ import { execFileSync } from 'node:child_process';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
 import './lending-engine-probe.mjs';
+/* The central brain's turn probe: every §42 scenario (A–J) against the real
+   engines with only the external boundary faked. It belongs in `npm test`
+   because the failure it catches — a confident answer built on unread data — is a
+   product failure, not a subsystem detail. The HTTP half is its own script
+   (`npm run test:central-brain-http`) since it boots the whole 286-route server. */
+import './intent-ai/ci-brain-turns-probe.mjs';
 
 /*
  * server/app.js reads its rate budgets at module load, and the FIRST probe
