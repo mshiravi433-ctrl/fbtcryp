@@ -171,6 +171,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
+import { lendingRouter } from './lending.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
@@ -5072,6 +5073,19 @@ app.use('/api/ai', aiCommandRoutes);
  * the execute endpoint returns a real venue/wallet hand-off.
  */
 app.use('/api/v1/ai', aiIntentOSRoutes);
+
+/* ------------------------------ lending BFF --------------------------------- */
+/*
+ * The read/build API behind the Lending page (spec §6/§7/§29/§30). Mounted
+ * on /api/lending so it inherits the broad /api rate limiter. Read endpoints
+ * return live or cached market data; POST endpoints only VALIDATE and BUILD
+ * unsigned transactions — the user's wallet signs. No signer, no key, no
+ * broadcast exists anywhere under this mount, and every contract address is
+ * allowlist-checked before any RPC is dialed. The engine modules it imports
+ * (src/lib/lending-engine) are pure and dependency-free, so the same risk
+ * bands, alert rules and circuit-breaker ladder run in the UI and here.
+ */
+app.use('/api/lending', lendingRouter());
 
 /* ------------------------------ order watch -------------------------------- */
 /*

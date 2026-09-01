@@ -50,11 +50,18 @@ import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import {
-  lendingVenue, lendingSupported, lendingChains, lendingAssetsFor,
+  lendingVenue, lendingSupported, lendingAssetsFor,
   readReserves, readUserAccount, readAssetPosition, readAllowance,
   buildLendingPlan, runLendingPlan, projectHealthFactor, healthBand,
   fromUnits, toUnits
 } from '../lib/lending';
+import {
+  mapRawError,
+  createTransactionMachine, TX_STATE,
+  createInFlightGuard, makeIdempotencyKey, makeRequestId,
+  evaluateAlerts, assessPosition,
+  enabledNetworks
+} from '../lib/lending-engine';
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -395,7 +402,7 @@ function StepRow({ step, asset, t }) {
   );
 }
 
-function ExecutionSheet({ exec, asset, onConfirm, onCancel, onDone, t }) {
+function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onRetry, t }) {
   const open = Boolean(exec);
   const phase = exec?.phase || 'review';
   return (
@@ -440,6 +447,50 @@ function ExecutionSheet({ exec, asset, onConfirm, onCancel, onDone, t }) {
               </div>
             </div>
 
+            {/* §15/§16 — the transaction state machine, visible: current state + the
+                five-step checklist (Preparing → Wallet signed → Submitted →
+                Confirming → Position update). */}
+            {machine && phase !== 'review' && (
+              <div
+                data-testid="loan-exec-machine"
+                data-state={machine.state}
+                style={{
+                  background: 'rgba(96,165,250,0.07)', border: '1px solid rgba(96,165,250,0.22)',
+                  borderRadius: 12, padding: '9px 12px', marginBottom: 12,
+                }}
+              >
+                <div className="row-between" style={{ gap: 8 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: '#93c5fd', textTransform: 'uppercase' }}>
+                    {t(`loan.machine.${machine.state}`, { defaultValue: machine.state })}
+                  </span>
+                  {exec?.requestId && (
+                    <span data-testid="loan-exec-request" style={{ fontSize: 9.5, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+                      {exec.requestId.slice(0, 18)}…
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+                  {(machine.progress || []).map((step) => (
+                    <span
+                      key={step.id}
+                      data-testid={`loan-progress-${step.id}`}
+                      data-status={step.status}
+                      style={{
+                        fontSize: 9.5, fontWeight: 700, padding: '2.5px 8px', borderRadius: 99,
+                        background: step.status === 'done' ? 'rgba(74,222,128,0.14)'
+                          : step.status === 'active' ? 'rgba(96,165,250,0.18)' : 'rgba(255,255,255,0.05)',
+                        color: step.status === 'done' ? '#4ade80'
+                          : step.status === 'active' ? '#93c5fd' : 'var(--text-3)',
+                      }}
+                    >
+                      {step.status === 'done' ? '✓ ' : step.status === 'active' ? '● ' : '○ '}
+                      {t(`loan.progress.${step.id}`, { defaultValue: step.label })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Review rows — the exact numbers the wallet will be asked to sign. */}
             <div style={{
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
@@ -469,6 +520,7 @@ function ExecutionSheet({ exec, asset, onConfirm, onCancel, onDone, t }) {
             {phase === 'failed' && (
               <div
                 data-testid="loan-exec-error"
+                data-code={exec?.code || 'UNKNOWN'}
                 style={{
                   background: 'rgba(248,113,113,0.09)', border: '1px solid rgba(248,113,113,0.28)',
                   borderRadius: 12, padding: '10px 13px', marginBottom: 14,
@@ -522,7 +574,21 @@ function ExecutionSheet({ exec, asset, onConfirm, onCancel, onDone, t }) {
 
             {phase === 'running' && (
               <button className="btn btn-primary" style={{ marginBottom: 10, width: '100%', opacity: 0.7 }} disabled>
-                {t('loan.running')}
+                {/* §17: while the transaction confirms, the button says so —
+                    and the in-flight guard behind it refuses a double-tap. */}
+                {machine?.state === 'PENDING' ? t('loan.pendingBtn') : t('loan.running')}
+              </button>
+            )}
+
+            {/* §15: ERROR → RETRY → VALIDATING. Same action, re-validated. */}
+            {phase === 'failed' && onRetry && (
+              <button
+                className="btn btn-primary"
+                data-testid="loan-exec-retry"
+                style={{ marginBottom: 10, width: '100%' }}
+                onClick={onRetry}
+              >
+                {t('loan.retry')}
               </button>
             )}
 
@@ -550,16 +616,135 @@ function ExecutionSheet({ exec, asset, onConfirm, onCancel, onDone, t }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   §27/§28 — READ-ONLY BANNER
+   The server's circuit breaker opened. Markets stay visible; new transactions
+   are refused. Better than crashing the page.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function ReadOnlyBanner({ t }) {
+  return (
+    <motion.div
+      variants={riseIn} initial="hidden" animate="show"
+      data-testid="loan-readonly"
+      style={{
+        borderRadius: 14, padding: '12px 14px', marginBottom: 12,
+        background: 'rgba(251,191,36,0.09)', border: '1px solid rgba(251,191,36,0.35)',
+        display: 'flex', gap: 10, alignItems: 'flex-start',
+      }}
+    >
+      <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+      <div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>{t('loan.readOnlyTitle')}</div>
+        <p style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: 0 }}>{t('loan.readOnlyBody')}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §22/§23 — ALERTS PANEL
+   Rendered from the pure alert-rules engine (lending-engine/alerts.js) — the
+   component only displays; the engine decides. No white border anywhere.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const ALERT_DOT = { critical: '#f87171', warning: '#fbbf24', info: '#60a5fa' };
+const ALERT_ICON = { critical: '🔴', warning: '⚠️', info: '🟢' };
+
+function AlertsPanel({ alerts, open, onClose, onManage, t }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div
+            data-testid="loan-alerts-panel"
+            style={{
+              borderRadius: 16, padding: '14px', marginBottom: 12,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.09)',
+              display: 'flex', flexDirection: 'column', gap: 8,
+            }}
+          >
+            <div className="row-between">
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--text-2)', textTransform: 'uppercase' }}>
+                {t('loan.alerts.title')}
+              </span>
+              <button type="button" className="icon-btn" onClick={onClose} aria-label={t('common.close', { defaultValue: 'Close' })}>
+                ✕
+              </button>
+            </div>
+
+            {(!alerts || alerts.length === 0) && (
+              <p className="faint" data-testid="loan-alerts-empty" style={{ fontSize: 12, margin: 0, lineHeight: 1.7 }}>
+                {t('loan.alerts.empty')}
+              </p>
+            )}
+
+            {(alerts || []).map((alert) => (
+              <div
+                key={`${alert.type}-${alert.asset || 'account'}`}
+                data-testid={`loan-alert-${alert.type.toLowerCase()}`}
+                data-severity={alert.severity}
+                style={{
+                  borderRadius: 12, padding: '10px 12px',
+                  background: `${ALERT_DOT[alert.severity] ?? '#60a5fa'}14`,
+                  border: `1px solid ${ALERT_DOT[alert.severity] ?? '#60a5fa'}33`,
+                  display: 'flex', gap: 9, alignItems: 'flex-start',
+                }}
+              >
+                <span style={{ fontSize: 13, flexShrink: 0 }}>{ALERT_ICON[alert.severity] ?? '🟢'}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>
+                    {t(`loan.alertType.${alert.type}`, { defaultValue: alert.title })}
+                  </div>
+                  <div style={{ fontSize: 11, lineHeight: 1.65, color: 'var(--text-2)', marginTop: 1 }}>
+                    {alert.value && typeof alert.value === 'object' && 'from' in alert.value && 'to' in alert.value
+                      ? t('loan.alertChange', { from: alert.value.from, to: alert.value.to })
+                      : alert.body}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {(alerts || []).some((a) => a.severity === 'critical') && (
+              <button
+                type="button"
+                data-testid="loan-alert-manage"
+                className="btn btn-primary"
+                onClick={onManage}
+                style={{ width: '100%', marginTop: 2 }}
+              >
+                {t('loan.alerts.managePosition')}
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    CHAIN RAIL — the markets this screen can actually execute on
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function ChainRail({ chain, onPick, t }) {
+  /*
+   * §5: the rail renders the NETWORK CONFIG's feature-flagged list — never a
+   * hardcoded array. A chain whose flag is off (or whose pool is not wired)
+   * simply does not appear, and the rest of Lending keeps working.
+   */
+  const networks = enabledNetworks().filter((n) => lendingSupported(n.chainId));
   return (
     <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 10 }}>
       <span className="faint" style={{ fontSize: 10, alignSelf: 'center', flexShrink: 0, marginInlineEnd: 2 }}>
         {t('loan.market')}
       </span>
-      {lendingChains().map((id) => {
+      {networks.map((network) => {
+        const id = network.chainId;
         const on = id === chain;
         return (
           <button
@@ -1205,6 +1390,14 @@ export default function Loan() {
   const [loading, setLoading] = useState(true);
   const [readAt, setReadAt] = useState(null);
   const [exec, setExec] = useState(null);
+  const [machineView, setMachineView] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
+  const machineRef = useRef(null);
+  const guardRef = useRef(createInFlightGuard());
+  const prevSnapRef = useRef(null);
+  const lastTxFailureRef = useRef(null);
 
   const walletState = !isConnected || !address
     ? 'disconnected'
@@ -1212,9 +1405,24 @@ export default function Loan() {
       ? 'wrong-chain'
       : 'ready';
 
+  /*
+   * §27/§28 — the circuit breaker lives on the BFF. The banner only renders
+   * what the server reports; if the status call fails (or is stubbed in
+   * tests), the page simply stays interactive — no crash, no invented state.
+   */
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/lending/status')
+      .then((res) => res.json())
+      .then((json) => { if (alive) setReadOnly(Boolean(json?.data?.readOnly)); })
+      .catch(() => { if (alive) setReadOnly(false); });
+    return () => { alive = false; };
+  }, [chain]);
+
   /**
    * One read pass: live reserve rates for every asset (no wallet needed) and,
    * when a wallet is connected, that wallet's position in each of them.
+   * The same pass feeds the alert engine (§22) with the previous snapshot.
    */
   const refresh = useCallback(async () => {
     if (!venue || typeof getReadProvider !== 'function') { setLoading(false); return; }
@@ -1223,20 +1431,48 @@ export default function Loan() {
       const provider = await getReadProvider(chain);
       const nextReserves = await readReserves({ provider, chainId: chain, assets });
       setReserves(nextReserves);
+      let acct = null;
       if (address) {
-        const [acct, entries] = await Promise.all([
+        const [accountRead, entries] = await Promise.all([
           readUserAccount({ provider, chainId: chain, user: address }),
           Promise.all(assets.map(async (asset) => [
             asset.id,
             await readAssetPosition({ provider, chainId: chain, asset, user: address, reserve: nextReserves[asset.id] })
           ]))
         ]);
+        acct = accountRead;
         setAccount(acct);
         setPositions(Object.fromEntries(entries));
       } else {
         setAccount(null);
         setPositions({});
       }
+
+      /* Alert engine: pure rules over (current, previous) snapshots. */
+      try {
+        const prev = prevSnapRef.current;
+        const marketNow = Object.fromEntries(assets.map((a) => [a.id, {
+          supplyApyPct: nextReserves[a.id]?.supplyApyPct,
+          borrowApyPct: nextReserves[a.id]?.borrowApyPct
+        }]));
+        const riskNow = acct?.ok ? assessPosition({
+          healthFactor: acct.healthFactor,
+          totalDebtUsd: acct.totalDebtUsd,
+          totalCollateralUsd: acct.totalCollateralUsd,
+          liquidationThresholdPct: acct.liquidationThresholdPct
+        }) : null;
+        setAlerts(evaluateAlerts({
+          position: riskNow,
+          previous: prev?.risk ?? null,
+          market: marketNow,
+          previousMarket: prev?.market ?? null,
+          txFailed: lastTxFailureRef.current
+        }));
+        prevSnapRef.current = { risk: riskNow, market: marketNow };
+      } catch {
+        /* Alerts must never take the page down. */
+      }
+
       setReadAt(Date.now());
     } catch {
       /* A dead RPC leaves the last honest numbers on screen and the dash
@@ -1284,51 +1520,137 @@ export default function Loan() {
     if (collateral && Number(collateral) > 0) review.push([t('loan.collateral'), `${collateral} ${asset.symbol}`]);
     review.push([t('loan.market'), chainLabel(chain)]);
 
+    /* §15 — the machine starts here: validation is the allowance read above;
+       the review sheet is the READY state. Each attempt carries its own
+       requestId and a deterministic idempotency key (§17). */
+    const machine = createTransactionMachine({
+      action,
+      meta: {
+        requestId: makeRequestId(),
+        idempotencyKey: makeIdempotencyKey({ action, wallet: address || 'none', asset: asset?.id, amount, chainId: chain }),
+        asset: asset?.symbol,
+        chainId: chain
+      }
+    });
+    machine.transition(TX_STATE.VALIDATING);
+    machine.transition(TX_STATE.READY);
+    machineRef.current = machine;
+    setMachineView(machine.snapshot());
+
     setExec({
       action,
       asset,
       amount,
       collateral,
       chainId: chain,
+      requestId: machine.meta.requestId,
+      idempotencyKey: machine.meta.idempotencyKey,
       review,
       steps: plan.steps.map((step) => ({ ...step, state: 'pending', hash: null })),
       phase: 'review'
     });
   }, [address, chain, getReadProvider, notify, t]);
 
+  const updateMachine = useCallback(() => {
+    const machine = machineRef.current;
+    if (machine) setMachineView(machine.snapshot());
+  }, []);
+
   /** Run the reviewed plan. Every step is the user's own wallet signature. */
   const confirmExecution = useCallback(async () => {
     if (!exec) return;
-    const signer = typeof getSigner === 'function' ? getSigner() : null;
-    if (!signer) {
-      setExec((prev) => (prev ? { ...prev, phase: 'failed', code: 'WALLET_NOT_CONNECTED' } : prev));
-      return;
-    }
-    setExec((prev) => (prev ? { ...prev, phase: 'running' } : prev));
-    const result = await runLendingPlan({
-      steps: exec.steps,
-      signer,
-      chainId: exec.chainId,
-      asset: exec.asset,
-      account: address,
-      onStep: (update) => {
-        setExec((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            steps: prev.steps.map((step) => (step.id === update.id
-              ? { ...step, state: update.state, hash: update.hash || step.hash }
-              : step))
-          };
-        });
+    const machine = machineRef.current;
+    if (!machine) return;
+
+    /* §17 layer 1: the in-flight guard. A double-tap on Confirm (or a retry
+       racing itself) is refused with the SAME deterministic key the backend
+       would use — the second attempt never reaches the wallet. */
+    const idemKey = exec.idempotencyKey || makeIdempotencyKey({ action: exec.action, wallet: address, asset: exec.asset?.id, amount: exec.amount, chainId: exec.chainId });
+    const acquired = guardRef.current.tryAcquire(idemKey);
+    if (!acquired.ok) return;
+
+    try {
+      machine.transition(TX_STATE.SIMULATING);
+      updateMachine();
+
+      const signer = typeof getSigner === 'function' ? getSigner() : null;
+      if (!signer) {
+        machine.transition(TX_STATE.ERROR, { code: 'WALLET_NOT_CONNECTED' });
+        updateMachine();
+        setExec((prev) => (prev ? { ...prev, phase: 'failed', code: 'WALLET_NOT_CONNECTED' } : prev));
+        return;
       }
+
+      machine.transition(TX_STATE.AWAITING_SIGNATURE);
+      updateMachine();
+      setExec((prev) => (prev ? { ...prev, phase: 'running' } : prev));
+
+      const result = await runLendingPlan({
+        steps: exec.steps,
+        signer,
+        chainId: exec.chainId,
+        asset: exec.asset,
+        account: address,
+        onStep: (update) => {
+          setExec((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              steps: prev.steps.map((step) => (step.id === update.id
+                ? { ...step, state: update.state, hash: update.hash || step.hash }
+                : step))
+            };
+          });
+        }
+      });
+
+      if (result.ok) {
+        /* §16: signed → broadcast → confirmed; the final verify is the fresh
+           on-chain position read below, then COMPLETED. */
+        machine.transition(TX_STATE.SIGNED);
+        machine.transition(TX_STATE.BROADCASTING);
+        machine.transition(TX_STATE.PENDING);
+        machine.transition(TX_STATE.CONFIRMED);
+        machine.transition(TX_STATE.VERIFYING);
+        updateMachine();
+        lastTxFailureRef.current = null;
+        await refresh();
+        machine.transition(TX_STATE.COMPLETED);
+        updateMachine();
+        setExec((prev) => (prev ? { ...prev, phase: 'done', code: null, message: null } : prev));
+        haptic?.('success');
+      } else {
+        /* §14: a raw wallet/RPC error is mapped to a stable code + friendly
+           message. The raw text is never rendered. */
+        const mapped = mapRawError({ code: result.code, message: result.message }, { fallback: 'UNKNOWN' });
+        if (mapped.code === 'USER_REJECTED') machine.transition(TX_STATE.CANCELLED, { code: mapped.code });
+        else machine.transition(TX_STATE.ERROR, { code: mapped.code });
+        updateMachine();
+        lastTxFailureRef.current = { action: exec.action, asset: exec.asset?.symbol ?? null };
+        setExec((prev) => (prev
+          ? { ...prev, phase: 'failed', code: mapped.code, message: result.message || null }
+          : prev));
+      }
+    } finally {
+      guardRef.current.release(idemKey);
+      updateMachine();
+    }
+  }, [exec, getSigner, address, refresh, haptic, updateMachine]);
+
+  /** §15: ERROR → RETRY → VALIDATING. A fresh attempt with a fresh requestId. */
+  const retryExecution = useCallback(() => {
+    if (!exec) return;
+    const machine = createTransactionMachine({
+      action: exec.action,
+      meta: { requestId: makeRequestId(), idempotencyKey: exec.idempotencyKey, asset: exec.asset?.symbol, chainId: exec.chainId }
     });
-    setExec((prev) => (prev
-      ? { ...prev, phase: result.ok ? 'done' : 'failed', code: result.code || null, message: result.message || null }
-      : prev));
-    if (result.ok) haptic?.('success');
-    refresh();
-  }, [exec, getSigner, address, refresh, haptic]);
+    machine.transition(TX_STATE.RETRY);
+    machine.transition(TX_STATE.VALIDATING);
+    machineRef.current = machine;
+    setMachineView(machine.snapshot());
+    setExec((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => ({ ...s, state: 'pending', hash: null })) } : prev));
+    confirmExecution();
+  }, [exec, confirmExecution]);
 
   const market = {
     chain, assets, reserves, positions, account, loading, walletState,
@@ -1355,6 +1677,30 @@ export default function Loan() {
           <h1 className="h1" style={{ margin: 0, fontSize: 20 }}>{t('loan.pageTitle')}</h1>
           <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>{t('loan.pageSubtitle')}</p>
         </div>
+        {/* §23 — the alert bell: count only, no white border. */}
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          data-testid="loan-alerts-bell"
+          data-count={alerts.length}
+          aria-label={t('loan.alerts.title')}
+          onClick={() => { haptic?.('light'); setAlertsOpen((open) => !open); }}
+          style={{ position: 'relative' }}
+        >
+          <span style={{ fontSize: 13 }}>🔔</span>
+          {alerts.length > 0 && (
+            <span
+              style={{
+                position: 'absolute', top: -4, right: -4, minWidth: 15, height: 15, borderRadius: 99,
+                background: alerts.some((a) => a.severity === 'critical') ? '#f87171' : '#fbbf24',
+                color: '#0b0b10', fontSize: 9, fontWeight: 800,
+                display: 'grid', placeItems: 'center', padding: '0 3px',
+              }}
+            >
+              {alerts.length}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
@@ -1371,6 +1717,17 @@ export default function Loan() {
           </motion.span>
         </button>
       </motion.div>
+
+      {/* §27/§28 — read-only fallback, driven by the BFF's circuit breaker. */}
+      {readOnly && <ReadOnlyBanner t={t} />}
+
+      <AlertsPanel
+        alerts={alerts}
+        open={alertsOpen}
+        onClose={() => setAlertsOpen(false)}
+        onManage={() => { setAlertsOpen(false); setTab('positions'); }}
+        t={t}
+      />
 
       {/* ── Hero card ──────────────────────────────────────────────────── */}
       <motion.div
@@ -1511,9 +1868,11 @@ export default function Loan() {
       <ExecutionSheet
         exec={exec}
         asset={exec?.asset}
+        machine={machineView}
         onConfirm={confirmExecution}
-        onCancel={() => setExec(null)}
-        onDone={() => { setExec(null); setTab('positions'); }}
+        onCancel={() => { machineRef.current = null; setMachineView(null); setExec(null); }}
+        onDone={() => { machineRef.current = null; setMachineView(null); setExec(null); setTab('positions'); }}
+        onRetry={retryExecution}
         t={t}
       />
     </PageTransition>
