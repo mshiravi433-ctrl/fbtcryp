@@ -1,21 +1,15 @@
 /**
  * Risk Trainer — interactive R:R + position size calculator.
- *
- * The user moves three sliders (risk %, stop loss %, take profit %) and the
- * screen prints position size, potential loss, potential profit, and the
- * resulting R:R. The point is to make the math FEEL mechanical, not
- * abstract: change a number, see the answer.
- *
- * There is no trade to execute here. It is a calculator, but presented as
- * a tool that makes risk discipline cheap to practice.
  */
 
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LabBack, AICoach, Panel, Row, Notice } from './Shared';
 import { calcPositionSize } from '../../lib/lab/engine';
 import { useLabStore } from '../../store/useLabStore';
 
 export default function RiskTrainer({ onBack }) {
+  const { t } = useTranslation();
   const balance = useLabStore((s) => s.balance);
   const [capital, setCapital] = useState(balance);
   const [riskPct, setRiskPct] = useState(1);
@@ -33,86 +27,84 @@ export default function RiskTrainer({ onBack }) {
 
   const coachMsg =
     riskPct > 2
-      ? 'Risk above 2% per trade is aggressive. 1% is the floor most professionals stick to.'
+      ? t('lab2.risk.coachAggressive')
       : rr < 1.5
-      ? 'R:R below 1.5 means you need a 70%+ win rate. Wait for better setups.'
+      ? t('lab2.risk.coachBadRr')
       : rr >= 3
-      ? '3:1 R:R is the sweet spot. Even a 40% win rate is profitable here.'
-      : 'Setup looks reasonable. Now the question is whether you would actually pull the trigger.';
+      ? t('lab2.risk.coachGood')
+      : t('lab2.risk.coachNeutral');
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="🛡️ Risk Trainer" sub="Change a number. See the answer. Build the instinct." />
+      <LabBack onBack={onBack} title={`🛡️ ${t('lab2.screens.risk.title')}`} sub={t('lab2.screens.risk.sub')} />
 
-      <Panel title="Inputs">
+      <Panel title={t('lab2.risk.inputs')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <SliderField
-            label="Capital ($)"
+            label={t('lab2.risk.capital')}
             value={capital}
             onChange={setCapital}
             min={100}
             max={1000000}
             step={100}
-            display={`$${capital.toLocaleString()}`}
+            display={<span className="lab2-num">${capital.toLocaleString()}</span>}
           />
           <SliderField
-            label="Entry price"
+            label={t('lab2.risk.entryPrice')}
             value={entry}
             onChange={setEntry}
             min={1}
             max={100000}
             step={1}
-            display={`$${entry.toLocaleString()}`}
+            display={<span className="lab2-num">${entry.toLocaleString()}</span>}
           />
           <SliderField
-            label="Risk per trade (%)"
+            label={t('lab2.risk.riskPerTrade')}
             value={riskPct}
             onChange={setRiskPct}
             min={0.1}
             max={10}
             step={0.1}
-            display={`${riskPct.toFixed(1)}%`}
+            display={<span className="lab2-num">{riskPct.toFixed(1)}%</span>}
           />
           <SliderField
-            label="Stop loss (%)"
+            label={t('lab2.risk.stopLoss')}
             value={stopLossPct}
             onChange={setStopLossPct}
             min={0.5}
             max={20}
             step={0.5}
-            display={`${stopLossPct.toFixed(1)}%`}
+            display={<span className="lab2-num">{stopLossPct.toFixed(1)}%</span>}
           />
           <SliderField
-            label="Take profit (%)"
+            label={t('lab2.risk.takeProfit')}
             value={takeProfitPct}
             onChange={setTakeProfitPct}
             min={0.5}
             max={50}
             step={0.5}
-            display={`${takeProfitPct.toFixed(1)}%`}
+            display={<span className="lab2-num">{takeProfitPct.toFixed(1)}%</span>}
           />
         </div>
       </Panel>
 
-      <Panel title="Position sizing">
-        <Row label="Position size (units)" value={sizing.qty} />
-        <Row label="Position value" value={`$${sizing.positionValue.toFixed(2)}`} />
-        <Row label="Potential loss" value={`$${sizing.potentialLoss.toFixed(2)}`} valueClass="neg" />
-        <Row label="Potential profit" value={`$${(sizing.positionValue * takeProfitPct / stopLossPct).toFixed(2)}`} valueClass="pos" />
+      <Panel title={t('lab2.risk.positionSizing')}>
+        <Row label={t('lab2.risk.positionSizeUnits')} value={<span className="lab2-num">{sizing.qty}</span>} />
+        <Row label={t('lab2.risk.positionValue')} value={<span className="lab2-num">${sizing.positionValue.toFixed(2)}</span>} />
+        <Row label={t('lab2.risk.potentialLoss')} value={<span className="lab2-num">${sizing.potentialLoss.toFixed(2)}</span>} valueClass="neg" />
+        <Row label={t('lab2.risk.potentialProfit')} value={<span className="lab2-num">${(sizing.positionValue * takeProfitPct / stopLossPct).toFixed(2)}</span>} valueClass="pos" />
       </Panel>
 
-      <Panel title="R:R analysis">
-        <Row label="R:R" value={`1 : ${rr.toFixed(2)}`} valueClass={rr >= 3 ? 'pos' : rr >= 1.5 ? '' : 'neg'} />
-        <Row label="Win rate needed to break even" value={`${winRateNeeded.toFixed(1)}%`} />
-        <Row label="Win rate needed for 2× growth (over 100 trades)" value={`${Math.max(winRateNeeded, 0).toFixed(1)}% + 5%`} />
+      <Panel title={t('lab2.risk.rrAnalysis')}>
+        <Row label={t('lab2.risk.rr')} value={<span className="lab2-num">1 : {rr.toFixed(2)}</span>} valueClass={rr >= 3 ? 'pos' : rr >= 1.5 ? '' : 'neg'} />
+        <Row label={t('lab2.risk.winRateBreakEven')} value={<span className="lab2-num">{winRateNeeded.toFixed(1)}%</span>} />
+        <Row label={t('lab2.risk.winRate2x')} value={<span className="lab2-num">{Math.max(winRateNeeded, 0).toFixed(1)}% + 5%</span>} />
       </Panel>
 
       <AICoach message={coachMsg} />
 
       <Notice icon="⚖️">
-        The 1% rule (risk &lt;1% of capital per trade) means ten losses in a row
-        only cost you 10%. This is how professionals survive bad streaks without
-        blowing the account.
+        {t('lab2.risk.notice')}
       </Notice>
     </div>
   );

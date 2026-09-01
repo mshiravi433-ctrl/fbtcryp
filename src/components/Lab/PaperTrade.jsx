@@ -1,29 +1,18 @@
 /**
  * Paper Trading — open and close a virtual position with full
  * stop-loss / take-profit / risk discipline.
- *
- * ─── RISK MANAGEMENT SCORE ────────────────────────────────────────────────
- * The exit screen prints a 0–100 score that grades the user's *discipline*,
- * not their P&L. The formula rewards:
- *   • a defined stop loss        (did they decide their max loss up front?)
- *   • a defined take profit      (or did they "let the winners run" forever?)
- *   • a small position size      (<10% of balance, so one bad trade can't
- *                                  blow the account)
- *   • a high R:R                 (≥3:1, the floor for a profitable system
- *                                  even at 50% win rate)
- * The result is a number that a user can improve without ever getting
- * better at predicting prices — which is the point. Discipline is the
- * edge.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { LabBack, AICoach, Panel, Row, Notice, Empty, ResultCard, Sparkline } from './Shared';
+import { useTranslation } from 'react-i18next';
+import { LabBack, AICoach, Panel, Row, Notice, ResultCard, Sparkline } from './Shared';
 import { COINS, getPrices, tickPrice } from '../../lib/lab/marketData';
 import { calcPositionSize } from '../../lib/lab/engine';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
 
 export default function PaperTrade({ onBack }) {
+  const { t } = useTranslation();
   const { haptic } = useTelegram();
   const balance = useLabStore((s) => s.balance);
   const openTrade = useLabStore((s) => s.openPaperTrade);
@@ -81,11 +70,11 @@ export default function PaperTrade({ onBack }) {
     if (!open || !livePrice) return;
     if (open.stop && ((open.side === 'buy' && livePrice <= open.stop) || (open.side === 'sell' && livePrice >= open.stop))) {
       closeTrade(open.id, open.stop);
-      setResult({ reason: 'Stop loss hit' });
+      setResult({ reason: 'stop' });
       haptic?.('warning');
     } else if (open.tp && ((open.side === 'buy' && livePrice >= open.tp) || (open.side === 'sell' && livePrice <= open.tp))) {
       closeTrade(open.id, open.tp);
-      setResult({ reason: 'Take profit hit' });
+      setResult({ reason: 'tp' });
       haptic?.('success');
     }
   }, [livePrice, open, closeTrade, haptic]);
@@ -95,7 +84,7 @@ export default function PaperTrade({ onBack }) {
     if (open) {
       // Close at current
       closeTrade(open.id, livePrice ?? entry);
-      setResult({ reason: 'Closed manually' });
+      setResult({ reason: 'manual' });
       haptic?.('select');
       return;
     }
@@ -136,16 +125,16 @@ export default function PaperTrade({ onBack }) {
 
   // Coach triggers
   const coachMsg = open
-    ? 'Position is live. Watch the PnL but do not touch the stop — that is the point of having one.'
+    ? t('lab2.paper.coachLive')
     : !Number(stop)
-    ? 'Every trade needs a stop loss. If you cannot define your loss, you do not have a trade.'
+    ? t('lab2.paper.coachNoStop')
     : !Number(tp)
-    ? 'A trade without a target is a trade that will reverse and give back its gains.'
+    ? t('lab2.paper.coachNoTp')
     : sizePct > 10
-    ? 'Position above 10% of your balance is reckless. Cut it down or skip this one.'
+    ? t('lab2.paper.coachOverSize')
     : rr < 1.5
-    ? 'R:R below 1.5 means you need a 70% win rate to break even. Wait for a better setup.'
-    : 'Setup looks disciplined. Execute.';
+    ? t('lab2.paper.coachBadRr')
+    : t('lab2.paper.coachGood');
 
   if (result && !open) {
     const last = trades.find((t) => t.closed);
@@ -154,20 +143,28 @@ export default function PaperTrade({ onBack }) {
     }
   }
 
+  const reasonLabel = result?.reason === 'stop'
+    ? t('lab2.paper.stopLossHit')
+    : result?.reason === 'tp'
+    ? t('lab2.paper.takeProfitHit')
+    : t('lab2.paper.closedManually');
+
+  const symbol = COINS.find((c) => c.id === coinId)?.symbol;
+
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="📈 Paper Trading" sub="Trade with virtual money. No risk, all the lessons." />
+      <LabBack onBack={onBack} title={`📈 ${t('lab2.screens.paper.title')}`} sub={t('lab2.screens.paper.sub')} />
 
-      <Panel title={`${COINS.find((c) => c.id === coinId)?.symbol} · Live price`}>
+      <Panel title={`${symbol} · ${t('lab2.paper.livePrice')}`}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>
+          <div className="lab2-num" style={{ fontSize: 28, fontWeight: 700 }}>
             ${livePrice?.toLocaleString('en-US', { maximumFractionDigits: livePrice < 1 ? 5 : 2 }) ?? '—'}
           </div>
         </div>
         <Sparkline data={history} />
       </Panel>
 
-      <Panel title="Coin">
+      <Panel title={t('lab2.paper.coin')}>
         <div className="lab2-defi-tabs">
           {COINS.slice(0, 6).map((c) => (
             <button
@@ -183,23 +180,23 @@ export default function PaperTrade({ onBack }) {
 
       {!open ? (
         <>
-          <Panel title="Side">
+          <Panel title={t('lab2.paper.side')}>
             <div className="lab2-choices">
               <button className={`lab2-btn buy full ${side === 'buy' ? '' : 'ghost'}`} onClick={() => setSide('buy')}>
-                📈 Buy / Long
+                📈 {t('lab2.paper.buyLong')}
               </button>
               <button className={`lab2-btn sell full ${side === 'sell' ? '' : 'ghost'}`} onClick={() => setSide('sell')}>
-                📉 Sell / Short
+                📉 {t('lab2.paper.sellShort')}
               </button>
             </div>
           </Panel>
 
-          <Panel title="Order">
+          <Panel title={t('lab2.paper.order')}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div>
-                <label className="lab2-input-label">Quantity (in coin)</label>
+                <label className="lab2-input-label">{t('lab2.paper.quantity')}</label>
                 <input
-                  className="lab2-input"
+                  className="lab2-input lab2-num"
                   type="number"
                   step="0.001"
                   value={qty}
@@ -207,9 +204,9 @@ export default function PaperTrade({ onBack }) {
                 />
               </div>
               <div>
-                <label className="lab2-input-label">Stop Loss (price)</label>
+                <label className="lab2-input-label">{t('lab2.paper.stopLossPrice')}</label>
                 <input
-                  className="lab2-input"
+                  className="lab2-input lab2-num"
                   type="number"
                   step="0.01"
                   value={stop}
@@ -218,9 +215,9 @@ export default function PaperTrade({ onBack }) {
                 />
               </div>
               <div>
-                <label className="lab2-input-label">Take Profit (price)</label>
+                <label className="lab2-input-label">{t('lab2.paper.takeProfitPrice')}</label>
                 <input
-                  className="lab2-input"
+                  className="lab2-input lab2-num"
                   type="number"
                   step="0.01"
                   value={tp}
@@ -231,16 +228,16 @@ export default function PaperTrade({ onBack }) {
             </div>
           </Panel>
 
-          <Panel title="Trade math">
-            <Row label="Position value" value={`$${positionValue.toFixed(2)}`} />
-            <Row label="Size" value={`${sizePct.toFixed(1)}% of balance`} valueClass={sizePct > 10 ? 'neg' : sizePct > 5 ? '' : 'pos'} />
-            <Row label="Risk" value={`${riskPctEntry.toFixed(2)}% · $${potentialLoss.toFixed(2)}`} valueClass="neg" />
-            <Row label="Reward" value={`${rewardPctEntry.toFixed(2)}% · $${potentialProfit.toFixed(2)}`} valueClass="pos" />
-            <Row label="R:R" value={`1 : ${rr.toFixed(2)}`} valueClass={rr >= 3 ? 'pos' : rr >= 1.5 ? '' : 'neg'} />
+          <Panel title={t('lab2.paper.tradeMath')}>
+            <Row label={t('lab2.paper.positionValue')} value={<span className="lab2-num">${positionValue.toFixed(2)}</span>} />
+            <Row label={t('lab2.paper.size')} value={t('lab2.paper.ofBalance', { pct: sizePct.toFixed(1) })} valueClass={sizePct > 10 ? 'neg' : sizePct > 5 ? '' : 'pos'} />
+            <Row label={t('lab2.paper.risk')} value={<span className="lab2-num">{riskPctEntry.toFixed(2)}% · ${potentialLoss.toFixed(2)}</span>} valueClass="neg" />
+            <Row label={t('lab2.paper.reward')} value={<span className="lab2-num">{rewardPctEntry.toFixed(2)}% · ${potentialProfit.toFixed(2)}</span>} valueClass="pos" />
+            <Row label={t('lab2.paper.rr')} value={<span className="lab2-num">1 : {rr.toFixed(2)}</span>} valueClass={rr >= 3 ? 'pos' : rr >= 1.5 ? '' : 'neg'} />
           </Panel>
 
           <button className={`lab2-btn ${side === 'buy' ? 'buy' : 'sell'} full`} onClick={submit}>
-            Execute {side === 'buy' ? 'Buy' : 'Sell'}
+            {t('lab2.paper.execute', { action: side === 'buy' ? t('lab2.paper.buy') : t('lab2.paper.sell') })}
           </button>
         </>
       ) : (
@@ -253,55 +250,56 @@ export default function PaperTrade({ onBack }) {
         <ResultCard
           kind={result.closed.pnl >= 0 ? 'win' : 'loss'}
           emoji={result.closed.pnl >= 0 ? '🏆' : '📉'}
-          title={`Position closed · ${result.reason}`}
-          sub={result.closed.pnl >= 0 ? 'Discipline pays off.' : 'Even a loss can be a good trade if the rules were followed.'}
+          title={`${t('lab2.paper.positionClosed')} · ${reasonLabel}`}
+          sub={result.closed.pnl >= 0 ? t('lab2.paper.disciplinePays') : t('lab2.paper.lossGoodTrade')}
         >
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-            <Row label="Entry" value={`$${result.closed.entry.toFixed(2)}`} />
-            <Row label="Exit" value={`$${result.closed.exit.toFixed(2)}`} />
-            <Row label="P&L" value={`${result.closed.pnl >= 0 ? '+' : ''}$${result.closed.pnl.toFixed(2)} (${result.closed.pnlPct.toFixed(2)}%)`} valueClass={result.closed.pnl >= 0 ? 'pos' : 'neg'} />
-            <Row label="Risk Mgmt Score" value={`${result.closed.riskScore}/100`} valueClass={result.closed.riskScore >= 80 ? 'pos' : result.closed.riskScore >= 50 ? '' : 'neg'} />
+            <Row label={t('lab2.paper.entry')} value={<span className="lab2-num">${result.closed.entry.toFixed(2)}</span>} />
+            <Row label={t('lab2.paper.exit')} value={<span className="lab2-num">${result.closed.exit.toFixed(2)}</span>} />
+            <Row label={t('lab2.paper.pnl')} value={<span className="lab2-num">{result.closed.pnl >= 0 ? '+' : ''}${result.closed.pnl.toFixed(2)} ({result.closed.pnlPct.toFixed(2)}%)</span>} valueClass={result.closed.pnl >= 0 ? 'pos' : 'neg'} />
+            <Row label={t('lab2.paper.riskMgmtScore')} value={<span className="lab2-num">{result.closed.riskScore}/100</span>} valueClass={result.closed.riskScore >= 80 ? 'pos' : result.closed.riskScore >= 50 ? '' : 'neg'} />
           </div>
         </ResultCard>
       )}
 
       {closed.length > 0 && (
-        <Panel title="Recent trades">
+        <Panel title={t('lab2.paper.recentTrades')}>
           {closed.map((t) => (
             <div key={t.id} className="lab2-row">
               <span>{COINS.find((c) => c.id === t.symbol)?.symbol} · {t.side === 'buy' ? 'L' : 'S'}</span>
               <strong className={t.pnl >= 0 ? 'pos' : 'neg'}>
-                {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)} · {t.riskScore}/100
+                <span className="lab2-num">{t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)} · {t.riskScore}/100</span>
               </strong>
             </div>
           ))}
         </Panel>
       )}
 
-      <Panel title="Stats">
-        <Row label="Total trades" value={trades.filter((t) => t.closed).length} />
-        <Row label="Win rate" value={`${winRateFn()}%`} />
-        <Row label="Balance" value={`$${balance.toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
+      <Panel title={t('lab2.paper.stats')}>
+        <Row label={t('lab2.paper.totalTrades')} value={<span className="lab2-num">{trades.filter((t) => t.closed).length}</span>} />
+        <Row label={t('lab2.paper.winRate')} value={<span className="lab2-num">{winRateFn()}%</span>} />
+        <Row label={t('lab2.paper.balance')} value={<span className="lab2-num">${balance.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>} />
       </Panel>
     </div>
   );
 }
 
 function OpenPosition({ open, livePrice, now, onClose }) {
+  const { t } = useTranslation();
   const pnl = open.side === 'buy' ? (livePrice - open.entry) * open.qty : (open.entry - livePrice) * open.qty;
   const pnlPct = ((pnl / (open.entry * open.qty)) * 100);
   return (
-    <Panel title="Open position">
-      <Row label="Symbol" value={COINS.find((c) => c.id === open.symbol)?.symbol ?? open.symbol} />
-      <Row label="Side" value={open.side === 'buy' ? '📈 Long' : '📉 Short'} />
-      <Row label="Entry" value={`$${open.entry.toFixed(2)}`} />
-      <Row label="Quantity" value={open.qty} />
-      <Row label="Current" value={`$${livePrice?.toFixed(2) ?? '—'}`} />
-      <Row label="Stop Loss" value={open.stop ? `$${open.stop.toFixed(2)}` : '—'} />
-      <Row label="Take Profit" value={open.tp ? `$${open.tp.toFixed(2)}` : '—'} />
-      <Row label="Unrealized P&L" value={`${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct.toFixed(2)}%)`} valueClass={pnl >= 0 ? 'pos' : 'neg'} />
+    <Panel title={t('lab2.paper.openPosition')}>
+      <Row label={t('lab2.paper.symbol')} value={COINS.find((c) => c.id === open.symbol)?.symbol ?? open.symbol} />
+      <Row label={t('lab2.paper.side')} value={open.side === 'buy' ? `📈 ${t('lab2.long')}` : `📉 ${t('lab2.short')}`} />
+      <Row label={t('lab2.paper.entry')} value={<span className="lab2-num">${open.entry.toFixed(2)}</span>} />
+      <Row label={t('lab2.paper.quantity')} value={<span className="lab2-num">{open.qty}</span>} />
+      <Row label={t('lab2.paper.current')} value={<span className="lab2-num">${livePrice?.toFixed(2) ?? '—'}</span>} />
+      <Row label={t('lab2.paper.stopLoss')} value={open.stop ? <span className="lab2-num">${open.stop.toFixed(2)}</span> : '—'} />
+      <Row label={t('lab2.paper.takeProfit')} value={open.tp ? <span className="lab2-num">${open.tp.toFixed(2)}</span> : '—'} />
+      <Row label={t('lab2.paper.unrealizedPnl')} value={<span className="lab2-num">{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} ({pnlPct.toFixed(2)}%)</span>} valueClass={pnl >= 0 ? 'pos' : 'neg'} />
       <button className="lab2-btn ghost full" onClick={onClose}>
-        Close at market
+        {t('lab2.paper.closeAtMarket')}
       </button>
     </Panel>
   );
