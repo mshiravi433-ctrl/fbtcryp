@@ -1,0 +1,158 @@
+/**
+ * CROSS-CHAIN — the shared desk, quote card, status and history.
+ *
+ * Imported by the components themselves rather than by a page, because the
+ * SAME components render inside Intent OS and on the bridge page. A stylesheet
+ * owned by one page would have made the other look broken — which is the
+ * cosmetic version of the exact problem this rework fixes.
+ *
+ * Everything below leans on the app's existing tokens (--ios-panel, --text-2,
+ * --rgb-1 …) so the desk inherits the theme, including light mode and RTL,
+ * instead of inventing a second design language.
+ */
+
+.xcc-desk { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── banners ─────────────────────────────────────────────────────────────── */
+.xcc-banner {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+  margin-top: 10px; padding: 9px 11px; border-radius: 11px;
+  font-size: 11.5px; line-height: 1.6; color: var(--text-2);
+  background: var(--ios-panel-2, rgba(255,255,255,.04));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.xcc-banner.warn { color: #ffb65c; box-shadow: inset 0 0 0 1px rgba(255,182,92,.35); }
+.xcc-banner.bad { color: #ff6b81; box-shadow: inset 0 0 0 1px rgba(255,107,129,.35); }
+:root[data-theme='light'] .xcc-banner.warn { color: #a15c00; }
+:root[data-theme='light'] .xcc-banner.bad { color: #b3223c; }
+.xcc-changed { flex-direction: column; align-items: stretch; }
+
+/* ── the ticket ──────────────────────────────────────────────────────────── */
+.xcc-ticket { display: flex; flex-direction: column; }
+.xcc-leg { display: flex; flex-direction: column; gap: 7px; }
+.xcc-leg-label {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3);
+}
+.xcc-leg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.xcc-select, .xcc-amount, .xcc-search, .xcc-field input {
+  width: 100%; border-radius: 10px; padding: 10px 11px;
+  background: var(--ios-panel-2, rgba(255,255,255,.04));
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--text-1); font-size: 13px; font-weight: 600;
+}
+:root[data-theme='light'] .xcc-select,
+:root[data-theme='light'] .xcc-amount,
+:root[data-theme='light'] .xcc-search,
+:root[data-theme='light'] .xcc-field input { border-color: rgba(20,35,60,.14); }
+.xcc-amount-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.xcc-amount { font: 700 20px/1.2 var(--font-mono); letter-spacing: .02em; }
+.xcc-flip {
+  align-self: center; margin: 10px 0; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--ios-panel-2, rgba(255,255,255,.06)); border: 1px solid rgba(255,255,255,.1);
+  color: var(--text-1); font-size: 15px; cursor: pointer;
+}
+.xcc-field { display: flex; flex-direction: column; gap: 5px; margin-top: 11px; }
+.xcc-field > span { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.xcc-field em { font-style: normal; font-size: 10.5px; }
+.xcc-linkish { align-self: flex-start; margin-top: 8px; padding-inline: 0; }
+.xcc-submit { width: 100%; margin-top: 12px; }
+
+/* ── token picker ────────────────────────────────────────────────────────── */
+.xcc-token { position: relative; }
+.xcc-token-btn {
+  width: 100%; display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  border-radius: 10px; padding: 8px 11px; cursor: pointer;
+  background: var(--ios-panel-2, rgba(255,255,255,.04));
+  border: 1px solid rgba(255,255,255,.08); color: var(--text-1);
+}
+:root[data-theme='light'] .xcc-token-btn { border-color: rgba(20,35,60,.14); }
+.xcc-token-label { font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.xcc-token-value { font-size: 13.5px; font-weight: 700; }
+.xcc-token-balance { font: 500 9.5px/1.3 var(--font-mono); color: var(--text-3); }
+.xcc-token-sheet {
+  position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 6px);
+  border-radius: 12px; padding: 9px; max-height: 300px; overflow: auto;
+  background: var(--ios-panel, #12161f); box-shadow: 0 18px 40px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.xcc-token-list { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; }
+.xcc-token-row {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 7px; align-items: center;
+  padding: 7px 8px; border-radius: 9px; border: 0; cursor: pointer;
+  background: transparent; color: var(--text-1); text-align: start;
+}
+.xcc-token-row:hover { background: rgba(255,255,255,.05); }
+.xcc-token-sym { font-size: 12px; font-weight: 700; }
+.xcc-token-name { font-size: 10.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xcc-token-addr, .xcc-token-price { font: 500 9.5px/1 var(--font-mono); color: var(--text-3); }
+
+/* ── quote card ──────────────────────────────────────────────────────────── */
+.xcc-quote {
+  margin-top: 12px; border-radius: 12px; padding: 12px;
+  background: var(--ios-panel-2, rgba(255,255,255,.04));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.xcc-quote-compact { margin-top: 8px; padding: 9px; }
+.xcc-quote-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.xcc-quote-label { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.xcc-quote-out { font: 800 17px/1.2 var(--font-mono); color: var(--text-1); }
+.xcc-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; padding: 2.5px 0; color: var(--text-2); }
+.xcc-row span:first-child { color: var(--text-3); }
+.xcc-row-warn span:last-child { color: #ffb65c; }
+.xcc-quote-age { margin-top: 9px; font-size: 10px; color: var(--text-3); }
+.xcc-quote-age.expired { color: #ffb65c; }
+.xcc-note { margin: 8px 0 0; font-size: 10.5px; line-height: 1.65; color: var(--text-3); }
+.xcc-error { margin: 8px 0 0; font-size: 11px; color: #ff6b81; overflow-wrap: anywhere; }
+:root[data-theme='light'] .xcc-error { color: #b3223c; }
+.xcc-skeleton { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.xcc-skeleton .skel { height: 13px; border-radius: 6px; }
+.xcc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+
+/* ── route comparison ────────────────────────────────────────────────────── */
+.xcc-routes { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; }
+.xcc-routes-head { font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.xcc-route {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  padding: 8px 10px; border-radius: 10px; cursor: pointer; text-align: start;
+  background: var(--ios-panel-2, rgba(255,255,255,.03));
+  border: 1px solid transparent; color: var(--text-2);
+}
+.xcc-route.active { border-color: var(--rgb-1, #4ad2ff); color: var(--text-1); }
+.xcc-route-name { font-size: 11.5px; font-weight: 700; }
+.xcc-route-out { font-size: 11px; }
+.xcc-route-meta { font-size: 10px; color: var(--text-3); }
+
+/* ── status ──────────────────────────────────────────────────────────────── */
+.xcc-status { display: flex; flex-direction: column; gap: 8px; }
+.xcc-status-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.xcc-status-head strong { font-size: 13px; }
+.xcc-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.xcc-steps li { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--text-3); }
+.xcc-steps li.done { color: var(--text-1); }
+.xcc-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.18); flex: none; }
+.xcc-steps li.done .xcc-dot { background: #35d08c; }
+.xcc-status.failed .xcc-dot { background: #ff6b81; }
+.xcc-status-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: 11px; }
+.xcc-status-links a { color: var(--rgb-1, #4ad2ff); text-decoration: none; }
+.xcc-status-meta { font: 500 10px/1.4 var(--font-mono); color: var(--text-3); }
+
+/* ── history ─────────────────────────────────────────────────────────────── */
+.xcc-history-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.xcc-history-head h3 { margin: 0; font-size: 12.5px; }
+.xcc-history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.xcc-history-row {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 11px; border-radius: 11px;
+  background: var(--ios-panel-2, rgba(255,255,255,.035));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+.xcc-history-row header { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.xcc-history-row header strong { font: 700 12.5px/1 var(--font-mono); }
+.xcc-history-meta { font-size: 10.5px; color: var(--text-3); }
+.xcc-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+.xcc-badge.ok { color: #35d08c; box-shadow: inset 0 0 0 1px rgba(53,208,140,.35); }
+.xcc-badge.bad { color: #ff6b81; box-shadow: inset 0 0 0 1px rgba(255,107,129,.35); }
+.xcc-badge.wait { color: #ffb65c; box-shadow: inset 0 0 0 1px rgba(255,182,92,.35); }
+
+/* ── HTLC readiness checklist ────────────────────────────────────────────── */
+.icc-checklist { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.icc-checklist li { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-2); }
+.icc-advanced > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; }

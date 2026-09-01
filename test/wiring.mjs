@@ -3588,11 +3588,19 @@ export default function run() {
      * APK. A leaked LI.FI key is billed to us and can be exhausted by a
      * stranger. This is the same rule that governs the Jupiter and Gemini
      * keys, asserted rather than remembered.
+     *
+     * The key now lives in server/lifi.js — the single LI.FI client that
+     * server/bridge.js, server/crossChain.js and the Intent OS adapter all
+     * call. This check follows the key rather than the file it used to be in;
+     * the client-side half below got STRICTER at the same time, because the
+     * old version only inspected src/lib/api.js and a leak can be authored in
+     * any of the 400 other files under src/.
      */
+    const lifiClient = read('server/lifi.js');
     t('the LI.FI key is read server-side only',
-      /process\.env\.LIFI_API_KEY/.test(bridge) && !/VITE_LIFI/.test(bridge));
-    t('...and no client file reaches for it',
-      !read('src/lib/api.js').includes('LIFI_API_KEY'));
+      /process\.env\.LIFI_API_KEY/.test(lifiClient) && !/VITE_LIFI/.test(lifiClient));
+    t('...and no client file anywhere reaches for it',
+      !walk('src').some((f) => /LIFI_API_KEY|VITE_LIFI/.test(read(f))));
 
     /*
      * `integrator` and `fee` decide where our revenue goes. If they were in
@@ -3660,8 +3668,23 @@ export default function run() {
     t('a user can navigate to it', /'\/bridge'/.test(read('src/components/MoreSheet.jsx')));
 
     const page = read('src/pages/Bridge.jsx');
-    t('the screen requests quotes', /getBridgeQuote\s*\(/.test(page));
-    t('...and can send the transaction', /sendTransaction\s*\(/.test(page));
+    /*
+     * ─── QUOTES COME FROM THE SHARED SERVICE NOW ────────────────────────────
+     * This used to assert `getBridgeQuote(` — the page's own LI.FI wrapper.
+     * The page and the Intent OS «میان‌زنجیره‌ای» desk each had their own
+     * quote path, and the Intent OS one was returning a hard-coded rate.
+     * Both now go through src/services/cross-chain, so the check follows the
+     * quote: the screen must ask the SHARED service for a rate, compare
+     * routes through it, and execute through its pipeline. A second private
+     * quote path reappearing on this screen is exactly what this now catches.
+     */
+    t('the screen requests quotes', /crossChainService\.getQuote\s*\(/.test(page));
+    t('...through the one service Intent OS also uses',
+      /from '\.\.\/services\/cross-chain'/.test(page)
+      && /from '\.\.\/\.\.\/services\/cross-chain'/.test(read('src/components/crosschain/CrossChainDesk.jsx')));
+    t('...and compares more than one route before picking', /crossChainService\.getRoutes\s*\(/.test(page));
+    t('...and can send the transaction',
+      /sendTransaction\s*\(/.test(page) && /crossChainService\.execute\s*\(/.test(page));
 
     /*
      * The wallet MUST be moved to the source chain before signing. Skipping
@@ -3671,6 +3694,17 @@ export default function run() {
      */
     t('it switches to the source chain before signing',
       /wallet\.chainId !== fromChain/.test(page) && /switchChain/.test(page));
+    /*
+     * The LI.FI path signs inside the shared pipeline now, so the same
+     * protection has to be asserted there — and it is stronger there, because
+     * the pipeline REFUSES to sign on the wrong network instead of only
+     * asking for the switch.
+     */
+    t('...and the shared pipeline refuses to sign on the wrong one',
+      (() => {
+        const client = read('src/services/cross-chain/client.js');
+        return /switchChain/.test(client) && /WRONG_NETWORK/.test(client);
+      })());
 
     /*
      * Our fee has to be visible in the quote. A fee the user only discovers

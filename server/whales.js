@@ -157,12 +157,38 @@ function explorerAddrUrl(chainId, addr) {
 
 /* -------- fetch helpers per chain (RPC-only fallback path) -------- */
 
+/*
+ * WHALE SCAN ENDPOINT FALLBACK
+ * ---------------------------------------------------------------------------
+ * Each chain lists several public RPCs (see chainsLite.js) because one dead
+ * or rate-limited host used to take the WHOLE chain out of the feed:
+ * `eth_blockNumber` throws → the chain returns [] → metrics, flows and the
+ * whale board all lose that chain's events. Now we walk the endpoint list
+ * in order; an endpoint that cannot even read the latest block is skipped,
+ * while an endpoint that answers (even with zero whale events in the window)
+ * is a VALID answer and stops the walk — we never pay extra upstream calls
+ * for a chain that is genuinely quiet.
+ */
 async function fetchWhalesRpc(chainId, minValueUsd, priceLookup) {
   const cfg = EVM_CHAINS[chainId];
   if (!cfg?.rpc?.length) return [];
-  const rpc = cfg.rpc[0];
   const known = knownTokenMap(chainId);
+  let lastErr = null;
+  for (const rpc of cfg.rpc) {
+    try {
+      return await fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known);
+    } catch (e) {
+      // This endpoint failed (rate-limited / down) — try the next one.
+      lastErr = e;
+    }
+  }
+  // Every endpoint for this chain failed. Re-throw so `fetchWhales` records
+  // it in `failedChains` / `partial: true` — the same observability the
+  // single-endpoint days had. Other chains continue (allSettled).
+  throw lastErr || new Error('ALL_RPC_ENDPOINTS_FAILED');
+}
 
+async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known) {
   const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
   const latest = Number(BigInt(latestHex));
   const fromBlock = Math.max(0, latest - RPC_BLOCK_WINDOW);
@@ -185,10 +211,11 @@ async function fetchWhalesRpc(chainId, minValueUsd, priceLookup) {
         toBlock: '0x' + toBlock.toString(16),
         topics: [TRANSFER_TOPIC]
       }]);
-    } catch {
-      return []; // give up gracefully
+    } catch (e) {
+      throw e; // this endpoint cannot serve logs — let the caller try the next
     }
   }
+  if (!Array.isArray(logs)) logs = [];
 
   const events = [];
   const seen = new Set();
@@ -428,6 +455,42 @@ async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup) {
 
 /* -------- prices -------- */
 
+/**
+ * Coinlore keyless price fallback — used ONLY when CoinGecko cannot answer
+ * (public rate limit, network blip). Same ids in, same shape out
+ * (`id → { [vsCcy]: number }`), values are the live `price` field.
+ * Coinlore already serves this codebase's global-stats fallback in
+ * providers.js, so no new upstream relationship is introduced.
+ */
+async function fetchCoinlorePrices(ids, vsCcy = 'usd') {
+  const res = await fetch(`https://api.coinlore.net/api/prices/v2/ids/${ids.join(',')}`, {
+    headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' },
+    signal: AbortSignal.timeout(10_000)
+  });
+  if (!res.ok) throw new Error(`coinlore ${res.status}`);
+  const body = await res.json();
+  const out = {};
+  for (const [id, row] of Object.entries(body?.data || {})) {
+    const p = Number(row?.price);
+    if (Number.isFinite(p) && p > 0) out[id] = { [vsCcy]: p };
+  }
+  return out;
+}
+
+/*
+ * PRICING WAS A SINGLE POINT OF FAILURE — THE ONE THAT KILLED THE FEED.
+ * ---------------------------------------------------------------------------
+ * The old version awaited `fetchSimplePrices` and let it throw. CoinGecko's
+ * keyless public limit (a handful of calls/minute on a shared Vercel IP)
+ * returns 429 exactly when the app is busy; the throw propagated out of
+ * `fetchWhales`, `labelledEvents` swallowed it, and EVERY whale-based number
+ * on the Smart Money page went to zero — «خیلی از داده‌ها کار نمی‌کند».
+ *
+ * Now: retry once, fall back to Coinlore, and if even that fails keep the
+ * pipeline alive with unpriced events (huge-amount transfers still surface)
+ * and flag `ok: false` so the response carries `pricesOutage: true` and the
+ * UI can say "no data" instead of "zero activity".
+ */
 async function priceLookupFor(vsCcy) {
   // Use the existing providers.js simple-price fetch so keys stay server-side
   // and caching is shared with every other market endpoint. Import lazily to
@@ -441,8 +504,30 @@ async function priceLookupFor(vsCcy) {
       if (t.coingeckoId) cgIds.add(t.coingeckoId);
     }
   }
-  const prices = await fetchSimplePrices(Array.from(cgIds), vsCcy);
-  return (cgId) => prices?.[cgId]?.[vsCcy] ?? null;
+  const ids = Array.from(cgIds);
+
+  let prices = null;
+  let source = null;
+  for (let attempt = 0; attempt < 2 && !prices; attempt += 1) {
+    try {
+      const got = await fetchSimplePrices(ids, vsCcy);
+      if (got && Object.keys(got).length) { prices = got; source = 'coingecko'; }
+    } catch {
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
+    }
+  }
+  if (!prices) {
+    try {
+      const lore = await fetchCoinlorePrices(ids, vsCcy);
+      if (lore && Object.keys(lore).length) { prices = lore; source = 'coinlore'; }
+    } catch { /* fall through: unpriced, flagged */ }
+  }
+  const map = prices || {};
+  return {
+    lookup: (cgId) => map[cgId]?.[vsCcy] ?? null,
+    ok: !!prices,
+    source: source || 'none'
+  };
 }
 
 /* -------- public entry -------- */
@@ -470,7 +555,7 @@ export async function fetchWhales({
     ? EVM_CHAIN_ORDER.filter((id) => chains.includes(EVM_CHAINS[id]?.short?.toLowerCase()) || chains.includes(String(id)))
     : EVM_CHAIN_ORDER;
 
-  const priceLookup = await priceLookupFor(vs);
+  const { lookup: priceLookup, ok: pricesOk, source: priceSource } = await priceLookupFor(vs);
 
   // Fetch chains in parallel; tolerate partial failure per chain.
   const results = await Promise.allSettled(
@@ -529,7 +614,11 @@ export async function fetchWhales({
     limit,
     total: filtered.length,
     pricedCount,
-    partial: failures.length > 0 || pricedCount < filtered.length,
+    partial: failures.length > 0 || pricedCount < filtered.length || !pricesOk,
+    // True when no price source answered (CoinGecko AND Coinlore). Callers
+    // and the UI can then report "no data" instead of "zero activity".
+    pricesOutage: !pricesOk,
+    priceSource: priceSource,
     failedChains: failures,
     events: filtered.slice(0, limit)
   };

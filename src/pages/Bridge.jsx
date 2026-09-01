@@ -9,8 +9,6 @@ import { fmtUsd } from '../lib/format';
 import {
   BRIDGE_CHAINS,
   fromBaseUnits,
-  getBridgeQuote,
-  summariseQuote,
   toBaseUnits,
   tokensFor
 } from '../lib/bridge';
@@ -21,6 +19,21 @@ import {
   getDlnQuote,
   getDlnTx
 } from '../lib/dln';
+/*
+ * ─── THE SHARED CROSS-CHAIN SERVICE ────────────────────────────────────────
+ * This page and the Intent OS «میان‌زنجیره‌ای» desk used to be two systems: a
+ * real LI.FI integration here, and a hard-coded rate there. Both now go
+ * through /services/cross-chain — the same quote engine, the same ranking, the
+ * same execution pipeline (balance → allowance → chain → re-quote → signature
+ * → broadcast) and the same tracked history.
+ *
+ * The legacy /api/bridge/quote contract documented in src/pages/Developers.jsx
+ * still exists (src/lib/bridge.js), but the screen itself now quotes, ranks
+ * and executes through the shared service.
+ */
+import { crossChainService } from '../services/cross-chain';
+import CrossChainStatus from '../components/crosschain/CrossChainStatus';
+import CrossChainHistory from '../components/crosschain/CrossChainHistory';
 import { IconExternal, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
@@ -185,6 +198,19 @@ export default function Bridge() {
   const [txErr, setTxErr] = useState(null);
 
   /*
+   * Execution + tracking state. `tracked` is the ledger row the server owns:
+   * it is the only thing allowed to say COMPLETED, and only once a
+   * destination transaction hash exists.
+   */
+  const [routes, setRoutes] = useState([]);
+  const [execStep, setExecStep] = useState(null);
+  const [changedQuote, setChangedQuote] = useState(null);
+  const [tracked, setTracked] = useState(null);
+  const [historyKey, setHistoryKey] = useState(0);
+  const stopTrackRef = useRef(null);
+  useEffect(() => () => stopTrackRef.current?.(), []);
+
+  /*
    * ─── THE SECOND PROVIDER ────────────────────────────────────────────────
    * deBridge DLN pays us 70 bps where LI.FI pays 30, and needs no key and no
    * account. It is quoted ALONGSIDE LI.FI rather than replacing it, because
@@ -218,7 +244,28 @@ export default function Bridge() {
     [toTokens, tokenSymbol]
   );
 
-  const summary = useMemo(() => summariseQuote(quote), [quote]);
+  /*
+   * ─── ONE SHAPE FOR THE SCREEN, WHATEVER THE PROVIDER ────────────────────
+   * The quote is already normalised by the shared engine (the same object the
+   * Intent OS desk renders). This adapter keeps the field names this screen
+   * has always used, so the itemised cost block below did not have to be
+   * rewritten to gain a shared engine.
+   */
+  const summary = useMemo(() => (quote ? {
+    tool: quote.tool,
+    toolName: quote.toolName ?? quote.tool,
+    nativePriceUsd: quote.nativePriceUsd,
+    nativeSymbol: quote.nativeSymbol,
+    fromAmountUsd: quote.fromAmountUsd,
+    toAmountUsd: quote.toAmountUsd,
+    toAmount: quote.toAmount,
+    toAmountMin: quote.toAmountMin,
+    feeUsd: (quote.bridgeFeeUsd || 0) + (quote.protocolFeeUsd || 0),
+    gasUsd: quote.gasCostUsd,
+    ourFeeUsd: quote.integratorFeeUsd,
+    totalCostUsd: quote.totalCostUsd,
+    durationSec: quote.estimatedTime
+  } : null), [quote]);
 
   /*
    * ─── PRICING THE FIXED FEE, WITHOUT A NEW DEPENDENCY ────────────────────
@@ -313,7 +360,15 @@ export default function Bridge() {
 
     setQuoting(true);
     try {
-      const q = await getBridgeQuote({
+      /*
+       * ─── ROUTES FIRST, THEN THE EXECUTABLE QUOTE ────────────────────────
+       * "Take the first route" is how a user ends up on a path that is a few
+       * cents better on paper and forty minutes slower in practice. The
+       * service ranks every route the provider offers on output MINUS gas,
+       * minus fees payable on top, minus time in flight, minus how many hops
+       * can fail — and only then asks for the signable quote on the winner.
+       */
+      const params = {
         fromChain,
         toChain,
         fromToken: fromToken.address,
@@ -330,6 +385,23 @@ export default function Bridge() {
         /* Omitted entirely when blank — an empty string would be forwarded
            as a literal and rejected. */
         ...(toAddress.trim() && toAddressValid ? { toAddress: toAddress.trim() } : {})
+      };
+
+      let best = null;
+      try {
+        const ranked = await crossChainService.getRoutes(params);
+        if (seq.current !== mine) return;
+        setRoutes(ranked.routes);
+        best = ranked.best;
+      } catch {
+        /* The comparison is an upgrade, not a dependency: a failed route list
+           must not stop the quote below from working. */
+        if (seq.current === mine) setRoutes([]);
+      }
+
+      const q = await crossChainService.getQuote({
+        ...params,
+        ...(best?.tool ? { preferTool: best.tool } : {})
       });
       if (seq.current !== mine) return;
       setQuote(q);
@@ -469,47 +541,72 @@ export default function Bridge() {
   const run = async () => {
     if (provider === 'dln') return runDln();
 
-    const tx = quote?.transactionRequest;
-    if (!tx) return;
+    if (!quote) return;
 
     setBusy(true);
     setTxErr(null);
     haptic?.('medium');
 
-    try {
-      /*
-       * The wallet must be ON the source chain before signing. Skipping this
-       * produces a transaction broadcast to whichever network happened to be
-       * selected — the single most expensive mistake available here, and one
-       * the user cannot undo.
-       */
-      if (wallet.chainId !== fromChain) {
-        await wallet.switchChain?.(fromChain);
+    /*
+     * ─── ONE EXECUTION PIPELINE, SHARED WITH INTENT OS ──────────────────────
+     * This used to be `signer.sendTransaction(quote.transactionRequest)` and
+     * nothing else — no allowance check (so an ERC-20 bridge could revert
+     * after the user paid gas), no balance check, no re-quote, and no record
+     * of the transfer anywhere afterwards.
+     *
+     * `crossChainService.execute()` does the whole sequence the spec lists:
+     * refresh the quote → validate balance → validate allowance (approving
+     * the exact amount, never infinite) → validate the chain → validate the
+     * destination → build → the USER's wallet signs → broadcast → write the
+     * ledger row → track the source, the bridge and the destination.
+     */
+    const result = await crossChainService.execute(quote, {
+      wallet,
+      destination: toAddress.trim() && toAddressValid ? toAddress.trim() : '',
+      slippage: Number(slippage) / 100,
+      source: 'bridge',
+      onStep: (step) => setExecStep(step),
+      /* The rate moved between display and signature: stop, show the new
+         number and require a second, explicit yes. */
+      confirmQuoteChange: async (fresh) => new Promise((resolve) => {
+        setChangedQuote({ quote: fresh, resolve });
+      })
+    });
+
+    setBusy(false);
+    setExecStep(null);
+
+    if (!result.ok) {
+      if (result.code === 'QUOTE_CHANGED') {
+        setQuote(result.quote);
+        setChangedQuote(null);
+        return;
       }
-
-      const signer = wallet.getSigner?.();
-      if (!signer) throw new Error('NO_SIGNER');
-
-      const sent = await signer.sendTransaction({
-        to: tx.to,
-        data: tx.data,
-        value: tx.value ?? undefined,
-        /*
-         * LI.FI's gas estimate is passed through rather than recalculated.
-         * A bridge call is a multi-step contract interaction and wallets
-         * routinely under-estimate it, which shows up as a failed transaction
-         * that still charged gas.
-         */
-        gasLimit: tx.gasLimit ?? undefined
-      });
-
-      setTxHash(sent.hash);
-      haptic?.('success');
-    } catch (e) {
-      setTxErr(e?.shortMessage || e?.message || 'TX_FAILED');
+      setTxErr(t(`bridge.err.${result.code}`, { defaultValue: result.detail || result.code }));
       haptic?.('error');
-    } finally {
-      setBusy(false);
+      return;
+    }
+
+    setChangedQuote(null);
+    setTxHash(result.sourceTxHash);
+    haptic?.('success');
+
+    if (result.transaction) {
+      setTracked(result.transaction);
+      setHistoryKey((n) => n + 1);
+      /* Track to the DESTINATION. A confirmed source transaction is not an
+         arrival, and this screen no longer implies that it is. */
+      stopTrackRef.current?.();
+      stopTrackRef.current = crossChainService.trackTransaction(result.transaction.id, {
+        onUpdate: (row) => {
+          if (!row) return;
+          setTracked(row);
+          if (row.executionStatus === 'COMPLETED') {
+            setHistoryKey((n) => n + 1);
+            wallet.refreshBalance?.();
+          }
+        }
+      });
     }
   };
 
@@ -816,6 +913,20 @@ export default function Bridge() {
           </div>
         )}
 
+        {/*
+          How many routes were actually compared, and which one won. A "best
+          route" claim the user cannot check is just a slogan.
+        */}
+        {routes.length > 1 && !quoting && (
+          <p className="faint" style={{ marginTop: 9, fontSize: 12 }} dir="ltr">
+            {t('bridge.routesCompared', {
+              defaultValue: '{{count}} routes compared · best: {{name}}',
+              count: routes.length,
+              name: routes[0]?.toolName || routes[0]?.tool || '—'
+            })}
+          </p>
+        )}
+
         {!wallet.isConnected ? (
           <p className="notice" style={{ marginTop: 12 }}>{t('bridge.connectFirst')}</p>
         ) : (
@@ -831,7 +942,9 @@ export default function Bridge() {
             disabled={busy || (provider === 'dln' ? !dln?.toAmount : !quote?.transactionRequest)}
             onClick={run}
           >
-            {busy ? t('bridge.sending') : t('bridge.send')}
+            {busy
+              ? t(`crossChain.step.${execStep || 'confirm'}`, { defaultValue: t('bridge.sending') })
+              : t('bridge.send')}
           </button>
         )}
 
@@ -862,7 +975,66 @@ export default function Bridge() {
             </a>
           </div>
         )}
+
+        {/*
+          ─── THE RATE MOVED WHILE CONFIRMING ────────────────────────────────
+          A bridge that silently signs a different price than the one on
+          screen is indistinguishable from one that lies. Execution pauses
+          here until the user says yes to the NEW number.
+        */}
+        {changedQuote && (
+          <div className="notice notice-danger" style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>{t('bridge.quoteChanged', { defaultValue: 'The rate changed while confirming.' })}</div>
+            <p style={{ margin: 0, fontSize: 12 }} dir="ltr">
+              ≈ {fromBaseUnits(changedQuote.quote.toAmount, toToken?.decimals ?? 6)} {toToken?.symbol}
+            </p>
+            <div className="row" style={{ gap: 8, marginTop: 8 }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { changedQuote.resolve(true); setChangedQuote(null); }}
+              >
+                {t('bridge.acceptNewRate', { defaultValue: 'Accept new rate' })}
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { changedQuote.resolve(false); setChangedQuote(null); }}
+              >
+                {t('bridge.cancel', { defaultValue: 'Cancel' })}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/*
+          The REAL status of the transfer, driven by the server re-reading the
+          bridge. This is what replaced "sent, good luck": a source hash is
+          only the first of three things that have to happen.
+        */}
+        {tracked && provider !== 'dln' && (
+          <div style={{ marginTop: 12 }}>
+            <CrossChainStatus
+              transaction={tracked}
+              chains={BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name }))}
+              onRefresh={async () => {
+                try {
+                  const payload = await crossChainService.getStatus(tracked.id);
+                  setTracked(payload.transaction);
+                } catch { /* the row keeps its real status */ }
+              }}
+              busy={busy}
+            />
+          </div>
+        )}
       </motion.section>
+
+      {/* One history, shared with the Intent OS cross-chain desk. */}
+      {wallet.isConnected && wallet.address && (
+        <CrossChainHistory
+          wallet={wallet.address}
+          refreshKey={historyKey}
+          chains={BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name }))}
+        />
+      )}
 
       {/*
         Placed BELOW the ticket rather than above it. Someone arriving here
