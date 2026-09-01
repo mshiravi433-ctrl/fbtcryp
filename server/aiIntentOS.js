@@ -58,6 +58,10 @@ import { humanizeError } from '../src/lib/intent-ai/errorHumanizer.js';
 import { createExecutionPlan, toExecutionResult } from '../src/lib/intent-ai/executionStateMachine.js';
 import { checkScheduleAuthorization } from './intentScheduler.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
+/* Central Intelligence OS: share one world view between the V1 chat and the
+   central brain (wallet/portfolio truth + page awareness, §5/§7). */
+import { ingestClientData as centralIngestClientData, setPage as centralSetPage } from './central/stateStore.js';
+import { normalizePageContext } from './central/contextEngine.js';
 import { aiConfigured, classifyIntentWithModel } from './ai.js';
 import { fetchSimplePrices } from './providers.js';
 import { fetchYields } from './yields.js';
@@ -285,9 +289,36 @@ async function buildAIContext(req, body = {}) {
   ])];
   const chains = chainList.length ? chainList : AI_CONTROL_CHAINS.map((c) => c.chainId);
 
+  /*
+   * CENTRAL INTELLIGENCE SYNC — the V1 chat and the central brain share one
+   * world view: the same wallet/portfolio truth and the same page context
+   * (§5/§7). Ingestion is structural, not optional; a page-blind AI is the
+   * exact failure mode this architecture removes.
+   */
+  const activePage = normalizePageContext({
+    route: client.currentRoute || client.currentPage || b.currentRoute || b.currentPage || null,
+    module: client.currentModule || b.currentModule || null,
+    tab: client.currentTab || b.currentTab || null,
+    selectedAsset: client.selectedAsset || b.selectedAsset || null,
+    selectedNetwork: client.selectedNetwork || b.selectedNetwork || null,
+    walletConnected: wallet.connected
+  });
+  try {
+    centralIngestClientData(userId, {
+      wallet: { connected: wallet.connected, canSign: wallet.canSign, evmAddresses: wallet.evmAddresses, solanaAddresses: wallet.solanaAddresses },
+      portfolio: { totalValueUsd: portfolio.totalValueUsd, holdings: portfolio.holdings, partial: portfolio.partial },
+      balances,
+      positions,
+      openOrders: orders,
+      recentActivity
+    });
+    if (activePage) centralSetPage(userId, activePage);
+  } catch { /* central sync must never break the V1 context read */ }
+
   return {
     schema: 'fbt.ai-context.v1',
     userId,
+    activePage,
     wallet,
     chains,
     balances,

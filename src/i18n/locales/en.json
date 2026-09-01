@@ -4325,7 +4325,8 @@
       "strategies": "Strategy",
       "plan": "Goals",
       "crosschain": "Cross-chain",
-      "history": "History"
+      "history": "History",
+      "brain": "Brain"
     },
     "compose": {
       "choose": "Choose an outcome",
@@ -5127,9 +5128,45 @@
       "failed": "That did not work",
       "venuePlan": "Venue profit plan (read-only)",
       "noYield": "No live yield feed is answering right now, so Base is the same as Bear. The plan is not guessing a yield in its place.",
-      "rebuild": "Rebuild with fresh market data",
-      "deviceScope": "These goals are saved for this device. Sign in with Telegram to keep them across devices."
-    }
+  "rebuild": "Rebuild with fresh market data",
+  "deviceScope": "These goals are saved for this device. Sign in with Telegram to keep them across devices.",
+  "healthTitle": "GOAL HEALTH",
+  "healthProb": "Goal Probability",
+  "healthBehind": "Behind Schedule",
+  "healthSuggest": "Suggested adjustment",
+  "healthAddMonthly": "Increase contribution by {{amount}}/month.",
+  "healthReduceTarget": "Reduce the target by {{amount}}.",
+  "healthExtend": "Extend the timeline by {{months}} month(s).",
+  "healthReview": "Review the plan settings.",
+  "profitPlan": "PROFIT PLAN",
+  "assumptionNote": "assumption-based, not a forecast",
+  "goalProbability": "Goal Probability",
+  "strategies": "Choose your risk",
+  "expectedReturn": "Expected Return",
+  "maxDrawdown": "Max Drawdown",
+  "futuresExposure": "Futures Exposure",
+  "futuresRec": "Recommended",
+  "futuresMax": "Maximum Allowed",
+  "futuresRisk": "Risk Contribution",
+  "forecast": "FORECAST",
+  "forecastNote": "what-if · under the same assumption band",
+  "whatIf": "What if…",
+  "whatIfCrypto": "Crypto −30%",
+  "whatIfCryptoUp": "Crypto +30%",
+  "whatIfMonthly": "Contribution +500/mo",
+  "computing": "Computing…",
+  "before": "Before",
+  "after": "After",
+  "delta": "Δ",
+  "simulator": "Monthly contribution",
+  "simMonthly": "{{amount}}",
+  "simSingle": "Contribution {{amount}} → {{probability}}% chance of hitting the target.",
+  "strategy": {
+    "conservative": "Conservative",
+    "moderate": "Balanced",
+    "aggressive": "Aggressive"
+  }
+}
   },
   "whales": {
     "title": "Whale Tracking",
@@ -7434,12 +7471,661 @@
     "subtitle": "Practice without real money",
     "virtualBalance": "Virtual Balance",
     "practiceOnly": "Practice only — not real money",
-    "level": "Level",
+    "level": {
+      "badgesEarned": "{{earned}}/{{total}} badges earned",
+      "level": "Level",
+      "currentLevel": "Current level",
+      "xp": "XP",
+      "progressToNext": "Progress to next",
+      "disciplineScores": "Discipline scores",
+      "predictionAccuracy": "Prediction accuracy",
+      "tradeWinRate": "Trade win rate",
+      "strategiesBacktested": "Strategies backtested",
+      "challengeWins": "Challenge wins",
+      "lessonsCompleted": "Lessons completed",
+      "badges": "Badges",
+      "badgesList": {
+        "predictor": {
+          "name": "Predictor",
+          "desc": "Make 10 predictions"
+        },
+        "trader": {
+          "name": "Trader",
+          "desc": "Open 5 paper trades"
+        },
+        "graduate": {
+          "name": "Graduate",
+          "desc": "Complete 5 lessons"
+        },
+        "strategist": {
+          "name": "Strategist",
+          "desc": "Run 3 strategy backtests"
+        },
+        "riskpro": {
+          "name": "Risk Pro",
+          "desc": "Hit 90+ Risk Mgmt Score on 3 trades"
+        },
+        "defi": {
+          "name": "DeFi Curious",
+          "desc": "Try all 5 DeFi primitives"
+        },
+        "master": {
+          "name": "Market Master",
+          "desc": "Reach Level 10"
+        }
+      },
+      "notice": "XP is awarded for practice, not for profit. A losing trade with a disciplined setup earns more XP than a winning trade with no stop loss — because the discipline is what compounds over a career."
+    },
     "accuracy": "Accuracy",
     "rank": "Rank",
     "practice": "Practice",
     "learn": "Learn",
     "advanced": "Advanced",
-    "more": "More tools"
+    "more": "More tools",
+    "aiCoach": "AI Coach",
+    "you": "You",
+    "xpRange": "{{cur}} / {{next}} XP",
+    "xpValue": "{{n}} XP",
+    "up": "Up",
+    "down": "Down",
+    "neutral": "Neutral",
+    "long": "Long",
+    "short": "Short",
+    "tryAgain": "Try again",
+    "nextScenario": "Next scenario",
+    "nextLesson": "Next lesson",
+    "on": "ON",
+    "off": "OFF",
+    "cards": {
+      "predict": {
+        "title": "Prediction",
+        "sub": "Call the next move"
+      },
+      "paper": {
+        "title": "Paper Trading",
+        "sub": "Trade with virtual money"
+      },
+      "invest": {
+        "title": "Investment Sim",
+        "sub": "Build a portfolio"
+      },
+      "challenges": {
+        "title": "Challenges",
+        "sub": "Market scenarios"
+      },
+      "lessons": {
+        "title": "Lessons",
+        "sub": "Learn by doing"
+      },
+      "risk": {
+        "title": "Risk Trainer",
+        "sub": "Size, stop, R:R"
+      },
+      "strategy": {
+        "title": "Strategy Lab",
+        "sub": "Build & backtest"
+      },
+      "defi": {
+        "title": "DeFi Lab",
+        "sub": "LP, stake, borrow"
+      },
+      "whatif": {
+        "title": "What-If?",
+        "sub": "Scenario explorer"
+      },
+      "compare": {
+        "title": "Compare",
+        "sub": "A vs B"
+      },
+      "level": {
+        "title": "My Level",
+        "sub": "XP · Badges"
+      },
+      "leaderboard": {
+        "title": "Leaderboard",
+        "sub": "Virtual rank"
+      }
+    },
+    "screens": {
+      "predict": {
+        "title": "Prediction",
+        "sub": "Call the next move — compare with AI"
+      },
+      "paper": {
+        "title": "Paper Trading",
+        "sub": "Trade with virtual money. No risk, all the lessons."
+      },
+      "invest": {
+        "title": "Investment Simulator",
+        "sub": "Build a portfolio. Run it over time. Compare."
+      },
+      "challenges": {
+        "title": "Market Challenges",
+        "sub": "Decide under pressure. Learn from the consequence."
+      },
+      "lessons": {
+        "title": "Lessons",
+        "sub": "Bite-sized. One question, one lesson."
+      },
+      "risk": {
+        "title": "Risk Trainer",
+        "sub": "Change a number. See the answer. Build the instinct."
+      },
+      "strategy": {
+        "title": "Strategy Lab",
+        "sub": "Build a rule, backtest it, see what the math says."
+      },
+      "defi": {
+        "title": "DeFi Lab",
+        "sub": "Lend, borrow, LP, farm, stake. All with virtual money."
+      },
+      "whatif": {
+        "title": "What-If?",
+        "sub": "If this happens, what happens to your portfolio?"
+      },
+      "compare": {
+        "title": "Compare Portfolios",
+        "sub": "Same horizon, different mix. Which wins?"
+      },
+      "level": {
+        "title": "Your Lab Level"
+      },
+      "leaderboard": {
+        "title": "Lab Leaderboard"
+      }
+    },
+    "levelNames": {
+      "beginner": "Beginner",
+      "trader": "Trader",
+      "analyst": "Analyst",
+      "strategist": "Strategist",
+      "portfolioManager": "Portfolio Manager",
+      "marketMaster": "Market Master"
+    },
+    "durations": {
+      "1m": "1 min",
+      "5m": "5 min",
+      "15m": "15 min"
+    },
+    "prediction": {
+      "livePrice": "Live price",
+      "vsUsd": "vs USD",
+      "aiPredicts": "AI predicts",
+      "coin": "Coin",
+      "duration": "Duration",
+      "confidence": "Your confidence",
+      "guess": "Guess",
+      "strongConviction": "Strong conviction",
+      "recentCalls": "Recent calls",
+      "yourAccuracyVsAi": "Your accuracy vs AI",
+      "ai": "AI",
+      "yourStanding": "Your standing",
+      "xp": "XP",
+      "globalRank": "Global rank",
+      "totalPredictions": "Total predictions",
+      "openRound": "Open round",
+      "entry": "Entry",
+      "yourCall": "Your call",
+      "confidenceLabel": "Confidence",
+      "secondsRemaining": "{{s}}s remaining",
+      "notice": "Every prediction earns XP. Correct calls earn more. Your accuracy is shown next to the AI’s so you can see what “the market” was doing — and where your reads beat the model.",
+      "coachLive": "Round is live. The countdown is the only thing that matters now — do not stare at the price.",
+      "coachLowConfidence": "Confidence below 40% is a guess, not a call. Wait for a stronger setup.",
+      "coachNeutral": "Pick a direction only if you would still hold this view with the screen off."
+    },
+    "paper": {
+      "livePrice": "Live price",
+      "coin": "Coin",
+      "side": "Side",
+      "buyLong": "Buy / Long",
+      "sellShort": "Sell / Short",
+      "order": "Order",
+      "quantity": "Quantity (in coin)",
+      "stopLossPrice": "Stop Loss (price)",
+      "takeProfitPrice": "Take Profit (price)",
+      "tradeMath": "Trade math",
+      "positionValue": "Position value",
+      "size": "Size",
+      "ofBalance": "{{pct}}% of balance",
+      "risk": "Risk",
+      "reward": "Reward",
+      "rr": "R:R",
+      "execute": "Execute {{action}}",
+      "buy": "Buy",
+      "sell": "Sell",
+      "stopLossHit": "Stop loss hit",
+      "takeProfitHit": "Take profit hit",
+      "closedManually": "Closed manually",
+      "positionClosed": "Position closed",
+      "disciplinePays": "Discipline pays off.",
+      "lossGoodTrade": "Even a loss can be a good trade if the rules were followed.",
+      "entry": "Entry",
+      "exit": "Exit",
+      "pnl": "P&L",
+      "riskMgmtScore": "Risk Mgmt Score",
+      "recentTrades": "Recent trades",
+      "stats": "Stats",
+      "totalTrades": "Total trades",
+      "winRate": "Win rate",
+      "balance": "Balance",
+      "openPosition": "Open position",
+      "symbol": "Symbol",
+      "current": "Current",
+      "stopLoss": "Stop Loss",
+      "takeProfit": "Take Profit",
+      "unrealizedPnl": "Unrealized P&L",
+      "closeAtMarket": "Close at market",
+      "coachLive": "Position is live. Watch the PnL but do not touch the stop — that is the point of having one.",
+      "coachNoStop": "Every trade needs a stop loss. If you cannot define your loss, you do not have a trade.",
+      "coachNoTp": "A trade without a target is a trade that will reverse and give back its gains.",
+      "coachOverSize": "Position above 10% of your balance is reckless. Cut it down or skip this one.",
+      "coachBadRr": "R:R below 1.5 means you need a 70% win rate to break even. Wait for a better setup.",
+      "coachGood": "Setup looks disciplined. Execute."
+    },
+    "assets": {
+      "BTC": "Bitcoin",
+      "ETH": "Ethereum",
+      "SOL": "Solana",
+      "USDC": "USDC (stable)",
+      "GOLD": "Gold",
+      "STOCKS": "S&P 500"
+    },
+    "invest": {
+      "horizons": {
+        "1d": "1 Day",
+        "1w": "1 Week",
+        "1m": "1 Month",
+        "3m": "3 Months",
+        "1y": "1 Year"
+      },
+      "capital": "Capital",
+      "availableBalance": "Available virtual balance",
+      "portfolioName": "Portfolio name",
+      "allocation": "Allocation",
+      "total": "Total",
+      "tapRunToNormalise": "tap Run to normalise",
+      "normalise": "Normalise to 100%",
+      "timeHorizon": "Time horizon",
+      "runSimulation": "Run Simulation",
+      "resultOver": "Result over {{horizon}}",
+      "finalValue": "Final value",
+      "return": "Return",
+      "maxDrawdown": "Max drawdown",
+      "vsBtc": "vs 100% BTC",
+      "savedPortfolios": "Saved portfolios",
+      "notice": "Diversification does not promise higher returns — it promises lower drawdowns. A 60/40 BTC/ETH mix often beats 100% BTC on a risk-adjusted basis even when it lags on raw return.",
+      "coachBeatBtc": "Your mix beat 100% BTC. Diversification paid off.",
+      "coachPositive": "Positive, but BTC would have done better. Sometimes concentration wins.",
+      "coachDown": "Down period. If your drawdown stayed under 30%, the strategy held up."
+    },
+    "challenges": {
+      "chooseScenario": "Choose a scenario",
+      "whatDoYouDo": "What do you do?",
+      "yourPortfolio": "Your portfolio",
+      "yourHistory": "Your history",
+      "noChallengesYet": "No challenges yet. Make your first call above.",
+      "notice": "There is rarely one “right” answer in a real market — there is the answer that fits YOUR strategy and risk tolerance. The lesson here is what to think about, not what to do."
+    },
+    "lesson": {
+      "progress": "Progress",
+      "pick": "Pick a lesson",
+      "totalXp": "Total XP",
+      "correct": "Correct",
+      "notQuite": "Not quite",
+      "score": "Score: {{score}}/100",
+      "alreadyDone": "You have already completed this lesson (best score: {{score}}%). You can review the explanation any time."
+    },
+    "scenarios": {
+      "crash-30": {
+        "title": "Market Crash",
+        "short": "Market Crash",
+        "teaser": "BTC drops 18%, ETH -24%, SOL -31%. You have $50,000 virtual.",
+        "choices": {
+          "sell": {
+            "label": "Sell everything",
+            "lesson": "Selling at the bottom locks in losses. You exited at the worst possible moment."
+          },
+          "hold": {
+            "label": "Hold and wait",
+            "lesson": "Holding through the crash preserves capital. If your thesis is intact, the recovery is the reward."
+          },
+          "buy": {
+            "label": "Buy the dip",
+            "lesson": "If you had dry powder, buying the dip is what professionals do. Risk only what you can afford to lose."
+          },
+          "reduce": {
+            "label": "Reduce risk, keep core",
+            "lesson": "Trimming leverage and rotating to stables cuts drawdown by 32%. Smart rebalancing beats heroics."
+          }
+        }
+      },
+      "bull-25": {
+        "title": "BTC +25%",
+        "short": "BTC +25%",
+        "teaser": "BTC just ripped 25% in a week. You have $20,000 virtual.",
+        "choices": {
+          "fomo": {
+            "label": "All-in on BTC now",
+            "lesson": "Chasing a 25% green candle is the textbook “buy high, sell low” trap."
+          },
+          "take": {
+            "label": "Take 30% profits",
+            "lesson": "Taking partial profits locks in gains and leaves the rest to run. This is how professionals derisk."
+          },
+          "hold": {
+            "label": "Hold and add on pullback",
+            "lesson": "Wait for a retest of the breakout level. If it holds, add. If it fails, you saved capital."
+          },
+          "rotate": {
+            "label": "Rotate 50% to alts",
+            "lesson": "Rotation amplifies returns if alts lead, but lag if BTC keeps running. Know your risk."
+          }
+        }
+      },
+      "defi-hack": {
+        "title": "DeFi Protocol Hack",
+        "short": "DeFi Hack",
+        "teaser": "A major protocol you LP into gets exploited. TVL drains 80%.",
+        "choices": {
+          "panic": {
+            "label": "Withdraw everything immediately",
+            "lesson": "The right call. Hack or no hack, the lesson is: never LP what you cannot afford to lose entirely."
+          },
+          "hope": {
+            "label": "Wait for recovery",
+            "lesson": "Protocol exploits rarely recover. The treasury is gone. Hope is not a strategy."
+          },
+          "claim": {
+            "label": "Claim the insurance fund",
+            "lesson": "If the protocol had an active cover, you recover some. Always check before you deposit."
+          }
+        }
+      },
+      "rates-hike": {
+        "title": "Interest Rate Hike",
+        "short": "Rate Hike",
+        "teaser": "Central bank raises rates 75bps. Risk-off across the board.",
+        "choices": {
+          "flight": {
+            "label": "Move to gold + stables",
+            "lesson": "Defensive positioning shines in rate-hike cycles. Stables and gold preserve capital."
+          },
+          "ignore": {
+            "label": "Ignore and hold crypto",
+            "lesson": "Macro matters. Ignoring rates is a recipe for drawdown."
+          },
+          "short": {
+            "label": "Short the leaders with leverage",
+            "lesson": "Leverage during a regime change is a fast way to be right and still lose money on the wick."
+          }
+        }
+      },
+      "liquidation": {
+        "title": "Cascade Liquidation",
+        "short": "Liquidation",
+        "teaser": "A whale gets liquidated. $400M in long positions gone in 4 minutes.",
+        "choices": {
+          "catch": {
+            "label": "Try to catch the falling knife",
+            "lesson": "Cascades accelerate. Wait for the chart to stabilise, THEN act."
+          },
+          "stable": {
+            "label": "Park in stables, wait 24h",
+            "lesson": "In a liquidation cascade, doing nothing is often the best trade. Volatility is the risk."
+          },
+          "hedge": {
+            "label": "Open a hedge short",
+            "lesson": "A small hedge offsets a bigger spot loss. Risk management in practice."
+          }
+        }
+      }
+    },
+    "lessons": {
+      "lesson-01": {
+        "title": "Market Basics",
+        "question": "What does “market cap” mean?",
+        "options": [
+          "The price of one coin",
+          "Price × circulating supply",
+          "The amount of money in the market",
+          "The daily volume"
+        ],
+        "explanation": "Market cap = current price × number of coins in circulation. A $2 coin with 10B supply has a $20B cap — same as a $20 coin with 1B supply."
+      },
+      "lesson-02": {
+        "title": "Risk Management",
+        "question": "What is the “1% rule”?",
+        "options": [
+          "Keep 1% of your portfolio in cash",
+          "Never risk more than 1% of capital on a single trade",
+          "Take 1% profit every day",
+          "Use 1x leverage only"
+        ],
+        "explanation": "Risk 1% (or less) of your capital per trade. Ten losses in a row only costs you 10%. This is how professionals survive bad streaks."
+      },
+      "lesson-03": {
+        "title": "Paper Trading",
+        "question": "Why is paper trading useful?",
+        "options": [
+          "It makes real money",
+          "It is required by law",
+          "It lets you practice without losing real money",
+          "It guarantees future profits"
+        ],
+        "explanation": "Paper trading uses virtual money to practice. You learn the mechanics, the emotions, the discipline — without the cost of real mistakes."
+      },
+      "lesson-04": {
+        "title": "What is Liquidation?",
+        "question": "You have $10,000 collateral and borrow $6,000. ETH drops 20%. What happens?",
+        "options": [
+          "Nothing — your collateral is fine",
+          "Your risk increases, but no liquidation yet",
+          "You are liquidated — the loan was overcollateralised but the buffer is gone",
+          "You make a profit on the short"
+        ],
+        "explanation": "Collateral: $10,000 → $8,000 (after 20% drop). Debt: $6,000. Health factor: 8/6 = 1.33. Many protocols liquidate below 1.25. You are RIGHT at the edge — one more 5% drop and you are gone."
+      },
+      "lesson-05": {
+        "title": "Impermanent Loss",
+        "question": "You LP into ETH/USDC. ETH goes up 50% while USDC stays flat. What happens?",
+        "options": [
+          "You gain exactly 50% on the ETH side",
+          "You end up with LESS ETH than if you had just held it",
+          "The pool rebalances for you automatically — no impact",
+          "You lose all your USDC"
+        ],
+        "explanation": "Impermanent loss: the pool sells your ETH as it rises (to keep the 50/50 ratio). You end up with less ETH than a simple hold — even though the LP fees may compensate. “Impermanent” because if ETH reverts, the loss disappears. In practice, it rarely fully reverts."
+      },
+      "lesson-06": {
+        "title": "Diversification",
+        "question": "Why hold multiple assets instead of just BTC?",
+        "options": [
+          "It is required by regulation",
+          "It reduces single-asset risk and smooths returns",
+          "It guarantees profits",
+          "It is easier to manage"
+        ],
+        "explanation": "No asset goes up forever. A 60/40 BTC/ETH mix has a lower drawdown than 100% BTC, with most of the upside. Diversification is the only “free lunch” in finance."
+      },
+      "lesson-07": {
+        "title": "Stop Loss",
+        "question": "You enter a long at $100 with a $95 stop. What is your max loss per unit?",
+        "options": [
+          "$95",
+          "$5 (5%)",
+          "$100",
+          "It depends on leverage"
+        ],
+        "explanation": "Stop loss defines your worst case BEFORE you enter. $100 - $95 = $5. The discipline of a pre-set stop is what separates traders from gamblers."
+      },
+      "lesson-08": {
+        "title": "Risk / Reward",
+        "question": "You risk $100 to make $300. What is your R:R?",
+        "options": [
+          "1:1",
+          "1:3",
+          "3:1",
+          "Depends on win rate"
+        ],
+        "explanation": "Risk $100, reward $300 → 1:3 R:R. You can lose 75% of the time and still break even. This is why professionals wait for high-R:R setups."
+      }
+    },
+    "risk": {
+      "inputs": "Inputs",
+      "capital": "Capital ($)",
+      "entryPrice": "Entry price",
+      "riskPerTrade": "Risk per trade (%)",
+      "stopLoss": "Stop loss (%)",
+      "takeProfit": "Take profit (%)",
+      "positionSizing": "Position sizing",
+      "positionSizeUnits": "Position size (units)",
+      "positionValue": "Position value",
+      "potentialLoss": "Potential loss",
+      "potentialProfit": "Potential profit",
+      "rrAnalysis": "R:R analysis",
+      "rr": "R:R",
+      "winRateBreakEven": "Win rate needed to break even",
+      "winRate2x": "Win rate needed for 2× growth (over 100 trades)",
+      "notice": "The 1% rule (risk <1% of capital per trade) means ten losses in a row only cost you 10%. This is how professionals survive bad streaks without blowing the account.",
+      "coachAggressive": "Risk above 2% per trade is aggressive. 1% is the floor most professionals stick to.",
+      "coachBadRr": "R:R below 1.5 means you need a 70%+ win rate. Wait for better setups.",
+      "coachGood": "3:1 R:R is the sweet spot. Even a 40% win rate is profitable here.",
+      "coachNeutral": "Setup looks reasonable. Now the question is whether you would actually pull the trigger."
+    },
+    "strategy": {
+      "strategy": "Strategy",
+      "strategyName": "Strategy name",
+      "ruleIf": "IF",
+      "ruleThen": "THEN",
+      "andMa": "AND price > MA200",
+      "presets": "Presets",
+      "presetRsiReversal": "RSI Reversal",
+      "presetTrendFollowing": "Trend Following",
+      "presetDipBuyer": "Dip Buyer",
+      "entryRules": "Entry rules",
+      "buyWhenRsi": "Buy when RSI below",
+      "onlyAboveMa": "Only buy above 200-day MA",
+      "position": "Position",
+      "positionSize": "Position size (% of cash)",
+      "exit": "Exit",
+      "stopLoss": "Stop loss",
+      "takeProfit": "Take profit",
+      "runBacktest": "Run Backtest",
+      "return": "Return",
+      "overDays": "Over {{days}} days · {{trades}} trades",
+      "winRate": "Win rate",
+      "maxDrawdown": "Max drawdown",
+      "sharpe": "Sharpe ratio",
+      "finalCash": "Final cash",
+      "equityCurve": "Equity curve",
+      "savedStrategies": "Saved strategies",
+      "notice": "Backtests run on synthetic data. The numbers are reproducible but they do NOT include slippage, fees, funding rates, or the fact that a crowded trade moves the market against you. Use this to compare ideas, not to pick a winner.",
+      "coachSharpe": "Sharpe above 1.5 is excellent. Real markets rarely give you this — forward-test before trusting it.",
+      "coachDrawdown": "Drawdown above 30% is hard to stomach live. Either cut the position size or tighten the stop.",
+      "coachWinRate": "Win rate below 40% means R:R is doing the heavy lifting. Make sure the reward justifies the misses.",
+      "coachBalanced": "Setup looks balanced. Try changing one rule at a time to see which matters most.",
+      "coachNoRules": "A strategy without an entry AND exit rule is a hope, not a plan. Define both before backtesting."
+    },
+    "defi": {
+      "choosePrimitive": "Choose primitive",
+      "lend": "Lend",
+      "borrow": "Borrow",
+      "lp": "LP",
+      "farm": "Farm",
+      "stake": "Stake",
+      "yourHistory": "Your DeFi history",
+      "days": "{{n}}d",
+      "supplyUsdc": "Supply USDC, earn APY",
+      "amount": "Amount",
+      "apy": "APY",
+      "duration": "Duration",
+      "apyForDays": "{{apy}}% APY for {{days}} days",
+      "supplyVirtual": "Supply virtual",
+      "borrowAgainst": "Borrow against collateral",
+      "collateral": "Collateral (USD)",
+      "ltv": "Loan-to-Value",
+      "liqThreshold": "Liquidation threshold",
+      "youCanBorrow": "You can borrow",
+      "liqPrice": "Liquidation price",
+      "collateralRatio": "Current collateral ratio",
+      "openVirtualPosition": "Open virtual position",
+      "addLiquidity": "Add liquidity to ETH/USDC",
+      "deposit": "Deposit",
+      "poolApr": "Pool APR",
+      "priceChangeEth": "Price change of ETH",
+      "impermanentLoss": "Impermanent loss",
+      "feesEarned": "Fees earned",
+      "netReturn": "Net return",
+      "addVirtualLiquidity": "Add virtual liquidity",
+      "farmTitle": "Farm — stake LP, earn extra",
+      "lpTokenValue": "LP token value",
+      "baseApr": "Base APR",
+      "rewardApr": "Reward APR (extra token)",
+      "totalApr": "Total APR",
+      "afterDays": "After {{days}} days",
+      "startVirtualFarm": "Start virtual farm",
+      "stakeTitle": "Stake — lock and earn",
+      "stakeAmount": "Stake amount",
+      "lockDuration": "Lock duration",
+      "stakeVirtual": "Stake virtual"
+    },
+    "whatif": {
+      "events": {
+        "btc-crash": "BTC crash",
+        "eth-drop": "ETH drop",
+        "btc-rally": "BTC rally",
+        "stable-depeg": "Stablecoin depeg",
+        "gold-up": "Gold surge",
+        "stocks-down": "Stock market down",
+        "sol-explode": "SOL +60%"
+      },
+      "yourPortfolio": "Your portfolio (default mix)",
+      "shocksApplied": "Shocks applied",
+      "noShocks": "No shocks yet. Add one below.",
+      "runScenario": "Run Scenario",
+      "portfolioImpact": "Portfolio impact",
+      "netEffect": "Net effect of all shocks combined",
+      "pastScenarios": "Past scenarios",
+      "shocksCount": "{{n}} shock(s)",
+      "notice": "The best time to decide what to do in a crash is BEFORE the crash. Run a few of these. Notice which mix holds up. Then you know what to actually own.",
+      "coachPanic": "A 15%+ drawdown is where most people panic. Plan in advance so you act from rules, not fear.",
+      "coachDown": "Down but survivable. This is where a stop loss or hedge matters most.",
+      "coachNeutral": "Plan for these in advance — the worst decisions are the ones made in the moment."
+    },
+    "compare": {
+      "horizon": "Horizon",
+      "horizons": {
+        "1m": "1M",
+        "3m": "3M",
+        "1y": "1Y"
+      },
+      "portfolioA": "Portfolio A",
+      "portfolioB": "Portfolio B",
+      "presetBtc": "100% BTC",
+      "presetMix": "BTC/ETH/USDC",
+      "presetDiversified": "Diversified",
+      "total": "Total",
+      "compare": "Compare",
+      "drawdownFinal": "Drawdown {{dd}}% · Final ${{final}}",
+      "equityCurves": "Equity curves",
+      "notice": "Two portfolios with the same return can have wildly different drawdowns. The one that lets you sleep at night is usually the better one.",
+      "coachA": "A beat B on raw return. But check the drawdown — that is what hurts in real life.",
+      "coachB": "B won. Diversification can outperform even against concentrated bets over short horizons.",
+      "coachTie": "A wash. Same return, different risk. That is the diversification trade."
+    },
+    "leaderboard": {
+      "youAre": "You are #{{rank}} of {{total}} · virtual only",
+      "topThisWeek": "Top this week",
+      "howXpEarned": "How XP is earned",
+      "correctPrediction": "Correct prediction",
+      "winningTrade": "Winning trade",
+      "challengeWin": "Challenge win",
+      "lesson": "Lesson",
+      "strategyBacktest": "Strategy backtest",
+      "defiSim": "DeFi sim",
+      "whatIf": "What-if",
+      "xpAmount": "+{{n}} XP",
+      "notice": "The leaderboard is a virtual score. There is no prize, no payout, no ranking that affects anything outside Lab. The XP is meant to track practice, not to gamify trading."
+    }
   }
 }

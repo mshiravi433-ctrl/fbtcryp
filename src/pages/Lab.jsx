@@ -45,15 +45,15 @@ import '../styles/lab-v2.css';
 import '../styles/lab-modern.css'; // re-use the older glass / aurora styles that already exist
 
 const GROUPS = [
-  { id: 'practice', label: 'Practice', Icon: null, Group: PracticeGroup },
-  { id: 'learn', label: 'Learn', Icon: null, Group: LearnGroup },
-  { id: 'advanced', label: 'Advanced', Icon: null, Group: AdvancedGroup }
+  { id: 'practice', Group: PracticeGroup },
+  { id: 'learn', Group: LearnGroup },
+  { id: 'advanced', Group: AdvancedGroup }
 ];
 
 const MORE_TOOLS = [
-  { id: 'compare', title: '⚖️ Compare', sub: 'A vs B' },
-  { id: 'level', title: '🏆 My Level', sub: 'XP · Badges' },
-  { id: 'leaderboard', title: '🎖️ Leaderboard', sub: 'Virtual rank' }
+  { id: 'compare', icon: '⚖️' },
+  { id: 'level', icon: '🏆' },
+  { id: 'leaderboard', icon: '🎖️' }
 ];
 
 export default function Lab() {
@@ -112,8 +112,8 @@ export default function Lab() {
             ←
           </button>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>🧪 {t('lab.title', 'Lab')}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('lab2.subtitle', 'Practice without real money')}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>🧪 {t('lab2.title')}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('lab2.subtitle')}</div>
           </div>
         </div>
 
@@ -127,7 +127,7 @@ export default function Lab() {
               className={`lab2-tab ${tab === g.id && !tool ? 'active' : ''}`}
               onClick={() => selectTab(g.id)}
             >
-              {g.label}
+              {t(`lab2.${g.id}`)}
             </button>
           ))}
         </div>
@@ -181,7 +181,7 @@ export default function Lab() {
           <div className="lab2-group">
             <div className="lab2-group-title">
               <span className="lab2-group-emoji">🧰</span>
-              {t('lab2.more', 'More tools')}
+              {t('lab2.more')}
             </div>
             <div className="lab2-grid">
               {MORE_TOOLS.map((m) => (
@@ -191,9 +191,9 @@ export default function Lab() {
                   onClick={() => selectTool(m.id)}
                 >
                   <div className="lab2-card-glow amber" />
-                  <div className="lab2-card-icon">{m.title.split(' ')[0]}</div>
-                  <div className="lab2-card-title">{m.title.split(' ').slice(1).join(' ')}</div>
-                  <div className="lab2-card-sub">{m.sub}</div>
+                  <div className="lab2-card-icon">{m.icon}</div>
+                  <div className="lab2-card-title">{t(`lab2.cards.${m.id}.title`)}</div>
+                  <div className="lab2-card-sub">{t(`lab2.cards.${m.id}.sub`)}</div>
                 </button>
               ))}
             </div>

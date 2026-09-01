@@ -3069,7 +3069,8 @@
     },
     "tab": {
       "plan": "الأهداف",
-      "history": "السجل"
+      "history": "السجل",
+      "brain": "الدماغ المركزي"
     },
     "rail": {
       "label": "شريط تحكم Intent OS",

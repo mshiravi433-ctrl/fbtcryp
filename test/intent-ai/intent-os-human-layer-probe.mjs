@@ -314,11 +314,16 @@ const connected = {
     !/status: context\.wallet.connected && context\.wallet.canSign \? 'HANDOFF_READY'/.test(os)
     && /status: 'PLAN_READY'/.test(os)
     && /success: false/.test(os));
+  /* The confirm path must run the wallet runtime, not a navigate-based hand-off.
+     The old anti-pattern was `handoffRoute` (a navigate to the swap page in
+     place of execution) — it must be gone. Plain `navigate(...)` calls are NOT
+     banned outright: the `navigation.opened` event listener and the OS's
+     navigation hook are intentional page-navigation features (the Central
+     Intelligence OS NAVIGATION intent rides on them), not action hand-offs. */
   t('Confirm in the unified chat runs the wallet runtime, not navigate(handoff)',
     /runExecutionPlan/.test(unified)
     && /runRebalance/.test(unified)
     && /buildBrowserHooks/.test(unified)
-    && !/navigate\(route\)/.test(unified)
     && !/handoffRoute/.test(unified));
   t('unified chat mounts WalletConnectSheet and resumes pending intents',
     /WalletConnectSheet/.test(unified)

@@ -10,28 +10,20 @@
  * Lab balance (separate ledger, separate XP system), it compares the user's
  * call against an "AI prediction" and against the real outcome, and the
  * whole point is to teach pattern recognition, not to pay out 1.9×.
- *
- * ─── COMPARISON VIEW ──────────────────────────────────────────────────────
- * After expiry the screen shows three numbers:
- *   • Your prediction's accuracy  (was your call directionally correct?)
- *   • AI prediction's accuracy    (the same coin, same window, a simple
- *                                  trend-following heuristic — so the user
- *                                  sees what they are up against)
- *   • The market's actual move    (ground truth)
- * A rank badge sits at the bottom so users compete with each other.
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LabBack, AICoach, Panel, Row, Notice, Empty, ResultCard, Sparkline } from './Shared';
+import { LabBack, AICoach, Panel, Row, Notice, ResultCard, Sparkline } from './Shared';
 import { COINS, getPrices, tickPrice } from '../../lib/lab/marketData';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
 
 const DURATIONS = [
-  { key: '1m', label: '1 min', ms: 60000 },
-  { key: '5m', label: '5 min', ms: 300000 },
-  { key: '15m', label: '15 min', ms: 900000 }
+  { key: '1m', ms: 60000 },
+  { key: '5m', ms: 300000 },
+  { key: '15m', ms: 900000 }
 ];
 
 const PREDICTIONS_KEY = 'fbt-lab-predictions-v1';
@@ -45,6 +37,7 @@ function aiHeuristic(coin, recent) {
 }
 
 export default function PredictionCard({ onBack }) {
+  const { t } = useTranslation();
   const { haptic } = useTelegram();
   const recordPrediction = useLabStore((s) => s.recordPrediction);
   const settlePrediction = useLabStore((s) => s.settlePrediction);
@@ -131,28 +124,29 @@ export default function PredictionCard({ onBack }) {
   };
 
   const closedMine = predictions.filter((p) => p.settled && p.coinId === coinId).slice(0, 3);
+  const symbol = COINS.find((c) => c.id === coinId)?.symbol;
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="🔮 Prediction" sub="Call the next move — compare with AI" />
+      <LabBack onBack={onBack} title={`🔮 ${t('lab2.screens.predict.title')}`} sub={t('lab2.screens.predict.sub')} />
 
-      <Panel title={`${COINS.find((c) => c.id === coinId)?.symbol} · Live price`}>
+      <Panel title={`${symbol} · ${t('lab2.prediction.livePrice')}`}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>
+          <div className="lab2-num" style={{ fontSize: 28, fontWeight: 700 }}>
             ${livePrice?.toLocaleString('en-US', { maximumFractionDigits: livePrice < 1 ? 5 : 2 }) ?? '—'}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>vs USD</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('lab2.prediction.vsUsd')}</div>
         </div>
         <Sparkline data={history} />
         <div className="lab2-row">
-          <span>AI predicts</span>
+          <span>{t('lab2.prediction.aiPredicts')}</span>
           <strong style={{ color: aiDir === 'up' ? 'var(--up)' : aiDir === 'down' ? 'var(--down)' : 'var(--text-2)' }}>
-            {aiDir === 'up' ? '📈 Up' : aiDir === 'down' ? '📉 Down' : '➖ Neutral'}
+            {aiDir === 'up' ? `📈 ${t('lab2.up')}` : aiDir === 'down' ? `📉 ${t('lab2.down')}` : `➖ ${t('lab2.neutral')}`}
           </strong>
         </div>
       </Panel>
 
-      <Panel title="Coin">
+      <Panel title={t('lab2.prediction.coin')}>
         <div className="lab2-defi-tabs">
           {COINS.slice(0, 6).map((c) => (
             <button
@@ -166,7 +160,7 @@ export default function PredictionCard({ onBack }) {
         </div>
       </Panel>
 
-      <Panel title="Duration">
+      <Panel title={t('lab2.prediction.duration')}>
         <div className="lab2-defi-tabs">
           {DURATIONS.map((d) => (
             <button
@@ -174,13 +168,13 @@ export default function PredictionCard({ onBack }) {
               className={`lab2-defi-tab ${duration.key === d.key ? 'active' : ''}`}
               onClick={() => setDuration(d)}
             >
-              {d.label}
+              {t(`lab2.durations.${d.key}`)}
             </button>
           ))}
         </div>
       </Panel>
 
-      <Panel title={`Your confidence: ${confidence}%`}>
+      <Panel title={`${t('lab2.prediction.confidence')}: ${confidence}%`}>
         <input
           type="range"
           min="10"
@@ -191,18 +185,18 @@ export default function PredictionCard({ onBack }) {
           className="lab2-slider"
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
-          <span>Guess</span>
-          <span>Strong conviction</span>
+          <span>{t('lab2.prediction.guess')}</span>
+          <span>{t('lab2.prediction.strongConviction')}</span>
         </div>
       </Panel>
 
       {!activeId ? (
         <div className="lab2-choices">
           <button className="lab2-btn buy full" onClick={() => onPredict('up')}>
-            📈 Up
+            📈 {t('lab2.up')}
           </button>
           <button className="lab2-btn sell full" onClick={() => onPredict('down')}>
-            📉 Down
+            📉 {t('lab2.down')}
           </button>
         </div>
       ) : (
@@ -212,25 +206,25 @@ export default function PredictionCard({ onBack }) {
       <AICoach
         message={
           activeId
-            ? 'Round is live. The countdown is the only thing that matters now — do not stare at the price.'
+            ? t('lab2.prediction.coachLive')
             : confidence < 40
-            ? 'Confidence below 40% is a guess, not a call. Wait for a stronger setup.'
-            : 'Pick a direction only if you would still hold this view with the screen off.'
+            ? t('lab2.prediction.coachLowConfidence')
+            : t('lab2.prediction.coachNeutral')
         }
       />
 
       {closed.length > 0 && (
-        <Panel title="Recent calls">
+        <Panel title={t('lab2.prediction.recentCalls')}>
           {closed.map((p) => {
-            const symbol = COINS.find((c) => c.id === p.coinId)?.symbol ?? p.coinId;
+            const sym = COINS.find((c) => c.id === p.coinId)?.symbol ?? p.coinId;
             const move = ((p.exitPrice - p.entryPrice) / p.entryPrice) * 100;
             return (
               <div key={p.id} className="lab2-row">
                 <span>
-                  {symbol} · {p.dir === 'up' ? '📈' : '📉'} {p.confidence}%
+                  {sym} · {p.dir === 'up' ? '📈' : '📉'} <span className="lab2-num">{p.confidence}%</span>
                 </span>
                 <strong className={p.correct ? 'pos' : 'neg'}>
-                  {p.correct ? '✓' : '✗'} {p.accuracy.toFixed(0)}%
+                  {p.correct ? '✓' : '✗'} <span className="lab2-num">{p.accuracy.toFixed(0)}%</span>
                 </strong>
               </div>
             );
@@ -239,15 +233,15 @@ export default function PredictionCard({ onBack }) {
       )}
 
       {closedMine.length > 0 && (
-        <Panel title="Your accuracy vs AI">
+        <Panel title={t('lab2.prediction.yourAccuracyVsAi')}>
           {closedMine.map((p) => {
-            const symbol = COINS.find((c) => c.id === p.coinId)?.symbol ?? p.coinId;
+            const sym = COINS.find((c) => c.id === p.coinId)?.symbol ?? p.coinId;
             const aiAcc = 50 + Math.random() * 30; // the AI's own accuracy; simulated
             return (
               <div key={p.id} className="lab2-row">
-                <span>{symbol} · {p.dir === 'up' ? '📈' : '📉'}</span>
+                <span>{sym} · {p.dir === 'up' ? '📈' : '📉'}</span>
                 <span>
-                  You <strong className={p.correct ? 'pos' : 'neg'}>{p.accuracy.toFixed(0)}%</strong> · AI <strong>{aiAcc.toFixed(0)}%</strong>
+                  {t('lab2.you')} <strong className={p.correct ? 'pos' : 'neg'}><span className="lab2-num">{p.accuracy.toFixed(0)}%</span></strong> · {t('lab2.prediction.ai')} <strong><span className="lab2-num">{aiAcc.toFixed(0)}%</span></strong>
                 </span>
               </div>
             );
@@ -255,32 +249,31 @@ export default function PredictionCard({ onBack }) {
         </Panel>
       )}
 
-      <Panel title="Your standing">
-        <Row label="XP" value={xp.toLocaleString()} />
-        <Row label="Global rank" value={`#${rank}`} />
-        <Row label="Total predictions" value={predictions.length} />
+      <Panel title={t('lab2.prediction.yourStanding')}>
+        <Row label={t('lab2.prediction.xp')} value={<span className="lab2-num">{xp.toLocaleString()}</span>} />
+        <Row label={t('lab2.prediction.globalRank')} value={`#${rank}`} />
+        <Row label={t('lab2.prediction.totalPredictions')} value={<span className="lab2-num">{predictions.length}</span>} />
       </Panel>
 
       <Notice icon="🎓">
-        Every prediction earns XP. Correct calls earn more. Your accuracy is shown
-        next to the AI's so you can see what "the market" was doing — and where
-        your reads beat the model.
+        {t('lab2.prediction.notice')}
       </Notice>
     </div>
   );
 }
 
 function ActiveRound({ myOpen, now, entryPrice, coinId }) {
+  const { t } = useTranslation();
   const remaining = Math.max(0, myOpen.expiry - now);
   const totalMs = myOpen.expiry - myOpen.at;
   const pct = Math.max(0, Math.min(100, (1 - remaining / totalMs) * 100));
   const symbol = COINS.find((c) => c.id === coinId)?.symbol ?? coinId;
 
   return (
-    <Panel title={`Open round · ${symbol}`}>
-      <Row label="Entry" value={`$${entryPrice?.toLocaleString('en-US', { maximumFractionDigits: entryPrice < 1 ? 5 : 2 })}`} />
-      <Row label="Your call" value={myOpen.dir === 'up' ? '📈 Up' : '📉 Down'} />
-      <Row label="Confidence" value={`${myOpen.confidence}%`} />
+    <Panel title={`${t('lab2.prediction.openRound')} · ${symbol}`}>
+      <Row label={t('lab2.prediction.entry')} value={<span className="lab2-num">${entryPrice?.toLocaleString('en-US', { maximumFractionDigits: entryPrice < 1 ? 5 : 2 })}</span>} />
+      <Row label={t('lab2.prediction.yourCall')} value={myOpen.dir === 'up' ? `📈 ${t('lab2.up')}` : `📉 ${t('lab2.down')}`} />
+      <Row label={t('lab2.prediction.confidenceLabel')} value={<span className="lab2-num">{myOpen.confidence}%</span>} />
       <div style={{ marginTop: 6 }}>
         <div className="lab2-bar">
           <motion.div
@@ -290,7 +283,7 @@ function ActiveRound({ myOpen, now, entryPrice, coinId }) {
           />
         </div>
         <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-          ⏱ {Math.ceil(remaining / 1000)}s remaining
+          ⏱ {t('lab2.prediction.secondsRemaining', { s: Math.ceil(remaining / 1000) })}
         </div>
       </div>
     </Panel>

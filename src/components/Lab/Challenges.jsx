@@ -1,26 +1,24 @@
 /**
  * Market Challenges — what would you do if BTC just dropped 18%?
  * Pick an answer, the system explains the consequences.
- *
- * Each challenge:
- *   1. Sets a fictional market scenario with price shocks per asset.
- *   2. Offers 3-4 choices.
- *   3. Reveals the impact (in % portfolio change) and a one-line lesson.
- *   4. Awards XP for engaging, more for the "smart" outcome.
- *
- * The "smart" answer is rarely the one that makes the most money in the
- * moment — it is the one that a long-term profitable trader would pick.
- * That distinction is the whole point of the screen.
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LabBack, AICoach, Panel, Row, Notice, ResultCard } from './Shared';
+import { LabBack, Panel, Notice, ResultCard } from './Shared';
 import { SCENARIOS } from '../../lib/lab/scenarios';
 import { useLabStore } from '../../store/useLabStore';
 import { useTelegram } from '../../context/TelegramContext';
 
+const OUTCOME_KIND = {
+  smart: 'win', win: 'win', survive: 'win', late: 'loss', loss: 'loss',
+  panic: 'loss', risky: 'win', patient: 'win', disciplined: 'win',
+  safe: 'win', pain: 'loss', partial: 'win'
+};
+
 export default function Challenges({ onBack }) {
+  const { t } = useTranslation();
   const { haptic } = useTelegram();
   const completeChallenge = useLabStore((s) => s.completeChallenge);
   const completed = useLabStore((s) => s.challenges);
@@ -29,13 +27,14 @@ export default function Challenges({ onBack }) {
   const [revealed, setRevealed] = useState(false);
 
   const active = SCENARIOS.find((s) => s.id === activeId) ?? SCENARIOS[0];
+  const chosen = active.choices.find((c) => c.id === selectedChoice);
 
   const handleChoice = (choice) => {
     if (revealed) return;
     haptic?.('select');
     setSelectedChoice(choice.id);
     setRevealed(true);
-    const outcomeRank = { smart: 'win', win: 'win', survive: 'win', late: 'loss', loss: 'loss', panic: 'loss', risky: 'win', patient: 'win', disciplined: 'win', safe: 'win', pain: 'loss', partial: 'win' }[choice.outcome] || 'neutral';
+    const outcomeRank = OUTCOME_KIND[choice.outcome] || 'neutral';
     completeChallenge({
       scenarioId: active.id,
       choiceId: choice.id,
@@ -60,9 +59,9 @@ export default function Challenges({ onBack }) {
 
   return (
     <div className="lab2-screen">
-      <LabBack onBack={onBack} title="🎯 Market Challenges" sub="Decide under pressure. Learn from the consequence." />
+      <LabBack onBack={onBack} title={`🎯 ${t('lab2.screens.challenges.title')}`} sub={t('lab2.screens.challenges.sub')} />
 
-      <Panel title="Choose a scenario">
+      <Panel title={t('lab2.challenges.chooseScenario')}>
         <div className="lab2-defi-tabs">
           {SCENARIOS.map((s) => (
             <button
@@ -70,15 +69,15 @@ export default function Challenges({ onBack }) {
               className={`lab2-defi-tab ${activeId === s.id ? 'active' : ''}`}
               onClick={() => { setActiveId(s.id); reset(); }}
             >
-              {s.icon} {s.title.replace(/^[^A-Za-z]+/, '').split(' ').slice(0, 2).join(' ')}
+              {s.icon} {t(`lab2.scenarios.${s.id}.short`)}
             </button>
           ))}
         </div>
       </Panel>
 
-      <Panel title={active.title}>
+      <Panel title={`${active.icon} ${t(`lab2.scenarios.${active.id}.title`)}`}>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
-          {active.teaser}
+          {t(`lab2.scenarios.${active.id}.teaser`)}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           {active.shocks.map((s) => (
@@ -92,6 +91,7 @@ export default function Challenges({ onBack }) {
                 color: s.pct > 0 ? 'var(--up)' : s.pct < 0 ? 'var(--down)' : 'var(--text-2)',
                 fontWeight: 600
               }}
+              className="lab2-num"
             >
               {s.coin} {s.pct > 0 ? '+' : ''}{s.pct}%
             </span>
@@ -99,7 +99,7 @@ export default function Challenges({ onBack }) {
         </div>
       </Panel>
 
-      <Panel title="What do you do?">
+      <Panel title={t('lab2.challenges.whatDoYouDo')}>
         <div className="lab2-choices">
           {active.choices.map((c) => (
             <button
@@ -107,42 +107,38 @@ export default function Challenges({ onBack }) {
               className={`lab2-choice ${selectedChoice === c.id ? 'selected' : ''}`}
               onClick={() => handleChoice(c)}
             >
-              {c.label}
+              {t(`lab2.scenarios.${active.id}.choices.${c.id}.label`)}
             </button>
           ))}
         </div>
       </Panel>
 
       <AnimatePresence>
-        {revealed && selectedChoice && (
+        {revealed && chosen && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
           >
             <ResultCard
-              kind={
-                ['smart', 'win', 'survive', 'disciplined', 'safe', 'partial', 'patient', 'risky'].includes(active.choices.find((c) => c.id === selectedChoice)?.outcome)
-                  ? 'win'
-                  : 'loss'
-              }
-              emoji={active.choices.find((c) => c.id === selectedChoice)?.outcome === 'smart' ? '🧠' : '📊'}
-              title={`Your portfolio: ${active.choices.find((c) => c.id === selectedChoice)?.impact > 0 ? '+' : ''}${active.choices.find((c) => c.id === selectedChoice)?.impact}%`}
-              sub={active.choices.find((c) => c.id === selectedChoice)?.lesson}
+              kind={['smart', 'win', 'survive', 'disciplined', 'safe', 'partial', 'patient', 'risky'].includes(chosen.outcome) ? 'win' : 'loss'}
+              emoji={chosen.outcome === 'smart' ? '🧠' : '📊'}
+              title={<>{t('lab2.challenges.yourPortfolio')}: <span className="lab2-num">{chosen.impact > 0 ? '+' : ''}{chosen.impact}%</span></>}
+              sub={t(`lab2.scenarios.${active.id}.choices.${chosen.id}.lesson`)}
             >
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button className="lab2-btn ghost" onClick={reset}>Try again</button>
-                <button className="lab2-btn primary" onClick={nextScenario}>Next scenario →</button>
+                <button className="lab2-btn ghost" onClick={reset}>{t('lab2.tryAgain')}</button>
+                <button className="lab2-btn primary" onClick={nextScenario}>{t('lab2.nextScenario')} <span className="lab2-arrow">→</span></button>
               </div>
             </ResultCard>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <Panel title="Your history">
+      <Panel title={t('lab2.challenges.yourHistory')}>
         {completed.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>
-            No challenges yet. Make your first call above.
+            {t('lab2.challenges.noChallengesYet')}
           </div>
         ) : (
           completed.slice(0, 5).map((c) => {
@@ -150,9 +146,9 @@ export default function Challenges({ onBack }) {
             const ch = sc?.choices.find((x) => x.id === c.choiceId);
             return (
               <div key={c.id} className="lab2-row">
-                <span>{sc?.title}</span>
+                <span>{sc ? `${sc.icon} ${t(`lab2.scenarios.${sc.id}.title`)}` : c.scenarioId}</span>
                 <strong className={c.outcome === 'win' ? 'pos' : c.outcome === 'loss' ? 'neg' : ''}>
-                  {ch?.impact > 0 ? '+' : ''}{ch?.impact}%
+                  <span className="lab2-num">{ch?.impact > 0 ? '+' : ''}{ch?.impact}%</span>
                 </strong>
               </div>
             );
@@ -161,9 +157,7 @@ export default function Challenges({ onBack }) {
       </Panel>
 
       <Notice icon="💡">
-        There is rarely one "right" answer in a real market — there is the answer
-        that fits YOUR strategy and risk tolerance. The lesson here is what to
-        think about, not what to do.
+        {t('lab2.challenges.notice')}
       </Notice>
     </div>
   );

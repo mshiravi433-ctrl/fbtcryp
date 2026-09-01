@@ -172,6 +172,7 @@ import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, g
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
 import { createCentralIntelligence } from './ci/api.js';
+import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
@@ -331,7 +332,10 @@ import {
   createGoal,
   financialGoalMeta,
   getGoal,
+  goalAnalyze,
   goalProgress,
+  goalSimulate,
+  goalWhatIf,
   listGoals,
   ownerFromRequest,
   parseGoalFromText,
@@ -1731,6 +1735,85 @@ app.get('/api/v1/financial-goals/:id/progress', async (req, res) => {
   if (!result.ok) return goalFail(res, result.code);
   res.set('cache-control', 'private, no-store');
   return res.json({ data: { goal: result.goal, progress: result.progress }, meta: { ...financialGoalMeta(), scope: who.via } });
+});
+
+/*
+ * GOAL ENGINE — ANALYZE. The one call the Plan tab renders: outlook
+ * (probability + range + data quality), goal health, evidence, the three risk
+ * strategies and the futures ceiling. Absolutely nothing here executes — the
+ * only execution path remains the Intent OS draft reviewed and signed by the
+ * user. Server-owned numbers only, and a dead feed is reported as dead.
+ */
+app.post('/api/v1/financial-goals/:id/analyze', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await goalAnalyze(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      goal: result.goal,
+      plan: result.plan,
+      outlook: result.outlook,
+      health: result.health,
+      evidence: result.evidence,
+      strategies: result.strategies,
+      futures: result.futures
+    },
+    meta: { ...financialGoalMeta(), scope: who.via, market: result.market, executed: false, nextStep: 'REVIEW_AND_SIGN_IN_INTENT_OS' }
+  });
+});
+
+/*
+ * GOAL ENGINE — WHAT-IF. Recompute the outlook after one change (a market
+ * shock or a monthly-contribution delta). Returns before/after + delta, all
+ * under the same assumption band as the base plan. No execution, no forecast.
+ */
+app.post('/api/v1/financial-goals/:id/what-if', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await goalWhatIf(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      goal: result.goal,
+      kind: result.kind,
+      change: result.change,
+      before: result.before,
+      after: result.after,
+      delta: result.delta,
+      warnings: result.warnings,
+      note: result.note
+    },
+    meta: { ...financialGoalMeta(), scope: who.via, executed: false, assumptionBased: true }
+  });
+});
+
+/*
+ * GOAL ENGINE — SIMULATOR. The monthly-contribution → target-probability
+ * table the slider renders. Server computed, same engine as the base plan.
+ */
+app.post('/api/v1/financial-goals/:id/simulate', async (req, res) => {
+  const who = goalIdentity(req, res);
+  if (!who) return undefined;
+  const result = await goalSimulate(who.owner, req.params.id, req.body || {});
+  if (!result.ok) return goalFail(res, result.code);
+  res.set('cache-control', 'private, no-store');
+  return res.json({
+    data: {
+      goal: result.goal,
+      targetAmount: result.targetAmount,
+      currentValueUsd: result.currentValueUsd,
+      baseMonthlyUsd: result.baseMonthlyUsd,
+      baseProbabilityPct: result.baseProbabilityPct,
+      rows: result.rows,
+      assumptions: result.assumptions,
+      warnings: result.warnings,
+      note: result.note
+    },
+    meta: { ...financialGoalMeta(), scope: who.via, executed: false, assumptionBased: true }
+  });
 });
 
 /* ── Phases 121–130: Intent OS output locales ───────────────────────────── */
@@ -5134,6 +5217,36 @@ setInterval(() => {
   const now = Date.now();
   for (const [k, v] of ciHits) if (now > v.reset) ciHits.delete(k);
 }, WINDOW_MS).unref?.();
+
+/*
+ * ─── TWO GATEWAYS, ONE REPO: READ THIS BEFORE ADDING A THIRD ───────────────
+ * `/api/brain` above is the Central Intelligence OS built in this branch: shared
+ * per-owner state, capability matrix, policy gates, plan digests, action engine,
+ * verification, and the §42 probes (turns + HTTP). `/api` below is the earlier
+ * central OS merged into main from PR #137/#138 (`server/central/*`), which
+ * exposes §36's literal paths (`/api/intent`, `/api/system/*`, `/api/tools/*`)
+ * and its own event-driven refresh.
+ *
+ * They coexist without fighting over routes, and both are kept here on purpose:
+ * deleting a merged implementation from inside a feature branch is not a merge
+ * resolution, it is a silent revert of somebody else's work. What must NOT
+ * continue to coexist is the choice in the frontend — `CentralBrainContext` and
+ * `src/lib/central/client.js` speak only to `/api/brain`, so exactly one brain is
+ * wired into the UI, and no screen is allowed to grow a second client.
+ *
+ * Follow-up (not in this PR): pick one surface, move the other's tests over, and
+ * alias the loser for a release so nothing 404s mid-migration.
+ */
+/* ---------------------- FBT CENTRAL INTELLIGENCE OS ------------------------ */
+/*
+ * The central brain (§45): Wallet, Swap, Bridge, Lending, Futures, dYdX,
+ * Portfolio, Goals, News, Signals… are limbs of ONE system. The frontend
+ * talks to a single gateway — /api/intent, /api/system/*, /api/tools/* —
+ * and the brain answers from REAL module state, never from an LLM guess.
+ * Mounted after express.json and the rate limiter; adapters self-register.
+ */
+installCentralOS();
+app.use('/api', centralRouter);
 
 /* ------------------------------ lending BFF --------------------------------- */
 /*

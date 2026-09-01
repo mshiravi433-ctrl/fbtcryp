@@ -80,7 +80,7 @@
   gap: 14px;
   font-size: 11px;
   color: var(--text-2);
-  text-align: right;
+  text-align: end;
 }
 
 .lab2-stat {
@@ -194,7 +194,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  text-align: left;
+  text-align: start;
   color: var(--text-1);
   transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
   cursor: pointer;
@@ -302,9 +302,9 @@
 .lab2-tabs::-webkit-scrollbar { display: none; }
 
 .lab2-tab {
-  flex: 1;
-  min-width: fit-content;
-  padding: 8px 14px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 12px;
   background: transparent;
   border: none;
   border-radius: 10px;
@@ -314,6 +314,8 @@
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lab2-tab.active {
@@ -425,7 +427,7 @@
   border-radius: 14px;
   padding: 14px;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   color: var(--text-1);
   font-size: 12px;
   font-weight: 500;
@@ -449,7 +451,7 @@
   background: rgba(255, 255, 255, 0.03);
   border-radius: 12px;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   color: var(--text-1);
   font-size: 12px;
   width: 100%;
@@ -631,7 +633,7 @@
   color: var(--text-1);
   font-weight: 600;
   min-width: 40px;
-  text-align: right;
+  text-align: end;
 }
 
 /* ─── Compare side-by-side (Portfolio A vs B) ───────────────────────────── */
@@ -717,6 +719,10 @@
 .lab2-defi-tabs::-webkit-scrollbar { display: none; }
 
 .lab2-defi-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
   padding: 6px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
@@ -781,3 +787,112 @@
 .lab2-result.win { border-color: rgba(0, 255, 157, 0.30); }
 .lab2-result.loss { border-color: rgba(255, 59, 107, 0.30); }
 .lab2-result.neutral { border-color: rgba(255, 255, 255, 0.10); }
+
+/* ==========================================================================
+   LAB v2 — theme, RTL and sizing fixes
+   --------------------------------------------------------------------------
+   The base rules above were authored against the black canvas and use
+   rgba(255,255,255,…) glass. On the light theme those surfaces vanish
+   (white-on-white), the neon accents used as TEXT lose all contrast, and the
+   hard-coded left/right alignment breaks right-to-left. Everything below
+   restores those without touching the dark theme.
+   ========================================================================== */
+
+/* Numbers always read left-to-right, even inside RTL text. */
+.lab2-num {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* "next"/"back" arrows mirror in RTL. */
+.lab2-arrow { display: inline-block; }
+[dir='rtl'] .lab2-arrow { transform: scaleX(-1); }
+[dir='rtl'] .lab2-back { transform: scaleX(-1); }
+
+/* ─── LIGHT THEME: readable glass surfaces ──────────────────────────────── */
+
+:root[data-theme='light'] .lab2-card,
+:root[data-theme='light'] .lab2-panel,
+:root[data-theme='light'] .lab2-result,
+:root[data-theme='light'] .lab2-compare-side {
+  background: var(--bg-panel);
+  border-color: var(--line);
+  box-shadow: 0 2px 14px -6px rgba(16, 20, 40, 0.12);
+}
+
+:root[data-theme='light'] .lab2-card:hover {
+  background: var(--bg-raised);
+  border-color: var(--line-strong);
+}
+
+:root[data-theme='light'] .lab2-header {
+  border-color: var(--line);
+  background: linear-gradient(145deg, rgba(0, 150, 200, 0.08), rgba(106, 58, 224, 0.08), rgba(231, 0, 115, 0.06));
+}
+
+:root[data-theme='light'] .lab2-tabs,
+:root[data-theme='light'] .lab2-back,
+:root[data-theme='light'] .lab2-btn.ghost,
+:root[data-theme='light'] .lab2-defi-tab {
+  background: var(--bg-raised);
+  border-color: var(--line);
+}
+
+:root[data-theme='light'] .lab2-choice,
+:root[data-theme='light'] .lab2-quiz-option,
+:root[data-theme='light'] .lab2-lb-row,
+:root[data-theme='light'] .lab2-input {
+  background: var(--bg-raised);
+  border-color: var(--line);
+}
+
+:root[data-theme='light'] .lab2-choice:hover,
+:root[data-theme='light'] .lab2-quiz-option:hover {
+  background: var(--bg-panel);
+}
+
+:root[data-theme='light'] .lab2-quiz-letter {
+  background: rgba(16, 20, 40, 0.08);
+}
+
+:root[data-theme='light'] .lab2-bar {
+  background: rgba(16, 20, 40, 0.10);
+}
+
+:root[data-theme='light'] .lab2-slider {
+  background: rgba(16, 20, 40, 0.14);
+}
+
+:root[data-theme='light'] .lab2-row + .lab2-row {
+  border-top-color: var(--line);
+}
+
+/* Neon gradient text is unreadable on white — swap to the readable ink hues. */
+:root[data-theme='light'] .lab2-balance {
+  background: linear-gradient(120deg, var(--ink-cyan), var(--ink-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+:root[data-theme='light'] .lab2-coach-name {
+  color: var(--ink-violet);
+}
+
+:root[data-theme='light'] .lab2-choice.selected {
+  border-color: var(--ink-cyan);
+  background: color-mix(in srgb, var(--ink-cyan) 10%, transparent);
+}
+
+:root[data-theme='light'] .lab2-tab {
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .lab2-tab.active {
+  background: linear-gradient(135deg, var(--ink-cyan), var(--ink-violet));
+  color: #fff;
+}
+
+:root[data-theme='light'] .lab2-defi-tab.active {
+  background: linear-gradient(135deg, var(--ink-mint), var(--ink-cyan));
+  color: #fff;
+}
