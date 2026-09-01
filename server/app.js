@@ -171,6 +171,7 @@ import {
 import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
+import { createCentralIntelligence } from './ci/api.js';
 import { lendingRouter } from './lending.js';
 import { fetchTokenRisk } from './tokenRisk.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
@@ -5073,6 +5074,66 @@ app.use('/api/ai', aiCommandRoutes);
  * the execute endpoint returns a real venue/wallet hand-off.
  */
 app.use('/api/v1/ai', aiIntentOSRoutes);
+
+/* ----------------- FBT CENTRAL INTELLIGENCE OS — the central brain ---------------- */
+/*
+ * One brain for all thirty modules (§14), mounted as a single gateway (§37) so no
+ * screen ever talks to a venue directly and then narrates the result. Everything
+ * that makes this different from another AI route lives behind it: a durable
+ * per-owner system state, a capability matrix, a policy engine that must pass
+ * before a tool is called, an action engine that parks a confirmed plan, and the
+ * after-transaction refresh that re-reads every dependent module.
+ *
+ * The budget is its own on purpose. A turn spends real provider quota (wallet +
+ * market + protocol reads), so writes are capped; but 10/min — the /api/v1/ai
+ * figure — is not a usable chat budget for a human typing and confirming, and the
+ * brain's mutating surface is already gated by confirmation + idempotency, so the
+ * limiter's job here is to stop a script, not to throttle a person. GETs are free
+ * (they read cached state), and the SSE stream is a single long-lived GET.
+ *
+ * The server never signs: `execute` stops at an unsigned hand-off (§36), which is
+ * why nothing under this mount needs a key, a seed, or a mnemonic — and why none
+ * of these handlers can be talked into producing one.
+ */
+const centralIntelligence = createCentralIntelligence({ log: (line) => app.locals.ciLog?.push?.(line) });
+const ciHits = new Map();
+const CI_WRITE_MAX = Number(process.env.BRAIN_RATE_LIMIT || 30);
+const CI_TOOL_MAX = Number(process.env.BRAIN_TOOL_RATE_LIMIT || 120);
+app.use('/api/brain', (req, res, next) => {
+  if (req.method === 'GET') return next();
+  const isTool = req.path.startsWith('/tools/');
+  const max = isTool ? CI_TOOL_MAX : CI_WRITE_MAX;
+  /* The bucket is per DEVICE identity, falling back to the IP: thirty users behind
+     one office NAT must not starve each other's chat budget, while an anonymous
+     script still gets one ceiling per address. The device header is the same one the
+     brain scopes its session by, so the budget and the session agree. */
+  const ciDevice = String(req.get?.('x-fbt-device') || '').trim();
+  const key = `${req.tgUser?.id ?? (ciDevice || req.ip)}:${isTool ? 'tools' : 'intent'}`;
+  const now = Date.now();
+  const rec = ciHits.get(key);
+  if (!rec || now > rec.reset) {
+    ciHits.set(key, { count: 1, reset: now + WINDOW_MS });
+    return next();
+  }
+  rec.count += 1;
+  if (rec.count > max) {
+    res.set('retry-after', String(Math.ceil((rec.reset - now) / 1000)));
+    /* 429 as data, not as a thrown error: the chat renders this as "the brain is
+       busy, retry in Ns" and keeps the conversation, instead of a blank bubble. */
+    return res.status(429).json({
+      ok: false, code: 'BRAIN_RATE_LIMITED', retryAfterMs: rec.reset - now,
+      detail: isTool ? 'too many direct tool calls for this device' : 'too many intents for this device',
+      brain: centralIntelligence.schema
+    });
+  }
+  return next();
+});
+app.set('centralIntelligence', centralIntelligence);
+app.use('/api/brain', centralIntelligence.router);
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of ciHits) if (now > v.reset) ciHits.delete(k);
+}, WINDOW_MS).unref?.();
 
 /* ------------------------------ lending BFF --------------------------------- */
 /*
