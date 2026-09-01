@@ -61,6 +61,22 @@ export const IconActivity = (p) => (
   </svg>
 );
 
+/*
+ * Smart Money / on-chain monitoring — an eye watching the chain.
+ *
+ * LIVES IN THE SHARED SET, NOT IN MoreSheet.
+ * The Smart Money menu tile used to ship a private copy of this glyph with
+ * strokeWidth 2 while every other tile used the shared 1.75 — the eye read as
+ * thicker and bigger than its neighbours. «در منو smart money را مثل بقیه
+ * ایکون ها کن نه برجسته»: one vocabulary, one stroke, one size.
+ */
+export const IconSmartMoney = (p) => (
+  <svg {...base} {...p}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 export const IconShield = (p) => (
   <svg {...base} {...p}>
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
+import ScrollRail from '../components/ScrollRail';
 import { IconChevronLeft, IconSearch, IconBell } from '../components/Icons';
 import {
   fetchOverview, fetchWhales, fetchFlows, fetchLiquidity,
@@ -47,6 +48,13 @@ export default function SmartMoney() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
   const abortRef = useRef(null);
+  const tabRefs = useRef({});
+
+  /* Keep the selected tab visible inside the rail. Only on `tab` change —
+     never on the 45s data refresh, or the page would yank itself back up. */
+  useEffect(() => {
+    tabRefs.current[tab]?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [tab]);
 
   const load = useCallback(async (win) => {
     abortRef.current?.abort?.();
@@ -86,6 +94,13 @@ export default function SmartMoney() {
   };
 
   const m = data?.metrics;
+  /*
+   * dataStatus 'unavailable' means the upstream stream (RPC/explorer/price
+   * sources) answered nothing — NOT that on-chain activity is zero. The old
+   * render painted "0" and "$0" everywhere, which read as working data.
+   * Now an unavailable stream shows one honest banner + "—", with retry.
+   */
+  const offline = data?.dataStatus === 'unavailable';
 
   return (
     <PageTransition>
@@ -109,14 +124,30 @@ export default function SmartMoney() {
           </div>
         </motion.section>
 
-        {/* Tabs */}
-        <div className="sm-tabs">
+        {/*
+          Tabs as a RAIL.
+          «تب های مختلف مثل ریل حرکت نمی‌کند که انتخاب کنیم» — six Persian
+          labels (کیف‌پول‌های هوشمند، جریان نقدینگی، …) never fit one phone
+          row, and the old plain div could not be scrolled reliably on the
+          WebView, so the tabs past the first two were unreachable. Now the
+          row uses the same ScrollRail as every other rail in the app:
+          horizontal-only, snap-aligned, edge fades signal "more this way",
+          and selecting a tab scrolls it into view.
+        */}
+        <ScrollRail className="sm-tabs" ariaLabel={t('sm.title')} role="tablist">
           {TABS.map((id) => (
-            <button key={id} className={`sm-tab ${tab === id ? 'active' : ''}`} onClick={() => { haptic?.('light'); setTab(id); }}>
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              ref={(el) => { tabRefs.current[id] = el; }}
+              className={`sm-tab ${tab === id ? 'active' : ''}`}
+              onClick={() => { haptic?.('light'); setTab(id); }}
+            >
               {t(`sm.tabs.${id}`)}
             </button>
           ))}
-        </div>
+        </ScrollRail>
 
         {/* OVERVIEW */}
         {tab === 'overview' && (
@@ -130,39 +161,47 @@ export default function SmartMoney() {
             {loading && !data && <Spinner />}
             {error && !data && <Empty>{t('sm.errorOverview')}<br /><span className="faint">{error}</span></Empty>}
 
+            {/* Honest offline banner — see the `offline` flag above. */}
+            {data && offline && (
+              <div className="sm-section sm-offline">
+                <span className="msg">⚠️ {t('sm.dataSourceOffline')}</span>
+                <button className="sm-btn ghost" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => load(window)}>{t('sm.retry')}</button>
+              </div>
+            )}
+
             {data && (
               <>
                 <div className="sm-metrics">
                   <div className="sm-metric">
                     <div className="lab">{t('sm.whaleActivity')}</div>
-                    <div className="val">{m?.whaleActivity?.value ?? '—'}</div>
-                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{fmtPct(m?.whaleActivity?.changePct)}</div>
+                    <div className="val">{offline ? '—' : m?.whaleActivity?.value ?? '—'}</div>
+                    <div className={`chg ${(m?.whaleActivity?.changePct || 0) >= 0 ? 'sm-up' : 'sm-down'}`}>{offline ? '—' : fmtPct(m?.whaleActivity?.changePct)}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.accumulation')}</div>
-                    <div className="val sm-up">{fmtUsd(m?.accumulation?.valueUsd)}</div>
-                    <div className="chg sm-up">{fmtPct(m?.accumulation?.changePct)}</div>
+                    <div className="val sm-up">{offline ? '—' : fmtUsd(m?.accumulation?.valueUsd)}</div>
+                    <div className="chg sm-up">{offline ? '—' : fmtPct(m?.accumulation?.changePct)}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.distribution')}</div>
-                    <div className="val sm-down">{fmtUsd(m?.distribution?.valueUsd)}</div>
-                    <div className="chg sm-down">{fmtPct(m?.distribution?.changePct)}</div>
+                    <div className="val sm-down">{offline ? '—' : fmtUsd(m?.distribution?.valueUsd)}</div>
+                    <div className="chg sm-down">{offline ? '—' : fmtPct(m?.distribution?.changePct)}</div>
                   </div>
                 </div>
 
                 <div className="sm-metrics">
                   <div className="sm-metric">
                     <div className="lab">{t('sm.exchangeInflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
+                    <div className="val" style={{ fontSize: 16 }}>{offline ? '—' : m?.exchangeInflow?.text ? `$${m.exchangeInflow.text}` : '—'}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.exchangeOutflow')}</div>
-                    <div className="val" style={{ fontSize: 16 }}>{m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
+                    <div className="val" style={{ fontSize: 16 }}>{offline ? '—' : m?.exchangeOutflow?.text ? `$${m.exchangeOutflow.text}` : '—'}</div>
                   </div>
                   <div className="sm-metric">
                     <div className="lab">{t('sm.netFlow')}</div>
                     <div className={`val ${(m?.netFlow?.value || 0) >= 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 16 }}>
-                      {m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
+                      {offline ? '—' : m?.netFlow?.text ? `${(m.netFlow.value || 0) < 0 ? '-' : ''}$${m.netFlow.text.replace('-', '')}` : '—'}
                     </div>
                   </div>
                 </div>
@@ -186,8 +225,9 @@ export default function SmartMoney() {
                   ))}
                 </div>
 
-                {/* Money flow quick view */}
-                <FlowSummary flows={data.flows} onMore={() => setTab('flows')} t={t} />
+                {/* Money flow quick view — hidden while offline: a 0/0 bar
+                    reads as "no flow", which is exactly what we are NOT sure of. */}
+                {!offline && <FlowSummary flows={data.flows} onMore={() => setTab('flows')} t={t} />}
 
                 {/* Early detection */}
                 <div className="sm-section">

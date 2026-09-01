@@ -7,13 +7,6 @@ import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
 import { SPECULATION_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
-const IconSmartMoney = (p) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
 import {
   IconActivity,
   IconBriefcase,
@@ -27,6 +20,7 @@ import {
   IconPools,
   IconSettings,
   IconShield,
+  IconSmartMoney,
   IconSwap,
   IconTrend,
   IconTrophy,
@@ -161,7 +155,14 @@ const GROUPS = [
   {
     id: 'more',
     items: [
-      { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)', featured: true },
+      /*
+       * «در منو smart money را مثل بقیه ایکون ها کن نه برجسته» — the tile
+       * used to carry `featured: true` (glowing border + label weight),
+       * which made it stand out from every other destination. It is a normal
+       * tile now: same size, same stroke icon (IconSmartMoney in Icons.jsx),
+       * same flat treatment.
+       */
+      { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
@@ -292,8 +293,7 @@ export default function MoreSheet({ open, onClose }) {
                       <button
                         key={item.to + item.key}
                         type="button"
-                        className={`more-tile${item.featured ? ' more-tile-featured' : ''}`}
-                        data-featured={item.featured ? 'true' : 'false'}
+                        className="more-tile"
                         data-pressed={pressed === item.to ? 'true' : 'false'}
                         onClick={() => go(item.to)}
                         style={{ padding: 12, borderRadius: 16, background: `linear-gradient(145deg, color-mix(in srgb, \${item.hue} 7%, rgba(255,255,255,0.05)), rgba(255,255,255,0.03))`, border: `1px solid color-mix(in srgb, \${item.hue} 12%, rgba(255,255,255,0.06))`, backdropFilter: 'blur(10px)' }}
